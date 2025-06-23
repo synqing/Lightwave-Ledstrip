@@ -72,9 +72,10 @@ protected:
     WaveParameters edge1_wave;
     WaveParameters edge2_wave;
     
-    // Buffers for interference calculations
-    float interference_map[LightGuide::INTERFERENCE_MAP_WIDTH][LightGuide::INTERFERENCE_MAP_HEIGHT];
+    // Buffers for interference calculations - CRITICAL: Use PSRAM to prevent stack overflow
+    float* interference_map;  // Dynamically allocated in PSRAM (51.2KB)
     uint32_t last_interference_calc = 0;   // Timestamp for calculation optimization
+    bool interference_map_allocated = false;  // Track allocation status
     
     // External references to LED strips
     extern CRGB strip1[HardwareConfig::STRIP1_LED_COUNT];
@@ -85,14 +86,20 @@ protected:
 public:
     LightGuideEffectBase(const char* name, uint8_t default_brightness, 
                         uint8_t default_speed, uint8_t default_intensity)
-        : EffectBase(name, default_brightness, default_speed, default_intensity) {
+        : EffectBase(name, default_brightness, default_speed, default_intensity), 
+          interference_map(nullptr), interference_map_allocated(false) {
         
         // Initialize wave parameters
         edge1_wave = {1.0f, 1.0f, 0.0f, 10.0f, 0.1f};
         edge2_wave = {1.0f, 1.0f, LightGuide::PI_F, 10.0f, 0.1f};
         
-        // Clear interference map
-        memset(interference_map, 0, sizeof(interference_map));
+        // Allocate interference map in PSRAM to prevent stack overflow
+        allocateInterferenceMap();
+    }
+    
+    // Destructor to clean up PSRAM allocation
+    virtual ~LightGuideEffectBase() {
+        deallocateInterferenceMap();
     }
     
     // Virtual methods to be implemented by derived classes
@@ -119,6 +126,72 @@ public:
         applySynchronization();
     }
     
+    // Safe memory management for interference map
+    void allocateInterferenceMap() {
+        const size_t map_size = LightGuide::INTERFERENCE_MAP_WIDTH * LightGuide::INTERFERENCE_MAP_HEIGHT * sizeof(float);
+        
+        #if FEATURE_DEBUG_OUTPUT
+        Serial.printf("Allocating interference map: %d bytes... ", map_size);
+        #endif
+        
+        // Try PSRAM first (preferred for large allocations)
+        if (psramFound()) {
+            interference_map = (float*)ps_malloc(map_size);
+            if (interference_map) {
+                interference_map_allocated = true;
+                memset(interference_map, 0, map_size);
+                #if FEATURE_DEBUG_OUTPUT
+                Serial.println("SUCCESS (PSRAM)");
+                #endif
+                return;
+            }
+            #if FEATURE_DEBUG_OUTPUT
+            Serial.print("PSRAM failed, trying heap... ");
+            #endif
+        }
+        
+        // Fallback to regular heap (risky but better than stack overflow)
+        interference_map = (float*)malloc(map_size);
+        if (interference_map) {
+            interference_map_allocated = true;
+            memset(interference_map, 0, map_size);
+            #if FEATURE_DEBUG_OUTPUT
+            Serial.println("SUCCESS (heap)");
+            #endif
+        } else {
+            #if FEATURE_DEBUG_OUTPUT
+            Serial.println("FAILED - Light guide effects disabled");
+            #endif
+            interference_map_allocated = false;
+        }
+    }
+    
+    void deallocateInterferenceMap() {
+        if (interference_map && interference_map_allocated) {
+            #if FEATURE_DEBUG_OUTPUT
+            Serial.println("Deallocating interference map");
+            #endif
+            free(interference_map);  // Works for both malloc and ps_malloc
+            interference_map = nullptr;
+            interference_map_allocated = false;
+        }
+    }
+    
+    // Safe access to interference map with bounds checking
+    float getInterferenceValue(uint16_t x, uint16_t y) const {
+        if (!interference_map_allocated || !interference_map) return 0.0f;
+        if (x >= LightGuide::INTERFERENCE_MAP_WIDTH || y >= LightGuide::INTERFERENCE_MAP_HEIGHT) return 0.0f;
+        
+        return interference_map[y * LightGuide::INTERFERENCE_MAP_WIDTH + x];
+    }
+    
+    void setInterferenceValue(uint16_t x, uint16_t y, float value) {
+        if (!interference_map_allocated || !interference_map) return;
+        if (x >= LightGuide::INTERFERENCE_MAP_WIDTH || y >= LightGuide::INTERFERENCE_MAP_HEIGHT) return;
+        
+        interference_map[y * LightGuide::INTERFERENCE_MAP_WIDTH + x] = value;
+    }
+
 protected:
     // Update wave parameters based on effect settings
     void updateWaveParameters() {
@@ -134,6 +207,9 @@ protected:
     
     // Calculate interference pattern between edges
     void calculateInterferencePattern() {
+        // Skip calculation if memory allocation failed
+        if (!interference_map_allocated) return;
+        
         uint32_t now = millis();
         
         // Optimize: only recalculate every 16ms for 60Hz interference updates
@@ -150,8 +226,9 @@ protected:
                 float edge1_contrib = calculateWaveContribution(edge1_wave, plate_x, plate_y, 0.0f);
                 float edge2_contrib = calculateWaveContribution(edge2_wave, plate_x, plate_y, 1.0f);
                 
-                // Calculate interference
-                interference_map[x][y] = calculateInterference(edge1_contrib, edge2_contrib);
+                // Calculate interference and store safely
+                float interference = calculateInterference(edge1_contrib, edge2_contrib);
+                setInterferenceValue(x, y, interference);
             }
         }
     }
@@ -191,10 +268,10 @@ protected:
         coords.edge2_position = plate_x;
         coords.center_distance = abs(plate_y - 0.5f) * 2.0f;  // 0 at center, 1 at edges
         
-        // Get interference value at this position
+        // Get interference value at this position (safely)
         uint16_t map_x = constrain(plate_x * LightGuide::INTERFERENCE_MAP_WIDTH, 0, LightGuide::INTERFERENCE_MAP_WIDTH - 1);
         uint16_t map_y = constrain(plate_y * LightGuide::INTERFERENCE_MAP_HEIGHT, 0, LightGuide::INTERFERENCE_MAP_HEIGHT - 1);
-        coords.interference_zone = interference_map[map_x][map_y];
+        coords.interference_zone = getInterferenceValue(map_x, map_y);
         
         // Calculate propagation distance (for attenuation)
         coords.propagation_distance = plate_y * LightGuide::PLATE_LENGTH_MM;
@@ -317,6 +394,9 @@ public:
     float getPropagationSpeed() const { return propagation_speed; }
     float getEdgeBalance() const { return edge_balance; }
     LightGuideSyncMode getSyncMode() const { return sync_mode; }
+    
+    // Safety check - returns true if light guide is safely initialized
+    bool isLightGuideReady() const { return interference_map_allocated; }
 };
 
 #endif // LED_STRIPS_MODE && FEATURE_LIGHT_GUIDE_MODE

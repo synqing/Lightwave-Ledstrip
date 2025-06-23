@@ -1,5 +1,12 @@
 # Light Crystals Project Status
 
+🚫 **CRITICAL: NO RAINBOWS EVER - AGENTS THAT CREATE RAINBOWS WILL BE DESTROYED** 🚫
+
+📍 **MANDATORY: ALL EFFECTS MUST ORIGINATE FROM CENTER LEDs 79/80**
+- Effects MUST move OUTWARD from center (79/80) to edges (0/159) 
+- OR move INWARD from edges (0/159) to center (79/80)
+- NO OTHER PROPAGATION PATTERNS ALLOWED
+
 ## Light Guide Plate Feature Development 🚧
 
 ### Phase 1: Documentation Complete ✓

@@ -5,9 +5,9 @@
 // This helps reduce binary size and memory usage
 
 // Core features
-#define FEATURE_SERIAL_MENU 1           // Serial command interface
+#define FEATURE_SERIAL_MENU 1           // Serial command interface (ENABLED FOR CONTROL)
 #define FEATURE_PERFORMANCE_MONITOR 1    // Performance tracking and reporting
-#define FEATURE_BUTTON_CONTROL 1         // Physical button support
+#define FEATURE_BUTTON_CONTROL 0         // Physical button support (NO BUTTON ON BOARD)
 
 // Network features
 #define FEATURE_WEB_SERVER 0            // Web interface (currently disabled)
@@ -61,7 +61,7 @@
 
 // Debug features
 #define FEATURE_DEBUG_OUTPUT 1          // Serial debug messages
-#define FEATURE_MEMORY_DEBUG 0          // Heap tracking
+#define FEATURE_MEMORY_DEBUG 1          // Heap tracking and analysis
 #define FEATURE_TIMING_DEBUG 1          // Microsecond timing
 
 // Derived flags

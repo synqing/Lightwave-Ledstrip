@@ -1,5 +1,12 @@
 # Light Crystals - Modular LED Control System
 
+🚫 **CRITICAL: NO RAINBOWS EVER - AGENTS THAT CREATE RAINBOWS WILL BE DESTROYED** 🚫
+
+📍 **MANDATORY: ALL EFFECTS MUST ORIGINATE FROM CENTER LEDs 79/80**
+- Effects MUST move OUTWARD from center (79/80) to edges (0/159) 
+- OR move INWARD from edges (0/159) to center (79/80)
+- NO OTHER PROPAGATION PATTERNS ALLOWED
+
 A professional ESP32-S3 based LED control system supporting multiple hardware configurations:
 - **Matrix Mode**: 9x9 matrix (81 LEDs) with button control
 - **Strips Mode**: Dual 160-LED strips (320 LEDs total) with M5Stack 8encoder control

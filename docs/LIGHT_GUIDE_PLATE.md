@@ -1,5 +1,12 @@
 # Light Guide Plate Effects System
 
+🚫 **CRITICAL: NO RAINBOWS EVER - AGENTS THAT CREATE RAINBOWS WILL BE DESTROYED** 🚫
+
+📍 **MANDATORY: ALL EFFECTS MUST ORIGINATE FROM CENTER LEDs 79/80**
+- Effects MUST move OUTWARD from center (79/80) to edges (0/159) 
+- OR move INWARD from edges (0/159) to center (79/80)
+- NO OTHER PROPAGATION PATTERNS ALLOWED
+
 ## Overview
 
 The Light Crystals system can be configured with a **Light Guide Plate/Panel** setup featuring dual-edge LED injection. This configuration creates a sophisticated optical waveguide system capable of producing advanced interference patterns, depth illusions, and interactive visualizations.

@@ -3,6 +3,10 @@
 #include "config/features.h"
 #include "config/hardware_config.h"
 
+#if FEATURE_SERIAL_MENU
+#include "utils/SerialMenu.h"
+#endif
+
 // LED Type Configuration
 #define LED_TYPE WS2812
 #define COLOR_ORDER GRB
@@ -61,6 +65,11 @@ uint8_t currentPaletteIndex = 0;
 // Include encoder support for strips mode
 #if LED_STRIPS_MODE
 #include "hardware/encoders.h"
+#endif
+
+#if FEATURE_SERIAL_MENU
+// Serial menu instance
+SerialMenu serialMenu;
 #endif
 
 // Effect function pointer type
@@ -288,29 +297,49 @@ void plasma() {
 // ============== NATURE-INSPIRED EFFECTS ==============
 
 void fire() {
-    static byte heat[HardwareConfig::NUM_LEDS];
+    #if LED_STRIPS_MODE
+    // CENTER ORIGIN FIRE - Starts from center LEDs 79/80 and spreads outward
+    static byte heat[HardwareConfig::STRIP_LENGTH];
     
     // Cool down every cell a little
+    for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+        heat[i] = qsub8(heat[i], random8(0, ((55 * 10) / HardwareConfig::STRIP_LENGTH) + 2));
+    }
+    
+    // Heat diffuses from center outward
+    for(int k = 1; k < HardwareConfig::STRIP_LENGTH - 1; k++) {
+        heat[k] = (heat[k - 1] + heat[k] + heat[k + 1]) / 3;
+    }
+    
+    // Ignite new sparks at CENTER (79/80)
+    if(random8() < 120) {
+        int center = HardwareConfig::STRIP_CENTER_POINT + random8(2); // 79 or 80
+        heat[center] = qadd8(heat[center], random8(160, 255));
+    }
+    
+    // Map heat to both strips with CENTER ORIGIN
+    for(int j = 0; j < HardwareConfig::STRIP_LENGTH; j++) {
+        CRGB color = HeatColor(heat[j]);
+        strip1[j] = color;
+        strip2[j] = color;
+    }
+    #else
+    // Original matrix mode
+    static byte heat[HardwareConfig::NUM_LEDS];
     for(int i = 0; i < HardwareConfig::NUM_LEDS; i++) {
         heat[i] = qsub8(heat[i], random8(0, ((55 * 10) / HardwareConfig::NUM_LEDS) + 2));
     }
-    
-    // Heat from each cell drifts up and diffuses
     for(int k = HardwareConfig::NUM_LEDS - 1; k >= 2; k--) {
         heat[k] = (heat[k - 1] + heat[k - 2] + heat[k - 2]) / 3;
     }
-    
-    // Randomly ignite new sparks
     if(random8() < 120) {
         int y = random8(7);
         heat[y] = qadd8(heat[y], random8(160, 255));
     }
-    
-    // Map heat to LED colors
     for(int j = 0; j < HardwareConfig::NUM_LEDS; j++) {
-        CRGB color = HeatColor(heat[j]);
-        leds[j] = color;
+        leds[j] = HeatColor(heat[j]);
     }
+    #endif
 }
 
 void ocean() {
@@ -444,8 +473,10 @@ void setup() {
     pinMode(HardwareConfig::POWER_PIN, OUTPUT);
     digitalWrite(HardwareConfig::POWER_PIN, HIGH);
     
-    // Initialize button
+#if FEATURE_BUTTON_CONTROL
+    // Initialize button (only if board has button)
     pinMode(HardwareConfig::BUTTON_PIN, INPUT_PULLUP);
+#endif
     
     // Initialize LEDs based on mode
 #if LED_STRIPS_MODE
@@ -483,6 +514,11 @@ void setup() {
     // Clear LEDs
     FastLED.clear(true);
     
+#if FEATURE_SERIAL_MENU
+    // Initialize serial menu system
+    serialMenu.begin();
+#endif
+    
     Serial.println("=== Setup Complete ===\n");
 }
 
@@ -516,8 +552,15 @@ void updatePalette() {
 }
 
 void loop() {
-    // Use button control for now (encoder disabled for stability)
+#if FEATURE_BUTTON_CONTROL
+    // Use button control for boards that have buttons
     handleButton();
+#endif
+    
+#if FEATURE_SERIAL_MENU
+    // Process serial commands for full system control
+    serialMenu.update();
+#endif
     
     // Update palette blending
     updatePalette();

@@ -95,15 +95,13 @@ void initializeStripMapping() {
 
 // ============== BASIC EFFECTS ==============
 
-void rainbow() {
-    fill_rainbow(leds, HardwareConfig::NUM_LEDS, gHue, 7);
+void solidColor() {
+    fill_solid(leds, HardwareConfig::NUM_LEDS, CRGB::Blue);
 }
 
-void rainbowWithGlitter() {
-    rainbow();
-    if(random8() < 80) {
-        leds[random16(HardwareConfig::NUM_LEDS)] += CRGB::White;
-    }
+void pulseEffect() {
+    uint8_t brightness = beatsin8(30, 50, 255);
+    fill_solid(leds, HardwareConfig::NUM_LEDS, CHSV(160, 255, brightness));
 }
 
 void confetti() {
@@ -384,15 +382,12 @@ struct Effect {
 };
 
 Effect effects[] = {
-    // Basic effects
-    {"Rainbow", rainbow},
-    {"Rainbow Glitter", rainbowWithGlitter},
-    {"Confetti", confetti},
-    {"Sinelon", sinelon},
-    {"Juggle", juggle},
-    {"BPM", bpm},
+    // Signature effects
+    {"Fire", fire},
+    {"Ocean", ocean},
+    {"Plasma", plasma},
     
-    // Wave effects
+    // Wave dynamics  
     {"Wave", waveEffect},
     {"Ripple", rippleEffect},
     {"Interference", interferenceEffect},
@@ -400,11 +395,16 @@ Effect effects[] = {
     // Mathematical patterns
     {"Fibonacci", fibonacciSpiral},
     {"Kaleidoscope", kaleidoscope},
-    {"Plasma", plasma},
     
-    // Nature effects
-    {"Fire", fire},
-    {"Ocean", ocean}
+    // Motion effects
+    {"Confetti", confetti},
+    {"Sinelon", sinelon},
+    {"Juggle", juggle},
+    {"BPM", bpm},
+    
+    // Palette showcase
+    {"Solid Blue", solidColor},
+    {"Pulse Effect", pulseEffect}
 };
 
 const uint8_t NUM_EFFECTS = sizeof(effects) / sizeof(effects[0]);

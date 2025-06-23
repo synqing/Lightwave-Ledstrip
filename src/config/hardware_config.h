@@ -17,8 +17,8 @@ namespace HardwareConfig {
     constexpr uint8_t NUM_STRIPS = 2;
     
     // GPIO Pin Assignment
-    constexpr uint8_t STRIP1_DATA_PIN = 6;   // Channel 1 (primary)
-    constexpr uint8_t STRIP2_DATA_PIN = 7;   // Channel 2 (opposite)
+    constexpr uint8_t STRIP1_DATA_PIN = 11;   // Channel 1 (primary)
+    constexpr uint8_t STRIP2_DATA_PIN = 12;   // Channel 2 (opposite)
     constexpr uint8_t LED_DATA_PIN = STRIP1_DATA_PIN;  // Backward compatibility
     
     // Physical Layout Constants
@@ -72,8 +72,15 @@ namespace HardwareConfig {
 #endif
 
     // Common pins for both modes
-    constexpr uint8_t BUTTON_PIN = 0;
-    constexpr uint8_t POWER_PIN = 5;
+    constexpr uint8_t BUTTON_PIN = 0;  // BOOT button on DevKit
+    constexpr uint8_t POWER_PIN = 48;  // RGB LED power on some DevKits (or use any free GPIO)
+    
+#if LED_STRIPS_MODE
+    // M5Stack 8encoder I2C pins for strips hardware
+    constexpr uint8_t I2C_SDA = 13;
+    constexpr uint8_t I2C_SCL = 14;
+    constexpr uint8_t M5STACK_8ENCODER_ADDR = 0x41;  // Default I2C address
+#endif
     
     // Audio input pins (for future use)
     constexpr uint8_t I2S_SCK = 3;

@@ -58,6 +58,11 @@ uint8_t currentPaletteIndex = 0;
 // Include palette definitions
 #include "Palettes.h"
 
+// Include encoder support for strips mode
+#if LED_STRIPS_MODE
+#include "hardware/encoders.h"
+#endif
+
 // Effect function pointer type
 typedef void (*EffectFunction)();
 
@@ -452,6 +457,9 @@ void setup() {
     FastLED.setBrightness(HardwareConfig::STRIP_BRIGHTNESS);
     
     Serial.println("Dual strip FastLED initialized");
+    
+    // Initialize M5Stack 8Encoder
+    initEncoders();
 #else
     // Single matrix initialization  
     FastLED.addLeds<LED_TYPE, HardwareConfig::LED_DATA_PIN, COLOR_ORDER>(
@@ -507,8 +515,14 @@ void updatePalette() {
 }
 
 void loop() {
-    // Handle button
+#if LED_STRIPS_MODE
+    // Process encoder input
+    processEncoders();
+    updateEncoderLEDs();
+#else
+    // Handle button for matrix mode
     handleButton();
+#endif
     
     // Update palette blending
     updatePalette();

@@ -458,8 +458,9 @@ void setup() {
     
     Serial.println("Dual strip FastLED initialized");
     
-    // Initialize M5Stack 8Encoder
+    // Initialize M5Stack 8Encoder (disabled for stability)
     initEncoders();
+    Serial.println("System running in STABLE MODE - using button control");
 #else
     // Single matrix initialization  
     FastLED.addLeds<LED_TYPE, HardwareConfig::LED_DATA_PIN, COLOR_ORDER>(
@@ -515,14 +516,8 @@ void updatePalette() {
 }
 
 void loop() {
-#if LED_STRIPS_MODE
-    // Process encoder input
-    processEncoders();
-    updateEncoderLEDs();
-#else
-    // Handle button for matrix mode
+    // Use button control for now (encoder disabled for stability)
     handleButton();
-#endif
     
     // Update palette blending
     updatePalette();

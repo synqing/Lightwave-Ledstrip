@@ -105,27 +105,10 @@ bool writeI2CRegister(uint8_t reg, uint8_t* data, size_t len) {
 void initEncoders() {
     Serial.println("Initializing M5Stack 8Encoder...");
     
-    // Initialize I2C with reliable settings
-    Wire.begin(HardwareConfig::I2C_SDA, HardwareConfig::I2C_SCL, 100000); // 100kHz for stability
-    Wire.setTimeOut(10); // 10ms timeout
-    delay(100);
-    
-    // Test communication
-    uint8_t testData;
-    if (readI2CRegister(REG_BUTTON_STATE, &testData, 1)) {
-        g_encoderAvailable = true;
-        Serial.println("M5Stack 8Encoder initialized successfully");
-        
-        // Clear all LEDs
-        for (int i = 0; i < 8; i++) {
-            uint8_t ledData[4] = {(uint8_t)(REG_RGB_LED + i), 0, 0, 64}; // Dim blue
-            writeI2CRegister(REG_RGB_LED + i, ledData + 1, 3);
-            delay(10);
-        }
-    } else {
-        g_encoderAvailable = false;
-        Serial.println("M5Stack 8Encoder not found - using button control");
-    }
+    // DISABLE encoder for now to prevent crashes
+    g_encoderAvailable = false;
+    Serial.println("M5Stack 8Encoder DISABLED - system stability mode");
+    Serial.println("Using button control instead");
     
     g_encoderPerf.lastReportTime = millis();
 }

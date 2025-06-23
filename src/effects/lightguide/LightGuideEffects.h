@@ -210,13 +210,13 @@ inline void handleLightGuideEncoderChange(uint8_t encoder, int32_t value) {
             break;
             
         case 6: // Effect-specific parameter 1
-            // Handle effect-specific parameters
-            handleEffectSpecificParameter1(value);
+            // TODO: Handle effect-specific parameters
+            // handleEffectSpecificParameter1(value);
             break;
             
         case 7: // Effect-specific parameter 2
-            // Handle effect-specific parameters
-            handleEffectSpecificParameter2(value);
+            // TODO: Handle effect-specific parameters  
+            // handleEffectSpecificParameter2(value);
             break;
     }
 }

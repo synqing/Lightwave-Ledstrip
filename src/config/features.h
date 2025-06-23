@@ -15,8 +15,8 @@
 #define FEATURE_OTA_UPDATE 0            // Over-the-air updates
 
 // LED Layout Modes (mutually exclusive)
-#define LED_STRIPS_MODE 0               // Dual 160-LED strips mode
-#define LED_MATRIX_MODE 1               // 9x9 matrix mode (default)
+#define LED_STRIPS_MODE 1               // Dual 160-LED strips mode
+#define LED_MATRIX_MODE 0               // 9x9 matrix mode (default)
 
 // Effect categories
 #define FEATURE_BASIC_EFFECTS 1         // Gradient, wave, pulse
@@ -32,6 +32,14 @@
 #define FEATURE_STRIP_SYNC 1            // Cross-strip synchronization
 #define FEATURE_STRIP_SEGMENTS 1        // Strip segmentation
 #define FEATURE_STRIP_POWER_MGMT 1      // Power management for 320 LEDs
+
+// Light Guide Plate specific features (extension of strips mode)
+#define FEATURE_LIGHT_GUIDE_MODE 1      // Enable light guide plate effects
+#define FEATURE_INTERFERENCE_CALC 1     // Wave interference calculations
+#define FEATURE_INTERACTIVE_SENSING 0   // Proximity/touch sensing (future)
+#define FEATURE_PHYSICS_SIMULATION 1    // Physics-based effects
+#define FEATURE_HOLOGRAPHIC_PATTERNS 1  // Holographic interference effects
+#define FEATURE_DEPTH_ILLUSION 1        // 3D depth illusion effects
 #else
 #define FEATURE_STRIP_EFFECTS 0
 #define FEATURE_DUAL_STRIP 0
@@ -39,6 +47,12 @@
 #define FEATURE_STRIP_SYNC 0
 #define FEATURE_STRIP_SEGMENTS 0
 #define FEATURE_STRIP_POWER_MGMT 0
+#define FEATURE_LIGHT_GUIDE_MODE 0
+#define FEATURE_INTERFERENCE_CALC 0
+#define FEATURE_INTERACTIVE_SENSING 0
+#define FEATURE_PHYSICS_SIMULATION 0
+#define FEATURE_HOLOGRAPHIC_PATTERNS 0
+#define FEATURE_DEPTH_ILLUSION 0
 #endif
 
 // Hardware optimization

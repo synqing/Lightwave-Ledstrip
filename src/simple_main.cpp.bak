@@ -1,0 +1,71 @@
+#include <Arduino.h>
+#include <FastLED.h>
+
+// Configuration
+#define NUM_LEDS 81
+#define DATA_PIN 16
+#define BUTTON_PIN 0
+#define BRIGHTNESS 96
+
+CRGB leds[NUM_LEDS];
+
+void setup() {
+    // Initialize serial
+    Serial.begin(115200);
+    while (!Serial && millis() < 5000) { delay(10); }
+    
+    Serial.println("\n=== Light Crystals Starting ===");
+    Serial.println("LED Pin: GPIO16");
+    Serial.println("Button Pin: GPIO0");
+    Serial.print("LEDs: ");
+    Serial.println(NUM_LEDS);
+    
+    // Initialize button
+    pinMode(BUTTON_PIN, INPUT_PULLUP);
+    
+    // Initialize LEDs
+    FastLED.addLeds<WS2812, DATA_PIN, GRB>(leds, NUM_LEDS);
+    FastLED.setBrightness(BRIGHTNESS);
+    
+    // Rainbow startup pattern
+    for(int i = 0; i < NUM_LEDS; i++) {
+        leds[i] = CHSV(map(i, 0, NUM_LEDS-1, 0, 255), 255, 255);
+    }
+    FastLED.show();
+    
+    Serial.println("=== Setup Complete ===\n");
+}
+
+uint8_t gHue = 0;
+
+void loop() {
+    // Rainbow animation
+    EVERY_N_MILLISECONDS(20) {
+        gHue++;
+        for(int i = 0; i < NUM_LEDS; i++) {
+            leds[i] = CHSV(gHue + (i * 3), 255, 255);
+        }
+        FastLED.show();
+    }
+    
+    // Button check
+    static bool lastButtonState = HIGH;
+    bool buttonState = digitalRead(BUTTON_PIN);
+    
+    if (buttonState == LOW && lastButtonState == HIGH) {
+        Serial.println("Button pressed!");
+        // Flash white
+        fill_solid(leds, NUM_LEDS, CRGB::White);
+        FastLED.show();
+        delay(100);
+    }
+    lastButtonState = buttonState;
+    
+    // Status every 5 seconds
+    EVERY_N_SECONDS(5) {
+        Serial.print("Running... Free heap: ");
+        Serial.print(ESP.getFreeHeap());
+        Serial.print(" bytes, Hue: ");
+        Serial.println(gHue);
+    }
+}

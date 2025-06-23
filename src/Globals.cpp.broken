@@ -1,0 +1,27 @@
+#include <FastLED.h>
+#include "config/hardware_config.h"
+#include "core/PaletteManager.h"
+
+// Global LED array
+CRGB leds[HardwareConfig::NUM_LEDS];
+
+// Strip mapping arrays
+uint8_t angles[HardwareConfig::NUM_LEDS];
+uint8_t radii[HardwareConfig::NUM_LEDS];
+
+// Palette management
+CRGBPalette16 currentPalette;
+CRGBPalette16 targetPalette;
+uint8_t currentPaletteIndex = 0;
+
+// Effect parameters
+uint8_t brightnessVal = DEFAULT_BRIGHTNESS;
+uint8_t fadeAmount = 20;
+uint8_t paletteSpeed = 10;
+uint16_t fps = 120;
+
+// Note: currentPalette is now managed by PaletteManager
+// and should be accessed via paletteManager.getCurrentPalette()
+
+// Include the palette definitions
+#include "Palettes.h"

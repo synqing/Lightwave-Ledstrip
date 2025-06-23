@@ -1,0 +1,38 @@
+# PlatformIO
+.pio
+.vscode/.browse.c_cpp.db*
+.vscode/c_cpp_properties.json
+.vscode/launch.json
+.vscode/ipch
+
+# Build outputs
+build/
+*.bin
+*.elf
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+
+# Temporary files
+*.tmp
+*.swp
+*~
+
+# Logs
+*.log
+
+# User-specific files
+src/config/network_config_private.h
+credentials.h

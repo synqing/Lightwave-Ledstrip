@@ -9,6 +9,12 @@
 
 #if LED_STRIPS_MODE && FEATURE_LIGHT_GUIDE_MODE
 
+// External references to LED strips and global variables
+extern CRGB strip1[HardwareConfig::STRIP1_LED_COUNT];
+extern CRGB strip2[HardwareConfig::STRIP2_LED_COUNT];
+extern CRGBPalette16 currentPalette;
+extern uint8_t gHue;
+
 // Light Guide Physical Constants
 namespace LightGuide {
     // Physical measurements
@@ -76,12 +82,6 @@ protected:
     float* interference_map;  // Dynamically allocated in PSRAM (51.2KB)
     uint32_t last_interference_calc = 0;   // Timestamp for calculation optimization
     bool interference_map_allocated = false;  // Track allocation status
-    
-    // External references to LED strips
-    extern CRGB strip1[HardwareConfig::STRIP1_LED_COUNT];
-    extern CRGB strip2[HardwareConfig::STRIP2_LED_COUNT];
-    extern CRGBPalette16 currentPalette;
-    extern uint8_t gHue;
     
 public:
     LightGuideEffectBase(const char* name, uint8_t default_brightness, 

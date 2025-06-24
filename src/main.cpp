@@ -20,7 +20,7 @@
     CRGB strip1_transition[HardwareConfig::STRIP1_LED_COUNT];
     CRGB strip2_transition[HardwareConfig::STRIP2_LED_COUNT];
     
-    // Combined virtual buffer for compatibility
+    // Combined virtual buffer for compatibility (only declare if not matrix mode)
     CRGB* leds = strip1;  // Primary strip for legacy effects
     CRGB* transitionBuffer = strip1_transition;
     
@@ -64,12 +64,14 @@ uint8_t currentPaletteIndex = 0;
 
 // Include encoder support for strips mode
 #if LED_STRIPS_MODE
-#include "hardware/encoders.h"
+#include "hardware/m5_encoder.h"
 #endif
 
 #if FEATURE_SERIAL_MENU
 // Serial menu instance
 SerialMenu serialMenu;
+// Dummy wave engine for compatibility
+DummyWave2D fxWave2D;
 #endif
 
 // Effect function pointer type
@@ -105,18 +107,63 @@ void initializeStripMapping() {
 // ============== BASIC EFFECTS ==============
 
 void solidColor() {
+    #if LED_STRIPS_MODE
+    fill_solid(strip1, HardwareConfig::STRIP_LENGTH, CRGB::Blue);
+    fill_solid(strip2, HardwareConfig::STRIP_LENGTH, CRGB::Blue);
+    #else
     fill_solid(leds, HardwareConfig::NUM_LEDS, CRGB::Blue);
+    #endif
 }
 
 void pulseEffect() {
     uint8_t brightness = beatsin8(30, 50, 255);
+    #if LED_STRIPS_MODE
+    fill_solid(strip1, HardwareConfig::STRIP_LENGTH, CHSV(160, 255, brightness));
+    fill_solid(strip2, HardwareConfig::STRIP_LENGTH, CHSV(160, 255, brightness));
+    #else
     fill_solid(leds, HardwareConfig::NUM_LEDS, CHSV(160, 255, brightness));
+    #endif
 }
 
 void confetti() {
     fadeToBlackBy(leds, HardwareConfig::NUM_LEDS, 10);
     int pos = random16(HardwareConfig::NUM_LEDS);
     leds[pos] += CHSV(gHue + random8(64), 200, 255);
+}
+
+// NEW STRIP-SPECIFIC EFFECT - CENTER ORIGIN CONFETTI
+void stripConfetti() {
+    #if LED_STRIPS_MODE
+    // CENTER ORIGIN CONFETTI - Sparks spawn at center LEDs 79/80 and fade as they move outward
+    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 10);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 10);
+    
+    // Spawn new confetti at CENTER (LEDs 79/80)
+    if (random8() < 80) {
+        int centerPos = HardwareConfig::STRIP_CENTER_POINT + random8(2); // 79 or 80
+        CRGB color = CHSV(gHue + random8(64), 200, 255);
+        strip1[centerPos] += color;
+        strip2[centerPos] += color;
+    }
+    
+    // Move existing confetti outward from center with fading
+    for (int i = HardwareConfig::STRIP_CENTER_POINT - 1; i >= 0; i--) {
+        if (strip1[i+1]) {
+            strip1[i] = strip1[i+1];
+            strip1[i].fadeToBlackBy(30);
+            strip2[i] = strip2[i+1];
+            strip2[i].fadeToBlackBy(30);
+        }
+    }
+    for (int i = HardwareConfig::STRIP_CENTER_POINT + 1; i < HardwareConfig::STRIP_LENGTH; i++) {
+        if (strip1[i-1]) {
+            strip1[i] = strip1[i-1];
+            strip1[i].fadeToBlackBy(30);
+            strip2[i] = strip2[i-1];
+            strip2[i].fadeToBlackBy(30);
+        }
+    }
+    #endif
 }
 
 void sinelon() {
@@ -155,6 +202,38 @@ void juggle() {
         leds[beatsin16(i+7, 0, HardwareConfig::NUM_LEDS-1)] |= CHSV(dothue, 200, 255);
         dothue += 32;
     }
+}
+
+// NEW STRIP-SPECIFIC EFFECT - CENTER ORIGIN JUGGLE
+void stripJuggle() {
+    #if LED_STRIPS_MODE
+    // CENTER ORIGIN JUGGLE - Multiple dots oscillate outward from center LEDs 79/80
+    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 20);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 20);
+    
+    uint8_t dothue = 0;
+    for(int i = 0; i < 8; i++) {
+        // Oscillate from center outward (0 to STRIP_HALF_LENGTH)
+        int distFromCenter = beatsin16(i+7, 0, HardwareConfig::STRIP_HALF_LENGTH);
+        
+        // Set positions on both sides of center
+        int pos1 = HardwareConfig::STRIP_CENTER_POINT + distFromCenter;
+        int pos2 = HardwareConfig::STRIP_CENTER_POINT - distFromCenter;
+        
+        CRGB color = CHSV(dothue, 200, 255);
+        
+        if (pos1 < HardwareConfig::STRIP_LENGTH) {
+            strip1[pos1] |= color;
+            strip2[pos1] |= color;
+        }
+        if (pos2 >= 0) {
+            strip1[pos2] |= color;
+            strip2[pos2] |= color;
+        }
+        
+        dothue += 32;
+    }
+    #endif
 }
 
 void bpm() {
@@ -207,6 +286,59 @@ void waveEffect() {
 }
 
 void rippleEffect() {
+    #if LED_STRIPS_MODE
+    // CENTER ORIGIN RIPPLES - Always start from CENTER LEDs 79/80 and move outward
+    static struct {
+        float radius;
+        float speed;
+        uint8_t hue;
+        bool active;
+    } ripples[5];
+    
+    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, fadeAmount);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, fadeAmount);
+    
+    // Spawn new ripples at CENTER ONLY
+    if (random8() < 30) {
+        for (uint8_t i = 0; i < 5; i++) {
+            if (!ripples[i].active) {
+                ripples[i].radius = 0;
+                ripples[i].speed = 0.5f + (random8() / 255.0f) * 2.0f;
+                ripples[i].hue = random8();
+                ripples[i].active = true;
+                break;
+            }
+        }
+    }
+    
+    // Update and render CENTER ORIGIN ripples
+    for (uint8_t r = 0; r < 5; r++) {
+        if (!ripples[r].active) continue;
+        
+        ripples[r].radius += ripples[r].speed * (paletteSpeed / 10.0f);
+        
+        if (ripples[r].radius > HardwareConfig::STRIP_HALF_LENGTH) {
+            ripples[r].active = false;
+            continue;
+        }
+        
+        // Draw ripple moving outward from center
+        for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+            float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
+            float wavePos = distFromCenter - ripples[r].radius;
+            
+            if (abs(wavePos) < 3.0f) {
+                uint8_t brightness = 255 - (abs(wavePos) * 85);
+                brightness = (brightness * (HardwareConfig::STRIP_HALF_LENGTH - ripples[r].radius)) / HardwareConfig::STRIP_HALF_LENGTH;
+                
+                CRGB color = ColorFromPalette(currentPalette, ripples[r].hue + distFromCenter, brightness);
+                strip1[i] += color;
+                strip2[i] += color;
+            }
+        }
+    }
+    #else
+    // Original matrix mode with center origin
     static struct {
         float center;
         float radius;
@@ -217,11 +349,10 @@ void rippleEffect() {
     
     fadeToBlackBy(leds, HardwareConfig::NUM_LEDS, fadeAmount);
     
-    // Spawn new ripples
     if (random8() < 20) {
         for (uint8_t i = 0; i < 5; i++) {
             if (!ripples[i].active) {
-                ripples[i].center = random16(HardwareConfig::NUM_LEDS);
+                ripples[i].center = HardwareConfig::NUM_LEDS / 2; // Matrix center
                 ripples[i].radius = 0;
                 ripples[i].speed = 0.5f + (random8() / 255.0f) * 2.0f;
                 ripples[i].hue = random8();
@@ -231,13 +362,12 @@ void rippleEffect() {
         }
     }
     
-    // Update and render ripples
     for (uint8_t r = 0; r < 5; r++) {
         if (!ripples[r].active) continue;
         
         ripples[r].radius += ripples[r].speed * (paletteSpeed / 10.0f);
         
-        if (ripples[r].radius > HardwareConfig::NUM_LEDS) {
+        if (ripples[r].radius > HardwareConfig::NUM_LEDS / 2) {
             ripples[r].active = false;
             continue;
         }
@@ -248,13 +378,12 @@ void rippleEffect() {
             
             if (abs(wavePos) < 5.0f) {
                 uint8_t brightness = 255 - (abs(wavePos) * 51);
-                brightness = (brightness * (HardwareConfig::NUM_LEDS - ripples[r].radius)) / HardwareConfig::NUM_LEDS;
-                
                 CRGB color = ColorFromPalette(currentPalette, ripples[r].hue + distance, brightness);
                 leds[i] += color;
             }
         }
     }
+    #endif
 }
 
 void interferenceEffect() {
@@ -280,6 +409,89 @@ void interferenceEffect() {
         CRGB color = ColorFromPalette(currentPalette, hue, brightness);
         leds[i] = color;
     }
+}
+
+// NEW STRIP-SPECIFIC EFFECT - CENTER ORIGIN INTERFERENCE
+void stripInterference() {
+    #if LED_STRIPS_MODE
+    // CENTER ORIGIN INTERFERENCE - Waves emanate from center LEDs 79/80 and interfere
+    static float wave1Phase = 0;
+    static float wave2Phase = 0;
+    
+    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, fadeAmount);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, fadeAmount);
+    
+    wave1Phase += paletteSpeed / 20.0f;
+    wave2Phase -= paletteSpeed / 30.0f;
+    
+    for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+        // Calculate distance from CENTER (79/80)
+        float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
+        float normalizedDist = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
+        
+        // Two waves emanating from center with different frequencies
+        float wave1 = sin(normalizedDist * PI * 4 + wave1Phase) * 127 + 128;
+        float wave2 = sin(normalizedDist * PI * 6 + wave2Phase) * 127 + 128;
+        
+        // Interference pattern from CENTER ORIGIN
+        float interference = (wave1 + wave2) / 2.0f;
+        uint8_t brightness = interference;
+        
+        // Hue varies with distance from center
+        uint8_t hue = (uint8_t)(wave1Phase * 20) + (distFromCenter * 8);
+        
+        CRGB color = ColorFromPalette(currentPalette, hue, brightness);
+        strip1[i] = color;
+        strip2[i] = color;
+    }
+    #endif
+}
+
+// NEW STRIP-SPECIFIC EFFECT - CENTER ORIGIN BPM
+void stripBPM() {
+    #if LED_STRIPS_MODE
+    // CENTER ORIGIN BPM - Pulses emanate from center LEDs 79/80
+    uint8_t BeatsPerMinute = 62;
+    uint8_t beat = beatsin8(BeatsPerMinute, 64, 255);
+    
+    for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+        // Calculate distance from CENTER (79/80)
+        float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
+        uint8_t colorIndex = gHue + (distFromCenter * 2);
+        uint8_t brightness = beat - gHue + (distFromCenter * 10);
+        
+        CRGB color = ColorFromPalette(currentPalette, colorIndex, brightness);
+        strip1[i] = color;
+        strip2[i] = color;
+    }
+    #endif
+}
+
+// NEW STRIP-SPECIFIC EFFECT - CENTER ORIGIN PLASMA
+void stripPlasma() {
+    #if LED_STRIPS_MODE
+    // CENTER ORIGIN PLASMA - Plasma field generated from center LEDs 79/80
+    static uint16_t time = 0;
+    time += paletteSpeed;
+    
+    for (int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+        // Calculate distance from CENTER (79/80)
+        float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
+        float normalizedDist = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
+        
+        // Plasma calculations from center outward
+        float v1 = sin(normalizedDist * 8.0f + time / 100.0f);
+        float v2 = sin(normalizedDist * 5.0f - time / 150.0f);
+        float v3 = sin(normalizedDist * 3.0f + time / 200.0f);
+        
+        uint8_t hue = (uint8_t)((v1 + v2 + v3) * 42.5f + 127.5f) + gHue;
+        uint8_t brightness = (uint8_t)((v1 + v2) * 63.75f + 191.25f);
+        
+        CRGB color = CHSV(hue, 255, brightness);
+        strip1[i] = color;
+        strip2[i] = color;
+    }
+    #endif
 }
 
 // ============== MATHEMATICAL PATTERNS ==============
@@ -406,6 +618,34 @@ void ocean() {
     }
 }
 
+// NEW STRIP-SPECIFIC EFFECT - CENTER ORIGIN OCEAN
+void stripOcean() {
+    #if LED_STRIPS_MODE
+    // CENTER ORIGIN OCEAN - Waves emanate from center LEDs 79/80
+    static uint16_t waterOffset = 0;
+    waterOffset += paletteSpeed / 2;
+    
+    for (int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+        // Calculate distance from CENTER (79/80)
+        float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
+        
+        // Create wave-like motion from center outward
+        uint8_t wave1 = sin8((distFromCenter * 10) + waterOffset);
+        uint8_t wave2 = sin8((distFromCenter * 7) - waterOffset * 2);
+        uint8_t combinedWave = (wave1 + wave2) / 2;
+        
+        // Ocean colors from deep blue to cyan
+        uint8_t hue = 160 + (combinedWave >> 3);  // Blue range
+        uint8_t brightness = 100 + (combinedWave >> 1);
+        uint8_t saturation = 255 - (combinedWave >> 2);
+        
+        CRGB color = CHSV(hue, saturation, brightness);
+        strip1[i] = color;
+        strip2[i] = color;
+    }
+    #endif
+}
+
 // ============== TRANSITION SYSTEM ==============
 
 void startTransition(uint8_t newEffect) {
@@ -455,6 +695,31 @@ struct Effect {
     EffectFunction function;
 };
 
+#if LED_STRIPS_MODE
+Effect effects[] = {
+    // Signature effects with CENTER ORIGIN
+    {"Fire", fire},
+    {"Ocean", stripOcean},
+    
+    // Wave dynamics (already CENTER ORIGIN)
+    {"Wave", waveEffect},
+    {"Ripple", rippleEffect},
+    
+    // NEW Strip-specific CENTER ORIGIN effects
+    {"Strip Confetti", stripConfetti},
+    {"Strip Juggle", stripJuggle},
+    {"Strip Interference", stripInterference},
+    {"Strip BPM", stripBPM},
+    {"Strip Plasma", stripPlasma},
+    
+    // Motion effects (already CENTER ORIGIN)
+    {"Sinelon", sinelon},
+    
+    // Palette showcase
+    {"Solid Blue", solidColor},
+    {"Pulse Effect", pulseEffect}
+};
+#else
 Effect effects[] = {
     // Signature effects
     {"Fire", fire},
@@ -480,6 +745,7 @@ Effect effects[] = {
     {"Solid Blue", solidColor},
     {"Pulse Effect", pulseEffect}
 };
+#endif
 
 const uint8_t NUM_EFFECTS = sizeof(effects) / sizeof(effects[0]);
 
@@ -534,9 +800,9 @@ void setup() {
     
     Serial.println("Dual strip FastLED initialized");
     
-    // Initialize M5Stack 8Encoder (disabled for stability)
+    // Initialize M5Stack 8Encoder
     initEncoders();
-    Serial.println("System running in STABLE MODE - using button control");
+    Serial.println("M5Stack 8Encoder initialized - encoder control enabled");
 #else
     // Single matrix initialization  
     FastLED.addLeds<LED_TYPE, HardwareConfig::LED_DATA_PIN, COLOR_ORDER>(
@@ -601,6 +867,12 @@ void loop() {
     // Use button control for boards that have buttons
     handleButton();
 #endif
+
+#if LED_STRIPS_MODE
+    // Process M5Stack 8Encoder input
+    processEncoders();
+    updateEncoderLEDs();
+#endif
     
 #if FEATURE_SERIAL_MENU
     // Process serial commands for full system control
@@ -637,6 +909,14 @@ void loop() {
         Serial.print(", Free heap: ");
         Serial.print(ESP.getFreeHeap());
         Serial.println(" bytes");
+    }
+    
+    // Auto-cycle effects every 15 seconds for demonstration
+    EVERY_N_SECONDS(15) {
+        uint8_t nextEffect = (currentEffect + 1) % NUM_EFFECTS;
+        startTransition(nextEffect);
+        Serial.print("Auto-switching to: ");
+        Serial.println(effects[nextEffect].name);
     }
     
     // Frame rate control

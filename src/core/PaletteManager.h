@@ -7,7 +7,7 @@
 #include "../config/features.h"
 
 // Forward declare the gradient palettes array
-extern const TProgmemRGBGradientPalettePtr gGradientPalettes[];
+extern const TProgmemRGBGradientPaletteRef gGradientPalettes[];
 extern const uint8_t gGradientPaletteCount;
 
 class PaletteManager {

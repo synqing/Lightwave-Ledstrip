@@ -5,18 +5,33 @@
 #include <FastLED.h>
 #include "../config/hardware_config.h"
 #include "../config/features.h"
-#include "../core/FxEngine.h"
-#include "../core/PaletteManager.h"
-#include "../hardware/PerformanceMonitor.h"
+// #include "../core/FxEngine.h"  // Disabled for now due to conflicts
+// #include "../core/PaletteManager.h"  // Disabled for now
+// #include "../hardware/PerformanceMonitor.h"  // Disabled for now
 
 // External variables
-extern FxEngine fxEngine;
-extern PaletteManager paletteManager;
+// extern FxEngine fxEngine;  // Disabled due to conflicts
+// extern PaletteManager paletteManager;  // Disabled for now
 extern uint8_t brightnessVal;
 extern uint8_t fadeAmount;
 extern uint16_t fps;
 extern uint8_t paletteSpeed;
-extern PerformanceMonitor perfMon;
+// extern PerformanceMonitor perfMon;  // Disabled for now
+
+// Palette system
+extern CRGBPalette16 currentPalette;
+extern CRGBPalette16 targetPalette;
+extern uint8_t currentPaletteIndex;
+extern const char* paletteNames[];
+extern const TProgmemRGBGradientPaletteRef gGradientPalettes[];
+extern const uint8_t gGradientPaletteCount;
+
+// Dummy wave engine for now
+class DummyWave2D {
+public:
+    uint8_t getNumActiveSources() { return 0; }
+};
+extern DummyWave2D fxWave2D;
 
 class SerialMenu {
 private:
@@ -474,7 +489,7 @@ private:
   }
   
   void resetToDefaults() {
-    brightnessVal = DEFAULT_BRIGHTNESS;
+    brightnessVal = HardwareConfig::DEFAULT_BRIGHTNESS;
     fadeAmount = 20;
     paletteSpeed = 10;
     fps = 120;

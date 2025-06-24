@@ -514,4 +514,41 @@ const TProgmemRGBGradientPaletteRef gGradientPalettes[] = {
 
 // Count of how many cpt-city gradients are defined:
 const uint8_t gGradientPaletteCount =
-  sizeof(gGradientPalettes) / sizeof(TProgmemRGBGradientPaletteRef); 
+  sizeof(gGradientPalettes) / sizeof(TProgmemRGBGradientPaletteRef);
+
+// Array of palette names for serial menu
+const char* paletteNames[] = {
+  "Sunset Real",
+  "Rivendell",
+  "Ocean Breeze 036",
+  "RGI 15",
+  "Retro 2",
+  "Analogous 1",
+  "Pink Splash 08",
+  "Coral Reef",
+  "Ocean Breeze 068",
+  "Pink Splash 07",
+  "Vintage 01",
+  "Departure",
+  "Landscape 64",
+  "Landscape 33",
+  "Rainbow Sherbet",
+  "GR65 Hult",
+  "GR64 Hult",
+  "GMT Dry Wet",
+  "IB Jul01",
+  "Vintage 57",
+  "IB15",
+  "Fuschia 7",
+  "Emerald Dragon",
+  "Lava",
+  "Fire",
+  "Colorful",
+  "Magenta Evening",
+  "Pink Purple",
+  "Autumn 19",
+  "Blue Magenta White",
+  "Black Magenta Red",
+  "Red Magenta Yellow",
+  "Blue Cyan Yellow"
+}; 

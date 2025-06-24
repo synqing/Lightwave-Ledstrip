@@ -54,6 +54,20 @@ uint32_t lastButtonPress = 0;
 uint8_t fadeAmount = 20;
 uint8_t paletteSpeed = 10;
 
+// Universal visual parameters for encoders 4-7
+struct VisualParams {
+    uint8_t intensity = 128;      // Effect intensity/amplitude (0-255)
+    uint8_t saturation = 255;     // Color saturation (0-255)
+    uint8_t complexity = 128;     // Effect complexity/detail (0-255)
+    uint8_t variation = 0;        // Effect variation/mode (0-255)
+    
+    // Helper functions for normalized access
+    float getIntensityNorm() { return intensity / 255.0f; }
+    float getSaturationNorm() { return saturation / 255.0f; }
+    float getComplexityNorm() { return complexity / 255.0f; }
+    float getVariationNorm() { return variation / 255.0f; }
+} visualParams;
+
 // Transition parameters
 bool inTransition = false;
 uint32_t transitionStart = 0;
@@ -407,7 +421,7 @@ void encoderTask(void* parameter) {
         // Poll encoders safely in dedicated task
         bool connectionLost = false;
         
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < 8; i++) {
             // Track I2C transaction start time
             uint32_t transaction_start = micros();
             
@@ -489,7 +503,7 @@ void encoderTask(void* parameter) {
         if (now - lastLEDUpdate >= 100) {
             lastLEDUpdate = now;
             
-            for (int i = 0; i < 4; i++) {
+            for (int i = 0; i < 8; i++) {
                 if (ledNeedsUpdate[i]) {
                     if (now - ledFlashTime[i] < 300) {
                         // Green flash for activity
@@ -501,6 +515,10 @@ void encoderTask(void* parameter) {
                             case 1: encoder.writeRGB(i, 16, 16, 16); break; // White - Brightness
                             case 2: encoder.writeRGB(i, 8, 0, 16); break;   // Purple - Palette
                             case 3: encoder.writeRGB(i, 16, 8, 0); break;   // Yellow - Speed
+                            case 4: encoder.writeRGB(i, 16, 0, 8); break;   // Orange - Intensity
+                            case 5: encoder.writeRGB(i, 0, 16, 16); break;  // Cyan - Saturation
+                            case 6: encoder.writeRGB(i, 8, 16, 0); break;   // Lime - Complexity
+                            case 7: encoder.writeRGB(i, 16, 0, 16); break;  // Magenta - Variation
                         }
                         ledNeedsUpdate[i] = false;
                     }
@@ -797,12 +815,13 @@ void rippleEffect() {
     fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, fadeAmount);
     fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, fadeAmount);
     
-    // Spawn new ripples at CENTER ONLY
-    if (random8() < 30) {
+    // Spawn new ripples at CENTER ONLY - frequency controlled by complexity
+    uint8_t spawnChance = 30 * visualParams.getComplexityNorm();
+    if (random8() < spawnChance) {
         for (uint8_t i = 0; i < 5; i++) {
             if (!ripples[i].active) {
                 ripples[i].radius = 0;
-                ripples[i].speed = 0.5f + (random8() / 255.0f) * 2.0f;
+                ripples[i].speed = (0.5f + (random8() / 255.0f) * 2.0f) * visualParams.getIntensityNorm();
                 ripples[i].hue = random8();
                 ripples[i].active = true;
                 break;
@@ -829,8 +848,11 @@ void rippleEffect() {
             if (abs(wavePos) < 3.0f) {
                 uint8_t brightness = 255 - (abs(wavePos) * 85);
                 brightness = (brightness * (HardwareConfig::STRIP_HALF_LENGTH - ripples[r].radius)) / HardwareConfig::STRIP_HALF_LENGTH;
+                brightness = brightness * visualParams.getIntensityNorm();
                 
                 CRGB color = ColorFromPalette(currentPalette, ripples[r].hue + distFromCenter, brightness);
+                // Apply saturation control
+                color = blend(CRGB::White, color, visualParams.saturation);
                 strip1[i] += color;
                 strip2[i] += color;
             }
@@ -1067,15 +1089,23 @@ void fire() {
         heat[k] = (heat[k - 1] + heat[k] + heat[k + 1]) / 3;
     }
     
-    // Ignite new sparks at CENTER (79/80)
-    if(random8() < 120) {
+    // Ignite new sparks at CENTER (79/80) - intensity controls spark frequency and heat
+    uint8_t sparkChance = 120 * visualParams.getIntensityNorm();
+    if(random8() < sparkChance) {
         int center = HardwareConfig::STRIP_CENTER_POINT + random8(2); // 79 or 80
-        heat[center] = qadd8(heat[center], random8(160, 255));
+        uint8_t heatAmount = 160 + (95 * visualParams.getIntensityNorm());
+        heat[center] = qadd8(heat[center], random8(160, heatAmount));
     }
     
     // Map heat to both strips with CENTER ORIGIN
     for(int j = 0; j < HardwareConfig::STRIP_LENGTH; j++) {
-        CRGB color = HeatColor(heat[j]);
+        // Scale heat by intensity
+        uint8_t scaledHeat = heat[j] * visualParams.getIntensityNorm();
+        CRGB color = HeatColor(scaledHeat);
+        
+        // Apply saturation control (desaturate towards white)
+        color = blend(CRGB::White, color, visualParams.saturation);
+        
         strip1[j] = color;
         strip2[j] = color;
     }
@@ -1147,6 +1177,289 @@ void stripOcean() {
 
 // ============== LIGHT GUIDE PLATE EFFECTS ==============
 // LGP implementation has been removed - awaiting Dual-Strip Wave Engine
+
+// ============== NEW CENTER ORIGIN EFFECTS ==============
+
+// HEARTBEAT - Pulses emanate from center like a beating heart
+void heartbeatEffect() {
+    #if LED_STRIPS_MODE
+    static float phase = 0;
+    static float lastBeat = 0;
+    
+    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 20);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 20);
+    
+    // Heartbeat rhythm: lub-dub... lub-dub...
+    float beatPattern = sin(phase) + sin(phase * 2.1f) * 0.4f;
+    
+    if (beatPattern > 1.8f && phase - lastBeat > 2.0f) {
+        lastBeat = phase;
+        // Generate pulse from CENTER
+        for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+            float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
+            float normalizedDist = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
+            
+            // Pulse intensity decreases with distance
+            uint8_t brightness = 255 * (1.0f - normalizedDist);
+            CRGB color = ColorFromPalette(currentPalette, gHue + normalizedDist * 50, brightness);
+            
+            strip1[i] += color;
+            strip2[i] += color;
+        }
+    }
+    
+    phase += paletteSpeed / 200.0f;
+    #endif
+}
+
+// BREATHING - Smooth expansion and contraction from center
+void breathingEffect() {
+    #if LED_STRIPS_MODE
+    static float breathPhase = 0;
+    
+    // Smooth breathing curve
+    float breath = (sin(breathPhase) + 1.0f) / 2.0f;
+    float radius = breath * HardwareConfig::STRIP_HALF_LENGTH;
+    
+    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 15);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 15);
+    
+    for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+        float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
+        
+        if (distFromCenter <= radius) {
+            float intensity = 1.0f - (distFromCenter / radius) * 0.5f;
+            uint8_t brightness = 255 * intensity * breath;
+            
+            CRGB color = ColorFromPalette(currentPalette, gHue + distFromCenter * 3, brightness);
+            strip1[i] = color;
+            strip2[i] = color;
+        }
+    }
+    
+    breathPhase += paletteSpeed / 100.0f;
+    #endif
+}
+
+// SHOCKWAVE - Explosive rings emanate from center
+void shockwaveEffect() {
+    #if LED_STRIPS_MODE
+    static float shockwaves[5] = {-1, -1, -1, -1, -1};
+    static uint8_t waveHues[5] = {0};
+    
+    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 25);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 25);
+    
+    // Spawn new shockwave from CENTER - complexity controls frequency
+    uint8_t spawnChance = 20 * visualParams.getComplexityNorm();
+    if (random8() < spawnChance) {
+        for (int w = 0; w < 5; w++) {
+            if (shockwaves[w] < 0) {
+                shockwaves[w] = 0;
+                waveHues[w] = gHue + random8(64);
+                break;
+            }
+        }
+    }
+    
+    // Update and render shockwaves
+    for (int w = 0; w < 5; w++) {
+        if (shockwaves[w] >= 0) {
+            shockwaves[w] += (paletteSpeed / 20.0f) * visualParams.getIntensityNorm();
+            
+            if (shockwaves[w] > HardwareConfig::STRIP_HALF_LENGTH) {
+                shockwaves[w] = -1;
+                continue;
+            }
+            
+            // Render shockwave ring
+            for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+                float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
+                float ringDist = abs(distFromCenter - shockwaves[w]);
+                
+                // Ring thickness controlled by complexity
+                float ringThickness = 3.0f + (3.0f * visualParams.getComplexityNorm());
+                if (ringDist < ringThickness) {
+                    float intensity = 1.0f - (ringDist / ringThickness);
+                    uint8_t brightness = 255 * intensity * (1.0f - shockwaves[w] / HardwareConfig::STRIP_HALF_LENGTH);
+                    brightness = brightness * visualParams.getIntensityNorm();
+                    
+                    CRGB color = ColorFromPalette(currentPalette, waveHues[w], brightness);
+                    // Apply saturation control
+                    color = blend(CRGB::White, color, visualParams.saturation);
+                    strip1[i] += color;
+                    strip2[i] += color;
+                }
+            }
+        }
+    }
+    #endif
+}
+
+// VORTEX - Spiral patterns emanating from center
+void vortexEffect() {
+    #if LED_STRIPS_MODE
+    static float vortexAngle = 0;
+    
+    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 20);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 20);
+    
+    for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+        float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
+        float normalizedDist = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
+        
+        // Spiral calculation
+        float spiralOffset = normalizedDist * 8.0f + vortexAngle;
+        float intensity = sin(spiralOffset) * 0.5f + 0.5f;
+        intensity *= (1.0f - normalizedDist * 0.5f); // Fade towards edges
+        
+        uint8_t brightness = 255 * intensity;
+        uint8_t hue = gHue + distFromCenter * 5 + vortexAngle * 20;
+        
+        CRGB color = ColorFromPalette(currentPalette, hue, brightness);
+        
+        // Opposite spiral direction for strip2
+        if (i < HardwareConfig::STRIP_CENTER_POINT) {
+            strip1[i] = color;
+            strip2[HardwareConfig::STRIP_LENGTH - 1 - i] = color;
+        } else {
+            strip1[i] = color;
+            strip2[HardwareConfig::STRIP_LENGTH - 1 - i] = color;
+        }
+    }
+    
+    vortexAngle += paletteSpeed / 50.0f;
+    #endif
+}
+
+// COLLISION - Particles shoot from edges to center and explode
+void collisionEffect() {
+    #if LED_STRIPS_MODE
+    static float particle1Pos = 0;
+    static float particle2Pos = HardwareConfig::STRIP_LENGTH - 1;
+    static bool exploding = false;
+    static float explosionRadius = 0;
+    
+    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 30);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 30);
+    
+    if (!exploding) {
+        // Move particles toward center
+        particle1Pos += paletteSpeed / 10.0f;
+        particle2Pos -= paletteSpeed / 10.0f;
+        
+        // Draw particles
+        for (int trail = 0; trail < 10; trail++) {
+            int pos1 = particle1Pos - trail;
+            int pos2 = particle2Pos + trail;
+            
+            if (pos1 >= 0 && pos1 < HardwareConfig::STRIP_LENGTH) {
+                uint8_t brightness = 255 - (trail * 25);
+                strip1[pos1] = ColorFromPalette(currentPalette, gHue, brightness);
+                strip2[pos1] = ColorFromPalette(currentPalette, gHue + 128, brightness);
+            }
+            
+            if (pos2 >= 0 && pos2 < HardwareConfig::STRIP_LENGTH) {
+                uint8_t brightness = 255 - (trail * 25);
+                strip1[pos2] = ColorFromPalette(currentPalette, gHue + 128, brightness);
+                strip2[pos2] = ColorFromPalette(currentPalette, gHue, brightness);
+            }
+        }
+        
+        // Check for collision at center
+        if (particle1Pos >= HardwareConfig::STRIP_CENTER_POINT - 5 && 
+            particle2Pos <= HardwareConfig::STRIP_CENTER_POINT + 5) {
+            exploding = true;
+            explosionRadius = 0;
+        }
+    } else {
+        // Explosion expanding from center
+        explosionRadius += paletteSpeed / 5.0f;
+        
+        for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+            float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
+            
+            if (distFromCenter <= explosionRadius && distFromCenter >= explosionRadius - 10) {
+                float intensity = 1.0f - ((distFromCenter - (explosionRadius - 10)) / 10.0f);
+                uint8_t brightness = 255 * intensity;
+                
+                CRGB color = ColorFromPalette(currentPalette, gHue + random8(64), brightness);
+                strip1[i] += color;
+                strip2[i] += color;
+            }
+        }
+        
+        // Reset when explosion reaches edges
+        if (explosionRadius > HardwareConfig::STRIP_HALF_LENGTH + 10) {
+            exploding = false;
+            particle1Pos = 0;
+            particle2Pos = HardwareConfig::STRIP_LENGTH - 1;
+        }
+    }
+    #endif
+}
+
+// GRAVITY WELL - Everything gets pulled toward center
+void gravityWellEffect() {
+    #if LED_STRIPS_MODE
+    static struct GravityParticle {
+        float position;
+        float velocity;
+        uint8_t hue;
+        bool active;
+    } particles[20];
+    
+    static bool initialized = false;
+    if (!initialized) {
+        for (int p = 0; p < 20; p++) {
+            particles[p].position = random16(HardwareConfig::STRIP_LENGTH);
+            particles[p].velocity = 0;
+            particles[p].hue = random8();
+            particles[p].active = true;
+        }
+        initialized = true;
+    }
+    
+    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 20);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 20);
+    
+    // Update particles with gravity toward center
+    for (int p = 0; p < 20; p++) {
+        if (particles[p].active) {
+            float distFromCenter = particles[p].position - HardwareConfig::STRIP_CENTER_POINT;
+            float gravity = -distFromCenter * 0.01f * paletteSpeed / 10.0f;
+            
+            particles[p].velocity += gravity;
+            particles[p].velocity *= 0.95f; // Damping
+            particles[p].position += particles[p].velocity;
+            
+            // Respawn at edges if particle reaches center
+            if (abs(particles[p].position - HardwareConfig::STRIP_CENTER_POINT) < 2) {
+                particles[p].position = random8(2) ? 0 : HardwareConfig::STRIP_LENGTH - 1;
+                particles[p].velocity = 0;
+                particles[p].hue = random8();
+            }
+            
+            // Draw particle with motion blur
+            int pos = particles[p].position;
+            if (pos >= 0 && pos < HardwareConfig::STRIP_LENGTH) {
+                strip1[pos] += ColorFromPalette(currentPalette, particles[p].hue, 255);
+                strip2[pos] += ColorFromPalette(currentPalette, particles[p].hue + 64, 255);
+                
+                // Motion blur
+                for (int blur = 1; blur < 4; blur++) {
+                    int blurPos = pos - (particles[p].velocity > 0 ? blur : -blur);
+                    if (blurPos >= 0 && blurPos < HardwareConfig::STRIP_LENGTH) {
+                        uint8_t brightness = 255 / (blur + 1);
+                        strip1[blurPos] += ColorFromPalette(currentPalette, particles[p].hue, brightness);
+                        strip2[blurPos] += ColorFromPalette(currentPalette, particles[p].hue + 64, brightness);
+                    }
+                }
+            }
+        }
+    }
+    #endif
+}
 
 // ============== TRANSITION SYSTEM ==============
 
@@ -1231,13 +1544,14 @@ Effect effects[] = {
     {"Solid Blue", solidColor, EFFECT_TYPE_STANDARD},
     {"Pulse Effect", pulseEffect, EFFECT_TYPE_STANDARD},
     
-    // =============== DUAL-STRIP WAVE ENGINE EFFECTS ===============
-    {"Wave Independent", []() { waveEngine.interaction_mode = MODE_INDEPENDENT; renderDualStripWaves(waveEngine); }, EFFECT_TYPE_WAVE_ENGINE},
-    {"Wave Interference", []() { waveEngine.interaction_mode = MODE_INTERFERENCE; renderDualStripWaves(waveEngine); }, EFFECT_TYPE_WAVE_ENGINE},
-    {"Wave Chase", []() { waveEngine.interaction_mode = MODE_CHASE; renderDualStripWaves(waveEngine); }, EFFECT_TYPE_WAVE_ENGINE},
-    {"Wave Reflection", []() { waveEngine.interaction_mode = MODE_REFLECTION; renderDualStripWaves(waveEngine); }, EFFECT_TYPE_WAVE_ENGINE},
-    {"Wave Spiral", []() { waveEngine.interaction_mode = MODE_SPIRAL; renderDualStripWaves(waveEngine); }, EFFECT_TYPE_WAVE_ENGINE},
-    {"Wave Pulse", []() { waveEngine.interaction_mode = MODE_PULSE; renderDualStripWaves(waveEngine); }, EFFECT_TYPE_WAVE_ENGINE}
+    // =============== NEW CENTER ORIGIN EFFECTS ===============
+    // These replace the rubbish wave effects with proper CENTER ORIGIN compliance
+    {"Heartbeat", heartbeatEffect, EFFECT_TYPE_STANDARD},
+    {"Breathing", breathingEffect, EFFECT_TYPE_STANDARD},
+    {"Shockwave", shockwaveEffect, EFFECT_TYPE_STANDARD},
+    {"Vortex", vortexEffect, EFFECT_TYPE_STANDARD},
+    {"Collision", collisionEffect, EFFECT_TYPE_STANDARD},
+    {"Gravity Well", gravityWellEffect, EFFECT_TYPE_STANDARD}
 };
 #else
 Effect effects[] = {
@@ -1346,7 +1660,8 @@ void setup() {
             Serial.println("Encoder mapping:");
             Serial.println("  0: Effect selection  1: Brightness");
             Serial.println("  2: Palette           3: Speed");
-            Serial.println("  4-7: Reserved");
+            Serial.println("  4: Intensity         5: Saturation");
+            Serial.println("  6: Complexity        7: Variation");
         } else {
             Serial.println("M5ROTATE8 not found initially - task will attempt reconnection");
             encoderAvailable = false;
@@ -1501,9 +1816,24 @@ void loop() {
                         Serial.printf("⚡ MAIN: Speed changed to %d\n", paletteSpeed);
                         break;
                         
-                    case 4: case 5: case 6: case 7:
-                        // Additional encoders available for future use
-                        Serial.printf("📍 MAIN: Encoder %d not mapped for standard effects\n", event.encoder_id);
+                    case 4: // Intensity/Amplitude
+                        visualParams.intensity = constrain(visualParams.intensity + (event.delta > 0 ? 16 : -16), 0, 255);
+                        Serial.printf("🔥 MAIN: Intensity changed to %d (%.1f%%)\n", visualParams.intensity, visualParams.getIntensityNorm() * 100);
+                        break;
+                        
+                    case 5: // Saturation
+                        visualParams.saturation = constrain(visualParams.saturation + (event.delta > 0 ? 16 : -16), 0, 255);
+                        Serial.printf("🎨 MAIN: Saturation changed to %d (%.1f%%)\n", visualParams.saturation, visualParams.getSaturationNorm() * 100);
+                        break;
+                        
+                    case 6: // Complexity/Detail
+                        visualParams.complexity = constrain(visualParams.complexity + (event.delta > 0 ? 16 : -16), 0, 255);
+                        Serial.printf("✨ MAIN: Complexity changed to %d (%.1f%%)\n", visualParams.complexity, visualParams.getComplexityNorm() * 100);
+                        break;
+                        
+                    case 7: // Variation/Mode
+                        visualParams.variation = constrain(visualParams.variation + (event.delta > 0 ? 16 : -16), 0, 255);
+                        Serial.printf("🔄 MAIN: Variation changed to %d (%.1f%%)\n", visualParams.variation, visualParams.getVariationNorm() * 100);
                         break;
                 }
             }

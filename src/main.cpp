@@ -88,13 +88,195 @@ struct EncoderEvent {
     uint32_t timestamp;
 };
 
-// Encoder state tracking for proper debouncing
-struct EncoderState {
-    int32_t last_value = 0;
-    uint32_t last_change_time = 0;
-    bool skip_next = false;
+// Balanced detent handling for M5ROTATE8 - responsive but stable
+struct DetentDebounce {
+    int32_t pending_count = 0;          // Current pending count
+    uint32_t last_event_time = 0;       // Last encoder activity
+    uint32_t last_emit_time = 0;        // Last time we sent an event
+    bool expecting_pair = false;        // Expecting second count of a pair
+    
+    // Handle M5ROTATE8's variable count behavior (usually ±2, sometimes ±1)
+    bool processRawDelta(int32_t raw_delta, uint32_t now) {
+        // No change - don't emit anything
+        if (raw_delta == 0) {
+            return false;
+        }
+        
+        // Update timing
+        last_event_time = now;
+        
+        // Handle different count scenarios
+        if (abs(raw_delta) == 2) {
+            // Full detent in one read - emit immediately if not too soon
+            pending_count = (raw_delta > 0) ? 1 : -1;
+            expecting_pair = false;
+            
+            if (now - last_emit_time >= 60) { // 60ms minimum between events
+                last_emit_time = now;
+                return true;
+            }
+            pending_count = 0; // Too soon, discard
+            
+        } else if (abs(raw_delta) == 1) {
+            // Single count - might be half a detent or a full slow detent
+            if (!expecting_pair) {
+                // First single count
+                pending_count = raw_delta;
+                expecting_pair = true;
+                // Don't emit yet - wait to see if we get a pair
+            } else {
+                // Second single count
+                if ((pending_count > 0 && raw_delta > 0) || 
+                    (pending_count < 0 && raw_delta < 0)) {
+                    // Same direction - treat as full detent
+                    expecting_pair = false;
+                    pending_count = (pending_count > 0) ? 1 : -1;
+                    
+                    if (now - last_emit_time >= 60) {
+                        last_emit_time = now;
+                        return true;
+                    }
+                } else {
+                    // Direction change - start over
+                    pending_count = raw_delta;
+                    expecting_pair = true;
+                }
+            }
+        } else {
+            // Unusual count (>2) - emit normalized if not too soon
+            pending_count = (raw_delta > 0) ? 1 : -1;
+            expecting_pair = false;
+            
+            if (now - last_emit_time >= 60) {
+                last_emit_time = now;
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    // Get normalized delta (always ±1)
+    int32_t getNormalizedDelta() {
+        int32_t result = pending_count;
+        pending_count = 0;
+        expecting_pair = false;
+        return result;
+    }
 };
-EncoderState encoderStates[8];
+
+DetentDebounce encoderDebounce[8];
+
+// Performance monitoring system
+struct EncoderMetrics {
+    // Event tracking
+    uint32_t total_events = 0;
+    uint32_t successful_events = 0;
+    uint32_t dropped_events = 0;
+    uint32_t queue_full_count = 0;
+    
+    // I2C health
+    uint32_t i2c_transactions = 0;
+    uint32_t i2c_failures = 0;
+    uint32_t connection_losses = 0;
+    uint32_t successful_reconnects = 0;
+    
+    // Timing metrics
+    uint32_t total_response_time_us = 0;
+    uint32_t max_response_time_us = 0;
+    uint32_t min_response_time_us = UINT32_MAX;
+    
+    // Queue metrics
+    uint8_t max_queue_depth = 0;
+    uint8_t current_queue_depth = 0;
+    
+    // Reporting
+    uint32_t last_report_time = 0;
+    uint32_t report_interval_ms = 10000;  // 10 seconds
+    
+    void recordEvent(bool queued, uint32_t response_time_us) {
+        total_events++;
+        if (queued) {
+            successful_events++;
+            total_response_time_us += response_time_us;
+            max_response_time_us = max(max_response_time_us, response_time_us);
+            min_response_time_us = min(min_response_time_us, response_time_us);
+        } else {
+            dropped_events++;
+            queue_full_count++;
+        }
+    }
+    
+    void recordI2CTransaction(bool success) {
+        i2c_transactions++;
+        if (!success) {
+            i2c_failures++;
+        }
+    }
+    
+    void recordConnectionLoss() {
+        connection_losses++;
+    }
+    
+    void recordReconnect() {
+        successful_reconnects++;
+    }
+    
+    void updateQueueDepth(uint8_t depth) {
+        current_queue_depth = depth;
+        max_queue_depth = max(max_queue_depth, depth);
+    }
+    
+    void printReport() {
+        uint32_t now = millis();
+        if (now - last_report_time < report_interval_ms) return;
+        
+        last_report_time = now;
+        
+        Serial.println("\n📊 === ENCODER PERFORMANCE REPORT ===");
+        
+        // Calculate success rates
+        float event_success_rate = total_events > 0 ? 
+            (100.0f * successful_events / total_events) : 100.0f;
+        float i2c_success_rate = i2c_transactions > 0 ? 
+            (100.0f * (i2c_transactions - i2c_failures) / i2c_transactions) : 100.0f;
+        
+        // Calculate average response time
+        float avg_response_ms = successful_events > 0 ? 
+            (total_response_time_us / 1000.0f / successful_events) : 0.0f;
+        
+        Serial.printf("🔄 I2C Health: %.1f%% success (%u/%u transactions)\n", 
+                     i2c_success_rate, i2c_transactions - i2c_failures, i2c_transactions);
+        Serial.printf("📡 Connection: %u losses, %u successful reconnects\n",
+                     connection_losses, successful_reconnects);
+        Serial.printf("🎮 Events: %u total, %.1f%% delivered, %u dropped\n",
+                     total_events, event_success_rate, dropped_events);
+        Serial.printf("⏱️ Response: %.2fms avg, %.2fms max, %.2fms min\n",
+                     avg_response_ms, max_response_time_us / 1000.0f, 
+                     min_response_time_us == UINT32_MAX ? 0.0f : min_response_time_us / 1000.0f);
+        Serial.printf("📦 Queue: %u/%u current, %u max depth, %u overflows\n",
+                     current_queue_depth, 16, max_queue_depth, queue_full_count);
+        
+        // Calculate events per minute
+        float events_per_min = (total_events * 60000.0f) / report_interval_ms;
+        Serial.printf("⚡ Activity: %.1f events/min\n", events_per_min);
+        
+        Serial.println("=====================================\n");
+        
+        // Reset counters for next period
+        total_events = 0;
+        successful_events = 0;
+        dropped_events = 0;
+        i2c_transactions = 0;
+        i2c_failures = 0;
+        total_response_time_us = 0;
+        max_response_time_us = 0;
+        min_response_time_us = UINT32_MAX;
+        max_queue_depth = current_queue_depth;
+    }
+};
+
+EncoderMetrics encoderMetrics;
 
 // Connection health and recovery
 uint32_t lastConnectionCheck = 0;
@@ -204,6 +386,9 @@ void encoderTask(void* parameter) {
                     // Initialize encoder LEDs to idle state
                     encoder.setAll(0, 0, 16);
                     Serial.println("💡 TASK: Encoder LEDs initialized to idle state");
+                    
+                    // Record successful reconnection
+                    encoderMetrics.recordReconnect();
                 } else {
                     encoderFailCount++;
                     // Exponential backoff: 1s, 2s, 4s, 8s, max 30s
@@ -223,39 +408,30 @@ void encoderTask(void* parameter) {
         bool connectionLost = false;
         
         for (int i = 0; i < 4; i++) {
+            // Track I2C transaction start time
+            uint32_t transaction_start = micros();
+            
             if (!encoder.isConnected()) {
                 connectionLost = true;
+                encoderMetrics.recordI2CTransaction(false);
                 break;
             }
             
             // Read relative counter with error handling
             int32_t raw_delta = encoder.getRelCounter(i);
             
+            // Reset the counter after reading to prevent accumulation
             if (raw_delta != 0) {
-                EncoderState& state = encoderStates[i];
-                
-                // Debouncing: ignore changes within 50ms of last change
-                if (now - state.last_change_time < 50) {
-                    continue;
-                }
-                
-                // M5ROTATE8 quirk: sometimes sends ±2 for single detent
-                // Solution: Only send one event per physical detent
-                int32_t delta = (raw_delta > 0) ? 1 : -1;
-                
-                // Additional filtering: skip every other event if encoder is being too sensitive
-                if (abs(raw_delta) >= 2 && state.skip_next) {
-                    state.skip_next = false;
-                    continue;
-                }
-                
-                if (abs(raw_delta) >= 2) {
-                    state.skip_next = true;
-                }
-                
-                // Update state
-                state.last_value = raw_delta;
-                state.last_change_time = now;
+                encoder.resetCounter(i);
+            }
+            encoderMetrics.recordI2CTransaction(true);
+            
+            // Process through detent-aware debouncing
+            DetentDebounce& debounce = encoderDebounce[i];
+            
+            if (debounce.processRawDelta(raw_delta, now)) {
+                // Get normalized delta
+                int32_t delta = debounce.getNormalizedDelta();
                 
                 // Create event for main loop
                 EncoderEvent event = {
@@ -265,11 +441,25 @@ void encoderTask(void* parameter) {
                     .timestamp = now
                 };
                 
+                // Calculate response time
+                uint32_t response_time_us = micros() - transaction_start;
+                
+                // Update queue depth before sending
+                UBaseType_t queue_spaces = uxQueueSpacesAvailable(encoderEventQueue);
+                encoderMetrics.updateQueueDepth(16 - queue_spaces);
+                
                 // Send to main loop via queue (non-blocking)
-                if (xQueueSend(encoderEventQueue, &event, 0) != pdTRUE) {
+                bool queued = (xQueueSend(encoderEventQueue, &event, 0) == pdTRUE);
+                
+                // Record metrics
+                encoderMetrics.recordEvent(queued, response_time_us);
+                
+                if (!queued) {
                     Serial.println("⚠️ TASK: Encoder event queue full - dropping event");
-                } else {
-                    Serial.printf("📤 TASK: Encoder %d delta %+d (raw: %+d) queued\n", i, delta, raw_delta);
+                } else if (i == 0) {
+                    // Only log encoder 0 (effect selection) to reduce spam
+                    Serial.printf("📤 TASK: Encoder %d delta %+d (raw: %+d)\n", 
+                                 i, delta, raw_delta);
                 }
                 
                 // Flash LED to indicate activity
@@ -287,8 +477,12 @@ void encoderTask(void* parameter) {
             encoderAvailable = false;
             encoderSuspended = true;
             lastConnectionCheck = now;
+            encoderMetrics.recordConnectionLoss();
             continue;
         }
+        
+        // Print performance report periodically
+        encoderMetrics.printReport();
         
         // Update encoder LEDs every 100ms to show status
         static uint32_t lastLEDUpdate = 0;
@@ -998,72 +1192,78 @@ void updateTransition() {
 }
 
 // Array of effects
+enum EffectType {
+    EFFECT_TYPE_STANDARD,
+    EFFECT_TYPE_WAVE_ENGINE
+};
+
 struct Effect {
     const char* name;
     EffectFunction function;
+    EffectType type;
 };
 
 #if LED_STRIPS_MODE
 Effect effects[] = {
     // =============== BASIC STRIP EFFECTS ===============
     // Signature effects with CENTER ORIGIN
-    {"Fire", fire},
-    {"Ocean", stripOcean},
+    {"Fire", fire, EFFECT_TYPE_STANDARD},
+    {"Ocean", stripOcean, EFFECT_TYPE_STANDARD},
     
     // Wave dynamics (already CENTER ORIGIN)
-    {"Wave", waveEffect},
-    {"Ripple", rippleEffect},
+    {"Wave", waveEffect, EFFECT_TYPE_STANDARD},
+    {"Ripple", rippleEffect, EFFECT_TYPE_STANDARD},
     
     // NEW Strip-specific CENTER ORIGIN effects
-    {"Strip Confetti", stripConfetti},
-    {"Strip Juggle", stripJuggle},
-    {"Strip Interference", stripInterference},
-    {"Strip BPM", stripBPM},
-    {"Strip Plasma", stripPlasma},
+    {"Strip Confetti", stripConfetti, EFFECT_TYPE_STANDARD},
+    {"Strip Juggle", stripJuggle, EFFECT_TYPE_STANDARD},
+    {"Strip Interference", stripInterference, EFFECT_TYPE_STANDARD},
+    {"Strip BPM", stripBPM, EFFECT_TYPE_STANDARD},
+    {"Strip Plasma", stripPlasma, EFFECT_TYPE_STANDARD},
     
     // Motion effects (ALL NOW CENTER ORIGIN COMPLIANT)
-    {"Confetti", confetti},
-    {"Sinelon", sinelon},
-    {"Juggle", juggle},
-    {"BPM", bpm},
+    {"Confetti", confetti, EFFECT_TYPE_STANDARD},
+    {"Sinelon", sinelon, EFFECT_TYPE_STANDARD},
+    {"Juggle", juggle, EFFECT_TYPE_STANDARD},
+    {"BPM", bpm, EFFECT_TYPE_STANDARD},
     
     // Palette showcase
-    {"Solid Blue", solidColor},
-    {"Pulse Effect", pulseEffect},
+    {"Solid Blue", solidColor, EFFECT_TYPE_STANDARD},
+    {"Pulse Effect", pulseEffect, EFFECT_TYPE_STANDARD},
     
     // =============== DUAL-STRIP WAVE ENGINE EFFECTS ===============
-    {"Wave Independent", []() { waveEngine.interaction_mode = MODE_INDEPENDENT; renderDualStripWaves(waveEngine); }},
-    {"Wave Interference", []() { waveEngine.interaction_mode = MODE_INTERFERENCE; renderDualStripWaves(waveEngine); }},
-    {"Wave Chase", []() { waveEngine.interaction_mode = MODE_CHASE; renderDualStripWaves(waveEngine); }},
-    {"Wave Reflection", []() { waveEngine.interaction_mode = MODE_REFLECTION; renderDualStripWaves(waveEngine); }},
-    {"Wave Spiral", []() { waveEngine.interaction_mode = MODE_SPIRAL; renderDualStripWaves(waveEngine); }},
-    {"Wave Pulse", []() { waveEngine.interaction_mode = MODE_PULSE; renderDualStripWaves(waveEngine); }}
+    {"Wave Independent", []() { waveEngine.interaction_mode = MODE_INDEPENDENT; renderDualStripWaves(waveEngine); }, EFFECT_TYPE_WAVE_ENGINE},
+    {"Wave Interference", []() { waveEngine.interaction_mode = MODE_INTERFERENCE; renderDualStripWaves(waveEngine); }, EFFECT_TYPE_WAVE_ENGINE},
+    {"Wave Chase", []() { waveEngine.interaction_mode = MODE_CHASE; renderDualStripWaves(waveEngine); }, EFFECT_TYPE_WAVE_ENGINE},
+    {"Wave Reflection", []() { waveEngine.interaction_mode = MODE_REFLECTION; renderDualStripWaves(waveEngine); }, EFFECT_TYPE_WAVE_ENGINE},
+    {"Wave Spiral", []() { waveEngine.interaction_mode = MODE_SPIRAL; renderDualStripWaves(waveEngine); }, EFFECT_TYPE_WAVE_ENGINE},
+    {"Wave Pulse", []() { waveEngine.interaction_mode = MODE_PULSE; renderDualStripWaves(waveEngine); }, EFFECT_TYPE_WAVE_ENGINE}
 };
 #else
 Effect effects[] = {
     // Signature effects
-    {"Fire", fire},
-    {"Ocean", ocean},
-    {"Plasma", plasma},
+    {"Fire", fire, EFFECT_TYPE_STANDARD},
+    {"Ocean", ocean, EFFECT_TYPE_STANDARD},
+    {"Plasma", plasma, EFFECT_TYPE_STANDARD},
     
     // Wave dynamics  
-    {"Wave", waveEffect},
-    {"Ripple", rippleEffect},
-    {"Interference", interferenceEffect},
+    {"Wave", waveEffect, EFFECT_TYPE_STANDARD},
+    {"Ripple", rippleEffect, EFFECT_TYPE_STANDARD},
+    {"Interference", interferenceEffect, EFFECT_TYPE_STANDARD},
     
     // Mathematical patterns
-    {"Fibonacci", fibonacciSpiral},
-    {"Kaleidoscope", kaleidoscope},
+    {"Fibonacci", fibonacciSpiral, EFFECT_TYPE_STANDARD},
+    {"Kaleidoscope", kaleidoscope, EFFECT_TYPE_STANDARD},
     
     // Motion effects
-    {"Confetti", confetti},
-    {"Sinelon", sinelon},
-    {"Juggle", juggle},
-    {"BPM", bpm},
+    {"Confetti", confetti, EFFECT_TYPE_STANDARD},
+    {"Sinelon", sinelon, EFFECT_TYPE_STANDARD},
+    {"Juggle", juggle, EFFECT_TYPE_STANDARD},
+    {"BPM", bpm, EFFECT_TYPE_STANDARD},
     
     // Palette showcase
-    {"Solid Blue", solidColor},
-    {"Pulse Effect", pulseEffect}
+    {"Solid Blue", solidColor, EFFECT_TYPE_STANDARD},
+    {"Pulse Effect", pulseEffect, EFFECT_TYPE_STANDARD}
 };
 #endif
 
@@ -1249,24 +1449,34 @@ void loop() {
         while (xQueueReceive(encoderEventQueue, &event, 0) == pdTRUE) {
             char buffer[64];
             
-            // Check if current effect is a wave effect (last 6 effects)
-            bool isWaveEffect = currentEffect >= (NUM_EFFECTS - 6);
-            
-            if (isWaveEffect) {
-                // Wave engine parameter control
+            // Special handling for encoder 0 (effect selection) - ALWAYS process normally
+            if (event.encoder_id == 0) {
+                // Effect selection - one effect change per physical detent click
+                uint8_t newEffect;
+                if (event.delta > 0) {
+                    newEffect = (currentEffect + 1) % NUM_EFFECTS;
+                } else {
+                    newEffect = currentEffect > 0 ? currentEffect - 1 : NUM_EFFECTS - 1;
+                }
+                
+                // Only transition if actually changing effects
+                if (newEffect != currentEffect) {
+                    startTransition(newEffect);
+                    Serial.printf("🎨 MAIN: Effect changed to %s (index %d)\n", effects[currentEffect].name, currentEffect);
+                    
+                    // Log mode transition if effect type changed
+                    if (effects[newEffect].type != effects[currentEffect].type) {
+                        Serial.printf("🔄 MAIN: Encoder mode switched to %s\n", 
+                                     effects[currentEffect].type == EFFECT_TYPE_WAVE_ENGINE ? "WAVE ENGINE" : "STANDARD");
+                    }
+                }
+                
+            } else if (effects[currentEffect].type == EFFECT_TYPE_WAVE_ENGINE) {
+                // Wave engine parameter control for encoders 1-7
                 handleWaveEncoderInput(event.encoder_id, event.delta, waveEngine);
             } else {
-                // Standard effect control
+                // Standard effect control for encoders 1-7
                 switch (event.encoder_id) {
-                    case 0: // Effect selection
-                        if (event.delta > 0) {
-                            startTransition((currentEffect + 1) % NUM_EFFECTS);
-                        } else {
-                            startTransition(currentEffect > 0 ? currentEffect - 1 : NUM_EFFECTS - 1);
-                        }
-                        Serial.printf("🎨 MAIN: Effect changed to %s (index %d)\n", effects[currentEffect].name, currentEffect);
-                        break;
-                        
                     case 1: // Brightness
                         {
                             int brightness = FastLED.getBrightness() + (event.delta > 0 ? 16 : -16);
@@ -1339,8 +1549,18 @@ void loop() {
         Serial.print(ESP.getFreeHeap());
         Serial.println(" bytes");
         
+        // Quick encoder performance summary
+        #if LED_STRIPS_MODE
+        if (encoderAvailable) {
+            Serial.printf("Encoder: %u queue depth, %.1f%% I2C success\n",
+                         encoderMetrics.current_queue_depth,
+                         encoderMetrics.i2c_transactions > 0 ? 
+                         (100.0f * (encoderMetrics.i2c_transactions - encoderMetrics.i2c_failures) / encoderMetrics.i2c_transactions) : 100.0f);
+        }
+        #endif
+        
         // Update wave engine performance stats if using wave effects
-        if (currentEffect >= (NUM_EFFECTS - 6)) {
+        if (effects[currentEffect].type == EFFECT_TYPE_WAVE_ENGINE) {
             updateWavePerformanceStats(waveEngine);
         }
     }

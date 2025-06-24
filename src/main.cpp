@@ -1005,14 +1005,6 @@ struct Effect {
 
 #if LED_STRIPS_MODE
 Effect effects[] = {
-    // =============== DUAL-STRIP WAVE ENGINE EFFECTS ===============
-    {"Wave Independent", []() { waveEngine.interaction_mode = MODE_INDEPENDENT; renderDualStripWaves(waveEngine); }},
-    {"Wave Interference", []() { waveEngine.interaction_mode = MODE_INTERFERENCE; renderDualStripWaves(waveEngine); }},
-    {"Wave Chase", []() { waveEngine.interaction_mode = MODE_CHASE; renderDualStripWaves(waveEngine); }},
-    {"Wave Reflection", []() { waveEngine.interaction_mode = MODE_REFLECTION; renderDualStripWaves(waveEngine); }},
-    {"Wave Spiral", []() { waveEngine.interaction_mode = MODE_SPIRAL; renderDualStripWaves(waveEngine); }},
-    {"Wave Pulse", []() { waveEngine.interaction_mode = MODE_PULSE; renderDualStripWaves(waveEngine); }},
-    
     // =============== BASIC STRIP EFFECTS ===============
     // Signature effects with CENTER ORIGIN
     {"Fire", fire},
@@ -1037,7 +1029,15 @@ Effect effects[] = {
     
     // Palette showcase
     {"Solid Blue", solidColor},
-    {"Pulse Effect", pulseEffect}
+    {"Pulse Effect", pulseEffect},
+    
+    // =============== DUAL-STRIP WAVE ENGINE EFFECTS ===============
+    {"Wave Independent", []() { waveEngine.interaction_mode = MODE_INDEPENDENT; renderDualStripWaves(waveEngine); }},
+    {"Wave Interference", []() { waveEngine.interaction_mode = MODE_INTERFERENCE; renderDualStripWaves(waveEngine); }},
+    {"Wave Chase", []() { waveEngine.interaction_mode = MODE_CHASE; renderDualStripWaves(waveEngine); }},
+    {"Wave Reflection", []() { waveEngine.interaction_mode = MODE_REFLECTION; renderDualStripWaves(waveEngine); }},
+    {"Wave Spiral", []() { waveEngine.interaction_mode = MODE_SPIRAL; renderDualStripWaves(waveEngine); }},
+    {"Wave Pulse", []() { waveEngine.interaction_mode = MODE_PULSE; renderDualStripWaves(waveEngine); }}
 };
 #else
 Effect effects[] = {
@@ -1249,8 +1249,8 @@ void loop() {
         while (xQueueReceive(encoderEventQueue, &event, 0) == pdTRUE) {
             char buffer[64];
             
-            // Check if current effect is a wave effect (first 6 effects)
-            bool isWaveEffect = currentEffect < 6;
+            // Check if current effect is a wave effect (last 6 effects)
+            bool isWaveEffect = currentEffect >= (NUM_EFFECTS - 6);
             
             if (isWaveEffect) {
                 // Wave engine parameter control
@@ -1340,7 +1340,7 @@ void loop() {
         Serial.println(" bytes");
         
         // Update wave engine performance stats if using wave effects
-        if (currentEffect < 6) {
+        if (currentEffect >= (NUM_EFFECTS - 6)) {
             updateWavePerformanceStats(waveEngine);
         }
     }

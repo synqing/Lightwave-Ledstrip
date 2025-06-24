@@ -320,23 +320,23 @@ private:
         // Edge 1 electrode effect (positive)
         for (uint16_t i = 0; i < 5; i++) {  // First 5 LEDs
             CRGB electrode_color = CHSV(0, 255, electrode_pulse * 255);  // Red glow
-            setEdge1LED(i, blend(strip1[i], electrode_color, 128));
+            setEdge1LED(i, blend(leds[i], electrode_color, 128));
         }
         
         for (uint16_t i = HardwareConfig::STRIP_LENGTH - 5; i < HardwareConfig::STRIP_LENGTH; i++) {  // Last 5 LEDs
             CRGB electrode_color = CHSV(0, 255, electrode_pulse * 255);
-            setEdge1LED(i, blend(strip1[i], electrode_color, 128));
+            setEdge1LED(i, blend(leds[i], electrode_color, 128));
         }
         
         // Edge 2 electrode effect (negative)
         for (uint16_t i = 0; i < 5; i++) {
             CRGB electrode_color = CHSV(160, 255, electrode_pulse * 255);  // Blue glow
-            setEdge2LED(i, blend(strip2[i], electrode_color, 128));
+            setEdge2LED(i, blend(leds[HardwareConfig::STRIP1_LED_COUNT + i], electrode_color, 128));
         }
         
         for (uint16_t i = HardwareConfig::STRIP_LENGTH - 5; i < HardwareConfig::STRIP_LENGTH; i++) {
             CRGB electrode_color = CHSV(160, 255, electrode_pulse * 255);
-            setEdge2LED(i, blend(strip2[i], electrode_color, 128));
+            setEdge2LED(i, blend(leds[HardwareConfig::STRIP1_LED_COUNT + i], electrode_color, 128));
         }
     }
     

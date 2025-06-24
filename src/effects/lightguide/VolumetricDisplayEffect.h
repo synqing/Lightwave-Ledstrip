@@ -389,8 +389,8 @@ private:
             if (fog_intensity > 0.0f) {
                 CRGB fog_color = CHSV(gHue + 60, 100, fog_intensity * 255);
                 
-                strip1[i] = blend(strip1[i], fog_color, 64);
-                strip2[i] = blend(strip2[i], fog_color, 64);
+                leds[i] = blend(leds[i], fog_color, 64);
+                leds[HardwareConfig::STRIP1_LED_COUNT + i] = blend(leds[HardwareConfig::STRIP1_LED_COUNT + i], fog_color, 64);
             }
         }
     }

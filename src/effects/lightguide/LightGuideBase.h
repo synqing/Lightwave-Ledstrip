@@ -12,6 +12,7 @@
 // External references to LED strips and global variables
 extern CRGB strip1[HardwareConfig::STRIP1_LED_COUNT];
 extern CRGB strip2[HardwareConfig::STRIP2_LED_COUNT];
+extern CRGB leds[HardwareConfig::NUM_LEDS];  // Unified LED buffer
 extern CRGBPalette16 currentPalette;
 extern uint8_t gHue;
 
@@ -115,9 +116,8 @@ public:
             calculateInterferencePattern();
         }
         
-        // Clear strips
-        fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, fadeAmount);
-        fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, fadeAmount);
+        // Clear unified LED buffer
+        fadeToBlackBy(leds, HardwareConfig::NUM_LEDS, fadeAmount);
         
         // Render the specific effect
         renderLightGuideEffect();
@@ -279,17 +279,17 @@ protected:
         return coords;
     }
     
-    // Set LED color on Edge 1 (Strip 1)
+    // Set LED color on Edge 1 (Strip 1) - writes to unified leds[] buffer
     void setEdge1LED(uint16_t index, CRGB color) {
         if (index < HardwareConfig::STRIP1_LED_COUNT) {
-            strip1[index] = color;
+            leds[index] = color;  // leds[0-159] maps to strip1
         }
     }
     
-    // Set LED color on Edge 2 (Strip 2)  
+    // Set LED color on Edge 2 (Strip 2) - writes to unified leds[] buffer
     void setEdge2LED(uint16_t index, CRGB color) {
         if (index < HardwareConfig::STRIP2_LED_COUNT) {
-            strip2[index] = color;
+            leds[HardwareConfig::STRIP1_LED_COUNT + index] = color;  // leds[160-319] maps to strip2
         }
     }
     
@@ -319,47 +319,47 @@ protected:
                 break;
                 
             case LightGuideSyncMode::MIRRORED:
-                // Mirror strip1 to strip2
+                // Mirror Edge 1 to Edge 2 in unified buffer
                 for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
                     uint16_t mirror_index = HardwareConfig::STRIP_LENGTH - 1 - i;
-                    strip2[i] = strip1[mirror_index];
+                    leds[HardwareConfig::STRIP1_LED_COUNT + i] = leds[mirror_index];
                 }
                 break;
                 
             case LightGuideSyncMode::PHASE_LOCKED:
-                // Copy with phase offset
+                // Copy with phase offset in unified buffer
                 {
                     uint16_t offset = (uint16_t)(phase_offset * HardwareConfig::STRIP_LENGTH / LightGuide::TWO_PI_F);
                     for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
                         uint16_t source_index = (i + offset) % HardwareConfig::STRIP_LENGTH;
-                        strip2[i] = strip1[source_index];
+                        leds[HardwareConfig::STRIP1_LED_COUNT + i] = leds[source_index];
                     }
                 }
                 break;
                 
             case LightGuideSyncMode::ALTERNATING:
-                // Alternate dominance based on time
+                // Alternate dominance based on time in unified buffer
                 {
                     bool edge1_dominant = (millis() / 1000) % 2 == 0;
                     if (!edge1_dominant) {
-                        // Copy strip1 to strip2 and dim strip1
+                        // Copy Edge 1 to Edge 2 and dim Edge 1
                         for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
-                            strip2[i] = strip1[i];
-                            strip1[i].fadeToBlackBy(128);
+                            leds[HardwareConfig::STRIP1_LED_COUNT + i] = leds[i];
+                            leds[i].fadeToBlackBy(128);
                         }
                     } else {
-                        // Dim strip2
-                        fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, 128);
+                        // Dim Edge 2
+                        fadeToBlackBy(&leds[HardwareConfig::STRIP1_LED_COUNT], HardwareConfig::STRIP2_LED_COUNT, 128);
                     }
                 }
                 break;
                 
             case LightGuideSyncMode::COOPERATIVE:
-                // Blend strips based on edge balance
+                // Blend edges based on edge balance in unified buffer
                 {
                     uint8_t blend_amount = (uint8_t)(edge_balance * 255);
                     for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
-                        strip2[i] = blend(strip1[i], strip2[i], blend_amount);
+                        leds[HardwareConfig::STRIP1_LED_COUNT + i] = blend(leds[i], leds[HardwareConfig::STRIP1_LED_COUNT + i], blend_amount);
                     }
                 }
                 break;

@@ -88,6 +88,14 @@ struct EncoderEvent {
     uint32_t timestamp;
 };
 
+// Encoder state tracking for proper debouncing
+struct EncoderState {
+    int32_t last_value = 0;
+    uint32_t last_change_time = 0;
+    bool skip_next = false;
+};
+EncoderState encoderStates[8];
+
 // Connection health and recovery
 uint32_t lastConnectionCheck = 0;
 uint32_t encoderFailCount = 0;
@@ -104,6 +112,16 @@ const uint32_t SERIAL_RATE_LIMIT_MS = 100;  // Max 10 messages per second
 #endif
 
 // Light Guide Mode disabled - implementation removed
+
+// Dual-Strip Wave Engine
+#if LED_STRIPS_MODE
+#include "effects/waves/DualStripWaveEngine.h"
+#include "effects/waves/WaveEffects.h"
+#include "effects/waves/WaveEncoderControl.h"
+
+// Global wave engine instance (stack-allocated, ~200 bytes)
+DualStripWaveEngine waveEngine;
+#endif
 
 #if FEATURE_SERIAL_MENU
 // Serial menu instance
@@ -211,28 +229,47 @@ void encoderTask(void* parameter) {
             }
             
             // Read relative counter with error handling
-            int32_t delta = encoder.getRelCounter(i);
+            int32_t raw_delta = encoder.getRelCounter(i);
             
-            if (delta != 0) {
-                // Normalize step size (M5ROTATE8 sometimes returns ±2, sometimes ±1)
-                if (abs(delta) >= 2) {
-                    delta = delta / 2;
+            if (raw_delta != 0) {
+                EncoderState& state = encoderStates[i];
+                
+                // Debouncing: ignore changes within 50ms of last change
+                if (now - state.last_change_time < 50) {
+                    continue;
                 }
+                
+                // M5ROTATE8 quirk: sometimes sends ±2 for single detent
+                // Solution: Only send one event per physical detent
+                int32_t delta = (raw_delta > 0) ? 1 : -1;
+                
+                // Additional filtering: skip every other event if encoder is being too sensitive
+                if (abs(raw_delta) >= 2 && state.skip_next) {
+                    state.skip_next = false;
+                    continue;
+                }
+                
+                if (abs(raw_delta) >= 2) {
+                    state.skip_next = true;
+                }
+                
+                // Update state
+                state.last_value = raw_delta;
+                state.last_change_time = now;
                 
                 // Create event for main loop
                 EncoderEvent event = {
                     .encoder_id = (uint8_t)i,
                     .delta = delta,
-                    .button_pressed = false,  // Button handling can be added later
+                    .button_pressed = false,
                     .timestamp = now
                 };
                 
                 // Send to main loop via queue (non-blocking)
                 if (xQueueSend(encoderEventQueue, &event, 0) != pdTRUE) {
-                    // Queue full - drop event (main loop is too slow)
                     Serial.println("⚠️ TASK: Encoder event queue full - dropping event");
                 } else {
-                    Serial.printf("📤 TASK: Encoder %d delta %+d queued\n", i, delta);
+                    Serial.printf("📤 TASK: Encoder %d delta %+d (raw: %+d) queued\n", i, delta, raw_delta);
                 }
                 
                 // Flash LED to indicate activity
@@ -968,8 +1005,13 @@ struct Effect {
 
 #if LED_STRIPS_MODE
 Effect effects[] = {
-    // =============== LIGHT GUIDE PLATE EFFECTS ===============
-    // LGP implementation removed - awaiting Dual-Strip Wave Engine
+    // =============== DUAL-STRIP WAVE ENGINE EFFECTS ===============
+    {"Wave Independent", []() { waveEngine.interaction_mode = MODE_INDEPENDENT; renderDualStripWaves(waveEngine); }},
+    {"Wave Interference", []() { waveEngine.interaction_mode = MODE_INTERFERENCE; renderDualStripWaves(waveEngine); }},
+    {"Wave Chase", []() { waveEngine.interaction_mode = MODE_CHASE; renderDualStripWaves(waveEngine); }},
+    {"Wave Reflection", []() { waveEngine.interaction_mode = MODE_REFLECTION; renderDualStripWaves(waveEngine); }},
+    {"Wave Spiral", []() { waveEngine.interaction_mode = MODE_SPIRAL; renderDualStripWaves(waveEngine); }},
+    {"Wave Pulse", []() { waveEngine.interaction_mode = MODE_PULSE; renderDualStripWaves(waveEngine); }},
     
     // =============== BASIC STRIP EFFECTS ===============
     // Signature effects with CENTER ORIGIN
@@ -1207,39 +1249,53 @@ void loop() {
         while (xQueueReceive(encoderEventQueue, &event, 0) == pdTRUE) {
             char buffer[64];
             
-            switch (event.encoder_id) {
-                case 0: // Effect selection
-                    if (event.delta > 0) {
-                        startTransition((currentEffect + 1) % NUM_EFFECTS);
-                    } else {
-                        startTransition(currentEffect > 0 ? currentEffect - 1 : NUM_EFFECTS - 1);
-                    }
-                    Serial.printf("🎨 MAIN: Effect changed to %s (index %d)\n", effects[currentEffect].name, currentEffect);
-                    break;
-                    
-                case 1: // Brightness
-                    {
-                        int brightness = FastLED.getBrightness() + (event.delta > 0 ? 16 : -16);
-                        brightness = constrain(brightness, 16, 255);
-                        FastLED.setBrightness(brightness);
-                        Serial.printf("💡 MAIN: Brightness changed to %d\n", brightness);
-                    }
-                    break;
-                    
-                case 2: // Palette selection
-                    if (event.delta > 0) {
-                        currentPaletteIndex = (currentPaletteIndex + 1) % gGradientPaletteCount;
-                    } else {
-                        currentPaletteIndex = currentPaletteIndex > 0 ? currentPaletteIndex - 1 : gGradientPaletteCount - 1;
-                    }
-                    targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
-                    Serial.printf("🎨 MAIN: Palette changed to %d\n", currentPaletteIndex);
-                    break;
-                    
-                case 3: // Speed control
-                    paletteSpeed = constrain(paletteSpeed + (event.delta > 0 ? 2 : -2), 1, 50);
-                    Serial.printf("⚡ MAIN: Speed changed to %d\n", paletteSpeed);
-                    break;
+            // Check if current effect is a wave effect (first 6 effects)
+            bool isWaveEffect = currentEffect < 6;
+            
+            if (isWaveEffect) {
+                // Wave engine parameter control
+                handleWaveEncoderInput(event.encoder_id, event.delta, waveEngine);
+            } else {
+                // Standard effect control
+                switch (event.encoder_id) {
+                    case 0: // Effect selection
+                        if (event.delta > 0) {
+                            startTransition((currentEffect + 1) % NUM_EFFECTS);
+                        } else {
+                            startTransition(currentEffect > 0 ? currentEffect - 1 : NUM_EFFECTS - 1);
+                        }
+                        Serial.printf("🎨 MAIN: Effect changed to %s (index %d)\n", effects[currentEffect].name, currentEffect);
+                        break;
+                        
+                    case 1: // Brightness
+                        {
+                            int brightness = FastLED.getBrightness() + (event.delta > 0 ? 16 : -16);
+                            brightness = constrain(brightness, 16, 255);
+                            FastLED.setBrightness(brightness);
+                            Serial.printf("💡 MAIN: Brightness changed to %d\n", brightness);
+                        }
+                        break;
+                        
+                    case 2: // Palette selection
+                        if (event.delta > 0) {
+                            currentPaletteIndex = (currentPaletteIndex + 1) % gGradientPaletteCount;
+                        } else {
+                            currentPaletteIndex = currentPaletteIndex > 0 ? currentPaletteIndex - 1 : gGradientPaletteCount - 1;
+                        }
+                        targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
+                        Serial.printf("🎨 MAIN: Palette changed to %d\n", currentPaletteIndex);
+                        break;
+                        
+                    case 3: // Speed control
+                        paletteSpeed = constrain(paletteSpeed + (event.delta > 0 ? 2 : -2), 1, 50);
+                        Serial.printf("⚡ MAIN: Speed changed to %d\n", paletteSpeed);
+                        break;
+                        
+                    case 4: case 5: case 6: case 7:
+                        // Additional encoders available for future use
+                        Serial.printf("📍 MAIN: Encoder %d not mapped for standard effects\n", event.encoder_id);
+                        break;
+                }
             }
         }
     }
@@ -1282,15 +1338,13 @@ void loop() {
         Serial.print(", Free heap: ");
         Serial.print(ESP.getFreeHeap());
         Serial.println(" bytes");
+        
+        // Update wave engine performance stats if using wave effects
+        if (currentEffect < 6) {
+            updateWavePerformanceStats(waveEngine);
+        }
     }
     
-    // Auto-cycle effects every 15 seconds for demonstration
-    EVERY_N_SECONDS(15) {
-        uint8_t nextEffect = (currentEffect + 1) % NUM_EFFECTS;
-        startTransition(nextEffect);
-        Serial.print("Auto-switching to: ");
-        Serial.println(effects[nextEffect].name);
-    }
     
     // Frame rate control
     delay(1000/HardwareConfig::DEFAULT_FPS);

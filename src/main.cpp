@@ -120,9 +120,32 @@ void confetti() {
 }
 
 void sinelon() {
+    #if LED_STRIPS_MODE
+    // CENTER ORIGIN SINELON - Oscillates outward from center LEDs 79/80
+    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 20);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 20);
+    
+    // Oscillate from center outward (0 to STRIP_HALF_LENGTH)
+    int distFromCenter = beatsin16(13, 0, HardwareConfig::STRIP_HALF_LENGTH);
+    
+    // Set both sides of center
+    int pos1 = HardwareConfig::STRIP_CENTER_POINT + distFromCenter;
+    int pos2 = HardwareConfig::STRIP_CENTER_POINT - distFromCenter;
+    
+    if (pos1 < HardwareConfig::STRIP_LENGTH) {
+        strip1[pos1] += CHSV(gHue, 255, 192);
+        strip2[pos1] += CHSV(gHue, 255, 192);
+    }
+    if (pos2 >= 0) {
+        strip1[pos2] += CHSV(gHue + 128, 255, 192);  // Different hue
+        strip2[pos2] += CHSV(gHue + 128, 255, 192);
+    }
+    #else
+    // Original matrix mode
     fadeToBlackBy(leds, HardwareConfig::NUM_LEDS, 20);
     int pos = beatsin16(13, 0, HardwareConfig::NUM_LEDS-1);
     leds[pos] += CHSV(gHue, 255, 192);
+    #endif
 }
 
 void juggle() {
@@ -145,20 +168,42 @@ void bpm() {
 // ============== ADVANCED WAVE EFFECTS ==============
 
 void waveEffect() {
+    #if LED_STRIPS_MODE
+    // CENTER ORIGIN WAVES - Start from center LEDs 79/80 and propagate outward
     static uint16_t wavePosition = 0;
     
-    fadeToBlackBy(leds, HardwareConfig::NUM_LEDS, fadeAmount);
+    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, fadeAmount);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, fadeAmount);
     
+    uint16_t waveSpeed = map(paletteSpeed, 1, 50, 100, 10);
+    wavePosition += waveSpeed;
+    
+    for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+        // Calculate distance from CENTER (79/80)
+        float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
+        
+        // Wave propagates outward from center
+        uint8_t brightness = sin8((distFromCenter * 15) + (wavePosition >> 4));
+        uint8_t colorIndex = (distFromCenter * 8) + (wavePosition >> 6);
+        
+        CRGB color = ColorFromPalette(currentPalette, colorIndex, brightness);
+        strip1[i] = color;
+        strip2[i] = color;
+    }
+    #else
+    // Original matrix mode
+    static uint16_t wavePosition = 0;
+    fadeToBlackBy(leds, HardwareConfig::NUM_LEDS, fadeAmount);
     uint16_t waveSpeed = map(paletteSpeed, 1, 50, 100, 10);
     wavePosition += waveSpeed;
     
     for (uint16_t i = 0; i < HardwareConfig::NUM_LEDS; i++) {
         uint8_t brightness = sin8((i * 10) + (wavePosition >> 4));
         uint8_t colorIndex = angles[i] + (wavePosition >> 6);
-        
         CRGB color = ColorFromPalette(currentPalette, colorIndex, brightness);
         leds[i] = color;
     }
+    #endif
 }
 
 void rippleEffect() {

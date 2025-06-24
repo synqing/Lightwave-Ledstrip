@@ -5,7 +5,7 @@
 // This helps reduce binary size and memory usage
 
 // Core features
-#define FEATURE_SERIAL_MENU 1           // Serial command interface (ENABLED FOR CONTROL)
+#define FEATURE_SERIAL_MENU 0           // Serial command interface (needs fixing)
 #define FEATURE_PERFORMANCE_MONITOR 1    // Performance tracking and reporting
 #define FEATURE_BUTTON_CONTROL 0         // Physical button support (NO BUTTON ON BOARD)
 

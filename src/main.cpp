@@ -3,6 +3,10 @@
 #include "config/features.h"
 #include "config/hardware_config.h"
 
+#if FEATURE_PERFORMANCE_MONITOR
+#include "utils/PerformanceOptimizer.h"
+#endif
+
 #if FEATURE_SERIAL_MENU
 #include "utils/SerialMenu.h"
 #endif
@@ -20,9 +24,11 @@
     CRGB strip1_transition[HardwareConfig::STRIP1_LED_COUNT];
     CRGB strip2_transition[HardwareConfig::STRIP2_LED_COUNT];
     
-    // Combined virtual buffer for compatibility (only declare if not matrix mode)
-    CRGB* leds = strip1;  // Primary strip for legacy effects
-    CRGB* transitionBuffer = strip1_transition;
+    // Combined virtual buffer for compatibility with EffectBase expectations
+    // EffectBase expects leds[NUM_LEDS] where NUM_LEDS = 320 for strips mode
+    // We create a unified buffer that can handle both strips
+    CRGB leds[HardwareConfig::NUM_LEDS];  // Full 320 LED buffer for EffectBase compatibility
+    CRGB transitionBuffer[HardwareConfig::NUM_LEDS];
     
     // Strip-specific globals
     HardwareConfig::SyncMode currentSyncMode = HardwareConfig::SYNC_SYNCHRONIZED;
@@ -62,10 +68,42 @@ uint8_t currentPaletteIndex = 0;
 // Include palette definitions
 #include "Palettes.h"
 
-// Include encoder support for strips mode
+// M5ROTATE8 encoder for strips mode - NON-BLOCKING I2C TASK ARCHITECTURE
 #if LED_STRIPS_MODE
-#include "hardware/m5_encoder.h"
+#include "m5rotate8.h"
+
+// Single encoder instance (default address 0x41)
+M5ROTATE8 encoder;
+bool encoderAvailable = false;
+
+// FreeRTOS task and queue for non-blocking I2C
+TaskHandle_t encoderTaskHandle = NULL;
+QueueHandle_t encoderEventQueue = NULL;
+
+// Encoder event structure for queue communication
+struct EncoderEvent {
+    uint8_t encoder_id;
+    int32_t delta;
+    bool button_pressed;
+    uint32_t timestamp;
+};
+
+// Connection health and recovery
+uint32_t lastConnectionCheck = 0;
+uint32_t encoderFailCount = 0;
+uint32_t reconnectBackoffMs = 1000;  // Start with 1 second backoff
+bool encoderSuspended = false;
+
+// LED flash timing (handled by I2C task)
+uint32_t ledFlashTime[8] = {0};
+bool ledNeedsUpdate[8] = {false};
+
+// Serial rate limiting
+uint32_t lastSerialOutput = 0;
+const uint32_t SERIAL_RATE_LIMIT_MS = 100;  // Max 10 messages per second
 #endif
+
+// Light Guide Mode disabled - implementation removed
 
 #if FEATURE_SERIAL_MENU
 // Serial menu instance
@@ -104,6 +142,163 @@ void initializeStripMapping() {
 #endif
 }
 
+#if LED_STRIPS_MODE
+// Synchronization functions for unified LED buffer
+void syncLedsToStrips() {
+    // Copy first half of leds buffer to strip1, second half to strip2
+    memcpy(strip1, leds, HardwareConfig::STRIP1_LED_COUNT * sizeof(CRGB));
+    memcpy(strip2, &leds[HardwareConfig::STRIP1_LED_COUNT], HardwareConfig::STRIP2_LED_COUNT * sizeof(CRGB));
+}
+
+void syncStripsToLeds() {
+    // Copy strips back to unified buffer (for Light Guide effects that read current state)
+    memcpy(leds, strip1, HardwareConfig::STRIP1_LED_COUNT * sizeof(CRGB));
+    memcpy(&leds[HardwareConfig::STRIP1_LED_COUNT], strip2, HardwareConfig::STRIP2_LED_COUNT * sizeof(CRGB));
+}
+
+// ============== NON-BLOCKING I2C ENCODER TASK ==============
+
+#if LED_STRIPS_MODE
+// Dedicated I2C task running on Core 0 (separate from main loop on Core 1)
+void encoderTask(void* parameter) {
+    Serial.println("🚀 I2C Encoder Task started on Core 0");
+    Serial.println("📡 Task will handle all I2C operations independently");
+    Serial.println("⚡ Main loop is now NON-BLOCKING for encoder operations");
+    
+    while (true) {
+        uint32_t now = millis();
+        
+        // Connection health check with exponential backoff
+        if (!encoderAvailable || encoderSuspended) {
+            if (now - lastConnectionCheck >= reconnectBackoffMs) {
+                lastConnectionCheck = now;
+                
+                Serial.printf("🔄 TASK: Attempting encoder reconnection (backoff: %dms)...\n", reconnectBackoffMs);
+                
+                if (encoder.begin() && encoder.isConnected()) {
+                    Serial.println("✅ TASK: Encoder reconnected successfully!");
+                    Serial.printf("📋 TASK: Firmware V%d\n", encoder.getVersion());
+                    encoderAvailable = true;
+                    encoderSuspended = false;
+                    encoderFailCount = 0;
+                    reconnectBackoffMs = 1000;  // Reset backoff
+                    
+                    // Initialize encoder LEDs to idle state
+                    encoder.setAll(0, 0, 16);
+                    Serial.println("💡 TASK: Encoder LEDs initialized to idle state");
+                } else {
+                    encoderFailCount++;
+                    // Exponential backoff: 1s, 2s, 4s, 8s, max 30s
+                    uint32_t maxShift = min(encoderFailCount, (uint32_t)5);
+                    reconnectBackoffMs = min((uint32_t)(1000 * (1 << maxShift)), (uint32_t)30000);
+                    Serial.printf("❌ TASK: Reconnection failed (%d attempts), next try in %dms\n", 
+                                 encoderFailCount, reconnectBackoffMs);
+                }
+            }
+            
+            // Wait longer when disconnected to avoid spam
+            vTaskDelay(pdMS_TO_TICKS(500));
+            continue;
+        }
+        
+        // Poll encoders safely in dedicated task
+        bool connectionLost = false;
+        
+        for (int i = 0; i < 4; i++) {
+            if (!encoder.isConnected()) {
+                connectionLost = true;
+                break;
+            }
+            
+            // Read relative counter with error handling
+            int32_t delta = encoder.getRelCounter(i);
+            
+            if (delta != 0) {
+                // Normalize step size (M5ROTATE8 sometimes returns ±2, sometimes ±1)
+                if (abs(delta) >= 2) {
+                    delta = delta / 2;
+                }
+                
+                // Create event for main loop
+                EncoderEvent event = {
+                    .encoder_id = (uint8_t)i,
+                    .delta = delta,
+                    .button_pressed = false,  // Button handling can be added later
+                    .timestamp = now
+                };
+                
+                // Send to main loop via queue (non-blocking)
+                if (xQueueSend(encoderEventQueue, &event, 0) != pdTRUE) {
+                    // Queue full - drop event (main loop is too slow)
+                    Serial.println("⚠️ TASK: Encoder event queue full - dropping event");
+                } else {
+                    Serial.printf("📤 TASK: Encoder %d delta %+d queued\n", i, delta);
+                }
+                
+                // Flash LED to indicate activity
+                ledFlashTime[i] = now;
+                ledNeedsUpdate[i] = true;
+            }
+            
+            // Small delay between encoder reads to prevent I2C bus saturation
+            vTaskDelay(pdMS_TO_TICKS(2));
+        }
+        
+        // Handle connection loss
+        if (connectionLost) {
+            Serial.println("💥 TASK: Encoder connection lost, suspending I2C operations...");
+            encoderAvailable = false;
+            encoderSuspended = true;
+            lastConnectionCheck = now;
+            continue;
+        }
+        
+        // Update encoder LEDs every 100ms to show status
+        static uint32_t lastLEDUpdate = 0;
+        if (now - lastLEDUpdate >= 100) {
+            lastLEDUpdate = now;
+            
+            for (int i = 0; i < 4; i++) {
+                if (ledNeedsUpdate[i]) {
+                    if (now - ledFlashTime[i] < 300) {
+                        // Green flash for activity
+                        encoder.writeRGB(i, 0, 64, 0);
+                    } else {
+                        // Return to colored idle state
+                        switch (i) {
+                            case 0: encoder.writeRGB(i, 16, 0, 0); break;   // Red - Effect
+                            case 1: encoder.writeRGB(i, 16, 16, 16); break; // White - Brightness
+                            case 2: encoder.writeRGB(i, 8, 0, 16); break;   // Purple - Palette
+                            case 3: encoder.writeRGB(i, 16, 8, 0); break;   // Yellow - Speed
+                        }
+                        ledNeedsUpdate[i] = false;
+                    }
+                }
+            }
+        }
+        
+        // Task runs at 50Hz (20ms intervals)
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+}
+
+// Safe serial output with rate limiting (only for encoder changes)
+void rateLimitedSerial(const char* message) {
+    uint32_t now = millis();
+    if (now - lastSerialOutput >= SERIAL_RATE_LIMIT_MS) {
+        lastSerialOutput = now;
+        Serial.print(message);
+    }
+}
+
+// ALWAYS print debug messages (no rate limiting)
+void debugSerial(const char* message) {
+    Serial.print(message);
+}
+#endif
+
+#endif
+
 // ============== BASIC EFFECTS ==============
 
 void solidColor() {
@@ -126,9 +321,35 @@ void pulseEffect() {
 }
 
 void confetti() {
+#if LED_STRIPS_MODE
+    // CENTER ORIGIN CONFETTI - ALL effects MUST originate from CENTER LEDs 79/80
+    fadeToBlackBy(leds, HardwareConfig::NUM_LEDS, 10);
+    
+    // Spawn confetti ONLY at center LEDs 79/80 (MANDATORY CENTER ORIGIN)
+    if (random8() < 80) {
+        int centerPos = HardwareConfig::STRIP_CENTER_POINT + random8(2); // 79 or 80 only
+        leds[centerPos] += CHSV(gHue + random8(64), 200, 255);
+    }
+    
+    // Move confetti outward from center with fading
+    for (int i = HardwareConfig::STRIP_CENTER_POINT - 1; i >= 0; i--) {
+        if (leds[i+1]) {
+            leds[i] = leds[i+1];
+            leds[i].fadeToBlackBy(25);
+        }
+    }
+    for (int i = HardwareConfig::STRIP_CENTER_POINT + 2; i < HardwareConfig::NUM_LEDS; i++) {
+        if (leds[i-1]) {
+            leds[i] = leds[i-1];
+            leds[i].fadeToBlackBy(25);
+        }
+    }
+#else
+    // Original matrix mode
     fadeToBlackBy(leds, HardwareConfig::NUM_LEDS, 10);
     int pos = random16(HardwareConfig::NUM_LEDS);
     leds[pos] += CHSV(gHue + random8(64), 200, 255);
+#endif
 }
 
 // NEW STRIP-SPECIFIC EFFECT - CENTER ORIGIN CONFETTI
@@ -196,12 +417,39 @@ void sinelon() {
 }
 
 void juggle() {
+#if LED_STRIPS_MODE
+    // CENTER ORIGIN JUGGLE - ALL effects MUST originate from CENTER LEDs 79/80
+    fadeToBlackBy(leds, HardwareConfig::NUM_LEDS, 20);
+    
+    uint8_t dothue = 0;
+    for(int i = 0; i < 8; i++) {
+        // Oscillate from center outward (MANDATORY CENTER ORIGIN)
+        int distFromCenter = beatsin16(i+7, 0, HardwareConfig::STRIP_HALF_LENGTH);
+        
+        // Set positions on both sides of center (79/80)
+        int pos1 = HardwareConfig::STRIP_CENTER_POINT + distFromCenter;
+        int pos2 = HardwareConfig::STRIP_CENTER_POINT - distFromCenter;
+        
+        CRGB color = CHSV(dothue, 200, 255);
+        
+        if (pos1 < HardwareConfig::NUM_LEDS) {
+            leds[pos1] |= color;
+        }
+        if (pos2 >= 0) {
+            leds[pos2] |= color;
+        }
+        
+        dothue += 32;
+    }
+#else
+    // Original matrix mode
     fadeToBlackBy(leds, HardwareConfig::NUM_LEDS, 20);
     uint8_t dothue = 0;
     for(int i = 0; i < 8; i++) {
         leds[beatsin16(i+7, 0, HardwareConfig::NUM_LEDS-1)] |= CHSV(dothue, 200, 255);
         dothue += 32;
     }
+#endif
 }
 
 // NEW STRIP-SPECIFIC EFFECT - CENTER ORIGIN JUGGLE
@@ -237,11 +485,31 @@ void stripJuggle() {
 }
 
 void bpm() {
+#if LED_STRIPS_MODE
+    // CENTER ORIGIN BPM - ALL effects MUST originate from CENTER LEDs 79/80
+    uint8_t BeatsPerMinute = 62;
+    uint8_t beat = beatsin8(BeatsPerMinute, 64, 255);
+    
+    // Calculate distance from center for each LED (MANDATORY CENTER ORIGIN)
+    for(int i = 0; i < HardwareConfig::NUM_LEDS; i++) {
+        float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
+        
+        // Intensity decreases with distance from center
+        uint8_t intensity = beat - (distFromCenter * 3);
+        intensity = max(intensity, (uint8_t)32); // Minimum brightness
+        
+        leds[i] = ColorFromPalette(currentPalette, 
+                                  gHue + (distFromCenter * 2), 
+                                  intensity);
+    }
+#else
+    // Original matrix mode
     uint8_t BeatsPerMinute = 62;
     uint8_t beat = beatsin8(BeatsPerMinute, 64, 255);
     for(int i = 0; i < HardwareConfig::NUM_LEDS; i++) {
         leds[i] = ColorFromPalette(currentPalette, gHue+(i*2), beat-gHue+(i*10));
     }
+#endif
 }
 
 // ============== ADVANCED WAVE EFFECTS ==============
@@ -646,6 +914,9 @@ void stripOcean() {
     #endif
 }
 
+// ============== LIGHT GUIDE PLATE EFFECTS ==============
+// LGP implementation has been removed - awaiting Dual-Strip Wave Engine
+
 // ============== TRANSITION SYSTEM ==============
 
 void startTransition(uint8_t newEffect) {
@@ -697,6 +968,10 @@ struct Effect {
 
 #if LED_STRIPS_MODE
 Effect effects[] = {
+    // =============== LIGHT GUIDE PLATE EFFECTS ===============
+    // LGP implementation removed - awaiting Dual-Strip Wave Engine
+    
+    // =============== BASIC STRIP EFFECTS ===============
     // Signature effects with CENTER ORIGIN
     {"Fire", fire},
     {"Ocean", stripOcean},
@@ -712,8 +987,11 @@ Effect effects[] = {
     {"Strip BPM", stripBPM},
     {"Strip Plasma", stripPlasma},
     
-    // Motion effects (already CENTER ORIGIN)
+    // Motion effects (ALL NOW CENTER ORIGIN COMPLIANT)
+    {"Confetti", confetti},
     {"Sinelon", sinelon},
+    {"Juggle", juggle},
+    {"BPM", bpm},
     
     // Palette showcase
     {"Solid Blue", solidColor},
@@ -800,9 +1078,61 @@ void setup() {
     
     Serial.println("Dual strip FastLED initialized");
     
-    // Initialize M5Stack 8Encoder
-    initEncoders();
-    Serial.println("M5Stack 8Encoder initialized - encoder control enabled");
+    #if LED_STRIPS_MODE
+    // Initialize I2C and M5ROTATE8 with dedicated task architecture
+    Serial.println("Initializing M5ROTATE8 with dedicated I2C task...");
+    Wire.begin(HardwareConfig::I2C_SDA, HardwareConfig::I2C_SCL);
+    Wire.setClock(400000);  // Max supported speed (400 KHz)
+    
+    // Create encoder event queue (16 events max)
+    encoderEventQueue = xQueueCreate(16, sizeof(EncoderEvent));
+    if (encoderEventQueue == NULL) {
+        Serial.println("ERROR: Failed to create encoder event queue");
+        encoderAvailable = false;
+    } else {
+        Serial.println("Encoder event queue created successfully");
+        
+        // Initial connection attempt
+        encoderAvailable = encoder.begin();
+        if (encoderAvailable && encoder.isConnected()) {
+            Serial.print("M5ROTATE8 connected! Firmware: V");
+            Serial.println(encoder.getVersion());
+            
+            // Set all LEDs to dim blue idle state
+            encoder.setAll(0, 0, 16);
+            
+            Serial.println("Encoder mapping:");
+            Serial.println("  0: Effect selection  1: Brightness");
+            Serial.println("  2: Palette           3: Speed");
+            Serial.println("  4-7: Reserved");
+        } else {
+            Serial.println("M5ROTATE8 not found initially - task will attempt reconnection");
+            encoderAvailable = false;
+        }
+        
+        // Create dedicated I2C task on Core 0 (main loop runs on Core 1)
+        xTaskCreatePinnedToCore(
+            encoderTask,           // Task function
+            "EncoderI2CTask",      // Task name
+            4096,                  // Stack size (4KB)
+            NULL,                  // Parameters
+            2,                     // Priority (higher than idle)
+            &encoderTaskHandle,    // Task handle
+            0                      // Core 0 (main loop on Core 1)
+        );
+        
+        if (encoderTaskHandle != NULL) {
+            Serial.println("✅ I2C Encoder Task created on Core 0");
+            Serial.println("🚀 Main loop now NON-BLOCKING for encoder operations");
+            Serial.println("📋 Task will attempt encoder connection and handle all I2C operations");
+            Serial.println("💬 Look for TASK: messages from I2C task, MAIN: from main loop");
+        } else {
+            Serial.println("❌ ERROR: Failed to create encoder task");
+        }
+    }
+    #endif
+    
+    // Light Guide Mode disabled - implementation removed
 #else
     // Single matrix initialization  
     FastLED.addLeds<LED_TYPE, HardwareConfig::LED_DATA_PIN, COLOR_ORDER>(
@@ -869,9 +1199,50 @@ void loop() {
 #endif
 
 #if LED_STRIPS_MODE
-    // Process M5Stack 8Encoder input
-    processEncoders();
-    updateEncoderLEDs();
+    // Process encoder events from I2C task (NON-BLOCKING)
+    if (encoderEventQueue != NULL) {
+        EncoderEvent event;
+        
+        // Process all available events in queue (non-blocking)
+        while (xQueueReceive(encoderEventQueue, &event, 0) == pdTRUE) {
+            char buffer[64];
+            
+            switch (event.encoder_id) {
+                case 0: // Effect selection
+                    if (event.delta > 0) {
+                        startTransition((currentEffect + 1) % NUM_EFFECTS);
+                    } else {
+                        startTransition(currentEffect > 0 ? currentEffect - 1 : NUM_EFFECTS - 1);
+                    }
+                    Serial.printf("🎨 MAIN: Effect changed to %s (index %d)\n", effects[currentEffect].name, currentEffect);
+                    break;
+                    
+                case 1: // Brightness
+                    {
+                        int brightness = FastLED.getBrightness() + (event.delta > 0 ? 16 : -16);
+                        brightness = constrain(brightness, 16, 255);
+                        FastLED.setBrightness(brightness);
+                        Serial.printf("💡 MAIN: Brightness changed to %d\n", brightness);
+                    }
+                    break;
+                    
+                case 2: // Palette selection
+                    if (event.delta > 0) {
+                        currentPaletteIndex = (currentPaletteIndex + 1) % gGradientPaletteCount;
+                    } else {
+                        currentPaletteIndex = currentPaletteIndex > 0 ? currentPaletteIndex - 1 : gGradientPaletteCount - 1;
+                    }
+                    targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
+                    Serial.printf("🎨 MAIN: Palette changed to %d\n", currentPaletteIndex);
+                    break;
+                    
+                case 3: // Speed control
+                    paletteSpeed = constrain(paletteSpeed + (event.delta > 0 ? 2 : -2), 1, 50);
+                    Serial.printf("⚡ MAIN: Speed changed to %d\n", paletteSpeed);
+                    break;
+            }
+        }
+    }
 #endif
     
 #if FEATURE_SERIAL_MENU
@@ -891,6 +1262,8 @@ void loop() {
         // Then apply transition blending
         updateTransition();
     }
+    
+    // LED strips are updated directly by effects - no sync needed
     
     // Show the LEDs
     FastLED.show();

@@ -34,7 +34,7 @@
 #define FEATURE_STRIP_POWER_MGMT 1      // Power management for 320 LEDs
 
 // Light Guide Plate specific features (extension of strips mode)
-#define FEATURE_LIGHT_GUIDE_MODE 1      // Enable light guide plate effects
+#define FEATURE_LIGHT_GUIDE_MODE 0      // LGP implementation removed - awaiting Dual-Strip Wave Engine
 #define FEATURE_INTERFERENCE_CALC 1     // Wave interference calculations
 #define FEATURE_INTERACTIVE_SENSING 0   // Proximity/touch sensing (future)
 #define FEATURE_PHYSICS_SIMULATION 1    // Physics-based effects

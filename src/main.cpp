@@ -398,9 +398,13 @@ void setup() {
     
     // Initialize M5Unit-Scroll encoder on secondary I2C bus
     Serial.println("[DEBUG] About to initialize scroll encoder...");
-    // DISABLED - CAUSING CRASHES
-    // initScrollEncoder();
-    Serial.println("[DEBUG] Scroll encoder init SKIPPED - was causing crashes");
+    // Re-enable with improved error handling
+    initScrollEncoder();
+    if (scrollEncoderAvailable) {
+        Serial.println("[DEBUG] Scroll encoder initialized successfully");
+    } else {
+        Serial.println("[DEBUG] Scroll encoder not available - continuing without it");
+    }
     
     // Set up scroll encoder callbacks
     setScrollEncoderCallbacks(
@@ -668,8 +672,10 @@ void loop() {
     }
     
     // Process scroll encoder input (non-blocking)
-    // DISABLED - CAUSING CRASHES
-    // processScrollEncoder();
+    // Re-enabled with error handling
+    if (scrollEncoderAvailable) {
+        processScrollEncoder();
+    }
     
     // Show the LEDs
     FastLED.show();

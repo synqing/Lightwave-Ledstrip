@@ -9,8 +9,9 @@
 // M5Unit-Scroll encoder interface on secondary I2C bus
 // This provides a 9th encoder for additional control
 
-// Use the pre-defined Wire1 instance from Arduino framework
-// Wire1 is already defined as TwoWire(1) in the framework
+// Use a separate TwoWire instance for scroll encoder
+// This prevents conflicts with the main I2C bus
+TwoWire scrollI2C = TwoWire(1);  // Use I2C bus 1
 
 // Scroll encoder instance
 M5UnitScroll scrollEncoder;
@@ -49,8 +50,8 @@ void initScrollEncoder() {
     Serial.println("Initializing M5Unit-Scroll on secondary I2C bus...");
     
     // Initialize secondary I2C bus on pins 20/21
-    Wire1.begin(HardwareConfig::I2C_SDA_SCROLL, HardwareConfig::I2C_SCL_SCROLL);
-    Wire1.setClock(100000);  // 100kHz for stability
+    scrollI2C.begin(HardwareConfig::I2C_SDA_SCROLL, HardwareConfig::I2C_SCL_SCROLL);
+    scrollI2C.setClock(100000);  // 100kHz for stability
     
     // Small delay for I2C bus to stabilize
     delay(50);
@@ -60,10 +61,10 @@ void initScrollEncoder() {
     bool initSuccess = false;
     
     // Set timeout for Wire operations
-    Wire1.setTimeOut(100);  // 100ms timeout
+    scrollI2C.setTimeOut(100);  // 100ms timeout
     
     // Try initialization (with internal timeout)
-    initSuccess = scrollEncoder.begin(&Wire1, HardwareConfig::M5UNIT_SCROLL_ADDR);
+    initSuccess = scrollEncoder.begin(&scrollI2C, HardwareConfig::M5UNIT_SCROLL_ADDR);
     
     if (initSuccess && (millis() - startTime < 500)) {
         scrollEncoderAvailable = true;
@@ -103,8 +104,18 @@ void processScrollEncoder() {
     
     scrollPerf.totalReads++;
     
-    // Read encoder value
-    int32_t newValue = scrollEncoder.getEncoderValue();
+    // Read encoder value with error handling
+    int32_t newValue = 0;
+    try {
+        // Wrap I2C operations in error handling
+        newValue = scrollEncoder.getEncoderValue();
+    } catch (...) {
+        scrollPerf.errors++;
+        Serial.println("⚠️ Scroll encoder read error - disabling");
+        scrollEncoderAvailable = false;
+        return;
+    }
+    
     if (newValue != scrollState.value) {
         int32_t delta = newValue - scrollState.value;
         scrollState.lastValue = scrollState.value;

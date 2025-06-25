@@ -26,6 +26,9 @@ enum TransitionType {
     TRANSITION_MELT,          // Thermal melt effect
     TRANSITION_GLITCH,        // Digital glitch effect
     TRANSITION_PHASE_SHIFT,   // Frequency-based morph
+    TRANSITION_SPIRAL,        // Helical spiral from center
+    TRANSITION_RIPPLE,        // Concentric wave ripples
+    TRANSITION_LIGHTNING,     // Jagged lightning bolts
     TRANSITION_COUNT
 };
 
@@ -79,6 +82,29 @@ private:
         
         // Phase shift
         float phaseOffset;
+        
+        // Spiral effect
+        float spiralAngle;
+        float spiralSpeed;
+        
+        // Ripple effect
+        struct RippleWave {
+            float position;
+            float amplitude;
+            float frequency;
+            uint32_t birthTime;
+            bool active;
+        } ripples[5];
+        uint8_t rippleCount;
+        
+        // Lightning effect
+        struct LightningBolt {
+            uint16_t segments[20];  // Path segments
+            uint8_t segmentCount;
+            uint32_t lastStrike;
+            uint8_t intensity;
+            bool active;
+        } lightning;
     } m_state;
     
 public:
@@ -130,10 +156,16 @@ private:
     void applyMelt();
     void applyGlitch();
     void applyPhaseShift();
+    void applySpiral();
+    void applyRipple();
+    void applyLightning();
     
     // Helper functions
     void initializeMelt();
     void initializeGlitch();
+    void initializeSpiral();
+    void initializeRipple();
+    void initializeLightning();
     
     // Utility functions
     CRGB lerpColor(CRGB from, CRGB to, uint8_t progress);
@@ -169,6 +201,15 @@ inline void TransitionEngine::startTransition(
             break;
         case TRANSITION_GLITCH:
             initializeGlitch();
+            break;
+        case TRANSITION_SPIRAL:
+            initializeSpiral();
+            break;
+        case TRANSITION_RIPPLE:
+            initializeRipple();
+            break;
+        case TRANSITION_LIGHTNING:
+            initializeLightning();
             break;
         default:
             break;
@@ -212,6 +253,15 @@ inline bool TransitionEngine::update() {
             break;
         case TRANSITION_PHASE_SHIFT:
             applyPhaseShift();
+            break;
+        case TRANSITION_SPIRAL:
+            applySpiral();
+            break;
+        case TRANSITION_RIPPLE:
+            applyRipple();
+            break;
+        case TRANSITION_LIGHTNING:
+            applyLightning();
             break;
     }
     
@@ -454,12 +504,15 @@ inline void TransitionEngine::initializeGlitch() {
 inline TransitionType TransitionEngine::getRandomTransition() {
     // Weighted random selection for variety
     uint8_t weights[] = {
-        30,  // FADE
-        15,  // WIPE_OUT
-        15,  // WIPE_IN
-        15,  // MELT
-        10,  // GLITCH
-        15   // PHASE_SHIFT
+        20,  // FADE
+        10,  // WIPE_OUT
+        10,  // WIPE_IN
+        10,  // MELT
+        8,   // GLITCH
+        10,  // PHASE_SHIFT
+        12,  // SPIRAL - NEW!
+        12,  // RIPPLE - NEW!
+        8    // LIGHTNING - NEW!
     };
     
     uint8_t total = 0;
@@ -476,6 +529,183 @@ inline TransitionType TransitionEngine::getRandomTransition() {
     }
     
     return TRANSITION_FADE;  // Fallback
+}
+
+// ============== NEW SPECTACULAR TRANSITIONS ==============
+
+inline void TransitionEngine::initializeSpiral() {
+    m_state.spiralAngle = 0.0f;
+    m_state.spiralSpeed = random8(3, 8) * 0.1f;  // Random spiral speed
+}
+
+inline void TransitionEngine::applySpiral() {
+    // Update spiral rotation
+    m_state.spiralAngle += m_state.spiralSpeed;
+    
+    if (m_dualStripMode) {
+        // CENTER ORIGIN spiral for dual strips
+        uint16_t stripLength = m_numLeds / 2;
+        
+        for (uint16_t strip = 0; strip < 2; strip++) {
+            uint16_t offset = strip * stripLength;
+            
+            for (uint16_t i = 0; i < stripLength; i++) {
+                // Calculate distance from center (LED 79)
+                float distFromCenter = abs((int)i - (int)m_centerPoint) / (float)m_centerPoint;
+                
+                // Spiral equation: angle varies with distance and time
+                float angle = m_state.spiralAngle + distFromCenter * TWO_PI * 2.0f;
+                float spiralProgress = (sin(angle) + 1.0f) * 0.5f;
+                
+                // Combine with main transition progress
+                float combinedProgress = spiralProgress * m_progress;
+                combinedProgress = constrain(combinedProgress, 0.0f, 1.0f);
+                
+                uint8_t blend = combinedProgress * 255;
+                m_outputBuffer[offset + i] = lerpColor(
+                    m_sourceBuffer[offset + i], 
+                    m_targetBuffer[offset + i], 
+                    blend
+                );
+            }
+        }
+    } else {
+        // Single buffer spiral
+        for (uint16_t i = 0; i < m_numLeds; i++) {
+            float distFromCenter = abs((int)i - (int)m_centerPoint) / (float)m_centerPoint;
+            float angle = m_state.spiralAngle + distFromCenter * TWO_PI * 2.0f;
+            float spiralProgress = (sin(angle) + 1.0f) * 0.5f;
+            float combinedProgress = spiralProgress * m_progress;
+            
+            uint8_t blend = constrain(combinedProgress * 255, 0, 255);
+            m_outputBuffer[i] = lerpColor(m_sourceBuffer[i], m_targetBuffer[i], blend);
+        }
+    }
+}
+
+inline void TransitionEngine::initializeRipple() {
+    m_state.rippleCount = 3;  // Start with 3 ripples
+    
+    for (uint8_t i = 0; i < m_state.rippleCount; i++) {
+        m_state.ripples[i].position = 0.0f;
+        m_state.ripples[i].amplitude = 1.0f - (i * 0.3f);  // Decreasing amplitude
+        m_state.ripples[i].frequency = 2.0f + i;  // Different frequencies
+        m_state.ripples[i].birthTime = millis() + (i * 200);  // Staggered birth times
+        m_state.ripples[i].active = true;
+    }
+}
+
+inline void TransitionEngine::applyRipple() {
+    uint32_t now = millis();
+    
+    // Start with source buffer
+    memcpy(m_outputBuffer, m_sourceBuffer, m_numLeds * sizeof(CRGB));
+    
+    if (m_dualStripMode) {
+        uint16_t stripLength = m_numLeds / 2;
+        
+        for (uint16_t strip = 0; strip < 2; strip++) {
+            uint16_t offset = strip * stripLength;
+            
+            for (uint16_t i = 0; i < stripLength; i++) {
+                float distFromCenter = abs((int)i - (int)m_centerPoint) / (float)m_centerPoint;
+                float totalRipple = 0.0f;
+                
+                // Combine multiple ripples
+                for (uint8_t r = 0; r < m_state.rippleCount; r++) {
+                    if (!m_state.ripples[r].active) continue;
+                    
+                    float rippleAge = (now - m_state.ripples[r].birthTime) / 1000.0f;
+                    if (rippleAge < 0) continue;  // Not born yet
+                    
+                    float ripplePos = rippleAge * 0.5f;  // Ripple speed
+                    float rippleDist = abs(distFromCenter - ripplePos);
+                    
+                    if (rippleDist < 0.2f) {  // Ripple width
+                        float rippleIntensity = m_state.ripples[r].amplitude * 
+                                              cos(rippleDist * PI * m_state.ripples[r].frequency) *
+                                              exp(-rippleAge * 2.0f);  // Decay over time
+                        totalRipple += rippleIntensity;
+                    }
+                }
+                
+                // Apply ripple effect
+                float rippleBlend = constrain((totalRipple + 1.0f) * 0.5f * m_progress, 0.0f, 1.0f);
+                uint8_t blend = rippleBlend * 255;
+                
+                m_outputBuffer[offset + i] = lerpColor(
+                    m_outputBuffer[offset + i], 
+                    m_targetBuffer[offset + i], 
+                    blend
+                );
+            }
+        }
+    }
+}
+
+inline void TransitionEngine::initializeLightning() {
+    m_state.lightning.segmentCount = 0;
+    m_state.lightning.lastStrike = 0;
+    m_state.lightning.intensity = 255;
+    m_state.lightning.active = false;
+}
+
+inline void TransitionEngine::applyLightning() {
+    uint32_t now = millis();
+    
+    // Start with current blend state
+    uint8_t baseBlend = m_progress * 255;
+    for (uint16_t i = 0; i < m_numLeds; i++) {
+        m_outputBuffer[i] = lerpColor(m_sourceBuffer[i], m_targetBuffer[i], baseBlend);
+    }
+    
+    // Generate lightning strikes
+    if (now - m_state.lightning.lastStrike > 100 + random8(200)) {  // Random strike interval
+        m_state.lightning.lastStrike = now;
+        m_state.lightning.active = true;
+        m_state.lightning.intensity = 255;
+        
+        // Generate jagged lightning path
+        m_state.lightning.segmentCount = random8(5, 15);
+        uint16_t currentPos = m_centerPoint;  // Start from center
+        
+        for (uint8_t i = 0; i < m_state.lightning.segmentCount; i++) {
+            // Jagged movement - sometimes forward, sometimes sideways
+            int16_t jump = random8(3, 12);
+            if (random8() < 100) jump = -jump;  // Sometimes go backwards
+            
+            currentPos += jump;
+            currentPos = constrain(currentPos, 0, m_numLeds - 1);
+            m_state.lightning.segments[i] = currentPos;
+        }
+    }
+    
+    // Render lightning bolt
+    if (m_state.lightning.active) {
+        // Fade lightning intensity
+        m_state.lightning.intensity = max(0, (int)m_state.lightning.intensity - 8);
+        if (m_state.lightning.intensity == 0) {
+            m_state.lightning.active = false;
+        }
+        
+        // Draw lightning segments
+        for (uint8_t i = 0; i < m_state.lightning.segmentCount; i++) {
+            uint16_t pos = m_state.lightning.segments[i];
+            
+            // Main bolt
+            CRGB lightningColor = CRGB::White;
+            lightningColor.nscale8(m_state.lightning.intensity);
+            m_outputBuffer[pos] = lightningColor;
+            
+            // Glow around bolt
+            if (pos > 0) {
+                m_outputBuffer[pos - 1] = lerpColor(m_outputBuffer[pos - 1], lightningColor, 128);
+            }
+            if (pos < m_numLeds - 1) {
+                m_outputBuffer[pos + 1] = lerpColor(m_outputBuffer[pos + 1], lightningColor, 128);
+            }
+        }
+    }
 }
 
 #endif // TRANSITION_ENGINE_H

@@ -8,7 +8,12 @@
 #include <freertos/queue.h>
 #include "m5rotate8.h"
 #include "../config/hardware_config.h"
+#include "../config/features.h"
 #include "../core/EffectTypes.h"
+
+#if FEATURE_WIRELESS_ENCODERS
+#include "../wireless/WirelessReceiver.h"
+#endif
 
 // Encoder event structure for queue communication
 struct EncoderEvent {
@@ -71,6 +76,12 @@ private:
     M5ROTATE8 encoder;
     bool encoderAvailable = false;
     
+    // Wireless encoder support
+#if FEATURE_WIRELESS_ENCODERS
+    WirelessEncoder::SimpleWirelessReceiver wirelessReceiver;
+    bool wirelessEnabled = false;
+#endif
+    
     // FreeRTOS task and queue
     TaskHandle_t encoderTaskHandle = NULL;
     QueueHandle_t encoderEventQueue = NULL;
@@ -122,6 +133,14 @@ public:
     
     // Get encoder instance for VFS
     M5ROTATE8* getEncoder() { return encoderAvailable ? &encoder : nullptr; }
+    
+    // Wireless encoder methods
+#if FEATURE_WIRELESS_ENCODERS
+    bool enableWireless();
+    void disableWireless();
+    bool isWirelessConnected() const;
+    void startWirelessPairing();
+#endif
     
     // Rate-limited serial output
     void rateLimitedSerial(const char* message);

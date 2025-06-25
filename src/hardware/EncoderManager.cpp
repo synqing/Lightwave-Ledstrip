@@ -194,6 +194,13 @@ void EncoderManager::encoderTask() {
         // Update encoder LEDs
         updateEncoderLEDs(now);
         
+#if FEATURE_WIRELESS_ENCODERS
+        // Update wireless receiver
+        if (wirelessEnabled) {
+            wirelessReceiver.update();
+        }
+#endif
+        
         // Task runs at 50Hz (20ms intervals)
         vTaskDelay(pdMS_TO_TICKS(20));
     }
@@ -272,6 +279,41 @@ void EncoderManager::rateLimitedSerial(const char* message) {
         Serial.print(message);
     }
 }
+
+// Wireless encoder methods
+#if FEATURE_WIRELESS_ENCODERS
+bool EncoderManager::enableWireless() {
+    if (!wirelessEnabled) {
+        if (wirelessReceiver.initialize()) {
+            wirelessEnabled = true;
+            Serial.println("✅ Wireless encoder receiver enabled");
+            return true;
+        } else {
+            Serial.println("❌ Failed to enable wireless encoder receiver");
+            return false;
+        }
+    }
+    return true;
+}
+
+void EncoderManager::disableWireless() {
+    wirelessEnabled = false;
+    Serial.println("🔄 Wireless encoder receiver disabled");
+}
+
+bool EncoderManager::isWirelessConnected() const {
+    return wirelessEnabled && wirelessReceiver.isConnected();
+}
+
+void EncoderManager::startWirelessPairing() {
+    if (wirelessEnabled) {
+        Serial.println("🔗 Wireless pairing mode active - waiting for transmitter...");
+        Serial.println("   Power on your wireless encoder transmitter device");
+    } else {
+        Serial.println("⚠️ Wireless not enabled");
+    }
+}
+#endif
 
 // EncoderMetrics implementation
 void EncoderMetrics::recordEvent(bool queued, uint32_t response_time_us) {

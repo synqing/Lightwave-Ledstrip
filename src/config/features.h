@@ -42,6 +42,7 @@
 // Hardware optimization
 #define FEATURE_HARDWARE_OPTIMIZATION 1  // ESP32-specific optimizations
 #define FEATURE_FASTLED_OPTIMIZATION 1   // FastLED advanced features
+#define FEATURE_WIRELESS_ENCODERS 1       // Wireless encoder receiver support
 
 // Debug features
 #define FEATURE_DEBUG_OUTPUT 1          // Serial debug messages

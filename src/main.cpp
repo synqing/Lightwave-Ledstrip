@@ -255,6 +255,18 @@ void startAdvancedTransition(uint8_t newEffect) {
                 duration = 1400;
                 curve = EASE_IN_OUT_CUBIC;
                 break;
+            case TRANSITION_SPIRAL:
+                duration = 2000;  // Longer for spectacular spiral
+                curve = EASE_IN_OUT_ELASTIC;
+                break;
+            case TRANSITION_RIPPLE:
+                duration = 2500;  // Long ripple waves
+                curve = EASE_OUT_CUBIC;
+                break;
+            case TRANSITION_LIGHTNING:
+                duration = 1000;  // Quick lightning strikes
+                curve = EASE_OUT_QUAD;
+                break;
             default:
                 duration = 1000;
                 curve = EASE_IN_OUT_QUAD;
@@ -283,7 +295,8 @@ void startAdvancedTransition(uint8_t newEffect) {
     
     // Debug transition type names
     const char* transitionNames[] = {
-        "FADE", "WIPE_OUT", "WIPE_IN", "MELT", "GLITCH", "PHASE_SHIFT"
+        "FADE", "WIPE_OUT", "WIPE_IN", "MELT", "GLITCH", "PHASE_SHIFT",
+        "SPIRAL", "RIPPLE", "LIGHTNING"
     };
     Serial.printf("%s (%dms)\n", transitionNames[transType], duration);
     
@@ -507,6 +520,9 @@ void loop() {
                 Serial.println("📋 Available Commands:");
                 Serial.println("  'n' or 'N' - Next effect (cycles through all effects)");
                 Serial.println("  't' or 'T' - Toggle random transitions on/off");
+#if FEATURE_WIRELESS_ENCODERS
+                Serial.println("  'w' or 'W' - Start wireless encoder pairing");
+#endif
                 Serial.println("  'h' or 'H' - Show this help menu");
                 Serial.println("\n🎨 Current Status:");
                 Serial.printf("  Effect: %s (%d/%d)\n", effects[currentEffect].name, currentEffect + 1, NUM_EFFECTS);
@@ -516,6 +532,10 @@ void loop() {
                 Serial.println("  • M5Stack 8-Encoder: GPIO 13/14");
                 Serial.println("  • M5Unit-Scroll: GPIO 15/21");
                 Serial.println("  • LED Strips: GPIO 11/12 (160 LEDs each)");
+#if FEATURE_WIRELESS_ENCODERS
+                Serial.printf("  • Wireless Encoders: %s\n", 
+                    encoderManager.isWirelessConnected() ? "CONNECTED" : "Ready");
+#endif
                 Serial.println("=========================================\n");
                 break;
             case 't':
@@ -531,6 +551,12 @@ void loop() {
                     startAdvancedTransition(nextEffect);
                 }
                 break;
+#if FEATURE_WIRELESS_ENCODERS
+            case 'w':
+            case 'W':
+                encoderManager.startWirelessPairing();
+                break;
+#endif
             // Preset commands disabled for now
             // case 's':
             // case 'S':

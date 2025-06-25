@@ -1,0 +1,18 @@
+# Custom Partition Table for Maximum Performance
+# Optimized for LED strip application with massive pre-calculated data storage
+#
+# Total Flash: 16MB (16,777,216 bytes)
+# 
+# Changes from default:
+# - Removed OTA partition (not needed) - saves 6.25MB
+# - Massive app partition: 14.6MB (was ~1.3MB)
+# - Small SPIFFS: 512KB (only for presets)
+# - Custom data partition: 1MB (for runtime-loadable effects)
+#
+# Name,   Type, SubType, Offset,  Size,    Flags
+nvs,      data, nvs,     0x9000,  0x5000,
+otadata,  data, ota,     0xe000,  0x2000,
+app0,     app,  ota_0,   0x10000, 0xE90000,  # 14.6MB for app
+spiffs,   data, spiffs,  0xEA0000,0x80000,   # 512KB for presets
+userdata, data, 0x40,    0xF20000,0x100000,  # 1MB custom data
+coredump, data, coredump,0x1020000,0x10000,  # 64KB coredump

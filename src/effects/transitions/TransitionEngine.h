@@ -21,15 +21,9 @@
 
 enum TransitionType {
     TRANSITION_FADE,          // Classic crossfade
-    TRANSITION_WIPE_LR,       // Wipe left to right
-    TRANSITION_WIPE_RL,       // Wipe right to left
-    TRANSITION_WIPE_OUT,      // Wipe from center outward
+    TRANSITION_WIPE_OUT,      // Wipe from center outward  
     TRANSITION_WIPE_IN,       // Wipe from edges inward
-    TRANSITION_DISSOLVE,      // Random pixel transition
-    TRANSITION_ZOOM_IN,       // Scale from center
-    TRANSITION_ZOOM_OUT,      // Scale to center
     TRANSITION_MELT,          // Thermal melt effect
-    TRANSITION_SHATTER,       // Particle explosion
     TRANSITION_GLITCH,        // Digital glitch effect
     TRANSITION_PHASE_SHIFT,   // Frequency-based morph
     TRANSITION_COUNT
@@ -75,20 +69,6 @@ private:
     
     // Effect-specific state
     struct TransitionState {
-        // Dissolve effect
-        uint8_t pixelOrder[HardwareConfig::NUM_LEDS];
-        uint16_t dissolveIndex;
-        
-        // Shatter effect
-        struct Particle {
-            float x;
-            float vx;
-            float vy;
-            uint8_t hue;
-            uint8_t lifetime;
-        } particles[20];
-        uint8_t particleCount;
-        
         // Melt effect
         float heatMap[HardwareConfig::NUM_LEDS];
         
@@ -147,16 +127,11 @@ private:
     // Transition implementations
     void applyFade();
     void applyWipe(bool leftToRight, bool fromCenter);
-    void applyDissolve();
-    void applyZoom(bool zoomIn);
     void applyMelt();
-    void applyShatter();
     void applyGlitch();
     void applyPhaseShift();
     
     // Helper functions
-    void initializeDissolve();
-    void initializeShatter();
     void initializeMelt();
     void initializeGlitch();
     
@@ -189,12 +164,6 @@ inline void TransitionEngine::startTransition(
     resetState();
     
     switch (type) {
-        case TRANSITION_DISSOLVE:
-            initializeDissolve();
-            break;
-        case TRANSITION_SHATTER:
-            initializeShatter();
-            break;
         case TRANSITION_MELT:
             initializeMelt();
             break;
@@ -229,32 +198,14 @@ inline bool TransitionEngine::update() {
         case TRANSITION_FADE:
             applyFade();
             break;
-        case TRANSITION_WIPE_LR:
-            applyWipe(true, false);
-            break;
-        case TRANSITION_WIPE_RL:
-            applyWipe(false, false);
-            break;
         case TRANSITION_WIPE_OUT:
             applyWipe(true, true);
             break;
         case TRANSITION_WIPE_IN:
             applyWipe(false, true);
             break;
-        case TRANSITION_DISSOLVE:
-            applyDissolve();
-            break;
-        case TRANSITION_ZOOM_IN:
-            applyZoom(true);
-            break;
-        case TRANSITION_ZOOM_OUT:
-            applyZoom(false);
-            break;
         case TRANSITION_MELT:
             applyMelt();
-            break;
-        case TRANSITION_SHATTER:
-            applyShatter();
             break;
         case TRANSITION_GLITCH:
             applyGlitch();
@@ -337,66 +288,6 @@ inline void TransitionEngine::applyWipe(bool leftToRight, bool fromCenter) {
     }
 }
 
-inline void TransitionEngine::applyDissolve() {
-    uint16_t pixelsToShow = m_progress * m_numLeds;
-    
-    for (uint16_t i = 0; i < m_numLeds; i++) {
-        uint16_t pixelIndex = m_state.pixelOrder[i];
-        if (i < pixelsToShow) {
-            m_outputBuffer[pixelIndex] = m_targetBuffer[pixelIndex];
-        } else {
-            m_outputBuffer[pixelIndex] = m_sourceBuffer[pixelIndex];
-        }
-    }
-}
-
-inline void TransitionEngine::applyZoom(bool zoomIn) {
-    float scale = zoomIn ? m_progress : 1.0f - m_progress;
-    
-    if (m_dualStripMode) {
-        // Process each strip independently
-        uint16_t stripLength = m_numLeds / 2;
-        
-        for (uint16_t strip = 0; strip < 2; strip++) {
-            uint16_t offset = strip * stripLength;
-            
-            for (uint16_t i = 0; i < stripLength; i++) {
-                float distFromCenter = (float)(i - m_centerPoint) / m_centerPoint;
-                float scaledDist = distFromCenter * scale;
-                int16_t sourcePos = m_centerPoint + scaledDist * m_centerPoint;
-                
-                if (sourcePos >= 0 && sourcePos < stripLength) {
-                    uint8_t blend = zoomIn ? (m_progress * 255) : ((1.0f - m_progress) * 255);
-                    m_outputBuffer[offset + i] = lerpColor(
-                        m_sourceBuffer[offset + i], 
-                        m_targetBuffer[offset + sourcePos], 
-                        blend
-                    );
-                } else {
-                    m_outputBuffer[offset + i] = m_targetBuffer[offset + i];
-                }
-            }
-        }
-    } else {
-        // Single buffer zoom
-        for (uint16_t i = 0; i < m_numLeds; i++) {
-            float distFromCenter = (float)(i - m_centerPoint) / m_centerPoint;
-            float scaledDist = distFromCenter * scale;
-            int16_t sourcePos = m_centerPoint + scaledDist * m_centerPoint;
-            
-            if (sourcePos >= 0 && sourcePos < m_numLeds) {
-                uint8_t blend = zoomIn ? (m_progress * 255) : ((1.0f - m_progress) * 255);
-                m_outputBuffer[i] = lerpColor(
-                    m_sourceBuffer[i], 
-                    m_targetBuffer[sourcePos], 
-                    blend
-                );
-            } else {
-                m_outputBuffer[i] = m_targetBuffer[i];
-            }
-        }
-    }
-}
 
 inline void TransitionEngine::applyMelt() {
     // Update heat map
@@ -420,38 +311,6 @@ inline void TransitionEngine::applyMelt() {
     }
 }
 
-inline void TransitionEngine::applyShatter() {
-    // Start with source
-    memcpy(m_outputBuffer, m_sourceBuffer, m_numLeds * sizeof(CRGB));
-    
-    // Update and render particles
-    for (uint8_t i = 0; i < m_state.particleCount; i++) {
-        auto& p = m_state.particles[i];
-        
-        // Update physics
-        p.x += p.vx;
-        p.vy += 0.5f;  // Gravity
-        p.x += p.vy;
-        
-        // Update lifetime
-        if (p.lifetime > 0) {
-            p.lifetime--;
-            
-            // Render particle
-            int16_t pos = (int16_t)p.x;
-            if (pos >= 0 && pos < m_numLeds) {
-                CRGB particleColor = CHSV(p.hue, 255, p.lifetime * 2);
-                m_outputBuffer[pos] = lerpColor(m_outputBuffer[pos], particleColor, 200);
-            }
-        }
-    }
-    
-    // Fade in target
-    uint8_t targetAlpha = m_progress * m_progress * 255;  // Quadratic fade
-    for (uint16_t i = 0; i < m_numLeds; i++) {
-        m_outputBuffer[i] = lerpColor(m_outputBuffer[i], m_targetBuffer[i], targetAlpha);
-    }
-}
 
 inline void TransitionEngine::applyGlitch() {
     // Copy source as base
@@ -579,33 +438,6 @@ inline void TransitionEngine::resetState() {
     memset(&m_state, 0, sizeof(m_state));
 }
 
-inline void TransitionEngine::initializeDissolve() {
-    // Initialize random pixel order
-    for (uint16_t i = 0; i < m_numLeds; i++) {
-        m_state.pixelOrder[i] = i;
-    }
-    
-    // Fisher-Yates shuffle
-    for (uint16_t i = m_numLeds - 1; i > 0; i--) {
-        uint16_t j = random16(i + 1);
-        uint8_t temp = m_state.pixelOrder[i];
-        m_state.pixelOrder[i] = m_state.pixelOrder[j];
-        m_state.pixelOrder[j] = temp;
-    }
-}
-
-inline void TransitionEngine::initializeShatter() {
-    // Create particles at random positions
-    m_state.particleCount = 20;
-    for (uint8_t i = 0; i < m_state.particleCount; i++) {
-        auto& p = m_state.particles[i];
-        p.x = random16(m_numLeds);
-        p.vx = random8(10) - 5;  // -5 to +5
-        p.vy = -random8(5, 15);  // Upward velocity
-        p.hue = random8();
-        p.lifetime = 128;
-    }
-}
 
 inline void TransitionEngine::initializeMelt() {
     // Clear heat map
@@ -622,18 +454,12 @@ inline void TransitionEngine::initializeGlitch() {
 inline TransitionType TransitionEngine::getRandomTransition() {
     // Weighted random selection for variety
     uint8_t weights[] = {
-        20,  // FADE
-        15,  // WIPE_LR
-        15,  // WIPE_RL
-        10,  // WIPE_OUT
-        10,  // WIPE_IN
-        8,   // DISSOLVE
-        5,   // ZOOM_IN
-        5,   // ZOOM_OUT
-        4,   // MELT
-        3,   // SHATTER
-        3,   // GLITCH
-        2    // PHASE_SHIFT
+        30,  // FADE
+        15,  // WIPE_OUT
+        15,  // WIPE_IN
+        15,  // MELT
+        10,  // GLITCH
+        15   // PHASE_SHIFT
     };
     
     uint8_t total = 0;

@@ -67,8 +67,9 @@ namespace HardwareConfig {
     constexpr uint8_t I2C_SCL = 14;
     constexpr uint8_t M5STACK_8ENCODER_ADDR = 0x41;  // Default I2C address
     
-    // M5Unit-Scroll I2C pins (secondary I2C bus)
-    constexpr uint8_t I2C_SDA_SCROLL = 20;
+    // M5Unit-Scroll I2C pins (secondary I2C bus) 
+    // Note: GPIO 20 is USB D+ on ESP32-S3, changed to GPIO 15
+    constexpr uint8_t I2C_SDA_SCROLL = 15;
     constexpr uint8_t I2C_SCL_SCROLL = 21;
     constexpr uint8_t M5UNIT_SCROLL_ADDR = 0x40;  // Default I2C address
     

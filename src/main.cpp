@@ -240,23 +240,8 @@ void startAdvancedTransition(uint8_t newEffect) {
                 break;
             case TRANSITION_WIPE_OUT:
             case TRANSITION_WIPE_IN:
-            case TRANSITION_WIPE_LR:
-            case TRANSITION_WIPE_RL:
                 duration = 1200;
                 curve = EASE_OUT_CUBIC;
-                break;
-            case TRANSITION_DISSOLVE:
-                duration = 1500;
-                curve = EASE_LINEAR;
-                break;
-            case TRANSITION_ZOOM_IN:
-            case TRANSITION_ZOOM_OUT:
-                duration = 1000;
-                curve = EASE_IN_OUT_ELASTIC;
-                break;
-            case TRANSITION_SHATTER:
-                duration = 2000;
-                curve = EASE_OUT_BOUNCE;
                 break;
             case TRANSITION_MELT:
                 duration = 1800;
@@ -298,9 +283,7 @@ void startAdvancedTransition(uint8_t newEffect) {
     
     // Debug transition type names
     const char* transitionNames[] = {
-        "FADE", "WIPE_LR", "WIPE_RL", "WIPE_OUT", "WIPE_IN", 
-        "DISSOLVE", "ZOOM_IN", "ZOOM_OUT", "MELT", "SHATTER", 
-        "GLITCH", "PHASE_SHIFT"
+        "FADE", "WIPE_OUT", "WIPE_IN", "MELT", "GLITCH", "PHASE_SHIFT"
     };
     Serial.printf("%s (%dms)\n", transitionNames[transType], duration);
     
@@ -312,18 +295,12 @@ void startAdvancedTransition(uint8_t newEffect) {
 
 
 void setup() {
-    // Initialize serial with USB CDC wait
+    // Initialize serial with proper USB CDC setup
     Serial.begin(115200);
-    
-    // Wait for USB CDC to enumerate (ESP32-S3 specific)
-    #ifdef ARDUINO_USB_CDC_ON_BOOT
-    delay(2000);  // Give USB time to enumerate
-    while (!Serial && millis() < 5000) {
-        delay(10);  // Wait up to 5 seconds for serial
-    }
-    #endif
-    
     delay(1000);
+    while (!Serial && millis() < 3000) {
+        delay(10);  // Wait up to 3 seconds for USB
+    }
     
     Serial.println("\n=== Light Crystals - Dual LED Strips ===");
     Serial.println("Matrix mode has been surgically removed");
@@ -506,10 +483,10 @@ void loop() {
     static uint32_t loopCounter = 0;
     static uint32_t lastDebugPrint = 0;
     
-    // Debug print every second
-    if (millis() - lastDebugPrint > 1000) {
+    // Debug print every 10 seconds (reduced frequency)
+    if (millis() - lastDebugPrint > 10000) {
         lastDebugPrint = millis();
-        Serial.printf("[DEBUG] Loop running: %lu iterations, Effect: %s\n", loopCounter, effects[currentEffect].name);
+        Serial.printf("[DEBUG] Loop: %lu iterations, Effect: %s\n", loopCounter, effects[currentEffect].name);
         loopCounter = 0;
     }
     loopCounter++;
@@ -522,8 +499,25 @@ void loop() {
     // Simple transition controls via Serial
     if (Serial.available()) {
         char cmd = Serial.read();
-        Serial.printf("*** RECEIVED COMMAND: '%c' (0x%02X) ***\n", cmd, cmd);
+        Serial.printf("*** RECEIVED COMMAND: '%c' ***\n", cmd);
         switch (cmd) {
+            case 'h':
+            case 'H':
+                Serial.println("\n🎮 === LIGHT CRYSTALS SERIAL COMMANDS ===");
+                Serial.println("📋 Available Commands:");
+                Serial.println("  'n' or 'N' - Next effect (cycles through all effects)");
+                Serial.println("  't' or 'T' - Toggle random transitions on/off");
+                Serial.println("  'h' or 'H' - Show this help menu");
+                Serial.println("\n🎨 Current Status:");
+                Serial.printf("  Effect: %s (%d/%d)\n", effects[currentEffect].name, currentEffect + 1, NUM_EFFECTS);
+                Serial.printf("  Transitions: %s\n", useRandomTransitions ? "RANDOM" : "FADE ONLY");
+                Serial.printf("  Palette: %d\n", currentPaletteIndex);
+                Serial.println("\n🎯 Hardware:");
+                Serial.println("  • M5Stack 8-Encoder: GPIO 13/14");
+                Serial.println("  • M5Unit-Scroll: GPIO 15/21");
+                Serial.println("  • LED Strips: GPIO 11/12 (160 LEDs each)");
+                Serial.println("=========================================\n");
+                break;
             case 't':
             case 'T':
                 useRandomTransitions = !useRandomTransitions;

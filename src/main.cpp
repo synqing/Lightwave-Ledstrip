@@ -3,8 +3,10 @@
 #include "config/features.h"
 #include "config/hardware_config.h"
 #include "core/EffectTypes.h"
+#include "core/MegaLUTs.h"
 #include "effects/strip/StripEffects.h"
 #include "effects/transitions/TransitionEngine.h"
+#include "effects/LUTOptimizedEffects.h"
 #include "hardware/EncoderManager.h"
 #include "hardware/EncoderLEDFeedback.h"
 
@@ -36,50 +38,33 @@ CRGB leds[HardwareConfig::NUM_LEDS];  // Full 320 LED buffer for EffectBase comp
 CRGB transitionBuffer[HardwareConfig::NUM_LEDS];
 
 // Pre-calculated distance lookup table for CENTER ORIGIN effects
-uint8_t distanceFromCenter[HardwareConfig::NUM_LEDS];
+// NOTE: These are now defined in MegaLUTs.cpp as part of the massive LUT system
+extern uint8_t* distanceFromCenterLUT;
 float normalizedDistance[HardwareConfig::NUM_LEDS];
 
-// Performance optimization LUTs - global for cross-file access
-uint8_t fadeIntensityLUT[256][256];  // [progress][distance] -> intensity
-uint8_t wavePatternLUT[256];         // Pre-calculated wave patterns
-uint8_t spiralAngleLUT[160];         // Pre-calculated spiral angles per position
-uint8_t rippleDecayLUT[80];          // Pre-calculated ripple decay values
+// Legacy LUT declarations for backward compatibility
+// These map to the new MegaLUT system
+#define distanceFromCenter distanceFromCenterLUT
+#define wavePatternLUT wavePatternLUT[0]  // Use first wave pattern
+#define spiralAngleLUT spiralAngleLUT      // Direct mapping
 
-// Initialize LUTs once at startup
+// LUT-optimized effect instances
+LUTPlasmaEffect* lutPlasmaEffect;
+LUTFireEffect* lutFireEffect;
+LUTWaveEffect* lutWaveEffect;
+LUTMandelbrotEffect* lutMandelbrotEffect;
+LUTParticleEffect* lutParticleEffect;
+LUTPerlinNoiseEffect* lutPerlinEffect;
+LUTComplexWaveEffect* lutComplexWaveEffect;
+LUTShaderEffect* lutShaderEffect;
+LUTTransitionShowcase* lutTransitionEffect;
+LUTFrequencyEffect* lutFrequencyEffect;
+
+// Initialize legacy LUTs - minimal since MegaLUTs handles everything
 void initializeLUTs() {
-    // Fade intensity LUT - pre-calculate all fade combinations
-    for (uint16_t progress = 0; progress < 256; progress++) {
-        for (uint16_t dist = 0; dist < 256; dist++) {
-            // Calculate fade with trailing effect
-            uint16_t fadeEdge = (progress * 130) >> 8;  // 1.3x multiplier
-            uint16_t fadeTrail = 77;  // ~30% of 256
-            
-            if (dist <= fadeEdge - fadeTrail) {
-                fadeIntensityLUT[progress][dist] = 255;
-            } else if (dist <= fadeEdge) {
-                uint16_t fadePos = dist - (fadeEdge - fadeTrail);
-                fadeIntensityLUT[progress][dist] = 255 - ((fadePos * 255) / fadeTrail);
-            } else {
-                fadeIntensityLUT[progress][dist] = 0;
-            }
-        }
-    }
-    
-    // Wave pattern LUT - pre-calculate sin8 combinations
-    for (uint16_t i = 0; i < 256; i++) {
-        wavePatternLUT[i] = sin8(i);
-    }
-    
-    // Spiral angle LUT - pre-calculate spiral positions
-    for (uint16_t i = 0; i < 160; i++) {
-        float dist = abs((int)i - 79) / 79.0f;
-        spiralAngleLUT[i] = (uint8_t)(dist * 255);
-    }
-    
-    // Ripple decay LUT - exponential decay pre-calculated
-    for (uint16_t i = 0; i < 80; i++) {
-        float decay = exp(-i * 0.05f);  // Exponential decay
-        rippleDecayLUT[i] = (uint8_t)(decay * 255);
+    // Legacy compatibility - MegaLUTs handles all pre-calculations
+    // This function is kept for backward compatibility only
+    Serial.println("[LUT] Legacy LUT initialization skipped - using MegaLUTs");
     }
 }
 
@@ -196,6 +181,59 @@ extern void vortexEffect();
 extern void collisionEffect();
 extern void gravityWellEffect();
 
+// LUT-Optimized Effect Wrappers
+void lutPlasmaWrapper() {
+    if (lutPlasmaEffect) {
+        lutPlasmaEffect->update();
+        // Handle encoder changes through the effect
+        static int16_t lastEncoderValues[8] = {0};
+        for (uint8_t i = 3; i < 8; i++) {
+            int16_t currentValue = encoderManager.getEncoder()->getCounter(i);
+            int16_t delta = currentValue - lastEncoderValues[i];
+            if (delta != 0) {
+                lutPlasmaEffect->onEncoderChange(i, delta);
+                lastEncoderValues[i] = currentValue;
+            }
+        }
+    }
+}
+
+void lutFireWrapper() {
+    if (lutFireEffect) lutFireEffect->update();
+}
+
+void lutWaveWrapper() {
+    if (lutWaveEffect) lutWaveEffect->update();
+}
+
+void lutMandelbrotWrapper() {
+    if (lutMandelbrotEffect) lutMandelbrotEffect->update();
+}
+
+void lutParticleWrapper() {
+    if (lutParticleEffect) lutParticleEffect->update();
+}
+
+void lutPerlinWrapper() {
+    if (lutPerlinEffect) lutPerlinEffect->update();
+}
+
+void lutComplexWaveWrapper() {
+    if (lutComplexWaveEffect) lutComplexWaveEffect->update();
+}
+
+void lutShaderWrapper() {
+    if (lutShaderEffect) lutShaderEffect->update();
+}
+
+void lutTransitionWrapper() {
+    if (lutTransitionEffect) lutTransitionEffect->update();
+}
+
+void lutFrequencyWrapper() {
+    if (lutFrequencyEffect) lutFrequencyEffect->update();
+}
+
 // Effects array - Matrix mode has been surgically removed
 Effect effects[] = {
     // =============== BASIC STRIP EFFECTS ===============
@@ -231,7 +269,19 @@ Effect effects[] = {
     {"Shockwave", shockwaveEffect, EFFECT_TYPE_STANDARD},
     {"Vortex", vortexEffect, EFFECT_TYPE_STANDARD},
     {"Collision", collisionEffect, EFFECT_TYPE_STANDARD},
-    {"Gravity Well", gravityWellEffect, EFFECT_TYPE_STANDARD}
+    {"Gravity Well", gravityWellEffect, EFFECT_TYPE_STANDARD},
+    
+    // =============== LUT-OPTIMIZED ULTRA PERFORMANCE EFFECTS ===============
+    {"LUT Plasma", lutPlasmaWrapper, EFFECT_TYPE_STANDARD},
+    {"LUT Fire", lutFireWrapper, EFFECT_TYPE_STANDARD},
+    {"LUT Wave", lutWaveWrapper, EFFECT_TYPE_STANDARD},
+    {"LUT Mandelbrot", lutMandelbrotWrapper, EFFECT_TYPE_STANDARD},
+    {"LUT Particles", lutParticleWrapper, EFFECT_TYPE_STANDARD},
+    {"LUT Perlin", lutPerlinWrapper, EFFECT_TYPE_STANDARD},
+    {"LUT Complex", lutComplexWaveWrapper, EFFECT_TYPE_STANDARD},
+    {"LUT Shader", lutShaderWrapper, EFFECT_TYPE_STANDARD},
+    {"LUT Transitions", lutTransitionWrapper, EFFECT_TYPE_STANDARD},
+    {"LUT Frequency", lutFrequencyWrapper, EFFECT_TYPE_STANDARD}
 };
 
 const uint8_t NUM_EFFECTS = sizeof(effects) / sizeof(effects[0]);
@@ -251,7 +301,7 @@ void initializeStripMapping() {
         radii[i] = distFromCenter * 255;
         
         // Pre-calculate absolute and normalized distances
-        distanceFromCenter[i] = abs((int)stripPos - (int)HardwareConfig::STRIP_CENTER_POINT);
+        // Note: distanceFromCenter is now part of MegaLUTs
         normalizedDistance[i] = distFromCenter;
     }
 }
@@ -426,9 +476,9 @@ void setup() {
     
     Serial.println("Dual strip FastLED initialized");
     
-    // Initialize I2C and M5ROTATE8 with dedicated task architecture
+    // Initialize I2C at MAXIMUM speed
     Wire.begin(HardwareConfig::I2C_SDA, HardwareConfig::I2C_SCL);
-    Wire.setClock(400000);  // Max supported speed (400 KHz)
+    Wire.setClock(1000000);  // 1 MHz for maximum performance
     
     // Initialize encoder manager
     encoderManager.begin();
@@ -452,6 +502,26 @@ void setup() {
     
     // Initialize strip mapping and LUTs
     initializeStripMapping();
+    
+    // Initialize MEGA LUT System - MAXIMUM PERFORMANCE!
+    Serial.println("\n[LUT] Initializing MEGA LUT System for maximum performance...");
+    initializeMegaLUTs();  // This will use 200-250KB of RAM for LUTs
+    
+    // Initialize LUT-optimized effect instances
+    lutPlasmaEffect = new LUTPlasmaEffect();
+    lutFireEffect = new LUTFireEffect();
+    lutWaveEffect = new LUTWaveEffect();
+    lutMandelbrotEffect = new LUTMandelbrotEffect();
+    lutParticleEffect = new LUTParticleEffect();
+    lutPerlinEffect = new LUTPerlinNoiseEffect();
+    lutComplexWaveEffect = new LUTComplexWaveEffect();
+    lutShaderEffect = new LUTShaderEffect();
+    lutTransitionEffect = new LUTTransitionShowcase();
+    lutFrequencyEffect = new LUTFrequencyEffect();
+    
+    Serial.println("[LUT] LUT-optimized effects initialized");
+    
+    // Legacy LUT initialization (minimal, for backward compatibility)
     initializeLUTs();
     
     // Initialize palette
@@ -521,7 +591,23 @@ void setup() {
     // Serial.println("   's' = Quick save preset");
     // Serial.println("   'l' = Quick load preset");
     Serial.println("");
-    Serial.println("[DEBUG] Entering main loop...");
+    Serial.println("[DEBUG] Starting dual-core processing...");
+    
+    // Create frame synchronization semaphore
+    frameSemaphore = xSemaphoreCreateBinary();
+    xSemaphoreGive(frameSemaphore);
+    
+    // Create I/O task on Core 0
+    xTaskCreatePinnedToCore(
+        IOTaskCode,      // Task function
+        "IOTask",        // Name
+        8192,            // Stack size
+        NULL,            // Parameters
+        2,               // Priority (higher than render)
+        &IOTask,         // Task handle
+        0);              // Core 0
+    
+    Serial.println("[DEBUG] Entering main render loop on Core 1...");
 }
 
 void handleButton() {
@@ -568,6 +654,43 @@ void updateEncoderFeedback() {
     }
 }
 
+// Performance optimization: Use both cores
+TaskHandle_t RenderTask;
+TaskHandle_t IOTask;
+SemaphoreHandle_t frameSemaphore;
+
+// Core 0: Handle all I/O operations
+void IOTaskCode(void * parameter) {
+    for(;;) {
+        // Process encoder events
+        QueueHandle_t encoderEventQueue = encoderManager.getEventQueue();
+        if (encoderEventQueue != NULL) {
+            EncoderEvent event;
+            while (xQueueReceive(encoderEventQueue, &event, 0) == pdTRUE) {
+                // Process encoder event (moved from main loop)
+                if (event.encoder_id == 0 && !transitionEngine.isActive()) {
+                    uint8_t newEffect = (event.delta > 0) ? 
+                        (currentEffect + 1) % NUM_EFFECTS : 
+                        (currentEffect > 0 ? currentEffect - 1 : NUM_EFFECTS - 1);
+                    if (newEffect != currentEffect) {
+                        startAdvancedTransition(newEffect);
+                    }
+                }
+                // Other encoder processing...
+            }
+        }
+        
+        // Process scroll encoder
+        if (scrollEncoderAvailable) {
+            processScrollEncoder();
+        }
+        
+        // Yield to other tasks
+        vTaskDelay(1);
+    }
+}
+
+// Core 1: Main render loop
 void loop() {
     static uint32_t loopCounter = 0;
     static uint32_t lastDebugPrint = 0;

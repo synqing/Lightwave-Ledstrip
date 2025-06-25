@@ -249,15 +249,28 @@ inline void TransitionEngine::applyFade() {
             CRGB* tgtPtr = &m_targetBuffer[offset];
             CRGB* outPtr = &m_outputBuffer[offset];
             
-            // Use external distance and fade LUTs
-            extern uint8_t distanceFromCenter[];
-            extern uint8_t fadeIntensityLUT[256][256];
-            uint8_t* distPtr = &distanceFromCenter[offset];
+            // Use external distance lookup from MegaLUTs
+            extern uint8_t* distanceFromCenterLUT;
+            uint8_t* distPtr = &distanceFromCenterLUT[offset];
             
-            // Use LUT for fade calculations - MUCH faster
+            // Simple distance-based fade with smooth trailing edge
             for (uint16_t i = 0; i < stripLength; i++) {
                 uint8_t dist = distPtr[i];
-                uint8_t blendAmount = fadeIntensityLUT[m_easedProgress][dist];
+                uint8_t blendAmount = m_easedProgress;
+                
+                // Apply distance-based fading
+                if (dist < fadeEdge - fadeTrailWidth) {
+                    blendAmount = 255;  // Full new effect
+                } else if (dist < fadeEdge) {
+                    // Smooth fade in trail
+                    uint16_t fadePos = dist - (fadeEdge - fadeTrailWidth);
+                    blendAmount = 255 - ((fadePos * 255) / fadeTrailWidth);
+                } else {
+                    blendAmount = 0;  // Full old effect
+                }
+                
+                // Mix based on progress
+                blendAmount = scale8(blendAmount, m_easedProgress);
                 
                 // Use FastLED's optimized blend function
                 outPtr[i] = blend(srcPtr[i], tgtPtr[i], blendAmount);
@@ -288,8 +301,8 @@ inline void TransitionEngine::applyWipe(bool leftToRight, bool fromCenter) {
         uint16_t stripLength = m_numLeds / 2;
         uint8_t radius = (m_easedProgress * m_centerPoint) >> 8;
         
-        // Use external distance lookup
-        extern uint8_t distanceFromCenter[];
+        // Use external distance lookup from MegaLUTs
+        extern uint8_t* distanceFromCenterLUT;
         
         // Process both strips with optimized pointer arithmetic
         for (uint16_t strip = 0; strip < 2; strip++) {
@@ -297,7 +310,7 @@ inline void TransitionEngine::applyWipe(bool leftToRight, bool fromCenter) {
             CRGB* srcPtr = &m_sourceBuffer[offset];
             CRGB* tgtPtr = &m_targetBuffer[offset];
             CRGB* outPtr = &m_outputBuffer[offset];
-            uint8_t* distPtr = &distanceFromCenter[offset];
+            uint8_t* distPtr = &distanceFromCenterLUT[offset];
             
             if (leftToRight) {
                 for (uint16_t i = 0; i < stripLength; i++) {
@@ -336,18 +349,22 @@ inline void TransitionEngine::applyWipe(bool leftToRight, bool fromCenter) {
 
 inline void TransitionEngine::applyPhaseShift() {
     // Frequency-based morphing with LUT
-    extern uint8_t wavePatternLUT[256];
+    extern uint8_t (*wavePatternLUT)[HardwareConfig::NUM_LEDS];
     
     // Update phase with integer math
     static uint8_t phaseAccumulator = 0;
     phaseAccumulator += (m_easedProgress >> 2);  // Slower phase progression
     
     // Process with optimized wave LUT
+    uint8_t patternIndex = phaseAccumulator >> 3;  // Select pattern based on phase
+    
     for (uint16_t i = 0; i < m_numLeds; i++) {
-        // Use integer position calculation
-        uint8_t position = (i * 255) / m_numLeds;
-        uint8_t waveIndex = position + phaseAccumulator;
-        uint8_t wave = wavePatternLUT[waveIndex];
+        // Use pre-calculated wave pattern
+        uint8_t wave = wavePatternLUT[patternIndex & 255][i];
+        
+        // Add phase animation
+        uint8_t phaseWave = sin8(i + phaseAccumulator * 4);
+        wave = scale8(wave, phaseWave);
         
         // Scale wave by progress
         uint8_t blendAmount = scale8(wave, m_easedProgress);
@@ -488,13 +505,13 @@ inline void TransitionEngine::applySpiral() {
                 // Calculate distance from center (LED 79)
                 float distFromCenter = abs((int)i - (int)m_centerPoint) / (float)m_centerPoint;
                 
-                // Use pre-calculated spiral LUT
-                extern uint8_t spiralAngleLUT[160];
-                extern uint8_t wavePatternLUT[256];
+                // Use pre-calculated LUTs from MegaLUTs
+                extern uint8_t* spiralAngleLUT;
+                extern uint8_t (*wavePatternLUT)[HardwareConfig::NUM_LEDS];
                 
                 // Spiral using LUT - much faster
                 uint8_t spiralIndex = spiralAngleLUT[i] + (uint8_t)(m_state.spiralAngle * 40);
-                uint8_t spiralProgress = wavePatternLUT[spiralIndex] >> 1;  // 0-127 range
+                uint8_t spiralProgress = wavePatternLUT[0][i] >> 1;  // Use first pattern
                 
                 // Combine with main transition progress
                 float combinedProgress = spiralProgress * m_progress;

@@ -120,6 +120,9 @@ public:
     // Get metrics
     const EncoderMetrics& getMetrics() { return metrics; }
     
+    // Get encoder instance for VFS
+    M5ROTATE8* getEncoder() { return encoderAvailable ? &encoder : nullptr; }
+    
     // Rate-limited serial output
     void rateLimitedSerial(const char* message);
 };

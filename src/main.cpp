@@ -4,7 +4,9 @@
 #include "config/hardware_config.h"
 #include "core/EffectTypes.h"
 #include "effects/strip/StripEffects.h"
+#include "effects/transitions/TransitionEngine.h"
 #include "hardware/EncoderManager.h"
+#include "hardware/EncoderLEDFeedback.h"
 
 #if FEATURE_PERFORMANCE_MONITOR
 #include "utils/PerformanceOptimizer.h"
@@ -52,11 +54,16 @@ uint8_t paletteSpeed = 10;
 // Universal visual parameters for encoders 4-7
 VisualParams visualParams;
 
-// Transition parameters
-bool inTransition = false;
-uint32_t transitionStart = 0;
-uint32_t transitionDuration = 1000;  // 1 second transitions
-float transitionProgress = 0.0f;
+// Advanced Transition System
+TransitionEngine transitionEngine(HardwareConfig::NUM_LEDS);
+CRGB transitionSourceBuffer[HardwareConfig::NUM_LEDS];
+bool useRandomTransitions = true;
+
+// Visual Feedback System
+EncoderLEDFeedback* encoderFeedback = nullptr;
+
+// Preset Management System - DISABLED
+// PresetManager* presetManager = nullptr;
 
 // Palette management
 CRGBPalette16 currentPalette;
@@ -69,13 +76,13 @@ uint8_t currentPaletteIndex = 0;
 // M5Unit-Scroll encoder on secondary I2C bus
 #include "hardware/scroll_encoder.h"
 
-// Dual-Strip Wave Engine
-#include "effects/waves/DualStripWaveEngine.h"
-#include "effects/waves/WaveEffects.h"
-#include "effects/waves/WaveEncoderControl.h"
+// Dual-Strip Wave Engine (disabled for now - files don't exist yet)
+// #include "effects/waves/DualStripWaveEngine.h"
+// #include "effects/waves/WaveEffects.h"
+// #include "effects/waves/WaveEncoderControl.h"
 
-// Global wave engine instance (stack-allocated, ~200 bytes)
-DualStripWaveEngine waveEngine;
+// Global wave engine instance (disabled for now)
+// DualStripWaveEngine waveEngine;
 
 #if FEATURE_SERIAL_MENU
 // Serial menu instance
@@ -87,82 +94,7 @@ DummyWave2D fxWave2D;
 // Effect function pointer type
 typedef void (*EffectFunction)();
 
-// Initialize strip mapping for spatial effects
-void initializeStripMapping() {
-    // Linear strip mapping for dual strips
-    for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
-        float normalized = (float)i / HardwareConfig::STRIP_LENGTH;
-        
-        // Linear angle mapping for strips
-        angles[i] = normalized * 255;
-        
-        // Distance from center point for outward propagation
-        float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT) / HardwareConfig::STRIP_HALF_LENGTH;
-        radii[i] = distFromCenter * 255;
-    }
-}
-
-// Synchronization functions for unified LED buffer
-void syncLedsToStrips() {
-    // Copy first half of leds buffer to strip1, second half to strip2
-    memcpy(strip1, leds, HardwareConfig::STRIP1_LED_COUNT * sizeof(CRGB));
-    memcpy(strip2, &leds[HardwareConfig::STRIP1_LED_COUNT], HardwareConfig::STRIP2_LED_COUNT * sizeof(CRGB));
-}
-
-void syncStripsToLeds() {
-    // Copy strips back to unified buffer (for Light Guide effects that read current state)
-    memcpy(leds, strip1, HardwareConfig::STRIP1_LED_COUNT * sizeof(CRGB));
-    memcpy(&leds[HardwareConfig::STRIP1_LED_COUNT], strip2, HardwareConfig::STRIP2_LED_COUNT * sizeof(CRGB));
-}
-
-// ============== BASIC EFFECTS ==============
-// Effects have been moved to src/effects/strip/StripEffects.cpp
-
-
-// ============== TRANSITION SYSTEM ==============
-
-void startTransition(uint8_t newEffect) {
-    if (newEffect == currentEffect) return;
-    
-    // Save current LED state
-    for (int i = 0; i < HardwareConfig::NUM_LEDS; i++) {
-        transitionBuffer[i] = leds[i];
-    }
-    
-    previousEffect = currentEffect;
-    currentEffect = newEffect;
-    inTransition = true;
-    transitionStart = millis();
-    transitionProgress = 0.0f;
-}
-
-void updateTransition() {
-    if (!inTransition) return;
-    
-    uint32_t elapsed = millis() - transitionStart;
-    transitionProgress = (float)elapsed / transitionDuration;
-    
-    if (transitionProgress >= 1.0f) {
-        transitionProgress = 1.0f;
-        inTransition = false;
-    }
-    
-    // Smooth easing function (ease-in-out)
-    float t = transitionProgress;
-    float eased = t < 0.5f 
-        ? 2 * t * t 
-        : 1 - pow(-2 * t + 2, 2) / 2;
-    
-    // Blend between old and new effect
-    for (int i = 0; i < HardwareConfig::NUM_LEDS; i++) {
-        CRGB oldColor = transitionBuffer[i];
-        CRGB newColor = leds[i];
-        
-        leds[i] = blend(oldColor, newColor, eased * 255);
-    }
-}
-
-// Array of effects
+// Array of effects - forward declaration
 enum EffectType {
     EFFECT_TYPE_STANDARD,
     EFFECT_TYPE_WAVE_ENGINE
@@ -173,6 +105,30 @@ struct Effect {
     EffectFunction function;
     EffectType type;
 };
+
+// Forward declare all effect functions
+extern void solidColor();
+extern void pulseEffect();
+extern void confetti();
+extern void stripConfetti();
+extern void sinelon();
+extern void juggle();
+extern void stripJuggle();
+extern void bpm();
+extern void waveEffect();
+extern void rippleEffect();
+extern void stripInterference();
+extern void stripBPM();
+extern void stripPlasma();
+extern void fire();
+extern void ocean();
+extern void stripOcean();
+extern void heartbeatEffect();
+extern void breathingEffect();
+extern void shockwaveEffect();
+extern void vortexEffect();
+extern void collisionEffect();
+extern void gravityWellEffect();
 
 // Effects array - Matrix mode has been surgically removed
 Effect effects[] = {
@@ -213,6 +169,147 @@ Effect effects[] = {
 };
 
 const uint8_t NUM_EFFECTS = sizeof(effects) / sizeof(effects[0]);
+
+// Initialize strip mapping for spatial effects
+void initializeStripMapping() {
+    // Linear strip mapping for dual strips
+    for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+        float normalized = (float)i / HardwareConfig::STRIP_LENGTH;
+        
+        // Linear angle mapping for strips
+        angles[i] = normalized * 255;
+        
+        // Distance from center point for outward propagation
+        float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT) / HardwareConfig::STRIP_HALF_LENGTH;
+        radii[i] = distFromCenter * 255;
+    }
+}
+
+// Synchronization functions for unified LED buffer
+void syncLedsToStrips() {
+    // Copy first half of leds buffer to strip1, second half to strip2
+    memcpy(strip1, leds, HardwareConfig::STRIP1_LED_COUNT * sizeof(CRGB));
+    memcpy(strip2, &leds[HardwareConfig::STRIP1_LED_COUNT], HardwareConfig::STRIP2_LED_COUNT * sizeof(CRGB));
+}
+
+void syncStripsToLeds() {
+    // Copy strips back to unified buffer (for Light Guide effects that read current state)
+    memcpy(leds, strip1, HardwareConfig::STRIP1_LED_COUNT * sizeof(CRGB));
+    memcpy(&leds[HardwareConfig::STRIP1_LED_COUNT], strip2, HardwareConfig::STRIP2_LED_COUNT * sizeof(CRGB));
+}
+
+// ============== BASIC EFFECTS ==============
+// Effects have been moved to src/effects/strip/StripEffects.cpp
+
+
+// ============== ADVANCED TRANSITION SYSTEM ==============
+
+void startAdvancedTransition(uint8_t newEffect) {
+    Serial.println("*** TRANSITION FUNCTION CALLED ***");
+    if (newEffect == currentEffect) return;
+    
+    // Configure transition engine for dual-strip mode
+    transitionEngine.setDualStripMode(true, HardwareConfig::STRIP_LENGTH);
+    
+    // Save current LED state to source buffer
+    memcpy(transitionSourceBuffer, leds, HardwareConfig::NUM_LEDS * sizeof(CRGB));
+    
+    // Switch to new effect
+    previousEffect = currentEffect;
+    currentEffect = newEffect;
+    
+    // Render one frame of the new effect to get target state
+    effects[currentEffect].function();
+    
+    // CRITICAL: Sync strips to leds buffer so transition engine can see the effect
+    syncStripsToLeds();
+    
+    // Select transition type
+    TransitionType transType;
+    uint32_t duration;
+    EasingCurve curve;
+    
+    if (useRandomTransitions) {
+        transType = TransitionEngine::getRandomTransition();
+        
+        // Vary duration based on transition type
+        switch (transType) {
+            case TRANSITION_FADE:
+                duration = 800;
+                curve = EASE_IN_OUT_QUAD;
+                break;
+            case TRANSITION_WIPE_OUT:
+            case TRANSITION_WIPE_IN:
+            case TRANSITION_WIPE_LR:
+            case TRANSITION_WIPE_RL:
+                duration = 1200;
+                curve = EASE_OUT_CUBIC;
+                break;
+            case TRANSITION_DISSOLVE:
+                duration = 1500;
+                curve = EASE_LINEAR;
+                break;
+            case TRANSITION_ZOOM_IN:
+            case TRANSITION_ZOOM_OUT:
+                duration = 1000;
+                curve = EASE_IN_OUT_ELASTIC;
+                break;
+            case TRANSITION_SHATTER:
+                duration = 2000;
+                curve = EASE_OUT_BOUNCE;
+                break;
+            case TRANSITION_MELT:
+                duration = 1800;
+                curve = EASE_IN_CUBIC;
+                break;
+            case TRANSITION_GLITCH:
+                duration = 600;
+                curve = EASE_LINEAR;
+                break;
+            case TRANSITION_PHASE_SHIFT:
+                duration = 1400;
+                curve = EASE_IN_OUT_CUBIC;
+                break;
+            default:
+                duration = 1000;
+                curve = EASE_IN_OUT_QUAD;
+                break;
+        }
+    } else {
+        // Simple fade for consistent behavior during testing
+        transType = TRANSITION_FADE;
+        duration = 1000;
+        curve = EASE_IN_OUT_QUAD;
+    }
+    
+    // Start the transition
+    transitionEngine.startTransition(
+        transitionSourceBuffer,  // Source: old effect
+        leds,                   // Target: new effect  
+        leds,                   // Output: back to leds buffer
+        transType,
+        duration,
+        curve
+    );
+    
+    Serial.printf("🎭 TRANSITION: %s → %s using ", 
+                  effects[previousEffect].name, 
+                  effects[currentEffect].name);
+    
+    // Debug transition type names
+    const char* transitionNames[] = {
+        "FADE", "WIPE_LR", "WIPE_RL", "WIPE_OUT", "WIPE_IN", 
+        "DISSOLVE", "ZOOM_IN", "ZOOM_OUT", "MELT", "SHATTER", 
+        "GLITCH", "PHASE_SHIFT"
+    };
+    Serial.printf("%s (%dms)\n", transitionNames[transType], duration);
+    
+    // Flash effect encoder to indicate transition
+    if (encoderFeedback) {
+        encoderFeedback->flashEncoder(0, 255, 255, 255, duration / 2);  // White flash for half transition duration
+    }
+}
+
 
 void setup() {
     // Initialize serial with USB CDC wait
@@ -271,6 +368,21 @@ void setup() {
     // Initialize encoder manager
     encoderManager.begin();
     
+    // Initialize Visual Feedback System
+    if (encoderManager.isAvailable()) {
+        M5ROTATE8* encoder = encoderManager.getEncoder();
+        if (encoder) {
+            encoderFeedback = new EncoderLEDFeedback(encoder, &visualParams);
+            encoderFeedback->applyDefaultColorScheme();
+            Serial.println("✅ Visual Feedback System initialized");
+        }
+    } else {
+        Serial.println("⚠️  VFS disabled - no encoder available");
+    }
+    
+    // Preset Management System - DISABLED FOR NOW
+    // Will be re-enabled once basic transitions work
+    
     FastLED.setCorrection(TypicalLEDStrip);
     
     // Initialize strip mapping
@@ -285,7 +397,10 @@ void setup() {
     FastLED.clear(true);
     
     // Initialize M5Unit-Scroll encoder on secondary I2C bus
-    initScrollEncoder();
+    Serial.println("[DEBUG] About to initialize scroll encoder...");
+    // DISABLED - CAUSING CRASHES
+    // initScrollEncoder();
+    Serial.println("[DEBUG] Scroll encoder init SKIPPED - was causing crashes");
     
     // Set up scroll encoder callbacks
     setScrollEncoderCallbacks(
@@ -328,7 +443,15 @@ void setup() {
     serialMenu.begin();
 #endif
     
-    Serial.println("=== Setup Complete ===\n");
+    Serial.println("=== Setup Complete ===");
+    Serial.println("🎭 Advanced Transition System Active");
+    // Serial.println("💾 Preset Management System Active");
+    Serial.println("   't' = Toggle random transitions");
+    Serial.println("   'n' = Next effect with transition");
+    // Serial.println("   's' = Quick save preset");
+    // Serial.println("   'l' = Quick load preset");
+    Serial.println("");
+    Serial.println("[DEBUG] Entering main loop...");
 }
 
 void handleButton() {
@@ -338,7 +461,7 @@ void handleButton() {
             
             // Start transition to next effect
             uint8_t nextEffect = (currentEffect + 1) % NUM_EFFECTS;
-            startTransition(nextEffect);
+            startAdvancedTransition(nextEffect);
             
             Serial.print("Transitioning to: ");
             Serial.println(effects[nextEffect].name);
@@ -360,11 +483,73 @@ void updatePalette() {
     nblendPaletteTowardPalette(currentPalette, targetPalette, 24);
 }
 
+void updateEncoderFeedback() {
+    if (encoderFeedback && encoderManager.isAvailable()) {
+        // Update current effect info
+        encoderFeedback->setCurrentEffect(currentEffect, effects[currentEffect].name);
+        
+        // Update performance metrics (simplified for now)
+        float frameTime = 1000.0f / HardwareConfig::DEFAULT_FPS;
+        float cpuUsage = (frameTime / 8.33f) * 100.0f;  // Estimate based on target 120 FPS
+        encoderFeedback->updatePerformanceMetrics(cpuUsage, HardwareConfig::DEFAULT_FPS);
+        
+        // Update the LED feedback
+        encoderFeedback->update();
+    }
+}
+
 void loop() {
+    static uint32_t loopCounter = 0;
+    static uint32_t lastDebugPrint = 0;
+    
+    // Debug print every second
+    if (millis() - lastDebugPrint > 1000) {
+        lastDebugPrint = millis();
+        Serial.printf("[DEBUG] Loop running: %lu iterations, Effect: %s\n", loopCounter, effects[currentEffect].name);
+        loopCounter = 0;
+    }
+    loopCounter++;
+    
 #if FEATURE_BUTTON_CONTROL
     // Use button control for boards that have buttons
     handleButton();
 #endif
+
+    // Simple transition controls via Serial
+    if (Serial.available()) {
+        char cmd = Serial.read();
+        Serial.printf("*** RECEIVED COMMAND: '%c' (0x%02X) ***\n", cmd, cmd);
+        switch (cmd) {
+            case 't':
+            case 'T':
+                useRandomTransitions = !useRandomTransitions;
+                Serial.printf("🎭 Random transitions: %s\n", 
+                             useRandomTransitions ? "ENABLED" : "DISABLED");
+                break;
+            case 'n':
+            case 'N':
+                {
+                    uint8_t nextEffect = (currentEffect + 1) % NUM_EFFECTS;
+                    startAdvancedTransition(nextEffect);
+                }
+                break;
+            // Preset commands disabled for now
+            // case 's':
+            // case 'S':
+            //     if (presetManager) {
+            //         presetManager->quickSave(0);  // Save to slot 0
+            //         Serial.println("💾 Quick saved current state");
+            //     }
+            //     break;
+            // case 'l':
+            // case 'L':
+            //     if (presetManager) {
+            //         presetManager->quickLoad(0);  // Load from slot 0
+            //         Serial.println("📁 Quick loaded preset");
+            //     }
+            //     break;
+        }
+    }
 
     // Process encoder events from I2C task (NON-BLOCKING)
     QueueHandle_t encoderEventQueue = encoderManager.getEventQueue();
@@ -387,7 +572,7 @@ void loop() {
                 
                 // Only transition if actually changing effects
                 if (newEffect != currentEffect) {
-                    startTransition(newEffect);
+                    startAdvancedTransition(newEffect);
                     Serial.printf("🎨 MAIN: Effect changed to %s (index %d)\n", effects[currentEffect].name, currentEffect);
                     
                     // Log mode transition if effect type changed
@@ -398,8 +583,9 @@ void loop() {
                 }
                 
             } else if (effects[currentEffect].type == EFFECT_TYPE_WAVE_ENGINE) {
-                // Wave engine parameter control for encoders 1-7
-                handleWaveEncoderInput(event.encoder_id, event.delta, waveEngine);
+                // Wave engine parameter control for encoders 1-7 (disabled for now)
+                // handleWaveEncoderInput(event.encoder_id, event.delta, waveEngine);
+                Serial.printf("🌊 WAVE: Would handle encoder %d, delta %d\n", event.encoder_id, event.delta);
             } else {
                 // Standard effect control for encoders 1-7
                 switch (event.encoder_id) {
@@ -409,6 +595,7 @@ void loop() {
                             brightness = constrain(brightness, 16, 255);
                             FastLED.setBrightness(brightness);
                             Serial.printf("💡 MAIN: Brightness changed to %d\n", brightness);
+                            if (encoderFeedback) encoderFeedback->flashEncoder(1, 255, 255, 255, 200);
                         }
                         break;
                         
@@ -420,31 +607,37 @@ void loop() {
                         }
                         targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
                         Serial.printf("🎨 MAIN: Palette changed to %d\n", currentPaletteIndex);
+                        if (encoderFeedback) encoderFeedback->flashEncoder(2, 255, 0, 255, 200);
                         break;
                         
                     case 3: // Speed control
                         paletteSpeed = constrain(paletteSpeed + (event.delta > 0 ? 2 : -2), 1, 50);
                         Serial.printf("⚡ MAIN: Speed changed to %d\n", paletteSpeed);
+                        if (encoderFeedback) encoderFeedback->flashEncoder(3, 255, 255, 0, 200);
                         break;
                         
                     case 4: // Intensity/Amplitude
                         visualParams.intensity = constrain(visualParams.intensity + (event.delta > 0 ? 16 : -16), 0, 255);
                         Serial.printf("🔥 MAIN: Intensity changed to %d (%.1f%%)\n", visualParams.intensity, visualParams.getIntensityNorm() * 100);
+                        if (encoderFeedback) encoderFeedback->flashEncoder(4, 255, 128, 0, 200);
                         break;
                         
                     case 5: // Saturation
                         visualParams.saturation = constrain(visualParams.saturation + (event.delta > 0 ? 16 : -16), 0, 255);
                         Serial.printf("🎨 MAIN: Saturation changed to %d (%.1f%%)\n", visualParams.saturation, visualParams.getSaturationNorm() * 100);
+                        if (encoderFeedback) encoderFeedback->flashEncoder(5, 0, 255, 255, 200);
                         break;
                         
                     case 6: // Complexity/Detail
                         visualParams.complexity = constrain(visualParams.complexity + (event.delta > 0 ? 16 : -16), 0, 255);
                         Serial.printf("✨ MAIN: Complexity changed to %d (%.1f%%)\n", visualParams.complexity, visualParams.getComplexityNorm() * 100);
+                        if (encoderFeedback) encoderFeedback->flashEncoder(6, 128, 255, 0, 200);
                         break;
                         
                     case 7: // Variation/Mode
                         visualParams.variation = constrain(visualParams.variation + (event.delta > 0 ? 16 : -16), 0, 255);
                         Serial.printf("🔄 MAIN: Variation changed to %d (%.1f%%)\n", visualParams.variation, visualParams.getVariationNorm() * 100);
+                        if (encoderFeedback) encoderFeedback->flashEncoder(7, 255, 0, 255, 200);
                         break;
                 }
             }
@@ -459,20 +652,24 @@ void loop() {
     // Update palette blending
     updatePalette();
     
-    // If not in transition, run current effect
-    if (!inTransition) {
+    // Update encoder LED feedback
+    updateEncoderFeedback();
+    
+    // Update transition system
+    if (transitionEngine.isActive()) {
+        // During transition: generate new effect frame and let transition engine handle blending
         effects[currentEffect].function();
+        syncStripsToLeds();  // Sync current effect to leds buffer
+        transitionEngine.update();  // This blends and writes to leds buffer
+        syncLedsToStrips();  // Sync blended result back to strips
     } else {
-        // Run the new effect to generate target colors
+        // Normal operation: just run the effect
         effects[currentEffect].function();
-        // Then apply transition blending
-        updateTransition();
     }
     
-    // LED strips are updated directly by effects - no sync needed
-    
     // Process scroll encoder input (non-blocking)
-    processScrollEncoder();
+    // DISABLED - CAUSING CRASHES
+    // processScrollEncoder();
     
     // Show the LEDs
     FastLED.show();
@@ -501,13 +698,13 @@ void loop() {
                          (100.0f * (metrics.i2c_transactions - metrics.i2c_failures) / metrics.i2c_transactions) : 100.0f);
         }
         
-        // Update wave engine performance stats if using wave effects
-        if (effects[currentEffect].type == EFFECT_TYPE_WAVE_ENGINE) {
-            updateWavePerformanceStats(waveEngine);
-        }
+        // Update wave engine performance stats if using wave effects (disabled for now)
+        // if (effects[currentEffect].type == EFFECT_TYPE_WAVE_ENGINE) {
+        //     updateWavePerformanceStats(waveEngine);
+        // }
     }
     
     
-    // Frame rate control
-    delay(1000/HardwareConfig::DEFAULT_FPS);
+    // Frame rate control - reduce from 120 to 60 FPS for stability
+    delay(16);  // ~60 FPS instead of 120
 }

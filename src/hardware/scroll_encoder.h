@@ -55,8 +55,17 @@ void initScrollEncoder() {
     // Small delay for I2C bus to stabilize
     delay(50);
     
-    // Initialize scroll encoder
-    if (scrollEncoder.begin(&Wire1, HardwareConfig::M5UNIT_SCROLL_ADDR)) {
+    // Try to initialize scroll encoder with timeout
+    uint32_t startTime = millis();
+    bool initSuccess = false;
+    
+    // Set timeout for Wire operations
+    Wire1.setTimeOut(100);  // 100ms timeout
+    
+    // Try initialization (with internal timeout)
+    initSuccess = scrollEncoder.begin(&Wire1, HardwareConfig::M5UNIT_SCROLL_ADDR);
+    
+    if (initSuccess && (millis() - startTime < 500)) {
         scrollEncoderAvailable = true;
         Serial.println("✅ M5Unit-Scroll connected successfully!");
         Serial.print("   Address: 0x");

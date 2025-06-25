@@ -11,10 +11,10 @@ struct VisualParams {
     uint8_t variation = 0;        // Effect variation/mode (0-255)
     
     // Helper functions for normalized access
-    float getIntensityNorm() { return intensity / 255.0f; }
-    float getSaturationNorm() { return saturation / 255.0f; }
-    float getComplexityNorm() { return complexity / 255.0f; }
-    float getVariationNorm() { return variation / 255.0f; }
+    float getIntensityNorm() const { return intensity / 255.0f; }
+    float getSaturationNorm() const { return saturation / 255.0f; }
+    float getComplexityNorm() const { return complexity / 255.0f; }
+    float getVariationNorm() const { return variation / 255.0f; }
 };
 
 #endif // EFFECT_TYPES_H

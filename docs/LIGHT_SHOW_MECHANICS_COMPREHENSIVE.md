@@ -4,9 +4,9 @@
 
 ```
 ╔═══════════════════════════════════════════════════════════════════╗
-║                    LIGHT CRYSTALS SYSTEM                          ║
-║                 Dual-Strip LED Controller                         ║
-║                    ESP32-S3 @ 240MHz                             ║
+║                    SPECTRASYNQ K1-LIGHTWAVE                       ║
+║                    Dual-Strip LED Controller                      ║
+║                        ESP32-S3 @ 240MHz                          ║
 ╚═══════════════════════════════════════════════════════════════════╝
 ```
 
@@ -18,7 +18,7 @@
 
 ## 📋 Executive Summary
 
-This document provides an exhaustive technical analysis of light show mechanics for the **Light Crystals** dual-strip LED system. It covers existing mechanics, FastLED advanced features, and proposes enhancements that would significantly improve visual impact while maintaining the **CENTER ORIGIN** philosophy and **120 FPS** performance target.
+This document provides an exhaustive technical analysis of light show mechanics for the **K1-LIGHTWAVE** music visualiser system. It covers existing mechanics, FastLED advanced features, and proposes enhancements that would significantly improve visual impact while maintaining the **CENTER ORIGIN** philosophy and **120 FPS** performance target.
 
 ### 🎯 Key Objectives
 - **10x** Performance improvement through FastLED optimization

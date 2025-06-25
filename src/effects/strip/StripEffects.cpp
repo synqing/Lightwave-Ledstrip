@@ -3,9 +3,9 @@
 // ============== BASIC EFFECTS ==============
 
 void solidColor() {
-    // TEMP FIX: Use legacy palette like Strip BPM (which works)
+    // TEST: Re-enable orchestrator with double-brightness fix
     uint8_t brightness = getEmotionalBrightness(255);
-    CRGB color = ColorFromPalette(currentPalette, 128, brightness);
+    CRGB color = getOrchestratedColor(128, brightness);
     fill_solid(strip1, HardwareConfig::STRIP_LENGTH, color);
     fill_solid(strip2, HardwareConfig::STRIP_LENGTH, color);
 }

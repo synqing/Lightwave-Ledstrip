@@ -110,12 +110,20 @@ void updatePaletteLUT() {
 CRGB getOrchestratedColor(uint8_t position, uint8_t brightness) {
     CRGB color = colorOrchestrator.getEmotionalColor(position, brightness);
     
+    // DEBUG: Log orchestrator color returns periodically
+    static uint32_t lastColorLog = 0;
+    if (millis() - lastColorLog > 8000) { // Every 8 seconds
+        Serial.printf("🎨 Orchestrator color pos=%d bright=%d -> R=%d G=%d B=%d\n", 
+                     position, brightness, color.r, color.g, color.b);
+        lastColorLog = millis();
+    }
+    
     // SAFETY: Fallback to legacy palette if orchestrator returns black/invalid
     if (color.r == 0 && color.g == 0 && color.b == 0 && brightness > 10) {
         color = ColorFromPalette(currentPalette, position, brightness);
         static uint32_t lastWarning = 0;
         if (millis() - lastWarning > 5000) {
-            Serial.println("⚠️ Orchestrator returned black - using fallback palette");
+            Serial.printf("⚠️ Orchestrator returned black pos=%d bright=%d - using fallback\n", position, brightness);
             lastWarning = millis();
         }
     }

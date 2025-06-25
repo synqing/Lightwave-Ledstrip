@@ -30,7 +30,6 @@ inline void displayPipelineGradient() {
     static uint8_t hue = 0;
     hue++;
     
-    #if LED_STRIPS_MODE
     // CENTER ORIGIN implementation for strips
     for (int i = 0; i < HardwareConfig::NUM_LEDS; i++) {
         float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
@@ -38,15 +37,6 @@ inline void displayPipelineGradient() {
         uint8_t brightness = 255 - (distFromCenter * 2); // Fade with distance
         leds[i] = CHSV(localHue, 255, brightness);
     }
-    #else
-    // Matrix mode - center-based gradient
-    for (int i = 0; i < HardwareConfig::NUM_LEDS; i++) {
-        float distFromCenter = abs((float)i - (HardwareConfig::NUM_LEDS / 2));
-        uint8_t localHue = hue + (distFromCenter * 8);
-        uint8_t brightness = 255 - (distFromCenter * 5);
-        leds[i] = CHSV(localHue, 255, brightness);
-    }
-    #endif
 }
 
 inline void displayPipelineFibonacci() {

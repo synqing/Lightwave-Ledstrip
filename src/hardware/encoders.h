@@ -5,7 +5,7 @@
 #include <Wire.h>
 #include "config/hardware_config.h"
 
-#if LED_STRIPS_MODE
+// Matrix mode has been surgically removed - encoder support is now permanent
 
 // M5Stack 8Encoder I2C interface
 // Using direct I2C communication for better control and timing
@@ -266,6 +266,5 @@ void updateEncoderLEDs() {
     }
 }
 
-#endif // LED_STRIPS_MODE
 
 #endif // ENCODERS_H

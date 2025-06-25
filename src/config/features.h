@@ -5,7 +5,7 @@
 // This helps reduce binary size and memory usage
 
 // Core features
-#define FEATURE_SERIAL_MENU 0           // Serial command interface - DISABLED (too many conflicts)
+#define FEATURE_SERIAL_MENU 0           // Serial command interface - DISABLED (conflicts)
 #define FEATURE_PERFORMANCE_MONITOR 1    // Performance tracking and reporting
 #define FEATURE_BUTTON_CONTROL 0         // Physical button support (NO BUTTON ON BOARD)
 
@@ -14,9 +14,8 @@
 #define FEATURE_WEBSOCKET 0             // WebSocket support
 #define FEATURE_OTA_UPDATE 0            // Over-the-air updates
 
-// LED Layout Modes (mutually exclusive)
-#define LED_STRIPS_MODE 1               // Dual 160-LED strips mode
-#define LED_MATRIX_MODE 0               // 9x9 matrix mode (default)
+// LED Layout Configuration
+// All matrix code has been surgically removed - strips mode is now permanent
 
 // Effect categories
 #define FEATURE_BASIC_EFFECTS 1         // Gradient, wave, pulse
@@ -24,8 +23,7 @@
 #define FEATURE_PIPELINE_EFFECTS 1      // Modular pipeline system
 #define FEATURE_AUDIO_EFFECTS 0         // Audio-reactive effects (future)
 
-// LED Strips specific features (only when LED_STRIPS_MODE enabled)
-#if LED_STRIPS_MODE
+// LED Strips features (now permanent after matrix removal)
 #define FEATURE_STRIP_EFFECTS 1         // Strip-specific effects
 #define FEATURE_DUAL_STRIP 1            // Enable dual strip support
 #define FEATURE_STRIP_PROPAGATION 1     // Bidirectional propagation
@@ -40,20 +38,6 @@
 #define FEATURE_PHYSICS_SIMULATION 1    // Physics-based effects
 #define FEATURE_HOLOGRAPHIC_PATTERNS 1  // Holographic interference effects
 #define FEATURE_DEPTH_ILLUSION 1        // 3D depth illusion effects
-#else
-#define FEATURE_STRIP_EFFECTS 0
-#define FEATURE_DUAL_STRIP 0
-#define FEATURE_STRIP_PROPAGATION 0
-#define FEATURE_STRIP_SYNC 0
-#define FEATURE_STRIP_SEGMENTS 0
-#define FEATURE_STRIP_POWER_MGMT 0
-#define FEATURE_LIGHT_GUIDE_MODE 0
-#define FEATURE_INTERFERENCE_CALC 0
-#define FEATURE_INTERACTIVE_SENSING 0
-#define FEATURE_PHYSICS_SIMULATION 0
-#define FEATURE_HOLOGRAPHIC_PATTERNS 0
-#define FEATURE_DEPTH_ILLUSION 0
-#endif
 
 // Hardware optimization
 #define FEATURE_HARDWARE_OPTIMIZATION 1  // ESP32-specific optimizations

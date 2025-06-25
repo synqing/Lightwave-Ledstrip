@@ -2,24 +2,28 @@
 #define ADVANCED_EFFECTS_H
 
 #include "../../core/FxEngine.h"
-#include "HDREffect.h"
-#include "SupersampledEffect.h"
-#include "TimeAlphaEffect.h"
-#include "FxWaveEffects.h"
+
+// Forward declarations of advanced effect functions
+void hdrEffect();
+void supersampledEffect();
+void timeAlphaEffect();
+void fxWaveRippleEffect();
+void fxWaveInterferenceEffect();
+void fxWaveOrbitalEffect();
 
 // Collection of advanced effects
 class AdvancedEffects {
 public:
     static void registerAll(FxEngine& engine) {
-        // Register advanced object-based effects
-        engine.addEffect(new HDREffect());
-        engine.addEffect(new SupersampledEffect());
-        engine.addEffect(new TimeAlphaEffect());
+        // Register advanced function-based effects
+        engine.addEffect("HDR", hdrEffect, 128, 15, 20);
+        engine.addEffect("Supersampled", supersampledEffect, 128, 10, 15);
+        engine.addEffect("Time Alpha", timeAlphaEffect, 128, 20, 25);
         
         // Register FxWave effects
-        engine.addEffect(new FxWaveRippleEffect());
-        engine.addEffect(new FxWaveInterferenceEffect());
-        engine.addEffect(new FxWaveOrbitalEffect());
+        engine.addEffect("Wave Ripple", fxWaveRippleEffect, 128, 25, 20);
+        engine.addEffect("Wave Interference", fxWaveInterferenceEffect, 128, 20, 15);
+        engine.addEffect("Wave Orbital", fxWaveOrbitalEffect, 128, 30, 25);
     }
 };
 

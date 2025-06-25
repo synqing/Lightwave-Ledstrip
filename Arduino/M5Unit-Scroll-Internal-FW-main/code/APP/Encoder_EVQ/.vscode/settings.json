@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "string.h": "c",
+        "tim.h": "c",
+        "i2c_ex.h": "c"
+    },
+    "files.encoding": "gb2312"
+}

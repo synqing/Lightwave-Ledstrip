@@ -2,11 +2,7 @@
 #define WAVE_ENCODER_CONTROL_H
 
 #include "DualStripWaveEngine.h"
-#include "m5rotate8.h"
-
-// Forward declaration of M5ROTATE8 encoder instance
-extern M5ROTATE8 encoder;
-extern bool encoderAvailable;
+#include "../../hardware/EncoderManager.h"
 
 // Forward declaration
 void updateWaveEncoderLED(uint8_t encoder_id, DualStripWaveEngine& engine);
@@ -105,83 +101,11 @@ void handleWaveEncoderInput(uint8_t encoder_id, int32_t delta, DualStripWaveEngi
  * Update encoder LED colors to reflect current parameter states
  */
 void updateWaveEncoderLED(uint8_t encoder_id, DualStripWaveEngine& engine) {
-    if (!encoderAvailable || !encoder.isConnected()) return;
-    
-    switch(encoder_id) {
-        case 0: // Wave type - different colors for each type
-            {
-                CRGB colors[] = {
-                    CRGB::Blue,    // Sine
-                    CRGB::Green,   // Triangle  
-                    CRGB::Red,     // Sawtooth
-                    CRGB::Purple,  // Gaussian
-                    CRGB::Orange   // Damped
-                };
-                CRGB color = colors[engine.wave_type];
-                encoder.writeRGB(0, color.r/4, color.g/4, color.b/4);
-            }
-            break;
-            
-        case 1: // Strip1 frequency - intensity based on frequency
-            {
-                uint8_t intensity = map(engine.strip1_frequency * 10, 1, 100, 16, 64);
-                encoder.writeRGB(1, intensity, 0, 0); // Red intensity
-            }
-            break;
-            
-        case 2: // Strip2 frequency - intensity based on frequency
-            {
-                uint8_t intensity = map(engine.strip2_frequency * 10, 1, 100, 16, 64);
-                encoder.writeRGB(2, 0, intensity, 0); // Green intensity
-            }
-            break;
-            
-        case 3: // Phase offset - color wheel based on phase
-            {
-                uint8_t hue = (uint8_t)(engine.manual_phase_offset * 255 / (2*PI));
-                CHSV hsv_color(hue, 255, 32);
-                CRGB rgb_color = hsv_color;
-                encoder.writeRGB(3, rgb_color.r, rgb_color.g, rgb_color.b);
-            }
-            break;
-            
-        case 4: // Wave speed - blue intensity
-            {
-                uint8_t intensity = map(engine.wave_speed * 10, 1, 50, 16, 64);
-                encoder.writeRGB(4, 0, 0, intensity); // Blue intensity
-            }
-            break;
-            
-        case 5: // Interaction mode - cycling colors
-            {
-                CRGB mode_colors[] = {
-                    CRGB::White,    // Independent
-                    CRGB::Yellow,   // Interference
-                    CRGB::Cyan,     // Chase
-                    CRGB::Magenta,  // Reflection
-                    CRGB::Orange,   // Spiral
-                    CRGB::Pink      // Pulse
-                };
-                CRGB color = mode_colors[engine.interaction_mode];
-                encoder.writeRGB(5, color.r/4, color.g/4, color.b/4);
-            }
-            break;
-            
-        case 6: // Bidirectional/Center Origin status
-            {
-                uint8_t r = engine.bidirectional ? 32 : 8;
-                uint8_t g = engine.center_origin ? 32 : 8;
-                encoder.writeRGB(6, r, g, 0);
-            }
-            break;
-            
-        case 7: // Amplitude - white intensity
-            {
-                uint8_t intensity = map(engine.amplitude * 10, 1, 20, 16, 64);
-                encoder.writeRGB(7, intensity, intensity, intensity);
-            }
-            break;
-    }
+    // LED updates are now handled by EncoderManager
+    // This function is kept for compatibility but does nothing
+    (void)encoder_id;  // Suppress unused parameter warning
+    (void)engine;      // Suppress unused parameter warning
+    return;
 }
 
 /**

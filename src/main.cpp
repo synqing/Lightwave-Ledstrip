@@ -1197,13 +1197,18 @@ void loop() {
     bool shouldRunEffects = (currentTime - lastEffectTime >= 8); // 120 Hz effect updates
     
     if (shouldRunEffects) {
-        // FIXED: Advance hue synchronized with effect rate (prevents 50x speed)
+        lastEffectTime = currentTime;
+    }
+    
+    // CRITICAL FIX: Proper hue timing - advance every ~50ms (20Hz) not every 8ms (120Hz)
+    static uint32_t lastHueTime = 0;
+    if (currentTime - lastHueTime >= 50) { // 20Hz hue advancement for proper effect speed
         gHue++;
         
         // Update cinematic orchestrator with proper timing
         colorOrchestrator.update(gHue);
         
-        lastEffectTime = currentTime;
+        lastHueTime = currentTime;
     }
     
     if (shouldDisplay) {

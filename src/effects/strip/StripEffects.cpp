@@ -3,24 +3,36 @@
 // ============== BASIC EFFECTS ==============
 
 void solidColor() {
-    fill_solid(strip1, HardwareConfig::STRIP_LENGTH, CRGB::Blue);
-    fill_solid(strip2, HardwareConfig::STRIP_LENGTH, CRGB::Blue);
+    // TEMP FIX: Use legacy palette like Strip BPM (which works)
+    uint8_t brightness = getEmotionalBrightness(255);
+    CRGB color = ColorFromPalette(currentPalette, 128, brightness);
+    fill_solid(strip1, HardwareConfig::STRIP_LENGTH, color);
+    fill_solid(strip2, HardwareConfig::STRIP_LENGTH, color);
 }
 
 void pulseEffect() {
-    uint8_t brightness = beatsin8(30, 50, 255);
-    fill_solid(strip1, HardwareConfig::STRIP_LENGTH, CHSV(160, 255, brightness));
-    fill_solid(strip2, HardwareConfig::STRIP_LENGTH, CHSV(160, 255, brightness));
+    // TEMP FIX: Use legacy palette like Strip BPM (which works)
+    uint8_t baseBrightness = beatsin8(30, 50, 255);
+    uint8_t emotionalBrightness = getEmotionalBrightness(baseBrightness);
+    CRGB color = ColorFromPalette(currentPalette, gHue, emotionalBrightness);
+    fill_solid(strip1, HardwareConfig::STRIP_LENGTH, color);
+    fill_solid(strip2, HardwareConfig::STRIP_LENGTH, color);
 }
 
 void confetti() {
     // CENTER ORIGIN CONFETTI - ALL effects MUST originate from CENTER LEDs 79/80
     fadeToBlackBy(leds, HardwareConfig::NUM_LEDS, 10);
     
+    // ORCHESTRATOR INTEGRATION: Emotional intensity controls spawn rate
+    uint8_t emotionalSpawnRate = 40 + (40 * colorOrchestrator.getEmotionalIntensity());
+    
     // Spawn confetti ONLY at center LEDs 79/80 (MANDATORY CENTER ORIGIN)
-    if (random8() < 80) {
+    if (random8() < emotionalSpawnRate) {
         int centerPos = HardwareConfig::STRIP_CENTER_POINT + random8(2); // 79 or 80 only
-        leds[centerPos] += CHSV(gHue + random8(64), 200, 255);
+        // Use orchestrated color with emotional modulation
+        uint8_t brightness = getEmotionalBrightness(255);
+        CRGB emotionalColor = getOrchestratedColor(gHue + random8(64), brightness);
+        leds[centerPos] += emotionalColor;
     }
     
     // Move confetti outward from center with fading
@@ -44,10 +56,14 @@ void stripConfetti() {
     fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 10);
     fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 10);
     
+    // Emotional intensity controls spawn rate
+    float emotionalIntensity = colorOrchestrator.getEmotionalIntensity();
+    uint8_t spawnRate = 40 + (emotionalIntensity * 40); // 40-80 based on emotion
+    
     // Spawn new confetti at CENTER (LEDs 79/80)
-    if (random8() < 80) {
+    if (random8() < spawnRate) {
         int centerPos = HardwareConfig::STRIP_CENTER_POINT + random8(2); // 79 or 80
-        CRGB color = CHSV(gHue + random8(64), 200, 255);
+        CRGB color = getOrchestratedColor(gHue + random8(64), getEmotionalBrightness(255));
         strip1[centerPos] += color;
         strip2[centerPos] += color;
     }
@@ -83,13 +99,19 @@ void sinelon() {
     int pos1 = HardwareConfig::STRIP_CENTER_POINT + distFromCenter;
     int pos2 = HardwareConfig::STRIP_CENTER_POINT - distFromCenter;
     
+    uint8_t emotionalBrightness = getEmotionalBrightness(192);
+    
     if (pos1 < HardwareConfig::STRIP_LENGTH) {
-        strip1[pos1] += CHSV(gHue, 255, 192);
-        strip2[pos1] += CHSV(gHue, 255, 192);
+        // TEMP FIX: Use legacy palette like Strip BPM (which works)
+        CRGB color1 = ColorFromPalette(currentPalette, gHue, emotionalBrightness);
+        strip1[pos1] += color1;
+        strip2[pos1] += color1;
     }
     if (pos2 >= 0) {
-        strip1[pos2] += CHSV(gHue + 128, 255, 192);  // Different hue
-        strip2[pos2] += CHSV(gHue + 128, 255, 192);
+        // TEMP FIX: Use legacy palette like Strip BPM (which works)  
+        CRGB color2 = ColorFromPalette(currentPalette, gHue + 128, emotionalBrightness);
+        strip1[pos2] += color2;
+        strip2[pos2] += color2;
     }
 }
 
@@ -98,6 +120,8 @@ void juggle() {
     fadeToBlackBy(leds, HardwareConfig::NUM_LEDS, 20);
     
     uint8_t dothue = 0;
+    uint8_t emotionalBrightness = getEmotionalBrightness(255);
+    
     for(int i = 0; i < 8; i++) {
         // Oscillate from center outward (MANDATORY CENTER ORIGIN)
         int distFromCenter = beatsin16(i+7, 0, HardwareConfig::STRIP_HALF_LENGTH);
@@ -106,7 +130,7 @@ void juggle() {
         int pos1 = HardwareConfig::STRIP_CENTER_POINT + distFromCenter;
         int pos2 = HardwareConfig::STRIP_CENTER_POINT - distFromCenter;
         
-        CRGB color = CHSV(dothue, 200, 255);
+        CRGB color = getOrchestratedColor(dothue, emotionalBrightness);
         
         if (pos1 < HardwareConfig::NUM_LEDS) {
             leds[pos1] |= color;
@@ -126,6 +150,8 @@ void stripJuggle() {
     fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 20);
     
     uint8_t dothue = 0;
+    uint8_t emotionalBrightness = getEmotionalBrightness(255);
+    
     for(int i = 0; i < 8; i++) {
         // Oscillate from center outward (0 to STRIP_HALF_LENGTH)
         int distFromCenter = beatsin16(i+7, 0, HardwareConfig::STRIP_HALF_LENGTH);
@@ -134,7 +160,7 @@ void stripJuggle() {
         int pos1 = HardwareConfig::STRIP_CENTER_POINT + distFromCenter;
         int pos2 = HardwareConfig::STRIP_CENTER_POINT - distFromCenter;
         
-        CRGB color = CHSV(dothue, 200, 255);
+        CRGB color = getOrchestratedColor(dothue, emotionalBrightness);
         
         if (pos1 < HardwareConfig::STRIP_LENGTH) {
             strip1[pos1] |= color;
@@ -152,7 +178,11 @@ void stripJuggle() {
 void bpm() {
     // CENTER ORIGIN BPM - Optimized with pre-calculated distances
     uint8_t BeatsPerMinute = 62;
-    uint8_t beat = beatsin8(BeatsPerMinute, 64, 255);
+    
+    // Emotional intensity affects the beat strength
+    float emotionalIntensity = colorOrchestrator.getEmotionalIntensity();
+    uint8_t baseBeat = 64 + (emotionalIntensity * 64); // 64-128 based on emotion
+    uint8_t beat = beatsin8(BeatsPerMinute, baseBeat, 255);
     
     // Use pre-calculated distance lookup
     extern uint8_t distanceFromCenter[];
@@ -165,10 +195,9 @@ void bpm() {
         uint16_t intensity = beat - ((dist * 3) >> 2);  // Approximate * 0.75
         intensity = max(intensity, (uint16_t)32);
         
-        // Use palette LUT for faster color lookup
-        extern CRGB paletteLUT[256];
+        // Use orchestrated color with emotional brightness
         uint8_t colorIndex = gHue + (dist >> 1);
-        CRGB baseColor = paletteLUT[colorIndex];
+        CRGB baseColor = getOrchestratedColorFast(colorIndex, 255);
         leds[i] = baseColor.scale8(intensity);
     }
 }
@@ -182,7 +211,10 @@ void waveEffect() {
     fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, fadeAmount);
     fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, fadeAmount);
     
-    uint16_t waveSpeed = map(paletteSpeed, 1, 50, 100, 10);
+    // Emotional intensity affects wave speed
+    float emotionalIntensity = colorOrchestrator.getEmotionalIntensity();
+    uint16_t baseSpeed = map(paletteSpeed, 1, 50, 100, 10);
+    uint16_t waveSpeed = baseSpeed + (emotionalIntensity * baseSpeed * 0.5f); // Up to 1.5x speed
     wavePosition += waveSpeed;
     
     // Use pre-calculated distance lookup
@@ -194,13 +226,14 @@ void waveEffect() {
         
         // Wave propagates outward - use wave LUT
         extern uint8_t wavePatternLUT[256];
-        extern CRGB paletteLUT[256];
         
         uint8_t waveIdx = ((dist * 15) >> 3) + (wavePosition >> 4);
         uint8_t brightness = wavePatternLUT[waveIdx];
         uint8_t colorIndex = (dist << 3) + (wavePosition >> 6);  // dist * 8
         
-        CRGB color = paletteLUT[colorIndex].scale8(brightness);
+        // Use orchestrated color with emotional brightness
+        uint8_t emotionalBrightness = getEmotionalBrightness(brightness);
+        CRGB color = getOrchestratedColorFast(colorIndex, emotionalBrightness);
         strip1[i] = color;
         strip2[i] = color;
     }
@@ -218,13 +251,21 @@ void rippleEffect() {
     fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, fadeAmount);
     fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, fadeAmount);
     
-    // Spawn new ripples at CENTER ONLY - frequency controlled by complexity
-    uint8_t spawnChance = 30 * visualParams.getComplexityNorm();
+    // ORCHESTRATOR INTEGRATION: Emotional state controls ripple behavior
+    float emotionalIntensity = colorOrchestrator.getEmotionalIntensity();
+    
+    // Spawn new ripples at CENTER ONLY - emotional intensity and complexity control frequency
+    uint8_t baseSpawnChance = 20 + (20 * emotionalIntensity);  // Emotional component
+    uint8_t complexityBonus = 15 * visualParams.getComplexityNorm();  // Complexity component
+    uint8_t spawnChance = baseSpawnChance + complexityBonus;
+    
     if (random8() < spawnChance) {
         for (uint8_t i = 0; i < 5; i++) {
             if (!ripples[i].active) {
                 ripples[i].radius = 0;
-                ripples[i].speed = (0.5f + (random8() / 255.0f) * 2.0f) * visualParams.getIntensityNorm();
+                // Speed influenced by both visual params and emotional intensity
+                float combinedIntensity = (visualParams.getIntensityNorm() + emotionalIntensity) / 2.0f;
+                ripples[i].speed = (0.5f + (random8() / 255.0f) * 2.0f) * combinedIntensity;
                 ripples[i].hue = random8();
                 ripples[i].active = true;
                 break;
@@ -264,20 +305,23 @@ void rippleEffect() {
                     brightness = (brightness * (HardwareConfig::STRIP_HALF_LENGTH - intRadius)) / HardwareConfig::STRIP_HALF_LENGTH;
                     brightness = scale8(brightness, visualParams.intensity);
                     
-                    // Use palette LUT and ripple decay LUT
-                    extern CRGB paletteLUT[256];
-                    extern uint8_t rippleDecayLUT[80];
-                    
+                    // ORCHESTRATOR INTEGRATION: Use orchestrated colors for cinematic ripples
                     uint8_t colorIndex = ripples[r].hue + dist;
-                    CRGB color = paletteLUT[colorIndex].scale8(brightness);
+                    CRGB color = getOrchestratedColorFast(colorIndex, brightness);
                     
-                    // Apply decay based on radius
+                    // Apply decay based on radius (using existing ripple decay LUT)
+                    extern uint8_t rippleDecayLUT[80];
                     if (intRadius < 80) {
                         color.nscale8(rippleDecayLUT[intRadius]);
                     }
                     
-                    // Apply saturation control
+                    // Apply saturation control (preserve visual params control)
                     color = blend(CRGB::White, color, visualParams.saturation);
+                    
+                    // Apply additional emotional brightness modulation
+                    uint8_t emotionalMod = getEmotionalBrightness(255);
+                    color.nscale8(emotionalMod);
+                    
                     strip1[i] += color;
                     strip2[i] += color;
                 }
@@ -295,8 +339,12 @@ void stripInterference() {
     fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, fadeAmount);
     fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, fadeAmount);
     
-    wave1Phase += paletteSpeed / 20.0f;
-    wave2Phase -= paletteSpeed / 30.0f;
+    // Emotional intensity affects wave speed
+    float emotionalIntensity = colorOrchestrator.getEmotionalIntensity();
+    float speedMultiplier = 1.0f + (emotionalIntensity * 0.8f); // 1.0x to 1.8x speed
+    
+    wave1Phase += (paletteSpeed / 20.0f) * speedMultiplier;
+    wave2Phase -= (paletteSpeed / 30.0f) * speedMultiplier;
     
     for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
         // Calculate distance from CENTER (79/80)
@@ -314,7 +362,9 @@ void stripInterference() {
         // Hue varies with distance from center
         uint8_t hue = (uint8_t)(wave1Phase * 20) + (distFromCenter * 8);
         
-        CRGB color = ColorFromPalette(currentPalette, hue, brightness);
+        // Use orchestrated color with emotional brightness
+        uint8_t emotionalBrightness = getEmotionalBrightness(brightness);
+        CRGB color = getOrchestratedColorFast(hue, emotionalBrightness);
         strip1[i] = color;
         strip2[i] = color;
     }
@@ -397,19 +447,29 @@ void fire() {
         heat[k] = (heat[k - 1] + heat[k] + heat[k + 1]) / 3;
     }
     
-    // Ignite new sparks at CENTER (79/80) - intensity controls spark frequency and heat
-    uint8_t sparkChance = 120 * visualParams.getIntensityNorm();
+    // ORCHESTRATOR INTEGRATION: Combine visual params with emotional intensity
+    float combinedIntensity = (visualParams.getIntensityNorm() + colorOrchestrator.getEmotionalIntensity()) / 2.0f;
+    
+    // Ignite new sparks at CENTER (79/80) - emotional intensity controls spark frequency and heat
+    uint8_t sparkChance = 120 * combinedIntensity;
     if(random8() < sparkChance) {
         int center = HardwareConfig::STRIP_CENTER_POINT + random8(2); // 79 or 80
-        uint8_t heatAmount = 160 + (95 * visualParams.getIntensityNorm());
+        uint8_t heatAmount = 160 + (95 * combinedIntensity);
         heat[center] = qadd8(heat[center], random8(160, heatAmount));
     }
     
-    // Map heat to both strips with CENTER ORIGIN
+    // Map heat to both strips with CENTER ORIGIN using orchestrated colors
     for(int j = 0; j < HardwareConfig::STRIP_LENGTH; j++) {
         // Scale heat by intensity
         uint8_t scaledHeat = heat[j] * visualParams.getIntensityNorm();
-        CRGB color = HeatColor(scaledHeat);
+        
+        // Use orchestrated color instead of HeatColor() - maps heat to palette index
+        // Lower heat = lower palette indices (cooler colors), higher heat = higher indices (warmer colors)
+        uint8_t paletteIndex = map(scaledHeat, 0, 255, 0, 240); // Leave some headroom
+        uint8_t brightness = scaledHeat; // Heat directly controls brightness
+        
+        // Get orchestrated color with emotional modulation
+        CRGB color = getOrchestratedColor(paletteIndex, getEmotionalBrightness(brightness));
         
         // Apply saturation control (desaturate towards white)
         color = blend(CRGB::White, color, visualParams.saturation);
@@ -421,7 +481,11 @@ void fire() {
 
 void ocean() {
     static uint16_t waterOffset = 0;
-    waterOffset += paletteSpeed / 2;
+    
+    // Emotional intensity affects wave speed
+    float emotionalIntensity = colorOrchestrator.getEmotionalIntensity();
+    uint16_t waveSpeed = (paletteSpeed / 2) + (emotionalIntensity * paletteSpeed / 4);
+    waterOffset += waveSpeed;
     
     for (int i = 0; i < HardwareConfig::NUM_LEDS; i++) {
         // Create wave-like motion
@@ -429,12 +493,11 @@ void ocean() {
         uint8_t wave2 = sin8((i * 7) - waterOffset * 2);
         uint8_t combinedWave = (wave1 + wave2) / 2;
         
-        // Ocean colors from deep blue to cyan
-        uint8_t hue = 160 + (combinedWave >> 3);  // Blue range
+        // Use orchestrated color with wave modulation
+        uint8_t paletteIndex = 160 + (combinedWave >> 3);  // Blue range mapped to palette
         uint8_t brightness = 100 + (combinedWave >> 1);
-        uint8_t saturation = 255 - (combinedWave >> 2);
         
-        leds[i] = CHSV(hue, saturation, brightness);
+        leds[i] = getOrchestratedColor(paletteIndex, getEmotionalBrightness(brightness));
     }
 }
 
@@ -442,7 +505,11 @@ void ocean() {
 void stripOcean() {
     // CENTER ORIGIN OCEAN - Waves emanate from center LEDs 79/80
     static uint16_t waterOffset = 0;
-    waterOffset += paletteSpeed / 2;
+    
+    // Emotional intensity affects wave speed
+    float emotionalIntensity = colorOrchestrator.getEmotionalIntensity();
+    uint16_t waveSpeed = (paletteSpeed / 2) + (emotionalIntensity * paletteSpeed / 4);
+    waterOffset += waveSpeed;
     
     for (int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
         // Calculate distance from CENTER (79/80)
@@ -453,12 +520,11 @@ void stripOcean() {
         uint8_t wave2 = sin8((distFromCenter * 7) - waterOffset * 2);
         uint8_t combinedWave = (wave1 + wave2) / 2;
         
-        // Ocean colors from deep blue to cyan
-        uint8_t hue = 160 + (combinedWave >> 3);  // Blue range
+        // Use orchestrated color with wave modulation
+        uint8_t paletteIndex = 160 + (combinedWave >> 3);  // Blue range mapped to palette
         uint8_t brightness = 100 + (combinedWave >> 1);
-        uint8_t saturation = 255 - (combinedWave >> 2);
         
-        CRGB color = CHSV(hue, saturation, brightness);
+        CRGB color = getOrchestratedColor(paletteIndex, getEmotionalBrightness(brightness));
         strip1[i] = color;
         strip2[i] = color;
     }
@@ -486,7 +552,8 @@ void heartbeatEffect() {
             
             // Pulse intensity decreases with distance
             uint8_t brightness = 255 * (1.0f - normalizedDist);
-            CRGB color = ColorFromPalette(currentPalette, gHue + normalizedDist * 50, brightness);
+            uint8_t paletteIndex = gHue + normalizedDist * 50;
+            CRGB color = getOrchestratedColor(paletteIndex, getEmotionalBrightness(brightness));
             
             strip1[i] += color;
             strip2[i] += color;
@@ -514,7 +581,8 @@ void breathingEffect() {
             float intensity = 1.0f - (distFromCenter / radius) * 0.5f;
             uint8_t brightness = 255 * intensity * breath;
             
-            CRGB color = ColorFromPalette(currentPalette, gHue + distFromCenter * 3, brightness);
+            uint8_t paletteIndex = gHue + distFromCenter * 3;
+            CRGB color = getOrchestratedColor(paletteIndex, getEmotionalBrightness(brightness));
             strip1[i] = color;
             strip2[i] = color;
         }

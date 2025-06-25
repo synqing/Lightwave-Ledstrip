@@ -23,12 +23,10 @@ enum TransitionType {
     TRANSITION_FADE,          // Classic crossfade
     TRANSITION_WIPE_OUT,      // Wipe from center outward  
     TRANSITION_WIPE_IN,       // Wipe from edges inward
-    TRANSITION_MELT,          // Thermal melt effect
     TRANSITION_GLITCH,        // Digital glitch effect
     TRANSITION_PHASE_SHIFT,   // Frequency-based morph
     TRANSITION_SPIRAL,        // Helical spiral from center
     TRANSITION_RIPPLE,        // Concentric wave ripples
-    TRANSITION_LIGHTNING,     // Jagged lightning bolts
     TRANSITION_COUNT
 };
 
@@ -70,41 +68,28 @@ private:
     uint16_t m_centerPoint;
     bool m_dualStripMode = false;
     
-    // Effect-specific state
+    // Effect-specific state - OPTIMIZED FOR MEMORY
     struct TransitionState {
-        // Melt effect
-        float heatMap[HardwareConfig::NUM_LEDS];
-        
         // Glitch effect
-        uint16_t glitchSegments[10];
+        uint16_t glitchSegments[8];  // Reduced count
         uint8_t glitchCount;
         uint32_t lastGlitch;
         
         // Phase shift
         float phaseOffset;
         
-        // Spiral effect
+        // Spiral effect - CENTER ORIGIN ONLY
         float spiralAngle;
         float spiralSpeed;
         
-        // Ripple effect
+        // Ripple effect - CENTER ORIGIN WAVES
         struct RippleWave {
-            float position;
-            float amplitude;
-            float frequency;
+            float radius;      // Distance from center
+            float amplitude;   // Wave amplitude
             uint32_t birthTime;
             bool active;
-        } ripples[5];
+        } ripples[3];  // Reduced count
         uint8_t rippleCount;
-        
-        // Lightning effect
-        struct LightningBolt {
-            uint16_t segments[20];  // Path segments
-            uint8_t segmentCount;
-            uint32_t lastStrike;
-            uint8_t intensity;
-            bool active;
-        } lightning;
     } m_state;
     
 public:
@@ -153,19 +138,15 @@ private:
     // Transition implementations
     void applyFade();
     void applyWipe(bool leftToRight, bool fromCenter);
-    void applyMelt();
     void applyGlitch();
     void applyPhaseShift();
     void applySpiral();
     void applyRipple();
-    void applyLightning();
     
     // Helper functions
-    void initializeMelt();
     void initializeGlitch();
     void initializeSpiral();
     void initializeRipple();
-    void initializeLightning();
     
     // Utility functions
     CRGB lerpColor(CRGB from, CRGB to, uint8_t progress);
@@ -196,9 +177,6 @@ inline void TransitionEngine::startTransition(
     resetState();
     
     switch (type) {
-        case TRANSITION_MELT:
-            initializeMelt();
-            break;
         case TRANSITION_GLITCH:
             initializeGlitch();
             break;
@@ -207,9 +185,6 @@ inline void TransitionEngine::startTransition(
             break;
         case TRANSITION_RIPPLE:
             initializeRipple();
-            break;
-        case TRANSITION_LIGHTNING:
-            initializeLightning();
             break;
         default:
             break;
@@ -245,9 +220,6 @@ inline bool TransitionEngine::update() {
         case TRANSITION_WIPE_IN:
             applyWipe(false, true);
             break;
-        case TRANSITION_MELT:
-            applyMelt();
-            break;
         case TRANSITION_GLITCH:
             applyGlitch();
             break;
@@ -259,9 +231,6 @@ inline bool TransitionEngine::update() {
             break;
         case TRANSITION_RIPPLE:
             applyRipple();
-            break;
-        case TRANSITION_LIGHTNING:
-            applyLightning();
             break;
     }
     
@@ -340,23 +309,39 @@ inline void TransitionEngine::applyWipe(bool leftToRight, bool fromCenter) {
 
 
 inline void TransitionEngine::applyMelt() {
-    // Update heat map
-    for (uint16_t i = 0; i < m_numLeds; i++) {
-        // Add heat at transition boundary
-        float boundary = m_progress * m_numLeds;
-        float dist = abs((float)i - boundary);
-        float heat = max(0.0f, 1.0f - dist / 20.0f);
+    if (!m_state.heatMap) return;  // Safety check
+    
+    // CENTER ORIGIN melting - heat radiates from center outward
+    if (m_dualStripMode) {
+        uint16_t stripLength = m_numLeds / 2;
+        float meltRadius = m_progress * m_centerPoint;
         
-        m_state.heatMap[i] += heat * 0.3f;
-        m_state.heatMap[i] *= 0.95f;  // Cool down
-        
-        // Apply melting effect
-        if (m_state.heatMap[i] > 0.5f || i < boundary) {
-            m_outputBuffer[i] = m_targetBuffer[i];
-        } else {
-            // Blend based on heat
-            uint8_t blend = m_state.heatMap[i] * 512;  // 0-255 range
-            m_outputBuffer[i] = lerpColor(m_sourceBuffer[i], m_targetBuffer[i], blend);
+        for (uint16_t strip = 0; strip < 2; strip++) {
+            uint16_t offset = strip * stripLength;
+            
+            for (uint16_t i = 0; i < stripLength; i++) {
+                float distFromCenter = abs((int)i - (int)m_centerPoint);
+                
+                // Add heat based on distance from melting boundary
+                uint8_t heatAdd = 0;
+                if (distFromCenter <= meltRadius + 10) {
+                    float heatIntensity = max(0.0f, 1.0f - abs(distFromCenter - meltRadius) / 10.0f);
+                    heatAdd = heatIntensity * 60;
+                }
+                
+                // Update heat (8-bit arithmetic)
+                m_state.heatMap[offset + i] = min(255, (int)m_state.heatMap[offset + i] + heatAdd);
+                m_state.heatMap[offset + i] = (m_state.heatMap[offset + i] * 240) >> 8;  // Cool down
+                
+                // Apply melting effect
+                if (distFromCenter <= meltRadius || m_state.heatMap[offset + i] > 128) {
+                    m_outputBuffer[offset + i] = m_targetBuffer[offset + i];
+                } else {
+                    // Blend based on heat
+                    uint8_t blend = m_state.heatMap[offset + i];
+                    m_outputBuffer[offset + i] = lerpColor(m_sourceBuffer[offset + i], m_targetBuffer[offset + i], blend);
+                }
+            }
         }
     }
 }
@@ -490,10 +475,12 @@ inline void TransitionEngine::resetState() {
 
 
 inline void TransitionEngine::initializeMelt() {
-    // Clear heat map
-    for (uint16_t i = 0; i < m_numLeds; i++) {
-        m_state.heatMap[i] = 0;
+    // Allocate heat map if needed
+    if (!m_state.heatMap) {
+        m_state.heatMap = new uint8_t[m_numLeds];
     }
+    // Clear heat map
+    memset(m_state.heatMap, 0, m_numLeds);
 }
 
 inline void TransitionEngine::initializeGlitch() {
@@ -587,10 +574,9 @@ inline void TransitionEngine::initializeRipple() {
     m_state.rippleCount = 3;  // Start with 3 ripples
     
     for (uint8_t i = 0; i < m_state.rippleCount; i++) {
-        m_state.ripples[i].position = 0.0f;
+        m_state.ripples[i].radius = 0.0f;  // Start from center
         m_state.ripples[i].amplitude = 1.0f - (i * 0.3f);  // Decreasing amplitude
-        m_state.ripples[i].frequency = 2.0f + i;  // Different frequencies
-        m_state.ripples[i].birthTime = millis() + (i * 200);  // Staggered birth times
+        m_state.ripples[i].birthTime = millis() + (i * 300);  // Staggered birth times
         m_state.ripples[i].active = true;
     }
 }
@@ -608,28 +594,29 @@ inline void TransitionEngine::applyRipple() {
             uint16_t offset = strip * stripLength;
             
             for (uint16_t i = 0; i < stripLength; i++) {
-                float distFromCenter = abs((int)i - (int)m_centerPoint) / (float)m_centerPoint;
+                float distFromCenter = abs((int)i - (int)m_centerPoint);
                 float totalRipple = 0.0f;
                 
-                // Combine multiple ripples
+                // Combine multiple CENTER ORIGIN ripples
                 for (uint8_t r = 0; r < m_state.rippleCount; r++) {
                     if (!m_state.ripples[r].active) continue;
                     
                     float rippleAge = (now - m_state.ripples[r].birthTime) / 1000.0f;
                     if (rippleAge < 0) continue;  // Not born yet
                     
-                    float ripplePos = rippleAge * 0.5f;  // Ripple speed
-                    float rippleDist = abs(distFromCenter - ripplePos);
+                    // Ripple expands from center outward
+                    float currentRadius = rippleAge * m_centerPoint * 0.8f;  // Ripple speed
+                    float rippleDist = abs(distFromCenter - currentRadius);
                     
-                    if (rippleDist < 0.2f) {  // Ripple width
+                    if (rippleDist < 8.0f) {  // Ripple width
                         float rippleIntensity = m_state.ripples[r].amplitude * 
-                                              cos(rippleDist * PI * m_state.ripples[r].frequency) *
-                                              exp(-rippleAge * 2.0f);  // Decay over time
+                                              cos(rippleDist * PI / 4.0f) *
+                                              exp(-rippleAge * 1.5f);  // Decay over time
                         totalRipple += rippleIntensity;
                     }
                 }
                 
-                // Apply ripple effect
+                // Apply ripple effect with transition progress
                 float rippleBlend = constrain((totalRipple + 1.0f) * 0.5f * m_progress, 0.0f, 1.0f);
                 uint8_t blend = rippleBlend * 255;
                 
@@ -659,31 +646,41 @@ inline void TransitionEngine::applyLightning() {
         m_outputBuffer[i] = lerpColor(m_sourceBuffer[i], m_targetBuffer[i], baseBlend);
     }
     
-    // Generate lightning strikes
-    if (now - m_state.lightning.lastStrike > 100 + random8(200)) {  // Random strike interval
+    // Generate CENTER ORIGIN lightning strikes
+    if (now - m_state.lightning.lastStrike > 150 + random8(200)) {  // Random strike interval
         m_state.lightning.lastStrike = now;
         m_state.lightning.active = true;
         m_state.lightning.intensity = 255;
         
-        // Generate jagged lightning path
-        m_state.lightning.segmentCount = random8(5, 15);
-        uint16_t currentPos = m_centerPoint;  // Start from center
+        // Generate CENTER ORIGIN lightning path - radiates outward
+        m_state.lightning.segmentCount = random8(4, 8);
         
-        for (uint8_t i = 0; i < m_state.lightning.segmentCount; i++) {
-            // Jagged movement - sometimes forward, sometimes sideways
-            int16_t jump = random8(3, 12);
-            if (random8() < 100) jump = -jump;  // Sometimes go backwards
+        if (m_dualStripMode) {
+            uint16_t stripLength = m_numLeds / 2;
             
-            currentPos += jump;
-            currentPos = constrain(currentPos, 0, m_numLeds - 1);
-            m_state.lightning.segments[i] = currentPos;
+            // Create lightning on both strips radiating from center
+            for (uint8_t i = 0; i < m_state.lightning.segmentCount; i++) {
+                // Distance from center increases with each segment
+                float distance = (i + 1) * (m_centerPoint / (float)m_state.lightning.segmentCount);
+                distance += random8(10) - 5;  // Add some jitter
+                
+                // Place on both strips
+                uint16_t pos1 = m_centerPoint + constrain(distance, 0, m_centerPoint);
+                uint16_t pos2 = stripLength + (m_centerPoint - constrain(distance, 0, m_centerPoint));
+                
+                m_state.lightning.segments[i] = pos1;  // First strip
+                if (i + m_state.lightning.segmentCount < 10) {
+                    m_state.lightning.segments[i + m_state.lightning.segmentCount] = pos2;  // Second strip
+                }
+            }
+            m_state.lightning.segmentCount *= 2;  // Both strips
         }
     }
     
     // Render lightning bolt
     if (m_state.lightning.active) {
         // Fade lightning intensity
-        m_state.lightning.intensity = max(0, (int)m_state.lightning.intensity - 8);
+        m_state.lightning.intensity = max(0, (int)m_state.lightning.intensity - 12);
         if (m_state.lightning.intensity == 0) {
             m_state.lightning.active = false;
         }
@@ -691,6 +688,7 @@ inline void TransitionEngine::applyLightning() {
         // Draw lightning segments
         for (uint8_t i = 0; i < m_state.lightning.segmentCount; i++) {
             uint16_t pos = m_state.lightning.segments[i];
+            if (pos >= m_numLeds) continue;
             
             // Main bolt
             CRGB lightningColor = CRGB::White;

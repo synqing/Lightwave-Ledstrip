@@ -150,28 +150,33 @@ void stripJuggle() {
 }
 
 void bpm() {
-    // CENTER ORIGIN BPM - ALL effects MUST originate from CENTER LEDs 79/80
+    // CENTER ORIGIN BPM - Optimized with pre-calculated distances
     uint8_t BeatsPerMinute = 62;
     uint8_t beat = beatsin8(BeatsPerMinute, 64, 255);
     
-    // Calculate distance from center for each LED (MANDATORY CENTER ORIGIN)
+    // Use pre-calculated distance lookup
+    extern uint8_t distanceFromCenter[];
+    
+    // Process in strips for better cache locality
     for(int i = 0; i < HardwareConfig::NUM_LEDS; i++) {
-        float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
+        uint8_t dist = distanceFromCenter[i];
         
-        // Intensity decreases with distance from center
-        uint8_t intensity = beat - (distFromCenter * 3);
-        intensity = max(intensity, (uint8_t)32); // Minimum brightness
+        // Intensity decreases with distance - use integer math
+        uint16_t intensity = beat - ((dist * 3) >> 2);  // Approximate * 0.75
+        intensity = max(intensity, (uint16_t)32);
         
-        leds[i] = ColorFromPalette(currentPalette, 
-                                  gHue + (distFromCenter * 2), 
-                                  intensity);
+        // Use palette LUT for faster color lookup
+        extern CRGB paletteLUT[256];
+        uint8_t colorIndex = gHue + (dist >> 1);
+        CRGB baseColor = paletteLUT[colorIndex];
+        leds[i] = baseColor.scale8(intensity);
     }
 }
 
 // ============== ADVANCED WAVE EFFECTS ==============
 
 void waveEffect() {
-    // CENTER ORIGIN WAVES - Start from center LEDs 79/80 and propagate outward
+    // CENTER ORIGIN WAVES - Optimized with lookup table
     static uint16_t wavePosition = 0;
     
     fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, fadeAmount);
@@ -180,15 +185,22 @@ void waveEffect() {
     uint16_t waveSpeed = map(paletteSpeed, 1, 50, 100, 10);
     wavePosition += waveSpeed;
     
+    // Use pre-calculated distance lookup
+    extern uint8_t distanceFromCenter[];
+    
+    // Process both strips with optimized calculations
     for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
-        // Calculate distance from CENTER (79/80)
-        float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
+        uint8_t dist = distanceFromCenter[i];
         
-        // Wave propagates outward from center
-        uint8_t brightness = sin8((distFromCenter * 15) + (wavePosition >> 4));
-        uint8_t colorIndex = (distFromCenter * 8) + (wavePosition >> 6);
+        // Wave propagates outward - use wave LUT
+        extern uint8_t wavePatternLUT[256];
+        extern CRGB paletteLUT[256];
         
-        CRGB color = ColorFromPalette(currentPalette, colorIndex, brightness);
+        uint8_t waveIdx = ((dist * 15) >> 3) + (wavePosition >> 4);
+        uint8_t brightness = wavePatternLUT[waveIdx];
+        uint8_t colorIndex = (dist << 3) + (wavePosition >> 6);  // dist * 8
+        
+        CRGB color = paletteLUT[colorIndex].scale8(brightness);
         strip1[i] = color;
         strip2[i] = color;
     }
@@ -231,21 +243,44 @@ void rippleEffect() {
             continue;
         }
         
-        // Draw ripple moving outward from center
+        // Draw ripple moving outward from center - optimized
+        extern uint8_t distanceFromCenter[];
+        
+        // Convert radius to integer for faster comparison
+        uint16_t intRadius = ripples[r].radius;
+        uint16_t radiusLow = (intRadius > 3) ? intRadius - 3 : 0;
+        uint16_t radiusHigh = intRadius + 3;
+        
         for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
-            float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
-            float wavePos = distFromCenter - ripples[r].radius;
+            uint8_t dist = distanceFromCenter[i];
             
-            if (abs(wavePos) < 3.0f) {
-                uint8_t brightness = 255 - (abs(wavePos) * 85);
-                brightness = (brightness * (HardwareConfig::STRIP_HALF_LENGTH - ripples[r].radius)) / HardwareConfig::STRIP_HALF_LENGTH;
-                brightness = brightness * visualParams.getIntensityNorm();
+            // Quick bounds check
+            if (dist >= radiusLow && dist <= radiusHigh) {
+                int16_t wavePos = dist - intRadius;
+                uint8_t absDiff = abs(wavePos);
                 
-                CRGB color = ColorFromPalette(currentPalette, ripples[r].hue + distFromCenter, brightness);
-                // Apply saturation control
-                color = blend(CRGB::White, color, visualParams.saturation);
-                strip1[i] += color;
-                strip2[i] += color;
+                if (absDiff < 3) {
+                    uint8_t brightness = 255 - (absDiff * 85);
+                    brightness = (brightness * (HardwareConfig::STRIP_HALF_LENGTH - intRadius)) / HardwareConfig::STRIP_HALF_LENGTH;
+                    brightness = scale8(brightness, visualParams.intensity);
+                    
+                    // Use palette LUT and ripple decay LUT
+                    extern CRGB paletteLUT[256];
+                    extern uint8_t rippleDecayLUT[80];
+                    
+                    uint8_t colorIndex = ripples[r].hue + dist;
+                    CRGB color = paletteLUT[colorIndex].scale8(brightness);
+                    
+                    // Apply decay based on radius
+                    if (intRadius < 80) {
+                        color.nscale8(rippleDecayLUT[intRadius]);
+                    }
+                    
+                    // Apply saturation control
+                    color = blend(CRGB::White, color, visualParams.saturation);
+                    strip1[i] += color;
+                    strip2[i] += color;
+                }
             }
         }
     }

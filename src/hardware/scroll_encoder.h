@@ -164,8 +164,8 @@ void processScrollEncoder() {
         updateScrollEncoderLEDForMode();  // Return to mode color
     }
     
-    // Performance reporting
-    if (now - scrollPerf.lastReportTime > 10000) {
+    // Performance reporting - reduced frequency
+    if (now - scrollPerf.lastReportTime > 60000) {  // 60 seconds instead of 10
         if (scrollPerf.totalReads > 0) {
             float successRate = (float)scrollPerf.successfulReads / scrollPerf.totalReads * 100.0f;
             Serial.printf("Scroll Encoder: %d reads, %.1f%% success, %d errors\n",

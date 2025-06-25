@@ -35,6 +35,54 @@ CRGB strip2_transition[HardwareConfig::STRIP2_LED_COUNT];
 CRGB leds[HardwareConfig::NUM_LEDS];  // Full 320 LED buffer for EffectBase compatibility
 CRGB transitionBuffer[HardwareConfig::NUM_LEDS];
 
+// Pre-calculated distance lookup table for CENTER ORIGIN effects
+uint8_t distanceFromCenter[HardwareConfig::NUM_LEDS];
+float normalizedDistance[HardwareConfig::NUM_LEDS];
+
+// Performance optimization LUTs - global for cross-file access
+uint8_t fadeIntensityLUT[256][256];  // [progress][distance] -> intensity
+uint8_t wavePatternLUT[256];         // Pre-calculated wave patterns
+uint8_t spiralAngleLUT[160];         // Pre-calculated spiral angles per position
+uint8_t rippleDecayLUT[80];          // Pre-calculated ripple decay values
+
+// Initialize LUTs once at startup
+void initializeLUTs() {
+    // Fade intensity LUT - pre-calculate all fade combinations
+    for (uint16_t progress = 0; progress < 256; progress++) {
+        for (uint16_t dist = 0; dist < 256; dist++) {
+            // Calculate fade with trailing effect
+            uint16_t fadeEdge = (progress * 130) >> 8;  // 1.3x multiplier
+            uint16_t fadeTrail = 77;  // ~30% of 256
+            
+            if (dist <= fadeEdge - fadeTrail) {
+                fadeIntensityLUT[progress][dist] = 255;
+            } else if (dist <= fadeEdge) {
+                uint16_t fadePos = dist - (fadeEdge - fadeTrail);
+                fadeIntensityLUT[progress][dist] = 255 - ((fadePos * 255) / fadeTrail);
+            } else {
+                fadeIntensityLUT[progress][dist] = 0;
+            }
+        }
+    }
+    
+    // Wave pattern LUT - pre-calculate sin8 combinations
+    for (uint16_t i = 0; i < 256; i++) {
+        wavePatternLUT[i] = sin8(i);
+    }
+    
+    // Spiral angle LUT - pre-calculate spiral positions
+    for (uint16_t i = 0; i < 160; i++) {
+        float dist = abs((int)i - 79) / 79.0f;
+        spiralAngleLUT[i] = (uint8_t)(dist * 255);
+    }
+    
+    // Ripple decay LUT - exponential decay pre-calculated
+    for (uint16_t i = 0; i < 80; i++) {
+        float decay = exp(-i * 0.05f);  // Exponential decay
+        rippleDecayLUT[i] = (uint8_t)(decay * 255);
+    }
+}
+
 // Strip-specific globals
 HardwareConfig::SyncMode currentSyncMode = HardwareConfig::SYNC_SYNCHRONIZED;
 HardwareConfig::PropagationMode currentPropagationMode = HardwareConfig::PROPAGATE_OUTWARD;
@@ -42,6 +90,24 @@ HardwareConfig::PropagationMode currentPropagationMode = HardwareConfig::PROPAGA
 // Strip mapping arrays for spatial effects
 uint8_t angles[HardwareConfig::NUM_LEDS];
 uint8_t radii[HardwareConfig::NUM_LEDS];
+
+// Color palette LUT for fast lookups
+CRGB paletteLUT[256];  // Current palette expanded to 256 entries
+static uint32_t lastPaletteUpdate = 0;
+
+void updatePaletteLUT() {
+    // Only update if palette changed
+    static CRGBPalette16 lastPalette;
+    if (memcmp(&currentPalette, &lastPalette, sizeof(CRGBPalette16)) != 0 || 
+        millis() - lastPaletteUpdate > 100) {
+        
+        for (uint16_t i = 0; i < 256; i++) {
+            paletteLUT[i] = ColorFromPalette(currentPalette, i, 255);
+        }
+        memcpy(&lastPalette, &currentPalette, sizeof(CRGBPalette16));
+        lastPaletteUpdate = millis();
+    }
+}
 
 // Effect parameters
 uint8_t gHue = 0;
@@ -172,30 +238,44 @@ const uint8_t NUM_EFFECTS = sizeof(effects) / sizeof(effects[0]);
 
 // Initialize strip mapping for spatial effects
 void initializeStripMapping() {
-    // Linear strip mapping for dual strips
-    for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
-        float normalized = (float)i / HardwareConfig::STRIP_LENGTH;
+    // Pre-calculate all distance values to avoid per-frame calculations
+    for (uint16_t i = 0; i < HardwareConfig::NUM_LEDS; i++) {
+        uint16_t stripPos = i % HardwareConfig::STRIP_LENGTH;
+        float normalized = (float)stripPos / HardwareConfig::STRIP_LENGTH;
         
         // Linear angle mapping for strips
         angles[i] = normalized * 255;
         
         // Distance from center point for outward propagation
-        float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT) / HardwareConfig::STRIP_HALF_LENGTH;
+        float distFromCenter = abs((float)stripPos - HardwareConfig::STRIP_CENTER_POINT) / HardwareConfig::STRIP_HALF_LENGTH;
         radii[i] = distFromCenter * 255;
+        
+        // Pre-calculate absolute and normalized distances
+        distanceFromCenter[i] = abs((int)stripPos - (int)HardwareConfig::STRIP_CENTER_POINT);
+        normalizedDistance[i] = distFromCenter;
     }
 }
 
-// Synchronization functions for unified LED buffer
+// Synchronization functions optimized for speed
+// Use pointer aliasing to avoid unnecessary copies where possible
+static bool stripsAreSynced = true;
+
 void syncLedsToStrips() {
-    // Copy first half of leds buffer to strip1, second half to strip2
-    memcpy(strip1, leds, HardwareConfig::STRIP1_LED_COUNT * sizeof(CRGB));
-    memcpy(strip2, &leds[HardwareConfig::STRIP1_LED_COUNT], HardwareConfig::STRIP2_LED_COUNT * sizeof(CRGB));
+    // Only copy if we've been working in the unified buffer
+    if (!stripsAreSynced) {
+        memcpy(strip1, leds, HardwareConfig::STRIP1_LED_COUNT * sizeof(CRGB));
+        memcpy(strip2, &leds[HardwareConfig::STRIP1_LED_COUNT], HardwareConfig::STRIP2_LED_COUNT * sizeof(CRGB));
+        stripsAreSynced = true;
+    }
 }
 
 void syncStripsToLeds() {
-    // Copy strips back to unified buffer (for Light Guide effects that read current state)
-    memcpy(leds, strip1, HardwareConfig::STRIP1_LED_COUNT * sizeof(CRGB));
-    memcpy(&leds[HardwareConfig::STRIP1_LED_COUNT], strip2, HardwareConfig::STRIP2_LED_COUNT * sizeof(CRGB));
+    // Only copy if we've been working in the strip buffers
+    if (stripsAreSynced) {
+        memcpy(leds, strip1, HardwareConfig::STRIP1_LED_COUNT * sizeof(CRGB));
+        memcpy(&leds[HardwareConfig::STRIP1_LED_COUNT], strip2, HardwareConfig::STRIP2_LED_COUNT * sizeof(CRGB));
+        stripsAreSynced = false;
+    }
 }
 
 // ============== BASIC EFFECTS ==============
@@ -205,8 +285,15 @@ void syncStripsToLeds() {
 // ============== ADVANCED TRANSITION SYSTEM ==============
 
 void startAdvancedTransition(uint8_t newEffect) {
-    Serial.println("*** TRANSITION FUNCTION CALLED ***");
     if (newEffect == currentEffect) return;
+    
+    // Prevent rapid transitions - minimum 100ms between transitions
+    static uint32_t lastTransitionTime = 0;
+    uint32_t now = millis();
+    if (now - lastTransitionTime < 100) {
+        return;  // Too soon, ignore
+    }
+    lastTransitionTime = now;
     
     // Configure transition engine for dual-strip mode
     transitionEngine.setDualStripMode(true, HardwareConfig::STRIP_LENGTH);
@@ -232,43 +319,31 @@ void startAdvancedTransition(uint8_t newEffect) {
     if (useRandomTransitions) {
         transType = TransitionEngine::getRandomTransition();
         
-        // Vary duration based on transition type
+        // Vary duration based on transition type - OPTIMIZED FOR SMOOTH TRAILING FADES
         switch (transType) {
             case TRANSITION_FADE:
-                duration = 800;
+                duration = 600;  // Faster for smoother experience
                 curve = EASE_IN_OUT_QUAD;
                 break;
             case TRANSITION_WIPE_OUT:
             case TRANSITION_WIPE_IN:
-                duration = 1200;
+                duration = 800;  // Reduced from 1200
                 curve = EASE_OUT_CUBIC;
                 break;
-            case TRANSITION_MELT:
-                duration = 1800;
-                curve = EASE_IN_CUBIC;
-                break;
-            case TRANSITION_GLITCH:
-                duration = 600;
-                curve = EASE_LINEAR;
-                break;
             case TRANSITION_PHASE_SHIFT:
-                duration = 1400;
+                duration = 1000;  // Reduced from 1400
                 curve = EASE_IN_OUT_CUBIC;
                 break;
             case TRANSITION_SPIRAL:
-                duration = 2000;  // Longer for spectacular spiral
-                curve = EASE_IN_OUT_ELASTIC;
+                duration = 1200;  // Reduced from 2000
+                curve = EASE_IN_OUT_QUAD;  // Changed from elastic
                 break;
             case TRANSITION_RIPPLE:
-                duration = 2500;  // Long ripple waves
-                curve = EASE_OUT_CUBIC;
-                break;
-            case TRANSITION_LIGHTNING:
-                duration = 1000;  // Quick lightning strikes
-                curve = EASE_OUT_QUAD;
+                duration = 1500;  // Reduced from 2500
+                curve = EASE_OUT_QUAD;  // Changed from cubic
                 break;
             default:
-                duration = 1000;
+                duration = 800;
                 curve = EASE_IN_OUT_QUAD;
                 break;
         }
@@ -295,8 +370,8 @@ void startAdvancedTransition(uint8_t newEffect) {
     
     // Debug transition type names
     const char* transitionNames[] = {
-        "FADE", "WIPE_OUT", "WIPE_IN", "MELT", "GLITCH", "PHASE_SHIFT",
-        "SPIRAL", "RIPPLE", "LIGHTNING"
+        "FADE", "WIPE_OUT", "WIPE_IN", "PHASE_SHIFT",
+        "SPIRAL", "RIPPLE"
     };
     Serial.printf("%s (%dms)\n", transitionNames[transType], duration);
     
@@ -375,8 +450,9 @@ void setup() {
     
     FastLED.setCorrection(TypicalLEDStrip);
     
-    // Initialize strip mapping
+    // Initialize strip mapping and LUTs
     initializeStripMapping();
+    initializeLUTs();
     
     // Initialize palette
     currentPaletteIndex = 0;
@@ -413,7 +489,7 @@ void setup() {
             QueueHandle_t queue = encoderManager.getEventQueue();
             if (queue != NULL) {
                 xQueueSend(queue, &event, 0);
-                Serial.printf("SCROLL: Mirroring encoder %d, delta %d\n", mirroredEncoder, delta);
+                // Serial.printf("SCROLL: Mirroring encoder %d, delta %d\n", mirroredEncoder, delta);  // Removed spam
             }
         },
         // Button press callback - cycle through encoder modes
@@ -427,8 +503,8 @@ void setup() {
                 "Intensity", "Saturation", "Complexity", "Variation"
             };
             
-            Serial.printf("SCROLL: Switched to %s mode (encoder %d)\n", 
-                         modeName[nextMode], nextMode);
+            // Serial.printf("SCROLL: Switched to %s mode (encoder %d)\n", 
+            //              modeName[nextMode], nextMode);  // Removed spam
         }
     );
     
@@ -580,12 +656,28 @@ void loop() {
     if (encoderEventQueue != NULL) {
         EncoderEvent event;
         
-        // Process all available events in queue (non-blocking)
+        // Limit events processed per loop to prevent backlog
+        int eventsProcessed = 0;
+        const int MAX_EVENTS_PER_LOOP = 3;
+        
+        // Process ALL available events in queue to prevent backlog
+        // This ensures no lag from queued encoder inputs
         while (xQueueReceive(encoderEventQueue, &event, 0) == pdTRUE) {
+            eventsProcessed++;
+            
+            // Batch process after collecting events
+            if (eventsProcessed >= 10) {
+                break; // Process in next frame to maintain 120 FPS
+            }
             char buffer[64];
             
             // Special handling for encoder 0 (effect selection) - ALWAYS process normally
             if (event.encoder_id == 0) {
+                // Ignore input if transition is active to prevent "caught between" issue
+                if (transitionEngine.isActive()) {
+                    continue;  // Silently ignore
+                }
+                
                 // Effect selection - one effect change per physical detent click
                 uint8_t newEffect;
                 if (event.delta > 0) {
@@ -597,7 +689,7 @@ void loop() {
                 // Only transition if actually changing effects
                 if (newEffect != currentEffect) {
                     startAdvancedTransition(newEffect);
-                    Serial.printf("🎨 MAIN: Effect changed to %s (index %d)\n", effects[currentEffect].name, currentEffect);
+                    // Serial.printf("🎨 MAIN: Effect changed to %s (index %d)\n", effects[currentEffect].name, currentEffect);  // Reduced spam
                     
                     // Log mode transition if effect type changed
                     if (effects[newEffect].type != effects[currentEffect].type) {
@@ -673,23 +765,33 @@ void loop() {
     serialMenu.update();
 #endif
     
-    // Update palette blending
+    // Update palette blending and LUT
     updatePalette();
+    updatePaletteLUT();
     
     // Update encoder LED feedback
     updateEncoderFeedback();
     
-    // Update transition system
+    // Update transition system with optimized buffer management
     if (transitionEngine.isActive()) {
         // During transition: generate new effect frame and let transition engine handle blending
         effects[currentEffect].function();
-        syncStripsToLeds();  // Sync current effect to leds buffer
-        transitionEngine.update();  // This blends and writes to leds buffer
-        syncLedsToStrips();  // Sync blended result back to strips
+        
+        // Update transition directly on unified buffer to avoid copies
+        bool stillActive = transitionEngine.update();
+        
+        if (!stillActive) {
+            // Transition completed - no delay needed for 120 FPS
+            stripsAreSynced = false; // Mark that we need to sync
+        }
     } else {
         // Normal operation: just run the effect
         effects[currentEffect].function();
+        stripsAreSynced = false; // Effects work on unified buffer
     }
+    
+    // Only sync when actually needed
+    syncLedsToStrips();
     
     // Process scroll encoder input (non-blocking)
     // Re-enabled with error handling
@@ -705,8 +807,8 @@ void loop() {
         gHue++;
     }
     
-    // Status every 5 seconds
-    EVERY_N_SECONDS(5) {
+    // Status every 30 seconds (reduced from 5)
+    EVERY_N_SECONDS(30) {
         Serial.print("Effect: ");
         Serial.print(effects[currentEffect].name);
         Serial.print(", Palette: ");
@@ -714,6 +816,11 @@ void loop() {
         Serial.print(", Free heap: ");
         Serial.print(ESP.getFreeHeap());
         Serial.println(" bytes");
+        
+        // Warn if heap is getting low
+        if (ESP.getFreeHeap() < 50000) {
+            Serial.println("⚠️  WARNING: Low memory! Consider reducing effect complexity.");
+        }
         
         // Quick encoder performance summary
         if (encoderManager.isAvailable()) {
@@ -723,14 +830,33 @@ void loop() {
                          metrics.i2c_transactions > 0 ? 
                          (100.0f * (metrics.i2c_transactions - metrics.i2c_failures) / metrics.i2c_transactions) : 100.0f);
         }
-        
-        // Update wave engine performance stats if using wave effects (disabled for now)
-        // if (effects[currentEffect].type == EFFECT_TYPE_WAVE_ENGINE) {
-        //     updateWavePerformanceStats(waveEngine);
-        // }
     }
     
     
-    // Frame rate control - reduce from 120 to 60 FPS for stability
-    delay(16);  // ~60 FPS instead of 120
+    // Frame rate control - maintain 120 FPS target
+    static uint32_t frameStartTime = 0;
+    static uint32_t targetFrameTime = 8333; // 8.33ms for 120 FPS
+    
+    uint32_t frameEndTime = micros();
+    uint32_t frameTime = frameEndTime - frameStartTime;
+    
+    // Only delay if we're running faster than 120 FPS
+    if (frameTime < targetFrameTime) {
+        delayMicroseconds(targetFrameTime - frameTime);
+    }
+    
+    frameStartTime = micros();
+    
+    // Performance warning if we can't maintain 120 FPS
+    static uint32_t slowFrameCount = 0;
+    static uint32_t lastPerfWarning = 0;
+    if (frameTime > targetFrameTime + 1000) { // Allow 1ms tolerance
+        slowFrameCount++;
+        if (millis() - lastPerfWarning > 5000 && slowFrameCount > 10) {
+            Serial.printf("⚠️ Performance: %d slow frames (>%.1fms) in last 5s\n", 
+                         slowFrameCount, targetFrameTime / 1000.0);
+            lastPerfWarning = millis();
+            slowFrameCount = 0;
+        }
+    }
 }

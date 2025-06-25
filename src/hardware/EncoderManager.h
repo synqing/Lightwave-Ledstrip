@@ -48,7 +48,7 @@ struct EncoderMetrics {
     
     // Reporting
     uint32_t last_report_time = 0;
-    uint32_t report_interval_ms = 10000;  // 10 seconds
+    uint32_t report_interval_ms = 60000;  // 60 seconds (reduced from 10)
     
     void recordEvent(bool queued, uint32_t response_time_us);
     void recordI2CTransaction(bool success);

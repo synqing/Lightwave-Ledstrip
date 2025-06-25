@@ -23,7 +23,6 @@ enum TransitionType {
     TRANSITION_FADE,          // Classic crossfade
     TRANSITION_WIPE_OUT,      // Wipe from center outward  
     TRANSITION_WIPE_IN,       // Wipe from edges inward
-    TRANSITION_GLITCH,        // Digital glitch effect
     TRANSITION_PHASE_SHIFT,   // Frequency-based morph
     TRANSITION_SPIRAL,        // Helical spiral from center
     TRANSITION_RIPPLE,        // Concentric wave ripples
@@ -68,13 +67,12 @@ private:
     uint16_t m_centerPoint;
     bool m_dualStripMode = false;
     
+    // Performance optimization: pre-calculated values
+    uint8_t m_easedProgress = 0;  // Pre-calculated eased progress as 0-255
+    uint8_t m_fadeRadius = 0;     // Current fade radius for center-origin effects
+    
     // Effect-specific state - OPTIMIZED FOR MEMORY
     struct TransitionState {
-        // Glitch effect
-        uint16_t glitchSegments[8];  // Reduced count
-        uint8_t glitchCount;
-        uint32_t lastGlitch;
-        
         // Phase shift
         float phaseOffset;
         
@@ -138,13 +136,11 @@ private:
     // Transition implementations
     void applyFade();
     void applyWipe(bool leftToRight, bool fromCenter);
-    void applyGlitch();
     void applyPhaseShift();
     void applySpiral();
     void applyRipple();
     
     // Helper functions
-    void initializeGlitch();
     void initializeSpiral();
     void initializeRipple();
     
@@ -177,9 +173,6 @@ inline void TransitionEngine::startTransition(
     resetState();
     
     switch (type) {
-        case TRANSITION_GLITCH:
-            initializeGlitch();
-            break;
         case TRANSITION_SPIRAL:
             initializeSpiral();
             break;
@@ -198,16 +191,22 @@ inline bool TransitionEngine::update() {
     uint32_t elapsed = millis() - m_startTime;
     if (elapsed >= m_duration) {
         m_progress = 1.0f;
+        m_easedProgress = 255;
         m_active = false;
         
-        // Copy final state
-        memcpy(m_outputBuffer, m_targetBuffer, m_numLeds * sizeof(CRGB));
+        // Copy final state - use optimized block copy
+        uint32_t* src = (uint32_t*)m_targetBuffer;
+        uint32_t* dst = (uint32_t*)m_outputBuffer;
+        uint16_t count = (m_numLeds * sizeof(CRGB)) / sizeof(uint32_t);
+        while (count--) *dst++ = *src++;
+        
         return false;
     }
     
-    // Apply easing
+    // Apply easing with pre-calculated 8-bit result
     float rawProgress = (float)elapsed / m_duration;
     m_progress = applyEasing(rawProgress, m_curve);
+    m_easedProgress = m_progress * 255;
     
     // Apply transition effect
     switch (m_type) {
@@ -219,9 +218,6 @@ inline bool TransitionEngine::update() {
             break;
         case TRANSITION_WIPE_IN:
             applyWipe(false, true);
-            break;
-        case TRANSITION_GLITCH:
-            applyGlitch();
             break;
         case TRANSITION_PHASE_SHIFT:
             applyPhaseShift();
@@ -239,157 +235,124 @@ inline bool TransitionEngine::update() {
 
 inline void TransitionEngine::applyFade() {
     if (m_dualStripMode) {
-        // CENTER ORIGIN FADE - fade radiates from center outward
+        // CENTER ORIGIN FADE optimized with integer math
         uint16_t stripLength = m_numLeds / 2;
         
+        // Pre-calculate fade parameters using integer math
+        uint16_t fadeEdge = (m_easedProgress * m_centerPoint * 130) >> 8;  // 1.3x multiplier
+        uint16_t fadeTrailWidth = m_centerPoint * 30 / 100;  // 30% trail width
+        
+        // Process both strips in parallel-friendly blocks
         for (uint16_t strip = 0; strip < 2; strip++) {
             uint16_t offset = strip * stripLength;
+            CRGB* srcPtr = &m_sourceBuffer[offset];
+            CRGB* tgtPtr = &m_targetBuffer[offset];
+            CRGB* outPtr = &m_outputBuffer[offset];
             
+            // Use external distance and fade LUTs
+            extern uint8_t distanceFromCenter[];
+            extern uint8_t fadeIntensityLUT[256][256];
+            uint8_t* distPtr = &distanceFromCenter[offset];
+            
+            // Use LUT for fade calculations - MUCH faster
             for (uint16_t i = 0; i < stripLength; i++) {
-                // Calculate distance from center (LED 79)
-                float distFromCenter = abs((int)i - (int)m_centerPoint) / (float)m_centerPoint;
+                uint8_t dist = distPtr[i];
+                uint8_t blendAmount = fadeIntensityLUT[m_easedProgress][dist];
                 
-                // Fade progress based on distance from center
-                float localProgress = m_progress * 2.0f - distFromCenter;
-                localProgress = constrain(localProgress, 0.0f, 1.0f);
-                
-                uint8_t blend = localProgress * 255;
-                m_outputBuffer[offset + i] = lerpColor(
-                    m_sourceBuffer[offset + i], 
-                    m_targetBuffer[offset + i], 
-                    blend
-                );
+                // Use FastLED's optimized blend function
+                outPtr[i] = blend(srcPtr[i], tgtPtr[i], blendAmount);
             }
         }
     } else {
-        // Standard uniform fade
-        uint8_t blend = m_progress * 255;
-        for (uint16_t i = 0; i < m_numLeds; i++) {
-            m_outputBuffer[i] = lerpColor(m_sourceBuffer[i], m_targetBuffer[i], blend);
+        // Standard uniform fade - process in blocks for better cache usage
+        uint8_t blendAmount = m_easedProgress;
+        
+        // Process 4 pixels at a time for better performance
+        uint16_t i = 0;
+        for (; i < m_numLeds - 3; i += 4) {
+            m_outputBuffer[i] = blend(m_sourceBuffer[i], m_targetBuffer[i], blendAmount);
+            m_outputBuffer[i+1] = blend(m_sourceBuffer[i+1], m_targetBuffer[i+1], blendAmount);
+            m_outputBuffer[i+2] = blend(m_sourceBuffer[i+2], m_targetBuffer[i+2], blendAmount);
+            m_outputBuffer[i+3] = blend(m_sourceBuffer[i+3], m_targetBuffer[i+3], blendAmount);
+        }
+        // Handle remaining pixels
+        for (; i < m_numLeds; i++) {
+            m_outputBuffer[i] = blend(m_sourceBuffer[i], m_targetBuffer[i], blendAmount);
         }
     }
 }
 
 inline void TransitionEngine::applyWipe(bool leftToRight, bool fromCenter) {
     if (fromCenter && m_dualStripMode) {
-        // CENTER ORIGIN wipe for dual strips
+        // CENTER ORIGIN wipe optimized with lookup table
         uint16_t stripLength = m_numLeds / 2;
-        uint16_t radius = m_progress * m_centerPoint;
+        uint8_t radius = (m_easedProgress * m_centerPoint) >> 8;
         
-        // Process both strips
+        // Use external distance lookup
+        extern uint8_t distanceFromCenter[];
+        
+        // Process both strips with optimized pointer arithmetic
         for (uint16_t strip = 0; strip < 2; strip++) {
             uint16_t offset = strip * stripLength;
+            CRGB* srcPtr = &m_sourceBuffer[offset];
+            CRGB* tgtPtr = &m_targetBuffer[offset];
+            CRGB* outPtr = &m_outputBuffer[offset];
+            uint8_t* distPtr = &distanceFromCenter[offset];
             
-            for (uint16_t i = 0; i < stripLength; i++) {
-                uint16_t distFromCenter = abs((int)i - (int)m_centerPoint);
-                bool showTarget = leftToRight ? 
-                    (distFromCenter <= radius) : 
-                    (distFromCenter >= m_centerPoint - radius);
-                    
-                m_outputBuffer[offset + i] = showTarget ? 
-                    m_targetBuffer[offset + i] : 
-                    m_sourceBuffer[offset + i];
+            if (leftToRight) {
+                for (uint16_t i = 0; i < stripLength; i++) {
+                    outPtr[i] = (distPtr[i] <= radius) ? tgtPtr[i] : srcPtr[i];
+                }
+            } else {
+                uint8_t invRadius = m_centerPoint - radius;
+                for (uint16_t i = 0; i < stripLength; i++) {
+                    outPtr[i] = (distPtr[i] >= invRadius) ? tgtPtr[i] : srcPtr[i];
+                }
             }
         }
     } else {
-        // Standard linear wipe
-        uint16_t threshold = m_progress * m_numLeds;
+        // Standard linear wipe - process in blocks
+        uint16_t threshold = (m_easedProgress * m_numLeds) >> 8;
         
-        for (uint16_t i = 0; i < m_numLeds; i++) {
-            bool showTarget = leftToRight ? 
-                (i < threshold) : 
-                (i >= m_numLeds - threshold);
-                
-            m_outputBuffer[i] = showTarget ? 
-                m_targetBuffer[i] : 
-                m_sourceBuffer[i];
+        if (leftToRight) {
+            // Copy target up to threshold
+            memcpy(m_outputBuffer, m_targetBuffer, threshold * sizeof(CRGB));
+            // Copy source for the rest
+            memcpy(&m_outputBuffer[threshold], &m_sourceBuffer[threshold], 
+                   (m_numLeds - threshold) * sizeof(CRGB));
+        } else {
+            uint16_t sourceEnd = m_numLeds - threshold;
+            // Copy source up to threshold
+            memcpy(m_outputBuffer, m_sourceBuffer, sourceEnd * sizeof(CRGB));
+            // Copy target for the rest
+            memcpy(&m_outputBuffer[sourceEnd], &m_targetBuffer[sourceEnd], 
+                   threshold * sizeof(CRGB));
         }
     }
 }
 
 
-inline void TransitionEngine::applyMelt() {
-    if (!m_state.heatMap) return;  // Safety check
-    
-    // CENTER ORIGIN melting - heat radiates from center outward
-    if (m_dualStripMode) {
-        uint16_t stripLength = m_numLeds / 2;
-        float meltRadius = m_progress * m_centerPoint;
-        
-        for (uint16_t strip = 0; strip < 2; strip++) {
-            uint16_t offset = strip * stripLength;
-            
-            for (uint16_t i = 0; i < stripLength; i++) {
-                float distFromCenter = abs((int)i - (int)m_centerPoint);
-                
-                // Add heat based on distance from melting boundary
-                uint8_t heatAdd = 0;
-                if (distFromCenter <= meltRadius + 10) {
-                    float heatIntensity = max(0.0f, 1.0f - abs(distFromCenter - meltRadius) / 10.0f);
-                    heatAdd = heatIntensity * 60;
-                }
-                
-                // Update heat (8-bit arithmetic)
-                m_state.heatMap[offset + i] = min(255, (int)m_state.heatMap[offset + i] + heatAdd);
-                m_state.heatMap[offset + i] = (m_state.heatMap[offset + i] * 240) >> 8;  // Cool down
-                
-                // Apply melting effect
-                if (distFromCenter <= meltRadius || m_state.heatMap[offset + i] > 128) {
-                    m_outputBuffer[offset + i] = m_targetBuffer[offset + i];
-                } else {
-                    // Blend based on heat
-                    uint8_t blend = m_state.heatMap[offset + i];
-                    m_outputBuffer[offset + i] = lerpColor(m_sourceBuffer[offset + i], m_targetBuffer[offset + i], blend);
-                }
-            }
-        }
-    }
-}
 
-
-inline void TransitionEngine::applyGlitch() {
-    // Copy source as base
-    memcpy(m_outputBuffer, m_sourceBuffer, m_numLeds * sizeof(CRGB));
-    
-    // Apply glitch segments
-    uint32_t now = millis();
-    if (now - m_state.lastGlitch > 50) {  // New glitch every 50ms
-        m_state.lastGlitch = now;
-        
-        // Random glitch segments
-        m_state.glitchCount = random8(3, 8);
-        for (uint8_t i = 0; i < m_state.glitchCount; i++) {
-            m_state.glitchSegments[i] = random16(m_numLeds);
-        }
-    }
-    
-    // Apply glitches
-    for (uint8_t i = 0; i < m_state.glitchCount; i++) {
-        uint16_t pos = m_state.glitchSegments[i];
-        uint16_t len = random8(5, 20);
-        
-        for (uint16_t j = 0; j < len && pos + j < m_numLeds; j++) {
-            if (random8() < (m_progress * 255)) {
-                // Glitch to target
-                m_outputBuffer[pos + j] = m_targetBuffer[pos + j];
-            } else if (random8() < 30) {
-                // Corruption
-                m_outputBuffer[pos + j] = CRGB(random8(), random8(), random8());
-            }
-        }
-    }
-}
 
 inline void TransitionEngine::applyPhaseShift() {
-    // Frequency-based morphing
-    m_state.phaseOffset += m_progress * 0.2f;
+    // Frequency-based morphing with LUT
+    extern uint8_t wavePatternLUT[256];
     
+    // Update phase with integer math
+    static uint8_t phaseAccumulator = 0;
+    phaseAccumulator += (m_easedProgress >> 2);  // Slower phase progression
+    
+    // Process with optimized wave LUT
     for (uint16_t i = 0; i < m_numLeds; i++) {
-        float position = (float)i / m_numLeds;
-        float wave = sin(position * TWO_PI * 3 + m_state.phaseOffset);
-        float blend = (wave + 1.0f) * 0.5f * m_progress;
+        // Use integer position calculation
+        uint8_t position = (i * 255) / m_numLeds;
+        uint8_t waveIndex = position + phaseAccumulator;
+        uint8_t wave = wavePatternLUT[waveIndex];
         
-        m_outputBuffer[i] = lerpColor(m_sourceBuffer[i], m_targetBuffer[i], blend * 255);
+        // Scale wave by progress
+        uint8_t blendAmount = scale8(wave, m_easedProgress);
+        
+        m_outputBuffer[i] = blend(m_sourceBuffer[i], m_targetBuffer[i], blendAmount);
     }
 }
 
@@ -474,32 +437,17 @@ inline void TransitionEngine::resetState() {
 }
 
 
-inline void TransitionEngine::initializeMelt() {
-    // Allocate heat map if needed
-    if (!m_state.heatMap) {
-        m_state.heatMap = new uint8_t[m_numLeds];
-    }
-    // Clear heat map
-    memset(m_state.heatMap, 0, m_numLeds);
-}
 
-inline void TransitionEngine::initializeGlitch() {
-    m_state.glitchCount = 0;
-    m_state.lastGlitch = 0;
-}
 
 inline TransitionType TransitionEngine::getRandomTransition() {
     // Weighted random selection for variety
     uint8_t weights[] = {
-        20,  // FADE
-        10,  // WIPE_OUT
-        10,  // WIPE_IN
-        10,  // MELT
-        8,   // GLITCH
-        10,  // PHASE_SHIFT
-        12,  // SPIRAL - NEW!
-        12,  // RIPPLE - NEW!
-        8    // LIGHTNING - NEW!
+        35,  // FADE - increased weight for smooth trailing fades
+        15,  // WIPE_OUT
+        15,  // WIPE_IN
+        15,  // PHASE_SHIFT
+        10,  // SPIRAL
+        10   // RIPPLE
     };
     
     uint8_t total = 0;
@@ -540,9 +488,13 @@ inline void TransitionEngine::applySpiral() {
                 // Calculate distance from center (LED 79)
                 float distFromCenter = abs((int)i - (int)m_centerPoint) / (float)m_centerPoint;
                 
-                // Spiral equation: angle varies with distance and time
-                float angle = m_state.spiralAngle + distFromCenter * TWO_PI * 2.0f;
-                float spiralProgress = (sin(angle) + 1.0f) * 0.5f;
+                // Use pre-calculated spiral LUT
+                extern uint8_t spiralAngleLUT[160];
+                extern uint8_t wavePatternLUT[256];
+                
+                // Spiral using LUT - much faster
+                uint8_t spiralIndex = spiralAngleLUT[i] + (uint8_t)(m_state.spiralAngle * 40);
+                uint8_t spiralProgress = wavePatternLUT[spiralIndex] >> 1;  // 0-127 range
                 
                 // Combine with main transition progress
                 float combinedProgress = spiralProgress * m_progress;
@@ -630,80 +582,5 @@ inline void TransitionEngine::applyRipple() {
     }
 }
 
-inline void TransitionEngine::initializeLightning() {
-    m_state.lightning.segmentCount = 0;
-    m_state.lightning.lastStrike = 0;
-    m_state.lightning.intensity = 255;
-    m_state.lightning.active = false;
-}
-
-inline void TransitionEngine::applyLightning() {
-    uint32_t now = millis();
-    
-    // Start with current blend state
-    uint8_t baseBlend = m_progress * 255;
-    for (uint16_t i = 0; i < m_numLeds; i++) {
-        m_outputBuffer[i] = lerpColor(m_sourceBuffer[i], m_targetBuffer[i], baseBlend);
-    }
-    
-    // Generate CENTER ORIGIN lightning strikes
-    if (now - m_state.lightning.lastStrike > 150 + random8(200)) {  // Random strike interval
-        m_state.lightning.lastStrike = now;
-        m_state.lightning.active = true;
-        m_state.lightning.intensity = 255;
-        
-        // Generate CENTER ORIGIN lightning path - radiates outward
-        m_state.lightning.segmentCount = random8(4, 8);
-        
-        if (m_dualStripMode) {
-            uint16_t stripLength = m_numLeds / 2;
-            
-            // Create lightning on both strips radiating from center
-            for (uint8_t i = 0; i < m_state.lightning.segmentCount; i++) {
-                // Distance from center increases with each segment
-                float distance = (i + 1) * (m_centerPoint / (float)m_state.lightning.segmentCount);
-                distance += random8(10) - 5;  // Add some jitter
-                
-                // Place on both strips
-                uint16_t pos1 = m_centerPoint + constrain(distance, 0, m_centerPoint);
-                uint16_t pos2 = stripLength + (m_centerPoint - constrain(distance, 0, m_centerPoint));
-                
-                m_state.lightning.segments[i] = pos1;  // First strip
-                if (i + m_state.lightning.segmentCount < 10) {
-                    m_state.lightning.segments[i + m_state.lightning.segmentCount] = pos2;  // Second strip
-                }
-            }
-            m_state.lightning.segmentCount *= 2;  // Both strips
-        }
-    }
-    
-    // Render lightning bolt
-    if (m_state.lightning.active) {
-        // Fade lightning intensity
-        m_state.lightning.intensity = max(0, (int)m_state.lightning.intensity - 12);
-        if (m_state.lightning.intensity == 0) {
-            m_state.lightning.active = false;
-        }
-        
-        // Draw lightning segments
-        for (uint8_t i = 0; i < m_state.lightning.segmentCount; i++) {
-            uint16_t pos = m_state.lightning.segments[i];
-            if (pos >= m_numLeds) continue;
-            
-            // Main bolt
-            CRGB lightningColor = CRGB::White;
-            lightningColor.nscale8(m_state.lightning.intensity);
-            m_outputBuffer[pos] = lightningColor;
-            
-            // Glow around bolt
-            if (pos > 0) {
-                m_outputBuffer[pos - 1] = lerpColor(m_outputBuffer[pos - 1], lightningColor, 128);
-            }
-            if (pos < m_numLeds - 1) {
-                m_outputBuffer[pos + 1] = lerpColor(m_outputBuffer[pos + 1], lightningColor, 128);
-            }
-        }
-    }
-}
 
 #endif // TRANSITION_ENGINE_H

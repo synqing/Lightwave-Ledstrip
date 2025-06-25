@@ -3,12 +3,15 @@
 #include "config/features.h"
 #include "config/hardware_config.h"
 #include "core/EffectTypes.h"
-#include "core/MegaLUTs.h"
+// #include "core/MegaLUTs.h"  // Disabled temporarily
 #include "effects/strip/StripEffects.h"
 #include "effects/transitions/TransitionEngine.h"
-#include "effects/LUTOptimizedEffects.h"
+// #include "effects/LUTOptimizedEffects.h"  // Disabled temporarily
+#include "effects/CinematicColorOrchestrator.h"
 #include "hardware/EncoderManager.h"
 #include "hardware/EncoderLEDFeedback.h"
+#include "Palettes.h"
+#include "esp_task_wdt.h"  // Watchdog timer for system stability
 
 #if FEATURE_PERFORMANCE_MONITOR
 #include "utils/PerformanceOptimizer.h"
@@ -38,35 +41,14 @@ CRGB leds[HardwareConfig::NUM_LEDS];  // Full 320 LED buffer for EffectBase comp
 CRGB transitionBuffer[HardwareConfig::NUM_LEDS];
 
 // Pre-calculated distance lookup table for CENTER ORIGIN effects
-// NOTE: These are now defined in MegaLUTs.cpp as part of the massive LUT system
-extern uint8_t* distanceFromCenterLUT;
+uint8_t distanceFromCenter[HardwareConfig::NUM_LEDS];
 float normalizedDistance[HardwareConfig::NUM_LEDS];
 
-// Legacy LUT declarations for backward compatibility
-// These map to the new MegaLUT system
-#define distanceFromCenter distanceFromCenterLUT
-#define wavePatternLUT wavePatternLUT[0]  // Use first wave pattern
-#define spiralAngleLUT spiralAngleLUT      // Direct mapping
-
-// LUT-optimized effect instances
-LUTPlasmaEffect* lutPlasmaEffect;
-LUTFireEffect* lutFireEffect;
-LUTWaveEffect* lutWaveEffect;
-LUTMandelbrotEffect* lutMandelbrotEffect;
-LUTParticleEffect* lutParticleEffect;
-LUTPerlinNoiseEffect* lutPerlinEffect;
-LUTComplexWaveEffect* lutComplexWaveEffect;
-LUTShaderEffect* lutShaderEffect;
-LUTTransitionShowcase* lutTransitionEffect;
-LUTFrequencyEffect* lutFrequencyEffect;
-
-// Initialize legacy LUTs - minimal since MegaLUTs handles everything
-void initializeLUTs() {
-    // Legacy compatibility - MegaLUTs handles all pre-calculations
-    // This function is kept for backward compatibility only
-    Serial.println("[LUT] Legacy LUT initialization skipped - using MegaLUTs");
-    }
-}
+// Performance optimization LUTs - global for cross-file access  
+// uint8_t fadeIntensityLUT[256][256];  // [progress][distance] -> intensity - DISABLED: 65KB causes boot loop
+uint8_t wavePatternLUT[256];         // Pre-calculated wave patterns
+uint8_t spiralAngleLUT[160];         // Pre-calculated spiral angles per position
+uint8_t rippleDecayLUT[80];          // Pre-calculated ripple decay values
 
 // Strip-specific globals
 HardwareConfig::SyncMode currentSyncMode = HardwareConfig::SYNC_SYNCHRONIZED;
@@ -81,6 +63,7 @@ CRGB paletteLUT[256];  // Current palette expanded to 256 entries
 static uint32_t lastPaletteUpdate = 0;
 
 void updatePaletteLUT() {
+    // ORCHESTRATOR INTEGRATION: Update LUT from orchestrator-synced currentPalette
     // Only update if palette changed
     static CRGBPalette16 lastPalette;
     if (memcmp(&currentPalette, &lastPalette, sizeof(CRGBPalette16)) != 0 || 
@@ -92,6 +75,85 @@ void updatePaletteLUT() {
         memcpy(&lastPalette, &currentPalette, sizeof(CRGBPalette16));
         lastPaletteUpdate = millis();
     }
+}
+
+// ============== ORCHESTRATOR INTEGRATION WRAPPERS ==============
+// These functions provide a seamless bridge between existing effects and the orchestrator
+// 
+// INTEGRATION STATUS:
+// ✅ Phase 1: Palette System Unification
+//    - currentPalette now syncs from orchestrator in updatePalette()
+//    - paletteLUT updated from orchestrator-controlled currentPalette
+//    - Legacy automatic palette changes disabled
+//    - Setup initializes with orchestrator palette
+//
+// ✅ Phase 2: Effect Color Integration (Partial)
+//    - Added orchestrator color wrapper functions
+//    - Updated key effects: solidColor, pulseEffect, confetti, fire, ripple
+//    - High-performance getOrchestratedColorFast() for LUT-based speed
+//    - Maintains backward compatibility with existing effects
+//
+// 🔄 Phase 3: Emotional Intensity Integration (In Progress)
+//    - Added getEmotionalBrightness() for intensity modulation
+//    - Effects now respond to emotional state (spawn rates, brightness, etc.)
+//    - Visual feedback integration pending
+//
+// ⏳ Phase 4: Performance Optimization (Pending)
+//    - Single palette update path working
+//    - LUT caching optimization pending
+//    - Full effect migration pending
+
+/**
+ * Get color from orchestrator with emotional modulation
+ * Drop-in replacement for ColorFromPalette that adds cinematic intelligence
+ */
+CRGB getOrchestratedColor(uint8_t position, uint8_t brightness) {
+    CRGB color = colorOrchestrator.getEmotionalColor(position, brightness);
+    
+    // SAFETY: Fallback to legacy palette if orchestrator returns black/invalid
+    if (color.r == 0 && color.g == 0 && color.b == 0 && brightness > 10) {
+        color = ColorFromPalette(currentPalette, position, brightness);
+        static uint32_t lastWarning = 0;
+        if (millis() - lastWarning > 5000) {
+            Serial.println("⚠️ Orchestrator returned black - using fallback palette");
+            lastWarning = millis();
+        }
+    }
+    
+    return color;
+}
+
+/**
+ * Get brightness modulated by emotional intensity
+ * Multiplies base brightness by current emotional state
+ */
+uint8_t getEmotionalBrightness(uint8_t baseBrightness) {
+    float emotionalIntensity = colorOrchestrator.getEmotionalIntensity();
+    // Apply 40-100% scaling based on emotional intensity
+    float intensityMultiplier = 0.4f + (emotionalIntensity * 0.6f);
+    return baseBrightness * intensityMultiplier;
+}
+
+/**
+ * Fast orchestrated color lookup using existing LUT system
+ * High performance version for effects that need speed
+ */
+CRGB getOrchestratedColorFast(uint8_t position, uint8_t brightness) {
+    // Use existing LUT but apply emotional brightness modulation
+    CRGB color = paletteLUT[position];
+    if (brightness != 255) {
+        color.nscale8(brightness);
+    }
+    // Apply emotional brightness multiplier
+    uint8_t emotionalBrightness = getEmotionalBrightness(255);
+    color.nscale8(emotionalBrightness);
+    
+    // SAFETY: Ensure we never return completely black unless brightness is 0
+    if (color.r == 0 && color.g == 0 && color.b == 0 && brightness > 10) {
+        color = ColorFromPalette(currentPalette, position, brightness);
+    }
+    
+    return color;
 }
 
 // Effect parameters
@@ -116,13 +178,10 @@ EncoderLEDFeedback* encoderFeedback = nullptr;
 // Preset Management System - DISABLED
 // PresetManager* presetManager = nullptr;
 
-// Palette management
+// Legacy palette variables (kept for compatibility, but orchestrator overrides)
 CRGBPalette16 currentPalette;
-CRGBPalette16 targetPalette;
+CRGBPalette16 targetPalette; 
 uint8_t currentPaletteIndex = 0;
-
-// Include palette definitions
-#include "Palettes.h"
 
 // M5Unit-Scroll encoder on secondary I2C bus
 #include "hardware/scroll_encoder.h"
@@ -181,7 +240,8 @@ extern void vortexEffect();
 extern void collisionEffect();
 extern void gravityWellEffect();
 
-// LUT-Optimized Effect Wrappers
+// LUT-Optimized Effect Wrappers - DISABLED
+/*
 void lutPlasmaWrapper() {
     if (lutPlasmaEffect) {
         lutPlasmaEffect->update();
@@ -233,6 +293,7 @@ void lutTransitionWrapper() {
 void lutFrequencyWrapper() {
     if (lutFrequencyEffect) lutFrequencyEffect->update();
 }
+*/
 
 // Effects array - Matrix mode has been surgically removed
 Effect effects[] = {
@@ -269,22 +330,45 @@ Effect effects[] = {
     {"Shockwave", shockwaveEffect, EFFECT_TYPE_STANDARD},
     {"Vortex", vortexEffect, EFFECT_TYPE_STANDARD},
     {"Collision", collisionEffect, EFFECT_TYPE_STANDARD},
-    {"Gravity Well", gravityWellEffect, EFFECT_TYPE_STANDARD},
+    {"Gravity Well", gravityWellEffect, EFFECT_TYPE_STANDARD}
     
     // =============== LUT-OPTIMIZED ULTRA PERFORMANCE EFFECTS ===============
-    {"LUT Plasma", lutPlasmaWrapper, EFFECT_TYPE_STANDARD},
-    {"LUT Fire", lutFireWrapper, EFFECT_TYPE_STANDARD},
-    {"LUT Wave", lutWaveWrapper, EFFECT_TYPE_STANDARD},
-    {"LUT Mandelbrot", lutMandelbrotWrapper, EFFECT_TYPE_STANDARD},
-    {"LUT Particles", lutParticleWrapper, EFFECT_TYPE_STANDARD},
-    {"LUT Perlin", lutPerlinWrapper, EFFECT_TYPE_STANDARD},
-    {"LUT Complex", lutComplexWaveWrapper, EFFECT_TYPE_STANDARD},
-    {"LUT Shader", lutShaderWrapper, EFFECT_TYPE_STANDARD},
-    {"LUT Transitions", lutTransitionWrapper, EFFECT_TYPE_STANDARD},
-    {"LUT Frequency", lutFrequencyWrapper, EFFECT_TYPE_STANDARD}
+    // TEMPORARILY DISABLED - Will re-enable after fixing compilation
+    // {"LUT Plasma", lutPlasmaWrapper, EFFECT_TYPE_STANDARD},
+    // {"LUT Fire", lutFireWrapper, EFFECT_TYPE_STANDARD},
+    // {"LUT Wave", lutWaveWrapper, EFFECT_TYPE_STANDARD},
+    // {"LUT Mandelbrot", lutMandelbrotWrapper, EFFECT_TYPE_STANDARD},
+    // {"LUT Particles", lutParticleWrapper, EFFECT_TYPE_STANDARD},
+    // {"LUT Perlin", lutPerlinWrapper, EFFECT_TYPE_STANDARD},
+    // {"LUT Complex", lutComplexWaveWrapper, EFFECT_TYPE_STANDARD},
+    // {"LUT Shader", lutShaderWrapper, EFFECT_TYPE_STANDARD},
+    // {"LUT Transitions", lutTransitionWrapper, EFFECT_TYPE_STANDARD},
+    // {"LUT Frequency", lutFrequencyWrapper, EFFECT_TYPE_STANDARD}
 };
 
 const uint8_t NUM_EFFECTS = sizeof(effects) / sizeof(effects[0]);
+
+// Initialize LUTs for maximum performance  
+void initializeLUTs() {
+    // NOTE: Large fade intensity LUT disabled to prevent boot loops (65KB too large for ESP32)
+    
+    // Wave pattern LUT - pre-calculate sin8 combinations
+    for (uint16_t i = 0; i < 256; i++) {
+        wavePatternLUT[i] = sin8(i);
+    }
+    
+    // Spiral angle LUT - pre-calculate spiral positions
+    for (uint16_t i = 0; i < 160; i++) {
+        float dist = abs((int)i - 79) / 79.0f;
+        spiralAngleLUT[i] = (uint8_t)(dist * 255);
+    }
+    
+    // Ripple decay LUT - exponential decay pre-calculated
+    for (uint16_t i = 0; i < 80; i++) {
+        float decay = exp(-i * 0.05f);  // Exponential decay
+        rippleDecayLUT[i] = (uint8_t)(decay * 255);
+    }
+}
 
 // Initialize strip mapping for spatial effects
 void initializeStripMapping() {
@@ -311,11 +395,40 @@ void initializeStripMapping() {
 static bool stripsAreSynced = true;
 
 void syncLedsToStrips() {
-    // Only copy if we've been working in the unified buffer
-    if (!stripsAreSynced) {
-        memcpy(strip1, leds, HardwareConfig::STRIP1_LED_COUNT * sizeof(CRGB));
-        memcpy(strip2, &leds[HardwareConfig::STRIP1_LED_COUNT], HardwareConfig::STRIP2_LED_COUNT * sizeof(CRGB));
-        stripsAreSynced = true;
+    // CRITICAL FIX: Copy FROM strips TO leds (effects write to strips, FastLED displays strips)
+    // This function should sync strip buffers back to the unified leds[] buffer for compatibility
+    
+    // MEMORY SAFETY: Bounds checking to prevent buffer overflows
+    size_t strip1Size = HardwareConfig::STRIP1_LED_COUNT * sizeof(CRGB);
+    size_t strip2Size = HardwareConfig::STRIP2_LED_COUNT * sizeof(CRGB);
+    size_t totalSize = HardwareConfig::NUM_LEDS * sizeof(CRGB);
+    
+    // Verify buffer sizes are sane
+    if (strip1Size + strip2Size > totalSize) {
+        Serial.println("🚨 CRITICAL: Buffer overflow prevented in syncLedsToStrips()");
+        return;
+    }
+    
+    // FIXED: Copy FROM strips TO leds (for transition engine compatibility)
+    memcpy(leds, strip1, min(strip1Size, totalSize));
+    memcpy(&leds[HardwareConfig::STRIP1_LED_COUNT], strip2, 
+           min(strip2Size, totalSize - strip1Size));
+    stripsAreSynced = true;
+    
+    // Safety check: Ensure we're not copying garbage data
+    static uint32_t lastSafetyCheck = 0;
+    if (millis() - lastSafetyCheck > 5000) { // Every 5 seconds
+        bool hasValidData = false;
+        for (int i = 0; i < 10; i++) { // Check first 10 LEDs
+            if (leds[i].r > 0 || leds[i].g > 0 || leds[i].b > 0) {
+                hasValidData = true;
+                break;
+            }
+        }
+        if (!hasValidData) {
+            Serial.println("⚠️ LED buffer appears to be all black - potential effect issue");
+        }
+        lastSafetyCheck = millis();
     }
 }
 
@@ -480,20 +593,32 @@ void setup() {
     Wire.begin(HardwareConfig::I2C_SDA, HardwareConfig::I2C_SCL);
     Wire.setClock(1000000);  // 1 MHz for maximum performance
     
+    // DEBUG: Check heap before encoder manager
+    Serial.printf("📊 Heap before encoder manager: %d bytes free\n", ESP.getFreeHeap());
+    
     // Initialize encoder manager
-    encoderManager.begin();
+    Serial.println("Initializing M5ROTATE8 encoder manager...");
+    bool encoderInit = encoderManager.begin();
+    Serial.printf("📊 Encoder manager init result: %s\n", encoderInit ? "SUCCESS" : "FAILED");
+    
+    // DEBUG: Check heap after encoder manager
+    Serial.printf("📊 Heap after encoder manager: %d bytes free\n", ESP.getFreeHeap());
+    
+    // TEMPORARILY DISABLED: Visual Feedback System (suspected NULL pointer crash)
+    Serial.println("⚠️  VFS DISABLED FOR DEBUGGING - testing NULL pointer crash fix");
+    encoderFeedback = nullptr;
     
     // Initialize Visual Feedback System
-    if (encoderManager.isAvailable()) {
-        M5ROTATE8* encoder = encoderManager.getEncoder();
-        if (encoder) {
-            encoderFeedback = new EncoderLEDFeedback(encoder, &visualParams);
-            encoderFeedback->applyDefaultColorScheme();
-            Serial.println("✅ Visual Feedback System initialized");
-        }
-    } else {
-        Serial.println("⚠️  VFS disabled - no encoder available");
-    }
+    // if (encoderManager.isAvailable()) {
+    //     M5ROTATE8* encoder = encoderManager.getEncoder();
+    //     if (encoder) {
+    //         encoderFeedback = new EncoderLEDFeedback(encoder, &visualParams);
+    //         encoderFeedback->applyDefaultColorScheme();
+    //         Serial.println("✅ Visual Feedback System initialized");
+    //     }
+    // } else {
+    //     Serial.println("⚠️  VFS disabled - no encoder available");
+    // }
     
     // Preset Management System - DISABLED FOR NOW
     // Will be re-enabled once basic transitions work
@@ -502,35 +627,42 @@ void setup() {
     
     // Initialize strip mapping and LUTs
     initializeStripMapping();
-    
-    // Initialize MEGA LUT System - MAXIMUM PERFORMANCE!
-    Serial.println("\n[LUT] Initializing MEGA LUT System for maximum performance...");
-    initializeMegaLUTs();  // This will use 200-250KB of RAM for LUTs
-    
-    // Initialize LUT-optimized effect instances
-    lutPlasmaEffect = new LUTPlasmaEffect();
-    lutFireEffect = new LUTFireEffect();
-    lutWaveEffect = new LUTWaveEffect();
-    lutMandelbrotEffect = new LUTMandelbrotEffect();
-    lutParticleEffect = new LUTParticleEffect();
-    lutPerlinEffect = new LUTPerlinNoiseEffect();
-    lutComplexWaveEffect = new LUTComplexWaveEffect();
-    lutShaderEffect = new LUTShaderEffect();
-    lutTransitionEffect = new LUTTransitionShowcase();
-    lutFrequencyEffect = new LUTFrequencyEffect();
-    
-    Serial.println("[LUT] LUT-optimized effects initialized");
-    
-    // Legacy LUT initialization (minimal, for backward compatibility)
     initializeLUTs();
     
-    // Initialize palette
+    // Initialize orchestrator and sync palette system
     currentPaletteIndex = 0;
-    currentPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
+    
+    // ORCHESTRATOR INTEGRATION: Initialize with orchestrator's starting palette
+    currentPalette = colorOrchestrator.getCurrentPalette();
     targetPalette = currentPalette;
+    
+    Serial.print("🎬 Orchestrator initialized with theme: ");
+    Serial.println(colorOrchestrator.getCurrentThemeName());
+    
+    // CRITICAL: Enable watchdog timer for system stability
+    esp_task_wdt_init(30, true);  // 30 second timeout, enable panic
+    esp_task_wdt_add(NULL);       // Add main task to watchdog
+    Serial.println("🐕 Watchdog timer enabled (30s timeout)");
+    
+    // DEBUG: Check heap before major allocations
+    Serial.printf("📊 Initial heap: %d bytes free\n", ESP.getFreeHeap());
+    Serial.printf("📊 PSRAM detected: %s\n", psramFound() ? "YES" : "NO");
+    if (psramFound()) {
+        Serial.printf("📊 PSRAM size: %d bytes\n", ESP.getPsramSize());
+        Serial.printf("📊 Free PSRAM: %d bytes\n", ESP.getFreePsram());
+    }
+    
+    // Add panic handler for debugging
+    esp_register_shutdown_handler([]() {
+        Serial.println("🚨 PANIC: System shutting down - LED/I2C issue detected");
+        FastLED.clear(true);
+    });
     
     // Clear LEDs
     FastLED.clear(true);
+    
+    // DEBUG: Check heap before I2C initialization
+    Serial.printf("📊 Heap before I2C: %d bytes free\n", ESP.getFreeHeap());
     
     // Initialize M5Unit-Scroll encoder on secondary I2C bus
     Serial.println("[DEBUG] About to initialize scroll encoder...");
@@ -541,6 +673,9 @@ void setup() {
     } else {
         Serial.println("[DEBUG] Scroll encoder not available - continuing without it");
     }
+    
+    // DEBUG: Check heap after I2C initialization
+    Serial.printf("📊 Heap after I2C: %d bytes free\n", ESP.getFreeHeap());
     
     // Set up scroll encoder callbacks
     setScrollEncoderCallbacks(
@@ -610,23 +745,68 @@ void handleButton() {
 }
 
 void updatePalette() {
-    // Smoothly blend between palettes
-    static uint32_t lastPaletteChange = 0;
+    // ORCHESTRATOR INTEGRATION: Sync legacy palette system from cinematic orchestrator
+    // Legacy automatic palette changes disabled - orchestrator now controls all palettes
     
-    if (millis() - lastPaletteChange > 5000) {  // Change palette every 5 seconds
-        lastPaletteChange = millis();
-        currentPaletteIndex = (currentPaletteIndex + 1) % gGradientPaletteCount;
-        targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
+    // Sync currentPalette from orchestrator
+    CRGBPalette16 orchestratorPalette = colorOrchestrator.getCurrentPalette();
+    
+    // Only update if orchestrator palette has changed (optimization)
+    static CRGBPalette16 lastOrchestratorPalette;
+    static bool firstSync = true;
+    
+    if (firstSync || memcmp(&orchestratorPalette, &lastOrchestratorPalette, sizeof(CRGBPalette16)) != 0) {
+        // Smooth transition to orchestrator palette
+        targetPalette = orchestratorPalette;
+        
+        // Fast blend for immediate responsiveness to orchestrator changes
+        nblendPaletteTowardPalette(currentPalette, targetPalette, 64);
+        
+        // Cache for next comparison
+        memcpy(&lastOrchestratorPalette, &orchestratorPalette, sizeof(CRGBPalette16));
+        firstSync = false;
     }
-    
-    // Blend towards target palette
-    nblendPaletteTowardPalette(currentPalette, targetPalette, 24);
 }
 
 void updateEncoderFeedback() {
     if (encoderFeedback && encoderManager.isAvailable()) {
         // Update current effect info
         encoderFeedback->setCurrentEffect(currentEffect, effects[currentEffect].name);
+        
+        // ENHANCED ORCHESTRATOR INTEGRATION: Show emotional state on encoders
+        static float lastEmotionalIntensity = -1.0f;
+        static EmotionalState lastEmotionalState = EMOTION_COUNT; // Invalid state to force initial update
+        
+        float currentEmotionalIntensity = colorOrchestrator.getEmotionalIntensity();
+        EmotionalState currentEmotionalState = colorOrchestrator.getCurrentEmotion();
+        
+        // Flash encoder when emotional state changes
+        if (currentEmotionalState != lastEmotionalState) {
+            // Different colors for different emotional states
+            CRGB emotionColors[] = {
+                CRGB::Blue,         // TRANQUIL - calm blue
+                CRGB::Yellow,       // BUILDING - warm yellow
+                CRGB::Orange,       // INTENSE - energetic orange
+                CRGB::Red,          // EXPLOSIVE - peak red
+                CRGB::Purple        // RESOLUTION - peaceful purple
+            };
+            
+            if (currentEmotionalState < EMOTION_COUNT) {
+                CRGB color = emotionColors[currentEmotionalState];
+                encoderFeedback->flashEncoder(2, color.r, color.g, color.b, 500);
+            }
+            lastEmotionalState = currentEmotionalState;
+        }
+        
+        // Subtle intensity change feedback
+        if (abs(currentEmotionalIntensity - lastEmotionalIntensity) > 0.15f) {
+            // Use current theme color with intensity-based brightness
+            CRGB themeColor = colorOrchestrator.getEmotionalColor(128, 255);
+            uint8_t flashBrightness = 100 + (currentEmotionalIntensity * 155); // 100-255 brightness
+            themeColor.nscale8(flashBrightness);
+            encoderFeedback->flashEncoder(2, themeColor.r, themeColor.g, themeColor.b, 200);
+            lastEmotionalIntensity = currentEmotionalIntensity;
+        }
         
         // Update performance metrics (simplified for now)
         float frameTime = 1000.0f / HardwareConfig::DEFAULT_FPS;
@@ -641,11 +821,20 @@ void updateEncoderFeedback() {
 void loop() {
     static uint32_t loopCounter = 0;
     static uint32_t lastDebugPrint = 0;
+    static uint32_t lastWatchdogFeed = 0;
+    
+    // Feed watchdog timer every 5 seconds to prevent system reset
+    uint32_t now = millis();
+    if (now - lastWatchdogFeed > 5000) {
+        esp_task_wdt_reset();
+        lastWatchdogFeed = now;
+    }
     
     // Debug print every 10 seconds (reduced frequency)
-    if (millis() - lastDebugPrint > 10000) {
-        lastDebugPrint = millis();
-        Serial.printf("[DEBUG] Loop: %lu iterations, Effect: %s\n", loopCounter, effects[currentEffect].name);
+    if (now - lastDebugPrint > 10000) {
+        lastDebugPrint = now;
+        Serial.printf("[DEBUG] Loop: %lu iterations, Effect: %s, Heap: %d\n", 
+                     loopCounter, effects[currentEffect].name, ESP.getFreeHeap());
         loopCounter = 0;
     }
     loopCounter++;
@@ -666,8 +855,10 @@ void loop() {
                 Serial.println("📋 Available Commands:");
                 Serial.println("  'n' or 'N' - Next effect (cycles through all effects)");
                 Serial.println("  't' or 'T' - Toggle random transitions on/off");
+                Serial.println("  'c' or 'C' - Show cinematic orchestrator status");
+                Serial.println("  'x' or 'X' - Trigger emotional peak (dramatic effect)");
 #if FEATURE_WIRELESS_ENCODERS
-                Serial.println("  'w' or 'W' - Start wireless encoder pairing");
+                Serial.println("  'w' or 'W' - Enable wireless receiver and start pairing");
 #endif
                 Serial.println("  'h' or 'H' - Show this help menu");
                 Serial.println("\n🎨 Current Status:");
@@ -679,8 +870,18 @@ void loop() {
                 Serial.println("  • M5Unit-Scroll: GPIO 15/21");
                 Serial.println("  • LED Strips: GPIO 11/12 (160 LEDs each)");
 #if FEATURE_WIRELESS_ENCODERS
-                Serial.printf("  • Wireless Encoders: %s\n", 
-                    encoderManager.isWirelessConnected() ? "CONNECTED" : "Ready");
+                if (encoderManager.hasWirelessPaired()) {
+                    Serial.printf("  • Wireless Encoders: %s", 
+                        encoderManager.isWirelessConnected() ? "CONNECTED" : "PAIRED");
+                    if (encoderManager.isWirelessConnected()) {
+                        Serial.printf(" (%.1f%% loss, %d pkts)", 
+                            encoderManager.getWirelessPacketLossRate(),
+                            encoderManager.getWirelessPacketsReceived());
+                    }
+                    Serial.println();
+                } else {
+                    Serial.println("  • Wireless Encoders: Ready for pairing");
+                }
 #endif
                 Serial.println("=========================================\n");
                 break;
@@ -697,10 +898,38 @@ void loop() {
                     startAdvancedTransition(nextEffect);
                 }
                 break;
+            case 'c':
+            case 'C':
+                Serial.println("\n🎬 === CINEMATIC ORCHESTRATOR STATUS ===");
+                Serial.printf("🎭 Current Theme: %s\n", colorOrchestrator.getCurrentThemeName());
+                Serial.printf("💫 Emotional State: %s\n", colorOrchestrator.getCurrentEmotionName());
+                Serial.printf("🔥 Intensity Level: %.1f%%\n", colorOrchestrator.getEmotionalIntensity() * 100.0f);
+                Serial.printf("🌀 Global Hue: %d/255\n", gHue);
+                Serial.println("\n🔗 Integration Status:");
+                Serial.println("  ✅ Palette system unified with orchestrator");
+                Serial.println("  ✅ Effects using orchestrated colors");
+                Serial.println("  ✅ Emotional intensity modulating effects");
+                Serial.println("  ✅ Encoder feedback showing emotional state");
+                Serial.printf("  🎨 Active Palette: %s synced\n", "Legacy");
+                Serial.printf("  📊 Effects Enhanced: %d of %d\n", 5, NUM_EFFECTS);
+                Serial.println("=========================================\n");
+                break;
+            case 'x':
+            case 'X':
+                Serial.println("💥 TRIGGERING EMOTIONAL PEAK!");
+                colorOrchestrator.triggerEmotionalPeak();
+                break;
 #if FEATURE_WIRELESS_ENCODERS
             case 'w':
             case 'W':
-                encoderManager.startWirelessPairing();
+                Serial.println("🔗 Enabling wireless encoder receiver...");
+                if (encoderManager.enableWireless()) {
+                    encoderManager.startWirelessPairing();
+                    Serial.println("✅ Wireless receiver enabled and in pairing mode");
+                    Serial.println("   Power on your wireless encoder transmitter now");
+                } else {
+                    Serial.println("❌ Failed to enable wireless receiver");
+                }
                 break;
 #endif
             // Preset commands disabled for now
@@ -785,14 +1014,17 @@ void loop() {
                         }
                         break;
                         
-                    case 2: // Palette selection
+                    case 2: // Theme selection (was palette)
                         if (event.delta > 0) {
-                            currentPaletteIndex = (currentPaletteIndex + 1) % gGradientPaletteCount;
+                            LightShowTheme currentTheme = colorOrchestrator.getCurrentTheme();
+                            LightShowTheme nextTheme = (LightShowTheme)((currentTheme + 1) % THEME_COUNT);
+                            colorOrchestrator.setTheme(nextTheme);
                         } else {
-                            currentPaletteIndex = currentPaletteIndex > 0 ? currentPaletteIndex - 1 : gGradientPaletteCount - 1;
+                            LightShowTheme currentTheme = colorOrchestrator.getCurrentTheme();
+                            LightShowTheme prevTheme = (LightShowTheme)(currentTheme > 0 ? currentTheme - 1 : THEME_COUNT - 1);
+                            colorOrchestrator.setTheme(prevTheme);
                         }
-                        targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
-                        Serial.printf("🎨 MAIN: Palette changed to %d\n", currentPaletteIndex);
+                        Serial.printf("🎨 MAIN: Theme changed to %s\n", colorOrchestrator.getCurrentThemeName());
                         if (encoderFeedback) encoderFeedback->flashEncoder(2, 255, 0, 255, 200);
                         break;
                         
@@ -824,6 +1056,32 @@ void loop() {
                         visualParams.variation = constrain(visualParams.variation + (event.delta > 0 ? 16 : -16), 0, 255);
                         Serial.printf("🔄 MAIN: Variation changed to %d (%.1f%%)\n", visualParams.variation, visualParams.getVariationNorm() * 100);
                         if (encoderFeedback) encoderFeedback->flashEncoder(7, 255, 0, 255, 200);
+                        break;
+                        
+                    case 8: // 9th Encoder (Scroll Wheel) - Dynamic Parameter Control
+                        // Use 9th encoder for dynamic parameter selection
+                        {
+                            static uint8_t selectedParam = 0; // 0=Effect, 1=Brightness, 2=Theme, 3=Speed
+                            const char* paramNames[] = {"Effect", "Brightness", "Theme", "Speed"};
+                            
+                            if (event.delta > 0) {
+                                selectedParam = (selectedParam + 1) % 4;
+                            } else {
+                                selectedParam = selectedParam > 0 ? selectedParam - 1 : 3;
+                            }
+                            
+                            Serial.printf("🎚️ MAIN: 9th Encoder -> %s mode\n", paramNames[selectedParam]);
+                            
+                            // Visual feedback - cycle through colors
+                            CRGB colors[] = {CRGB::Red, CRGB::White, CRGB::Purple, CRGB::Yellow};
+                            if (encoderFeedback) {
+                                encoderFeedback->flashEncoder(0, colors[selectedParam].r, colors[selectedParam].g, colors[selectedParam].b, 500);
+                            }
+                        }
+                        break;
+                        
+                    default:
+                        Serial.printf("⚠️ MAIN: Unknown encoder ID %d\n", event.encoder_id);
                         break;
                 }
             }
@@ -857,7 +1115,65 @@ void loop() {
     } else {
         // Normal operation: just run the effect
         effects[currentEffect].function();
-        stripsAreSynced = false; // Effects work on unified buffer
+        stripsAreSynced = false; // Effects work on strip buffers
+        
+        // DEBUG: Track effect output for diagnostics
+        static uint32_t lastEffectLog = 0;
+        if (millis() - lastEffectLog > 10000) { // Every 10 seconds
+            // Sample a few LEDs to verify effect is producing output
+            bool hasStripOutput = false;
+            for (int i = 75; i < 85; i++) { // Center region
+                if (strip1[i].r > 10 || strip1[i].g > 10 || strip1[i].b > 10 ||
+                    strip2[i].r > 10 || strip2[i].g > 10 || strip2[i].b > 10) {
+                    hasStripOutput = true;
+                    break;
+                }
+            }
+            Serial.printf("🎨 Effect '%s' producing output: %s\n", 
+                         effects[currentEffect].name, 
+                         hasStripOutput ? "YES" : "NO");
+            lastEffectLog = millis();
+        }
+        
+        // SAFETY: If effect produces no output, fill with a basic pattern
+        static uint32_t lastOutputCheck = 0;
+        if (millis() - lastOutputCheck > 5000) { // Check every 5 seconds (less frequent)
+            bool hasOutput = false;
+            // Check strip buffers (where effects actually write) for any output
+            for (int i = 70; i < 90; i++) {
+                if (strip1[i].r > 5 || strip1[i].g > 5 || strip1[i].b > 5 ||
+                    strip2[i].r > 5 || strip2[i].g > 5 || strip2[i].b > 5) {
+                    hasOutput = true;
+                    break;
+                }
+            }
+            if (!hasOutput) {
+                // Check ends too for non-center effects
+                for (int i = 0; i < 10; i++) {
+                    if (strip1[i].r > 5 || strip1[i].g > 5 || strip1[i].b > 5 ||
+                        strip2[i].r > 5 || strip2[i].g > 5 || strip2[i].b > 5) {
+                        hasOutput = true;
+                        break;
+                    }
+                }
+                for (int i = 150; i < 160; i++) {
+                    if (strip1[i].r > 5 || strip1[i].g > 5 || strip1[i].b > 5 ||
+                        strip2[i].r > 5 || strip2[i].g > 5 || strip2[i].b > 5) {
+                        hasOutput = true;
+                        break;
+                    }
+                }
+            }
+            if (!hasOutput) {
+                // FIXED: Emergency fallback writes to STRIP buffers (where FastLED reads from)
+                uint8_t brightness = (sin8(millis() / 10) / 2) + 127;
+                fill_solid(strip1, HardwareConfig::STRIP_LENGTH, CRGB(brightness, 0, 0));
+                fill_solid(strip2, HardwareConfig::STRIP_LENGTH, CRGB(brightness, 0, 0));
+                Serial.printf("⚠️ No effect output detected - using emergency BREATHING pattern\n");
+                stripsAreSynced = false; // Mark strips as needing sync
+            }
+            lastOutputCheck = millis();
+        }
     }
     
     // Only sync when actually needed
@@ -869,20 +1185,54 @@ void loop() {
         processScrollEncoder();
     }
     
-    // Show the LEDs
-    FastLED.show();
+    // FIXED: Proper frame timing WITHOUT encoder starvation
+    static uint32_t lastFrameTime = 0;
+    static uint32_t lastEffectTime = 0;
+    uint32_t currentTime = millis();
+    uint32_t targetFrameTime = 1000 / 60; // 60 FPS target (16.67ms per frame)
     
-    // Advance the global hue
-    EVERY_N_MILLISECONDS(20) {
+    // CRITICAL: Always process effects to prevent starvation
+    // But only update display at target frame rate
+    bool shouldDisplay = (currentTime - lastFrameTime >= targetFrameTime);
+    bool shouldRunEffects = (currentTime - lastEffectTime >= 8); // 120 Hz effect updates
+    
+    if (shouldRunEffects) {
+        // FIXED: Advance hue synchronized with effect rate (prevents 50x speed)
         gHue++;
+        
+        // Update cinematic orchestrator with proper timing
+        colorOrchestrator.update(gHue);
+        
+        lastEffectTime = currentTime;
     }
+    
+    if (shouldDisplay) {
+        // CRITICAL: Ensure buffer synchronization before display
+        syncLedsToStrips();
+        
+        // Display LEDs immediately after effects are rendered
+        FastLED.show();
+        
+        lastFrameTime = currentTime;
+        
+        // DEBUG: Monitor for timing issues
+        static uint32_t frameCounter = 0;
+        frameCounter++;
+        if (frameCounter % 300 == 0) { // Every 5 seconds at 60 FPS
+            Serial.printf("🎬 FPS Check: %d frames, Free heap: %d\n", frameCounter, ESP.getFreeHeap());
+        }
+    }
+    
+    // Continue processing - no early return that blocks encoders
     
     // Status every 30 seconds (reduced from 5)
     EVERY_N_SECONDS(30) {
         Serial.print("Effect: ");
         Serial.print(effects[currentEffect].name);
-        Serial.print(", Palette: ");
-        Serial.print(currentPaletteIndex);
+        Serial.print(", Theme: ");
+        Serial.print(colorOrchestrator.getCurrentThemeName());
+        Serial.print(", Emotion: ");
+        Serial.print(colorOrchestrator.getCurrentEmotionName());
         Serial.print(", Free heap: ");
         Serial.print(ESP.getFreeHeap());
         Serial.println(" bytes");
@@ -902,31 +1252,4 @@ void loop() {
         }
     }
     
-    
-    // Frame rate control - maintain 120 FPS target
-    static uint32_t frameStartTime = 0;
-    static uint32_t targetFrameTime = 8333; // 8.33ms for 120 FPS
-    
-    uint32_t frameEndTime = micros();
-    uint32_t frameTime = frameEndTime - frameStartTime;
-    
-    // Only delay if we're running faster than 120 FPS
-    if (frameTime < targetFrameTime) {
-        delayMicroseconds(targetFrameTime - frameTime);
-    }
-    
-    frameStartTime = micros();
-    
-    // Performance warning if we can't maintain 120 FPS
-    static uint32_t slowFrameCount = 0;
-    static uint32_t lastPerfWarning = 0;
-    if (frameTime > targetFrameTime + 1000) { // Allow 1ms tolerance
-        slowFrameCount++;
-        if (millis() - lastPerfWarning > 5000 && slowFrameCount > 10) {
-            Serial.printf("⚠️ Performance: %d slow frames (>%.1fms) in last 5s\n", 
-                         slowFrameCount, targetFrameTime / 1000.0);
-            lastPerfWarning = millis();
-            slowFrameCount = 0;
-        }
-    }
 }

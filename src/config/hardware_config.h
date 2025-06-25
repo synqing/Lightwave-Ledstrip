@@ -6,9 +6,9 @@
 // Hardware pin definitions for Light Crystals
 namespace HardwareConfig {
 
-#if LED_STRIPS_MODE
-    // ==================== LED STRIPS MODE ====================
+    // ==================== LED STRIPS CONFIGURATION ====================
     // Dual 160-LED strips in opposite physical layout
+    // Matrix mode has been surgically removed - strips mode is now permanent
     
     // Strip Configuration
     constexpr uint16_t STRIP1_LED_COUNT = 160;
@@ -57,30 +57,20 @@ namespace HardwareConfig {
     constexpr uint16_t NUM_LEDS = TOTAL_LEDS;
     constexpr uint16_t DEFAULT_FPS = STRIP_FPS;
     constexpr uint8_t DEFAULT_BRIGHTNESS = STRIP_BRIGHTNESS;
-    
-#else
-    // ==================== LED MATRIX MODE (Original) ====================
-    // 9x9 matrix configuration (81 LEDs)
-    
-    constexpr uint8_t LED_DATA_PIN = 6;     // GPIO6 for matrix
-    constexpr uint16_t NUM_LEDS = 81;       // 9x9 matrix
-    constexpr uint8_t NUM_STRIPS = 1;       // Single matrix
-    constexpr uint16_t DEFAULT_FPS = 120;
-    constexpr uint8_t DEFAULT_BRIGHTNESS = 96;
-    constexpr uint32_t BUTTON_DEBOUNCE_MS = 500;
-    
-#endif
 
     // Common pins for both modes
     constexpr uint8_t BUTTON_PIN = 0;  // BOOT button on DevKit
     constexpr uint8_t POWER_PIN = 48;  // RGB LED power on some DevKits (or use any free GPIO)
     
-#if LED_STRIPS_MODE
     // M5Stack 8encoder I2C pins for strips hardware
     constexpr uint8_t I2C_SDA = 13;
     constexpr uint8_t I2C_SCL = 14;
     constexpr uint8_t M5STACK_8ENCODER_ADDR = 0x41;  // Default I2C address
-#endif
+    
+    // M5Unit-Scroll I2C pins (secondary I2C bus)
+    constexpr uint8_t I2C_SDA_SCROLL = 20;
+    constexpr uint8_t I2C_SCL_SCROLL = 21;
+    constexpr uint8_t M5UNIT_SCROLL_ADDR = 0x40;  // Default I2C address
     
     // Audio input pins (for future use)
     constexpr uint8_t I2S_SCK = 3;

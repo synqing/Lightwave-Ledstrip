@@ -591,23 +591,7 @@ void setup() {
     // Serial.println("   's' = Quick save preset");
     // Serial.println("   'l' = Quick load preset");
     Serial.println("");
-    Serial.println("[DEBUG] Starting dual-core processing...");
-    
-    // Create frame synchronization semaphore
-    frameSemaphore = xSemaphoreCreateBinary();
-    xSemaphoreGive(frameSemaphore);
-    
-    // Create I/O task on Core 0
-    xTaskCreatePinnedToCore(
-        IOTaskCode,      // Task function
-        "IOTask",        // Name
-        8192,            // Stack size
-        NULL,            // Parameters
-        2,               // Priority (higher than render)
-        &IOTask,         // Task handle
-        0);              // Core 0
-    
-    Serial.println("[DEBUG] Entering main render loop on Core 1...");
+    Serial.println("[DEBUG] Entering main loop with MAXIMUM single-core performance...");
 }
 
 void handleButton() {
@@ -654,43 +638,6 @@ void updateEncoderFeedback() {
     }
 }
 
-// Performance optimization: Use both cores
-TaskHandle_t RenderTask;
-TaskHandle_t IOTask;
-SemaphoreHandle_t frameSemaphore;
-
-// Core 0: Handle all I/O operations
-void IOTaskCode(void * parameter) {
-    for(;;) {
-        // Process encoder events
-        QueueHandle_t encoderEventQueue = encoderManager.getEventQueue();
-        if (encoderEventQueue != NULL) {
-            EncoderEvent event;
-            while (xQueueReceive(encoderEventQueue, &event, 0) == pdTRUE) {
-                // Process encoder event (moved from main loop)
-                if (event.encoder_id == 0 && !transitionEngine.isActive()) {
-                    uint8_t newEffect = (event.delta > 0) ? 
-                        (currentEffect + 1) % NUM_EFFECTS : 
-                        (currentEffect > 0 ? currentEffect - 1 : NUM_EFFECTS - 1);
-                    if (newEffect != currentEffect) {
-                        startAdvancedTransition(newEffect);
-                    }
-                }
-                // Other encoder processing...
-            }
-        }
-        
-        // Process scroll encoder
-        if (scrollEncoderAvailable) {
-            processScrollEncoder();
-        }
-        
-        // Yield to other tasks
-        vTaskDelay(1);
-    }
-}
-
-// Core 1: Main render loop
 void loop() {
     static uint32_t loopCounter = 0;
     static uint32_t lastDebugPrint = 0;

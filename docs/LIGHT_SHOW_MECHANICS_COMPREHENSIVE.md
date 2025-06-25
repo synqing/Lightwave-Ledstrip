@@ -98,7 +98,7 @@ graph TB
 | **Controller** | ESP32-S3 | Dual-core @ 240MHz |
 | **Data Pins** | GPIO 11 & 12 | Parallel output via RMT |
 | **Frame Rate** | 120 FPS | 8.33ms per frame |
-| **Memory** | 8MB Flash, 320KB RAM | No PSRAM |
+| **Memory** | 8MB Flash, 320KB RAM | 16MB PSRAM |
 
 ### 1.2 Control Interface Architecture
 

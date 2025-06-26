@@ -211,12 +211,9 @@ void waveEffect() {
     fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, fadeAmount);
     fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, fadeAmount);
     
-    // Emotional intensity affects wave speed
-    float emotionalIntensity = colorOrchestrator.getEmotionalIntensity();
-    // FIXED: Correct speed mapping - low speed = slow movement
-    uint16_t baseSpeed = map(paletteSpeed, 1, 50, 10, 200);  // 1=slow, 50=fast
-    uint16_t waveSpeed = baseSpeed + (emotionalIntensity * baseSpeed * 0.5f); // Up to 1.5x speed
-    wavePosition += waveSpeed;
+    // UNIFIED SPEED: Use consistent speed system
+    float speed = getUnifiedSpeed() * 100.0f;  // Base wave speed
+    wavePosition += speed;
     
     // Use pre-calculated distance lookup
     extern uint8_t distanceFromCenter[];
@@ -278,7 +275,7 @@ void rippleEffect() {
     for (uint8_t r = 0; r < 5; r++) {
         if (!ripples[r].active) continue;
         
-        ripples[r].radius += ripples[r].speed * (paletteSpeed / 50.0f);  // FIXED: Slower ripple expansion
+        ripples[r].radius += ripples[r].speed * getUnifiedSpeed();  // UNIFIED: Consistent speed
         
         if (ripples[r].radius > HardwareConfig::STRIP_HALF_LENGTH) {
             ripples[r].active = false;
@@ -690,10 +687,10 @@ void collisionEffect() {
     fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 30);
     
     if (!exploding) {
-        // Move particles toward center - FIXED: Much slower speed scaling
-        float speedMultiplier = paletteSpeed / 100.0f;  // 0.01 to 0.5 range
-        particle1Pos += speedMultiplier;
-        particle2Pos -= speedMultiplier;
+        // Move particles toward center - UNIFIED: Consistent speed
+        float speed = getUnifiedSpeed() * 0.5f;  // Slower for dramatic effect
+        particle1Pos += speed;
+        particle2Pos -= speed;
         
         // Draw particles
         for (int trail = 0; trail < 10; trail++) {
@@ -720,8 +717,8 @@ void collisionEffect() {
             explosionRadius = 0;
         }
     } else {
-        // Explosion expanding from center - FIXED: Consistent speed scaling
-        explosionRadius += paletteSpeed / 50.0f;  // Much slower expansion
+        // Explosion expanding from center - UNIFIED: Consistent speed
+        explosionRadius += getUnifiedSpeed() * 0.8f;  // Moderate expansion speed
         
         for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
             float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
@@ -772,8 +769,8 @@ void gravityWellEffect() {
     for (int p = 0; p < 20; p++) {
         if (particles[p].active) {
             float distFromCenter = particles[p].position - HardwareConfig::STRIP_CENTER_POINT;
-            // FIXED: Much weaker gravity for controllable speed
-            float gravity = -distFromCenter * 0.001f * paletteSpeed / 10.0f;
+            // UNIFIED: Consistent gravity strength
+            float gravity = -distFromCenter * 0.01f * getUnifiedSpeed();
             
             particles[p].velocity += gravity;
             particles[p].velocity *= 0.95f; // Damping

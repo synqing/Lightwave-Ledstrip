@@ -108,6 +108,10 @@ void updatePaletteLUT() {
  * Drop-in replacement for ColorFromPalette that adds cinematic intelligence
  */
 CRGB getOrchestratedColor(uint8_t position, uint8_t brightness) {
+    // CRITICAL FIX: Bypass orchestrator completely - it's causing timing/state corruption
+    return ColorFromPalette(currentPalette, position, brightness);
+    
+    /* DISABLED - Orchestrator causing LED state issues
     CRGB color = colorOrchestrator.getEmotionalColor(position, brightness);
     
     // DEBUG: Log orchestrator color returns periodically
@@ -129,6 +133,7 @@ CRGB getOrchestratedColor(uint8_t position, uint8_t brightness) {
     }
     
     return color;
+    */
 }
 
 /**
@@ -147,6 +152,10 @@ uint8_t getEmotionalBrightness(uint8_t baseBrightness) {
  * High performance version for effects that need speed
  */
 CRGB getOrchestratedColorFast(uint8_t position, uint8_t brightness) {
+    // CRITICAL FIX: Bypass orchestrator completely - it's causing timing/state corruption
+    return ColorFromPalette(currentPalette, position, brightness);
+    
+    /* DISABLED - Orchestrator causing LED state issues
     // Use existing LUT but apply emotional brightness modulation
     CRGB color = paletteLUT[position];
     if (brightness != 255) {
@@ -162,6 +171,7 @@ CRGB getOrchestratedColorFast(uint8_t position, uint8_t brightness) {
     }
     
     return color;
+    */
 }
 
 // Effect parameters

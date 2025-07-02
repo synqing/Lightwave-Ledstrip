@@ -21,6 +21,7 @@
 #include "utils/SerialMenu.h"
 #endif
 
+
 // LED Type Configuration
 #define LED_TYPE WS2812
 #define COLOR_ORDER GRB
@@ -574,6 +575,7 @@ void setup() {
     Serial.println("\n=== Light Crystals - Dual LED Strips ===");
     Serial.println("Matrix mode has been surgically removed");
     Serial.println("Mode: Dual 160-LED Strips");
+    
     Serial.print("Strip 1 Pin: GPIO");
     Serial.println(HardwareConfig::STRIP1_DATA_PIN);
     Serial.print("Strip 2 Pin: GPIO");
@@ -839,23 +841,49 @@ void updateEncoderFeedback() {
 void loop() {
     static uint32_t loopCounter = 0;
     static uint32_t lastDebugPrint = 0;
-    static uint32_t lastWatchdogFeed = 0;
+    static uint32_t frameStartTime = 0;
+    static uint32_t totalFrameTime = 0;
+    static uint32_t maxFrameTime = 0;
+    static uint32_t minFrameTime = 999999;
     
-    // Feed watchdog timer every 5 seconds to prevent system reset
-    uint32_t now = millis();
-    if (now - lastWatchdogFeed > 5000) {
-        esp_task_wdt_reset();
-        lastWatchdogFeed = now;
-    }
+    // Precise frame timing measurement
+    uint32_t currentTime = micros();
+    uint32_t frameTime = currentTime - frameStartTime;
+    frameStartTime = currentTime;
     
-    // Debug print every 10 seconds (reduced frequency)
-    if (now - lastDebugPrint > 10000) {
-        lastDebugPrint = now;
-        Serial.printf("[DEBUG] Loop: %lu iterations, Effect: %s, Heap: %d\n", 
-                     loopCounter, effects[currentEffect].name, ESP.getFreeHeap());
+    // Debug print every second
+    if (millis() - lastDebugPrint > 1000) {
+        lastDebugPrint = millis();
+        float fps = (float)loopCounter;  // Iterations per second = FPS
+        float avgFrameTime = (loopCounter > 0) ? (float)totalFrameTime / (float)loopCounter : 0;
+        float avgFPS = (avgFrameTime > 0) ? 1000000.0f / avgFrameTime : 0;
+        Serial.printf("[PERF] FPS: %.1f (avg: %.1f), Frame time: %.1fµs (min: %luµs, max: %luµs), Effect: %s\n", 
+                      fps, avgFPS, avgFrameTime, minFrameTime, maxFrameTime, effects[currentEffect].name);
+        
+        // Additional debug: Check if any LEDs are lit
+        bool anyLit = false;
+        for (int i = 0; i < 10; i++) {  // Check first 10 LEDs
+            if (leds[i].r > 0 || leds[i].g > 0 || leds[i].b > 0) {
+                anyLit = true;
+                break;
+            }
+        }
+        Serial.printf("[DEBUG] LEDs lit: %s, Brightness: %d\n", 
+                      anyLit ? "YES" : "NO", FastLED.getBrightness());
+        
         loopCounter = 0;
+        totalFrameTime = 0;
+        maxFrameTime = 0;
+        minFrameTime = 999999;
     }
     loopCounter++;
+    
+    // Track frame time statistics
+    if (frameTime > 0 && frameTime < 1000000) {  // Sanity check
+        totalFrameTime += frameTime;
+        if (frameTime > maxFrameTime) maxFrameTime = frameTime;
+        if (frameTime < minFrameTime) minFrameTime = frameTime;
+    }
     
 #if FEATURE_BUTTON_CONTROL
     // Use button control for boards that have buttons
@@ -1133,74 +1161,52 @@ void loop() {
     } else {
         // Normal operation: just run the effect
         effects[currentEffect].function();
-        stripsAreSynced = false; // Effects work on strip buffers
-        
-        // DEBUG: Track effect output for diagnostics
-        static uint32_t lastEffectLog = 0;
-        if (millis() - lastEffectLog > 10000) { // Every 10 seconds
-            // Sample a few LEDs to verify effect is producing output
-            bool hasStripOutput = false;
-            for (int i = 75; i < 85; i++) { // Center region
-                if (strip1[i].r > 10 || strip1[i].g > 10 || strip1[i].b > 10 ||
-                    strip2[i].r > 10 || strip2[i].g > 10 || strip2[i].b > 10) {
-                    hasStripOutput = true;
-                    break;
-                }
-            }
-            Serial.printf("🎨 Effect '%s' producing output: %s\n", 
-                         effects[currentEffect].name, 
-                         hasStripOutput ? "YES" : "NO");
-            lastEffectLog = millis();
-        }
-        
-        // SAFETY: If effect produces no output, fill with a basic pattern
-        static uint32_t lastOutputCheck = 0;
-        if (millis() - lastOutputCheck > 5000) { // Check every 5 seconds (less frequent)
-            bool hasOutput = false;
-            // Check strip buffers (where effects actually write) for any output
-            for (int i = 70; i < 90; i++) {
-                if (strip1[i].r > 5 || strip1[i].g > 5 || strip1[i].b > 5 ||
-                    strip2[i].r > 5 || strip2[i].g > 5 || strip2[i].b > 5) {
-                    hasOutput = true;
-                    break;
-                }
-            }
-            if (!hasOutput) {
-                // Check ends too for non-center effects
-                for (int i = 0; i < 10; i++) {
-                    if (strip1[i].r > 5 || strip1[i].g > 5 || strip1[i].b > 5 ||
-                        strip2[i].r > 5 || strip2[i].g > 5 || strip2[i].b > 5) {
-                        hasOutput = true;
-                        break;
-                    }
-                }
-                for (int i = 150; i < 160; i++) {
-                    if (strip1[i].r > 5 || strip1[i].g > 5 || strip1[i].b > 5 ||
-                        strip2[i].r > 5 || strip2[i].g > 5 || strip2[i].b > 5) {
-                        hasOutput = true;
-                        break;
-                    }
-                }
-            }
-            if (!hasOutput) {
-                // FIXED: Emergency fallback writes to STRIP buffers (where FastLED reads from)
-                uint8_t brightness = (sin8(millis() / 10) / 2) + 127;
-                fill_solid(strip1, HardwareConfig::STRIP_LENGTH, CRGB(brightness, 0, 0));
-                fill_solid(strip2, HardwareConfig::STRIP_LENGTH, CRGB(brightness, 0, 0));
-                Serial.printf("⚠️ No effect output detected - using emergency BREATHING pattern\n");
-                stripsAreSynced = false; // Mark strips as needing sync
-            }
-            lastOutputCheck = millis();
-        }
+        // Check which buffer the effect uses and sync appropriately
+        // Most strip effects write directly to strip1/strip2, so sync back to leds
+        syncStripsToLeds();  // Sync strips back to unified LED buffer
     }
     
     // Only sync when actually needed
     syncLedsToStrips();
     
     // Process scroll encoder input (non-blocking)
-    // Re-enabled with error handling
-    if (scrollEncoderAvailable) {
-        processScrollEncoder();
+    // DISABLED - CAUSING CRASHES
+    // processScrollEncoder();
+    
+    // Debug output every 2 seconds to reduce overhead
+    EVERY_N_SECONDS(2) {
+        // Count lit LEDs in each strip
+        int strip1LitCount = 0;
+        int strip2LitCount = 0;
+        
+        for (int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+            if (strip1[i].r > 0 || strip1[i].g > 0 || strip1[i].b > 0) {
+                strip1LitCount++;
+            }
+            if (strip2[i].r > 0 || strip2[i].g > 0 || strip2[i].b > 0) {
+                strip2LitCount++;
+            }
+        }
+        
+        Serial.printf("[DEBUG] Strip1 lit: %d/%d, Strip2 lit: %d/%d, gHue: %d, Brightness: %d\n",
+                      strip1LitCount, HardwareConfig::STRIP_LENGTH, strip2LitCount, HardwareConfig::STRIP_LENGTH, gHue, FastLED.getBrightness());
+        
+        // Also check if any LED in the unified buffer is lit
+        int unifiedLitCount = 0;
+        for (int i = 0; i < HardwareConfig::TOTAL_LEDS; i++) {
+            if (leds[i].r > 0 || leds[i].g > 0 || leds[i].b > 0) {
+                unifiedLitCount++;
+            }
+        }
+        Serial.printf("[DEBUG] Unified buffer lit: %d/%d\n", unifiedLitCount, HardwareConfig::TOTAL_LEDS);
+    }
+    
+    // Show the LEDs
+    FastLED.show();
+    
+    // Advance the global hue
+    EVERY_N_MILLISECONDS(20) {
+        gHue++;
     }
     
     // FIXED: Proper frame timing WITHOUT encoder starvation
@@ -1275,4 +1281,7 @@ void loop() {
         }
     }
     
+    // NO DELAY - Run at maximum possible FPS for best performance
+    // The ESP32-S3 and FastLED will naturally limit to a sustainable rate
+    // Removing artificial delays allows the system to run at its full potential
 }

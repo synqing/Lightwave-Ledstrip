@@ -16,6 +16,7 @@
 #include "utils/SerialMenu.h"
 #endif
 
+
 // LED Type Configuration
 #define LED_TYPE WS2812
 #define COLOR_ORDER GRB
@@ -328,6 +329,7 @@ void setup() {
     Serial.println("\n=== Light Crystals - Dual LED Strips ===");
     Serial.println("Matrix mode has been surgically removed");
     Serial.println("Mode: Dual 160-LED Strips");
+    
     Serial.print("Strip 1 Pin: GPIO");
     Serial.println(HardwareConfig::STRIP1_DATA_PIN);
     Serial.print("Strip 2 Pin: GPIO");
@@ -501,12 +503,24 @@ void updateEncoderFeedback() {
 void loop() {
     static uint32_t loopCounter = 0;
     static uint32_t lastDebugPrint = 0;
+    static uint32_t frameStartTime = 0;
+    static uint32_t totalFrameTime = 0;
+    static uint32_t maxFrameTime = 0;
+    static uint32_t minFrameTime = 999999;
+    
+    // Precise frame timing measurement
+    uint32_t currentTime = micros();
+    uint32_t frameTime = currentTime - frameStartTime;
+    frameStartTime = currentTime;
     
     // Debug print every second
     if (millis() - lastDebugPrint > 1000) {
         lastDebugPrint = millis();
-        Serial.printf("[DEBUG] Loop running: %lu iterations, Effect: %s, gHue: %d\n", 
-                      loopCounter, effects[currentEffect].name, gHue);
+        float fps = (float)loopCounter;  // Iterations per second = FPS
+        float avgFrameTime = (loopCounter > 0) ? (float)totalFrameTime / (float)loopCounter : 0;
+        float avgFPS = (avgFrameTime > 0) ? 1000000.0f / avgFrameTime : 0;
+        Serial.printf("[PERF] FPS: %.1f (avg: %.1f), Frame time: %.1fµs (min: %luµs, max: %luµs), Effect: %s\n", 
+                      fps, avgFPS, avgFrameTime, minFrameTime, maxFrameTime, effects[currentEffect].name);
         
         // Additional debug: Check if any LEDs are lit
         bool anyLit = false;
@@ -520,8 +534,18 @@ void loop() {
                       anyLit ? "YES" : "NO", FastLED.getBrightness());
         
         loopCounter = 0;
+        totalFrameTime = 0;
+        maxFrameTime = 0;
+        minFrameTime = 999999;
     }
     loopCounter++;
+    
+    // Track frame time statistics
+    if (frameTime > 0 && frameTime < 1000000) {  // Sanity check
+        totalFrameTime += frameTime;
+        if (frameTime > maxFrameTime) maxFrameTime = frameTime;
+        if (frameTime < minFrameTime) minFrameTime = frameTime;
+    }
     
 #if FEATURE_BUTTON_CONTROL
     // Use button control for boards that have buttons
@@ -687,8 +711,8 @@ void loop() {
     // DISABLED - CAUSING CRASHES
     // processScrollEncoder();
     
-    // Debug output every second to understand effect freezing
-    EVERY_N_SECONDS(1) {
+    // Debug output every 2 seconds to reduce overhead
+    EVERY_N_SECONDS(2) {
         // Count lit LEDs in each strip
         int strip1LitCount = 0;
         int strip2LitCount = 0;
@@ -749,6 +773,7 @@ void loop() {
     }
     
     
-    // Frame rate control - reduce from 120 to 60 FPS for stability
-    delay(16);  // ~60 FPS instead of 120
+    // NO DELAY - Run at maximum possible FPS for best performance
+    // The ESP32-S3 and FastLED will naturally limit to a sustainable rate
+    // Removing artificial delays allows the system to run at its full potential
 }

@@ -505,7 +505,20 @@ void loop() {
     // Debug print every second
     if (millis() - lastDebugPrint > 1000) {
         lastDebugPrint = millis();
-        Serial.printf("[DEBUG] Loop running: %lu iterations, Effect: %s\n", loopCounter, effects[currentEffect].name);
+        Serial.printf("[DEBUG] Loop running: %lu iterations, Effect: %s, gHue: %d\n", 
+                      loopCounter, effects[currentEffect].name, gHue);
+        
+        // Additional debug: Check if any LEDs are lit
+        bool anyLit = false;
+        for (int i = 0; i < 10; i++) {  // Check first 10 LEDs
+            if (leds[i].r > 0 || leds[i].g > 0 || leds[i].b > 0) {
+                anyLit = true;
+                break;
+            }
+        }
+        Serial.printf("[DEBUG] LEDs lit: %s, Brightness: %d\n", 
+                      anyLit ? "YES" : "NO", FastLED.getBrightness());
+        
         loopCounter = 0;
     }
     loopCounter++;
@@ -665,11 +678,42 @@ void loop() {
     } else {
         // Normal operation: just run the effect
         effects[currentEffect].function();
+        // Check which buffer the effect uses and sync appropriately
+        // Most strip effects write directly to strip1/strip2, so sync back to leds
+        syncStripsToLeds();  // Sync strips back to unified LED buffer
     }
     
     // Process scroll encoder input (non-blocking)
     // DISABLED - CAUSING CRASHES
     // processScrollEncoder();
+    
+    // Debug output every second to understand effect freezing
+    EVERY_N_SECONDS(1) {
+        // Count lit LEDs in each strip
+        int strip1LitCount = 0;
+        int strip2LitCount = 0;
+        
+        for (int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+            if (strip1[i].r > 0 || strip1[i].g > 0 || strip1[i].b > 0) {
+                strip1LitCount++;
+            }
+            if (strip2[i].r > 0 || strip2[i].g > 0 || strip2[i].b > 0) {
+                strip2LitCount++;
+            }
+        }
+        
+        Serial.printf("[DEBUG] Strip1 lit: %d/%d, Strip2 lit: %d/%d, gHue: %d, Brightness: %d\n",
+                      strip1LitCount, HardwareConfig::STRIP_LENGTH, strip2LitCount, HardwareConfig::STRIP_LENGTH, gHue, FastLED.getBrightness());
+        
+        // Also check if any LED in the unified buffer is lit
+        int unifiedLitCount = 0;
+        for (int i = 0; i < HardwareConfig::TOTAL_LEDS; i++) {
+            if (leds[i].r > 0 || leds[i].g > 0 || leds[i].b > 0) {
+                unifiedLitCount++;
+            }
+        }
+        Serial.printf("[DEBUG] Unified buffer lit: %d/%d\n", unifiedLitCount, HardwareConfig::TOTAL_LEDS);
+    }
     
     // Show the LEDs
     FastLED.show();

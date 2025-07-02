@@ -172,13 +172,18 @@ void bpm() {
 
 void waveEffect() {
     // CENTER ORIGIN WAVES - Start from center LEDs 79/80 and propagate outward
-    static uint16_t wavePosition = 0;
+    static uint32_t wavePosition = 0;  // Changed to uint32_t to prevent overflow
     
     fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, fadeAmount);
     fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, fadeAmount);
     
     uint16_t waveSpeed = map(paletteSpeed, 1, 50, 100, 10);
     wavePosition += waveSpeed;
+    
+    // Prevent overflow by wrapping
+    if (wavePosition > 65535) {
+        wavePosition = wavePosition % 65536;
+    }
     
     for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
         // Calculate distance from CENTER (79/80)
@@ -306,8 +311,13 @@ void stripBPM() {
 // NEW STRIP-SPECIFIC EFFECT - CENTER ORIGIN PLASMA
 void stripPlasma() {
     // CENTER ORIGIN PLASMA - Plasma field generated from center LEDs 79/80
-    static uint16_t time = 0;
+    static uint32_t time = 0;
     time += paletteSpeed;
+    
+    // Prevent overflow
+    if (time > 65535) {
+        time = time % 65536;
+    }
     
     for (int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
         // Calculate distance from CENTER (79/80)
@@ -331,8 +341,13 @@ void stripPlasma() {
 // ============== MATHEMATICAL PATTERNS ==============
 
 void plasma() {
-    static uint16_t time = 0;
+    static uint32_t time = 0;
     time += paletteSpeed;
+    
+    // Prevent overflow
+    if (time > 65535) {
+        time = time % 65536;
+    }
     
     for (int i = 0; i < HardwareConfig::NUM_LEDS; i++) {
         float v1 = sin((float)i / 8.0f + time / 100.0f);
@@ -363,10 +378,12 @@ void fire() {
     }
     
     // Ignite new sparks at CENTER (79/80) - intensity controls spark frequency and heat
-    uint8_t sparkChance = 120 * visualParams.getIntensityNorm();
+    float intensityNorm = visualParams.getIntensityNorm();
+    if (intensityNorm < 0.1f) intensityNorm = 0.1f; // Ensure minimum activity
+    uint8_t sparkChance = 120 * intensityNorm;
     if(random8() < sparkChance) {
         int center = HardwareConfig::STRIP_CENTER_POINT + random8(2); // 79 or 80
-        uint8_t heatAmount = 160 + (95 * visualParams.getIntensityNorm());
+        uint8_t heatAmount = 160 + (95 * intensityNorm);
         heat[center] = qadd8(heat[center], random8(160, heatAmount));
     }
     
@@ -385,8 +402,13 @@ void fire() {
 }
 
 void ocean() {
-    static uint16_t waterOffset = 0;
+    static uint32_t waterOffset = 0;
     waterOffset += paletteSpeed / 2;
+    
+    // Prevent overflow
+    if (waterOffset > 65535) {
+        waterOffset = waterOffset % 65536;
+    }
     
     for (int i = 0; i < HardwareConfig::NUM_LEDS; i++) {
         // Create wave-like motion
@@ -406,8 +428,13 @@ void ocean() {
 // NEW STRIP-SPECIFIC EFFECT - CENTER ORIGIN OCEAN
 void stripOcean() {
     // CENTER ORIGIN OCEAN - Waves emanate from center LEDs 79/80
-    static uint16_t waterOffset = 0;
+    static uint32_t waterOffset = 0;
     waterOffset += paletteSpeed / 2;
+    
+    // Prevent overflow
+    if (waterOffset > 65535) {
+        waterOffset = waterOffset % 65536;
+    }
     
     for (int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
         // Calculate distance from CENTER (79/80)
@@ -592,8 +619,8 @@ void collisionEffect() {
         
         // Draw particles
         for (int trail = 0; trail < 10; trail++) {
-            int pos1 = particle1Pos - trail;
-            int pos2 = particle2Pos + trail;
+            int pos1 = (int)particle1Pos - trail;
+            int pos2 = (int)particle2Pos + trail;
             
             if (pos1 >= 0 && pos1 < HardwareConfig::STRIP_LENGTH) {
                 uint8_t brightness = 255 - (trail * 25);

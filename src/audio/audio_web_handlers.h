@@ -2,9 +2,10 @@
 
 #include <AsyncWebSocket.h>
 #include <ArduinoJson.h>
+#include "audio_sync.h"
 
 // Audio sync instance
-extern class AudioSync audioSync;
+extern AudioSync audioSync;
 
 /**
  * Handle audio-related WebSocket commands

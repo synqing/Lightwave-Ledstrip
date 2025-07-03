@@ -24,7 +24,6 @@
 #if FEATURE_AUDIO_SYNC
 #include "audio/audio_sync.h"
 #include "audio/audio_effects.h"
-AudioSync audioSync;  // Global audio sync instance
 #endif
 
 
@@ -534,12 +533,7 @@ void setup() {
     Serial.println("\n=== Initializing Audio Sync ===");
     if (audioSync.begin()) {
         Serial.println("✅ Audio sync initialized");
-        
-        // Add audio routes to web server
-        #if FEATURE_WEB_SERVER
-        setupAudioRoutes(webServer.getServer());
-        Serial.println("✅ Audio web routes added");
-        #endif
+        Serial.println("✅ Audio sync ready for WebSocket commands");
     } else {
         Serial.println("⚠️ Audio sync initialization failed");
     }

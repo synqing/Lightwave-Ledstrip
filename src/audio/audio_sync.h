@@ -47,6 +47,9 @@ public:
     
     // Get current playback time
     float getCurrentTime() const;
+    
+    // Get total duration
+    float getDuration() const { return decoder.getDuration(); }
 };
 
 // Global instance

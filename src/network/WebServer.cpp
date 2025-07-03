@@ -4,6 +4,7 @@
 #include <FastLED.h>
 #include <ESPmDNS.h>
 #include <Update.h>
+#include "WiFiOptimizerPro.h"
 
 #if FEATURE_AUDIO_SYNC
 #include "../audio/audio_web_handlers.h"
@@ -48,21 +49,24 @@ bool LightwaveWebServer::begin() {
         return false;
     }
     
-    // Initialize WiFi
+    // Initialize WiFi with WiFiOptimizerPro for enhanced connectivity
     // Pre-connection setup to avoid common ESP32 issues
     WiFi.disconnect(true);  // Clear any previous connection
     delay(100);
     WiFi.setHostname("LightwaveOS");  // Set hostname before connection
     
-    WiFi.mode(WIFI_STA);
-    WiFi.setAutoReconnect(true);
-    WiFi.setAutoConnect(true);
-    
-    // Force power saving off for better connectivity
-    WiFi.setSleep(false);
-    
-    // Set TX power to maximum for better range
-    WiFi.setTxPower(WIFI_POWER_19_5dBm);
+    // Initialize WiFi Optimizer Pro with advanced features
+    Serial.println("\n=== Initializing WiFi Optimizer Pro ===");
+    if (!WiFiOptimizerPro::initializeAdvanced()) {
+        Serial.println("⚠️  WiFi Optimizer Pro init failed, falling back to standard mode");
+        
+        // Fallback to standard initialization
+        WiFi.mode(WIFI_STA);
+        WiFi.setAutoReconnect(true);
+        WiFi.setAutoConnect(true);
+        WiFi.setSleep(false);
+        WiFi.setTxPower(WIFI_POWER_19_5dBm);
+    }
     
     // Enable WiFi debugging
     Serial.println("\n=== WiFi Debug Info ===");
@@ -76,14 +80,20 @@ bool LightwaveWebServer::begin() {
     Serial.println();
     Serial.printf("MAC Address: %s\n", WiFi.macAddress().c_str());
     
-    WiFi.begin(NetworkConfig::WIFI_SSID, NetworkConfig::WIFI_PASSWORD);
+    // Use WiFi Optimizer Pro's optimized connection method
+    bool connected = WiFiOptimizerPro::connectOptimized(NetworkConfig::WIFI_SSID, NetworkConfig::WIFI_PASSWORD);
     
-    Serial.print("Connecting to WiFi");
-    int attempts = 0;
-    bool tryBSSID = false;
-    uint8_t targetBSSID[6] = {0};
-    
-    while (WiFi.status() != WL_CONNECTED && attempts < 40) {  // Increased attempts
+    if (!connected) {
+        // Fallback to standard connection if optimizer fails
+        Serial.println("\n⚠️  Optimizer connection failed, trying standard method...");
+        WiFi.begin(NetworkConfig::WIFI_SSID, NetworkConfig::WIFI_PASSWORD);
+        
+        Serial.print("Connecting to WiFi");
+        int attempts = 0;
+        bool tryBSSID = false;
+        uint8_t targetBSSID[6] = {0};
+        
+        while (WiFi.status() != WL_CONNECTED && attempts < 40) {  // Increased attempts
         delay(500);
         
         // Print detailed status every 2 seconds
@@ -166,6 +176,12 @@ bool LightwaveWebServer::begin() {
             Serial.print(".");
         }
         attempts++;
+    }
+    }  // End of fallback connection attempt
+    
+    // Print optimizer status if connected
+    if (WiFi.status() == WL_CONNECTED && connected) {
+        WiFiOptimizerPro::printStatus();
     }
     
     if (WiFi.status() != WL_CONNECTED) {

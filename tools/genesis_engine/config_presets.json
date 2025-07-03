@@ -1,0 +1,53 @@
+{
+  "presets": {
+    "default": {
+      "bass_range": [20, 250],
+      "mid_range": [250, 4000],
+      "high_range": [4000, 20000],
+      "sample_rate": 44100,
+      "hop_length": 512,
+      "n_fft": 2048,
+      "smoothing_window": 11,
+      "bass_boost": 1.2,
+      "mid_boost": 1.0,
+      "high_boost": 0.8
+    },
+    "edm": {
+      "bass_range": [20, 150],
+      "mid_range": [150, 2000],
+      "high_range": [2000, 20000],
+      "bass_boost": 1.5,
+      "mid_boost": 0.8,
+      "high_boost": 1.2,
+      "onset_threshold": 0.25
+    },
+    "rock": {
+      "bass_range": [40, 300],
+      "mid_range": [300, 3000],
+      "high_range": [3000, 16000],
+      "bass_boost": 1.1,
+      "mid_boost": 1.3,
+      "high_boost": 0.9,
+      "smoothing_window": 9
+    },
+    "classical": {
+      "bass_range": [30, 200],
+      "mid_range": [200, 4000],
+      "high_range": [4000, 18000],
+      "bass_boost": 0.9,
+      "mid_boost": 1.1,
+      "high_boost": 1.0,
+      "smoothing_window": 15,
+      "onset_threshold": 0.4
+    },
+    "hip_hop": {
+      "bass_range": [20, 200],
+      "mid_range": [200, 3000],
+      "high_range": [3000, 18000],
+      "bass_boost": 1.8,
+      "mid_boost": 0.9,
+      "high_boost": 0.7,
+      "hop_length": 1024
+    }
+  }
+}

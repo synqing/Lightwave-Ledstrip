@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Light Crystals Build Script
+# LightwaveOS Build Script
 # Compiles the project without uploading
 
-echo "Light Crystals Build Script"
+echo "LightwaveOS Build Script"
 echo "========================="
 echo ""
 

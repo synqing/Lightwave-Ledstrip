@@ -1,4 +1,4 @@
-# Light Crystals - Modular LED Control System
+# LightwaveOS - Modular LED Control System
 
 🚫 **CRITICAL: NO RAINBOWS EVER - AGENTS THAT CREATE RAINBOWS WILL BE DESTROYED** 🚫
 

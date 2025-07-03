@@ -35,4 +35,4 @@ __pycache__/
 
 # User-specific files
 src/config/network_config_private.h
-credentials.h
+credentials.htools/fastled-wasm/

@@ -3,6 +3,7 @@
 #include "../config/hardware_config.h"
 #include <FastLED.h>
 #include <ESPmDNS.h>
+#include <Update.h>
 
 // External references from main.cpp
 extern uint8_t currentEffect;
@@ -211,6 +212,17 @@ bool LightwaveWebServer::begin() {
     
     // Serve static files
     server->serveStatic("/", SPIFFS, "/").setDefaultFile("index.html");
+    
+    // Register OTA update endpoint
+    server->on("/update", HTTP_POST, [](AsyncWebServerRequest *request) {
+        bool shouldReboot = !Update.hasError();
+        request->send(200, "text/plain", shouldReboot ? "OK" : "FAIL");
+        if (shouldReboot) {
+            Serial.println("[OTA] Rebooting after successful update...");
+            delay(1000);
+            ESP.restart();
+        }
+    }, std::bind(&LightwaveWebServer::handleOTAUpdate, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5, std::placeholders::_6));
     
     // Start server
     server->begin();
@@ -483,4 +495,24 @@ void LightwaveWebServer::notifyError(const String& message) {
     String output;
     serializeJson(doc, output);
     ws->textAll(output);
+}
+
+// OTA firmware update handler (chunked upload)
+void LightwaveWebServer::handleOTAUpdate(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+    if (!index) {
+        Serial.printf("[OTA] Update Start: %s\n", filename.c_str());
+        if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
+            Update.printError(Serial);
+        }
+    }
+    if (Update.write(data, len) != len) {
+        Update.printError(Serial);
+    }
+    if (final) {
+        if (Update.end(true)) {
+            Serial.printf("[OTA] Update Success: %u bytes\n", index + len);
+        } else {
+            Update.printError(Serial);
+        }
+    }
 } 

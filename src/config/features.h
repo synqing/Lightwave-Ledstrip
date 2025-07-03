@@ -10,7 +10,9 @@
 #define FEATURE_BUTTON_CONTROL 0         // Physical button support (NO BUTTON ON BOARD)
 
 // Network features
-#define FEATURE_WEB_SERVER 0            // Web interface (currently disabled)
+#ifndef FEATURE_WEB_SERVER
+#define FEATURE_WEB_SERVER 1            // Web interface enabled by default (can override via build flags)
+#endif
 #define FEATURE_WEBSOCKET 0             // WebSocket support
 #define FEATURE_OTA_UPDATE 0            // Over-the-air updates
 

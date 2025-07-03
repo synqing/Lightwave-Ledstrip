@@ -41,7 +41,7 @@ private:
   
 public:
   void begin() {
-    Serial.println(F("\n=== Light Crystals Control System ==="));
+    Serial.println(F("\n=== LightwaveOS Control System ==="));
     Serial.println(F("Type 'h' or 'help' for menu"));
     Serial.println(F("Type 'm' or 'menu' for main menu"));
     Serial.println(F("======================================"));
@@ -501,7 +501,7 @@ private:
   
   void clearScreen() {
     Serial.print(F("\033[2J\033[H")); // ANSI clear screen
-    Serial.println(F("=== Light Crystals Control System ==="));
+    Serial.println(F("=== LightwaveOS Control System ==="));
   }
 };
 

@@ -3,7 +3,7 @@
 
 #include "features.h"
 
-// Hardware pin definitions for Light Crystals
+// Hardware pin definitions for LightwaveOS
 namespace HardwareConfig {
 
     // ==================== LED STRIPS CONFIGURATION ====================
@@ -45,7 +45,7 @@ namespace HardwareConfig {
     
     // Strip Performance Settings
     constexpr uint16_t STRIP_FPS = 120;
-    constexpr uint8_t STRIP_BRIGHTNESS = 96;
+    constexpr uint8_t STRIP_BRIGHTNESS = 96;   // Default brightness level
     constexpr uint8_t STRIP_MAX_BRIGHTNESS = 128;  // Current limiting for 320 LEDs
     constexpr uint32_t BUTTON_DEBOUNCE_MS = 500;
     

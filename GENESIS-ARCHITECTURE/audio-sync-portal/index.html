@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LightwaveOS Audio Sync Portal</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌊 LightwaveOS Audio Sync Portal</h1>
+            <p>Synchronize LED visualizations with audio playback</p>
+        </header>
+
+        <!-- Audio Sync Section -->
+        <div class="audio-sync-panel">
+            <h2>Audio Sync Control</h2>
+            
+            <!-- File Upload -->
+            <div class="file-upload-section">
+                <div class="file-input-group">
+                    <label>Musical Data (JSON):</label>
+                    <input type="file" id="jsonFile" accept=".json">
+                    <span class="file-status" id="jsonStatus">No file selected</span>
+                </div>
+                
+                <div class="file-input-group">
+                    <label>Audio Track (MP3):</label>
+                    <input type="file" id="mp3File" accept=".mp3">
+                    <span class="file-status" id="mp3Status">No file selected</span>
+                </div>
+                
+                <button id="uploadBtn" class="upload-btn" disabled>
+                    Upload & Prepare
+                </button>
+            </div>
+            
+            <!-- Audio Player -->
+            <div class="audio-player-section">
+                <audio id="audioPlayer" controls style="display:none;"></audio>
+                <div class="custom-player">
+                    <div class="track-info">
+                        <span id="trackName">No track loaded</span>
+                        <span id="trackTime">0:00 / 0:00</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div id="progressFill" class="progress-fill"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Sync Controls -->
+            <div class="sync-controls">
+                <button id="syncPlayBtn" class="sync-btn play" disabled>
+                    ▶ Sync Play
+                </button>
+                <button id="stopBtn" class="sync-btn stop" disabled>
+                    ■ Stop
+                </button>
+                <div class="sync-status">
+                    <span id="syncIndicator" class="indicator">●</span>
+                    <span id="syncText">Not synced</span>
+                </div>
+            </div>
+            
+            <!-- Sync Calibration -->
+            <div class="calibration-section">
+                <label>Sync Offset (ms):</label>
+                <input type="range" id="syncOffset" min="-500" max="500" value="0">
+                <span id="offsetValue">0</span>
+            </div>
+        </div>
+
+        <!-- Status Messages -->
+        <div id="statusMessages" class="status-messages"></div>
+
+        <!-- Connection Status -->
+        <div class="connection-status">
+            <span class="connection-indicator" id="connectionIndicator">●</span>
+            <span id="connectionText">Disconnected</span>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

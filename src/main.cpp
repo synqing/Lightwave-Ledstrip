@@ -4,9 +4,14 @@
 #include "config/hardware_config.h"
 #include "core/EffectTypes.h"
 #include "effects/strip/StripEffects.h"
+#include "effects/strip/OptimizedStripEffects.h"
 #include "effects/transitions/TransitionEngine.h"
 #include "hardware/EncoderManager.h"
 #include "hardware/EncoderLEDFeedback.h"
+
+#if FEATURE_WEB_SERVER
+#include "network/WebServer.h"
+#endif
 
 #if FEATURE_PERFORMANCE_MONITOR
 #include "utils/PerformanceOptimizer.h"
@@ -66,6 +71,9 @@ EncoderLEDFeedback* encoderFeedback = nullptr;
 // Preset Management System - DISABLED
 // PresetManager* presetManager = nullptr;
 
+// Feature flag for optimized effects
+bool useOptimizedEffects = true;
+
 // Palette management
 CRGBPalette16 currentPalette;
 CRGBPalette16 targetPalette;
@@ -92,20 +100,14 @@ SerialMenu serialMenu;
 DummyWave2D fxWave2D;
 #endif
 
-// Effect function pointer type
-typedef void (*EffectFunction)();
 
-// Array of effects - forward declaration
-enum EffectType {
-    EFFECT_TYPE_STANDARD,
-    EFFECT_TYPE_WAVE_ENGINE
-};
+// Forward declare wrapper functions
+void stripInterferenceWrapper();
+void heartbeatEffectWrapper();
+void breathingEffectWrapper();
+void stripPlasmaWrapper();
+void vortexEffectWrapper();
 
-struct Effect {
-    const char* name;
-    EffectFunction function;
-    EffectType type;
-};
 
 // Forward declare all effect functions
 extern void solidColor();
@@ -131,6 +133,9 @@ extern void vortexEffect();
 extern void collisionEffect();
 extern void gravityWellEffect();
 
+// Include effects header
+#include "effects.h"
+
 // Effects array - Matrix mode has been surgically removed
 Effect effects[] = {
     // =============== BASIC STRIP EFFECTS ===============
@@ -145,9 +150,9 @@ Effect effects[] = {
     // NEW Strip-specific CENTER ORIGIN effects
     {"Strip Confetti", stripConfetti, EFFECT_TYPE_STANDARD},
     {"Strip Juggle", stripJuggle, EFFECT_TYPE_STANDARD},
-    {"Strip Interference", stripInterference, EFFECT_TYPE_STANDARD},
+    {"Strip Interference", stripInterferenceWrapper, EFFECT_TYPE_STANDARD},
     {"Strip BPM", stripBPM, EFFECT_TYPE_STANDARD},
-    {"Strip Plasma", stripPlasma, EFFECT_TYPE_STANDARD},
+    {"Strip Plasma", stripPlasmaWrapper, EFFECT_TYPE_STANDARD},
     
     // Motion effects (ALL NOW CENTER ORIGIN COMPLIANT)
     {"Confetti", confetti, EFFECT_TYPE_STANDARD},
@@ -161,10 +166,10 @@ Effect effects[] = {
     
     // =============== NEW CENTER ORIGIN EFFECTS ===============
     // These replace the rubbish wave effects with proper CENTER ORIGIN compliance
-    {"Heartbeat", heartbeatEffect, EFFECT_TYPE_STANDARD},
-    {"Breathing", breathingEffect, EFFECT_TYPE_STANDARD},
+    {"Heartbeat", heartbeatEffectWrapper, EFFECT_TYPE_STANDARD},
+    {"Breathing", breathingEffectWrapper, EFFECT_TYPE_STANDARD},
     {"Shockwave", shockwaveEffect, EFFECT_TYPE_STANDARD},
-    {"Vortex", vortexEffect, EFFECT_TYPE_STANDARD},
+    {"Vortex", vortexEffectWrapper, EFFECT_TYPE_STANDARD},
     {"Collision", collisionEffect, EFFECT_TYPE_STANDARD},
     {"Gravity Well", gravityWellEffect, EFFECT_TYPE_STANDARD}
 };
@@ -201,6 +206,49 @@ void syncStripsToLeds() {
 
 // ============== BASIC EFFECTS ==============
 // Effects have been moved to src/effects/strip/StripEffects.cpp
+
+// ============== EFFECT WRAPPERS ==============
+// These functions dynamically choose between original and optimized versions
+
+void stripInterferenceWrapper() {
+    if (useOptimizedEffects) {
+        stripInterferenceOptimized();
+    } else {
+        stripInterference();
+    }
+}
+
+void heartbeatEffectWrapper() {
+    if (useOptimizedEffects) {
+        heartbeatEffectOptimized();
+    } else {
+        heartbeatEffect();
+    }
+}
+
+void breathingEffectWrapper() {
+    if (useOptimizedEffects) {
+        breathingEffectOptimized();
+    } else {
+        breathingEffect();
+    }
+}
+
+void stripPlasmaWrapper() {
+    if (useOptimizedEffects) {
+        stripPlasmaOptimized();
+    } else {
+        stripPlasma();
+    }
+}
+
+void vortexEffectWrapper() {
+    if (useOptimizedEffects) {
+        vortexEffectOptimized();
+    } else {
+        vortexEffect();
+    }
+}
 
 
 // ============== ADVANCED TRANSITION SYSTEM ==============
@@ -326,7 +374,7 @@ void setup() {
     
     delay(1000);
     
-    Serial.println("\n=== Light Crystals - Dual LED Strips ===");
+    Serial.println("\n=== LightwaveOS - Dual LED Strips ===");
     Serial.println("Matrix mode has been surgically removed");
     Serial.println("Mode: Dual 160-LED Strips");
     
@@ -385,10 +433,15 @@ void setup() {
     // Preset Management System - DISABLED FOR NOW
     // Will be re-enabled once basic transitions work
     
-    FastLED.setCorrection(TypicalLEDStrip);
+    // FastLED built-in optimizations
+    FastLED.setCorrection(TypicalLEDStrip);  // Color correction for WS2812
+    FastLED.setDither(BINARY_DITHER);         // Enable temporal dithering
     
     // Initialize strip mapping
     initializeStripMapping();
+    
+    // Initialize optimized effect lookup tables
+    initOptimizedEffects();
     
     // Initialize palette
     currentPaletteIndex = 0;
@@ -445,13 +498,31 @@ void setup() {
     serialMenu.begin();
 #endif
     
-    Serial.println("=== Setup Complete ===");
+    // Wait a moment to ensure serial monitor is fully connected
+    Serial.println("\n=== Waiting 3 seconds before WiFi initialization ===");
+    Serial.println("This ensures serial monitor captures all debug output...");
+    delay(3000);
+    
+    // Initialize web server
+#if FEATURE_WEB_SERVER
+    Serial.println("\n=== Initializing Web Server ===");
+    if (webServer.begin()) {
+        Serial.println("✅ Web server started successfully");
+        Serial.print("📱 Access the control panel at: http://");
+        Serial.print(WiFi.localIP());
+        Serial.println(" or http://lightwaveos.local");
+    } else {
+        Serial.println("⚠️  Web server failed to start");
+    }
+#endif
+
+    Serial.println("\n=== Setup Complete ===");
     Serial.println("🎭 Advanced Transition System Active");
-    // Serial.println("💾 Preset Management System Active");
+    Serial.println("⚡ FastLED Optimizations ENABLED");
     Serial.println("   't' = Toggle random transitions");
     Serial.println("   'n' = Next effect with transition");
-    // Serial.println("   's' = Quick save preset");
-    // Serial.println("   'l' = Quick load preset");
+    Serial.println("   'o' = Toggle optimized effects");
+    Serial.println("   'p' = Performance comparison (when available)");
     Serial.println("");
     Serial.println("[DEBUG] Entering main loop...");
 }
@@ -513,10 +584,10 @@ void loop() {
     uint32_t frameTime = currentTime - frameStartTime;
     frameStartTime = currentTime;
     
-    // Debug print every second
-    if (millis() - lastDebugPrint > 1000) {
+    // Debug print every 5 seconds
+    if (millis() - lastDebugPrint > 5000) {
         lastDebugPrint = millis();
-        float fps = (float)loopCounter;  // Iterations per second = FPS
+        float fps = (float)loopCounter / 5.0f;  // Convert to per-second rate
         float avgFrameTime = (loopCounter > 0) ? (float)totalFrameTime / (float)loopCounter : 0;
         float avgFPS = (avgFrameTime > 0) ? 1000000.0f / avgFrameTime : 0;
         Serial.printf("[PERF] FPS: %.1f (avg: %.1f), Frame time: %.1fµs (min: %luµs, max: %luµs), Effect: %s\n", 
@@ -569,6 +640,39 @@ void loop() {
                     uint8_t nextEffect = (currentEffect + 1) % NUM_EFFECTS;
                     startAdvancedTransition(nextEffect);
                 }
+                break;
+            case 'o':
+            case 'O':
+                useOptimizedEffects = !useOptimizedEffects;
+                Serial.printf("⚡ Optimized effects: %s\n", 
+                             useOptimizedEffects ? "ENABLED" : "DISABLED");
+                break;
+            case 'p':
+            case 'P':
+                if (effects[currentEffect].name == "Strip Interference" ||
+                    effects[currentEffect].name == "Heartbeat" ||
+                    effects[currentEffect].name == "Breathing" ||
+                    effects[currentEffect].name == "Strip Plasma" ||
+                    effects[currentEffect].name == "Vortex") {
+                    comparePerformance();
+                } else {
+                    Serial.println("Performance comparison not available for this effect");
+                }
+                break;
+            case 'w':
+            case 'W':
+                #if FEATURE_WEB_SERVER
+                Serial.println("\n=== Retrying WiFi Connection ===");
+                webServer.stop();
+                delay(100);
+                if (webServer.begin()) {
+                    Serial.println("✅ Web server restarted successfully");
+                } else {
+                    Serial.println("⚠️  Web server failed to restart");
+                }
+                #else
+                Serial.println("Web server feature not enabled");
+                #endif
                 break;
             // Preset commands disabled for now
             // case 's':
@@ -692,6 +796,11 @@ void loop() {
     // Update encoder LED feedback
     updateEncoderFeedback();
     
+    // Update web server
+#if FEATURE_WEB_SERVER
+    webServer.update();
+#endif
+    
     // Update transition system
     if (transitionEngine.isActive()) {
         // During transition: generate new effect frame and let transition engine handle blending
@@ -711,8 +820,8 @@ void loop() {
     // DISABLED - CAUSING CRASHES
     // processScrollEncoder();
     
-    // Debug output every 2 seconds to reduce overhead
-    EVERY_N_SECONDS(2) {
+    // Debug output every 10 seconds to minimize overhead
+    EVERY_N_SECONDS(10) {
         // Count lit LEDs in each strip
         int strip1LitCount = 0;
         int strip2LitCount = 0;
@@ -747,8 +856,8 @@ void loop() {
         gHue++;
     }
     
-    // Status every 5 seconds
-    EVERY_N_SECONDS(5) {
+    // Status every 30 seconds
+    EVERY_N_SECONDS(30) {
         Serial.print("Effect: ");
         Serial.print(effects[currentEffect].name);
         Serial.print(", Palette: ");

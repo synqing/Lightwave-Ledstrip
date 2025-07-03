@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Light Crystals Upload Script
+# LightwaveOS Upload Script
 # Uses the correct USB port: /dev/cu.usbmodem1101
 
-echo "Light Crystals Upload Script"
+echo "LightwaveOS Upload Script"
 echo "=========================="
 echo "Target Port: /dev/cu.usbmodem1101"
 echo ""

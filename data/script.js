@@ -1,495 +1,655 @@
-// LightwaveOS Web Control
-// WebSocket connection and UI management
-
-let ws = null;
-let wsReconnectInterval = null;
-let isConnected = false;
-let currentEffect = 0;
-let ledData = new Array(320).fill({r: 0, g: 0, b: 0});
-let animationFrame = null;
-let previewPaused = false;
-
-// Configuration
-const WS_PORT = 81;
-const RECONNECT_INTERVAL = 5000;
-
-// Effect definitions with icons
-const effects = [
-    { name: "Fire", icon: "🔥" },
-    { name: "Ocean", icon: "🌊" },
-    { name: "Wave", icon: "🌀" },
-    { name: "Ripple", icon: "💧" },
-    { name: "Strip Confetti", icon: "🎊" },
-    { name: "Strip Juggle", icon: "🤹" },
-    { name: "Strip Interference", icon: "📡" },
-    { name: "Strip BPM", icon: "🎵" },
-    { name: "Strip Plasma", icon: "🌈" },
-    { name: "Confetti", icon: "🎉" },
-    { name: "Sinelon", icon: "〰️" },
-    { name: "Juggle", icon: "🔮" },
-    { name: "BPM", icon: "💓" },
-    { name: "Solid Blue", icon: "🔵" },
-    { name: "Pulse Effect", icon: "💫" },
-    { name: "Heartbeat", icon: "❤️" },
-    { name: "Breathing", icon: "🫧" },
-    { name: "Shockwave", icon: "💥" },
-    { name: "Vortex", icon: "🌪️" },
-    { name: "Collision", icon: "💫" },
-    { name: "Gravity Well", icon: "🌌" }
-];
-
-// Palette definitions
-const palettes = [
-    { name: "Rainbow", colors: ["#FF0000", "#FF7F00", "#FFFF00", "#00FF00", "#0000FF", "#4B0082", "#9400D3"] },
-    { name: "Ocean", colors: ["#000428", "#004e92", "#0077BE", "#0088CE", "#00A6FB", "#48CAE4", "#90E0EF"] },
-    { name: "Fire", colors: ["#641E16", "#922B21", "#C0392B", "#E74C3C", "#EC7063", "#F1948A", "#FADBD8"] },
-    { name: "Forest", colors: ["#0B5345", "#0E6655", "#148F77", "#17A589", "#1ABC9C", "#48C9B0", "#76D7C4"] },
-    { name: "Sunset", colors: ["#512E5F", "#633974", "#76448A", "#884EA0", "#9B59B6", "#AF7AC5", "#C39BD3"] },
-    { name: "Party", colors: ["#E91E63", "#9C27B0", "#673AB7", "#3F51B5", "#2196F3", "#00BCD4", "#009688"] },
-    { name: "Lava", colors: ["#1A0000", "#330000", "#660000", "#990000", "#CC0000", "#FF3333", "#FF6666"] },
-    { name: "Cloud", colors: ["#F8F9F9", "#F2F3F4", "#E5E7E9", "#D7DBDD", "#BFC9CA", "#AAB7B8", "#95A5A6"] },
-    { name: "Galaxy", colors: ["#000000", "#0F0F0F", "#1E1E1E", "#2D2D2D", "#3C3C3C", "#4B4B4B", "#5A5A5A"] }
-];
-
-// Initialize on page load
-document.addEventListener('DOMContentLoaded', () => {
-    initializeUI();
-    connectWebSocket();
-    initializeCanvas();
-    hideLoadingOverlay();
-});
-
-// Initialize UI components
-function initializeUI() {
-    // Populate effects
-    populateEffects();
-    
-    // Populate palettes
-    populatePalettes();
-    
-    // Setup event listeners
-    setupEventListeners();
-    
-    // Initialize collapsible sections
-    initializeCollapsibles();
-}
-
-// Populate effect grid
-function populateEffects() {
-    const effectGrid = document.getElementById('effect-grid');
-    effectGrid.innerHTML = '';
-    
-    effects.forEach((effect, index) => {
-        const card = document.createElement('div');
-        card.className = 'effect-card';
-        card.dataset.effectId = index;
-        if (index === currentEffect) card.classList.add('active');
+class AudioSyncController {
+    constructor() {
+        this.ws = null;
+        this.audioPlayer = document.getElementById('audioPlayer');
+        this.jsonFile = null;
+        this.mp3File = null;
+        this.syncOffset = 0;
+        this.syncStartTime = 0;
+        this.isSynced = false;
+        this.syncInterval = null;
         
-        card.innerHTML = `
-            <span class="effect-icon">${effect.icon}</span>
-            <span class="effect-name">${effect.name}</span>
-        `;
+        // Enhanced features
+        this.networkLatency = 0;
+        this.latencySamples = [];
+        this.uploadChunkSize = 1024 * 1024; // 1MB chunks
+        this.activeUploads = new Map();
         
-        card.addEventListener('click', () => selectEffect(index));
-        effectGrid.appendChild(card);
-    });
-}
-
-// Populate palette grid
-function populatePalettes() {
-    const paletteGrid = document.getElementById('palette-grid');
-    paletteGrid.innerHTML = '';
+        this.initializeEventListeners();
+        this.connectWebSocket();
+    }
     
-    palettes.forEach((palette, index) => {
-        const card = document.createElement('div');
-        card.className = 'palette-card';
-        card.dataset.paletteId = index;
-        
-        const preview = document.createElement('div');
-        preview.className = 'palette-preview';
-        
-        palette.colors.forEach(color => {
-            const colorDiv = document.createElement('div');
-            colorDiv.className = 'palette-color';
-            colorDiv.style.backgroundColor = color;
-            preview.appendChild(colorDiv);
+    initializeEventListeners() {
+        // File inputs
+        document.getElementById('jsonFile').addEventListener('change', (e) => {
+            this.jsonFile = e.target.files[0];
+            document.getElementById('jsonStatus').textContent = 
+                `${this.jsonFile.name} (${this.formatFileSize(this.jsonFile.size)})`;
+            this.updateUploadButton();
         });
         
-        card.appendChild(preview);
-        card.innerHTML += `<div class="palette-name">${palette.name}</div>`;
+        document.getElementById('mp3File').addEventListener('change', (e) => {
+            this.mp3File = e.target.files[0];
+            document.getElementById('mp3Status').textContent = this.mp3File.name;
+            this.updateUploadButton();
+        });
         
-        card.addEventListener('click', () => selectPalette(index));
-        paletteGrid.appendChild(card);
-    });
-}
-
-// Setup event listeners
-function setupEventListeners() {
-    // Sliders
-    const sliders = ['brightness', 'speed', 'intensity', 'saturation', 'transition-time'];
-    sliders.forEach(id => {
-        const slider = document.getElementById(id);
-        const valueDisplay = document.getElementById(`${id}-value`);
+        // Upload button
+        document.getElementById('uploadBtn').addEventListener('click', () => {
+            this.uploadFiles();
+        });
         
-        slider.addEventListener('input', (e) => {
-            let value = e.target.value;
-            if (id === 'transition-time') {
-                valueDisplay.textContent = `${value}ms`;
-            } else {
-                valueDisplay.textContent = value;
+        // Sync controls
+        document.getElementById('syncPlayBtn').addEventListener('click', () => {
+            this.startSyncPlayback();
+        });
+        
+        document.getElementById('stopBtn').addEventListener('click', () => {
+            this.stopPlayback();
+        });
+        
+        // Calibration
+        document.getElementById('syncOffset').addEventListener('input', (e) => {
+            this.syncOffset = parseInt(e.target.value);
+            document.getElementById('offsetValue').textContent = this.syncOffset;
+        });
+        
+        // Audio player events
+        this.audioPlayer.addEventListener('timeupdate', () => {
+            if (this.audioPlayer.duration) {
+                const progress = (this.audioPlayer.currentTime / this.audioPlayer.duration) * 100;
+                document.getElementById('progressFill').style.width = progress + '%';
             }
-            sendParameter(id, value);
         });
-    });
-    
-    // Toggles
-    const toggles = ['random-transitions', 'optimized-effects', 'auto-cycle'];
-    toggles.forEach(id => {
-        const toggle = document.getElementById(id);
-        toggle.addEventListener('change', (e) => {
-            sendParameter(id, e.target.checked);
-        });
-    });
-    
-    // Buttons
-    document.getElementById('power-toggle').addEventListener('click', togglePower);
-    document.getElementById('next-effect').addEventListener('click', nextEffect);
-    document.getElementById('prev-effect').addEventListener('click', prevEffect);
-    document.getElementById('save-preset').addEventListener('click', savePreset);
-    document.getElementById('emergency-stop').addEventListener('click', emergencyStop);
-    document.getElementById('preview-toggle').addEventListener('click', togglePreview);
-    document.getElementById('sync-toggle').addEventListener('click', toggleSync);
-}
-
-// WebSocket connection
-function connectWebSocket() {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.hostname}:${WS_PORT}`;
-    
-    try {
-        ws = new WebSocket(wsUrl);
         
-        ws.onopen = () => {
+        // Advanced calibration button
+        const calibrateBtn = document.getElementById('calibrateBtn');
+        if (calibrateBtn) {
+            calibrateBtn.addEventListener('click', () => {
+                this.performLatencyCalibration();
+            });
+        }
+    }
+    
+    connectWebSocket() {
+        const host = window.location.hostname || 'lightwaveos.local';
+        const wsUrl = `ws://${host}:81`;
+        
+        this.ws = new WebSocket(wsUrl);
+        
+        this.ws.onopen = () => {
             console.log('WebSocket connected');
-            isConnected = true;
-            updateConnectionStatus(true);
-            showToast('Connected to LightwaveOS', 'success');
+            this.updateConnectionStatus(true);
+            this.showStatus('Connected to LightwaveOS', 'success');
             
-            // Request current state
-            sendCommand('get_state');
+            // Start measuring network latency
+            this.measureNetworkLatency();
         };
         
-        ws.onclose = () => {
+        this.ws.onclose = () => {
             console.log('WebSocket disconnected');
-            isConnected = false;
-            updateConnectionStatus(false);
-            showToast('Disconnected from device', 'error');
-            
-            // Attempt reconnection
-            if (!wsReconnectInterval) {
-                wsReconnectInterval = setInterval(connectWebSocket, RECONNECT_INTERVAL);
+            this.updateConnectionStatus(false);
+            this.showStatus('Disconnected from device', 'error');
+            setTimeout(() => this.connectWebSocket(), 3000);
+        };
+        
+        this.ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            this.showStatus('Connection error', 'error');
+        };
+        
+        this.ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                this.handleWebSocketMessage(data);
+            } catch (e) {
+                console.error('Failed to parse WebSocket message:', e);
             }
         };
-        
-        ws.onerror = (error) => {
-            console.error('WebSocket error:', error);
-            showToast('Connection error', 'error');
-        };
-        
-        ws.onmessage = (event) => {
-            handleMessage(JSON.parse(event.data));
-        };
-        
-    } catch (error) {
-        console.error('Failed to create WebSocket:', error);
-        showToast('Failed to connect', 'error');
     }
-}
-
-// Handle incoming WebSocket messages
-function handleMessage(data) {
-    switch (data.type) {
-        case 'state':
-            updateUIState(data);
-            break;
+    
+    handleWebSocketMessage(data) {
+        switch (data.type) {
+            case 'sync_status':
+                this.handleSyncStatus(data);
+                break;
+                
+            case 'upload_progress':
+                this.updateUploadProgress(data);
+                break;
+                
+            case 'upload_complete':
+                this.handleUploadComplete(data);
+                break;
+                
+            case 'pong':
+                this.handlePongResponse(data);
+                break;
+                
+            case 'sync_metrics':
+                this.updateSyncMetrics(data);
+                break;
+                
+            case 'drift_correction':
+                this.applyDriftCorrection(data);
+                break;
+                
+            case 'beat':
+                this.visualizeBeat(data);
+                break;
+                
+            case 'error':
+                this.showStatus(data.message, 'error');
+                break;
+        }
+    }
+    
+    async uploadFiles() {
+        if (!this.jsonFile || !this.mp3File) return;
+        
+        try {
+            // Check file size
+            const jsonSize = this.jsonFile.size;
+            const isLargeFile = jsonSize > 5 * 1024 * 1024; // > 5MB
             
-        case 'led_data':
-            updateLEDData(data.leds);
-            break;
+            this.showStatus(`Uploading ${this.formatFileSize(jsonSize)} JSON file...`, 'info');
             
-        case 'performance':
-            updatePerformanceMetrics(data);
-            break;
+            // Upload JSON using appropriate method
+            if (isLargeFile) {
+                await this.uploadLargeJSON(this.jsonFile);
+            } else {
+                await this.uploadSmallJSON(this.jsonFile);
+            }
             
-        case 'effect_change':
-            currentEffect = data.effect;
-            updateEffectSelection();
-            showToast(`Effect changed to ${effects[currentEffect].name}`, 'info');
-            break;
+            // Load MP3 into audio player
+            const mp3URL = URL.createObjectURL(this.mp3File);
+            this.audioPlayer.src = mp3URL;
+            this.audioPlayer.load();
             
-        case 'error':
-            showToast(data.message, 'error');
-            break;
-    }
-}
-
-// Update UI state from device
-function updateUIState(state) {
-    // Update sliders
-    if (state.brightness !== undefined) {
-        document.getElementById('brightness').value = state.brightness;
-        document.getElementById('brightness-value').textContent = state.brightness;
+            // Update UI
+            document.getElementById('trackName').textContent = this.mp3File.name;
+            document.getElementById('syncPlayBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = false;
+            
+            this.showStatus('Files loaded successfully', 'success');
+            
+        } catch (error) {
+            this.showStatus('Upload failed: ' + error.message, 'error');
+        }
     }
     
-    if (state.speed !== undefined) {
-        document.getElementById('speed').value = state.speed;
-        document.getElementById('speed-value').textContent = state.speed;
-    }
-    
-    if (state.intensity !== undefined) {
-        document.getElementById('intensity').value = state.intensity;
-        document.getElementById('intensity-value').textContent = state.intensity;
-    }
-    
-    if (state.saturation !== undefined) {
-        document.getElementById('saturation').value = state.saturation;
-        document.getElementById('saturation-value').textContent = state.saturation;
-    }
-    
-    // Update toggles
-    if (state.randomTransitions !== undefined) {
-        document.getElementById('random-transitions').checked = state.randomTransitions;
-    }
-    
-    if (state.optimizedEffects !== undefined) {
-        document.getElementById('optimized-effects').checked = state.optimizedEffects;
-    }
-    
-    // Update current effect
-    if (state.currentEffect !== undefined) {
-        currentEffect = state.currentEffect;
-        updateEffectSelection();
-    }
-    
-    // Update performance metrics
-    if (state.fps !== undefined) {
-        document.getElementById('fps-counter').textContent = `${state.fps.toFixed(1)} FPS`;
-    }
-    
-    if (state.heap !== undefined) {
-        const heapKB = (state.heap / 1024).toFixed(1);
-        document.getElementById('heap-status').textContent = `${heapKB} KB`;
-    }
-}
-
-// Send command to device
-function sendCommand(command, params = {}) {
-    if (!isConnected || !ws) return;
-    
-    const message = {
-        command: command,
-        ...params
-    };
-    
-    ws.send(JSON.stringify(message));
-}
-
-// Send parameter update
-function sendParameter(param, value) {
-    sendCommand('set_parameter', { parameter: param, value: value });
-}
-
-// Effect selection
-function selectEffect(effectId) {
-    sendCommand('set_effect', { effect: effectId });
-    currentEffect = effectId;
-    updateEffectSelection();
-}
-
-function updateEffectSelection() {
-    document.querySelectorAll('.effect-card').forEach(card => {
-        card.classList.toggle('active', parseInt(card.dataset.effectId) === currentEffect);
-    });
-}
-
-// Palette selection
-function selectPalette(paletteId) {
-    sendCommand('set_palette', { palette: paletteId });
-    
-    document.querySelectorAll('.palette-card').forEach(card => {
-        card.classList.toggle('active', parseInt(card.dataset.paletteId) === paletteId);
-    });
-}
-
-// Button actions
-function togglePower() {
-    sendCommand('toggle_power');
-    const btn = document.getElementById('power-toggle');
-    btn.classList.toggle('active');
-}
-
-function nextEffect() {
-    const nextId = (currentEffect + 1) % effects.length;
-    selectEffect(nextId);
-}
-
-function prevEffect() {
-    const prevId = currentEffect > 0 ? currentEffect - 1 : effects.length - 1;
-    selectEffect(prevId);
-}
-
-function savePreset() {
-    const name = prompt('Enter preset name:');
-    if (name) {
-        sendCommand('save_preset', { name: name });
-        showToast(`Preset "${name}" saved`, 'success');
-    }
-}
-
-function emergencyStop() {
-    sendCommand('emergency_stop');
-    showToast('Emergency stop activated', 'warning');
-}
-
-// LED Preview Canvas
-function initializeCanvas() {
-    const canvas = document.getElementById('led-canvas');
-    const ctx = canvas.getContext('2d');
-    
-    // Set canvas size
-    canvas.width = 800;
-    canvas.height = 100;
-    
-    // Start animation loop
-    animateLEDs();
-}
-
-function animateLEDs() {
-    if (previewPaused) {
-        animationFrame = requestAnimationFrame(animateLEDs);
-        return;
-    }
-    
-    const canvas = document.getElementById('led-canvas');
-    const ctx = canvas.getContext('2d');
-    
-    // Clear canvas
-    ctx.fillStyle = '#1a1a2e';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    // Draw LEDs
-    const ledSize = canvas.width / 320;
-    const y = canvas.height / 2;
-    
-    ledData.forEach((led, index) => {
-        const x = index * ledSize + ledSize / 2;
+    async uploadSmallJSON(file) {
+        const jsonData = await this.readFileAsText(file);
         
-        // Draw glow effect
-        const gradient = ctx.createRadialGradient(x, y, 0, x, y, ledSize * 2);
-        gradient.addColorStop(0, `rgba(${led.r}, ${led.g}, ${led.b}, 0.8)`);
-        gradient.addColorStop(1, `rgba(${led.r}, ${led.g}, ${led.b}, 0)`);
+        // Validate JSON
+        const data = JSON.parse(jsonData);
+        const duration = data.global_metrics?.duration_ms || 0;
         
-        ctx.fillStyle = gradient;
-        ctx.fillRect(x - ledSize * 2, y - ledSize * 2, ledSize * 4, ledSize * 4);
+        const host = window.location.hostname || 'lightwaveos.local';
         
-        // Draw LED
-        ctx.fillStyle = `rgb(${led.r}, ${led.g}, ${led.b})`;
-        ctx.fillRect(x - ledSize / 2, y - 10, ledSize, 20);
-    });
-    
-    animationFrame = requestAnimationFrame(animateLEDs);
-}
-
-function updateLEDData(leds) {
-    if (leds && leds.length === 320) {
-        ledData = leds;
-    }
-}
-
-function togglePreview() {
-    previewPaused = !previewPaused;
-    const btn = document.getElementById('preview-toggle');
-    btn.innerHTML = previewPaused ? 
-        '<i class="fas fa-play"></i> Resume Preview' : 
-        '<i class="fas fa-pause"></i> Pause Preview';
-}
-
-function toggleSync() {
-    const syncEnabled = document.getElementById('sync-toggle').classList.toggle('active');
-    sendCommand('toggle_sync', { enabled: syncEnabled });
-}
-
-// Performance metrics
-function updatePerformanceMetrics(metrics) {
-    if (metrics.frameTime !== undefined) {
-        document.getElementById('frame-time').textContent = `${metrics.frameTime.toFixed(2)} ms`;
-    }
-    
-    if (metrics.cpuUsage !== undefined) {
-        document.getElementById('cpu-usage').textContent = `${metrics.cpuUsage.toFixed(1)} %`;
-    }
-    
-    if (metrics.optimizationGain !== undefined) {
-        document.getElementById('opt-gain').textContent = `${metrics.optimizationGain.toFixed(1)} x`;
-    }
-}
-
-// Collapsible sections
-function initializeCollapsibles() {
-    document.querySelectorAll('.collapsible-header').forEach(header => {
-        header.addEventListener('click', () => {
-            header.parentElement.classList.toggle('collapsed');
+        const response = await fetch(`http://${host}/upload/audio_data`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-File-Name': file.name,
+                'X-Duration-Ms': duration
+            },
+            body: jsonData
         });
-    });
-}
-
-// Connection status
-function updateConnectionStatus(connected) {
-    const status = document.getElementById('connection-status');
-    status.textContent = connected ? 'Connected' : 'Disconnected';
-    status.className = 'status-text ' + (connected ? 'connected' : 'disconnected');
-}
-
-// Toast notifications
-function showToast(message, type = 'info') {
-    const container = document.getElementById('toast-container');
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    
-    const icon = {
-        success: 'fas fa-check-circle',
-        error: 'fas fa-exclamation-circle',
-        warning: 'fas fa-exclamation-triangle',
-        info: 'fas fa-info-circle'
-    }[type];
-    
-    toast.innerHTML = `
-        <i class="${icon}"></i>
-        <span>${message}</span>
-    `;
-    
-    container.appendChild(toast);
-    
-    // Auto remove after 3 seconds
-    setTimeout(() => {
-        toast.style.opacity = '0';
-        setTimeout(() => toast.remove(), 300);
-    }, 3000);
-}
-
-// Loading overlay
-function hideLoadingOverlay() {
-    setTimeout(() => {
-        document.getElementById('loading-overlay').classList.add('hidden');
-    }, 1000);
-}
-
-// Cleanup on page unload
-window.addEventListener('beforeunload', () => {
-    if (ws) {
-        ws.close();
+        
+        if (!response.ok) {
+            throw new Error('JSON upload failed');
+        }
+        
+        // Notify ESP32 to load the file
+        this.sendCommand({
+            cmd: 'load_audio_data',
+            filename: '/audio/' + file.name,
+            streaming: false
+        });
     }
-    if (animationFrame) {
-        cancelAnimationFrame(animationFrame);
+    
+    async uploadLargeJSON(file) {
+        const uploadId = this.generateUploadId();
+        const chunks = Math.ceil(file.size / this.uploadChunkSize);
+        
+        this.showStatus(`Uploading large file in ${chunks} chunks...`, 'info');
+        
+        // Create progress tracker
+        const progressTracker = {
+            uploadId,
+            totalChunks: chunks,
+            uploadedChunks: 0,
+            startTime: Date.now()
+        };
+        
+        this.activeUploads.set(uploadId, progressTracker);
+        
+        // Upload chunks
+        for (let i = 0; i < chunks; i++) {
+            const start = i * this.uploadChunkSize;
+            const end = Math.min(start + this.uploadChunkSize, file.size);
+            const chunk = file.slice(start, end);
+            
+            await this.uploadChunk(uploadId, chunk, i, chunks, file.name);
+            
+            progressTracker.uploadedChunks++;
+            this.updateLocalProgress(uploadId);
+        }
+        
+        // Finalize upload
+        await this.finalizeChunkedUpload(uploadId, file.name);
     }
+    
+    async uploadChunk(uploadId, chunk, chunkIndex, totalChunks, filename) {
+        const host = window.location.hostname || 'lightwaveos.local';
+        const formData = new FormData();
+        formData.append('chunk', chunk);
+        
+        const response = await fetch(`http://${host}/upload/audio_data/chunk`, {
+            method: 'POST',
+            headers: {
+                'X-Upload-ID': uploadId,
+                'X-Chunk-Index': chunkIndex,
+                'X-Total-Chunks': totalChunks,
+                'X-Chunk-Size': this.uploadChunkSize,
+                'X-File-Name': filename
+            },
+            body: formData
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Chunk ${chunkIndex} upload failed`);
+        }
+        
+        return response.json();
+    }
+    
+    async finalizeChunkedUpload(uploadId, filename) {
+        const host = window.location.hostname || 'lightwaveos.local';
+        
+        const response = await fetch(`http://${host}/upload/audio_data/chunk`, {
+            method: 'POST',
+            headers: {
+                'X-Upload-ID': uploadId,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ finalize: true })
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to finalize upload');
+        }
+        
+        const result = await response.json();
+        
+        // Clean up tracker
+        this.activeUploads.delete(uploadId);
+        
+        // Notify ESP32 to load with streaming
+        this.sendCommand({
+            cmd: 'load_audio_data',
+            filename: result.filename,
+            streaming: true  // Use streaming parser for large files
+        });
+        
+        return result;
+    }
+    
+    updateLocalProgress(uploadId) {
+        const tracker = this.activeUploads.get(uploadId);
+        if (!tracker) return;
+        
+        const progress = (tracker.uploadedChunks / tracker.totalChunks) * 100;
+        const elapsed = Date.now() - tracker.startTime;
+        const speed = (tracker.uploadedChunks * this.uploadChunkSize) / (elapsed / 1000);
+        
+        document.getElementById('uploadProgressBar').style.width = progress + '%';
+        document.getElementById('uploadProgressText').textContent = 
+            `${progress.toFixed(1)}% (${this.formatFileSize(speed)}/s)`;
+    }
+    
+    updateUploadProgress(data) {
+        const progress = data.progress;
+        document.getElementById('uploadProgressBar').style.width = progress + '%';
+        document.getElementById('uploadProgressText').textContent = 
+            `${progress.toFixed(1)}% (${data.chunks_received}/${data.total_chunks} chunks)`;
+    }
+    
+    async measureNetworkLatency() {
+        this.latencySamples = [];
+        
+        for (let i = 0; i < 10; i++) {
+            const sample = await this.measureSingleLatency(i);
+            if (sample > 0) {
+                this.latencySamples.push(sample);
+            }
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        // Calculate statistics
+        if (this.latencySamples.length > 0) {
+            this.networkLatency = this.calculateTrimmedMean(this.latencySamples);
+            document.getElementById('latencyDisplay').textContent = 
+                `${this.networkLatency.toFixed(1)}ms`;
+            
+            // Send latency report to device
+            this.sendCommand({
+                cmd: 'measure_latency',
+                type: 'latency_report',
+                latency: this.networkLatency
+            });
+        }
+    }
+    
+    measureSingleLatency(sequence) {
+        return new Promise((resolve) => {
+            const startTime = performance.now();
+            const timeout = setTimeout(() => resolve(-1), 1000);
+            
+            const handler = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'pong' && data.sequence === sequence) {
+                        clearTimeout(timeout);
+                        const latency = performance.now() - startTime;
+                        this.ws.removeEventListener('message', handler);
+                        resolve(latency);
+                    }
+                } catch (e) {}
+            };
+            
+            this.ws.addEventListener('message', handler);
+            
+            this.sendCommand({
+                cmd: 'measure_latency',
+                type: 'ping',
+                sequence: sequence,
+                timestamp: Date.now()
+            });
+        });
+    }
+    
+    calculateTrimmedMean(samples) {
+        if (samples.length === 0) return 0;
+        
+        // Sort samples
+        const sorted = [...samples].sort((a, b) => a - b);
+        
+        // Remove top and bottom 20%
+        const trimCount = Math.floor(sorted.length * 0.2);
+        const trimmed = sorted.slice(trimCount, sorted.length - trimCount);
+        
+        // Calculate mean
+        const sum = trimmed.reduce((a, b) => a + b, 0);
+        return sum / trimmed.length;
+    }
+    
+    async performLatencyCalibration() {
+        this.showStatus('Performing network calibration...', 'info');
+        
+        // Disable controls during calibration
+        document.getElementById('calibrateBtn').disabled = true;
+        
+        // Measure latency multiple times
+        await this.measureNetworkLatency();
+        
+        // Re-enable controls
+        document.getElementById('calibrateBtn').disabled = false;
+        
+        this.showStatus(`Calibration complete. Latency: ${this.networkLatency.toFixed(1)}ms`, 'success');
+    }
+    
+    async startSyncPlayback() {
+        // Pre-buffer audio
+        this.audioPlayer.currentTime = 0;
+        await this.audioPlayer.play();
+        this.audioPlayer.pause();
+        
+        // Calculate synchronized start time
+        const countdown = 3000;
+        const targetStartTime = Date.now() + countdown;
+        
+        // Send sync command with enhanced timing info
+        this.sendCommand({
+            cmd: 'prepare_sync_play',
+            start_time: targetStartTime,
+            offset: this.syncOffset,
+            network_latency: this.networkLatency,
+            client_time: Date.now()
+        });
+        
+        // Show countdown
+        this.showCountdown(countdown);
+        
+        // Schedule audio playback with compensation
+        const compensatedDelay = countdown - this.networkLatency / 2 - 50;
+        setTimeout(() => {
+            this.audioPlayer.play();
+            this.isSynced = true;
+            this.syncStartTime = Date.now();
+            this.updateSyncStatus('Synced', true);
+            this.startSyncMonitor();
+        }, compensatedDelay);
+    }
+    
+    startSyncMonitor() {
+        let driftCorrections = 0;
+        
+        this.syncInterval = setInterval(() => {
+            if (!this.isSynced) {
+                clearInterval(this.syncInterval);
+                return;
+            }
+            
+            const currentTime = Date.now() - this.syncStartTime;
+            const audioTime = this.audioPlayer.currentTime * 1000;
+            const drift = Math.abs(currentTime - audioTime);
+            
+            // Send enhanced sync heartbeat
+            this.sendCommand({
+                cmd: 'sync_heartbeat',
+                time_ms: audioTime,
+                drift_ms: drift,
+                corrections: driftCorrections
+            });
+            
+            // Update UI
+            this.updateTimeDisplay();
+            
+            // Advanced drift correction
+            if (drift > 100 && driftCorrections < 5) {
+                this.updateSyncStatus(`Drift: ${drift.toFixed(0)}ms (correcting...)`, false);
+                driftCorrections++;
+            } else if (drift < 50) {
+                this.updateSyncStatus('Synced', true);
+                driftCorrections = Math.max(0, driftCorrections - 1);
+            }
+            
+        }, 100);
+    }
+    
+    applyDriftCorrection(data) {
+        if (!this.isSynced || !this.audioPlayer) return;
+        
+        const suggestedRate = data.suggested_rate;
+        
+        // Apply temporary playback rate adjustment
+        this.audioPlayer.playbackRate = suggestedRate;
+        
+        // Reset after correction period
+        setTimeout(() => {
+            this.audioPlayer.playbackRate = 1.0;
+        }, 1000);
+        
+        console.log(`Applied drift correction: rate=${suggestedRate}`);
+    }
+    
+    updateSyncMetrics(data) {
+        // Update advanced sync metrics display
+        const metricsEl = document.getElementById('syncMetrics');
+        if (metricsEl) {
+            metricsEl.innerHTML = `
+                <div>Device Time: ${data.device_time.toFixed(0)}ms</div>
+                <div>Client Time: ${data.client_time.toFixed(0)}ms</div>
+                <div>Drift: ${data.drift.toFixed(1)}ms</div>
+                <div>Network Latency: ${data.network_latency.toFixed(1)}ms</div>
+                <div>On Beat: ${data.on_beat ? '🎵' : '-'}</div>
+            `;
+        }
+    }
+    
+    visualizeBeat(data) {
+        // Flash beat indicator
+        const beatIndicator = document.getElementById('beatIndicator');
+        if (beatIndicator) {
+            beatIndicator.classList.add('beat-flash');
+            setTimeout(() => {
+                beatIndicator.classList.remove('beat-flash');
+            }, 100);
+        }
+        
+        // Update beat confidence
+        const confidenceEl = document.getElementById('beatConfidence');
+        if (confidenceEl) {
+            confidenceEl.style.width = (data.confidence * 100) + '%';
+        }
+    }
+    
+    // Helper methods
+    formatFileSize(bytes) {
+        const units = ['B', 'KB', 'MB', 'GB'];
+        let size = bytes;
+        let unitIndex = 0;
+        
+        while (size >= 1024 && unitIndex < units.length - 1) {
+            size /= 1024;
+            unitIndex++;
+        }
+        
+        return `${size.toFixed(1)} ${units[unitIndex]}`;
+    }
+    
+    generateUploadId() {
+        return 'upload_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    }
+    
+    readFileAsText(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.onerror = reject;
+            reader.readAsText(file);
+        });
+    }
+    
+    showCountdown(ms) {
+        let remaining = ms / 1000;
+        const countdownEl = document.createElement('div');
+        countdownEl.className = 'countdown-overlay';
+        countdownEl.innerHTML = `
+            <div class="countdown-number">${remaining}</div>
+            <div class="countdown-text">Starting synchronized playback...</div>
+        `;
+        document.body.appendChild(countdownEl);
+        
+        const numberEl = countdownEl.querySelector('.countdown-number');
+        
+        const interval = setInterval(() => {
+            remaining--;
+            if (remaining <= 0) {
+                clearInterval(interval);
+                countdownEl.classList.add('fade-out');
+                setTimeout(() => countdownEl.remove(), 500);
+            } else {
+                numberEl.textContent = remaining;
+                if (remaining === 1) {
+                    numberEl.classList.add('pulse');
+                }
+            }
+        }, 1000);
+    }
+    
+    stopPlayback() {
+        this.audioPlayer.pause();
+        this.audioPlayer.currentTime = 0;
+        this.isSynced = false;
+        
+        if (this.syncInterval) {
+            clearInterval(this.syncInterval);
+            this.syncInterval = null;
+        }
+        
+        this.sendCommand({
+            cmd: 'stop_playback'
+        });
+        
+        this.updateSyncStatus('Stopped', false);
+        document.getElementById('progressFill').style.width = '0%';
+        this.updateTimeDisplay();
+    }
+    
+    sendCommand(data) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify(data));
+        } else {
+            this.showStatus('Not connected to device', 'error');
+        }
+    }
+    
+    updateConnectionStatus(connected) {
+        const indicator = document.getElementById('connectionIndicator');
+        const text = document.getElementById('connectionText');
+        
+        if (connected) {
+            indicator.classList.add('connected');
+            text.textContent = 'Connected';
+        } else {
+            indicator.classList.remove('connected');
+            text.textContent = 'Disconnected';
+        }
+    }
+    
+    updateSyncStatus(text, synced) {
+        document.getElementById('syncText').textContent = text;
+        const indicator = document.getElementById('syncIndicator');
+        indicator.className = synced ? 'indicator synced' : 'indicator not-synced';
+    }
+    
+    updateTimeDisplay() {
+        const current = this.formatTime(this.audioPlayer.currentTime);
+        const duration = this.formatTime(this.audioPlayer.duration || 0);
+        document.getElementById('trackTime').textContent = `${current} / ${duration}`;
+    }
+    
+    formatTime(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+    
+    showStatus(message, type = 'info') {
+        const messagesEl = document.getElementById('statusMessages');
+        const messageEl = document.createElement('div');
+        messageEl.className = `status-message ${type}`;
+        messageEl.textContent = message;
+        
+        messagesEl.appendChild(messageEl);
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            messageEl.style.opacity = '0';
+            setTimeout(() => messageEl.remove(), 300);
+        }, 5000);
+        
+        // Keep only last 5 messages
+        while (messagesEl.children.length > 5) {
+            messagesEl.removeChild(messagesEl.firstChild);
+        }
+    }
+}
+
+// Initialize enhanced controller on page load
+document.addEventListener('DOMContentLoaded', () => {
+    window.audioSync = new AudioSyncController();
 });

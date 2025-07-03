@@ -63,6 +63,9 @@ public:
     // Send notifications
     void notifyEffectChange(uint8_t effectId);
     void notifyError(const String& message);
+    
+    // Get server instance for adding routes
+    AsyncWebServer* getServer() { return server; }
 };
 
 // Global instance

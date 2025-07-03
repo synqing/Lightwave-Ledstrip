@@ -5,6 +5,10 @@
 #include <ESPmDNS.h>
 #include <Update.h>
 
+#if FEATURE_AUDIO_SYNC
+#include "../audio/audio_web_handlers.h"
+#endif
+
 // External references from main.cpp
 extern uint8_t currentEffect;
 extern uint8_t gHue;
@@ -308,6 +312,11 @@ void LightwaveWebServer::handleCommand(AsyncWebSocketClient* client, const JsonD
         bool enabled = doc["enabled"] | false;
         Serial.printf("Sync %s\n", enabled ? "enabled" : "disabled");
     }
+#if FEATURE_AUDIO_SYNC
+    else if (strcmp(cmd, "audio") == 0) {
+        handleAudioCommand(client, doc);
+    }
+#endif
 }
 
 void LightwaveWebServer::handleSetParameter(const JsonDocument& doc) {

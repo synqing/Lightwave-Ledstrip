@@ -21,6 +21,12 @@
 #include "utils/SerialMenu.h"
 #endif
 
+#if FEATURE_AUDIO_SYNC
+#include "audio/audio_sync.h"
+#include "audio/audio_effects.h"
+AudioSync audioSync;  // Global audio sync instance
+#endif
+
 
 // LED Type Configuration
 #define LED_TYPE WS2812
@@ -171,7 +177,14 @@ Effect effects[] = {
     {"Shockwave", shockwaveEffect, EFFECT_TYPE_STANDARD},
     {"Vortex", vortexEffectWrapper, EFFECT_TYPE_STANDARD},
     {"Collision", collisionEffect, EFFECT_TYPE_STANDARD},
-    {"Gravity Well", gravityWellEffect, EFFECT_TYPE_STANDARD}
+    {"Gravity Well", gravityWellEffect, EFFECT_TYPE_STANDARD},
+    
+#if FEATURE_AUDIO_SYNC
+    // =============== AUDIO REACTIVE EFFECTS ===============
+    {"Bass Reactive", bassReactiveEffect, EFFECT_TYPE_STANDARD},
+    {"Spectrum", spectrumEffect, EFFECT_TYPE_STANDARD},
+    {"Energy Flow", energyFlowEffect, EFFECT_TYPE_STANDARD}
+#endif
 };
 
 const uint8_t NUM_EFFECTS = sizeof(effects) / sizeof(effects[0]);
@@ -516,6 +529,22 @@ void setup() {
     }
 #endif
 
+#if FEATURE_AUDIO_SYNC
+    // Initialize audio sync system
+    Serial.println("\n=== Initializing Audio Sync ===");
+    if (audioSync.begin()) {
+        Serial.println("✅ Audio sync initialized");
+        
+        // Add audio routes to web server
+        #if FEATURE_WEB_SERVER
+        setupAudioRoutes(webServer.getServer());
+        Serial.println("✅ Audio web routes added");
+        #endif
+    } else {
+        Serial.println("⚠️ Audio sync initialization failed");
+    }
+#endif
+
     Serial.println("\n=== Setup Complete ===");
     Serial.println("🎭 Advanced Transition System Active");
     Serial.println("⚡ FastLED Optimizations ENABLED");
@@ -799,6 +828,11 @@ void loop() {
     // Update web server
 #if FEATURE_WEB_SERVER
     webServer.update();
+#endif
+
+#if FEATURE_AUDIO_SYNC
+    // Update audio sync system
+    audioSync.update();
 #endif
     
     // Update transition system

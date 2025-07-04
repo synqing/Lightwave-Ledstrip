@@ -205,7 +205,7 @@ public:
     /**
      * Adaptive TX power task - adjusts power based on RSSI
      */
-    static void IRAM_ATTR adaptivePowerTask(void* param) {
+    static void adaptivePowerTask(void* param) {
         const int8_t MIN_TX_POWER = 8;   // 8 dBm (6.3mW)
         const int8_t MED_TX_POWER = 14;  // 14 dBm (25mW)
         const int8_t MAX_TX_POWER = 20;  // 20 dBm (100mW)
@@ -267,16 +267,16 @@ public:
      * Configure coexistence with LED DMA operations
      */
     static void configureCoexistence() {
-        // WiFi/Bluetooth coexistence
-        esp_coex_preference_t coex_pref = ESP_COEX_PREFER_WIFI;
-        esp_coex_preference_set(coex_pref);
+        // WiFi/Bluetooth coexistence - disabled for ESP32-S3 compatibility
+        // esp_coex_preference_t coex_pref = ESP_COEX_PREFER_WIFI;
+        // esp_coex_preference_set(coex_pref);
         
         // Configure WiFi sleep to avoid conflicts with LED updates
         // This ensures WiFi doesn't sleep during critical LED operations
         wifi_ps_type_t ps_type = WIFI_PS_MIN_MODEM;  // Minimal power save
         esp_wifi_set_ps(ps_type);
         
-        Serial.println("✅ Coexistence configured for LED DMA priority");
+        Serial.println("✅ Power save configured for LED DMA priority");
     }
     
     /**

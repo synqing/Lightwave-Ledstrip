@@ -17,6 +17,9 @@
 #include "pipeline/PipelineEffects.h"
 #endif
 
+// Strip effects (always included for dual-strip hardware)
+#include "strip/StripEffects.h"
+
 class EffectRegistry {
 public:
     static void registerAllEffects(FxEngine& engine) {
@@ -33,6 +36,9 @@ public:
         #if FEATURE_PIPELINE_EFFECTS
         registerPipelineEffects(engine);
         #endif
+        
+        // Always register strip effects for dual-strip hardware
+        registerStripEffects(engine);
     }
     
 private:
@@ -59,6 +65,12 @@ private:
         Serial.println(F("[INFO] Pipeline effects registered"));
     }
     #endif
+    
+    static void registerStripEffects(FxEngine& engine) {
+        // Register strip-specific effects including LGP effects
+        StripEffects::registerAll(engine);
+        Serial.println(F("[INFO] Strip effects (including LGP) registered"));
+    }
 };
 
 #endif // EFFECT_REGISTRY_H

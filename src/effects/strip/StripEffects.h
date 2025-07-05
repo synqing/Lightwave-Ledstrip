@@ -5,6 +5,7 @@
 #include <FastLED.h>
 #include "../../config/hardware_config.h"
 #include "../../core/EffectTypes.h"
+#include "../../core/FxEngine.h"
 
 // External dependencies from main.cpp
 extern CRGB strip1[HardwareConfig::STRIP1_LED_COUNT];
@@ -48,5 +49,38 @@ void shockwaveEffect();
 void vortexEffect();
 void collisionEffect();
 void gravityWellEffect();
+
+// LGP-specific effects
+void lgpInterferenceScanner();
+void lgpHolographic();
+void lgpModalResonance();
+void lgpWaveCollision();
+void lgpBoxWave();
+void lgpDiamondLattice();
+void lgpHexagonalGrid();
+void lgpSpiralVortex();
+void lgpSierpinskiTriangles();
+void lgpChevronWaves();
+void lgpConcentricRings();
+void lgpStarBurst();
+void lgpMeshNetwork();
+
+// Include new LGP Advanced Effects
+#include "LGPAdvancedEffects.h"
+
+// Include new LGP Organic Effects  
+#include "LGPOrganicEffects.h"
+
+// Include new LGP Geometric Effects
+#include "LGPGeometricEffects.h"
+
+// Include new LGP Color Mixing Effects
+#include "LGPColorMixingEffects.h"
+
+// StripEffects registration class
+class StripEffects {
+public:
+    static void registerAll(FxEngine& engine);
+};
 
 #endif // STRIP_EFFECTS_H

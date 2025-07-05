@@ -141,6 +141,13 @@ extern void gravityWellEffect();
 // Include effects header
 #include "effects.h"
 
+// LGP Effect Declarations
+#include "effects/strip/LGPInterferenceEffects.h"
+#include "effects/strip/LGPGeometricEffects.h"
+#include "effects/strip/LGPAdvancedEffects.h"
+#include "effects/strip/LGPOrganicEffects.h"
+#include "effects/strip/LGPQuantumEffects.h"
+
 // Effects array - Matrix mode has been surgically removed
 Effect effects[] = {
     // =============== BASIC STRIP EFFECTS ===============
@@ -177,6 +184,54 @@ Effect effects[] = {
     {"Vortex", vortexEffectWrapper, EFFECT_TYPE_STANDARD},
     {"Collision", collisionEffect, EFFECT_TYPE_STANDARD},
     {"Gravity Well", gravityWellEffect, EFFECT_TYPE_STANDARD},
+    
+    // =============== LGP INTERFERENCE EFFECTS ===============
+    // Specifically designed for Light Guide Plate optics
+    {"LGP Box Wave", lgpBoxWave, EFFECT_TYPE_STANDARD},
+    {"LGP Holographic", lgpHolographic, EFFECT_TYPE_STANDARD},
+    {"LGP Modal Resonance", lgpModalResonance, EFFECT_TYPE_STANDARD},
+    {"LGP Interference Scanner", lgpInterferenceScanner, EFFECT_TYPE_STANDARD},
+    {"LGP Wave Collision", lgpWaveCollision, EFFECT_TYPE_STANDARD},
+    
+    // =============== LGP GEOMETRIC EFFECTS ===============
+    // Advanced shapes leveraging waveguide physics
+    {"LGP Diamond Lattice", lgpDiamondLattice, EFFECT_TYPE_STANDARD},
+    {"LGP Hexagonal Grid", lgpHexagonalGrid, EFFECT_TYPE_STANDARD},
+    {"LGP Spiral Vortex", lgpSpiralVortex, EFFECT_TYPE_STANDARD},
+    {"LGP Sierpinski", lgpSierpinskiTriangles, EFFECT_TYPE_STANDARD},
+    {"LGP Chevron Waves", lgpChevronWaves, EFFECT_TYPE_STANDARD},
+    {"LGP Concentric Rings", lgpConcentricRings, EFFECT_TYPE_STANDARD},
+    {"LGP Star Burst", lgpStarBurst, EFFECT_TYPE_STANDARD},
+    {"LGP Mesh Network", lgpMeshNetwork, EFFECT_TYPE_STANDARD},
+    
+    // =============== LGP ADVANCED EFFECTS ===============
+    // Next-gen optical patterns
+    {"LGP Moiré Curtains", lgpMoireCurtains, EFFECT_TYPE_STANDARD},
+    {"LGP Radial Ripple", lgpRadialRipple, EFFECT_TYPE_STANDARD},
+    {"LGP Holographic Vortex", lgpHolographicVortex, EFFECT_TYPE_STANDARD},
+    {"LGP Evanescent Drift", lgpEvanescentDrift, EFFECT_TYPE_STANDARD},
+    {"LGP Chromatic Shear", lgpChromaticShear, EFFECT_TYPE_STANDARD},
+    {"LGP Modal Cavity", lgpModalCavity, EFFECT_TYPE_STANDARD},
+    {"LGP Fresnel Zones", lgpFresnelZones, EFFECT_TYPE_STANDARD},
+    {"LGP Photonic Crystal", lgpPhotonicCrystal, EFFECT_TYPE_STANDARD},
+    
+    // =============== LGP ORGANIC EFFECTS ===============
+    // Nature-inspired optical phenomena
+    {"LGP Aurora Borealis", lgpAuroraBorealis, EFFECT_TYPE_STANDARD},
+    {"LGP Bioluminescent", lgpBioluminescentWaves, EFFECT_TYPE_STANDARD},
+    {"LGP Plasma Membrane", lgpPlasmaMembrane, EFFECT_TYPE_STANDARD},
+    {"LGP Neural Network", lgpNeuralNetwork, EFFECT_TYPE_STANDARD},
+    {"LGP Crystal Growth", lgpCrystallineGrowth, EFFECT_TYPE_STANDARD},
+    {"LGP Fluid Dynamics", lgpFluidDynamics, EFFECT_TYPE_STANDARD},
+    
+    // =============== LGP QUANTUM EFFECTS ===============
+    // Mind-bending physics simulations
+    {"LGP Quantum Tunneling", lgpQuantumTunneling, EFFECT_TYPE_STANDARD},
+    {"LGP Gravitational Lens", lgpGravitationalLensing, EFFECT_TYPE_STANDARD},
+    {"LGP Sonic Boom", lgpSonicBoom, EFFECT_TYPE_STANDARD},
+    {"LGP Time Crystal", lgpTimeCrystal, EFFECT_TYPE_STANDARD},
+    {"LGP Soliton Waves", lgpSolitonWaves, EFFECT_TYPE_STANDARD},
+    {"LGP Metamaterial Cloak", lgpMetamaterialCloaking, EFFECT_TYPE_STANDARD},
     
 #if FEATURE_AUDIO_SYNC
     // =============== AUDIO REACTIVE EFFECTS ===============

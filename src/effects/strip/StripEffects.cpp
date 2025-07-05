@@ -726,3 +726,85 @@ void gravityWellEffect() {
         }
     }
 }
+
+// ============== EFFECT REGISTRATION ==============
+
+#include "../basic/BasicEffects.h"
+
+void StripEffects::registerAll(FxEngine& engine) {
+    // Register basic strip effects
+    engine.addEffect("Solid Color", solidColor);
+    engine.addEffect("Pulse", pulseEffect);
+    engine.addEffect("Confetti", stripConfetti);
+    engine.addEffect("Sinelon", sinelon);
+    engine.addEffect("Juggle", stripJuggle);
+    engine.addEffect("BPM", stripBPM);
+    
+    // Register wave effects
+    engine.addEffect("Wave", waveEffect);
+    engine.addEffect("Ripple", rippleEffect);
+    engine.addEffect("Interference", stripInterference);
+    engine.addEffect("Plasma", stripPlasma);
+    
+    // Register nature effects
+    engine.addEffect("Fire", fire);
+    engine.addEffect("Ocean", stripOcean);
+    
+    // Register center-origin effects
+    engine.addEffect("Heartbeat", heartbeatEffect);
+    engine.addEffect("Breathing", breathingEffect);
+    engine.addEffect("Shockwave", shockwaveEffect);
+    engine.addEffect("Vortex", vortexEffect);
+    engine.addEffect("Collision", collisionEffect);
+    engine.addEffect("Gravity Well", gravityWellEffect);
+    
+    // Register LGP interference effects
+    engine.addEffect("LGP Box Wave", lgpBoxWave);
+    engine.addEffect("LGP Holographic", lgpHolographic);
+    engine.addEffect("LGP Modal Resonance", lgpModalResonance);
+    engine.addEffect("LGP Interference Scanner", lgpInterferenceScanner);
+    engine.addEffect("LGP Wave Collision", lgpWaveCollision);
+    
+    // Register LGP geometric effects
+    engine.addEffect("LGP Diamond Lattice", lgpDiamondLattice);
+    engine.addEffect("LGP Hexagonal Grid", lgpHexagonalGrid);
+    engine.addEffect("LGP Spiral Vortex", lgpSpiralVortex);
+    engine.addEffect("LGP Sierpinski", lgpSierpinskiTriangles);
+    engine.addEffect("LGP Chevron Waves", lgpChevronWaves);
+    engine.addEffect("LGP Concentric Rings", lgpConcentricRings);
+    engine.addEffect("LGP Star Burst", lgpStarBurst);
+    engine.addEffect("LGP Mesh Network", lgpMeshNetwork);
+    
+    // Register LGP advanced effects
+    engine.addEffect("LGP Moiré Curtains", lgpMoireCurtains);
+    engine.addEffect("LGP Radial Ripple", lgpRadialRipple);
+    engine.addEffect("LGP Holographic Vortex", lgpHolographicVortex);
+    engine.addEffect("LGP Evanescent Drift", lgpEvanescentDrift);
+    engine.addEffect("LGP Chromatic Shear", lgpChromaticShear);
+    engine.addEffect("LGP Modal Cavity", lgpModalCavity);
+    engine.addEffect("LGP Fresnel Zones", lgpFresnelZones);
+    engine.addEffect("LGP Photonic Crystal", lgpPhotonicCrystal);
+    
+    // Register LGP organic effects
+    engine.addEffect("LGP Aurora Borealis", lgpAuroraBorealis);
+    engine.addEffect("LGP Bioluminescent", lgpBioluminescentWaves);
+    engine.addEffect("LGP Plasma Membrane", lgpPlasmaMembrane);
+    engine.addEffect("LGP Neural Network", lgpNeuralNetwork);
+    engine.addEffect("LGP Crystal Growth", lgpCrystallineGrowth);
+    engine.addEffect("LGP Fluid Dynamics", lgpFluidDynamics);
+    
+    // Register LGP color mixing effects
+    engine.addEffect("LGP Color Temperature", lgpColorTemperature);
+    engine.addEffect("LGP RGB Prism", lgpRGBPrism);
+    engine.addEffect("LGP Complementary Mix", lgpComplementaryMixing);
+    engine.addEffect("LGP Additive/Subtractive", lgpAdditiveSubtractive);
+    engine.addEffect("LGP Quantum Colors", lgpQuantumColors);
+    engine.addEffect("LGP Doppler Shift", lgpDopplerShift);
+    engine.addEffect("LGP Chromatic Aberration", lgpChromaticAberration);
+    engine.addEffect("LGP HSV Cylinder", lgpHSVCylinder);
+    engine.addEffect("LGP Perceptual Blend", lgpPerceptualBlend);
+    engine.addEffect("LGP Metameric Colors", lgpMetamericColors);
+    engine.addEffect("LGP Color Accelerator", lgpColorAccelerator);
+    engine.addEffect("LGP DNA Helix", lgpDNAHelix);
+    engine.addEffect("LGP Phase Transition", lgpPhaseTransition);
+}

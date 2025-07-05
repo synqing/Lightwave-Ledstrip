@@ -63,10 +63,16 @@ enum AudioParameter {
 static AudioParameter currentAudioParam = AUDIO_PARAM_SOURCE;
 static uint8_t audioParamSelection = 0;
 
-// I2C utility functions with timing
+// I2C utility functions with timing and mutex protection
 bool readI2CRegister(uint8_t reg, uint8_t* data, size_t len) {
     uint32_t startTime = micros();
     g_encoderPerf.totalReads++;
+    
+    // Take I2C mutex before any Wire operations
+    if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(50)) != pdTRUE) {
+        g_encoderPerf.timeouts++;
+        return false;
+    }
     
     Wire.beginTransmission(HardwareConfig::M5STACK_8ENCODER_ADDR);
     Wire.write(reg);
@@ -74,6 +80,7 @@ bool readI2CRegister(uint8_t reg, uint8_t* data, size_t len) {
     
     if (result != 0) {
         g_encoderPerf.errors++;
+        xSemaphoreGive(i2cMutex);
         return false;
     }
     
@@ -86,12 +93,15 @@ bool readI2CRegister(uint8_t reg, uint8_t* data, size_t len) {
     
     if (Wire.available() < len) {
         g_encoderPerf.timeouts++;
+        xSemaphoreGive(i2cMutex);
         return false;
     }
     
     for (size_t i = 0; i < len; i++) {
         data[i] = Wire.read();
     }
+    
+    xSemaphoreGive(i2cMutex);
     
     uint32_t elapsed = micros() - startTime;
     g_encoderPerf.totalTimeUs += elapsed;
@@ -104,12 +114,19 @@ bool readI2CRegister(uint8_t reg, uint8_t* data, size_t len) {
 bool writeI2CRegister(uint8_t reg, uint8_t* data, size_t len) {
     uint32_t startTime = micros();
     
+    // Take I2C mutex before any Wire operations
+    if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(50)) != pdTRUE) {
+        return false;
+    }
+    
     Wire.beginTransmission(HardwareConfig::M5STACK_8ENCODER_ADDR);
     Wire.write(reg);
     for (size_t i = 0; i < len; i++) {
         Wire.write(data[i]);
     }
     uint8_t result = Wire.endTransmission();
+    
+    xSemaphoreGive(i2cMutex);
     
     uint32_t elapsed = micros() - startTime;
     g_encoderPerf.totalTimeUs += elapsed;

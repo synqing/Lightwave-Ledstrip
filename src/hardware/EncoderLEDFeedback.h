@@ -155,7 +155,11 @@ inline void EncoderLEDFeedback::updateEncoderLED(uint8_t index) {
     uint8_t finalG = led.g * led.brightness / 255;
     uint8_t finalB = led.b * led.brightness / 255;
     
-    m_encoder->writeRGB(index, finalR, finalG, finalB);
+    // Thread-safe I2C access
+    if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        m_encoder->writeRGB(index, finalR, finalG, finalB);
+        xSemaphoreGive(i2cMutex);
+    }
 }
 
 inline void EncoderLEDFeedback::updateEffectIndicator(LEDState& led) {
@@ -277,14 +281,18 @@ inline float EncoderLEDFeedback::generateActivityDecay(uint32_t lastActivity, ui
 
 inline void EncoderLEDFeedback::applyDefaultColorScheme() {
     // Set default colors as per the specification
-    m_encoder->writeRGB(0, 16, 0, 0);    // Red - Effect
-    m_encoder->writeRGB(1, 16, 16, 16);  // White - Brightness
-    m_encoder->writeRGB(2, 8, 0, 16);    // Purple - Palette
-    m_encoder->writeRGB(3, 16, 8, 0);    // Yellow - Speed
-    m_encoder->writeRGB(4, 16, 0, 8);    // Orange - Intensity
-    m_encoder->writeRGB(5, 0, 16, 16);   // Cyan - Saturation
-    m_encoder->writeRGB(6, 8, 16, 0);    // Lime - Complexity
-    m_encoder->writeRGB(7, 16, 0, 16);   // Magenta - Variation
+    // Thread-safe I2C access
+    if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        m_encoder->writeRGB(0, 16, 0, 0);    // Red - Effect
+        m_encoder->writeRGB(1, 16, 16, 16);  // White - Brightness
+        m_encoder->writeRGB(2, 8, 0, 16);    // Purple - Palette
+        m_encoder->writeRGB(3, 16, 8, 0);    // Yellow - Speed
+        m_encoder->writeRGB(4, 16, 0, 8);    // Orange - Intensity
+        m_encoder->writeRGB(5, 0, 16, 16);   // Cyan - Saturation
+        m_encoder->writeRGB(6, 8, 16, 0);    // Lime - Complexity
+        m_encoder->writeRGB(7, 16, 0, 16);   // Magenta - Variation
+        xSemaphoreGive(i2cMutex);
+    }
 }
 
 #endif // ENCODER_LED_FEEDBACK_H

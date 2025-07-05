@@ -57,22 +57,25 @@ bool EncoderManager::begin() {
     Serial.println("Encoder event queue created successfully");
     
     // Initial connection attempt
-    encoderAvailable = encoder.begin();
-    if (encoderAvailable && encoder.isConnected()) {
-        Serial.print("M5ROTATE8 connected! Firmware: V");
-        Serial.println(encoder.getVersion());
-        
-        // Set all LEDs to dim blue idle state
-        encoder.setAll(0, 0, 16);
-        
-        Serial.println("Encoder mapping:");
-        Serial.println("  0: Effect selection  1: Brightness");
-        Serial.println("  2: Palette           3: Speed");
-        Serial.println("  4: Intensity         5: Saturation");
-        Serial.println("  6: Complexity        7: Variation");
-    } else {
-        Serial.println("M5ROTATE8 not found initially - task will attempt reconnection");
-        encoderAvailable = false;
+    if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
+        encoderAvailable = encoder.begin();
+        if (encoderAvailable && encoder.isConnected()) {
+            Serial.print("M5ROTATE8 connected! Firmware: V");
+            Serial.println(encoder.getVersion());
+            
+            // Set all LEDs to dim blue idle state
+            encoder.setAll(0, 0, 16);
+            
+            Serial.println("Encoder mapping:");
+            Serial.println("  0: Effect selection  1: Brightness");
+            Serial.println("  2: Palette           3: Speed");
+            Serial.println("  4: Intensity         5: Saturation");
+            Serial.println("  6: Complexity        7: Variation");
+        } else {
+            Serial.println("M5ROTATE8 not found initially - task will attempt reconnection");
+            encoderAvailable = false;
+        }
+        xSemaphoreGive(i2cMutex);
     }
     
     // Create dedicated I2C task on Core 0 (main loop runs on Core 1)
@@ -132,24 +135,26 @@ void EncoderManager::encoderTask() {
         // Poll encoders safely in dedicated task
         bool connectionLost = false;
         
-        for (int i = 0; i < 8; i++) {
-            // Track I2C transaction start time
-            uint32_t transaction_start = micros();
-            
-            if (!encoder.isConnected()) {
-                connectionLost = true;
-                metrics.recordI2CTransaction(false);
-                break;
-            }
-            
-            // Read relative counter with error handling
-            int32_t raw_delta = encoder.getRelCounter(i);
-            
-            // Reset the counter after reading to prevent accumulation
-            if (raw_delta != 0) {
-                encoder.resetCounter(i);
-            }
-            metrics.recordI2CTransaction(true);
+        // Take I2C mutex for encoder polling
+        if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+            for (int i = 0; i < 8; i++) {
+                // Track I2C transaction start time
+                uint32_t transaction_start = micros();
+                
+                if (!encoder.isConnected()) {
+                    connectionLost = true;
+                    metrics.recordI2CTransaction(false);
+                    break;
+                }
+                
+                // Read relative counter with error handling
+                int32_t raw_delta = encoder.getRelCounter(i);
+                
+                // Reset the counter after reading to prevent accumulation
+                if (raw_delta != 0) {
+                    encoder.resetCounter(i);
+                }
+                metrics.recordI2CTransaction(true);
             
             // Process through detent-aware debouncing
             DetentDebounce& debounce = encoderDebounce[i];
@@ -205,6 +210,9 @@ void EncoderManager::encoderTask() {
             vTaskDelay(pdMS_TO_TICKS(2));
         }
         
+        // Release I2C mutex after polling
+        xSemaphoreGive(i2cMutex);
+        
         // Handle connection loss
         if (connectionLost) {
             Serial.println("💥 TASK: Encoder connection lost, suspending I2C operations...");
@@ -214,6 +222,10 @@ void EncoderManager::encoderTask() {
             metrics.recordConnectionLoss();
             continue;
         }
+    } else {
+        // Could not get mutex - skip this polling cycle
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
         
         // Print performance report periodically
         metrics.printReport();
@@ -233,28 +245,34 @@ void EncoderManager::encoderTask() {
 bool EncoderManager::attemptReconnection() {
     Serial.printf("🔄 TASK: Attempting encoder reconnection (backoff: %dms)...\n", reconnectBackoffMs);
     
-    if (encoder.begin() && encoder.isConnected()) {
-        Serial.println("✅ TASK: Encoder reconnected successfully!");
-        Serial.printf("📋 TASK: Firmware V%d\n", encoder.getVersion());
-        encoderFailCount = 0;
-        reconnectBackoffMs = 1000;  // Reset backoff
-        
-        // Initialize encoder LEDs to idle state
-        encoder.setAll(0, 0, 16);
-        Serial.println("💡 TASK: Encoder LEDs initialized to idle state");
-        
-        // Record successful reconnection
-        metrics.recordReconnect();
-        return true;
-    } else {
+    bool success = false;
+    if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        if (encoder.begin() && encoder.isConnected()) {
+            Serial.println("✅ TASK: Encoder reconnected successfully!");
+            Serial.printf("📋 TASK: Firmware V%d\n", encoder.getVersion());
+            encoderFailCount = 0;
+            reconnectBackoffMs = 1000;  // Reset backoff
+            
+            // Initialize encoder LEDs to idle state
+            encoder.setAll(0, 0, 16);
+            Serial.println("💡 TASK: Encoder LEDs initialized to idle state");
+            
+            // Record successful reconnection
+            metrics.recordReconnect();
+            success = true;
+        }
+        xSemaphoreGive(i2cMutex);
+    }
+    
+    if (!success) {
         encoderFailCount++;
         // Exponential backoff: 1s, 2s, 4s, 8s, max 30s
         uint32_t maxShift = min(encoderFailCount, (uint32_t)5);
         reconnectBackoffMs = min((uint32_t)(1000 * (1 << maxShift)), (uint32_t)30000);
         Serial.printf("❌ TASK: Reconnection failed (%d attempts), next try in %dms\n", 
                      encoderFailCount, reconnectBackoffMs);
-        return false;
     }
+    return success;
 }
 
 // Update encoder LEDs
@@ -263,26 +281,29 @@ void EncoderManager::updateEncoderLEDs(uint32_t now) {
     if (now - lastLEDUpdate >= 100) {
         lastLEDUpdate = now;
         
-        for (int i = 0; i < 8; i++) {
-            if (ledNeedsUpdate[i]) {
-                if (now - ledFlashTime[i] < 300) {
-                    // Green flash for activity
-                    encoder.writeRGB(i, 0, 64, 0);
-                } else {
-                    // Return to colored idle state
-                    switch (i) {
-                        case 0: encoder.writeRGB(i, 16, 0, 0); break;   // Red - Effect
-                        case 1: encoder.writeRGB(i, 16, 16, 16); break; // White - Brightness
-                        case 2: encoder.writeRGB(i, 8, 0, 16); break;   // Purple - Palette
-                        case 3: encoder.writeRGB(i, 16, 8, 0); break;   // Yellow - Speed
-                        case 4: encoder.writeRGB(i, 16, 0, 8); break;   // Orange - Intensity
-                        case 5: encoder.writeRGB(i, 0, 16, 16); break;  // Cyan - Saturation
-                        case 6: encoder.writeRGB(i, 8, 16, 0); break;   // Lime - Complexity
-                        case 7: encoder.writeRGB(i, 16, 0, 16); break;  // Magenta - Variation
+        if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+            for (int i = 0; i < 8; i++) {
+                if (ledNeedsUpdate[i]) {
+                    if (now - ledFlashTime[i] < 300) {
+                        // Green flash for activity
+                        encoder.writeRGB(i, 0, 64, 0);
+                    } else {
+                        // Return to colored idle state
+                        switch (i) {
+                            case 0: encoder.writeRGB(i, 16, 0, 0); break;   // Red - Effect
+                            case 1: encoder.writeRGB(i, 16, 16, 16); break; // White - Brightness
+                            case 2: encoder.writeRGB(i, 8, 0, 16); break;   // Purple - Palette
+                            case 3: encoder.writeRGB(i, 16, 8, 0); break;   // Yellow - Speed
+                            case 4: encoder.writeRGB(i, 16, 0, 8); break;   // Orange - Intensity
+                            case 5: encoder.writeRGB(i, 0, 16, 16); break;  // Cyan - Saturation
+                            case 6: encoder.writeRGB(i, 8, 16, 0); break;   // Lime - Complexity
+                            case 7: encoder.writeRGB(i, 16, 0, 16); break;  // Magenta - Variation
+                        }
+                        ledNeedsUpdate[i] = false;
                     }
-                    ledNeedsUpdate[i] = false;
                 }
             }
+            xSemaphoreGive(i2cMutex);
         }
     }
 }
@@ -290,7 +311,10 @@ void EncoderManager::updateEncoderLEDs(uint32_t now) {
 // Set individual encoder LED
 void EncoderManager::setEncoderLED(uint8_t encoderId, uint8_t r, uint8_t g, uint8_t b) {
     if (encoderId < 8 && encoderAvailable) {
-        encoder.writeRGB(encoderId, r, g, b);
+        if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+            encoder.writeRGB(encoderId, r, g, b);
+            xSemaphoreGive(i2cMutex);
+        }
     }
 }
 

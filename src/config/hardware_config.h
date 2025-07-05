@@ -82,4 +82,9 @@ namespace HardwareConfig {
     constexpr size_t TRANSITION_BUFFER_SIZE = NUM_LEDS * 3; // RGB bytes
 }
 
+// Global I2C mutex for thread-safe Wire operations
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+extern SemaphoreHandle_t i2cMutex;
+
 #endif // HARDWARE_CONFIG_H

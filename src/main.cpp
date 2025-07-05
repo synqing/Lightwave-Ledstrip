@@ -29,6 +29,7 @@
 #include "audio/AudioSystem.h"
 #include "audio/audio_effects.h"
 #include "audio/MicTest.h"
+#include "audio/GoertzelUtils.h"
 #endif
 
 
@@ -102,6 +103,9 @@ uint8_t currentPaletteIndex = 0;
 
 // Global wave engine instance (disabled for now)
 // DualStripWaveEngine waveEngine;
+
+// Global I2C mutex for thread-safe Wire operations
+SemaphoreHandle_t i2cMutex = NULL;
 
 #if FEATURE_SERIAL_MENU
 // Serial menu instance
@@ -517,6 +521,14 @@ void setup() {
     
     Serial.println("Dual strip FastLED initialized");
     
+    // Create I2C mutex for thread-safe operations
+    i2cMutex = xSemaphoreCreateMutex();
+    if (i2cMutex == NULL) {
+        Serial.println("ERROR: Failed to create I2C mutex!");
+    } else {
+        Serial.println("I2C mutex created for thread-safe operations");
+    }
+    
     // Initialize I2C and M5ROTATE8 with dedicated task architecture
     Wire.begin(HardwareConfig::I2C_SDA, HardwareConfig::I2C_SCL);
     Wire.setClock(400000);  // Max supported speed (400 KHz)
@@ -739,6 +751,9 @@ void audioUpdateCallback() {
     // Update audio systems
     audioSynq.update();
     AudioSync.update();
+    // Provide latest 96-bin magnitudes to utility layer for visual engine
+    const AudioFrame& frame = AudioSync.getCurrentFrame();
+    GoertzelUtils::setBinsPointer(frame.frequency_bins);
 #endif
 }
 

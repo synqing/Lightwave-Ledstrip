@@ -9,9 +9,12 @@
 #define FEATURE_PERFORMANCE_MONITOR 1    // Performance tracking and reporting
 #define FEATURE_BUTTON_CONTROL 0         // Physical button support (NO BUTTON ON BOARD)
 
-// Network features
+// Network features - DISABLED BY DEFAULT because WiFi is fucking worthless
+// To enable WiFi/WebServer, either:
+// 1. Change FEATURE_WEB_SERVER to 1 below
+// 2. Or add to platformio.ini: build_flags = -D FEATURE_WEB_SERVER=1
 #ifndef FEATURE_WEB_SERVER
-#define FEATURE_WEB_SERVER 1            // Web interface enabled by default (can override via build flags)
+#define FEATURE_WEB_SERVER 0            // Web interface DISABLED by default (that WiFi shit is worthless)
 #endif
 #define FEATURE_WEBSOCKET 0             // WebSocket support
 #define FEATURE_OTA_UPDATE 0            // Over-the-air updates

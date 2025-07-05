@@ -1,4 +1,7 @@
 #include "WebServer.h"
+
+#if FEATURE_WEB_SERVER
+
 #include "WiFiManager.h"
 #include "../config/network_config.h"
 #include "../config/hardware_config.h"
@@ -441,3 +444,4 @@ void LightwaveWebServer::onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient 
         }
     }
 }
+#endif // FEATURE_WEB_SERVER

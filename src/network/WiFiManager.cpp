@@ -1,4 +1,7 @@
 #include "WiFiManager.h"
+
+#if FEATURE_WEB_SERVER
+
 #include <esp_wifi.h>
 
 // Static member initialization
@@ -501,3 +504,4 @@ void WiFiManager::onWiFiEvent(WiFiEvent_t event) {
             break;
     }
 }
+#endif // FEATURE_WEB_SERVER

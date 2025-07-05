@@ -151,6 +151,10 @@ extern void shockwaveEffect();
 extern void vortexEffect();
 extern void collisionEffect();
 extern void gravityWellEffect();
+extern void lgpFFTColorMap();
+extern void lgpHarmonicResonance();
+extern void lgpStereoPhasePattern();
+extern void spectrumLightshowEngine();
 
 // Include effects header
 #include "effects.h"
@@ -162,7 +166,7 @@ extern void gravityWellEffect();
 #include "effects/strip/LGPOrganicEffects.h"
 #include "effects/strip/LGPQuantumEffects.h"
 #include "effects/strip/LGPColorMixingEffects.h"
-#include "effects/strip/LGPAudioReactive.h"
+// #include "effects/strip/LGPAudioReactive.h"  // Removed: all old audio-reactive modes retired
 
 // Effects array - Matrix mode has been surgically removed
 Effect effects[] = {
@@ -266,21 +270,12 @@ Effect effects[] = {
     
 #if FEATURE_AUDIO_SYNC
     // =============== AUDIO REACTIVE EFFECTS ===============
-    {"Bass Reactive", bassReactiveEffect, EFFECT_TYPE_STANDARD},
-    {"Spectrum", spectrumEffect, EFFECT_TYPE_STANDARD},
-    // {"Energy Flow", energyFlowEffect, EFFECT_TYPE_STANDARD}, // TODO: Implement this effect
+    // Old music-reactive effects removed
     
     // =============== LGP AUDIO REACTIVE EFFECTS ===============
-    {"LGP Frequency Collision", lgpFrequencyCollision, EFFECT_TYPE_STANDARD},
-    {"LGP Beat Interference", lgpBeatInterference, EFFECT_TYPE_STANDARD},
-    {"LGP Spectral Morphing", lgpSpectralMorphing, EFFECT_TYPE_STANDARD},
-    {"LGP Audio Quantum", lgpAudioQuantumCollapse, EFFECT_TYPE_STANDARD},
-    {"LGP Rhythm Waves", lgpRhythmWaves, EFFECT_TYPE_STANDARD},
-    {"LGP Envelope Interference", lgpEnvelopeInterference, EFFECT_TYPE_STANDARD},
-    {"LGP Kick Shockwave", lgpKickShockwave, EFFECT_TYPE_STANDARD},
-    {"LGP FFT Color Map", lgpFFTColorMap, EFFECT_TYPE_STANDARD},
-    {"LGP Harmonic Resonance", lgpHarmonicResonance, EFFECT_TYPE_STANDARD},
-    {"LGP Stereo Phase", lgpStereoPhasePattern, EFFECT_TYPE_STANDARD}
+    // Removed LGP audio reactive modes – superseded by structured engine
+    // Keep new structured engine below
+    {"Spectrum LS Engine", spectrumLightshowEngine, EFFECT_TYPE_STANDARD},
 #endif
 };
 

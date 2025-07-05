@@ -1,4 +1,7 @@
 #include "WiFiManagerV2.h"
+
+#if FEATURE_WEB_SERVER
+
 #include <esp_event.h>
 
 // Static member initialization
@@ -827,3 +830,4 @@ void WiFiManagerV2::optimizeForLEDCoexistence() {
     
     Serial.println("[WiFiV2] Optimized for LED coexistence");
 }
+#endif // FEATURE_WEB_SERVER

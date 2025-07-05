@@ -9,7 +9,7 @@ audio-sync-portal/
 ├── index.html              # Web interface for audio sync control
 ├── script.js               # Enhanced JavaScript controller with chunked uploads
 ├── styles.css              # Styling for the web portal
-├── WebServerAudioSync.cpp  # Enhanced ESP32 implementation with streaming support
+├── WebServerAudioSynq.cpp  # Enhanced ESP32 implementation with streaming support
 ├── AudioReactiveEffects.h  # Example audio-reactive LED effects
 ├── ENHANCED_FEATURES.md    # Documentation of enhanced features
 └── README.md              # This file
@@ -50,7 +50,7 @@ cp index.html script.js styles.css /path/to/your/project/data/audio-sync/
 ```
 
 ### 2. Integrate Server Code
-Add the methods from `WebServerAudioSync.cpp` to your existing WebServer class:
+Add the methods from `WebServerAudioSynq.cpp` to your existing WebServer class:
 
 ```cpp
 // In your WebServer.h
@@ -61,9 +61,9 @@ private:
     bool syncActive;
 
 public:
-    void setupAudioSyncHandlers();
+    void setupAudioSynqHandlers();
     void handleAudioDataUpload(...);
-    void handleAudioSyncCommand(JsonDocument& doc);
+    void handleAudioSynqCommand(JsonDocument& doc);
     // ... other methods
 ```
 
@@ -89,7 +89,7 @@ void loop() {
     // ... existing code ...
     
     // Update audio sync if active
-    webServer.updateAudioSync();
+    webServer.updateAudioSynq();
     
     // Get audio frame for effects
     if (vpDecoder && vpDecoder->isPlaying()) {

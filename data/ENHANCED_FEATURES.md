@@ -130,19 +130,19 @@ TimerHandle_t timer = xTimerCreate(
 ### Basic Upload (Small File)
 ```javascript
 // Automatic detection and standard upload
-await audioSync.uploadFiles();  // Handles both small and large files
+await audioSynq.uploadFiles();  // Handles both small and large files
 ```
 
 ### Manual Calibration
 ```javascript
 // Measure network latency before critical performance
-await audioSync.performLatencyCalibration();
+await audioSynq.performLatencyCalibration();
 ```
 
 ### Monitor Sync Quality
 ```javascript
 // Real-time metrics in UI
-audioSync.on('sync_metrics', (data) => {
+audioSynq.on('sync_metrics', (data) => {
     console.log(`Drift: ${data.drift}ms, Latency: ${data.network_latency}ms`);
 });
 ```

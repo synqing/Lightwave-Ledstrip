@@ -78,7 +78,7 @@ namespace HardwareConfig {
     constexpr uint8_t I2S_DIN = 4;
     
     // Memory limits
-    constexpr size_t MAX_EFFECTS = 20;
+    constexpr size_t MAX_EFFECTS = 80;  // Increased to accommodate all effects including audio-reactive
     constexpr size_t TRANSITION_BUFFER_SIZE = NUM_LEDS * 3; // RGB bytes
 }
 

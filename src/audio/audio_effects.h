@@ -4,7 +4,7 @@
 #include <FastLED.h>
 
 // Global audio sync instance
-extern AudioSync audioSync;
+extern AudioSynq audioSynq;
 
 // Forward declarations for audio effect functions
 void bassReactiveEffect();
@@ -18,7 +18,7 @@ inline void bassReactiveEffect() {
     extern CRGB strip2[];
     extern uint8_t gHue;
     
-    AudioFrame frame = audioSync.getCurrentFrame();
+    AudioFrame frame = audioSynq.getCurrentFrame();
     
     // Map bass energy to brightness
     uint8_t brightness = 0;
@@ -45,7 +45,7 @@ inline void spectrumEffect() {
     extern CRGB strip1[];
     extern CRGB strip2[];
     
-    AudioFrame frame = audioSync.getCurrentFrame();
+    AudioFrame frame = audioSynq.getCurrentFrame();
     
     if (frame.silence || !frame.frequency_bins) {
         fadeToBlackBy(strip1, 144, 20);
@@ -94,7 +94,7 @@ inline void energyFlowEffect() {
     
     static float position = 0;
     
-    AudioFrame frame = audioSync.getCurrentFrame();
+    AudioFrame frame = audioSynq.getCurrentFrame();
     
     // Move position based on energy
     if (!frame.silence) {

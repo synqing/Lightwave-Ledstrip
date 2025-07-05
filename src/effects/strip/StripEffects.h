@@ -65,6 +65,21 @@ void lgpConcentricRings();
 void lgpStarBurst();
 void lgpMeshNetwork();
 
+// LGP Color Mixing Effects declarations
+void lgpColorTemperature();
+void lgpRGBPrism();
+void lgpComplementaryMixing();
+void lgpAdditiveSubtractive();
+void lgpQuantumColors();
+void lgpDopplerShift();
+void lgpChromaticAberration();
+void lgpHSVCylinder();
+void lgpPerceptualBlend();
+void lgpMetamericColors();
+void lgpColorAccelerator();
+void lgpDNAHelix();
+void lgpPhaseTransition();
+
 // Include new LGP Advanced Effects
 #include "LGPAdvancedEffects.h"
 
@@ -76,6 +91,9 @@ void lgpMeshNetwork();
 
 // Include new LGP Color Mixing Effects
 #include "LGPColorMixingEffects.h"
+
+// Include new LGP Audio Reactive Effects
+#include "LGPAudioReactive.h"
 
 // StripEffects registration class
 class StripEffects {

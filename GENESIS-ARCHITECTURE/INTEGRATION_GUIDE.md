@@ -87,7 +87,7 @@ In `main.cpp`, add VP_DECODER initialization with enhanced features:
 // Global instances
 VPDecoder vpDecoder;
 AudioFrame currentAudioFrame;
-bool audioSyncActive = false;
+bool audioSynqActive = false;
 
 void setup() {
     // ... existing setup ...
@@ -106,9 +106,9 @@ void loop() {
     // Update audio frame if VP Decoder is playing
     if (vpDecoder.isPlaying()) {
         currentAudioFrame = vpDecoder.getCurrentFrame();
-        audioSyncActive = true;
+        audioSynqActive = true;
     } else {
-        audioSyncActive = false;
+        audioSynqActive = false;
     }
     
     // ... rest of loop ...
@@ -134,7 +134,7 @@ public:
 void renderCurrentEffect() {
     if (currentEffect) {
         // Provide audio frame if effect needs it
-        if (audioSyncActive && currentEffect->requiresAudio()) {
+        if (audioSynqActive && currentEffect->requiresAudio()) {
             currentEffect->setAudioFrame(&currentAudioFrame);
         }
         currentEffect->render(leds, visualParams);
@@ -155,7 +155,7 @@ void WebServer::setupRoutes() {
           .setDefaultFile("index.html");
     
     // Setup audio sync handlers
-    setupAudioSyncHandlers();
+    setupAudioSynqHandlers();
 }
 ```
 
@@ -277,7 +277,7 @@ void* audio_buffer = ps_malloc(AUDIO_BUFFER_SIZE);
 
 2. **Limit concurrent audio effects**:
 ```cpp
-if (currentEffect->requiresAudio() && audioSyncActive) {
+if (currentEffect->requiresAudio() && audioSynqActive) {
     // Run audio effect
 } else {
     // Fall back to non-audio effect

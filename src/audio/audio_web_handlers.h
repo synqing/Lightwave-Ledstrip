@@ -5,7 +5,7 @@
 #include "audio_sync.h"
 
 // Audio sync instance
-extern AudioSync audioSync;
+extern AudioSynq audioSynq;
 
 /**
  * Handle audio-related WebSocket commands
@@ -32,9 +32,9 @@ inline void handleAudioCommand(AsyncWebSocketClient* client, const JsonDocument&
     
     if (strcmp(subCmd, "loadData") == 0) {
         const char* filename = doc["filename"];
-        if (filename && audioSync.loadAudioData(filename)) {
+        if (filename && audioSynq.loadAudioData(filename)) {
             response["status"] = "success";
-            response["duration"] = audioSync.getDuration();
+            response["duration"] = audioSynq.getDuration();
         } else {
             response["status"] = "error";
             response["message"] = "Failed to load audio data";
@@ -42,24 +42,28 @@ inline void handleAudioCommand(AsyncWebSocketClient* client, const JsonDocument&
     }
     else if (strcmp(subCmd, "startSync") == 0) {
         unsigned long clientTime = doc["clientTime"] | 0;
-        audioSync.startPlayback(clientTime);
+        audioSynq.startPlayback(clientTime);
         response["status"] = "success";
         response["serverTime"] = millis();
     }
     else if (strcmp(subCmd, "stopSync") == 0) {
-        audioSync.stopPlayback();
+        audioSynq.stopPlayback();
         response["status"] = "success";
     }
     else if (strcmp(subCmd, "getStatus") == 0) {
         response["status"] = "success";
-        response["isPlaying"] = audioSync.isPlaying();
-        response["currentTime"] = audioSync.getCurrentTime();
+        response["isPlaying"] = audioSynq.isPlaying();
+        response["isMicActive"] = audioSynq.isMicrophoneActive();
+        response["source"] = audioSynq.isUsingMicrophone() ? "microphone" : "vp_decoder";
+        response["currentTime"] = audioSynq.getCurrentTime();
         
-        if (audioSync.isPlaying()) {
-            auto frame = audioSync.getCurrentFrame();
+        if (audioSynq.isPlaying() || audioSynq.isMicrophoneActive()) {
+            auto frame = audioSynq.getCurrentFrame();
             response["bassEnergy"] = frame.bass_energy;
             response["midEnergy"] = frame.mid_energy;
             response["highEnergy"] = frame.high_energy;
+            response["overallEnergy"] = frame.total_energy;
+            response["hasBeat"] = frame.beat_detected;
         }
     }
     else if (strcmp(subCmd, "ping") == 0) {
@@ -67,6 +71,26 @@ inline void handleAudioCommand(AsyncWebSocketClient* client, const JsonDocument&
         response["status"] = "success";
         response["clientTime"] = doc["clientTime"];
         response["serverTime"] = millis();
+    }
+    else if (strcmp(subCmd, "startMic") == 0) {
+        if (audioSynq.startMicrophone()) {
+            response["status"] = "success";
+            response["message"] = "Microphone started";
+        } else {
+            response["status"] = "error";
+            response["message"] = "Failed to start microphone";
+        }
+    }
+    else if (strcmp(subCmd, "stopMic") == 0) {
+        audioSynq.stopMicrophone();
+        response["status"] = "success";
+        response["message"] = "Microphone stopped";
+    }
+    else if (strcmp(subCmd, "setSource") == 0) {
+        bool useMic = doc["useMicrophone"] | false;
+        audioSynq.setAudioSource(useMic);
+        response["status"] = "success";
+        response["source"] = useMic ? "microphone" : "vp_decoder";
     }
     else {
         response["status"] = "error";

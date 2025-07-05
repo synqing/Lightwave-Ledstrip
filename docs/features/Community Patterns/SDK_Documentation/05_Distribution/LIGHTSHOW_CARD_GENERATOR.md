@@ -147,7 +147,7 @@ interface LightshowCard {
             type: 'image' | 'video';
             data: string;              // Base64 encoded content
             caption?: string;          // Media description
-            audioSync?: boolean;       // Shows audio response
+            audioSynq?: boolean;       // Shows audio response
         }>;
         preview: {
             duration: number;          // Preview length in seconds

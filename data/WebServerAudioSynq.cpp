@@ -40,7 +40,7 @@
 //     };
 //     LatencyStats latencyStats;
 
-void WebServer::setupAudioSyncHandlers() {
+void WebServer::setupAudioSynqHandlers() {
     // Standard file upload handler for small files
     server.on("/upload/audio_data", HTTP_POST, 
         [](AsyncWebServerRequest *request) {
@@ -258,7 +258,7 @@ void WebServer::cleanupStaleUploads() {
     }
 }
 
-void WebServer::handleAudioSyncCommand(JsonDocument& doc) {
+void WebServer::handleAudioSynqCommand(JsonDocument& doc) {
     String cmd = doc["cmd"];
     
     if (cmd == "measure_latency") {
@@ -502,12 +502,12 @@ void WebServer::schedulePlaybackStart(unsigned long delayMs) {
     if (timer != NULL) {
         xTimerStart(timer, 0);
     } else {
-        Serial.println("[Audio Sync] Failed to create sync timer!");
+        Serial.println("[Audio Synq] Failed to create sync timer!");
     }
 }
 
 // Integration with main loop - enhanced version
-void WebServer::updateAudioSync() {
+void WebServer::updateAudioSynq() {
     if (!vpDecoder || !vpDecoder->isPlaying()) {
         return;
     }

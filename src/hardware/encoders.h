@@ -4,6 +4,12 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include "config/hardware_config.h"
+#include "config/features.h"
+
+#if FEATURE_AUDIO_SYNC
+#include "audio/audio_sync.h"
+#include "audio/i2s_mic.h"
+#endif
 
 // Matrix mode has been surgically removed - encoder support is now permanent
 
@@ -46,6 +52,16 @@ extern uint8_t paletteSpeed;
 extern uint8_t fadeAmount;
 extern HardwareConfig::SyncMode currentSyncMode;
 extern HardwareConfig::PropagationMode currentPropagationMode;
+
+// Audio parameter control
+enum AudioParameter {
+    AUDIO_PARAM_SOURCE,      // 0 = VP_DECODER, 1 = I2S_MIC
+    AUDIO_PARAM_SENSITIVITY, // Mic sensitivity / energy scaling
+    AUDIO_PARAM_BEAT_THRESH, // Beat detection threshold
+    AUDIO_PARAM_SYNC_OFFSET  // VP_DECODER sync offset
+};
+static AudioParameter currentAudioParam = AUDIO_PARAM_SOURCE;
+static uint8_t audioParamSelection = 0;
 
 // I2C utility functions with timing
 bool readI2CRegister(uint8_t reg, uint8_t* data, size_t len) {
@@ -182,7 +198,55 @@ void processEncoders() {
                         }
                         break;
                         
-                    case 7: // Reserved for future use
+                    case 7: // Audio parameters control
+                        #if FEATURE_AUDIO_SYNC
+                        {
+                            extern AudioSynq audioSynq;
+                            extern I2SMic i2sMic;
+                            
+                            switch (currentAudioParam) {
+                                case AUDIO_PARAM_SOURCE:
+                                    if (delta > 0) {
+                                        audioSynq.setAudioSource(true); // Switch to mic
+                                    } else {
+                                        audioSynq.setAudioSource(false); // Switch to VP_DECODER
+                                    }
+                                    break;
+                                    
+                                case AUDIO_PARAM_SENSITIVITY:
+                                    // Future: adjust mic gain/sensitivity
+                                    break;
+                                    
+                                case AUDIO_PARAM_BEAT_THRESH:
+                                    if (i2sMic.isActive()) {
+                                        float thresh = i2sMic.getBeatThreshold();
+                                        thresh += delta > 0 ? 0.1f : -0.1f;
+                                        i2sMic.setBeatThreshold(thresh);
+                                    }
+                                    break;
+                                    
+                                case AUDIO_PARAM_SYNC_OFFSET:
+                                    {
+                                        int offset = audioSynq.getSyncOffset();
+                                        offset += delta > 0 ? 10 : -10; // 10ms steps
+                                        offset = constrain(offset, -500, 500); // +/- 500ms
+                                        audioSynq.setSyncOffset(offset);
+                                    }
+                                    break;
+                            }
+                            
+                            // Update LED to show audio mode
+                            uint8_t ledData[3];
+                            if (audioSynq.isUsingMicrophone()) {
+                                // Purple for mic mode
+                                ledData[0] = 128; ledData[1] = 0; ledData[2] = 255;
+                            } else {
+                                // Cyan for VP_DECODER mode
+                                ledData[0] = 0; ledData[1] = 255; ledData[2] = 255;
+                            }
+                            writeI2CRegister(REG_RGB_LED + 7, ledData, 3);
+                        }
+                        #endif
                         break;
                 }
                 
@@ -218,6 +282,30 @@ void processEncoders() {
                         break;
                     case 3: // Reset fade
                         fadeAmount = 20;
+                        break;
+                    case 7: // Cycle through audio parameters
+                        #if FEATURE_AUDIO_SYNC
+                        audioParamSelection = (audioParamSelection + 1) % 4;
+                        currentAudioParam = (AudioParameter)audioParamSelection;
+                        
+                        // Flash different colors for different params
+                        uint8_t ledData[3];
+                        switch (currentAudioParam) {
+                            case AUDIO_PARAM_SOURCE:
+                                ledData[0] = 255; ledData[1] = 0; ledData[2] = 255; // Magenta
+                                break;
+                            case AUDIO_PARAM_SENSITIVITY:
+                                ledData[0] = 255; ledData[1] = 255; ledData[2] = 0; // Yellow
+                                break;
+                            case AUDIO_PARAM_BEAT_THRESH:
+                                ledData[0] = 255; ledData[1] = 128; ledData[2] = 0; // Orange
+                                break;
+                            case AUDIO_PARAM_SYNC_OFFSET:
+                                ledData[0] = 0; ledData[1] = 255; ledData[2] = 128; // Turquoise
+                                break;
+                        }
+                        writeI2CRegister(REG_RGB_LED + 7, ledData, 3);
+                        #endif
                         break;
                     default:
                         // Other buttons for future use

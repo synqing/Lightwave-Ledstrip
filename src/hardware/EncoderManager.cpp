@@ -17,20 +17,38 @@ EncoderManager::EncoderManager() {
 
 // Destructor
 EncoderManager::~EncoderManager() {
+    // Safely delete task with guards
     if (encoderTaskHandle != NULL) {
+        // Ensure task handle is valid before deletion
+        configASSERT(encoderTaskHandle != NULL);
+        
+        // Give task time to finish current operation
+        vTaskDelay(pdMS_TO_TICKS(100));
+        
+        // Delete the task
         vTaskDelete(encoderTaskHandle);
+        encoderTaskHandle = NULL;  // Clear handle after deletion
     }
+    
+    // Delete queue
     if (encoderEventQueue != NULL) {
         vQueueDelete(encoderEventQueue);
+        encoderEventQueue = NULL;
     }
 }
 
 // Initialize encoder system
 bool EncoderManager::begin() {
+    // Prevent double initialization
+    if (encoderTaskHandle != NULL) {
+        Serial.println("WARNING: Encoder manager already initialized");
+        return true;
+    }
+    
     Serial.println("Initializing M5Stack 8Encoder with dedicated I2C task...");
     
-    // Create encoder event queue (16 events max)
-    encoderEventQueue = xQueueCreate(16, sizeof(EncoderEvent));
+    // Create encoder event queue (64 events max to prevent overflow during fast spins)
+    encoderEventQueue = xQueueCreate(64, sizeof(EncoderEvent));
     if (encoderEventQueue == NULL) {
         Serial.println("ERROR: Failed to create encoder event queue");
         return false;
@@ -63,7 +81,7 @@ bool EncoderManager::begin() {
         "EncoderI2CTask",         // Task name
         4096,                     // Stack size (4KB)
         this,                     // Parameters (this object)
-        2,                        // Priority (higher than idle)
+        1,                        // Priority (lower than audio render task)
         &encoderTaskHandle,       // Task handle
         0                         // Core 0 (main loop on Core 1)
     );
@@ -153,7 +171,7 @@ void EncoderManager::encoderTask() {
                 
                 // Update queue depth before sending
                 UBaseType_t queue_spaces = uxQueueSpacesAvailable(encoderEventQueue);
-                metrics.updateQueueDepth(16 - queue_spaces);
+                metrics.updateQueueDepth(64 - queue_spaces);
                 
                 // Send to main loop via queue (non-blocking)
                 bool queued = (xQueueSend(encoderEventQueue, &event, 0) == pdTRUE);
@@ -162,11 +180,20 @@ void EncoderManager::encoderTask() {
                 metrics.recordEvent(queued, response_time_us);
                 
                 if (!queued) {
-                    Serial.println("⚠️ TASK: Encoder event queue full - dropping event");
+                    // Throttle logging - don't spam from ISR context
+                    static uint32_t lastDropLog = 0;
+                    if (now - lastDropLog > 1000) {
+                        lastDropLog = now;
+                        Serial.println("⚠️ TASK: Encoder event queue full - dropping event");
+                    }
                 } else if (i == 0) {
-                    // Only log encoder 0 (effect selection) to reduce spam
-                    Serial.printf("📤 TASK: Encoder %d delta %+d (raw: %+d)\n", 
-                                 i, delta, raw_delta);
+                    // Throttle encoder 0 logging to prevent Core 0 starvation
+                    static uint32_t lastEncoderLog = 0;
+                    if (now - lastEncoderLog > 500) {
+                        lastEncoderLog = now;
+                        Serial.printf("📤 TASK: Encoder %d delta %+d (raw: %+d)\n", 
+                                     i, delta, raw_delta);
+                    }
                 }
                 
                 // Flash LED to indicate activity
@@ -196,6 +223,9 @@ void EncoderManager::encoderTask() {
         
         // Task runs at 50Hz (20ms intervals)
         vTaskDelay(pdMS_TO_TICKS(20));
+        
+        // Additional yield to prevent priority collision
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
 
@@ -313,35 +343,24 @@ void EncoderMetrics::printReport() {
     
     last_report_time = now;
     
-    Serial.println("\n📊 === ENCODER PERFORMANCE REPORT ===");
-    
-    // Calculate success rates
-    float event_success_rate = total_events > 0 ? 
-        (100.0f * successful_events / total_events) : 100.0f;
-    float i2c_success_rate = i2c_transactions > 0 ? 
-        (100.0f * (i2c_transactions - i2c_failures) / i2c_transactions) : 100.0f;
-    
-    // Calculate average response time
-    float avg_response_ms = successful_events > 0 ? 
-        (total_response_time_us / 1000.0f / successful_events) : 0.0f;
-    
-    Serial.printf("🔄 I2C Health: %.1f%% success (%u/%u transactions)\n", 
-                 i2c_success_rate, i2c_transactions - i2c_failures, i2c_transactions);
-    Serial.printf("📡 Connection: %u losses, %u successful reconnects\n",
-                 connection_losses, successful_reconnects);
-    Serial.printf("🎮 Events: %u total, %.1f%% delivered, %u dropped\n",
-                 total_events, event_success_rate, dropped_events);
-    Serial.printf("⏱️ Response: %.2fms avg, %.2fms max, %.2fms min\n",
-                 avg_response_ms, max_response_time_us / 1000.0f, 
-                 min_response_time_us == UINT32_MAX ? 0.0f : min_response_time_us / 1000.0f);
-    Serial.printf("📦 Queue: %u/%u current, %u max depth, %u overflows\n",
-                 current_queue_depth, 16, max_queue_depth, queue_full_count);
-    
-    // Calculate events per minute
-    float events_per_min = (total_events * 60000.0f) / report_interval_ms;
-    Serial.printf("⚡ Activity: %.1f events/min\n", events_per_min);
-    
-    Serial.println("=====================================\n");
+    // Only show encoder performance if there are issues
+    if (dropped_events > 0 || queue_full_count > 0 || connection_losses > 0) {
+        Serial.println("\n📊 === ENCODER PERFORMANCE ALERT ===");
+        
+        // Calculate success rates
+        float event_success_rate = total_events > 0 ? 
+            (100.0f * successful_events / total_events) : 100.0f;
+        
+        Serial.printf("⚠️  Events: %u total, %.1f%% delivered, %u dropped\n",
+                     total_events, event_success_rate, dropped_events);
+        Serial.printf("⚠️  Queue: %u overflows, max depth %u/64\n",
+                     queue_full_count, max_queue_depth);
+        
+        if (connection_losses > 0) {
+            Serial.printf("⚠️  Connection: %u losses, %u reconnects\n",
+                         connection_losses, successful_reconnects);
+        }
+    }
     
     // Reset counters for next period
     total_events = 0;

@@ -3,13 +3,14 @@
 #include <Arduino.h>
 #include "vp_decoder.h"
 #include "audio_frame.h"
+#include "i2s_mic.h"
 
 /**
- * Simple Audio Sync Manager for LightwaveOS
+ * Simple Audio Synq Manager for LightwaveOS
  * 
  * Handles VP_DECODER integration and provides audio data to effects
  */
-class AudioSync {
+class AudioSynq {
 private:
     VPDecoder decoder;
     AudioFrame currentFrame;
@@ -17,8 +18,15 @@ private:
     unsigned long syncStartTime = 0;
     int syncOffset = 0;  // User-adjustable offset in ms
     
+    // Audio source mode
+    enum AudioSource {
+        SOURCE_VP_DECODER,  // Pre-analyzed JSON data
+        SOURCE_I2S_MIC     // Real-time microphone
+    };
+    AudioSource currentSource = SOURCE_VP_DECODER;
+    
 public:
-    AudioSync() = default;
+    AudioSynq() = default;
     
     // Initialize the audio sync system
     bool begin();
@@ -50,7 +58,16 @@ public:
     
     // Get total duration
     float getDuration() const { return decoder.getDuration(); }
+    
+    // Microphone support
+    bool startMicrophone();
+    void stopMicrophone();
+    bool isMicrophoneActive() const { return currentSource == SOURCE_I2S_MIC && i2sMic.isActive(); }
+    
+    // Switch between sources
+    void setAudioSource(bool useMicrophone);
+    bool isUsingMicrophone() const { return currentSource == SOURCE_I2S_MIC; }
 };
 
 // Global instance
-extern AudioSync audioSync;
+extern AudioSynq audioSynq;

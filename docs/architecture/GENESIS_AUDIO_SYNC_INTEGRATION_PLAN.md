@@ -56,7 +56,7 @@ graph TD
 | ID | Deliverable | Owner | ETA |
 |----|-------------|-------|-----|
 | D-1 | `audio/` module (VP_DECODER sources) migrated & namespaced | FW Team | W1-D3 |
-| D-2 | `WebServerAudioSync.*` merged into existing `network/` layer | FW Team | W1-D5 |
+| D-2 | `WebServerAudioSynq.*` merged into existing `network/` layer | FW Team | W1-D5 |
 | D-3 | Web portal (`data/audio-sync/*`) with chunk upload & calibration UI | Frontend Team | W2-D2 |
 | D-4 | Five audio-reactive effects ported (`FrequencySpectrum`, etc.) | FX Team | W2-D5 |
 | D-5 | Preset struct v6 with `audioEnabled` migration | FW Team | W3-D1 |

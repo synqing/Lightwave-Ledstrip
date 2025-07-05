@@ -157,7 +157,7 @@ public:
 
 ```cpp
 // Precision timing with drift correction
-class AudioSyncManager {
+class AudioSynqManager {
 private:
     struct SyncState {
         unsigned long deviceStartTime;
@@ -252,7 +252,7 @@ public:
 
 ```javascript
 // Enhanced sync controller with production features
-class AudioSyncControllerPro extends AudioSyncController {
+class AudioSynqControllerPro extends AudioSynqController {
     constructor() {
         super();
         
@@ -422,17 +422,17 @@ class PerformanceValidator {
 
 ### Unit Tests
 ```cpp
-TEST(AudioSync, ChunkedUploadIntegrity) {
+TEST(AudioSynq, ChunkedUploadIntegrity) {
     ChunkedUploadManager manager;
     // Test chunk ordering, CRC validation, missing chunk detection
 }
 
-TEST(AudioSync, LatencyCompensation) {
-    AudioSyncManager sync;
+TEST(AudioSynq, LatencyCompensation) {
+    AudioSynqManager sync;
     // Test drift calculation, PID controller, correction limits
 }
 
-TEST(AudioSync, MemoryBounds) {
+TEST(AudioSynq, MemoryBounds) {
     // Verify no memory leaks, PSRAM usage, buffer limits
 }
 ```

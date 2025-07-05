@@ -807,4 +807,16 @@ void StripEffects::registerAll(FxEngine& engine) {
     engine.addEffect("LGP Color Accelerator", lgpColorAccelerator);
     engine.addEffect("LGP DNA Helix", lgpDNAHelix);
     engine.addEffect("LGP Phase Transition", lgpPhaseTransition);
+    
+    // Register LGP audio-reactive effects
+    engine.addEffect("LGP Frequency Collision", lgpFrequencyCollision);
+    engine.addEffect("LGP Beat Interference", lgpBeatInterference);
+    engine.addEffect("LGP Spectral Morphing", lgpSpectralMorphing);
+    engine.addEffect("LGP Audio Quantum", lgpAudioQuantumCollapse);
+    engine.addEffect("LGP Rhythm Waves", lgpRhythmWaves);
+    engine.addEffect("LGP Envelope Interference", lgpEnvelopeInterference);
+    engine.addEffect("LGP Kick Shockwave", lgpKickShockwave);
+    engine.addEffect("LGP FFT Color Map", lgpFFTColorMap);
+    engine.addEffect("LGP Harmonic Resonance", lgpHarmonicResonance);
+    engine.addEffect("LGP Stereo Phase", lgpStereoPhasePattern);
 }

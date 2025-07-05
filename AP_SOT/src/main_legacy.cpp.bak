@@ -1,0 +1,98 @@
+#include <Arduino.h>
+#include "audio/audio_processing.h"
+#include "audio/audio_features.h"
+#include "audio/goertzel_engine.h"
+#include "audio/audio_state.h"
+
+// Global audio state (required by audio_state.h)
+AudioState audio_state = {0}; // Ensure zero initialization
+
+// Audio components
+AudioProcessor audio_processor;
+extern GoertzelEngineGodTier goertzel_god_tier;
+
+void setup() {
+    Serial.begin(115200);
+    delay(2000); // Longer delay for USB CDC
+    
+    Serial.println("\n\n=== AP_SOT: Audio Pipeline Source of Truth ===");
+    Serial.println("Version: DC Offset +360 (EMOTISCOPE proven)");
+    Serial.println("Starting initialization...");
+    Serial.flush();
+    
+    // Initialize audio processor
+    Serial.println("1. Initializing I2S audio processor...");
+    audio_processor.init();
+    Serial.println("   - I2S initialized");
+    
+    // Initialize God-Tier Goertzel engine
+    Serial.println("2. Initializing God-Tier Goertzel engine...");
+    goertzel_god_tier.init();
+    Serial.println("   - God-Tier Goertzel ready");
+    
+    // Initialize feature extraction
+    Serial.println("3. Initializing audio features...");
+    AudioFeatures::init();
+    Serial.println("   - Features ready");
+    
+    Serial.println("\n✓ Initialization complete!");
+    Serial.println("Starting audio processing loop...\n");
+}
+
+void loop() {
+    // 1. Read samples from I2S microphone
+    if (audio_processor.readSamples()) {
+        // 2. Preprocess audio (DC removal, normalization)
+        audio_processor.preprocess();
+        
+        // 3. Run God-Tier Goertzel frequency analysis
+        goertzel_god_tier.process(audio_processor.getSamples(), 128);
+        
+        // 4. Update audio features and state
+        AudioFeatures::process(goertzel_god_tier.getMagnitudes(), 96);
+        
+        // Print compact metrics at a readable interval (e.g., 10 times per second)
+        static uint32_t lastPrintTime = 0;
+        if (millis() - lastPrintTime > 100) {
+            lastPrintTime = millis();
+            
+            // Print the actual metrics from audio state
+            Serial.printf("Energy: %.1f | Bass: %.1f | Mid: %.1f | High: %.1f | Beat: %.1f (%.0f BPM)\n",
+                         audio_state.core.global_energy,
+                         audio_state.core.zone_energies[0] + audio_state.core.zone_energies[1],
+                         audio_state.core.zone_energies[2] + audio_state.core.zone_energies[3] + 
+                         audio_state.core.zone_energies[4] + audio_state.core.zone_energies[5],
+                         audio_state.core.zone_energies[6] + audio_state.core.zone_energies[7],
+                         audio_state.ext.beat.beat_confidence,
+                         audio_state.ext.beat.tempo_bpm);
+            
+            // Debug: show raw sample range and Goertzel output
+            static int debug_cnt = 0;
+            if (++debug_cnt % 50 == 0) {
+                int16_t* samples = audio_processor.getSamples();
+                int16_t min_val = 32767, max_val = -32768;
+                for (int i = 0; i < 128; i++) {
+                    if (samples[i] < min_val) min_val = samples[i];
+                    if (samples[i] > max_val) max_val = samples[i];
+                }
+                Serial.printf("Raw audio range: [%d, %d]\n", min_val, max_val);
+                
+                // Debug God-Tier Goertzel output
+                float* mags = goertzel_god_tier.getMagnitudes();
+                float mag_sum = 0;
+                for (int i = 0; i < 96; i++) {
+                    mag_sum += mags[i];
+                }
+                Serial.printf("Goertzel sum: %.1f, First 8 bins: %.1f %.1f %.1f %.1f %.1f %.1f %.1f %.1f\n",
+                             mag_sum, mags[0], mags[1], mags[2], mags[3], mags[4], mags[5], mags[6], mags[7]);
+                
+                // Debug zone energies
+                Serial.printf("Zones: %.1f %.1f %.1f %.1f %.1f %.1f %.1f %.1f\n",
+                             audio_state.core.zone_energies[0], audio_state.core.zone_energies[1],
+                             audio_state.core.zone_energies[2], audio_state.core.zone_energies[3],
+                             audio_state.core.zone_energies[4], audio_state.core.zone_energies[5],
+                             audio_state.core.zone_energies[6], audio_state.core.zone_energies[7]);
+            }
+        }
+    }
+}

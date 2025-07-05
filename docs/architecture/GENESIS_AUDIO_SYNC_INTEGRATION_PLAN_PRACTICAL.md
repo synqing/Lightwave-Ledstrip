@@ -99,7 +99,7 @@ void handleUpload(AsyncWebServerRequest *request, String filename,
 
 ```cpp
 // Simple sync - no PID controllers or complex math
-class SimpleAudioSync {
+class SimpleAudioSynq {
 private:
     unsigned long startTime = 0;
     int offsetMs = 0;  // User-adjustable

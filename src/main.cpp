@@ -11,11 +11,14 @@
 
 #if FEATURE_WEB_SERVER
 #include "network/WebServer.h"
+#include "network/WiFiManager.h"
 #endif
 
 #if FEATURE_PERFORMANCE_MONITOR
 #include "utils/PerformanceOptimizer.h"
 #endif
+
+#include "core/AudioRenderTask.h"
 
 #if FEATURE_SERIAL_MENU
 #include "utils/SerialMenu.h"
@@ -23,7 +26,9 @@
 
 #if FEATURE_AUDIO_SYNC
 #include "audio/audio_sync.h"
+#include "audio/AudioSystem.h"
 #include "audio/audio_effects.h"
+#include "audio/MicTest.h"
 #endif
 
 
@@ -113,6 +118,11 @@ void breathingEffectWrapper();
 void stripPlasmaWrapper();
 void vortexEffectWrapper();
 
+// Audio/render task callbacks
+void audioUpdateCallback();
+void renderUpdateCallback();
+void effectUpdateCallback();
+
 
 // Forward declare all effect functions
 extern void solidColor();
@@ -147,6 +157,8 @@ extern void gravityWellEffect();
 #include "effects/strip/LGPAdvancedEffects.h"
 #include "effects/strip/LGPOrganicEffects.h"
 #include "effects/strip/LGPQuantumEffects.h"
+#include "effects/strip/LGPColorMixingEffects.h"
+#include "effects/strip/LGPAudioReactive.h"
 
 // Effects array - Matrix mode has been surgically removed
 Effect effects[] = {
@@ -233,11 +245,38 @@ Effect effects[] = {
     {"LGP Soliton Waves", lgpSolitonWaves, EFFECT_TYPE_STANDARD},
     {"LGP Metamaterial Cloak", lgpMetamaterialCloaking, EFFECT_TYPE_STANDARD},
     
+    // =============== LGP COLOR MIXING EFFECTS ===============
+    {"LGP Color Temperature", lgpColorTemperature, EFFECT_TYPE_STANDARD},
+    {"LGP RGB Prism", lgpRGBPrism, EFFECT_TYPE_STANDARD},
+    {"LGP Complementary Mix", lgpComplementaryMixing, EFFECT_TYPE_STANDARD},
+    {"LGP Additive/Subtractive", lgpAdditiveSubtractive, EFFECT_TYPE_STANDARD},
+    {"LGP Quantum Colors", lgpQuantumColors, EFFECT_TYPE_STANDARD},
+    {"LGP Doppler Shift", lgpDopplerShift, EFFECT_TYPE_STANDARD},
+    {"LGP Chromatic Aberration", lgpChromaticAberration, EFFECT_TYPE_STANDARD},
+    {"LGP HSV Cylinder", lgpHSVCylinder, EFFECT_TYPE_STANDARD},
+    {"LGP Perceptual Blend", lgpPerceptualBlend, EFFECT_TYPE_STANDARD},
+    {"LGP Metameric Colors", lgpMetamericColors, EFFECT_TYPE_STANDARD},
+    {"LGP Color Accelerator", lgpColorAccelerator, EFFECT_TYPE_STANDARD},
+    {"LGP DNA Helix", lgpDNAHelix, EFFECT_TYPE_STANDARD},
+    {"LGP Phase Transition", lgpPhaseTransition, EFFECT_TYPE_STANDARD},
+    
 #if FEATURE_AUDIO_SYNC
     // =============== AUDIO REACTIVE EFFECTS ===============
     {"Bass Reactive", bassReactiveEffect, EFFECT_TYPE_STANDARD},
     {"Spectrum", spectrumEffect, EFFECT_TYPE_STANDARD},
-    {"Energy Flow", energyFlowEffect, EFFECT_TYPE_STANDARD}
+    // {"Energy Flow", energyFlowEffect, EFFECT_TYPE_STANDARD}, // TODO: Implement this effect
+    
+    // =============== LGP AUDIO REACTIVE EFFECTS ===============
+    {"LGP Frequency Collision", lgpFrequencyCollision, EFFECT_TYPE_STANDARD},
+    {"LGP Beat Interference", lgpBeatInterference, EFFECT_TYPE_STANDARD},
+    {"LGP Spectral Morphing", lgpSpectralMorphing, EFFECT_TYPE_STANDARD},
+    {"LGP Audio Quantum", lgpAudioQuantumCollapse, EFFECT_TYPE_STANDARD},
+    {"LGP Rhythm Waves", lgpRhythmWaves, EFFECT_TYPE_STANDARD},
+    {"LGP Envelope Interference", lgpEnvelopeInterference, EFFECT_TYPE_STANDARD},
+    {"LGP Kick Shockwave", lgpKickShockwave, EFFECT_TYPE_STANDARD},
+    {"LGP FFT Color Map", lgpFFTColorMap, EFFECT_TYPE_STANDARD},
+    {"LGP Harmonic Resonance", lgpHarmonicResonance, EFFECT_TYPE_STANDARD},
+    {"LGP Stereo Phase", lgpStereoPhasePattern, EFFECT_TYPE_STANDARD}
 #endif
 };
 
@@ -560,24 +599,47 @@ void setup() {
         }
     );
     
+    // Start the consolidated audio/render task FIRST for deterministic timing
+    Serial.println("\n=== Starting Audio/Render Task (PRIORITY) ===");
+    if (!audioRenderTask.start(audioUpdateCallback, renderUpdateCallback, effectUpdateCallback)) {
+        Serial.println("⚠️  CRITICAL: Failed to start audio/render task!");
+        Serial.println("⚠️  System performance will be degraded");
+    } else {
+        Serial.println("✅ Started 8ms audio/render task on Core 1");
+    }
+    
 #if FEATURE_SERIAL_MENU
     // Initialize serial menu system
     serialMenu.begin();
 #endif
     
-    // Wait a moment to ensure serial monitor is fully connected
-    Serial.println("\n=== Waiting 3 seconds before WiFi initialization ===");
-    Serial.println("This ensures serial monitor captures all debug output...");
-    delay(3000);
-    
-    // Initialize web server
+    // Initialize WiFi Manager (non-blocking)
 #if FEATURE_WEB_SERVER
-    Serial.println("\n=== Initializing Web Server ===");
+    Serial.println("\n=== Starting Non-Blocking WiFi Manager ===");
+    WiFiManager& wifiManager = WiFiManager::getInstance();
+    
+    // Configure WiFi
+    wifiManager.setCredentials(NetworkConfig::WIFI_SSID, NetworkConfig::WIFI_PASSWORD);
+    
+    // Enable Soft-AP as immediate fallback
+    wifiManager.enableSoftAP(NetworkConfig::AP_SSID, NetworkConfig::AP_PASSWORD);
+    
+    // Start WiFi manager task on Core 0
+    if (wifiManager.begin()) {
+        Serial.println("✅ WiFi Manager started on Core 0");
+        Serial.println("📡 WiFi connection in progress (non-blocking)");
+        Serial.println("🔄 Soft-AP available immediately if needed");
+    } else {
+        Serial.println("⚠️  WiFi Manager failed to start");
+    }
+    
+    // Initialize Web Server (works with or without WiFi)
+    Serial.println("\n=== Starting Web Server (Network-Independent) ===");
     if (webServer.begin()) {
         Serial.println("✅ Web server started successfully");
-        Serial.print("📱 Access the control panel at: http://");
-        Serial.print(WiFi.localIP());
-        Serial.println(" or http://lightwaveos.local");
+        Serial.println("📱 Server ready - will be accessible once network is up");
+        Serial.println("   - WiFi: http://lightwaveos.local (once connected)");
+        Serial.printf("   - AP: http://%s (fallback mode)\n", WiFi.softAPIP().toString().c_str());
     } else {
         Serial.println("⚠️  Web server failed to start");
     }
@@ -585,12 +647,31 @@ void setup() {
 
 #if FEATURE_AUDIO_SYNC
     // Initialize audio sync system
-    Serial.println("\n=== Initializing Audio Sync ===");
-    if (audioSync.begin()) {
-        Serial.println("✅ Audio sync initialized");
-        Serial.println("✅ Audio sync ready for WebSocket commands");
+    Serial.println("\n=== Initializing Audio Synq ===");
+    if (audioSynq.begin()) {
+        Serial.println("✅ Audio synq initialized");
+        Serial.println("✅ Audio synq ready for WebSocket commands");
     } else {
-        Serial.println("⚠️ Audio sync initialization failed");
+        Serial.println("⚠️ Audio synq initialization failed");
+    }
+    
+    // Initialize AudioSystem (provides audio data to effects)
+    AudioSync.begin();
+    Serial.println("✅ AudioSystem initialized - mock data active");
+    
+    // Test I2S microphone
+    Serial.println("\n=== Testing I2S Microphone ===");
+    if (MicTest::testMicConnection()) {
+        Serial.println("🎤 I2S microphone test PASSED - keeping driver active");
+        
+        // DON'T call startMicMonitoring() - the test already initialized the driver!
+        // Instead, directly switch AudioSynq to use the already-initialized mic
+        Serial.println("🔗 Connecting I2SMic to AudioSynq for real-time audio effects");
+        audioSynq.setAudioSource(true);  // Switch to microphone mode
+        
+        Serial.println("✅ Real-time microphone audio active for LGP effects");
+    } else {
+        Serial.println("⚠️  Microphone test failed - using mock audio data only");
     }
 #endif
 
@@ -602,6 +683,7 @@ void setup() {
     Serial.println("   'o' = Toggle optimized effects");
     Serial.println("   'p' = Performance comparison (when available)");
     Serial.println("");
+    
     Serial.println("[DEBUG] Entering main loop...");
 }
 
@@ -646,6 +728,36 @@ void updateEncoderFeedback() {
         
         // Update the LED feedback
         encoderFeedback->update();
+    }
+}
+
+// ============== AUDIO/RENDER TASK CALLBACKS ==============
+
+// Audio update callback - runs in 8ms task
+void audioUpdateCallback() {
+#if FEATURE_AUDIO_SYNC
+    // Update audio systems
+    audioSynq.update();
+    AudioSync.update();
+#endif
+}
+
+// Render update callback - runs in 8ms task
+void renderUpdateCallback() {
+    // Update transition system
+    if (transitionEngine.isActive()) {
+        syncStripsToLeds();
+        transitionEngine.update();
+        syncLedsToStrips();
+    } else {
+        syncStripsToLeds();
+    }
+}
+
+// Effect update callback - runs in 8ms task
+void effectUpdateCallback() {
+    if (effects[currentEffect].function) {
+        effects[currentEffect].function();
     }
 }
 
@@ -794,6 +906,9 @@ void loop() {
                     startAdvancedTransition(newEffect);
                     Serial.printf("🎨 MAIN: Effect changed to %s (index %d)\n", effects[currentEffect].name, currentEffect);
                     
+                    // Update the effect callback in the audio/render task
+                    audioRenderTask.setEffectCallback(effectUpdateCallback);
+                    
                     // Log mode transition if effect type changed
                     if (effects[newEffect].type != effects[currentEffect].type) {
                         Serial.printf("🔄 MAIN: Encoder mode switched to %s\n", 
@@ -879,25 +994,8 @@ void loop() {
     webServer.update();
 #endif
 
-#if FEATURE_AUDIO_SYNC
-    // Update audio sync system
-    audioSync.update();
-#endif
-    
-    // Update transition system
-    if (transitionEngine.isActive()) {
-        // During transition: generate new effect frame and let transition engine handle blending
-        effects[currentEffect].function();
-        syncStripsToLeds();  // Sync current effect to leds buffer
-        transitionEngine.update();  // This blends and writes to leds buffer
-        syncLedsToStrips();  // Sync blended result back to strips
-    } else {
-        // Normal operation: just run the effect
-        effects[currentEffect].function();
-        // Check which buffer the effect uses and sync appropriately
-        // Most strip effects write directly to strip1/strip2, so sync back to leds
-        syncStripsToLeds();  // Sync strips back to unified LED buffer
-    }
+    // Audio and rendering are now handled by the dedicated task
+    // No need to update them in the main loop
     
     // Process scroll encoder input (non-blocking)
     // DISABLED - CAUSING CRASHES
@@ -931,13 +1029,45 @@ void loop() {
         Serial.printf("[DEBUG] Unified buffer lit: %d/%d\n", unifiedLitCount, HardwareConfig::TOTAL_LEDS);
     }
     
-    // Show the LEDs
-    FastLED.show();
+    // LED showing is now handled by the audio/render task
     
     // Advance the global hue
     EVERY_N_MILLISECONDS(20) {
         gHue++;
     }
+    
+    // WiFi status LED feedback
+#if FEATURE_WEB_SERVER
+    EVERY_N_SECONDS(2) {
+        static WiFiManager::WiFiState lastWiFiState = WiFiManager::STATE_WIFI_INIT;
+        WiFiManager& wifi = WiFiManager::getInstance();
+        WiFiManager::WiFiState currentWiFiState = wifi.getState();
+        
+        // Update encoder LED based on WiFi state
+        if (encoderFeedback && currentWiFiState != lastWiFiState) {
+            switch (currentWiFiState) {
+                case WiFiManager::STATE_WIFI_SCANNING:
+                    encoderFeedback->flashEncoder(7, 0, 0, 255, 500); // Blue flash for scanning
+                    break;
+                case WiFiManager::STATE_WIFI_CONNECTING:
+                    encoderFeedback->flashEncoder(7, 255, 255, 0, 300); // Yellow flash for connecting
+                    break;
+                case WiFiManager::STATE_WIFI_CONNECTED:
+                    encoderFeedback->flashEncoder(7, 0, 255, 0, 1000); // Green flash for connected
+                    break;
+                case WiFiManager::STATE_WIFI_AP_MODE:
+                    encoderFeedback->flashEncoder(7, 255, 128, 0, 2000); // Orange for AP mode
+                    break;
+                case WiFiManager::STATE_WIFI_FAILED:
+                    encoderFeedback->flashEncoder(7, 255, 0, 0, 500); // Red flash for failed
+                    break;
+                default:
+                    break;
+            }
+            lastWiFiState = currentWiFiState;
+        }
+    }
+#endif
     
     // Status every 30 seconds
     EVERY_N_SECONDS(30) {
@@ -948,6 +1078,16 @@ void loop() {
         Serial.print(", Free heap: ");
         Serial.print(ESP.getFreeHeap());
         Serial.println(" bytes");
+        
+#if FEATURE_WEB_SERVER
+        // WiFi status
+        WiFiManager& wifi = WiFiManager::getInstance();
+        Serial.printf("WiFi: %s", wifi.getStateString().c_str());
+        if (wifi.isConnected()) {
+            Serial.printf(" - %s (%d dBm)", wifi.getSSID().c_str(), wifi.getRSSI());
+        }
+        Serial.println();
+#endif
         
         // Quick encoder performance summary
         if (encoderManager.isAvailable()) {

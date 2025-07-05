@@ -1,4 +1,4 @@
-class AudioSyncController {
+class AudioSynqController {
     constructor() {
         this.ws = null;
         this.audioPlayer = document.getElementById('audioPlayer');
@@ -651,5 +651,5 @@ class AudioSyncController {
 
 // Initialize enhanced controller on page load
 document.addEventListener('DOMContentLoaded', () => {
-    window.audioSync = new AudioSyncController();
+    window.audioSynq = new AudioSynqController();
 });

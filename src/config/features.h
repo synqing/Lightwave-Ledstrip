@@ -24,6 +24,7 @@
 #define FEATURE_ADVANCED_EFFECTS 1      // HDR, supersampling, etc.
 #define FEATURE_PIPELINE_EFFECTS 1      // Modular pipeline system
 #define FEATURE_AUDIO_EFFECTS 0         // Audio-reactive effects (future)
+#define FEATURE_AUDIO_SYNC 1            // Audio Synq system for VP_DECODER integration
 
 // LED Strips features (now permanent after matrix removal)
 #define FEATURE_STRIP_EFFECTS 1         // Strip-specific effects

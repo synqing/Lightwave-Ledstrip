@@ -18,6 +18,8 @@ private:
     
     // Connection state
     bool isConnected = false;
+    bool isRunning = false;
+    bool shouldReboot = false;
     uint32_t lastHeartbeat = 0;
     
     // JSON document size
@@ -38,8 +40,22 @@ private:
     
     // State broadcast
     void broadcastState();
+    void broadcastStatus();
     void broadcastPerformance();
     void broadcastLEDData();
+    
+    // Network status handlers
+    void onWiFiConnected();
+    void onAPModeStarted();
+    void onWiFiDisconnected();
+    void startWiFiMonitor();
+    void startMDNS();
+    bool beginNetworkServices();
+    void setupRoutes();
+    
+    // Static WebSocket handler
+    static void onWsEvent(AsyncWebSocket* server, AsyncWebSocketClient* client,
+                          AwsEventType type, void* arg, uint8_t* data, size_t len);
     
     // OTA firmware update handler
     void handleOTAUpdate(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final);

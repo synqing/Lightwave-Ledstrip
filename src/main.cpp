@@ -570,41 +570,46 @@ void setup() {
     // initScrollEncoder();
     Serial.println("[DEBUG] Scroll encoder init SKIPPED - was causing crashes");
     
-    // Set up scroll encoder callbacks
-    setScrollEncoderCallbacks(
-        // Value change callback - mirrors M5ROTATE8 encoder functions
-        [](int32_t delta) {
-            uint8_t mirroredEncoder = getScrollMirroredEncoder();
-            
-            // Create an encoder event to process through the same logic
-            EncoderEvent event;
-            event.encoder_id = mirroredEncoder;
-            event.delta = delta;
-            event.button_pressed = false;
-            event.timestamp = millis();
-            
-            // Send to encoder event queue if available
-            QueueHandle_t queue = encoderManager.getEventQueue();
-            if (queue != NULL) {
-                xQueueSend(queue, &event, 0);
-                Serial.printf("SCROLL: Mirroring encoder %d, delta %d\n", mirroredEncoder, delta);
+    // DISABLED - Setting up callbacks when encoder not available causes crashes
+    // Only set up scroll encoder callbacks if main encoder is available
+    /*
+    if (encoderManager.isAvailable()) {
+        setScrollEncoderCallbacks(
+            // Value change callback - mirrors M5ROTATE8 encoder functions
+            [](int32_t delta) {
+                uint8_t mirroredEncoder = getScrollMirroredEncoder();
+                
+                // Create an encoder event to process through the same logic
+                EncoderEvent event;
+                event.encoder_id = mirroredEncoder;
+                event.delta = delta;
+                event.button_pressed = false;
+                event.timestamp = millis();
+                
+                // Send to encoder event queue if available
+                QueueHandle_t queue = encoderManager.getEventQueue();
+                if (queue != NULL) {
+                    xQueueSend(queue, &event, 0);
+                    Serial.printf("SCROLL: Mirroring encoder %d, delta %d\n", mirroredEncoder, delta);
+                }
+            },
+            // Button press callback - cycle through encoder modes
+            []() {
+                uint8_t currentMode = getScrollMirroredEncoder();
+                uint8_t nextMode = (currentMode + 1) % 8;
+                setScrollMirroredEncoder(nextMode);
+                
+                const char* modeName[] = {
+                    "Effect", "Brightness", "Palette", "Speed",
+                    "Intensity", "Saturation", "Complexity", "Variation"
+                };
+                
+                Serial.printf("SCROLL: Switched to %s mode (encoder %d)\n", 
+                             modeName[nextMode], nextMode);
             }
-        },
-        // Button press callback - cycle through encoder modes
-        []() {
-            uint8_t currentMode = getScrollMirroredEncoder();
-            uint8_t nextMode = (currentMode + 1) % 8;
-            setScrollMirroredEncoder(nextMode);
-            
-            const char* modeName[] = {
-                "Effect", "Brightness", "Palette", "Speed",
-                "Intensity", "Saturation", "Complexity", "Variation"
-            };
-            
-            Serial.printf("SCROLL: Switched to %s mode (encoder %d)\n", 
-                         modeName[nextMode], nextMode);
-        }
-    );
+        );
+    }
+    */
     
     // Start the consolidated audio/render task FIRST for deterministic timing
     Serial.println("\n=== Starting Audio/Render Task (PRIORITY) ===");
@@ -724,7 +729,8 @@ void updatePalette() {
 }
 
 void updateEncoderFeedback() {
-    if (encoderFeedback && encoderManager.isAvailable()) {
+    // Check both that encoderFeedback is not NULL AND encoder is available
+    if (encoderFeedback != nullptr && encoderManager.isAvailable()) {
         // Update current effect info
         encoderFeedback->setCurrentEffect(currentEffect, effects[currentEffect].name);
         

@@ -770,3 +770,507 @@ void lgpTuringPatternEngine() {
         strip2[i] = CHSV(hue2, saturation * 255, brightness);
     }
 }
+
+// ============== LGP KELVIN-HELMHOLTZ INSTABILITIES ==============
+// Vortex formation at shear boundaries between fluid layers
+void lgpKelvinHelmholtzInstabilities() {
+    // ENCODER MAPPING:
+    // Speed (3): Shear velocity/instability growth rate
+    // Intensity (4): Vortex strength/circulation
+    // Saturation (5): Color saturation
+    // Complexity (6): Number of vortices (1-6)
+    // Variation (7): Instability type (single/multiple/turbulent)
+    
+    float speed = paletteSpeed / 255.0f;
+    float intensity = visualParams.getIntensityNorm();
+    float saturation = visualParams.getSaturationNorm();
+    float complexity = visualParams.getComplexityNorm();
+    float variation = visualParams.getVariationNorm();
+    
+    static float shearPhase = 0;
+    static float vortexPhase[6] = {0, 0, 0, 0, 0, 0};
+    static float growthRate = 0.01f;
+    
+    shearPhase += speed * 0.03f;
+    int numVortices = 1 + (complexity * 5);  // 1-6 vortices
+    
+    // Instability growth based on Kelvin-Helmholtz theory
+    growthRate = 0.01f + (intensity * 0.05f);
+    
+    for(int v = 0; v < numVortices; v++) {
+        vortexPhase[v] += speed * (0.02f + v * 0.005f);
+    }
+    
+    for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+        float position = (float)i / HardwareConfig::STRIP_LENGTH;
+        float shearInterface = 0.5f;  // Center of strip
+        float distFromInterface = abs(position - shearInterface);
+        
+        // Base shear flow - two layers moving in opposite directions
+        float shearFlow = (position < shearInterface) ? -1.0f : 1.0f;
+        
+        float totalVorticity = 0;
+        
+        if (variation < 0.33f) {
+            // Single dominant vortex
+            float vortexCenter = 0.5f + 0.3f * sin(shearPhase);
+            float distToVortex = abs(position - vortexCenter);
+            float vortexRadius = 0.1f + (intensity * 0.2f);
+            
+            if (distToVortex < vortexRadius) {
+                float circulation = intensity * sin(vortexPhase[0] + distToVortex * 10);
+                totalVorticity = circulation * exp(-distToVortex / vortexRadius);
+            }
+        } else if (variation < 0.66f) {
+            // Multiple periodic vortices
+            for(int v = 0; v < numVortices; v++) {
+                float vortexSpacing = 1.0f / numVortices;
+                float vortexCenter = (v + 0.5f) * vortexSpacing;
+                vortexCenter += 0.1f * sin(vortexPhase[v]);
+                
+                float distToVortex = abs(position - vortexCenter);
+                float vortexRadius = 0.08f + (intensity * 0.15f);
+                
+                if (distToVortex < vortexRadius) {
+                    float circulation = intensity * sin(vortexPhase[v] * (1 + v * 0.3f));
+                    totalVorticity += circulation * exp(-distToVortex / vortexRadius);
+                }
+            }
+        } else {
+            // Turbulent cascade - chaotic vortex breakdown
+            for(int v = 0; v < numVortices; v++) {
+                float vortexCenter = 0.2f + 0.6f * sin(vortexPhase[v] + v * 1.2f);
+                float distToVortex = abs(position - vortexCenter);
+                float vortexRadius = 0.05f + (intensity * 0.1f) * (1 + 0.5f * sin(vortexPhase[v] * 3));
+                
+                if (distToVortex < vortexRadius) {
+                    float chaosPhase = vortexPhase[v] * (2 + v) + position * 20;
+                    float circulation = intensity * sin(chaosPhase) * cos(chaosPhase * 1.618f);
+                    totalVorticity += circulation * exp(-distToVortex / vortexRadius);
+                }
+            }
+        }
+        
+        // Instability growth - exponential amplification
+        float instabilityGrowth = exp(growthRate * shearPhase * distFromInterface);
+        totalVorticity *= instabilityGrowth;
+        
+        // Velocity field from vorticity
+        float velocity = shearFlow + totalVorticity;
+        
+        // Color based on velocity and vorticity
+        uint8_t brightness = 128 + (127 * tanh(velocity * 2) * intensity);
+        
+        // Hue shifts based on flow direction and vorticity
+        uint8_t hue1 = gHue + (velocity * 40) + (totalVorticity * 60);
+        uint8_t hue2 = gHue - (velocity * 40) + (totalVorticity * 60);
+        
+        // Visualize shear interface
+        if (abs(position - shearInterface) < 0.05f) {
+            brightness = brightness * 0.7f;  // Darken interface
+        }
+        
+        strip1[i] = CHSV(hue1, saturation * 255, brightness);
+        strip2[i] = CHSV(hue2, saturation * 255, brightness);
+    }
+}
+
+// ============== LGP FARADAY ROTATION ==============
+// Polarization rotation in magnetized optical medium
+void lgpFaradayRotation() {
+    // ENCODER MAPPING:
+    // Speed (3): Rotation rate/magnetic field strength
+    // Intensity (4): Faraday rotation angle
+    // Saturation (5): Color saturation
+    // Complexity (6): Number of magnetic domains (1-5)
+    // Variation (7): Field configuration (uniform/gradient/alternating)
+    
+    float speed = paletteSpeed / 255.0f;
+    float intensity = visualParams.getIntensityNorm();
+    float saturation = visualParams.getSaturationNorm();
+    float complexity = visualParams.getComplexityNorm();
+    float variation = visualParams.getVariationNorm();
+    
+    static float rotationPhase = 0;
+    static float domainPhase[5] = {0, 0, 0, 0, 0};
+    
+    rotationPhase += speed * 0.02f;
+    int numDomains = 1 + (complexity * 4);  // 1-5 magnetic domains
+    
+    for(int d = 0; d < numDomains; d++) {
+        domainPhase[d] += speed * (0.01f + d * 0.003f);
+    }
+    
+    for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+        float position = (float)i / HardwareConfig::STRIP_LENGTH;
+        
+        // Magnetic field configuration
+        float magneticField = 0;
+        
+        if (variation < 0.33f) {
+            // Uniform field
+            magneticField = intensity * sin(rotationPhase);
+        } else if (variation < 0.66f) {
+            // Gradient field
+            magneticField = intensity * position * sin(rotationPhase);
+        } else {
+            // Alternating domains
+            for(int d = 0; d < numDomains; d++) {
+                float domainCenter = (d + 0.5f) / numDomains;
+                float domainWidth = 0.8f / numDomains;
+                
+                if (abs(position - domainCenter) < domainWidth / 2) {
+                    float domainField = intensity * sin(domainPhase[d]);
+                    if (d % 2 == 1) domainField = -domainField;  // Alternating polarity
+                    magneticField += domainField;
+                }
+            }
+        }
+        
+        // Faraday rotation angle (Verdet constant × B × L)
+        float rotationAngle = magneticField * position * PI;
+        
+        // Polarization components
+        float linearPol = cos(rotationAngle);
+        float circularPol = sin(rotationAngle);
+        
+        // Stokes parameters for polarization visualization
+        float s1 = linearPol;  // Linear horizontal/vertical
+        float s2 = linearPol * cos(2 * rotationAngle);  // Linear ±45°
+        float s3 = circularPol;  // Circular left/right
+        
+        // Intensity based on polarization state
+        float polIntensity = sqrt(s1*s1 + s2*s2 + s3*s3);
+        
+        uint8_t brightness = 128 + (127 * polIntensity * intensity);
+        
+        // Color mapping based on polarization state
+        uint8_t hue1 = gHue + (rotationAngle * 180 / PI);  // Rotation angle → hue
+        uint8_t hue2 = gHue + (rotationAngle * 180 / PI) + 90;  // Orthogonal polarization
+        
+        // Modulate saturation based on circular polarization
+        uint8_t sat1 = saturation * 255 * (0.5f + 0.5f * abs(s3));
+        uint8_t sat2 = saturation * 255 * (0.5f + 0.5f * abs(s3));
+        
+        strip1[i] = CHSV(hue1, sat1, brightness);
+        strip2[i] = CHSV(hue2, sat2, brightness);
+    }
+}
+
+// ============== LGP BRILLOUIN ZONES ==============
+// Electronic band structure in crystalline materials
+void lgpBrillouinZones() {
+    // ENCODER MAPPING:
+    // Speed (3): Electron velocity/band filling
+    // Intensity (4): Band gap energy
+    // Saturation (5): Color saturation
+    // Complexity (6): Number of bands (1-8)
+    // Variation (7): Crystal structure (1D/2D/3D projection)
+    
+    float speed = paletteSpeed / 255.0f;
+    float intensity = visualParams.getIntensityNorm();
+    float saturation = visualParams.getSaturationNorm();
+    float complexity = visualParams.getComplexityNorm();
+    float variation = visualParams.getVariationNorm();
+    
+    static float fermiLevel = 0;
+    static float bandPhase = 0;
+    
+    fermiLevel += speed * 0.01f;
+    bandPhase += speed * 0.02f;
+    
+    int numBands = 1 + (complexity * 7);  // 1-8 bands
+    
+    for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+        float kVector = (float)i / HardwareConfig::STRIP_LENGTH;  // Wave vector in first Brillouin zone
+        kVector = (kVector - 0.5f) * 2 * PI;  // -π to π
+        
+        float totalElectronDensity = 0;
+        float totalEnergy = 0;
+        
+        for(int band = 0; band < numBands; band++) {
+            float energy = 0;
+            
+            if (variation < 0.25f) {
+                // 1D tight-binding model
+                energy = -2 * cos(kVector) + band * 2;
+            } else if (variation < 0.5f) {
+                // 2D square lattice (projected)
+                energy = -2 * (cos(kVector) + cos(kVector + bandPhase)) + band * 1.5f;
+            } else if (variation < 0.75f) {
+                // 3D cubic lattice (projected)
+                energy = -2 * (cos(kVector) + cos(kVector + PI/3) + cos(kVector + 2*PI/3)) + band * 1.2f;
+            } else {
+                // Honeycomb lattice (graphene-like)
+                float ka = kVector;
+                float kb = kVector + 2*PI/3;
+                energy = sqrt(3 + 2*cos(ka) + 2*cos(kb) + 2*cos(ka-kb));
+                if (band % 2 == 1) energy = -energy;  // Valence/conduction bands
+                energy += band * 0.5f;
+            }
+            
+            // Band gap modification
+            if (band > 0) {
+                energy += intensity * 2;  // Band gap
+            }
+            
+            // Fermi-Dirac distribution
+            float kT = 0.1f;  // Temperature
+            float occupation = 1.0f / (1.0f + exp((energy - fermiLevel) / kT));
+            
+            totalElectronDensity += occupation;
+            totalEnergy += energy * occupation;
+        }
+        
+        // Normalize
+        totalElectronDensity /= numBands;
+        totalEnergy /= numBands;
+        
+        // Conductivity based on density of states at Fermi level
+        float conductivity = totalElectronDensity * (1 - totalElectronDensity);
+        
+        uint8_t brightness = 128 + (127 * totalElectronDensity * intensity);
+        
+        // Color based on energy and conductivity
+        uint8_t hue1 = gHue + (totalEnergy * 30) + (kVector * 20);
+        uint8_t hue2 = gHue + (conductivity * 120);
+        
+        // Visualize band edges
+        if (abs(kVector) > PI * 0.9f) {
+            brightness = brightness * 0.6f;  // Zone boundary
+        }
+        
+        strip1[i] = CHSV(hue1, saturation * 255, brightness);
+        strip2[i] = CHSV(hue2, saturation * 255, brightness);
+    }
+}
+
+// ============== LGP SHOCK WAVE FORMATION ==============
+// Nonlinear steepening of wave fronts into shock structures
+void lgpShockWaveFormation() {
+    // ENCODER MAPPING:
+    // Speed (3): Wave propagation velocity
+    // Intensity (4): Nonlinearity strength/shock steepness
+    // Saturation (5): Color saturation
+    // Complexity (6): Number of shock fronts (1-4)
+    // Variation (7): Shock type (compression/rarefaction/N-wave)
+    
+    float speed = paletteSpeed / 255.0f;
+    float intensity = visualParams.getIntensityNorm();
+    float saturation = visualParams.getSaturationNorm();
+    float complexity = visualParams.getComplexityNorm();
+    float variation = visualParams.getVariationNorm();
+    
+    static float wavePhase = 0;
+    static float shockPos[4] = {0, 0, 0, 0};
+    static float shockVel[4] = {1.0f, 0.8f, 1.2f, 0.9f};
+    
+    wavePhase += speed * 0.05f;
+    int numShocks = 1 + (complexity * 3);  // 1-4 shock fronts
+    
+    // Update shock positions
+    for(int s = 0; s < numShocks; s++) {
+        shockPos[s] += shockVel[s] * speed;
+        if (shockPos[s] > HardwareConfig::STRIP_LENGTH) {
+            shockPos[s] = 0;
+        }
+    }
+    
+    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 20);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 20);
+    
+    for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+        float position = (float)i / HardwareConfig::STRIP_LENGTH;
+        float totalWave = 0;
+        
+        for(int s = 0; s < numShocks; s++) {
+            float distToShock = abs(i - shockPos[s]);
+            float shockWidth = 5 + (intensity * 15);
+            
+            if (variation < 0.33f) {
+                // Compression shock (step function)
+                if (distToShock < shockWidth) {
+                    float shockProfile = 1.0f / (1.0f + exp((distToShock - shockWidth/2) / (1 + intensity * 3)));
+                    totalWave += shockProfile * intensity;
+                }
+            } else if (variation < 0.66f) {
+                // Rarefaction wave (expanding)
+                if (distToShock < shockWidth) {
+                    float expansionRate = 1 + intensity * 2;
+                    float shockProfile = exp(-distToShock / (shockWidth * expansionRate));
+                    totalWave += shockProfile * intensity * 0.7f;
+                }
+            } else {
+                // N-wave (compression followed by rarefaction)
+                if (distToShock < shockWidth) {
+                    float normalizedDist = distToShock / shockWidth;
+                    float nWaveProfile = sin(normalizedDist * PI) * exp(-normalizedDist);
+                    if (i < shockPos[s]) nWaveProfile = -nWaveProfile;  // Antisymmetric
+                    totalWave += nWaveProfile * intensity;
+                }
+            }
+        }
+        
+        // Background wave (pre-shock)
+        float backgroundWave = 0.2f * sin(position * 8 + wavePhase);
+        
+        // Nonlinear steepening effect
+        float steepening = 1 + intensity * 2;
+        totalWave = tanh(totalWave * steepening) / tanh(steepening);
+        
+        float finalWave = backgroundWave + totalWave;
+        
+        uint8_t brightness = 128 + (127 * finalWave);
+        
+        // Color based on wave amplitude and shock strength
+        uint8_t hue1 = gHue + (finalWave * 60) + (position * 30);
+        uint8_t hue2 = gHue - (finalWave * 60) + (position * 30);
+        
+        // Highlight shock fronts with different colors
+        for(int s = 0; s < numShocks; s++) {
+            if (abs(i - shockPos[s]) < 3) {
+                hue1 += 80;  // Shock front color shift
+                hue2 += 80;
+            }
+        }
+        
+        strip1[i] = CHSV(hue1, saturation * 255, brightness);
+        strip2[i] = CHSV(hue2, saturation * 255, brightness);
+    }
+}
+
+// ============== LGP CHAOS VISUALIZATION ==============
+// Strange attractors and bifurcation cascades
+void lgpChaosVisualization() {
+    // ENCODER MAPPING:
+    // Speed (3): Evolution rate/time step
+    // Intensity (4): Chaos parameter/bifurcation control
+    // Saturation (5): Color saturation
+    // Complexity (6): Attractor type (1-6)
+    // Variation (7): Visualization mode (trajectory/phase/poincare)
+    
+    float speed = paletteSpeed / 255.0f;
+    float intensity = visualParams.getIntensityNorm();
+    float saturation = visualParams.getSaturationNorm();
+    float complexity = visualParams.getComplexityNorm();
+    float variation = visualParams.getVariationNorm();
+    
+    static float x = 0.1f, y = 0.1f, z = 0.1f;
+    static float trajectory[320];
+    static int trajectoryIndex = 0;
+    static float chaosParam = 0;
+    
+    chaosParam = 1 + intensity * 3;  // Chaos parameter
+    float dt = speed * 0.01f;
+    
+    int attractorType = 1 + (complexity * 5);  // 1-6 different attractors
+    
+    // Evolve dynamical system
+    float dx, dy, dz;
+    
+    switch(attractorType) {
+        case 1:
+            // Logistic map
+            x = chaosParam * x * (1 - x);
+            y = x;  // Copy for visualization
+            break;
+            
+        case 2:
+            // Hénon map
+            dx = 1 - chaosParam * x * x + y;
+            dy = 0.3f * x;
+            x = dx; y = dy;
+            break;
+            
+        case 3:
+            // Lorenz system
+            dx = 10 * (y - x);
+            dy = x * (28 - z) - y;
+            dz = x * y - chaosParam * z;
+            x += dx * dt; y += dy * dt; z += dz * dt;
+            break;
+            
+        case 4:
+            // Rössler system
+            dx = -y - z;
+            dy = x + 0.2f * y;
+            dz = 0.2f + z * (x - chaosParam);
+            x += dx * dt; y += dy * dt; z += dz * dt;
+            break;
+            
+        case 5:
+            // Chua's circuit
+            {
+                float m1 = -1.2f, m0 = -0.7f;
+                float h = (m1 - m0) * (abs(x + 1) - abs(x - 1)) / 2;
+                float f = m0 * x + h;
+                dx = 10 * (y - x - f);
+                dy = x - y + z;
+                dz = -chaosParam * y;
+                x += dx * dt; y += dy * dt; z += dz * dt;
+            }
+            break;
+            
+        case 6:
+            // Double pendulum (simplified)
+            {
+                static float theta1 = 0.5f, theta2 = 0.5f, p1 = 0, p2 = 0;
+                float delta = theta2 - theta1;
+                float den = 2 - cos(delta) * cos(delta);
+                
+                float num1 = -p1 * p2 * sin(delta) / den;
+                float num2 = (p2*p2 - 2*p1*p2*cos(delta) + 2*p1*p1) * sin(delta) * cos(delta) / (den*den);
+                
+                dx = (p1 - p2*cos(delta)) / den;
+                dy = (2*p2 - p1*cos(delta)) / den;
+                
+                theta1 += dx * dt; theta2 += dy * dt;
+                p1 += (num1 + num2 - 2*sin(theta1)) * dt;
+                p2 += (num1 + num2 - sin(theta2)) * dt;
+                
+                x = theta1; y = theta2;
+            }
+            break;
+    }
+    
+    // Store trajectory
+    trajectory[trajectoryIndex] = x;
+    trajectoryIndex = (trajectoryIndex + 1) % HardwareConfig::STRIP_LENGTH;
+    
+    // Visualize chaos
+    for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+        float chaosValue = 0;
+        
+        if (variation < 0.33f) {
+            // Trajectory mode
+            chaosValue = trajectory[(trajectoryIndex + i) % HardwareConfig::STRIP_LENGTH];
+        } else if (variation < 0.66f) {
+            // Phase space projection
+            float phase = (float)i / HardwareConfig::STRIP_LENGTH * TWO_PI;
+            chaosValue = x * cos(phase) + y * sin(phase);
+        } else {
+            // Poincaré section
+            if (abs(z) < 0.1f && z > 0) {  // Crossing condition
+                chaosValue = sqrt(x*x + y*y);
+            }
+        }
+        
+        // Normalize and scale
+        chaosValue = tanh(chaosValue * 2) * 0.5f + 0.5f;
+        
+        uint8_t brightness = chaosValue * 255 * intensity;
+        
+        // Color based on chaos parameter and position
+        uint8_t hue1 = gHue + (chaosValue * 120) + (chaosParam * 40);
+        uint8_t hue2 = gHue + (chaosValue * 120) - (chaosParam * 40);
+        
+        // Highlight bifurcation points
+        if (abs(chaosParam - 2) < 0.1f || abs(chaosParam - 3) < 0.1f) {
+            hue1 += 60;  // Bifurcation color shift
+            hue2 += 60;
+        }
+        
+        strip1[i] = CHSV(hue1, saturation * 255, brightness);
+        strip2[i] = CHSV(hue2, saturation * 255, brightness);
+    }
+}

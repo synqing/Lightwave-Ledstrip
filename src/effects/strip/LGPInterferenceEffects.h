@@ -77,4 +77,44 @@ void lgpRogueWaveGenerator();
 // Encoder 7 (Variation): Pattern type (spots/stripes/maze/spiral)
 void lgpTuringPatternEngine();
 
+// Kelvin-Helmholtz Instabilities - Vortex formation at shear boundaries
+// Encoder 3 (Speed): Shear velocity/instability growth rate
+// Encoder 4 (Intensity): Vortex strength/circulation
+// Encoder 5 (Saturation): Color saturation
+// Encoder 6 (Complexity): Number of vortices (1-6)
+// Encoder 7 (Variation): Instability type (single/multiple/turbulent)
+void lgpKelvinHelmholtzInstabilities();
+
+// Faraday Rotation - Polarization rotation in magnetized optical medium
+// Encoder 3 (Speed): Rotation rate/magnetic field strength
+// Encoder 4 (Intensity): Faraday rotation angle
+// Encoder 5 (Saturation): Color saturation
+// Encoder 6 (Complexity): Number of magnetic domains (1-5)
+// Encoder 7 (Variation): Field configuration (uniform/gradient/alternating)
+void lgpFaradayRotation();
+
+// Brillouin Zones - Electronic band structure in crystalline materials
+// Encoder 3 (Speed): Electron velocity/band filling
+// Encoder 4 (Intensity): Band gap energy
+// Encoder 5 (Saturation): Color saturation
+// Encoder 6 (Complexity): Number of bands (1-8)
+// Encoder 7 (Variation): Crystal structure (1D/2D/3D projection)
+void lgpBrillouinZones();
+
+// Shock Wave Formation - Nonlinear steepening of wave fronts
+// Encoder 3 (Speed): Wave propagation velocity
+// Encoder 4 (Intensity): Nonlinearity strength/shock steepness
+// Encoder 5 (Saturation): Color saturation
+// Encoder 6 (Complexity): Number of shock fronts (1-4)
+// Encoder 7 (Variation): Shock type (compression/rarefaction/N-wave)
+void lgpShockWaveFormation();
+
+// Chaos Visualization - Strange attractors and bifurcation cascades
+// Encoder 3 (Speed): Evolution rate/time step
+// Encoder 4 (Intensity): Chaos parameter/bifurcation control
+// Encoder 5 (Saturation): Color saturation
+// Encoder 6 (Complexity): Attractor type (1-6)
+// Encoder 7 (Variation): Visualization mode (trajectory/phase/poincare)
+void lgpChaosVisualization();
+
 #endif // LGP_INTERFERENCE_EFFECTS_H

@@ -1274,3 +1274,217 @@ void lgpChaosVisualization() {
         strip2[i] = CHSV(hue2, saturation * 255, brightness);
     }
 }
+
+// ============== LGP NEURAL AVALANCHE CASCADES ==============
+// Brain activity pattern explosions with critical branching
+void lgpNeuralAvalancheCascades() {
+    // ENCODER MAPPING:
+    // Speed (3): Neural firing rate/cascade velocity
+    // Intensity (4): Synaptic strength/avalanche magnitude
+    // Saturation (5): Color saturation
+    // Complexity (6): Network connectivity (sparse to dense)
+    // Variation (7): Cascade type (critical/subcritical/supercritical)
+    
+    float speed = paletteSpeed / 255.0f;
+    float intensity = visualParams.getIntensityNorm();
+    float saturation = visualParams.getSaturationNorm();
+    float complexity = visualParams.getComplexityNorm();
+    float variation = visualParams.getVariationNorm();
+    
+    static float neuronState[320];
+    static float synapticWeight[320];
+    static float avalancheStrength[320];
+    static bool initialized = false;
+    static float globalActivity = 0;
+    
+    if (!initialized) {
+        for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+            neuronState[i] = random(100) / 100.0f;
+            synapticWeight[i] = 0.5f + (random(100) - 50) * 0.01f;
+            avalancheStrength[i] = 0;
+        }
+        initialized = true;
+    }
+    
+    float connectivity = 0.1f + (complexity * 0.4f);  // 0.1-0.5 connection probability
+    float criticalPoint = 1.0f + (variation - 0.5f) * 2.0f;  // Branching ratio
+    
+    // Neural dynamics with avalanche propagation
+    for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+        float input = 0;
+        
+        // Collect input from neighboring neurons
+        for(int j = max(0, i-5); j <= min(HardwareConfig::STRIP_LENGTH-1, i+5); j++) {
+            if (i != j && random(1000) < connectivity * 1000) {
+                float distance = abs(i - j);
+                float coupling = synapticWeight[j] * exp(-distance * 0.2f);
+                input += neuronState[j] * coupling;
+            }
+        }
+        
+        // Activation function (sigmoid with threshold)
+        float threshold = 0.5f + (intensity * 0.3f);
+        float activation = 1.0f / (1.0f + exp(-(input - threshold) * 10));
+        
+        // Avalanche propagation based on variation
+        if (variation < 0.33f) {
+            // Subcritical - avalanches die out quickly
+            neuronState[i] = activation * 0.8f;
+            avalancheStrength[i] *= 0.95f;
+        } else if (variation < 0.66f) {
+            // Critical - power-law avalanche distribution
+            neuronState[i] = activation;
+            if (activation > 0.8f) {
+                avalancheStrength[i] = intensity * (1 + sin(speed * i * 0.1f));
+            } else {
+                avalancheStrength[i] *= 0.98f;
+            }
+        } else {
+            // Supercritical - explosive cascades
+            neuronState[i] = activation * criticalPoint;
+            if (activation > 0.6f) {
+                avalancheStrength[i] = intensity * 2 * (1 + cos(speed * i * 0.05f));
+            } else {
+                avalancheStrength[i] *= 0.9f;
+            }
+        }
+        
+        // Global brain state
+        globalActivity += neuronState[i];
+    }
+    
+    globalActivity /= HardwareConfig::STRIP_LENGTH;
+    
+    // Visualize neural activity
+    for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+        float activity = neuronState[i] + avalancheStrength[i] * 0.5f;
+        
+        // Spike visualization
+        uint8_t brightness = 128 + (127 * tanh(activity * 2));
+        
+        // Color based on neural state
+        uint8_t hue1 = gHue + (activity * 60) + (globalActivity * 40);
+        uint8_t hue2 = gHue + (activity * 60) - (globalActivity * 40);
+        
+        // Highlight avalanche fronts
+        if (avalancheStrength[i] > intensity * 0.8f) {
+            hue1 += 120;  // Red shift for avalanche
+            brightness = 255;
+        }
+        
+        strip1[i] = CHSV(hue1, saturation * 255, brightness);
+        strip2[i] = CHSV(hue2, saturation * 255, brightness);
+    }
+}
+
+// ============== LGP CARDIAC ARRHYTHMIA SPIRALS ==============
+// Heart rhythm chaos with spiral wave breakup
+void lgpCardiacArrhythmiaSpirals() {
+    // ENCODER MAPPING:
+    // Speed (3): Heart rate/conduction velocity
+    // Intensity (4): Arrhythmia severity/spiral instability
+    // Saturation (5): Color saturation
+    // Complexity (6): Number of spiral cores (1-4)
+    // Variation (7): Arrhythmia type (AF/VF/VT)
+    
+    float speed = paletteSpeed / 255.0f;
+    float intensity = visualParams.getIntensityNorm();
+    float saturation = visualParams.getSaturationNorm();
+    float complexity = visualParams.getComplexityNorm();
+    float variation = visualParams.getVariationNorm();
+    
+    static float voltage[320];
+    static float recovery[320];
+    static float spiralPhase[4] = {0, PI/2, PI, 3*PI/2};
+    static float spiralPos[4] = {80, 160, 240, 320};
+    static bool refractory[320];
+    
+    int numSpirals = 1 + (complexity * 3);  // 1-4 spiral cores
+    
+    // Update spiral dynamics
+    for(int s = 0; s < numSpirals; s++) {
+        spiralPhase[s] += speed * (0.1f + s * 0.02f);
+        spiralPos[s] += speed * (1.0f + intensity * 2.0f);
+        if (spiralPos[s] > HardwareConfig::STRIP_LENGTH) spiralPos[s] = 0;
+    }
+    
+    // Cardiac tissue model (simplified FitzHugh-Nagumo)
+    for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+        float v = voltage[i];
+        float w = recovery[i];
+        
+        // Diffusion from neighbors
+        float diffusion = 0;
+        if (i > 0) diffusion += voltage[i-1];
+        if (i < HardwareConfig::STRIP_LENGTH-1) diffusion += voltage[i+1];
+        diffusion -= 2 * v;
+        diffusion *= 0.1f;  // Diffusion coefficient
+        
+        // Spiral wave sources
+        float spiralInput = 0;
+        for(int s = 0; s < numSpirals; s++) {
+            float distToSpiral = abs(i - spiralPos[s]);
+            if (distToSpiral < 20) {
+                float spiralRadius = distToSpiral;
+                float spiralWave = sin(spiralPhase[s] + spiralRadius * 0.3f);
+                spiralInput += spiralWave * intensity * exp(-distToSpiral * 0.1f);
+            }
+        }
+        
+        // Arrhythmia dynamics based on variation
+        float dt = speed * 0.1f;
+        if (variation < 0.33f) {
+            // Atrial Fibrillation - chaotic multiple wavelets
+            float chaos = sin(i * 0.5f + spiralPhase[0] * 3) * cos(i * 0.3f + spiralPhase[1] * 2);
+            voltage[i] += dt * (v * (1 - v) * (v - 0.3f) - w + diffusion + spiralInput + chaos * intensity);
+            recovery[i] += dt * 0.02f * (v - w);
+        } else if (variation < 0.66f) {
+            // Ventricular Fibrillation - spiral wave breakup
+            float breakup = intensity * sin(spiralPhase[0] * 5 + i * 0.1f);
+            voltage[i] += dt * (v * (1 - v) * (v - 0.1f) - w + diffusion + spiralInput + breakup);
+            recovery[i] += dt * 0.01f * (v - w);
+        } else {
+            // Ventricular Tachycardia - reentrant circuits
+            float reentry = sin(spiralPhase[0] + i * 0.05f) * intensity;
+            voltage[i] += dt * (v * (1 - v) * (v - 0.2f) - w + diffusion + spiralInput + reentry);
+            recovery[i] += dt * 0.015f * (v - w);
+        }
+        
+        // Refractory period
+        refractory[i] = (voltage[i] > 0.8f);
+        
+        // Clamp values
+        voltage[i] = constrain(voltage[i], 0, 1);
+        recovery[i] = constrain(recovery[i], 0, 1);
+    }
+    
+    // Visualize cardiac activity
+    for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+        float v = voltage[i];
+        float w = recovery[i];
+        
+        uint8_t brightness = v * 255;
+        
+        // Color based on cardiac state
+        uint8_t hue1 = gHue + (v * 120) + (w * 60);
+        uint8_t hue2 = gHue + (v * 120) - (w * 60);
+        
+        // Highlight refractory regions
+        if (refractory[i]) {
+            hue1 += 60;  // Yellow for refractory
+            saturation *= 0.5f;
+        }
+        
+        // Highlight spiral cores
+        for(int s = 0; s < numSpirals; s++) {
+            if (abs(i - spiralPos[s]) < 3) {
+                hue1 = 0;  // Red for spiral core
+                hue2 = 0;
+                brightness = 255;
+            }
+        }
+        
+        strip1[i] = CHSV(hue1, saturation * 255, brightness);
+        strip2[i] = CHSV(hue2, saturation * 255, brightness);
+    }
+}

@@ -45,4 +45,36 @@ void lgpInterferenceScanner();
 // Encoder 7 (Variation): Collision behavior
 void lgpWaveCollision();
 
+// Soliton Explorer - Self-maintaining wave packets that preserve shape
+// Encoder 3 (Speed): Soliton velocity
+// Encoder 4 (Intensity): Soliton amplitude/nonlinearity
+// Encoder 5 (Saturation): Color saturation
+// Encoder 6 (Complexity): Number of solitons (1-4)
+// Encoder 7 (Variation): Soliton type (bright/dark/breather)
+void lgpSolitonExplorer();
+
+// Quantum Tunneling - Wave packets that tunnel through barrier regions
+// Encoder 3 (Speed): Packet velocity
+// Encoder 4 (Intensity): Barrier height/tunneling probability
+// Encoder 5 (Saturation): Color saturation
+// Encoder 6 (Complexity): Number of barriers (1-3)
+// Encoder 7 (Variation): Barrier type (rectangular/gaussian/periodic)
+void lgpQuantumTunneling();
+
+// Rogue Wave Generator - Extreme wave events from background noise
+// Encoder 3 (Speed): Background wave frequency
+// Encoder 4 (Intensity): Rogue wave amplitude multiplier
+// Encoder 5 (Saturation): Color saturation
+// Encoder 6 (Complexity): Number of background modes (3-12)
+// Encoder 7 (Variation): Rogue wave trigger probability
+void lgpRogueWaveGenerator();
+
+// Turing Pattern Engine - Biological pattern formation via reaction-diffusion
+// Encoder 3 (Speed): Reaction rate
+// Encoder 4 (Intensity): Pattern contrast
+// Encoder 5 (Saturation): Color saturation
+// Encoder 6 (Complexity): Pattern scale (spots to stripes)
+// Encoder 7 (Variation): Pattern type (spots/stripes/maze/spiral)
+void lgpTuringPatternEngine();
+
 #endif // LGP_INTERFERENCE_EFFECTS_H

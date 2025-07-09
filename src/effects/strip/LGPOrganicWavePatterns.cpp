@@ -3,8 +3,17 @@
 // These effects transform the Light Guide Plate into a living organism
 
 #include <FastLED.h>
+#include <math.h>
 #include "../../config/hardware_config.h"
 #include "../../core/EffectTypes.h"
+
+// Math constants
+#ifndef PI
+#define PI 3.14159265358979323846
+#endif
+#ifndef TWO_PI
+#define TWO_PI (2.0 * PI)
+#endif
 
 // External references
 extern CRGB strip1[];

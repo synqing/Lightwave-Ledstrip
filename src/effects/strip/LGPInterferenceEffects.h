@@ -133,36 +133,16 @@ void lgpNeuralAvalancheCascades();
 // Encoder 7 (Variation): Arrhythmia type (AF/VF/VT)
 void lgpCardiacArrhythmiaSpirals();
 
-// Supernova Shockfront - Stellar explosion dynamics with nucleosynthesis
-// Encoder 3 (Speed): Explosion velocity/shockfront speed
-// Encoder 4 (Intensity): Explosion energy/temperature
-// Encoder 5 (Saturation): Color saturation
-// Encoder 6 (Complexity): Stellar mass (affects explosion dynamics)
-// Encoder 7 (Variation): Supernova type (Ia/IIb/hypernova)
-void lgpSupernovaShockfront();
+// NOTE: The following effects are planned but not yet implemented:
+// - Supernova Shockfront (stellar explosion dynamics)
+// - Plasma Instabilities (fusion reactor turbulence)
+// - Fractal Dimension Generator (recursive patterns)
+// - Earthquake Seismic Waves (tectonic wave propagation)
+// Uncomment declarations below when implementations are added
 
-// Plasma Instabilities - Fusion reactor turbulence with MHD modes
-// Encoder 3 (Speed): Plasma flow velocity/rotation
-// Encoder 4 (Intensity): Magnetic field strength/instability growth
-// Encoder 5 (Saturation): Color saturation
-// Encoder 6 (Complexity): Mode number (m/n resonances)
-// Encoder 7 (Variation): Instability type (tearing/ballooning/kink)
-void lgpPlasmaInstabilities();
-
-// Fractal Dimension Generator - Infinite recursive madness with self-similarity
-// Encoder 3 (Speed): Fractal zoom/iteration speed
-// Encoder 4 (Intensity): Fractal complexity/iteration depth
-// Encoder 5 (Saturation): Color saturation
-// Encoder 6 (Complexity): Fractal type selection (1-8)
-// Encoder 7 (Variation): Dimension parameter/scaling
-void lgpFractalDimensionGenerator();
-
-// Earthquake Seismic Waves - Tectonic fury with P-waves and S-waves
-// Encoder 3 (Speed): Wave propagation velocity
-// Encoder 4 (Intensity): Earthquake magnitude/energy
-// Encoder 5 (Saturation): Color saturation
-// Encoder 6 (Complexity): Fault complexity/rupture pattern
-// Encoder 7 (Variation): Wave type (P/S/surface/tsunami)
-void lgpEarthquakeSeismicWaves();
+// void lgpSupernovaShockfront();
+// void lgpPlasmaInstabilities();
+// void lgpFractalDimensionGenerator();
+// void lgpEarthquakeSeismicWaves();
 
 #endif // LGP_INTERFERENCE_EFFECTS_H

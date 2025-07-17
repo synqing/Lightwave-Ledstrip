@@ -231,9 +231,9 @@ Effect effects[] = {
     
     // =============== LGP PHYSICS-BASED EFFECTS ===============
     // Advanced physics simulations for Light Guide Plate
-    {"LGP Plasma Field", lgpPlasmaField, EFFECT_TYPE_STANDARD},
-    {"LGP Magnetic Field", lgpMagneticField, EFFECT_TYPE_STANDARD},
-    {"LGP Turbulent Flow", lgpTurbulentFlow, EFFECT_TYPE_STANDARD},
+    {"LGP Liquid Crystal", lgpLiquidCrystal, EFFECT_TYPE_STANDARD},
+    {"LGP Prism Cascade", lgpPrismCascade, EFFECT_TYPE_STANDARD},
+    {"LGP Silk Waves", lgpSilkWaves, EFFECT_TYPE_STANDARD},
     
 #if FEATURE_AUDIO_SYNC
     // =============== AUDIO REACTIVE EFFECTS ===============

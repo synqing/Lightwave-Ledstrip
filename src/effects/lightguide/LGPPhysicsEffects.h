@@ -52,12 +52,28 @@ void lgpEnergyTransfer();
 // Encoder 7 (Variation): Correlation length
 void lgpQuantumFluctuations();
 
-// Turbulent Flow Dynamics - Fluid vortices with color mixing
-// Encoder 3 (Speed): Flow velocity/vortex spawn rate
-// Encoder 4 (Intensity): Vortex strength
-// Encoder 5 (Saturation): Color mixing intensity
-// Encoder 6 (Complexity): Vortex size/influence radius
-// Encoder 7 (Variation): Turbulence visualization (>200 shows vortex cores)
-void lgpTurbulentFlow();
+// Liquid Crystal Flow - Smooth organic color transitions
+// Encoder 3 (Speed): Flow animation speed
+// Encoder 4 (Intensity): Overall brightness
+// Encoder 5 (Saturation): Color saturation control
+// Encoder 6 (Complexity): Wave complexity/layers
+// Encoder 7 (Variation): Center pulse intensity (>100 enables)
+void lgpLiquidCrystal();
+
+// Prism Cascade - Beautiful spectral dispersion effects
+// Encoder 3 (Speed): Wave spawn rate
+// Encoder 4 (Intensity): Wave propagation speed
+// Encoder 5 (Saturation): Center glow intensity
+// Encoder 6 (Complexity): Spectral spread/wavelength
+// Encoder 7 (Variation): Unused
+void lgpPrismCascade();
+
+// Silk Waves - Smooth flowing waves like silk fabric
+// Encoder 3 (Speed): Wave flow speed
+// Encoder 4 (Intensity): Overall brightness
+// Encoder 5 (Saturation): Highlight intensity
+// Encoder 6 (Complexity): Wave frequency/detail
+// Encoder 7 (Variation): Unused
+void lgpSilkWaves();
 
 #endif // LGP_PHYSICS_EFFECTS_H

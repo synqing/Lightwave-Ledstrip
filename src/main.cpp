@@ -233,6 +233,7 @@ Effect effects[] = {
     // Advanced physics simulations for Light Guide Plate
     {"LGP Plasma Field", lgpPlasmaField, EFFECT_TYPE_STANDARD},
     {"LGP Magnetic Field", lgpMagneticField, EFFECT_TYPE_STANDARD},
+    {"LGP Turbulent Flow", lgpTurbulentFlow, EFFECT_TYPE_STANDARD},
     
 #if FEATURE_AUDIO_SYNC
     // =============== AUDIO REACTIVE EFFECTS ===============
@@ -308,6 +309,14 @@ void startAdvancedTransition(uint8_t newEffect) {
     if (useRandomTransitions) {
         transType = TransitionEngine::getRandomTransition();
         
+        // DEBUG: Force cycle through new transitions for testing
+        static uint8_t forceTransition = 5; // Start with PULSEWAVE
+        if (random8() < 50) { // 20% chance to use a new transition
+            transType = (TransitionType)forceTransition;
+            forceTransition++;
+            if (forceTransition > 11) forceTransition = 5; // Cycle 5-11 (new transitions)
+        }
+        
         // Vary duration based on transition type
         switch (transType) {
             case TRANSITION_FADE:
@@ -321,14 +330,6 @@ void startAdvancedTransition(uint8_t newEffect) {
                 break;
             case TRANSITION_DISSOLVE:
                 duration = 1500;
-                curve = EASE_LINEAR;
-                break;
-            case TRANSITION_SHATTER:
-                duration = 2000;
-                curve = EASE_OUT_BOUNCE;
-                break;
-            case TRANSITION_GLITCH:
-                duration = 600;
                 curve = EASE_LINEAR;
                 break;
             case TRANSITION_PHASE_SHIFT:
@@ -389,11 +390,11 @@ void startAdvancedTransition(uint8_t newEffect) {
                   effects[previousEffect].name, 
                   effects[currentEffect].name);
     
-    // Debug transition type names
+    // Debug transition type names - CENTER ORIGIN ONLY
     const char* transitionNames[] = {
-        "FADE", "WIPE_LR", "WIPE_RL", "WIPE_OUT", "WIPE_IN", 
-        "DISSOLVE", "ZOOM_IN", "ZOOM_OUT", "MELT", "SHATTER", 
-        "GLITCH", "PHASE_SHIFT"
+        "FADE", "WIPE_OUT", "WIPE_IN", "DISSOLVE", 
+        "PHASE_SHIFT", "PULSEWAVE", "IMPLOSION", 
+        "IRIS", "NUCLEAR", "STARGATE", "KALEIDOSCOPE", "MANDALA"
     };
     Serial.printf("%s (%dms)\n", transitionNames[transType], duration);
     

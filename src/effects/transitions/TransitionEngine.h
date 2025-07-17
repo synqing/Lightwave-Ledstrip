@@ -24,8 +24,6 @@ enum TransitionType {
     TRANSITION_WIPE_OUT,      // Wipe from center outward
     TRANSITION_WIPE_IN,       // Wipe from edges inward  
     TRANSITION_DISSOLVE,      // Random pixel transition
-    TRANSITION_SHATTER,       // Particle explosion from center
-    TRANSITION_GLITCH,        // Digital glitch effect
     TRANSITION_PHASE_SHIFT,   // Frequency-based morph
     TRANSITION_PULSEWAVE,     // Concentric energy pulses from center
     TRANSITION_IMPLOSION,     // Particles converge and collapse to center
@@ -82,22 +80,8 @@ private:
         uint8_t pixelOrder[HardwareConfig::NUM_LEDS];
         uint16_t dissolveIndex;
         
-        // Shatter effect
-        struct Particle {
-            float x;
-            float vx;
-            float vy;
-            uint8_t hue;
-            uint8_t lifetime;
-        } particles[20];
-        uint8_t particleCount;
-        
-        // Melt effect - REMOVED (violated CENTER ORIGIN)
-        
-        // Glitch effect
-        uint16_t glitchSegments[10];
-        uint8_t glitchCount;
-        uint32_t lastGlitch;
+        // REMOVED: Shatter effect
+        // REMOVED: Glitch effect
         
         // Phase shift
         float phaseOffset;
@@ -194,8 +178,7 @@ private:
     void applyFade();
     void applyWipe(bool outward, bool fromCenter);  // fromCenter always true now
     void applyDissolve();
-    void applyShatter();
-    void applyGlitch();
+    // REMOVED: applyShatter, applyGlitch
     void applyPhaseShift();
     void applyPulsewave();
     void applyImplosion();
@@ -208,8 +191,7 @@ private:
     
     // Helper functions
     void initializeDissolve();
-    void initializeShatter();
-    void initializeGlitch();
+    // REMOVED: initializeShatter, initializeGlitch
     void initializePulsewave();
     void initializeImplosion();
     void initializeIris();
@@ -250,12 +232,6 @@ inline void TransitionEngine::startTransition(
     switch (type) {
         case TRANSITION_DISSOLVE:
             initializeDissolve();
-            break;
-        case TRANSITION_SHATTER:
-            initializeShatter();
-            break;
-        case TRANSITION_GLITCH:
-            initializeGlitch();
             break;
         case TRANSITION_PULSEWAVE:
             initializePulsewave();
@@ -315,12 +291,6 @@ inline bool TransitionEngine::update() {
             break;
         case TRANSITION_DISSOLVE:
             applyDissolve();
-            break;
-        case TRANSITION_SHATTER:
-            applyShatter();  // Particles explode from center
-            break;
-        case TRANSITION_GLITCH:
-            applyGlitch();
             break;
         case TRANSITION_PHASE_SHIFT:
             applyPhaseShift();
@@ -435,91 +405,7 @@ inline void TransitionEngine::applyDissolve() {
     }
 }
 
-// REMOVED: applyZoom and applyMelt - violated CENTER ORIGIN principle
-
-inline void TransitionEngine::applyShatter() {
-    // Start with source
-    memcpy(m_outputBuffer, m_sourceBuffer, m_numLeds * sizeof(CRGB));
-    
-    // Update and render particles FROM CENTER
-    for (uint8_t i = 0; i < m_state.particleCount; i++) {
-        auto& p = m_state.particles[i];
-        
-        // Update physics - particles move away from center
-        p.x += p.vx * (1.0f + m_progress);  // Accelerate outward
-        p.vy += 0.5f;  // Gravity
-        
-        // Update lifetime
-        if (p.lifetime > 0) {
-            p.lifetime--;
-            
-            // Render particle on both strips if in dual mode
-            if (m_dualStripMode) {
-                uint16_t stripLength = m_numLeds / 2;
-                // Render on strip 1
-                int16_t pos1 = (int16_t)p.x;
-                if (pos1 >= 0 && pos1 < stripLength) {
-                    CRGB particleColor = CHSV(p.hue, 255, p.lifetime * 2);
-                    m_outputBuffer[pos1] = lerpColor(m_outputBuffer[pos1], particleColor, 200);
-                }
-                // Mirror on strip 2
-                int16_t pos2 = stripLength + (stripLength - 1 - pos1);
-                if (pos2 >= stripLength && pos2 < m_numLeds) {
-                    CRGB particleColor = CHSV(p.hue, 255, p.lifetime * 2);
-                    m_outputBuffer[pos2] = lerpColor(m_outputBuffer[pos2], particleColor, 200);
-                }
-            } else {
-                int16_t pos = (int16_t)p.x;
-                if (pos >= 0 && pos < m_numLeds) {
-                    CRGB particleColor = CHSV(p.hue, 255, p.lifetime * 2);
-                    m_outputBuffer[pos] = lerpColor(m_outputBuffer[pos], particleColor, 200);
-                }
-            }
-        }
-    }
-    
-    // Fade in target from CENTER ORIGIN
-    for (uint16_t i = 0; i < m_numLeds; i++) {
-        float distFromCenter = getDistanceFromCenter(i);
-        float centerProgress = m_progress * 2.0f - distFromCenter;
-        centerProgress = constrain(centerProgress, 0.0f, 1.0f);
-        uint8_t targetAlpha = centerProgress * centerProgress * 255;  // Quadratic fade from center
-        m_outputBuffer[i] = lerpColor(m_outputBuffer[i], m_targetBuffer[i], targetAlpha);
-    }
-}
-
-inline void TransitionEngine::applyGlitch() {
-    // Copy source as base
-    memcpy(m_outputBuffer, m_sourceBuffer, m_numLeds * sizeof(CRGB));
-    
-    // Apply glitch segments
-    uint32_t now = millis();
-    if (now - m_state.lastGlitch > 50) {  // New glitch every 50ms
-        m_state.lastGlitch = now;
-        
-        // Random glitch segments
-        m_state.glitchCount = random8(3, 8);
-        for (uint8_t i = 0; i < m_state.glitchCount; i++) {
-            m_state.glitchSegments[i] = random16(m_numLeds);
-        }
-    }
-    
-    // Apply glitches
-    for (uint8_t i = 0; i < m_state.glitchCount; i++) {
-        uint16_t pos = m_state.glitchSegments[i];
-        uint16_t len = random8(5, 20);
-        
-        for (uint16_t j = 0; j < len && pos + j < m_numLeds; j++) {
-            if (random8() < (m_progress * 255)) {
-                // Glitch to target
-                m_outputBuffer[pos + j] = m_targetBuffer[pos + j];
-            } else if (random8() < 30) {
-                // Corruption
-                m_outputBuffer[pos + j] = CRGB(random8(), random8(), random8());
-            }
-        }
-    }
-}
+// REMOVED: applyZoom, applyMelt, applyShatter, applyGlitch - violated CENTER ORIGIN or were glitchy trash
 
 inline void TransitionEngine::applyPhaseShift() {
     // Frequency-based morphing
@@ -872,31 +758,7 @@ inline void TransitionEngine::initializeDissolve() {
     }
 }
 
-inline void TransitionEngine::initializeShatter() {
-    // Create particles at CENTER ORIGIN
-    m_state.particleCount = 20;
-    for (uint8_t i = 0; i < m_state.particleCount; i++) {
-        auto& p = m_state.particles[i];
-        // Start at center with slight random offset
-        p.x = m_centerPoint + random8(10) - 5;
-        // Velocity away from center
-        if (i < m_state.particleCount / 2) {
-            p.vx = -random8(3, 8);  // Left direction
-        } else {
-            p.vx = random8(3, 8);   // Right direction
-        }
-        p.vy = -random8(5, 15);  // Upward velocity
-        p.hue = random8();
-        p.lifetime = 128;
-    }
-}
-
-// REMOVED: initializeMelt - violated CENTER ORIGIN principle
-
-inline void TransitionEngine::initializeGlitch() {
-    m_state.glitchCount = 0;
-    m_state.lastGlitch = 0;
-}
+// REMOVED: initializeShatter, initializeGlitch, initializeMelt - trash effects
 
 inline void TransitionEngine::initializePulsewave() {
     m_state.pulseCount = 0;
@@ -963,21 +825,19 @@ inline void TransitionEngine::initializeMandala() {
 inline TransitionType TransitionEngine::getRandomTransition() {
     // Weighted random selection for variety - CENTER ORIGIN ONLY
     uint8_t weights[] = {
-        20,  // FADE
-        15,  // WIPE_OUT - from center
-        15,  // WIPE_IN - to center
-        10,  // DISSOLVE
-        6,   // SHATTER - from center
-        4,   // GLITCH
-        2,   // PHASE_SHIFT
-        8,   // PULSEWAVE - energy rings
-        7,   // IMPLOSION - particles collapse
-        6,   // IRIS - mechanical aperture
-        5,   // NUCLEAR - chain reaction
-        4,   // STARGATE - wormhole portal
-        3,   // KALEIDOSCOPE - crystal patterns
-        2    // MANDALA - sacred geometry
-        // REMOVED: WIPE_LR, WIPE_RL, ZOOM_IN, ZOOM_OUT, MELT
+        25,  // FADE
+        20,  // WIPE_OUT - from center
+        20,  // WIPE_IN - to center
+        15,  // DISSOLVE
+        5,   // PHASE_SHIFT
+        10,  // PULSEWAVE - energy rings
+        10,  // IMPLOSION - particles collapse
+        8,   // IRIS - mechanical aperture
+        7,   // NUCLEAR - chain reaction
+        6,   // STARGATE - wormhole portal
+        5,   // KALEIDOSCOPE - crystal patterns
+        4    // MANDALA - sacred geometry
+        // REMOVED: WIPE_LR, WIPE_RL, ZOOM_IN, ZOOM_OUT, MELT, SHATTER, GLITCH
     };
     
     uint8_t total = 0;

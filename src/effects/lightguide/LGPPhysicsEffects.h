@@ -52,4 +52,12 @@ void lgpEnergyTransfer();
 // Encoder 7 (Variation): Correlation length
 void lgpQuantumFluctuations();
 
+// Turbulent Flow Dynamics - Fluid vortices with color mixing
+// Encoder 3 (Speed): Flow velocity/vortex spawn rate
+// Encoder 4 (Intensity): Vortex strength
+// Encoder 5 (Saturation): Color mixing intensity
+// Encoder 6 (Complexity): Vortex size/influence radius
+// Encoder 7 (Variation): Turbulence visualization (>200 shows vortex cores)
+void lgpTurbulentFlow();
+
 #endif // LGP_PHYSICS_EFFECTS_H

@@ -161,11 +161,13 @@ void lgpGravitationalLensing() {
     
     // Generate light rays from center
     for (int16_t ray = -40; ray <= 40; ray += 2) {
-        float rayPos = HardwareConfig::STRIP_CENTER_POINT;
-        float rayAngle = ray * 0.02f;  // Initial angle
-        
-        // Trace ray path
-        for (uint8_t step = 0; step < 80; step++) {
+        // Rays go both left and right from center
+        for (int8_t direction = -1; direction <= 1; direction += 2) {
+            float rayPos = HardwareConfig::STRIP_CENTER_POINT;
+            float rayAngle = ray * 0.02f * direction;  // Initial angle with direction
+            
+            // Trace ray path
+            for (uint8_t step = 0; step < 80; step++) {
             // Calculate total gravitational deflection
             float totalDeflection = 0;
             
@@ -185,7 +187,7 @@ void lgpGravitationalLensing() {
             rayAngle += totalDeflection * 0.01f;
             
             // Update ray position
-            rayPos += cos(rayAngle) * 2;
+            rayPos += cos(rayAngle) * 2 * direction;  // Apply direction
             
             // Draw ray point
             int16_t pixelPos = (int16_t)rayPos;
@@ -205,6 +207,7 @@ void lgpGravitationalLensing() {
             
             // Stop if ray exits
             if (rayPos < 0 || rayPos >= HardwareConfig::STRIP_LENGTH) break;
+            }
         }
     }
     

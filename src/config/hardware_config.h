@@ -81,6 +81,11 @@ namespace HardwareConfig {
     // Memory limits
     constexpr size_t MAX_EFFECTS = 80;  // Increased to accommodate all effects including audio-reactive
     constexpr size_t TRANSITION_BUFFER_SIZE = NUM_LEDS * 3; // RGB bytes
+    
+    // Light Guide Plate Configuration
+    constexpr bool LIGHT_GUIDE_MODE_ENABLED = true;  // Enable LGP-specific features
+    constexpr uint8_t LIGHT_GUIDE_MODE_PIN = 255;    // GPIO pin for hardware detection (255 = always enabled)
+    constexpr uint32_t LIGHT_GUIDE_SIGNATURE = 0x4C475000;  // "LGP\0" signature for auto-detection
 }
 
 // Global I2C mutex for thread-safe Wire operations

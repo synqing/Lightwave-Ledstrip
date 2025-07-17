@@ -169,6 +169,9 @@ extern void spectrumLightshowEngine();
 #include "effects/strip/LGPColorMixingEffects.h"
 // #include "effects/strip/LGPAudioReactive.h"  // Removed: all old audio-reactive modes retired
 
+// New Light Guide Plate Physics Effects
+#include "effects/lightguide/LGPPhysicsEffects.h"
+
 // Effects array - Matrix mode has been surgically removed
 // USELESS EFFECTS PURGED - Only the good shit remains
 Effect effects[] = {
@@ -231,6 +234,11 @@ Effect effects[] = {
     // =============== LGP COLOR MIXING EFFECTS ===============
     {"LGP Chromatic Aberration", lgpChromaticAberration, EFFECT_TYPE_STANDARD},
     {"LGP Color Accelerator", lgpColorAccelerator, EFFECT_TYPE_STANDARD},
+    
+    // =============== LGP PHYSICS-BASED EFFECTS ===============
+    // Advanced physics simulations for Light Guide Plate
+    {"LGP Plasma Field", lgpPlasmaField, EFFECT_TYPE_STANDARD},
+    {"LGP Magnetic Field", lgpMagneticField, EFFECT_TYPE_STANDARD},
     
 #if FEATURE_AUDIO_SYNC
     // =============== AUDIO REACTIVE EFFECTS ===============

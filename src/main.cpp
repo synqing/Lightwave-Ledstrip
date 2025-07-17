@@ -341,6 +341,34 @@ void startAdvancedTransition(uint8_t newEffect) {
                 duration = 1400;
                 curve = EASE_IN_OUT_CUBIC;
                 break;
+            case TRANSITION_PULSEWAVE:
+                duration = 2000;
+                curve = EASE_OUT_QUAD;
+                break;
+            case TRANSITION_IMPLOSION:
+                duration = 1500;
+                curve = EASE_IN_CUBIC;
+                break;
+            case TRANSITION_IRIS:
+                duration = 1200;
+                curve = EASE_IN_OUT_QUAD;
+                break;
+            case TRANSITION_NUCLEAR:
+                duration = 2500;
+                curve = EASE_OUT_ELASTIC;
+                break;
+            case TRANSITION_STARGATE:
+                duration = 3000;
+                curve = EASE_IN_OUT_BACK;
+                break;
+            case TRANSITION_KALEIDOSCOPE:
+                duration = 1800;
+                curve = EASE_IN_OUT_CUBIC;
+                break;
+            case TRANSITION_MANDALA:
+                duration = 2200;
+                curve = EASE_IN_OUT_ELASTIC;
+                break;
             default:
                 duration = 1000;
                 curve = EASE_IN_OUT_QUAD;

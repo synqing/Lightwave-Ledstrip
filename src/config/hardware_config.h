@@ -17,8 +17,8 @@ namespace HardwareConfig {
     constexpr uint8_t NUM_STRIPS = 2;
     
     // GPIO Pin Assignment
-    constexpr uint8_t STRIP1_DATA_PIN = 11;   // Channel 1 (primary)
-    constexpr uint8_t STRIP2_DATA_PIN = 12;   // Channel 2 (opposite)
+    constexpr uint8_t STRIP1_DATA_PIN = 7;    // Channel 1 (primary) - Changed from 8
+    constexpr uint8_t STRIP2_DATA_PIN = 8;    // Channel 2 (opposite) - Changed from 9
     constexpr uint8_t LED_DATA_PIN = STRIP1_DATA_PIN;  // Backward compatibility
     
     // Physical Layout Constants
@@ -62,14 +62,15 @@ namespace HardwareConfig {
     constexpr uint8_t BUTTON_PIN = 0;  // BOOT button on DevKit
     constexpr uint8_t POWER_PIN = 48;  // RGB LED power on some DevKits (or use any free GPIO)
     
-    // M5Stack 8encoder I2C pins for strips hardware
-    constexpr uint8_t I2C_SDA = 13;
-    constexpr uint8_t I2C_SCL = 14;
+    // Encoder Hardware Configuration
+    // M5Stack 8encoder I2C configuration (Primary I2C bus)
+    constexpr uint8_t I2C_SDA = 10;
+    constexpr uint8_t I2C_SCL = 11;
     constexpr uint8_t M5STACK_8ENCODER_ADDR = 0x41;  // Default I2C address
     
-    // M5Unit-Scroll I2C pins (secondary I2C bus)
-    constexpr uint8_t I2C_SDA_SCROLL = 20;
-    constexpr uint8_t I2C_SCL_SCROLL = 21;
+    // M5Unit-Scroll I2C configuration (Secondary pins for scroll encoder)
+    constexpr uint8_t I2C_SDA_SCROLL = 11;  // Your wiring: SDA on GPIO11
+    constexpr uint8_t I2C_SCL_SCROLL = 12;  // Your wiring: SCL on GPIO12
     constexpr uint8_t M5UNIT_SCROLL_ADDR = 0x40;  // Default I2C address
     
     // Audio input pins (for future use)

@@ -79,6 +79,10 @@ bool useRandomTransitions = true;
 // Visual Feedback System
 EncoderLEDFeedback* encoderFeedback = nullptr;
 
+// LED strip state tracking
+int strip1LitCount = 0;
+int strip2LitCount = 0;
+
 // Preset Management System - DISABLED
 // PresetManager* presetManager = nullptr;
 
@@ -93,8 +97,8 @@ uint8_t currentPaletteIndex = 0;
 // Include palette definitions
 #include "Palettes.h"
 
-// M5Unit-Scroll encoder on secondary I2C bus
-#include "hardware/scroll_encoder.h"
+// M5Unit-Scroll encoder manager
+#include "hardware/ScrollEncoderManager.h"
 
 // Dual-Strip Wave Engine (disabled for now - files don't exist yet)
 // #include "effects/waves/DualStripWaveEngine.h"
@@ -524,6 +528,69 @@ void setup() {
         Serial.println("I2C mutex created for thread-safe operations");
     }
     
+    // Initialize I2C bus with scroll encoder pins (since 8encoder is disabled)
+    Wire.begin(HardwareConfig::I2C_SDA_SCROLL, HardwareConfig::I2C_SCL_SCROLL);
+    Wire.setClock(400000);  // 400kHz
+    
+    // Scan I2C bus to see what's connected
+    Serial.println("\n🔍 Scanning I2C bus...");
+    Serial.printf("   SDA: GPIO%d, SCL: GPIO%d\n", 
+                  HardwareConfig::I2C_SDA_SCROLL, HardwareConfig::I2C_SCL_SCROLL);
+    byte error, address;
+    int nDevices = 0;
+    for(address = 1; address < 127; address++) {
+        Wire.beginTransmission(address);
+        error = Wire.endTransmission();
+        if (error == 0) {
+            Serial.print("   Found device at 0x");
+            if (address < 16) Serial.print("0");
+            Serial.print(address, HEX);
+            if (address == 0x40) Serial.print(" (M5Unit-Scroll)");
+            else if (address == 0x41) Serial.print(" (M5Stack 8Encoder)");
+            Serial.println();
+            nDevices++;
+        }
+    }
+    if (nDevices == 0) {
+        Serial.println("   No I2C devices found!");
+    } else {
+        Serial.printf("   Found %d device(s)\n", nDevices);
+    }
+    Serial.println();
+    
+    // Initialize M5Unit-Scroll encoder manager
+    if (scrollManager.begin()) {
+        Serial.println("✅ Scroll encoder system initialized");
+        
+        // Set up callbacks to handle parameter changes
+        scrollManager.setParamChangeCallback([](ScrollParameter param, uint8_t value) {
+            switch (param) {
+                case PARAM_BRIGHTNESS:
+                    FastLED.setBrightness(value);
+                    Serial.printf("Brightness: %d\n", value);
+                    break;
+                case PARAM_PALETTE:
+                    currentPaletteIndex = value % gGradientPaletteCount;
+                    targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
+                    Serial.printf("Palette: %d\n", currentPaletteIndex);
+                    break;
+                case PARAM_SPEED:
+                    paletteSpeed = value / 4;  // Scale to reasonable range
+                    Serial.printf("Speed: %d\n", paletteSpeed);
+                    break;
+                default:
+                    // Other parameters are handled by updateVisualParams
+                    break;
+            }
+        });
+        
+        // Effect changes are handled internally by ScrollEncoderManager
+    } else {
+        Serial.println("⚠️  Scroll encoder not found - continuing without it");
+    }
+    
+    // Commenting out M5Stack 8encoder initialization
+    /*
     // Initialize I2C and M5ROTATE8 with dedicated task architecture
     Wire.begin(HardwareConfig::I2C_SDA, HardwareConfig::I2C_SCL);
     Wire.setClock(400000);  // Max supported speed (400 KHz)
@@ -542,6 +609,7 @@ void setup() {
     } else {
         Serial.println("⚠️  VFS disabled - no encoder available");
     }
+    */
     
     // Preset Management System - DISABLED FOR NOW
     // Will be re-enabled once basic transitions work
@@ -565,10 +633,14 @@ void setup() {
     FastLED.clear(true);
     
     // Initialize M5Unit-Scroll encoder on secondary I2C bus
+#if FEATURE_DEBUG_OUTPUT
     Serial.println("[DEBUG] About to initialize scroll encoder...");
+#endif
     // DISABLED - CAUSING CRASHES
     // initScrollEncoder();
+#if FEATURE_DEBUG_OUTPUT
     Serial.println("[DEBUG] Scroll encoder init SKIPPED - was causing crashes");
+#endif
     
     // DISABLED - Setting up callbacks when encoder not available causes crashes
     // Only set up scroll encoder callbacks if main encoder is available
@@ -696,7 +768,9 @@ void setup() {
     Serial.println("   'p' = Performance comparison (when available)");
     Serial.println("");
     
+#if FEATURE_DEBUG_OUTPUT
     Serial.println("[DEBUG] Entering main loop...");
+#endif
 }
 
 void handleButton() {
@@ -807,8 +881,10 @@ void loop() {
                 break;
             }
         }
+#if FEATURE_DEBUG_OUTPUT
         Serial.printf("[DEBUG] LEDs lit: %s, Brightness: %d\n", 
                       anyLit ? "YES" : "NO", FastLED.getBrightness());
+#endif
         
         loopCounter = 0;
         totalFrameTime = 0;
@@ -898,6 +974,12 @@ void loop() {
         }
     }
 
+    // Update scroll encoder
+    scrollManager.update();
+    
+    // Update visual parameters from scroll encoder
+    scrollManager.updateVisualParams(visualParams);
+    
     // Process encoder events from I2C task (NON-BLOCKING)
     QueueHandle_t encoderEventQueue = encoderManager.getEventQueue();
     if (encoderEventQueue != NULL) {
@@ -1010,29 +1092,24 @@ void loop() {
     webServer.update();
 #endif
 
+    // Process scroll encoder events
+    // processScrollEncoder(); // Removed - old implementation
+    
     // Audio and rendering are now handled by the dedicated task
     // No need to update them in the main loop
     
-    // Process scroll encoder input (non-blocking)
-    // DISABLED - CAUSING CRASHES
-    // processScrollEncoder();
-    
-    // Debug output every 10 seconds to minimize overhead
-    EVERY_N_SECONDS(10) {
-        // Count lit LEDs in each strip
-        int strip1LitCount = 0;
-        int strip2LitCount = 0;
-        
-        for (int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
-            if (strip1[i].r > 0 || strip1[i].g > 0 || strip1[i].b > 0) {
-                strip1LitCount++;
-            }
-            if (strip2[i].r > 0 || strip2[i].g > 0 || strip2[i].b > 0) {
-                strip2LitCount++;
-            }
+    // Main loop runs at full speed, timing is handled by FastLED
+    EVERY_N_MILLISECONDS(20) {
+        // Process encoder events if available
+        if (encoderFeedback) {
+            encoderFeedback->update();
         }
         
-        Serial.printf("[DEBUG] Strip1 lit: %d/%d, Strip2 lit: %d/%d, gHue: %d, Brightness: %d\n",
+#if FEATURE_DEBUG_OUTPUT
+        static unsigned long lastDebugPrint = 0;
+        if (millis() - lastDebugPrint > 1000) {  // Only print once per second
+            lastDebugPrint = millis();
+            Serial.printf("[DEBUG] Strip1 lit: %d/%d, Strip2 lit: %d/%d, gHue: %d, Brightness: %d\n",
                       strip1LitCount, HardwareConfig::STRIP_LENGTH, strip2LitCount, HardwareConfig::STRIP_LENGTH, gHue, FastLED.getBrightness());
         
         // Also check if any LED in the unified buffer is lit
@@ -1042,7 +1119,9 @@ void loop() {
                 unifiedLitCount++;
             }
         }
-        Serial.printf("[DEBUG] Unified buffer lit: %d/%d\n", unifiedLitCount, HardwareConfig::TOTAL_LEDS);
+            Serial.printf("[DEBUG] Unified buffer lit: %d/%d\n", unifiedLitCount, HardwareConfig::TOTAL_LEDS);
+        }
+#endif
     }
     
     // LED showing is now handled by the audio/render task

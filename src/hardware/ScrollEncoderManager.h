@@ -78,14 +78,14 @@ private:
     };
     
     SensitivityProfile profiles[PARAM_COUNT] = {
-        {1.0f, 3.0f, 0.1f, 500},   // PARAM_EFFECT - no acceleration
-        {0.5f, 4.0f, 0.2f, 300},   // PARAM_BRIGHTNESS - smooth ramping
+        {1.0f, 1.0f, 0.0f, 0},     // PARAM_EFFECT - no acceleration
+        {0.3f, 2.0f, 0.1f, 500},   // PARAM_BRIGHTNESS - gentle ramping
         {1.0f, 1.0f, 0.0f, 0},     // PARAM_PALETTE - no acceleration
-        {0.8f, 5.0f, 0.3f, 400},   // PARAM_SPEED - fast changes
-        {0.7f, 3.5f, 0.2f, 350},   // PARAM_INTENSITY
-        {0.6f, 3.0f, 0.15f, 400},  // PARAM_SATURATION
-        {0.8f, 4.0f, 0.25f, 350},  // PARAM_COMPLEXITY
-        {0.9f, 3.5f, 0.2f, 400}    // PARAM_VARIATION
+        {0.4f, 2.5f, 0.15f, 400},  // PARAM_SPEED - moderate changes
+        {0.3f, 2.0f, 0.1f, 500},   // PARAM_INTENSITY - gentle for LGP
+        {0.3f, 2.0f, 0.1f, 500},   // PARAM_SATURATION - gentle for LGP
+        {0.3f, 2.0f, 0.1f, 500},   // PARAM_COMPLEXITY - gentle for LGP
+        {0.3f, 2.0f, 0.1f, 500}    // PARAM_VARIATION - gentle for LGP
     };
     
 public:
@@ -196,13 +196,13 @@ private:
     bool needsRecovery = false;
     uint32_t lastRecoveryAttempt = 0;
     static constexpr uint32_t RECOVERY_INTERVAL = 5000; // 5 seconds
-    static constexpr uint32_t HEALTH_TIMEOUT = 1000;    // 1 second
-    static constexpr uint32_t MAX_ERRORS = 5;
+    static constexpr uint32_t HEALTH_TIMEOUT = 3000;    // 3 seconds - increased for I2C bus contention
+    static constexpr uint32_t MAX_ERRORS = 10;          // Increased tolerance for I2C conflicts
     
     // Watchdog system
     struct Watchdog {
         uint32_t lastFeedTime = 0;
-        uint32_t timeout = 2000;  // 2 seconds
+        uint32_t timeout = 5000;  // 5 seconds - increased for I2C bus sharing
         bool triggered = false;
         
         void feed() { 

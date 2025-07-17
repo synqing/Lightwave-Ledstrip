@@ -301,9 +301,12 @@ void lgpInterferenceScanner() {
         }
         
         // Intensity shaping
-        pattern = pow(abs(pattern), 2 - intensity);
+        // Ensure exponent stays in reasonable range (0.5 to 2.0)
+        float exponent = constrain(2 - intensity, 0.5f, 2.0f);
+        pattern = pow(abs(pattern), exponent);
         
-        uint8_t brightness = pattern * 255 * intensity;
+        // Ensure brightness doesn't overflow
+        uint8_t brightness = constrain(pattern * 255 * intensity, 0, 255);
         
         // Color mapping
         uint8_t hue1 = gHue + (dist * 2) + (pattern * 50);
@@ -446,7 +449,9 @@ void lgpSolitonExplorer() {
         }
         
         // Nonlinear self-interaction (Kerr effect simulation)
-        totalWave = totalWave / (1 + totalWave * intensity);
+        // Prevent division by values approaching zero
+        float divisor = max(0.1f, 1 + abs(totalWave) * intensity);
+        totalWave = totalWave / divisor;
         
         uint8_t brightness = 128 + (127 * totalWave);
         

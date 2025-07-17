@@ -18,7 +18,7 @@
 #include "utils/PerformanceOptimizer.h"
 #endif
 
-#include "core/AudioRenderTask.h"
+// #include "core/AudioRenderTask.h"  // DISABLED - Audio system removed
 
 #if FEATURE_SERIAL_MENU
 #include "utils/SerialMenu.h"
@@ -599,7 +599,7 @@ void setup() {
                              effects[newEffect].name);
                 
                 // Update audio/render task
-                audioRenderTask.setEffectCallback(effectUpdateCallback);
+                // audioRenderTask.setEffectCallback(effectUpdateCallback);  // DISABLED - Audio removed
             }
         });
         
@@ -621,6 +621,8 @@ void setup() {
     Wire.begin(HardwareConfig::I2C_SDA, HardwareConfig::I2C_SCL);
     Wire.setClock(400000);  // Max supported speed (400 KHz)
     
+    // M5ROTATE8 encoder disabled - using scroll encoder only
+    /*
     // Initialize encoder manager
     encoderManager.begin();
     
@@ -632,8 +634,6 @@ void setup() {
             encoderFeedback->applyDefaultColorScheme();
             Serial.println("✅ Visual Feedback System initialized");
         }
-    } else {
-        Serial.println("⚠️  VFS disabled - no encoder available");
     }
     */
     
@@ -709,6 +709,8 @@ void setup() {
     }
     */
     
+    // Audio/render task DISABLED - Audio system removed
+    /*
     // Start the consolidated audio/render task FIRST for deterministic timing
     Serial.println("\n=== Starting Audio/Render Task (PRIORITY) ===");
     if (!audioRenderTask.start(audioUpdateCallback, renderUpdateCallback, effectUpdateCallback)) {
@@ -717,6 +719,7 @@ void setup() {
     } else {
         Serial.println("✅ Started 8ms audio/render task on Core 1");
     }
+    */
     
 #if FEATURE_SERIAL_MENU
     // Initialize serial menu system
@@ -1007,6 +1010,8 @@ void loop() {
     scrollManager.updateVisualParams(visualParams);
     
     // Process encoder events from I2C task (NON-BLOCKING)
+    // Commented out - using scroll encoder instead
+    /*
     QueueHandle_t encoderEventQueue = encoderManager.getEventQueue();
     if (encoderEventQueue != NULL) {
         EncoderEvent event;
@@ -1031,7 +1036,7 @@ void loop() {
                     Serial.printf("🎨 MAIN: Effect changed to %s (index %d)\n", effects[currentEffect].name, currentEffect);
                     
                     // Update the effect callback in the audio/render task
-                    audioRenderTask.setEffectCallback(effectUpdateCallback);
+                    // audioRenderTask.setEffectCallback(effectUpdateCallback);  // DISABLED - Audio removed
                     
                     // Log mode transition if effect type changed
                     if (effects[newEffect].type != effects[currentEffect].type) {
@@ -1053,7 +1058,7 @@ void loop() {
                             brightness = constrain(brightness, 16, 255);
                             FastLED.setBrightness(brightness);
                             Serial.printf("💡 MAIN: Brightness changed to %d\n", brightness);
-                            if (encoderFeedback) encoderFeedback->flashEncoder(1, 255, 255, 255, 200);
+                            // if (encoderFeedback) encoderFeedback->flashEncoder(1, 255, 255, 255, 200);
                         }
                         break;
                         
@@ -1065,7 +1070,7 @@ void loop() {
                         }
                         targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
                         Serial.printf("🎨 MAIN: Palette changed to %d\n", currentPaletteIndex);
-                        if (encoderFeedback) encoderFeedback->flashEncoder(2, 255, 0, 255, 200);
+                        // if (encoderFeedback) encoderFeedback->flashEncoder(2, 255, 0, 255, 200);
                         break;
                         
                     case 3: // Speed control
@@ -1075,25 +1080,25 @@ void loop() {
                         break;
                         
                     case 4: // Intensity/Amplitude
-                        visualParams.intensity = constrain(visualParams.intensity + (event.delta > 0 ? 16 : -16), 0, 255);
+                        visualParams.intensity = constrain(visualParams.intensity + (event.delta > 0 ? 4 : -4), 0, 255);
                         Serial.printf("🔥 MAIN: Intensity changed to %d (%.1f%%)\n", visualParams.intensity, visualParams.getIntensityNorm() * 100);
                         if (encoderFeedback) encoderFeedback->flashEncoder(4, 255, 128, 0, 200);
                         break;
                         
                     case 5: // Saturation
-                        visualParams.saturation = constrain(visualParams.saturation + (event.delta > 0 ? 16 : -16), 0, 255);
+                        visualParams.saturation = constrain(visualParams.saturation + (event.delta > 0 ? 4 : -4), 0, 255);
                         Serial.printf("🎨 MAIN: Saturation changed to %d (%.1f%%)\n", visualParams.saturation, visualParams.getSaturationNorm() * 100);
                         if (encoderFeedback) encoderFeedback->flashEncoder(5, 0, 255, 255, 200);
                         break;
                         
                     case 6: // Complexity/Detail
-                        visualParams.complexity = constrain(visualParams.complexity + (event.delta > 0 ? 16 : -16), 0, 255);
+                        visualParams.complexity = constrain(visualParams.complexity + (event.delta > 0 ? 4 : -4), 0, 255);
                         Serial.printf("✨ MAIN: Complexity changed to %d (%.1f%%)\n", visualParams.complexity, visualParams.getComplexityNorm() * 100);
                         if (encoderFeedback) encoderFeedback->flashEncoder(6, 128, 255, 0, 200);
                         break;
                         
                     case 7: // Variation/Mode
-                        visualParams.variation = constrain(visualParams.variation + (event.delta > 0 ? 16 : -16), 0, 255);
+                        visualParams.variation = constrain(visualParams.variation + (event.delta > 0 ? 4 : -4), 0, 255);
                         Serial.printf("🔄 MAIN: Variation changed to %d (%.1f%%)\n", visualParams.variation, visualParams.getVariationNorm() * 100);
                         if (encoderFeedback) encoderFeedback->flashEncoder(7, 255, 0, 255, 200);
                         break;
@@ -1111,7 +1116,7 @@ void loop() {
     updatePalette();
     
     // Update encoder LED feedback
-    updateEncoderFeedback();
+    // updateEncoderFeedback();  // DISABLED - M5ROTATE8 encoder disabled
     
     // Update web server
 #if FEATURE_WEB_SERVER
@@ -1149,8 +1154,14 @@ void loop() {
         }
 #endif
     }
+    */  // End of commented out encoderManager block
     
-    // LED showing is now handled by the audio/render task
+    // Call render callbacks directly (audio/render task disabled)
+    effectUpdateCallback();  // Run the current effect
+    renderUpdateCallback();  // Handle transitions
+    
+    // Show LEDs (audio/render task disabled)
+    FastLED.show();
     
     // Advance the global hue
     EVERY_N_MILLISECONDS(20) {
@@ -1211,6 +1222,8 @@ void loop() {
 #endif
         
         // Quick encoder performance summary
+        // Commented out - using scroll encoder instead
+        /*
         if (encoderManager.isAvailable()) {
             const EncoderMetrics& metrics = encoderManager.getMetrics();
             Serial.printf("Encoder: %u queue depth, %.1f%% I2C success\n",
@@ -1218,6 +1231,7 @@ void loop() {
                          metrics.i2c_transactions > 0 ? 
                          (100.0f * (metrics.i2c_transactions - metrics.i2c_failures) / metrics.i2c_transactions) : 100.0f);
         }
+        */
         
         // Update wave engine performance stats if using wave effects (disabled for now)
         // if (effects[currentEffect].type == EFFECT_TYPE_WAVE_ENGINE) {

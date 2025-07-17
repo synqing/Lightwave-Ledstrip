@@ -101,6 +101,19 @@ int16_t ScrollAcceleration::processValue(int16_t rawDelta, ScrollParameter param
     float finalMultiplier = profile.baseMultiplier * acceleration;
     int16_t processedDelta = round(rawDelta * finalMultiplier);
     
+    // Additional smoothing for LGP effects - prevent single-tick jumps
+    if (abs(processedDelta) == 1 && param >= PARAM_INTENSITY && param <= PARAM_VARIATION) {
+        // For visual parameters, accumulate small changes
+        static float accumulator = 0;
+        accumulator += rawDelta * finalMultiplier;
+        if (abs(accumulator) >= 1.0f) {
+            processedDelta = (int16_t)accumulator;
+            accumulator -= processedDelta;
+        } else {
+            processedDelta = 0;
+        }
+    }
+    
     // Update state
     lastChangeTime = now;
     lastDelta = rawDelta;
@@ -207,6 +220,9 @@ bool ScrollEncoderManager::begin() {
         400000                              // 400kHz
     );
     
+    // Add small delay after initialization to let device stabilize
+    delay(50);
+    
     if (initSuccess) {
         isAvailable = true;
         Serial.println("✅ M5Unit-Scroll connected successfully!");
@@ -262,6 +278,9 @@ bool ScrollEncoderManager::begin() {
         // Set initial LED color
         updateLED();
         
+        // Initialize last successful read time
+        lastSuccessfulRead = millis();
+        
         return true;
     } else {
         delete scrollEncoder;
@@ -275,6 +294,14 @@ bool ScrollEncoderManager::begin() {
         Serial.println("   2. Verify I2C address is 0x40");
         Serial.println("   3. Ensure device is powered");
         Serial.println("   4. Check for I2C conflicts with other devices");
+        Serial.println("   5. Try power cycling the scroll encoder");
+        
+        // Perform I2C scan to help diagnose
+        Serial.println("\n   Scanning I2C bus for diagnostics...");
+        Wire.beginTransmission(0x40);
+        uint8_t error = Wire.endTransmission();
+        Serial.printf("   Device at 0x40: %s (error code: %d)\n", 
+                      error == 0 ? "FOUND" : "NOT FOUND", error);
         
         return false;
     }
@@ -423,7 +450,8 @@ void ScrollEncoderManager::handleValueChange(int32_t delta) {
             
         case PARAM_BRIGHTNESS:
             // Fine control for brightness with acceleration
-            newValue += delta;
+            // Limit delta to prevent large jumps
+            newValue += constrain(delta, -4, 4);
             break;
             
         case PARAM_PALETTE:
@@ -437,7 +465,8 @@ void ScrollEncoderManager::handleValueChange(int32_t delta) {
             
         default:
             // Standard increment/decrement with acceleration
-            newValue += delta;
+            // Limit delta to prevent large jumps that distort LGP effects
+            newValue += constrain(delta, -3, 3);
             break;
     }
     

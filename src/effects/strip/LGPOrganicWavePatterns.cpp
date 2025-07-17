@@ -110,7 +110,7 @@ void lgpBioluminescentPlanktonWaves() {
     for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
         float glow = glowIntensity[i] * planktonDensity;
         
-        uint8_t brightness = glow * 255 * intensity;
+        uint8_t brightness = constrain(glow * 255 * intensity, 0, 255);
         
         // Bioluminescent colors by species
         uint8_t hue1, hue2;
@@ -239,7 +239,7 @@ void lgpBacterialColonyGrowth() {
         float signal = quorumSignal[i];
         
         // Brightness based on bacterial density
-        uint8_t brightness = (density * 0.7f + biofilm * 0.3f) * 255 * intensity;
+        uint8_t brightness = constrain((density * 0.7f + biofilm * 0.3f) * 255 * intensity, 0, 255);
         
         // Color based on colony state
         uint8_t hue1 = gHue + (density * 60) + (signal * 40);
@@ -358,7 +358,7 @@ void lgpDNAReplicationFork() {
         float lagging = laggingStrand[i];
         float combined = max(leading, lagging);
         
-        uint8_t brightness = combined * 255 * intensity;
+        uint8_t brightness = constrain(combined * 255 * intensity, 0, 255);
         
         // DNA base colors (A=red, T=yellow, G=green, C=blue)
         uint8_t hue1 = gHue;
@@ -506,7 +506,7 @@ void lgpProteinFoldingDynamics() {
         float tertiary = tertiaryContacts[i];
         float folded = (secondary + tertiary) / 2;
         
-        uint8_t brightness = (0.3f + folded * 0.7f) * 255 * intensity;
+        uint8_t brightness = constrain((0.3f + folded * 0.7f) * 255 * intensity, 0, 255);
         
         // Color based on structure type
         uint8_t hue1 = gHue;
@@ -825,7 +825,7 @@ void lgpSlimeMoldOptimization() {
         float food = chemoattractant[i];
         
         // Brightness based on slime presence and tube thickness
-        uint8_t brightness = (density * 0.6f + tube * 0.4f) * 255 * intensity;
+        uint8_t brightness = constrain((density * 0.6f + tube * 0.4f) * 255 * intensity, 0, 255);
         
         // Color based on state
         uint8_t hue1 = gHue + 64;  // Base yellow for slime

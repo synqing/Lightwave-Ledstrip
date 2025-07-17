@@ -76,4 +76,28 @@ void lgpPrismCascade();
 // Encoder 7 (Variation): Unused
 void lgpSilkWaves();
 
+// Aurora Flow - Smooth flowing curtains of light
+// Encoder 3 (Speed): Curtain movement speed
+// Encoder 4 (Intensity): Overall brightness
+// Encoder 5 (Saturation): Center glow intensity (>150 enables)
+// Encoder 6 (Complexity): Curtain sway amount
+// Encoder 7 (Variation): Star field density (>50 enables)
+void lgpAuroraFlow();
+
+// Crystal Formation - Growing and shrinking crystalline patterns
+// Encoder 3 (Speed): Crystal spawn rate
+// Encoder 4 (Intensity): Overall brightness
+// Encoder 5 (Saturation): Core glow intensity
+// Encoder 6 (Complexity): Number of crystal facets
+// Encoder 7 (Variation): Sparkle intensity
+void lgpCrystalFormation();
+
+// Nebula Cloud - Swirling cosmic clouds with stars
+// Encoder 3 (Speed): Cloud drift speed
+// Encoder 4 (Intensity): Overall brightness
+// Encoder 5 (Saturation): Nebula core intensity
+// Encoder 6 (Complexity): Color complexity (>100 enables advanced)
+// Encoder 7 (Variation): Star field visibility (>50 enables)
+void lgpNebulaCloud();
+
 #endif // LGP_PHYSICS_EFFECTS_H

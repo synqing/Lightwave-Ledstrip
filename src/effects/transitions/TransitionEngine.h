@@ -20,19 +20,15 @@
  */
 
 enum TransitionType {
-    TRANSITION_FADE,          // Classic crossfade
-    TRANSITION_WIPE_LR,       // Wipe left to right
-    TRANSITION_WIPE_RL,       // Wipe right to left
+    TRANSITION_FADE,          // CENTER ORIGIN crossfade - radiates from center
     TRANSITION_WIPE_OUT,      // Wipe from center outward
-    TRANSITION_WIPE_IN,       // Wipe from edges inward
+    TRANSITION_WIPE_IN,       // Wipe from edges inward  
     TRANSITION_DISSOLVE,      // Random pixel transition
-    TRANSITION_ZOOM_IN,       // Scale from center
-    TRANSITION_ZOOM_OUT,      // Scale to center
-    TRANSITION_MELT,          // Thermal melt effect
-    TRANSITION_SHATTER,       // Particle explosion
+    TRANSITION_SHATTER,       // Particle explosion from center
     TRANSITION_GLITCH,        // Digital glitch effect
     TRANSITION_PHASE_SHIFT,   // Frequency-based morph
     TRANSITION_COUNT
+    // REMOVED: WIPE_LR, WIPE_RL, ZOOM_IN, ZOOM_OUT, MELT - these violate CENTER ORIGIN
 };
 
 enum EasingCurve {
@@ -89,8 +85,7 @@ private:
         } particles[20];
         uint8_t particleCount;
         
-        // Melt effect
-        float heatMap[HardwareConfig::NUM_LEDS];
+        // Melt effect - REMOVED (violated CENTER ORIGIN)
         
         // Glitch effect
         uint16_t glitchSegments[10];
@@ -144,21 +139,20 @@ private:
     // Easing functions
     float applyEasing(float t, EasingCurve curve);
     
-    // Transition implementations
+    // Transition implementations - CENTER ORIGIN ONLY
     void applyFade();
-    void applyWipe(bool leftToRight, bool fromCenter);
+    void applyWipe(bool outward, bool fromCenter);  // fromCenter always true now
     void applyDissolve();
-    void applyZoom(bool zoomIn);
-    void applyMelt();
     void applyShatter();
     void applyGlitch();
     void applyPhaseShift();
+    // REMOVED: applyZoom, applyMelt
     
     // Helper functions
     void initializeDissolve();
     void initializeShatter();
-    void initializeMelt();
     void initializeGlitch();
+    // REMOVED: initializeMelt
     
     // Utility functions
     CRGB lerpColor(CRGB from, CRGB to, uint8_t progress);
@@ -195,12 +189,10 @@ inline void TransitionEngine::startTransition(
         case TRANSITION_SHATTER:
             initializeShatter();
             break;
-        case TRANSITION_MELT:
-            initializeMelt();
-            break;
         case TRANSITION_GLITCH:
             initializeGlitch();
             break;
+        // REMOVED: MELT initialization
         default:
             break;
     }
@@ -224,37 +216,22 @@ inline bool TransitionEngine::update() {
     float rawProgress = (float)elapsed / m_duration;
     m_progress = applyEasing(rawProgress, m_curve);
     
-    // Apply transition effect
+    // Apply transition effect - CENTER ORIGIN ONLY
     switch (m_type) {
         case TRANSITION_FADE:
-            applyFade();
-            break;
-        case TRANSITION_WIPE_LR:
-            applyWipe(true, false);
-            break;
-        case TRANSITION_WIPE_RL:
-            applyWipe(false, false);
+            applyFade();  // CENTER ORIGIN fade
             break;
         case TRANSITION_WIPE_OUT:
-            applyWipe(true, true);
+            applyWipe(true, true);  // Always from center
             break;
         case TRANSITION_WIPE_IN:
-            applyWipe(false, true);
+            applyWipe(false, true);  // Always to center
             break;
         case TRANSITION_DISSOLVE:
             applyDissolve();
             break;
-        case TRANSITION_ZOOM_IN:
-            applyZoom(true);
-            break;
-        case TRANSITION_ZOOM_OUT:
-            applyZoom(false);
-            break;
-        case TRANSITION_MELT:
-            applyMelt();
-            break;
         case TRANSITION_SHATTER:
-            applyShatter();
+            applyShatter();  // Particles explode from center
             break;
         case TRANSITION_GLITCH:
             applyGlitch();
@@ -262,6 +239,7 @@ inline bool TransitionEngine::update() {
         case TRANSITION_PHASE_SHIFT:
             applyPhaseShift();
             break;
+        // REMOVED: WIPE_LR, WIPE_RL, ZOOM_IN, ZOOM_OUT, MELT
     }
     
     return true;
@@ -350,105 +328,55 @@ inline void TransitionEngine::applyDissolve() {
     }
 }
 
-inline void TransitionEngine::applyZoom(bool zoomIn) {
-    float scale = zoomIn ? m_progress : 1.0f - m_progress;
-    
-    if (m_dualStripMode) {
-        // Process each strip independently
-        uint16_t stripLength = m_numLeds / 2;
-        
-        for (uint16_t strip = 0; strip < 2; strip++) {
-            uint16_t offset = strip * stripLength;
-            
-            for (uint16_t i = 0; i < stripLength; i++) {
-                float distFromCenter = (float)(i - m_centerPoint) / m_centerPoint;
-                float scaledDist = distFromCenter * scale;
-                int16_t sourcePos = m_centerPoint + scaledDist * m_centerPoint;
-                
-                if (sourcePos >= 0 && sourcePos < stripLength) {
-                    uint8_t blend = zoomIn ? (m_progress * 255) : ((1.0f - m_progress) * 255);
-                    m_outputBuffer[offset + i] = lerpColor(
-                        m_sourceBuffer[offset + i], 
-                        m_targetBuffer[offset + sourcePos], 
-                        blend
-                    );
-                } else {
-                    m_outputBuffer[offset + i] = m_targetBuffer[offset + i];
-                }
-            }
-        }
-    } else {
-        // Single buffer zoom
-        for (uint16_t i = 0; i < m_numLeds; i++) {
-            float distFromCenter = (float)(i - m_centerPoint) / m_centerPoint;
-            float scaledDist = distFromCenter * scale;
-            int16_t sourcePos = m_centerPoint + scaledDist * m_centerPoint;
-            
-            if (sourcePos >= 0 && sourcePos < m_numLeds) {
-                uint8_t blend = zoomIn ? (m_progress * 255) : ((1.0f - m_progress) * 255);
-                m_outputBuffer[i] = lerpColor(
-                    m_sourceBuffer[i], 
-                    m_targetBuffer[sourcePos], 
-                    blend
-                );
-            } else {
-                m_outputBuffer[i] = m_targetBuffer[i];
-            }
-        }
-    }
-}
-
-inline void TransitionEngine::applyMelt() {
-    // Update heat map
-    for (uint16_t i = 0; i < m_numLeds; i++) {
-        // Add heat at transition boundary
-        float boundary = m_progress * m_numLeds;
-        float dist = abs((float)i - boundary);
-        float heat = max(0.0f, 1.0f - dist / 20.0f);
-        
-        m_state.heatMap[i] += heat * 0.3f;
-        m_state.heatMap[i] *= 0.95f;  // Cool down
-        
-        // Apply melting effect
-        if (m_state.heatMap[i] > 0.5f || i < boundary) {
-            m_outputBuffer[i] = m_targetBuffer[i];
-        } else {
-            // Blend based on heat
-            uint8_t blend = m_state.heatMap[i] * 512;  // 0-255 range
-            m_outputBuffer[i] = lerpColor(m_sourceBuffer[i], m_targetBuffer[i], blend);
-        }
-    }
-}
+// REMOVED: applyZoom and applyMelt - violated CENTER ORIGIN principle
 
 inline void TransitionEngine::applyShatter() {
     // Start with source
     memcpy(m_outputBuffer, m_sourceBuffer, m_numLeds * sizeof(CRGB));
     
-    // Update and render particles
+    // Update and render particles FROM CENTER
     for (uint8_t i = 0; i < m_state.particleCount; i++) {
         auto& p = m_state.particles[i];
         
-        // Update physics
-        p.x += p.vx;
+        // Update physics - particles move away from center
+        p.x += p.vx * (1.0f + m_progress);  // Accelerate outward
         p.vy += 0.5f;  // Gravity
-        p.x += p.vy;
         
         // Update lifetime
         if (p.lifetime > 0) {
             p.lifetime--;
             
-            // Render particle
-            int16_t pos = (int16_t)p.x;
-            if (pos >= 0 && pos < m_numLeds) {
-                CRGB particleColor = CHSV(p.hue, 255, p.lifetime * 2);
-                m_outputBuffer[pos] = lerpColor(m_outputBuffer[pos], particleColor, 200);
+            // Render particle on both strips if in dual mode
+            if (m_dualStripMode) {
+                uint16_t stripLength = m_numLeds / 2;
+                // Render on strip 1
+                int16_t pos1 = (int16_t)p.x;
+                if (pos1 >= 0 && pos1 < stripLength) {
+                    CRGB particleColor = CHSV(p.hue, 255, p.lifetime * 2);
+                    m_outputBuffer[pos1] = lerpColor(m_outputBuffer[pos1], particleColor, 200);
+                }
+                // Mirror on strip 2
+                int16_t pos2 = stripLength + (stripLength - 1 - pos1);
+                if (pos2 >= stripLength && pos2 < m_numLeds) {
+                    CRGB particleColor = CHSV(p.hue, 255, p.lifetime * 2);
+                    m_outputBuffer[pos2] = lerpColor(m_outputBuffer[pos2], particleColor, 200);
+                }
+            } else {
+                int16_t pos = (int16_t)p.x;
+                if (pos >= 0 && pos < m_numLeds) {
+                    CRGB particleColor = CHSV(p.hue, 255, p.lifetime * 2);
+                    m_outputBuffer[pos] = lerpColor(m_outputBuffer[pos], particleColor, 200);
+                }
             }
         }
     }
     
-    // Fade in target
-    uint8_t targetAlpha = m_progress * m_progress * 255;  // Quadratic fade
+    // Fade in target from CENTER ORIGIN
     for (uint16_t i = 0; i < m_numLeds; i++) {
+        float distFromCenter = getDistanceFromCenter(i);
+        float centerProgress = m_progress * 2.0f - distFromCenter;
+        centerProgress = constrain(centerProgress, 0.0f, 1.0f);
+        uint8_t targetAlpha = centerProgress * centerProgress * 255;  // Quadratic fade from center
         m_outputBuffer[i] = lerpColor(m_outputBuffer[i], m_targetBuffer[i], targetAlpha);
     }
 }
@@ -595,24 +523,25 @@ inline void TransitionEngine::initializeDissolve() {
 }
 
 inline void TransitionEngine::initializeShatter() {
-    // Create particles at random positions
+    // Create particles at CENTER ORIGIN
     m_state.particleCount = 20;
     for (uint8_t i = 0; i < m_state.particleCount; i++) {
         auto& p = m_state.particles[i];
-        p.x = random16(m_numLeds);
-        p.vx = random8(10) - 5;  // -5 to +5
+        // Start at center with slight random offset
+        p.x = m_centerPoint + random8(10) - 5;
+        // Velocity away from center
+        if (i < m_state.particleCount / 2) {
+            p.vx = -random8(3, 8);  // Left direction
+        } else {
+            p.vx = random8(3, 8);   // Right direction
+        }
         p.vy = -random8(5, 15);  // Upward velocity
         p.hue = random8();
         p.lifetime = 128;
     }
 }
 
-inline void TransitionEngine::initializeMelt() {
-    // Clear heat map
-    for (uint16_t i = 0; i < m_numLeds; i++) {
-        m_state.heatMap[i] = 0;
-    }
-}
+// REMOVED: initializeMelt - violated CENTER ORIGIN principle
 
 inline void TransitionEngine::initializeGlitch() {
     m_state.glitchCount = 0;
@@ -620,20 +549,16 @@ inline void TransitionEngine::initializeGlitch() {
 }
 
 inline TransitionType TransitionEngine::getRandomTransition() {
-    // Weighted random selection for variety
+    // Weighted random selection for variety - CENTER ORIGIN ONLY
     uint8_t weights[] = {
-        20,  // FADE
-        15,  // WIPE_LR
-        15,  // WIPE_RL
-        10,  // WIPE_OUT
-        10,  // WIPE_IN
-        8,   // DISSOLVE
-        5,   // ZOOM_IN
-        5,   // ZOOM_OUT
-        4,   // MELT
-        3,   // SHATTER
-        3,   // GLITCH
+        30,  // FADE - increased weight
+        20,  // WIPE_OUT - from center
+        20,  // WIPE_IN - to center
+        15,  // DISSOLVE
+        8,   // SHATTER - from center
+        5,   // GLITCH
         2    // PHASE_SHIFT
+        // REMOVED: WIPE_LR, WIPE_RL, ZOOM_IN, ZOOM_OUT, MELT
     };
     
     uint8_t total = 0;
@@ -650,6 +575,30 @@ inline TransitionType TransitionEngine::getRandomTransition() {
     }
     
     return TRANSITION_FADE;  // Fallback
+}
+
+inline uint16_t TransitionEngine::getCenterPoint(uint16_t index) {
+    // For dual strips, both use LED 79 as center
+    if (m_dualStripMode) {
+        return m_centerPoint;  // Always LED 79
+    } else {
+        return m_numLeds / 2;  // Middle of single strip
+    }
+}
+
+inline float TransitionEngine::getDistanceFromCenter(uint16_t index) {
+    if (m_dualStripMode) {
+        uint16_t stripLength = m_numLeds / 2;
+        uint16_t strip = index / stripLength;
+        uint16_t localIndex = index % stripLength;
+        // For dual strips, both use LED 79 as center
+        uint16_t distFromCenter = abs((int)localIndex - (int)m_centerPoint);
+        return (float)distFromCenter / m_centerPoint;
+    } else {
+        // Single strip mode - center is middle of strip
+        uint16_t distFromCenter = abs((int)index - (int)m_centerPoint);
+        return (float)distFromCenter / m_centerPoint;
+    }
 }
 
 #endif // TRANSITION_ENGINE_H

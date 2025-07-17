@@ -314,8 +314,6 @@ void startAdvancedTransition(uint8_t newEffect) {
                 break;
             case TRANSITION_WIPE_OUT:
             case TRANSITION_WIPE_IN:
-            case TRANSITION_WIPE_LR:
-            case TRANSITION_WIPE_RL:
                 duration = 1200;
                 curve = EASE_OUT_CUBIC;
                 break;
@@ -323,18 +321,9 @@ void startAdvancedTransition(uint8_t newEffect) {
                 duration = 1500;
                 curve = EASE_LINEAR;
                 break;
-            case TRANSITION_ZOOM_IN:
-            case TRANSITION_ZOOM_OUT:
-                duration = 1000;
-                curve = EASE_IN_OUT_ELASTIC;
-                break;
             case TRANSITION_SHATTER:
                 duration = 2000;
                 curve = EASE_OUT_BOUNCE;
-                break;
-            case TRANSITION_MELT:
-                duration = 1800;
-                curve = EASE_IN_CUBIC;
                 break;
             case TRANSITION_GLITCH:
                 duration = 600;

@@ -120,11 +120,8 @@ DummyWave2D fxWave2D;
 
 
 // Forward declare wrapper functions
-void stripInterferenceWrapper();
-void heartbeatEffectWrapper();
-void breathingEffectWrapper();
-void stripPlasmaWrapper();
-void vortexEffectWrapper();
+// REMOVED: stripInterferenceWrapper, heartbeatEffectWrapper, breathingEffectWrapper, stripPlasmaWrapper, vortexEffectWrapper
+// These were useless effects that have been purged
 
 // Audio/render task callbacks
 void audioUpdateCallback();
@@ -173,8 +170,9 @@ extern void spectrumLightshowEngine();
 // #include "effects/strip/LGPAudioReactive.h"  // Removed: all old audio-reactive modes retired
 
 // Effects array - Matrix mode has been surgically removed
+// USELESS EFFECTS PURGED - Only the good shit remains
 Effect effects[] = {
-    // =============== BASIC STRIP EFFECTS ===============
+    // =============== QUALITY STRIP EFFECTS ===============
     // Signature effects with CENTER ORIGIN
     {"Fire", fire, EFFECT_TYPE_STANDARD},
     {"Ocean", stripOcean, EFFECT_TYPE_STANDARD},
@@ -183,35 +181,20 @@ Effect effects[] = {
     {"Wave", waveEffect, EFFECT_TYPE_STANDARD},
     {"Ripple", rippleEffect, EFFECT_TYPE_STANDARD},
     
-    // NEW Strip-specific CENTER ORIGIN effects
+    // Quality strip-specific effects
     {"Strip Confetti", stripConfetti, EFFECT_TYPE_STANDARD},
     {"Strip Juggle", stripJuggle, EFFECT_TYPE_STANDARD},
-    {"Strip Interference", stripInterferenceWrapper, EFFECT_TYPE_STANDARD},
-    {"Strip BPM", stripBPM, EFFECT_TYPE_STANDARD},
-    {"Strip Plasma", stripPlasmaWrapper, EFFECT_TYPE_STANDARD},
     
-    // Motion effects (ALL NOW CENTER ORIGIN COMPLIANT)
-    {"Confetti", confetti, EFFECT_TYPE_STANDARD},
+    // Motion effects worth keeping
     {"Sinelon", sinelon, EFFECT_TYPE_STANDARD},
-    {"Juggle", juggle, EFFECT_TYPE_STANDARD},
-    {"BPM", bpm, EFFECT_TYPE_STANDARD},
-    
-    // Palette showcase
-    {"Solid Blue", solidColor, EFFECT_TYPE_STANDARD},
-    {"Pulse Effect", pulseEffect, EFFECT_TYPE_STANDARD},
     
     // =============== NEW CENTER ORIGIN EFFECTS ===============
-    // These replace the rubbish wave effects with proper CENTER ORIGIN compliance
-    {"Heartbeat", heartbeatEffectWrapper, EFFECT_TYPE_STANDARD},
-    {"Breathing", breathingEffectWrapper, EFFECT_TYPE_STANDARD},
     {"Shockwave", shockwaveEffect, EFFECT_TYPE_STANDARD},
-    {"Vortex", vortexEffectWrapper, EFFECT_TYPE_STANDARD},
     {"Collision", collisionEffect, EFFECT_TYPE_STANDARD},
     {"Gravity Well", gravityWellEffect, EFFECT_TYPE_STANDARD},
     
     // =============== LGP INTERFERENCE EFFECTS ===============
     // Specifically designed for Light Guide Plate optics
-    {"LGP Box Wave", lgpBoxWave, EFFECT_TYPE_STANDARD},
     {"LGP Holographic", lgpHolographic, EFFECT_TYPE_STANDARD},
     {"LGP Modal Resonance", lgpModalResonance, EFFECT_TYPE_STANDARD},
     {"LGP Interference Scanner", lgpInterferenceScanner, EFFECT_TYPE_STANDARD},
@@ -220,22 +203,15 @@ Effect effects[] = {
     // =============== LGP GEOMETRIC EFFECTS ===============
     // Advanced shapes leveraging waveguide physics
     {"LGP Diamond Lattice", lgpDiamondLattice, EFFECT_TYPE_STANDARD},
-    {"LGP Hexagonal Grid", lgpHexagonalGrid, EFFECT_TYPE_STANDARD},
-    {"LGP Spiral Vortex", lgpSpiralVortex, EFFECT_TYPE_STANDARD},
-    {"LGP Sierpinski", lgpSierpinskiTriangles, EFFECT_TYPE_STANDARD},
-    {"LGP Chevron Waves", lgpChevronWaves, EFFECT_TYPE_STANDARD},
     {"LGP Concentric Rings", lgpConcentricRings, EFFECT_TYPE_STANDARD},
     {"LGP Star Burst", lgpStarBurst, EFFECT_TYPE_STANDARD},
-    {"LGP Mesh Network", lgpMeshNetwork, EFFECT_TYPE_STANDARD},
     
     // =============== LGP ADVANCED EFFECTS ===============
     // Next-gen optical patterns
     {"LGP Moiré Curtains", lgpMoireCurtains, EFFECT_TYPE_STANDARD},
     {"LGP Radial Ripple", lgpRadialRipple, EFFECT_TYPE_STANDARD},
     {"LGP Holographic Vortex", lgpHolographicVortex, EFFECT_TYPE_STANDARD},
-    {"LGP Evanescent Drift", lgpEvanescentDrift, EFFECT_TYPE_STANDARD},
     {"LGP Chromatic Shear", lgpChromaticShear, EFFECT_TYPE_STANDARD},
-    {"LGP Modal Cavity", lgpModalCavity, EFFECT_TYPE_STANDARD},
     {"LGP Fresnel Zones", lgpFresnelZones, EFFECT_TYPE_STANDARD},
     {"LGP Photonic Crystal", lgpPhotonicCrystal, EFFECT_TYPE_STANDARD},
     
@@ -244,41 +220,20 @@ Effect effects[] = {
     {"LGP Aurora Borealis", lgpAuroraBorealis, EFFECT_TYPE_STANDARD},
     {"LGP Bioluminescent", lgpBioluminescentWaves, EFFECT_TYPE_STANDARD},
     {"LGP Plasma Membrane", lgpPlasmaMembrane, EFFECT_TYPE_STANDARD},
-    {"LGP Neural Network", lgpNeuralNetwork, EFFECT_TYPE_STANDARD},
-    {"LGP Crystal Growth", lgpCrystallineGrowth, EFFECT_TYPE_STANDARD},
-    {"LGP Fluid Dynamics", lgpFluidDynamics, EFFECT_TYPE_STANDARD},
     
     // =============== LGP QUANTUM EFFECTS ===============
     // Mind-bending physics simulations
     {"LGP Quantum Tunneling", lgpQuantumTunneling, EFFECT_TYPE_STANDARD},
     {"LGP Gravitational Lens", lgpGravitationalLensing, EFFECT_TYPE_STANDARD},
-    {"LGP Sonic Boom", lgpSonicBoom, EFFECT_TYPE_STANDARD},
     {"LGP Time Crystal", lgpTimeCrystal, EFFECT_TYPE_STANDARD},
-    {"LGP Soliton Waves", lgpSolitonWaves, EFFECT_TYPE_STANDARD},
     {"LGP Metamaterial Cloak", lgpMetamaterialCloaking, EFFECT_TYPE_STANDARD},
     
     // =============== LGP COLOR MIXING EFFECTS ===============
-    {"LGP Color Temperature", lgpColorTemperature, EFFECT_TYPE_STANDARD},
-    {"LGP RGB Prism", lgpRGBPrism, EFFECT_TYPE_STANDARD},
-    {"LGP Complementary Mix", lgpComplementaryMixing, EFFECT_TYPE_STANDARD},
-    {"LGP Additive/Subtractive", lgpAdditiveSubtractive, EFFECT_TYPE_STANDARD},
-    {"LGP Quantum Colors", lgpQuantumColors, EFFECT_TYPE_STANDARD},
-    {"LGP Doppler Shift", lgpDopplerShift, EFFECT_TYPE_STANDARD},
     {"LGP Chromatic Aberration", lgpChromaticAberration, EFFECT_TYPE_STANDARD},
-    {"LGP HSV Cylinder", lgpHSVCylinder, EFFECT_TYPE_STANDARD},
-    {"LGP Perceptual Blend", lgpPerceptualBlend, EFFECT_TYPE_STANDARD},
-    {"LGP Metameric Colors", lgpMetamericColors, EFFECT_TYPE_STANDARD},
     {"LGP Color Accelerator", lgpColorAccelerator, EFFECT_TYPE_STANDARD},
-    {"LGP DNA Helix", lgpDNAHelix, EFFECT_TYPE_STANDARD},
-    {"LGP Phase Transition", lgpPhaseTransition, EFFECT_TYPE_STANDARD},
     
 #if FEATURE_AUDIO_SYNC
     // =============== AUDIO REACTIVE EFFECTS ===============
-    // Old music-reactive effects removed
-    
-    // =============== LGP AUDIO REACTIVE EFFECTS ===============
-    // Removed LGP audio reactive modes – superseded by structured engine
-    // Keep new structured engine below
     {"Spectrum LS Engine", spectrumLightshowEngine, EFFECT_TYPE_STANDARD},
 #endif
 };
@@ -317,47 +272,8 @@ void syncStripsToLeds() {
 // Effects have been moved to src/effects/strip/StripEffects.cpp
 
 // ============== EFFECT WRAPPERS ==============
-// These functions dynamically choose between original and optimized versions
-
-void stripInterferenceWrapper() {
-    if (useOptimizedEffects) {
-        stripInterferenceOptimized();
-    } else {
-        stripInterference();
-    }
-}
-
-void heartbeatEffectWrapper() {
-    if (useOptimizedEffects) {
-        heartbeatEffectOptimized();
-    } else {
-        heartbeatEffect();
-    }
-}
-
-void breathingEffectWrapper() {
-    if (useOptimizedEffects) {
-        breathingEffectOptimized();
-    } else {
-        breathingEffect();
-    }
-}
-
-void stripPlasmaWrapper() {
-    if (useOptimizedEffects) {
-        stripPlasmaOptimized();
-    } else {
-        stripPlasma();
-    }
-}
-
-void vortexEffectWrapper() {
-    if (useOptimizedEffects) {
-        vortexEffectOptimized();
-    } else {
-        vortexEffect();
-    }
-}
+// REMOVED: All wrappers for shitty effects have been eliminated
+// The purge is complete - only quality effects remain
 
 
 // ============== ADVANCED TRANSITION SYSTEM ==============
@@ -791,10 +707,9 @@ void setup() {
     Serial.println("\n=== Setup Complete ===");
     Serial.println("🎭 Advanced Transition System Active");
     Serial.println("⚡ FastLED Optimizations ENABLED");
-    Serial.println("   't' = Toggle random transitions");
-    Serial.println("   'n' = Next effect with transition");
-    Serial.println("   'o' = Toggle optimized effects");
-    Serial.println("   'p' = Performance comparison (when available)");
+    Serial.println("\n📟 SERIAL COMMAND SYSTEM READY");
+    Serial.println("   Press 'h' or '?' for command reference");
+    Serial.println("   Quick start: Press 1-8 for parameter modes, +/- to adjust");
     Serial.println("");
     
 #if FEATURE_DEBUG_OUTPUT
@@ -880,6 +795,135 @@ void effectUpdateCallback() {
     }
 }
 
+// Helper function to adjust current parameter
+void adjustCurrentParameter(int8_t direction) {
+    ScrollParameter param = scrollManager.getCurrentParam();
+    int16_t currentValue = scrollManager.getParamValue(param);
+    int16_t newValue = currentValue;
+    
+    // Get parameter names
+    const char* paramNames[] = {
+        "Effect", "Brightness", "Palette", "Speed",
+        "Intensity", "Saturation", "Complexity", "Variation"
+    };
+    
+    switch (param) {
+        case PARAM_EFFECT:
+            if (direction > 0) {
+                uint8_t newEffect = (currentEffect + 1) % NUM_EFFECTS;
+                startAdvancedTransition(newEffect);
+                Serial.printf("➕ %s: %s\n", paramNames[param], effects[newEffect].name);
+            } else {
+                uint8_t newEffect = currentEffect > 0 ? currentEffect - 1 : NUM_EFFECTS - 1;
+                startAdvancedTransition(newEffect);
+                Serial.printf("➖ %s: %s\n", paramNames[param], effects[newEffect].name);
+            }
+            return;
+            
+        case PARAM_BRIGHTNESS:
+            newValue = constrain(currentValue + (direction * 4), 0, 255);
+            FastLED.setBrightness(newValue);
+            break;
+            
+        case PARAM_PALETTE:
+            if (direction > 0) {
+                newValue = (currentValue + 1) % gGradientPaletteCount;
+            } else {
+                newValue = currentValue > 0 ? currentValue - 1 : gGradientPaletteCount - 1;
+            }
+            currentPaletteIndex = newValue;
+            targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
+            Serial.printf("%s %s: Palette %d\n", 
+                         direction > 0 ? "➕" : "➖", 
+                         paramNames[param], newValue);
+            break;
+            
+        case PARAM_SPEED:
+            newValue = constrain(currentValue + (direction * 4), 0, 255);
+            paletteSpeed = map(newValue, 0, 255, 1, 50);
+            break;
+            
+        case PARAM_INTENSITY:
+            newValue = constrain(currentValue + (direction * 3), 0, 255);
+            visualParams.intensity = newValue;
+            break;
+            
+        case PARAM_SATURATION:
+            newValue = constrain(currentValue + (direction * 3), 0, 255);
+            visualParams.saturation = newValue;
+            break;
+            
+        case PARAM_COMPLEXITY:
+            newValue = constrain(currentValue + (direction * 3), 0, 255);
+            visualParams.complexity = newValue;
+            break;
+            
+        case PARAM_VARIATION:
+            newValue = constrain(currentValue + (direction * 3), 0, 255);
+            visualParams.variation = newValue;
+            break;
+    }
+    
+    // Update scroll manager value
+    scrollManager.setParamValue(param, newValue);
+    
+    // Print feedback (except for effect and palette which print their own)
+    if (param != PARAM_EFFECT && param != PARAM_PALETTE) {
+        Serial.printf("%s %s: %d (%.1f%%)\n", 
+                     direction > 0 ? "➕" : "➖",
+                     paramNames[param], 
+                     newValue, 
+                     (newValue / 255.0f) * 100.0f);
+    }
+}
+
+// Print serial command help
+void printSerialHelp() {
+    Serial.println("\n");
+    Serial.println("╔════════════════════════════════════════════════════╗");
+    Serial.println("║          SERIAL COMMAND REFERENCE                  ║");
+    Serial.println("╠════════════════════════════════════════════════════╣");
+    Serial.println("║ PARAMETER MODES (Number Keys):                     ║");
+    Serial.println("║   1 - Effect Selection Mode                        ║");
+    Serial.println("║   2 - Brightness Control Mode                      ║");
+    Serial.println("║   3 - Palette Selection Mode                       ║");
+    Serial.println("║   4 - Speed Control Mode                           ║");
+    Serial.println("║   5 - Intensity Control Mode                       ║");
+    Serial.println("║   6 - Saturation Control Mode                      ║");
+    Serial.println("║   7 - Complexity Control Mode                      ║");
+    Serial.println("║   8 - Variation Control Mode                       ║");
+    Serial.println("║                                                    ║");
+    Serial.println("║ VALUE ADJUSTMENT:                                  ║");
+    Serial.println("║   + or = : Increase parameter value                ║");
+    Serial.println("║   - or _ : Decrease parameter value                ║");
+    Serial.println("║                                                    ║");
+    Serial.println("║ QUICK SHORTCUTS:                                   ║");
+    Serial.println("║   [ : Previous effect                              ║");
+    Serial.println("║   ] : Next effect                                  ║");
+    Serial.println("║                                                    ║");
+    Serial.println("║ OTHER COMMANDS:                                    ║");
+    Serial.println("║   t : Toggle random transitions                    ║");
+    Serial.println("║   n : Next effect with transition                  ║");
+    Serial.println("║   o : Toggle optimized effects                     ║");
+    Serial.println("║   p : Performance comparison (if available)        ║");
+    Serial.println("║   w : Retry WiFi connection                        ║");
+    Serial.println("║   h or ? : Show this help                         ║");
+    Serial.println("╚════════════════════════════════════════════════════╝");
+    Serial.println();
+    
+    // Show current status
+    Serial.printf("Current Mode: %s\n", 
+                  scrollManager.getCurrentParam() == PARAM_EFFECT ? "Effect" :
+                  scrollManager.getCurrentParam() == PARAM_BRIGHTNESS ? "Brightness" :
+                  scrollManager.getCurrentParam() == PARAM_PALETTE ? "Palette" :
+                  scrollManager.getCurrentParam() == PARAM_SPEED ? "Speed" :
+                  scrollManager.getCurrentParam() == PARAM_INTENSITY ? "Intensity" :
+                  scrollManager.getCurrentParam() == PARAM_SATURATION ? "Saturation" :
+                  scrollManager.getCurrentParam() == PARAM_COMPLEXITY ? "Complexity" :
+                  "Variation");
+    Serial.printf("Current Effect: %s\n", effects[currentEffect].name);
+}
+
 void loop() {
     static uint32_t loopCounter = 0;
     static uint32_t lastDebugPrint = 0;
@@ -960,15 +1004,8 @@ void loop() {
                 break;
             case 'p':
             case 'P':
-                if (effects[currentEffect].name == "Strip Interference" ||
-                    effects[currentEffect].name == "Heartbeat" ||
-                    effects[currentEffect].name == "Breathing" ||
-                    effects[currentEffect].name == "Strip Plasma" ||
-                    effects[currentEffect].name == "Vortex") {
-                    comparePerformance();
-                } else {
-                    Serial.println("Performance comparison not available for this effect");
-                }
+                // Performance comparison removed - those shitty effects are gone
+                Serial.println("Performance comparison removed - optimized effects only now");
                 break;
             case 'w':
             case 'W':
@@ -985,6 +1022,74 @@ void loop() {
                 Serial.println("Web server feature not enabled");
                 #endif
                 break;
+                
+            // Parameter mode selection (1-8 keys)
+            case '1':
+                Serial.println("\n🎨 MODE: Effect Selection");
+                scrollManager.setCurrentParam(PARAM_EFFECT);
+                break;
+            case '2':
+                Serial.println("\n💡 MODE: Brightness Control");
+                scrollManager.setCurrentParam(PARAM_BRIGHTNESS);
+                break;
+            case '3':
+                Serial.println("\n🎨 MODE: Palette Selection");
+                scrollManager.setCurrentParam(PARAM_PALETTE);
+                break;
+            case '4':
+                Serial.println("\n⚡ MODE: Speed Control");
+                scrollManager.setCurrentParam(PARAM_SPEED);
+                break;
+            case '5':
+                Serial.println("\n🔥 MODE: Intensity Control");
+                scrollManager.setCurrentParam(PARAM_INTENSITY);
+                break;
+            case '6':
+                Serial.println("\n🌈 MODE: Saturation Control");
+                scrollManager.setCurrentParam(PARAM_SATURATION);
+                break;
+            case '7':
+                Serial.println("\n✨ MODE: Complexity Control");
+                scrollManager.setCurrentParam(PARAM_COMPLEXITY);
+                break;
+            case '8':
+                Serial.println("\n🔄 MODE: Variation Control");
+                scrollManager.setCurrentParam(PARAM_VARIATION);
+                break;
+                
+            // Parameter value adjustment (+/- keys)
+            case '+':
+            case '=':  // Allow = key without shift
+                adjustCurrentParameter(1);
+                break;
+            case '-':
+            case '_':  // Allow underscore too
+                adjustCurrentParameter(-1);
+                break;
+                
+            // Quick access shortcuts
+            case '[':  // Previous effect
+                {
+                    uint8_t prevEffect = currentEffect > 0 ? currentEffect - 1 : NUM_EFFECTS - 1;
+                    startAdvancedTransition(prevEffect);
+                    Serial.printf("⬅️ Effect: %s\n", effects[prevEffect].name);
+                }
+                break;
+            case ']':  // Next effect
+                {
+                    uint8_t nextEffect = (currentEffect + 1) % NUM_EFFECTS;
+                    startAdvancedTransition(nextEffect);
+                    Serial.printf("➡️ Effect: %s\n", effects[nextEffect].name);
+                }
+                break;
+                
+            // Help command
+            case 'h':
+            case 'H':
+            case '?':
+                printSerialHelp();
+                break;
+                
             // Preset commands disabled for now
             // case 's':
             // case 'S':

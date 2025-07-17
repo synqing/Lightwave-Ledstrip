@@ -255,6 +255,15 @@ public:
     // Get current parameter
     ScrollParameter getCurrentParam() const { return state.currentParam; }
     
+    // Set current parameter
+    void setCurrentParam(ScrollParameter param) {
+        if (param < PARAM_COUNT) {
+            state.currentParam = param;
+            updateLED();  // Update LED to show new parameter color
+            Serial.printf("Scroll encoder switched to %s mode\n", PARAM_NAMES[param]);
+        }
+    }
+    
     // Get parameter value
     uint8_t getParamValue(ScrollParameter param) const {
         return state.paramValues[param];

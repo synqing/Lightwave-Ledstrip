@@ -67,8 +67,8 @@ struct DetentDebounce {
 // Encoder Manager class
 class EncoderManager {
 private:
-    // Encoder hardware
-    M5ROTATE8 encoder;
+    // Encoder hardware - M5Stack 8encoder only
+    M5ROTATE8* m5rotate8 = nullptr;
     bool encoderAvailable = false;
     
     // FreeRTOS task and queue
@@ -100,9 +100,12 @@ private:
     void encoderTask();
     
     // Internal methods
+    bool initializeM5Rotate8();
+    void processEncoderEvents();
     bool attemptReconnection();
     void updateEncoderLEDs(uint32_t now);
     void setEncoderLED(uint8_t encoderId, uint8_t r, uint8_t g, uint8_t b);
+    void performI2CBusRecovery(uint8_t sda, uint8_t scl);
     
 public:
     EncoderManager();
@@ -121,7 +124,9 @@ public:
     const EncoderMetrics& getMetrics() { return metrics; }
     
     // Get encoder instance for VFS
-    M5ROTATE8* getEncoder() { return encoderAvailable ? &encoder : nullptr; }
+    M5ROTATE8* getEncoder() { 
+        return encoderAvailable ? m5rotate8 : nullptr; 
+    }
     
     // Rate-limited serial output
     void rateLimitedSerial(const char* message);

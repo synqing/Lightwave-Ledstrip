@@ -1,0 +1,311 @@
+#ifndef SCROLL_ENCODER_H
+#define SCROLL_ENCODER_H
+
+#include <Arduino.h>
+#include <Wire.h>
+#include "M5UnitScroll.h"
+#include "config/hardware_config.h"
+
+// M5Unit-Scroll encoder interface on secondary I2C bus
+// This provides a 9th encoder for additional control
+
+// Use the pre-defined Wire1 instance from Arduino framework
+// Wire1 is already defined as TwoWire(1) in the framework
+
+// Scroll encoder instance
+M5UnitScroll scrollEncoder;
+bool scrollEncoderAvailable = false;
+
+// Scroll encoder state
+struct ScrollEncoderState {
+    int32_t value = 0;
+    int32_t lastValue = 0;
+    bool buttonPressed = false;
+    bool buttonPressHandled = false;
+    uint32_t lastUpdate = 0;
+    uint32_t lastButtonPress = 0;
+    
+    // Which M5ROTATE8 encoder we're mirroring (0-7)
+    uint8_t mirroredEncoder = 0;
+    
+    // Function pointer for value change callback
+    void (*onValueChange)(int32_t delta) = nullptr;
+    void (*onButtonPress)() = nullptr;
+} scrollState;
+
+// Performance monitoring for scroll encoder
+struct ScrollEncoderPerf {
+    uint32_t totalReads = 0;
+    uint32_t successfulReads = 0;
+    uint32_t errors = 0;
+    uint32_t lastReportTime = 0;
+} scrollPerf;
+
+// Forward declarations
+void updateScrollEncoderLEDForMode();
+
+// I2C scanner function
+void scanI2C(TwoWire &wire, const char* busName) {
+    Serial.print("\n🔍 Scanning ");
+    Serial.print(busName);
+    Serial.println(" I2C bus...");
+    
+    byte error, address;
+    int nDevices = 0;
+    
+    for(address = 1; address < 127; address++) {
+        wire.beginTransmission(address);
+        error = wire.endTransmission();
+        
+        if (error == 0) {
+            Serial.print("   Found device at address 0x");
+            if (address < 16) Serial.print("0");
+            Serial.print(address, HEX);
+            Serial.print(" (");
+            
+            // Common I2C addresses
+            if (address == 0x40) Serial.print("M5Unit-Scroll");
+            else if (address == 0x41) Serial.print("M5Stack 8Encoder");
+            else if (address == 0x68) Serial.print("RTC/IMU");
+            else Serial.print("Unknown device");
+            
+            Serial.println(")");
+            nDevices++;
+        }
+    }
+    
+    if (nDevices == 0) {
+        Serial.println("   No I2C devices found!");
+    } else {
+        Serial.print("   Found ");
+        Serial.print(nDevices);
+        Serial.println(" device(s)");
+    }
+}
+
+// Initialize scroll encoder on secondary I2C bus
+void initScrollEncoder() {
+    Serial.println("\n🔌 Initializing M5Unit-Scroll...");
+    
+    // Initialize I2C bus with specific pins and higher speed (400kHz)
+    Serial.println("\n[INITIALIZING I2C BUS]");
+    Serial.print("   SDA: GPIO");
+    Serial.print(HardwareConfig::I2C_SDA_SCROLL);
+    Serial.print(", SCL: GPIO");
+    Serial.println(HardwareConfig::I2C_SCL_SCROLL);
+    
+    // Initialize I2C bus with specific pins and higher speed (400kHz)
+    bool initSuccess = scrollEncoder.begin(&Wire, HardwareConfig::M5UNIT_SCROLL_ADDR, 
+                                         HardwareConfig::I2C_SDA_SCROLL, 
+                                         HardwareConfig::I2C_SCL_SCROLL, 
+                                         400000);  // 400kHz
+    
+    // Small delay for I2C bus to stabilize
+    delay(50);
+    
+    // Try to initialize scroll encoder with timeout
+    uint32_t startTime = millis();
+    
+    // Show initialization status
+    Serial.print("\n🔄 Initializing M5Unit-Scroll at address: 0x");
+    Serial.println(HardwareConfig::M5UNIT_SCROLL_ADDR, HEX);
+    
+    if (initSuccess && (millis() - startTime < 500)) {
+        scrollEncoderAvailable = true;
+        Serial.println("✅ M5Unit-Scroll connected successfully!");
+        Serial.print("   Firmware: V");
+        Serial.println(scrollEncoder.getFirmwareVersion());
+        
+        // Test LED
+        Serial.println("   Testing LED (should turn blue)...");
+        scrollEncoder.setLEDColor(0x0000FF);  // Blue
+        delay(500);
+        
+        // Reset encoder value to 0
+        scrollEncoder.setEncoderValue(0);
+        
+        // Initialize state
+        scrollState.value = 0;
+        scrollState.lastValue = 0;
+        scrollPerf.lastReportTime = millis();
+        
+    } else {
+        scrollEncoderAvailable = false;
+        Serial.println("\n❌ M5Unit-Scroll initialization failed!");
+        Serial.println("   Possible issues:");
+        Serial.println("   1. Incorrect I2C address (should be 0x40)");
+        Serial.println("   2. Wiring issue (check SDA/SCL connections)");
+        Serial.println("   3. Power issue (ensure device is powered)");
+        Serial.print("   4. Current pins: SDA=GPIO");
+        Serial.print(HardwareConfig::I2C_SDA_SCROLL);
+        Serial.print(", SCL=GPIO");
+        Serial.println(HardwareConfig::I2C_SCL_SCROLL);
+    }
+}
+
+// Process scroll encoder input
+void processScrollEncoder() {
+    if (!scrollEncoderAvailable) return;
+    
+    static uint32_t lastPrintTime = 0;
+    static int32_t lastReportedValue = 0;
+    static int16_t detentAccumulator = 0; // Accumulated delta since last reported detent
+    uint32_t now = millis();
+    
+    // Rate limit to 50Hz
+    if (now - scrollState.lastUpdate < 20) return;
+    scrollState.lastUpdate = now;
+    
+    scrollPerf.totalReads++;
+    
+    // Read incremental delta directly from device (auto-resets register)
+    int16_t delta = scrollEncoder.getIncEncoderValue();
+    if (delta == 0) { return; }
+
+    // Movement detected
+    scrollPerf.successfulReads++;
+
+    // Accumulate delta until we reach a full detent
+    detentAccumulator += delta;
+    const int8_t DETENT_THRESHOLD = 1; // getIncEncoderValue already returns per detent (1 count)
+
+    int8_t direction = 0;
+    if (detentAccumulator > 0) {
+        direction = 1;
+    } else if (detentAccumulator < 0) {
+        direction = -1;
+    } else {
+        return;
+    }
+    detentAccumulator = 0;
+        
+        // Update the state
+        scrollState.lastValue = scrollState.value;
+        scrollState.value += direction;
+        
+        // Call the value change callback if set
+        if (scrollState.onValueChange) {
+            scrollState.onValueChange(direction);
+        }
+        
+        // Update LED feedback
+        updateScrollEncoderLEDForMode();
+        
+        // Only print occasionally to avoid spamming
+        #if FEATURE_DEBUG_OUTPUT
+        if (now - lastPrintTime > 100) { // 10 Hz max
+            Serial.printf("Scroll detent: %+d (total: %d)\n", direction, scrollState.value);
+            lastPrintTime = now;
+            lastReportedValue = scrollState.value;
+        }
+        #endif
+        
+        // Force an immediate LED update so UI feels responsive
+        FastLED.show();
+    
+    // Handle button press
+    bool buttonPressed = scrollEncoder.getButtonStatus() == 0; // 0 = pressed
+    if (buttonPressed && !scrollState.buttonPressed) {
+        scrollState.buttonPressed = true;
+        scrollState.lastButtonPress = now;
+        
+        // Call the button press callback if set
+        if (scrollState.onButtonPress) {
+            scrollState.onButtonPress();
+        }
+        
+        // Toggle LED on button press
+        scrollEncoder.setLEDColor(0xFFFFFF); // White flash
+        FastLED.show(); // Ensure LED update is visible immediately
+        
+        // Debug output
+        Serial.println("Scroll Button: Pressed");
+        
+    } else if (!buttonPressed && scrollState.buttonPressed) {
+        scrollState.buttonPressed = false;
+        
+        // Debug output
+        Serial.println("Scroll Button: Released");
+    }
+    
+    // Flash LED for 100ms on button press
+    if (scrollState.buttonPressed && (now - scrollState.lastButtonPress) > 100) {
+        updateScrollEncoderLEDForMode();  // Return to mode color after flash
+        FastLED.show(); // Ensure LED update is visible immediately
+    }
+    
+    // Performance reporting
+    if (now - scrollPerf.lastReportTime > 10000) {
+        if (scrollPerf.totalReads > 0) {
+            float successRate = (float)scrollPerf.successfulReads / scrollPerf.totalReads * 100.0f;
+            Serial.printf("Scroll Encoder: %d reads, %.1f%% success, %d errors\n",
+                         scrollPerf.totalReads, successRate, scrollPerf.errors);
+        }
+        
+        // Reset counters
+        scrollPerf = {0};
+        scrollPerf.lastReportTime = now;
+    }
+}
+
+// Set scroll encoder LED color
+void setScrollEncoderLED(uint8_t r, uint8_t g, uint8_t b) {
+    if (scrollEncoderAvailable) {
+        uint32_t color = ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
+        scrollEncoder.setLEDColor(color);
+    }
+}
+
+// Get scroll encoder value
+int32_t getScrollEncoderValue() {
+    return scrollState.value;
+}
+
+// Reset scroll encoder value
+void resetScrollEncoder() {
+    if (scrollEncoderAvailable) {
+        scrollEncoder.setEncoderValue(0);
+        scrollState.value = 0;
+        scrollState.lastValue = 0;
+    }
+}
+
+// Set callbacks for scroll encoder events
+void setScrollEncoderCallbacks(void (*onChange)(int32_t), void (*onPress)()) {
+    scrollState.onValueChange = onChange;
+    scrollState.onButtonPress = onPress;
+}
+
+// Update LED color based on mirrored encoder
+void updateScrollEncoderLEDForMode() {
+    if (!scrollEncoderAvailable) return;
+    
+    // Different color for each encoder mode
+    const uint32_t encoderColors[8] = {
+        0xFF0000,  // 0: Effect - Red
+        0xFFFF00,  // 1: Brightness - Yellow  
+        0x00FF00,  // 2: Palette - Green
+        0x00FFFF,  // 3: Speed - Cyan
+        0x0080FF,  // 4: Intensity - Light Blue
+        0xFF00FF,  // 5: Saturation - Magenta
+        0xFF8000,  // 6: Complexity - Orange
+        0x8000FF   // 7: Variation - Purple
+    };
+    
+    scrollEncoder.setLEDColor(encoderColors[scrollState.mirroredEncoder]);
+}
+
+// Get current mirrored encoder
+uint8_t getScrollMirroredEncoder() {
+    return scrollState.mirroredEncoder;
+}
+
+// Set which encoder to mirror
+void setScrollMirroredEncoder(uint8_t encoder) {
+    if (encoder < 8) {
+        scrollState.mirroredEncoder = encoder;
+        updateScrollEncoderLEDForMode();
+    }
+}
+
+#endif // SCROLL_ENCODER_H

@@ -5,6 +5,8 @@
 #include <Wire.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
+#include <nvs_flash.h>
+#include <nvs.h>
 #include "M5UnitScroll.h"
 #include "../config/hardware_config.h"
 #include "../core/EffectTypes.h"
@@ -28,6 +30,93 @@ extern const uint32_t PARAM_COLORS[PARAM_COUNT];
 // Parameter names for display
 extern const char* PARAM_NAMES[PARAM_COUNT];
 
+// Performance metrics for scroll encoder
+struct ScrollMetrics {
+    // Event tracking
+    uint32_t totalReads = 0;
+    uint32_t successfulReads = 0;
+    uint32_t failedReads = 0;
+    uint32_t buttonPresses = 0;
+    
+    // Timing metrics
+    uint32_t totalResponseTime = 0;
+    uint32_t maxResponseTime = 0;
+    uint32_t minResponseTime = UINT32_MAX;
+    float avgResponseTime = 0;
+    
+    // Health metrics
+    uint32_t connectionLosses = 0;
+    uint32_t recoveries = 0;
+    uint32_t i2cErrors = 0;
+    
+    // Reporting
+    uint32_t lastReportTime = 0;
+    static constexpr uint32_t REPORT_INTERVAL = 30000; // 30 seconds
+    
+    void recordRead(bool success, uint32_t responseTime);
+    void recordButtonPress() { buttonPresses++; }
+    void recordConnectionLoss() { connectionLosses++; }
+    void recordRecovery() { recoveries++; }
+    void recordI2CError() { i2cErrors++; }
+    void printReport();
+    void reset();
+};
+
+// Acceleration system for smooth control
+class ScrollAcceleration {
+private:
+    uint32_t lastChangeTime = 0;
+    int16_t lastDelta = 0;
+    float acceleration = 1.0f;
+    
+    // Sensitivity profiles per parameter
+    struct SensitivityProfile {
+        float baseMultiplier;
+        float maxAcceleration;
+        float accelerationRate;
+        uint32_t accelerationWindow;
+    };
+    
+    SensitivityProfile profiles[PARAM_COUNT] = {
+        {1.0f, 3.0f, 0.1f, 500},   // PARAM_EFFECT - no acceleration
+        {0.5f, 4.0f, 0.2f, 300},   // PARAM_BRIGHTNESS - smooth ramping
+        {1.0f, 1.0f, 0.0f, 0},     // PARAM_PALETTE - no acceleration
+        {0.8f, 5.0f, 0.3f, 400},   // PARAM_SPEED - fast changes
+        {0.7f, 3.5f, 0.2f, 350},   // PARAM_INTENSITY
+        {0.6f, 3.0f, 0.15f, 400},  // PARAM_SATURATION
+        {0.8f, 4.0f, 0.25f, 350},  // PARAM_COMPLEXITY
+        {0.9f, 3.5f, 0.2f, 400}    // PARAM_VARIATION
+    };
+    
+public:
+    int16_t processValue(int16_t rawDelta, ScrollParameter param);
+    void reset();
+};
+
+// Enhanced LED animation system
+class ScrollLEDAnimator {
+private:
+    struct Animation {
+        uint32_t startTime;
+        uint32_t duration;
+        uint8_t startR, startG, startB;
+        uint8_t targetR, targetG, targetB;
+        bool active;
+        
+        uint32_t getCurrentColor(uint32_t now);
+    };
+    
+    Animation currentAnim;
+    uint32_t baseColor;
+    float pulsePhase = 0;
+    
+public:
+    void startTransition(uint32_t fromColor, uint32_t toColor, uint32_t duration);
+    void flashColor(uint32_t color, uint32_t duration);
+    uint32_t getCurrentColor();
+    void setBaseColor(uint32_t color) { baseColor = color; }
+};
+
 // Scroll encoder state
 struct ScrollState {
     int32_t value = 0;
@@ -42,14 +131,106 @@ struct ScrollState {
     uint8_t paramValues[PARAM_COUNT] = {0, 96, 0, 128, 128, 128, 128, 128};
 };
 
+// Forward declaration
+class ScrollEncoderManager;
+
+// Panic mode actions
+enum PanicAction : uint8_t {
+    PANIC_FULL_RESET,      // Complete system reset
+    PANIC_RESTORE_DEFAULTS, // Restore all parameters to defaults
+    PANIC_BYPASS_ENCODER,   // Bypass encoder, use defaults
+    PANIC_DIAGNOSTIC_MODE   // Enter diagnostic mode
+};
+
+// Panic mode handler
+class PanicMode {
+private:
+    bool isPanicMode = false;
+    uint32_t panicStartTime = 0;
+    uint32_t consecutiveFailures = 0;
+    uint32_t panicButtonPressStart = 0;
+    bool panicButtonPressed = false;
+    
+    static constexpr uint32_t PANIC_THRESHOLD = 10;
+    static constexpr uint32_t PANIC_TIMEOUT = 30000; // 30 seconds
+    static constexpr uint32_t PANIC_BUTTON_DURATION = 10000; // 10 seconds
+    
+    ScrollEncoderManager* manager = nullptr;
+    
+public:
+    void init(ScrollEncoderManager* mgr) { manager = mgr; }
+    bool isActive() const { return isPanicMode; }
+    void incrementFailures() { consecutiveFailures++; }
+    void resetFailures() { consecutiveFailures = 0; }
+    uint32_t getFailureCount() const { return consecutiveFailures; }
+    
+    void checkPanicConditions(uint32_t lastSuccessfulRead, uint32_t watchdogTime);
+    void checkManualTrigger(bool buttonPressed);
+    void enterPanicMode(PanicAction action);
+    void executePanicAction(PanicAction action);
+    void forceBusReset();
+    void runDiagnostics();
+    bool exitPanicMode();
+    uint8_t getDefaultValue(ScrollParameter param);
+    void applyDefaultParameters();
+};
+
 // Scroll encoder manager class
 class ScrollEncoderManager {
+    friend class PanicMode;  // Allow panic mode access to private members
+    
 private:
     M5UnitScroll* scrollEncoder = nullptr;
     bool isAvailable = false;
     ScrollState state;
     
-    // Thread safety - defined in main.cpp
+    // Performance and health monitoring
+    ScrollMetrics metrics;
+    ScrollAcceleration acceleration;
+    ScrollLEDAnimator ledAnimator;
+    PanicMode panicMode;
+    
+    // Health monitoring
+    uint32_t lastSuccessfulRead = 0;
+    uint32_t consecutiveErrors = 0;
+    bool needsRecovery = false;
+    uint32_t lastRecoveryAttempt = 0;
+    static constexpr uint32_t RECOVERY_INTERVAL = 5000; // 5 seconds
+    static constexpr uint32_t HEALTH_TIMEOUT = 1000;    // 1 second
+    static constexpr uint32_t MAX_ERRORS = 5;
+    
+    // Watchdog system
+    struct Watchdog {
+        uint32_t lastFeedTime = 0;
+        uint32_t timeout = 2000;  // 2 seconds
+        bool triggered = false;
+        
+        void feed() { 
+            lastFeedTime = millis(); 
+            triggered = false;
+        }
+        
+        bool check() {
+            if (millis() - lastFeedTime > timeout && !triggered) {
+                triggered = true;
+                return true;
+            }
+            return false;
+        }
+        
+        uint32_t getTimeSinceLastFeed() {
+            return millis() - lastFeedTime;
+        }
+    } watchdog;
+    
+    // Recovery state machine
+    enum RecoveryState {
+        RECOVERY_IDLE,
+        RECOVERY_BUS_RESET,
+        RECOVERY_REINIT,
+        RECOVERY_VERIFY,
+        RECOVERY_FAILED
+    } recoveryState = RECOVERY_IDLE;
     
     // Callbacks
     void (*onParamChange)(ScrollParameter param, uint8_t value) = nullptr;
@@ -98,6 +279,16 @@ public:
     // Get visual params for effects
     void updateVisualParams(VisualParams& params);
     
+    // Health and metrics
+    bool isHealthy() const { return isAvailable && !needsRecovery; }
+    uint32_t getLastSuccessTime() const { return lastSuccessfulRead; }
+    const ScrollMetrics& getMetrics() const { return metrics; }
+    void printMetrics() { metrics.printReport(); }
+    
+    // Parameter persistence
+    bool saveParameters();
+    bool loadParameters();
+    
 private:
     // Update LED color based on current parameter
     void updateLED();
@@ -107,6 +298,15 @@ private:
     
     // Cycle through parameters
     void nextParameter();
+    
+    // Recovery methods
+    void performI2CBusRecovery();
+    bool attemptReconnection();
+    void resetI2CBus();
+    
+    // Health monitoring
+    void checkConnectionHealth(uint32_t now);
+    void updateHealthStatus(bool success, uint32_t responseTime);
 };
 
 // Global instance

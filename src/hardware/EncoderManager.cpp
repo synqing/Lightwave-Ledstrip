@@ -13,6 +13,9 @@ EncoderManager::EncoderManager() {
     // Initialize arrays
     memset(ledFlashTime, 0, sizeof(ledFlashTime));
     memset(ledNeedsUpdate, 0, sizeof(ledNeedsUpdate));
+    
+    // Initialize encoder hardware pointer
+    m5rotate8 = nullptr;
 }
 
 // Destructor
@@ -35,6 +38,12 @@ EncoderManager::~EncoderManager() {
         vQueueDelete(encoderEventQueue);
         encoderEventQueue = NULL;
     }
+    
+    // Clean up encoder hardware
+    if (m5rotate8) {
+        delete m5rotate8;
+        m5rotate8 = nullptr;
+    }
 }
 
 // Initialize encoder system
@@ -45,7 +54,7 @@ bool EncoderManager::begin() {
         return true;
     }
     
-    Serial.println("Initializing M5Stack 8Encoder with dedicated I2C task...");
+    Serial.println("Initializing Encoder system - detecting hardware...");
     
     // Create encoder event queue (64 events max to prevent overflow during fast spins)
     encoderEventQueue = xQueueCreate(64, sizeof(EncoderEvent));
@@ -56,26 +65,10 @@ bool EncoderManager::begin() {
     
     Serial.println("Encoder event queue created successfully");
     
-    // Initial connection attempt
-    if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
-        encoderAvailable = encoder.begin();
-        if (encoderAvailable && encoder.isConnected()) {
-            Serial.print("M5ROTATE8 connected! Firmware: V");
-            Serial.println(encoder.getVersion());
-            
-            // Set all LEDs to dim blue idle state
-            encoder.setAll(0, 0, 16);
-            
-            Serial.println("Encoder mapping:");
-            Serial.println("  0: Effect selection  1: Brightness");
-            Serial.println("  2: Palette           3: Speed");
-            Serial.println("  4: Intensity         5: Saturation");
-            Serial.println("  6: Complexity        7: Variation");
-        } else {
-            Serial.println("M5ROTATE8 not found initially - task will attempt reconnection");
-            encoderAvailable = false;
-        }
-        xSemaphoreGive(i2cMutex);
+    // Initialize M5Rotate8 encoder
+    if (!initializeM5Rotate8()) {
+        Serial.println("M5Rotate8 not found - task will attempt reconnection");
+        encoderAvailable = false;
     }
     
     // Create dedicated I2C task on Core 0 (main loop runs on Core 1)
@@ -132,100 +125,22 @@ void EncoderManager::encoderTask() {
             }
         }
         
-        // Poll encoders safely in dedicated task
+        // Poll encoders based on detected type
         bool connectionLost = false;
         
         // Take I2C mutex for encoder polling
         if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-            for (int i = 0; i < 8; i++) {
-                // Track I2C transaction start time
-                uint32_t transaction_start = micros();
-                
-                if (!encoder.isConnected()) {
-                    connectionLost = true;
-                    metrics.recordI2CTransaction(false);
-                    break;
-                }
-                
-                // Read relative counter with error handling
-                int32_t raw_delta = encoder.getRelCounter(i);
-                
-                // Reset the counter after reading to prevent accumulation
-                if (raw_delta != 0) {
-                    encoder.resetCounter(i);
-                }
-                metrics.recordI2CTransaction(true);
             
-            // Process through detent-aware debouncing
-            DetentDebounce& debounce = encoderDebounce[i];
+            // Process encoder events
+            processEncoderEvents();
             
-            if (debounce.processRawDelta(raw_delta, now)) {
-                // Get normalized delta
-                int32_t delta = debounce.getNormalizedDelta();
-                
-                // Create event for main loop
-                EncoderEvent event = {
-                    .encoder_id = (uint8_t)i,
-                    .delta = delta,
-                    .button_pressed = false,
-                    .timestamp = now
-                };
-                
-                // Calculate response time
-                uint32_t response_time_us = micros() - transaction_start;
-                
-                // Update queue depth before sending
-                UBaseType_t queue_spaces = uxQueueSpacesAvailable(encoderEventQueue);
-                metrics.updateQueueDepth(64 - queue_spaces);
-                
-                // Send to main loop via queue (non-blocking)
-                bool queued = (xQueueSend(encoderEventQueue, &event, 0) == pdTRUE);
-                
-                // Record metrics
-                metrics.recordEvent(queued, response_time_us);
-                
-                if (!queued) {
-                    // Throttle logging - don't spam from ISR context
-                    static uint32_t lastDropLog = 0;
-                    if (now - lastDropLog > 1000) {
-                        lastDropLog = now;
-                        Serial.println("⚠️ TASK: Encoder event queue full - dropping event");
-                    }
-                } else if (i == 0) {
-                    // Throttle encoder 0 logging to prevent Core 0 starvation
-                    static uint32_t lastEncoderLog = 0;
-                    if (now - lastEncoderLog > 500) {
-                        lastEncoderLog = now;
-                        Serial.printf("📤 TASK: Encoder %d delta %+d (raw: %+d)\n", 
-                                     i, delta, raw_delta);
-                    }
-                }
-                
-                // Flash LED to indicate activity
-                ledFlashTime[i] = now;
-                ledNeedsUpdate[i] = true;
-            }
-            
-            // Small delay between encoder reads to prevent I2C bus saturation
-            vTaskDelay(pdMS_TO_TICKS(2));
-        }
+            // Release I2C mutex after polling
+            xSemaphoreGive(i2cMutex);
         
-        // Release I2C mutex after polling
-        xSemaphoreGive(i2cMutex);
-        
-        // Handle connection loss
-        if (connectionLost) {
-            Serial.println("💥 TASK: Encoder connection lost, suspending I2C operations...");
-            encoderAvailable = false;
-            encoderSuspended = true;
-            lastConnectionCheck = now;
-            metrics.recordConnectionLoss();
-            continue;
+        } else {
+            // Could not get mutex - skip this polling cycle
+            vTaskDelay(pdMS_TO_TICKS(5));
         }
-    } else {
-        // Could not get mutex - skip this polling cycle
-        vTaskDelay(pdMS_TO_TICKS(5));
-    }
         
         // Print performance report periodically
         metrics.printReport();
@@ -245,26 +160,16 @@ void EncoderManager::encoderTask() {
 bool EncoderManager::attemptReconnection() {
     Serial.printf("🔄 TASK: Attempting encoder reconnection (backoff: %dms)...\n", reconnectBackoffMs);
     
-    bool success = false;
-    if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-        if (encoder.begin() && encoder.isConnected()) {
-            Serial.println("✅ TASK: Encoder reconnected successfully!");
-            Serial.printf("📋 TASK: Firmware V%d\n", encoder.getVersion());
-            encoderFailCount = 0;
-            reconnectBackoffMs = 1000;  // Reset backoff
-            
-            // Initialize encoder LEDs to idle state
-            encoder.setAll(0, 0, 16);
-            Serial.println("💡 TASK: Encoder LEDs initialized to idle state");
-            
-            // Record successful reconnection
-            metrics.recordReconnect();
-            success = true;
-        }
-        xSemaphoreGive(i2cMutex);
-    }
+    bool success = initializeM5Rotate8();
     
-    if (!success) {
+    if (success) {
+        encoderFailCount = 0;
+        reconnectBackoffMs = 1000;  // Reset backoff
+        Serial.println("✅ TASK: Encoder reconnected successfully!");
+        
+        // Record successful reconnection
+        metrics.recordReconnect();
+    } else {
         encoderFailCount++;
         // Exponential backoff: 1s, 2s, 4s, 8s, max 30s
         uint32_t maxShift = min(encoderFailCount, (uint32_t)5);
@@ -275,8 +180,10 @@ bool EncoderManager::attemptReconnection() {
     return success;
 }
 
-// Update encoder LEDs
+// Update encoder LEDs (M5Stack 8Encoder only)
 void EncoderManager::updateEncoderLEDs(uint32_t now) {
+    if (!m5rotate8) return;
+    
     static uint32_t lastLEDUpdate = 0;
     if (now - lastLEDUpdate >= 100) {
         lastLEDUpdate = now;
@@ -286,18 +193,18 @@ void EncoderManager::updateEncoderLEDs(uint32_t now) {
                 if (ledNeedsUpdate[i]) {
                     if (now - ledFlashTime[i] < 300) {
                         // Green flash for activity
-                        encoder.writeRGB(i, 0, 64, 0);
+                        m5rotate8->writeRGB(i, 0, 64, 0);
                     } else {
                         // Return to colored idle state
                         switch (i) {
-                            case 0: encoder.writeRGB(i, 16, 0, 0); break;   // Red - Effect
-                            case 1: encoder.writeRGB(i, 16, 16, 16); break; // White - Brightness
-                            case 2: encoder.writeRGB(i, 8, 0, 16); break;   // Purple - Palette
-                            case 3: encoder.writeRGB(i, 16, 8, 0); break;   // Yellow - Speed
-                            case 4: encoder.writeRGB(i, 16, 0, 8); break;   // Orange - Intensity
-                            case 5: encoder.writeRGB(i, 0, 16, 16); break;  // Cyan - Saturation
-                            case 6: encoder.writeRGB(i, 8, 16, 0); break;   // Lime - Complexity
-                            case 7: encoder.writeRGB(i, 16, 0, 16); break;  // Magenta - Variation
+                            case 0: m5rotate8->writeRGB(i, 16, 0, 0); break;   // Red - Effect
+                            case 1: m5rotate8->writeRGB(i, 16, 16, 16); break; // White - Brightness
+                            case 2: m5rotate8->writeRGB(i, 8, 0, 16); break;   // Purple - Palette
+                            case 3: m5rotate8->writeRGB(i, 16, 8, 0); break;   // Yellow - Speed
+                            case 4: m5rotate8->writeRGB(i, 16, 0, 8); break;   // Orange - Intensity
+                            case 5: m5rotate8->writeRGB(i, 0, 16, 16); break;  // Cyan - Saturation
+                            case 6: m5rotate8->writeRGB(i, 8, 16, 0); break;   // Lime - Complexity
+                            case 7: m5rotate8->writeRGB(i, 16, 0, 16); break;  // Magenta - Variation
                         }
                         ledNeedsUpdate[i] = false;
                     }
@@ -310,9 +217,11 @@ void EncoderManager::updateEncoderLEDs(uint32_t now) {
 
 // Set individual encoder LED
 void EncoderManager::setEncoderLED(uint8_t encoderId, uint8_t r, uint8_t g, uint8_t b) {
-    if (encoderId < 8 && encoderAvailable) {
+    if (!encoderAvailable || !m5rotate8) return;
+    
+    if (encoderId < 8) {
         if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-            encoder.writeRGB(encoderId, r, g, b);
+            m5rotate8->writeRGB(encoderId, r, g, b);
             xSemaphoreGive(i2cMutex);
         }
     }
@@ -464,4 +373,196 @@ int32_t DetentDebounce::getNormalizedDelta() {
     pending_count = 0;
     expecting_pair = false;
     return result;
+}
+
+
+// Initialize M5Stack 8Encoder
+bool EncoderManager::initializeM5Rotate8() {
+    Serial.printf("🔧 Trying M5Stack 8Encoder on GPIO %d/%d...\n", 
+                  HardwareConfig::I2C_SDA, HardwareConfig::I2C_SCL);
+    
+    if (m5rotate8) {
+        delete m5rotate8;
+    }
+    
+    m5rotate8 = new M5ROTATE8();
+    
+    if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
+        bool success = m5rotate8->begin();
+        if (success && m5rotate8->isConnected()) {
+            Serial.printf("✅ M5ROTATE8 connected! Firmware: V%d\n", m5rotate8->getVersion());
+            
+            // Set all LEDs to dim blue idle state
+            m5rotate8->setAll(0, 0, 16);
+            
+            Serial.println("🎮 Encoder mapping:");
+            Serial.println("  0: Effect selection  1: Brightness");
+            Serial.println("  2: Palette           3: Speed");
+            Serial.println("  4: Intensity         5: Saturation");
+            Serial.println("  6: Complexity        7: Variation");
+            
+            xSemaphoreGive(i2cMutex);
+            return true;
+        } else {
+            xSemaphoreGive(i2cMutex);
+            delete m5rotate8;
+            m5rotate8 = nullptr;
+            Serial.println("❌ M5ROTATE8 not found");
+            return false;
+        }
+    }
+    
+    return false;
+}
+
+
+// Process M5Stack 8Encoder events
+void EncoderManager::processEncoderEvents() {
+    if (!m5rotate8 || !m5rotate8->isConnected()) {
+        return;
+    }
+    
+    // Poll all 8 encoders
+    for (int i = 0; i < 8; i++) {
+        // Track I2C transaction start time
+        uint32_t transaction_start = micros();
+        
+        // Read relative counter with error handling
+        int32_t raw_delta = m5rotate8->getRelCounter(i);
+        
+        // Reset the counter after reading to prevent accumulation
+        if (raw_delta != 0) {
+            m5rotate8->resetCounter(i);
+        }
+        metrics.recordI2CTransaction(true);
+        
+        // Process through detent-aware debouncing
+        DetentDebounce& debounce = encoderDebounce[i];
+        
+        if (debounce.processRawDelta(raw_delta, millis())) {
+            // Get normalized delta
+            int32_t delta = debounce.getNormalizedDelta();
+            
+            // Create event for main loop
+            EncoderEvent event = {
+                .encoder_id = (uint8_t)i,
+                .delta = delta,
+                .button_pressed = false,
+                .timestamp = millis()
+            };
+            
+            // Calculate response time
+            uint32_t response_time_us = micros() - transaction_start;
+            
+            // Update queue depth before sending
+            UBaseType_t queue_spaces = uxQueueSpacesAvailable(encoderEventQueue);
+            metrics.updateQueueDepth(64 - queue_spaces);
+            
+            // Send to main loop via queue (non-blocking)
+            bool queued = (xQueueSend(encoderEventQueue, &event, 0) == pdTRUE);
+            
+            // Record metrics
+            metrics.recordEvent(queued, response_time_us);
+            
+            if (queued) {
+                // Flash LED to indicate activity
+                ledFlashTime[i] = millis();
+                ledNeedsUpdate[i] = true;
+                
+                if (i == 0) {
+                    // Throttle encoder 0 logging
+                    static uint32_t lastEncoderLog = 0;
+                    uint32_t now = millis();
+                    if (now - lastEncoderLog > 500) {
+                        lastEncoderLog = now;
+                        Serial.printf("📤 TASK: Encoder %d delta %+d (raw: %+d)\n", 
+                                     i, delta, raw_delta);
+                    }
+                }
+            }
+        }
+        
+        // Small delay between encoder reads
+        vTaskDelay(pdMS_TO_TICKS(2));
+    }
+}
+
+
+// Perform I2C bus recovery to clear stuck conditions
+void EncoderManager::performI2CBusRecovery(uint8_t sda, uint8_t scl) {
+    Serial.println("📋 I2C Bus Recovery Sequence:");
+    
+    // Configure pins as GPIO outputs
+    pinMode(sda, OUTPUT);
+    pinMode(scl, OUTPUT);
+    
+    // Set both lines high initially
+    digitalWrite(sda, HIGH);
+    digitalWrite(scl, HIGH);
+    delay(5);
+    
+    // Check initial state
+    pinMode(sda, INPUT_PULLUP);
+    pinMode(scl, INPUT_PULLUP);
+    bool sdaStuck = !digitalRead(sda);
+    bool sclStuck = !digitalRead(scl);
+    
+    if (sdaStuck || sclStuck) {
+        Serial.printf("⚠️  Stuck lines detected - SDA: %s, SCL: %s\n", 
+                     sdaStuck ? "LOW" : "OK", 
+                     sclStuck ? "LOW" : "OK");
+    }
+    
+    // Perform clock pulsing to release stuck devices
+    pinMode(scl, OUTPUT);
+    pinMode(sda, INPUT_PULLUP);
+    
+    Serial.println("🔄 Sending 9 clock pulses to release stuck devices...");
+    for (int i = 0; i < 9; i++) {
+        digitalWrite(scl, LOW);
+        delayMicroseconds(5);
+        digitalWrite(scl, HIGH);
+        delayMicroseconds(5);
+        
+        // Check if SDA was released
+        if (digitalRead(sda)) {
+            Serial.printf("✅ SDA released after %d clock pulses\n", i + 1);
+            break;
+        }
+    }
+    
+    // Generate STOP condition
+    pinMode(sda, OUTPUT);
+    digitalWrite(sda, LOW);
+    delayMicroseconds(5);
+    digitalWrite(scl, HIGH);
+    delayMicroseconds(5);
+    digitalWrite(sda, HIGH);
+    delayMicroseconds(5);
+    
+    Serial.println("✅ I2C STOP condition sent");
+    
+    // Final check
+    pinMode(sda, INPUT_PULLUP);
+    pinMode(scl, INPUT_PULLUP);
+    delay(10);
+    
+    bool sdaFinal = digitalRead(sda);
+    bool sclFinal = digitalRead(scl);
+    Serial.printf("📊 Final pin states - SDA: %s, SCL: %s\n", 
+                 sdaFinal ? "HIGH" : "LOW", 
+                 sclFinal ? "HIGH" : "LOW");
+    
+    if (!sdaFinal || !sclFinal) {
+        Serial.println("⚠️  WARNING: I2C lines still stuck after recovery!");
+        Serial.println("    Check for hardware issues:");
+        Serial.println("    - Short circuits");
+        Serial.println("    - Missing pull-up resistors");
+        Serial.println("    - Incorrect wiring");
+        Serial.println("    - Device power issues");
+    } else {
+        Serial.println("✅ I2C bus recovery complete - lines are free");
+    }
+    
+    delay(50); // Give bus time to stabilize
 }

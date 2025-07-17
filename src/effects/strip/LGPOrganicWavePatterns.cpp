@@ -439,7 +439,7 @@ void lgpProteinFoldingDynamics() {
     int proteinLength = 50 + (complexity * 200);  // 50-250 residues
     
     // Protein folding simulation
-    for(int i = 0; i < min(proteinLength, HardwareConfig::STRIP_LENGTH); i++) {
+    for(int i = 0; i < min(proteinLength, (int)HardwareConfig::STRIP_LENGTH); i++) {
         // Secondary structure formation (alpha helices, beta sheets)
         if (foldingProgress > 0.2f) {
             // Check for helix-forming regions
@@ -675,7 +675,7 @@ void lgpMyceliumNetworkGrowth() {
         
         // Add communication pulses
         brightness += signal * 55;
-        brightness = min(255, brightness);
+        brightness = min(255, (int)brightness);
         
         // Color based on network state
         uint8_t hue1 = gHue + (networkAge[i] * 40);  // Age gradient

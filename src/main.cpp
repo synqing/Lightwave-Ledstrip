@@ -584,7 +584,33 @@ void setup() {
             }
         });
         
-        // Effect changes are handled internally by ScrollEncoderManager
+        // Set up effect change callback
+        scrollManager.setEffectChangeCallback([](uint8_t newEffect) {
+            // Validate effect index
+            if (newEffect >= NUM_EFFECTS) {
+                Serial.printf("❌ Invalid effect index: %d\n", newEffect);
+                return;
+            }
+            
+            // Only transition if different
+            if (newEffect != currentEffect) {
+                startAdvancedTransition(newEffect);
+                Serial.printf("🎨 Scroll: Effect changed to %s\n", 
+                             effects[newEffect].name);
+                
+                // Update audio/render task
+                audioRenderTask.setEffectCallback(effectUpdateCallback);
+            }
+        });
+        
+        // Synchronize initial state with current system values
+        scrollManager.setParamValue(PARAM_BRIGHTNESS, FastLED.getBrightness());
+        scrollManager.setParamValue(PARAM_PALETTE, currentPaletteIndex);
+        scrollManager.setParamValue(PARAM_SPEED, paletteSpeed * 4);
+        scrollManager.setParamValue(PARAM_INTENSITY, visualParams.intensity);
+        scrollManager.setParamValue(PARAM_SATURATION, visualParams.saturation);
+        scrollManager.setParamValue(PARAM_COMPLEXITY, visualParams.complexity);
+        scrollManager.setParamValue(PARAM_VARIATION, visualParams.variation);
     } else {
         Serial.println("⚠️  Scroll encoder not found - continuing without it");
     }

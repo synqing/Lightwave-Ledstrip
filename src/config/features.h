@@ -27,7 +27,7 @@
 #define FEATURE_ADVANCED_EFFECTS 1      // HDR, supersampling, etc.
 #define FEATURE_PIPELINE_EFFECTS 1      // Modular pipeline system
 #define FEATURE_AUDIO_EFFECTS 0         // Audio-reactive effects (future)
-#define FEATURE_AUDIO_SYNC 1            // Audio Synq system for VP_DECODER integration
+#define FEATURE_AUDIO_SYNC 0            // Audio Synq system for VP_DECODER integration - DISABLED (no mic)
 
 // LED Strips features (now permanent after matrix removal)
 #define FEATURE_STRIP_EFFECTS 1         // Strip-specific effects
@@ -50,9 +50,9 @@
 #define FEATURE_FASTLED_OPTIMIZATION 1   // FastLED advanced features
 
 // Debug features
-#define FEATURE_DEBUG_OUTPUT 1          // Serial debug messages
-#define FEATURE_MEMORY_DEBUG 1          // Heap tracking and analysis
-#define FEATURE_TIMING_DEBUG 1          // Microsecond timing
+#define FEATURE_DEBUG_OUTPUT 0          // Reduced serial debug messages
+#define FEATURE_MEMORY_DEBUG 0          // Disable heap tracking to reduce noise
+#define FEATURE_TIMING_DEBUG 0          // Disable microsecond timing
 
 // Derived flags
 #if FEATURE_WEB_SERVER || FEATURE_WEBSOCKET

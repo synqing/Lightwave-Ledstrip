@@ -133,10 +133,8 @@ void effectUpdateCallback();
 extern void solidColor();
 extern void pulseEffect();
 extern void confetti();
-extern void stripConfetti();
 extern void sinelon();
 extern void juggle();
-extern void stripJuggle();
 extern void bpm();
 extern void waveEffect();
 extern void rippleEffect();
@@ -183,10 +181,6 @@ Effect effects[] = {
     // Wave dynamics (already CENTER ORIGIN)
     {"Wave", waveEffect, EFFECT_TYPE_STANDARD},
     {"Ripple", rippleEffect, EFFECT_TYPE_STANDARD},
-    
-    // Quality strip-specific effects
-    {"Strip Confetti", stripConfetti, EFFECT_TYPE_STANDARD},
-    {"Strip Juggle", stripJuggle, EFFECT_TYPE_STANDARD},
     
     // Motion effects worth keeping
     {"Sinelon", sinelon, EFFECT_TYPE_STANDARD},

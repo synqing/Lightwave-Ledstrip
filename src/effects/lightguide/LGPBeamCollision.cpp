@@ -67,9 +67,9 @@ public:
                 beams[i].velocity = (2.0f + random(0, 30) / 10.0f) * (fromLeft ? 1 : -1);
                 beams[i].velocity *= (0.5f + visualParams.getIntensityNorm());
                 
-                // Vibrant colors
-                uint8_t hue = gHue + random(0, 64);
-                beams[i].color = CHSV(hue, 255, 255);
+                // Get color from palette
+                uint8_t paletteIndex = random8();  // Random position in palette
+                beams[i].color = ColorFromPalette(currentPalette, paletteIndex, 255, LINEARBLEND);
                 beams[i].intensity = 1.0f;
                 beams[i].active = true;
                 
@@ -93,11 +93,16 @@ public:
                     particle.velocity = random(-80, 81) / 10.0f;
                     particle.life = 1.0f;
                     
-                    // Mix colors for explosion
-                    if (random8() < 128) {
+                    // Mix colors for explosion - use palette colors
+                    uint8_t explosionPaletteIndex = random8();
+                    particle.color = ColorFromPalette(currentPalette, explosionPaletteIndex, 255, LINEARBLEND);
+                    
+                    // Sometimes use the beam colors for continuity
+                    uint8_t colorChoice = random8();
+                    if (colorChoice < 85) {
                         particle.color = color1;
-                    } else {
-                        particle.color = blend(color1, color2, random8());
+                    } else if (colorChoice < 170) {
+                        particle.color = color2;
                     }
                     
                     // Add some white for extra pop

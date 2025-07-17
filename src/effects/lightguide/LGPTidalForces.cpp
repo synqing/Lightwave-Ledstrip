@@ -75,9 +75,9 @@ public:
                 waves[i].velocity *= (0.5f + visualParams.getIntensityNorm());
                 waves[i].momentum = waves[i].height * abs(waves[i].velocity);
                 
-                // Ocean colors - deep blues and greens
-                uint8_t hue = 160 + random(0, 40);  // Blue-green range
-                waves[i].color = CHSV(hue, 200 + random(0, 55), 255);
+                // Get ocean colors from palette
+                uint8_t paletteIndex = 128 + random(0, 64);  // Middle range of palette for water
+                waves[i].color = ColorFromPalette(currentPalette, paletteIndex, 255, LINEARBLEND);
                 waves[i].active = true;
                 
                 // Initialize foam
@@ -100,13 +100,17 @@ public:
                     splash.velocity = random(-60, 61) / 10.0f * magnitude;
                     splash.vHeight = random(30, 80) / 10.0f * magnitude;
                     
-                    // Mix wave colors with white foam
+                    // Splash colors from palette with foam
+                    uint8_t splashPaletteIndex = random8();
+                    splash.color = ColorFromPalette(currentPalette, splashPaletteIndex, 255, LINEARBLEND);
+                    
+                    // Mix in wave colors and white foam
                     uint8_t mixType = random8();
-                    if (mixType < 100) {
+                    if (mixType < 80) {
                         splash.color = color1;
-                    } else if (mixType < 200) {
+                    } else if (mixType < 160) {
                         splash.color = color2;
-                    } else {
+                    } else if (mixType > 220) {
                         splash.color = CRGB(200, 220, 255);  // White foam
                     }
                     
@@ -131,15 +135,18 @@ public:
         // Update turbulence
         turbulence = sin(now * 0.001f) * 0.2f + 0.1f;
         
-        // Deep ocean background
+        // Deep ocean background using palette
         for (int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
             // Deeper in the middle
             float depth = 1.0f - abs(i - HardwareConfig::STRIP_CENTER_POINT) / (float)HardwareConfig::STRIP_CENTER_POINT;
-            uint8_t bgHue = 180 + depth * 20;  // Deeper = darker blue
             uint8_t bgBright = 10 + depth * 20;
             
-            strip1[i] = CHSV(bgHue, 255, bgBright);
-            strip2[i] = CHSV(bgHue + 10, 240, bgBright);
+            // Use darker palette colors for ocean depth
+            uint8_t palettePos = 160 + sin8(i * 2 + millis() / 50) / 4;  // Gentle variation
+            CRGB bgColor = ColorFromPalette(currentPalette, palettePos, bgBright, LINEARBLEND);
+            
+            strip1[i] = bgColor;
+            strip2[i] = bgColor;
         }
         
         // Update waves from left

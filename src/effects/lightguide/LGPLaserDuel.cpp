@@ -57,9 +57,10 @@ public:
         clashPoint(HardwareConfig::STRIP_CENTER_POINT),
         clashIntensity(0), battleIntensity(0), lastClashTime(0) {
         
-        // Initialize duelists
-        leftLaser = {0.5f, 0, CRGB(255, 0, 0), 0.02f, false, 0};      // Red
-        rightLaser = {0.5f, HardwareConfig::STRIP_LENGTH - 1, CRGB(0, 100, 255), 0.02f, false, 0}; // Blue
+        // Initialize duelists with palette colors
+        // Use opposite ends of the palette for contrast
+        leftLaser = {0.5f, 0, ColorFromPalette(currentPalette, 0, 255), 0.02f, false, 0};
+        rightLaser = {0.5f, HardwareConfig::STRIP_LENGTH - 1, ColorFromPalette(currentPalette, 128, 255), 0.02f, false, 0};
         
         // Clear sparks
         for (auto& spark : sparks) spark.active = false;
@@ -74,13 +75,17 @@ public:
                     spark.vx = random(-50, 51) / 10.0f;
                     spark.vy = random(0, 50) / 10.0f;
                     
-                    // Sparks are mix of both laser colors plus white
+                    // Sparks use palette colors
+                    uint8_t sparkPaletteIndex = random8();
+                    spark.color = ColorFromPalette(currentPalette, sparkPaletteIndex, 255, LINEARBLEND);
+                    
+                    // Sometimes use laser colors or white for variety
                     uint8_t sparkType = random8();
-                    if (sparkType < 85) {
+                    if (sparkType < 64) {
                         spark.color = leftLaser.color;
-                    } else if (sparkType < 170) {
+                    } else if (sparkType < 128) {
                         spark.color = rightLaser.color;
-                    } else {
+                    } else if (sparkType > 200) {
                         spark.color = CRGB(255, 255, 100);  // Hot white/yellow
                     }
                     
@@ -94,6 +99,12 @@ public:
     
     void render() override {
         uint32_t now = millis();
+        
+        // Update laser colors from palette periodically for variety
+        if ((now >> 10) % 2 == 0) {  // Every ~1 second
+            leftLaser.color = ColorFromPalette(currentPalette, beatsin8(10, 0, 64), 255);
+            rightLaser.color = ColorFromPalette(currentPalette, beatsin8(10, 192, 255), 255);
+        }
         
         // Update battle intensity based on speed
         battleIntensity = paletteSpeed / 255.0f;

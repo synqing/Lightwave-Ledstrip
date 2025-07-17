@@ -76,28 +76,28 @@ void lgpPrismCascade();
 // Encoder 7 (Variation): Unused
 void lgpSilkWaves();
 
-// Aurora Flow - Smooth flowing curtains of light
-// Encoder 3 (Speed): Curtain movement speed
+// Counter-Propagating Wave Interference - Opposing beams create standing waves
+// Encoder 3 (Speed): Wave propagation speed
 // Encoder 4 (Intensity): Overall brightness
-// Encoder 5 (Saturation): Center glow intensity (>150 enables)
-// Encoder 6 (Complexity): Curtain sway amount
-// Encoder 7 (Variation): Star field density (>50 enables)
-void lgpAuroraFlow();
+// Encoder 5 (Saturation): Standing wave nodes (>150 shows bright nodes)
+// Encoder 6 (Complexity): Standing wave enhancement at center
+// Encoder 7 (Variation): Wave absorption/decay rate
+void lgpCounterPropagating();
 
-// Crystal Formation - Growing and shrinking crystalline patterns
-// Encoder 3 (Speed): Crystal spawn rate
+// Dynamic Diffraction Grating - Virtual slits cause spectral separation
+// Encoder 3 (Speed): Grating movement speed
 // Encoder 4 (Intensity): Overall brightness
-// Encoder 5 (Saturation): Core glow intensity
-// Encoder 6 (Complexity): Number of crystal facets
-// Encoder 7 (Variation): Sparkle intensity
-void lgpCrystalFormation();
+// Encoder 5 (Saturation): Slit brightness (>150 shows slits)
+// Encoder 6 (Complexity): Slit spacing (8-20 LEDs)
+// Encoder 7 (Variation): Number of slits (3-11)
+void lgpDiffractionGrating();
 
-// Nebula Cloud - Swirling cosmic clouds with stars
-// Encoder 3 (Speed): Cloud drift speed
+// Mach-Zehnder Interferometer - Split/recombine beams with phase shifts
+// Encoder 3 (Speed): Phase modulation speed
 // Encoder 4 (Intensity): Overall brightness
-// Encoder 5 (Saturation): Nebula core intensity
-// Encoder 6 (Complexity): Color complexity (>100 enables advanced)
-// Encoder 7 (Variation): Star field visibility (>50 enables)
-void lgpNebulaCloud();
+// Encoder 5 (Saturation): Cross-interference at center (>150 enables)
+// Encoder 6 (Complexity): Path delay modulation amount
+// Encoder 7 (Variation): Beam split ratio (30%-70%)
+void lgpMachZehnder();
 
 #endif // LGP_PHYSICS_EFFECTS_H

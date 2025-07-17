@@ -479,12 +479,10 @@ void ScrollEncoderManager::handleValueChange(int32_t delta) {
         onParamChange(param, newValue);
     }
     
-    // Debug output
-    #if FEATURE_DEBUG_OUTPUT
+    // Always show parameter value changes for user feedback
     if (newValue != oldValue) {
         Serial.printf("Scroll: %s = %d\n", PARAM_NAMES[param], newValue);
     }
-    #endif
 }
 
 void ScrollEncoderManager::nextParameter() {

@@ -234,9 +234,9 @@ Effect effects[] = {
     {"LGP Liquid Crystal", lgpLiquidCrystal, EFFECT_TYPE_STANDARD},
     {"LGP Prism Cascade", lgpPrismCascade, EFFECT_TYPE_STANDARD},
     {"LGP Silk Waves", lgpSilkWaves, EFFECT_TYPE_STANDARD},
-    {"LGP Counter-Propagating", lgpCounterPropagating, EFFECT_TYPE_STANDARD},
-    {"LGP Diffraction Grating", lgpDiffractionGrating, EFFECT_TYPE_STANDARD},
-    {"LGP Mach-Zehnder", lgpMachZehnder, EFFECT_TYPE_STANDARD},
+    {"LGP Beam Collision", lgpBeamCollision, EFFECT_TYPE_STANDARD},
+    {"LGP Laser Duel", lgpLaserDuel, EFFECT_TYPE_STANDARD},
+    {"LGP Tidal Forces", lgpTidalForces, EFFECT_TYPE_STANDARD},
     
 #if FEATURE_AUDIO_SYNC
     // =============== AUDIO REACTIVE EFFECTS ===============

@@ -76,28 +76,28 @@ void lgpPrismCascade();
 // Encoder 7 (Variation): Unused
 void lgpSilkWaves();
 
-// Counter-Propagating Wave Interference - Opposing beams create standing waves
-// Encoder 3 (Speed): Wave propagation speed
-// Encoder 4 (Intensity): Overall brightness
-// Encoder 5 (Saturation): Standing wave nodes (>150 shows bright nodes)
-// Encoder 6 (Complexity): Standing wave enhancement at center
-// Encoder 7 (Variation): Wave absorption/decay rate
-void lgpCounterPropagating();
+// Beam Collision Explosion - Laser beams shoot and EXPLODE when they meet!
+// Encoder 3 (Speed): Beam spawn rate
+// Encoder 4 (Intensity): Beam speed multiplier
+// Encoder 5 (Saturation): Explosion flash intensity (>150 adds white flash)
+// Encoder 6 (Complexity): Explosion particle count
+// Encoder 7 (Variation): Unused
+void lgpBeamCollision();
 
-// Dynamic Diffraction Grating - Virtual slits cause spectral separation
-// Encoder 3 (Speed): Grating movement speed
-// Encoder 4 (Intensity): Overall brightness
-// Encoder 5 (Saturation): Slit brightness (>150 shows slits)
-// Encoder 6 (Complexity): Slit spacing (8-20 LEDs)
-// Encoder 7 (Variation): Number of slits (3-11)
-void lgpDiffractionGrating();
+// Laser Duel - Opposing lasers fight with power struggles and sparks!
+// Encoder 3 (Speed): Battle intensity/charge rate
+// Encoder 4 (Intensity): Beam movement speed
+// Encoder 5 (Saturation): Unused
+// Encoder 6 (Complexity): Spark count multiplier
+// Encoder 7 (Variation): Unused
+void lgpLaserDuel();
 
-// Mach-Zehnder Interferometer - Split/recombine beams with phase shifts
-// Encoder 3 (Speed): Phase modulation speed
-// Encoder 4 (Intensity): Overall brightness
-// Encoder 5 (Saturation): Cross-interference at center (>150 enables)
-// Encoder 6 (Complexity): Path delay modulation amount
-// Encoder 7 (Variation): Beam split ratio (30%-70%)
-void lgpMachZehnder();
+// Tidal Forces - Massive waves crash from both sides!
+// Encoder 3 (Speed): Wave spawn frequency
+// Encoder 4 (Intensity): Wave speed multiplier
+// Encoder 5 (Saturation): Unused
+// Encoder 6 (Complexity): Splash particle multiplier
+// Encoder 7 (Variation): Unused
+void lgpTidalForces();
 
 #endif // LGP_PHYSICS_EFFECTS_H

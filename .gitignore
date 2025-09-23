@@ -36,3 +36,19 @@ __pycache__/
 # User-specific files
 src/config/network_config_private.h
 credentials.htools/fastled-wasm/
+# Local tooling caches
+.cache/
+.pio-home/
+project/
+tools/build.sh
+tools/compile_commands.json
+tools/install.sh
+tools/monitor.sh
+tools/upload.sh
+# Internal docs drafts
+docs/CHANGELOG.md
+docs/TODO.md
+docs/effects/
+docs/implementation/
+assets/
+archives/

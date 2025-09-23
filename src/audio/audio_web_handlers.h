@@ -1,5 +1,8 @@
 #pragma once
 
+#include "../config/features.h"
+
+#if FEATURE_AUDIO_SYNC
 #include <AsyncWebSocket.h>
 #include <ArduinoJson.h>
 #include "audio_sync.h"
@@ -101,3 +104,4 @@ inline void handleAudioCommand(AsyncWebSocketClient* client, const JsonDocument&
     serializeJson(response, output);
     client->text(output);
 }
+#endif // FEATURE_AUDIO_SYNC

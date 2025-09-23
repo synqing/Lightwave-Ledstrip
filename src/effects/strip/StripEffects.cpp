@@ -808,6 +808,7 @@ void StripEffects::registerAll(FxEngine& engine) {
     engine.addEffect("LGP DNA Helix", lgpDNAHelix);
     engine.addEffect("LGP Phase Transition", lgpPhaseTransition);
     
+#if FEATURE_AUDIO_EFFECTS && FEATURE_AUDIO_SYNC
     // Register LGP audio-reactive effects
     engine.addEffect("LGP Frequency Collision", lgpFrequencyCollision);
     engine.addEffect("LGP Beat Interference", lgpBeatInterference);
@@ -819,4 +820,5 @@ void StripEffects::registerAll(FxEngine& engine) {
     engine.addEffect("LGP FFT Color Map", lgpFFTColorMap);
     engine.addEffect("LGP Harmonic Resonance", lgpHarmonicResonance);
     engine.addEffect("LGP Stereo Phase", lgpStereoPhasePattern);
+#endif
 }

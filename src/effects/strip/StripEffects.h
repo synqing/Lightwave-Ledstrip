@@ -92,8 +92,9 @@ void lgpPhaseTransition();
 // Include new LGP Color Mixing Effects
 #include "LGPColorMixingEffects.h"
 
-// Include new LGP Audio Reactive Effects
+#if FEATURE_AUDIO_EFFECTS && FEATURE_AUDIO_SYNC
 #include "LGPAudioReactive.h"
+#endif
 
 // StripEffects registration class
 class StripEffects {

@@ -1,3 +1,6 @@
+#include "../../config/features.h"
+
+#if FEATURE_AUDIO_EFFECTS && FEATURE_AUDIO_SYNC
 #include "core/LightshowEngine.h"
 #include <FastLED.h>
 
@@ -35,3 +38,5 @@ void spectrumLightshowEngine() {
     engine.render(strip1, HardwareConfig::STRIP_LENGTH);
     engine.render(strip2, HardwareConfig::STRIP_LENGTH);
 } 
+
+#endif // FEATURE_AUDIO_EFFECTS && FEATURE_AUDIO_SYNC

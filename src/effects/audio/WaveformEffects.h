@@ -1,6 +1,9 @@
 #ifndef WAVEFORM_EFFECTS_H
 #define WAVEFORM_EFFECTS_H
 
+#include "../../config/features.h"
+
+#if FEATURE_AUDIO_EFFECTS && FEATURE_AUDIO_SYNC
 #include <Arduino.h>
 #include <FastLED.h>
 #include "../../config/hardware_config.h"
@@ -56,5 +59,7 @@ void waveformMirror();            // Mirrored waveform from center
 void initAudioSimulator();
 uint8_t mapFrequencyToPosition(uint8_t bin, uint8_t stripLength);
 CRGB getFrequencyColor(uint8_t frequency, uint8_t intensity);
+
+#endif // FEATURE_AUDIO_EFFECTS && FEATURE_AUDIO_SYNC
 
 #endif // WAVEFORM_EFFECTS_H

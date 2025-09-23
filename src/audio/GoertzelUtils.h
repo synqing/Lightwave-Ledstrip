@@ -1,5 +1,8 @@
 #pragma once
 
+#include "../config/features.h"
+
+#if FEATURE_AUDIO_SYNC
 // GoertzelUtils – lightweight helpers for accessing 96-bin musical‐spaced
 // spectral data produced by the SpectraSynq Goertzel engine.
 //
@@ -39,4 +42,6 @@ float getBinMagnitude(int idx);  // O(1)
 // `out` must point to a float array of length >= zoneCount.
 void mapBinsToZones(int zoneCount, float* out, bool logarithmic = true);
 
-}  // namespace GoertzelUtils 
+}  // namespace GoertzelUtils
+
+#endif // FEATURE_AUDIO_SYNC

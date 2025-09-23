@@ -52,4 +52,44 @@ void lgpSolitonWaves();
 // Encoder 7 (Variation): Edge glow intensity
 void lgpMetamaterialCloaking();
 
+// Gradient-Index Cloak - Smooth GRIN lens cloaking
+// Encoder 3 (Speed): Cloak drift speed
+// Encoder 4 (Intensity): Index gradient strength
+// Encoder 5 (Saturation): Color saturation
+// Encoder 6 (Complexity): Cloak radius
+// Encoder 7 (Variation): Gradient exponent (soft → sharp lens)
+void lgpGrinCloak();
+
+// Caustic Fan - Virtual focusing with caustic envelopes
+// Encoder 3 (Speed): Caustic sweep speed
+// Encoder 4 (Intensity): Caustic gain/brightness
+// Encoder 5 (Saturation): Color saturation
+// Encoder 6 (Complexity): Fan curvature
+// Encoder 7 (Variation): Fan separation & asymmetry
+void lgpCausticFan();
+
+// Birefringent Shear - Dual-mode interference drift
+// Encoder 3 (Speed): Base wave motion
+// Encoder 4 (Intensity): Mode mix strength
+// Encoder 5 (Saturation): Color saturation
+// Encoder 6 (Complexity): Mode separation (Δk)
+// Encoder 7 (Variation): Drift direction / phase offset
+void lgpBirefringentShear();
+
+// Anisotropic Cloak - Directionally biased metamaterial
+// Encoder 3 (Speed): Cloak drift speed
+// Encoder 4 (Intensity): Base refractive magnitude
+// Encoder 5 (Saturation): Color saturation
+// Encoder 6 (Complexity): Cloak radius
+// Encoder 7 (Variation): Anisotropy (left/right imbalance)
+void lgpAnisotropicCloak();
+
+// Evanescent Skin - Edge-bound shimmering waves
+// Encoder 3 (Speed): Skin oscillation speed
+// Encoder 4 (Intensity): Skin decay rate
+// Encoder 5 (Saturation): Color saturation
+// Encoder 6 (Complexity): Skin frequency / detail
+// Encoder 7 (Variation): Skin placement (rim vs plate edges)
+void lgpEvanescentSkin();
+
 #endif // LGP_QUANTUM_EFFECTS_H

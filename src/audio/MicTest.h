@@ -1,5 +1,8 @@
 #pragma once
 
+#include "../config/features.h"
+
+#if FEATURE_AUDIO_SYNC
 #include <Arduino.h>
 
 /**
@@ -28,3 +31,5 @@ private:
     static unsigned long lastStatusPrint;
     static float lastAudioLevel;
 };
+
+#endif // FEATURE_AUDIO_SYNC

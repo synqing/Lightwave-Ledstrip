@@ -1,6 +1,9 @@
 #ifndef OPTIMIZED_WAVEFORM_H
 #define OPTIMIZED_WAVEFORM_H
 
+#include "../../config/features.h"
+
+#if FEATURE_AUDIO_EFFECTS && FEATURE_AUDIO_SYNC
 #include <Arduino.h>
 #include <FastLED.h>
 #include "../../config/hardware_config.h"
@@ -184,5 +187,7 @@ void waveformBeat();        // Beat-synchronized waves
 
 // Initialize the wave engine
 void initWaveEngine();
+
+#endif // FEATURE_AUDIO_EFFECTS && FEATURE_AUDIO_SYNC
 
 #endif // OPTIMIZED_WAVEFORM_H

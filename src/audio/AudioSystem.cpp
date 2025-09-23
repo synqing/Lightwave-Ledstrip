@@ -1,3 +1,6 @@
+#include "../config/features.h"
+
+#if FEATURE_AUDIO_SYNC
 #include "AudioSystem.h"
 #include <FastLED.h>
 
@@ -211,8 +214,10 @@ void AudioSystem::generateMockData() {
     mockFrame.bpm_estimate = 60000.0f / beatInterval;
     
     // Transient detection (random spikes)
-    mockFrame.transient_detected = (random8() < 5) && (mockFrame.total_energy > 0.5f);
-    
-    // Never silent in mock mode
-    mockFrame.silence = false;
+mockFrame.transient_detected = (random8() < 5) && (mockFrame.total_energy > 0.5f);
+
+// Never silent in mock mode
+mockFrame.silence = false;
 }
+
+#endif // FEATURE_AUDIO_SYNC

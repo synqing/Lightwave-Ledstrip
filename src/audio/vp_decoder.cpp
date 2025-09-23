@@ -1,3 +1,6 @@
+#include "../config/features.h"
+
+#if FEATURE_AUDIO_SYNC
 #include "vp_decoder.h"
 #include <ArduinoJson.h>
 
@@ -257,11 +260,6 @@ void VPDecoder::synthesizeFrequencyBands() {
     }
 }
 
-// ================================================================================
-// NEW STREAMING PARSER METHODS FOR LARGE JSON FILES
-// ================================================================================
-
-bool VPDecoder::streamParseFile(const String& file_path) {
     Serial.println("🔄 VP Decoder: Starting streaming parse...");
     
     File file = SPIFFS.open(file_path, "r");
@@ -478,3 +476,5 @@ void VPDecoder::synthesizeFrequencyBins(float bass, float mid, float high) {
         }
     }
 }
+
+#endif // FEATURE_AUDIO_SYNC

@@ -1,3 +1,6 @@
+#include "../config/features.h"
+
+#if FEATURE_AUDIO_SYNC
 #include "MicTest.h"
 #include "i2s_mic.h"
 
@@ -164,3 +167,5 @@ bool MicTest::isMicProducingAudio() {
     
     return currentLevel > 0.01f; // Return true if any audio detected
 }
+
+#endif // FEATURE_AUDIO_SYNC

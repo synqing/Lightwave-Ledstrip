@@ -1,5 +1,8 @@
 #pragma once
 
+#include "../config/features.h"
+
+#if FEATURE_AUDIO_SYNC
 #include <Arduino.h>
 #include "vp_decoder.h"
 #include "audio_frame.h"
@@ -71,3 +74,4 @@ public:
 
 // Global instance
 extern AudioSynq audioSynq;
+#endif // FEATURE_AUDIO_SYNC

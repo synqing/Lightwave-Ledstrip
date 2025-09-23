@@ -1,3 +1,6 @@
+#include "../config/features.h"
+
+#if FEATURE_AUDIO_SYNC
 #include "GoertzelUtils.h"
 #include <math.h>
 #include <string.h>
@@ -57,3 +60,5 @@ void mapBinsToZones(int zoneCount, float* out, bool logarithmic) {
 }
 
 }  // namespace GoertzelUtils 
+
+#endif // FEATURE_AUDIO_SYNC

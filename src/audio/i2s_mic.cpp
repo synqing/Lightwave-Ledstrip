@@ -1,5 +1,9 @@
+#include "../config/features.h"
+
+#if FEATURE_AUDIO_SYNC
 #include "i2s_mic.h"
 #include <math.h>
+#include <stdlib.h>
 
 // Global instance
 I2SMic i2sMic;
@@ -79,8 +83,21 @@ bool I2SMic::begin() {
     
     // SPH0645 startup time (reduced from AP_SOT reference)
     delay(50);
-    
+
     initialized = true;
+    capturing = false;
+
+    // Reset timing metrics so latency tracking starts clean
+    lastChunkTimestampUs = 0;
+    prevChunkTimestampUs = 0;
+    lastChunkIntervalUs = 0;
+    lastChunkJitterUs = 0;
+    lastLedLatencyUs = 0;
+    lastReadDurationUs = 0;
+    timingSampleCounter = 0;
+    latencySampleCounter = 0;
+    expectedChunkIntervalUs = (SAMPLE_BUFFER_SIZE * 1000000UL) / SAMPLE_RATE;
+
     Serial.println("[I2SMic] SPH0645 ready with AP_SOT configuration");
     return true;
 }
@@ -117,14 +134,19 @@ void I2SMic::stopCapture() {
 
 void I2SMic::update() {
     if (!capturing) return;
-    
+
     // EXACT AP_SOT I2S reading with detailed debugging
     size_t bytes_read = 0;
     uint32_t* i2s_buffer = (uint32_t*)sampleBuffer;  // Cast to uint32_t like AP_SOT
-    
+
+    uint32_t readStartUs = micros();
+
     esp_err_t err = i2s_read(I2S_NUM_0, i2s_buffer, 
                             128 * sizeof(uint32_t),  // EXACT AP_SOT: 128 samples
                             &bytes_read, 100 / portTICK_PERIOD_MS);
+
+    uint32_t readEndUs = micros();
+    lastReadDurationUs = readEndUs - readStartUs;
     
     if (err != ESP_OK || bytes_read == 0) {
         static int failure_count = 0;
@@ -137,6 +159,40 @@ void I2SMic::update() {
     
     // Convert 32-bit I2S data like AP_SOT
     size_t samples_read = bytes_read / sizeof(uint32_t);
+
+    if (samples_read > 0) {
+        uint32_t expectedUs = (uint32_t)((1000000ULL * samples_read) / SAMPLE_RATE);
+        expectedChunkIntervalUs = expectedUs;
+
+        prevChunkTimestampUs = lastChunkTimestampUs;
+        lastChunkTimestampUs = readEndUs;
+
+        if (prevChunkTimestampUs != 0 && readEndUs >= prevChunkTimestampUs) {
+            lastChunkIntervalUs = readEndUs - prevChunkTimestampUs;
+            lastChunkJitterUs = (int32_t)lastChunkIntervalUs - (int32_t)expectedChunkIntervalUs;
+        } else {
+            lastChunkIntervalUs = expectedChunkIntervalUs;
+            lastChunkJitterUs = 0;
+        }
+
+        bool logTiming = false;
+        if (++timingSampleCounter >= 250) {
+            timingSampleCounter = 0;
+            logTiming = true;
+        }
+        if (abs(lastChunkJitterUs) > 200) {
+            logTiming = true;
+        }
+
+        if (logTiming) {
+            Serial.printf("TIMING|%lu|AUDIO_CHUNK_READY|interval_us=%lu|jitter_us=%ld|read_us=%lu|samples=%u\n",
+                          (unsigned long)lastChunkTimestampUs,
+                          (unsigned long)lastChunkIntervalUs,
+                          (long)lastChunkJitterUs,
+                          (unsigned long)lastReadDurationUs,
+                          (unsigned)samples_read);
+        }
+    }
     
     // EXACT AP_SOT: Debug raw I2S data (reduced frequency for cleaner output)
     static int raw_debug = 0;
@@ -201,6 +257,38 @@ void I2SMic::update() {
     float spectralData[Goertzel96::NUM_BINS];
     spectralAnalyzer.getMagnitudes(spectralData);
     audioSnapshot.update(currentFrame, spectralData, fftBins);
+}
+
+void I2SMic::markLedFrameComplete(uint32_t ledCompleteUs) {
+    if (lastChunkTimestampUs == 0 || ledCompleteUs <= lastChunkTimestampUs) {
+        return;
+    }
+
+    uint32_t latencyUs = ledCompleteUs - lastChunkTimestampUs;
+    if (latencyUs > 500000) {
+        // Ignore clearly invalid latency spikes
+        return;
+    }
+
+    lastLedLatencyUs = latencyUs;
+
+    bool logLatency = false;
+    if (++latencySampleCounter >= 250) {
+        latencySampleCounter = 0;
+        logLatency = true;
+    }
+    if (latencyUs > 4000) {
+        logLatency = true;
+    }
+
+    if (logLatency) {
+        Serial.printf("TIMING|%lu|LED_FRAME_DONE|latency_us=%lu|audio_ts=%lu|interval_us=%lu|jitter_us=%ld\n",
+                      (unsigned long)ledCompleteUs,
+                      (unsigned long)lastLedLatencyUs,
+                      (unsigned long)lastChunkTimestampUs,
+                      (unsigned long)lastChunkIntervalUs,
+                      (long)lastChunkJitterUs);
+    }
 }
 
 void I2SMic::processSamples() {
@@ -389,3 +477,5 @@ AudioFrame I2SMic::getCurrentFrame() const {
     
     return frame;
 }
+
+#endif // FEATURE_AUDIO_SYNC

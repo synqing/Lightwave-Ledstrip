@@ -1,5 +1,8 @@
 #pragma once
 
+#include "../config/features.h"
+
+#if FEATURE_AUDIO_SYNC
 #include <Arduino.h>
 #include "audio_frame_constants.h"
 
@@ -64,3 +67,4 @@ public:
 
 // Global instance
 extern FrequencyBinOptimizer g_freq_bin_optimizer;
+#endif // FEATURE_AUDIO_SYNC

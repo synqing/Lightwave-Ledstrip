@@ -1,5 +1,8 @@
 #pragma once
 
+#include "../config/features.h"
+
+#if FEATURE_AUDIO_SYNC
 #include <Arduino.h>
 #include <vector>
 #include <FS.h>
@@ -191,3 +194,5 @@ private:
     float interpolateFromBuffer(const SlidingDataBuffer<MusicalDataPoint>& buffer, float time_ms);
     void synthesizeFrequencyBands();
 };
+
+#endif // FEATURE_AUDIO_SYNC

@@ -1,6 +1,10 @@
 #ifndef LGP_AUDIO_REACTIVE_H
 #define LGP_AUDIO_REACTIVE_H
 
+#include "../../config/features.h"
+
+#if FEATURE_AUDIO_EFFECTS && FEATURE_AUDIO_SYNC
+
 // Light Guide Plate Audio-Reactive Effects
 // Combining Genesis Audio Sync with LGP interference patterns
 
@@ -50,5 +54,7 @@ void lgpAudioConvolution();
 
 // Neural network beat prediction
 void lgpNeuralBeatPredict();
+
+#endif // FEATURE_AUDIO_EFFECTS && FEATURE_AUDIO_SYNC
 
 #endif // LGP_AUDIO_REACTIVE_H

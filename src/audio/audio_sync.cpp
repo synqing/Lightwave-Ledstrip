@@ -1,3 +1,6 @@
+#include "../config/features.h"
+
+#if FEATURE_AUDIO_SYNC
 #include "audio_sync.h"
 #include <SPIFFS.h>
 
@@ -29,8 +32,8 @@ bool AudioSynq::loadAudioData(const String& filename) {
     // Check if file exists
     if (!SPIFFS.exists(filename)) {
         Serial.printf("[AudioSynq] File not found: %s\n", filename.c_str());
-        return false;
-    }
+    return false;
+}
     
     // Check file size to determine loading method
     File file = SPIFFS.open(filename, "r");
@@ -184,3 +187,5 @@ void AudioSynq::setAudioSource(bool useMicrophone) {
         currentSource = SOURCE_VP_DECODER;
     }
 }
+
+#endif // FEATURE_AUDIO_SYNC

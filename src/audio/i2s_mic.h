@@ -1,5 +1,8 @@
 #pragma once
 
+#include "../config/features.h"
+
+#if FEATURE_AUDIO_SYNC
 #include <Arduino.h>
 #include <driver/i2s.h>
 #include "audio_frame.h"
@@ -61,7 +64,18 @@ private:
     
     // Goertzel spectral analyzer
     Goertzel96 spectralAnalyzer;
-    
+
+    // Timing metrics
+    uint32_t lastChunkTimestampUs = 0;
+    uint32_t prevChunkTimestampUs = 0;
+    uint32_t lastChunkIntervalUs = 0;
+    int32_t lastChunkJitterUs = 0;
+    uint32_t expectedChunkIntervalUs = (SAMPLE_BUFFER_SIZE * 1000000UL) / SAMPLE_RATE;
+    uint32_t lastReadDurationUs = 0;
+    uint32_t lastLedLatencyUs = 0;
+    uint32_t timingSampleCounter = 0;
+    uint32_t latencySampleCounter = 0;
+
 public:
     I2SMic() = default;
     ~I2SMic();
@@ -97,7 +111,16 @@ public:
     // Configuration
     void setBeatThreshold(float threshold) { beatThreshold = constrain(threshold, 1.0f, 3.0f); }
     float getBeatThreshold() const { return beatThreshold; }
-    
+
+    // Timing instrumentation
+    uint32_t getLastChunkTimestampUs() const { return lastChunkTimestampUs; }
+    uint32_t getLastChunkIntervalUs() const { return lastChunkIntervalUs; }
+    int32_t getLastChunkJitterUs() const { return lastChunkJitterUs; }
+    uint32_t getExpectedChunkIntervalUs() const { return expectedChunkIntervalUs; }
+    uint32_t getLastLedLatencyUs() const { return lastLedLatencyUs; }
+    uint32_t getLastReadDurationUs() const { return lastReadDurationUs; }
+    void markLedFrameComplete(uint32_t ledCompleteUs);
+
 private:
     // Process audio samples
     void processSamples();
@@ -114,3 +137,4 @@ private:
 
 // Global instance
 extern I2SMic i2sMic;
+#endif // FEATURE_AUDIO_SYNC

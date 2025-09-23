@@ -16,6 +16,7 @@
 
 #if FEATURE_PERFORMANCE_MONITOR
 #include "utils/PerformanceOptimizer.h"
+#include "hardware/PerformanceMonitor.h"
 #endif
 
 // #include "core/AudioRenderTask.h"  // DISABLED - Audio system removed
@@ -30,6 +31,7 @@
 #include "audio/audio_effects.h"
 #include "audio/MicTest.h"
 #include "audio/GoertzelUtils.h"
+#include "audio/i2s_mic.h"
 #endif
 
 
@@ -67,6 +69,8 @@ uint8_t previousEffect = 0;
 uint32_t lastButtonPress = 0;
 uint8_t fadeAmount = 20;
 uint8_t paletteSpeed = 10;
+uint16_t fps = HardwareConfig::DEFAULT_FPS;
+uint8_t brightnessVal = HardwareConfig::STRIP_BRIGHTNESS;
 
 // Universal visual parameters for encoders 4-7
 VisualParams visualParams;
@@ -75,6 +79,10 @@ VisualParams visualParams;
 TransitionEngine transitionEngine(HardwareConfig::NUM_LEDS);
 CRGB transitionSourceBuffer[HardwareConfig::NUM_LEDS];
 bool useRandomTransitions = true;
+
+#if FEATURE_PERFORMANCE_MONITOR
+PerformanceMonitor perfMon;
+#endif
 
 // Visual Feedback System
 EncoderLEDFeedback* encoderFeedback = nullptr;
@@ -153,7 +161,9 @@ extern void gravityWellEffect();
 extern void lgpFFTColorMap();
 extern void lgpHarmonicResonance();
 extern void lgpStereoPhasePattern();
+#if FEATURE_AUDIO_EFFECTS && FEATURE_AUDIO_SYNC
 extern void spectrumLightshowEngine();
+#endif
 
 // Include effects header
 #include "effects.h"
@@ -224,6 +234,11 @@ Effect effects[] = {
     {"LGP Gravitational Lens", lgpGravitationalLensing, EFFECT_TYPE_STANDARD},
     {"LGP Time Crystal", lgpTimeCrystal, EFFECT_TYPE_STANDARD},
     {"LGP Metamaterial Cloak", lgpMetamaterialCloaking, EFFECT_TYPE_STANDARD},
+    {"LGP GRIN Cloak", lgpGrinCloak, EFFECT_TYPE_STANDARD},
+    {"LGP Caustic Fan", lgpCausticFan, EFFECT_TYPE_STANDARD},
+    {"LGP Birefringent Shear", lgpBirefringentShear, EFFECT_TYPE_STANDARD},
+    {"LGP Anisotropic Cloak", lgpAnisotropicCloak, EFFECT_TYPE_STANDARD},
+    {"LGP Evanescent Skin", lgpEvanescentSkin, EFFECT_TYPE_STANDARD},
     
     // =============== LGP COLOR MIXING EFFECTS ===============
     {"LGP Chromatic Aberration", lgpChromaticAberration, EFFECT_TYPE_STANDARD},
@@ -238,7 +253,7 @@ Effect effects[] = {
     {"LGP Laser Duel", lgpLaserDuel, EFFECT_TYPE_STANDARD},
     {"LGP Tidal Forces", lgpTidalForces, EFFECT_TYPE_STANDARD},
     
-#if FEATURE_AUDIO_SYNC
+#if FEATURE_AUDIO_SYNC && FEATURE_AUDIO_EFFECTS
     // =============== AUDIO REACTIVE EFFECTS ===============
     {"Spectrum LS Engine", spectrumLightshowEngine, EFFECT_TYPE_STANDARD},
 #endif
@@ -456,7 +471,11 @@ void setup() {
     FastLED.addLeds<LED_TYPE, HardwareConfig::STRIP2_DATA_PIN, COLOR_ORDER>(
         strip2, HardwareConfig::STRIP2_LED_COUNT);
     FastLED.setBrightness(HardwareConfig::STRIP_BRIGHTNESS);
-    
+
+#if FEATURE_PERFORMANCE_MONITOR
+    perfMon.begin(HardwareConfig::DEFAULT_FPS);
+#endif
+
     Serial.println("Dual strip FastLED initialized");
     
     // Create I2C mutex for thread-safe operations
@@ -467,14 +486,43 @@ void setup() {
         Serial.println("I2C mutex created for thread-safe operations");
     }
     
-    // Initialize I2C bus with scroll encoder pins (since 8encoder is disabled)
-    Wire.begin(HardwareConfig::I2C_SDA_SCROLL, HardwareConfig::I2C_SCL_SCROLL);
+    // Utility to release any devices holding SDA/SCL low
+    auto flushI2CPort = [](uint8_t sdaPin, uint8_t sclPin) {
+        pinMode(sdaPin, INPUT_PULLUP);
+        pinMode(sclPin, INPUT_PULLUP);
+        delay(5);
+
+        pinMode(sclPin, OUTPUT);
+        for (int i = 0; i < 9; ++i) {
+            digitalWrite(sclPin, LOW);
+            delayMicroseconds(4);
+            digitalWrite(sclPin, HIGH);
+            delayMicroseconds(4);
+        }
+
+        pinMode(sdaPin, OUTPUT);
+        digitalWrite(sdaPin, LOW);
+        delayMicroseconds(4);
+        digitalWrite(sclPin, HIGH);
+        delayMicroseconds(4);
+        digitalWrite(sdaPin, HIGH);
+
+        pinMode(sdaPin, INPUT_PULLUP);
+        pinMode(sclPin, INPUT_PULLUP);
+        delay(5);
+    };
+
+    // Initialize I2C bus with primary 8Encoder pins
+    flushI2CPort(HardwareConfig::I2C_SDA, HardwareConfig::I2C_SCL);
+    delay(10);
+    Wire.begin(HardwareConfig::I2C_SDA, HardwareConfig::I2C_SCL);
     Wire.setClock(400000);  // 400kHz
+    delay(10);
     
     // Scan I2C bus to see what's connected
     Serial.println("\n🔍 Scanning I2C bus...");
     Serial.printf("   SDA: GPIO%d, SCL: GPIO%d\n", 
-                  HardwareConfig::I2C_SDA_SCROLL, HardwareConfig::I2C_SCL_SCROLL);
+                  HardwareConfig::I2C_SDA, HardwareConfig::I2C_SCL);
     byte error, address;
     int nDevices = 0;
     for(address = 1; address < 127; address++) {
@@ -484,8 +532,8 @@ void setup() {
             Serial.print("   Found device at 0x");
             if (address < 16) Serial.print("0");
             Serial.print(address, HEX);
-            if (address == 0x40) Serial.print(" (M5Unit-Scroll)");
-            else if (address == 0x41) Serial.print(" (M5Stack 8Encoder)");
+            if (address == HardwareConfig::M5STACK_8ENCODER_ADDR) Serial.print(" (M5Stack 8Encoder)");
+            else if (address == HardwareConfig::M5UNIT_SCROLL_ADDR) Serial.print(" (M5Unit-Scroll)");
             Serial.println();
             nDevices++;
         }
@@ -497,85 +545,81 @@ void setup() {
     }
     Serial.println();
     
-    // Initialize M5Unit-Scroll encoder manager
+    // Configure scroll manager callbacks (used for parameter state even without hardware)
+    scrollManager.setParamChangeCallback([](ScrollParameter param, uint8_t value) {
+        switch (param) {
+            case PARAM_BRIGHTNESS:
+                FastLED.setBrightness(value);
+                brightnessVal = value;
+                Serial.printf("Brightness: %d\n", value);
+                break;
+            case PARAM_PALETTE:
+                currentPaletteIndex = value % gGradientPaletteCount;
+                targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
+                Serial.printf("Palette: %d\n", currentPaletteIndex);
+                break;
+            case PARAM_SPEED:
+                paletteSpeed = value / 4;  // Scale to reasonable range
+                Serial.printf("Speed: %d\n", paletteSpeed);
+                break;
+            default:
+                // Other parameters are handled by updateVisualParams
+                break;
+        }
+    });
+
+    scrollManager.setEffectChangeCallback([](uint8_t newEffect) {
+        if (newEffect >= NUM_EFFECTS) {
+            Serial.printf("❌ Invalid effect index: %d\n", newEffect);
+            return;
+        }
+        if (newEffect != currentEffect) {
+            startAdvancedTransition(newEffect);
+            Serial.printf("🎨 Scroll: Effect changed to %s\n", effects[newEffect].name);
+        }
+    });
+
+    Serial.println();
+
+#if FEATURE_ROTATE8_ENCODER
+    if (encoderManager.begin()) {
+        if (encoderManager.isAvailable()) {
+            M5ROTATE8* encoder = encoderManager.getEncoder();
+            if (encoder) {
+                encoderFeedback = new EncoderLEDFeedback(encoder, &visualParams);
+                encoderFeedback->applyDefaultColorScheme();
+                Serial.println("✅ Visual Feedback System initialized");
+            }
+        } else {
+            Serial.println("⚠️  8Encoder detected but not yet available - background task will retry");
+        }
+    } else {
+        Serial.println("❌ Failed to initialize 8Encoder management task");
+    }
+#endif
+
+#if FEATURE_SCROLL_ENCODER
+    // Attempt to initialize scroll encoder after 8Encoder has been configured
+    flushI2CPort(HardwareConfig::I2C_SDA_SCROLL, HardwareConfig::I2C_SCL_SCROLL);
+    delay(10);
     if (scrollManager.begin()) {
         Serial.println("✅ Scroll encoder system initialized");
-        
-        // Set up callbacks to handle parameter changes
-        scrollManager.setParamChangeCallback([](ScrollParameter param, uint8_t value) {
-            switch (param) {
-                case PARAM_BRIGHTNESS:
-                    FastLED.setBrightness(value);
-                    Serial.printf("Brightness: %d\n", value);
-                    break;
-                case PARAM_PALETTE:
-                    currentPaletteIndex = value % gGradientPaletteCount;
-                    targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
-                    Serial.printf("Palette: %d\n", currentPaletteIndex);
-                    break;
-                case PARAM_SPEED:
-                    paletteSpeed = value / 4;  // Scale to reasonable range
-                    Serial.printf("Speed: %d\n", paletteSpeed);
-                    break;
-                default:
-                    // Other parameters are handled by updateVisualParams
-                    break;
-            }
-        });
-        
-        // Set up effect change callback
-        scrollManager.setEffectChangeCallback([](uint8_t newEffect) {
-            // Validate effect index
-            if (newEffect >= NUM_EFFECTS) {
-                Serial.printf("❌ Invalid effect index: %d\n", newEffect);
-                return;
-            }
-            
-            // Only transition if different
-            if (newEffect != currentEffect) {
-                startAdvancedTransition(newEffect);
-                Serial.printf("🎨 Scroll: Effect changed to %s\n", 
-                             effects[newEffect].name);
-                
-                // Update audio/render task
-                // audioRenderTask.setEffectCallback(effectUpdateCallback);  // DISABLED - Audio removed
-            }
-        });
-        
-        // Synchronize initial state with current system values
-        scrollManager.setParamValue(PARAM_BRIGHTNESS, FastLED.getBrightness());
-        scrollManager.setParamValue(PARAM_PALETTE, currentPaletteIndex);
-        scrollManager.setParamValue(PARAM_SPEED, paletteSpeed * 4);
-        scrollManager.setParamValue(PARAM_INTENSITY, visualParams.intensity);
-        scrollManager.setParamValue(PARAM_SATURATION, visualParams.saturation);
-        scrollManager.setParamValue(PARAM_COMPLEXITY, visualParams.complexity);
-        scrollManager.setParamValue(PARAM_VARIATION, visualParams.variation);
     } else {
         Serial.println("⚠️  Scroll encoder not found - continuing without it");
     }
-    
-    // Commenting out M5Stack 8encoder initialization
-    /*
-    // Initialize I2C and M5ROTATE8 with dedicated task architecture
-    Wire.begin(HardwareConfig::I2C_SDA, HardwareConfig::I2C_SCL);
-    Wire.setClock(400000);  // Max supported speed (400 KHz)
-    
-    // M5ROTATE8 encoder disabled - using scroll encoder only
-    /*
-    // Initialize encoder manager
-    encoderManager.begin();
-    
-    // Initialize Visual Feedback System
-    if (encoderManager.isAvailable()) {
-        M5ROTATE8* encoder = encoderManager.getEncoder();
-        if (encoder) {
-            encoderFeedback = new EncoderLEDFeedback(encoder, &visualParams);
-            encoderFeedback->applyDefaultColorScheme();
-            Serial.println("✅ Visual Feedback System initialized");
-        }
-    }
-    */
-    
+#else
+    Serial.println("ℹ️ Scroll encoder disabled in firmware - using 8Encoder only");
+#endif
+
+    // Synchronize initial state with current system values
+    scrollManager.setParamValue(PARAM_BRIGHTNESS, FastLED.getBrightness());
+    scrollManager.setParamValue(PARAM_PALETTE, currentPaletteIndex);
+    scrollManager.setParamValue(PARAM_SPEED, paletteSpeed * 4);
+    scrollManager.setParamValue(PARAM_INTENSITY, visualParams.intensity);
+    scrollManager.setParamValue(PARAM_SATURATION, visualParams.saturation);
+    scrollManager.setParamValue(PARAM_COMPLEXITY, visualParams.complexity);
+    scrollManager.setParamValue(PARAM_VARIATION, visualParams.variation);
+
     // Preset Management System - DISABLED FOR NOW
     // Will be re-enabled once basic transitions work
     
@@ -846,6 +890,7 @@ void adjustCurrentParameter(int8_t direction) {
         case PARAM_BRIGHTNESS:
             newValue = constrain(currentValue + (direction * 4), 0, 255);
             FastLED.setBrightness(newValue);
+            brightnessVal = newValue;
             break;
             
         case PARAM_PALETTE:
@@ -987,6 +1032,10 @@ void loop() {
         maxFrameTime = 0;
         minFrameTime = 999999;
     }
+
+#if FEATURE_PERFORMANCE_MONITOR
+    perfMon.startFrame();
+#endif
     loopCounter++;
     
     // Track frame time statistics
@@ -1131,15 +1180,14 @@ void loop() {
         }
     }
 
-    // Update scroll encoder
+    // Update scroll encoder (if attached)
+#if FEATURE_SCROLL_ENCODER
     scrollManager.update();
-    
-    // Update visual parameters from scroll encoder
     scrollManager.updateVisualParams(visualParams);
-    
+#endif
+
+#if FEATURE_ROTATE8_ENCODER
     // Process encoder events from I2C task (NON-BLOCKING)
-    // Commented out - using scroll encoder instead
-    /*
     QueueHandle_t encoderEventQueue = encoderManager.getEventQueue();
     if (encoderEventQueue != NULL) {
         EncoderEvent event;
@@ -1162,10 +1210,8 @@ void loop() {
                 if (newEffect != currentEffect) {
                     startAdvancedTransition(newEffect);
                     Serial.printf("🎨 MAIN: Effect changed to %s (index %d)\n", effects[currentEffect].name, currentEffect);
-                    
-                    // Update the effect callback in the audio/render task
-                    // audioRenderTask.setEffectCallback(effectUpdateCallback);  // DISABLED - Audio removed
-                    
+                    scrollManager.setParamValue(PARAM_EFFECT, newEffect);
+
                     // Log mode transition if effect type changed
                     if (effects[newEffect].type != effects[currentEffect].type) {
                         Serial.printf("🔄 MAIN: Encoder mode switched to %s\n", 
@@ -1185,7 +1231,9 @@ void loop() {
                             int brightness = FastLED.getBrightness() + (event.delta > 0 ? 16 : -16);
                             brightness = constrain(brightness, 16, 255);
                             FastLED.setBrightness(brightness);
+                            brightnessVal = brightness;
                             Serial.printf("💡 MAIN: Brightness changed to %d\n", brightness);
+                            scrollManager.setParamValue(PARAM_BRIGHTNESS, brightness);
                             // if (encoderFeedback) encoderFeedback->flashEncoder(1, 255, 255, 255, 200);
                         }
                         break;
@@ -1198,6 +1246,7 @@ void loop() {
                         }
                         targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
                         Serial.printf("🎨 MAIN: Palette changed to %d\n", currentPaletteIndex);
+                        scrollManager.setParamValue(PARAM_PALETTE, currentPaletteIndex);
                         // if (encoderFeedback) encoderFeedback->flashEncoder(2, 255, 0, 255, 200);
                         break;
                         
@@ -1205,39 +1254,52 @@ void loop() {
                         paletteSpeed = constrain(paletteSpeed + (event.delta > 0 ? 2 : -2), 1, 50);
                         Serial.printf("⚡ MAIN: Speed changed to %d\n", paletteSpeed);
                         if (encoderFeedback) encoderFeedback->flashEncoder(3, 255, 255, 0, 200);
+                        scrollManager.setParamValue(PARAM_SPEED, constrain(paletteSpeed * 4, 0, 255));
                         break;
                         
                     case 4: // Intensity/Amplitude
                         visualParams.intensity = constrain(visualParams.intensity + (event.delta > 0 ? 4 : -4), 0, 255);
                         Serial.printf("🔥 MAIN: Intensity changed to %d (%.1f%%)\n", visualParams.intensity, visualParams.getIntensityNorm() * 100);
                         if (encoderFeedback) encoderFeedback->flashEncoder(4, 255, 128, 0, 200);
+                        scrollManager.setParamValue(PARAM_INTENSITY, visualParams.intensity);
                         break;
                         
                     case 5: // Saturation
                         visualParams.saturation = constrain(visualParams.saturation + (event.delta > 0 ? 4 : -4), 0, 255);
                         Serial.printf("🎨 MAIN: Saturation changed to %d (%.1f%%)\n", visualParams.saturation, visualParams.getSaturationNorm() * 100);
                         if (encoderFeedback) encoderFeedback->flashEncoder(5, 0, 255, 255, 200);
+                        scrollManager.setParamValue(PARAM_SATURATION, visualParams.saturation);
                         break;
                         
                     case 6: // Complexity/Detail
                         visualParams.complexity = constrain(visualParams.complexity + (event.delta > 0 ? 4 : -4), 0, 255);
                         Serial.printf("✨ MAIN: Complexity changed to %d (%.1f%%)\n", visualParams.complexity, visualParams.getComplexityNorm() * 100);
                         if (encoderFeedback) encoderFeedback->flashEncoder(6, 128, 255, 0, 200);
+                        scrollManager.setParamValue(PARAM_COMPLEXITY, visualParams.complexity);
                         break;
                         
                     case 7: // Variation/Mode
                         visualParams.variation = constrain(visualParams.variation + (event.delta > 0 ? 4 : -4), 0, 255);
                         Serial.printf("🔄 MAIN: Variation changed to %d (%.1f%%)\n", visualParams.variation, visualParams.getVariationNorm() * 100);
                         if (encoderFeedback) encoderFeedback->flashEncoder(7, 255, 0, 255, 200);
+                        scrollManager.setParamValue(PARAM_VARIATION, visualParams.variation);
                         break;
                 }
             }
         }
     }
     
+#endif // FEATURE_ROTATE8_ENCODER
+
 #if FEATURE_SERIAL_MENU
     // Process serial commands for full system control
+#if FEATURE_PERFORMANCE_MONITOR
+    perfMon.startSection();
+#endif
     serialMenu.update();
+#if FEATURE_PERFORMANCE_MONITOR
+    perfMon.endSerialProcessing();
+#endif
 #endif
     
     // Update palette blending
@@ -1282,14 +1344,29 @@ void loop() {
         }
 #endif
     }
-    */  // End of commented out encoderManager block
     
     // Call render callbacks directly (audio/render task disabled)
+#if FEATURE_PERFORMANCE_MONITOR
+    perfMon.startSection();
+#endif
     effectUpdateCallback();  // Run the current effect
     renderUpdateCallback();  // Handle transitions
+#if FEATURE_PERFORMANCE_MONITOR
+    perfMon.endEffectProcessing();
+#endif
     
     // Show LEDs (audio/render task disabled)
+#if FEATURE_PERFORMANCE_MONITOR
+    perfMon.startSection();
+#endif
     FastLED.show();
+#if FEATURE_PERFORMANCE_MONITOR
+    perfMon.endFastLEDShow();
+#endif
+
+#if FEATURE_AUDIO_SYNC
+    i2sMic.markLedFrameComplete(micros());
+#endif
     
     // Advance the global hue
     EVERY_N_MILLISECONDS(20) {
@@ -1368,6 +1445,10 @@ void loop() {
     }
     
     
+#if FEATURE_PERFORMANCE_MONITOR
+    perfMon.endFrame();
+#endif
+
     // NO DELAY - Run at maximum possible FPS for best performance
     // The ESP32-S3 and FastLED will naturally limit to a sustainable rate
     // Removing artificial delays allows the system to run at its full potential

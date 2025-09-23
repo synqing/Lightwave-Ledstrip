@@ -1,6 +1,10 @@
 #ifndef AUDIO_SNAPSHOT_H
 #define AUDIO_SNAPSHOT_H
 
+#include "../config/features.h"
+
+#if FEATURE_AUDIO_SYNC
+
 #include <Arduino.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
@@ -175,5 +179,7 @@ public:
 
 // Global audio snapshot instance
 extern AudioSnapshot audioSnapshot;
+
+#endif // FEATURE_AUDIO_SYNC
 
 #endif // AUDIO_SNAPSHOT_H

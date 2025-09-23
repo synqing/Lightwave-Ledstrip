@@ -17,8 +17,8 @@ namespace HardwareConfig {
     constexpr uint8_t NUM_STRIPS = 2;
     
     // GPIO Pin Assignment
-    constexpr uint8_t STRIP1_DATA_PIN = 7;    // Channel 1 (primary) - Changed from 8
-    constexpr uint8_t STRIP2_DATA_PIN = 8;    // Channel 2 (opposite) - Changed from 9
+    constexpr uint8_t STRIP1_DATA_PIN = 9;    // Channel 1 (primary) - GPIO 9
+    constexpr uint8_t STRIP2_DATA_PIN = 10;   // Channel 2 (opposite) - GPIO 10
     constexpr uint8_t LED_DATA_PIN = STRIP1_DATA_PIN;  // Backward compatibility
     
     // Physical Layout Constants
@@ -64,8 +64,8 @@ namespace HardwareConfig {
     
     // Encoder Hardware Configuration
     // M5Stack 8encoder I2C configuration (Primary I2C bus)
-    constexpr uint8_t I2C_SDA = 10;
-    constexpr uint8_t I2C_SCL = 11;
+    constexpr uint8_t I2C_SDA = 3;   // M5Stack 8encoder SDA
+    constexpr uint8_t I2C_SCL = 4;   // M5Stack 8encoder SCL
     constexpr uint8_t M5STACK_8ENCODER_ADDR = 0x41;  // Default I2C address
     
     // M5Unit-Scroll I2C configuration (Secondary pins for scroll encoder)

@@ -1,3 +1,6 @@
+#include "../../config/features.h"
+
+#if FEATURE_AUDIO_EFFECTS && FEATURE_AUDIO_SYNC
 #include "OptimizedWaveform.h"
 
 // External dependencies
@@ -196,3 +199,5 @@ void waveformOscilloscope() {
     strip1[HardwareConfig::STRIP_CENTER_POINT + 1] += CRGB(0, 32, 0);
     strip2[HardwareConfig::STRIP_CENTER_POINT + 1] += CRGB(0, 32, 0);
 }
+
+#endif // FEATURE_AUDIO_EFFECTS && FEATURE_AUDIO_SYNC

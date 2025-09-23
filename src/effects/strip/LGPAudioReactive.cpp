@@ -1,3 +1,7 @@
+#include "../../config/features.h"
+
+#if FEATURE_AUDIO_EFFECTS && FEATURE_AUDIO_SYNC
+
 #include "LGPAudioReactive.h"
 #include <FastLED.h>
 #include "../../audio/audio_sync.h"
@@ -23,8 +27,6 @@ void shockwaveEffect();
 inline uint8_t audioToBrightness(float energy, float scale = 1.0f) {
     return constrain(energy * 255.0f * scale, 0, 255);
 }
-
-// Helper function to map frequency to hue
 inline uint8_t freqToHue(float freq) {
     // Map 20Hz-20kHz to full hue spectrum
     if (freq <= 0.0f) return 0;  // Safety check
@@ -33,7 +35,6 @@ inline uint8_t freqToHue(float freq) {
 }
 
 // ========== FREQUENCY-BASED EFFECTS ==========
-
 void lgpFrequencyCollision() {
     if (!AudioSync.isRealAudioActive()) {
         // Fallback to static pattern
@@ -511,3 +512,5 @@ void lgpNeuralBeatPredict() {
     
     beatPhase += 0.02f;
 }
+
+#endif // FEATURE_AUDIO_EFFECTS && FEATURE_AUDIO_SYNC

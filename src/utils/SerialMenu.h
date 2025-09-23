@@ -5,24 +5,27 @@
 #include <FastLED.h>
 #include "../config/hardware_config.h"
 #include "../config/features.h"
-// #include "../core/FxEngine.h"  // Disabled for now due to conflicts
-// #include "../core/PaletteManager.h"  // Disabled for now
-// #include "../hardware/PerformanceMonitor.h"  // Disabled for now
+#include "SerialFxEngine.h"
+#if FEATURE_PERFORMANCE_MONITOR
+#include "../hardware/PerformanceMonitor.h"
+#endif
 
 // External variables
-// extern FxEngine fxEngine;  // Disabled due to conflicts
+extern SerialFxEngine fxEngine;
 // extern PaletteManager paletteManager;  // Disabled for now
 extern uint8_t brightnessVal;
 extern uint8_t fadeAmount;
 extern uint16_t fps;
 extern uint8_t paletteSpeed;
-// extern PerformanceMonitor perfMon;  // Disabled for now
+#if FEATURE_PERFORMANCE_MONITOR
+extern PerformanceMonitor perfMon;
+#endif
 
 // Palette system
 extern CRGBPalette16 currentPalette;
 extern CRGBPalette16 targetPalette;
 extern uint8_t currentPaletteIndex;
-extern const char* paletteNames[];
+extern const char* const paletteNames[];
 extern const TProgmemRGBGradientPaletteRef gGradientPalettes[];
 extern const uint8_t gGradientPaletteCount;
 
@@ -30,6 +33,7 @@ extern const uint8_t gGradientPaletteCount;
 class DummyWave2D {
 public:
     uint8_t getNumActiveSources() { return 0; }
+    float getTimeScale() { return 1.0f; }
 };
 extern DummyWave2D fxWave2D;
 

@@ -2,6 +2,7 @@
 // Mind-bending optical effects based on quantum mechanics and exotic physics
 // Designed to exploit Light Guide Plate interference for otherworldly visuals
 
+#include <algorithm>
 #include <FastLED.h>
 #include "../../config/hardware_config.h"
 #include "../../core/EffectTypes.h"
@@ -494,6 +495,252 @@ void lgpMetamaterialCloaking() {
     }
     
     // Sync to unified buffer
+    memcpy(leds, strip1, sizeof(CRGB) * HardwareConfig::STRIP_LENGTH);
+    memcpy(&leds[HardwareConfig::STRIP_LENGTH], strip2, sizeof(CRGB) * HardwareConfig::STRIP_LENGTH);
+}
+
+// ============== GRADIENT-INDEX (GRIN) CLOAK ==============
+// Smooth gradient refractive profile emulating GRIN optics
+void lgpGrinCloak() {
+    static uint16_t time = 0;
+    static float cloakPos = HardwareConfig::STRIP_CENTER_POINT;
+    static float cloakVel = 0.35f;
+
+    time += paletteSpeed >> 1;
+
+    float intensityNorm   = visualParams.getIntensityNorm();
+    float saturationNorm  = visualParams.getSaturationNorm();
+    float complexityNorm  = visualParams.getComplexityNorm();
+    float variationNorm   = visualParams.getVariationNorm();
+
+    float cloakRadius = 8.0f + complexityNorm * 20.0f;         // 8 – 28 px
+    float exponent    = 1.0f + variationNorm * 3.0f;            // lens gradient profile
+    float gradient    = 0.3f + intensityNorm * 1.7f;            // index magnitude
+
+    cloakPos += cloakVel;
+    if (cloakPos < cloakRadius || cloakPos > HardwareConfig::STRIP_LENGTH - cloakRadius) {
+        cloakVel = -cloakVel;
+    }
+
+    for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+        float dist = fabsf((float)i - cloakPos);
+        float norm = (cloakRadius > 0.001f) ? (dist / cloakRadius) : 0.0f;
+        norm = constrain(norm, 0.0f, 1.0f);
+
+        // Smooth GRIN displacement
+        float lensStrength = gradient * powf(norm, exponent);
+        float direction = (i < cloakPos) ? -1.0f : 1.0f;
+        float sample = (float)i + direction * lensStrength * cloakRadius * 0.6f;
+        sample = constrain(sample, 0.0f, (float)(HardwareConfig::STRIP_LENGTH - 1));
+
+        uint8_t wave = sin8((int16_t)(sample * 4.0f) + (time >> 2));
+
+        float focusGain = 1.0f + (1.0f - norm) * gradient * 0.3f;
+        float brightnessF = wave * focusGain;
+
+        // Hide centre to maintain “cloak” transparency
+        if (norm < 0.3f) {
+            brightnessF *= norm / 0.3f;
+        }
+
+        // Highlight rim
+        if (fabsf(norm - 1.0f) < 0.08f) {
+            brightnessF = 255.0f;
+        }
+
+        uint8_t brightness = (uint8_t)constrain(brightnessF, 0.0f, 255.0f);
+        uint8_t hue        = gHue + (uint8_t)(sample * 1.5f);
+
+        strip1[i] = CHSV(hue,             (uint8_t)(saturationNorm * 255.0f), brightness);
+        strip2[i] = CHSV(hue + 128,       (uint8_t)(saturationNorm * 255.0f), brightness);
+    }
+
+    memcpy(leds, strip1, sizeof(CRGB) * HardwareConfig::STRIP_LENGTH);
+    memcpy(&leds[HardwareConfig::STRIP_LENGTH], strip2, sizeof(CRGB) * HardwareConfig::STRIP_LENGTH);
+}
+
+// ============== CAUSTIC FAN ==============
+// Two virtual focusing fans creating drifting caustic envelopes
+void lgpCausticFan() {
+    static uint16_t time = 0;
+    time += paletteSpeed >> 2;
+
+    float intensityNorm   = visualParams.getIntensityNorm();
+    float saturationNorm  = visualParams.getSaturationNorm();
+    float complexityNorm  = visualParams.getComplexityNorm();
+    float variationNorm   = visualParams.getVariationNorm();
+
+    float curvature   = 0.6f + complexityNorm * 2.4f;                // controls caustic curvature
+    float separation  = 0.5f + variationNorm * 2.0f;                 // fan separation / asymmetry
+    float gain        = 4.0f  + intensityNorm * 16.0f;               // caustic brightness gain
+    float animPhase   = time / 256.0f;
+
+    for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+        float x = (float)i - HardwareConfig::STRIP_CENTER_POINT;
+
+        float def1 = curvature * (x - separation) + sinf(animPhase);
+        float def2 = -curvature * (x + separation) + sinf(animPhase * 1.21f);
+        float diff = fabsf(def1 - def2);
+
+        float caustic = 1.0f / (1.0f + diff * diff * gain);          // sharp where diff ~ 0
+        float envelope = 1.0f / (1.0f + fabsf(x) * 0.08f);           // fade towards edges
+        float brightnessF = caustic * envelope * 255.0f;
+
+        // Add subtle wave motion so background still moves
+        brightnessF = constrain(brightnessF + (sin8(i * 3 + (time >> 2)) >> 2), 0, 255);
+
+        uint8_t brightness = (uint8_t)brightnessF;
+        uint8_t hue        = gHue + (uint8_t)(x * 1.5f) + (time >> 4);
+
+        strip1[i] = CHSV(hue,             (uint8_t)(saturationNorm * 255.0f), brightness);
+        strip2[i] = CHSV(hue + 96,        (uint8_t)(saturationNorm * 255.0f), brightness);
+    }
+
+    memcpy(leds, strip1, sizeof(CRGB) * HardwareConfig::STRIP_LENGTH);
+    memcpy(&leds[HardwareConfig::STRIP_LENGTH], strip2, sizeof(CRGB) * HardwareConfig::STRIP_LENGTH);
+}
+
+// ============== BIREFRINGENT SHEAR ==============
+// Dual spatial modes slipping past one another
+void lgpBirefringentShear() {
+    static uint16_t time = 0;
+    time += paletteSpeed >> 1;
+
+    float intensityNorm   = visualParams.getIntensityNorm();
+    float saturationNorm  = visualParams.getSaturationNorm();
+    float complexityNorm  = visualParams.getComplexityNorm();
+    float variationNorm   = visualParams.getVariationNorm();
+
+    float baseFrequency = 3.5f;
+    float deltaK        = 0.2f + complexityNorm * 3.0f;               // mode separation
+    float drift         = (variationNorm * 2.0f - 1.0f) * 0.8f;        // shear direction
+
+    uint8_t mixWave    = (uint8_t)(intensityNorm * 255.0f);
+    uint8_t mixCarrier = 255 - mixWave;
+
+    for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+        float idx = (float)i;
+
+        float phaseBase = time / 128.0f;
+        float phase1 = idx * (baseFrequency + deltaK) + phaseBase;
+        float phase2 = idx * (baseFrequency - deltaK) - phaseBase + drift * idx * 0.05f;
+
+        uint8_t wave1 = sin8((int16_t)(phase1 * 16.0f));
+        uint8_t wave2 = sin8((int16_t)(phase2 * 16.0f));
+
+        uint8_t combined = qadd8(scale8(wave1, mixCarrier), scale8(wave2, mixWave));
+        uint8_t beat     = (uint8_t)abs((int)wave1 - (int)wave2);
+        uint8_t brightness = qadd8(combined, scale8(beat, 96));
+
+        uint8_t hue1 = gHue + (uint8_t)(idx) + (time >> 4);
+        uint8_t hue2 = hue1 + 128;
+
+        strip1[i] = CHSV(hue1, (uint8_t)(saturationNorm * 255.0f), brightness);
+        strip2[i] = CHSV(hue2, (uint8_t)(saturationNorm * 255.0f), brightness);
+    }
+
+    memcpy(leds, strip1, sizeof(CRGB) * HardwareConfig::STRIP_LENGTH);
+    memcpy(&leds[HardwareConfig::STRIP_LENGTH], strip2, sizeof(CRGB) * HardwareConfig::STRIP_LENGTH);
+}
+
+// ============== ANISOTROPIC CLOAK ==============
+// Directionally biased refractive shell
+void lgpAnisotropicCloak() {
+    static uint16_t time = 0;
+    static float cloakPos = HardwareConfig::STRIP_CENTER_POINT;
+    static float cloakVel = 0.45f;
+
+    time += paletteSpeed >> 2;
+
+    float intensityNorm   = visualParams.getIntensityNorm();
+    float saturationNorm  = visualParams.getSaturationNorm();
+    float complexityNorm  = visualParams.getComplexityNorm();
+    float variationNorm   = visualParams.getVariationNorm();
+
+    float cloakRadius = 10.0f + complexityNorm * 22.0f;
+    float baseIndex   = 0.4f + intensityNorm * 1.4f;
+    float anisotropy  = (variationNorm * 2.0f) - 1.0f;               // -1 .. 1
+
+    cloakPos += cloakVel;
+    if (cloakPos < cloakRadius || cloakPos > HardwareConfig::STRIP_LENGTH - cloakRadius) {
+        cloakVel = -cloakVel;
+    }
+
+    for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+        float dist = fabsf((float)i - cloakPos);
+        float norm = (cloakRadius > 0.001f) ? (dist / cloakRadius) : 0.0f;
+        norm = constrain(norm, 0.0f, 1.0f);
+
+        float sideBias = (i < cloakPos) ? (1.0f + anisotropy) : (1.0f - anisotropy);
+        sideBias = constrain(sideBias, -2.0f, 2.0f);
+
+        float offset = baseIndex * powf(norm, 1.5f) * sideBias * cloakRadius * 0.5f;
+        float sample = (float)i + ((i < cloakPos) ? -offset : offset);
+        sample = constrain(sample, 0.0f, (float)(HardwareConfig::STRIP_LENGTH - 1));
+
+        uint8_t wave = sin8((int16_t)(sample * 4.0f) + (time >> 2));
+        float brightnessF = wave;
+
+        if (norm < 0.25f) {
+            brightnessF *= norm / 0.25f;
+        }
+        if (fabsf(norm - 1.0f) < 0.06f) {
+            brightnessF = 255.0f;
+        }
+
+        uint8_t hue = gHue + (uint8_t)(sample) + (uint8_t)(sideBias * 20.0f);
+
+        strip1[i] = CHSV(hue,             (uint8_t)(saturationNorm * 255.0f), (uint8_t)constrain(brightnessF, 0.0f, 255.0f));
+        strip2[i] = CHSV(hue + 128,       (uint8_t)(saturationNorm * 255.0f), (uint8_t)constrain(brightnessF, 0.0f, 255.0f));
+    }
+
+    memcpy(leds, strip1, sizeof(CRGB) * HardwareConfig::STRIP_LENGTH);
+    memcpy(&leds[HardwareConfig::STRIP_LENGTH], strip2, sizeof(CRGB) * HardwareConfig::STRIP_LENGTH);
+}
+
+// ============== EVANESCENT SKIN ==============
+// Thin shimmering layers hugging rims or edges
+void lgpEvanescentSkin() {
+    static uint16_t time = 0;
+    time += paletteSpeed >> 2;
+
+    float intensityNorm   = visualParams.getIntensityNorm();
+    float saturationNorm  = visualParams.getSaturationNorm();
+    float complexityNorm  = visualParams.getComplexityNorm();
+    float variationNorm   = visualParams.getVariationNorm();
+
+    bool rimMode = (variationNorm < 0.5f);
+    float lambda  = 1.5f + intensityNorm * 6.0f;                  // decay factor
+    float skinFreq = 2.5f + complexityNorm * 10.0f;               // inner ripple detail
+    float anim = time / 256.0f;
+
+    float ringRadius = HardwareConfig::STRIP_HALF_LENGTH * (0.35f + variationNorm * 0.9f);
+
+    for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+        float brightnessF;
+        float hue = gHue + (i >> 1);
+
+        if (rimMode) {
+            float distFromCenter = fabsf((float)i - HardwareConfig::STRIP_CENTER_POINT);
+            float skinDistance = fabsf(distFromCenter - ringRadius);
+            float envelope = 1.0f / (1.0f + lambda * skinDistance);
+            float carrier = sinf(distFromCenter * skinFreq * 0.05f + anim * TWO_PI);
+            brightnessF = envelope * (carrier * 0.5f + 0.5f) * 255.0f;
+        } else {
+            uint16_t edgeDistance = std::min<uint16_t>(i, static_cast<uint16_t>(HardwareConfig::STRIP_LENGTH - 1 - i));
+            float distToEdge = static_cast<float>(edgeDistance);
+            float envelope = 1.0f / (1.0f + lambda * distToEdge * 0.4f);
+            float carrier = sinf((HardwareConfig::STRIP_LENGTH - distToEdge) * skinFreq * 0.04f - anim * TWO_PI);
+            brightnessF = envelope * (carrier * 0.5f + 0.5f) * 255.0f;
+        }
+
+        brightnessF = constrain(brightnessF, 0.0f, 255.0f);
+        uint8_t brightness = (uint8_t)brightnessF;
+
+        strip1[i] = CHSV((uint8_t)hue,        (uint8_t)(saturationNorm * 255.0f), brightness);
+        strip2[i] = CHSV((uint8_t)hue + 128,  (uint8_t)(saturationNorm * 255.0f), brightness);
+    }
+
     memcpy(leds, strip1, sizeof(CRGB) * HardwareConfig::STRIP_LENGTH);
     memcpy(&leds[HardwareConfig::STRIP_LENGTH], strip2, sizeof(CRGB) * HardwareConfig::STRIP_LENGTH);
 }

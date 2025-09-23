@@ -1,5 +1,8 @@
 #pragma once
 
+#include "../config/features.h"
+
+#if FEATURE_AUDIO_EFFECTS && FEATURE_AUDIO_SYNC
 #include "audio_sync.h"
 #include <FastLED.h>
 
@@ -39,6 +42,7 @@ inline void bassReactiveEffect() {
         }
     }
 }
+#endif // FEATURE_AUDIO_EFFECTS && FEATURE_AUDIO_SYNC
 
 inline void spectrumEffect() {
     // Import globals from main.cpp

@@ -1,5 +1,8 @@
 #pragma once
 
+#include "../config/features.h"
+
+#if FEATURE_AUDIO_EFFECTS && FEATURE_AUDIO_SYNC
 #include <FastLED.h>
 #include <functional>
 #include <vector>
@@ -63,3 +66,5 @@ private:
     ColorProvider _colorProvider;
     std::vector<float> _zones;  // length == _zoneCount
 }; 
+
+#endif // FEATURE_AUDIO_EFFECTS && FEATURE_AUDIO_SYNC

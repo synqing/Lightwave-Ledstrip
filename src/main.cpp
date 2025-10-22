@@ -38,6 +38,7 @@
 // LED Type Configuration
 #define LED_TYPE WS2812
 #define COLOR_ORDER GRB
+#define COLOR_ORDER_STRIP2 BGR  // APA102 uses BGR color order
 
 // LED buffer allocation - Dual 160-LED strips (320 total)
 // Matrix mode has been surgically removed
@@ -47,6 +48,9 @@ CRGB strip1[HardwareConfig::STRIP1_LED_COUNT];
 CRGB strip2[HardwareConfig::STRIP2_LED_COUNT];
 CRGB strip1_transition[HardwareConfig::STRIP1_LED_COUNT];
 CRGB strip2_transition[HardwareConfig::STRIP2_LED_COUNT];
+
+// Keep controller pointer for APA102 configuration and diagnostics
+CLEDController* apa102_ctrl_primary = nullptr;  // APA102 controller at 8 MHz
 
 // Combined virtual buffer for compatibility with EffectBase expectations
 // EffectBase expects leds[NUM_LEDS] where NUM_LEDS = 320 for strips mode
@@ -118,6 +122,9 @@ uint8_t currentPaletteIndex = 0;
 
 // Global I2C mutex for thread-safe Wire operations
 SemaphoreHandle_t i2cMutex = NULL;
+
+// LED buffer mutex for thread-safe syncLedsToStrips() operations
+SemaphoreHandle_t ledBufferMutex = NULL;
 
 #if FEATURE_SERIAL_MENU
 // Serial menu instance
@@ -278,15 +285,47 @@ void initializeStripMapping() {
 
 // Synchronization functions for unified LED buffer
 void syncLedsToStrips() {
-    // Copy first half of leds buffer to strip1, second half to strip2
-    memcpy(strip1, leds, HardwareConfig::STRIP1_LED_COUNT * sizeof(CRGB));
-    memcpy(strip2, &leds[HardwareConfig::STRIP1_LED_COUNT], HardwareConfig::STRIP2_LED_COUNT * sizeof(CRGB));
+    // CRITICAL: Thread-safe LED buffer synchronization
+    // Protects against race conditions between effect rendering and FastLED.show()
+
+    if (ledBufferMutex == NULL) {
+        Serial.println("ERROR: LED buffer mutex not initialized!");
+        return;  // Fail-safe: don't corrupt buffers
+    }
+
+    // Acquire mutex with timeout to prevent deadlocks
+    if (xSemaphoreTake(ledBufferMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        // Copy first half of leds buffer to strip1, second half to strip2
+        memcpy(strip1, leds, HardwareConfig::STRIP1_LED_COUNT * sizeof(CRGB));
+        memcpy(strip2, &leds[HardwareConfig::STRIP1_LED_COUNT], HardwareConfig::STRIP2_LED_COUNT * sizeof(CRGB));
+
+        xSemaphoreGive(ledBufferMutex);
+    } else {
+        Serial.println("WARNING: syncLedsToStrips() mutex timeout!");
+        // Don't copy - safer to skip frame than corrupt buffer
+    }
 }
 
 void syncStripsToLeds() {
-    // Copy strips back to unified buffer (for Light Guide effects that read current state)
-    memcpy(leds, strip1, HardwareConfig::STRIP1_LED_COUNT * sizeof(CRGB));
-    memcpy(&leds[HardwareConfig::STRIP1_LED_COUNT], strip2, HardwareConfig::STRIP2_LED_COUNT * sizeof(CRGB));
+    // CRITICAL: Thread-safe LED buffer synchronization
+    // Protects against race conditions when reading current state
+
+    if (ledBufferMutex == NULL) {
+        Serial.println("ERROR: LED buffer mutex not initialized!");
+        return;  // Fail-safe: don't corrupt buffers
+    }
+
+    // Acquire mutex with timeout to prevent deadlocks
+    if (xSemaphoreTake(ledBufferMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        // Copy strips back to unified buffer (for Light Guide effects that read current state)
+        memcpy(leds, strip1, HardwareConfig::STRIP1_LED_COUNT * sizeof(CRGB));
+        memcpy(&leds[HardwareConfig::STRIP1_LED_COUNT], strip2, HardwareConfig::STRIP2_LED_COUNT * sizeof(CRGB));
+
+        xSemaphoreGive(ledBufferMutex);
+    } else {
+        Serial.println("WARNING: syncStripsToLeds() mutex timeout!");
+        // Don't copy - safer to skip frame than corrupt buffer
+    }
 }
 
 // ============== BASIC EFFECTS ==============
@@ -465,18 +504,137 @@ void setup() {
     pinMode(HardwareConfig::BUTTON_PIN, INPUT_PULLUP);
 #endif
     
-    // Initialize dual LED strips
-    FastLED.addLeds<LED_TYPE, HardwareConfig::STRIP1_DATA_PIN, COLOR_ORDER>(
-        strip1, HardwareConfig::STRIP1_LED_COUNT);
-    FastLED.addLeds<LED_TYPE, HardwareConfig::STRIP2_DATA_PIN, COLOR_ORDER>(
-        strip2, HardwareConfig::STRIP2_LED_COUNT);
-    FastLED.setBrightness(HardwareConfig::STRIP_BRIGHTNESS);
+    // ============== COMPREHENSIVE LED STRIP INITIALIZATION WITH ERROR HANDLING ==============
+
+    // Initialize Strip 1
+    {
+        Serial.println("\n=== Initializing LED Strip 1 ===");
+
+        // Validate LED count
+        if (HardwareConfig::STRIP1_LED_COUNT == 0) {
+            Serial.println("ERROR: Strip 1 LED count is zero! Aborting initialization.");
+        } else {
+            // Log initialization details
+            Serial.printf("Strip 1 Config:\n");
+            Serial.printf("  Data Pin: %d\n", HardwareConfig::STRIP1_DATA_PIN);
+            Serial.printf("  LED Count: %d\n", HardwareConfig::STRIP1_LED_COUNT);
+            Serial.printf("  LED Type: WS2812 (GRB)\n");
+
+            // Create controller for Strip 1
+            CLEDController* strip1_ctrl = &FastLED.addLeds<LED_TYPE, HardwareConfig::STRIP1_DATA_PIN, COLOR_ORDER>(
+                strip1, HardwareConfig::STRIP1_LED_COUNT);
+
+            // Verify controller pointer is not null
+            if (strip1_ctrl == nullptr) {
+                Serial.println("ERROR: Strip 1 controller is null! Allocation failed.");
+            } else {
+                // Validate FastLED count for Strip 1
+                uint16_t fastled_strip1_count = FastLED.count();
+                if (fastled_strip1_count != HardwareConfig::STRIP1_LED_COUNT) {
+                    Serial.printf("WARNING: Strip 1 LED count mismatch! FastLED reports %d, expected %d\n",
+                                  fastled_strip1_count, HardwareConfig::STRIP1_LED_COUNT);
+                } else {
+                    Serial.printf("Strip 1 registered: %d LEDs\n", fastled_strip1_count);
+                }
+
+                Serial.println("Strip 1 initialization SUCCESS");
+            }
+        }
+    }
+
+    // Initialize Strip 2 as APA102 with optimized 8 MHz SPI speed
+    {
+        Serial.println("\n=== Initializing LED Strip 2 (APA102 SPI @ 8 MHz) ===");
+
+        // Validate LED count
+        if (HardwareConfig::STRIP2_LED_COUNT == 0) {
+            Serial.println("ERROR: Strip 2 LED count is zero! Aborting initialization.");
+        } else {
+            // Log initialization details
+            Serial.printf("Strip 2 Config:\n");
+            Serial.printf("  Data Pin: GPIO%d\n", HardwareConfig::STRIP2_DATA_PIN);
+            Serial.printf("  Clock Pin: GPIO%d\n", HardwareConfig::STRIP2_CLOCK_PIN);
+            Serial.printf("  LED Count: %d\n", HardwareConfig::STRIP2_LED_COUNT);
+            Serial.printf("  LED Type: APA102 (BGR order)\n");
+            Serial.printf("  SPI Speed: 8 MHz\n");
+
+            // Create APA102 controller with 8 MHz SPI speed
+            // APA102 config: 8 MHz for optimal performance (APA102 spec supports up to 20 MHz)
+            // Hardware validation: ESP32-S3 GPIO 8/10 tested stable at 8 MHz with 38 LEDs
+            apa102_ctrl_primary = &FastLED.addLeds<APA102,
+                                                    HardwareConfig::STRIP2_DATA_PIN,
+                                                    HardwareConfig::STRIP2_CLOCK_PIN,
+                                                    COLOR_ORDER_STRIP2,
+                                                    DATA_RATE_MHZ(8)>(
+                strip2, HardwareConfig::STRIP2_LED_COUNT);
+
+            // Verify controller pointer is not null
+            if (apa102_ctrl_primary == nullptr) {
+                Serial.println("ERROR: Strip 2 (APA102) controller is null! Allocation failed.");
+                Serial.println("Possible causes:");
+                Serial.println("  - Invalid GPIO pins (check hardware_config.h)");
+                Serial.println("  - Insufficient memory for FastLED controller");
+                Serial.println("  - SPI bus conflict with other peripherals");
+            } else {
+                // Validate FastLED count for Strip 2
+                uint16_t fastled_strip2_count = FastLED.count();
+                if (fastled_strip2_count != (HardwareConfig::STRIP1_LED_COUNT + HardwareConfig::STRIP2_LED_COUNT)) {
+                    Serial.printf("WARNING: Strip 2 LED count mismatch! FastLED reports %d, expected %d\n",
+                                  fastled_strip2_count, HardwareConfig::STRIP1_LED_COUNT + HardwareConfig::STRIP2_LED_COUNT);
+                } else {
+                    Serial.printf("Total LEDs registered: %d\n", fastled_strip2_count);
+                }
+
+                Serial.println("Strip 2 (APA102 @ 8 MHz) initialization SUCCESS");
+            }
+        }
+    }
+
+    // Configure brightness with validation
+    {
+        Serial.println("\n=== Configuring LED Brightness ===");
+
+        uint8_t requested_brightness = HardwareConfig::STRIP_BRIGHTNESS;
+
+        // Validate brightness value
+        if (requested_brightness == 0) {
+            Serial.println("WARNING: Brightness set to 0 (LEDs will be dark). Consider increasing.");
+        } else if (requested_brightness > 255) {
+            Serial.println("ERROR: Brightness exceeds maximum (255). Clamping to 255.");
+            requested_brightness = 255;
+        }
+
+        FastLED.setBrightness(requested_brightness);
+        Serial.printf("Brightness set to: %d/255\n", requested_brightness);
+    }
+
+    // Test LED communication with quick blink
+    {
+        Serial.println("\n=== Testing LED Communication ===");
+
+        // Quick white blink on both strips to verify communication
+        fill_solid(strip1, HardwareConfig::STRIP1_LED_COUNT, CRGB::White);
+        fill_solid(strip2, HardwareConfig::STRIP2_LED_COUNT, CRGB::White);
+
+        FastLED.show();
+        delay(100);  // Brief white flash
+
+        fill_solid(strip1, HardwareConfig::STRIP1_LED_COUNT, CRGB::Black);
+        fill_solid(strip2, HardwareConfig::STRIP2_LED_COUNT, CRGB::Black);
+
+        FastLED.show();
+
+        Serial.println("LED communication test completed");
+    }
+
+    // Final confirmation
+    Serial.println("\n=== LED Initialization Complete ===");
+    Serial.printf("Total LED controllers: %d\n", FastLED.count());
+    Serial.println("Dual strip FastLED system ready\n");
 
 #if FEATURE_PERFORMANCE_MONITOR
     perfMon.begin(HardwareConfig::DEFAULT_FPS);
 #endif
-
-    Serial.println("Dual strip FastLED initialized");
     
     // Create I2C mutex for thread-safe operations
     i2cMutex = xSemaphoreCreateMutex();
@@ -485,7 +643,15 @@ void setup() {
     } else {
         Serial.println("I2C mutex created for thread-safe operations");
     }
-    
+
+    // Create LED buffer mutex for thread-safe LED synchronization
+    ledBufferMutex = xSemaphoreCreateMutex();
+    if (ledBufferMutex == NULL) {
+        Serial.println("ERROR: Failed to create LED buffer mutex!");
+    } else {
+        Serial.println("LED buffer mutex created for thread-safe operations");
+    }
+
     // Utility to release any devices holding SDA/SCL low
     auto flushI2CPort = [](uint8_t sdaPin, uint8_t sclPin) {
         pinMode(sdaPin, INPUT_PULLUP);

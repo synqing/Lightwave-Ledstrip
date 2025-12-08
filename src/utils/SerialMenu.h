@@ -25,9 +25,16 @@ extern PerformanceMonitor perfMon;
 extern CRGBPalette16 currentPalette;
 extern CRGBPalette16 targetPalette;
 extern uint8_t currentPaletteIndex;
+extern bool paletteAutoCycle;
+extern uint32_t paletteCycleInterval;
 extern const char* const paletteNames[];
 extern const TProgmemRGBGradientPaletteRef gGradientPalettes[];
 extern const uint8_t gGradientPaletteCount;
+
+// Palette control functions
+extern void setPaletteIndex(uint8_t index);
+extern void nextPalette();
+extern void prevPalette();
 
 // Dummy wave engine for now
 class DummyWave2D {
@@ -103,6 +110,25 @@ private:
       setEffect(cmd.substring(7));
     } else if (cmd.startsWith("palette ")) {
       setPalette(cmd.substring(8));
+    } else if (cmd == "pnext" || cmd == "palette next") {
+      nextPalette();
+      Serial.print(F("Palette: "));
+      Serial.print(currentPaletteIndex);
+      Serial.print(F(" - "));
+      Serial.println(paletteNames[currentPaletteIndex]);
+    } else if (cmd == "pprev" || cmd == "palette prev") {
+      prevPalette();
+      Serial.print(F("Palette: "));
+      Serial.print(currentPaletteIndex);
+      Serial.print(F(" - "));
+      Serial.println(paletteNames[currentPaletteIndex]);
+    } else if (cmd == "pauto" || cmd == "palette auto") {
+      paletteAutoCycle = !paletteAutoCycle;
+      Serial.print(F("Palette auto-cycle: "));
+      Serial.println(paletteAutoCycle ? F("ON") : F("OFF"));
+    } else if (cmd.startsWith("pinterval ") || cmd.startsWith("palette interval ")) {
+      String val = cmd.startsWith("pinterval ") ? cmd.substring(10) : cmd.substring(17);
+      setPaletteInterval(val);
     } else if (cmd.startsWith("brightness ")) {
       setBrightness(cmd.substring(11));
     } else if (cmd.startsWith("fade ")) {
@@ -145,6 +171,10 @@ private:
     Serial.println(F("  prev          - Previous effect"));
     Serial.println(F("  effect <0-7>  - Set effect by number"));
     Serial.println(F("  palette <0-32>- Set palette by number"));
+    Serial.println(F("  pnext         - Next palette"));
+    Serial.println(F("  pprev         - Previous palette"));
+    Serial.println(F("  pauto         - Toggle palette auto-cycle"));
+    Serial.println(F("  pinterval <ms>- Set cycle interval (500-60000)"));
     Serial.println(F("  brightness <0-255> - Set brightness"));
     Serial.println(F("  fade <0-255>  - Set fade amount"));
     Serial.println(F("  speed <1-50>  - Set palette speed"));
@@ -255,6 +285,13 @@ private:
   
   void showPalettesMenu() {
     Serial.println(F("\n=== PALETTES MENU ==="));
+    Serial.print(F("Auto-cycle: "));
+    Serial.print(paletteAutoCycle ? F("ON") : F("OFF"));
+    Serial.print(F(" | Interval: "));
+    Serial.print(paletteCycleInterval / 1000.0, 1);
+    Serial.println(F("s"));
+    Serial.println();
+
     for (uint8_t i = 0; i < 33; i++) {
       Serial.print(i);
       Serial.print(F(". "));
@@ -266,7 +303,7 @@ private:
         Serial.print(F(" <<<"));
       }
       Serial.println();
-      
+
       // Show in groups of 5
       if ((i + 1) % 5 == 0 && i < 32) {
         Serial.println();
@@ -274,7 +311,10 @@ private:
     }
     Serial.println(F(""));
     Serial.println(F("Commands:"));
-    Serial.println(F("  palette <0-32> - Select palette"));
+    Serial.println(F("  palette <0-32>  - Select palette"));
+    Serial.println(F("  pnext / pprev   - Next/prev palette"));
+    Serial.println(F("  pauto           - Toggle auto-cycle"));
+    Serial.println(F("  pinterval <ms>  - Set cycle interval"));
     Serial.println(F("===================="));
   }
   
@@ -425,14 +465,25 @@ private:
   void setPalette(String value) {
     int paletteNum = value.toInt();
     if (paletteNum >= 0 && paletteNum < 33) {
-      currentPaletteIndex = paletteNum;
-      targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
+      setPaletteIndex(paletteNum);
       Serial.print(F("Set palette to: "));
       Serial.print(paletteNum);
       Serial.print(F(" - "));
       Serial.println(paletteNames[paletteNum]);
     } else {
       Serial.println(F("Invalid palette number (0-32)"));
+    }
+  }
+
+  void setPaletteInterval(String value) {
+    int interval = value.toInt();
+    if (interval >= 500 && interval <= 60000) {
+      paletteCycleInterval = interval;
+      Serial.print(F("Palette cycle interval: "));
+      Serial.print(interval);
+      Serial.println(F("ms"));
+    } else {
+      Serial.println(F("Invalid interval (500-60000 ms)"));
     }
   }
   

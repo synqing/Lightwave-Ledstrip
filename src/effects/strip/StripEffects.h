@@ -17,6 +17,14 @@ extern uint8_t fadeAmount;
 extern uint8_t paletteSpeed;
 extern VisualParams visualParams;
 
+// Safety macro for writing to strip2 (respects actual LED count)
+#define SAFE_STRIP2_WRITE(index, value) \
+    do { \
+        if ((index) < HardwareConfig::STRIP2_LED_COUNT) { \
+            strip2[(index)] = (value); \
+        } \
+    } while(0)
+
 // ============== BASIC STRIP EFFECTS ==============
 void solidColor();
 void pulseEffect();

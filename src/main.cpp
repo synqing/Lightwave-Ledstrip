@@ -6,8 +6,6 @@
 #include "effects/strip/StripEffects.h"
 #include "effects/strip/OptimizedStripEffects.h"
 #include "effects/transitions/TransitionEngine.h"
-#include "hardware/EncoderManager.h"
-#include "hardware/EncoderLEDFeedback.h"
 
 #if FEATURE_WEB_SERVER
 #include "network/WebServer.h"
@@ -36,9 +34,9 @@
 
 
 // LED Type Configuration
+// WS2812 Dual-Strip: GPIO4 (Strip 1, 160 LEDs) + GPIO5 (Strip 2, 160 LEDs)
 #define LED_TYPE WS2812
-#define COLOR_ORDER GRB
-#define COLOR_ORDER_STRIP2 BGR  // APA102 uses BGR color order
+#define COLOR_ORDER GRB  // WS2812 uses GRB color order
 
 // LED buffer allocation - Dual 160-LED strips (320 total)
 // Matrix mode has been surgically removed
@@ -49,8 +47,9 @@ CRGB strip2[HardwareConfig::STRIP2_LED_COUNT];
 CRGB strip1_transition[HardwareConfig::STRIP1_LED_COUNT];
 CRGB strip2_transition[HardwareConfig::STRIP2_LED_COUNT];
 
-// Keep controller pointer for APA102 configuration and diagnostics
-CLEDController* apa102_ctrl_primary = nullptr;  // APA102 controller at 8 MHz
+// Keep controller pointers for WS2812 diagnostics
+CLEDController* ws2812_ctrl_strip1 = nullptr;
+CLEDController* ws2812_ctrl_strip2 = nullptr;
 
 // Combined virtual buffer for compatibility with EffectBase expectations
 // EffectBase expects leds[NUM_LEDS] where NUM_LEDS = 320 for strips mode
@@ -76,7 +75,7 @@ uint8_t paletteSpeed = 10;
 uint16_t fps = HardwareConfig::DEFAULT_FPS;
 uint8_t brightnessVal = HardwareConfig::STRIP_BRIGHTNESS;
 
-// Universal visual parameters for encoders 4-7
+// Visual parameters (serial-controlled only, no encoder HMI)
 VisualParams visualParams;
 
 // Advanced Transition System
@@ -87,9 +86,6 @@ bool useRandomTransitions = true;
 #if FEATURE_PERFORMANCE_MONITOR
 PerformanceMonitor perfMon;
 #endif
-
-// Visual Feedback System
-EncoderLEDFeedback* encoderFeedback = nullptr;
 
 // LED strip state tracking
 int strip1LitCount = 0;
@@ -105,11 +101,13 @@ bool useOptimizedEffects = true;
 CRGBPalette16 currentPalette;
 CRGBPalette16 targetPalette;
 uint8_t currentPaletteIndex = 0;
+bool paletteAutoCycle = true;              // Toggle for auto-cycling palettes
+uint32_t paletteCycleInterval = 5000;      // Interval in ms (default 5 seconds)
 
 // Include palette definitions
 #include "Palettes.h"
 
-// M5Unit-Scroll encoder manager
+// Parameter state manager (software-only, no I2C hardware)
 #include "hardware/ScrollEncoderManager.h"
 
 // Dual-Strip Wave Engine (disabled for now - files don't exist yet)
@@ -120,7 +118,7 @@ uint8_t currentPaletteIndex = 0;
 // Global wave engine instance (disabled for now)
 // DualStripWaveEngine waveEngine;
 
-// Global I2C mutex for thread-safe Wire operations
+// Global I2C mutex (stub for compilation - HMI disabled)
 SemaphoreHandle_t i2cMutex = NULL;
 
 // LED buffer mutex for thread-safe syncLedsToStrips() operations
@@ -454,11 +452,6 @@ void startAdvancedTransition(uint8_t newEffect) {
         "IRIS", "NUCLEAR", "STARGATE", "KALEIDOSCOPE", "MANDALA"
     };
     Serial.printf("%s (%dms)\n", transitionNames[transType], duration);
-    
-    // Flash effect encoder to indicate transition
-    if (encoderFeedback) {
-        encoderFeedback->flashEncoder(0, 255, 255, 255, duration / 2);  // White flash for half transition duration
-    }
 }
 
 
@@ -506,88 +499,32 @@ void setup() {
     
     // ============== COMPREHENSIVE LED STRIP INITIALIZATION WITH ERROR HANDLING ==============
 
-    // Initialize Strip 1
+    // Initialize WS2812 Dual-Strip Configuration
     {
-        Serial.println("\n=== Initializing LED Strip 1 ===");
+        Serial.println("\n=== Initializing WS2812 Dual-Strip System ===");
+        Serial.printf("Configuration: 2 strips x %d LEDs = %d total\n",
+                      HardwareConfig::LEDS_PER_STRIP, HardwareConfig::TOTAL_LEDS);
 
-        // Validate LED count
-        if (HardwareConfig::STRIP1_LED_COUNT == 0) {
-            Serial.println("ERROR: Strip 1 LED count is zero! Aborting initialization.");
-        } else {
-            // Log initialization details
-            Serial.printf("Strip 1 Config:\n");
-            Serial.printf("  Data Pin: %d\n", HardwareConfig::STRIP1_DATA_PIN);
-            Serial.printf("  LED Count: %d\n", HardwareConfig::STRIP1_LED_COUNT);
-            Serial.printf("  LED Type: WS2812 (GRB)\n");
+        // Strip 1: GPIO4, first 160 LEDs of unified buffer
+        Serial.printf("\nStrip 1: GPIO%d, %d LEDs (leds[0-%d])\n",
+                      HardwareConfig::STRIP1_DATA_PIN,
+                      HardwareConfig::STRIP1_LED_COUNT,
+                      HardwareConfig::STRIP1_LED_COUNT - 1);
+        ws2812_ctrl_strip1 = &FastLED.addLeds<LED_TYPE, HardwareConfig::STRIP1_DATA_PIN, COLOR_ORDER>(
+            leds, 0, HardwareConfig::STRIP1_LED_COUNT);
+        Serial.println("  Strip 1 registered");
 
-            // Create controller for Strip 1
-            CLEDController* strip1_ctrl = &FastLED.addLeds<LED_TYPE, HardwareConfig::STRIP1_DATA_PIN, COLOR_ORDER>(
-                strip1, HardwareConfig::STRIP1_LED_COUNT);
+        // Strip 2: GPIO5, second 160 LEDs of unified buffer
+        Serial.printf("\nStrip 2: GPIO%d, %d LEDs (leds[%d-%d])\n",
+                      HardwareConfig::STRIP2_DATA_PIN,
+                      HardwareConfig::STRIP2_LED_COUNT,
+                      HardwareConfig::STRIP1_LED_COUNT,
+                      HardwareConfig::TOTAL_LEDS - 1);
+        ws2812_ctrl_strip2 = &FastLED.addLeds<LED_TYPE, HardwareConfig::STRIP2_DATA_PIN, COLOR_ORDER>(
+            leds, HardwareConfig::STRIP1_LED_COUNT, HardwareConfig::STRIP2_LED_COUNT);
+        Serial.println("  Strip 2 registered");
 
-            // Verify controller pointer is not null
-            if (strip1_ctrl == nullptr) {
-                Serial.println("ERROR: Strip 1 controller is null! Allocation failed.");
-            } else {
-                // Validate FastLED count for Strip 1
-                uint16_t fastled_strip1_count = FastLED.count();
-                if (fastled_strip1_count != HardwareConfig::STRIP1_LED_COUNT) {
-                    Serial.printf("WARNING: Strip 1 LED count mismatch! FastLED reports %d, expected %d\n",
-                                  fastled_strip1_count, HardwareConfig::STRIP1_LED_COUNT);
-                } else {
-                    Serial.printf("Strip 1 registered: %d LEDs\n", fastled_strip1_count);
-                }
-
-                Serial.println("Strip 1 initialization SUCCESS");
-            }
-        }
-    }
-
-    // Initialize Strip 2 as APA102 with optimized 8 MHz SPI speed
-    {
-        Serial.println("\n=== Initializing LED Strip 2 (APA102 SPI @ 8 MHz) ===");
-
-        // Validate LED count
-        if (HardwareConfig::STRIP2_LED_COUNT == 0) {
-            Serial.println("ERROR: Strip 2 LED count is zero! Aborting initialization.");
-        } else {
-            // Log initialization details
-            Serial.printf("Strip 2 Config:\n");
-            Serial.printf("  Data Pin: GPIO%d\n", HardwareConfig::STRIP2_DATA_PIN);
-            Serial.printf("  Clock Pin: GPIO%d\n", HardwareConfig::STRIP2_CLOCK_PIN);
-            Serial.printf("  LED Count: %d\n", HardwareConfig::STRIP2_LED_COUNT);
-            Serial.printf("  LED Type: APA102 (BGR order)\n");
-            Serial.printf("  SPI Speed: 8 MHz\n");
-
-            // Create APA102 controller with 8 MHz SPI speed
-            // APA102 config: 8 MHz for optimal performance (APA102 spec supports up to 20 MHz)
-            // Hardware validation: ESP32-S3 GPIO 8/10 tested stable at 8 MHz with 38 LEDs
-            apa102_ctrl_primary = &FastLED.addLeds<APA102,
-                                                    HardwareConfig::STRIP2_DATA_PIN,
-                                                    HardwareConfig::STRIP2_CLOCK_PIN,
-                                                    COLOR_ORDER_STRIP2,
-                                                    DATA_RATE_MHZ(8)>(
-                strip2, HardwareConfig::STRIP2_LED_COUNT);
-
-            // Verify controller pointer is not null
-            if (apa102_ctrl_primary == nullptr) {
-                Serial.println("ERROR: Strip 2 (APA102) controller is null! Allocation failed.");
-                Serial.println("Possible causes:");
-                Serial.println("  - Invalid GPIO pins (check hardware_config.h)");
-                Serial.println("  - Insufficient memory for FastLED controller");
-                Serial.println("  - SPI bus conflict with other peripherals");
-            } else {
-                // Validate FastLED count for Strip 2
-                uint16_t fastled_strip2_count = FastLED.count();
-                if (fastled_strip2_count != (HardwareConfig::STRIP1_LED_COUNT + HardwareConfig::STRIP2_LED_COUNT)) {
-                    Serial.printf("WARNING: Strip 2 LED count mismatch! FastLED reports %d, expected %d\n",
-                                  fastled_strip2_count, HardwareConfig::STRIP1_LED_COUNT + HardwareConfig::STRIP2_LED_COUNT);
-                } else {
-                    Serial.printf("Total LEDs registered: %d\n", fastled_strip2_count);
-                }
-
-                Serial.println("Strip 2 (APA102 @ 8 MHz) initialization SUCCESS");
-            }
-        }
+        Serial.printf("\nTotal FastLED controllers: %d\n", FastLED.count());
     }
 
     // Configure brightness with validation
@@ -608,23 +545,19 @@ void setup() {
         Serial.printf("Brightness set to: %d/255\n", requested_brightness);
     }
 
-    // Test LED communication with quick blink
+    // Test LED communication with quick blink on both strips
     {
         Serial.println("\n=== Testing LED Communication ===");
 
-        // Quick white blink on both strips to verify communication
-        fill_solid(strip1, HardwareConfig::STRIP1_LED_COUNT, CRGB::White);
-        fill_solid(strip2, HardwareConfig::STRIP2_LED_COUNT, CRGB::White);
-
+        // Quick white blink to verify WS2812 communication
+        fill_solid(leds, HardwareConfig::TOTAL_LEDS, CRGB::White);
         FastLED.show();
         delay(100);  // Brief white flash
 
-        fill_solid(strip1, HardwareConfig::STRIP1_LED_COUNT, CRGB::Black);
-        fill_solid(strip2, HardwareConfig::STRIP2_LED_COUNT, CRGB::Black);
-
+        fill_solid(leds, HardwareConfig::TOTAL_LEDS, CRGB::Black);
         FastLED.show();
 
-        Serial.println("LED communication test completed");
+        Serial.println("LED communication test completed (both strips)");
     }
 
     // Final confirmation
@@ -635,14 +568,6 @@ void setup() {
 #if FEATURE_PERFORMANCE_MONITOR
     perfMon.begin(HardwareConfig::DEFAULT_FPS);
 #endif
-    
-    // Create I2C mutex for thread-safe operations
-    i2cMutex = xSemaphoreCreateMutex();
-    if (i2cMutex == NULL) {
-        Serial.println("ERROR: Failed to create I2C mutex!");
-    } else {
-        Serial.println("I2C mutex created for thread-safe operations");
-    }
 
     // Create LED buffer mutex for thread-safe LED synchronization
     ledBufferMutex = xSemaphoreCreateMutex();
@@ -652,139 +577,8 @@ void setup() {
         Serial.println("LED buffer mutex created for thread-safe operations");
     }
 
-    // Utility to release any devices holding SDA/SCL low
-    auto flushI2CPort = [](uint8_t sdaPin, uint8_t sclPin) {
-        pinMode(sdaPin, INPUT_PULLUP);
-        pinMode(sclPin, INPUT_PULLUP);
-        delay(5);
-
-        pinMode(sclPin, OUTPUT);
-        for (int i = 0; i < 9; ++i) {
-            digitalWrite(sclPin, LOW);
-            delayMicroseconds(4);
-            digitalWrite(sclPin, HIGH);
-            delayMicroseconds(4);
-        }
-
-        pinMode(sdaPin, OUTPUT);
-        digitalWrite(sdaPin, LOW);
-        delayMicroseconds(4);
-        digitalWrite(sclPin, HIGH);
-        delayMicroseconds(4);
-        digitalWrite(sdaPin, HIGH);
-
-        pinMode(sdaPin, INPUT_PULLUP);
-        pinMode(sclPin, INPUT_PULLUP);
-        delay(5);
-    };
-
-    // Initialize I2C bus with primary 8Encoder pins
-    flushI2CPort(HardwareConfig::I2C_SDA, HardwareConfig::I2C_SCL);
-    delay(10);
-    Wire.begin(HardwareConfig::I2C_SDA, HardwareConfig::I2C_SCL);
-    Wire.setClock(400000);  // 400kHz
-    delay(10);
-    
-    // Scan I2C bus to see what's connected
-    Serial.println("\n🔍 Scanning I2C bus...");
-    Serial.printf("   SDA: GPIO%d, SCL: GPIO%d\n", 
-                  HardwareConfig::I2C_SDA, HardwareConfig::I2C_SCL);
-    byte error, address;
-    int nDevices = 0;
-    for(address = 1; address < 127; address++) {
-        Wire.beginTransmission(address);
-        error = Wire.endTransmission();
-        if (error == 0) {
-            Serial.print("   Found device at 0x");
-            if (address < 16) Serial.print("0");
-            Serial.print(address, HEX);
-            if (address == HardwareConfig::M5STACK_8ENCODER_ADDR) Serial.print(" (M5Stack 8Encoder)");
-            else if (address == HardwareConfig::M5UNIT_SCROLL_ADDR) Serial.print(" (M5Unit-Scroll)");
-            Serial.println();
-            nDevices++;
-        }
-    }
-    if (nDevices == 0) {
-        Serial.println("   No I2C devices found!");
-    } else {
-        Serial.printf("   Found %d device(s)\n", nDevices);
-    }
-    Serial.println();
-    
-    // Configure scroll manager callbacks (used for parameter state even without hardware)
-    scrollManager.setParamChangeCallback([](ScrollParameter param, uint8_t value) {
-        switch (param) {
-            case PARAM_BRIGHTNESS:
-                FastLED.setBrightness(value);
-                brightnessVal = value;
-                Serial.printf("Brightness: %d\n", value);
-                break;
-            case PARAM_PALETTE:
-                currentPaletteIndex = value % gGradientPaletteCount;
-                targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
-                Serial.printf("Palette: %d\n", currentPaletteIndex);
-                break;
-            case PARAM_SPEED:
-                paletteSpeed = value / 4;  // Scale to reasonable range
-                Serial.printf("Speed: %d\n", paletteSpeed);
-                break;
-            default:
-                // Other parameters are handled by updateVisualParams
-                break;
-        }
-    });
-
-    scrollManager.setEffectChangeCallback([](uint8_t newEffect) {
-        if (newEffect >= NUM_EFFECTS) {
-            Serial.printf("❌ Invalid effect index: %d\n", newEffect);
-            return;
-        }
-        if (newEffect != currentEffect) {
-            startAdvancedTransition(newEffect);
-            Serial.printf("🎨 Scroll: Effect changed to %s\n", effects[newEffect].name);
-        }
-    });
-
-    Serial.println();
-
-#if FEATURE_ROTATE8_ENCODER
-    if (encoderManager.begin()) {
-        if (encoderManager.isAvailable()) {
-            M5ROTATE8* encoder = encoderManager.getEncoder();
-            if (encoder) {
-                encoderFeedback = new EncoderLEDFeedback(encoder, &visualParams);
-                encoderFeedback->applyDefaultColorScheme();
-                Serial.println("✅ Visual Feedback System initialized");
-            }
-        } else {
-            Serial.println("⚠️  8Encoder detected but not yet available - background task will retry");
-        }
-    } else {
-        Serial.println("❌ Failed to initialize 8Encoder management task");
-    }
-#endif
-
-#if FEATURE_SCROLL_ENCODER
-    // Attempt to initialize scroll encoder after 8Encoder has been configured
-    flushI2CPort(HardwareConfig::I2C_SDA_SCROLL, HardwareConfig::I2C_SCL_SCROLL);
-    delay(10);
-    if (scrollManager.begin()) {
-        Serial.println("✅ Scroll encoder system initialized");
-    } else {
-        Serial.println("⚠️  Scroll encoder not found - continuing without it");
-    }
-#else
-    Serial.println("ℹ️ Scroll encoder disabled in firmware - using 8Encoder only");
-#endif
-
-    // Synchronize initial state with current system values
-    scrollManager.setParamValue(PARAM_BRIGHTNESS, FastLED.getBrightness());
-    scrollManager.setParamValue(PARAM_PALETTE, currentPaletteIndex);
-    scrollManager.setParamValue(PARAM_SPEED, paletteSpeed * 4);
-    scrollManager.setParamValue(PARAM_INTENSITY, visualParams.intensity);
-    scrollManager.setParamValue(PARAM_SATURATION, visualParams.saturation);
-    scrollManager.setParamValue(PARAM_COMPLEXITY, visualParams.complexity);
-    scrollManager.setParamValue(PARAM_VARIATION, visualParams.variation);
+    // HMI REMOVED - No I2C devices on this hardware configuration
+    Serial.println("ℹ️ HMI disabled - serial control only");
 
     // Preset Management System - DISABLED FOR NOW
     // Will be re-enabled once basic transitions work
@@ -806,58 +600,7 @@ void setup() {
     
     // Clear LEDs
     FastLED.clear(true);
-    
-    // Initialize M5Unit-Scroll encoder on secondary I2C bus
-#if FEATURE_DEBUG_OUTPUT
-    Serial.println("[DEBUG] About to initialize scroll encoder...");
-#endif
-    // DISABLED - CAUSING CRASHES
-    // initScrollEncoder();
-#if FEATURE_DEBUG_OUTPUT
-    Serial.println("[DEBUG] Scroll encoder init SKIPPED - was causing crashes");
-#endif
-    
-    // DISABLED - Setting up callbacks when encoder not available causes crashes
-    // Only set up scroll encoder callbacks if main encoder is available
-    /*
-    if (encoderManager.isAvailable()) {
-        setScrollEncoderCallbacks(
-            // Value change callback - mirrors M5ROTATE8 encoder functions
-            [](int32_t delta) {
-                uint8_t mirroredEncoder = getScrollMirroredEncoder();
-                
-                // Create an encoder event to process through the same logic
-                EncoderEvent event;
-                event.encoder_id = mirroredEncoder;
-                event.delta = delta;
-                event.button_pressed = false;
-                event.timestamp = millis();
-                
-                // Send to encoder event queue if available
-                QueueHandle_t queue = encoderManager.getEventQueue();
-                if (queue != NULL) {
-                    xQueueSend(queue, &event, 0);
-                    Serial.printf("SCROLL: Mirroring encoder %d, delta %d\n", mirroredEncoder, delta);
-                }
-            },
-            // Button press callback - cycle through encoder modes
-            []() {
-                uint8_t currentMode = getScrollMirroredEncoder();
-                uint8_t nextMode = (currentMode + 1) % 8;
-                setScrollMirroredEncoder(nextMode);
-                
-                const char* modeName[] = {
-                    "Effect", "Brightness", "Palette", "Speed",
-                    "Intensity", "Saturation", "Complexity", "Variation"
-                };
-                
-                Serial.printf("SCROLL: Switched to %s mode (encoder %d)\n", 
-                             modeName[nextMode], nextMode);
-            }
-        );
-    }
-    */
-    
+
     // Audio/render task DISABLED - Audio system removed
     /*
     // Start the consolidated audio/render task FIRST for deterministic timing
@@ -968,32 +711,41 @@ void handleButton() {
 void updatePalette() {
     // Smoothly blend between palettes
     static uint32_t lastPaletteChange = 0;
-    
-    if (millis() - lastPaletteChange > 5000) {  // Change palette every 5 seconds
+
+    // Only auto-cycle if enabled
+    if (paletteAutoCycle && (millis() - lastPaletteChange > paletteCycleInterval)) {
         lastPaletteChange = millis();
         currentPaletteIndex = (currentPaletteIndex + 1) % gGradientPaletteCount;
         targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
     }
-    
+
     // Blend towards target palette
     nblendPaletteTowardPalette(currentPalette, targetPalette, 24);
 }
 
-void updateEncoderFeedback() {
-    // Check both that encoderFeedback is not NULL AND encoder is available
-    if (encoderFeedback != nullptr && encoderManager.isAvailable()) {
-        // Update current effect info
-        encoderFeedback->setCurrentEffect(currentEffect, effects[currentEffect].name);
-        
-        // Update performance metrics (simplified for now)
-        float frameTime = 1000.0f / HardwareConfig::DEFAULT_FPS;
-        float cpuUsage = (frameTime / 8.33f) * 100.0f;  // Estimate based on target 120 FPS
-        encoderFeedback->updatePerformanceMetrics(cpuUsage, HardwareConfig::DEFAULT_FPS);
-        
-        // Update the LED feedback
-        encoderFeedback->update();
+// Manual palette control functions
+void setPaletteIndex(uint8_t index) {
+    if (index < gGradientPaletteCount) {
+        currentPaletteIndex = index;
+        targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
     }
 }
+
+void nextPalette() {
+    currentPaletteIndex = (currentPaletteIndex + 1) % gGradientPaletteCount;
+    targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
+}
+
+void prevPalette() {
+    if (currentPaletteIndex == 0) {
+        currentPaletteIndex = gGradientPaletteCount - 1;
+    } else {
+        currentPaletteIndex--;
+    }
+    targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
+}
+
+// HMI REMOVED - updateEncoderFeedback() deleted
 
 // ============== AUDIO/RENDER TASK CALLBACKS ==============
 
@@ -1112,50 +864,335 @@ void adjustCurrentParameter(int8_t direction) {
 }
 
 // Print serial command help
+// ============== KEYBOARD CONTROL SYSTEM ==============
+// Debug menu state machine (keyboard-driven since no HMI devices)
+static enum { MENU_OFF, MENU_MAIN, MENU_PIPELINE } dbg_menu_state = MENU_OFF;
+
+// Brightness limits for keyboard control
+static constexpr uint8_t MIN_BRIGHTNESS = 8;
+static constexpr uint8_t MAX_BRIGHTNESS = 200;
+static constexpr uint8_t BRIGHTNESS_STEP = 8;
+
+// Forward declarations for keystroke handling
+static void handleSingleKeystroke(char ch);
+static void handleMenuInput(char ch);
+static void printMenuMain();
+static void printMenuPipeline();
+
 void printSerialHelp() {
-    Serial.println("\n");
-    Serial.println("╔════════════════════════════════════════════════════╗");
-    Serial.println("║          SERIAL COMMAND REFERENCE                  ║");
-    Serial.println("╠════════════════════════════════════════════════════╣");
-    Serial.println("║ PARAMETER MODES (Number Keys):                     ║");
-    Serial.println("║   1 - Effect Selection Mode                        ║");
-    Serial.println("║   2 - Brightness Control Mode                      ║");
-    Serial.println("║   3 - Palette Selection Mode                       ║");
-    Serial.println("║   4 - Speed Control Mode                           ║");
-    Serial.println("║   5 - Intensity Control Mode                       ║");
-    Serial.println("║   6 - Saturation Control Mode                      ║");
-    Serial.println("║   7 - Complexity Control Mode                      ║");
-    Serial.println("║   8 - Variation Control Mode                       ║");
-    Serial.println("║                                                    ║");
-    Serial.println("║ VALUE ADJUSTMENT:                                  ║");
-    Serial.println("║   + or = : Increase parameter value                ║");
-    Serial.println("║   - or _ : Decrease parameter value                ║");
-    Serial.println("║                                                    ║");
-    Serial.println("║ QUICK SHORTCUTS:                                   ║");
-    Serial.println("║   [ : Previous effect                              ║");
-    Serial.println("║   ] : Next effect                                  ║");
-    Serial.println("║                                                    ║");
-    Serial.println("║ OTHER COMMANDS:                                    ║");
-    Serial.println("║   t : Toggle random transitions                    ║");
-    Serial.println("║   n : Next effect with transition                  ║");
-    Serial.println("║   o : Toggle optimized effects                     ║");
-    Serial.println("║   p : Performance comparison (if available)        ║");
-    Serial.println("║   w : Retry WiFi connection                        ║");
-    Serial.println("║   h or ? : Show this help                         ║");
-    Serial.println("╚════════════════════════════════════════════════════╝");
-    Serial.println();
-    
-    // Show current status
-    Serial.printf("Current Mode: %s\n", 
-                  scrollManager.getCurrentParam() == PARAM_EFFECT ? "Effect" :
-                  scrollManager.getCurrentParam() == PARAM_BRIGHTNESS ? "Brightness" :
-                  scrollManager.getCurrentParam() == PARAM_PALETTE ? "Palette" :
-                  scrollManager.getCurrentParam() == PARAM_SPEED ? "Speed" :
-                  scrollManager.getCurrentParam() == PARAM_INTENSITY ? "Intensity" :
-                  scrollManager.getCurrentParam() == PARAM_SATURATION ? "Saturation" :
-                  scrollManager.getCurrentParam() == PARAM_COMPLEXITY ? "Complexity" :
-                  "Variation");
-    Serial.printf("Current Effect: %s\n", effects[currentEffect].name);
+    Serial.println("\n========== KEYBOARD CONTROLS ==========");
+    Serial.println("  SPACEBAR  - Next effect");
+    Serial.println("  BACKSPACE - Previous effect");
+    Serial.println("  ] / [     - Next/prev palette");
+    Serial.println("  + / =     - Brightness up");
+    Serial.println("  - / _     - Brightness down");
+    Serial.println("  > / .     - Speed up");
+    Serial.println("  < / ,     - Speed down");
+    Serial.println("  t         - Toggle random transitions");
+    Serial.println("  m         - Toggle debug menu");
+    Serial.println("  s         - Print status");
+    Serial.println("  ?         - Show this help");
+    Serial.println("========================================");
+    Serial.println("String commands: type 'help' + Enter\n");
+}
+
+static void printMenuMain() {
+    Serial.println("\n==== DEBUG MENU ====");
+    Serial.printf("Transitions: %s\n", useRandomTransitions ? "RANDOM" : "FADE");
+    Serial.printf("Optimized: %s\n", useOptimizedEffects ? "ON" : "OFF");
+    Serial.println("--------------------");
+    Serial.println("  1) Toggle random transitions");
+    Serial.println("  2) Toggle optimized effects");
+    Serial.println("  3) Pipeline settings...");
+    Serial.println("  0) Close menu");
+    Serial.println("====================\n");
+}
+
+static void printMenuPipeline() {
+    Serial.println("\n-- Pipeline Settings --");
+    Serial.printf("1) Intensity: %d\n", visualParams.intensity);
+    Serial.printf("2) Saturation: %d\n", visualParams.saturation);
+    Serial.printf("3) Complexity: %d\n", visualParams.complexity);
+    Serial.printf("4) Variation: %d\n", visualParams.variation);
+    Serial.println("0) Back to main");
+    Serial.println("-----------------------\n");
+}
+
+static void handleMenuInput(char ch) {
+    switch (dbg_menu_state) {
+        case MENU_MAIN:
+            if (ch == '1') {
+                useRandomTransitions = !useRandomTransitions;
+                Serial.printf("Transitions: %s\n", useRandomTransitions ? "RANDOM" : "FADE");
+                printMenuMain();
+            } else if (ch == '2') {
+                useOptimizedEffects = !useOptimizedEffects;
+                Serial.printf("Optimized: %s\n", useOptimizedEffects ? "ON" : "OFF");
+                printMenuMain();
+            } else if (ch == '3') {
+                dbg_menu_state = MENU_PIPELINE;
+                printMenuPipeline();
+            } else if (ch == '0') {
+                dbg_menu_state = MENU_OFF;
+                Serial.println("Menu closed");
+            }
+            break;
+
+        case MENU_PIPELINE:
+            if (ch == '1') {
+                visualParams.intensity = (visualParams.intensity + 32) % 256;
+                Serial.printf("Intensity: %d\n", visualParams.intensity);
+                printMenuPipeline();
+            } else if (ch == '2') {
+                visualParams.saturation = (visualParams.saturation + 32) % 256;
+                Serial.printf("Saturation: %d\n", visualParams.saturation);
+                printMenuPipeline();
+            } else if (ch == '3') {
+                visualParams.complexity = (visualParams.complexity + 32) % 256;
+                Serial.printf("Complexity: %d\n", visualParams.complexity);
+                printMenuPipeline();
+            } else if (ch == '4') {
+                visualParams.variation = (visualParams.variation + 32) % 256;
+                Serial.printf("Variation: %d\n", visualParams.variation);
+                printMenuPipeline();
+            } else if (ch == '0') {
+                dbg_menu_state = MENU_MAIN;
+                printMenuMain();
+            }
+            break;
+
+        default:
+            break;
+    }
+}
+
+static void handleSingleKeystroke(char ch) {
+    // SPACEBAR - Next effect
+    if (ch == ' ') {
+        uint8_t nextEffect = (currentEffect + 1) % NUM_EFFECTS;
+        startAdvancedTransition(nextEffect);
+        Serial.printf("Effect: [%d] %s\n", currentEffect, effects[currentEffect].name);
+        return;
+    }
+
+    // BACKSPACE (127 or 8) - Previous effect
+    if (ch == 127 || ch == 8) {
+        uint8_t prevEffect = currentEffect > 0 ? currentEffect - 1 : NUM_EFFECTS - 1;
+        startAdvancedTransition(prevEffect);
+        Serial.printf("Effect: [%d] %s\n", currentEffect, effects[currentEffect].name);
+        return;
+    }
+
+    // ] - Next palette
+    if (ch == ']') {
+        currentPaletteIndex = (currentPaletteIndex + 1) % gGradientPaletteCount;
+        targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
+        Serial.printf("Palette: [%d/%d]\n", currentPaletteIndex, gGradientPaletteCount - 1);
+        return;
+    }
+
+    // [ - Previous palette
+    if (ch == '[') {
+        currentPaletteIndex = (currentPaletteIndex == 0) ? (gGradientPaletteCount - 1) : (currentPaletteIndex - 1);
+        targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
+        Serial.printf("Palette: [%d/%d]\n", currentPaletteIndex, gGradientPaletteCount - 1);
+        return;
+    }
+
+    // + or = - Brightness up
+    if (ch == '+' || ch == '=') {
+        int32_t nb = (int32_t)brightnessVal + BRIGHTNESS_STEP;
+        if (nb > MAX_BRIGHTNESS) nb = MAX_BRIGHTNESS;
+        brightnessVal = (uint8_t)nb;
+        FastLED.setBrightness(brightnessVal);
+        Serial.printf("Brightness: %d\n", brightnessVal);
+        return;
+    }
+
+    // - or _ - Brightness down
+    if (ch == '-' || ch == '_') {
+        int32_t nb = (int32_t)brightnessVal - BRIGHTNESS_STEP;
+        if (nb < MIN_BRIGHTNESS) nb = MIN_BRIGHTNESS;
+        brightnessVal = (uint8_t)nb;
+        FastLED.setBrightness(brightnessVal);
+        Serial.printf("Brightness: %d\n", brightnessVal);
+        return;
+    }
+
+    // > or . - Speed up
+    if (ch == '>' || ch == '.') {
+        int32_t ns = (int32_t)paletteSpeed + 4;
+        if (ns > 50) ns = 50;
+        paletteSpeed = (uint8_t)ns;
+        Serial.printf("Speed: %d\n", paletteSpeed);
+        return;
+    }
+
+    // < or , - Speed down
+    if (ch == '<' || ch == ',') {
+        int32_t ns = (int32_t)paletteSpeed - 4;
+        if (ns < 1) ns = 1;
+        paletteSpeed = (uint8_t)ns;
+        Serial.printf("Speed: %d\n", paletteSpeed);
+        return;
+    }
+
+    // t - Toggle transitions
+    if (ch == 't' || ch == 'T') {
+        useRandomTransitions = !useRandomTransitions;
+        Serial.printf("Transitions: %s\n", useRandomTransitions ? "RANDOM" : "FADE");
+        return;
+    }
+
+    // m - Toggle menu
+    if (ch == 'm' || ch == 'M') {
+        if (dbg_menu_state == MENU_OFF) {
+            dbg_menu_state = MENU_MAIN;
+            printMenuMain();
+        } else {
+            dbg_menu_state = MENU_OFF;
+            Serial.println("Menu closed");
+        }
+        return;
+    }
+
+    // s - Status
+    if (ch == 's' || ch == 'S') {
+        Serial.printf("\n--- STATUS ---\n");
+        Serial.printf("Effect: [%d] %s\n", currentEffect, effects[currentEffect].name);
+        Serial.printf("Palette: %d/%d\n", currentPaletteIndex, gGradientPaletteCount - 1);
+        Serial.printf("Brightness: %d\n", brightnessVal);
+        Serial.printf("Speed: %d\n", paletteSpeed);
+        Serial.printf("Heap: %d bytes\n", ESP.getFreeHeap());
+        Serial.printf("--------------\n");
+        return;
+    }
+
+    // ? - Help
+    if (ch == '?') {
+        printSerialHelp();
+        return;
+    }
+
+    // h - Help
+    if (ch == 'h' || ch == 'H') {
+        printSerialHelp();
+        return;
+    }
+
+    // n - Next effect (alias)
+    if (ch == 'n' || ch == 'N') {
+        uint8_t nextEffect = (currentEffect + 1) % NUM_EFFECTS;
+        startAdvancedTransition(nextEffect);
+        Serial.printf("Effect: [%d] %s\n", currentEffect, effects[currentEffect].name);
+        return;
+    }
+
+    // Menu input handling (when menu is open)
+    if (dbg_menu_state != MENU_OFF) {
+        handleMenuInput(ch);
+    }
+}
+
+void handleSerial() {
+    while (Serial.available()) {
+        char ch = Serial.peek();
+
+        // Check for quick keys (single-char immediate commands)
+        bool isSingleChar = (Serial.available() == 1);
+        bool isQuickKey = (ch == ' ' || ch == '[' || ch == ']' || ch == '+' || ch == '=' ||
+                          ch == '-' || ch == '_' || ch == '>' || ch == '<' || ch == '.' ||
+                          ch == ',' || ch == '?' || ch == 127 || ch == 8);
+        bool isMenuDigit = (dbg_menu_state != MENU_OFF && ch >= '0' && ch <= '9');
+        bool isMenuToggle = (ch == 'm' || ch == 'M');
+        bool isStatusKey = ((ch == 's' || ch == 'S') && Serial.available() == 1);
+        bool isToggleKey = ((ch == 't' || ch == 'T') && Serial.available() == 1);
+        bool isHelpKey = ((ch == 'h' || ch == 'H' || ch == 'n' || ch == 'N') && Serial.available() == 1);
+
+        if (isSingleChar || isQuickKey || isMenuDigit || isMenuToggle || isStatusKey || isToggleKey || isHelpKey) {
+            ch = Serial.read();
+            handleSingleKeystroke(ch);
+            continue;
+        }
+
+        // String command processing
+        String cmd = Serial.readStringUntil('\n');
+        cmd.trim();
+
+        if (cmd.startsWith("effect ")) {
+            uint8_t idx = cmd.substring(7).toInt();
+            if (idx < NUM_EFFECTS) {
+                startAdvancedTransition(idx);
+                Serial.printf("Effect: %s\n", effects[idx].name);
+            } else {
+                Serial.printf("Invalid effect index (0-%d)\n", NUM_EFFECTS - 1);
+            }
+        }
+        else if (cmd.startsWith("brightness ") || cmd.startsWith("bri ")) {
+            int sp = cmd.indexOf(' ');
+            uint8_t val = cmd.substring(sp + 1).toInt();
+            brightnessVal = constrain(val, MIN_BRIGHTNESS, MAX_BRIGHTNESS);
+            FastLED.setBrightness(brightnessVal);
+            Serial.printf("Brightness: %d\n", brightnessVal);
+        }
+        else if (cmd.startsWith("palette ") || cmd.startsWith("pal ")) {
+            int sp = cmd.indexOf(' ');
+            uint16_t idx = cmd.substring(sp + 1).toInt();
+            if (idx < gGradientPaletteCount) {
+                currentPaletteIndex = idx;
+                targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
+                Serial.printf("Palette: %d\n", idx);
+            } else {
+                Serial.printf("Invalid palette index (0-%d)\n", gGradientPaletteCount - 1);
+            }
+        }
+        else if (cmd.startsWith("speed ")) {
+            uint8_t val = constrain(cmd.substring(6).toInt(), 1, 50);
+            paletteSpeed = val;
+            Serial.printf("Speed: %d\n", paletteSpeed);
+        }
+        else if (cmd == "status") {
+            Serial.printf("Effect: [%d] %s\n", currentEffect, effects[currentEffect].name);
+            Serial.printf("Brightness: %d\n", brightnessVal);
+            Serial.printf("Palette: %d\n", currentPaletteIndex);
+            Serial.printf("Speed: %d\n", paletteSpeed);
+            Serial.printf("Heap: %d bytes\n", ESP.getFreeHeap());
+        }
+        else if (cmd == "effects" || cmd == "list") {
+            Serial.println("\n=== EFFECTS LIST ===");
+            for (uint8_t i = 0; i < NUM_EFFECTS; i++) {
+                Serial.printf("  %2d: %s%s\n", i, effects[i].name, (i == currentEffect) ? " *" : "");
+            }
+            Serial.println("====================\n");
+        }
+        else if (cmd == "next") {
+            uint8_t nextEffect = (currentEffect + 1) % NUM_EFFECTS;
+            startAdvancedTransition(nextEffect);
+            Serial.printf("Effect: %s\n", effects[currentEffect].name);
+        }
+        else if (cmd == "prev") {
+            uint8_t prevEffect = currentEffect > 0 ? currentEffect - 1 : NUM_EFFECTS - 1;
+            startAdvancedTransition(prevEffect);
+            Serial.printf("Effect: %s\n", effects[currentEffect].name);
+        }
+        else if (cmd == "help") {
+            Serial.println("\n=== STRING COMMANDS ===");
+            Serial.printf("  effect <0-%d>      - Set effect by index\n", NUM_EFFECTS - 1);
+            Serial.printf("  brightness <8-200> - Set brightness\n");
+            Serial.printf("  palette <0-%d>     - Set palette by index\n", gGradientPaletteCount - 1);
+            Serial.println("  speed <1-50>       - Set animation speed");
+            Serial.println("  next               - Next effect");
+            Serial.println("  prev               - Previous effect");
+            Serial.println("  effects / list     - Show all effects");
+            Serial.println("  status             - Show current state");
+            Serial.println("  help               - This message");
+            Serial.println("========================\n");
+            printSerialHelp();
+        }
+        else if (cmd.length() > 0) {
+            Serial.println("Unknown command. Type 'help' for list.");
+        }
+    }
 }
 
 void loop() {
@@ -1211,146 +1248,8 @@ void loop() {
         if (frameTime < minFrameTime) minFrameTime = frameTime;
     }
     
-#if FEATURE_BUTTON_CONTROL
-    // Use button control for boards that have buttons
-    handleButton();
-#endif
-
-    // Simple transition controls via Serial
-    if (Serial.available()) {
-        char cmd = Serial.read();
-        Serial.printf("*** RECEIVED COMMAND: '%c' (0x%02X) ***\n", cmd, cmd);
-        switch (cmd) {
-            case 't':
-            case 'T':
-                useRandomTransitions = !useRandomTransitions;
-                Serial.printf("🎭 Random transitions: %s\n", 
-                             useRandomTransitions ? "ENABLED" : "DISABLED");
-                break;
-            case 'n':
-            case 'N':
-                {
-                    uint8_t nextEffect = (currentEffect + 1) % NUM_EFFECTS;
-                    startAdvancedTransition(nextEffect);
-                }
-                break;
-            case 'o':
-            case 'O':
-                useOptimizedEffects = !useOptimizedEffects;
-                Serial.printf("⚡ Optimized effects: %s\n", 
-                             useOptimizedEffects ? "ENABLED" : "DISABLED");
-                break;
-            case 'p':
-            case 'P':
-                // Performance comparison removed - those shitty effects are gone
-                Serial.println("Performance comparison removed - optimized effects only now");
-                break;
-            case 'w':
-            case 'W':
-                #if FEATURE_WEB_SERVER
-                Serial.println("\n=== Retrying WiFi Connection ===");
-                webServer.stop();
-                delay(100);
-                if (webServer.begin()) {
-                    Serial.println("✅ Web server restarted successfully");
-                } else {
-                    Serial.println("⚠️  Web server failed to restart");
-                }
-                #else
-                Serial.println("Web server feature not enabled");
-                #endif
-                break;
-                
-            // Parameter mode selection (1-8 keys)
-            case '1':
-                Serial.println("\n🎨 MODE: Effect Selection");
-                scrollManager.setCurrentParam(PARAM_EFFECT);
-                break;
-            case '2':
-                Serial.println("\n💡 MODE: Brightness Control");
-                scrollManager.setCurrentParam(PARAM_BRIGHTNESS);
-                break;
-            case '3':
-                Serial.println("\n🎨 MODE: Palette Selection");
-                scrollManager.setCurrentParam(PARAM_PALETTE);
-                break;
-            case '4':
-                Serial.println("\n⚡ MODE: Speed Control");
-                scrollManager.setCurrentParam(PARAM_SPEED);
-                break;
-            case '5':
-                Serial.println("\n🔥 MODE: Intensity Control");
-                scrollManager.setCurrentParam(PARAM_INTENSITY);
-                break;
-            case '6':
-                Serial.println("\n🌈 MODE: Saturation Control");
-                scrollManager.setCurrentParam(PARAM_SATURATION);
-                break;
-            case '7':
-                Serial.println("\n✨ MODE: Complexity Control");
-                scrollManager.setCurrentParam(PARAM_COMPLEXITY);
-                break;
-            case '8':
-                Serial.println("\n🔄 MODE: Variation Control");
-                scrollManager.setCurrentParam(PARAM_VARIATION);
-                break;
-                
-            // Parameter value adjustment (+/- keys)
-            case '+':
-            case '=':  // Allow = key without shift
-                adjustCurrentParameter(1);
-                break;
-            case '-':
-            case '_':  // Allow underscore too
-                adjustCurrentParameter(-1);
-                break;
-                
-            // Quick access shortcuts
-            case '[':  // Previous effect
-                {
-                    uint8_t prevEffect = currentEffect > 0 ? currentEffect - 1 : NUM_EFFECTS - 1;
-                    startAdvancedTransition(prevEffect);
-                    Serial.printf("⬅️ Effect: %s\n", effects[prevEffect].name);
-                }
-                break;
-            case ']':  // Next effect
-                {
-                    uint8_t nextEffect = (currentEffect + 1) % NUM_EFFECTS;
-                    startAdvancedTransition(nextEffect);
-                    Serial.printf("➡️ Effect: %s\n", effects[nextEffect].name);
-                }
-                break;
-                
-            // Help command
-            case 'h':
-            case 'H':
-            case '?':
-                printSerialHelp();
-                break;
-                
-            // Preset commands disabled for now
-            // case 's':
-            // case 'S':
-            //     if (presetManager) {
-            //         presetManager->quickSave(0);  // Save to slot 0
-            //         Serial.println("💾 Quick saved current state");
-            //     }
-            //     break;
-            // case 'l':
-            // case 'L':
-            //     if (presetManager) {
-            //         presetManager->quickLoad(0);  // Load from slot 0
-            //         Serial.println("📁 Quick loaded preset");
-            //     }
-            //     break;
-        }
-    }
-
-    // Update scroll encoder (if attached)
-#if FEATURE_SCROLL_ENCODER
-    scrollManager.update();
-    scrollManager.updateVisualParams(visualParams);
-#endif
+    // Handle serial commands (keyboard-driven control)
+    handleSerial();
 
 #if FEATURE_ROTATE8_ENCODER
     // Process encoder events from I2C task (NON-BLOCKING)
@@ -1471,8 +1370,7 @@ void loop() {
     // Update palette blending
     updatePalette();
     
-    // Update encoder LED feedback
-    // updateEncoderFeedback();  // DISABLED - M5ROTATE8 encoder disabled
+    // HMI REMOVED - encoder feedback disabled
     
     // Update web server
 #if FEATURE_WEB_SERVER
@@ -1487,10 +1385,6 @@ void loop() {
     
     // Main loop runs at full speed, timing is handled by FastLED
     EVERY_N_MILLISECONDS(20) {
-        // Process encoder events if available
-        if (encoderFeedback) {
-            encoderFeedback->update();
-        }
         
 #if FEATURE_DEBUG_OUTPUT
         static unsigned long lastDebugPrint = 0;
@@ -1539,38 +1433,7 @@ void loop() {
         gHue++;
     }
     
-    // WiFi status LED feedback
-#if FEATURE_WEB_SERVER
-    EVERY_N_SECONDS(2) {
-        static WiFiManager::WiFiState lastWiFiState = WiFiManager::STATE_WIFI_INIT;
-        WiFiManager& wifi = WiFiManager::getInstance();
-        WiFiManager::WiFiState currentWiFiState = wifi.getState();
-        
-        // Update encoder LED based on WiFi state
-        if (encoderFeedback && currentWiFiState != lastWiFiState) {
-            switch (currentWiFiState) {
-                case WiFiManager::STATE_WIFI_SCANNING:
-                    encoderFeedback->flashEncoder(7, 0, 0, 255, 500); // Blue flash for scanning
-                    break;
-                case WiFiManager::STATE_WIFI_CONNECTING:
-                    encoderFeedback->flashEncoder(7, 255, 255, 0, 300); // Yellow flash for connecting
-                    break;
-                case WiFiManager::STATE_WIFI_CONNECTED:
-                    encoderFeedback->flashEncoder(7, 0, 255, 0, 1000); // Green flash for connected
-                    break;
-                case WiFiManager::STATE_WIFI_AP_MODE:
-                    encoderFeedback->flashEncoder(7, 255, 128, 0, 2000); // Orange for AP mode
-                    break;
-                case WiFiManager::STATE_WIFI_FAILED:
-                    encoderFeedback->flashEncoder(7, 255, 0, 0, 500); // Red flash for failed
-                    break;
-                default:
-                    break;
-            }
-            lastWiFiState = currentWiFiState;
-        }
-    }
-#endif
+    // HMI REMOVED - WiFi status LED feedback disabled
     
     // Status every 30 seconds
     EVERY_N_SECONDS(30) {

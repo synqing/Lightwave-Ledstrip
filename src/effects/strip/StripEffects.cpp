@@ -3,14 +3,13 @@
 // ============== BASIC EFFECTS ==============
 
 void solidColor() {
-    fill_solid(strip1, HardwareConfig::STRIP_LENGTH, CRGB::Blue);
-    fill_solid(strip2, HardwareConfig::STRIP_LENGTH, CRGB::Blue);
+    // Solid blue effect for APA102 strip
+    fill_solid(strip1, HardwareConfig::STRIP1_LED_COUNT, CRGB::Blue);
 }
 
 void pulseEffect() {
     uint8_t brightness = beatsin8(30, 50, 255);
-    fill_solid(strip1, HardwareConfig::STRIP_LENGTH, CHSV(160, 255, brightness));
-    fill_solid(strip2, HardwareConfig::STRIP_LENGTH, CHSV(160, 255, brightness));
+    fill_solid(strip1, HardwareConfig::STRIP1_LED_COUNT, CHSV(160, 255, brightness));
 }
 
 void confetti() {
@@ -41,15 +40,17 @@ void confetti() {
 // NEW STRIP-SPECIFIC EFFECT - CENTER ORIGIN CONFETTI
 void stripConfetti() {
     // CENTER ORIGIN CONFETTI - Sparks spawn at center LEDs 79/80 and fade as they move outward
-    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 10);
-    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 10);
+    fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, 10);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, 10);
     
     // Spawn new confetti at CENTER (LEDs 79/80)
     if (random8() < 80) {
         int centerPos = HardwareConfig::STRIP_CENTER_POINT + random8(2); // 79 or 80
         CRGB color = CHSV(gHue + random8(64), 200, 255);
         strip1[centerPos] += color;
-        strip2[centerPos] += color;
+        if (centerPos < HardwareConfig::STRIP2_LED_COUNT) {
+            strip2[centerPos] += color;
+        }
     }
     
     // Move existing confetti outward from center with fading
@@ -57,24 +58,28 @@ void stripConfetti() {
         if (strip1[i+1]) {
             strip1[i] = strip1[i+1];
             strip1[i].fadeToBlackBy(30);
-            strip2[i] = strip2[i+1];
-            strip2[i].fadeToBlackBy(30);
+            if (i < HardwareConfig::STRIP2_LED_COUNT && (i+1) < HardwareConfig::STRIP2_LED_COUNT) {
+                strip2[i] = strip2[i+1];
+                strip2[i].fadeToBlackBy(30);
+            }
         }
     }
     for (int i = HardwareConfig::STRIP_CENTER_POINT + 1; i < HardwareConfig::STRIP_LENGTH; i++) {
         if (strip1[i-1]) {
             strip1[i] = strip1[i-1];
             strip1[i].fadeToBlackBy(30);
-            strip2[i] = strip2[i-1];
-            strip2[i].fadeToBlackBy(30);
+            if (i < HardwareConfig::STRIP2_LED_COUNT && (i-1) < HardwareConfig::STRIP2_LED_COUNT) {
+                strip2[i] = strip2[i-1];
+                strip2[i].fadeToBlackBy(30);
+            }
         }
     }
 }
 
 void sinelon() {
     // CENTER ORIGIN SINELON - Oscillates outward from center LEDs 79/80
-    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 20);
-    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 20);
+    fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, 20);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, 20);
     
     // Oscillate from center outward (0 to STRIP_HALF_LENGTH)
     int distFromCenter = beatsin16(13, 0, HardwareConfig::STRIP_HALF_LENGTH);
@@ -122,8 +127,8 @@ void juggle() {
 // NEW STRIP-SPECIFIC EFFECT - CENTER ORIGIN JUGGLE
 void stripJuggle() {
     // CENTER ORIGIN JUGGLE - Multiple dots oscillate outward from center LEDs 79/80
-    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 20);
-    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 20);
+    fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, 20);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, 20);
     
     uint8_t dothue = 0;
     for(int i = 0; i < 8; i++) {
@@ -174,8 +179,8 @@ void waveEffect() {
     // CENTER ORIGIN WAVES - Start from center LEDs 79/80 and propagate outward
     static uint32_t wavePosition = 0;  // Changed to uint32_t to prevent overflow
     
-    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, fadeAmount);
-    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, fadeAmount);
+    fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, fadeAmount);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, fadeAmount);
     
     uint16_t waveSpeed = map(paletteSpeed, 1, 50, 100, 10);
     wavePosition += waveSpeed;
@@ -208,8 +213,8 @@ void rippleEffect() {
         bool active;
     } ripples[5];
     
-    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, fadeAmount);
-    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, fadeAmount);
+    fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, fadeAmount);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, fadeAmount);
     
     // Spawn new ripples at CENTER ONLY - frequency controlled by complexity
     uint8_t spawnChance = 30 * visualParams.getComplexityNorm();
@@ -262,8 +267,8 @@ void stripInterference() {
     static float wave1Phase = 0;
     static float wave2Phase = 0;
     
-    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, fadeAmount);
-    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, fadeAmount);
+    fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, fadeAmount);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, fadeAmount);
     
     wave1Phase += paletteSpeed / 20.0f;
     wave2Phase -= paletteSpeed / 30.0f;
@@ -392,12 +397,16 @@ void fire() {
         // Scale heat by intensity
         uint8_t scaledHeat = heat[j] * visualParams.getIntensityNorm();
         CRGB color = HeatColor(scaledHeat);
-        
+
         // Apply saturation control (desaturate towards white)
         color = blend(CRGB::White, color, visualParams.saturation);
-        
+
         strip1[j] = color;
-        strip2[j] = color;
+
+        // Only write to strip2 within its bounds (40 LEDs)
+        if (j < HardwareConfig::STRIP2_LED_COUNT) {
+            strip2[j] = color;
+        }
     }
 }
 
@@ -463,8 +472,8 @@ void heartbeatEffect() {
     static float phase = 0;
     static float lastBeat = 0;
     
-    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 20);
-    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 20);
+    fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, 20);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, 20);
     
     // Heartbeat rhythm: lub-dub... lub-dub...
     float beatPattern = sin(phase) + sin(phase * 2.1f) * 0.4f;
@@ -496,8 +505,8 @@ void breathingEffect() {
     float breath = (sin(breathPhase) + 1.0f) / 2.0f;
     float radius = breath * HardwareConfig::STRIP_HALF_LENGTH;
     
-    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 15);
-    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 15);
+    fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, 15);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, 15);
     
     for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
         float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
@@ -520,8 +529,8 @@ void shockwaveEffect() {
     static float shockwaves[5] = {-1, -1, -1, -1, -1};
     static uint8_t waveHues[5] = {0};
     
-    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 25);
-    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 25);
+    fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, 25);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, 25);
     
     // Spawn new shockwave from CENTER - complexity controls frequency
     uint8_t spawnChance = 20 * visualParams.getComplexityNorm();
@@ -572,8 +581,8 @@ void shockwaveEffect() {
 void vortexEffect() {
     static float vortexAngle = 0;
     
-    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 20);
-    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 20);
+    fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, 20);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, 20);
     
     for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
         float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
@@ -609,8 +618,8 @@ void collisionEffect() {
     static bool exploding = false;
     static float explosionRadius = 0;
     
-    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 30);
-    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 30);
+    fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, 30);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, 30);
     
     if (!exploding) {
         // Move particles toward center
@@ -687,8 +696,8 @@ void gravityWellEffect() {
         initialized = true;
     }
     
-    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 20);
-    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 20);
+    fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, 20);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, 20);
     
     // Update particles with gravity toward center
     for (int p = 0; p < 20; p++) {

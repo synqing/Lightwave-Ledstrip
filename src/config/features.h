@@ -13,9 +13,8 @@
 #undef FEATURE_PERFORMANCE_MONITOR
 #endif
 #define FEATURE_PERFORMANCE_MONITOR 1    // Performance tracking and reporting
-#ifndef FEATURE_BUTTON_CONTROL
-#define FEATURE_BUTTON_CONTROL 0         // Physical button support (NO BUTTON ON BOARD)
-#endif
+// HMI REMOVED - No encoders or buttons on this hardware configuration
+#define FEATURE_BUTTON_CONTROL 0         // Physical button support - DISABLED
 
 // Network features - DISABLED BY DEFAULT because WiFi is fucking worthless
 // To enable WiFi/WebServer, either:
@@ -40,12 +39,9 @@
 #ifndef FEATURE_PIPELINE_EFFECTS
 #define FEATURE_PIPELINE_EFFECTS 1      // Modular pipeline system
 #endif
-#ifndef FEATURE_SCROLL_ENCODER
-#define FEATURE_SCROLL_ENCODER 0        // M5Unit-Scroll support
-#endif
-#ifndef FEATURE_ROTATE8_ENCODER
-#define FEATURE_ROTATE8_ENCODER 1       // M5Stack 8-encoder support
-#endif
+// HMI encoders removed from hardware configuration
+#define FEATURE_SCROLL_ENCODER 0        // M5Unit-Scroll - REMOVED
+#define FEATURE_ROTATE8_ENCODER 0       // M5Stack 8-encoder - REMOVED
 #ifdef FEATURE_AUDIO_EFFECTS
 #undef FEATURE_AUDIO_EFFECTS
 #endif

@@ -1,6 +1,10 @@
 #ifndef WEB_SERVER_H
 #define WEB_SERVER_H
 
+#include "config/features.h"
+
+#if FEATURE_WEB_SERVER
+
 #include <Arduino.h>
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
@@ -20,6 +24,7 @@ private:
     bool isConnected = false;
     bool isRunning = false;
     bool shouldReboot = false;
+    bool mdnsStarted = false;
     uint32_t lastHeartbeat = 0;
     
     // JSON document size
@@ -86,5 +91,7 @@ public:
 
 // Global instance
 extern LightwaveWebServer webServer;
+
+#endif // FEATURE_WEB_SERVER
 
 #endif // WEB_SERVER_H 

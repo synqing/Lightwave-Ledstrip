@@ -6,6 +6,7 @@
 #include "effects/strip/StripEffects.h"
 #include "effects/strip/OptimizedStripEffects.h"
 #include "effects/transitions/TransitionEngine.h"
+#include "effects/zones/ZoneComposer.h"
 
 #if FEATURE_WEB_SERVER
 #include "network/WebServer.h"
@@ -82,6 +83,16 @@ VisualParams visualParams;
 TransitionEngine transitionEngine(HardwareConfig::NUM_LEDS);
 CRGB transitionSourceBuffer[HardwareConfig::NUM_LEDS];
 bool useRandomTransitions = true;
+
+// Zone Composer System
+ZoneComposer zoneComposer;
+
+// WebServer control variables
+uint8_t effectSpeed = 10;              // Effect animation speed (1-50)
+uint8_t effectIntensity = 255;         // Visual pipeline intensity (0-255)
+uint8_t effectSaturation = 255;        // Visual pipeline saturation (0-255)
+uint8_t effectComplexity = 128;        // Visual pipeline complexity (0-255)
+uint8_t effectVariation = 128;         // Visual pipeline variation (0-255)
 
 #if FEATURE_PERFORMANCE_MONITOR
 PerformanceMonitor perfMon;
@@ -180,6 +191,7 @@ extern void spectrumLightshowEngine();
 #include "effects/strip/LGPOrganicEffects.h"
 #include "effects/strip/LGPQuantumEffects.h"
 #include "effects/strip/LGPColorMixingEffects.h"
+#include "effects/strip/LGPNovelPhysics.h"
 // #include "effects/strip/LGPAudioReactive.h"  // Removed: all old audio-reactive modes retired
 
 // New Light Guide Plate Physics Effects
@@ -257,7 +269,15 @@ Effect effects[] = {
     {"LGP Beam Collision", lgpBeamCollision, EFFECT_TYPE_STANDARD},
     {"LGP Laser Duel", lgpLaserDuel, EFFECT_TYPE_STANDARD},
     {"LGP Tidal Forces", lgpTidalForces, EFFECT_TYPE_STANDARD},
-    
+
+    // =============== LGP NOVEL PHYSICS EFFECTS ===============
+    // Advanced effects exploiting dual-edge optical interference
+    {"LGP Chladni Harmonics", lgpChladniHarmonics, EFFECT_TYPE_STANDARD},
+    {"LGP Gravitational Chirp", lgpGravitationalWaveChirp, EFFECT_TYPE_STANDARD},
+    {"LGP Quantum Entangle", lgpQuantumEntanglementCollapse, EFFECT_TYPE_STANDARD},
+    {"LGP Mycelial Network", lgpMycelialNetwork, EFFECT_TYPE_STANDARD},
+    {"LGP Riley Dissonance", lgpRileyDissonance, EFFECT_TYPE_STANDARD},
+
 #if FEATURE_AUDIO_SYNC && FEATURE_AUDIO_EFFECTS
     // =============== AUDIO REACTIVE EFFECTS ===============
     {"Spectrum LS Engine", spectrumLightshowEngine, EFFECT_TYPE_STANDARD},
@@ -680,6 +700,26 @@ void setup() {
     }
 #endif
 
+    // ============== ZONE COMPOSER INITIALIZATION ==============
+    Serial.println("\n=== Initializing Zone Composer ===");
+
+    // FORCE 3-ZONE MODE: Always load Preset 2 (Triple Rings - 3 zones)
+    // This ensures consistent 3-zone layout matching the webapp visualization
+    Serial.println("Loading default 3-zone configuration (Preset 2: Triple Rings)");
+    zoneComposer.loadPreset(2);
+
+    // NOTE: Commented out NVS loading to prevent 4-zone override
+    // User can manually load saved configs via serial: "zone load"
+    // if (!zoneComposer.loadConfig()) {
+    //     Serial.println("No saved config - loading default preset");
+    //     zoneComposer.loadPreset(2);
+    // }
+
+    Serial.println("Zone Composer initialized in 3-ZONE mode (30+90+40 LEDs)");
+    Serial.println("Use 'zone status' to view configuration");
+    Serial.println("Use 'zone on' to enable zone mode");
+    Serial.println("Use 'zone presets' to see available presets\n");
+
     Serial.println("\n=== Setup Complete ===");
     Serial.println("🎭 Advanced Transition System Active");
     Serial.println("⚡ FastLED Optimizations ENABLED");
@@ -775,8 +815,15 @@ void renderUpdateCallback() {
 
 // Effect update callback - runs in 8ms task
 void effectUpdateCallback() {
-    if (effects[currentEffect].function) {
-        effects[currentEffect].function();
+    // Check if Zone Composer is enabled
+    if (zoneComposer.isEnabled()) {
+        // Render all zones
+        zoneComposer.render();
+    } else {
+        // Legacy single-effect mode
+        if (effects[currentEffect].function) {
+            effects[currentEffect].function();
+        }
     }
 }
 
@@ -1175,6 +1222,81 @@ void handleSerial() {
             startAdvancedTransition(prevEffect);
             Serial.printf("Effect: %s\n", effects[currentEffect].name);
         }
+        else if (cmd == "zone status") {
+            zoneComposer.printStatus();
+        }
+        else if (cmd == "zone on") {
+            zoneComposer.enable();
+            Serial.println("✅ Zone Composer enabled");
+        }
+        else if (cmd == "zone off") {
+            zoneComposer.disable();
+            Serial.println("✅ Zone Composer disabled (single-effect mode)");
+        }
+        else if (cmd.startsWith("zone ") && cmd.indexOf(" effect ") > 0) {
+            // Parse: zone <id> effect <effect_id>
+            int spaceIdx = cmd.indexOf(' ', 5);
+            uint8_t zoneId = cmd.substring(5, spaceIdx).toInt();
+            uint8_t effectId = cmd.substring(spaceIdx + 8).toInt();
+            zoneComposer.setZoneEffect(zoneId, effectId);
+        }
+        else if (cmd.startsWith("zone ") && cmd.indexOf(" enable") > 0) {
+            // Parse: zone <id> enable
+            uint8_t zoneId = cmd.substring(5, cmd.indexOf(' ', 5)).toInt();
+            zoneComposer.enableZone(zoneId, true);
+        }
+        else if (cmd.startsWith("zone ") && cmd.indexOf(" disable") > 0) {
+            // Parse: zone <id> disable
+            uint8_t zoneId = cmd.substring(5, cmd.indexOf(' ', 5)).toInt();
+            zoneComposer.enableZone(zoneId, false);
+        }
+        else if (cmd.startsWith("zone count ")) {
+            // Parse: zone count <1-4>
+            uint8_t count = cmd.substring(11).toInt();  // "zone count " = 11 chars
+            if (count >= 1 && count <= 4) {
+                zoneComposer.setZoneCount(count);
+                Serial.printf("✅ Zone count set to %d\n", count);
+            } else {
+                Serial.println("❌ Invalid count (1-4)");
+            }
+        }
+        else if (cmd.startsWith("zone preset ")) {
+            // Parse: zone preset <0-4>
+            uint8_t presetId = cmd.substring(12).toInt();  // "zone preset " = 12 chars
+            if (presetId < 5) {
+                if (zoneComposer.loadPreset(presetId)) {
+                    Serial.printf("✅ Loaded preset %d: %s\n", presetId, zoneComposer.getPresetName(presetId));
+                } else {
+                    Serial.println("❌ Failed to load preset");
+                }
+            } else {
+                Serial.println("❌ Invalid preset ID (0-4)");
+            }
+        }
+        else if (cmd == "zone presets") {
+            // List all available presets
+            Serial.println("\n=== AVAILABLE ZONE PRESETS ===");
+            for (uint8_t i = 0; i < 5; i++) {
+                Serial.printf("  %d: %s\n", i, zoneComposer.getPresetName(i));
+            }
+            Serial.println("Usage: zone preset <0-4>\n");
+        }
+        else if (cmd == "zone save") {
+            // Save current configuration to NVS
+            if (zoneComposer.saveConfig()) {
+                Serial.println("✅ Zone configuration saved");
+            } else {
+                Serial.println("❌ Failed to save configuration");
+            }
+        }
+        else if (cmd == "zone load") {
+            // Load configuration from NVS
+            if (zoneComposer.loadConfig()) {
+                Serial.println("✅ Zone configuration loaded");
+            } else {
+                Serial.println("⚠️  No saved configuration found - using defaults");
+            }
+        }
         else if (cmd == "help") {
             Serial.println("\n=== STRING COMMANDS ===");
             Serial.printf("  effect <0-%d>      - Set effect by index\n", NUM_EFFECTS - 1);
@@ -1186,6 +1308,17 @@ void handleSerial() {
             Serial.println("  effects / list     - Show all effects");
             Serial.println("  status             - Show current state");
             Serial.println("  help               - This message");
+            Serial.println("\n=== ZONE COMMANDS ===");
+            Serial.println("  zone status              - Show zone configuration");
+            Serial.println("  zone on/off              - Enable/disable zone mode");
+            Serial.println("  zone count <1-4>         - Set number of zones");
+            Serial.printf("  zone <0-3> effect <0-%d> - Assign effect to zone\n", NUM_EFFECTS - 1);
+            Serial.println("  zone <0-3> enable        - Enable specific zone");
+            Serial.println("  zone <0-3> disable       - Disable specific zone");
+            Serial.println("  zone presets             - List available presets");
+            Serial.println("  zone preset <0-4>        - Load preset configuration");
+            Serial.println("  zone save                - Save config to NVS");
+            Serial.println("  zone load                - Load config from NVS");
             Serial.println("========================\n");
             printSerialHelp();
         }

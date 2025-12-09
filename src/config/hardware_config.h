@@ -57,7 +57,12 @@ namespace HardwareConfig {
     // Segment Configuration
     constexpr uint8_t STRIP_SEGMENT_COUNT = 8;     // Divide each strip into 8 segments
     constexpr uint8_t SEGMENT_SIZE = LEDS_PER_STRIP / STRIP_SEGMENT_COUNT;  // 20 LEDs per segment
-    
+
+    // Zone Composer Configuration
+    constexpr uint8_t MAX_ZONES = 4;               // Maximum zones per strip
+    constexpr uint8_t ZONE_SIZE = 40;              // LEDs per zone (2x 20-LED segments)
+    constexpr uint8_t ZONE_SEGMENT_SIZE = 20;      // LEDs per zone segment (left or right)
+
     // Legacy compatibility
     constexpr uint16_t NUM_LEDS = TOTAL_LEDS;
     constexpr uint16_t DEFAULT_FPS = STRIP_FPS;

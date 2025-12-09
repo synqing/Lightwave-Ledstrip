@@ -21,9 +21,9 @@
 // 1. Change FEATURE_WEB_SERVER to 1 below
 // 2. Or add to platformio.ini: build_flags = -D FEATURE_WEB_SERVER=1
 #ifndef FEATURE_WEB_SERVER
-#define FEATURE_WEB_SERVER 0            // Web interface DISABLED by default (that WiFi shit is worthless)
+#define FEATURE_WEB_SERVER 1            // Web interface ENABLED for webapp
 #endif
-#define FEATURE_WEBSOCKET 0             // WebSocket support
+#define FEATURE_WEBSOCKET 1             // WebSocket support
 #define FEATURE_OTA_UPDATE 0            // Over-the-air updates
 
 // LED Layout Configuration

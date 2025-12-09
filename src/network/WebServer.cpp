@@ -21,6 +21,12 @@ extern CRGB strip1[];
 extern CRGB strip2[];
 extern bool useOptimizedEffects;
 extern bool useRandomTransitions;
+extern uint8_t effectSpeed;
+extern uint8_t effectIntensity, effectSaturation, effectComplexity, effectVariation;
+
+// Zone Composer
+#include "../effects/zones/ZoneComposer.h"
+extern ZoneComposer zoneComposer;
 
 // External references from main.cpp
 #include "../effects.h"
@@ -126,7 +132,7 @@ void LightwaveWebServer::startWiFiMonitor() {
             }
         },
         "WebServerWiFiMon",
-        2048,
+        8192,  // Increased from 2048 - needs more stack for mDNS and JSON operations
         this,
         1,
         nullptr
@@ -186,17 +192,26 @@ void LightwaveWebServer::onWiFiDisconnected() {
 void LightwaveWebServer::startMDNS() {
     // Only start mDNS if we have a valid IP
     if (WiFi.status() == WL_CONNECTED || WiFi.getMode() & WIFI_MODE_AP) {
+        // If mDNS is already running, stop it first to allow clean re-initialization
+        if (mdnsStarted) {
+            MDNS.end();
+            mdnsStarted = false;
+            delay(100); // Brief delay to ensure clean shutdown
+        }
+
         // Initialize mDNS
         if (MDNS.begin(NetworkConfig::MDNS_HOSTNAME)) {
             Serial.printf("[WebServer] mDNS responder started: http://%s.local\n", NetworkConfig::MDNS_HOSTNAME);
-            
+
             // Add service to mDNS-SD
             MDNS.addService("http", "tcp", NetworkConfig::WEB_SERVER_PORT);
             MDNS.addService("ws", "tcp", NetworkConfig::WEB_SERVER_PORT);
-            
+
             // Add some TXT records
             MDNS.addServiceTxt("http", "tcp", "version", "1.0.0");
             MDNS.addServiceTxt("http", "tcp", "board", "ESP32-S3");
+
+            mdnsStarted = true;
         } else {
             Serial.println("[WebServer] Error starting mDNS");
         }
@@ -332,13 +347,306 @@ void LightwaveWebServer::setupRoutes() {
             }
         }
     );
-    
+
+    // ========== NEW WEBAPP API ENDPOINTS ==========
+
+    // Speed control
+    server->on("/api/speed", HTTP_POST, [](AsyncWebServerRequest *request){},
+        NULL,
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+            StaticJsonDocument<256> doc;
+            DeserializationError error = deserializeJson(doc, data, len);
+
+            if (!error && doc.containsKey("speed")) {
+                uint8_t newSpeed = doc["speed"];
+                if (newSpeed >= 1 && newSpeed <= 50) {
+                    effectSpeed = newSpeed;
+                    request->send(200, "application/json", "{\"status\":\"ok\"}");
+                } else {
+                    request->send(400, "application/json", "{\"error\":\"Speed must be 1-50\"}");
+                }
+            } else {
+                request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
+            }
+        }
+    );
+
+    // Palette control
+    server->on("/api/palette", HTTP_POST, [](AsyncWebServerRequest *request){},
+        NULL,
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+            StaticJsonDocument<256> doc;
+            DeserializationError error = deserializeJson(doc, data);
+
+            if (!error && doc.containsKey("paletteId")) {
+                extern uint8_t currentPaletteIndex;
+                currentPaletteIndex = doc["paletteId"];
+                request->send(200, "application/json", "{\"status\":\"ok\"}");
+                return;
+            }
+            request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
+        }
+    );
+
+    // Get palettes list
+    server->on("/api/palettes", HTTP_GET, [](AsyncWebServerRequest *request){
+        AsyncJsonResponse *response = new AsyncJsonResponse();
+        JsonObject root = response->getRoot();
+        JsonArray palettes = root.createNestedArray("palettes");
+
+        // TODO: Get actual palette count
+        extern const uint8_t gGradientPaletteCount;
+        for (uint8_t i = 0; i < gGradientPaletteCount; i++) {
+            JsonObject palette = palettes.createNestedObject();
+            palette["id"] = i;
+            palette["name"] = String("Palette ") + i;
+        }
+
+        response->setLength();
+        request->send(response);
+    });
+
+    // Get effects list (paginated to avoid 2KB JSON limit)
+    server->on("/api/effects", HTTP_GET, [](AsyncWebServerRequest *request){
+        AsyncJsonResponse *response = new AsyncJsonResponse();
+        JsonObject root = response->getRoot();
+        JsonArray effectsList = root.createNestedArray("effects");
+
+        // Add effects in chunks
+        extern const uint8_t NUM_EFFECTS;
+        extern Effect effects[];
+
+        uint8_t start = request->hasParam("start") ? request->getParam("start")->value().toInt() : 0;
+        uint8_t count = request->hasParam("count") ? request->getParam("count")->value().toInt() : 20;
+        uint8_t end = min((uint8_t)(start + count), NUM_EFFECTS);
+
+        for (uint8_t i = start; i < end; i++) {
+            JsonObject effect = effectsList.createNestedObject();
+            effect["id"] = i;
+            effect["name"] = effects[i].name;
+            // Category determined by ID ranges
+            if (i <= 4) effect["category"] = "Classic";
+            else if (i <= 7) effect["category"] = "Shockwave";
+            else if (i <= 11) effect["category"] = "LGP Interference";
+            else if (i <= 14) effect["category"] = "LGP Geometric";
+            else if (i <= 20) effect["category"] = "LGP Advanced";
+            else if (i <= 23) effect["category"] = "LGP Organic";
+            else if (i <= 32) effect["category"] = "LGP Quantum";
+            else if (i <= 34) effect["category"] = "LGP Color Mixing";
+            else if (i <= 40) effect["category"] = "LGP Physics";
+            else if (i <= 45) effect["category"] = "LGP Novel Physics";
+            else effect["category"] = "Audio";
+        }
+
+        root["total"] = NUM_EFFECTS;
+        root["start"] = start;
+        root["count"] = end - start;
+
+        response->setLength();
+        request->send(response);
+    });
+
+    // Visual pipeline control
+    server->on("/api/pipeline", HTTP_POST, [](AsyncWebServerRequest *request){},
+        NULL,
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+            StaticJsonDocument<512> doc;
+            DeserializationError error = deserializeJson(doc, data, len);
+
+            if (!error) {
+                bool updated = false;
+                if (doc.containsKey("intensity")) {
+                    effectIntensity = doc["intensity"];
+                    updated = true;
+                }
+                if (doc.containsKey("saturation")) {
+                    effectSaturation = doc["saturation"];
+                    updated = true;
+                }
+                if (doc.containsKey("complexity")) {
+                    effectComplexity = doc["complexity"];
+                    updated = true;
+                }
+                if (doc.containsKey("variation")) {
+                    effectVariation = doc["variation"];
+                    updated = true;
+                }
+
+                if (updated) {
+                    request->send(200, "application/json", "{\"status\":\"ok\"}");
+                } else {
+                    request->send(400, "application/json", "{\"error\":\"No valid parameters\"}");
+                }
+            } else {
+                request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
+            }
+        }
+    );
+
+    // Transitions control
+    server->on("/api/transitions", HTTP_POST, [](AsyncWebServerRequest *request){},
+        NULL,
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+            StaticJsonDocument<256> doc;
+            DeserializationError error = deserializeJson(doc, data);
+
+            if (!error && doc.containsKey("enabled")) {
+                extern bool useRandomTransitions;
+                useRandomTransitions = doc["enabled"];
+                request->send(200, "application/json", "{\"status\":\"ok\"}");
+                return;
+            }
+            request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
+        }
+    );
+
+    // ========== ZONE COMPOSER API ENDPOINTS ==========
+
+    // Get zone status
+    server->on("/api/zone/status", HTTP_GET, [](AsyncWebServerRequest *request){
+        AsyncResponseStream *response = request->beginResponseStream("application/json");
+        StaticJsonDocument<512> doc;
+
+        doc["enabled"] = zoneComposer.isEnabled();
+        doc["zoneCount"] = zoneComposer.getZoneCount();
+
+        JsonArray zones = doc.createNestedArray("zones");
+        for (uint8_t i = 0; i < zoneComposer.getZoneCount(); i++) {
+            JsonObject zone = zones.createNestedObject();
+            zone["id"] = i;
+            zone["enabled"] = zoneComposer.isZoneEnabled(i);
+            zone["effectId"] = zoneComposer.getZoneEffect(i);
+        }
+
+        serializeJson(doc, *response);
+        request->send(response);
+    });
+
+    // Enable/disable zone mode
+    server->on("/api/zone/enable", HTTP_POST, [](AsyncWebServerRequest *request){},
+        NULL,
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+            StaticJsonDocument<256> doc;
+            DeserializationError error = deserializeJson(doc, data, len);
+
+            if (!error && doc.containsKey("enabled")) {
+                bool enable = doc["enabled"];
+                if (enable) {
+                    zoneComposer.enable();
+                } else {
+                    zoneComposer.disable();
+                }
+                request->send(200, "application/json", "{\"status\":\"ok\"}");
+            } else {
+                request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
+            }
+        }
+    );
+
+    // Configure individual zone
+    server->on("/api/zone/config", HTTP_POST, [](AsyncWebServerRequest *request){},
+        NULL,
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+            StaticJsonDocument<256> doc;
+            DeserializationError error = deserializeJson(doc, data, len);
+
+            if (!error && doc.containsKey("zoneId")) {
+                uint8_t zoneId = doc["zoneId"];
+
+                if (doc.containsKey("effectId")) {
+                    uint8_t effectId = doc["effectId"];
+                    zoneComposer.setZoneEffect(zoneId, effectId);
+                }
+
+                if (doc.containsKey("enabled")) {
+                    bool enabled = doc["enabled"];
+                    zoneComposer.enableZone(zoneId, enabled);
+                }
+
+                request->send(200, "application/json", "{\"status\":\"ok\"}");
+            } else {
+                request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
+            }
+        }
+    );
+
+    // Set zone count
+    server->on("/api/zone/count", HTTP_POST, [](AsyncWebServerRequest *request){},
+        NULL,
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+            StaticJsonDocument<256> doc;
+            DeserializationError error = deserializeJson(doc, data, len);
+
+            if (!error && doc.containsKey("count")) {
+                uint8_t count = doc["count"];
+                zoneComposer.setZoneCount(count);
+                request->send(200, "application/json", "{\"status\":\"ok\"}");
+            } else {
+                request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
+            }
+        }
+    );
+
+    // Get zone presets
+    server->on("/api/zone/presets", HTTP_GET, [](AsyncWebServerRequest *request){
+        AsyncResponseStream *response = request->beginResponseStream("application/json");
+        StaticJsonDocument<512> doc;
+
+        JsonArray presets = doc.createNestedArray("presets");
+        for (uint8_t i = 0; i < 5; i++) {  // 5 presets (0-4)
+            JsonObject preset = presets.createNestedObject();
+            preset["id"] = i;
+            preset["name"] = String("Preset ") + String(i);
+        }
+
+        serializeJson(doc, *response);
+        request->send(response);
+    });
+
+    // Load zone preset
+    server->on("/api/zone/preset/load", HTTP_POST, [](AsyncWebServerRequest *request){},
+        NULL,
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+            StaticJsonDocument<256> doc;
+            DeserializationError error = deserializeJson(doc, data, len);
+
+            if (!error && doc.containsKey("presetId")) {
+                uint8_t presetId = doc["presetId"];
+                if (zoneComposer.loadPreset(presetId)) {
+                    request->send(200, "application/json", "{\"status\":\"ok\"}");
+                } else {
+                    request->send(400, "application/json", "{\"error\":\"Invalid preset ID\"}");
+                }
+            } else {
+                request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
+            }
+        }
+    );
+
+    // Save zone config to NVS
+    server->on("/api/zone/config/save", HTTP_POST, [](AsyncWebServerRequest *request){
+        if (zoneComposer.saveConfig()) {
+            request->send(200, "application/json", "{\"status\":\"ok\"}");
+        } else {
+            request->send(500, "application/json", "{\"error\":\"Failed to save config\"}");
+        }
+    });
+
+    // Load zone config from NVS
+    server->on("/api/zone/config/load", HTTP_POST, [](AsyncWebServerRequest *request){
+        if (zoneComposer.loadConfig()) {
+            request->send(200, "application/json", "{\"status\":\"ok\"}");
+        } else {
+            request->send(500, "application/json", "{\"error\":\"Failed to load config\"}");
+        }
+    });
+
 #if FEATURE_AUDIO_SYNC
     // Register audio-specific web handlers
     // TODO: Implement registerAudioWebHandlers
     // registerAudioWebHandlers(server, ws);
 #endif
-    
+
     // 404 handler
     server->onNotFound([](AsyncWebServerRequest *request){
         request->send(404, "text/plain", "Not found");
@@ -417,28 +725,101 @@ void LightwaveWebServer::onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient 
             message += (char)data[i];
         }
         
-        StaticJsonDocument<256> doc;
+        StaticJsonDocument<512> doc;
         DeserializationError error = deserializeJson(doc, message);
-        
+
         if (!error) {
-            String cmd = doc["cmd"];
-            
-            if (cmd == "effect") {
-                uint8_t effect = doc["value"];
-                if (effect < NUM_EFFECTS) {
-                    startAdvancedTransition(effect);
+            // Check for new "type" format first
+            if (doc.containsKey("type")) {
+                String type = doc["type"].as<String>();
+
+                // Global effect control
+                if (type == "setEffect") {
+                    uint8_t effectId = doc["effectId"];
+                    if (effectId < NUM_EFFECTS) {
+                        startAdvancedTransition(effectId);
+                    }
+                } else if (type == "nextEffect") {
+                    extern uint8_t currentEffect;
+                    currentEffect = (currentEffect + 1) % NUM_EFFECTS;
+                    startAdvancedTransition(currentEffect);
+                } else if (type == "prevEffect") {
+                    extern uint8_t currentEffect;
+                    currentEffect = (currentEffect - 1 + NUM_EFFECTS) % NUM_EFFECTS;
+                    startAdvancedTransition(currentEffect);
                 }
-            } else if (cmd == "brightness") {
-                uint8_t brightness = doc["value"];
-                FastLED.setBrightness(brightness);
-            } else if (cmd == "palette") {
-                uint8_t palette = doc["value"];
-                if (palette < gGradientPaletteCount) {
-                    currentPaletteIndex = palette;
-                    targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
+
+                // Global parameters
+                else if (type == "setBrightness") {
+                    uint8_t value = doc["value"];
+                    FastLED.setBrightness(value);
+                } else if (type == "setSpeed") {
+                    uint8_t value = doc["value"];
+                    if (value >= 1 && value <= 50) {
+                        effectSpeed = value;
+                    }
+                } else if (type == "setPalette") {
+                    uint8_t paletteId = doc["paletteId"];
+                    if (paletteId < gGradientPaletteCount) {
+                        currentPaletteIndex = paletteId;
+                        targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
+                    }
+                } else if (type == "setPipeline") {
+                    if (doc.containsKey("intensity")) effectIntensity = doc["intensity"];
+                    if (doc.containsKey("saturation")) effectSaturation = doc["saturation"];
+                    if (doc.containsKey("complexity")) effectComplexity = doc["complexity"];
+                    if (doc.containsKey("variation")) effectVariation = doc["variation"];
+                } else if (type == "toggleTransitions") {
+                    extern bool useRandomTransitions;
+                    useRandomTransitions = doc["enabled"];
+                }
+
+                // Zone Composer control
+                else if (type == "zone.enable") {
+                    bool enable = doc["enable"];
+                    if (enable) zoneComposer.enable();
+                    else zoneComposer.disable();
+                } else if (type == "zone.setCount") {
+                    uint8_t count = doc["count"];
+                    zoneComposer.setZoneCount(count);
+                } else if (type == "zone.setEffect") {
+                    uint8_t zoneId = doc["zoneId"];
+                    uint8_t effectId = doc["effectId"];
+                    zoneComposer.setZoneEffect(zoneId, effectId);
+                } else if (type == "zone.enableZone") {
+                    uint8_t zoneId = doc["zoneId"];
+                    bool enabled = doc["enabled"];
+                    zoneComposer.enableZone(zoneId, enabled);
+                } else if (type == "zone.loadPreset") {
+                    uint8_t presetId = doc["presetId"];
+                    zoneComposer.loadPreset(presetId);
+                } else if (type == "zone.save") {
+                    zoneComposer.saveConfig();
+                } else if (type == "zone.load") {
+                    zoneComposer.loadConfig();
                 }
             }
-            
+            // Legacy "cmd" format for backward compatibility
+            else if (doc.containsKey("cmd")) {
+                String cmd = doc["cmd"];
+
+                if (cmd == "effect") {
+                    uint8_t effect = doc["value"];
+                    if (effect < NUM_EFFECTS) {
+                        startAdvancedTransition(effect);
+                    }
+                } else if (cmd == "brightness") {
+                    uint8_t brightness = doc["value"];
+                    FastLED.setBrightness(brightness);
+                } else if (cmd == "palette") {
+                    uint8_t palette = doc["value"];
+                    if (palette < gGradientPaletteCount) {
+                        currentPaletteIndex = palette;
+                        targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
+                    }
+                }
+            }
+
             // Broadcast updated status
             webServer.broadcastStatus();
         }

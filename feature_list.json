@@ -1,5 +1,6 @@
 {
-  "$schema": "domain-memory-harness-v1",
+  "$schema": "domain-memory-harness-v2",
+  "schema_version": "2.0",
   "description": "Backlog for LightwaveOS ESP32-S3 LED control system. Each item is derived from existing project state, not invented.",
   "items": [
     {
@@ -18,12 +19,8 @@
       "status": "FAILING",
       "priority": 2,
       "dependencies": [],
-      "evidence": {
-        "last_verified_at": "2025-12-12T06:30:00Z",
-        "commands_run": ["cat test/test_main.cpp"],
-        "results_summary": "test_main.cpp asserts 81 LEDs but hardware_config.h uses 320",
-        "links_or_paths": ["test/test_main.cpp", "src/config/hardware_config.h"]
-      },
+      "attempts": [],
+      "override_reason": null,
       "notes": "PlatformIO test framework (Unity) is set up but tests are stale."
     },
     {
@@ -41,12 +38,20 @@
       "status": "PASSING",
       "priority": 1,
       "dependencies": [],
-      "evidence": {
-        "last_verified_at": "2025-12-12T06:45:00Z",
-        "commands_run": ["pio run -e esp32dev_wifi"],
-        "results_summary": "SUCCESS - RAM 19.3%, Flash 31.3% (well under 80% limit). Only deprecation warnings (ArduinoJson API changes), no errors.",
-        "links_or_paths": []
-      },
+      "attempts": [
+        {
+          "run_id": "worker-002",
+          "timestamp": "2025-12-12T06:45:00Z",
+          "result": "PASSED",
+          "evidence": {
+            "commands_run": ["pio run -e esp32dev_wifi"],
+            "results_summary": "SUCCESS - RAM 19.3%, Flash 31.3% (well under 80% limit). Only deprecation warnings (ArduinoJson API changes), no errors."
+          },
+          "commit": "53de8f1",
+          "reverted": false
+        }
+      ],
+      "override_reason": null,
       "notes": "Verified in WORKER run 002. Build takes ~60s cold, ~3s incremental."
     },
     {
@@ -64,12 +69,20 @@
       "status": "PASSING",
       "priority": 1,
       "dependencies": [],
-      "evidence": {
-        "last_verified_at": "2025-12-12T06:38:00Z",
-        "commands_run": ["./init.sh"],
-        "results_summary": "init.sh created, executable, returns 0, prints PASS/FAIL summary with colors",
-        "links_or_paths": ["init.sh"]
-      },
+      "attempts": [
+        {
+          "run_id": "init-001",
+          "timestamp": "2025-12-12T06:38:00Z",
+          "result": "PASSED",
+          "evidence": {
+            "commands_run": ["./init.sh"],
+            "results_summary": "init.sh created, executable, returns 0, prints PASS/FAIL summary with colors"
+          },
+          "commit": "4860021",
+          "reverted": false
+        }
+      ],
+      "override_reason": null,
       "notes": "Created in INITIALIZER run 001. Checks: toolchain detection, git status, esp32dev build."
     },
     {
@@ -88,12 +101,8 @@
       "status": "FAILING",
       "priority": 3,
       "dependencies": [],
-      "evidence": {
-        "last_verified_at": null,
-        "commands_run": [],
-        "results_summary": "Not yet audited",
-        "links_or_paths": ["src/effects/strip/"]
-      },
+      "attempts": [],
+      "override_reason": null,
       "notes": "Mentioned in TODO.md as known issue."
     },
     {
@@ -111,12 +120,8 @@
       "status": "FAILING",
       "priority": 4,
       "dependencies": ["VERIFY-WIFI-BUILD"],
-      "evidence": {
-        "last_verified_at": null,
-        "commands_run": [],
-        "results_summary": "Not yet verified",
-        "links_or_paths": []
-      },
+      "attempts": [],
+      "override_reason": null,
       "notes": "Memory debug flags are set in platformio.ini."
     },
     {
@@ -133,13 +138,48 @@
       "status": "FAILING",
       "priority": 2,
       "dependencies": [],
-      "evidence": {
-        "last_verified_at": "2025-12-12T06:30:00Z",
-        "commands_run": ["git status"],
-        "results_summary": "Many modified/deleted files shown in status",
-        "links_or_paths": []
-      },
+      "attempts": [],
+      "override_reason": null,
       "notes": "Large number of unstaged changes exist. This is blocking clean harness setup."
+    },
+    {
+      "id": "HARNESS-ENHANCE",
+      "title": "Enhance domain memory harness with full protocols",
+      "description": "Implement the complete domain memory harness with mutation protocols, validation rules, extracted reference files, and optional Python helper.",
+      "acceptance_criteria": [
+        "HARNESS_RULES.md documents all mutation protocols",
+        "feature_list.json uses v2 schema with attempts[]",
+        "ARCHITECTURE.md contains extracted key facts",
+        "CONSTRAINTS.md contains extracted hard limits",
+        "agent-progress.md has Lessons Learned section"
+      ],
+      "verification": [
+        "cat HARNESS_RULES.md | head -50",
+        "cat feature_list.json | grep schema_version",
+        "test -f ARCHITECTURE.md && echo exists",
+        "test -f CONSTRAINTS.md && echo exists"
+      ],
+      "status": "PASSING",
+      "priority": 1,
+      "dependencies": [],
+      "attempts": [
+        {
+          "run_id": "worker-003",
+          "timestamp": "2025-12-12T07:55:00Z",
+          "result": "PASSED",
+          "evidence": {
+            "commands_run": [
+              "ls -la HARNESS_RULES.md ARCHITECTURE.md CONSTRAINTS.md",
+              "cat feature_list.json | grep schema_version"
+            ],
+            "results_summary": "Phase 0-2 complete: HARNESS_RULES.md (300+ lines), feature_list.json v2 schema, ARCHITECTURE.md, CONSTRAINTS.md, Lessons Learned section. Phases 3-4 (harness.py, concurrency) optional."
+          },
+          "commit": "5da7912",
+          "reverted": false
+        }
+      ],
+      "override_reason": null,
+      "notes": "Complete (minimum viable). Optional: Phase 3 (harness.py) and Phase 4 (concurrency lock) available if needed."
     }
   ]
 }

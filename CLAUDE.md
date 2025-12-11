@@ -238,36 +238,46 @@ Connect at 115200 baud. Key commands:
 This project includes a domain memory harness for persistent agent progress across sessions.
 
 ### Harness Files
-| File | Purpose |
-|------|---------|
-| `feature_list.json` | Structured backlog with verification criteria |
-| `agent-progress.md` | Append-only log of agent run history |
-| `init.sh` | Boot ritual - verifies project health |
 
-### WORKER MODE Ritual (for autonomous agent sessions)
+| File | Purpose | Read First? |
+|------|---------|-------------|
+| `HARNESS_RULES.md` | **Protocol rules** - mutation, validation, revert | Yes |
+| `ARCHITECTURE.md` | Extracted system facts for quick reference | Yes |
+| `CONSTRAINTS.md` | Hard limits (timing, memory, power) | Yes |
+| `feature_list.json` | Structured backlog with attempts[] history | Yes |
+| `agent-progress.md` | Run history + Lessons Learned section | Yes |
+| `init.sh` | Boot ritual - verifies project health | Run it |
 
-1. **Boot ritual**: Run `./init.sh` - if it fails, fix verification pipeline first
-2. **Read memory**: Check `agent-progress.md` (last 3 entries) and `feature_list.json`
-3. **Select ONE item**: Pick highest priority FAILING item with all dependencies PASSING
-4. **Plan briefly**: 5-10 bullets tied to acceptance criteria
-5. **Implement + verify**: Make minimal changes, run verification commands from item
-6. **Update memory**: Update item status/evidence in `feature_list.json`, append entry to `agent-progress.md`
-7. **Commit**: Use message format `feat: <id> <title>` or `fix: <id> <title>`
-8. **Stop**: Do not start another item in the same run
+### WORKER MODE Ritual
+
+**Read `HARNESS_RULES.md` for complete protocol.** Summary:
+
+1. **Boot**: Run `./init.sh` - if fails, fix that first
+2. **Read memory**:
+   - `agent-progress.md` (Lessons Learned + last 3 runs)
+   - `feature_list.json` (backlog + attempts history)
+   - `ARCHITECTURE.md` and `CONSTRAINTS.md` (if touching code)
+3. **Select ONE item**: Highest priority FAILING, warn if dependencies FAILING
+4. **Implement**: Follow constraints, use CENTER ORIGIN for effects
+5. **Record attempt**: Add to `attempts[]` array regardless of result
+6. **On success**: Update status to PASSING with evidence, commit
+7. **On failure**: Keep status FAILING, revert code (not harness), log investigation
+8. **Stop**: One item per run
 
 ### Verification Commands
 ```bash
-# Fast verification (run before any work)
-./init.sh
-
-# Full build with WiFi
-pio run -e esp32dev_wifi
-
-# Check for uncommitted changes
-git status --porcelain | wc -l
+./init.sh                           # Boot ritual
+pio run -e esp32dev_wifi            # Full build with WiFi
+git status --porcelain | wc -l      # Check uncommitted changes
 ```
 
-### Item Status Values
-- `FAILING` - Not yet implemented or currently broken
-- `PASSING` - Implemented and verified working
-- `BLOCKED` - Cannot proceed due to external dependency
+### Status Values
+- `FAILING` - Not yet done or verification failed
+- `PASSING` - Done and verified (requires evidence)
+- `BLOCKED` - External blocker or max attempts reached (requires reason)
+- `CANCELLED` - No longer needed (requires reason)
+
+### Escape Hatches
+- `override_reason` field in feature_list.json items
+- `--force` flags in harness.py (when implemented)
+- Document why if bypassing rules

@@ -4,6 +4,30 @@ This file is append-only. Each agent run adds a new section below.
 
 ---
 
+## Lessons Learned (Persistent)
+
+This section captures reusable knowledge from failures. Updated when a failure reveals something worth remembering.
+
+### Build Issues
+| Issue | Resolution | Discovered |
+|-------|------------|------------|
+| ArduinoJson deprecation warnings | Safe to ignore, not errors. Library uses deprecated API internally. | worker-002 |
+| WiFi build takes ~60s cold | Use incremental builds (~3s). Don't clean unless necessary. | worker-002 |
+
+### Effect Development
+| Issue | Resolution | Discovered |
+|-------|------------|------------|
+| (none yet) | | |
+
+### Common Failure Patterns
+| Symptom | Likely Cause | Fix |
+|---------|--------------|-----|
+| Frame drops | malloc in render loop | Use static buffers |
+| Effect looks wrong | Linear propagation | Use center-out pattern |
+| Build fails | Missing feature flag | Check `features.h` and platformio.ini |
+
+---
+
 ## Run 001 - INITIALIZER MODE
 
 **Timestamp:** 2025-12-12T06:30:00Z
@@ -115,5 +139,48 @@ pio run -e esp32dev_wifi
 
 ### Next Recommended Action
 Pick next FAILING item: FIX-TEST-ASSERTIONS (priority 2) or CLEAN-GIT-STATE (priority 2).
+
+---
+
+## Run 003 - WORKER MODE
+
+**Timestamp:** 2025-12-12T07:30:00Z
+**Run ID:** worker-003
+**Mode:** WORKER
+
+### Selected Backlog Item
+**HARNESS-ENHANCE** (priority 1, no dependencies, status was FAILING)
+
+### Plan
+- Phase 0: Create HARNESS_RULES.md (mutation protocols)
+- Phase 1: Enhance feature_list.json schema (v2 with attempts[])
+- Phase 2: Create ARCHITECTURE.md and CONSTRAINTS.md (extracted)
+- Phase 3: Create harness.py (optional, lightweight validation)
+- Phase 4: Add concurrency handling (optional)
+
+### Actions Taken
+- Deep research on domain memory protocol gaps (28 identified)
+- Created plan with user approval
+- Phase 0: Created HARNESS_RULES.md with full mutation protocols
+- Phase 1: Upgraded feature_list.json to v2 schema with attempts[]
+- Phase 2: Created ARCHITECTURE.md (extracted key facts)
+- Phase 2: Created CONSTRAINTS.md (extracted hard limits)
+- Phase 2: Added Lessons Learned section to agent-progress.md
+
+### Verification Results
+- **HARNESS_RULES.md:** Created, 300+ lines of protocol documentation
+- **feature_list.json:** Upgraded to v2 schema, all items have attempts[] and override_reason
+- **ARCHITECTURE.md:** Created with extracted system facts
+- **CONSTRAINTS.md:** Created with extracted hard limits
+- **Lessons Learned:** Section added to agent-progress.md
+
+### Items Updated
+- HARNESS-ENHANCE: FAILING → PASSING (Phase 0-2 complete, Phase 3-4 optional)
+
+### Commit
+`5da7912` - feat: HARNESS-ENHANCE - Complete domain memory protocol implementation
+
+### Next Recommended Action
+Pick next FAILING item: FIX-TEST-ASSERTIONS (priority 2), CLEAN-GIT-STATE (priority 2), or CENTER-ORIGIN-AUDIT (priority 3).
 
 ---

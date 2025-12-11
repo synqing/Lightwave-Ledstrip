@@ -38,16 +38,16 @@
       "verification": [
         "pio run -e esp32dev_wifi"
       ],
-      "status": "FAILING",
+      "status": "PASSING",
       "priority": 1,
       "dependencies": [],
       "evidence": {
-        "last_verified_at": null,
-        "commands_run": [],
-        "results_summary": "Not yet verified",
+        "last_verified_at": "2025-12-12T06:45:00Z",
+        "commands_run": ["pio run -e esp32dev_wifi"],
+        "results_summary": "SUCCESS - RAM 19.3%, Flash 31.3% (well under 80% limit). Only deprecation warnings (ArduinoJson API changes), no errors.",
         "links_or_paths": []
       },
-      "notes": "esp32dev build passed. WiFi build needs verification."
+      "notes": "Verified in WORKER run 002. Build takes ~60s cold, ~3s incremental."
     },
     {
       "id": "DOC-BUILD-VERIFICATION",
@@ -61,16 +61,16 @@
       "verification": [
         "./init.sh"
       ],
-      "status": "FAILING",
+      "status": "PASSING",
       "priority": 1,
       "dependencies": [],
       "evidence": {
-        "last_verified_at": null,
-        "commands_run": [],
-        "results_summary": "init.sh does not exist yet",
-        "links_or_paths": []
+        "last_verified_at": "2025-12-12T06:38:00Z",
+        "commands_run": ["./init.sh"],
+        "results_summary": "init.sh created, executable, returns 0, prints PASS/FAIL summary with colors",
+        "links_or_paths": ["init.sh"]
       },
-      "notes": "Being created as part of domain memory harness."
+      "notes": "Created in INITIALIZER run 001. Checks: toolchain detection, git status, esp32dev build."
     },
     {
       "id": "CENTER-ORIGIN-AUDIT",

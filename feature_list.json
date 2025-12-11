@@ -1,0 +1,145 @@
+{
+  "$schema": "domain-memory-harness-v1",
+  "description": "Backlog for LightwaveOS ESP32-S3 LED control system. Each item is derived from existing project state, not invented.",
+  "items": [
+    {
+      "id": "FIX-TEST-ASSERTIONS",
+      "title": "Fix test assertions for current hardware",
+      "description": "The existing test file (test/test_main.cpp) asserts NUM_LEDS=81 and palette count=33, but current config uses dual 160-LED strips (320 total). Tests will fail if run. Update test assertions to match current hardware configuration.",
+      "acceptance_criteria": [
+        "test_led_array_size passes with NUM_LEDS=320",
+        "test_palette_count reflects actual palette count",
+        "pio test -e native compiles (if applicable) or test file is updated"
+      ],
+      "verification": [
+        "grep -n NUM_LEDS src/config/hardware_config.h",
+        "cat test/test_main.cpp"
+      ],
+      "status": "FAILING",
+      "priority": 2,
+      "dependencies": [],
+      "evidence": {
+        "last_verified_at": "2025-12-12T06:30:00Z",
+        "commands_run": ["cat test/test_main.cpp"],
+        "results_summary": "test_main.cpp asserts 81 LEDs but hardware_config.h uses 320",
+        "links_or_paths": ["test/test_main.cpp", "src/config/hardware_config.h"]
+      },
+      "notes": "PlatformIO test framework (Unity) is set up but tests are stale."
+    },
+    {
+      "id": "VERIFY-WIFI-BUILD",
+      "title": "Verify WiFi build compiles successfully",
+      "description": "The WiFi-enabled environment (esp32dev_wifi) is the primary build for web interface testing per CLAUDE.md. Confirm it builds without errors.",
+      "acceptance_criteria": [
+        "pio run -e esp32dev_wifi completes with SUCCESS",
+        "No compilation errors",
+        "Binary size is reasonable (< 80% flash)"
+      ],
+      "verification": [
+        "pio run -e esp32dev_wifi"
+      ],
+      "status": "FAILING",
+      "priority": 1,
+      "dependencies": [],
+      "evidence": {
+        "last_verified_at": null,
+        "commands_run": [],
+        "results_summary": "Not yet verified",
+        "links_or_paths": []
+      },
+      "notes": "esp32dev build passed. WiFi build needs verification."
+    },
+    {
+      "id": "DOC-BUILD-VERIFICATION",
+      "title": "Document canonical verification sequence",
+      "description": "Create init.sh that runs the project's fast verification. Currently no single command runs all checks. Need to identify: format, lint, build, test.",
+      "acceptance_criteria": [
+        "init.sh exists and is executable",
+        "Running ./init.sh returns 0 on healthy repo",
+        "Script prints clear pass/fail status"
+      ],
+      "verification": [
+        "./init.sh"
+      ],
+      "status": "FAILING",
+      "priority": 1,
+      "dependencies": [],
+      "evidence": {
+        "last_verified_at": null,
+        "commands_run": [],
+        "results_summary": "init.sh does not exist yet",
+        "links_or_paths": []
+      },
+      "notes": "Being created as part of domain memory harness."
+    },
+    {
+      "id": "CENTER-ORIGIN-AUDIT",
+      "title": "Audit effects for CENTER ORIGIN compliance",
+      "description": "Per CLAUDE.md, ALL effects must originate from LED 79/80 (center). TODO.md mentions 'Fix center-origin compliance in some LGP effects'. Need to identify and fix non-compliant effects.",
+      "acceptance_criteria": [
+        "All effects in src/effects/strip/ verified for center-origin pattern",
+        "Non-compliant effects identified and listed",
+        "At least one non-compliant effect fixed as proof of concept"
+      ],
+      "verification": [
+        "grep -rn 'for.*i = 0' src/effects/strip/ | head -20",
+        "grep -rn 'center\\|CENTER\\|79\\|80' src/effects/strip/"
+      ],
+      "status": "FAILING",
+      "priority": 3,
+      "dependencies": [],
+      "evidence": {
+        "last_verified_at": null,
+        "commands_run": [],
+        "results_summary": "Not yet audited",
+        "links_or_paths": ["src/effects/strip/"]
+      },
+      "notes": "Mentioned in TODO.md as known issue."
+    },
+    {
+      "id": "HEAP-FRAG-MONITOR",
+      "title": "Implement heap fragmentation monitoring",
+      "description": "TODO.md lists 'Heap fragmentation monitoring improvements' as known issue. FEATURE_MEMORY_DEBUG is enabled. Need to verify monitoring works or improve it.",
+      "acceptance_criteria": [
+        "Serial output shows heap stats during operation",
+        "Fragmentation percentage is logged",
+        "Alert threshold for high fragmentation exists"
+      ],
+      "verification": [
+        "grep -rn 'heap\\|fragment' src/"
+      ],
+      "status": "FAILING",
+      "priority": 4,
+      "dependencies": ["VERIFY-WIFI-BUILD"],
+      "evidence": {
+        "last_verified_at": null,
+        "commands_run": [],
+        "results_summary": "Not yet verified",
+        "links_or_paths": []
+      },
+      "notes": "Memory debug flags are set in platformio.ini."
+    },
+    {
+      "id": "CLEAN-GIT-STATE",
+      "title": "Clean up uncommitted changes on feature branch",
+      "description": "Git status shows many modified and deleted files on feature/zone-composer branch. The branch has uncommitted work including deleted LightwaveOS-Production directory. Need to commit or stash before harness work.",
+      "acceptance_criteria": [
+        "git status shows clean working tree (or intentional ignored files only)",
+        "Feature branch changes are committed with descriptive message"
+      ],
+      "verification": [
+        "git status --porcelain | wc -l"
+      ],
+      "status": "FAILING",
+      "priority": 2,
+      "dependencies": [],
+      "evidence": {
+        "last_verified_at": "2025-12-12T06:30:00Z",
+        "commands_run": ["git status"],
+        "results_summary": "Many modified/deleted files shown in status",
+        "links_or_paths": []
+      },
+      "notes": "Large number of unstaged changes exist. This is blocking clean harness setup."
+    }
+  ]
+}

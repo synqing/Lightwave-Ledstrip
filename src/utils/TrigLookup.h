@@ -18,6 +18,44 @@
  *   uint8_t brightness = TrigLookup::sin8_fast(phase);      // 0-255
  *   int8_t  offset     = TrigLookup::sin8_signed(phase);    // -127 to 127
  *   float   wave       = TrigLookup::sinf_fast(phase);      // -1.0 to 1.0
+ *
+ * ============================================================================
+ * CRITICAL: PRECISION AND ERROR COMPOUNDING CONSIDERATIONS
+ * ============================================================================
+ *
+ * PRECISION:
+ *   - Angular resolution: 256 steps = 1.406° per step (no interpolation)
+ *   - Float table max error: ±0.0123 (~1.23% of full scale)
+ *   - Integer tables: ±1-2 LSB (~1.5-2% worst case)
+ *
+ * WHEN ERRORS DO NOT COMPOUND (SAFE):
+ *   - Per-LED brightness calculations (each LED independent per frame)
+ *   - Phase accumulators where phase is stored in float, lookup is output only
+ *   - Example (SAFE):
+ *       float phase = 0;
+ *       phase += speed;                              // Float accumulator (exact)
+ *       uint8_t val = sin8_fast(rad_to_theta(phase)); // Error in output only
+ *
+ * WHEN ERRORS DO COMPOUND (DANGEROUS):
+ *   - Feedback loops where lookup output feeds back into next iteration's input
+ *   - Numerical integration / physics simulations using lookup for derivatives
+ *   - Coupled oscillator systems
+ *   - Example (DANGEROUS):
+ *       float state = 0;
+ *       state = sinf_fast(rad_to_theta(state * 10));  // ERROR FEEDS BACK!
+ *       // After N iterations, drift ≈ N × 0.0123 × feedback_gain
+ *
+ * RECOMMENDATIONS:
+ *   1. For display/brightness: Use lookup tables freely (errors invisible)
+ *   2. For physics state evolution: Use native sin()/cos() for accuracy
+ *   3. For feedback systems: Either use native trig OR add periodic re-sync
+ *   4. If precision critical: Consider 1024-entry table (0.3% error) or
+ *      implement linear interpolation between samples
+ *
+ * Most LED effects in this codebase use pattern 1 (independent per-LED) or
+ * pattern 2 (float phase accumulator), so errors remain bounded and do NOT
+ * compound over time.
+ * ============================================================================
  */
 
 namespace TrigLookup {

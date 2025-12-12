@@ -16,12 +16,24 @@
         "grep -n NUM_LEDS src/config/hardware_config.h",
         "cat test/test_main.cpp"
       ],
-      "status": "FAILING",
+      "status": "PASSING",
       "priority": 2,
       "dependencies": [],
-      "attempts": [],
+      "attempts": [
+        {
+          "run_id": "worker-004",
+          "timestamp": "2025-12-12T08:30:00Z",
+          "result": "PASSED",
+          "evidence": {
+            "commands_run": ["grep NUM_LEDS", "cat test/test_main.cpp", "pio run -e esp32dev"],
+            "results_summary": "Changed LED assertion from 81 to 320. Palette count (33) was already correct. Build passes."
+          },
+          "commit": "c68b6a4",
+          "reverted": false
+        }
+      ],
       "override_reason": null,
-      "notes": "PlatformIO test framework (Unity) is set up but tests are stale."
+      "notes": "Fixed: LED count assertion changed 81→320. Palette count was already correct at 33."
     },
     {
       "id": "VERIFY-WIFI-BUILD",

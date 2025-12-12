@@ -184,3 +184,42 @@ Pick next FAILING item: FIX-TEST-ASSERTIONS (priority 2) or CLEAN-GIT-STATE (pri
 Pick next FAILING item: FIX-TEST-ASSERTIONS (priority 2), CLEAN-GIT-STATE (priority 2), or CENTER-ORIGIN-AUDIT (priority 3).
 
 ---
+
+## Run 004 - WORKER MODE
+
+**Timestamp:** 2025-12-12T08:30:00Z
+**Run ID:** worker-004
+**Mode:** WORKER
+
+### Selected Backlog Item
+**FIX-TEST-ASSERTIONS** (priority 2, no dependencies, status was FAILING)
+
+### Plan
+1. Read test file to find incorrect assertions
+2. Read hardware_config.h to confirm correct values
+3. Fix test assertions
+4. Verify build passes
+5. Update harness files
+
+### Actions Taken
+- Found test/test_main.cpp asserting NUM_LEDS=81 (WRONG)
+- hardware_config.h clearly shows: LEDS_PER_STRIP=160, TOTAL_LEDS=320, NUM_LEDS=320
+- Changed test assertion from 81 to 320
+- Palette count assertion (33) was already correct - verified 33 DEFINE_GRADIENT_PALETTE entries
+- Build passes (5.17s)
+
+### Verification Results
+- **LED assertion:** Fixed 81→320 ✓
+- **Palette assertion:** Already correct (33) ✓
+- **Build:** SUCCESS (RAM 19.4%, Flash 31.8%)
+
+### Items Updated
+- FIX-TEST-ASSERTIONS: FAILING → PASSING
+
+### Commit
+`c68b6a4` - fix: Update test assertions for 320 LED hardware configuration
+
+### Next Recommended Action
+Pick next FAILING item: CLEAN-GIT-STATE (priority 2) or CENTER-ORIGIN-AUDIT (priority 3).
+
+---

@@ -1,8 +1,9 @@
 #include <unity.h>
 
 // Test basic LED array initialization
+// Hardware: 2 strips × 160 LEDs = 320 total
 void test_led_array_size() {
-    TEST_ASSERT_EQUAL(81, HardwareConfig::NUM_LEDS);
+    TEST_ASSERT_EQUAL(320, HardwareConfig::NUM_LEDS);
 }
 
 // Test palette count

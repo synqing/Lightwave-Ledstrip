@@ -126,9 +126,6 @@ uint32_t paletteCycleInterval = 5000;      // Interval in ms (default 5 seconds)
 // Include palette definitions
 #include "Palettes.h"
 
-// Parameter state manager (software-only, no I2C hardware)
-#include "hardware/ScrollEncoderManager.h"
-
 #if FEATURE_ROTATE8_ENCODER
 #include "hardware/EncoderManager.h"
 #endif
@@ -900,89 +897,6 @@ void effectUpdateCallback() {
     }
 }
 
-// Helper function to adjust current parameter
-void adjustCurrentParameter(int8_t direction) {
-    ScrollParameter param = scrollManager.getCurrentParam();
-    int16_t currentValue = scrollManager.getParamValue(param);
-    int16_t newValue = currentValue;
-    
-    // Get parameter names
-    const char* paramNames[] = {
-        "Effect", "Brightness", "Palette", "Speed",
-        "Intensity", "Saturation", "Complexity", "Variation"
-    };
-    
-    switch (param) {
-        case PARAM_EFFECT:
-            if (direction > 0) {
-                uint8_t newEffect = (currentEffect + 1) % NUM_EFFECTS;
-                startAdvancedTransition(newEffect);
-                Serial.printf("➕ %s: %s\n", paramNames[param], effects[newEffect].name);
-            } else {
-                uint8_t newEffect = currentEffect > 0 ? currentEffect - 1 : NUM_EFFECTS - 1;
-                startAdvancedTransition(newEffect);
-                Serial.printf("➖ %s: %s\n", paramNames[param], effects[newEffect].name);
-            }
-            return;
-            
-        case PARAM_BRIGHTNESS:
-            newValue = constrain(currentValue + (direction * 4), 0, 255);
-            FastLED.setBrightness(newValue);
-            brightnessVal = newValue;
-            break;
-            
-        case PARAM_PALETTE:
-            if (direction > 0) {
-                newValue = (currentValue + 1) % gGradientPaletteCount;
-            } else {
-                newValue = currentValue > 0 ? currentValue - 1 : gGradientPaletteCount - 1;
-            }
-            currentPaletteIndex = newValue;
-            targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
-            Serial.printf("%s %s: Palette %d\n", 
-                         direction > 0 ? "➕" : "➖", 
-                         paramNames[param], newValue);
-            break;
-            
-        case PARAM_SPEED:
-            newValue = constrain(currentValue + (direction * 4), 0, 255);
-            paletteSpeed = map(newValue, 0, 255, 1, 50);
-            break;
-            
-        case PARAM_INTENSITY:
-            newValue = constrain(currentValue + (direction * 3), 0, 255);
-            visualParams.intensity = newValue;
-            break;
-            
-        case PARAM_SATURATION:
-            newValue = constrain(currentValue + (direction * 3), 0, 255);
-            visualParams.saturation = newValue;
-            break;
-            
-        case PARAM_COMPLEXITY:
-            newValue = constrain(currentValue + (direction * 3), 0, 255);
-            visualParams.complexity = newValue;
-            break;
-            
-        case PARAM_VARIATION:
-            newValue = constrain(currentValue + (direction * 3), 0, 255);
-            visualParams.variation = newValue;
-            break;
-    }
-    
-    // Update scroll manager value
-    scrollManager.setParamValue(param, newValue);
-    
-    // Print feedback (except for effect and palette which print their own)
-    if (param != PARAM_EFFECT && param != PARAM_PALETTE) {
-        Serial.printf("%s %s: %d (%.1f%%)\n", 
-                     direction > 0 ? "➕" : "➖",
-                     paramNames[param], 
-                     newValue, 
-                     (newValue / 255.0f) * 100.0f);
-    }
-}
-
 // Print serial command help
 // ============== KEYBOARD CONTROL SYSTEM ==============
 // Debug menu state machine (keyboard-driven since no HMI devices)
@@ -1481,7 +1395,6 @@ void loop() {
                 if (newEffect != currentEffect) {
                     startAdvancedTransition(newEffect);
                     Serial.printf("🎨 MAIN: Effect changed to %s (index %d)\n", effects[currentEffect].name, currentEffect);
-                    scrollManager.setParamValue(PARAM_EFFECT, newEffect);
 
                     // Log mode transition if effect type changed
                     if (effects[newEffect].type != effects[currentEffect].type) {
@@ -1504,7 +1417,6 @@ void loop() {
                             FastLED.setBrightness(brightness);
                             brightnessVal = brightness;
                             Serial.printf("💡 MAIN: Brightness changed to %d\n", brightness);
-                            scrollManager.setParamValue(PARAM_BRIGHTNESS, brightness);
                             // if (encoderFeedback) encoderFeedback->flashEncoder(1, 255, 255, 255, 200);
                         }
                         break;
@@ -1517,38 +1429,32 @@ void loop() {
                         }
                         targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
                         Serial.printf("🎨 MAIN: Palette changed to %d\n", currentPaletteIndex);
-                        scrollManager.setParamValue(PARAM_PALETTE, currentPaletteIndex);
                         // if (encoderFeedback) encoderFeedback->flashEncoder(2, 255, 0, 255, 200);
                         break;
                         
                     case 3: // Speed control
                         paletteSpeed = constrain(paletteSpeed + (event.delta > 0 ? 2 : -2), 1, 50);
                         Serial.printf("⚡ MAIN: Speed changed to %d\n", paletteSpeed);
-                        scrollManager.setParamValue(PARAM_SPEED, constrain(paletteSpeed * 4, 0, 255));
                         break;
                         
                     case 4: // Intensity/Amplitude
                         visualParams.intensity = constrain(visualParams.intensity + (event.delta > 0 ? 4 : -4), 0, 255);
                         Serial.printf("🔥 MAIN: Intensity changed to %d (%.1f%%)\n", visualParams.intensity, visualParams.getIntensityNorm() * 100);
-                        scrollManager.setParamValue(PARAM_INTENSITY, visualParams.intensity);
                         break;
                         
                     case 5: // Saturation
                         visualParams.saturation = constrain(visualParams.saturation + (event.delta > 0 ? 4 : -4), 0, 255);
                         Serial.printf("🎨 MAIN: Saturation changed to %d (%.1f%%)\n", visualParams.saturation, visualParams.getSaturationNorm() * 100);
-                        scrollManager.setParamValue(PARAM_SATURATION, visualParams.saturation);
                         break;
                         
                     case 6: // Complexity/Detail
                         visualParams.complexity = constrain(visualParams.complexity + (event.delta > 0 ? 4 : -4), 0, 255);
                         Serial.printf("✨ MAIN: Complexity changed to %d (%.1f%%)\n", visualParams.complexity, visualParams.getComplexityNorm() * 100);
-                        scrollManager.setParamValue(PARAM_COMPLEXITY, visualParams.complexity);
                         break;
 
                     case 7: // Variation/Mode
                         visualParams.variation = constrain(visualParams.variation + (event.delta > 0 ? 4 : -4), 0, 255);
                         Serial.printf("🔄 MAIN: Variation changed to %d (%.1f%%)\n", visualParams.variation, visualParams.getVariationNorm() * 100);
-                        scrollManager.setParamValue(PARAM_VARIATION, visualParams.variation);
                         break;
                 }
             }

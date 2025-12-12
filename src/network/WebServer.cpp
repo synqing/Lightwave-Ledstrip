@@ -399,12 +399,12 @@ void LightwaveWebServer::setupRoutes() {
         JsonObject root = response->getRoot();
         JsonArray palettes = root.createNestedArray("palettes");
 
-        // TODO: Get actual palette count
         extern const uint8_t gGradientPaletteCount;
+        extern const char* const paletteNames[];
         for (uint8_t i = 0; i < gGradientPaletteCount; i++) {
             JsonObject palette = palettes.createNestedObject();
             palette["id"] = i;
-            palette["name"] = String("Palette ") + i;
+            palette["name"] = paletteNames[i];
         }
 
         response->setLength();
@@ -795,9 +795,9 @@ void LightwaveWebServer::setupRoutes() {
 #endif
 
 #if FEATURE_AUDIO_SYNC
-    // Register audio-specific web handlers
-    // TODO: Implement registerAudioWebHandlers
-    // registerAudioWebHandlers(server, ws);
+    // Audio web handlers - separate development track
+    // See: src/effects/strip/LGPAudioReactive.cpp for 6 ready effects
+    // Enable FEATURE_AUDIO_SYNC in features.h when audio hardware is connected
 #endif
 
     // 404 handler

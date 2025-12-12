@@ -330,26 +330,26 @@ void lgpCrystallineGrowth() {
         if (crystalSize[c] >= 20 && random8() < 5) {
             crystalSize[c] = 0;
             crystalSeeds[c] = random8(HardwareConfig::STRIP_LENGTH);
-            crystalHue[c] = random8();
+            crystalHue[c] = random8(30);  // Small palette offset instead of full spectrum
         }
-        
+
         // Render crystal
         uint8_t pos = crystalSeeds[c];
-        
+
         for (int8_t facet = -crystalSize[c]; facet <= crystalSize[c]; facet++) {
             int16_t facetPos = pos + facet;
             if (facetPos >= 0 && facetPos < HardwareConfig::STRIP_LENGTH) {
                 // Crystal structure with internal reflections
                 uint8_t facetBrightness = 255 - (abs(facet) * 255 / (crystalSize[c] + 1));
                 facetBrightness = scale8(facetBrightness, visualParams.intensity);
-                
-                // Prismatic dispersion
-                uint8_t hue = crystalHue[c] + (facet * 5);
-                
+
+                // Use palette with smaller prismatic dispersion
+                uint8_t paletteIndex = crystalHue[c] + abs(facet);  // Reduced from facet*5
+
                 // Different refraction on each strip
-                CRGB color1 = CHSV(hue, 200 - abs(facet) * 10, facetBrightness);
-                CRGB color2 = CHSV(hue + 30, 180 - abs(facet) * 8, scale8(facetBrightness, 200));
-                
+                CRGB color1 = ColorFromPalette(currentPalette, gHue + paletteIndex, facetBrightness);
+                CRGB color2 = ColorFromPalette(currentPalette, gHue + paletteIndex + 30, scale8(facetBrightness, 200));
+
                 strip1[facetPos] = blend(strip1[facetPos], color1, 128);
                 strip2[facetPos] = blend(strip2[facetPos], color2, 128);
             }
@@ -403,18 +403,18 @@ void lgpFluidDynamics() {
         // Velocity magnitude to color
         uint8_t speed = abs(velocity[i]) * 255;
         speed = constrain(speed, 0, 255);
-        
+
         // Pressure to brightness
         uint8_t brightness = (pressure[i] + 1.0f) * 127;
         brightness = scale8(brightness, visualParams.intensity);
-        
-        // Laminar flow: smooth gradients
-        // Turbulent flow: rapid color changes
-        uint8_t hue = gHue + (uint8_t)(velocity[i] * 100) + i/2;
-        
+
+        // CENTER ORIGIN + use palette with smaller gradient
+        float distFromCenter = abs((int)i - HardwareConfig::STRIP_CENTER_POINT);
+        uint8_t paletteIndex = (uint8_t)(velocity[i] * 20) + distFromCenter/4;  // Reduced from 100
+
         // Different visualization on each strip
-        strip1[i] = CHSV(hue, 255 - speed/2, brightness);
-        strip2[i] = CHSV(hue + 60, 200, scale8(brightness, 200 + speed/4));
+        strip1[i] = ColorFromPalette(currentPalette, gHue + paletteIndex, brightness);
+        strip2[i] = ColorFromPalette(currentPalette, gHue + paletteIndex + 60, scale8(brightness, 200 + speed/4));
     }
     
     // Sync to unified buffer

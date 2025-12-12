@@ -56,3 +56,35 @@ archives/
 
 # Domain Memory Harness
 .harness.lock
+
+# Claude Code
+.claude/
+
+# Temporary reports and screenshots
+*.png
+COMPREHENSIVE_AUDIT_REPORT.md
+CRITICAL_FIXES_TO_IMPLEMENT.md
+CSS_REFACTOR_GUIDE.md
+DESIGN_SYSTEM_AUDIT_REPORT.md
+DESIGN_SYSTEM_VISUAL_COMPARISON.md
+EFFECT_DROPDOWN_DEBUG_REPORT.md
+EFFECT_FORENSIC_ANALYSIS_REPORT.md
+MISSING_EFFECTS_LIST.txt
+PRISM_DESIGN_TOKENS_ENHANCED.css
+WEBAPP_IMPLEMENTATION.md
+AURA_BUILD_PROMPT.md
+AURA_BUILD_PROMPT.md.backup
+
+# Backup files
+*.backup
+*.broken
+
+# Development tooling
+tools/prism.node-package/
+web/
+
+# Deprecated/experimental
+GENESIS-ARCHITECTURE/
+Images/
+src/effects/engines/
+src/effects/enhanced/

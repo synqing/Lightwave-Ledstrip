@@ -8,6 +8,7 @@ extern CRGB strip2[];
 extern CRGB leds[];
 extern Effect effects[];
 extern const uint8_t NUM_EFFECTS;
+extern uint8_t effectSpeed;  // Global speed variable for effects
 
 ZoneComposer::ZoneComposer()
     : m_zoneCount(3)  // Default to 3-zone mode
@@ -16,11 +17,30 @@ ZoneComposer::ZoneComposer()
     , m_activeConfig(ZONE_CONFIGS_3ZONE)  // Start with 3-zone config
     , m_configSize(3)                      // Start with 3 zones
 {
-    // Initialize zone configuration
-    for (uint8_t i = 0; i < HardwareConfig::MAX_ZONES; i++) {
-        m_zoneEffects[i] = 0;  // Default to first effect
-        m_zoneEnabled[i] = false;  // Disabled by default
-    }
+    // Initialize zone configuration with custom defaults
+    // Zone 0 (center): Wave (effect ID 2)
+    m_zoneEffects[0] = 2;
+    m_zoneEnabled[0] = true;
+    m_zoneBrightness[0] = 255;
+    m_zoneSpeed[0] = 25;
+
+    // Zone 1 (middle): LGP Wave Collision (effect ID 11)
+    m_zoneEffects[1] = 11;
+    m_zoneEnabled[1] = true;
+    m_zoneBrightness[1] = 255;
+    m_zoneSpeed[1] = 25;
+
+    // Zone 2 (outer): LGP Diamond Lattice (effect ID 12)
+    m_zoneEffects[2] = 12;
+    m_zoneEnabled[2] = true;
+    m_zoneBrightness[2] = 255;
+    m_zoneSpeed[2] = 25;
+
+    // Zone 3 (4-zone mode only): Default to first effect, disabled
+    m_zoneEffects[3] = 0;
+    m_zoneEnabled[3] = false;
+    m_zoneBrightness[3] = 255;
+    m_zoneSpeed[3] = 25;
 
     // Clear buffers
     fill_solid(m_tempStrip1, 40, CRGB::Black);
@@ -55,6 +75,44 @@ void ZoneComposer::enableZone(uint8_t zoneId, bool enabled) {
 
     m_zoneEnabled[zoneId] = enabled;
     Serial.printf("Zone %d %s\n", zoneId, enabled ? "enabled" : "disabled");
+}
+
+void ZoneComposer::setZoneBrightness(uint8_t zoneId, uint8_t brightness) {
+    if (zoneId >= HardwareConfig::MAX_ZONES) {
+        Serial.printf("ERROR: Invalid zone ID %d\n", zoneId);
+        return;
+    }
+
+    m_zoneBrightness[zoneId] = brightness;
+    Serial.printf("Zone %d brightness set to %d\n", zoneId, brightness);
+}
+
+uint8_t ZoneComposer::getZoneBrightness(uint8_t zoneId) const {
+    if (zoneId >= HardwareConfig::MAX_ZONES) {
+        return 255;
+    }
+    return m_zoneBrightness[zoneId];
+}
+
+void ZoneComposer::setZoneSpeed(uint8_t zoneId, uint8_t speed) {
+    if (zoneId >= HardwareConfig::MAX_ZONES) {
+        Serial.printf("ERROR: Invalid zone ID %d\n", zoneId);
+        return;
+    }
+
+    // Clamp speed to valid range (1-50)
+    if (speed < 1) speed = 1;
+    if (speed > 50) speed = 50;
+
+    m_zoneSpeed[zoneId] = speed;
+    Serial.printf("Zone %d speed set to %d\n", zoneId, speed);
+}
+
+uint8_t ZoneComposer::getZoneSpeed(uint8_t zoneId) const {
+    if (zoneId >= HardwareConfig::MAX_ZONES) {
+        return 25;
+    }
+    return m_zoneSpeed[zoneId];
 }
 
 void ZoneComposer::setZoneCount(uint8_t count) {
@@ -141,13 +199,17 @@ void ZoneComposer::renderZone(uint8_t zoneId) {
     fill_solid(strip1, 160, CRGB::Black);
     fill_solid(strip2, 160, CRGB::Black);
 
-    // Step 2: Execute effect - it renders to full strip1/strip2
+    // Step 2: Set per-zone speed before effect execution
+    // Effects that use effectSpeed will now use the zone-specific value
+    effectSpeed = m_zoneSpeed[zoneId];
+
+    // Step 3: Execute effect - it renders to full strip1/strip2
     effects[effectId].function();
 
-    // Step 3: Extract zone segment and map to output
+    // Step 4: Extract zone segment and map to output (applies per-zone brightness)
     mapZoneToOutput(zoneId);
 
-    // Step 4: Clear strips for next zone
+    // Step 5: Clear strips for next zone
     fill_solid(strip1, 160, CRGB::Black);
     fill_solid(strip2, 160, CRGB::Black);
 }
@@ -158,14 +220,26 @@ void ZoneComposer::mapZoneToOutput(uint8_t zoneId) {
     }
 
     const ZoneDefinition& zone = m_activeConfig[zoneId];  // Use active config
+    uint8_t brightness = m_zoneBrightness[zoneId];
+
+    // Helper lambda to apply brightness scaling to a pixel
+    auto applyBrightness = [brightness](CRGB& pixel) {
+        if (brightness < 255) {
+            pixel.r = (pixel.r * brightness) / 255;
+            pixel.g = (pixel.g * brightness) / 255;
+            pixel.b = (pixel.b * brightness) / 255;
+        }
+    };
 
     // Copy zone segments from strip1/strip2 to output buffers
     // Zone layout: left segment (20 LEDs) + right segment (20 LEDs)
+    // Apply per-zone brightness during copy
 
     // Copy left segment for strip1
     for (uint8_t i = zone.strip1StartLeft; i <= zone.strip1EndLeft; i++) {
         if (i < 160) {
             m_outputStrip1[i] = strip1[i];
+            applyBrightness(m_outputStrip1[i]);
         }
     }
 
@@ -173,6 +247,7 @@ void ZoneComposer::mapZoneToOutput(uint8_t zoneId) {
     for (uint8_t i = zone.strip1StartRight; i <= zone.strip1EndRight; i++) {
         if (i < 160) {
             m_outputStrip1[i] = strip1[i];
+            applyBrightness(m_outputStrip1[i]);
         }
     }
 
@@ -180,6 +255,7 @@ void ZoneComposer::mapZoneToOutput(uint8_t zoneId) {
     for (uint8_t i = zone.strip2StartLeft; i <= zone.strip2EndLeft; i++) {
         if (i < 160) {
             m_outputStrip2[i] = strip2[i];
+            applyBrightness(m_outputStrip2[i]);
         }
     }
 
@@ -187,6 +263,7 @@ void ZoneComposer::mapZoneToOutput(uint8_t zoneId) {
     for (uint8_t i = zone.strip2StartRight; i <= zone.strip2EndRight; i++) {
         if (i < 160) {
             m_outputStrip2[i] = strip2[i];
+            applyBrightness(m_outputStrip2[i]);
         }
     }
 }
@@ -259,6 +336,8 @@ void ZoneComposer::printStatus() const {
         Serial.printf("  Status: %s\n", m_zoneEnabled[i] ? "ENABLED" : "DISABLED");
         Serial.printf("  Effect: %d (%s)\n", m_zoneEffects[i],
                      m_zoneEffects[i] < NUM_EFFECTS ? effects[m_zoneEffects[i]].name : "INVALID");
+        Serial.printf("  Brightness: %d\n", m_zoneBrightness[i]);
+        Serial.printf("  Speed: %d\n", m_zoneSpeed[i]);
 
         const ZoneDefinition& zone = m_activeConfig[i];  // Use active config
         Serial.printf("  Strip1 Range: [%d-%d] + [%d-%d]\n",

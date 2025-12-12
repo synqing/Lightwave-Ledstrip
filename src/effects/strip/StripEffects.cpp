@@ -333,11 +333,12 @@ void stripPlasma() {
         float v1 = sin(normalizedDist * 8.0f + time / 100.0f);
         float v2 = sin(normalizedDist * 5.0f - time / 150.0f);
         float v3 = sin(normalizedDist * 3.0f + time / 200.0f);
-        
-        uint8_t hue = (uint8_t)((v1 + v2 + v3) * 42.5f + 127.5f) + gHue;
+
+        // Use palette with small offset instead of full spectrum
+        uint8_t paletteIndex = (uint8_t)((v1 + v2 + v3) * 10.0f + 15.0f);  // 0-45 range (not rainbow)
         uint8_t brightness = (uint8_t)((v1 + v2) * 63.75f + 191.25f);
-        
-        CRGB color = CHSV(hue, 255, brightness);
+
+        CRGB color = ColorFromPalette(currentPalette, gHue + paletteIndex, brightness);
         strip1[i] = color;
         strip2[i] = color;
     }
@@ -411,25 +412,29 @@ void fire() {
 }
 
 void ocean() {
+    // CENTER ORIGIN: Ocean waves emanate from center
     static uint32_t waterOffset = 0;
     waterOffset += paletteSpeed / 2;
-    
+
     // Prevent overflow
     if (waterOffset > 65535) {
         waterOffset = waterOffset % 65536;
     }
-    
+
     for (int i = 0; i < HardwareConfig::NUM_LEDS; i++) {
-        // Create wave-like motion
-        uint8_t wave1 = sin8((i * 10) + waterOffset);
-        uint8_t wave2 = sin8((i * 7) - waterOffset * 2);
+        // Calculate distance from center for symmetry
+        float distFromCenter = abs((int)i - HardwareConfig::STRIP_CENTER_POINT);
+
+        // Create wave-like motion from center
+        uint8_t wave1 = sin8((distFromCenter * 10) + waterOffset);
+        uint8_t wave2 = sin8((distFromCenter * 7) - waterOffset * 2);
         uint8_t combinedWave = (wave1 + wave2) / 2;
-        
+
         // Ocean colors from deep blue to cyan
         uint8_t hue = 160 + (combinedWave >> 3);  // Blue range
         uint8_t brightness = 100 + (combinedWave >> 1);
         uint8_t saturation = 255 - (combinedWave >> 2);
-        
+
         leds[i] = CHSV(hue, saturation, brightness);
     }
 }

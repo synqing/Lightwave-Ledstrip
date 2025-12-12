@@ -238,36 +238,39 @@ void sinelonTuned() {
         
         // Brightness based on intensity
         uint8_t brightness = 192 + (intensity * 63); // 192-255
-        
+
+        // Use palette with small offset instead of rainbow (d * 51 created 0-255 range)
+        uint8_t paletteOffset = d * 8;  // 0-40 range (not rainbow)
+
         // Draw dots with motion blur
         if (pos1 >= 0 && pos1 < HardwareConfig::STRIP_LENGTH) {
-            CRGB color = CHSV(gHue + (d * 51), saturation, brightness);
+            CRGB color = ColorFromPalette(currentPalette, gHue + paletteOffset, brightness);
             strip1[pos1] += color;
             strip2[pos1] += color;
-            
+
             // Motion blur
             for(int blur = 1; blur <= 3; blur++) {
                 int blurPos = pos1 + blur;
                 if (blurPos < HardwareConfig::STRIP_LENGTH) {
                     uint8_t blurBright = brightness / (blur + 1);
-                    CRGB blurColor = CHSV(gHue + (d * 51), saturation, blurBright);
+                    CRGB blurColor = ColorFromPalette(currentPalette, gHue + paletteOffset, blurBright);
                     strip1[blurPos] += blurColor;
                     strip2[blurPos] += blurColor;
                 }
             }
         }
-        
+
         if (pos2 >= 0 && pos2 < HardwareConfig::STRIP_LENGTH) {
-            CRGB color = CHSV(gHue + (d * 51) + 128, saturation, brightness);
+            CRGB color = ColorFromPalette(currentPalette, gHue + paletteOffset + 128, brightness);
             strip1[pos2] += color;
             strip2[pos2] += color;
-            
+
             // Motion blur
             for(int blur = 1; blur <= 3; blur++) {
                 int blurPos = pos2 - blur;
                 if (blurPos >= 0) {
                     uint8_t blurBright = brightness / (blur + 1);
-                    CRGB blurColor = CHSV(gHue + (d * 51) + 128, saturation, blurBright);
+                    CRGB blurColor = ColorFromPalette(currentPalette, gHue + paletteOffset + 128, blurBright);
                     strip1[blurPos] += blurColor;
                     strip2[blurPos] += blurColor;
                 }

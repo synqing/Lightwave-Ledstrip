@@ -161,23 +161,23 @@ void lgpQuantumColors() {
         float probability = sin(waveFunction + normalizedDist * TWO_PI * numStates);
         probability = probability * probability;  // Square for probability density
         
-        // Collapse to specific color based on probability
-        uint8_t observedHue;
+        // Collapse to specific palette state (not full spectrum discrete colors)
+        uint8_t paletteOffset;
         if (probability < 0.25f) {
-            observedHue = 0;    // Red
+            paletteOffset = 0;
         } else if (probability < 0.5f) {
-            observedHue = 96;   // Green
+            paletteOffset = 10;
         } else if (probability < 0.75f) {
-            observedHue = 160;  // Blue
+            paletteOffset = 20;
         } else {
-            observedHue = 64;   // Yellow
+            paletteOffset = 30;
         }
-        
+
         // Uncertainty principle - fuzzy at observation boundary
         uint8_t uncertainty = 255 * (0.5f + 0.5f * sin(distFromCenter * 20));
-        
-        strip1[i] = CHSV(observedHue, 255, uncertainty * intensity);
-        strip2[i] = CHSV(observedHue + 128, 255, (255 - uncertainty) * intensity);
+
+        strip1[i] = ColorFromPalette(currentPalette, gHue + paletteOffset, uncertainty * intensity);
+        strip2[i] = ColorFromPalette(currentPalette, gHue + paletteOffset + 128, (255 - uncertainty) * intensity);
     }
 }
 
@@ -313,36 +313,38 @@ void lgpDNAHelix() {
         float angle1 = (distFromCenter / helixPitch) * TWO_PI + helixRotation;
         float angle2 = angle1 + PI;  // Opposite strand
         
-        // DNA base pairs (A-T: Blue-Yellow, G-C: Green-Red)
-        uint8_t base1Hue, base2Hue;
+        // DNA base pairs - use palette offsets instead of discrete spectrum
+        uint8_t paletteOffset1, paletteOffset2;
         if (sin(angle1 * 2) > 0) {
-            base1Hue = 160;  // Blue (A)
-            base2Hue = 64;   // Yellow (T)
+            paletteOffset1 = 0;   // Base pair type A
+            paletteOffset2 = 15;  // Base pair type T
         } else {
-            base1Hue = 96;   // Green (G)
-            base2Hue = 0;    // Red (C)
+            paletteOffset1 = 10;  // Base pair type G
+            paletteOffset2 = 25;  // Base pair type C
         }
-        
+
         // Helix structure
         float strand1Intensity = (sin(angle1) + 1) * 0.5f;
         float strand2Intensity = (sin(angle2) + 1) * 0.5f;
-        
+
         // Base pair connections at specific points
         float connectionIntensity = 0;
         if (fmod(distFromCenter, helixPitch/4) < 2) {
             connectionIntensity = 1;
         }
-        
+
         uint8_t brightness = 255 * intensity;
-        
+
         // Draw strands
-        strip1[i] = CHSV(base1Hue, 255, brightness * strand1Intensity);
-        strip2[i] = CHSV(base2Hue, 255, brightness * strand2Intensity);
-        
+        strip1[i] = ColorFromPalette(currentPalette, gHue + paletteOffset1, brightness * strand1Intensity);
+        strip2[i] = ColorFromPalette(currentPalette, gHue + paletteOffset2, brightness * strand2Intensity);
+
         // Add connections
         if (connectionIntensity > 0) {
-            strip1[i] = blend(strip1[i], CHSV(base2Hue, 200, brightness), 128);
-            strip2[i] = blend(strip2[i], CHSV(base1Hue, 200, brightness), 128);
+            CRGB conn2 = ColorFromPalette(currentPalette, gHue + paletteOffset2, brightness);
+            CRGB conn1 = ColorFromPalette(currentPalette, gHue + paletteOffset1, brightness);
+            strip1[i] = blend(strip1[i], conn2, 128);
+            strip2[i] = blend(strip2[i], conn1, 128);
         }
     }
 }
@@ -365,62 +367,70 @@ void lgpPhaseTransition() {
         float localTemp = temperature + (normalizedDist * pressure);
         
         CRGB color;
+        uint8_t paletteOffset;
+        uint8_t brightness;
+
         if (localTemp < 0.25f) {
             // Solid phase - crystalline structure
             float crystal = sin(distFromCenter * 10) * 0.5f + 0.5f;
-            color = CHSV(160 + crystal * 20, 255 - crystal * 50, 255 * intensity);
+            paletteOffset = 0 + crystal * 5;  // Small range for solid
+            brightness = 255 * intensity;
+            color = ColorFromPalette(currentPalette, gHue + paletteOffset, brightness);
         } else if (localTemp < 0.5f) {
             // Liquid phase - flowing motion
             float flow = sin(distFromCenter * 0.5f + phaseAnimation);
-            color = CHSV(96 + flow * 30, 200, 200 * intensity);
+            paletteOffset = 10 + flow * 5;  // Small range for liquid
+            brightness = 200 * intensity;
+            color = ColorFromPalette(currentPalette, gHue + paletteOffset, brightness);
         } else if (localTemp < 0.75f) {
             // Gas phase - dispersed particles
             float dispersion = random8() / 255.0f;
             if (dispersion < 0.3f) {
-                color = CHSV(32, 150, 150 * intensity);
+                paletteOffset = 20;
+                brightness = 150 * intensity;
+                color = ColorFromPalette(currentPalette, gHue + paletteOffset, brightness);
             } else {
                 color = CRGB::Black;
             }
         } else {
             // Plasma phase - ionized, energetic
             float plasma = sin(distFromCenter * 20 + phaseAnimation * 10);
-            uint8_t plasmaHue = 280 + plasma * 40;  // Violets and magentas
-            color = CHSV(plasmaHue, 200 - abs(plasma) * 100, 255 * intensity);
+            paletteOffset = 30 + plasma * 10;  // Reduced from 40
+            brightness = 255 * intensity;
+            color = ColorFromPalette(currentPalette, gHue + paletteOffset, brightness);
         }
-        
+
         // Different phases on each strip create phase boundary effects
         strip1[i] = color;
-        // Create a complementary color for strip2
-        CHSV hsv = rgb2hsv_approximate(color);
-        strip2[i] = blend(color, CHSV(hsv.h + 60, hsv.s, hsv.v), 128);
+        strip2[i] = ColorFromPalette(currentPalette, gHue + paletteOffset + 60, brightness);
     }
 }
 
 // ============== HSV CYLINDER MIXING ==============
-// Explore full HSV color space through cylindrical coordinates
+// Explore saturation/value space with palette colors (no rainbow)
 void lgpHSVCylinder() {
     float speed = paletteSpeed / 255.0f;
     float intensity = visualParams.getIntensityNorm();
     float complexity = visualParams.getComplexityNorm();
-    
+
     static float cylinderRotation = 0;
     cylinderRotation += speed * 0.02f;
-    
+
     for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
         float distFromCenter = abs(i - HardwareConfig::STRIP_CENTER_POINT);
         float normalizedDist = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
-        
-        // Strip 1: Travels through HUE (angle around cylinder)
-        uint8_t hue1 = (cylinderRotation + normalizedDist * complexity) * 255;
-        
+
+        // Use palette with small offset instead of full hue rotation
+        uint8_t paletteIndex = (cylinderRotation * 10) + (normalizedDist * complexity * 30);
+
         // Strip 2: Travels through SATURATION (radius from center)
         uint8_t sat2 = 255 * (1 - normalizedDist);
-        
+
         // Value (height) oscillates
         uint8_t val = 128 + 127 * sin(cylinderRotation + distFromCenter * 0.1f);
-        
-        strip1[i] = CHSV(hue1, 255, val * intensity);
-        strip2[i] = CHSV(gHue + 128, sat2, val * intensity);
+
+        strip1[i] = ColorFromPalette(currentPalette, gHue + paletteIndex, val * intensity);
+        strip2[i] = ColorFromPalette(currentPalette, gHue + 128, sat2 * (val * intensity) / 255);
     }
 }
 

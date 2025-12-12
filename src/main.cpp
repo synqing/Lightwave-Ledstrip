@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <FastLED.h>
+#include <Wire.h>
 #include "config/features.h"
 #include "config/hardware_config.h"
 #include "core/EffectTypes.h"
@@ -7,6 +8,13 @@
 #include "effects/strip/OptimizedStripEffects.h"
 #include "effects/transitions/TransitionEngine.h"
 #include "effects/zones/ZoneComposer.h"
+
+#if FEATURE_ENHANCEMENT_ENGINES
+#include "effects/engines/ColorEngine.h"
+#include "effects/engines/MotionEngine.h"
+#include "effects/engines/BlendingEngine.h"
+#include "effects/enhanced/EnhancedStripEffects.h"
+#endif
 
 #if FEATURE_WEB_SERVER
 #include "network/WebServer.h"
@@ -121,6 +129,10 @@ uint32_t paletteCycleInterval = 5000;      // Interval in ms (default 5 seconds)
 // Parameter state manager (software-only, no I2C hardware)
 #include "hardware/ScrollEncoderManager.h"
 
+#if FEATURE_ROTATE8_ENCODER
+#include "hardware/EncoderManager.h"
+#endif
+
 // Dual-Strip Wave Engine (disabled for now - files don't exist yet)
 // #include "effects/waves/DualStripWaveEngine.h"
 // #include "effects/waves/WaveEffects.h"
@@ -200,6 +212,20 @@ extern void spectrumLightshowEngine();
 // Effects array - Matrix mode has been surgically removed
 // USELESS EFFECTS PURGED - Only the good shit remains
 Effect effects[] = {
+// DISABLED: Enhanced effects have bugs causing hangs - need debugging
+// #if FEATURE_ENHANCEMENT_ENGINES
+//     // =============== ENHANCED EFFECTS (TOP OF LIST) ===============
+//     // Week 3: ColorEngine - dual/triple palette blending and diffusion
+//     {"Fire+", fireEnhanced, EFFECT_TYPE_STANDARD},
+//     {"Ocean+", stripOceanEnhanced, EFFECT_TYPE_STANDARD},
+//     {"LGP Holographic+", lgpHolographicEnhanced, EFFECT_TYPE_STANDARD},
+//
+//     // Week 4: MotionEngine - momentum physics, phase control, speed modulation
+//     {"Shockwave+", shockwaveEnhanced, EFFECT_TYPE_STANDARD},
+//     {"Collision+", collisionEnhanced, EFFECT_TYPE_STANDARD},
+//     {"LGP Wave Collision+", lgpWaveCollisionEnhanced, EFFECT_TYPE_STANDARD},
+// #endif
+
     // =============== QUALITY STRIP EFFECTS ===============
     // Signature effects with CENTER ORIGIN
     {"Fire", fire, EFFECT_TYPE_STANDARD},
@@ -597,8 +623,33 @@ void setup() {
         Serial.println("LED buffer mutex created for thread-safe operations");
     }
 
-    // HMI REMOVED - No I2C devices on this hardware configuration
+    // ============== ENCODER INITIALIZATION ==============
+#if FEATURE_ROTATE8_ENCODER
+    Serial.println("\n=== Initializing M5Stack 8Encoder ===");
+
+    // Create I2C mutex for thread-safe encoder operations
+    i2cMutex = xSemaphoreCreateMutex();
+    if (i2cMutex == NULL) {
+        Serial.println("❌ ERROR: Failed to create I2C mutex!");
+    } else {
+        Serial.println("✅ I2C mutex created for thread-safe operations");
+    }
+
+    // Initialize I2C bus
+    Wire.begin(HardwareConfig::I2C_SDA, HardwareConfig::I2C_SCL, 400000);
+    Serial.printf("✅ I2C initialized: SDA=GPIO%d, SCL=GPIO%d @ 400kHz\n",
+                  HardwareConfig::I2C_SDA, HardwareConfig::I2C_SCL);
+
+    // Initialize encoder manager (creates I2C task on Core 0)
+    if (encoderManager.begin()) {
+        Serial.println("✅ Encoder manager initialized successfully");
+        Serial.println("🎮 8 encoders available for real-time control");
+    } else {
+        Serial.println("⚠️  Encoder initialization failed - will retry in background");
+    }
+#else
     Serial.println("ℹ️ HMI disabled - serial control only");
+#endif
 
     // Preset Management System - DISABLED FOR NOW
     // Will be re-enabled once basic transitions work
@@ -719,6 +770,28 @@ void setup() {
     Serial.println("Use 'zone status' to view configuration");
     Serial.println("Use 'zone on' to enable zone mode");
     Serial.println("Use 'zone presets' to see available presets\n");
+
+#if FEATURE_ENHANCEMENT_ENGINES
+    // ============== ENHANCEMENT ENGINES INITIALIZATION ==============
+    Serial.println("\n=== Initializing Visual Enhancement Engines ===");
+
+    #if FEATURE_COLOR_ENGINE
+    ColorEngine::getInstance().reset();
+    Serial.println("✅ ColorEngine initialized (skeleton)");
+    #endif
+
+    #if FEATURE_MOTION_ENGINE
+    MotionEngine::getInstance().enable();
+    Serial.println("✅ MotionEngine initialized (skeleton)");
+    #endif
+
+    #if FEATURE_BLENDING_ENGINE
+    BlendingEngine::getInstance().clearBuffers();
+    Serial.println("✅ BlendingEngine initialized (skeleton)");
+    #endif
+
+    Serial.println("Enhancement engines ready - Week 1-2 skeleton phase\n");
+#endif
 
     Serial.println("\n=== Setup Complete ===");
     Serial.println("🎭 Advanced Transition System Active");
@@ -1451,35 +1524,30 @@ void loop() {
                     case 3: // Speed control
                         paletteSpeed = constrain(paletteSpeed + (event.delta > 0 ? 2 : -2), 1, 50);
                         Serial.printf("⚡ MAIN: Speed changed to %d\n", paletteSpeed);
-                        if (encoderFeedback) encoderFeedback->flashEncoder(3, 255, 255, 0, 200);
                         scrollManager.setParamValue(PARAM_SPEED, constrain(paletteSpeed * 4, 0, 255));
                         break;
                         
                     case 4: // Intensity/Amplitude
                         visualParams.intensity = constrain(visualParams.intensity + (event.delta > 0 ? 4 : -4), 0, 255);
                         Serial.printf("🔥 MAIN: Intensity changed to %d (%.1f%%)\n", visualParams.intensity, visualParams.getIntensityNorm() * 100);
-                        if (encoderFeedback) encoderFeedback->flashEncoder(4, 255, 128, 0, 200);
                         scrollManager.setParamValue(PARAM_INTENSITY, visualParams.intensity);
                         break;
                         
                     case 5: // Saturation
                         visualParams.saturation = constrain(visualParams.saturation + (event.delta > 0 ? 4 : -4), 0, 255);
                         Serial.printf("🎨 MAIN: Saturation changed to %d (%.1f%%)\n", visualParams.saturation, visualParams.getSaturationNorm() * 100);
-                        if (encoderFeedback) encoderFeedback->flashEncoder(5, 0, 255, 255, 200);
                         scrollManager.setParamValue(PARAM_SATURATION, visualParams.saturation);
                         break;
                         
                     case 6: // Complexity/Detail
                         visualParams.complexity = constrain(visualParams.complexity + (event.delta > 0 ? 4 : -4), 0, 255);
                         Serial.printf("✨ MAIN: Complexity changed to %d (%.1f%%)\n", visualParams.complexity, visualParams.getComplexityNorm() * 100);
-                        if (encoderFeedback) encoderFeedback->flashEncoder(6, 128, 255, 0, 200);
                         scrollManager.setParamValue(PARAM_COMPLEXITY, visualParams.complexity);
                         break;
-                        
+
                     case 7: // Variation/Mode
                         visualParams.variation = constrain(visualParams.variation + (event.delta > 0 ? 4 : -4), 0, 255);
                         Serial.printf("🔄 MAIN: Variation changed to %d (%.1f%%)\n", visualParams.variation, visualParams.getVariationNorm() * 100);
-                        if (encoderFeedback) encoderFeedback->flashEncoder(7, 255, 0, 255, 200);
                         scrollManager.setParamValue(PARAM_VARIATION, visualParams.variation);
                         break;
                 }

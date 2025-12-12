@@ -329,9 +329,9 @@ void lgpQuantumEntanglementCollapse() {
                                cos(quantumPhase * 5 - i * 0.15f) *
                                intensity;
 
-            // Superposition: strips show random, uncorrelated colors
-            hue1 = gHue + (uint8_t)(sin(quantumPhase + i * 0.1f) * 60);
-            hue2 = gHue + (uint8_t)(cos(quantumPhase * 1.3f - i * 0.12f) * 60);
+            // Superposition: use palette with smaller variations (reduced from ±60)
+            hue1 = gHue + (uint8_t)(sin(quantumPhase + i * 0.1f) * 15);  // ±15
+            hue2 = gHue + (uint8_t)(cos(quantumPhase * 1.3f - i * 0.12f) * 15);  // ±15
 
             brightness1 = 80 + (probability * 100) + (abs(fluctuation) * 75);
             brightness2 = 80 + (probability * 100) + (abs(fluctuation) * 75);
@@ -377,8 +377,8 @@ void lgpQuantumEntanglementCollapse() {
             brightness2 = 200 * pulse;
         }
 
-        strip1[i] = CHSV(hue1, saturation * 255, brightness1);
-        strip2[i] = CHSV(hue2, saturation * 255, brightness2);
+        strip1[i] = ColorFromPalette(currentPalette, hue1, brightness1);
+        strip2[i] = ColorFromPalette(currentPalette, hue2, brightness2);
     }
 }
 

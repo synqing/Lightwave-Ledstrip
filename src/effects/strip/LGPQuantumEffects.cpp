@@ -193,17 +193,17 @@ void lgpGravitationalLensing() {
             // Draw ray point
             int16_t pixelPos = (int16_t)rayPos;
             if (pixelPos >= 0 && pixelPos < HardwareConfig::STRIP_LENGTH) {
-                // Color based on deflection amount (gravitational redshift)
-                uint8_t hue = gHue + abs(totalDeflection) * 50;
+                // Use palette with smaller deflection gradient (reduced from *50)
+                uint8_t paletteIndex = abs(totalDeflection) * 20;  // Max ~20
                 uint8_t brightness = 255 - step * 3;
-                
+
                 // Einstein ring effect - brighter near critical angles
                 if (abs(totalDeflection) > 0.5f) {
                     brightness = 255;
                 }
-                
-                strip1[pixelPos] += CHSV(hue, 255, brightness);
-                strip2[pixelPos] += CHSV(hue + 64, 255, brightness);
+
+                strip1[pixelPos] += ColorFromPalette(currentPalette, gHue + paletteIndex, brightness);
+                strip2[pixelPos] += ColorFromPalette(currentPalette, gHue + paletteIndex + 64, brightness);
             }
             
             // Stop if ray exits
@@ -345,18 +345,18 @@ void lgpTimeCrystal() {
         // Normalize and apply crystallinity
         crystal = crystal / dimensions;
         uint8_t brightness = 128 + (int8_t)(crystal * crystallinity);
-        
-        // Time crystal refraction creates rainbow effects
-        uint8_t hue = gHue + (uint8_t)(crystal * 100) + i/2;
-        
+
+        // CENTER ORIGIN + use palette with smaller gradient
+        uint8_t paletteIndex = (uint8_t)(crystal * 20) + (distFromCenter * 20);  // Reduced from 100 + i/2
+
         // Phase-locked regions create structure
         if (abs(crystal) > 0.9f) {
             brightness = 255;
-            hue = gHue;  // Lock color in resonant zones
+            paletteIndex = 0;  // Lock color in resonant zones
         }
-        
-        strip1[i] = CHSV(hue, 200, brightness);
-        strip2[i] = CHSV(hue + 85, 200, brightness);
+
+        strip1[i] = ColorFromPalette(currentPalette, gHue + paletteIndex, brightness);
+        strip2[i] = ColorFromPalette(currentPalette, gHue + paletteIndex + 85, brightness);
     }
     
     // Sync to unified buffer

@@ -8,6 +8,8 @@ struct ZoneConfig {
     uint8_t zoneCount;                          // 1-4 active zones
     uint8_t zoneEffects[4];                     // Effect ID per zone (0-46)
     bool zoneEnabled[4];                        // Enable/disable per zone
+    uint8_t zoneBrightness[4];                  // Per-zone brightness (0-255)
+    uint8_t zoneSpeed[4];                       // Per-zone speed (1-50)
     bool systemEnabled;                         // Global zone system enable
     uint16_t checksum;                          // Data validation
 

@@ -160,13 +160,13 @@ void lgpHolographic() {
         }
         
         uint8_t brightness = 128 + (127 * layerSum * intensity);
-        
-        // Chromatic dispersion effect
-        uint8_t hue1 = gHue + (dist * 0.5f) + (layerSum * 20);
-        uint8_t hue2 = gHue - (dist * 0.5f) - (layerSum * 20);
-        
-        strip1[i] = CHSV(hue1, saturation * 255, brightness);
-        strip2[i] = CHSV(hue2, saturation * 255, brightness);
+
+        // Chromatic dispersion effect - use palette instead of rainbow
+        uint8_t paletteIndex1 = (dist * 0.5f) + (layerSum * 20);
+        uint8_t paletteIndex2 = 128 - (dist * 0.5f) - (layerSum * 20);
+
+        strip1[i] = ColorFromPalette(currentPalette, gHue + paletteIndex1, brightness);
+        strip2[i] = ColorFromPalette(currentPalette, gHue + paletteIndex2, brightness);
     }
 }
 
@@ -200,43 +200,45 @@ void lgpModalResonance() {
     }
     
     for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
-        float position = (float)i / HardwareConfig::STRIP_LENGTH;
-        
+        // CENTER ORIGIN: Use distance from center, not linear position
+        float distFromCenter = abs(i - HardwareConfig::STRIP_CENTER_POINT);
+        float normalizedDist = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
+
         float modalPattern;
-        
+
         if (variation < 0.25f) {
             // Pure mode
-            modalPattern = sin(position * baseMode * TWO_PI);
+            modalPattern = sin(normalizedDist * baseMode * TWO_PI);
         } else if (variation < 0.5f) {
             // Mode beating (two close modes)
-            float mode1 = sin(position * baseMode * TWO_PI);
-            float mode2 = sin(position * (baseMode + 0.5f) * TWO_PI);
+            float mode1 = sin(normalizedDist * baseMode * TWO_PI);
+            float mode2 = sin(normalizedDist * (baseMode + 0.5f) * TWO_PI);
             modalPattern = (mode1 + mode2) / 2;
         } else if (variation < 0.75f) {
             // Harmonic series
-            modalPattern = sin(position * baseMode * TWO_PI) +
-                          sin(position * baseMode * 2 * TWO_PI) * 0.5f +
-                          sin(position * baseMode * 3 * TWO_PI) * 0.25f;
+            modalPattern = sin(normalizedDist * baseMode * TWO_PI) +
+                          sin(normalizedDist * baseMode * 2 * TWO_PI) * 0.5f +
+                          sin(normalizedDist * baseMode * 3 * TWO_PI) * 0.25f;
             modalPattern /= 1.75f;
         } else {
             // Chaotic mode mixing
-            modalPattern = sin(position * baseMode * TWO_PI) *
-                          cos(position * (baseMode * 1.618f) * TWO_PI) *
+            modalPattern = sin(normalizedDist * baseMode * TWO_PI) *
+                          cos(normalizedDist * (baseMode * 1.618f) * TWO_PI) *
                           sin(modePhase * 5);
         }
-        
+
         // Apply window function for smoother edges
-        float window = sin(position * PI);
+        float window = sin(normalizedDist * PI);
         modalPattern *= window;
-        
+
         uint8_t brightness = 128 + (127 * modalPattern * intensity);
-        
-        // Color based on mode number and position
-        uint8_t hue = gHue + (baseMode * 10) + (position * 50);
-        
+
+        // Color based on mode number and distance - use palette instead of rainbow
+        uint8_t paletteIndex = (baseMode * 10) + (normalizedDist * 50);
+
         // Opposing strips get complementary phase
-        strip1[i] = CHSV(hue, saturation * 255, brightness);
-        strip2[i] = CHSV(hue + 128, saturation * 255, brightness);
+        strip1[i] = ColorFromPalette(currentPalette, gHue + paletteIndex, brightness);
+        strip2[i] = ColorFromPalette(currentPalette, gHue + paletteIndex + 128, brightness);
     }
 }
 
@@ -307,14 +309,13 @@ void lgpInterferenceScanner() {
         
         // Ensure brightness doesn't overflow
         uint8_t brightness = constrain(pattern * 255 * intensity, 0, 255);
-        
-        // Color mapping
-        uint8_t hue1 = gHue + (dist * 2) + (pattern * 50);
-        uint8_t hue2 = gHue - (dist * 2) + (pattern * 50);
-        
+
+        // Color mapping - use palette instead of rainbow
+        uint8_t paletteIndex = (dist * 2) + (pattern * 50);
+
         // Create opposition for interference
-        strip1[i] = CHSV(hue1, saturation * 255, brightness);
-        strip2[i] = CHSV(hue2, saturation * 255, 255 - brightness);  // Inverted
+        strip1[i] = ColorFromPalette(currentPalette, gHue + paletteIndex, brightness);
+        strip2[i] = ColorFromPalette(currentPalette, gHue + paletteIndex + 128, 255 - brightness);  // Inverted
     }
 }
 
@@ -357,12 +358,15 @@ void lgpWaveCollision() {
         
         // Interference
         float interference = packet1 + packet2;
-        
+
         uint8_t brightness = 128 + (127 * interference * intensity);
-        uint8_t hue = gHue + (i * 2) + (interference * 50);
-        
-        strip1[i] = CHSV(hue, 255, brightness);
-        strip2[i] = CHSV(hue + 128, 255, brightness);
+
+        // CENTER ORIGIN + use palette instead of rainbow
+        float distFromCenter = abs(i - HardwareConfig::STRIP_CENTER_POINT);
+        uint8_t paletteIndex = (distFromCenter * 2) + (interference * 50);
+
+        strip1[i] = ColorFromPalette(currentPalette, gHue + paletteIndex, brightness);
+        strip2[i] = ColorFromPalette(currentPalette, gHue + paletteIndex + 128, brightness);
     }
 }
 

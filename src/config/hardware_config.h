@@ -71,11 +71,10 @@ namespace HardwareConfig {
     // Common pins
     constexpr uint8_t POWER_PIN = 48;  // RGB LED power on some DevKits (or use any free GPIO)
 
-    // HMI REMOVED - No encoder or buttons on this hardware configuration
-    // Stub values for compilation compatibility (code is disabled via feature flags)
+    // I2C Configuration for M5Stack 8Encoder
     constexpr uint8_t BUTTON_PIN = 0;       // No button on board
-    constexpr uint8_t I2C_SDA = 0;
-    constexpr uint8_t I2C_SCL = 0;
+    constexpr uint8_t I2C_SDA = 17;         // I2C SDA on GPIO 17
+    constexpr uint8_t I2C_SCL = 18;         // I2C SCL on GPIO 18
     constexpr uint8_t I2C_SDA_SCROLL = 0;
     constexpr uint8_t I2C_SCL_SCROLL = 0;
     constexpr uint8_t M5STACK_8ENCODER_ADDR = 0x41;

@@ -14,6 +14,11 @@
 #include "../audio/audio_web_handlers.h"
 #endif
 
+#if FEATURE_ENHANCEMENT_ENGINES
+#include "../effects/engines/ColorEngine.h"
+#include "../effects/engines/MotionEngine.h"
+#endif
+
 // External references from main.cpp
 extern uint8_t currentEffect;
 extern uint8_t gHue;
@@ -516,6 +521,8 @@ void LightwaveWebServer::setupRoutes() {
             zone["id"] = i;
             zone["enabled"] = zoneComposer.isZoneEnabled(i);
             zone["effectId"] = zoneComposer.getZoneEffect(i);
+            zone["brightness"] = zoneComposer.getZoneBrightness(i);
+            zone["speed"] = zoneComposer.getZoneSpeed(i);
         }
 
         serializeJson(doc, *response);
@@ -640,6 +647,152 @@ void LightwaveWebServer::setupRoutes() {
             request->send(500, "application/json", "{\"error\":\"Failed to load config\"}");
         }
     });
+
+    // Set zone brightness
+    server->on("/api/zone/brightness", HTTP_POST, [](AsyncWebServerRequest *request){},
+        NULL,
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+            StaticJsonDocument<256> doc;
+            DeserializationError error = deserializeJson(doc, data, len);
+
+            if (!error && doc.containsKey("zoneId") && doc.containsKey("brightness")) {
+                uint8_t zoneId = doc["zoneId"];
+                uint8_t brightness = doc["brightness"];
+                zoneComposer.setZoneBrightness(zoneId, brightness);
+                request->send(200, "application/json", "{\"status\":\"ok\"}");
+            } else {
+                request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
+            }
+        }
+    );
+
+    // Set zone speed
+    server->on("/api/zone/speed", HTTP_POST, [](AsyncWebServerRequest *request){},
+        NULL,
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+            StaticJsonDocument<256> doc;
+            DeserializationError error = deserializeJson(doc, data, len);
+
+            if (!error && doc.containsKey("zoneId") && doc.containsKey("speed")) {
+                uint8_t zoneId = doc["zoneId"];
+                uint8_t speed = doc["speed"];
+                zoneComposer.setZoneSpeed(zoneId, speed);
+                request->send(200, "application/json", "{\"status\":\"ok\"}");
+            } else {
+                request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
+            }
+        }
+    );
+
+#if FEATURE_ENHANCEMENT_ENGINES
+    // =============== ENHANCEMENT ENGINE CONTROLS ===============
+
+    // ColorEngine: Enable/disable cross-palette blending
+    server->on("/api/enhancement/color/blend", HTTP_POST, [](AsyncWebServerRequest *request){},
+        NULL,
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+            extern ColorEngine* g_colorEngine;
+            StaticJsonDocument<256> doc;
+            DeserializationError error = deserializeJson(doc, data, len);
+
+            if (!error && doc.containsKey("enabled")) {
+                bool enabled = doc["enabled"];
+                ColorEngine::getInstance().enableCrossBlend(enabled);
+                request->send(200, "application/json", "{\"status\":\"ok\"}");
+            } else {
+                request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
+            }
+        }
+    );
+
+    // ColorEngine: Set diffusion amount
+    server->on("/api/enhancement/color/diffusion", HTTP_POST, [](AsyncWebServerRequest *request){},
+        NULL,
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+            StaticJsonDocument<256> doc;
+            DeserializationError error = deserializeJson(doc, data, len);
+
+            if (!error && doc.containsKey("amount")) {
+                uint8_t amount = doc["amount"];
+                ColorEngine::getInstance().setDiffusionAmount(amount);
+                ColorEngine::getInstance().enableDiffusion(amount > 0);
+                request->send(200, "application/json", "{\"status\":\"ok\"}");
+            } else {
+                request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
+            }
+        }
+    );
+
+    // ColorEngine: Set temporal rotation speed
+    server->on("/api/enhancement/color/rotation", HTTP_POST, [](AsyncWebServerRequest *request){},
+        NULL,
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+            StaticJsonDocument<256> doc;
+            DeserializationError error = deserializeJson(doc, data, len);
+
+            if (!error && doc.containsKey("speed")) {
+                float speed = doc["speed"];
+                ColorEngine::getInstance().setRotationSpeed(speed);
+                ColorEngine::getInstance().enableTemporalRotation(speed > 0);
+                request->send(200, "application/json", "{\"status\":\"ok\"}");
+            } else {
+                request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
+            }
+        }
+    );
+
+    // MotionEngine: Set phase offset
+    server->on("/api/enhancement/motion/phase", HTTP_POST, [](AsyncWebServerRequest *request){},
+        NULL,
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+            StaticJsonDocument<256> doc;
+            DeserializationError error = deserializeJson(doc, data, len);
+
+            if (!error && doc.containsKey("offset")) {
+                float offset = doc["offset"];
+                MotionEngine::getInstance().getPhaseController().setStripPhaseOffset(offset);
+                request->send(200, "application/json", "{\"status\":\"ok\"}");
+            } else {
+                request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
+            }
+        }
+    );
+
+    // MotionEngine: Enable/disable auto-rotation
+    server->on("/api/enhancement/motion/auto-rotate", HTTP_POST, [](AsyncWebServerRequest *request){},
+        NULL,
+        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+            StaticJsonDocument<256> doc;
+            DeserializationError error = deserializeJson(doc, data, len);
+
+            if (!error && doc.containsKey("enabled") && doc.containsKey("speed")) {
+                bool enabled = doc["enabled"];
+                float speed = doc["speed"];
+
+                if (enabled) {
+                    MotionEngine::getInstance().getPhaseController().enableAutoRotate(speed);
+                } else {
+                    MotionEngine::getInstance().getPhaseController().enableAutoRotate(0);
+                }
+                request->send(200, "application/json", "{\"status\":\"ok\"}");
+            } else {
+                request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
+            }
+        }
+    );
+
+    // Get enhancement engine status
+    server->on("/api/enhancement/status", HTTP_GET, [](AsyncWebServerRequest *request){
+        AsyncJsonResponse *response = new AsyncJsonResponse();
+        JsonObject root = response->getRoot();
+
+        root["colorEngineActive"] = ColorEngine::getInstance().isActive();
+        root["motionEngineEnabled"] = MotionEngine::getInstance().isEnabled();
+
+        response->setLength();
+        request->send(response);
+    });
+#endif
 
 #if FEATURE_AUDIO_SYNC
     // Register audio-specific web handlers
@@ -797,6 +950,14 @@ void LightwaveWebServer::onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient 
                     zoneComposer.saveConfig();
                 } else if (type == "zone.load") {
                     zoneComposer.loadConfig();
+                } else if (type == "zone.setBrightness") {
+                    uint8_t zoneId = doc["zoneId"];
+                    uint8_t brightness = doc["brightness"];
+                    zoneComposer.setZoneBrightness(zoneId, brightness);
+                } else if (type == "zone.setSpeed") {
+                    uint8_t zoneId = doc["zoneId"];
+                    uint8_t speed = doc["speed"];
+                    zoneComposer.setZoneSpeed(zoneId, speed);
                 }
             }
             // Legacy "cmd" format for backward compatibility

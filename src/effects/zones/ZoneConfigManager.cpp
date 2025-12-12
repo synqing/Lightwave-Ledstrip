@@ -13,6 +13,8 @@ void ZoneConfig::calculateChecksum() {
     for (uint8_t i = 0; i < 4; i++) {
         sum += zoneEffects[i];
         sum += zoneEnabled[i] ? 1 : 0;
+        sum += zoneBrightness[i];
+        sum += zoneSpeed[i];
     }
 
     checksum = sum;
@@ -27,6 +29,8 @@ bool ZoneConfig::isValid() const {
     for (uint8_t i = 0; i < 4; i++) {
         sum += zoneEffects[i];
         sum += zoneEnabled[i] ? 1 : 0;
+        sum += zoneBrightness[i];
+        sum += zoneSpeed[i];
     }
 
     return (checksum == sum) && (zoneCount >= 1 && zoneCount <= 4);
@@ -42,6 +46,8 @@ const ZonePreset ZONE_PRESETS[ZONE_PRESET_COUNT] = {
             .zoneCount = 1,
             .zoneEffects = {0, 0, 0, 0},  // Effect 0 (Fire)
             .zoneEnabled = {true, false, false, false},
+            .zoneBrightness = {255, 255, 255, 255},  // Full brightness
+            .zoneSpeed = {25, 25, 25, 25},  // Mid-range speed
             .systemEnabled = false,
             .checksum = 0  // Will be calculated on load
         }
@@ -54,6 +60,8 @@ const ZonePreset ZONE_PRESETS[ZONE_PRESET_COUNT] = {
             .zoneCount = 2,
             .zoneEffects = {0, 5, 0, 0},  // Fire (center) + Ocean (outer)
             .zoneEnabled = {true, true, false, false},
+            .zoneBrightness = {255, 200, 255, 255},  // Slightly dimmer outer
+            .zoneSpeed = {25, 30, 25, 25},  // Slightly faster outer
             .systemEnabled = false,
             .checksum = 0
         }
@@ -64,8 +72,10 @@ const ZonePreset ZONE_PRESETS[ZONE_PRESET_COUNT] = {
         "Triple Rings",
         {
             .zoneCount = 3,
-            .zoneEffects = {0, 10, 20, 0},  // Fire, LGP effect, LGP effect
+            .zoneEffects = {2, 11, 12, 0},  // Wave (2), LGP Wave Collision (11), LGP Diamond Lattice (12)
             .zoneEnabled = {true, true, true, false},
+            .zoneBrightness = {255, 220, 180, 255},  // Gradient brightness
+            .zoneSpeed = {20, 25, 35, 25},  // Varied speeds
             .systemEnabled = false,
             .checksum = 0
         }
@@ -78,6 +88,8 @@ const ZonePreset ZONE_PRESETS[ZONE_PRESET_COUNT] = {
             .zoneCount = 4,
             .zoneEffects = {0, 12, 24, 36},  // Varied effects across all zones
             .zoneEnabled = {true, true, true, true},
+            .zoneBrightness = {255, 230, 200, 170},  // Gradient: bright center to dim outer
+            .zoneSpeed = {15, 25, 35, 45},  // Gradient: slow center to fast outer
             .systemEnabled = false,
             .checksum = 0
         }
@@ -90,6 +102,8 @@ const ZonePreset ZONE_PRESETS[ZONE_PRESET_COUNT] = {
             .zoneCount = 4,
             .zoneEffects = {8, 15, 24, 35},  // LGP-specific effects
             .zoneEnabled = {true, true, true, true},
+            .zoneBrightness = {255, 255, 255, 255},  // Full brightness for showcase
+            .zoneSpeed = {20, 25, 30, 25},  // Balanced speeds
             .systemEnabled = false,
             .checksum = 0
         }
@@ -218,6 +232,8 @@ void ZoneConfigManager::exportConfig(ZoneConfig& config) {
     for (uint8_t i = 0; i < 4; i++) {
         config.zoneEffects[i] = m_composer->getZoneEffect(i);
         config.zoneEnabled[i] = m_composer->isZoneEnabled(i);
+        config.zoneBrightness[i] = m_composer->getZoneBrightness(i);
+        config.zoneSpeed[i] = m_composer->getZoneSpeed(i);
     }
 }
 
@@ -230,6 +246,8 @@ void ZoneConfigManager::importConfig(const ZoneConfig& config) {
     for (uint8_t i = 0; i < 4; i++) {
         m_composer->setZoneEffect(i, config.zoneEffects[i]);
         m_composer->enableZone(i, config.zoneEnabled[i]);
+        m_composer->setZoneBrightness(i, config.zoneBrightness[i]);
+        m_composer->setZoneSpeed(i, config.zoneSpeed[i]);
     }
 
     // Note: We don't auto-enable the system - user must use "zone on"
@@ -250,6 +268,11 @@ bool ZoneConfigManager::validateConfig(const ZoneConfig& config) const {
         if (config.zoneEffects[i] >= NUM_EFFECTS) {
             return false;
         }
+        // Validate speed (1-50)
+        if (config.zoneSpeed[i] < 1 || config.zoneSpeed[i] > 50) {
+            return false;
+        }
+        // Brightness 0-255 is always valid, no need to check
     }
 
     return true;

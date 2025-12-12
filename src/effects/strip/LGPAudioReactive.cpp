@@ -127,25 +127,28 @@ void lgpSpectralMorphing() {
     }
     
     const AudioFrame& frame = AudioSync.getCurrentFrame();
-    
-    // Create smooth gradient based on frequency spectrum
+
+    // Create symmetric gradient based on frequency spectrum - CENTER ORIGIN
     for (int i = 0; i < HardwareConfig::STRIP1_LED_COUNT; i++) {
-        float position = (float)i / HardwareConfig::STRIP1_LED_COUNT;
-        
-        // Interpolate between bass, mid, and high based on position
-        float bassWeight = max(0.0f, 1.0f - position * 3.0f);
-        float midWeight = max(0.0f, 1.0f - abs(position - 0.5f) * 3.0f);
-        float highWeight = max(0.0f, (position - 0.66f) * 3.0f);
-        
-        float energy = frame.bass_energy * bassWeight + 
-                      frame.mid_energy * midWeight + 
+        // CENTER ORIGIN: Use distance from center, not linear position
+        float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
+        float normalizedDist = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
+
+        // Interpolate between bass, mid, and high based on distance from center
+        float bassWeight = max(0.0f, 1.0f - normalizedDist * 2.0f);  // Bass at center
+        float midWeight = max(0.0f, 1.0f - abs(normalizedDist - 0.5f) * 2.0f);  // Mid in between
+        float highWeight = max(0.0f, normalizedDist - 0.5f);  // High at edges
+
+        float energy = frame.bass_energy * bassWeight +
+                      frame.mid_energy * midWeight +
                       frame.high_energy * highWeight;
-        
-        uint8_t hue = position * 255; // Full spectrum across strip
+
+        // Use palette with small offset instead of full spectrum
+        uint8_t paletteIndex = normalizedDist * 30;  // 0-30 range (not rainbow)
         uint8_t brightness = audioToBrightness(energy);
-        
-        strip1[i] = CHSV(hue, 255, brightness);
-        strip2[HardwareConfig::STRIP2_LED_COUNT - 1 - i] = CHSV(hue + 128, 255, brightness);
+
+        strip1[i] = ColorFromPalette(currentPalette, gHue + paletteIndex, brightness);
+        strip2[i] = ColorFromPalette(currentPalette, gHue + paletteIndex + 128, brightness);
     }
 }
 
@@ -309,29 +312,29 @@ void lgpKickShockwave() {
 
 void lgpFFTColorMap() {
     if (!AudioSync.isRealAudioActive()) {
-        // Show static rainbow when no audio
-        fill_rainbow(strip1, HardwareConfig::STRIP1_LED_COUNT, gHue, 3);
-        fill_rainbow(strip2, HardwareConfig::STRIP2_LED_COUNT, gHue + 128, 3);
+        // Show static palette color when no audio (no rainbow)
+        fill_solid(strip1, HardwareConfig::STRIP1_LED_COUNT, ColorFromPalette(currentPalette, gHue, 64));
+        fill_solid(strip2, HardwareConfig::STRIP2_LED_COUNT, ColorFromPalette(currentPalette, gHue + 128, 64));
         return;
     }
-    
+
     const AudioFrame& frame = AudioSync.getCurrentFrame();
-    
+
     // Map synthetic FFT bins across the strip
     int ledsPerBin = HardwareConfig::STRIP1_LED_COUNT / FFT_BIN_COUNT;
-    
+
     for (int bin = 0; bin < FFT_BIN_COUNT; bin++) {
-        // Calculate color based on frequency
-        uint8_t hue = map(bin, 0, FFT_BIN_COUNT - 1, 0, 255);
+        // Use palette instead of full spectrum - map bins to small palette range
+        uint8_t paletteIndex = map(bin, 0, FFT_BIN_COUNT - 1, 0, 30);  // 0-30 range (not rainbow)
         uint8_t brightness = audioToBrightness(frame.frequency_bins[bin]);
-        
+
         // Fill LEDs for this bin
         int startLed = bin * ledsPerBin;
         int endLed = min(startLed + ledsPerBin, (int)HardwareConfig::STRIP1_LED_COUNT);
-        
+
         for (int i = startLed; i < endLed; i++) {
-            strip1[i] = CHSV(hue, 255, brightness);
-            strip2[i] = CHSV(hue + 20, 255, brightness);
+            strip1[i] = ColorFromPalette(currentPalette, gHue + paletteIndex, brightness);
+            strip2[i] = ColorFromPalette(currentPalette, gHue + paletteIndex + 128, brightness);
         }
     }
 }

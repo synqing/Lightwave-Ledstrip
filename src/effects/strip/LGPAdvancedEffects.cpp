@@ -33,17 +33,19 @@ void lgpMoireCurtains() {
     // Phase advance based on speed
     phase += paletteSpeed;
     
-    // Render strips with different frequencies
+    // Render strips with different frequencies - CENTER ORIGIN
     for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+        float distFromCenter = abs((int)i - HardwareConfig::STRIP_CENTER_POINT);
+
         // Left strip
-        uint16_t leftPhase = (uint16_t)(sin16(i * leftFreq * 410 + phase) + 32768) >> 8;
+        uint16_t leftPhase = (uint16_t)(sin16(distFromCenter * leftFreq * 410 + phase) + 32768) >> 8;
         uint8_t leftBright = scale8(leftPhase, visualParams.intensity);
-        strip1[i] = ColorFromPalette(currentPalette, gHue + i/2, leftBright);
-        
+        strip1[i] = ColorFromPalette(currentPalette, gHue + (uint8_t)(distFromCenter/2), leftBright);
+
         // Right strip - slightly different frequency
-        uint16_t rightPhase = (uint16_t)(sin16(i * rightFreq * 410 + phase) + 32768) >> 8;
+        uint16_t rightPhase = (uint16_t)(sin16(distFromCenter * rightFreq * 410 + phase) + 32768) >> 8;
         uint8_t rightBright = scale8(rightPhase, visualParams.intensity);
-        strip2[i] = ColorFromPalette(currentPalette, gHue + i/2 + 128, rightBright);
+        strip2[i] = ColorFromPalette(currentPalette, gHue + (uint8_t)(distFromCenter/2) + 128, rightBright);
     }
     
     // Sync to unified buffer
@@ -98,24 +100,27 @@ void lgpHolographicVortex() {
     uint8_t tightness = visualParams.intensity >> 2;  // Radial chirp factor
     
     for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
-        // Polar coordinates (approximate)
-        float r = abs((float)i - HardwareConfig::STRIP_CENTER_POINT) / HardwareConfig::STRIP_CENTER_POINT;
-        uint16_t theta = i * 410;  // Azimuthal angle approximation
-        
+        // CENTER ORIGIN: Distance from center for radial coordinate
+        float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
+        float r = distFromCenter / HardwareConfig::STRIP_CENTER_POINT;
+
+        // Symmetric azimuthal angle: same angle magnitude on both sides
+        uint16_t theta = distFromCenter * 410;
+
         // Spiral phase: k*theta + m*r - omega*t
         uint16_t phase = spiralCount * theta + (uint16_t)(tightness * r * 65535) - time;
-        
+
         // Create vortex pattern
         uint8_t brightness = sin8(phase >> 8);
-        uint8_t hue = gHue + (phase >> 10);
-        
+        uint8_t paletteIndex = (phase >> 10);
+
         // Add depth via brightness modulation
         brightness = scale8(brightness, 255 - (uint8_t)(r * 127));
         brightness = scale8(brightness, visualParams.intensity);
-        
+
         // Anti-phase for holographic effect
-        strip1[i] = ColorFromPalette(currentPalette, hue, brightness);
-        strip2[i] = ColorFromPalette(currentPalette, hue + 128, brightness);
+        strip1[i] = ColorFromPalette(currentPalette, gHue + paletteIndex, brightness);
+        strip2[i] = ColorFromPalette(currentPalette, gHue + paletteIndex + 128, brightness);
     }
     
     // Sync to unified buffer
@@ -184,18 +189,19 @@ void lgpChromaticShear() {
     uint8_t shearAmount = visualParams.complexity;
     
     for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
-        // Linear position
-        uint8_t pos = (i * 255) / HardwareConfig::STRIP_LENGTH;
-        
+        // CENTER ORIGIN: Use distance from center instead of linear position
+        float distFromCenter = abs((int)i - HardwareConfig::STRIP_CENTER_POINT);
+        uint8_t distPos = (distFromCenter * 255) / HardwareConfig::STRIP_HALF_LENGTH;
+
         // Apply shear transformation
-        uint16_t shearOffset = ((uint16_t)pos * shearAmount) >> 3;
-        
+        uint16_t shearOffset = ((uint16_t)distPos * shearAmount) >> 3;
+
         // Left strip: base hue + shear
-        uint8_t leftHue = paletteOffset + pos + (shearPhase >> 8);
+        uint8_t leftHue = paletteOffset + distPos + (shearPhase >> 8);
         uint8_t leftBright = visualParams.intensity;
-        
+
         // Right strip: complementary hue + inverse shear
-        uint8_t rightHue = paletteOffset + pos + 120 - (shearPhase >> 8);
+        uint8_t rightHue = paletteOffset + distPos + 120 - (shearPhase >> 8);
         uint8_t rightBright = visualParams.intensity;
         
         // Add interference at center
@@ -261,20 +267,15 @@ void lgpModalCavity() {
 // ============== FRESNEL ZONES ==============
 // Optical zone plates creating focusing effects
 void lgpFresnelZones() {
-    static uint16_t focalPoint = 32768;  // Virtual focal point position
-    static int16_t focalVelocity = 0;
-    
-    // Focal point oscillation - MUCH SLOWER
-    focalVelocity += ((int16_t)paletteSpeed - 128) >> 3;  // Reduced by 8x
-    focalVelocity = (focalVelocity * 15) >> 4;  // Damping
-    focalPoint += focalVelocity >> 2;  // Further slow down
-    
+    // CENTER ORIGIN: Fixed focal point at center LED 79/80
+    // (Removed moving focal point - not CENTER ORIGIN compliant)
+
     // Zone count
     uint8_t zoneCount = 3 + (visualParams.complexity >> 5);
-    
+
     for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
-        // Distance from virtual focal point
-        int16_t dist = abs((int16_t)i - (focalPoint >> 8));
+        // Distance from fixed center focal point
+        int16_t dist = abs((int16_t)i - HardwareConfig::STRIP_CENTER_POINT);
         
         // Fresnel zone calculation: sqrt(n * lambda * f)
         // Approximated for LED spacing
@@ -319,8 +320,8 @@ void lgpPhotonicCrystal() {
     for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
         // CENTER ORIGIN: Calculate distance from center
         uint16_t distFromCenter = abs((int16_t)i - HardwareConfig::STRIP_CENTER_POINT);
-        // Periodic structure
-        uint8_t cellPosition = i % latticeSize;
+        // Periodic structure - use distance, not raw i
+        uint8_t cellPosition = distFromCenter % latticeSize;
         bool inBandgap = cellPosition < (latticeSize >> 1);
         
         // Add defects
@@ -340,12 +341,13 @@ void lgpPhotonicCrystal() {
         }
         
         brightness = scale8(brightness, visualParams.intensity);
-        
+
         // Color based on band structure
         uint8_t hue = inBandgap ? gHue : gHue + 128;
-        
-        strip1[i] = ColorFromPalette(currentPalette, hue + i/4, brightness);
-        strip2[i] = ColorFromPalette(currentPalette, hue + i/4 + 64, brightness);
+
+        // CENTER ORIGIN: Use distance from center for symmetric color gradient
+        strip1[i] = ColorFromPalette(currentPalette, hue + distFromCenter/4, brightness);
+        strip2[i] = ColorFromPalette(currentPalette, hue + distFromCenter/4 + 64, brightness);
     }
     
     // Sync to unified buffer

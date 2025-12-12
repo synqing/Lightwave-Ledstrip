@@ -31,23 +31,27 @@ void lgpDiamondLattice() {
     float diamondFreq = 2 + (complexity * 8);  // 2-10 diamonds
     
     for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
-        float pos = (float)i / HardwareConfig::STRIP_LENGTH;
-        
-        // Create crossing diagonal waves
-        float wave1 = sin((pos + phase) * diamondFreq * TWO_PI);
-        float wave2 = sin((pos - phase) * diamondFreq * TWO_PI);
-        
+        // CENTER ORIGIN: Use distance from center, not linear position
+        float distFromCenter = abs(i - HardwareConfig::STRIP_CENTER_POINT);
+        float normalizedDist = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
+
+        // Create crossing diagonal waves from center
+        float wave1 = sin((normalizedDist + phase) * diamondFreq * TWO_PI);
+        float wave2 = sin((normalizedDist - phase) * diamondFreq * TWO_PI);
+
         // Interference creates diamond nodes
         float diamond = abs(wave1 * wave2);
-        
+
         // Edge sharpening
         diamond = pow(diamond, 0.5f);  // Sharpen peaks
-        
+
         uint8_t brightness = diamond * 255 * intensity;
-        
-        // Opposing colors enhance the diamond effect
-        strip1[i] = CHSV(gHue + (i * 2), 255, brightness);
-        strip2[i] = CHSV(gHue + 128 - (i * 2), 255, brightness);
+
+        // Use palette instead of rainbow - map distance to palette index
+        uint8_t paletteIndex = distFromCenter * 2;
+
+        strip1[i] = ColorFromPalette(currentPalette, gHue + paletteIndex, brightness);
+        strip2[i] = ColorFromPalette(currentPalette, gHue + paletteIndex + 128, brightness);
     }
 }
 
@@ -138,13 +142,13 @@ void lgpSpiralVortex() {
         spiral *= (1 - normalizedDist * 0.5f);
         
         uint8_t brightness = 128 + (127 * spiral * intensity);
-        
-        // Color rotates with spiral
-        uint8_t hue = gHue + (spiralAngle * 255 / TWO_PI);
-        
+
+        // Color rotates with spiral - use palette instead of full spectrum
+        uint8_t paletteIndex = (spiralAngle * 255 / TWO_PI);
+
         // Opposite spirals on each strip
-        strip1[i] = CHSV(hue, 255, brightness);
-        strip2[i] = CHSV(hue + 128, 255, brightness);
+        strip1[i] = ColorFromPalette(currentPalette, gHue + paletteIndex, brightness);
+        strip2[i] = ColorFromPalette(currentPalette, gHue + paletteIndex + 128, brightness);
     }
 }
 
@@ -269,14 +273,12 @@ void lgpConcentricRings() {
         
         // Sharp ring edges
         rings = tanh(rings * 2);
-        
+
         uint8_t brightness = 128 + (127 * rings * intensity);
-        
-        // Radial color gradient
-        uint8_t hue = gHue + (normalizedDist * 100);
-        
-        strip1[i] = CHSV(hue, 220, brightness);
-        strip2[i] = CHSV(hue + 180, 220, brightness);
+
+        // Use single palette color - no gradient (no rainbow)
+        strip1[i] = ColorFromPalette(currentPalette, gHue, brightness);
+        strip2[i] = ColorFromPalette(currentPalette, gHue + 128, brightness);
     }
 }
 
@@ -302,24 +304,22 @@ void lgpStarBurst() {
     for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
         float distFromCenter = abs(i - HardwareConfig::STRIP_CENTER_POINT);
         float normalizedDist = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
-        
-        // Angular component (simulated)
-        float angle = (i > HardwareConfig::STRIP_CENTER_POINT) ? 0 : PI;
-        
-        // Star equation
-        float star = sin(angle * starPoints + starPhase) * 
+
+        // Star equation - radially symmetric from center
+        // Rotating star pattern using phase only (no positional angle)
+        float star = sin(distFromCenter * 0.3f + starPhase) *
                     exp(-normalizedDist * 2);  // Radial decay
-        
+
         // Pulsing
         star *= 0.5f + 0.5f * sin(starPhase * 3);
-        
+
         uint8_t brightness = 128 + (127 * star * intensity);
-        
-        // Color varies with angle and distance
-        uint8_t hue = gHue + (distFromCenter) + (star * 50);
-        
-        strip1[i] += CHSV(hue, 255, brightness);
-        strip2[i] += CHSV(hue + 60, 255, brightness);
+
+        // Color varies with distance - symmetric from center
+        uint8_t paletteIndex = distFromCenter + (star * 50);
+
+        strip1[i] += ColorFromPalette(currentPalette, gHue + paletteIndex, brightness);
+        strip2[i] += ColorFromPalette(currentPalette, gHue + paletteIndex + 85, brightness);
     }
 }
 

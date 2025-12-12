@@ -1,41 +1,165 @@
 /* K1-Lightwave Controller Styles */
-/* Custom styling for components not covered by Tailwind */
 
-/* Custom Slider Styling */
-input[type=range] {
+/* ========== Horizontal Slider (.slider-input) ========== */
+.slider-input {
     -webkit-appearance: none;
+    appearance: none;
     width: 100%;
+    height: 20px;
     background: transparent;
     cursor: pointer;
 }
 
-input[type=range]::-webkit-slider-thumb {
+/* WebKit Thumb */
+.slider-input::-webkit-slider-thumb {
     -webkit-appearance: none;
-    height: 16px;
-    width: 16px;
+    height: 18px;
+    width: 18px;
     border-radius: 50%;
     background: #ffffff;
     box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-    margin-top: -6px;
-    transition: transform 0.1s;
+    margin-top: -7px;
+    border: none;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-input[type=range]::-webkit-slider-thumb:hover {
+.slider-input::-webkit-slider-thumb:hover {
     transform: scale(1.1);
+    box-shadow: 0 2px 10px rgba(0,212,255,0.4);
 }
 
-input[type=range]::-webkit-slider-runnable-track {
+.slider-input::-webkit-slider-thumb:active {
+    transform: scale(1.05);
+    background: #00d4ff;
+}
+
+/* WebKit Track */
+.slider-input::-webkit-slider-runnable-track {
     width: 100%;
     height: 4px;
-    cursor: pointer;
     border-radius: 2px;
-    /* Default gradient, updated by JS */
     background: linear-gradient(to right, #00d4ff 50%, #2f3849 50%);
 }
 
-/* Hide scrollbar for clean look */
+/* Firefox Thumb */
+.slider-input::-moz-range-thumb {
+    height: 18px;
+    width: 18px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    border: none;
+    cursor: pointer;
+}
+
+.slider-input::-moz-range-thumb:hover {
+    transform: scale(1.1);
+    box-shadow: 0 2px 10px rgba(0,212,255,0.4);
+}
+
+/* Firefox Track */
+.slider-input::-moz-range-track {
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: #2f3849;
+}
+
+.slider-input::-moz-range-progress {
+    background: #00d4ff;
+    height: 4px;
+    border-radius: 2px;
+}
+
+/* Focus State */
+.slider-input:focus {
+    outline: none;
+}
+
+.slider-input:focus::-webkit-slider-thumb {
+    box-shadow: 0 0 0 3px rgba(0,212,255,0.3), 0 2px 6px rgba(0,0,0,0.3);
+}
+
+/* ========== Vertical Mixer Fader (.mixer-fader) ========== */
+.mixer-fader {
+    -webkit-appearance: slider-vertical;
+    appearance: slider-vertical;
+    width: 24px;
+    height: 100px;
+    background: transparent;
+    cursor: pointer;
+    writing-mode: vertical-lr;
+    direction: rtl;
+}
+
+/* WebKit Vertical Thumb */
+.mixer-fader::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    height: 10px;
+    width: 22px;
+    border-radius: 3px;
+    background: #ffffff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    border: none;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.mixer-fader::-webkit-slider-thumb:hover {
+    background: #00d4ff;
+}
+
+/* WebKit Vertical Track */
+.mixer-fader::-webkit-slider-runnable-track {
+    width: 6px;
+    height: 100%;
+    border-radius: 3px;
+    background: #2f3849;
+}
+
+/* Firefox Vertical Thumb */
+.mixer-fader::-moz-range-thumb {
+    height: 10px;
+    width: 22px;
+    border-radius: 3px;
+    background: #ffffff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    border: none;
+    cursor: pointer;
+}
+
+.mixer-fader::-moz-range-thumb:hover {
+    background: #00d4ff;
+}
+
+/* Firefox Vertical Track */
+.mixer-fader::-moz-range-track {
+    width: 6px;
+    height: 100%;
+    border-radius: 3px;
+    background: #2f3849;
+}
+
+.mixer-fader::-moz-range-progress {
+    background: #00d4ff;
+    border-radius: 3px;
+}
+
+/* ========== Toggle Switch ========== */
+.toggle-checkbox:checked {
+    transform: translateX(20px);
+    border-color: #00d4ff;
+}
+
+.toggle-checkbox:checked + .toggle-label {
+    background-color: #00d4ff;
+}
+
+/* ========== Scrollbar ========== */
 ::-webkit-scrollbar {
     width: 6px;
+    height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -47,22 +171,10 @@ input[type=range]::-webkit-slider-runnable-track {
     border-radius: 3px;
 }
 
-/* Toggle Switch Styling */
-.toggle-checkbox:checked {
-    transform: translateX(24px);
-    border-color: #00d4ff;
+::-webkit-scrollbar-thumb:hover {
+    background: #4a5568;
 }
 
-.toggle-checkbox:checked + .toggle-label {
-    background-color: #00d4ff;
-}
-
-/* Active state indicator */
-[data-state="active"] {
-    border-bottom-width: 2px;
-}
-
-/* No scrollbar utility class */
 .no-scrollbar::-webkit-scrollbar {
     display: none;
 }
@@ -70,4 +182,23 @@ input[type=range]::-webkit-slider-runnable-track {
 .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
+}
+
+/* ========== Zone Overlay Effects ========== */
+.zone-overlay {
+    mix-blend-mode: screen;
+}
+
+/* ========== Accessibility ========== */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+:focus-visible {
+    outline: 2px solid #00d4ff;
+    outline-offset: 2px;
 }

@@ -111,12 +111,12 @@ void stripPlasmaOptimized() {
         uint8_t v1 = sin8((normalizedDist << 3) + (time >> 6));
         uint8_t v2 = sin8((normalizedDist * 5) - (time >> 7));
         uint8_t v3 = sin8((normalizedDist * 3) + (time >> 8));
-        
-        // Combine waves
-        uint8_t hue = scale8(v1 + v2 + v3, 85) + gHue;  // scale8(x, 85) ≈ x/3
+
+        // Use palette with small offset instead of full spectrum
+        uint8_t paletteIndex = scale8(v1 + v2 + v3, 20);  // 0-60 range (not rainbow)
         uint8_t brightness = scale8(v1 + v2, 128) + 64; // Average and offset
-        
-        CRGB color = CHSV(hue, 255, brightness);
+
+        CRGB color = ColorFromPalette(currentPalette, gHue + paletteIndex, brightness);
         strip1[i] = color;
         strip2[i] = color;
     }

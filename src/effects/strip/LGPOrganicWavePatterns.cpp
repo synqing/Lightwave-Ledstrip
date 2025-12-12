@@ -57,14 +57,16 @@ void lgpBioluminescentPlanktonWaves() {
     wavePhase += speed * 0.05f;
     float planktonDensity = 0.1f + (complexity * 0.8f);  // 0.1-0.9 population density
     
-    // Ocean wave dynamics
+    // CENTER ORIGIN: Ocean wave dynamics - symmetric waves from center
     for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
-        float position = (float)i / HardwareConfig::STRIP_LENGTH;
-        
-        // Multiple wave components for realistic ocean
-        float wave1 = sin(position * 4 * PI + wavePhase) * 0.5f;
-        float wave2 = sin(position * 7 * PI - wavePhase * 0.7f) * 0.3f;
-        float wave3 = sin(position * 11 * PI + wavePhase * 1.3f) * 0.2f;
+        // Calculate distance from center for symmetry
+        float distFromCenter = abs((int)i - HardwareConfig::STRIP_CENTER_POINT);
+        float normalizedDist = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
+
+        // Multiple wave components for realistic ocean (symmetric)
+        float wave1 = sin(normalizedDist * 4 * PI + wavePhase) * 0.5f;
+        float wave2 = sin(normalizedDist * 7 * PI - wavePhase * 0.7f) * 0.3f;
+        float wave3 = sin(normalizedDist * 11 * PI + wavePhase * 1.3f) * 0.2f;
         
         float totalWave = wave1 + wave2 + wave3;
         
@@ -240,23 +242,23 @@ void lgpBacterialColonyGrowth() {
         
         // Brightness based on bacterial density
         uint8_t brightness = constrain((density * 0.7f + biofilm * 0.3f) * 255 * intensity, 0, 255);
-        
-        // Color based on colony state
-        uint8_t hue1 = gHue + (density * 60) + (signal * 40);
-        uint8_t hue2 = gHue + (biofilm * 80) + (nutrientLevel[i] * 40);
-        
-        // Special colors for different states
+
+        // Use palette with smaller gradients (reduced from 60+40 and 80+40)
+        uint8_t paletteIndex1 = (density * 15) + (signal * 10);  // Max 25
+        uint8_t paletteIndex2 = (biofilm * 20) + (nutrientLevel[i] * 10);  // Max 30
+
+        // Special states add smaller offsets
         if (signal > 0.7f) {
-            // Quorum sensing active - purple shift
-            hue1 += 140;
+            // Quorum sensing active
+            paletteIndex1 += 30;
         }
         if (biofilm > 0.5f) {
-            // Biofilm matrix - green shift
-            hue1 = 96 + (biofilm * 30);
+            // Biofilm matrix
+            paletteIndex1 += 20;
         }
-        
-        strip1[i] = CHSV(hue1, saturation * 255, brightness);
-        strip2[i] = CHSV(hue2, saturation * 255, brightness);
+
+        strip1[i] = ColorFromPalette(currentPalette, gHue + paletteIndex1, brightness);
+        strip2[i] = ColorFromPalette(currentPalette, gHue + paletteIndex2, brightness);
     }
 }
 
@@ -289,53 +291,57 @@ void lgpDNAReplicationFork() {
             leadingStrand[i] = 0;
             laggingStrand[i] = 0;
         }
-        replicationForkPos = HardwareConfig::STRIP_CENTER_POINT;
-        helicasePos = replicationForkPos;
+        replicationForkPos = 0;  // Start at center, grows outward
+        helicasePos = 0;
         initialized = true;
     }
-    
-    // Helicase unwinding
+
+    // CENTER ORIGIN: Helicase unwinding from center outward
     float unwindingRate = speed * 2.0f;
     helicasePos += unwindingRate;
-    if (helicasePos > HardwareConfig::STRIP_LENGTH) helicasePos = 0;
-    
+    if (helicasePos > HardwareConfig::STRIP_HALF_LENGTH) helicasePos = 0;  // Reset when reaching edge
+
     // Replication fork follows helicase
     float forkLag = 10;  // Distance behind helicase
     replicationForkPos = helicasePos - forkLag;
     if (replicationForkPos < 0) replicationForkPos = 0;
     
-    // DNA polymerase activity
+    // CENTER ORIGIN: DNA polymerase activity - symmetric replication from center
     for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
-        float distFromFork = i - replicationForkPos;
-        
+        // Calculate distance from center
+        float distFromCenter = abs((int)i - HardwareConfig::STRIP_CENTER_POINT);
+
+        // Check if within replication zone (behind helicasePos)
+        bool inReplicationZone = (distFromCenter < helicasePos) && (distFromCenter > replicationForkPos);
+
         if (variation < 0.33f || variation > 0.66f) {
             // Leading strand synthesis (continuous)
-            if (distFromFork < 0 && distFromFork > -50) {
+            if (inReplicationZone) {
                 leadingStrand[i] += speed * 0.1f;
-                
+
                 // Replication errors
                 if (random(1000) < (1 - intensity) * 10) {
                     leadingStrand[i] *= 0.8f;  // Mismatch
                 }
             }
         }
-        
+
         if (variation > 0.33f) {
             // Lagging strand synthesis (discontinuous)
-            if (distFromFork < 0 && distFromFork > -50) {
+            if (inReplicationZone) {
                 // Okazaki fragments
                 int fragmentSize = 20 - (complexity * 10);  // 10-20 bases
-                
-                if ((int)abs(distFromFork) % fragmentSize == 0) {
+
+                if ((int)distFromCenter % fragmentSize == 0) {
                     // New primer
                     if (primerCount < 32) {
                         primerPositions[primerCount++] = i;
                     }
                 }
-                
+
                 // Synthesis from primers
                 for(int p = 0; p < primerCount; p++) {
-                    if (i <= primerPositions[p] && i > primerPositions[p] - fragmentSize) {
+                    if (abs(i - primerPositions[p]) < fragmentSize) {
                         laggingStrand[i] += speed * 0.08f;
                     }
                 }
@@ -352,51 +358,54 @@ void lgpDNAReplicationFork() {
         laggingStrand[i] = constrain(laggingStrand[i], 0, 1);
     }
     
-    // Visualize replication
+    // Visualize replication - CENTER ORIGIN + use palette
     for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
         float leading = leadingStrand[i];
         float lagging = laggingStrand[i];
         float combined = max(leading, lagging);
-        
+
+        // Distance from center for symmetric color
+        float distFromCenter = abs((int)i - HardwareConfig::STRIP_CENTER_POINT);
+
         uint8_t brightness = constrain(combined * 255 * intensity, 0, 255);
-        
-        // DNA base colors (A=red, T=yellow, G=green, C=blue)
-        uint8_t hue1 = gHue;
-        uint8_t hue2 = gHue;
-        
+
+        // Use palette offsets instead of discrete hues
+        uint8_t paletteOffset1 = 0;
+        uint8_t paletteOffset2 = 0;
+
         // Color based on strand and position
-        if (abs(i - helicasePos) < 3) {
-            // Helicase - bright white
-            hue1 = 0;
+        if (abs(distFromCenter - helicasePos) < 3) {
+            // Helicase - first palette color
+            paletteOffset1 = 0;
             brightness = 255;
-        } else if (abs(i - replicationForkPos) < 2) {
-            // Replication fork - orange
-            hue1 = 32;
+        } else if (abs(distFromCenter - replicationForkPos) < 2) {
+            // Replication fork
+            paletteOffset1 = 10;
             brightness = 255;
         } else if (leading > 0.1f) {
-            // Leading strand - blue (continuous)
-            hue1 = 160 + (leading * 40);
-            hue2 = 160 + (leading * 40);
+            // Leading strand (continuous) - palette offset 20-25
+            paletteOffset1 = 20 + (leading * 5);
+            paletteOffset2 = 20 + (leading * 5);
         } else if (lagging > 0.1f) {
-            // Lagging strand - green (fragments)
-            hue1 = 96 + (lagging * 40);
-            hue2 = 96 + (lagging * 40);
-        } else if (i > helicasePos) {
-            // Unwound DNA - dim red
-            hue1 = 0;
+            // Lagging strand (fragments) - palette offset 30-35
+            paletteOffset1 = 30 + (lagging * 5);
+            paletteOffset2 = 30 + (lagging * 5);
+        } else if (distFromCenter > helicasePos) {
+            // Unwound DNA - dim
+            paletteOffset1 = 0;
             brightness = 30;
         }
-        
-        // Show primers as yellow dots
+
+        // Show primers
         for(int p = 0; p < primerCount; p++) {
             if (abs(i - primerPositions[p]) < 1) {
-                hue1 = 64;  // Yellow
+                paletteOffset1 = 15;
                 brightness = 200;
             }
         }
-        
-        strip1[i] = CHSV(hue1, saturation * 255, brightness);
-        strip2[i] = CHSV(hue2, saturation * 255, brightness);
+
+        strip1[i] = ColorFromPalette(currentPalette, gHue + paletteOffset1, brightness);
+        strip2[i] = ColorFromPalette(currentPalette, gHue + paletteOffset2, brightness);
     }
 }
 
@@ -436,32 +445,47 @@ void lgpProteinFoldingDynamics() {
     
     foldingProgress += speed * 0.02f;
     float temperature = 0.5f + (intensity * 0.5f);  // 0.5-1.0
-    int proteinLength = 50 + (complexity * 200);  // 50-250 residues
-    
-    // Protein folding simulation
-    for(int i = 0; i < min(proteinLength, (int)HardwareConfig::STRIP_LENGTH); i++) {
+    float proteinComplexity = complexity;  // 0-1 determines folding radius
+
+    // CENTER ORIGIN: Protein folding simulation - folding from/to center
+    for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+        // Calculate distance from center - protein folds from center outward
+        float distFromCenter = abs((int)i - HardwareConfig::STRIP_CENTER_POINT);
+        float normalizedDist = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
+
+        // Only process residues within folding radius
+        if (normalizedDist > proteinComplexity) continue;
         // Secondary structure formation (alpha helices, beta sheets)
         if (foldingProgress > 0.2f) {
             // Check for helix-forming regions
-            if (i >= 3 && i < proteinLength - 3) {
+            if (i >= 3 && i < HardwareConfig::STRIP_LENGTH - 3) {
                 float helixPropensity = 0;
                 for(int j = -3; j <= 3; j++) {
-                    helixPropensity += aminoAcidChain[i+j] * 0.14f;
+                    if (i+j >= 0 && i+j < HardwareConfig::STRIP_LENGTH) {
+                        helixPropensity += aminoAcidChain[i+j] * 0.14f;
+                    }
                 }
                 secondaryStructure[i] += helixPropensity * speed * 0.1f;
             }
         }
-        
-        // Tertiary structure - hydrophobic collapse
+
+        // Tertiary structure - hydrophobic collapse toward center
         if (foldingProgress > 0.5f) {
             if (hydrophobicity[i] > 0.5f) {
-                // Hydrophobic residues seek interior
+                // Hydrophobic residues seek interior (center)
                 float buryScore = 0;
-                for(int j = 0; j < proteinLength; j++) {
+                for(int j = 0; j < HardwareConfig::STRIP_LENGTH; j++) {
+                    float jDistFromCenter = abs((int)j - HardwareConfig::STRIP_CENTER_POINT);
+                    float jNormalizedDist = jDistFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
+
+                    // Skip if outside folding radius
+                    if (jNormalizedDist > proteinComplexity) continue;
+
                     if (abs(i - j) > 10) {  // Non-local contacts
-                        float distance = abs(i - j) / (float)proteinLength;
+                        // Favor contacts toward center
+                        float centerWeight = 1.0f - (distFromCenter / HardwareConfig::STRIP_HALF_LENGTH);
                         if (hydrophobicity[j] > 0.5f) {
-                            buryScore += exp(-distance * 5) * temperature;
+                            buryScore += exp(-abs(i - j) * 0.05f) * temperature * centerWeight;
                         }
                     }
                 }
@@ -487,7 +511,7 @@ void lgpProteinFoldingDynamics() {
                 // Aggregation seeds
                 tertiaryContacts[i] = 1.0f;
                 if (i > 0) tertiaryContacts[i-1] = 0.8f;
-                if (i < proteinLength-1) tertiaryContacts[i+1] = 0.8f;
+                if (i < HardwareConfig::STRIP_LENGTH-1) tertiaryContacts[i+1] = 0.8f;
             }
         }
         
@@ -500,45 +524,45 @@ void lgpProteinFoldingDynamics() {
         tertiaryContacts[i] = constrain(tertiaryContacts[i], 0, 1);
     }
     
-    // Visualize folding
+    // Visualize folding - use palette instead of discrete hues
     for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
         float secondary = secondaryStructure[i];
         float tertiary = tertiaryContacts[i];
         float folded = (secondary + tertiary) / 2;
-        
+
         uint8_t brightness = constrain((0.3f + folded * 0.7f) * 255 * intensity, 0, 255);
-        
-        // Color based on structure type
-        uint8_t hue1 = gHue;
-        uint8_t hue2 = gHue;
-        
+
+        // Color based on structure type - use palette offsets
+        uint8_t paletteOffset1 = 0;
+        uint8_t paletteOffset2 = 0;
+
         if (secondary > 0.7f && tertiary < 0.3f) {
-            // Alpha helix - magenta
-            hue1 = 192 + (secondary * 32);
-            hue2 = 192 + (secondary * 32);
+            // Alpha helix - palette offset 0-5
+            paletteOffset1 = 0 + (secondary * 5);
+            paletteOffset2 = 0 + (secondary * 5);
         } else if (secondary > 0.5f && secondary < 0.7f) {
-            // Beta sheet - yellow
-            hue1 = 64 + (secondary * 32);
-            hue2 = 64 + (secondary * 32);
+            // Beta sheet - palette offset 10-15
+            paletteOffset1 = 10 + (secondary * 5);
+            paletteOffset2 = 10 + (secondary * 5);
         } else if (tertiary > 0.7f) {
-            // Hydrophobic core - blue
-            hue1 = 160 + (tertiary * 40);
-            hue2 = 160 + (tertiary * 40);
+            // Hydrophobic core - palette offset 20-25
+            paletteOffset1 = 20 + (tertiary * 5);
+            paletteOffset2 = 20 + (tertiary * 5);
         } else {
-            // Random coil - green
-            hue1 = 96 + (folded * 40);
-            hue2 = 96 + (folded * 40);
+            // Random coil - palette offset 30-35
+            paletteOffset1 = 30 + (folded * 5);
+            paletteOffset2 = 30 + (folded * 5);
         }
-        
-        // Misfolded proteins - red warning
+
+        // Misfolded proteins - warning offset
         if (variation > 0.66f && tertiaryContacts[i] > 0.9f) {
-            hue1 = 0;
-            hue2 = 0;
+            paletteOffset1 = 40;
+            paletteOffset2 = 40;
             brightness = 255;
         }
-        
-        strip1[i] = CHSV(hue1, saturation * 255, brightness);
-        strip2[i] = CHSV(hue2, saturation * 255, brightness);
+
+        strip1[i] = ColorFromPalette(currentPalette, gHue + paletteOffset1, brightness);
+        strip2[i] = ColorFromPalette(currentPalette, gHue + paletteOffset2, brightness);
     }
 }
 

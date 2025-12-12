@@ -1,617 +1,634 @@
-// ========== K1-Lightwave Controller Web App ==========
-// Vanilla JavaScript - No frameworks
-// WebSocket + REST API integration
+// K1-Lightwave Controller Web App
+// Vanilla JavaScript - WebSocket + REST API
 
 // ========== Configuration ==========
 const CONFIG = {
     WS_URL: `ws://${window.location.hostname}/ws`,
-    API_BASE: `/api`,
+    API_BASE: '/api',
     RECONNECT_INTERVAL: 3000,
-    HEARTBEAT_INTERVAL: 30000,
-    DEBOUNCE_SLIDER: 150,       // ms delay for slider changes
-    DEBOUNCE_PIPELINE: 250,     // ms delay for pipeline sliders
+    DEBOUNCE_SLIDER: 150,
+    DEBOUNCE_PIPELINE: 250,
 };
 
-// ========== State Management ==========
+// ========== State ==========
 const state = {
-    // Connection
     ws: null,
     connected: false,
     reconnectTimer: null,
-
-    // Zone Composer
-    zoneMode: false,
     zoneCount: 3,
     selectedZone: 1,
     zones: [
-        { id: 1, effectId: 0, enabled: true },
-        { id: 2, effectId: 0, enabled: true },
-        { id: 3, effectId: 0, enabled: true },
+        { id: 1, effectId: 0, enabled: true, brightness: 255, speed: 25 },
+        { id: 2, effectId: 0, enabled: true, brightness: 255, speed: 25 },
+        { id: 3, effectId: 0, enabled: true, brightness: 255, speed: 25 },
+        { id: 4, effectId: 0, enabled: true, brightness: 255, speed: 25 },
     ],
-
-    // Global Parameters
-    brightness: 210,
-    speed: 32,
     paletteId: 0,
-    intensity: 128,
-    saturation: 200,
-    complexity: 45,
-    variation: 180,
     transitions: false,
-
-    // Effects Data
     effects: [],
     palettes: [],
-    currentEffect: 0,
-
-    // Performance
     fps: 0,
     memoryFree: 0,
 };
 
-// ========== Zone Configuration ==========
-// Zone definitions matching AURA spec for 3-zone mode
-// Default 3-zone mode uses custom layout (30+90+40 LEDs)
-const zones = {
-    1: {
-        color: 'text-accent-zone1',
-        bg: 'bg-accent-zone1',
-        border: 'border-accent-zone1',
-        text: 'LEDs 65-94',  // 3-ZONE: Zone 0 (center, 30 LEDs, continuous)
-        ids: ['vis-z1']
-    },
-    2: {
-        color: 'text-accent-zone2',
-        bg: 'bg-accent-zone2',
-        border: 'border-accent-zone2',
-        text: 'LEDs 20-64 | 95-139',  // 3-ZONE: Zone 1 (90 LEDs, split)
-        ids: ['vis-z2-l', 'vis-z2-r']
-    },
-    3: {
-        color: 'text-accent-zone3',
-        bg: 'bg-accent-zone3',
-        border: 'border-accent-zone3',
-        text: 'LEDs 0-19 | 140-159',  // 3-ZONE: Zone 2 (40 LEDs, split)
-        ids: ['vis-z3-l', 'vis-z3-r']
-    },
-    4: {
-        color: 'text-accent-zone3',  // Reuse zone3 color
-        bg: 'bg-accent-zone3',
-        border: 'border-accent-zone3',
-        text: 'LEDs 0-19 | 140-159',  // 4-ZONE: Zone 3 (40 LEDs, split)
-        ids: ['vis-z3-l', 'vis-z3-r']
-    }
+// Zone display configuration
+const zoneConfig = {
+    1: { color: 'accent-zone1', text: 'LEDs 65-94', visIds: ['vis-z1'] },
+    2: { color: 'accent-zone2', text: 'LEDs 20-64 | 95-139', visIds: ['vis-z2-l', 'vis-z2-r'] },
+    3: { color: 'accent-zone3', text: 'LEDs 0-19 | 140-159', visIds: ['vis-z3-l', 'vis-z3-r'] },
+    4: { color: 'accent-zone3', text: 'LEDs (Zone 4 range)', visIds: ['vis-z3-l', 'vis-z3-r'] },
 };
 
 // ========== API Client ==========
 const API = {
     async request(endpoint, options = {}) {
         try {
-            const response = await fetch(`${CONFIG.API_BASE}${endpoint}`, {
+            const res = await fetch(`${CONFIG.API_BASE}${endpoint}`, {
                 ...options,
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...options.headers,
-                },
+                headers: { 'Content-Type': 'application/json', ...options.headers },
             });
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            return await response.json();
-        } catch (error) {
-            console.error(`API Error [${endpoint}]:`, error);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return await res.json();
+        } catch (e) {
+            console.error(`API [${endpoint}]:`, e);
             return null;
         }
     },
+    setBrightness: (v) => API.request('/brightness', { method: 'POST', body: JSON.stringify({ brightness: v }) }),
+    setSpeed: (v) => API.request('/speed', { method: 'POST', body: JSON.stringify({ speed: v }) }),
+    setPalette: (id) => API.request('/palette', { method: 'POST', body: JSON.stringify({ paletteId: id }) }),
+    setPipeline: (i, s, c, v) => API.request('/pipeline', { method: 'POST', body: JSON.stringify({ intensity: i, saturation: s, complexity: c, variation: v }) }),
+    toggleTransitions: (e) => API.request('/transitions', { method: 'POST', body: JSON.stringify({ enabled: e }) }),
+    setZoneCount: (c) => API.request('/zone/count', { method: 'POST', body: JSON.stringify({ count: c }) }),
+    setZoneEffect: (z, e) => API.request('/zone/config', { method: 'POST', body: JSON.stringify({ zoneId: z, effectId: e, enabled: true }) }),
+    setZoneEnabled: (z, e) => API.request('/zone/config', { method: 'POST', body: JSON.stringify({ zoneId: z, enabled: e }) }),
+    setZoneBrightness: (z, b) => API.request('/zone/brightness', { method: 'POST', body: JSON.stringify({ zoneId: z, brightness: b }) }),
+    setZoneSpeed: (z, s) => API.request('/zone/speed', { method: 'POST', body: JSON.stringify({ zoneId: z, speed: s }) }),
+    loadPreset: (id) => API.request('/zone/preset/load', { method: 'POST', body: JSON.stringify({ presetId: id }) }),
+    saveConfig: () => API.request('/zone/config/save', { method: 'POST' }),
+    getStatus: () => API.request('/status'),
 
-    // Global Parameters
-    async setBrightness(value) {
-        return this.request('/brightness', {
-            method: 'POST',
-            body: JSON.stringify({ brightness: value }),
-        });
-    },
-
-    async setSpeed(value) {
-        return this.request('/speed', {
-            method: 'POST',
-            body: JSON.stringify({ speed: value }),
-        });
-    },
-
-    async setPalette(paletteId) {
-        return this.request('/palette', {
-            method: 'POST',
-            body: JSON.stringify({ paletteId }),
-        });
-    },
-
-    async setPipeline(intensity, saturation, complexity, variation) {
-        return this.request('/pipeline', {
-            method: 'POST',
-            body: JSON.stringify({ intensity, saturation, complexity, variation }),
-        });
-    },
-
-    async toggleTransitions(enabled) {
-        return this.request('/transitions', {
-            method: 'POST',
-            body: JSON.stringify({ enabled }),
-        });
-    },
-
-    // Zone Control
-    async setZoneCount(count) {
-        return this.request('/zone/count', {
-            method: 'POST',
-            body: JSON.stringify({ count }),
-        });
-    },
-
-    async setZoneEffect(zoneId, effectId) {
-        return this.request('/zone/config', {
-            method: 'POST',
-            body: JSON.stringify({ zoneId, effectId, enabled: true }),
-        });
-    },
-
-    async setZoneEnabled(zoneId, enabled) {
-        return this.request('/zone/config', {
-            method: 'POST',
-            body: JSON.stringify({ zoneId, enabled }),
-        });
-    },
-
-    async loadPreset(presetId) {
-        return this.request('/zone/preset/load', {
-            method: 'POST',
-            body: JSON.stringify({ presetId }),
-        });
-    },
-
-    async saveConfig() {
-        return this.request('/zone/config/save', {
-            method: 'POST',
-        });
-    },
-
-    // System
-    async getStatus() {
-        return this.request('/status');
-    },
+    // Enhancement Engine APIs
+    setColorBlend: (enabled) => API.request('/enhancement/color/blend', { method: 'POST', body: JSON.stringify({ enabled }) }),
+    setColorDiffusion: (amount) => API.request('/enhancement/color/diffusion', { method: 'POST', body: JSON.stringify({ amount }) }),
+    setColorRotation: (speed) => API.request('/enhancement/color/rotation', { method: 'POST', body: JSON.stringify({ speed }) }),
+    setMotionPhase: (offset) => API.request('/enhancement/motion/phase', { method: 'POST', body: JSON.stringify({ offset }) }),
+    setMotionAutoRotate: (enabled, speed) => API.request('/enhancement/motion/auto-rotate', { method: 'POST', body: JSON.stringify({ enabled, speed }) }),
+    getEnhancementStatus: () => API.request('/enhancement/status'),
 };
 
-// ========== WebSocket Client ==========
+// ========== WebSocket ==========
 const WS = {
     connect() {
-        if (state.ws) {
-            state.ws.close();
-        }
-
-        console.log('Connecting to WebSocket:', CONFIG.WS_URL);
+        if (state.ws) state.ws.close();
+        console.log('WS connecting:', CONFIG.WS_URL);
         state.ws = new WebSocket(CONFIG.WS_URL);
 
         state.ws.onopen = () => {
-            console.log('WebSocket connected');
+            console.log('WS connected');
             state.connected = true;
             updateConnectionStatus();
             clearTimeout(state.reconnectTimer);
-
-            // Request initial state
-            this.send({ type: 'getState' });
+            WS.send({ type: 'getState' });
         };
 
-        state.ws.onmessage = (event) => {
-            try {
-                const message = JSON.parse(event.data);
-                this.handleMessage(message);
-            } catch (error) {
-                console.error('WebSocket message parse error:', error);
-            }
+        state.ws.onmessage = (e) => {
+            try { WS.handleMessage(JSON.parse(e.data)); }
+            catch (err) { console.error('WS parse:', err); }
         };
 
-        state.ws.onerror = (error) => {
-            console.error('WebSocket error:', error);
-        };
+        state.ws.onerror = (e) => console.error('WS error:', e);
 
         state.ws.onclose = () => {
-            console.log('WebSocket disconnected');
+            console.log('WS disconnected');
             state.connected = false;
             updateConnectionStatus();
-
-            // Auto-reconnect
-            state.reconnectTimer = setTimeout(() => {
-                this.connect();
-            }, CONFIG.RECONNECT_INTERVAL);
+            state.reconnectTimer = setTimeout(() => WS.connect(), CONFIG.RECONNECT_INTERVAL);
         };
     },
 
-    send(message) {
+    send(msg) {
         if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-            state.ws.send(JSON.stringify(message));
-            console.log('WS ->', message);
-        } else {
-            console.warn('WebSocket not connected');
+            state.ws.send(JSON.stringify(msg));
         }
     },
 
-    handleMessage(message) {
-        console.log('WS <-', message);
-
-        switch (message.type) {
+    handleMessage(msg) {
+        console.log('WS <-', msg);
+        switch (msg.type) {
             case 'status':
-                updatePerformance(message.freeHeap);
-                break;
-
             case 'performance':
-                updatePerformance(message.fps, message.memoryFree);
+                updatePerformance(msg.fps, msg.freeHeap || msg.memoryFree);
                 break;
-
             case 'effectChange':
-                updateCurrentEffect(message.effectId, message.name);
+                updateCurrentEffect(msg.effectId, msg.name);
                 break;
-
-            case 'brightnessChange':
-                state.brightness = message.brightness;
-                updateSliderValue('slider-brightness', 'val-brightness', message.brightness);
-                break;
-
-            case 'speedChange':
-                state.speed = message.speed;
-                updateSliderValue('slider-speed', 'val-speed', message.speed);
-                break;
-
             case 'paletteChange':
-                state.paletteId = message.paletteId;
-                document.getElementById('palette-select').value = message.paletteId;
+                state.paletteId = msg.paletteId;
+                document.getElementById('palette-select').value = msg.paletteId;
                 break;
-
             case 'zone.state':
-                // Update zone state from server
+                // Sync zone state from server
                 break;
-
             case 'error':
-                console.error('Server error:', message.message);
+                console.error('Server:', msg.message);
                 break;
-
-            default:
-                console.warn('Unknown message type:', message.type);
         }
     }
 };
 
-// ========== UI Update Functions ==========
+// ========== UI Updates ==========
 function updateConnectionStatus() {
-    const statusText = document.getElementById('status-text');
-    const statusDot = document.getElementById('status-dot');
-
+    const txt = document.getElementById('status-text');
+    const dot = document.getElementById('status-dot');
     if (state.connected) {
-        statusText.textContent = 'ONLINE';
-        statusText.className = 'text-xs font-semibold tracking-wide text-text-secondary';
-        statusDot.className = 'w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,221,136,0.6)] animate-pulse';
+        txt.textContent = 'ONLINE';
+        dot.className = 'w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,221,136,0.6)] animate-pulse';
     } else {
-        statusText.textContent = 'OFFLINE';
-        statusText.className = 'text-xs font-semibold tracking-wide text-text-secondary';
-        statusDot.className = 'w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(255,85,85,0.6)]';
+        txt.textContent = 'OFFLINE';
+        dot.className = 'w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(255,85,85,0.6)]';
     }
 }
 
-function updatePerformance(fps, memoryFree) {
-    if (fps !== undefined) {
-        state.fps = fps;
-        document.getElementById('status-fps').textContent = fps;
-    }
-
-    if (memoryFree !== undefined) {
-        state.memoryFree = memoryFree;
-        const memMB = Math.round(memoryFree / 1024);
-        document.getElementById('status-mem').textContent = `${memMB}KB`;
-    }
+function updatePerformance(fps, mem) {
+    if (fps !== undefined) document.getElementById('status-fps').textContent = fps;
+    if (mem !== undefined) document.getElementById('status-mem').textContent = `${Math.round(mem / 1024)}KB`;
 }
 
-function updateCurrentEffect(effectId, name) {
-    state.currentEffect = effectId;
-    const statusFx = document.getElementById('status-fx');
-    if (statusFx) {
-        statusFx.textContent = name || `Effect ${effectId}`;
-    }
+function updateCurrentEffect(id, name) {
+    document.getElementById('status-fx').textContent = name || `Effect ${id}`;
 }
 
-function updateSliderValue(sliderId, labelId, value) {
-    const slider = document.getElementById(sliderId);
-    const label = document.getElementById(labelId);
-    if (slider && label) {
-        slider.value = value;
-        label.textContent = value;
-        updateSliderTrack(slider);
-    }
+function updateSliderTrack(input) {
+    const min = parseFloat(input.min) || 0;
+    const max = parseFloat(input.max) || 100;
+    const val = parseFloat(input.value);
+    const pct = ((val - min) / (max - min)) * 100;
+    input.style.background = `linear-gradient(to right, #00d4ff ${pct}%, #2f3849 ${pct}%)`;
 }
 
 // ========== Zone Logic ==========
-function selectZone(id) {
-    state.selectedZone = id;
-
-    // Reset Tabs
-    [1, 2, 3].forEach(z => {
-        const btn = document.getElementById(`tab-z${z}`);
-        if (!btn) return;
-        btn.setAttribute('aria-selected', 'false');
-        btn.className = "flex-1 pb-2 text-sm text-text-secondary hover:text-text-primary transition-colors flex justify-center items-center gap-2 border-b-2 border-transparent";
-    });
-
-    // Activate Tab
-    const activeBtn = document.getElementById(`tab-z${id}`);
-    if (activeBtn) {
-        activeBtn.setAttribute('aria-selected', 'true');
-        activeBtn.className = `flex-1 pb-2 text-sm font-semibold text-text-primary flex justify-center items-center gap-2 border-b-2 ${zones[id].border}`;
-    }
-
-    // Update Badge
-    const badge = document.getElementById('range-badge');
-    if (badge) {
-        badge.className = `w-full py-2 px-3 rounded text-xs font-mono font-medium text-center border transition-all duration-300 ${zones[id].bg}/10 ${zones[id].color} ${zones[id].border}/20`;
-        badge.innerText = zones[id].text;
-    }
-
-    // Update Visualization Overlays
-    document.querySelectorAll('.zone-overlay').forEach(el => {
-        el.style.opacity = '0';
-    });
-
-    // Show active zone segments
-    zones[id].ids.forEach(visId => {
-        const overlay = document.getElementById(visId);
-        if (overlay) {
-            overlay.style.opacity = '0.5';
-        }
-    });
-}
-
 function setZoneCount(count) {
     state.zoneCount = count;
 
-    // Update UI button states
+    // Update zone count buttons
     for (let i = 1; i <= 4; i++) {
-        const btn = document.querySelector(`button[onclick="setZoneCount(${i})"]`);
+        const btn = document.getElementById(`zc-${i}`);
         if (btn) {
-            if (i === count) {
-                btn.className = 'w-6 h-6 text-xs text-black bg-accent-cyan font-semibold rounded shadow-sm';
+            btn.className = i === count
+                ? 'w-6 h-6 text-xs text-black bg-accent-cyan font-semibold rounded'
+                : 'w-6 h-6 text-xs text-text-secondary hover:text-white rounded transition-colors';
+        }
+    }
+
+    // Update zone tabs visibility
+    updateZoneTabs(count);
+
+    // Update mixer channels
+    updateMixerChannels(count);
+
+    // If selected zone is now hidden, select zone 1
+    if (state.selectedZone > count) {
+        selectZone(1);
+    }
+
+    API.setZoneCount(count);
+}
+
+function updateZoneTabs(count) {
+    const tab4 = document.getElementById('tab-z4');
+    const tab3 = document.getElementById('tab-z3');
+
+    if (tab4) tab4.classList.toggle('hidden', count < 4);
+    if (tab3) tab3.classList.toggle('hidden', count < 3);
+}
+
+function updateMixerChannels(count) {
+    // Zone 4 channel
+    const z4 = document.getElementById('mixer-zone-4');
+    if (z4) {
+        if (count >= 4) {
+            z4.classList.remove('opacity-30', 'pointer-events-none');
+            z4.querySelectorAll('input').forEach(i => i.disabled = false);
+        } else {
+            z4.classList.add('opacity-30', 'pointer-events-none');
+            z4.querySelectorAll('input').forEach(i => i.disabled = true);
+        }
+    }
+
+    // Zone 3 channel
+    const z3 = document.getElementById('mixer-zone-3');
+    if (z3) {
+        if (count >= 3) {
+            z3.classList.remove('opacity-30', 'pointer-events-none');
+            z3.querySelectorAll('input').forEach(i => i.disabled = false);
+        } else {
+            z3.classList.add('opacity-30', 'pointer-events-none');
+            z3.querySelectorAll('input').forEach(i => i.disabled = true);
+        }
+    }
+}
+
+function selectZone(id) {
+    state.selectedZone = id;
+    const cfg = zoneConfig[id];
+
+    // Update tabs
+    for (let z = 1; z <= 4; z++) {
+        const tab = document.getElementById(`tab-z${z}`);
+        if (tab) {
+            const zCfg = zoneConfig[z];
+            if (z === id) {
+                tab.className = `flex-1 pb-2 text-sm font-semibold text-text-primary flex justify-center items-center gap-1.5 border-b-2 border-${zCfg.color}`;
+                tab.setAttribute('aria-selected', 'true');
             } else {
-                btn.className = 'w-6 h-6 text-xs text-text-secondary hover:text-white rounded transition-colors';
+                tab.className = `flex-1 pb-2 text-sm text-text-secondary hover:text-text-primary transition-colors flex justify-center items-center gap-1.5 border-b-2 border-transparent${z > state.zoneCount ? ' hidden' : ''}`;
+                tab.setAttribute('aria-selected', 'false');
             }
         }
     }
 
-    // Send to server
-    API.setZoneCount(count);
+    // Update LED range badge
+    const badge = document.getElementById('range-badge');
+    if (badge) {
+        badge.className = `w-full py-2 px-3 rounded text-xs font-mono font-medium text-center border bg-${cfg.color}/10 text-${cfg.color} border-${cfg.color}/20`;
+        badge.textContent = cfg.text;
+    }
+
+    // Update visualization overlays
+    document.querySelectorAll('.zone-overlay').forEach(el => el.style.opacity = '0');
+    cfg.visIds.forEach(visId => {
+        const el = document.getElementById(visId);
+        if (el) el.style.opacity = '0.5';
+    });
+
+    // Load zone-specific values into sliders
+    const zone = state.zones[id - 1];
+    if (zone) {
+        const bSlider = document.getElementById('zone-brightness-slider');
+        const bLabel = document.getElementById('zone-brightness-label');
+        const sSlider = document.getElementById('zone-speed-slider');
+        const sLabel = document.getElementById('zone-speed-label');
+
+        if (bSlider) { bSlider.value = zone.brightness; updateSliderTrack(bSlider); }
+        if (bLabel) bLabel.textContent = zone.brightness;
+        if (sSlider) { sSlider.value = zone.speed; updateSliderTrack(sSlider); }
+        if (sLabel) sLabel.textContent = zone.speed;
+    }
 }
 
-function enableZone() {
-    const zoneId = state.selectedZone - 1; // Convert to 0-indexed for API
-    API.setZoneEnabled(zoneId, true);
+// ========== Zone Controls ==========
+let zoneBrightnessTimeout, zoneSpeedTimeout;
+
+function setZoneBrightness(value) {
+    const zoneId = state.selectedZone - 1;
+    const brightness = parseInt(value);
+
+    if (state.zones[zoneId]) state.zones[zoneId].brightness = brightness;
+
+    document.getElementById('zone-brightness-label').textContent = brightness;
+    updateSliderTrack(document.getElementById('zone-brightness-slider'));
+
+    // Sync mixer
+    const mixerLabel = document.getElementById(`mixer-b-label-${zoneId}`);
+    const mixerSlider = document.getElementById(`mixer-b-${zoneId}`);
+    if (mixerLabel) mixerLabel.textContent = brightness;
+    if (mixerSlider) mixerSlider.value = brightness;
+
+    updateZoneVisualization();
+
+    clearTimeout(zoneBrightnessTimeout);
+    zoneBrightnessTimeout = setTimeout(() => API.setZoneBrightness(zoneId, brightness), CONFIG.DEBOUNCE_SLIDER);
 }
 
-function disableZone() {
-    const zoneId = state.selectedZone - 1; // Convert to 0-indexed for API
-    API.setZoneEnabled(zoneId, false);
+function setZoneSpeed(value) {
+    const zoneId = state.selectedZone - 1;
+    const speed = parseInt(value);
+
+    if (state.zones[zoneId]) state.zones[zoneId].speed = speed;
+
+    document.getElementById('zone-speed-label').textContent = speed;
+    updateSliderTrack(document.getElementById('zone-speed-slider'));
+
+    // Sync mixer
+    const mixerLabel = document.getElementById(`mixer-s-label-${zoneId}`);
+    const mixerSlider = document.getElementById(`mixer-s-${zoneId}`);
+    if (mixerLabel) mixerLabel.textContent = speed;
+    if (mixerSlider) mixerSlider.value = speed;
+
+    clearTimeout(zoneSpeedTimeout);
+    zoneSpeedTimeout = setTimeout(() => API.setZoneSpeed(zoneId, speed), CONFIG.DEBOUNCE_SLIDER);
 }
 
-function setZoneEffect() {
-    const effectSelect = document.getElementById('effect-select');
-    if (!effectSelect) return;
-
-    const effectId = parseInt(effectSelect.value);
-    const zoneId = state.selectedZone - 1; // Convert to 0-indexed for API
-
-    API.setZoneEffect(zoneId, effectId);
+function updateZoneVisualization() {
+    for (let i = 0; i < state.zones.length; i++) {
+        const zone = state.zones[i];
+        const cfg = zoneConfig[i + 1];
+        if (cfg && cfg.visIds) {
+            const opacity = zone.enabled ? zone.brightness / 255 : 0;
+            cfg.visIds.forEach(id => {
+                const el = document.getElementById(id);
+                if (el && i + 1 === state.selectedZone) el.style.opacity = opacity;
+            });
+        }
+    }
 }
 
+// ========== Mixer Controls ==========
+const mixerTimeouts = { b: {}, s: {} };
+
+function setMixerBrightness(zoneId, value) {
+    const brightness = parseInt(value);
+
+    if (state.zones[zoneId]) state.zones[zoneId].brightness = brightness;
+
+    document.getElementById(`mixer-b-label-${zoneId}`).textContent = brightness;
+
+    // Sync zone card if this zone is selected
+    if (zoneId === state.selectedZone - 1) {
+        document.getElementById('zone-brightness-label').textContent = brightness;
+        const slider = document.getElementById('zone-brightness-slider');
+        if (slider) { slider.value = brightness; updateSliderTrack(slider); }
+    }
+
+    updateZoneVisualization();
+
+    clearTimeout(mixerTimeouts.b[zoneId]);
+    mixerTimeouts.b[zoneId] = setTimeout(() => API.setZoneBrightness(zoneId, brightness), CONFIG.DEBOUNCE_SLIDER);
+}
+
+function setMixerSpeed(zoneId, value) {
+    const speed = parseInt(value);
+
+    if (state.zones[zoneId]) state.zones[zoneId].speed = speed;
+
+    document.getElementById(`mixer-s-label-${zoneId}`).textContent = speed;
+
+    // Sync zone card if this zone is selected
+    if (zoneId === state.selectedZone - 1) {
+        document.getElementById('zone-speed-label').textContent = speed;
+        const slider = document.getElementById('zone-speed-slider');
+        if (slider) { slider.value = speed; updateSliderTrack(slider); }
+    }
+
+    clearTimeout(mixerTimeouts.s[zoneId]);
+    mixerTimeouts.s[zoneId] = setTimeout(() => API.setZoneSpeed(zoneId, speed), CONFIG.DEBOUNCE_SLIDER);
+}
+
+// ========== Effect Navigation ==========
 function prevEffect() {
-    const effectSelect = document.getElementById('effect-select');
-    if (!effectSelect) return;
-
-    const currentIndex = effectSelect.selectedIndex;
-    if (currentIndex > 0) {
-        effectSelect.selectedIndex = currentIndex - 1;
+    const sel = document.getElementById('effect-select');
+    if (sel && sel.selectedIndex > 0) {
+        sel.selectedIndex--;
         setZoneEffect();
     }
 }
 
 function nextEffect() {
-    const effectSelect = document.getElementById('effect-select');
-    if (!effectSelect) return;
-
-    const currentIndex = effectSelect.selectedIndex;
-    if (currentIndex < effectSelect.options.length - 1) {
-        effectSelect.selectedIndex = currentIndex + 1;
+    const sel = document.getElementById('effect-select');
+    if (sel && sel.selectedIndex < sel.options.length - 1) {
+        sel.selectedIndex++;
         setZoneEffect();
     }
 }
 
-// ========== Global Parameters ==========
-let brightnessTimeout, speedTimeout, pipelineTimeout;
-
-function updateSlider(input, labelId) {
-    const label = document.getElementById(labelId);
-    if (label) {
-        label.innerText = input.value;
-    }
-    updateSliderTrack(input);
-
-    // Debounced API calls based on slider type
-    const sliderId = input.id;
-
-    if (sliderId === 'slider-brightness') {
-        clearTimeout(brightnessTimeout);
-        brightnessTimeout = setTimeout(() => {
-            state.brightness = parseInt(input.value);
-            API.setBrightness(state.brightness);
-        }, CONFIG.DEBOUNCE_SLIDER);
-    }
-    else if (sliderId === 'slider-speed') {
-        clearTimeout(speedTimeout);
-        speedTimeout = setTimeout(() => {
-            state.speed = parseInt(input.value);
-            API.setSpeed(state.speed);
-        }, CONFIG.DEBOUNCE_SLIDER);
-    }
-    else if (sliderId.startsWith('slider-')) {
-        // Pipeline sliders (intensity, saturation, complexity, variation)
-        clearTimeout(pipelineTimeout);
-        pipelineTimeout = setTimeout(() => {
-            const intensity = parseInt(document.getElementById('slider-intensity').value);
-            const saturation = parseInt(document.getElementById('slider-saturation').value);
-            const complexity = parseInt(document.getElementById('slider-complexity').value);
-            const variation = parseInt(document.getElementById('slider-variation').value);
-
-            state.intensity = intensity;
-            state.saturation = saturation;
-            state.complexity = complexity;
-            state.variation = variation;
-
-            API.setPipeline(intensity, saturation, complexity, variation);
-        }, CONFIG.DEBOUNCE_PIPELINE);
-    }
+function setZoneEffect() {
+    const sel = document.getElementById('effect-select');
+    if (!sel) return;
+    API.setZoneEffect(state.selectedZone - 1, parseInt(sel.value));
 }
 
-function updateSliderTrack(input) {
-    const min = input.min || 0;
-    const max = input.max || 100;
-    const val = input.value;
-    const percentage = ((val - min) / (max - min)) * 100;
-
-    input.style.background = `linear-gradient(to right, #00d4ff ${percentage}%, #2f3849 ${percentage}%)`;
+function enableZone() {
+    const zoneId = state.selectedZone - 1;
+    if (state.zones[zoneId]) state.zones[zoneId].enabled = true;
+    updateZoneVisualization();
+    API.setZoneEnabled(zoneId, true);
 }
 
+function disableZone() {
+    const zoneId = state.selectedZone - 1;
+    if (state.zones[zoneId]) state.zones[zoneId].enabled = false;
+    updateZoneVisualization();
+    API.setZoneEnabled(zoneId, false);
+}
+
+// ========== Global Settings ==========
 function setPalette() {
-    const paletteSelect = document.getElementById('palette-select');
-    if (!paletteSelect) return;
-
-    const paletteId = parseInt(paletteSelect.value);
-    state.paletteId = paletteId;
-    API.setPalette(paletteId);
+    const sel = document.getElementById('palette-select');
+    if (sel) {
+        state.paletteId = parseInt(sel.value);
+        API.setPalette(state.paletteId);
+    }
 }
 
 function toggleTransitions() {
     const toggle = document.getElementById('toggle-transitions');
-    if (!toggle) return;
-
-    state.transitions = toggle.checked;
-    API.toggleTransitions(state.transitions);
+    if (toggle) {
+        state.transitions = toggle.checked;
+        API.toggleTransitions(state.transitions);
+    }
 }
 
-// ========== Collapsible Panels ==========
-function toggleEditRange() {
-    const panel = document.getElementById('edit-range-panel');
-    if (!panel) return;
+// ========== Pipeline ==========
+let pipelineTimeout;
 
-    if (panel.style.maxHeight && panel.style.maxHeight !== '0px') {
-        panel.style.maxHeight = '0px';
-        panel.style.opacity = '0';
-    } else {
-        panel.style.maxHeight = panel.scrollHeight + "px";
-        panel.style.opacity = '1';
-    }
+function updatePipeline(input, labelId) {
+    document.getElementById(labelId).textContent = input.value;
+    updateSliderTrack(input);
+
+    clearTimeout(pipelineTimeout);
+    pipelineTimeout = setTimeout(() => {
+        const i = parseInt(document.getElementById('slider-intensity').value);
+        const s = parseInt(document.getElementById('slider-saturation').value);
+        const c = parseInt(document.getElementById('slider-complexity').value);
+        const v = parseInt(document.getElementById('slider-variation').value);
+        API.setPipeline(i, s, c, v);
+    }, CONFIG.DEBOUNCE_PIPELINE);
 }
 
 function togglePipeline() {
     const content = document.getElementById('pipeline-content');
     const chevron = document.getElementById('pipeline-chevron');
-    if (!content || !chevron) return;
+    if (!content) return;
 
     if (content.style.maxHeight && content.style.maxHeight !== '0px') {
         content.style.maxHeight = '0px';
-        chevron.style.transform = 'rotate(0deg)';
+        if (chevron) chevron.style.transform = 'rotate(0deg)';
     } else {
-        content.style.maxHeight = content.scrollHeight + "px";
-        chevron.style.transform = 'rotate(180deg)';
+        content.style.maxHeight = content.scrollHeight + 'px';
+        if (chevron) chevron.style.transform = 'rotate(180deg)';
     }
 }
 
-// ========== Preset Management ==========
-function loadPreset(presetId) {
-    API.loadPreset(presetId);
+// ========== Enhancement Engines ==========
+function toggleEnhancements() {
+    const content = document.getElementById('enhancements-content');
+    const chevron = document.getElementById('enhancements-chevron');
+    if (!content) return;
+
+    if (content.style.maxHeight && content.style.maxHeight !== '0px') {
+        content.style.maxHeight = '0px';
+        if (chevron) chevron.style.transform = 'rotate(0deg)';
+    } else {
+        content.style.maxHeight = content.scrollHeight + 'px';
+        if (chevron) chevron.style.transform = 'rotate(180deg)';
+    }
 }
 
-function savePreset() {
-    API.saveConfig();
+let diffusionTimeout, rotationTimeout, phaseTimeout, autoRotateSpeedTimeout;
+
+function toggleCrossBlend() {
+    const toggle = document.getElementById('toggle-blend');
+    if (toggle) {
+        API.setColorBlend(toggle.checked);
+    }
 }
 
-// ========== Initialization ==========
-async function loadEffects() {
-    try {
-        // Request all effects at once with high count parameter
-        // Backend supports pagination, requesting 100 to ensure we get all 47+ effects
-        const response = await fetch(`${CONFIG.API_BASE}/effects?start=0&count=100`);
-        if (!response.ok) return;
+function updateDiffusion(input) {
+    const value = parseInt(input.value);
+    document.getElementById('val-diffusion').textContent = value;
+    updateSliderTrack(input);
 
-        const data = await response.json();
-        state.effects = data.effects || [];
+    clearTimeout(diffusionTimeout);
+    diffusionTimeout = setTimeout(() => API.setColorDiffusion(value), CONFIG.DEBOUNCE_SLIDER);
+}
 
-        const effectSelect = document.getElementById('effect-select');
-        if (effectSelect) {
-            effectSelect.innerHTML = '';
-            state.effects.forEach(effect => {
-                const option = document.createElement('option');
-                option.value = effect.id;
-                option.textContent = effect.name;
-                effectSelect.appendChild(option);
-            });
+function updateRotation(input) {
+    const value = parseInt(input.value);
+    const speed = value / 10.0; // Convert to float (0.0-10.0 degrees/frame)
+    document.getElementById('val-rotation').textContent = speed.toFixed(1);
+    updateSliderTrack(input);
+
+    clearTimeout(rotationTimeout);
+    rotationTimeout = setTimeout(() => API.setColorRotation(speed), CONFIG.DEBOUNCE_SLIDER);
+}
+
+function updatePhase(input) {
+    const value = parseInt(input.value);
+    document.getElementById('val-phase').textContent = value;
+    updateSliderTrack(input);
+
+    clearTimeout(phaseTimeout);
+    phaseTimeout = setTimeout(() => API.setMotionPhase(value), CONFIG.DEBOUNCE_SLIDER);
+}
+
+function toggleAutoRotate() {
+    const toggle = document.getElementById('toggle-autorotate');
+    const speedContainer = document.getElementById('autorotate-speed-container');
+    const speedSlider = document.getElementById('slider-autorotate-speed');
+
+    if (toggle && speedContainer) {
+        const enabled = toggle.checked;
+        speedContainer.style.display = enabled ? 'flex' : 'none';
+
+        // Recalculate max-height when showing/hiding auto-rotate speed
+        const content = document.getElementById('enhancements-content');
+        if (content && content.style.maxHeight !== '0px') {
+            content.style.maxHeight = content.scrollHeight + 'px';
         }
 
-        console.log(`Loaded ${state.effects.length} of ${data.total || state.effects.length} effects`);
-    } catch (error) {
-        console.error('Failed to load effects:', error);
+        const speed = speedSlider ? parseFloat(speedSlider.value) : 10.0;
+        API.setMotionAutoRotate(enabled, speed);
+    }
+}
+
+function updateAutoRotateSpeed(input) {
+    const value = parseFloat(input.value);
+    document.getElementById('val-autorotate-speed').textContent = value;
+    updateSliderTrack(input);
+
+    clearTimeout(autoRotateSpeedTimeout);
+    autoRotateSpeedTimeout = setTimeout(() => {
+        const enabled = document.getElementById('toggle-autorotate')?.checked || false;
+        API.setMotionAutoRotate(enabled, value);
+    }, CONFIG.DEBOUNCE_SLIDER);
+}
+
+// ========== Presets ==========
+function loadPreset(id) { API.loadPreset(id); }
+function savePreset() { API.saveConfig(); }
+function resetToDefaults() { setZoneCount(3); }
+
+// ========== Data Loading ==========
+async function loadEffects() {
+    try {
+        const res = await fetch(`${CONFIG.API_BASE}/effects?start=0&count=100`);
+        if (!res.ok) return;
+        const data = await res.json();
+        state.effects = data.effects || [];
+
+        const sel = document.getElementById('effect-select');
+        if (sel) {
+            sel.innerHTML = '';
+            state.effects.forEach(fx => {
+                const opt = document.createElement('option');
+                opt.value = fx.id;
+                opt.textContent = fx.name;
+                sel.appendChild(opt);
+            });
+        }
+        console.log(`Loaded ${state.effects.length} effects`);
+    } catch (e) {
+        console.error('Load effects:', e);
     }
 }
 
 async function loadPalettes() {
     try {
-        const response = await fetch(`${CONFIG.API_BASE}/palettes`);
-        if (!response.ok) return;
-
-        const data = await response.json();
+        const res = await fetch(`${CONFIG.API_BASE}/palettes`);
+        if (!res.ok) return;
+        const data = await res.json();
         state.palettes = data.palettes || [];
 
-        const paletteSelect = document.getElementById('palette-select');
-        if (paletteSelect) {
-            paletteSelect.innerHTML = '';
-            state.palettes.forEach(palette => {
-                const option = document.createElement('option');
-                option.value = palette.id;
-                option.textContent = palette.name;
-                paletteSelect.appendChild(option);
+        const sel = document.getElementById('palette-select');
+        if (sel) {
+            sel.innerHTML = '';
+            state.palettes.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.id;
+                opt.textContent = p.name;
+                sel.appendChild(opt);
             });
         }
-
         console.log(`Loaded ${state.palettes.length} palettes`);
-    } catch (error) {
-        console.error('Failed to load palettes:', error);
+    } catch (e) {
+        console.error('Load palettes:', e);
     }
 }
 
+// ========== Initialization ==========
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('K1-Lightwave Controller initializing...');
+    console.log('K1-Lightwave initializing...');
 
-    // Initialize slider backgrounds
-    document.querySelectorAll('.slider-input').forEach(input => {
-        updateSliderTrack(input);
-    });
+    // Initialize slider tracks
+    document.querySelectorAll('.slider-input').forEach(updateSliderTrack);
 
-    // Load effects and palettes from API
+    // Load data
     await loadEffects();
     await loadPalettes();
 
-    // Connect to WebSocket
+    // Connect WebSocket
     WS.connect();
 
-    // Set initial zone selection
+    // Set initial states
+    updateZoneTabs(state.zoneCount);
+    updateMixerChannels(state.zoneCount);
     selectZone(1);
-
-    // Update connection status
     updateConnectionStatus();
 
-    console.log('K1-Lightwave Controller initialized');
+    // Sync mixer to initial state
+    for (let i = 0; i < 4; i++) {
+        const zone = state.zones[i];
+        const bLabel = document.getElementById(`mixer-b-label-${i}`);
+        const sLabel = document.getElementById(`mixer-s-label-${i}`);
+        const bSlider = document.getElementById(`mixer-b-${i}`);
+        const sSlider = document.getElementById(`mixer-s-${i}`);
+
+        if (bLabel) bLabel.textContent = zone.brightness;
+        if (sLabel) sLabel.textContent = zone.speed;
+        if (bSlider) bSlider.value = zone.brightness;
+        if (sSlider) sSlider.value = zone.speed;
+    }
+
+    console.log('K1-Lightwave initialized');
 });

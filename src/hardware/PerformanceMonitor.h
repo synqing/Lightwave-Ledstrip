@@ -238,6 +238,10 @@ public:
     Serial.println(F("========================\n"));
   }
   
+  // Fragmentation alert threshold (percentage)
+  static constexpr size_t FRAGMENTATION_WARNING_THRESHOLD = 30;
+  static constexpr size_t FRAGMENTATION_CRITICAL_THRESHOLD = 50;
+
   // Print compact performance line
   void printCompactStatus() {
     Serial.print(F("[PERF] FPS: "));
@@ -250,7 +254,32 @@ public:
     Serial.print(avgMetrics.fastLEDShow);
     Serial.print(F("μs | Heap: "));
     Serial.print(ESP.getFreeHeap());
+    Serial.print(F(" | Frag: "));
+    Serial.print(heapFragmentation);
+    Serial.print(F("%"));
+
+    // Alert on high fragmentation
+    if (heapFragmentation >= FRAGMENTATION_CRITICAL_THRESHOLD) {
+      Serial.print(F(" [CRITICAL]"));
+    } else if (heapFragmentation >= FRAGMENTATION_WARNING_THRESHOLD) {
+      Serial.print(F(" [WARN]"));
+    }
     Serial.println();
+  }
+
+  // Check if fragmentation is at warning level
+  bool isFragmentationWarning() const {
+    return heapFragmentation >= FRAGMENTATION_WARNING_THRESHOLD;
+  }
+
+  // Check if fragmentation is at critical level
+  bool isFragmentationCritical() const {
+    return heapFragmentation >= FRAGMENTATION_CRITICAL_THRESHOLD;
+  }
+
+  // Get current fragmentation percentage
+  size_t getFragmentation() const {
+    return heapFragmentation;
   }
   
   // Get timing breakdown percentages

@@ -110,12 +110,27 @@
         "grep -rn 'for.*i = 0' src/effects/strip/ | head -20",
         "grep -rn 'center\\|CENTER\\|79\\|80' src/effects/strip/"
       ],
-      "status": "FAILING",
+      "status": "PASSING",
       "priority": 3,
       "dependencies": [],
-      "attempts": [],
+      "attempts": [
+        {
+          "run_id": "worker-006",
+          "timestamp": "2025-12-12T08:25:00Z",
+          "result": "PASSED",
+          "evidence": {
+            "commands_run": [
+              "grep -rn 'for.*i = 0' src/effects/strip/*.cpp",
+              "grep -rn 'distFromCenter|CENTER_POINT' src/effects/strip/*.cpp"
+            ],
+            "results_summary": "Audited all effect files. Found 1 non-compliant effect (plasma() in StripEffects.cpp) - was using linear position instead of distFromCenter. Fixed by converting to center-origin pattern. All other effects already compliant."
+          },
+          "commit": "2c31cdd",
+          "reverted": false
+        }
+      ],
       "override_reason": null,
-      "notes": "Mentioned in TODO.md as known issue."
+      "notes": "Fixed: plasma() effect converted to CENTER ORIGIN. All effects now use distFromCenter pattern."
     },
     {
       "id": "HEAP-FRAG-MONITOR",
@@ -129,12 +144,27 @@
       "verification": [
         "grep -rn 'heap\\|fragment' src/"
       ],
-      "status": "FAILING",
+      "status": "PASSING",
       "priority": 4,
       "dependencies": ["VERIFY-WIFI-BUILD"],
-      "attempts": [],
+      "attempts": [
+        {
+          "run_id": "worker-006",
+          "timestamp": "2025-12-12T08:30:00Z",
+          "result": "PASSED",
+          "evidence": {
+            "commands_run": [
+              "grep -rn 'heap|fragment' src/",
+              "pio run -e esp32dev"
+            ],
+            "results_summary": "Heap monitoring already existed in PerformanceMonitor.h. Enhanced with: (1) Added fragmentation to printCompactStatus(), (2) Added FRAGMENTATION_WARNING_THRESHOLD (30%) and FRAGMENTATION_CRITICAL_THRESHOLD (50%), (3) Added [WARN]/[CRITICAL] alerts, (4) Added isFragmentationWarning()/isFragmentationCritical() query methods."
+          },
+          "commit": "2c31cdd",
+          "reverted": false
+        }
+      ],
       "override_reason": null,
-      "notes": "Memory debug flags are set in platformio.ini."
+      "notes": "Enhanced PerformanceMonitor with fragmentation thresholds and alerts."
     },
     {
       "id": "CLEAN-GIT-STATE",
@@ -147,12 +177,24 @@
       "verification": [
         "git status --porcelain | wc -l"
       ],
-      "status": "FAILING",
+      "status": "PASSING",
       "priority": 2,
       "dependencies": [],
-      "attempts": [],
+      "attempts": [
+        {
+          "run_id": "worker-006",
+          "timestamp": "2025-12-12T08:20:00Z",
+          "result": "PASSED",
+          "evidence": {
+            "commands_run": ["git status --porcelain | wc -l"],
+            "results_summary": "Created 2 commits: (1) Removed deprecated LightwaveOS-Production (95 files), (2) Zone-composer feature with web interface (49 files). Updated .gitignore for dev artifacts. git status now shows 0 uncommitted changes."
+          },
+          "commit": "3e904c0",
+          "reverted": false
+        }
+      ],
       "override_reason": null,
-      "notes": "Large number of unstaged changes exist. This is blocking clean harness setup."
+      "notes": "Cleaned. Two commits: 7df70d8 (remove deprecated), 3e904c0 (zone-composer feature)."
     },
     {
       "id": "HARNESS-ENHANCE",

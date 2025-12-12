@@ -347,22 +347,27 @@ void stripPlasma() {
 // ============== MATHEMATICAL PATTERNS ==============
 
 void plasma() {
+    // CENTER ORIGIN PLASMA - Uses distance from center for symmetric pattern
     static uint32_t time = 0;
     time += paletteSpeed;
-    
+
     // Prevent overflow
     if (time > 65535) {
         time = time % 65536;
     }
-    
+
     for (int i = 0; i < HardwareConfig::NUM_LEDS; i++) {
-        float v1 = sin((float)i / 8.0f + time / 100.0f);
-        float v2 = sin((float)i / 5.0f - time / 150.0f);
-        float v3 = sin((float)i / 3.0f + time / 200.0f);
-        
+        // CENTER ORIGIN: Use distance from center instead of linear position
+        float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
+
+        // Plasma waves radiate from center
+        float v1 = sin(distFromCenter / 8.0f + time / 100.0f);
+        float v2 = sin(distFromCenter / 5.0f - time / 150.0f);
+        float v3 = sin(distFromCenter / 3.0f + time / 200.0f);
+
         uint8_t hue = (uint8_t)((v1 + v2 + v3) * 42.5f + 127.5f) + gHue;
         uint8_t brightness = (uint8_t)((v1 + v2) * 63.75f + 191.25f);
-        
+
         leds[i] = CHSV(hue, 255, brightness);
     }
 }

@@ -549,6 +549,125 @@ function loadPreset(id) { API.loadPreset(id); }
 function savePreset() { API.saveConfig(); }
 function resetToDefaults() { setZoneCount(3); }
 
+// ========== Firmware Update ==========
+function toggleFirmware() {
+    const content = document.getElementById('firmware-content');
+    const chevron = document.getElementById('firmware-chevron');
+    if (!content) return;
+
+    if (content.style.maxHeight && content.style.maxHeight !== '0px') {
+        content.style.maxHeight = '0px';
+        if (chevron) chevron.style.transform = 'rotate(0deg)';
+    } else {
+        content.style.maxHeight = content.scrollHeight + 'px';
+        if (chevron) chevron.style.transform = 'rotate(180deg)';
+    }
+}
+
+function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+}
+
+function showFirmwareStatus(message, type) {
+    const statusEl = document.getElementById('firmware-status');
+    if (!statusEl) return;
+
+    statusEl.classList.remove('hidden', 'bg-green-500/20', 'text-green-400', 'bg-red-500/20', 'text-red-400', 'bg-yellow-500/20', 'text-yellow-400', 'bg-accent-cyan/20', 'text-accent-cyan');
+
+    if (type === 'success') {
+        statusEl.classList.add('bg-green-500/20', 'text-green-400');
+    } else if (type === 'error') {
+        statusEl.classList.add('bg-red-500/20', 'text-red-400');
+    } else if (type === 'warning') {
+        statusEl.classList.add('bg-yellow-500/20', 'text-yellow-400');
+    } else {
+        statusEl.classList.add('bg-accent-cyan/20', 'text-accent-cyan');
+    }
+
+    statusEl.textContent = message;
+}
+
+function updateFirmwareProgress(percent) {
+    const bar = document.getElementById('firmware-progress-bar');
+    const label = document.getElementById('firmware-progress-label');
+    if (bar) bar.style.width = percent + '%';
+    if (label) label.textContent = Math.round(percent) + '%';
+}
+
+function uploadFirmware() {
+    const fileInput = document.getElementById('firmware-file');
+    const uploadBtn = document.getElementById('firmware-upload-btn');
+    const progressContainer = document.getElementById('firmware-progress-container');
+
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+        showFirmwareStatus('Please select a firmware file', 'error');
+        return;
+    }
+
+    const file = fileInput.files[0];
+
+    // Validate file size (ESP32 has ~3.2MB per OTA slot)
+    if (file.size > 3200 * 1024) {
+        showFirmwareStatus('File too large (max 3.2 MB)', 'error');
+        return;
+    }
+
+    // Disable upload button during upload
+    if (uploadBtn) uploadBtn.disabled = true;
+    if (progressContainer) progressContainer.classList.remove('hidden');
+
+    showFirmwareStatus('Uploading firmware...', 'info');
+    updateFirmwareProgress(0);
+
+    // Create FormData and upload with XMLHttpRequest for progress
+    const formData = new FormData();
+    formData.append('update', file);
+
+    const xhr = new XMLHttpRequest();
+
+    xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+            const percent = (e.loaded / e.total) * 100;
+            updateFirmwareProgress(percent);
+        }
+    });
+
+    xhr.addEventListener('load', () => {
+        if (xhr.status === 200) {
+            updateFirmwareProgress(100);
+            showFirmwareStatus('Update successful! Rebooting...', 'success');
+
+            // Device will reboot, show reconnecting message after delay
+            setTimeout(() => {
+                showFirmwareStatus('Device rebooting. Please wait...', 'warning');
+            }, 2000);
+
+            // Try to reconnect after device reboots
+            setTimeout(() => {
+                window.location.reload();
+            }, 10000);
+        } else {
+            showFirmwareStatus(`Upload failed: ${xhr.statusText || 'Unknown error'}`, 'error');
+            if (uploadBtn) uploadBtn.disabled = false;
+        }
+    });
+
+    xhr.addEventListener('error', () => {
+        showFirmwareStatus('Upload failed: Network error', 'error');
+        if (uploadBtn) uploadBtn.disabled = false;
+    });
+
+    xhr.addEventListener('abort', () => {
+        showFirmwareStatus('Upload cancelled', 'warning');
+        if (uploadBtn) uploadBtn.disabled = false;
+    });
+
+    xhr.open('POST', '/update');
+    xhr.send(formData);
+}
+
 // ========== Data Loading ==========
 async function loadEffects() {
     try {
@@ -615,6 +734,41 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateMixerChannels(state.zoneCount);
     selectZone(1);
     updateConnectionStatus();
+
+    // Initialize firmware file input handler
+    const firmwareFileInput = document.getElementById('firmware-file');
+    if (firmwareFileInput) {
+        firmwareFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            const infoEl = document.getElementById('firmware-info');
+            const filenameEl = document.getElementById('firmware-filename');
+            const filesizeEl = document.getElementById('firmware-filesize');
+            const uploadBtn = document.getElementById('firmware-upload-btn');
+            const statusEl = document.getElementById('firmware-status');
+            const progressContainer = document.getElementById('firmware-progress-container');
+
+            if (file) {
+                // Show file info
+                if (infoEl) infoEl.classList.remove('hidden');
+                if (filenameEl) filenameEl.textContent = file.name;
+                if (filesizeEl) filesizeEl.textContent = formatFileSize(file.size);
+                if (uploadBtn) uploadBtn.disabled = false;
+
+                // Reset status and progress
+                if (statusEl) statusEl.classList.add('hidden');
+                if (progressContainer) progressContainer.classList.add('hidden');
+
+                // Validate file extension
+                if (!file.name.toLowerCase().endsWith('.bin')) {
+                    showFirmwareStatus('Please select a .bin file', 'warning');
+                    if (uploadBtn) uploadBtn.disabled = true;
+                }
+            } else {
+                if (infoEl) infoEl.classList.add('hidden');
+                if (uploadBtn) uploadBtn.disabled = true;
+            }
+        });
+    }
 
     // Sync mixer to initial state
     for (let i = 0; i < 4; i++) {

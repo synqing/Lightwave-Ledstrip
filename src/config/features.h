@@ -24,7 +24,7 @@
 #define FEATURE_WEB_SERVER 1            // Web interface ENABLED for webapp
 #endif
 #define FEATURE_WEBSOCKET 1             // WebSocket support
-#define FEATURE_OTA_UPDATE 0            // Over-the-air updates
+#define FEATURE_OTA_UPDATE 1            // Over-the-air updates (enabled)
 
 // LED Layout Configuration
 // All matrix code has been surgically removed - strips mode is now permanent

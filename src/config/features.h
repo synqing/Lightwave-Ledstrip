@@ -41,7 +41,7 @@
 #endif
 // M5Stack 8-encoder support
 #define FEATURE_SCROLL_ENCODER 0        // M5Unit-Scroll - REMOVED
-#define FEATURE_ROTATE8_ENCODER 1       // M5Stack 8-encoder - ENABLED
+#define FEATURE_ROTATE8_ENCODER 0       // M5Stack 8-encoder - DISABLED (hardware removed, code archived)
 #ifdef FEATURE_AUDIO_EFFECTS
 #undef FEATURE_AUDIO_EFFECTS
 #endif

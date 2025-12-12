@@ -237,25 +237,27 @@ Connect at 115200 baud. Key commands:
 
 This project includes a domain memory harness for persistent agent progress across sessions.
 
+**Location**: `.claude/harness/`
+
 ### Harness Files
 
 | File | Purpose | Read First? |
 |------|---------|-------------|
-| `HARNESS_RULES.md` | **Protocol rules** - mutation, validation, revert | Yes |
+| `.claude/harness/HARNESS_RULES.md` | **Protocol rules** - mutation, validation, revert | Yes |
 | `ARCHITECTURE.md` | Extracted system facts for quick reference | Yes |
 | `CONSTRAINTS.md` | Hard limits (timing, memory, power) | Yes |
-| `feature_list.json` | Structured backlog with attempts[] history | Yes |
-| `agent-progress.md` | Run history + Lessons Learned section | Yes |
-| `init.sh` | Boot ritual - verifies project health | Run it |
+| `.claude/harness/feature_list.json` | Structured backlog with attempts[] history | Yes |
+| `.claude/harness/agent-progress.md` | Run history + Lessons Learned section | Yes |
+| `.claude/harness/init.sh` | Boot ritual - verifies project health | Run it |
 
 ### WORKER MODE Ritual
 
-**Read `HARNESS_RULES.md` for complete protocol.** Summary:
+**Read `.claude/harness/HARNESS_RULES.md` for complete protocol.** Summary:
 
-1. **Boot**: Run `./init.sh` - if fails, fix that first
+1. **Boot**: Run `.claude/harness/init.sh` - if fails, fix that first
 2. **Read memory**:
-   - `agent-progress.md` (Lessons Learned + last 3 runs)
-   - `feature_list.json` (backlog + attempts history)
+   - `.claude/harness/agent-progress.md` (Lessons Learned + last 3 runs)
+   - `.claude/harness/feature_list.json` (backlog + attempts history)
    - `ARCHITECTURE.md` and `CONSTRAINTS.md` (if touching code)
 3. **Select ONE item**: Highest priority FAILING, warn if dependencies FAILING
 4. **Implement**: Follow constraints, use CENTER ORIGIN for effects
@@ -266,7 +268,7 @@ This project includes a domain memory harness for persistent agent progress acro
 
 ### Verification Commands
 ```bash
-./init.sh                           # Boot ritual
+.claude/harness/init.sh             # Boot ritual
 pio run -e esp32dev_wifi            # Full build with WiFi
 git status --porcelain | wc -l      # Check uncommitted changes
 ```
@@ -278,6 +280,6 @@ git status --porcelain | wc -l      # Check uncommitted changes
 - `CANCELLED` - No longer needed (requires reason)
 
 ### Escape Hatches
-- `override_reason` field in feature_list.json items
+- `override_reason` field in .claude/harness/feature_list.json items
 - `--force` flags in harness.py (when implemented)
 - Document why if bypassing rules

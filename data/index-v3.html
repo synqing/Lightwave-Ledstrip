@@ -1006,17 +1006,23 @@
             <div class="border-t border-white/5 px-6 py-4" style="background: linear-gradient(180deg, #0a0a0a 0%, #000 100%);">
                 <div class="max-w-5xl mx-auto flex items-center justify-between">
                     <div class="flex items-center gap-2">
-                        <button class="preset-btn">P0</button>
-                        <button class="preset-btn">P1</button>
-                        <button class="preset-btn active">P2</button>
-                        <button class="preset-btn">P3</button>
-                        <button class="preset-btn">P4</button>
+                        <button class="preset-btn" title="Unified">P0</button>
+                        <button class="preset-btn" title="Dual Split">P1</button>
+                        <button class="preset-btn active" title="Triple Rings">P2</button>
+                        <button class="preset-btn" title="Quad Active">P3</button>
+                        <button class="preset-btn" title="LGP Showcase">P4</button>
                         <button class="preset-btn ml-2 flex items-center justify-center" title="Save Preset">
                             <span class="iconify" data-icon="lucide:save" data-width="14"></span>
                         </button>
                     </div>
-                    
-                    <button class="w-12 h-12 rounded-xl flex items-center justify-center bg-[var(--gold)] text-black glow-gold transition-transform hover:scale-105" aria-label="Power">
+
+                    <div class="hidden md:flex items-center gap-4 text-[9px] text-[var(--text-muted)] font-tech uppercase tracking-wide">
+                        <span><kbd class="px-1 py-0.5 bg-[var(--bg-elevated)] rounded text-[8px]">?</kbd> Shortcuts</span>
+                        <span><kbd class="px-1 py-0.5 bg-[var(--bg-elevated)] rounded text-[8px]">Space</kbd> Zone</span>
+                        <span><kbd class="px-1 py-0.5 bg-[var(--bg-elevated)] rounded text-[8px]">←→</kbd> Effects</span>
+                    </div>
+
+                    <button onclick="toggleZoneSystem()" class="w-12 h-12 rounded-xl flex items-center justify-center bg-[var(--gold)] text-black glow-gold transition-transform hover:scale-105" aria-label="Power" title="Toggle Zone System">
                         <span class="iconify" data-icon="lucide:power" data-width="20"></span>
                     </button>
                 </div>

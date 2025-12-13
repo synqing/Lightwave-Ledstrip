@@ -239,9 +239,16 @@ function updateConnectionStatus(connected) {
     const text = document.querySelector('.connection-text');
     if (indicator) {
         indicator.style.background = connected ? 'var(--success)' : 'var(--error)';
+        indicator.classList.toggle('animate-pulse', connected);
     }
     if (text) {
         text.textContent = connected ? 'Connected' : 'Disconnected';
+        text.style.color = connected ? 'var(--text-secondary)' : 'var(--error)';
+    }
+
+    // Show toast on disconnect (but not on initial load)
+    if (!connected && state.ws) {
+        showToast('Connection lost. Reconnecting...', 'warning');
     }
 }
 
@@ -859,30 +866,85 @@ function showToast(message, type = 'info') {
     if (!container) {
         container = document.createElement('div');
         container.id = 'toast-container';
-        container.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;';
+        container.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px;';
         document.body.appendChild(container);
     }
 
+    const colors = {
+        error: { bg: 'var(--error)', text: 'white', icon: 'x-circle' },
+        warning: { bg: 'var(--gold)', text: 'black', icon: 'alert-triangle' },
+        success: { bg: 'var(--success)', text: 'black', icon: 'check-circle' },
+        info: { bg: 'var(--info)', text: 'white', icon: 'info' },
+    };
+    const { bg, text, icon } = colors[type] || colors.info;
+
     const toast = document.createElement('div');
-    const bgColor = type === 'error' ? 'var(--error)' : type === 'warning' ? 'var(--gold)' : 'var(--info)';
     toast.style.cssText = `
-        background: ${bgColor};
-        color: ${type === 'warning' ? 'black' : 'white'};
-        padding: 12px 20px;
+        background: ${bg};
+        color: ${text};
+        padding: 12px 16px;
         border-radius: 8px;
-        margin-top: 8px;
-        font-size: 14px;
+        font-size: 13px;
         font-family: var(--font-tech);
         box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         animation: slideIn 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 8px;
     `;
-    toast.textContent = message;
+    toast.innerHTML = `<span class="iconify" data-icon="lucide:${icon}" data-width="16"></span>${message}`;
     container.appendChild(toast);
 
     setTimeout(() => {
         toast.style.animation = 'slideOut 0.3s ease';
         setTimeout(() => toast.remove(), 300);
     }, 3000);
+}
+
+// ========== Loading States ==========
+function showLoading(elementId, show = true) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+
+    if (show) {
+        el.dataset.originalContent = el.innerHTML;
+        el.innerHTML = '<span class="iconify animate-spin" data-icon="lucide:loader-2" data-width="16"></span>';
+        el.disabled = true;
+    } else {
+        if (el.dataset.originalContent) {
+            el.innerHTML = el.dataset.originalContent;
+            delete el.dataset.originalContent;
+        }
+        el.disabled = false;
+    }
+}
+
+function showGlobalLoading(show = true) {
+    let overlay = document.getElementById('loading-overlay');
+
+    if (show && !overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'loading-overlay';
+        overlay.style.cssText = `
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            backdrop-filter: blur(4px);
+        `;
+        overlay.innerHTML = `
+            <div style="text-align:center;">
+                <span class="iconify animate-spin" data-icon="lucide:loader-2" data-width="48" style="color:var(--gold);"></span>
+                <div style="margin-top:16px;font-family:var(--font-tech);color:var(--text-secondary);">Loading...</div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+    } else if (!show && overlay) {
+        overlay.remove();
+    }
 }
 
 // ========== Canvas Visualization ==========
@@ -991,7 +1053,10 @@ async function init() {
     // Setup event listeners
     setupEventListeners();
     setupOTAUpload();
+    setupKeyboardShortcuts();
 
+    // Show connection toast
+    showToast('Dashboard connected', 'success');
     console.log('Dashboard initialized');
 }
 
@@ -1076,10 +1141,89 @@ function setupEventListeners() {
     window.addEventListener('resize', setupCanvas);
 }
 
+// ========== Keyboard Shortcuts ==========
+function setupKeyboardShortcuts() {
+    document.addEventListener('keydown', (e) => {
+        // Ignore if typing in input
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') {
+            return;
+        }
+
+        switch (e.key) {
+            case 'ArrowRight':
+                // Next effect
+                e.preventDefault();
+                if (state.effectId < state.effects.length - 1) {
+                    selectEffect(state.effectId + 1);
+                }
+                break;
+
+            case 'ArrowLeft':
+                // Previous effect
+                e.preventDefault();
+                if (state.effectId > 0) {
+                    selectEffect(state.effectId - 1);
+                }
+                break;
+
+            case 'ArrowUp':
+                // Increase brightness
+                e.preventDefault();
+                if (state.brightness < 255) {
+                    const newVal = Math.min(255, state.brightness + 10);
+                    setBrightness(newVal);
+                    const slider = document.getElementById('brightness-slider');
+                    if (slider) slider.value = newVal;
+                }
+                break;
+
+            case 'ArrowDown':
+                // Decrease brightness
+                e.preventDefault();
+                if (state.brightness > 0) {
+                    const newVal = Math.max(0, state.brightness - 10);
+                    setBrightness(newVal);
+                    const slider = document.getElementById('brightness-slider');
+                    if (slider) slider.value = newVal;
+                }
+                break;
+
+            case ' ':
+                // Toggle zone system
+                e.preventDefault();
+                toggleZoneSystem();
+                break;
+
+            case '1': case '2': case '3': case '4': case '5': case '6': case '7':
+                // Switch tabs
+                e.preventDefault();
+                const tabs = ['composer', 'effects', 'palettes', 'transitions', 'performance', 'network', 'firmware'];
+                const tabIndex = parseInt(e.key) - 1;
+                if (tabIndex < tabs.length) {
+                    switchTab(tabs[tabIndex]);
+                }
+                break;
+
+            case 'z':
+                // Cycle zone count
+                e.preventDefault();
+                const nextCount = (state.zoneCount % 4) + 1;
+                setZoneCount(nextCount);
+                break;
+
+            case '?':
+                // Show keyboard shortcuts help
+                e.preventDefault();
+                showToast('Shortcuts: ←→ Effects | ↑↓ Brightness | Space Zone | 1-7 Tabs | Z Zones', 'info');
+                break;
+        }
+    });
+}
+
 // Start when DOM ready
 document.addEventListener('DOMContentLoaded', init);
 
-// Add toast animation styles
+// Add animation styles
 const style = document.createElement('style');
 style.textContent = `
     @keyframes slideIn {
@@ -1089,6 +1233,13 @@ style.textContent = `
     @keyframes slideOut {
         from { transform: translateX(0); opacity: 1; }
         to { transform: translateX(100%); opacity: 0; }
+    }
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+    .animate-spin {
+        animation: spin 1s linear infinite;
     }
 `;
 document.head.appendChild(style);

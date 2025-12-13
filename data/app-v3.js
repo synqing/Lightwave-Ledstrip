@@ -39,7 +39,26 @@ const state = {
     // Data lists
     effects: [],
     palettes: [],
-    transitions: [],
+    transitions: [
+        { id: 0, name: 'Fade', icon: 'lucide:blend' },
+        { id: 1, name: 'Wipe Out', icon: 'lucide:move-horizontal' },
+        { id: 2, name: 'Wipe In', icon: 'lucide:shrink' },
+        { id: 3, name: 'Dissolve', icon: 'lucide:sparkles' },
+        { id: 4, name: 'Phase Shift', icon: 'lucide:waves' },
+        { id: 5, name: 'Pulsewave', icon: 'lucide:activity' },
+        { id: 6, name: 'Implosion', icon: 'lucide:target' },
+        { id: 7, name: 'Iris', icon: 'lucide:eye' },
+        { id: 8, name: 'Nuclear', icon: 'lucide:atom' },
+        { id: 9, name: 'Stargate', icon: 'lucide:circle-dot' },
+        { id: 10, name: 'Kaleidoscope', icon: 'lucide:hexagon' },
+        { id: 11, name: 'Mandala', icon: 'lucide:flower-2' },
+    ],
+
+    // Transition settings
+    currentTransition: 0,
+    transitionDuration: 2000,
+    transitionEasing: 'ease-out-elastic',
+    transitionRandom: false,
 
     // Performance
     fps: 0,
@@ -210,7 +229,7 @@ function syncPerformance(msg) {
     if (msg.freeHeap !== undefined) state.freeHeap = msg.freeHeap;
     if (msg.fragmentation !== undefined) state.fragmentation = msg.fragmentation;
 
-    updatePerformanceTab();
+    updatePerformanceGauges();
     updateSidebarStats();
 }
 
@@ -412,22 +431,6 @@ function populateZoneEffectDropdown() {
     if (zone) select.value = zone.effectId;
 }
 
-function updatePerformanceTab() {
-    // Update gauge values - these would need SVG stroke-dashoffset updates
-    // For now just update text values
-    const elements = {
-        fps: state.fps,
-        cpu: state.cpuUsage,
-        heap: Math.round(state.freeHeap / 1024),
-        frag: state.fragmentation,
-    };
-
-    // Update if elements exist
-    Object.entries(elements).forEach(([key, value]) => {
-        const el = document.getElementById(`perf-${key}`);
-        if (el) el.textContent = value;
-    });
-}
 
 // ========== UI Population ==========
 async function loadEffects() {
@@ -609,6 +612,227 @@ function switchTab(tabId) {
     });
 }
 
+// ========== Transition Handlers ==========
+function populateTransitionGrid() {
+    const container = document.getElementById('transition-grid');
+    if (!container) return;
+
+    container.innerHTML = state.transitions.map(t => `
+        <div class="transition-card ${t.id === state.currentTransition ? 'selected' : ''}"
+             data-id="${t.id}" onclick="selectTransition(${t.id})">
+            <span class="iconify text-[var(--text-secondary)] mb-2" data-icon="${t.icon}" data-width="24"></span>
+            <div class="text-xs font-medium">${t.name}</div>
+        </div>
+    `).join('');
+}
+
+function selectTransition(id) {
+    state.currentTransition = id;
+
+    // Update UI
+    document.querySelectorAll('.transition-card').forEach(card => {
+        card.classList.toggle('selected', parseInt(card.dataset.id) === id);
+    });
+
+    // Send to firmware
+    sendWS({
+        type: 'setTransition',
+        transitionId: id,
+        duration: state.transitionDuration,
+        easing: state.transitionEasing
+    });
+}
+
+function setTransitionDuration(value) {
+    state.transitionDuration = parseInt(value);
+    const label = document.querySelector('#transition-duration + .font-tech, [id="transition-duration-value"]');
+    if (label) label.textContent = `${value}ms`;
+
+    sendWS({
+        type: 'setTransition',
+        transitionId: state.currentTransition,
+        duration: state.transitionDuration,
+        easing: state.transitionEasing
+    });
+}
+
+function setTransitionEasing(value) {
+    state.transitionEasing = value;
+    sendWS({
+        type: 'setTransition',
+        transitionId: state.currentTransition,
+        duration: state.transitionDuration,
+        easing: value
+    });
+}
+
+function toggleTransitionRandom() {
+    state.transitionRandom = !state.transitionRandom;
+    const toggle = document.getElementById('transition-random');
+    if (toggle) toggle.classList.toggle('active', state.transitionRandom);
+
+    sendWS({ type: 'toggleTransitions', enabled: state.transitionRandom });
+}
+
+function testTransition() {
+    sendWS({ type: 'testTransition', transitionId: state.currentTransition });
+    showToast(`Testing: ${state.transitions[state.currentTransition]?.name || 'Transition'}`, 'info');
+}
+
+// ========== Performance Monitor ==========
+function updatePerformanceGauges() {
+    // FPS gauge (target 120)
+    updateGauge('perf-fps-gauge', state.fps, 120);
+    updateGaugeText('perf-fps-value', state.fps);
+
+    // CPU gauge (0-100%)
+    updateGauge('perf-cpu-gauge', state.cpuUsage, 100);
+    updateGaugeText('perf-cpu-value', state.cpuUsage);
+
+    // Heap gauge (show as percentage of 320KB)
+    const heapPercent = Math.round((state.freeHeap / 327680) * 100);
+    updateGauge('perf-heap-gauge', heapPercent, 100);
+    updateGaugeText('perf-heap-value', Math.round(state.freeHeap / 1024));
+
+    // Fragmentation gauge
+    updateGauge('perf-frag-gauge', 100 - state.fragmentation, 100);
+    updateGaugeText('perf-frag-value', state.fragmentation);
+}
+
+function updateGauge(id, value, max) {
+    const gauge = document.getElementById(id);
+    if (!gauge) return;
+
+    const circle = gauge.querySelector('circle:last-child');
+    if (!circle) return;
+
+    const circumference = 220; // 2 * PI * 35
+    const offset = circumference - (value / max) * circumference;
+    circle.style.strokeDashoffset = offset;
+}
+
+function updateGaugeText(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+}
+
+// ========== Network Handlers ==========
+async function scanNetworks() {
+    showToast('Scanning for networks...', 'info');
+    try {
+        const data = await API.request('/network/scan');
+        if (data.networks) {
+            populateNetworkList(data.networks);
+        }
+    } catch (e) {
+        showToast('Network scan failed', 'error');
+    }
+}
+
+function populateNetworkList(networks) {
+    const container = document.getElementById('network-list');
+    if (!container) return;
+
+    container.innerHTML = networks.map((n, i) => `
+        <div class="flex items-center justify-between p-2 rounded-lg ${i === 0 ? 'bg-[var(--gold-glow)] border border-[var(--gold)]/30' : 'hover:bg-[var(--bg-elevated)] cursor-pointer'}"
+             onclick="selectNetwork('${n.ssid}')">
+            <div class="flex items-center gap-2">
+                <span class="iconify ${i === 0 ? 'text-[var(--gold)]' : 'text-[var(--text-muted)]'}"
+                      data-icon="lucide:wifi" data-width="16"></span>
+                <span class="text-sm ${i === 0 ? '' : 'text-[var(--text-secondary)]'}">${n.ssid}</span>
+            </div>
+            <span class="text-xs text-[var(--text-muted)]">${n.rssi} dBm</span>
+        </div>
+    `).join('');
+}
+
+function selectNetwork(ssid) {
+    const password = prompt(`Enter password for ${ssid}:`);
+    if (password !== null) {
+        connectToNetwork(ssid, password);
+    }
+}
+
+async function connectToNetwork(ssid, password) {
+    showToast(`Connecting to ${ssid}...`, 'info');
+    try {
+        await API.request('/network/connect', {
+            method: 'POST',
+            body: JSON.stringify({ ssid, password })
+        });
+        showToast(`Connected to ${ssid}`, 'success');
+    } catch (e) {
+        showToast('Connection failed', 'error');
+    }
+}
+
+// ========== OTA Update Handlers ==========
+function setupOTAUpload() {
+    const fileInput = document.getElementById('ota-file-input');
+    if (!fileInput) return;
+
+    fileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (!file.name.endsWith('.bin')) {
+            showToast('Please select a .bin firmware file', 'error');
+            return;
+        }
+
+        const confirmed = confirm(`Upload firmware: ${file.name} (${(file.size / 1024).toFixed(1)} KB)?`);
+        if (!confirmed) return;
+
+        await uploadFirmware(file);
+    });
+}
+
+async function uploadFirmware(file) {
+    const progressContainer = document.getElementById('ota-progress');
+    const progressBar = document.getElementById('ota-progress-bar');
+    const progressText = document.getElementById('ota-progress-text');
+
+    // Show progress UI
+    if (progressContainer) progressContainer.classList.remove('hidden');
+    showToast('Uploading firmware...', 'info');
+
+    const formData = new FormData();
+    formData.append('update', file);
+
+    try {
+        const xhr = new XMLHttpRequest();
+
+        xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+                const percent = Math.round((e.loaded / e.total) * 100);
+                if (progressBar) progressBar.style.width = `${percent}%`;
+                if (progressText) progressText.textContent = `${percent}%`;
+            }
+        });
+
+        xhr.addEventListener('load', () => {
+            if (xhr.status === 200) {
+                showToast('Firmware uploaded! Rebooting...', 'success');
+                setTimeout(() => {
+                    showToast('Reconnecting...', 'info');
+                    location.reload();
+                }, 5000);
+            } else {
+                showToast('Upload failed: ' + xhr.statusText, 'error');
+            }
+        });
+
+        xhr.addEventListener('error', () => {
+            showToast('Upload failed', 'error');
+        });
+
+        xhr.open('POST', '/update');
+        xhr.send(formData);
+    } catch (e) {
+        showToast('Upload error: ' + e.message, 'error');
+    }
+}
+
 // ========== Preset Handlers ==========
 const PRESET_NAMES = ['Unified', 'Dual Split', 'Triple Rings', 'Quad Active', 'LGP Showcase'];
 
@@ -761,8 +985,12 @@ async function init() {
         loadZoneStatus(),
     ]);
 
+    // Populate UI components
+    populateTransitionGrid();
+
     // Setup event listeners
     setupEventListeners();
+    setupOTAUpload();
 
     console.log('Dashboard initialized');
 }

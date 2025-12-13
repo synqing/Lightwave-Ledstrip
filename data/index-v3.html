@@ -712,23 +712,23 @@
                                         <div>
                                             <div class="flex justify-between text-xs mb-2">
                                                 <span class="font-display uppercase tracking-wide text-[var(--text-muted)]">Duration</span>
-                                                <span class="font-tech text-[var(--text-primary)]">2000ms</span>
+                                                <span class="font-tech text-[var(--text-primary)]" id="transition-duration-value">2000ms</span>
                                             </div>
-                                            <input type="range" min="500" max="5000" value="2000" step="100" id="transition-duration">
+                                            <input type="range" min="500" max="5000" value="2000" step="100" id="transition-duration" oninput="setTransitionDuration(this.value)">
                                         </div>
                                         <div>
                                             <div class="text-[10px] font-display uppercase tracking-wide text-[var(--text-muted)] mb-2">Easing Curve</div>
-                                            <select class="w-full text-xs bg-[var(--bg-elevated)] border border-white/5 rounded px-3 py-2 text-[var(--text-secondary)] font-tech" id="transition-easing">
-                                                <option>Linear</option>
-                                                <option>Ease In Quad</option>
-                                                <option>Ease Out Quad</option>
-                                                <option>Ease In Out Quad</option>
-                                                <option>Ease In Cubic</option>
-                                                <option>Ease Out Cubic</option>
-                                                <option selected>Ease Out Elastic</option>
-                                                <option>Ease Out Bounce</option>
-                                                <option>Ease In Back</option>
-                                                <option>Ease Out Back</option>
+                                            <select class="w-full text-xs bg-[var(--bg-elevated)] border border-white/5 rounded px-3 py-2 text-[var(--text-secondary)] font-tech" id="transition-easing" onchange="setTransitionEasing(this.value)">
+                                                <option value="linear">Linear</option>
+                                                <option value="ease-in-quad">Ease In Quad</option>
+                                                <option value="ease-out-quad">Ease Out Quad</option>
+                                                <option value="ease-in-out-quad">Ease In Out Quad</option>
+                                                <option value="ease-in-cubic">Ease In Cubic</option>
+                                                <option value="ease-out-cubic">Ease Out Cubic</option>
+                                                <option value="ease-out-elastic" selected>Ease Out Elastic</option>
+                                                <option value="ease-out-bounce">Ease Out Bounce</option>
+                                                <option value="ease-in-back">Ease In Back</option>
+                                                <option value="ease-out-back">Ease Out Back</option>
                                             </select>
                                         </div>
                                     </div>
@@ -740,7 +740,7 @@
                                             <div class="w-1 h-full bg-[var(--gold)] transition-preview-line"></div>
                                         </div>
                                     </div>
-                                    <button class="w-full mt-3 py-2 rounded-lg bg-[var(--bg-elevated)] text-xs font-display uppercase tracking-wide text-[var(--text-secondary)] hover:bg-white/[0.06] transition-colors">
+                                    <button onclick="testTransition()" class="w-full mt-3 py-2 rounded-lg bg-[var(--bg-elevated)] text-xs font-display uppercase tracking-wide text-[var(--text-secondary)] hover:bg-white/[0.06] transition-colors">
                                         Test Transition
                                     </button>
                                 </div>
@@ -759,51 +759,51 @@
 
                         <div class="grid grid-cols-4 gap-4 mb-6">
                             <div class="card p-5 text-center">
-                                <div class="stat-gauge mx-auto mb-3">
+                                <div class="stat-gauge mx-auto mb-3" id="perf-fps-gauge">
                                     <svg width="80" height="80" viewBox="0 0 80 80">
                                         <circle cx="40" cy="40" r="35" fill="none" stroke="var(--bg-elevated)" stroke-width="6"/>
                                         <circle cx="40" cy="40" r="35" fill="none" stroke="var(--success)" stroke-width="6" stroke-dasharray="220" stroke-dashoffset="44" stroke-linecap="round"/>
                                     </svg>
                                     <div class="value">
-                                        <span class="text-2xl font-bold font-tech">120</span>
+                                        <span class="text-2xl font-bold font-tech" id="perf-fps-value">120</span>
                                     </div>
                                 </div>
                                 <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)]">FPS</div>
                             </div>
                             <div class="card p-5 text-center">
-                                <div class="stat-gauge mx-auto mb-3">
+                                <div class="stat-gauge mx-auto mb-3" id="perf-cpu-gauge">
                                     <svg width="80" height="80" viewBox="0 0 80 80">
                                         <circle cx="40" cy="40" r="35" fill="none" stroke="var(--bg-elevated)" stroke-width="6"/>
                                         <circle cx="40" cy="40" r="35" fill="none" stroke="var(--gold)" stroke-width="6" stroke-dasharray="220" stroke-dashoffset="127" stroke-linecap="round"/>
                                     </svg>
                                     <div class="value">
-                                        <span class="text-2xl font-bold font-tech">42</span>
+                                        <span class="text-2xl font-bold font-tech" id="perf-cpu-value">42</span>
                                         <span class="text-xs text-[var(--text-muted)]">%</span>
                                     </div>
                                 </div>
                                 <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)]">CPU</div>
                             </div>
                             <div class="card p-5 text-center">
-                                <div class="stat-gauge mx-auto mb-3">
+                                <div class="stat-gauge mx-auto mb-3" id="perf-heap-gauge">
                                     <svg width="80" height="80" viewBox="0 0 80 80">
                                         <circle cx="40" cy="40" r="35" fill="none" stroke="var(--bg-elevated)" stroke-width="6"/>
                                         <circle cx="40" cy="40" r="35" fill="none" stroke="var(--info)" stroke-width="6" stroke-dasharray="220" stroke-dashoffset="88" stroke-linecap="round"/>
                                     </svg>
                                     <div class="value">
-                                        <span class="text-2xl font-bold font-tech">156</span>
+                                        <span class="text-2xl font-bold font-tech" id="perf-heap-value">156</span>
                                         <span class="text-[9px] text-[var(--text-muted)]">KB</span>
                                     </div>
                                 </div>
                                 <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)]">Free Heap</div>
                             </div>
                             <div class="card p-5 text-center">
-                                <div class="stat-gauge mx-auto mb-3">
+                                <div class="stat-gauge mx-auto mb-3" id="perf-frag-gauge">
                                     <svg width="80" height="80" viewBox="0 0 80 80">
                                         <circle cx="40" cy="40" r="35" fill="none" stroke="var(--bg-elevated)" stroke-width="6"/>
                                         <circle cx="40" cy="40" r="35" fill="none" stroke="var(--success)" stroke-width="6" stroke-dasharray="220" stroke-dashoffset="198" stroke-linecap="round"/>
                                     </svg>
                                     <div class="value">
-                                        <span class="text-2xl font-bold font-tech">12</span>
+                                        <span class="text-2xl font-bold font-tech" id="perf-frag-value">12</span>
                                         <span class="text-xs text-[var(--text-muted)]">%</span>
                                     </div>
                                 </div>
@@ -902,33 +902,13 @@
                             <div class="card p-5">
                                 <div class="flex items-center justify-between mb-4">
                                     <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)]">Available Networks</div>
-                                    <button class="text-xs font-display uppercase tracking-wide text-[var(--gold)] hover:text-[var(--gold-highlight)] flex items-center gap-1">
+                                    <button onclick="scanNetworks()" class="text-xs font-display uppercase tracking-wide text-[var(--gold)] hover:text-[var(--gold-highlight)] flex items-center gap-1">
                                         <span class="iconify" data-icon="lucide:refresh-cw" data-width="12"></span>
                                         Scan
                                     </button>
                                 </div>
-                                <div class="space-y-2">
-                                    <div class="flex items-center justify-between p-2 rounded-lg bg-[var(--gold-glow)] border border-[var(--gold)]/30">
-                                        <div class="flex items-center gap-2">
-                                            <span class="iconify text-[var(--gold)]" data-icon="lucide:wifi" data-width="16"></span>
-                                            <span class="text-sm">HomeNetwork_5G</span>
-                                        </div>
-                                        <span class="text-xs text-[var(--text-muted)]">-42 dBm</span>
-                                    </div>
-                                    <div class="flex items-center justify-between p-2 rounded-lg hover:bg-[var(--bg-elevated)] cursor-pointer">
-                                        <div class="flex items-center gap-2">
-                                            <span class="iconify text-[var(--text-muted)]" data-icon="lucide:wifi" data-width="16"></span>
-                                            <span class="text-sm text-[var(--text-secondary)]">HomeNetwork_2G</span>
-                                        </div>
-                                        <span class="text-xs text-[var(--text-muted)]">-58 dBm</span>
-                                    </div>
-                                    <div class="flex items-center justify-between p-2 rounded-lg hover:bg-[var(--bg-elevated)] cursor-pointer">
-                                        <div class="flex items-center gap-2">
-                                            <span class="iconify text-[var(--text-muted)]" data-icon="lucide:wifi" data-width="16"></span>
-                                            <span class="text-sm text-[var(--text-secondary)]">Neighbor_WiFi</span>
-                                        </div>
-                                        <span class="text-xs text-[var(--text-muted)]">-76 dBm</span>
-                                    </div>
+                                <div class="space-y-2" id="network-list">
+                                    <div class="text-sm text-[var(--text-muted)] text-center py-4">Click Scan to search for networks</div>
                                 </div>
                             </div>
                         </div>
@@ -997,15 +977,25 @@
                         </div>
 
                         <div class="card p-5 mt-5">
-                            <div class="flex items-center justify-between">
+                            <div class="flex items-center justify-between mb-4">
                                 <div>
                                     <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-1">OTA Update</div>
                                     <div class="text-sm text-[var(--text-secondary)]">Upload new firmware via browser</div>
                                 </div>
                                 <label class="px-4 py-2 rounded-lg bg-[var(--bg-elevated)] text-sm font-display uppercase tracking-wide text-[var(--text-secondary)] hover:bg-white/[0.06] cursor-pointer transition-colors">
-                                    <input type="file" class="hidden" accept=".bin">
+                                    <input type="file" class="hidden" accept=".bin" id="ota-file-input">
                                     Select File
                                 </label>
+                            </div>
+                            <!-- OTA Progress Bar -->
+                            <div id="ota-progress" class="hidden">
+                                <div class="flex items-center justify-between text-xs mb-2">
+                                    <span class="text-[var(--text-muted)]">Uploading firmware...</span>
+                                    <span class="font-tech" id="ota-progress-text">0%</span>
+                                </div>
+                                <div class="h-2 bg-[var(--bg-elevated)] rounded-full overflow-hidden">
+                                    <div id="ota-progress-bar" class="h-full bg-[var(--gold)] transition-all duration-200" style="width: 0%"></div>
+                                </div>
                             </div>
                         </div>
                     </div>

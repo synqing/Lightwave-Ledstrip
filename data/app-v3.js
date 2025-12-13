@@ -271,16 +271,145 @@ function updateSidebarStats() {
 }
 
 function updateZoneMixer() {
-    // Update zone bars
+    const zoneColors = ['var(--zone-1)', 'var(--zone-2)', 'var(--zone-3)', 'var(--zone-4)'];
+
+    // Update zone bars and channel visibility
     for (let i = 0; i < 4; i++) {
         const bar = document.querySelector(`.zone-bar[data-zone="${i}"]`);
+        const channel = document.querySelector(`.zone-channel[data-zone="${i}"]`);
+        const zone = state.zones[i];
+
         if (bar) {
-            const zone = state.zones[i];
             const height = zone.enabled ? (zone.brightness / 255 * 100) : 0;
-            bar.style.height = `${height}%`;
-            bar.style.opacity = i < state.zoneCount ? 1 : 0.3;
+            bar.style.height = `${Math.max(5, height)}%`;
+        }
+
+        if (channel) {
+            channel.classList.toggle('opacity-30', i >= state.zoneCount);
+            channel.classList.toggle('pointer-events-none', i >= state.zoneCount);
         }
     }
+
+    // Update zone count selector buttons
+    document.querySelectorAll('#zone-count-selector button').forEach(btn => {
+        const count = parseInt(btn.dataset.count);
+        if (count === state.zoneCount) {
+            btn.className = 'w-6 h-6 text-xs rounded bg-[var(--gold)] text-black font-semibold';
+        } else {
+            btn.className = 'w-6 h-6 text-xs rounded bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:bg-white/10';
+        }
+    });
+
+    // Update zone system toggle
+    const zoneToggle = document.getElementById('zone-system-toggle');
+    if (zoneToggle) {
+        zoneToggle.classList.toggle('active', state.zoneEnabled);
+    }
+
+    // Update selected zone controls
+    updateSelectedZoneControls();
+}
+
+function updateSelectedZoneControls() {
+    const zone = state.zones[state.selectedZone];
+    if (!zone) return;
+
+    const zoneColors = ['var(--zone-1)', 'var(--zone-2)', 'var(--zone-3)', 'var(--zone-4)'];
+    const zoneNames = ['Center', 'Middle', 'Outer', 'Edge'];
+
+    // Update selected zone indicator
+    const dot = document.getElementById('selected-zone-dot');
+    const name = document.getElementById('selected-zone-name');
+    if (dot) dot.style.background = zoneColors[state.selectedZone];
+    if (name) name.textContent = `Zone ${state.selectedZone} - ${zoneNames[state.selectedZone]}`;
+
+    // Update zone effect dropdown
+    const effectSelect = document.getElementById('zone-effect-select');
+    if (effectSelect && state.effects.length > 0) {
+        effectSelect.value = zone.effectId;
+    }
+
+    // Update zone sliders
+    const brightnessSlider = document.getElementById('zone-brightness-slider');
+    const brightnessValue = document.getElementById('zone-brightness-value');
+    const speedSlider = document.getElementById('zone-speed-slider');
+    const speedValue = document.getElementById('zone-speed-value');
+
+    if (brightnessSlider) brightnessSlider.value = zone.brightness;
+    if (brightnessValue) brightnessValue.textContent = zone.brightness;
+    if (speedSlider) speedSlider.value = zone.speed;
+    if (speedValue) speedValue.textContent = zone.speed;
+
+    // Highlight selected zone channel
+    document.querySelectorAll('.zone-channel').forEach((ch, i) => {
+        ch.classList.toggle('ring-2', i === state.selectedZone);
+        ch.classList.toggle('ring-[var(--gold)]', i === state.selectedZone);
+    });
+}
+
+function selectZone(zoneId) {
+    if (zoneId >= state.zoneCount) return;
+    state.selectedZone = zoneId;
+    updateSelectedZoneControls();
+}
+
+function setZoneCount(count) {
+    state.zoneCount = count;
+    sendWS({ type: 'zone.setCount', count });
+    updateZoneMixer();
+}
+
+function toggleZoneSystem() {
+    state.zoneEnabled = !state.zoneEnabled;
+    sendWS({ type: 'zone.enable', enable: state.zoneEnabled });
+    updateZoneMixer();
+}
+
+let zoneBrightnessTimeout, zoneSpeedTimeout;
+
+function setZoneBrightness(value) {
+    const zoneId = state.selectedZone;
+    state.zones[zoneId].brightness = parseInt(value);
+    document.getElementById('zone-brightness-value').textContent = value;
+
+    // Update bar immediately
+    const bar = document.querySelector(`.zone-bar[data-zone="${zoneId}"]`);
+    if (bar) bar.style.height = `${Math.max(5, value / 255 * 100)}%`;
+
+    clearTimeout(zoneBrightnessTimeout);
+    zoneBrightnessTimeout = setTimeout(() => {
+        sendWS({ type: 'zone.setBrightness', zoneId, brightness: parseInt(value) });
+    }, CONFIG.DEBOUNCE_SLIDER);
+}
+
+function setZoneSpeed(value) {
+    const zoneId = state.selectedZone;
+    state.zones[zoneId].speed = parseInt(value);
+    document.getElementById('zone-speed-value').textContent = value;
+
+    clearTimeout(zoneSpeedTimeout);
+    zoneSpeedTimeout = setTimeout(() => {
+        sendWS({ type: 'zone.setSpeed', zoneId, speed: parseInt(value) });
+    }, CONFIG.DEBOUNCE_SLIDER);
+}
+
+function setZoneEffect(effectId) {
+    const zoneId = state.selectedZone;
+    state.zones[zoneId].effectId = parseInt(effectId);
+    sendWS({ type: 'zone.setEffect', zoneId, effectId: parseInt(effectId) });
+}
+
+function populateZoneEffectDropdown() {
+    const select = document.getElementById('zone-effect-select');
+    if (!select || state.effects.length === 0) return;
+
+    select.innerHTML = state.effects.map(e =>
+        `<option value="${e.id}">${e.name}</option>`
+    ).join('');
+
+    // Set current value
+    const zone = state.zones[state.selectedZone];
+    if (zone) select.value = zone.effectId;
 }
 
 function updatePerformanceTab() {
@@ -307,6 +436,7 @@ async function loadEffects() {
         state.effects = data.effects || [];
         populateEffectList();
         populateEffectsGrid();
+        populateZoneEffectDropdown();
         console.log(`Loaded ${state.effects.length} effects`);
     } catch (e) {
         console.error('Load effects:', e);
@@ -480,13 +610,22 @@ function switchTab(tabId) {
 }
 
 // ========== Preset Handlers ==========
+const PRESET_NAMES = ['Unified', 'Dual Split', 'Triple Rings', 'Quad Active', 'LGP Showcase'];
+
 function selectPreset(index) {
     document.querySelectorAll('.preset-btn').forEach((btn, i) => {
+        if (btn.querySelector('.iconify')) return; // Skip save button
         btn.classList.toggle('active', i === index);
     });
 
-    // Load zone preset
-    API.loadZonePreset(index);
+    // Load zone preset via WebSocket for faster response
+    sendWS({ type: 'zone.loadPreset', presetId: index });
+    showToast(`Loading preset: ${PRESET_NAMES[index] || `P${index}`}`, 'info');
+}
+
+function saveZoneConfig() {
+    sendWS({ type: 'zone.save' });
+    showToast('Zone configuration saved', 'success');
 }
 
 // ========== Toast Notifications ==========
@@ -651,22 +790,59 @@ function setupEventListeners() {
     });
 
     // Preset buttons
-    document.querySelectorAll('.preset-btn').forEach((btn, i) => {
-        if (btn.querySelector('.iconify')) return; // Skip save button
-        btn.addEventListener('click', () => selectPreset(i));
+    let presetIndex = 0;
+    document.querySelectorAll('.preset-btn').forEach((btn) => {
+        if (btn.querySelector('.iconify[data-icon="lucide:save"]')) {
+            // Save button
+            btn.addEventListener('click', () => saveZoneConfig());
+        } else {
+            // Preset button
+            const idx = presetIndex++;
+            btn.addEventListener('click', () => selectPreset(idx));
+            btn.title = PRESET_NAMES[idx] || `Preset ${idx}`;
+        }
     });
 
     // Toggle switches
     document.querySelectorAll('.toggle').forEach(toggle => {
         toggle.addEventListener('click', () => {
-            toggle.classList.toggle('active');
             // Handle specific toggles
-            if (toggle.id === 'transition-random') {
+            if (toggle.id === 'zone-system-toggle') {
+                toggleZoneSystem();
+            } else if (toggle.id === 'transition-random') {
+                toggle.classList.toggle('active');
                 state.transitionEnabled = toggle.classList.contains('active');
                 sendWS({ type: 'toggleTransitions', enabled: state.transitionEnabled });
+            } else {
+                toggle.classList.toggle('active');
             }
         });
     });
+
+    // Zone count selector
+    document.querySelectorAll('#zone-count-selector button').forEach(btn => {
+        btn.addEventListener('click', () => setZoneCount(parseInt(btn.dataset.count)));
+    });
+
+    // Zone channel selection
+    document.querySelectorAll('.zone-channel').forEach(channel => {
+        channel.addEventListener('click', () => selectZone(parseInt(channel.dataset.zone)));
+    });
+
+    // Zone controls
+    const zoneBrightnessSlider = document.getElementById('zone-brightness-slider');
+    const zoneSpeedSlider = document.getElementById('zone-speed-slider');
+    const zoneEffectSelect = document.getElementById('zone-effect-select');
+
+    if (zoneBrightnessSlider) {
+        zoneBrightnessSlider.addEventListener('input', (e) => setZoneBrightness(e.target.value));
+    }
+    if (zoneSpeedSlider) {
+        zoneSpeedSlider.addEventListener('input', (e) => setZoneSpeed(e.target.value));
+    }
+    if (zoneEffectSelect) {
+        zoneEffectSelect.addEventListener('change', (e) => setZoneEffect(e.target.value));
+    }
 
     // Window resize
     window.addEventListener('resize', setupCanvas);

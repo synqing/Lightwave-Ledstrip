@@ -38,6 +38,7 @@
             --zone-1: #4DFFB8;
             --zone-2: #FFB84D;
             --zone-3: #4D88FF;
+            --zone-4: #FF4D88;
             
             --font-display: 'Space Grotesk', system-ui, sans-serif;
             --font-body: 'Inter', system-ui, sans-serif;
@@ -463,39 +464,82 @@
                                 <!-- Zone Mixer -->
                                 <div class="card p-5">
                                     <div class="flex items-center justify-between mb-4">
-                                        <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)]">Zone Mixer</div>
-                                        <select class="text-xs bg-[var(--bg-elevated)] border border-white/5 rounded px-2 py-1 text-[var(--text-secondary)] font-tech" id="sync-mode">
-                                            <option value="1">Synchronized</option>
-                                            <option value="2">Mirrored</option>
-                                            <option value="0">Independent</option>
-                                            <option value="3">Chase</option>
-                                        </select>
+                                        <div class="flex items-center gap-3">
+                                            <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)]">Zone Mixer</div>
+                                            <div class="toggle" id="zone-system-toggle"></div>
+                                        </div>
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-[9px] text-[var(--text-muted)] uppercase">Zones:</span>
+                                            <div class="flex gap-1" id="zone-count-selector">
+                                                <button class="w-6 h-6 text-xs rounded bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:bg-white/10" data-count="1">1</button>
+                                                <button class="w-6 h-6 text-xs rounded bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:bg-white/10" data-count="2">2</button>
+                                                <button class="w-6 h-6 text-xs rounded bg-[var(--gold)] text-black font-semibold" data-count="3">3</button>
+                                                <button class="w-6 h-6 text-xs rounded bg-[var(--bg-elevated)] text-[var(--text-secondary)] hover:bg-white/10" data-count="4">4</button>
+                                            </div>
+                                        </div>
                                     </div>
-                                    
-                                    <div class="grid grid-cols-3 gap-6">
-                                        <div class="text-center">
-                                            <div class="relative h-20 flex items-end justify-center mb-3">
+
+                                    <div class="grid grid-cols-4 gap-4" id="zone-mixer-grid">
+                                        <div class="text-center zone-channel" data-zone="0">
+                                            <div class="relative h-16 flex items-end justify-center mb-2">
                                                 <div class="w-3 rounded-t-sm transition-all zone-bar" data-zone="0" style="height: 75%; background: var(--zone-1);"></div>
                                             </div>
-                                            <div class="w-2.5 h-2.5 rounded-full mx-auto mb-1" style="background: var(--zone-1); box-shadow: 0 0 12px var(--zone-1);"></div>
-                                            <div class="text-xs font-semibold">Bass</div>
-                                            <div class="text-[9px] text-[var(--text-muted)] font-tech">LED 54–104</div>
+                                            <div class="w-2 h-2 rounded-full mx-auto mb-1" style="background: var(--zone-1); box-shadow: 0 0 8px var(--zone-1);"></div>
+                                            <div class="text-[10px] font-semibold">Center</div>
+                                            <div class="text-[8px] text-[var(--text-muted)] font-tech">Z0</div>
                                         </div>
-                                        <div class="text-center">
-                                            <div class="relative h-20 flex items-end justify-center mb-3">
+                                        <div class="text-center zone-channel" data-zone="1">
+                                            <div class="relative h-16 flex items-end justify-center mb-2">
                                                 <div class="w-3 rounded-t-sm transition-all zone-bar" data-zone="1" style="height: 55%; background: var(--zone-2);"></div>
                                             </div>
-                                            <div class="w-2.5 h-2.5 rounded-full mx-auto mb-1" style="background: var(--zone-2); box-shadow: 0 0 12px var(--zone-2);"></div>
-                                            <div class="text-xs font-semibold">Mid</div>
-                                            <div class="text-[9px] text-[var(--text-muted)] font-tech">LED 27–53</div>
+                                            <div class="w-2 h-2 rounded-full mx-auto mb-1" style="background: var(--zone-2); box-shadow: 0 0 8px var(--zone-2);"></div>
+                                            <div class="text-[10px] font-semibold">Middle</div>
+                                            <div class="text-[8px] text-[var(--text-muted)] font-tech">Z1</div>
                                         </div>
-                                        <div class="text-center">
-                                            <div class="relative h-20 flex items-end justify-center mb-3">
+                                        <div class="text-center zone-channel" data-zone="2">
+                                            <div class="relative h-16 flex items-end justify-center mb-2">
                                                 <div class="w-3 rounded-t-sm transition-all zone-bar" data-zone="2" style="height: 35%; background: var(--zone-3);"></div>
                                             </div>
-                                            <div class="w-2.5 h-2.5 rounded-full mx-auto mb-1" style="background: var(--zone-3); box-shadow: 0 0 12px var(--zone-3);"></div>
-                                            <div class="text-xs font-semibold">High</div>
-                                            <div class="text-[9px] text-[var(--text-muted)] font-tech">LED 0–26</div>
+                                            <div class="w-2 h-2 rounded-full mx-auto mb-1" style="background: var(--zone-3); box-shadow: 0 0 8px var(--zone-3);"></div>
+                                            <div class="text-[10px] font-semibold">Outer</div>
+                                            <div class="text-[8px] text-[var(--text-muted)] font-tech">Z2</div>
+                                        </div>
+                                        <div class="text-center zone-channel opacity-30" data-zone="3">
+                                            <div class="relative h-16 flex items-end justify-center mb-2">
+                                                <div class="w-3 rounded-t-sm transition-all zone-bar" data-zone="3" style="height: 25%; background: var(--zone-4, #FF4D88);"></div>
+                                            </div>
+                                            <div class="w-2 h-2 rounded-full mx-auto mb-1" style="background: var(--zone-4, #FF4D88); box-shadow: 0 0 8px var(--zone-4, #FF4D88);"></div>
+                                            <div class="text-[10px] font-semibold">Edge</div>
+                                            <div class="text-[8px] text-[var(--text-muted)] font-tech">Z3</div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Per-Zone Controls (expanded on zone click) -->
+                                    <div class="mt-4 pt-4 border-t border-white/5" id="zone-controls">
+                                        <div class="flex items-center justify-between mb-3">
+                                            <div class="flex items-center gap-2">
+                                                <div class="w-2 h-2 rounded-full" id="selected-zone-dot" style="background: var(--zone-1);"></div>
+                                                <span class="text-xs font-semibold" id="selected-zone-name">Zone 0</span>
+                                            </div>
+                                            <select class="text-xs bg-[var(--bg-elevated)] border border-white/5 rounded px-2 py-1 text-[var(--text-secondary)] font-tech" id="zone-effect-select">
+                                                <!-- Populated by JS -->
+                                            </select>
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <div class="flex justify-between text-[9px] mb-1">
+                                                    <span class="text-[var(--text-muted)] uppercase">Brightness</span>
+                                                    <span class="font-tech" id="zone-brightness-value">255</span>
+                                                </div>
+                                                <input type="range" min="0" max="255" value="255" id="zone-brightness-slider">
+                                            </div>
+                                            <div>
+                                                <div class="flex justify-between text-[9px] mb-1">
+                                                    <span class="text-[var(--text-muted)] uppercase">Speed</span>
+                                                    <span class="font-tech" id="zone-speed-value">25</span>
+                                                </div>
+                                                <input type="range" min="1" max="50" value="25" id="zone-speed-slider">
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

@@ -18,10 +18,10 @@ const state = {
     zoneCount: 3,
     selectedZone: 1,
     zones: [
-        { id: 1, effectId: 0, enabled: true, brightness: 255, speed: 25 },
-        { id: 2, effectId: 0, enabled: true, brightness: 255, speed: 25 },
-        { id: 3, effectId: 0, enabled: true, brightness: 255, speed: 25 },
-        { id: 4, effectId: 0, enabled: true, brightness: 255, speed: 25 },
+        { id: 1, effectId: 0, enabled: true, brightness: 255, speed: 25, paletteId: 0 },
+        { id: 2, effectId: 0, enabled: true, brightness: 255, speed: 25, paletteId: 0 },
+        { id: 3, effectId: 0, enabled: true, brightness: 255, speed: 25, paletteId: 0 },
+        { id: 4, effectId: 0, enabled: true, brightness: 255, speed: 25, paletteId: 0 },
     ],
     paletteId: 0,
     transitions: false,
@@ -64,6 +64,7 @@ const API = {
     setZoneEnabled: (z, e) => API.request('/zone/config', { method: 'POST', body: JSON.stringify({ zoneId: z, enabled: e }) }),
     setZoneBrightness: (z, b) => API.request('/zone/brightness', { method: 'POST', body: JSON.stringify({ zoneId: z, brightness: b }) }),
     setZoneSpeed: (z, s) => API.request('/zone/speed', { method: 'POST', body: JSON.stringify({ zoneId: z, speed: s }) }),
+    setZonePalette: (z, p) => API.request('/zone/palette', { method: 'POST', body: JSON.stringify({ zoneId: z, paletteId: p }) }),
     loadPreset: (id) => API.request('/zone/preset/load', { method: 'POST', body: JSON.stringify({ presetId: id }) }),
     saveConfig: () => API.request('/zone/config/save', { method: 'POST' }),
     getStatus: () => API.request('/status'),
@@ -128,7 +129,7 @@ const WS = {
                 document.getElementById('palette-select').value = msg.paletteId;
                 break;
             case 'zone.state':
-                // Sync zone state from server
+                syncZoneState(msg);
                 break;
             case 'error':
                 console.error('Server:', msg.message);
@@ -157,6 +158,70 @@ function updatePerformance(fps, mem) {
 
 function updateCurrentEffect(id, name) {
     document.getElementById('status-fx').textContent = name || `Effect ${id}`;
+}
+
+// Sync zone state from server broadcast
+function syncZoneState(msg) {
+    // Update zone count if changed
+    if (msg.zoneCount !== undefined && msg.zoneCount !== state.zoneCount) {
+        state.zoneCount = msg.zoneCount;
+        for (let i = 1; i <= 4; i++) {
+            const btn = document.getElementById(`zc-${i}`);
+            if (btn) {
+                btn.className = i === msg.zoneCount
+                    ? 'w-6 h-6 text-xs text-black bg-accent-cyan font-semibold rounded'
+                    : 'w-6 h-6 text-xs text-text-secondary hover:text-white rounded transition-colors';
+            }
+        }
+        updateZoneTabs(msg.zoneCount);
+        updateMixerChannels(msg.zoneCount);
+    }
+
+    // Sync each zone's state
+    if (msg.zones && Array.isArray(msg.zones)) {
+        msg.zones.forEach((zoneData) => {
+            const idx = zoneData.id;
+            if (state.zones[idx]) {
+                state.zones[idx].enabled = zoneData.enabled;
+                state.zones[idx].effectId = zoneData.effectId;
+                state.zones[idx].brightness = zoneData.brightness;
+                state.zones[idx].speed = zoneData.speed;
+                state.zones[idx].paletteId = zoneData.paletteId !== undefined ? zoneData.paletteId : 0;
+
+                // Update mixer UI sliders and labels
+                const bLabel = document.getElementById(`mixer-b-label-${idx}`);
+                const sLabel = document.getElementById(`mixer-s-label-${idx}`);
+                const bSlider = document.getElementById(`mixer-b-${idx}`);
+                const sSlider = document.getElementById(`mixer-s-${idx}`);
+
+                if (bLabel) bLabel.textContent = zoneData.brightness;
+                if (sLabel) sLabel.textContent = zoneData.speed;
+                if (bSlider) { bSlider.value = zoneData.brightness; updateSliderTrack(bSlider); }
+                if (sSlider) { sSlider.value = zoneData.speed; updateSliderTrack(sSlider); }
+            }
+        });
+
+        // Update zone card if selected zone was affected
+        const zone = state.zones[state.selectedZone - 1];
+        if (zone) {
+            const bSlider = document.getElementById('zone-brightness-slider');
+            const bLabel = document.getElementById('zone-brightness-label');
+            const sSlider = document.getElementById('zone-speed-slider');
+            const sLabel = document.getElementById('zone-speed-label');
+            const effectSelect = document.getElementById('effect-select');
+            const paletteSelect = document.getElementById('zone-palette-select');
+
+            if (bSlider) { bSlider.value = zone.brightness; updateSliderTrack(bSlider); }
+            if (bLabel) bLabel.textContent = zone.brightness;
+            if (sSlider) { sSlider.value = zone.speed; updateSliderTrack(sSlider); }
+            if (sLabel) sLabel.textContent = zone.speed;
+            if (effectSelect) effectSelect.value = zone.effectId;
+            if (paletteSelect) paletteSelect.value = zone.paletteId;
+        }
+    }
+
+    updateZoneVisualization();
+    console.log('Zone state synced from server');
 }
 
 function updateSliderTrack(input) {
@@ -269,16 +334,18 @@ function selectZone(id) {
         const bLabel = document.getElementById('zone-brightness-label');
         const sSlider = document.getElementById('zone-speed-slider');
         const sLabel = document.getElementById('zone-speed-label');
+        const pSelect = document.getElementById('zone-palette-select');
 
         if (bSlider) { bSlider.value = zone.brightness; updateSliderTrack(bSlider); }
         if (bLabel) bLabel.textContent = zone.brightness;
         if (sSlider) { sSlider.value = zone.speed; updateSliderTrack(sSlider); }
         if (sLabel) sLabel.textContent = zone.speed;
+        if (pSelect) pSelect.value = zone.paletteId;
     }
 }
 
 // ========== Zone Controls ==========
-let zoneBrightnessTimeout, zoneSpeedTimeout;
+let zoneBrightnessTimeout, zoneSpeedTimeout, zonePaletteTimeout;
 
 function setZoneBrightness(value) {
     const zoneId = state.selectedZone - 1;
@@ -318,6 +385,16 @@ function setZoneSpeed(value) {
 
     clearTimeout(zoneSpeedTimeout);
     zoneSpeedTimeout = setTimeout(() => API.setZoneSpeed(zoneId, speed), CONFIG.DEBOUNCE_SLIDER);
+}
+
+function setZonePalette(value) {
+    const zoneId = state.selectedZone - 1;
+    const paletteId = parseInt(value);
+
+    if (state.zones[zoneId]) state.zones[zoneId].paletteId = paletteId;
+
+    // Send via WebSocket for faster response
+    sendWS({ type: 'zone.setPalette', zoneId, paletteId });
 }
 
 function updateZoneVisualization() {
@@ -699,6 +776,7 @@ async function loadPalettes() {
         const data = await res.json();
         state.palettes = data.palettes || [];
 
+        // Populate global palette dropdown
         const sel = document.getElementById('palette-select');
         if (sel) {
             sel.innerHTML = '';
@@ -709,6 +787,19 @@ async function loadPalettes() {
                 sel.appendChild(opt);
             });
         }
+
+        // Populate zone palette dropdown (0 = global, 1+ = specific palette)
+        const zoneSel = document.getElementById('zone-palette-select');
+        if (zoneSel) {
+            zoneSel.innerHTML = '<option value="0">Use Global Palette</option>';
+            state.palettes.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.id + 1;  // Offset by 1 (0 = global)
+                opt.textContent = p.name;
+                zoneSel.appendChild(opt);
+            });
+        }
+
         console.log(`Loaded ${state.palettes.length} palettes`);
     } catch (e) {
         console.error('Load palettes:', e);

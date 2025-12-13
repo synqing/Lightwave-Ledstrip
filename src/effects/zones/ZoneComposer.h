@@ -30,6 +30,10 @@ public:
     void setZoneSpeed(uint8_t zoneId, uint8_t speed);
     uint8_t getZoneSpeed(uint8_t zoneId) const;
 
+    // Per-zone palette control (0=global, 1-36=specific)
+    void setZonePalette(uint8_t zoneId, uint8_t paletteId);
+    uint8_t getZonePalette(uint8_t zoneId) const;
+
     // Zone queries (for config export)
     uint8_t getZoneEffect(uint8_t zoneId) const;
     bool isZoneEnabled(uint8_t zoneId) const;
@@ -58,6 +62,7 @@ private:
     bool m_zoneEnabled[HardwareConfig::MAX_ZONES];     // Enable/disable per zone
     uint8_t m_zoneBrightness[HardwareConfig::MAX_ZONES];  // Per-zone brightness (0-255)
     uint8_t m_zoneSpeed[HardwareConfig::MAX_ZONES];       // Per-zone speed (1-50)
+    uint8_t m_zonePalette[HardwareConfig::MAX_ZONES];    // Per-zone palette (0=global)
     bool m_enabled;                     // Global zone system enable
 
     // Dynamic zone configuration selection

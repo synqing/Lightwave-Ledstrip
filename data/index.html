@@ -157,6 +157,19 @@
                     <input type="range" min="1" max="50" value="25" class="slider-input" id="zone-speed-slider" oninput="setZoneSpeed(this.value)">
                 </div>
 
+                <!-- Per-Zone Palette -->
+                <div class="flex flex-col gap-1.5">
+                    <label class="text-xs font-medium text-text-secondary">Zone Palette</label>
+                    <div class="relative">
+                        <select id="zone-palette-select" onchange="setZonePalette(this.value)" class="w-full appearance-none bg-elevated border border-border-interactive text-text-primary rounded-lg pl-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent-cyan">
+                            <option value="0">Use Global Palette</option>
+                        </select>
+                        <div class="absolute right-2.5 top-2.5 pointer-events-none text-text-secondary">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Enable/Disable Buttons -->
                 <div class="grid grid-cols-2 gap-2">
                     <button onclick="enableZone()" class="py-2 rounded-lg bg-accent-cyan text-black text-sm font-semibold hover:opacity-90 transition-opacity">Enable</button>

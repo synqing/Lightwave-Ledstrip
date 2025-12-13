@@ -46,6 +46,7 @@ private:
     // State broadcast
     void broadcastState();
     void broadcastStatus();
+    void broadcastZoneState();  // Broadcast zone config to all clients
     void broadcastPerformance();
     void broadcastLEDData();
     

@@ -862,6 +862,31 @@ void LightwaveWebServer::broadcastStatus() {
     ws->textAll(output);
 }
 
+// Broadcast zone configuration to all connected clients
+void LightwaveWebServer::broadcastZoneState() {
+    if (ws->count() == 0) return;
+
+    StaticJsonDocument<768> doc;
+    doc["type"] = "zone.state";
+    doc["enabled"] = zoneComposer.isEnabled();
+    doc["zoneCount"] = zoneComposer.getZoneCount();
+
+    JsonArray zones = doc.createNestedArray("zones");
+    for (uint8_t i = 0; i < 4; i++) {
+        JsonObject zone = zones.createNestedObject();
+        zone["id"] = i;
+        zone["enabled"] = zoneComposer.isZoneEnabled(i);
+        zone["effectId"] = zoneComposer.getZoneEffect(i);
+        zone["brightness"] = zoneComposer.getZoneBrightness(i);
+        zone["speed"] = zoneComposer.getZoneSpeed(i);
+        zone["paletteId"] = zoneComposer.getZonePalette(i);
+    }
+
+    String output;
+    serializeJson(doc, output);
+    ws->textAll(output);
+}
+
 // WebSocket event handler
 void LightwaveWebServer::onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, 
                                   AwsEventType type, void *arg, uint8_t *data, size_t len) {
@@ -869,6 +894,7 @@ void LightwaveWebServer::onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient 
         Serial.printf("[WebSocket] Client connected: %s\n", client->remoteIP().toString().c_str());
         // Send initial status to new client
         webServer.broadcastStatus();
+        webServer.broadcastZoneState();  // Send zone state to new client
     } else if (type == WS_EVT_DISCONNECT) {
         Serial.printf("[WebSocket] Client disconnected\n");
     } else if (type == WS_EVT_DATA) {
@@ -927,37 +953,53 @@ void LightwaveWebServer::onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient 
                     useRandomTransitions = doc["enabled"];
                 }
 
-                // Zone Composer control
+                // Zone Composer control - broadcast state after each change
                 else if (type == "zone.enable") {
                     bool enable = doc["enable"];
                     if (enable) zoneComposer.enable();
                     else zoneComposer.disable();
+                    webServer.broadcastZoneState();
                 } else if (type == "zone.setCount") {
                     uint8_t count = doc["count"];
                     zoneComposer.setZoneCount(count);
+                    webServer.broadcastZoneState();
                 } else if (type == "zone.setEffect") {
                     uint8_t zoneId = doc["zoneId"];
                     uint8_t effectId = doc["effectId"];
                     zoneComposer.setZoneEffect(zoneId, effectId);
+                    webServer.broadcastZoneState();
                 } else if (type == "zone.enableZone") {
                     uint8_t zoneId = doc["zoneId"];
                     bool enabled = doc["enabled"];
                     zoneComposer.enableZone(zoneId, enabled);
+                    webServer.broadcastZoneState();
                 } else if (type == "zone.loadPreset") {
                     uint8_t presetId = doc["presetId"];
                     zoneComposer.loadPreset(presetId);
+                    webServer.broadcastZoneState();
                 } else if (type == "zone.save") {
                     zoneComposer.saveConfig();
+                    // No broadcast needed - save doesn't change runtime state
                 } else if (type == "zone.load") {
                     zoneComposer.loadConfig();
+                    webServer.broadcastZoneState();
                 } else if (type == "zone.setBrightness") {
                     uint8_t zoneId = doc["zoneId"];
                     uint8_t brightness = doc["brightness"];
                     zoneComposer.setZoneBrightness(zoneId, brightness);
+                    webServer.broadcastZoneState();
                 } else if (type == "zone.setSpeed") {
                     uint8_t zoneId = doc["zoneId"];
                     uint8_t speed = doc["speed"];
                     zoneComposer.setZoneSpeed(zoneId, speed);
+                    webServer.broadcastZoneState();
+                } else if (type == "zone.setPalette") {
+                    uint8_t zoneId = doc["zoneId"];
+                    uint8_t paletteId = doc["paletteId"];
+                    if (paletteId <= gGradientPaletteCount) {
+                        zoneComposer.setZonePalette(zoneId, paletteId);
+                        webServer.broadcastZoneState();
+                    }
                 }
             }
             // Legacy "cmd" format for backward compatibility

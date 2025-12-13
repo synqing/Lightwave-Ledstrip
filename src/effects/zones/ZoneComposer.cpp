@@ -10,6 +10,11 @@ extern Effect effects[];
 extern const uint8_t NUM_EFFECTS;
 extern uint8_t effectSpeed;  // Global speed variable for effects
 
+// Palette access for per-zone palette support
+extern CRGBPalette16 currentPalette;
+extern const TProgmemRGBGradientPaletteRef gGradientPalettes[];
+extern const uint8_t gGradientPaletteCount;
+
 ZoneComposer::ZoneComposer()
     : m_zoneCount(3)  // Default to 3-zone mode
     , m_enabled(false)
@@ -23,24 +28,28 @@ ZoneComposer::ZoneComposer()
     m_zoneEnabled[0] = true;
     m_zoneBrightness[0] = 255;
     m_zoneSpeed[0] = 25;
+    m_zonePalette[0] = 0;  // Use global palette
 
     // Zone 1 (middle): LGP Wave Collision (effect ID 11)
     m_zoneEffects[1] = 11;
     m_zoneEnabled[1] = true;
     m_zoneBrightness[1] = 255;
     m_zoneSpeed[1] = 25;
+    m_zonePalette[1] = 0;
 
     // Zone 2 (outer): LGP Diamond Lattice (effect ID 12)
     m_zoneEffects[2] = 12;
     m_zoneEnabled[2] = true;
     m_zoneBrightness[2] = 255;
     m_zoneSpeed[2] = 25;
+    m_zonePalette[2] = 0;
 
     // Zone 3 (4-zone mode only): Default to first effect, disabled
     m_zoneEffects[3] = 0;
     m_zoneEnabled[3] = false;
     m_zoneBrightness[3] = 255;
     m_zoneSpeed[3] = 25;
+    m_zonePalette[3] = 0;
 
     // Clear buffers
     fill_solid(m_tempStrip1, 40, CRGB::Black);
@@ -113,6 +122,24 @@ uint8_t ZoneComposer::getZoneSpeed(uint8_t zoneId) const {
         return 25;
     }
     return m_zoneSpeed[zoneId];
+}
+
+void ZoneComposer::setZonePalette(uint8_t zoneId, uint8_t paletteId) {
+    if (zoneId >= HardwareConfig::MAX_ZONES) {
+        Serial.printf("ERROR: Invalid zone ID %d\n", zoneId);
+        return;
+    }
+
+    m_zonePalette[zoneId] = paletteId;
+    Serial.printf("Zone %d palette set to %d%s\n", zoneId, paletteId,
+                 paletteId == 0 ? " (global)" : "");
+}
+
+uint8_t ZoneComposer::getZonePalette(uint8_t zoneId) const {
+    if (zoneId >= HardwareConfig::MAX_ZONES) {
+        return 0;
+    }
+    return m_zonePalette[zoneId];
 }
 
 void ZoneComposer::setZoneCount(uint8_t count) {
@@ -203,13 +230,24 @@ void ZoneComposer::renderZone(uint8_t zoneId) {
     // Effects that use effectSpeed will now use the zone-specific value
     effectSpeed = m_zoneSpeed[zoneId];
 
-    // Step 3: Execute effect - it renders to full strip1/strip2
+    // Step 3: Apply per-zone palette (save original first)
+    CRGBPalette16 savedPalette = currentPalette;
+    uint8_t zonePaletteId = m_zonePalette[zoneId];
+    if (zonePaletteId > 0 && zonePaletteId <= gGradientPaletteCount) {
+        // Use zone-specific palette (1-indexed: paletteId 1 = gGradientPalettes[0])
+        currentPalette = gGradientPalettes[zonePaletteId - 1];
+    }
+
+    // Step 4: Execute effect - it renders to full strip1/strip2
     effects[effectId].function();
 
-    // Step 4: Extract zone segment and map to output (applies per-zone brightness)
+    // Step 5: Restore original palette
+    currentPalette = savedPalette;
+
+    // Step 6: Extract zone segment and map to output (applies per-zone brightness)
     mapZoneToOutput(zoneId);
 
-    // Step 5: Clear strips for next zone
+    // Step 7: Clear strips for next zone
     fill_solid(strip1, 160, CRGB::Black);
     fill_solid(strip2, 160, CRGB::Black);
 }
@@ -338,6 +376,8 @@ void ZoneComposer::printStatus() const {
                      m_zoneEffects[i] < NUM_EFFECTS ? effects[m_zoneEffects[i]].name : "INVALID");
         Serial.printf("  Brightness: %d\n", m_zoneBrightness[i]);
         Serial.printf("  Speed: %d\n", m_zoneSpeed[i]);
+        Serial.printf("  Palette: %d%s\n", m_zonePalette[i],
+                     m_zonePalette[i] == 0 ? " (global)" : "");
 
         const ZoneDefinition& zone = m_activeConfig[i];  // Use active config
         Serial.printf("  Strip1 Range: [%d-%d] + [%d-%d]\n",

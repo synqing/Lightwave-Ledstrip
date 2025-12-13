@@ -1,0 +1,1296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LightwaveOS</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.iconify.design/3/3.1.0/iconify.min.js"></script>
+
+    <style>
+        /* ═══════════════════════════════════════════════════════════════════════════
+           K1 DESIGN TOKENS — From SpectraSynq Landing Page
+           ═══════════════════════════════════════════════════════════════════════════ */
+        :root {
+            --gold: #FFB84D;
+            --gold-dim: rgba(255, 184, 77, 0.3);
+            --gold-glow: rgba(255, 184, 77, 0.15);
+            --gold-highlight: #FFE5B4;
+            
+            --bg-base: #000000;
+            --bg-surface: #111111;
+            --bg-overlay: #1A1A1A;
+            --bg-elevated: #222222;
+            
+            --text-primary: #F2F2F2;
+            --text-secondary: #888888;
+            --text-muted: #444444;
+            
+            --success: #4DFFB8;
+            --error: #FF4D4D;
+            --info: #4D88FF;
+            
+            --zone-1: #4DFFB8;
+            --zone-2: #FFB84D;
+            --zone-3: #4D88FF;
+            
+            --font-display: 'Space Grotesk', system-ui, sans-serif;
+            --font-body: 'Inter', system-ui, sans-serif;
+            --font-tech: 'Manrope', system-ui, sans-serif;
+        }
+
+        * { box-sizing: border-box; }
+        
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-primary);
+            font-family: var(--font-body);
+            -webkit-font-smoothing: antialiased;
+            margin: 0;
+            min-height: 100vh;
+        }
+
+        ::selection {
+            background: var(--gold-dim);
+            color: black;
+        }
+
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--bg-elevated); border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        :focus-visible {
+            outline: 2px solid var(--gold);
+            outline-offset: 2px;
+        }
+
+        .font-display { font-family: var(--font-display); }
+        .font-body { font-family: var(--font-body); }
+        .font-tech { font-family: var(--font-tech); }
+        
+        .tracking-k1 { letter-spacing: 0.16em; }
+        .tracking-wide { letter-spacing: 0.12em; }
+
+        /* ═══════════════════════════════════════════════════════════════════════════
+           COMPONENTS
+           ═══════════════════════════════════════════════════════════════════════════ */
+        .glass-panel {
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 1.25rem;
+        }
+
+        .card {
+            background: var(--bg-surface);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 1rem;
+        }
+
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+            height: 24px;
+            cursor: pointer;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 3px;
+            background: var(--bg-elevated);
+            border-radius: 2px;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 14px;
+            width: 14px;
+            border-radius: 50%;
+            background: var(--text-primary);
+            margin-top: -5.5px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+            transition: transform 0.15s ease;
+        }
+        input[type=range]::-webkit-slider-thumb:hover {
+            transform: scale(1.15);
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            transition: all 0.2s ease;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            font-family: var(--font-display);
+            position: relative;
+        }
+        .nav-item:hover {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+        }
+        .nav-item.active {
+            background: var(--gold-glow);
+            color: var(--gold);
+        }
+        .nav-item.active::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 2px;
+            height: 60%;
+            background: var(--gold);
+            border-radius: 0 2px 2px 0;
+        }
+
+        .effect-item {
+            padding: 0.875rem 1rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            border-left: 2px solid transparent;
+        }
+        .effect-item:hover { background: var(--bg-elevated); }
+        .effect-item.active {
+            background: var(--gold-glow);
+            border-left-color: var(--gold);
+        }
+
+        .palette-swatch {
+            height: 40px;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            border: 2px solid transparent;
+            position: relative;
+            overflow: hidden;
+        }
+        .palette-swatch:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        }
+        .palette-swatch.selected {
+            border-color: var(--gold);
+            box-shadow: 0 0 0 2px var(--gold-dim);
+        }
+        .palette-swatch .palette-name {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 2px 6px;
+            font-size: 9px;
+            font-family: var(--font-tech);
+            background: rgba(0,0,0,0.7);
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+        .palette-swatch:hover .palette-name { opacity: 1; }
+
+        .preset-btn {
+            width: 44px;
+            height: 44px;
+            border-radius: 0.5rem;
+            background: var(--bg-surface);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            font-family: var(--font-tech);
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        .preset-btn:hover {
+            border-color: var(--gold-dim);
+            color: var(--text-primary);
+        }
+        .preset-btn.active {
+            background: var(--gold);
+            border-color: var(--gold);
+            color: var(--bg-base);
+            box-shadow: 0 0 20px var(--gold-dim);
+        }
+
+        .transition-card {
+            padding: 1rem;
+            border-radius: 0.75rem;
+            background: var(--bg-elevated);
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+        }
+        .transition-card:hover {
+            border-color: rgba(255,255,255,0.1);
+        }
+        .transition-card.selected {
+            border-color: var(--gold);
+            background: var(--gold-glow);
+        }
+
+        .stat-gauge {
+            position: relative;
+            width: 80px;
+            height: 80px;
+        }
+        .stat-gauge svg {
+            transform: rotate(-90deg);
+        }
+        .stat-gauge .value {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .glow-gold { box-shadow: 0 0 60px var(--gold-glow); }
+        .glow-subtle { box-shadow: 0 0 40px rgba(0, 0, 0, 0.8); }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.375rem;
+            padding: 0.375rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.6875rem;
+            font-family: var(--font-display);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            border: 1px solid transparent;
+        }
+        .chip.active {
+            background: var(--gold);
+            color: black;
+        }
+        .chip:not(.active) {
+            color: var(--text-secondary);
+            border-color: rgba(255,255,255,0.08);
+        }
+        .chip:not(.active):hover {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+        }
+
+        .toggle {
+            position: relative;
+            width: 44px;
+            height: 24px;
+            background: var(--bg-elevated);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+        .toggle.active { background: var(--gold); }
+        .toggle::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 18px;
+            height: 18px;
+            background: white;
+            border-radius: 50%;
+            transition: transform 0.2s ease;
+        }
+        .toggle.active::after { transform: translateX(20px); }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="flex min-h-screen">
+        
+        <!-- ═══════════════════════════════════════════════════════════════════════════
+             LEFT SIDEBAR
+             ═══════════════════════════════════════════════════════════════════════════ -->
+        <aside class="w-56 flex-shrink-0 border-r border-white/5 flex flex-col" style="background: linear-gradient(180deg, #0a0a0a 0%, #000 100%);">
+            
+            <div class="p-5 border-b border-white/5">
+                <div class="font-display text-sm tracking-k1 uppercase">
+                    <span class="text-[var(--gold)]">K</span><span class="text-[var(--text-muted)]">-</span><span class="text-[var(--text-primary)]">1</span>
+                </div>
+                <div class="text-[10px] tracking-wide uppercase text-[var(--text-muted)] mt-1">Lightwave OS</div>
+            </div>
+
+            <div class="px-5 py-3 border-b border-white/5">
+                <div class="flex items-center gap-2">
+                    <span class="w-1.5 h-1.5 rounded-full bg-[var(--success)] animate-pulse"></span>
+                    <span class="text-xs text-[var(--text-secondary)]">Connected</span>
+                </div>
+                <div class="text-[10px] text-[var(--text-muted)] mt-0.5 font-tech">192.168.1.42</div>
+            </div>
+
+            <nav class="flex-1 p-3 space-y-1">
+                <div class="nav-item active" data-tab="composer">
+                    <span class="iconify" data-icon="lucide:sliders-horizontal" data-width="16"></span>
+                    <span>Composer</span>
+                </div>
+                <div class="nav-item" data-tab="effects">
+                    <span class="iconify" data-icon="lucide:sparkles" data-width="16"></span>
+                    <span>Effects</span>
+                </div>
+                <div class="nav-item" data-tab="palettes">
+                    <span class="iconify" data-icon="lucide:palette" data-width="16"></span>
+                    <span>Palettes</span>
+                </div>
+                <div class="nav-item" data-tab="transitions">
+                    <span class="iconify" data-icon="lucide:shuffle" data-width="16"></span>
+                    <span>Transitions</span>
+                </div>
+                
+                <div class="pt-4 pb-2">
+                    <div class="text-[9px] uppercase tracking-k1 text-[var(--text-muted)] px-1">System</div>
+                </div>
+                
+                <div class="nav-item" data-tab="performance">
+                    <span class="iconify" data-icon="lucide:activity" data-width="16"></span>
+                    <span>Performance</span>
+                </div>
+                <div class="nav-item" data-tab="network">
+                    <span class="iconify" data-icon="lucide:wifi" data-width="16"></span>
+                    <span>Network</span>
+                </div>
+                <div class="nav-item" data-tab="firmware">
+                    <span class="iconify" data-icon="lucide:download" data-width="16"></span>
+                    <span>Firmware</span>
+                </div>
+            </nav>
+
+            <div class="p-4 border-t border-white/5">
+                <div class="grid grid-cols-2 gap-3 text-center">
+                    <div>
+                        <div class="text-lg font-semibold font-tech text-[var(--text-primary)]" id="stat-fps">120</div>
+                        <div class="text-[9px] uppercase tracking-wide text-[var(--text-muted)]">FPS</div>
+                    </div>
+                    <div>
+                        <div class="text-lg font-semibold font-tech text-[var(--text-primary)]"><span id="stat-cpu">42</span><span class="text-xs text-[var(--text-muted)]">%</span></div>
+                        <div class="text-[9px] uppercase tracking-wide text-[var(--text-muted)]">CPU</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ═══════════════════════════════════════════════════════════════════════════
+             MAIN CONTENT
+             ═══════════════════════════════════════════════════════════════════════════ -->
+        <main class="flex-1 flex flex-col overflow-hidden">
+            
+            <!-- LED Visualization - CENTER ORIGIN -->
+            <div class="relative w-full" style="background: linear-gradient(180deg, #0a0a0a 0%, #000 100%);">
+                <div class="max-w-5xl mx-auto px-6 py-6">
+                    <div class="relative rounded-2xl overflow-hidden glow-subtle" style="border: 1px solid rgba(255,255,255,0.05);">
+                        <canvas id="viz-canvas" class="w-full block" style="height: 100px;"></canvas>
+                        <div class="absolute bottom-2 left-3 text-[9px] font-tech uppercase tracking-wide text-[var(--text-muted)]">LED 0</div>
+                        <div class="absolute bottom-2 right-3 text-[9px] font-tech uppercase tracking-wide text-[var(--text-muted)]">LED 159</div>
+                        <div class="absolute top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded text-[9px] font-tech uppercase tracking-wide bg-black/60 text-[var(--zone-1)]">Center Origin</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Content Area -->
+            <div class="flex-1 overflow-y-auto">
+                <div class="max-w-5xl mx-auto px-6 py-6">
+                    
+                    <!-- ═══════════════════════════════════════════════════════════════
+                         TAB: COMPOSER
+                         ═══════════════════════════════════════════════════════════════ -->
+                    <div id="tab-composer" class="tab-content active">
+                        <div class="grid grid-cols-12 gap-5">
+                            <div class="col-span-7 space-y-5">
+                                
+                                <!-- Now Playing -->
+                                <div class="card p-5">
+                                    <div class="flex items-start justify-between mb-5">
+                                        <div>
+                                            <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-1">Now Playing</div>
+                                            <div class="text-xl font-semibold font-tech text-[var(--gold)]" id="current-effect">Aurora</div>
+                                            <div class="text-xs text-[var(--text-secondary)] mt-0.5" id="current-category">LGP Advanced</div>
+                                        </div>
+                                        <div class="text-right">
+                                            <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-1">Palette</div>
+                                            <div class="text-sm font-medium text-[var(--text-primary)]" id="current-palette">Ocean Breeze</div>
+                                            <div id="current-palette-preview" class="h-2 w-24 rounded-full mt-1.5" style="background: linear-gradient(90deg, #0a0607, #016f8f, #91d1ff);"></div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="space-y-4">
+                                        <div>
+                                            <div class="flex justify-between text-xs mb-2">
+                                                <span class="font-display uppercase tracking-wide text-[var(--text-muted)]">Master Brightness</span>
+                                                <span class="font-tech text-[var(--text-primary)]" id="brightness-value">128</span>
+                                            </div>
+                                            <input type="range" min="0" max="255" value="128" id="brightness-slider">
+                                        </div>
+                                        <div>
+                                            <div class="flex justify-between text-xs mb-2">
+                                                <span class="font-display uppercase tracking-wide text-[var(--text-muted)]">Global Speed</span>
+                                                <span class="font-tech text-[var(--text-primary)]" id="speed-value">25</span>
+                                            </div>
+                                            <input type="range" min="1" max="50" value="25" id="speed-slider">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Zone Mixer -->
+                                <div class="card p-5">
+                                    <div class="flex items-center justify-between mb-4">
+                                        <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)]">Zone Mixer</div>
+                                        <select class="text-xs bg-[var(--bg-elevated)] border border-white/5 rounded px-2 py-1 text-[var(--text-secondary)] font-tech" id="sync-mode">
+                                            <option value="1">Synchronized</option>
+                                            <option value="2">Mirrored</option>
+                                            <option value="0">Independent</option>
+                                            <option value="3">Chase</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="grid grid-cols-3 gap-6">
+                                        <div class="text-center">
+                                            <div class="relative h-20 flex items-end justify-center mb-3">
+                                                <div class="w-3 rounded-t-sm transition-all zone-bar" data-zone="0" style="height: 75%; background: var(--zone-1);"></div>
+                                            </div>
+                                            <div class="w-2.5 h-2.5 rounded-full mx-auto mb-1" style="background: var(--zone-1); box-shadow: 0 0 12px var(--zone-1);"></div>
+                                            <div class="text-xs font-semibold">Bass</div>
+                                            <div class="text-[9px] text-[var(--text-muted)] font-tech">LED 54–104</div>
+                                        </div>
+                                        <div class="text-center">
+                                            <div class="relative h-20 flex items-end justify-center mb-3">
+                                                <div class="w-3 rounded-t-sm transition-all zone-bar" data-zone="1" style="height: 55%; background: var(--zone-2);"></div>
+                                            </div>
+                                            <div class="w-2.5 h-2.5 rounded-full mx-auto mb-1" style="background: var(--zone-2); box-shadow: 0 0 12px var(--zone-2);"></div>
+                                            <div class="text-xs font-semibold">Mid</div>
+                                            <div class="text-[9px] text-[var(--text-muted)] font-tech">LED 27–53</div>
+                                        </div>
+                                        <div class="text-center">
+                                            <div class="relative h-20 flex items-end justify-center mb-3">
+                                                <div class="w-3 rounded-t-sm transition-all zone-bar" data-zone="2" style="height: 35%; background: var(--zone-3);"></div>
+                                            </div>
+                                            <div class="w-2.5 h-2.5 rounded-full mx-auto mb-1" style="background: var(--zone-3); box-shadow: 0 0 12px var(--zone-3);"></div>
+                                            <div class="text-xs font-semibold">High</div>
+                                            <div class="text-[9px] text-[var(--text-muted)] font-tech">LED 0–26</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Visual Pipeline -->
+                                <details class="card overflow-hidden group" open>
+                                    <summary class="flex items-center justify-between p-5 cursor-pointer select-none list-none hover:bg-white/[0.02] transition-colors">
+                                        <span class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)]">Visual Pipeline</span>
+                                        <span class="iconify text-[var(--text-muted)] group-open:rotate-180 transition-transform" data-icon="lucide:chevron-down" data-width="14"></span>
+                                    </summary>
+                                    <div class="px-5 pb-5 grid grid-cols-2 gap-4">
+                                        <div>
+                                            <div class="flex justify-between text-[10px] mb-1.5">
+                                                <span class="font-display uppercase tracking-wide text-[var(--text-muted)]">Intensity</span>
+                                                <span class="font-tech text-[var(--text-secondary)]">1.00</span>
+                                            </div>
+                                            <input type="range" min="0" max="200" value="100">
+                                        </div>
+                                        <div>
+                                            <div class="flex justify-between text-[10px] mb-1.5">
+                                                <span class="font-display uppercase tracking-wide text-[var(--text-muted)]">Saturation</span>
+                                                <span class="font-tech text-[var(--text-secondary)]">1.00</span>
+                                            </div>
+                                            <input type="range" min="0" max="200" value="100">
+                                        </div>
+                                        <div>
+                                            <div class="flex justify-between text-[10px] mb-1.5">
+                                                <span class="font-display uppercase tracking-wide text-[var(--text-muted)]">Complexity</span>
+                                                <span class="font-tech text-[var(--text-secondary)]">0.50</span>
+                                            </div>
+                                            <input type="range" min="0" max="100" value="50">
+                                        </div>
+                                        <div>
+                                            <div class="flex justify-between text-[10px] mb-1.5">
+                                                <span class="font-display uppercase tracking-wide text-[var(--text-muted)]">Variation</span>
+                                                <span class="font-tech text-[var(--text-secondary)]">0.50</span>
+                                            </div>
+                                            <input type="range" min="0" max="100" value="50">
+                                        </div>
+                                    </div>
+                                </details>
+                            </div>
+
+                            <!-- Quick Access & Effect Browser -->
+                            <div class="col-span-5 space-y-5">
+                                <div class="card p-4">
+                                    <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-3">Quick Access</div>
+                                    <div class="grid grid-cols-5 gap-2">
+                                        <button class="flex flex-col items-center gap-1.5 p-2.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-white/[0.06] transition-colors group">
+                                            <span class="iconify text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]" data-icon="lucide:heart-pulse" data-width="18"></span>
+                                            <span class="text-[9px] text-[var(--text-muted)]">Pulse</span>
+                                        </button>
+                                        <button class="flex flex-col items-center gap-1.5 p-2.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-white/[0.06] transition-colors group">
+                                            <span class="iconify text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]" data-icon="lucide:waves" data-width="18"></span>
+                                            <span class="text-[9px] text-[var(--text-muted)]">Wave</span>
+                                        </button>
+                                        <button class="flex flex-col items-center gap-1.5 p-2.5 rounded-lg bg-[var(--gold-glow)] border border-[var(--gold)]/30 transition-colors">
+                                            <span class="iconify text-[var(--gold)]" data-icon="lucide:sparkles" data-width="18"></span>
+                                            <span class="text-[9px] text-[var(--gold)]">Aurora</span>
+                                        </button>
+                                        <button class="flex flex-col items-center gap-1.5 p-2.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-white/[0.06] transition-colors group">
+                                            <span class="iconify text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]" data-icon="lucide:flame" data-width="18"></span>
+                                            <span class="text-[9px] text-[var(--text-muted)]">Fire</span>
+                                        </button>
+                                        <button class="flex flex-col items-center gap-1.5 p-2.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-white/[0.06] transition-colors group">
+                                            <span class="iconify text-[var(--text-secondary)] group-hover:text-[var(--text-primary)]" data-icon="lucide:scan-line" data-width="18"></span>
+                                            <span class="text-[9px] text-[var(--text-muted)]">Scan</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="card p-4 flex flex-col" style="height: 340px;">
+                                    <div class="flex items-center gap-2 mb-3 flex-wrap">
+                                        <span class="chip active">All</span>
+                                        <span class="chip">Classic</span>
+                                        <span class="chip">LGP</span>
+                                        <span class="chip">Physics</span>
+                                        <span class="chip">Quantum</span>
+                                    </div>
+                                    
+                                    <div class="flex-1 overflow-y-auto space-y-0.5" id="effect-list">
+                                        <!-- Effects populated by JS -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════════════════════════════════════════════════════
+                         TAB: EFFECTS
+                         ═══════════════════════════════════════════════════════════════ -->
+                    <div id="tab-effects" class="tab-content">
+                        <div class="mb-6">
+                            <h2 class="text-lg font-semibold font-tech mb-1">Effect Library</h2>
+                            <p class="text-sm text-[var(--text-secondary)]">50+ effects across 6 categories</p>
+                        </div>
+                        
+                        <div class="flex items-center gap-2 mb-5 flex-wrap">
+                            <span class="chip active" data-category="all">All · 50</span>
+                            <span class="chip" data-category="classic">Classic · 5</span>
+                            <span class="chip" data-category="lgp">LGP · 20</span>
+                            <span class="chip" data-category="physics">Physics · 10</span>
+                            <span class="chip" data-category="quantum">Quantum · 9</span>
+                            <span class="chip" data-category="audio">Audio · 6</span>
+                        </div>
+
+                        <div class="grid grid-cols-3 gap-3" id="effects-grid">
+                            <!-- Effects populated by JS -->
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════════════════════════════════════════════════════
+                         TAB: PALETTES
+                         ═══════════════════════════════════════════════════════════════ -->
+                    <div id="tab-palettes" class="tab-content">
+                        <div class="flex items-start justify-between mb-6">
+                            <div>
+                                <h2 class="text-lg font-semibold font-tech mb-1">Color Palettes</h2>
+                                <p class="text-sm text-[var(--text-secondary)]">33 gradient palettes</p>
+                            </div>
+                            <div class="card p-4 flex items-center gap-4">
+                                <div>
+                                    <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-1">Auto Cycle</div>
+                                    <div class="toggle active" id="palette-autocycle"></div>
+                                </div>
+                                <div>
+                                    <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-1">Interval</div>
+                                    <select class="text-xs bg-[var(--bg-elevated)] border border-white/5 rounded px-2 py-1 text-[var(--text-secondary)] font-tech">
+                                        <option>5s</option>
+                                        <option>10s</option>
+                                        <option>30s</option>
+                                        <option>60s</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-4 gap-3" id="palette-grid">
+                            <!-- Palettes populated by JS -->
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════════════════════════════════════════════════════
+                         TAB: TRANSITIONS
+                         ═══════════════════════════════════════════════════════════════ -->
+                    <div id="tab-transitions" class="tab-content">
+                        <div class="flex items-start justify-between mb-6">
+                            <div>
+                                <h2 class="text-lg font-semibold font-tech mb-1">Transitions</h2>
+                                <p class="text-sm text-[var(--text-secondary)]">12 CENTER ORIGIN transition types</p>
+                            </div>
+                            <div class="card p-4 flex items-center gap-4">
+                                <div>
+                                    <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-1">Random</div>
+                                    <div class="toggle" id="transition-random"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-12 gap-5">
+                            <div class="col-span-8">
+                                <div class="grid grid-cols-4 gap-3" id="transition-grid">
+                                    <!-- Transitions populated by JS -->
+                                </div>
+                            </div>
+                            <div class="col-span-4 space-y-4">
+                                <div class="card p-5">
+                                    <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-4">Settings</div>
+                                    <div class="space-y-4">
+                                        <div>
+                                            <div class="flex justify-between text-xs mb-2">
+                                                <span class="font-display uppercase tracking-wide text-[var(--text-muted)]">Duration</span>
+                                                <span class="font-tech text-[var(--text-primary)]">2000ms</span>
+                                            </div>
+                                            <input type="range" min="500" max="5000" value="2000" step="100" id="transition-duration">
+                                        </div>
+                                        <div>
+                                            <div class="text-[10px] font-display uppercase tracking-wide text-[var(--text-muted)] mb-2">Easing Curve</div>
+                                            <select class="w-full text-xs bg-[var(--bg-elevated)] border border-white/5 rounded px-3 py-2 text-[var(--text-secondary)] font-tech" id="transition-easing">
+                                                <option>Linear</option>
+                                                <option>Ease In Quad</option>
+                                                <option>Ease Out Quad</option>
+                                                <option>Ease In Out Quad</option>
+                                                <option>Ease In Cubic</option>
+                                                <option>Ease Out Cubic</option>
+                                                <option selected>Ease Out Elastic</option>
+                                                <option>Ease Out Bounce</option>
+                                                <option>Ease In Back</option>
+                                                <option>Ease Out Back</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="card p-5">
+                                    <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-3">Preview</div>
+                                    <div class="h-16 rounded-lg bg-[var(--bg-elevated)] relative overflow-hidden" id="transition-preview">
+                                        <div class="absolute inset-0 flex items-center justify-center">
+                                            <div class="w-1 h-full bg-[var(--gold)] transition-preview-line"></div>
+                                        </div>
+                                    </div>
+                                    <button class="w-full mt-3 py-2 rounded-lg bg-[var(--bg-elevated)] text-xs font-display uppercase tracking-wide text-[var(--text-secondary)] hover:bg-white/[0.06] transition-colors">
+                                        Test Transition
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════════════════════════════════════════════════════
+                         TAB: PERFORMANCE
+                         ═══════════════════════════════════════════════════════════════ -->
+                    <div id="tab-performance" class="tab-content">
+                        <div class="mb-6">
+                            <h2 class="text-lg font-semibold font-tech mb-1">Performance Monitor</h2>
+                            <p class="text-sm text-[var(--text-secondary)]">Real-time system metrics</p>
+                        </div>
+
+                        <div class="grid grid-cols-4 gap-4 mb-6">
+                            <div class="card p-5 text-center">
+                                <div class="stat-gauge mx-auto mb-3">
+                                    <svg width="80" height="80" viewBox="0 0 80 80">
+                                        <circle cx="40" cy="40" r="35" fill="none" stroke="var(--bg-elevated)" stroke-width="6"/>
+                                        <circle cx="40" cy="40" r="35" fill="none" stroke="var(--success)" stroke-width="6" stroke-dasharray="220" stroke-dashoffset="44" stroke-linecap="round"/>
+                                    </svg>
+                                    <div class="value">
+                                        <span class="text-2xl font-bold font-tech">120</span>
+                                    </div>
+                                </div>
+                                <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)]">FPS</div>
+                            </div>
+                            <div class="card p-5 text-center">
+                                <div class="stat-gauge mx-auto mb-3">
+                                    <svg width="80" height="80" viewBox="0 0 80 80">
+                                        <circle cx="40" cy="40" r="35" fill="none" stroke="var(--bg-elevated)" stroke-width="6"/>
+                                        <circle cx="40" cy="40" r="35" fill="none" stroke="var(--gold)" stroke-width="6" stroke-dasharray="220" stroke-dashoffset="127" stroke-linecap="round"/>
+                                    </svg>
+                                    <div class="value">
+                                        <span class="text-2xl font-bold font-tech">42</span>
+                                        <span class="text-xs text-[var(--text-muted)]">%</span>
+                                    </div>
+                                </div>
+                                <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)]">CPU</div>
+                            </div>
+                            <div class="card p-5 text-center">
+                                <div class="stat-gauge mx-auto mb-3">
+                                    <svg width="80" height="80" viewBox="0 0 80 80">
+                                        <circle cx="40" cy="40" r="35" fill="none" stroke="var(--bg-elevated)" stroke-width="6"/>
+                                        <circle cx="40" cy="40" r="35" fill="none" stroke="var(--info)" stroke-width="6" stroke-dasharray="220" stroke-dashoffset="88" stroke-linecap="round"/>
+                                    </svg>
+                                    <div class="value">
+                                        <span class="text-2xl font-bold font-tech">156</span>
+                                        <span class="text-[9px] text-[var(--text-muted)]">KB</span>
+                                    </div>
+                                </div>
+                                <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)]">Free Heap</div>
+                            </div>
+                            <div class="card p-5 text-center">
+                                <div class="stat-gauge mx-auto mb-3">
+                                    <svg width="80" height="80" viewBox="0 0 80 80">
+                                        <circle cx="40" cy="40" r="35" fill="none" stroke="var(--bg-elevated)" stroke-width="6"/>
+                                        <circle cx="40" cy="40" r="35" fill="none" stroke="var(--success)" stroke-width="6" stroke-dasharray="220" stroke-dashoffset="198" stroke-linecap="round"/>
+                                    </svg>
+                                    <div class="value">
+                                        <span class="text-2xl font-bold font-tech">12</span>
+                                        <span class="text-xs text-[var(--text-muted)]">%</span>
+                                    </div>
+                                </div>
+                                <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)]">Fragmentation</div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-5">
+                            <div class="card p-5">
+                                <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-4">Timing Metrics</div>
+                                <div class="space-y-3">
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-[var(--text-secondary)]">Effect Processing</span>
+                                        <span class="font-tech text-sm">1,234 µs</span>
+                                    </div>
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-[var(--text-secondary)]">FastLED Show</span>
+                                        <span class="font-tech text-sm">3,200 µs</span>
+                                    </div>
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-[var(--text-secondary)]">Frame Budget</span>
+                                        <span class="font-tech text-sm">8,333 µs</span>
+                                    </div>
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-[var(--text-secondary)]">Data Rate</span>
+                                        <span class="font-tech text-sm">7.68 Mbps</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card p-5">
+                                <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-4">Health Status</div>
+                                <div class="space-y-3">
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-[var(--text-secondary)]">Dropped Frames</span>
+                                        <span class="font-tech text-sm text-[var(--success)]">0</span>
+                                    </div>
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-[var(--text-secondary)]">Min Free Heap</span>
+                                        <span class="font-tech text-sm">85,420 bytes</span>
+                                    </div>
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-[var(--text-secondary)]">Uptime</span>
+                                        <span class="font-tech text-sm">4h 32m</span>
+                                    </div>
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-[var(--text-secondary)]">Temperature</span>
+                                        <span class="font-tech text-sm">42°C</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════════════════════════════════════════════════════
+                         TAB: NETWORK
+                         ═══════════════════════════════════════════════════════════════ -->
+                    <div id="tab-network" class="tab-content">
+                        <div class="mb-6">
+                            <h2 class="text-lg font-semibold font-tech mb-1">Network Settings</h2>
+                            <p class="text-sm text-[var(--text-secondary)]">WiFi configuration and diagnostics</p>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-5">
+                            <div class="card p-5">
+                                <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-4">Current Connection</div>
+                                <div class="space-y-4">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-10 h-10 rounded-lg bg-[var(--success)]/20 flex items-center justify-center">
+                                            <span class="iconify text-[var(--success)]" data-icon="lucide:wifi" data-width="20"></span>
+                                        </div>
+                                        <div>
+                                            <div class="font-medium">HomeNetwork_5G</div>
+                                            <div class="text-xs text-[var(--text-secondary)]">Connected · -42 dBm</div>
+                                        </div>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-4 pt-2 border-t border-white/5">
+                                        <div>
+                                            <div class="text-[10px] text-[var(--text-muted)] uppercase tracking-wide mb-1">IP Address</div>
+                                            <div class="font-tech text-sm">192.168.1.42</div>
+                                        </div>
+                                        <div>
+                                            <div class="text-[10px] text-[var(--text-muted)] uppercase tracking-wide mb-1">mDNS</div>
+                                            <div class="font-tech text-sm">lightwaveos.local</div>
+                                        </div>
+                                        <div>
+                                            <div class="text-[10px] text-[var(--text-muted)] uppercase tracking-wide mb-1">MAC Address</div>
+                                            <div class="font-tech text-sm">A4:CF:12:8B:3E:F1</div>
+                                        </div>
+                                        <div>
+                                            <div class="text-[10px] text-[var(--text-muted)] uppercase tracking-wide mb-1">Gateway</div>
+                                            <div class="font-tech text-sm">192.168.1.1</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card p-5">
+                                <div class="flex items-center justify-between mb-4">
+                                    <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)]">Available Networks</div>
+                                    <button class="text-xs font-display uppercase tracking-wide text-[var(--gold)] hover:text-[var(--gold-highlight)] flex items-center gap-1">
+                                        <span class="iconify" data-icon="lucide:refresh-cw" data-width="12"></span>
+                                        Scan
+                                    </button>
+                                </div>
+                                <div class="space-y-2">
+                                    <div class="flex items-center justify-between p-2 rounded-lg bg-[var(--gold-glow)] border border-[var(--gold)]/30">
+                                        <div class="flex items-center gap-2">
+                                            <span class="iconify text-[var(--gold)]" data-icon="lucide:wifi" data-width="16"></span>
+                                            <span class="text-sm">HomeNetwork_5G</span>
+                                        </div>
+                                        <span class="text-xs text-[var(--text-muted)]">-42 dBm</span>
+                                    </div>
+                                    <div class="flex items-center justify-between p-2 rounded-lg hover:bg-[var(--bg-elevated)] cursor-pointer">
+                                        <div class="flex items-center gap-2">
+                                            <span class="iconify text-[var(--text-muted)]" data-icon="lucide:wifi" data-width="16"></span>
+                                            <span class="text-sm text-[var(--text-secondary)]">HomeNetwork_2G</span>
+                                        </div>
+                                        <span class="text-xs text-[var(--text-muted)]">-58 dBm</span>
+                                    </div>
+                                    <div class="flex items-center justify-between p-2 rounded-lg hover:bg-[var(--bg-elevated)] cursor-pointer">
+                                        <div class="flex items-center gap-2">
+                                            <span class="iconify text-[var(--text-muted)]" data-icon="lucide:wifi" data-width="16"></span>
+                                            <span class="text-sm text-[var(--text-secondary)]">Neighbor_WiFi</span>
+                                        </div>
+                                        <span class="text-xs text-[var(--text-muted)]">-76 dBm</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════════════════════════════════════════════════════
+                         TAB: FIRMWARE
+                         ═══════════════════════════════════════════════════════════════ -->
+                    <div id="tab-firmware" class="tab-content">
+                        <div class="mb-6">
+                            <h2 class="text-lg font-semibold font-tech mb-1">Firmware</h2>
+                            <p class="text-sm text-[var(--text-secondary)]">Device information and updates</p>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-5">
+                            <div class="card p-5">
+                                <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-4">Device Info</div>
+                                <div class="space-y-3">
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-[var(--text-secondary)]">Device</span>
+                                        <span class="font-tech text-sm">K1-Lightwave</span>
+                                    </div>
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-[var(--text-secondary)]">Firmware</span>
+                                        <span class="font-tech text-sm">v1.4.2</span>
+                                    </div>
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-[var(--text-secondary)]">Build Date</span>
+                                        <span class="font-tech text-sm">2025-12-10</span>
+                                    </div>
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-[var(--text-secondary)]">Platform</span>
+                                        <span class="font-tech text-sm">ESP32-S3</span>
+                                    </div>
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-sm text-[var(--text-secondary)]">Flash Size</span>
+                                        <span class="font-tech text-sm">16 MB</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card p-5">
+                                <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-4">Feature Flags</div>
+                                <div class="space-y-2">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-sm text-[var(--text-secondary)]">Dual Strip</span>
+                                        <span class="text-xs font-tech px-2 py-0.5 rounded bg-[var(--success)]/20 text-[var(--success)]">Enabled</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-sm text-[var(--text-secondary)]">Physics Sim</span>
+                                        <span class="text-xs font-tech px-2 py-0.5 rounded bg-[var(--success)]/20 text-[var(--success)]">Enabled</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-sm text-[var(--text-secondary)]">Enhancement Engines</span>
+                                        <span class="text-xs font-tech px-2 py-0.5 rounded bg-[var(--text-muted)]/20 text-[var(--text-muted)]">Disabled</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-sm text-[var(--text-secondary)]">Audio Effects</span>
+                                        <span class="text-xs font-tech px-2 py-0.5 rounded bg-[var(--text-muted)]/20 text-[var(--text-muted)]">Awaiting HW</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-sm text-[var(--text-secondary)]">Performance Monitor</span>
+                                        <span class="text-xs font-tech px-2 py-0.5 rounded bg-[var(--success)]/20 text-[var(--success)]">Enabled</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card p-5 mt-5">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <div class="text-[10px] font-display uppercase tracking-k1 text-[var(--text-muted)] mb-1">OTA Update</div>
+                                    <div class="text-sm text-[var(--text-secondary)]">Upload new firmware via browser</div>
+                                </div>
+                                <label class="px-4 py-2 rounded-lg bg-[var(--bg-elevated)] text-sm font-display uppercase tracking-wide text-[var(--text-secondary)] hover:bg-white/[0.06] cursor-pointer transition-colors">
+                                    <input type="file" class="hidden" accept=".bin">
+                                    Select File
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Preset Bar -->
+            <div class="border-t border-white/5 px-6 py-4" style="background: linear-gradient(180deg, #0a0a0a 0%, #000 100%);">
+                <div class="max-w-5xl mx-auto flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <button class="preset-btn">P0</button>
+                        <button class="preset-btn">P1</button>
+                        <button class="preset-btn active">P2</button>
+                        <button class="preset-btn">P3</button>
+                        <button class="preset-btn">P4</button>
+                        <button class="preset-btn ml-2 flex items-center justify-center" title="Save Preset">
+                            <span class="iconify" data-icon="lucide:save" data-width="14"></span>
+                        </button>
+                    </div>
+                    
+                    <button class="w-12 h-12 rounded-xl flex items-center justify-center bg-[var(--gold)] text-black glow-gold transition-transform hover:scale-105" aria-label="Power">
+                        <span class="iconify" data-icon="lucide:power" data-width="20"></span>
+                    </button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // ═══════════════════════════════════════════════════════════════════════════
+        // DATA
+        // ═══════════════════════════════════════════════════════════════════════════
+        
+        const EFFECTS = [
+            { id: 0, name: 'Solid Color', category: 'classic' },
+            { id: 1, name: 'Rainbow', category: 'classic' },
+            { id: 2, name: 'Pulse', category: 'classic' },
+            { id: 3, name: 'Breathe', category: 'classic' },
+            { id: 4, name: 'Color Wipe', category: 'classic' },
+            { id: 5, name: 'Shockwave', category: 'lgp' },
+            { id: 6, name: 'Ripple Burst', category: 'lgp' },
+            { id: 7, name: 'Dual Shockwave', category: 'lgp' },
+            { id: 8, name: 'Strip Interference', category: 'lgp' },
+            { id: 9, name: 'Phase Collision', category: 'lgp' },
+            { id: 10, name: 'Wave Cancellation', category: 'lgp' },
+            { id: 11, name: 'Moiré Drift', category: 'lgp' },
+            { id: 12, name: 'Geometric Pulse', category: 'lgp' },
+            { id: 13, name: 'Angular Sweep', category: 'lgp' },
+            { id: 14, name: 'Radial Segments', category: 'lgp' },
+            { id: 15, name: 'Aurora', category: 'lgp' },
+            { id: 16, name: 'Plasma Fire', category: 'lgp' },
+            { id: 17, name: 'Nebula', category: 'lgp' },
+            { id: 18, name: 'Stargate Portal', category: 'lgp' },
+            { id: 19, name: 'Electric Storm', category: 'lgp' },
+            { id: 20, name: 'Lava Flow', category: 'lgp' },
+            { id: 21, name: 'Organic Growth', category: 'lgp' },
+            { id: 22, name: 'Cell Division', category: 'lgp' },
+            { id: 23, name: 'Bioluminescence', category: 'lgp' },
+            { id: 24, name: 'Quantum Collapse', category: 'quantum' },
+            { id: 25, name: 'Probability Wave', category: 'quantum' },
+            { id: 26, name: 'Superposition', category: 'quantum' },
+            { id: 27, name: 'Entanglement', category: 'quantum' },
+            { id: 28, name: 'Tunneling', category: 'quantum' },
+            { id: 29, name: 'Wavefunction', category: 'quantum' },
+            { id: 30, name: 'Zero Point', category: 'quantum' },
+            { id: 31, name: 'Spin State', category: 'quantum' },
+            { id: 32, name: 'Observer Effect', category: 'quantum' },
+            { id: 33, name: 'Color Diffusion', category: 'physics' },
+            { id: 34, name: 'Thermal Gradient', category: 'physics' },
+            { id: 35, name: 'Gravity Well', category: 'physics' },
+            { id: 36, name: 'Tidal Forces', category: 'physics' },
+            { id: 37, name: 'Momentum Transfer', category: 'physics' },
+            { id: 38, name: 'Friction Decay', category: 'physics' },
+            { id: 39, name: 'Spring Oscillation', category: 'physics' },
+            { id: 40, name: 'Pendulum', category: 'physics' },
+            { id: 41, name: 'Fluid Dynamics', category: 'physics' },
+            { id: 42, name: 'Particle System', category: 'physics' },
+            { id: 46, name: 'Beat Interference', category: 'audio' },
+            { id: 47, name: 'Spectral Morph', category: 'audio' },
+            { id: 48, name: 'Rhythm Waves', category: 'audio' },
+            { id: 49, name: 'FFT Color Map', category: 'audio' },
+            { id: 50, name: 'Kick Shockwave', category: 'audio' },
+            { id: 51, name: 'Harmonic Resonance', category: 'audio' },
+        ];
+
+        const PALETTES = [
+            { id: 0, name: 'Sunset Real', gradient: 'linear-gradient(90deg, #120126, #4a0d67, #f0451e, #ffaa00)' },
+            { id: 1, name: 'Rivendell', gradient: 'linear-gradient(90deg, #1a3329, #2d5a4a, #4a9375, #8fd9bc)' },
+            { id: 2, name: 'Ocean Breeze', gradient: 'linear-gradient(90deg, #0a0607, #016f8f, #91d1ff)' },
+            { id: 3, name: 'RGI 15', gradient: 'linear-gradient(90deg, #ff0000, #00ff00, #0000ff)' },
+            { id: 4, name: 'Retro 2', gradient: 'linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb, #ff9ff3)' },
+            { id: 5, name: 'Analogous 1', gradient: 'linear-gradient(90deg, #ff6b35, #ff9f1c, #ffbf69)' },
+            { id: 6, name: 'Pink Splash', gradient: 'linear-gradient(90deg, #ff006e, #fb5607, #ffbe0b)' },
+            { id: 7, name: 'Coral Reef', gradient: 'linear-gradient(90deg, #ff6f61, #ffb347, #40e0d0)' },
+            { id: 8, name: 'Vintage 01', gradient: 'linear-gradient(90deg, #2c1320, #6b2d5c, #f0433a, #c9ada7)' },
+            { id: 9, name: 'Departure', gradient: 'linear-gradient(90deg, #1a1a2e, #16213e, #0f3460, #e94560)' },
+            { id: 10, name: 'Landscape 64', gradient: 'linear-gradient(90deg, #114357, #f29492)' },
+            { id: 11, name: 'Landscape 33', gradient: 'linear-gradient(90deg, #c33764, #1d2671)' },
+            { id: 12, name: 'Rainbow Sherbet', gradient: 'linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb, #ff9ff3, #a29bfe)' },
+            { id: 13, name: 'GR65 Hult', gradient: 'linear-gradient(90deg, #1a1a2e, #4a00e0, #8e2de2)' },
+            { id: 14, name: 'GR64 Hult', gradient: 'linear-gradient(90deg, #000428, #004e92)' },
+            { id: 15, name: 'GMT Dry Wet', gradient: 'linear-gradient(90deg, #3e2723, #795548, #4caf50, #2196f3)' },
+            { id: 16, name: 'IB Jul01', gradient: 'linear-gradient(90deg, #e52d27, #b31217)' },
+            { id: 17, name: 'Vintage 57', gradient: 'linear-gradient(90deg, #f5af19, #f12711)' },
+            { id: 18, name: 'IB15', gradient: 'linear-gradient(90deg, #ee0979, #ff6a00)' },
+            { id: 19, name: 'Fuschia 7', gradient: 'linear-gradient(90deg, #c471f5, #fa71cd)' },
+            { id: 20, name: 'Emerald Dragon', gradient: 'linear-gradient(90deg, #134e5e, #71b280)' },
+            { id: 21, name: 'Lava', gradient: 'linear-gradient(90deg, #000000, #8b0000, #ff4500, #ffd700)' },
+            { id: 22, name: 'Fire', gradient: 'linear-gradient(90deg, #000000, #8b0000, #ff4500, #ffff00)' },
+            { id: 23, name: 'Colorful', gradient: 'linear-gradient(90deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #8b00ff)' },
+            { id: 24, name: 'Magenta Evening', gradient: 'linear-gradient(90deg, #1a0533, #4b0082, #9932cc, #ff00ff)' },
+            { id: 25, name: 'Pink Purple', gradient: 'linear-gradient(90deg, #ff6ec7, #7873f5)' },
+            { id: 26, name: 'Autumn 19', gradient: 'linear-gradient(90deg, #8b4513, #d2691e, #ff8c00, #ffd700)' },
+            { id: 27, name: 'Blue Magenta White', gradient: 'linear-gradient(90deg, #0000ff, #ff00ff, #ffffff)' },
+            { id: 28, name: 'Black Magenta Red', gradient: 'linear-gradient(90deg, #000000, #ff00ff, #ff0000)' },
+            { id: 29, name: 'Red Magenta Yellow', gradient: 'linear-gradient(90deg, #ff0000, #ff00ff, #ffff00)' },
+            { id: 30, name: 'Blue Cyan Yellow', gradient: 'linear-gradient(90deg, #0000ff, #00ffff, #ffff00)' },
+            { id: 31, name: 'Party', gradient: 'linear-gradient(90deg, #ff00ff, #00ff00, #00ffff, #ff0000)' },
+            { id: 32, name: 'Cloud', gradient: 'linear-gradient(90deg, #4169e1, #87ceeb, #ffffff, #f0f8ff)' },
+        ];
+
+        const TRANSITIONS = [
+            { id: 0, name: 'Fade', icon: 'lucide:blend' },
+            { id: 1, name: 'Wipe Out', icon: 'lucide:move-horizontal' },
+            { id: 2, name: 'Wipe In', icon: 'lucide:shrink' },
+            { id: 3, name: 'Dissolve', icon: 'lucide:sparkles' },
+            { id: 4, name: 'Phase Shift', icon: 'lucide:waves' },
+            { id: 5, name: 'Pulsewave', icon: 'lucide:activity' },
+            { id: 6, name: 'Implosion', icon: 'lucide:target' },
+            { id: 7, name: 'Iris', icon: 'lucide:eye' },
+            { id: 8, name: 'Nuclear', icon: 'lucide:atom' },
+            { id: 9, name: 'Stargate', icon: 'lucide:circle-dot' },
+            { id: 10, name: 'Kaleidoscope', icon: 'lucide:hexagon' },
+            { id: 11, name: 'Mandala', icon: 'lucide:flower-2' },
+        ];
+
+        let currentEffect = 15; // Aurora
+        let currentPalette = 2; // Ocean Breeze
+        let currentTransition = 9; // Stargate
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // CANVAS - CENTER ORIGIN VISUALIZATION
+        // ═══════════════════════════════════════════════════════════════════════════
+        
+        const canvas = document.getElementById('viz-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        function setupCanvas() {
+            const dpr = window.devicePixelRatio || 1;
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+        }
+        
+        function drawVisualizer() {
+            const width = canvas.width / (window.devicePixelRatio || 1);
+            const height = canvas.height / (window.devicePixelRatio || 1);
+            ctx.clearRect(0, 0, width, height);
+            
+            ctx.fillStyle = '#0a0a0a';
+            ctx.fillRect(0, 0, width, height);
+            
+            const ledCount = 160;
+            const center = ledCount / 2; // LED 79-80 is center
+            const ledW = width / ledCount;
+            const ledH = height * 0.6;
+            const stripY = height / 2;
+            
+            const time = Date.now() / 1000;
+            
+            // Zone colors
+            const colors = ['#4DFFB8', '#FFB84D', '#4D88FF'];
+            
+            for (let i = 0; i < ledCount; i++) {
+                // CENTER ORIGIN: Distance from center point
+                const distFromCenter = Math.abs(i - center);
+                const normalizedDist = distFromCenter / center;
+                
+                // Zone assignment based on distance from center
+                let colorIndex, baseAlpha;
+                if (distFromCenter < 26) {
+                    colorIndex = 0; // Bass - innermost (green)
+                    baseAlpha = 0.9;
+                } else if (distFromCenter < 52) {
+                    colorIndex = 1; // Mid (gold)
+                    baseAlpha = 0.7;
+                } else {
+                    colorIndex = 2; // High - outermost (blue)
+                    baseAlpha = 0.5;
+                }
+                
+                // CENTER ORIGIN animation: waves emanate FROM center OUTWARD
+                const waveSpeed = 3;
+                const wavePhase = distFromCenter * 0.15 - time * waveSpeed;
+                const wave = (Math.sin(wavePhase) + 1) / 2;
+                
+                // Secondary pulse also from center
+                const pulsePhase = distFromCenter * 0.08 - time * 2;
+                const pulse = (Math.sin(pulsePhase) + 1) / 2;
+                
+                // Combine effects
+                const intensity = 0.2 + 0.8 * wave * (0.5 + 0.5 * pulse);
+                const finalAlpha = baseAlpha * intensity;
+                
+                ctx.fillStyle = colors[colorIndex];
+                ctx.globalAlpha = Math.max(0.05, finalAlpha);
+                ctx.fillRect(i * ledW + 0.5, stripY - ledH/2, ledW - 1, ledH);
+            }
+            
+            // Center marker glow
+            const centerX = center * ledW;
+            const gradient = ctx.createRadialGradient(centerX, stripY, 0, centerX, stripY, 40);
+            gradient.addColorStop(0, 'rgba(77, 255, 184, 0.3)');
+            gradient.addColorStop(1, 'rgba(77, 255, 184, 0)');
+            ctx.globalAlpha = 0.5 + 0.3 * Math.sin(time * 2);
+            ctx.fillStyle = gradient;
+            ctx.fillRect(centerX - 40, stripY - 40, 80, 80);
+            
+            ctx.globalAlpha = 1;
+            requestAnimationFrame(drawVisualizer);
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // UI POPULATION
+        // ═══════════════════════════════════════════════════════════════════════════
+        
+        function populateEffectList() {
+            const container = document.getElementById('effect-list');
+            container.innerHTML = EFFECTS.slice(0, 12).map(e => `
+                <div class="effect-item ${e.id === currentEffect ? 'active' : ''}" data-id="${e.id}">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="text-sm font-medium">${e.name}</div>
+                            <div class="text-[10px] text-[var(--text-muted)] capitalize">${e.category}</div>
+                        </div>
+                        ${e.id === currentEffect ? '<span class="iconify text-[var(--gold)]" data-icon="lucide:check" data-width="14"></span>' : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function populateEffectsGrid() {
+            const container = document.getElementById('effects-grid');
+            container.innerHTML = EFFECTS.map(e => `
+                <div class="effect-item ${e.id === currentEffect ? 'active' : ''}" data-id="${e.id}">
+                    <div class="text-sm font-medium">${e.name}</div>
+                    <div class="text-[10px] text-[var(--text-muted)] capitalize">${e.category}</div>
+                </div>
+            `).join('');
+        }
+
+        function populatePaletteGrid() {
+            const container = document.getElementById('palette-grid');
+            container.innerHTML = PALETTES.map(p => `
+                <div class="palette-swatch ${p.id === currentPalette ? 'selected' : ''}" data-id="${p.id}" style="background: ${p.gradient};">
+                    <span class="palette-name">${p.name}</span>
+                </div>
+            `).join('');
+        }
+
+        function populateTransitionGrid() {
+            const container = document.getElementById('transition-grid');
+            container.innerHTML = TRANSITIONS.map(t => `
+                <div class="transition-card ${t.id === currentTransition ? 'selected' : ''}" data-id="${t.id}">
+                    <span class="iconify text-[var(--text-secondary)] mb-2" data-icon="${t.icon}" data-width="24"></span>
+                    <div class="text-xs font-medium">${t.name}</div>
+                </div>
+            `).join('');
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // EVENT HANDLERS
+        // ═══════════════════════════════════════════════════════════════════════════
+        
+        // Tab navigation
+        document.querySelectorAll('.nav-item[data-tab]').forEach(item => {
+            item.addEventListener('click', () => {
+                document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+                item.classList.add('active');
+                
+                const tabId = item.dataset.tab;
+                document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+                document.getElementById(`tab-${tabId}`).classList.add('active');
+            });
+        });
+
+        // Sliders
+        document.getElementById('brightness-slider').addEventListener('input', (e) => {
+            document.getElementById('brightness-value').textContent = e.target.value;
+        });
+        document.getElementById('speed-slider').addEventListener('input', (e) => {
+            document.getElementById('speed-value').textContent = e.target.value;
+        });
+
+        // Toggle
+        document.querySelectorAll('.toggle').forEach(toggle => {
+            toggle.addEventListener('click', () => toggle.classList.toggle('active'));
+        });
+
+        // Category chips
+        document.querySelectorAll('.chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                chip.parentElement.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+                chip.classList.add('active');
+            });
+        });
+
+        // Preset buttons
+        document.querySelectorAll('.preset-btn:not(:last-child)').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+            });
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // INIT
+        // ═══════════════════════════════════════════════════════════════════════════
+        
+        window.addEventListener('DOMContentLoaded', () => {
+            setupCanvas();
+            requestAnimationFrame(drawVisualizer);
+            populateEffectList();
+            populateEffectsGrid();
+            populatePaletteGrid();
+            populateTransitionGrid();
+        });
+        window.addEventListener('resize', setupCanvas);
+    </script>
+</body>
+</html>

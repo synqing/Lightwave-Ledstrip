@@ -1,0 +1,14 @@
+{
+  "enabledPlugins": {
+    "code-review-ai@claude-code-workflows": true,
+    "api-authentication-builder@claude-code-plugins-plus": true,
+    "api-batch-processor@claude-code-plugins-plus": true,
+    "api-contract-generator@claude-code-plugins-plus": true,
+    "api-documentation-generator@claude-code-plugins-plus": true,
+    "api-cache-manager@claude-code-plugins-plus": true,
+    "api-error-handler@claude-code-plugins-plus": true,
+    "api-event-emitter@claude-code-plugins-plus": true,
+    "api-gateway-builder@claude-code-plugins-plus": true,
+    "api-scaffolding@claude-code-workflows": true
+  }
+}

@@ -3,6 +3,7 @@
 #if FEATURE_WEB_SERVER
 
 #include "WiFiManager.h"
+#include "../effects/EffectMetadata.h"
 #include "../config/network_config.h"
 #include "../config/hardware_config.h"
 #include <FastLED.h>
@@ -1205,6 +1206,67 @@ void LightwaveWebServer::onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient 
                     serializeJson(response, output);
                     client->text(output);
                 }
+                else if (type == "effects.getMetadata") {
+                    uint8_t effectId = doc["effectId"] | 0;
+                    extern Effect effects[];
+
+                    StaticJsonDocument<512> response;
+                    response["type"] = "effects.metadata";
+
+                    if (effectId >= NUM_EFFECTS) {
+                        response["success"] = false;
+                        response["error"] = "Effect ID out of range";
+                    } else {
+                        response["success"] = true;
+                        JsonObject data = response.createNestedObject("data");
+                        data["effectId"] = effectId;
+                        data["name"] = effects[effectId].name;
+
+                        EffectMeta meta = getEffectMeta(effectId);
+                        char categoryBuf[24];
+                        char descBuf[64];
+
+                        getEffectCategoryName(effectId, categoryBuf, sizeof(categoryBuf));
+                        data["category"] = categoryBuf;
+                        data["categoryId"] = meta.category;
+
+                        getEffectDescription(effectId, descBuf, sizeof(descBuf));
+                        data["description"] = descBuf;
+
+                        JsonObject features = data.createNestedObject("features");
+                        features["centerOrigin"] = (meta.features & EffectFeatures::CENTER_ORIGIN) != 0;
+                        features["usesSpeed"] = (meta.features & EffectFeatures::USES_SPEED) != 0;
+                        features["usesPalette"] = (meta.features & EffectFeatures::USES_PALETTE) != 0;
+                        features["zoneAware"] = (meta.features & EffectFeatures::ZONE_AWARE) != 0;
+                        features["dualStrip"] = (meta.features & EffectFeatures::DUAL_STRIP) != 0;
+                        features["physicsBased"] = (meta.features & EffectFeatures::PHYSICS_BASED) != 0;
+                    }
+
+                    String output;
+                    serializeJson(response, output);
+                    client->text(output);
+                }
+                else if (type == "effects.getCategories") {
+                    StaticJsonDocument<512> response;
+                    response["type"] = "effects.categories";
+                    response["success"] = true;
+
+                    JsonArray categories = response.createNestedArray("categories");
+                    char categoryBuf[24];
+
+                    for (uint8_t c = 0; c < CAT_COUNT; c++) {
+                        strncpy_P(categoryBuf, (char*)pgm_read_ptr(&CATEGORY_NAMES[c]), sizeof(categoryBuf) - 1);
+                        categoryBuf[sizeof(categoryBuf) - 1] = '\0';
+
+                        JsonObject cat = categories.createNestedObject();
+                        cat["id"] = c;
+                        cat["name"] = categoryBuf;
+                    }
+
+                    String output;
+                    serializeJson(response, output);
+                    client->text(output);
+                }
                 else if (type == "parameters.get") {
                     StaticJsonDocument<256> response;
                     response["type"] = "parameters";
@@ -1297,6 +1359,11 @@ void LightwaveWebServer::setupV1Routes() {
     server->on("/api/v1/effects/current", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         handleEffectsCurrent(request);
+    });
+
+    server->on("/api/v1/effects/metadata", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        handleEffectMetadata(request);
     });
 
     server->on("/api/v1/effects/set", HTTP_POST,
@@ -1444,35 +1511,54 @@ void LightwaveWebServer::handleEffectsList(AsyncWebServerRequest* request) {
     }
     uint8_t end = min((uint8_t)(start + count), NUM_EFFECTS);
 
+    // Check if detailed metadata requested
+    bool includeDetails = request->hasParam("details");
+
     sendSuccessResponseLarge(request, [&](JsonObject& data) {
         data["total"] = NUM_EFFECTS;
         data["start"] = start;
         data["count"] = end - start;
 
         JsonArray effectsArr = data.createNestedArray("effects");
+        char categoryBuf[24];
+        char descBuf[64];
+
         for (uint8_t i = start; i < end; i++) {
             JsonObject effect = effectsArr.createNestedObject();
             effect["id"] = i;
             effect["name"] = effects[i].name;
 
-            // Determine category
-            const char* category = "Unknown";
-            if (i <= 4) category = "Classic";
-            else if (i <= 7) category = "Shockwave";
-            else if (i <= 11) category = "LGP Interference";
-            else if (i <= 14) category = "LGP Geometric";
-            else if (i <= 20) category = "LGP Advanced";
-            else if (i <= 23) category = "LGP Organic";
-            else if (i <= 32) category = "LGP Quantum";
-            else if (i <= 34) category = "LGP Color Mixing";
-            else if (i <= 40) category = "LGP Physics";
-            else if (i <= 45) category = "LGP Novel Physics";
-            else category = "Audio";
+            // Get metadata from PROGMEM
+            EffectMeta meta = getEffectMeta(i);
+            getEffectCategoryName(i, categoryBuf, sizeof(categoryBuf));
+            effect["category"] = categoryBuf;
+            effect["categoryId"] = meta.category;
 
-            effect["category"] = category;
-            effect["centerOrigin"] = true; // All effects are CENTER ORIGIN compliant
+            // Feature flags
+            effect["centerOrigin"] = (meta.features & EffectFeatures::CENTER_ORIGIN) != 0;
+
+            if (includeDetails) {
+                getEffectDescription(i, descBuf, sizeof(descBuf));
+                effect["description"] = descBuf;
+                effect["usesSpeed"] = (meta.features & EffectFeatures::USES_SPEED) != 0;
+                effect["usesPalette"] = (meta.features & EffectFeatures::USES_PALETTE) != 0;
+                effect["zoneAware"] = (meta.features & EffectFeatures::ZONE_AWARE) != 0;
+                effect["dualStrip"] = (meta.features & EffectFeatures::DUAL_STRIP) != 0;
+                effect["physicsBased"] = (meta.features & EffectFeatures::PHYSICS_BASED) != 0;
+            }
         }
-    }, 2048);
+
+        // Include category list for filtering UI
+        JsonArray categories = data.createNestedArray("categories");
+        for (uint8_t c = 0; c < CAT_COUNT; c++) {
+            strncpy_P(categoryBuf, (char*)pgm_read_ptr(&CATEGORY_NAMES[c]), sizeof(categoryBuf) - 1);
+            categoryBuf[sizeof(categoryBuf) - 1] = '\0';
+
+            JsonObject cat = categories.createNestedObject();
+            cat["id"] = c;
+            cat["name"] = categoryBuf;
+        }
+    }, 3072);  // Larger buffer for detailed responses
 }
 
 void LightwaveWebServer::handleEffectsCurrent(AsyncWebServerRequest* request) {
@@ -1485,6 +1571,57 @@ void LightwaveWebServer::handleEffectsCurrent(AsyncWebServerRequest* request) {
         data["brightness"] = FastLED.getBrightness();
         data["speed"] = effectSpeed;
         data["paletteId"] = currentPaletteIndex;
+    });
+}
+
+void LightwaveWebServer::handleEffectMetadata(AsyncWebServerRequest* request) {
+    extern Effect effects[];
+
+    // Get effect ID from query parameter
+    if (!request->hasParam("id")) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::MISSING_FIELD, "Effect ID required", "id");
+        return;
+    }
+
+    uint8_t effectId = request->getParam("id")->value().toInt();
+    if (effectId >= NUM_EFFECTS) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "id");
+        return;
+    }
+
+    char categoryBuf[24];
+    char descBuf[64];
+
+    sendSuccessResponse(request, [effectId, &categoryBuf, &descBuf](JsonObject& data) {
+        extern Effect effects[];
+
+        data["effectId"] = effectId;
+        data["name"] = effects[effectId].name;
+
+        // Get metadata from PROGMEM
+        EffectMeta meta = getEffectMeta(effectId);
+
+        getEffectCategoryName(effectId, categoryBuf, sizeof(categoryBuf));
+        data["category"] = categoryBuf;
+        data["categoryId"] = meta.category;
+
+        getEffectDescription(effectId, descBuf, sizeof(descBuf));
+        data["description"] = descBuf;
+
+        // Feature flags object
+        JsonObject features = data.createNestedObject("features");
+        features["centerOrigin"] = (meta.features & EffectFeatures::CENTER_ORIGIN) != 0;
+        features["usesSpeed"] = (meta.features & EffectFeatures::USES_SPEED) != 0;
+        features["usesPalette"] = (meta.features & EffectFeatures::USES_PALETTE) != 0;
+        features["zoneAware"] = (meta.features & EffectFeatures::ZONE_AWARE) != 0;
+        features["dualStrip"] = (meta.features & EffectFeatures::DUAL_STRIP) != 0;
+        features["physicsBased"] = (meta.features & EffectFeatures::PHYSICS_BASED) != 0;
+        features["audioReactive"] = (meta.features & EffectFeatures::AUDIO_REACTIVE) != 0;
+
+        // Raw features byte for compact storage
+        data["featureFlags"] = meta.features;
     });
 }
 

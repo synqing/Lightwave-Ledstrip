@@ -76,6 +76,7 @@ private:
     void handleDeviceInfo(AsyncWebServerRequest* request);
     void handleEffectsList(AsyncWebServerRequest* request);
     void handleEffectsCurrent(AsyncWebServerRequest* request);
+    void handleEffectMetadata(AsyncWebServerRequest* request);
     void handleEffectsSet(AsyncWebServerRequest* request, uint8_t* data, size_t len);
     void handleParametersGet(AsyncWebServerRequest* request);
     void handleParametersSet(AsyncWebServerRequest* request, uint8_t* data, size_t len);

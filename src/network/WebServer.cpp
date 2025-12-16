@@ -6,6 +6,7 @@
 #include "../effects/EffectMetadata.h"
 #include "../config/network_config.h"
 #include "../config/hardware_config.h"
+#include "OpenApiSpec.h"
 #include <FastLED.h>
 #include <ESPmDNS.h>
 #include <Update.h>
@@ -1428,6 +1429,18 @@ void LightwaveWebServer::setupV1Routes() {
             handleBatch(request, data, len);
         }
     );
+
+    // OpenAPI Specification endpoint - serves JSON from PROGMEM
+    server->on("/api/v1/openapi.json", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        // Stream the OpenAPI spec directly from PROGMEM
+        AsyncWebServerResponse* response = request->beginResponse_P(
+            200, "application/json",
+            reinterpret_cast<const uint8_t*>(OPENAPI_SPEC),
+            strlen_P(OPENAPI_SPEC));
+        response->addHeader("Cache-Control", "public, max-age=3600");
+        request->send(response);
+    });
 }
 
 // ============================================================
@@ -1454,6 +1467,7 @@ void LightwaveWebServer::handleApiDiscovery(AsyncWebServerRequest* request) {
         links["parameters"] = "/api/v1/parameters";
         links["transitions"] = "/api/v1/transitions/types";
         links["batch"] = "/api/v1/batch";
+        links["openapi"] = "/api/v1/openapi.json";
         links["websocket"] = "ws://lightwaveos.local/ws";
     }, 1024);
 }

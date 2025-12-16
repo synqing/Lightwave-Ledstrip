@@ -692,7 +692,7 @@ void setup() {
     WiFiManager& wifiManager = WiFiManager::getInstance();
     
     // Configure WiFi
-    wifiManager.setCredentials(NetworkConfig::WIFI_SSID, NetworkConfig::WIFI_PASSWORD);
+    wifiManager.setCredentials(NetworkConfig::WIFI_SSID_VALUE, NetworkConfig::WIFI_PASSWORD_VALUE);
     
     // Enable Soft-AP as immediate fallback
     wifiManager.enableSoftAP(NetworkConfig::AP_SSID, NetworkConfig::AP_PASSWORD);

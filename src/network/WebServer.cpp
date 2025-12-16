@@ -72,14 +72,20 @@ bool LightwaveWebServer::begin() {
 
 bool LightwaveWebServer::beginNetworkServices() {
     Serial.println("[WebServer] Initializing network services");
-    
+
+    // Setup CORS headers for all responses
+    // Allows web apps from any origin to access the API
+    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
+    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Headers", "Content-Type, X-OTA-Token");
+
     // Setup WebSocket handlers
     ws->onEvent(onWsEvent);
     server->addHandler(ws);
-    
+
     // Setup HTTP routes
     setupRoutes();
-    
+
     // Start the server immediately - it will work in AP or STA mode
     server->begin();
     isRunning = true;
@@ -263,31 +269,33 @@ void LightwaveWebServer::setupRoutes() {
     });
     
     // Effect control
-    server->on("/api/effect", HTTP_POST, [](AsyncWebServerRequest *request){}, 
-        NULL, 
+    server->on("/api/effect", HTTP_POST, [](AsyncWebServerRequest *request){},
+        NULL,
         [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
             StaticJsonDocument<256> doc;
-            DeserializationError error = deserializeJson(doc, data);
-            
+            DeserializationError error = deserializeJson(doc, data, len);
+
             if (!error && doc.containsKey("effect")) {
                 uint8_t newEffect = doc["effect"];
-                if (newEffect < NUM_EFFECTS) {
-                    startAdvancedTransition(newEffect);
-                    request->send(200, "application/json", "{\"status\":\"ok\"}");
+                if (newEffect >= NUM_EFFECTS) {
+                    request->send(400, "application/json", "{\"error\":\"Invalid effect ID\"}");
                     return;
                 }
+                startAdvancedTransition(newEffect);
+                request->send(200, "application/json", "{\"status\":\"ok\"}");
+                return;
             }
             request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
         }
     );
     
     // Brightness control
-    server->on("/api/brightness", HTTP_POST, [](AsyncWebServerRequest *request){}, 
-        NULL, 
+    server->on("/api/brightness", HTTP_POST, [](AsyncWebServerRequest *request){},
+        NULL,
         [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
             StaticJsonDocument<256> doc;
-            DeserializationError error = deserializeJson(doc, data);
-            
+            DeserializationError error = deserializeJson(doc, data, len);
+
             if (!error && doc.containsKey("brightness")) {
                 uint8_t brightness = doc["brightness"];
                 FastLED.setBrightness(brightness);
@@ -305,12 +313,12 @@ void LightwaveWebServer::setupRoutes() {
         request->send(200, "application/json", "{\"status\":\"scanning\"}");
     });
     
-    server->on("/api/network/connect", HTTP_POST, [](AsyncWebServerRequest *request){}, 
-        NULL, 
+    server->on("/api/network/connect", HTTP_POST, [](AsyncWebServerRequest *request){},
+        NULL,
         [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
             StaticJsonDocument<256> doc;
-            DeserializationError error = deserializeJson(doc, data);
-            
+            DeserializationError error = deserializeJson(doc, data, len);
+
             if (!error && doc.containsKey("ssid") && doc.containsKey("password")) {
                 WiFiManager& wifi = WiFiManager::getInstance();
                 wifi.setCredentials(doc["ssid"], doc["password"]);
@@ -322,18 +330,26 @@ void LightwaveWebServer::setupRoutes() {
         }
     );
     
-    // OTA update endpoint
-    server->on("/update", HTTP_POST, 
+    // OTA update endpoint (secured with token authentication)
+    server->on("/update", HTTP_POST,
         [this](AsyncWebServerRequest *request){
             shouldReboot = !Update.hasError();
-            AsyncWebServerResponse *response = request->beginResponse(200, "text/plain", 
+            AsyncWebServerResponse *response = request->beginResponse(200, "text/plain",
                 shouldReboot ? "OK" : "FAIL");
             response->addHeader("Connection", "close");
             request->send(response);
         },
         [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
+            // Token authentication check on first chunk
             if(!index){
-                Serial.printf("Update Start: %s\n", filename.c_str());
+                // Check for X-OTA-Token header
+                if (!request->hasHeader("X-OTA-Token") ||
+                    request->header("X-OTA-Token") != NetworkConfig::OTA_UPDATE_TOKEN) {
+                    Serial.println("[OTA] Unauthorized update attempt blocked!");
+                    request->send(401, "text/plain", "Unauthorized: Invalid or missing OTA token");
+                    return;
+                }
+                Serial.printf("[OTA] Authorized update start: %s\n", filename.c_str());
                 if(!Update.begin((ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000)){
                     Update.printError(Serial);
                 }
@@ -345,7 +361,7 @@ void LightwaveWebServer::setupRoutes() {
             }
             if(final){
                 if(Update.end(true)){
-                    Serial.printf("Update Success: %uB\n", index+len);
+                    Serial.printf("[OTA] Update Success: %uB\n", index+len);
                 } else {
                     Update.printError(Serial);
                 }
@@ -381,11 +397,15 @@ void LightwaveWebServer::setupRoutes() {
         NULL,
         [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
             StaticJsonDocument<256> doc;
-            DeserializationError error = deserializeJson(doc, data);
+            DeserializationError error = deserializeJson(doc, data, len);
 
             if (!error && doc.containsKey("paletteId")) {
-                extern uint8_t currentPaletteIndex;
-                currentPaletteIndex = doc["paletteId"];
+                uint8_t paletteId = doc["paletteId"];
+                if (paletteId >= gGradientPaletteCount) {
+                    request->send(400, "application/json", "{\"error\":\"Invalid palette ID\"}");
+                    return;
+                }
+                currentPaletteIndex = paletteId;
                 request->send(200, "application/json", "{\"status\":\"ok\"}");
                 return;
             }
@@ -493,7 +513,7 @@ void LightwaveWebServer::setupRoutes() {
         NULL,
         [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
             StaticJsonDocument<256> doc;
-            DeserializationError error = deserializeJson(doc, data);
+            DeserializationError error = deserializeJson(doc, data, len);
 
             if (!error && doc.containsKey("enabled")) {
                 extern bool useRandomTransitions;
@@ -559,9 +579,17 @@ void LightwaveWebServer::setupRoutes() {
 
             if (!error && doc.containsKey("zoneId")) {
                 uint8_t zoneId = doc["zoneId"];
+                if (zoneId >= HardwareConfig::MAX_ZONES) {
+                    request->send(400, "application/json", "{\"error\":\"Invalid zone ID\"}");
+                    return;
+                }
 
                 if (doc.containsKey("effectId")) {
                     uint8_t effectId = doc["effectId"];
+                    if (effectId >= NUM_EFFECTS) {
+                        request->send(400, "application/json", "{\"error\":\"Invalid effect ID\"}");
+                        return;
+                    }
                     zoneComposer.setZoneEffect(zoneId, effectId);
                 }
 
@@ -657,6 +685,10 @@ void LightwaveWebServer::setupRoutes() {
 
             if (!error && doc.containsKey("zoneId") && doc.containsKey("brightness")) {
                 uint8_t zoneId = doc["zoneId"];
+                if (zoneId >= HardwareConfig::MAX_ZONES) {
+                    request->send(400, "application/json", "{\"error\":\"Invalid zone ID\"}");
+                    return;
+                }
                 uint8_t brightness = doc["brightness"];
                 zoneComposer.setZoneBrightness(zoneId, brightness);
                 request->send(200, "application/json", "{\"status\":\"ok\"}");
@@ -675,6 +707,10 @@ void LightwaveWebServer::setupRoutes() {
 
             if (!error && doc.containsKey("zoneId") && doc.containsKey("speed")) {
                 uint8_t zoneId = doc["zoneId"];
+                if (zoneId >= HardwareConfig::MAX_ZONES) {
+                    request->send(400, "application/json", "{\"error\":\"Invalid zone ID\"}");
+                    return;
+                }
                 uint8_t speed = doc["speed"];
                 zoneComposer.setZoneSpeed(zoneId, speed);
                 request->send(200, "application/json", "{\"status\":\"ok\"}");
@@ -800,9 +836,14 @@ void LightwaveWebServer::setupRoutes() {
     // Enable FEATURE_AUDIO_SYNC in features.h when audio hardware is connected
 #endif
 
-    // 404 handler
+    // Handle CORS preflight requests and 404s
     server->onNotFound([](AsyncWebServerRequest *request){
-        request->send(404, "text/plain", "Not found");
+        if (request->method() == HTTP_OPTIONS) {
+            // Preflight CORS request - headers already set globally
+            request->send(204);
+        } else {
+            request->send(404, "text/plain", "Not found");
+        }
     });
 }
 
@@ -898,14 +939,17 @@ void LightwaveWebServer::onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient 
     } else if (type == WS_EVT_DISCONNECT) {
         Serial.printf("[WebSocket] Client disconnected\n");
     } else if (type == WS_EVT_DATA) {
-        // Handle WebSocket data
-        String message = "";
-        for (size_t i = 0; i < len; i++) {
-            message += (char)data[i];
+        // Handle WebSocket data - use stack buffer to avoid heap fragmentation
+        if (len > 511) {
+            Serial.println("[WebSocket] Message too large, rejected");
+            return;
         }
-        
+        char messageBuffer[512];
+        memcpy(messageBuffer, data, len);
+        messageBuffer[len] = '\0';
+
         StaticJsonDocument<512> doc;
-        DeserializationError error = deserializeJson(doc, message);
+        DeserializationError error = deserializeJson(doc, messageBuffer);
 
         if (!error) {
             // Check for new "type" format first

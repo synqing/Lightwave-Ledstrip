@@ -5,6 +5,7 @@
 #include <FastLED.h>
 #include "../../config/hardware_config.h"
 #include "../../core/EffectTypes.h"
+#include "../../utils/TrigLookup.h"
 
 // External references
 extern CRGB strip1[];
@@ -36,8 +37,8 @@ void lgpDiamondLattice() {
         float normalizedDist = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
 
         // Create crossing diagonal waves from center
-        float wave1 = sin((normalizedDist + phase) * diamondFreq * TWO_PI);
-        float wave2 = sin((normalizedDist - phase) * diamondFreq * TWO_PI);
+        float wave1 = TrigLookup::sinf_lookup((normalizedDist + phase) * diamondFreq * TWO_PI);
+        float wave2 = TrigLookup::sinf_lookup((normalizedDist - phase) * diamondFreq * TWO_PI);
 
         // Interference creates diamond nodes
         float diamond = abs(wave1 * wave2);
@@ -76,9 +77,9 @@ void lgpHexagonalGrid() {
         float pos = (float)i / HardwareConfig::STRIP_LENGTH;
         
         // Three waves at 120 degree angles
-        float wave1 = sin(pos * hexSize * TWO_PI + phase);
-        float wave2 = sin(pos * hexSize * TWO_PI + phase + TWO_PI/3);
-        float wave3 = sin(pos * hexSize * TWO_PI + phase + 2*TWO_PI/3);
+        float wave1 = TrigLookup::sinf_lookup(pos * hexSize * TWO_PI + phase);
+        float wave2 = TrigLookup::sinf_lookup(pos * hexSize * TWO_PI + phase + TWO_PI/3);
+        float wave3 = TrigLookup::sinf_lookup(pos * hexSize * TWO_PI + phase + 2*TWO_PI/3);
         
         float pattern;
         if (variation < 0.5f) {
@@ -129,13 +130,13 @@ void lgpSpiralVortex() {
         float spiral;
         if (variation < 0.33f) {
             // Archimedean spiral
-            spiral = sin(spiralAngle);
+            spiral = TrigLookup::sinf_lookup(spiralAngle);
         } else if (variation < 0.66f) {
             // Logarithmic spiral
-            spiral = sin(spiralAngle * (1 + normalizedDist));
+            spiral = TrigLookup::sinf_lookup(spiralAngle * (1 + normalizedDist));
         } else {
             // Fermat's spiral
-            spiral = sin(spiralAngle * sqrt(normalizedDist + 0.1f));
+            spiral = TrigLookup::sinf_lookup(spiralAngle * sqrt(normalizedDist + 0.1f));
         }
         
         // Radial fade
@@ -184,7 +185,7 @@ void lgpSierpinskiTriangles() {
         }
         
         // Create smooth transitions
-        float smooth = sin(bitCount * PI / maxDepth);
+        float smooth = TrigLookup::sinf_lookup(bitCount * PI / maxDepth);
         
         uint8_t brightness = smooth * 255 * intensity;
         uint8_t hue = gHue + (bitCount * 30);
@@ -220,7 +221,7 @@ void lgpChevronWaves() {
         
         // Create V-shape from center
         float chevronPhase = distFromCenter * chevronAngle + wavePos;
-        float chevron = sin(chevronPhase * chevronCount * 0.1f);
+        float chevron = TrigLookup::sinf_lookup(chevronPhase * chevronCount * 0.1f);
         
         // Sharp edges
         chevron = tanh(chevron * 3) * 0.5f + 0.5f;
@@ -259,15 +260,15 @@ void lgpConcentricRings() {
         float rings;
         if (variation < 0.33f) {
             // Simple concentric rings
-            rings = sin(distFromCenter * ringCount * 0.2f + ringPhase);
+            rings = TrigLookup::sinf_lookup(distFromCenter * ringCount * 0.2f + ringPhase);
         } else if (variation < 0.66f) {
             // Bessel function-like (more realistic)
-            float bessel = sin(distFromCenter * ringCount * 0.2f + ringPhase);
+            float bessel = TrigLookup::sinf_lookup(distFromCenter * ringCount * 0.2f + ringPhase);
             bessel *= 1.0f / sqrt(normalizedDist + 0.1f);  // J0 approximation
             rings = bessel;
         } else {
             // Fresnel zones
-            float fresnel = sin(sqrt(distFromCenter) * ringCount + ringPhase);
+            float fresnel = TrigLookup::sinf_lookup(sqrt(distFromCenter) * ringCount + ringPhase);
             rings = fresnel;
         }
         
@@ -307,11 +308,11 @@ void lgpStarBurst() {
 
         // Star equation - radially symmetric from center
         // Rotating star pattern using phase only (no positional angle)
-        float star = sin(distFromCenter * 0.3f + starPhase) *
+        float star = TrigLookup::sinf_lookup(distFromCenter * 0.3f + starPhase) *
                     exp(-normalizedDist * 2);  // Radial decay
 
         // Pulsing
-        star *= 0.5f + 0.5f * sin(starPhase * 3);
+        star *= 0.5f + 0.5f * TrigLookup::sinf_lookup(starPhase * 3);
 
         uint8_t brightness = 128 + (127 * star * intensity);
 
@@ -357,7 +358,7 @@ void lgpMeshNetwork() {
                 strip2[i] = CHSV(gHue + (n * 20) + 128, 255, nodeBright);
             } else if (distToNode < 20) {
                 // Connections to nearby nodes
-                float connection = sin(distToNode * 0.5f + networkPhase + n);
+                float connection = TrigLookup::sinf_lookup(distToNode * 0.5f + networkPhase + n);
                 connection *= exp(-distToNode * 0.1f);  // Decay
                 
                 uint8_t connBright = abs(connection) * 128 * intensity;

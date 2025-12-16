@@ -35,9 +35,10 @@ __pycache__/
 # Logs
 *.log
 
-# User-specific files
+# User-specific files (WiFi credentials - never commit!)
 src/config/network_config_private.h
 credentials.h
+wifi_credentials.ini
 
 # Local tooling caches
 .cache/

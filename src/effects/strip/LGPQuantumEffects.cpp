@@ -6,6 +6,7 @@
 #include <FastLED.h>
 #include "../../config/hardware_config.h"
 #include "../../core/EffectTypes.h"
+#include "../../utils/TrigLookup.h"
 
 // External references
 extern CRGB strip1[];
@@ -188,7 +189,7 @@ void lgpGravitationalLensing() {
             rayAngle += totalDeflection * 0.01f;
             
             // Update ray position
-            rayPos += cos(rayAngle) * 2 * direction;  // Apply direction
+            rayPos += TrigLookup::cosf_lookup(rayAngle) * 2 * direction;  // Apply direction
             
             // Draw ray point
             int16_t pixelPos = (int16_t)rayPos;
@@ -277,7 +278,7 @@ void lgpSonicBoom() {
             
             // Add shock diamonds (periodic compressions)
             float diamondPhase = distFromObject * 0.3f - time * 0.1f;
-            uint8_t diamondIntensity = 128 + 127 * sin(diamondPhase);
+            uint8_t diamondIntensity = 128 + 127 * TrigLookup::sinf_lookup(diamondPhase);
             shockIntensity = scale8(shockIntensity, diamondIntensity);
             
             // Color shift based on shock strength (hotter = bluer)
@@ -578,8 +579,8 @@ void lgpCausticFan() {
     for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
         float x = (float)i - HardwareConfig::STRIP_CENTER_POINT;
 
-        float def1 = curvature * (x - separation) + sinf(animPhase);
-        float def2 = -curvature * (x + separation) + sinf(animPhase * 1.21f);
+        float def1 = curvature * (x - separation) + TrigLookup::sinf_lookup(animPhase);
+        float def2 = -curvature * (x + separation) + TrigLookup::sinf_lookup(animPhase * 1.21f);
         float diff = fabsf(def1 - def2);
 
         float caustic = 1.0f / (1.0f + diff * diff * gain);          // sharp where diff ~ 0
@@ -724,13 +725,13 @@ void lgpEvanescentSkin() {
             float distFromCenter = fabsf((float)i - HardwareConfig::STRIP_CENTER_POINT);
             float skinDistance = fabsf(distFromCenter - ringRadius);
             float envelope = 1.0f / (1.0f + lambda * skinDistance);
-            float carrier = sinf(distFromCenter * skinFreq * 0.05f + anim * TWO_PI);
+            float carrier = TrigLookup::sinf_lookup(distFromCenter * skinFreq * 0.05f + anim * TWO_PI);
             brightnessF = envelope * (carrier * 0.5f + 0.5f) * 255.0f;
         } else {
             uint16_t edgeDistance = std::min<uint16_t>(i, static_cast<uint16_t>(HardwareConfig::STRIP_LENGTH - 1 - i));
             float distToEdge = static_cast<float>(edgeDistance);
             float envelope = 1.0f / (1.0f + lambda * distToEdge * 0.4f);
-            float carrier = sinf((HardwareConfig::STRIP_LENGTH - distToEdge) * skinFreq * 0.04f - anim * TWO_PI);
+            float carrier = TrigLookup::sinf_lookup((HardwareConfig::STRIP_LENGTH - distToEdge) * skinFreq * 0.04f - anim * TWO_PI);
             brightnessF = envelope * (carrier * 0.5f + 0.5f) * 255.0f;
         }
 

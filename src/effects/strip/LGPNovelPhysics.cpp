@@ -7,6 +7,7 @@
 #include <math.h>
 #include "../../config/hardware_config.h"
 #include "../../core/EffectTypes.h"
+#include "../../utils/TrigLookup.h"
 #include "LGPNovelPhysics.h"
 
 // Math constants
@@ -62,21 +63,21 @@ void lgpChladniHarmonics() {
         float distFromCenter = abs(i - HardwareConfig::STRIP_CENTER_POINT);
         float normalizedPos = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
 
-        // Mode shape: standing wave pattern
+        // Mode shape: standing wave pattern (using fast lookup)
         // sin(n * pi * x / L) gives n antinodes
-        float modeShape = sin(modeNumber * PI * normalizedPos);
+        float modeShape = TrigLookup::sinf_lookup(modeNumber * PI * normalizedPos);
 
         // Add mixing with nearby modes for variation control
         float mixedMode = modeShape;
         if (variation > 0.3f) {
-            float mix1 = sin((modeNumber + 1) * PI * normalizedPos) * sin(mixPhase);
-            float mix2 = sin((modeNumber - 1) * PI * normalizedPos) * cos(mixPhase * 1.3f);
+            float mix1 = TrigLookup::sinf_lookup((modeNumber + 1) * PI * normalizedPos) * TrigLookup::sinf_lookup(mixPhase);
+            float mix2 = TrigLookup::sinf_lookup((modeNumber - 1) * PI * normalizedPos) * TrigLookup::cosf_lookup(mixPhase * 1.3f);
             float mixAmount = (variation - 0.3f) / 0.7f;
             mixedMode = modeShape * (1 - mixAmount * 0.5f) + (mix1 + mix2) * mixAmount * 0.25f;
         }
 
-        // Temporal oscillation: plate vibrates up and down
-        float temporalOscillation = cos(vibrationPhase);
+        // Temporal oscillation: plate vibrates up and down (using fast lookup)
+        float temporalOscillation = TrigLookup::cosf_lookup(vibrationPhase);
         float plateDisplacement = mixedMode * temporalOscillation;
 
         // Sand particle visualization:
@@ -197,11 +198,11 @@ void lgpGravitationalWaveChirp() {
             float compressionFactor = 1 + inspiralProgress * 3;
             float spatialPhase = normalizedDist * chirpFreq * compressionFactor;
 
-            // h+ polarization (Strip1)
-            wave1 = sin(spatialPhase - phase1) * amplitude * (1 - normalizedDist);
+            // h+ polarization (Strip1) - using fast lookup
+            wave1 = TrigLookup::sinf_lookup(spatialPhase - phase1) * amplitude * (1 - normalizedDist);
 
-            // hx polarization (Strip2) - 90-degree phase offset
-            wave2 = sin(spatialPhase - phase2) * amplitude * (1 - normalizedDist);
+            // hx polarization (Strip2) - 90-degree phase offset, using fast lookup
+            wave2 = TrigLookup::sinf_lookup(spatialPhase - phase2) * amplitude * (1 - normalizedDist);
 
         } else if (merging) {
             // Merger flash at center
@@ -220,9 +221,9 @@ void lgpGravitationalWaveChirp() {
 
             float distToRing = abs(normalizedDist - fmod(ringRadius, 1.0f));
             if (distToRing < 0.2f) {
-                float ringShape = cos(distToRing / 0.2f * PI/2);
-                wave1 = sin(ringdownPhase * ringdownFreq) * ringShape * ringdownDecay * intensity;
-                wave2 = cos(ringdownPhase * ringdownFreq) * ringShape * ringdownDecay * intensity;
+                float ringShape = TrigLookup::cosf_lookup(distToRing / 0.2f * PI/2);
+                wave1 = TrigLookup::sinf_lookup(ringdownPhase * ringdownFreq) * ringShape * ringdownDecay * intensity;
+                wave2 = TrigLookup::cosf_lookup(ringdownPhase * ringdownFreq) * ringShape * ringdownDecay * intensity;
             }
         }
 
@@ -318,20 +319,20 @@ void lgpQuantumEntanglementCollapse() {
 
         if (!collapsing && !collapsed) {
             // SUPERPOSITION: quantum foam with wave function nodes
-            // Wave function: psi = sin(n*pi*x) * e^(i*omega*t)
-            float waveFunction = sin(quantumN * PI * normalizedDist);
+            // Wave function: psi = sin(n*pi*x) * e^(i*omega*t) - using fast lookup
+            float waveFunction = TrigLookup::sinf_lookup(quantumN * PI * normalizedDist);
 
             // Probability density |psi|^2
             float probability = waveFunction * waveFunction;
 
-            // Quantum fluctuations (uncertainty)
-            float fluctuation = sin(quantumPhase * 3 + i * 0.2f) *
-                               cos(quantumPhase * 5 - i * 0.15f) *
+            // Quantum fluctuations (uncertainty) - using fast lookup
+            float fluctuation = TrigLookup::sinf_lookup(quantumPhase * 3 + i * 0.2f) *
+                               TrigLookup::cosf_lookup(quantumPhase * 5 - i * 0.15f) *
                                intensity;
 
-            // Superposition: use palette with smaller variations (reduced from ±60)
-            hue1 = gHue + (uint8_t)(sin(quantumPhase + i * 0.1f) * 15);  // ±15
-            hue2 = gHue + (uint8_t)(cos(quantumPhase * 1.3f - i * 0.12f) * 15);  // ±15
+            // Superposition: use palette with smaller variations (reduced from +/-60) - using fast lookup
+            hue1 = gHue + (uint8_t)(TrigLookup::sinf_lookup(quantumPhase + i * 0.1f) * 15);  // +/-15
+            hue2 = gHue + (uint8_t)(TrigLookup::cosf_lookup(quantumPhase * 1.3f - i * 0.12f) * 15);  // +/-15
 
             brightness1 = 80 + (probability * 100) + (abs(fluctuation) * 75);
             brightness2 = 80 + (probability * 100) + (abs(fluctuation) * 75);
@@ -351,8 +352,8 @@ void lgpQuantumEntanglementCollapse() {
                 brightness2 = 180 * edgeFactor + 50;
 
             } else {
-                // Pre-collapse region: still in superposition
-                float chaos = sin(quantumPhase * 5 + i * 0.3f) * intensity;
+                // Pre-collapse region: still in superposition - using fast lookup
+                float chaos = TrigLookup::sinf_lookup(quantumPhase * 5 + i * 0.3f) * intensity;
                 hue1 = gHue + (uint8_t)(chaos * 40);
                 hue2 = gHue + (uint8_t)(chaos * 40) + random8(30);
                 brightness1 = 60 + abs(chaos) * 50;
@@ -371,8 +372,8 @@ void lgpQuantumEntanglementCollapse() {
             hue1 = collapsedHue;
             hue2 = collapsedHue + 128;  // Perfect anti-correlation
 
-            // Gentle pulsing to show quantum coherence
-            float pulse = sin(quantumPhase) * 0.1f + 0.9f;
+            // Gentle pulsing to show quantum coherence - using fast lookup
+            float pulse = TrigLookup::sinf_lookup(quantumPhase) * 0.1f + 0.9f;
             brightness1 = 200 * pulse;
             brightness2 = 200 * pulse;
         }
@@ -494,9 +495,9 @@ void lgpMycelialNetwork() {
             }
         }
 
-        // Nutrient flow visualization
+        // Nutrient flow visualization - using fast lookup
         float flowDirection = (variation - 0.5f) * 2;  // -1 to 1
-        float nutrientWave = sin(normalizedDist * 10 - nutrientPhase * flowDirection * 3);
+        float nutrientWave = TrigLookup::sinf_lookup(normalizedDist * 10 - nutrientPhase * flowDirection * 3);
         float nutrientBrightness = networkDensity[i] * (0.5f + nutrientWave * 0.5f) * saturation;
 
         // Fruiting body detection: where both strips have high density
@@ -564,30 +565,30 @@ void lgpRileyDissonance() {
         float pattern1 = 0, pattern2 = 0;
 
         if (complexity < 0.25f) {
-            // CONCENTRIC CIRCLES (radial pattern from center)
-            pattern1 = sin(normalizedDist * freq1 * TWO_PI + patternPhase);
-            pattern2 = sin(normalizedDist * freq2 * TWO_PI - patternPhase);
+            // CONCENTRIC CIRCLES (radial pattern from center) - using fast lookup
+            pattern1 = TrigLookup::sinf_lookup(normalizedDist * freq1 * TWO_PI + patternPhase);
+            pattern2 = TrigLookup::sinf_lookup(normalizedDist * freq2 * TWO_PI - patternPhase);
 
         } else if (complexity < 0.5f) {
-            // STRIPES (linear pattern)
-            pattern1 = sin(position * freq1 * TWO_PI + patternPhase);
-            pattern2 = sin(position * freq2 * TWO_PI - patternPhase * 0.7f);
+            // STRIPES (linear pattern) - using fast lookup
+            pattern1 = TrigLookup::sinf_lookup(position * freq1 * TWO_PI + patternPhase);
+            pattern2 = TrigLookup::sinf_lookup(position * freq2 * TWO_PI - patternPhase * 0.7f);
 
         } else if (complexity < 0.75f) {
-            // CHECKERBOARD (product of two patterns)
-            float check1 = sin(position * freq1 * TWO_PI);
-            float check2 = sin(normalizedDist * freq1 * TWO_PI + patternPhase);
+            // CHECKERBOARD (product of two patterns) - using fast lookup
+            float check1 = TrigLookup::sinf_lookup(position * freq1 * TWO_PI);
+            float check2 = TrigLookup::sinf_lookup(normalizedDist * freq1 * TWO_PI + patternPhase);
             pattern1 = check1 * check2;
 
-            float check3 = sin(position * freq2 * TWO_PI);
-            float check4 = sin(normalizedDist * freq2 * TWO_PI - patternPhase);
+            float check3 = TrigLookup::sinf_lookup(position * freq2 * TWO_PI);
+            float check4 = TrigLookup::sinf_lookup(normalizedDist * freq2 * TWO_PI - patternPhase);
             pattern2 = check3 * check4;
 
         } else {
-            // SPIRALS (combination of radial and angular)
+            // SPIRALS (combination of radial and angular) - using fast lookup
             float spiralAngle = position * TWO_PI + normalizedDist * 3;
-            pattern1 = sin(spiralAngle * freq1 / 4 + patternPhase * 2);
-            pattern2 = sin(spiralAngle * freq2 / 4 - patternPhase * 1.5f);
+            pattern1 = TrigLookup::sinf_lookup(spiralAngle * freq1 / 4 + patternPhase * 2);
+            pattern2 = TrigLookup::sinf_lookup(spiralAngle * freq2 / 4 - patternPhase * 1.5f);
         }
 
         // Apply contrast enhancement (makes patterns more aggressive)

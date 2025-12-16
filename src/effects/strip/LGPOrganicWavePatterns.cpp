@@ -6,6 +6,7 @@
 #include <math.h>
 #include "../../config/hardware_config.h"
 #include "../../core/EffectTypes.h"
+#include "../../utils/TrigLookup.h"
 
 // Math constants
 #ifndef PI
@@ -64,9 +65,9 @@ void lgpBioluminescentPlanktonWaves() {
         float normalizedDist = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
 
         // Multiple wave components for realistic ocean (symmetric)
-        float wave1 = sin(normalizedDist * 4 * PI + wavePhase) * 0.5f;
-        float wave2 = sin(normalizedDist * 7 * PI - wavePhase * 0.7f) * 0.3f;
-        float wave3 = sin(normalizedDist * 11 * PI + wavePhase * 1.3f) * 0.2f;
+        float wave1 = TrigLookup::sinf_lookup(normalizedDist * 4 * PI + wavePhase) * 0.5f;
+        float wave2 = TrigLookup::sinf_lookup(normalizedDist * 7 * PI - wavePhase * 0.7f) * 0.3f;
+        float wave3 = TrigLookup::sinf_lookup(normalizedDist * 11 * PI + wavePhase * 1.3f) * 0.2f;
         
         float totalWave = wave1 + wave2 + wave3;
         
@@ -93,7 +94,7 @@ void lgpBioluminescentPlanktonWaves() {
         } else if (variation < 0.66f) {
             // Jellyfish - pulsing patterns
             float pulsePhase = wavePhase * 2 + i * 0.1f;
-            glowIntensity[i] += 0.3f * sin(pulsePhase) * planktonDensity;
+            glowIntensity[i] += 0.3f * TrigLookup::sinf_lookup(pulsePhase) * planktonDensity;
         } else {
             // Marine bacteria - steady glow with quorum sensing
             float neighbors = 0;
@@ -638,7 +639,7 @@ void lgpMyceliumNetworkGrowth() {
             }
             
             // Communication through network
-            communicationSignal[i] = hyphalDensity[i] * sin(networkAge[i] * 10);
+            communicationSignal[i] = hyphalDensity[i] * TrigLookup::sinf_lookup(networkAge[i] * 10);
             
             // Anastomosis (hyphal fusion) for high connectivity
             if (complexity > 0.7f) {
@@ -671,7 +672,7 @@ void lgpMyceliumNetworkGrowth() {
             }
         } else {
             // Pulsed growth - oscillating
-            float pulse = sin(networkAge[i] * 5);
+            float pulse = TrigLookup::sinf_lookup(networkAge[i] * 5);
             growthRate *= (1 + pulse * 0.5f);
         }
         
@@ -783,7 +784,7 @@ void lgpSlimeMoldOptimization() {
             float flow = flowDirection[i] * flowRate;
             
             // Oscillatory flow (characteristic of Physarum)
-            flow *= (1 + 0.5f * sin(oscillationPhase + i * 0.1f));
+            flow *= (1 + 0.5f * TrigLookup::sinf_lookup(oscillationPhase + i * 0.1f));
             
             // Move slime
             if (flow > 0 && i < HardwareConfig::STRIP_LENGTH-1) {
@@ -817,7 +818,7 @@ void lgpSlimeMoldOptimization() {
             }
         } else {
             // Pulsation mode - rhythmic expansion/contraction
-            float pulse = sin(oscillationPhase * 2);
+            float pulse = TrigLookup::sinf_lookup(oscillationPhase * 2);
             slimeDensity[i] *= (1 + pulse * 0.1f);
         }
         
@@ -876,7 +877,7 @@ void lgpSlimeMoldOptimization() {
         
         // Pulsation visualization
         if (variation > 0.66f) {
-            brightness *= (1 + 0.2f * sin(oscillationPhase + i * 0.05f));
+            brightness *= (1 + 0.2f * TrigLookup::sinf_lookup(oscillationPhase + i * 0.05f));
         }
         
         strip1[i] = CHSV(hue1, saturation * 255, brightness);

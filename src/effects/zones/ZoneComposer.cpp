@@ -17,7 +17,7 @@ extern const uint8_t gGradientPaletteCount;
 
 ZoneComposer::ZoneComposer()
     : m_zoneCount(3)  // Default to 3-zone mode
-    , m_enabled(false)
+    , m_enabled(true)   // Zone mode ON by default at boot
     , m_configManager(nullptr)
     , m_activeConfig(ZONE_CONFIGS_3ZONE)  // Start with 3-zone config
     , m_configSize(3)                      // Start with 3 zones

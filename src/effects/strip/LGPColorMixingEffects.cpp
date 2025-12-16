@@ -4,6 +4,7 @@
 #include <FastLED.h>
 #include "../../config/hardware_config.h"
 #include "../../core/EffectTypes.h"
+#include "../../utils/TrigLookup.h"
 #include <math.h>
 
 #ifndef TWO_PI
@@ -84,9 +85,9 @@ void lgpRGBPrism() {
         float normalizedDist = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
         
         // Different wavelengths refract differently
-        float redAngle = sin(normalizedDist * dispersion + prismAngle);
-        float greenAngle = sin(normalizedDist * dispersion * 1.1f + prismAngle);
-        float blueAngle = sin(normalizedDist * dispersion * 1.2f + prismAngle);
+        float redAngle = TrigLookup::sinf_lookup(normalizedDist * dispersion + prismAngle);
+        float greenAngle = TrigLookup::sinf_lookup(normalizedDist * dispersion * 1.1f + prismAngle);
+        float blueAngle = TrigLookup::sinf_lookup(normalizedDist * dispersion * 1.2f + prismAngle);
         
         // Strip 1: Red channel dominant
         strip1[i].r = 128 + 127 * redAngle * intensity;
@@ -158,7 +159,7 @@ void lgpQuantumColors() {
         float normalizedDist = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
         
         // Wave function probability
-        float probability = sin(waveFunction + normalizedDist * TWO_PI * numStates);
+        float probability = TrigLookup::sinf_lookup(waveFunction + normalizedDist * TWO_PI * numStates);
         probability = probability * probability;  // Square for probability density
         
         // Collapse to specific palette state (not full spectrum discrete colors)
@@ -174,7 +175,7 @@ void lgpQuantumColors() {
         }
 
         // Uncertainty principle - fuzzy at observation boundary
-        uint8_t uncertainty = 255 * (0.5f + 0.5f * sin(distFromCenter * 20));
+        uint8_t uncertainty = 255 * (0.5f + 0.5f * TrigLookup::sinf_lookup(distFromCenter * 20));
 
         strip1[i] = ColorFromPalette(currentPalette, gHue + paletteOffset, uncertainty * intensity);
         strip2[i] = ColorFromPalette(currentPalette, gHue + paletteOffset + 128, (255 - uncertainty) * intensity);
@@ -315,7 +316,7 @@ void lgpDNAHelix() {
         
         // DNA base pairs - use palette offsets instead of discrete spectrum
         uint8_t paletteOffset1, paletteOffset2;
-        if (sin(angle1 * 2) > 0) {
+        if (TrigLookup::sinf_lookup(angle1 * 2) > 0) {
             paletteOffset1 = 0;   // Base pair type A
             paletteOffset2 = 15;  // Base pair type T
         } else {
@@ -324,8 +325,8 @@ void lgpDNAHelix() {
         }
 
         // Helix structure
-        float strand1Intensity = (sin(angle1) + 1) * 0.5f;
-        float strand2Intensity = (sin(angle2) + 1) * 0.5f;
+        float strand1Intensity = (TrigLookup::sinf_lookup(angle1) + 1) * 0.5f;
+        float strand2Intensity = (TrigLookup::sinf_lookup(angle2) + 1) * 0.5f;
 
         // Base pair connections at specific points
         float connectionIntensity = 0;
@@ -372,13 +373,13 @@ void lgpPhaseTransition() {
 
         if (localTemp < 0.25f) {
             // Solid phase - crystalline structure
-            float crystal = sin(distFromCenter * 10) * 0.5f + 0.5f;
+            float crystal = TrigLookup::sinf_lookup(distFromCenter * 10) * 0.5f + 0.5f;
             paletteOffset = 0 + crystal * 5;  // Small range for solid
             brightness = 255 * intensity;
             color = ColorFromPalette(currentPalette, gHue + paletteOffset, brightness);
         } else if (localTemp < 0.5f) {
             // Liquid phase - flowing motion
-            float flow = sin(distFromCenter * 0.5f + phaseAnimation);
+            float flow = TrigLookup::sinf_lookup(distFromCenter * 0.5f + phaseAnimation);
             paletteOffset = 10 + flow * 5;  // Small range for liquid
             brightness = 200 * intensity;
             color = ColorFromPalette(currentPalette, gHue + paletteOffset, brightness);
@@ -394,7 +395,7 @@ void lgpPhaseTransition() {
             }
         } else {
             // Plasma phase - ionized, energetic
-            float plasma = sin(distFromCenter * 20 + phaseAnimation * 10);
+            float plasma = TrigLookup::sinf_lookup(distFromCenter * 20 + phaseAnimation * 10);
             paletteOffset = 30 + plasma * 10;  // Reduced from 40
             brightness = 255 * intensity;
             color = ColorFromPalette(currentPalette, gHue + paletteOffset, brightness);
@@ -427,7 +428,7 @@ void lgpHSVCylinder() {
         uint8_t sat2 = 255 * (1 - normalizedDist);
 
         // Value (height) oscillates
-        uint8_t val = 128 + 127 * sin(cylinderRotation + distFromCenter * 0.1f);
+        uint8_t val = 128 + 127 * TrigLookup::sinf_lookup(cylinderRotation + distFromCenter * 0.1f);
 
         strip1[i] = ColorFromPalette(currentPalette, gHue + paletteIndex, val * intensity);
         strip2[i] = ColorFromPalette(currentPalette, gHue + 128, sat2 * (val * intensity) / 255);
@@ -449,9 +450,9 @@ void lgpPerceptualBlend() {
         
         // Define colors in a perceptually uniform way
         // Simplified LAB-like mixing
-        float L = 50 + 50 * sin(blendPhase);  // Lightness
-        float a = 50 * cos(blendPhase + normalizedDist * PI);  // Green-Red
-        float b = 50 * sin(blendPhase - normalizedDist * PI);  // Blue-Yellow
+        float L = 50 + 50 * TrigLookup::sinf_lookup(blendPhase);  // Lightness
+        float a = 50 * TrigLookup::cosf_lookup(blendPhase + normalizedDist * PI);  // Green-Red
+        float b = 50 * TrigLookup::sinf_lookup(blendPhase - normalizedDist * PI);  // Blue-Yellow
         
         // Convert to RGB (simplified)
         CRGB color;
@@ -484,9 +485,9 @@ void lgpChromaticAberration() {
         float normalizedDist = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
         
         // Lens equation with chromatic aberration
-        float redFocus = sin((normalizedDist - 0.1f * aberration) * PI + lensPosition);
-        float greenFocus = sin(normalizedDist * PI + lensPosition);
-        float blueFocus = sin((normalizedDist + 0.1f * aberration) * PI + lensPosition);
+        float redFocus = TrigLookup::sinf_lookup((normalizedDist - 0.1f * aberration) * PI + lensPosition);
+        float greenFocus = TrigLookup::sinf_lookup(normalizedDist * PI + lensPosition);
+        float blueFocus = TrigLookup::sinf_lookup((normalizedDist + 0.1f * aberration) * PI + lensPosition);
         
         // Create rainbow halos at boundaries
         CRGB aberratedColor;
@@ -576,16 +577,16 @@ void lgpMetamericColors() {
             // Edges: Different spectral distributions
             
             // Strip1: Narrow band spectrum
-            float narrow1 = sin(spectralShift * 10) * variation;
-            float narrow2 = cos(spectralShift * 10) * variation;
+            float narrow1 = TrigLookup::sinf_lookup(spectralShift * 10) * variation;
+            float narrow2 = TrigLookup::cosf_lookup(spectralShift * 10) * variation;
             CRGB spectrum1;
             spectrum1.r = targetColor.r + 50 * narrow1;
             spectrum1.g = targetColor.g - 30 * narrow1;
             spectrum1.b = targetColor.b + 20 * narrow2;
             
-            // Strip2: Broad band spectrum  
-            float broad1 = sin(spectralShift) * variation;
-            float broad2 = cos(spectralShift) * variation;
+            // Strip2: Broad band spectrum
+            float broad1 = TrigLookup::sinf_lookup(spectralShift) * variation;
+            float broad2 = TrigLookup::cosf_lookup(spectralShift) * variation;
             CRGB spectrum2;
             spectrum2.r = targetColor.r - 30 * broad1;
             spectrum2.g = targetColor.g + 40 * broad2;

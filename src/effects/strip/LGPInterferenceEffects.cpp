@@ -6,6 +6,7 @@
 #include <math.h>
 #include "../../config/hardware_config.h"
 #include "../../core/EffectTypes.h"
+#include "../../utils/TrigLookup.h"
 
 // Math constants
 #ifndef PI
@@ -62,15 +63,15 @@ void lgpBoxWave() {
         float boxPattern;
         if (variation < 0.33f) {
             // Standing waves (original box effect)
-            boxPattern = sin(boxPhase + motionPhase);
+            boxPattern = TrigLookup::sinf_lookup(boxPhase + motionPhase);
         } else if (variation < 0.66f) {
             // Traveling waves
             float travelPhase = (i / (float)HardwareConfig::STRIP_LENGTH) * TWO_PI * boxesPerSide;
-            boxPattern = sin(travelPhase - motionPhase * 10);
+            boxPattern = TrigLookup::sinf_lookup(travelPhase - motionPhase * 10);
         } else {
             // Rotating/spiral pattern
             float spiralPhase = boxPhase + (i * 0.02f);
-            boxPattern = sin(spiralPhase + motionPhase) * cos(spiralPhase - motionPhase * 0.5f);
+            boxPattern = TrigLookup::sinf_lookup(spiralPhase + motionPhase) * TrigLookup::cosf_lookup(spiralPhase - motionPhase * 0.5f);
         }
         
         // Sharpness control via intensity
@@ -125,22 +126,22 @@ void lgpHolographic() {
         float layerSum = 0;
         
         // Layer 1 - Slow, wide pattern
-        layerSum += sin(dist * 0.05f + phase1) * (numLayers >= 1 ? 1.0f : 0);
-        
+        layerSum += TrigLookup::sinf_lookup(dist * 0.05f + phase1) * (numLayers >= 1 ? 1.0f : 0);
+
         // Layer 2 - Medium pattern
-        layerSum += sin(dist * 0.15f + phase2) * 0.7f * (numLayers >= 2 ? 1.0f : 0);
-        
+        layerSum += TrigLookup::sinf_lookup(dist * 0.15f + phase2) * 0.7f * (numLayers >= 2 ? 1.0f : 0);
+
         // Layer 3 - Fast, tight pattern
-        layerSum += sin(dist * 0.3f + phase3) * 0.5f * (numLayers >= 3 ? 1.0f : 0);
-        
+        layerSum += TrigLookup::sinf_lookup(dist * 0.3f + phase3) * 0.5f * (numLayers >= 3 ? 1.0f : 0);
+
         // Layer 4 - Very fast shimmer
         if (numLayers >= 4) {
-            layerSum += sin(dist * 0.6f - phase1 * 3) * 0.3f;
+            layerSum += TrigLookup::sinf_lookup(dist * 0.6f - phase1 * 3) * 0.3f;
         }
-        
+
         // Layer 5 - Chaos layer
         if (numLayers >= 5) {
-            layerSum += sin(dist * 1.2f + phase2 * 5) * sin(phase3) * 0.2f;
+            layerSum += TrigLookup::sinf_lookup(dist * 1.2f + phase2 * 5) * TrigLookup::sinf_lookup(phase3) * 0.2f;
         }
         
         // Normalize and apply intensity
@@ -152,10 +153,10 @@ void lgpHolographic() {
             layerSum = tanh(layerSum);
         } else if (variation < 0.66f) {
             // Multiplicative (moiré-like)
-            layerSum = layerSum * sin(normalized * PI);
+            layerSum = layerSum * TrigLookup::sinf_lookup(normalized * PI);
         } else {
             // Differential (edge enhance)
-            float nextSum = sin((dist + 1) * 0.15f + phase2);
+            float nextSum = TrigLookup::sinf_lookup((dist + 1) * 0.15f + phase2);
             layerSum = (layerSum - nextSum) * 5;
         }
         
@@ -189,14 +190,14 @@ void lgpModalResonance() {
     // Mode selection
     static float modePhase = 0;
     modePhase += speed * 0.01f;
-    
+
     float baseMode;
     if (complexity < 0.5f) {
         // Low modes (1-10)
         baseMode = 1 + (complexity * 18);  // 1-10
     } else {
         // High modes (10-20) with sweep
-        baseMode = 10 + sin(modePhase) * 10 * (complexity - 0.5f) * 2;
+        baseMode = 10 + TrigLookup::sinf_lookup(modePhase) * 10 * (complexity - 0.5f) * 2;
     }
     
     for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
@@ -208,27 +209,27 @@ void lgpModalResonance() {
 
         if (variation < 0.25f) {
             // Pure mode
-            modalPattern = sin(normalizedDist * baseMode * TWO_PI);
+            modalPattern = TrigLookup::sinf_lookup(normalizedDist * baseMode * TWO_PI);
         } else if (variation < 0.5f) {
             // Mode beating (two close modes)
-            float mode1 = sin(normalizedDist * baseMode * TWO_PI);
-            float mode2 = sin(normalizedDist * (baseMode + 0.5f) * TWO_PI);
+            float mode1 = TrigLookup::sinf_lookup(normalizedDist * baseMode * TWO_PI);
+            float mode2 = TrigLookup::sinf_lookup(normalizedDist * (baseMode + 0.5f) * TWO_PI);
             modalPattern = (mode1 + mode2) / 2;
         } else if (variation < 0.75f) {
             // Harmonic series
-            modalPattern = sin(normalizedDist * baseMode * TWO_PI) +
-                          sin(normalizedDist * baseMode * 2 * TWO_PI) * 0.5f +
-                          sin(normalizedDist * baseMode * 3 * TWO_PI) * 0.25f;
+            modalPattern = TrigLookup::sinf_lookup(normalizedDist * baseMode * TWO_PI) +
+                          TrigLookup::sinf_lookup(normalizedDist * baseMode * 2 * TWO_PI) * 0.5f +
+                          TrigLookup::sinf_lookup(normalizedDist * baseMode * 3 * TWO_PI) * 0.25f;
             modalPattern /= 1.75f;
         } else {
             // Chaotic mode mixing
-            modalPattern = sin(normalizedDist * baseMode * TWO_PI) *
-                          cos(normalizedDist * (baseMode * 1.618f) * TWO_PI) *
-                          sin(modePhase * 5);
+            modalPattern = TrigLookup::sinf_lookup(normalizedDist * baseMode * TWO_PI) *
+                          TrigLookup::cosf_lookup(normalizedDist * (baseMode * 1.618f) * TWO_PI) *
+                          TrigLookup::sinf_lookup(modePhase * 5);
         }
 
         // Apply window function for smoother edges
-        float window = sin(normalizedDist * PI);
+        float window = TrigLookup::sinf_lookup(normalizedDist * PI);
         modalPattern *= window;
 
         uint8_t brightness = 128 + (127 * modalPattern * intensity);
@@ -275,30 +276,30 @@ void lgpInterferenceScanner() {
             float scanWindow = 0.2f + (complexity * 0.3f);
             float distFromScan = abs(position - (scanPos / TWO_PI));
             if (distFromScan < scanWindow) {
-                pattern = cos(distFromScan / scanWindow * PI/2);
+                pattern = TrigLookup::cosf_lookup(distFromScan / scanWindow * PI/2);
             }
         } else if (variation < 0.5f) {
             // Radial scan from center
             float ringRadius = fmod(scanPhase * 30, HardwareConfig::STRIP_HALF_LENGTH);
             float ringWidth = 5 + (complexity * 20);
             if (abs(dist - ringRadius) < ringWidth) {
-                pattern = cos((dist - ringRadius) / ringWidth * PI/2);
+                pattern = TrigLookup::cosf_lookup((dist - ringRadius) / ringWidth * PI/2);
             }
         } else if (variation < 0.75f) {
             // Dual sweep interference
-            float wave1 = sin(dist * 0.1f + scanPhase);
-            float wave2 = sin(dist * 0.1f - scanPhase2);
+            float wave1 = TrigLookup::sinf_lookup(dist * 0.1f + scanPhase);
+            float wave2 = TrigLookup::sinf_lookup(dist * 0.1f - scanPhase2);
             pattern = (wave1 + wave2) / 2;
-            
+
             // Add complexity via harmonics
             if (complexity > 0.5f) {
-                pattern += sin(dist * 0.3f + scanPhase * 2) * 0.3f;
-                pattern += sin(dist * 0.5f - scanPhase2 * 3) * 0.2f;
+                pattern += TrigLookup::sinf_lookup(dist * 0.3f + scanPhase * 2) * 0.3f;
+                pattern += TrigLookup::sinf_lookup(dist * 0.5f - scanPhase2 * 3) * 0.2f;
             }
         } else {
             // Moiré pattern scanner
-            float grid1 = sin(position * 20 * (1 + complexity) + scanPhase);
-            float grid2 = sin(position * 21 * (1 + complexity) - scanPhase);
+            float grid1 = TrigLookup::sinf_lookup(position * 20 * (1 + complexity) + scanPhase);
+            float grid2 = TrigLookup::sinf_lookup(position * 21 * (1 + complexity) - scanPhase);
             pattern = (grid1 * grid2 + 1) / 2;
         }
         
@@ -350,12 +351,12 @@ void lgpWaveCollision() {
     for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
         // Wave packet 1
         float dist1 = abs(i - wave1Pos);
-        float packet1 = exp(-dist1 * 0.05f) * cos(dist1 * 0.5f);
-        
+        float packet1 = exp(-dist1 * 0.05f) * TrigLookup::cosf_lookup(dist1 * 0.5f);
+
         // Wave packet 2
         float dist2 = abs(i - wave2Pos);
-        float packet2 = exp(-dist2 * 0.05f) * cos(dist2 * 0.5f);
-        
+        float packet2 = exp(-dist2 * 0.05f) * TrigLookup::cosf_lookup(dist2 * 0.5f);
+
         // Interference
         float interference = packet1 + packet2;
 
@@ -427,7 +428,7 @@ void lgpSolitonExplorer() {
             soliton1 = tanh(dist1 / width1);
         } else {
             // Breather soliton (oscillating)
-            float breatheAmp = 1 + 0.3f * sin(breathePhase + dist1 * 0.1f);
+            float breatheAmp = 1 + 0.3f * TrigLookup::sinf_lookup(breathePhase + dist1 * 0.1f);
             soliton1 = breatheAmp / cosh(dist1 / width1);
         }
         
@@ -530,10 +531,10 @@ void lgpRogueWaveGenerator() {
             float freq = m * 0.1f;
             float amplitude = 1.0f / (m * m);  // 1/f² spectrum
             float phase = backgroundPhase * m + (i * freq);
-            
+
             // Add random phase noise for each mode
-            float noise = sin(phase * 7.13f) * 0.1f;  // Pseudo-random
-            totalWave += amplitude * sin(phase + noise);
+            float noise = TrigLookup::sinf_lookup(phase * 7.13f) * 0.1f;  // Pseudo-random
+            totalWave += amplitude * TrigLookup::sinf_lookup(phase + noise);
         }
         
         // Normalize background to reasonable amplitude
@@ -546,9 +547,9 @@ void lgpRogueWaveGenerator() {
             
             // Peregrine soliton profile (approximate)
             float rogueProfile = 1.0f / cosh(distToRogue / rogueWidth);
-            
+
             // Modulation instability growth
-            float modulation = 1 + 0.5f * sin(rogueWavePhase * 3);
+            float modulation = 1 + 0.5f * TrigLookup::sinf_lookup(rogueWavePhase * 3);
             
             // Focusing effect - wave packet compression
             float focusEffect = exp(-distToRogue * distToRogue / (rogueWidth * rogueWidth * 4));
@@ -741,12 +742,12 @@ void lgpKelvinHelmholtzInstabilities() {
         
         if (variation < 0.33f) {
             // Single dominant vortex
-            float vortexCenter = 0.5f + 0.3f * sin(shearPhase);
+            float vortexCenter = 0.5f + 0.3f * TrigLookup::sinf_lookup(shearPhase);
             float distToVortex = abs(position - vortexCenter);
             float vortexRadius = 0.1f + (intensity * 0.2f);
-            
+
             if (distToVortex < vortexRadius) {
-                float circulation = intensity * sin(vortexPhase[0] + distToVortex * 10);
+                float circulation = intensity * TrigLookup::sinf_lookup(vortexPhase[0] + distToVortex * 10);
                 totalVorticity = circulation * exp(-distToVortex / vortexRadius);
             }
         } else if (variation < 0.66f) {
@@ -754,26 +755,26 @@ void lgpKelvinHelmholtzInstabilities() {
             for(int v = 0; v < numVortices; v++) {
                 float vortexSpacing = 1.0f / numVortices;
                 float vortexCenter = (v + 0.5f) * vortexSpacing;
-                vortexCenter += 0.1f * sin(vortexPhase[v]);
-                
+                vortexCenter += 0.1f * TrigLookup::sinf_lookup(vortexPhase[v]);
+
                 float distToVortex = abs(position - vortexCenter);
                 float vortexRadius = 0.08f + (intensity * 0.15f);
-                
+
                 if (distToVortex < vortexRadius) {
-                    float circulation = intensity * sin(vortexPhase[v] * (1 + v * 0.3f));
+                    float circulation = intensity * TrigLookup::sinf_lookup(vortexPhase[v] * (1 + v * 0.3f));
                     totalVorticity += circulation * exp(-distToVortex / vortexRadius);
                 }
             }
         } else {
             // Turbulent cascade - chaotic vortex breakdown
             for(int v = 0; v < numVortices; v++) {
-                float vortexCenter = 0.2f + 0.6f * sin(vortexPhase[v] + v * 1.2f);
+                float vortexCenter = 0.2f + 0.6f * TrigLookup::sinf_lookup(vortexPhase[v] + v * 1.2f);
                 float distToVortex = abs(position - vortexCenter);
-                float vortexRadius = 0.05f + (intensity * 0.1f) * (1 + 0.5f * sin(vortexPhase[v] * 3));
-                
+                float vortexRadius = 0.05f + (intensity * 0.1f) * (1 + 0.5f * TrigLookup::sinf_lookup(vortexPhase[v] * 3));
+
                 if (distToVortex < vortexRadius) {
                     float chaosPhase = vortexPhase[v] * (2 + v) + position * 20;
-                    float circulation = intensity * sin(chaosPhase) * cos(chaosPhase * 1.618f);
+                    float circulation = intensity * TrigLookup::sinf_lookup(chaosPhase) * TrigLookup::cosf_lookup(chaosPhase * 1.618f);
                     totalVorticity += circulation * exp(-distToVortex / vortexRadius);
                 }
             }
@@ -834,21 +835,21 @@ void lgpFaradayRotation() {
         
         // Magnetic field configuration
         float magneticField = 0;
-        
+
         if (variation < 0.33f) {
             // Uniform field
-            magneticField = intensity * sin(rotationPhase);
+            magneticField = intensity * TrigLookup::sinf_lookup(rotationPhase);
         } else if (variation < 0.66f) {
             // Gradient field
-            magneticField = intensity * position * sin(rotationPhase);
+            magneticField = intensity * position * TrigLookup::sinf_lookup(rotationPhase);
         } else {
             // Alternating domains
             for(int d = 0; d < numDomains; d++) {
                 float domainCenter = (d + 0.5f) / numDomains;
                 float domainWidth = 0.8f / numDomains;
-                
+
                 if (abs(position - domainCenter) < domainWidth / 2) {
-                    float domainField = intensity * sin(domainPhase[d]);
+                    float domainField = intensity * TrigLookup::sinf_lookup(domainPhase[d]);
                     if (d % 2 == 1) domainField = -domainField;  // Alternating polarity
                     magneticField += domainField;
                 }
@@ -857,14 +858,14 @@ void lgpFaradayRotation() {
         
         // Faraday rotation angle (Verdet constant × B × L)
         float rotationAngle = magneticField * position * PI;
-        
+
         // Polarization components
-        float linearPol = cos(rotationAngle);
-        float circularPol = sin(rotationAngle);
-        
+        float linearPol = TrigLookup::cosf_lookup(rotationAngle);
+        float circularPol = TrigLookup::sinf_lookup(rotationAngle);
+
         // Stokes parameters for polarization visualization
         float s1 = linearPol;  // Linear horizontal/vertical
-        float s2 = linearPol * cos(2 * rotationAngle);  // Linear ±45°
+        float s2 = linearPol * TrigLookup::cosf_lookup(2 * rotationAngle);  // Linear ±45°
         float s3 = circularPol;  // Circular left/right
         
         // Intensity based on polarization state
@@ -921,18 +922,18 @@ void lgpBrillouinZones() {
             
             if (variation < 0.25f) {
                 // 1D tight-binding model
-                energy = -2 * cos(kVector) + band * 2;
+                energy = -2 * TrigLookup::cosf_lookup(kVector) + band * 2;
             } else if (variation < 0.5f) {
                 // 2D square lattice (projected)
-                energy = -2 * (cos(kVector) + cos(kVector + bandPhase)) + band * 1.5f;
+                energy = -2 * (TrigLookup::cosf_lookup(kVector) + TrigLookup::cosf_lookup(kVector + bandPhase)) + band * 1.5f;
             } else if (variation < 0.75f) {
                 // 3D cubic lattice (projected)
-                energy = -2 * (cos(kVector) + cos(kVector + PI/3) + cos(kVector + 2*PI/3)) + band * 1.2f;
+                energy = -2 * (TrigLookup::cosf_lookup(kVector) + TrigLookup::cosf_lookup(kVector + PI/3) + TrigLookup::cosf_lookup(kVector + 2*PI/3)) + band * 1.2f;
             } else {
                 // Honeycomb lattice (graphene-like)
                 float ka = kVector;
                 float kb = kVector + 2*PI/3;
-                energy = sqrt(3 + 2*cos(ka) + 2*cos(kb) + 2*cos(ka-kb));
+                energy = sqrt(3 + 2*TrigLookup::cosf_lookup(ka) + 2*TrigLookup::cosf_lookup(kb) + 2*TrigLookup::cosf_lookup(ka-kb));
                 if (band % 2 == 1) energy = -energy;  // Valence/conduction bands
                 energy += band * 0.5f;
             }
@@ -1032,15 +1033,15 @@ void lgpShockWaveFormation() {
                 // N-wave (compression followed by rarefaction)
                 if (distToShock < shockWidth) {
                     float normalizedDist = distToShock / shockWidth;
-                    float nWaveProfile = sin(normalizedDist * PI) * exp(-normalizedDist);
+                    float nWaveProfile = TrigLookup::sinf_lookup(normalizedDist * PI) * exp(-normalizedDist);
                     if (i < shockPos[s]) nWaveProfile = -nWaveProfile;  // Antisymmetric
                     totalWave += nWaveProfile * intensity;
                 }
             }
         }
-        
+
         // Background wave (pre-shock)
-        float backgroundWave = 0.2f * sin(position * 8 + wavePhase);
+        float backgroundWave = 0.2f * TrigLookup::sinf_lookup(position * 8 + wavePhase);
         
         // Nonlinear steepening effect
         float steepening = 1 + intensity * 2;
@@ -1175,7 +1176,7 @@ void lgpChaosVisualization() {
         } else if (variation < 0.66f) {
             // Phase space projection
             float phase = (float)i / HardwareConfig::STRIP_LENGTH * TWO_PI;
-            chaosValue = x * cos(phase) + y * sin(phase);
+            chaosValue = x * TrigLookup::cosf_lookup(phase) + y * TrigLookup::sinf_lookup(phase);
         } else {
             // Poincaré section
             if (abs(z) < 0.1f && z > 0) {  // Crossing condition
@@ -1263,7 +1264,7 @@ void lgpNeuralAvalancheCascades() {
             // Critical - power-law avalanche distribution
             neuronState[i] = activation;
             if (activation > 0.8f) {
-                avalancheStrength[i] = intensity * (1 + sin(speed * i * 0.1f));
+                avalancheStrength[i] = intensity * (1 + TrigLookup::sinf_lookup(speed * i * 0.1f));
             } else {
                 avalancheStrength[i] *= 0.98f;
             }
@@ -1271,7 +1272,7 @@ void lgpNeuralAvalancheCascades() {
             // Supercritical - explosive cascades
             neuronState[i] = activation * criticalPoint;
             if (activation > 0.6f) {
-                avalancheStrength[i] = intensity * 2 * (1 + cos(speed * i * 0.05f));
+                avalancheStrength[i] = intensity * 2 * (1 + TrigLookup::cosf_lookup(speed * i * 0.05f));
             } else {
                 avalancheStrength[i] *= 0.9f;
             }
@@ -1354,26 +1355,26 @@ void lgpCardiacArrhythmiaSpirals() {
             float distToSpiral = abs(i - spiralPos[s]);
             if (distToSpiral < 20) {
                 float spiralRadius = distToSpiral;
-                float spiralWave = sin(spiralPhase[s] + spiralRadius * 0.3f);
+                float spiralWave = TrigLookup::sinf_lookup(spiralPhase[s] + spiralRadius * 0.3f);
                 spiralInput += spiralWave * intensity * exp(-distToSpiral * 0.1f);
             }
         }
-        
+
         // Arrhythmia dynamics based on variation
         float dt = speed * 0.1f;
         if (variation < 0.33f) {
             // Atrial Fibrillation - chaotic multiple wavelets
-            float chaos = sin(i * 0.5f + spiralPhase[0] * 3) * cos(i * 0.3f + spiralPhase[1] * 2);
+            float chaos = TrigLookup::sinf_lookup(i * 0.5f + spiralPhase[0] * 3) * TrigLookup::cosf_lookup(i * 0.3f + spiralPhase[1] * 2);
             voltage[i] += dt * (v * (1 - v) * (v - 0.3f) - w + diffusion + spiralInput + chaos * intensity);
             recovery[i] += dt * 0.02f * (v - w);
         } else if (variation < 0.66f) {
             // Ventricular Fibrillation - spiral wave breakup
-            float breakup = intensity * sin(spiralPhase[0] * 5 + i * 0.1f);
+            float breakup = intensity * TrigLookup::sinf_lookup(spiralPhase[0] * 5 + i * 0.1f);
             voltage[i] += dt * (v * (1 - v) * (v - 0.1f) - w + diffusion + spiralInput + breakup);
             recovery[i] += dt * 0.01f * (v - w);
         } else {
             // Ventricular Tachycardia - reentrant circuits
-            float reentry = sin(spiralPhase[0] + i * 0.05f) * intensity;
+            float reentry = TrigLookup::sinf_lookup(spiralPhase[0] + i * 0.05f) * intensity;
             voltage[i] += dt * (v * (1 - v) * (v - 0.2f) - w + diffusion + spiralInput + reentry);
             recovery[i] += dt * 0.015f * (v - w);
         }

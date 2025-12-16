@@ -1,4 +1,5 @@
 #include "StripEffects.h"
+#include "../../utils/TrigLookup.h"
 
 // ============== BASIC EFFECTS ==============
 
@@ -277,18 +278,19 @@ void stripInterference() {
         // Calculate distance from CENTER (79/80)
         float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
         float normalizedDist = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
-        
+
         // Two waves emanating from center with different frequencies
-        float wave1 = sin(normalizedDist * PI * 4 + wave1Phase) * 127 + 128;
-        float wave2 = sin(normalizedDist * PI * 6 + wave2Phase) * 127 + 128;
-        
+        // Using fast lookup tables instead of native sin()
+        float wave1 = TrigLookup::sinf_lookup(normalizedDist * PI * 4 + wave1Phase) * 127 + 128;
+        float wave2 = TrigLookup::sinf_lookup(normalizedDist * PI * 6 + wave2Phase) * 127 + 128;
+
         // Interference pattern from CENTER ORIGIN
         float interference = (wave1 + wave2) / 2.0f;
         uint8_t brightness = interference;
-        
+
         // Hue varies with distance from center
         uint8_t hue = (uint8_t)(wave1Phase * 20) + (distFromCenter * 8);
-        
+
         CRGB color = ColorFromPalette(currentPalette, hue, brightness);
         strip1[i] = color;
         strip2[i] = color;
@@ -328,11 +330,11 @@ void stripPlasma() {
         // Calculate distance from CENTER (79/80)
         float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
         float normalizedDist = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
-        
-        // Plasma calculations from center outward
-        float v1 = sin(normalizedDist * 8.0f + time / 100.0f);
-        float v2 = sin(normalizedDist * 5.0f - time / 150.0f);
-        float v3 = sin(normalizedDist * 3.0f + time / 200.0f);
+
+        // Plasma calculations from center outward (using fast lookup)
+        float v1 = TrigLookup::sinf_lookup(normalizedDist * 8.0f + time / 100.0f);
+        float v2 = TrigLookup::sinf_lookup(normalizedDist * 5.0f - time / 150.0f);
+        float v3 = TrigLookup::sinf_lookup(normalizedDist * 3.0f + time / 200.0f);
 
         // Use palette with small offset instead of full spectrum
         uint8_t paletteIndex = (uint8_t)((v1 + v2 + v3) * 10.0f + 15.0f);  // 0-45 range (not rainbow)
@@ -360,10 +362,10 @@ void plasma() {
         // CENTER ORIGIN: Use distance from center instead of linear position
         float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
 
-        // Plasma waves radiate from center
-        float v1 = sin(distFromCenter / 8.0f + time / 100.0f);
-        float v2 = sin(distFromCenter / 5.0f - time / 150.0f);
-        float v3 = sin(distFromCenter / 3.0f + time / 200.0f);
+        // Plasma waves radiate from center (using fast lookup)
+        float v1 = TrigLookup::sinf_lookup(distFromCenter / 8.0f + time / 100.0f);
+        float v2 = TrigLookup::sinf_lookup(distFromCenter / 5.0f - time / 150.0f);
+        float v3 = TrigLookup::sinf_lookup(distFromCenter / 3.0f + time / 200.0f);
 
         uint8_t hue = (uint8_t)((v1 + v2 + v3) * 42.5f + 127.5f) + gHue;
         uint8_t brightness = (uint8_t)((v1 + v2) * 63.75f + 191.25f);
@@ -481,12 +483,12 @@ void stripOcean() {
 void heartbeatEffect() {
     static float phase = 0;
     static float lastBeat = 0;
-    
+
     fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, 20);
     fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, 20);
-    
-    // Heartbeat rhythm: lub-dub... lub-dub...
-    float beatPattern = sin(phase) + sin(phase * 2.1f) * 0.4f;
+
+    // Heartbeat rhythm: lub-dub... lub-dub... (using fast lookup)
+    float beatPattern = TrigLookup::sinf_lookup(phase) + TrigLookup::sinf_lookup(phase * 2.1f) * 0.4f;
     
     if (beatPattern > 1.8f && phase - lastBeat > 2.0f) {
         lastBeat = phase;
@@ -510,9 +512,9 @@ void heartbeatEffect() {
 // BREATHING - Smooth expansion and contraction from center
 void breathingEffect() {
     static float breathPhase = 0;
-    
-    // Smooth breathing curve
-    float breath = (sin(breathPhase) + 1.0f) / 2.0f;
+
+    // Smooth breathing curve (using fast lookup)
+    float breath = (TrigLookup::sinf_lookup(breathPhase) + 1.0f) / 2.0f;
     float radius = breath * HardwareConfig::STRIP_HALF_LENGTH;
     
     fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, 15);
@@ -597,17 +599,17 @@ void vortexEffect() {
     for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
         float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
         float normalizedDist = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
-        
-        // Spiral calculation
+
+        // Spiral calculation (using fast lookup)
         float spiralOffset = normalizedDist * 8.0f + vortexAngle;
-        float intensity = sin(spiralOffset) * 0.5f + 0.5f;
+        float intensity = TrigLookup::sinf_lookup(spiralOffset) * 0.5f + 0.5f;
         intensity *= (1.0f - normalizedDist * 0.5f); // Fade towards edges
-        
+
         uint8_t brightness = 255 * intensity;
         uint8_t hue = gHue + distFromCenter * 5 + vortexAngle * 20;
-        
+
         CRGB color = ColorFromPalette(currentPalette, hue, brightness);
-        
+
         // Opposite spiral direction for strip2
         if (i < HardwareConfig::STRIP_CENTER_POINT) {
             strip1[i] = color;

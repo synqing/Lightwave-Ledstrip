@@ -860,22 +860,41 @@ void LightwaveWebServer::stop() {
 
 void LightwaveWebServer::update() {
     if (!isRunning) return;
-    
+
     // Clean up WebSocket clients
     ws->cleanupClients();
-    
+
     // Handle reboot if needed
     if(shouldReboot){
         Serial.println("Rebooting...");
         delay(100);
         ESP.restart();
     }
-    
+
     // Periodic status broadcast
     static uint32_t lastBroadcast = 0;
     if (millis() - lastBroadcast > 5000) {
         lastBroadcast = millis();
         broadcastStatus();
+    }
+
+    // Idle connection cleanup (check every 30 seconds)
+    static uint32_t lastIdleCheck = 0;
+    if (millis() - lastIdleCheck > 30000) {
+        lastIdleCheck = millis();
+
+        uint32_t idleClients[ConnectionManager::MAX_WS_CLIENTS];
+        uint8_t idleCount = 0;
+        connectionMgr.checkIdleConnections(idleClients, idleCount);
+
+        for (uint8_t i = 0; i < idleCount; i++) {
+            AsyncWebSocketClient* client = ws->client(idleClients[i]);
+            if (client) {
+                Serial.printf("[WebSocket] Closing idle connection: %u\n", idleClients[i]);
+                client->close(1000, "Idle timeout");
+            }
+            connectionMgr.onDisconnect(idleClients[i]);
+        }
     }
 }
 
@@ -932,16 +951,48 @@ void LightwaveWebServer::broadcastZoneState() {
 }
 
 // WebSocket event handler
-void LightwaveWebServer::onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, 
+void LightwaveWebServer::onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
                                   AwsEventType type, void *arg, uint8_t *data, size_t len) {
     if (type == WS_EVT_CONNECT) {
-        Serial.printf("[WebSocket] Client connected: %s\n", client->remoteIP().toString().c_str());
+        IPAddress clientIP = client->remoteIP();
+
+        // Check if we can accept this connection
+        if (!webServer.connectionMgr.canAcceptConnection(clientIP)) {
+            Serial.printf("[WebSocket] Connection rejected from %s: limit exceeded\n",
+                          clientIP.toString().c_str());
+            client->close(1008, "Connection limit exceeded");
+            return;
+        }
+
+        // Register the connection
+        webServer.connectionMgr.onConnect(clientIP, client->id());
+        Serial.printf("[WebSocket] Client connected: %s (id: %u, total: %d)\n",
+                      clientIP.toString().c_str(), client->id(),
+                      webServer.connectionMgr.getActiveCount());
+
         // Send initial status to new client
         webServer.broadcastStatus();
         webServer.broadcastZoneState();  // Send zone state to new client
+
     } else if (type == WS_EVT_DISCONNECT) {
-        Serial.printf("[WebSocket] Client disconnected\n");
+        webServer.connectionMgr.onDisconnect(client->id());
+        Serial.printf("[WebSocket] Client disconnected (id: %u, remaining: %d)\n",
+                      client->id(), webServer.connectionMgr.getActiveCount());
+
     } else if (type == WS_EVT_DATA) {
+        IPAddress clientIP = client->remoteIP();
+
+        // Rate limit check
+        if (!webServer.rateLimiter.checkWebSocket(clientIP)) {
+            Serial.printf("[WebSocket] Rate limited: %s\n", clientIP.toString().c_str());
+            String errorMsg = buildWsError(ErrorCodes::RATE_LIMITED,
+                                           "Too many messages, please slow down");
+            client->text(errorMsg);
+            return;
+        }
+
+        // Record activity for idle timeout tracking
+        webServer.connectionMgr.onActivity(client->id());
         // Handle WebSocket data - use stack buffer to avoid heap fragmentation
         if (len > 511) {
             Serial.println("[WebSocket] Message too large, rejected");
@@ -1047,6 +1098,130 @@ void LightwaveWebServer::onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient 
                         zoneComposer.setZonePalette(zoneId, paletteId);
                         webServer.broadcastZoneState();
                     }
+                }
+
+                // ============================================================
+                // v1 API Parity - Transitions
+                // ============================================================
+                else if (type == "transition.getTypes") {
+                    // Return transition types list via WebSocket
+                    StaticJsonDocument<1024> response;
+                    response["type"] = "transition.types";
+                    response["success"] = true;
+
+                    JsonArray types = response.createNestedArray("types");
+                    const char* transNames[] = {
+                        "FADE", "WIPE_OUT", "WIPE_IN", "DISSOLVE", "PHASE_SHIFT",
+                        "PULSEWAVE", "IMPLOSION", "IRIS", "NUCLEAR", "STARGATE",
+                        "KALEIDOSCOPE", "MANDALA"
+                    };
+                    for (uint8_t i = 0; i < 12; i++) {
+                        JsonObject t = types.createNestedObject();
+                        t["id"] = i;
+                        t["name"] = transNames[i];
+                    }
+
+                    String output;
+                    serializeJson(response, output);
+                    client->text(output);
+                }
+                else if (type == "transition.trigger") {
+                    uint8_t toEffect = doc["toEffect"] | 0;
+                    if (toEffect < NUM_EFFECTS) {
+                        startAdvancedTransition(toEffect);
+                        webServer.broadcastStatus();
+                    }
+                }
+                else if (type == "transition.config") {
+                    if (doc.containsKey("enabled")) {
+                        useRandomTransitions = doc["enabled"];
+                    }
+                    webServer.broadcastStatus();
+                }
+
+                // ============================================================
+                // v1 API Parity - Batch Operations
+                // ============================================================
+                else if (type == "batch") {
+                    if (doc.containsKey("operations") && doc["operations"].is<JsonArray>()) {
+                        JsonArray ops = doc["operations"];
+                        uint8_t processed = 0;
+                        uint8_t failed = 0;
+
+                        for (JsonVariant op : ops) {
+                            String action = op["action"] | "";
+                            if (webServer.executeBatchAction(action, op)) {
+                                processed++;
+                            } else {
+                                failed++;
+                            }
+                        }
+
+                        // Send batch result
+                        StaticJsonDocument<256> response;
+                        response["type"] = "batch.result";
+                        response["success"] = true;
+                        response["processed"] = processed;
+                        response["failed"] = failed;
+
+                        String output;
+                        serializeJson(response, output);
+                        client->text(output);
+                    }
+                }
+
+                // ============================================================
+                // v1 API Parity - Device Info
+                // ============================================================
+                else if (type == "device.getStatus") {
+                    StaticJsonDocument<512> response;
+                    response["type"] = "device.status";
+                    response["success"] = true;
+
+                    JsonObject data = response.createNestedObject("data");
+                    data["uptime"] = millis() / 1000;
+                    data["freeHeap"] = ESP.getFreeHeap();
+                    data["cpuFreq"] = ESP.getCpuFreqMHz();
+                    data["wsClients"] = webServer.ws->count();
+
+                    String output;
+                    serializeJson(response, output);
+                    client->text(output);
+                }
+                else if (type == "effects.getCurrent") {
+                    extern Effect effects[];
+                    StaticJsonDocument<256> response;
+                    response["type"] = "effects.current";
+                    response["success"] = true;
+
+                    JsonObject data = response.createNestedObject("data");
+                    data["effectId"] = currentEffect;
+                    data["name"] = effects[currentEffect].name;
+                    data["brightness"] = FastLED.getBrightness();
+                    data["speed"] = effectSpeed;
+                    data["paletteId"] = currentPaletteIndex;
+
+                    String output;
+                    serializeJson(response, output);
+                    client->text(output);
+                }
+                else if (type == "parameters.get") {
+                    StaticJsonDocument<256> response;
+                    response["type"] = "parameters";
+                    response["success"] = true;
+
+                    JsonObject data = response.createNestedObject("data");
+                    data["brightness"] = FastLED.getBrightness();
+                    data["speed"] = effectSpeed;
+                    data["paletteId"] = currentPaletteIndex;
+                    data["intensity"] = effectIntensity;
+                    data["saturation"] = effectSaturation;
+                    data["complexity"] = effectComplexity;
+                    data["variation"] = effectVariation;
+
+                    String output;
+                    serializeJson(response, output);
+                    client->text(output);
                 }
             }
             // Legacy "cmd" format for backward compatibility

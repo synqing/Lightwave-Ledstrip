@@ -1,0 +1,21 @@
+name: Pattern Submission Validation
+
+on:
+  pull_request:
+    branches: [ main, community-patterns ]
+
+jobs:
+  validate-pattern:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: pip install -r tools/requirements.txt || true
+      - name: Run Pattern Linter
+        run: python tools/pattern_linter.py ${{ github.workspace }}
+      - name: Run Performance Test
+        run: python tools/pattern_benchmark.py ${{ github.workspace }} 

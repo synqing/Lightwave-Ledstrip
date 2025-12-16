@@ -3,36 +3,23 @@
 // ============== BASIC EFFECTS ==============
 
 void solidColor() {
-    // TEST: Re-enable orchestrator with double-brightness fix
-    uint8_t brightness = getEmotionalBrightness(255);
-    CRGB color = getOrchestratedColor(128, brightness);
-    fill_solid(strip1, HardwareConfig::STRIP_LENGTH, color);
-    fill_solid(strip2, HardwareConfig::STRIP_LENGTH, color);
+    // Solid blue effect for APA102 strip
+    fill_solid(strip1, HardwareConfig::STRIP1_LED_COUNT, CRGB::Blue);
 }
 
 void pulseEffect() {
-    // TEMP FIX: Use legacy palette like Strip BPM (which works)
-    uint8_t baseBrightness = beatsin8(30, 50, 255);
-    uint8_t emotionalBrightness = getEmotionalBrightness(baseBrightness);
-    CRGB color = ColorFromPalette(currentPalette, gHue, emotionalBrightness);
-    fill_solid(strip1, HardwareConfig::STRIP_LENGTH, color);
-    fill_solid(strip2, HardwareConfig::STRIP_LENGTH, color);
+    uint8_t brightness = beatsin8(30, 50, 255);
+    fill_solid(strip1, HardwareConfig::STRIP1_LED_COUNT, CHSV(160, 255, brightness));
 }
 
 void confetti() {
     // CENTER ORIGIN CONFETTI - ALL effects MUST originate from CENTER LEDs 79/80
     fadeToBlackBy(leds, HardwareConfig::NUM_LEDS, 10);
     
-    // ORCHESTRATOR INTEGRATION: Emotional intensity controls spawn rate
-    uint8_t emotionalSpawnRate = 40 + (40 * colorOrchestrator.getEmotionalIntensity());
-    
     // Spawn confetti ONLY at center LEDs 79/80 (MANDATORY CENTER ORIGIN)
-    if (random8() < emotionalSpawnRate) {
+    if (random8() < 80) {
         int centerPos = HardwareConfig::STRIP_CENTER_POINT + random8(2); // 79 or 80 only
-        // Use orchestrated color with emotional modulation
-        uint8_t brightness = getEmotionalBrightness(255);
-        CRGB emotionalColor = getOrchestratedColor(gHue + random8(64), brightness);
-        leds[centerPos] += emotionalColor;
+        leds[centerPos] += CHSV(gHue + random8(64), 200, 255);
     }
     
     // Move confetti outward from center with fading
@@ -53,19 +40,17 @@ void confetti() {
 // NEW STRIP-SPECIFIC EFFECT - CENTER ORIGIN CONFETTI
 void stripConfetti() {
     // CENTER ORIGIN CONFETTI - Sparks spawn at center LEDs 79/80 and fade as they move outward
-    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 10);
-    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 10);
-    
-    // Emotional intensity controls spawn rate
-    float emotionalIntensity = colorOrchestrator.getEmotionalIntensity();
-    uint8_t spawnRate = 40 + (emotionalIntensity * 40); // 40-80 based on emotion
+    fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, 10);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, 10);
     
     // Spawn new confetti at CENTER (LEDs 79/80)
-    if (random8() < spawnRate) {
+    if (random8() < 80) {
         int centerPos = HardwareConfig::STRIP_CENTER_POINT + random8(2); // 79 or 80
-        CRGB color = getOrchestratedColor(gHue + random8(64), getEmotionalBrightness(255));
+        CRGB color = CHSV(gHue + random8(64), 200, 255);
         strip1[centerPos] += color;
-        strip2[centerPos] += color;
+        if (centerPos < HardwareConfig::STRIP2_LED_COUNT) {
+            strip2[centerPos] += color;
+        }
     }
     
     // Move existing confetti outward from center with fading
@@ -73,24 +58,28 @@ void stripConfetti() {
         if (strip1[i+1]) {
             strip1[i] = strip1[i+1];
             strip1[i].fadeToBlackBy(30);
-            strip2[i] = strip2[i+1];
-            strip2[i].fadeToBlackBy(30);
+            if (i < HardwareConfig::STRIP2_LED_COUNT && (i+1) < HardwareConfig::STRIP2_LED_COUNT) {
+                strip2[i] = strip2[i+1];
+                strip2[i].fadeToBlackBy(30);
+            }
         }
     }
     for (int i = HardwareConfig::STRIP_CENTER_POINT + 1; i < HardwareConfig::STRIP_LENGTH; i++) {
         if (strip1[i-1]) {
             strip1[i] = strip1[i-1];
             strip1[i].fadeToBlackBy(30);
-            strip2[i] = strip2[i-1];
-            strip2[i].fadeToBlackBy(30);
+            if (i < HardwareConfig::STRIP2_LED_COUNT && (i-1) < HardwareConfig::STRIP2_LED_COUNT) {
+                strip2[i] = strip2[i-1];
+                strip2[i].fadeToBlackBy(30);
+            }
         }
     }
 }
 
 void sinelon() {
     // CENTER ORIGIN SINELON - Oscillates outward from center LEDs 79/80
-    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 20);
-    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 20);
+    fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, 20);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, 20);
     
     // Oscillate from center outward (0 to STRIP_HALF_LENGTH)
     int distFromCenter = beatsin16(13, 0, HardwareConfig::STRIP_HALF_LENGTH);
@@ -99,19 +88,13 @@ void sinelon() {
     int pos1 = HardwareConfig::STRIP_CENTER_POINT + distFromCenter;
     int pos2 = HardwareConfig::STRIP_CENTER_POINT - distFromCenter;
     
-    uint8_t emotionalBrightness = getEmotionalBrightness(192);
-    
     if (pos1 < HardwareConfig::STRIP_LENGTH) {
-        // TEMP FIX: Use legacy palette like Strip BPM (which works)
-        CRGB color1 = ColorFromPalette(currentPalette, gHue, emotionalBrightness);
-        strip1[pos1] += color1;
-        strip2[pos1] += color1;
+        strip1[pos1] += CHSV(gHue, 255, 192);
+        strip2[pos1] += CHSV(gHue, 255, 192);
     }
     if (pos2 >= 0) {
-        // TEMP FIX: Use legacy palette like Strip BPM (which works)  
-        CRGB color2 = ColorFromPalette(currentPalette, gHue + 128, emotionalBrightness);
-        strip1[pos2] += color2;
-        strip2[pos2] += color2;
+        strip1[pos2] += CHSV(gHue + 128, 255, 192);  // Different hue
+        strip2[pos2] += CHSV(gHue + 128, 255, 192);
     }
 }
 
@@ -120,8 +103,6 @@ void juggle() {
     fadeToBlackBy(leds, HardwareConfig::NUM_LEDS, 20);
     
     uint8_t dothue = 0;
-    uint8_t emotionalBrightness = getEmotionalBrightness(255);
-    
     for(int i = 0; i < 8; i++) {
         // Oscillate from center outward (MANDATORY CENTER ORIGIN)
         int distFromCenter = beatsin16(i+7, 0, HardwareConfig::STRIP_HALF_LENGTH);
@@ -130,7 +111,7 @@ void juggle() {
         int pos1 = HardwareConfig::STRIP_CENTER_POINT + distFromCenter;
         int pos2 = HardwareConfig::STRIP_CENTER_POINT - distFromCenter;
         
-        CRGB color = getOrchestratedColor(dothue, emotionalBrightness);
+        CRGB color = CHSV(dothue, 200, 255);
         
         if (pos1 < HardwareConfig::NUM_LEDS) {
             leds[pos1] |= color;
@@ -146,12 +127,10 @@ void juggle() {
 // NEW STRIP-SPECIFIC EFFECT - CENTER ORIGIN JUGGLE
 void stripJuggle() {
     // CENTER ORIGIN JUGGLE - Multiple dots oscillate outward from center LEDs 79/80
-    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 20);
-    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 20);
+    fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, 20);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, 20);
     
     uint8_t dothue = 0;
-    uint8_t emotionalBrightness = getEmotionalBrightness(255);
-    
     for(int i = 0; i < 8; i++) {
         // Oscillate from center outward (0 to STRIP_HALF_LENGTH)
         int distFromCenter = beatsin16(i+7, 0, HardwareConfig::STRIP_HALF_LENGTH);
@@ -160,7 +139,7 @@ void stripJuggle() {
         int pos1 = HardwareConfig::STRIP_CENTER_POINT + distFromCenter;
         int pos2 = HardwareConfig::STRIP_CENTER_POINT - distFromCenter;
         
-        CRGB color = getOrchestratedColor(dothue, emotionalBrightness);
+        CRGB color = CHSV(dothue, 200, 255);
         
         if (pos1 < HardwareConfig::STRIP_LENGTH) {
             strip1[pos1] |= color;
@@ -176,29 +155,21 @@ void stripJuggle() {
 }
 
 void bpm() {
-    // CENTER ORIGIN BPM - Optimized with pre-calculated distances
+    // CENTER ORIGIN BPM - ALL effects MUST originate from CENTER LEDs 79/80
     uint8_t BeatsPerMinute = 62;
+    uint8_t beat = beatsin8(BeatsPerMinute, 64, 255);
     
-    // Emotional intensity affects the beat strength
-    float emotionalIntensity = colorOrchestrator.getEmotionalIntensity();
-    uint8_t baseBeat = 64 + (emotionalIntensity * 64); // 64-128 based on emotion
-    uint8_t beat = beatsin8(BeatsPerMinute, baseBeat, 255);
-    
-    // Use pre-calculated distance lookup
-    extern uint8_t distanceFromCenter[];
-    
-    // Process in strips for better cache locality
+    // Calculate distance from center for each LED (MANDATORY CENTER ORIGIN)
     for(int i = 0; i < HardwareConfig::NUM_LEDS; i++) {
-        uint8_t dist = distanceFromCenter[i];
+        float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
         
-        // Intensity decreases with distance - use integer math
-        uint16_t intensity = beat - ((dist * 3) >> 2);  // Approximate * 0.75
-        intensity = max(intensity, (uint16_t)32);
+        // Intensity decreases with distance from center
+        uint8_t intensity = beat - (distFromCenter * 3);
+        intensity = max(intensity, (uint8_t)32); // Minimum brightness
         
-        // Use orchestrated color with emotional brightness
-        uint8_t colorIndex = gHue + (dist >> 1);
-        CRGB baseColor = getOrchestratedColorFast(colorIndex, 255);
-        leds[i] = baseColor.scale8(intensity);
+        leds[i] = ColorFromPalette(currentPalette, 
+                                  gHue + (distFromCenter * 2), 
+                                  intensity);
     }
 }
 
@@ -208,35 +179,26 @@ void waveEffect() {
     // CENTER ORIGIN WAVES - Start from center LEDs 79/80 and propagate outward
     static uint32_t wavePosition = 0;  // Changed to uint32_t to prevent overflow
     
-    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, fadeAmount);
-    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, fadeAmount);
+    fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, fadeAmount);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, fadeAmount);
     
-    // UNIFIED SPEED: Use consistent speed system
-    float speed = getUnifiedSpeed() * 100.0f;  // Base wave speed
-    wavePosition += speed;
+    uint16_t waveSpeed = map(paletteSpeed, 1, 50, 100, 10);
+    wavePosition += waveSpeed;
     
     // Prevent overflow by wrapping
     if (wavePosition > 65535) {
         wavePosition = wavePosition % 65536;
     }
     
-    // Use pre-calculated distance lookup
-    extern uint8_t distanceFromCenter[];
-    
-    // Process both strips with optimized calculations
     for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
-        uint8_t dist = distanceFromCenter[i];
+        // Calculate distance from CENTER (79/80)
+        float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
         
-        // Wave propagates outward - use wave LUT
-        extern uint8_t wavePatternLUT[256];
+        // Wave propagates outward from center
+        uint8_t brightness = sin8((distFromCenter * 15) + (wavePosition >> 4));
+        uint8_t colorIndex = (distFromCenter * 8) + (wavePosition >> 6);
         
-        uint8_t waveIdx = ((dist * 15) >> 3) + (wavePosition >> 4);
-        uint8_t brightness = wavePatternLUT[waveIdx];
-        uint8_t colorIndex = (dist << 3) + (wavePosition >> 6);  // dist * 8
-        
-        // Use orchestrated color with emotional brightness
-        uint8_t emotionalBrightness = getEmotionalBrightness(brightness);
-        CRGB color = getOrchestratedColorFast(colorIndex, emotionalBrightness);
+        CRGB color = ColorFromPalette(currentPalette, colorIndex, brightness);
         strip1[i] = color;
         strip2[i] = color;
     }
@@ -251,24 +213,16 @@ void rippleEffect() {
         bool active;
     } ripples[5];
     
-    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, fadeAmount);
-    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, fadeAmount);
+    fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, fadeAmount);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, fadeAmount);
     
-    // ORCHESTRATOR INTEGRATION: Emotional state controls ripple behavior
-    float emotionalIntensity = colorOrchestrator.getEmotionalIntensity();
-    
-    // Spawn new ripples at CENTER ONLY - emotional intensity and complexity control frequency
-    uint8_t baseSpawnChance = 20 + (20 * emotionalIntensity);  // Emotional component
-    uint8_t complexityBonus = 15 * visualParams.getComplexityNorm();  // Complexity component
-    uint8_t spawnChance = baseSpawnChance + complexityBonus;
-    
+    // Spawn new ripples at CENTER ONLY - frequency controlled by complexity
+    uint8_t spawnChance = 30 * visualParams.getComplexityNorm();
     if (random8() < spawnChance) {
         for (uint8_t i = 0; i < 5; i++) {
             if (!ripples[i].active) {
                 ripples[i].radius = 0;
-                // Speed influenced by both visual params and emotional intensity
-                float combinedIntensity = (visualParams.getIntensityNorm() + emotionalIntensity) / 2.0f;
-                ripples[i].speed = (0.5f + (random8() / 255.0f) * 2.0f) * combinedIntensity;
+                ripples[i].speed = (0.5f + (random8() / 255.0f) * 2.0f) * visualParams.getIntensityNorm();
                 ripples[i].hue = random8();
                 ripples[i].active = true;
                 break;
@@ -280,54 +234,28 @@ void rippleEffect() {
     for (uint8_t r = 0; r < 5; r++) {
         if (!ripples[r].active) continue;
         
-        ripples[r].radius += ripples[r].speed * getUnifiedSpeed();  // UNIFIED: Consistent speed
+        ripples[r].radius += ripples[r].speed * (paletteSpeed / 10.0f);
         
         if (ripples[r].radius > HardwareConfig::STRIP_HALF_LENGTH) {
             ripples[r].active = false;
             continue;
         }
         
-        // Draw ripple moving outward from center - optimized
-        extern uint8_t distanceFromCenter[];
-        
-        // Convert radius to integer for faster comparison
-        uint16_t intRadius = ripples[r].radius;
-        uint16_t radiusLow = (intRadius > 3) ? intRadius - 3 : 0;
-        uint16_t radiusHigh = intRadius + 3;
-        
+        // Draw ripple moving outward from center
         for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
-            uint8_t dist = distanceFromCenter[i];
+            float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
+            float wavePos = distFromCenter - ripples[r].radius;
             
-            // Quick bounds check
-            if (dist >= radiusLow && dist <= radiusHigh) {
-                int16_t wavePos = dist - intRadius;
-                uint8_t absDiff = abs(wavePos);
+            if (abs(wavePos) < 3.0f) {
+                uint8_t brightness = 255 - (abs(wavePos) * 85);
+                brightness = (brightness * (HardwareConfig::STRIP_HALF_LENGTH - ripples[r].radius)) / HardwareConfig::STRIP_HALF_LENGTH;
+                brightness = brightness * visualParams.getIntensityNorm();
                 
-                if (absDiff < 3) {
-                    uint8_t brightness = 255 - (absDiff * 85);
-                    brightness = (brightness * (HardwareConfig::STRIP_HALF_LENGTH - intRadius)) / HardwareConfig::STRIP_HALF_LENGTH;
-                    brightness = scale8(brightness, visualParams.intensity);
-                    
-                    // ORCHESTRATOR INTEGRATION: Use orchestrated colors for cinematic ripples
-                    uint8_t colorIndex = ripples[r].hue + dist;
-                    CRGB color = getOrchestratedColorFast(colorIndex, brightness);
-                    
-                    // Apply decay based on radius (using existing ripple decay LUT)
-                    extern uint8_t rippleDecayLUT[80];
-                    if (intRadius < 80) {
-                        color.nscale8(rippleDecayLUT[intRadius]);
-                    }
-                    
-                    // Apply saturation control (preserve visual params control)
-                    color = blend(CRGB::White, color, visualParams.saturation);
-                    
-                    // Apply additional emotional brightness modulation
-                    uint8_t emotionalMod = getEmotionalBrightness(255);
-                    color.nscale8(emotionalMod);
-                    
-                    strip1[i] += color;
-                    strip2[i] += color;
-                }
+                CRGB color = ColorFromPalette(currentPalette, ripples[r].hue + distFromCenter, brightness);
+                // Apply saturation control
+                color = blend(CRGB::White, color, visualParams.saturation);
+                strip1[i] += color;
+                strip2[i] += color;
             }
         }
     }
@@ -339,15 +267,11 @@ void stripInterference() {
     static float wave1Phase = 0;
     static float wave2Phase = 0;
     
-    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, fadeAmount);
-    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, fadeAmount);
+    fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, fadeAmount);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, fadeAmount);
     
-    // Emotional intensity affects wave speed
-    float emotionalIntensity = colorOrchestrator.getEmotionalIntensity();
-    float speedMultiplier = 1.0f + (emotionalIntensity * 0.8f); // 1.0x to 1.8x speed
-    
-    wave1Phase += (paletteSpeed / 20.0f) * speedMultiplier;
-    wave2Phase -= (paletteSpeed / 30.0f) * speedMultiplier;
+    wave1Phase += paletteSpeed / 20.0f;
+    wave2Phase -= paletteSpeed / 30.0f;
     
     for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
         // Calculate distance from CENTER (79/80)
@@ -365,9 +289,7 @@ void stripInterference() {
         // Hue varies with distance from center
         uint8_t hue = (uint8_t)(wave1Phase * 20) + (distFromCenter * 8);
         
-        // Use orchestrated color with emotional brightness
-        uint8_t emotionalBrightness = getEmotionalBrightness(brightness);
-        CRGB color = getOrchestratedColorFast(hue, emotionalBrightness);
+        CRGB color = ColorFromPalette(currentPalette, hue, brightness);
         strip1[i] = color;
         strip2[i] = color;
     }
@@ -411,11 +333,12 @@ void stripPlasma() {
         float v1 = sin(normalizedDist * 8.0f + time / 100.0f);
         float v2 = sin(normalizedDist * 5.0f - time / 150.0f);
         float v3 = sin(normalizedDist * 3.0f + time / 200.0f);
-        
-        uint8_t hue = (uint8_t)((v1 + v2 + v3) * 42.5f + 127.5f) + gHue;
+
+        // Use palette with small offset instead of full spectrum
+        uint8_t paletteIndex = (uint8_t)((v1 + v2 + v3) * 10.0f + 15.0f);  // 0-45 range (not rainbow)
         uint8_t brightness = (uint8_t)((v1 + v2) * 63.75f + 191.25f);
-        
-        CRGB color = CHSV(hue, 255, brightness);
+
+        CRGB color = ColorFromPalette(currentPalette, gHue + paletteIndex, brightness);
         strip1[i] = color;
         strip2[i] = color;
     }
@@ -424,22 +347,27 @@ void stripPlasma() {
 // ============== MATHEMATICAL PATTERNS ==============
 
 void plasma() {
+    // CENTER ORIGIN PLASMA - Uses distance from center for symmetric pattern
     static uint32_t time = 0;
     time += paletteSpeed;
-    
+
     // Prevent overflow
     if (time > 65535) {
         time = time % 65536;
     }
-    
+
     for (int i = 0; i < HardwareConfig::NUM_LEDS; i++) {
-        float v1 = sin((float)i / 8.0f + time / 100.0f);
-        float v2 = sin((float)i / 5.0f - time / 150.0f);
-        float v3 = sin((float)i / 3.0f + time / 200.0f);
-        
+        // CENTER ORIGIN: Use distance from center instead of linear position
+        float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
+
+        // Plasma waves radiate from center
+        float v1 = sin(distFromCenter / 8.0f + time / 100.0f);
+        float v2 = sin(distFromCenter / 5.0f - time / 150.0f);
+        float v3 = sin(distFromCenter / 3.0f + time / 200.0f);
+
         uint8_t hue = (uint8_t)((v1 + v2 + v3) * 42.5f + 127.5f) + gHue;
         uint8_t brightness = (uint8_t)((v1 + v2) * 63.75f + 191.25f);
-        
+
         leds[i] = CHSV(hue, 255, brightness);
     }
 }
@@ -470,47 +398,49 @@ void fire() {
         heat[center] = qadd8(heat[center], random8(160, heatAmount));
     }
     
-    // Map heat to both strips with CENTER ORIGIN using orchestrated colors
+    // Map heat to both strips with CENTER ORIGIN
     for(int j = 0; j < HardwareConfig::STRIP_LENGTH; j++) {
         // Scale heat by intensity
         uint8_t scaledHeat = heat[j] * visualParams.getIntensityNorm();
-        
-        // Use orchestrated color instead of HeatColor() - maps heat to palette index
-        // Lower heat = lower palette indices (cooler colors), higher heat = higher indices (warmer colors)
-        uint8_t paletteIndex = map(scaledHeat, 0, 255, 0, 240); // Leave some headroom
-        uint8_t brightness = scaledHeat; // Heat directly controls brightness
-        
-        // Get orchestrated color with emotional modulation
-        CRGB color = getOrchestratedColor(paletteIndex, getEmotionalBrightness(brightness));
-        
+        CRGB color = HeatColor(scaledHeat);
+
         // Apply saturation control (desaturate towards white)
         color = blend(CRGB::White, color, visualParams.saturation);
-        
+
         strip1[j] = color;
-        strip2[j] = color;
+
+        // Only write to strip2 within its bounds (40 LEDs)
+        if (j < HardwareConfig::STRIP2_LED_COUNT) {
+            strip2[j] = color;
+        }
     }
 }
 
 void ocean() {
+    // CENTER ORIGIN: Ocean waves emanate from center
     static uint32_t waterOffset = 0;
     waterOffset += paletteSpeed / 2;
-    
+
     // Prevent overflow
     if (waterOffset > 65535) {
         waterOffset = waterOffset % 65536;
     }
-    
+
     for (int i = 0; i < HardwareConfig::NUM_LEDS; i++) {
-        // Create wave-like motion
-        uint8_t wave1 = sin8((i * 10) + waterOffset);
-        uint8_t wave2 = sin8((i * 7) - waterOffset * 2);
+        // Calculate distance from center for symmetry
+        float distFromCenter = abs((int)i - HardwareConfig::STRIP_CENTER_POINT);
+
+        // Create wave-like motion from center
+        uint8_t wave1 = sin8((distFromCenter * 10) + waterOffset);
+        uint8_t wave2 = sin8((distFromCenter * 7) - waterOffset * 2);
         uint8_t combinedWave = (wave1 + wave2) / 2;
-        
-        // Use orchestrated color with wave modulation
-        uint8_t paletteIndex = 160 + (combinedWave >> 3);  // Blue range mapped to palette
+
+        // Ocean colors from deep blue to cyan
+        uint8_t hue = 160 + (combinedWave >> 3);  // Blue range
         uint8_t brightness = 100 + (combinedWave >> 1);
-        
-        leds[i] = getOrchestratedColor(paletteIndex, getEmotionalBrightness(brightness));
+        uint8_t saturation = 255 - (combinedWave >> 2);
+
+        leds[i] = CHSV(hue, saturation, brightness);
     }
 }
 
@@ -534,11 +464,12 @@ void stripOcean() {
         uint8_t wave2 = sin8((distFromCenter * 7) - waterOffset * 2);
         uint8_t combinedWave = (wave1 + wave2) / 2;
         
-        // Use orchestrated color with wave modulation
-        uint8_t paletteIndex = 160 + (combinedWave >> 3);  // Blue range mapped to palette
+        // Ocean colors from deep blue to cyan
+        uint8_t hue = 160 + (combinedWave >> 3);  // Blue range
         uint8_t brightness = 100 + (combinedWave >> 1);
+        uint8_t saturation = 255 - (combinedWave >> 2);
         
-        CRGB color = getOrchestratedColor(paletteIndex, getEmotionalBrightness(brightness));
+        CRGB color = CHSV(hue, saturation, brightness);
         strip1[i] = color;
         strip2[i] = color;
     }
@@ -551,8 +482,8 @@ void heartbeatEffect() {
     static float phase = 0;
     static float lastBeat = 0;
     
-    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 20);
-    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 20);
+    fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, 20);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, 20);
     
     // Heartbeat rhythm: lub-dub... lub-dub...
     float beatPattern = sin(phase) + sin(phase * 2.1f) * 0.4f;
@@ -566,8 +497,7 @@ void heartbeatEffect() {
             
             // Pulse intensity decreases with distance
             uint8_t brightness = 255 * (1.0f - normalizedDist);
-            uint8_t paletteIndex = gHue + normalizedDist * 50;
-            CRGB color = getOrchestratedColor(paletteIndex, getEmotionalBrightness(brightness));
+            CRGB color = ColorFromPalette(currentPalette, gHue + normalizedDist * 50, brightness);
             
             strip1[i] += color;
             strip2[i] += color;
@@ -585,8 +515,8 @@ void breathingEffect() {
     float breath = (sin(breathPhase) + 1.0f) / 2.0f;
     float radius = breath * HardwareConfig::STRIP_HALF_LENGTH;
     
-    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 15);
-    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 15);
+    fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, 15);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, 15);
     
     for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
         float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
@@ -595,8 +525,7 @@ void breathingEffect() {
             float intensity = 1.0f - (distFromCenter / radius) * 0.5f;
             uint8_t brightness = 255 * intensity * breath;
             
-            uint8_t paletteIndex = gHue + distFromCenter * 3;
-            CRGB color = getOrchestratedColor(paletteIndex, getEmotionalBrightness(brightness));
+            CRGB color = ColorFromPalette(currentPalette, gHue + distFromCenter * 3, brightness);
             strip1[i] = color;
             strip2[i] = color;
         }
@@ -610,8 +539,8 @@ void shockwaveEffect() {
     static float shockwaves[5] = {-1, -1, -1, -1, -1};
     static uint8_t waveHues[5] = {0};
     
-    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 25);
-    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 25);
+    fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, 25);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, 25);
     
     // Spawn new shockwave from CENTER - complexity controls frequency
     uint8_t spawnChance = 20 * visualParams.getComplexityNorm();
@@ -662,8 +591,8 @@ void shockwaveEffect() {
 void vortexEffect() {
     static float vortexAngle = 0;
     
-    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 20);
-    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 20);
+    fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, 20);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, 20);
     
     for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
         float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
@@ -699,14 +628,13 @@ void collisionEffect() {
     static bool exploding = false;
     static float explosionRadius = 0;
     
-    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 30);
-    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 30);
+    fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, 30);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, 30);
     
     if (!exploding) {
-        // Move particles toward center - UNIFIED: Consistent speed
-        float speed = getUnifiedSpeed() * 0.5f;  // Slower for dramatic effect
-        particle1Pos += speed;
-        particle2Pos -= speed;
+        // Move particles toward center
+        particle1Pos += paletteSpeed / 10.0f;
+        particle2Pos -= paletteSpeed / 10.0f;
         
         // Draw particles
         for (int trail = 0; trail < 10; trail++) {
@@ -733,8 +661,8 @@ void collisionEffect() {
             explosionRadius = 0;
         }
     } else {
-        // Explosion expanding from center - UNIFIED: Consistent speed
-        explosionRadius += getUnifiedSpeed() * 0.8f;  // Moderate expansion speed
+        // Explosion expanding from center
+        explosionRadius += paletteSpeed / 5.0f;
         
         for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
             float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
@@ -778,15 +706,14 @@ void gravityWellEffect() {
         initialized = true;
     }
     
-    fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 20);
-    fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 20);
+    fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, 20);
+    fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, 20);
     
     // Update particles with gravity toward center
     for (int p = 0; p < 20; p++) {
         if (particles[p].active) {
             float distFromCenter = particles[p].position - HardwareConfig::STRIP_CENTER_POINT;
-            // UNIFIED: Consistent gravity strength
-            float gravity = -distFromCenter * 0.01f * getUnifiedSpeed();
+            float gravity = -distFromCenter * 0.01f * paletteSpeed / 10.0f;
             
             particles[p].velocity += gravity;
             particles[p].velocity *= 0.95f; // Damping
@@ -817,4 +744,100 @@ void gravityWellEffect() {
             }
         }
     }
+}
+
+// ============== EFFECT REGISTRATION ==============
+
+#include "../basic/BasicEffects.h"
+
+void StripEffects::registerAll(FxEngine& engine) {
+    // Register basic strip effects
+    engine.addEffect("Solid Color", solidColor);
+    engine.addEffect("Pulse", pulseEffect);
+    engine.addEffect("Confetti", stripConfetti);
+    engine.addEffect("Sinelon", sinelon);
+    engine.addEffect("Juggle", stripJuggle);
+    engine.addEffect("BPM", stripBPM);
+    
+    // Register wave effects
+    engine.addEffect("Wave", waveEffect);
+    engine.addEffect("Ripple", rippleEffect);
+    engine.addEffect("Interference", stripInterference);
+    engine.addEffect("Plasma", stripPlasma);
+    
+    // Register nature effects
+    engine.addEffect("Fire", fire);
+    engine.addEffect("Ocean", stripOcean);
+    
+    // Register center-origin effects
+    engine.addEffect("Heartbeat", heartbeatEffect);
+    engine.addEffect("Breathing", breathingEffect);
+    engine.addEffect("Shockwave", shockwaveEffect);
+    engine.addEffect("Vortex", vortexEffect);
+    engine.addEffect("Collision", collisionEffect);
+    engine.addEffect("Gravity Well", gravityWellEffect);
+    
+    // Register LGP interference effects
+    engine.addEffect("LGP Box Wave", lgpBoxWave);
+    engine.addEffect("LGP Holographic", lgpHolographic);
+    engine.addEffect("LGP Modal Resonance", lgpModalResonance);
+    engine.addEffect("LGP Interference Scanner", lgpInterferenceScanner);
+    engine.addEffect("LGP Wave Collision", lgpWaveCollision);
+    
+    // Register LGP geometric effects
+    engine.addEffect("LGP Diamond Lattice", lgpDiamondLattice);
+    engine.addEffect("LGP Hexagonal Grid", lgpHexagonalGrid);
+    engine.addEffect("LGP Spiral Vortex", lgpSpiralVortex);
+    engine.addEffect("LGP Sierpinski", lgpSierpinskiTriangles);
+    engine.addEffect("LGP Chevron Waves", lgpChevronWaves);
+    engine.addEffect("LGP Concentric Rings", lgpConcentricRings);
+    engine.addEffect("LGP Star Burst", lgpStarBurst);
+    engine.addEffect("LGP Mesh Network", lgpMeshNetwork);
+    
+    // Register LGP advanced effects
+    engine.addEffect("LGP Moiré Curtains", lgpMoireCurtains);
+    engine.addEffect("LGP Radial Ripple", lgpRadialRipple);
+    engine.addEffect("LGP Holographic Vortex", lgpHolographicVortex);
+    engine.addEffect("LGP Evanescent Drift", lgpEvanescentDrift);
+    engine.addEffect("LGP Chromatic Shear", lgpChromaticShear);
+    engine.addEffect("LGP Modal Cavity", lgpModalCavity);
+    engine.addEffect("LGP Fresnel Zones", lgpFresnelZones);
+    engine.addEffect("LGP Photonic Crystal", lgpPhotonicCrystal);
+    
+    // Register LGP organic effects
+    engine.addEffect("LGP Aurora Borealis", lgpAuroraBorealis);
+    engine.addEffect("LGP Bioluminescent", lgpBioluminescentWaves);
+    engine.addEffect("LGP Plasma Membrane", lgpPlasmaMembrane);
+    engine.addEffect("LGP Neural Network", lgpNeuralNetwork);
+    engine.addEffect("LGP Crystal Growth", lgpCrystallineGrowth);
+    engine.addEffect("LGP Fluid Dynamics", lgpFluidDynamics);
+    
+    // Register LGP color mixing effects
+    engine.addEffect("LGP Color Temperature", lgpColorTemperature);
+    engine.addEffect("LGP RGB Prism", lgpRGBPrism);
+    engine.addEffect("LGP Complementary Mix", lgpComplementaryMixing);
+    engine.addEffect("LGP Additive/Subtractive", lgpAdditiveSubtractive);
+    engine.addEffect("LGP Quantum Colors", lgpQuantumColors);
+    engine.addEffect("LGP Doppler Shift", lgpDopplerShift);
+    engine.addEffect("LGP Chromatic Aberration", lgpChromaticAberration);
+    engine.addEffect("LGP HSV Cylinder", lgpHSVCylinder);
+    engine.addEffect("LGP Perceptual Blend", lgpPerceptualBlend);
+    engine.addEffect("LGP Metameric Colors", lgpMetamericColors);
+    engine.addEffect("LGP Color Accelerator", lgpColorAccelerator);
+    engine.addEffect("LGP DNA Helix", lgpDNAHelix);
+    engine.addEffect("LGP Phase Transition", lgpPhaseTransition);
+    
+#if FEATURE_AUDIO_EFFECTS && FEATURE_AUDIO_SYNC
+    // Register LGP audio-reactive effects
+    engine.addEffect("LGP Frequency Collision", lgpFrequencyCollision);
+    engine.addEffect("LGP Beat Interference", lgpBeatInterference);
+    engine.addEffect("LGP Spectral Morphing", lgpSpectralMorphing);
+    engine.addEffect("LGP Audio Quantum", lgpAudioQuantumCollapse);
+    engine.addEffect("LGP Rhythm Waves", lgpRhythmWaves);
+    engine.addEffect("LGP Envelope Interference", lgpEnvelopeInterference);
+    engine.addEffect("LGP Kick Shockwave", lgpKickShockwave);
+    engine.addEffect("LGP FFT Color Map", lgpFFTColorMap);
+    engine.addEffect("LGP Harmonic Resonance", lgpHarmonicResonance);
+    engine.addEffect("LGP Stereo Phase", lgpStereoPhasePattern);
+#endif
 }

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>LED Strip Simulator</title>
+  <style>
+    body { background: #181c20; color: #fff; font-family: sans-serif; }
+    #controls { margin: 1em 0; }
+    canvas { background: #222; display: block; margin: 0 auto; }
+    label { margin-right: 1em; }
+  </style>
+</head>
+<body>
+  <h1>LED Strip Simulator (MVP)</h1>
+  <div id="controls">
+    <label>Pattern:
+      <select id="pattern">
+        <option value="gradient">Gradient Wave</option>
+        <option value="pulse">Pulse Pattern (coming soon)</option>
+      </select>
+    </label>
+    <label>Speed: <input type="range" id="speed" min="0.1" max="5" step="0.1" value="1"></label>
+    <label>Brightness: <input type="range" id="brightness" min="0" max="1" step="0.01" value="1"></label>
+    <label>Color Shift: <input type="range" id="colorShift" min="0" max="1" step="0.01" value="0"></label>
+    <label>Wave Freq: <input type="range" id="waveFreq" min="0.1" max="5" step="0.01" value="1"></label>
+    <label>Start Color: <input type="color" id="colorStart" value="#1e90ff"></label>
+    <label>End Color: <input type="color" id="colorEnd" value="#8a2be2"></label>
+  </div>
+  <canvas id="ledCanvas" width="1280" height="120"></canvas>
+  <script src="led_simulator.js"></script>
+</body>
+</html> 

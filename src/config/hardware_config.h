@@ -3,26 +3,31 @@
 
 #include "features.h"
 
-// Hardware pin definitions for Light Crystals
+// Hardware pin definitions for LightwaveOS
 namespace HardwareConfig {
 
     // ==================== LED STRIPS CONFIGURATION ====================
-    // Dual 160-LED strips in opposite physical layout
-    // Matrix mode has been surgically removed - strips mode is now permanent
-    
+    // WS2812 Dual-Strip Configuration for Light Guide Plate
+    // Two independent WS2812 strips: GPIO4 (Strip 1), GPIO5 (Strip 2)
+    // Each strip has 160 LEDs = 320 total LEDs
+
     // Strip Configuration
-    constexpr uint16_t STRIP1_LED_COUNT = 160;
-    constexpr uint16_t STRIP2_LED_COUNT = 160;
-    constexpr uint16_t TOTAL_LEDS = STRIP1_LED_COUNT + STRIP2_LED_COUNT;  // 320
+    constexpr uint16_t LEDS_PER_STRIP = 160;  // 160 LEDs per strip
+    constexpr uint16_t STRIP1_LED_COUNT = LEDS_PER_STRIP;
+    constexpr uint16_t STRIP2_LED_COUNT = LEDS_PER_STRIP;
+    constexpr uint16_t TOTAL_LEDS = STRIP1_LED_COUNT + STRIP2_LED_COUNT;  // 320 total
     constexpr uint8_t NUM_STRIPS = 2;
-    
-    // GPIO Pin Assignment
-    constexpr uint8_t STRIP1_DATA_PIN = 11;   // Channel 1 (primary)
-    constexpr uint8_t STRIP2_DATA_PIN = 12;   // Channel 2 (opposite)
+
+    // GPIO Pin Assignment - WS2812 (single data wire per strip, no clock)
+    constexpr uint8_t STRIP1_DATA_PIN = 4;    // WS2812 Strip 1 data - GPIO 4
+    constexpr uint8_t STRIP2_DATA_PIN = 5;    // WS2812 Strip 2 data - GPIO 5
     constexpr uint8_t LED_DATA_PIN = STRIP1_DATA_PIN;  // Backward compatibility
-    
+
+    // WS2812 Timing (reference only - handled by FastLED)
+    // 800kHz data rate, ~30us per LED, ~9.6ms for 320 LEDs
+
     // Physical Layout Constants
-    constexpr uint8_t STRIP_LENGTH = 160;
+    constexpr uint16_t STRIP_LENGTH = LEDS_PER_STRIP;   // 160 LEDs per strip
     constexpr uint8_t STRIP_CENTER_POINT = 79;  // LED 79/80 split for outward propagation
     constexpr uint8_t STRIP_HALF_LENGTH = 80;   // 0-79 and 80-159
     
@@ -45,42 +50,49 @@ namespace HardwareConfig {
     
     // Strip Performance Settings
     constexpr uint16_t STRIP_FPS = 120;
-    constexpr uint8_t STRIP_BRIGHTNESS = 96;
-    constexpr uint8_t STRIP_MAX_BRIGHTNESS = 128;  // Current limiting for 320 LEDs
+    constexpr uint8_t STRIP_BRIGHTNESS = 96;   // Default brightness level
+    constexpr uint8_t STRIP_MAX_BRIGHTNESS = 160;  // Current limiting for 320 LEDs
     constexpr uint32_t BUTTON_DEBOUNCE_MS = 500;
-    
+
     // Segment Configuration
-    constexpr uint8_t STRIP_SEGMENT_COUNT = 4;     // Divide each strip into 4 segments
-    constexpr uint8_t SEGMENT_SIZE = STRIP_LENGTH / STRIP_SEGMENT_COUNT;  // 40 LEDs per segment
-    
+    constexpr uint8_t STRIP_SEGMENT_COUNT = 8;     // Divide each strip into 8 segments
+    constexpr uint8_t SEGMENT_SIZE = LEDS_PER_STRIP / STRIP_SEGMENT_COUNT;  // 20 LEDs per segment
+
+    // Zone Composer Configuration
+    constexpr uint8_t MAX_ZONES = 4;               // Maximum zones per strip
+    constexpr uint8_t ZONE_SIZE = 40;              // LEDs per zone (2x 20-LED segments)
+    constexpr uint8_t ZONE_SEGMENT_SIZE = 20;      // LEDs per zone segment (left or right)
+
     // Legacy compatibility
     constexpr uint16_t NUM_LEDS = TOTAL_LEDS;
     constexpr uint16_t DEFAULT_FPS = STRIP_FPS;
     constexpr uint8_t DEFAULT_BRIGHTNESS = STRIP_BRIGHTNESS;
 
-    // Common pins for both modes
-    constexpr uint8_t BUTTON_PIN = 0;  // BOOT button on DevKit
+    // Common pins
     constexpr uint8_t POWER_PIN = 48;  // RGB LED power on some DevKits (or use any free GPIO)
-    
-    // M5Stack 8encoder I2C pins for strips hardware
-    constexpr uint8_t I2C_SDA = 13;
-    constexpr uint8_t I2C_SCL = 14;
-    constexpr uint8_t M5STACK_8ENCODER_ADDR = 0x41;  // Default I2C address
-    
-    // M5Unit-Scroll I2C pins (secondary I2C bus) 
-    // Note: GPIO 20 is USB D+ on ESP32-S3, changed to GPIO 15
-    constexpr uint8_t I2C_SDA_SCROLL = 15;
-    constexpr uint8_t I2C_SCL_SCROLL = 21;
-    constexpr uint8_t M5UNIT_SCROLL_ADDR = 0x40;  // Default I2C address
-    
-    // Audio input pins (for future use)
-    constexpr uint8_t I2S_SCK = 3;
-    constexpr uint8_t I2S_WS = 2;
-    constexpr uint8_t I2S_DIN = 4;
+
+    // I2C Configuration for M5Stack 8Encoder
+    constexpr uint8_t BUTTON_PIN = 0;       // No button on board
+    constexpr uint8_t I2C_SDA = 17;         // I2C SDA on GPIO 17
+    constexpr uint8_t I2C_SCL = 18;         // I2C SCL on GPIO 18
+    constexpr uint8_t I2C_SDA_SCROLL = 0;
+    constexpr uint8_t I2C_SCL_SCROLL = 0;
+    constexpr uint8_t M5STACK_8ENCODER_ADDR = 0x41;
+    constexpr uint8_t M5UNIT_SCROLL_ADDR = 0x40;
     
     // Memory limits
-    constexpr size_t MAX_EFFECTS = 20;
+    constexpr size_t MAX_EFFECTS = 80;  // Increased to accommodate all effects including audio-reactive
     constexpr size_t TRANSITION_BUFFER_SIZE = NUM_LEDS * 3; // RGB bytes
+    
+    // Light Guide Plate Configuration
+    constexpr bool LIGHT_GUIDE_MODE_ENABLED = true;  // Enable LGP-specific features
+    constexpr uint8_t LIGHT_GUIDE_MODE_PIN = 255;    // GPIO pin for hardware detection (255 = always enabled)
+    constexpr uint32_t LIGHT_GUIDE_SIGNATURE = 0x4C475000;  // "LGP\0" signature for auto-detection
 }
+
+// Global I2C mutex for thread-safe Wire operations (stub for compilation when HMI disabled)
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+extern SemaphoreHandle_t i2cMutex;
 
 #endif // HARDWARE_CONFIG_H

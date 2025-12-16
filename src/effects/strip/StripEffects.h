@@ -5,6 +5,7 @@
 #include <FastLED.h>
 #include "../../config/hardware_config.h"
 #include "../../core/EffectTypes.h"
+#include "../../core/FxEngine.h"
 
 // External dependencies from main.cpp
 extern CRGB strip1[HardwareConfig::STRIP1_LED_COUNT];
@@ -16,34 +17,13 @@ extern uint8_t fadeAmount;
 extern uint8_t paletteSpeed;
 extern VisualParams visualParams;
 
-// Orchestrator integration wrappers (from main.cpp)
-extern CRGB getOrchestratedColor(uint8_t position, uint8_t brightness = 255);
-extern uint8_t getEmotionalBrightness(uint8_t baseBrightness);
-extern CRGB getOrchestratedColorFast(uint8_t position, uint8_t brightness = 255);
-
-// Orchestrator instance for direct access when needed
-#include "../CinematicColorOrchestrator.h"
-extern CinematicColorOrchestrator colorOrchestrator;
-
-// ============== UNIFIED SPEED SYSTEM ==============
-// Convert paletteSpeed (1-50) to consistent speed multiplier (0.1 to 2.0)
-// ALL effects MUST use this for consistency
-inline float getUnifiedSpeed() {
-    // Linear mapping: 1=0.1x (very slow), 25=1.0x (normal), 50=2.0x (fast)
-    return 0.1f + (paletteSpeed - 1) * (1.9f / 49.0f);
-}
-
-// Frame-rate independent speed (accounts for actual frame time)
-inline float getFrameSpeed(uint32_t targetFPS = 60) {
-    static uint32_t lastFrameTime = 0;
-    uint32_t currentTime = millis();
-    uint32_t deltaTime = currentTime - lastFrameTime;
-    lastFrameTime = currentTime;
-    
-    // Calculate speed multiplier based on actual frame time
-    float frameMultiplier = deltaTime / (1000.0f / targetFPS);
-    return getUnifiedSpeed() * frameMultiplier;
-}
+// Safety macro for writing to strip2 (respects actual LED count)
+#define SAFE_STRIP2_WRITE(index, value) \
+    do { \
+        if ((index) < HardwareConfig::STRIP2_LED_COUNT) { \
+            strip2[(index)] = (value); \
+        } \
+    } while(0)
 
 // ============== BASIC STRIP EFFECTS ==============
 void solidColor();
@@ -77,5 +57,57 @@ void shockwaveEffect();
 void vortexEffect();
 void collisionEffect();
 void gravityWellEffect();
+
+// LGP-specific effects
+void lgpInterferenceScanner();
+void lgpHolographic();
+void lgpModalResonance();
+void lgpWaveCollision();
+void lgpBoxWave();
+void lgpDiamondLattice();
+void lgpHexagonalGrid();
+void lgpSpiralVortex();
+void lgpSierpinskiTriangles();
+void lgpChevronWaves();
+void lgpConcentricRings();
+void lgpStarBurst();
+void lgpMeshNetwork();
+
+// LGP Color Mixing Effects declarations
+void lgpColorTemperature();
+void lgpRGBPrism();
+void lgpComplementaryMixing();
+void lgpAdditiveSubtractive();
+void lgpQuantumColors();
+void lgpDopplerShift();
+void lgpChromaticAberration();
+void lgpHSVCylinder();
+void lgpPerceptualBlend();
+void lgpMetamericColors();
+void lgpColorAccelerator();
+void lgpDNAHelix();
+void lgpPhaseTransition();
+
+// Include new LGP Advanced Effects
+#include "LGPAdvancedEffects.h"
+
+// Include new LGP Organic Effects  
+#include "LGPOrganicEffects.h"
+
+// Include new LGP Geometric Effects
+#include "LGPGeometricEffects.h"
+
+// Include new LGP Color Mixing Effects
+#include "LGPColorMixingEffects.h"
+
+#if FEATURE_AUDIO_EFFECTS && FEATURE_AUDIO_SYNC
+#include "LGPAudioReactive.h"
+#endif
+
+// StripEffects registration class
+class StripEffects {
+public:
+    static void registerAll(FxEngine& engine);
+};
 
 #endif // STRIP_EFFECTS_H

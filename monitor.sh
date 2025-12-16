@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Light Crystals Monitor Script
+# LightwaveOS Monitor Script
 # Monitors serial output from /dev/cu.usbmodem1101
 
-echo "Light Crystals Serial Monitor"
+echo "LightwaveOS Serial Monitor"
 echo "============================"
 echo "Port: /dev/cu.usbmodem1101"
 echo "Speed: 115200 baud"

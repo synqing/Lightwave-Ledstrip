@@ -1,18 +1,20 @@
 # PlatformIO
 .pio
-.vscode/.browse.c_cpp.db*
-.vscode/c_cpp_properties.json
-.vscode/launch.json
-.vscode/ipch
+.pio-home/
 
 # Build outputs
 build/
 *.bin
 *.elf
+compile_commands.json
 
 # IDE
 .vscode/*
 !.vscode/extensions.json
+.vscode/.browse.c_cpp.db*
+.vscode/c_cpp_properties.json
+.vscode/launch.json
+.vscode/ipch
 .idea/
 *.sublime-project
 *.sublime-workspace
@@ -36,3 +38,43 @@ __pycache__/
 # User-specific files
 src/config/network_config_private.h
 credentials.h
+
+# Local tooling caches
+.cache/
+
+# ==========================================
+# ARCHIVE FOLDERS - Not tracked in git
+# ==========================================
+Master_Archive/
+archives/
+
+# ==========================================
+# GENERATED/TEMPORARY CONTENT
+# ==========================================
+# Screenshots (temporary)
+*.png
+
+# Backup files
+*.backup
+*.broken
+*.bak
+*.old
+
+# Domain Memory Harness lock
+.harness.lock
+
+# Hardware vendor folders (legacy)
+.waveshare/
+
+# Development artifacts in tools/
+tools/fastled-wasm/
+tools/prism.node-package/
+tools/build.sh
+tools/compile_commands.json
+tools/install.sh
+tools/monitor.sh
+tools/upload.sh
+
+# Duplicate docs (single source of truth at root)
+docs/CHANGELOG.md
+docs/TODO.md

@@ -1,0 +1,22 @@
+SERIAL COMMANDS FOR LIGHTWAVE:
+
+1. Basic Controls (from main.cpp):
+   t - Toggle random transitions ON/OFF
+   n - Next effect with transition
+   
+2. Try pressing these keys one at a time:
+   - Press 't' then ENTER (enables random transitions)
+   - Press 'n' then ENTER (next effect)
+
+3. Use the physical encoders:
+   - Encoder 0: Rotate to change effects
+   - Encoder 1: Adjust brightness
+   - Encoder 2: Change color palette
+   - Encoder 3: Adjust animation speed
+   - Encoder 4: Control intensity
+   - Encoder 5: Control saturation
+   - Encoder 6: Control complexity
+   - Encoder 7: Control variation
+
+Note: The serial menu system appears to be disabled in the build.
+Only 't' and 'n' commands are available via serial.

@@ -275,9 +275,9 @@ inline void PresetManager::applyPreset(const Preset& preset) {
     extern HardwareConfig::PropagationMode currentPropagationMode;
     extern bool useRandomTransitions;
     extern CRGBPalette16 targetPalette;
-    extern CRGBPalette16 gGradientPalettes[];
-    extern uint8_t gGradientPaletteCount;
-    
+    extern const TProgmemRGBGradientPaletteRef gMasterPalettes[];
+    extern const uint8_t gMasterPaletteCount;
+
     // Apply effect (this will trigger a transition)
     extern void startAdvancedTransition(uint8_t newEffect);
     if (preset.effectId < 22) {  // NUM_EFFECTS from main.cpp
@@ -285,10 +285,10 @@ inline void PresetManager::applyPreset(const Preset& preset) {
             startAdvancedTransition(preset.effectId);
         }
     }
-    
+
     // Apply palette
-    currentPaletteIndex = preset.paletteIndex % gGradientPaletteCount;
-    targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
+    currentPaletteIndex = preset.paletteIndex % gMasterPaletteCount;
+    targetPalette = CRGBPalette16(gMasterPalettes[currentPaletteIndex]);
     
     // Apply global parameters
     FastLED.setBrightness(preset.brightness);

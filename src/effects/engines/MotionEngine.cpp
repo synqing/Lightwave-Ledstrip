@@ -41,7 +41,7 @@ void MomentumEngine::reset() {
     activeParticleCount = 0;
 }
 
-int MomentumEngine::addParticle(float pos, float vel, float mass, CRGB color) {
+int MomentumEngine::addParticle(float pos, float vel, float mass, CRGB color, BoundaryMode boundary) {
     // Find free particle slot
     for (uint8_t i = 0; i < MAX_PARTICLES; i++) {
         if (!particles[i].active) {
@@ -52,6 +52,7 @@ int MomentumEngine::addParticle(float pos, float vel, float mass, CRGB color) {
             particles[i].drag = 0.98f;  // Default drag
             particles[i].color = color;
             particles[i].active = true;
+            particles[i].boundaryMode = boundary;
             activeParticleCount++;
             return i;
         }
@@ -79,12 +80,42 @@ void MomentumEngine::update(float deltaTime) {
         // Reset acceleration (forces are applied per frame)
         particles[i].acceleration = 0;
 
-        // Boundary conditions (wrap at 0-1)
-        if (particles[i].position > 1.0f) {
-            particles[i].position = fmod(particles[i].position, 1.0f);
-        }
-        if (particles[i].position < 0.0f) {
-            particles[i].position = 1.0f + fmod(particles[i].position, 1.0f);
+        // Boundary conditions
+        switch (particles[i].boundaryMode) {
+            case BOUNDARY_WRAP:
+                if (particles[i].position > 1.0f) {
+                    particles[i].position = fmod(particles[i].position, 1.0f);
+                } else if (particles[i].position < 0.0f) {
+                    particles[i].position = 1.0f + fmod(particles[i].position, 1.0f);
+                }
+                break;
+
+            case BOUNDARY_BOUNCE:
+                if (particles[i].position > 1.0f) {
+                    particles[i].position = 1.0f - (particles[i].position - 1.0f);
+                    particles[i].velocity = -particles[i].velocity;
+                } else if (particles[i].position < 0.0f) {
+                    particles[i].position = -particles[i].position;
+                    particles[i].velocity = -particles[i].velocity;
+                }
+                break;
+
+            case BOUNDARY_CLAMP:
+                if (particles[i].position > 1.0f) {
+                    particles[i].position = 1.0f;
+                    particles[i].velocity = 0;
+                } else if (particles[i].position < 0.0f) {
+                    particles[i].position = 0.0f;
+                    particles[i].velocity = 0;
+                }
+                break;
+
+            case BOUNDARY_DIE:
+                if (particles[i].position > 1.0f || particles[i].position < 0.0f) {
+                    particles[i].active = false;
+                    if (activeParticleCount > 0) activeParticleCount--;
+                }
+                break;
         }
     }
 }

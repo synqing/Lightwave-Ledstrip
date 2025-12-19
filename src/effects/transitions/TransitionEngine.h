@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <FastLED.h>
 #include "../../config/hardware_config.h"
+#include "../../core/EffectTypes.h"
 
 /**
  * Advanced Transition Engine
@@ -34,24 +35,6 @@ enum TransitionType {
     TRANSITION_MANDALA,       // Sacred geometry radiating from center
     TRANSITION_COUNT
     // REMOVED: WIPE_LR, WIPE_RL, ZOOM_IN, ZOOM_OUT, MELT - these violate CENTER ORIGIN
-};
-
-enum EasingCurve {
-    EASE_LINEAR,
-    EASE_IN_QUAD,
-    EASE_OUT_QUAD,
-    EASE_IN_OUT_QUAD,
-    EASE_IN_CUBIC,
-    EASE_OUT_CUBIC,
-    EASE_IN_OUT_CUBIC,
-    EASE_IN_ELASTIC,
-    EASE_OUT_ELASTIC,
-    EASE_IN_OUT_ELASTIC,
-    EASE_IN_BOUNCE,
-    EASE_OUT_BOUNCE,
-    EASE_IN_BACK,
-    EASE_OUT_BACK,
-    EASE_IN_OUT_BACK
 };
 
 class TransitionEngine {
@@ -171,9 +154,6 @@ private:
     // Reset transition state
     void resetState();
     
-    // Easing functions
-    float applyEasing(float t, EasingCurve curve);
-    
     // Transition implementations - CENTER ORIGIN ONLY
     void applyFade();
     void applyWipe(bool outward, bool fromCenter);  // fromCenter always true now
@@ -276,7 +256,7 @@ inline bool TransitionEngine::update() {
     
     // Apply easing
     float rawProgress = (float)elapsed / m_duration;
-    m_progress = applyEasing(rawProgress, m_curve);
+    m_progress = Easing::ease(rawProgress, m_curve);
     
     // Apply transition effect - CENTER ORIGIN ONLY
     switch (m_type) {
@@ -661,76 +641,6 @@ inline void TransitionEngine::applyMandala() {
     }
     
     m_state.mandalaPhase += 0.05f;
-}
-
-inline float TransitionEngine::applyEasing(float t, EasingCurve curve) {
-    switch (curve) {
-        case EASE_LINEAR:
-            return t;
-            
-        case EASE_IN_QUAD:
-            return t * t;
-            
-        case EASE_OUT_QUAD:
-            return t * (2 - t);
-            
-        case EASE_IN_OUT_QUAD:
-            return t < 0.5f ? 2 * t * t : -1 + (4 - 2 * t) * t;
-            
-        case EASE_IN_CUBIC:
-            return t * t * t;
-            
-        case EASE_OUT_CUBIC:
-            return (--t) * t * t + 1;
-            
-        case EASE_IN_OUT_CUBIC:
-            return t < 0.5f ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1;
-            
-        case EASE_IN_ELASTIC:
-            return t == 0 ? 0 : t == 1 ? 1 : -pow(2, 10 * (t - 1)) * sin((t - 1.1f) * 5 * PI);
-            
-        case EASE_OUT_ELASTIC:
-            return t == 0 ? 0 : t == 1 ? 1 : pow(2, -10 * t) * sin((t - 0.1f) * 5 * PI) + 1;
-            
-        case EASE_IN_OUT_ELASTIC:
-            if (t == 0) return 0;
-            if (t == 1) return 1;
-            t *= 2;
-            if (t < 1) return -0.5f * pow(2, 10 * (t - 1)) * sin((t - 1.1f) * 5 * PI);
-            return 0.5f * pow(2, -10 * (t - 1)) * sin((t - 1.1f) * 5 * PI) + 1;
-            
-        case EASE_IN_BOUNCE:
-            return 1 - applyEasing(1 - t, EASE_OUT_BOUNCE);
-            
-        case EASE_OUT_BOUNCE:
-            if (t < 1 / 2.75f) {
-                return 7.5625f * t * t;
-            } else if (t < 2 / 2.75f) {
-                t -= 1.5f / 2.75f;
-                return 7.5625f * t * t + 0.75f;
-            } else if (t < 2.5 / 2.75f) {
-                t -= 2.25f / 2.75f;
-                return 7.5625f * t * t + 0.9375f;
-            } else {
-                t -= 2.625f / 2.75f;
-                return 7.5625f * t * t + 0.984375f;
-            }
-            
-        case EASE_IN_BACK:
-            return t * t * (2.70158f * t - 1.70158f);
-            
-        case EASE_OUT_BACK:
-            return 1 + (--t) * t * (2.70158f * t + 1.70158f);
-            
-        case EASE_IN_OUT_BACK:
-            t *= 2;
-            if (t < 1) return 0.5f * t * t * (3.5949095f * t - 2.5949095f);
-            t -= 2;
-            return 0.5f * (t * t * (3.5949095f * t + 2.5949095f) + 2);
-            
-        default:
-            return t;
-    }
 }
 
 inline CRGB TransitionEngine::lerpColor(CRGB from, CRGB to, uint8_t progress) {

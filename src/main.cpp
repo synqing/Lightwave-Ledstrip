@@ -13,7 +13,10 @@
 #include "effects/engines/ColorEngine.h"
 #include "effects/engines/MotionEngine.h"
 #include "effects/engines/BlendingEngine.h"
-#include "effects/enhanced/EnhancedStripEffects.h"
+#endif
+
+#if FEATURE_NARRATIVE_ENGINE
+#include "core/NarrativeEngine.h"
 #endif
 
 #if FEATURE_WEB_SERVER
@@ -65,6 +68,7 @@ CLEDController* ws2812_ctrl_strip2 = nullptr;
 // We create a unified buffer that can handle both strips
 CRGB leds[HardwareConfig::NUM_LEDS];  // Full 320 LED buffer for EffectBase compatibility
 CRGB transitionBuffer[HardwareConfig::NUM_LEDS];
+
 
 // Strip-specific globals
 HardwareConfig::SyncMode currentSyncMode = HardwareConfig::SYNC_SYNCHRONIZED;
@@ -123,8 +127,8 @@ uint8_t currentPaletteIndex = 0;
 bool paletteAutoCycle = true;              // Toggle for auto-cycling palettes
 uint32_t paletteCycleInterval = 5000;      // Interval in ms (default 5 seconds)
 
-// Include palette definitions
-#include "Palettes.h"
+// Include master palette system (57 palettes with metadata)
+#include "Palettes_Master.h"
 
 #if FEATURE_ROTATE8_ENCODER
 #include "hardware/EncoderManager.h"
@@ -301,10 +305,8 @@ Effect effects[] = {
     {"LGP Mycelial Network", lgpMycelialNetwork, EFFECT_TYPE_STANDARD},
     {"LGP Riley Dissonance", lgpRileyDissonance, EFFECT_TYPE_STANDARD},
 
-#if FEATURE_AUDIO_SYNC && FEATURE_AUDIO_EFFECTS
-    // =============== AUDIO REACTIVE EFFECTS ===============
-    {"Spectrum LS Engine", spectrumLightshowEngine, EFFECT_TYPE_STANDARD},
-#endif
+// Audio effects removed
+
 };
 
 const uint8_t NUM_EFFECTS = sizeof(effects) / sizeof(effects[0]);
@@ -661,9 +663,9 @@ void setup() {
     // Initialize optimized effect lookup tables
     initOptimizedEffects();
     
-    // Initialize palette
+    // Initialize palette (using master palette system with 57 palettes)
     currentPaletteIndex = 0;
-    currentPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
+    currentPalette = CRGBPalette16(gMasterPalettes[currentPaletteIndex]);
     targetPalette = currentPalette;
     
     // Clear LEDs
@@ -787,6 +789,11 @@ void setup() {
     Serial.println("✅ BlendingEngine initialized (skeleton)");
     #endif
 
+    #if FEATURE_NARRATIVE_ENGINE
+    NarrativeEngine::getInstance().enable();
+    Serial.println("✅ NarrativeEngine initialized (dramatic timing)");
+    #endif
+
     Serial.println("Enhancement engines ready - Week 1-2 skeleton phase\n");
 #endif
 
@@ -825,8 +832,8 @@ void updatePalette() {
     // Only auto-cycle if enabled
     if (paletteAutoCycle && (millis() - lastPaletteChange > paletteCycleInterval)) {
         lastPaletteChange = millis();
-        currentPaletteIndex = (currentPaletteIndex + 1) % gGradientPaletteCount;
-        targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
+        currentPaletteIndex = (currentPaletteIndex + 1) % gMasterPaletteCount;
+        targetPalette = CRGBPalette16(gMasterPalettes[currentPaletteIndex]);
     }
 
     // Blend towards target palette
@@ -835,24 +842,30 @@ void updatePalette() {
 
 // Manual palette control functions
 void setPaletteIndex(uint8_t index) {
-    if (index < gGradientPaletteCount) {
+    if (index < gMasterPaletteCount) {
         currentPaletteIndex = index;
-        targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
+        targetPalette = CRGBPalette16(gMasterPalettes[currentPaletteIndex]);
     }
 }
 
 void nextPalette() {
-    currentPaletteIndex = (currentPaletteIndex + 1) % gGradientPaletteCount;
-    targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
+    currentPaletteIndex = (currentPaletteIndex + 1) % gMasterPaletteCount;
+    targetPalette = CRGBPalette16(gMasterPalettes[currentPaletteIndex]);
 }
 
 void prevPalette() {
     if (currentPaletteIndex == 0) {
-        currentPaletteIndex = gGradientPaletteCount - 1;
+        currentPaletteIndex = gMasterPaletteCount - 1;
     } else {
         currentPaletteIndex--;
     }
-    targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
+    targetPalette = CRGBPalette16(gMasterPalettes[currentPaletteIndex]);
+}
+
+// Get effective brightness (capped by palette power limits)
+uint8_t getEffectiveBrightness() {
+    uint8_t paletteCap = getPaletteMaxBrightness(currentPaletteIndex);
+    return min(brightnessVal, paletteCap);
 }
 
 // HMI REMOVED - updateEncoderFeedback() deleted
@@ -873,6 +886,20 @@ void audioUpdateCallback() {
 
 // Render update callback - runs in 8ms task
 void renderUpdateCallback() {
+#if FEATURE_NARRATIVE_ENGINE
+    // Update dramatic timing (top layer - before physics)
+    if (NarrativeEngine::getInstance().isEnabled()) {
+        NarrativeEngine::getInstance().update();
+    }
+#endif
+
+#if FEATURE_MOTION_ENGINE
+    // Update motion physics before rendering
+    if (MotionEngine::getInstance().isEnabled()) {
+        MotionEngine::getInstance().update();
+    }
+#endif
+
     // Update transition system
     if (transitionEngine.isActive()) {
         syncStripsToLeds();
@@ -1019,17 +1046,17 @@ static void handleSingleKeystroke(char ch) {
 
     // ] - Next palette
     if (ch == ']') {
-        currentPaletteIndex = (currentPaletteIndex + 1) % gGradientPaletteCount;
-        targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
-        Serial.printf("Palette: [%d/%d]\n", currentPaletteIndex, gGradientPaletteCount - 1);
+        currentPaletteIndex = (currentPaletteIndex + 1) % gMasterPaletteCount;
+        targetPalette = CRGBPalette16(gMasterPalettes[currentPaletteIndex]);
+        Serial.printf("Palette: [%d/%d]\n", currentPaletteIndex, gMasterPaletteCount - 1);
         return;
     }
 
     // [ - Previous palette
     if (ch == '[') {
-        currentPaletteIndex = (currentPaletteIndex == 0) ? (gGradientPaletteCount - 1) : (currentPaletteIndex - 1);
-        targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
-        Serial.printf("Palette: [%d/%d]\n", currentPaletteIndex, gGradientPaletteCount - 1);
+        currentPaletteIndex = (currentPaletteIndex == 0) ? (gMasterPaletteCount - 1) : (currentPaletteIndex - 1);
+        targetPalette = CRGBPalette16(gMasterPalettes[currentPaletteIndex]);
+        Serial.printf("Palette: [%d/%d]\n", currentPaletteIndex, gMasterPaletteCount - 1);
         return;
     }
 
@@ -1094,7 +1121,7 @@ static void handleSingleKeystroke(char ch) {
     if (ch == 's' || ch == 'S') {
         Serial.printf("\n--- STATUS ---\n");
         Serial.printf("Effect: [%d] %s\n", currentEffect, effects[currentEffect].name);
-        Serial.printf("Palette: %d/%d\n", currentPaletteIndex, gGradientPaletteCount - 1);
+        Serial.printf("Palette: %d/%d\n", currentPaletteIndex, gMasterPaletteCount - 1);
         Serial.printf("Brightness: %d\n", brightnessVal);
         Serial.printf("Speed: %d\n", paletteSpeed);
         Serial.printf("Heap: %d bytes\n", ESP.getFreeHeap());
@@ -1121,6 +1148,24 @@ static void handleSingleKeystroke(char ch) {
         Serial.printf("Effect: [%d] %s\n", currentEffect, effects[currentEffect].name);
         return;
     }
+
+#if FEATURE_NARRATIVE_ENGINE
+    // y - NarrativeEngine status, Y - toggle on/off
+    if (ch == 'y') {
+        NarrativeEngine::getInstance().printStatus();
+        return;
+    }
+    if (ch == 'Y') {
+        if (NarrativeEngine::getInstance().isEnabled()) {
+            NarrativeEngine::getInstance().disable();
+            Serial.println(F("NarrativeEngine DISABLED"));
+        } else {
+            NarrativeEngine::getInstance().enable();
+            Serial.println(F("NarrativeEngine ENABLED"));
+        }
+        return;
+    }
+#endif
 
     // Menu input handling (when menu is open)
     if (dbg_menu_state != MENU_OFF) {
@@ -1172,12 +1217,12 @@ void handleSerial() {
         else if (cmd.startsWith("palette ") || cmd.startsWith("pal ")) {
             int sp = cmd.indexOf(' ');
             uint16_t idx = cmd.substring(sp + 1).toInt();
-            if (idx < gGradientPaletteCount) {
+            if (idx < gMasterPaletteCount) {
                 currentPaletteIndex = idx;
-                targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
+                targetPalette = CRGBPalette16(gMasterPalettes[currentPaletteIndex]);
                 Serial.printf("Palette: %d\n", idx);
             } else {
-                Serial.printf("Invalid palette index (0-%d)\n", gGradientPaletteCount - 1);
+                Serial.printf("Invalid palette index (0-%d)\n", gMasterPaletteCount - 1);
             }
         }
         else if (cmd.startsWith("speed ")) {
@@ -1288,7 +1333,7 @@ void handleSerial() {
             Serial.println("\n=== STRING COMMANDS ===");
             Serial.printf("  effect <0-%d>      - Set effect by index\n", NUM_EFFECTS - 1);
             Serial.printf("  brightness <8-200> - Set brightness\n");
-            Serial.printf("  palette <0-%d>     - Set palette by index\n", gGradientPaletteCount - 1);
+            Serial.printf("  palette <0-%d>     - Set palette by index\n", gMasterPaletteCount - 1);
             Serial.println("  speed <1-50>       - Set animation speed");
             Serial.println("  next               - Next effect");
             Serial.println("  prev               - Previous effect");
@@ -1423,11 +1468,11 @@ void loop() {
                         
                     case 2: // Palette selection
                         if (event.delta > 0) {
-                            currentPaletteIndex = (currentPaletteIndex + 1) % gGradientPaletteCount;
+                            currentPaletteIndex = (currentPaletteIndex + 1) % gMasterPaletteCount;
                         } else {
-                            currentPaletteIndex = currentPaletteIndex > 0 ? currentPaletteIndex - 1 : gGradientPaletteCount - 1;
+                            currentPaletteIndex = currentPaletteIndex > 0 ? currentPaletteIndex - 1 : gMasterPaletteCount - 1;
                         }
-                        targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
+                        targetPalette = CRGBPalette16(gMasterPalettes[currentPaletteIndex]);
                         Serial.printf("🎨 MAIN: Palette changed to %d\n", currentPaletteIndex);
                         // if (encoderFeedback) encoderFeedback->flashEncoder(2, 255, 0, 255, 200);
                         break;
@@ -1522,6 +1567,12 @@ void loop() {
     perfMon.endEffectProcessing();
 #endif
     
+    // Enforce palette-based brightness cap (Phase 3: power safety)
+    uint8_t effectiveBrightness = getEffectiveBrightness();
+    if (FastLED.getBrightness() > effectiveBrightness) {
+        FastLED.setBrightness(effectiveBrightness);
+    }
+
     // Show LEDs (audio/render task disabled)
 #if FEATURE_PERFORMANCE_MONITOR
     perfMon.startSection();

@@ -1,5 +1,10 @@
 #include "StripEffects.h"
 #include "../../utils/TrigLookup.h"
+#include "../../config/features.h"
+
+#if FEATURE_NARRATIVE_ENGINE
+#include "../../core/NarrativeEngine.h"
+#endif
 
 // ============== BASIC EFFECTS ==============
 
@@ -177,6 +182,13 @@ void bpm() {
 // ============== ADVANCED WAVE EFFECTS ==============
 
 void waveEffect() {
+    // === NARRATIVE ENGINE: Query global dramatic timing ===
+#if FEATURE_NARRATIVE_ENGINE
+    float narrativeIntensity = NarrativeEngine::getInstance().getIntensity();
+#else
+    float narrativeIntensity = 1.0f;  // Full brightness when engine disabled
+#endif
+    
     // CENTER ORIGIN WAVES - Start from center LEDs 79/80 and propagate outward
     static uint32_t wavePosition = 0;  // Changed to uint32_t to prevent overflow
     
@@ -197,6 +209,11 @@ void waveEffect() {
         
         // Wave propagates outward from center
         uint8_t brightness = sin8((distFromCenter * 15) + (wavePosition >> 4));
+        
+        // === NARRATIVE MODULATION: Scale brightness by cycle intensity ===
+        // Minimum 20% brightness during REST, full range during BUILD→HOLD→RELEASE
+        brightness = (uint8_t)(brightness * (0.2f + 0.8f * narrativeIntensity));
+        
         uint8_t colorIndex = (distFromCenter * 8) + (wavePosition >> 6);
         
         CRGB color = ColorFromPalette(currentPalette, colorIndex, brightness);
@@ -559,7 +576,9 @@ void shockwaveEffect() {
     // Update and render shockwaves
     for (int w = 0; w < 5; w++) {
         if (shockwaves[w] >= 0) {
-            shockwaves[w] += (paletteSpeed / 20.0f) * visualParams.getIntensityNorm();
+            float t = shockwaves[w] / (float)HardwareConfig::STRIP_HALF_LENGTH;
+            float speedScale = 1.0f - 0.7f * Easing::ease(t, EASE_OUT_QUAD);
+            shockwaves[w] += (paletteSpeed / 20.0f) * visualParams.getIntensityNorm() * speedScale;
             
             if (shockwaves[w] > HardwareConfig::STRIP_HALF_LENGTH) {
                 shockwaves[w] = -1;
@@ -575,7 +594,8 @@ void shockwaveEffect() {
                 float ringThickness = 3.0f + (3.0f * visualParams.getComplexityNorm());
                 if (ringDist < ringThickness) {
                     float intensity = 1.0f - (ringDist / ringThickness);
-                    uint8_t brightness = 255 * intensity * (1.0f - shockwaves[w] / HardwareConfig::STRIP_HALF_LENGTH);
+                    float decay = 1.0f - Easing::ease(t, EASE_OUT_CUBIC);
+                    uint8_t brightness = 255 * intensity * decay;
                     brightness = brightness * visualParams.getIntensityNorm();
                     
                     CRGB color = ColorFromPalette(currentPalette, waveHues[w], brightness);
@@ -625,18 +645,21 @@ void vortexEffect() {
 
 // COLLISION - Particles shoot from edges to center and explode
 void collisionEffect() {
-    static float particle1Pos = 0;
-    static float particle2Pos = HardwareConfig::STRIP_LENGTH - 1;
     static bool exploding = false;
-    static float explosionRadius = 0;
+    static float approachT = 0.0f;
+    static uint32_t holdStartMs = 0;
+    static float explosionT = 0.0f;
     
     fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, 30);
     fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, 30);
     
     if (!exploding) {
-        // Move particles toward center
-        particle1Pos += paletteSpeed / 10.0f;
-        particle2Pos -= paletteSpeed / 10.0f;
+        float step = (0.01f + (paletteSpeed / 255.0f) * 0.05f) * (0.5f + visualParams.getIntensityNorm());
+        approachT = Easing::clamp01(approachT + step);
+
+        float eased = Easing::ease(approachT, EASE_IN_OUT_CUBIC);
+        float particle1Pos = eased * HardwareConfig::STRIP_CENTER_POINT;
+        float particle2Pos = (HardwareConfig::STRIP_LENGTH - 1) - eased * (HardwareConfig::STRIP_LENGTH - 1 - HardwareConfig::STRIP_CENTER_POINT);
         
         // Draw particles
         for (int trail = 0; trail < 10; trail++) {
@@ -656,22 +679,42 @@ void collisionEffect() {
             }
         }
         
-        // Check for collision at center
-        if (particle1Pos >= HardwareConfig::STRIP_CENTER_POINT - 5 && 
-            particle2Pos <= HardwareConfig::STRIP_CENTER_POINT + 5) {
-            exploding = true;
-            explosionRadius = 0;
+        uint32_t holdDurationMs = 80 + (uint32_t)(400.0f * visualParams.getComplexityNorm());
+        if (approachT >= 1.0f) {
+            if (holdStartMs == 0) holdStartMs = millis();
+            uint32_t heldMs = millis() - holdStartMs;
+            float holdT = holdDurationMs > 0 ? (float)heldMs / (float)holdDurationMs : 1.0f;
+            float beat = Easing::arc(holdT, 0.3f, 0.4f, 0.3f, EASE_OUT_CUBIC, EASE_IN_CUBIC);
+
+            for (int i = HardwareConfig::STRIP_CENTER_POINT - 2; i <= HardwareConfig::STRIP_CENTER_POINT + 2; i++) {
+                if (i >= 0 && i < HardwareConfig::STRIP_LENGTH) {
+                    uint8_t b = (uint8_t)(255.0f * beat);
+                    CRGB c = ColorFromPalette(currentPalette, gHue + (i - HardwareConfig::STRIP_CENTER_POINT) * 10, b);
+                    strip1[i] += c;
+                    strip2[i] += c;
+                }
+            }
+
+            if (holdT >= 1.0f) {
+                exploding = true;
+                explosionT = 0.0f;
+                holdStartMs = 0;
+                approachT = 0.0f;
+            }
         }
     } else {
         // Explosion expanding from center
-        explosionRadius += paletteSpeed / 5.0f;
+        float step = (0.015f + (paletteSpeed / 255.0f) * 0.06f) * (0.6f + visualParams.getIntensityNorm());
+        explosionT = Easing::clamp01(explosionT + step);
+        float explosionRadius = (HardwareConfig::STRIP_HALF_LENGTH + 10.0f) * Easing::ease(explosionT, EASE_OUT_CUBIC);
+        float envelope = 1.0f - Easing::ease(explosionT, EASE_OUT_QUAD);
         
         for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
             float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
             
             if (distFromCenter <= explosionRadius && distFromCenter >= explosionRadius - 10) {
                 float intensity = 1.0f - ((distFromCenter - (explosionRadius - 10)) / 10.0f);
-                uint8_t brightness = 255 * intensity;
+                uint8_t brightness = 255 * intensity * envelope;
                 
                 CRGB color = ColorFromPalette(currentPalette, gHue + random8(64), brightness);
                 strip1[i] += color;
@@ -680,10 +723,11 @@ void collisionEffect() {
         }
         
         // Reset when explosion reaches edges
-        if (explosionRadius > HardwareConfig::STRIP_HALF_LENGTH + 10) {
+        if (explosionT >= 1.0f) {
             exploding = false;
-            particle1Pos = 0;
-            particle2Pos = HardwareConfig::STRIP_LENGTH - 1;
+            approachT = 0.0f;
+            holdStartMs = 0;
+            explosionT = 0.0f;
         }
     }
 }

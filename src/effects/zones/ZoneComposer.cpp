@@ -10,10 +10,10 @@ extern Effect effects[];
 extern const uint8_t NUM_EFFECTS;
 extern uint8_t effectSpeed;  // Global speed variable for effects
 
-// Palette access for per-zone palette support
+// Palette access for per-zone palette support (using master palette system)
 extern CRGBPalette16 currentPalette;
-extern const TProgmemRGBGradientPaletteRef gGradientPalettes[];
-extern const uint8_t gGradientPaletteCount;
+extern const TProgmemRGBGradientPaletteRef gMasterPalettes[];
+extern const uint8_t gMasterPaletteCount;
 
 ZoneComposer::ZoneComposer()
     : m_zoneCount(3)  // Default to 3-zone mode
@@ -29,6 +29,7 @@ ZoneComposer::ZoneComposer()
     m_zoneBrightness[0] = 255;
     m_zoneSpeed[0] = 25;
     m_zonePalette[0] = 0;  // Use global palette
+    m_zoneBlendMode[0] = BLEND_OVERWRITE;
 
     // Zone 1 (middle): LGP Wave Collision (effect ID 11)
     m_zoneEffects[1] = 11;
@@ -36,6 +37,7 @@ ZoneComposer::ZoneComposer()
     m_zoneBrightness[1] = 255;
     m_zoneSpeed[1] = 25;
     m_zonePalette[1] = 0;
+    m_zoneBlendMode[1] = BLEND_OVERWRITE;
 
     // Zone 2 (outer): LGP Diamond Lattice (effect ID 12)
     m_zoneEffects[2] = 12;
@@ -43,6 +45,7 @@ ZoneComposer::ZoneComposer()
     m_zoneBrightness[2] = 255;
     m_zoneSpeed[2] = 25;
     m_zonePalette[2] = 0;
+    m_zoneBlendMode[2] = BLEND_OVERWRITE;
 
     // Zone 3 (4-zone mode only): Default to first effect, disabled
     m_zoneEffects[3] = 0;
@@ -50,6 +53,7 @@ ZoneComposer::ZoneComposer()
     m_zoneBrightness[3] = 255;
     m_zoneSpeed[3] = 25;
     m_zonePalette[3] = 0;
+    m_zoneBlendMode[3] = BLEND_OVERWRITE;
 
     // Clear buffers
     fill_solid(m_tempStrip1, 40, CRGB::Black);
@@ -140,6 +144,27 @@ uint8_t ZoneComposer::getZonePalette(uint8_t zoneId) const {
         return 0;
     }
     return m_zonePalette[zoneId];
+}
+
+void ZoneComposer::setZoneBlendMode(uint8_t zoneId, BlendMode mode) {
+    if (zoneId >= HardwareConfig::MAX_ZONES) {
+        Serial.printf("ERROR: Invalid zone ID %d\n", zoneId);
+        return;
+    }
+    
+    if (mode >= BLEND_MODE_COUNT) {
+        mode = BLEND_OVERWRITE;
+    }
+
+    m_zoneBlendMode[zoneId] = mode;
+    Serial.printf("Zone %d blend mode set to %d\n", zoneId, (int)mode);
+}
+
+BlendMode ZoneComposer::getZoneBlendMode(uint8_t zoneId) const {
+    if (zoneId >= HardwareConfig::MAX_ZONES) {
+        return BLEND_OVERWRITE;
+    }
+    return m_zoneBlendMode[zoneId];
 }
 
 void ZoneComposer::setZoneCount(uint8_t count) {
@@ -233,9 +258,9 @@ void ZoneComposer::renderZone(uint8_t zoneId) {
     // Step 3: Apply per-zone palette (save original first)
     CRGBPalette16 savedPalette = currentPalette;
     uint8_t zonePaletteId = m_zonePalette[zoneId];
-    if (zonePaletteId > 0 && zonePaletteId <= gGradientPaletteCount) {
-        // Use zone-specific palette (1-indexed: paletteId 1 = gGradientPalettes[0])
-        currentPalette = gGradientPalettes[zonePaletteId - 1];
+    if (zonePaletteId > 0 && zonePaletteId <= gMasterPaletteCount) {
+        // Use zone-specific palette (1-indexed: paletteId 1 = gMasterPalettes[0])
+        currentPalette = gMasterPalettes[zonePaletteId - 1];
     }
 
     // Step 4: Execute effect - it renders to full strip1/strip2
@@ -259,13 +284,12 @@ void ZoneComposer::mapZoneToOutput(uint8_t zoneId) {
 
     const ZoneDefinition& zone = m_activeConfig[zoneId];  // Use active config
     uint8_t brightness = m_zoneBrightness[zoneId];
+    BlendMode blendMode = m_zoneBlendMode[zoneId];
 
     // Helper lambda to apply brightness scaling to a pixel
     auto applyBrightness = [brightness](CRGB& pixel) {
         if (brightness < 255) {
-            pixel.r = (pixel.r * brightness) / 255;
-            pixel.g = (pixel.g * brightness) / 255;
-            pixel.b = (pixel.b * brightness) / 255;
+            pixel.nscale8(brightness);
         }
     };
 
@@ -276,32 +300,36 @@ void ZoneComposer::mapZoneToOutput(uint8_t zoneId) {
     // Copy left segment for strip1
     for (uint8_t i = zone.strip1StartLeft; i <= zone.strip1EndLeft; i++) {
         if (i < 160) {
-            m_outputStrip1[i] = strip1[i];
-            applyBrightness(m_outputStrip1[i]);
+            CRGB source = strip1[i];
+            applyBrightness(source);
+            m_outputStrip1[i] = BlendingEngine::blendPixels(m_outputStrip1[i], source, blendMode);
         }
     }
 
     // Copy right segment for strip1
     for (uint8_t i = zone.strip1StartRight; i <= zone.strip1EndRight; i++) {
         if (i < 160) {
-            m_outputStrip1[i] = strip1[i];
-            applyBrightness(m_outputStrip1[i]);
+            CRGB source = strip1[i];
+            applyBrightness(source);
+            m_outputStrip1[i] = BlendingEngine::blendPixels(m_outputStrip1[i], source, blendMode);
         }
     }
 
     // Copy left segment for strip2
     for (uint8_t i = zone.strip2StartLeft; i <= zone.strip2EndLeft; i++) {
         if (i < 160) {
-            m_outputStrip2[i] = strip2[i];
-            applyBrightness(m_outputStrip2[i]);
+            CRGB source = strip2[i];
+            applyBrightness(source);
+            m_outputStrip2[i] = BlendingEngine::blendPixels(m_outputStrip2[i], source, blendMode);
         }
     }
 
     // Copy right segment for strip2
     for (uint8_t i = zone.strip2StartRight; i <= zone.strip2EndRight; i++) {
         if (i < 160) {
-            m_outputStrip2[i] = strip2[i];
-            applyBrightness(m_outputStrip2[i]);
+            CRGB source = strip2[i];
+            applyBrightness(source);
+            m_outputStrip2[i] = BlendingEngine::blendPixels(m_outputStrip2[i], source, blendMode);
         }
     }
 }

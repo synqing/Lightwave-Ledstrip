@@ -40,8 +40,37 @@ extern ZoneComposer zoneComposer;
 extern CRGBPalette16 currentPalette;
 extern CRGBPalette16 targetPalette;
 extern uint8_t currentPaletteIndex;
-extern const TProgmemRGBGradientPaletteRef gGradientPalettes[];
-extern const uint8_t gGradientPaletteCount;
+
+// Master palette system externs (definitions in Palettes_Master.h, included in main.cpp)
+extern const TProgmemRGBGradientPaletteRef gMasterPalettes[];
+extern const uint8_t gMasterPaletteCount;
+extern const char* const MasterPaletteNames[];
+extern const uint8_t master_palette_flags[];
+extern const uint8_t master_palette_max_brightness[];
+
+// Palette flag definitions (must match Palettes_Master.h)
+#define PAL_WARM        0x01
+#define PAL_COOL        0x02
+#define PAL_HIGH_SAT    0x04
+#define PAL_WHITE_HEAVY 0x08
+#define PAL_CALM        0x10
+#define PAL_VIVID       0x20
+
+// Helper functions (inline implementations to avoid linking issues)
+inline bool paletteHasFlag(uint8_t idx, uint8_t flag) {
+    if (idx >= gMasterPaletteCount) return false;
+    return (master_palette_flags[idx] & flag) != 0;
+}
+inline bool isPaletteWarm(uint8_t idx) { return paletteHasFlag(idx, PAL_WARM); }
+inline bool isPaletteCool(uint8_t idx) { return paletteHasFlag(idx, PAL_COOL); }
+inline bool isPaletteCalm(uint8_t idx) { return paletteHasFlag(idx, PAL_CALM); }
+inline bool isPaletteVivid(uint8_t idx) { return paletteHasFlag(idx, PAL_VIVID); }
+inline bool isCrameriPalette(uint8_t idx) { return idx >= 33 && idx < gMasterPaletteCount; }
+inline bool isCptCityPalette(uint8_t idx) { return idx < 33; }
+inline uint8_t getPaletteMaxBrightness(uint8_t idx) {
+    if (idx >= gMasterPaletteCount) return 255;
+    return master_palette_max_brightness[idx];
+}
 
 // Forward declarations
 void startAdvancedTransition(uint8_t newEffect);
@@ -406,11 +435,12 @@ void LightwaveWebServer::setupRoutes() {
 
             if (!error && doc.containsKey("paletteId")) {
                 uint8_t paletteId = doc["paletteId"];
-                if (paletteId >= gGradientPaletteCount) {
+                if (paletteId >= gMasterPaletteCount) {
                     request->send(400, "application/json", "{\"error\":\"Invalid palette ID\"}");
                     return;
                 }
                 currentPaletteIndex = paletteId;
+                targetPalette = CRGBPalette16(gMasterPalettes[currentPaletteIndex]);
                 request->send(200, "application/json", "{\"status\":\"ok\"}");
                 return;
             }
@@ -418,19 +448,43 @@ void LightwaveWebServer::setupRoutes() {
         }
     );
 
-    // Get palettes list
+    // Get palettes list with metadata (57 palettes)
+    // Supports optional filter query param: ?filter=warm|cool|calm|vivid|crameri|cptcity
     server->on("/api/palettes", HTTP_GET, [](AsyncWebServerRequest *request){
         AsyncJsonResponse *response = new AsyncJsonResponse();
         JsonObject root = response->getRoot();
         JsonArray palettes = root.createNestedArray("palettes");
 
-        extern const uint8_t gGradientPaletteCount;
-        extern const char* const paletteNames[];
-        for (uint8_t i = 0; i < gGradientPaletteCount; i++) {
+        // Check for filter parameter
+        String filter = "";
+        if (request->hasParam("filter")) {
+            filter = request->getParam("filter")->value();
+        }
+
+        for (uint8_t i = 0; i < gMasterPaletteCount; i++) {
+            // Apply filter if specified
+            if (filter.length() > 0) {
+                if (filter == "warm" && !isPaletteWarm(i)) continue;
+                if (filter == "cool" && !isPaletteCool(i)) continue;
+                if (filter == "calm" && !isPaletteCalm(i)) continue;
+                if (filter == "vivid" && !isPaletteVivid(i)) continue;
+                if (filter == "crameri" && !isCrameriPalette(i)) continue;
+                if (filter == "cptcity" && !isCptCityPalette(i)) continue;
+            }
+
             JsonObject palette = palettes.createNestedObject();
             palette["id"] = i;
-            palette["name"] = paletteNames[i];
+            palette["name"] = MasterPaletteNames[i];
+            palette["source"] = isCrameriPalette(i) ? "crameri" : "cptcity";
+            palette["warm"] = isPaletteWarm(i);
+            palette["cool"] = isPaletteCool(i);
+            palette["calm"] = isPaletteCalm(i);
+            palette["vivid"] = isPaletteVivid(i);
+            palette["maxBrightness"] = getPaletteMaxBrightness(i);
         }
+
+        root["total"] = gMasterPaletteCount;
+        root["filtered"] = palettes.size();
 
         response->setLength();
         request->send(response);
@@ -1039,9 +1093,9 @@ void LightwaveWebServer::onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient 
                     }
                 } else if (type == "setPalette") {
                     uint8_t paletteId = doc["paletteId"];
-                    if (paletteId < gGradientPaletteCount) {
+                    if (paletteId < gMasterPaletteCount) {
                         currentPaletteIndex = paletteId;
-                        targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
+                        targetPalette = CRGBPalette16(gMasterPalettes[currentPaletteIndex]);
                     }
                 } else if (type == "setPipeline") {
                     if (doc.containsKey("intensity")) effectIntensity = doc["intensity"];
@@ -1096,7 +1150,7 @@ void LightwaveWebServer::onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient 
                 } else if (type == "zone.setPalette") {
                     uint8_t zoneId = doc["zoneId"];
                     uint8_t paletteId = doc["paletteId"];
-                    if (paletteId <= gGradientPaletteCount) {
+                    if (paletteId <= gMasterPaletteCount) {
                         zoneComposer.setZonePalette(zoneId, paletteId);
                         webServer.broadcastZoneState();
                     }
@@ -1301,9 +1355,9 @@ void LightwaveWebServer::onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient 
                     FastLED.setBrightness(brightness);
                 } else if (cmd == "palette") {
                     uint8_t palette = doc["value"];
-                    if (palette < gGradientPaletteCount) {
+                    if (palette < gMasterPaletteCount) {
                         currentPaletteIndex = palette;
-                        targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
+                        targetPalette = CRGBPalette16(gMasterPalettes[currentPaletteIndex]);
                     }
                 }
             }
@@ -1713,9 +1767,9 @@ void LightwaveWebServer::handleParametersSet(AsyncWebServerRequest* request, uin
 
     if (doc.containsKey("paletteId")) {
         uint8_t val = doc["paletteId"];
-        if (val < gGradientPaletteCount) {
+        if (val < gMasterPaletteCount) {
             currentPaletteIndex = val;
-            targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
+            targetPalette = CRGBPalette16(gMasterPalettes[currentPaletteIndex]);
             updated = true;
         } else {
             sendErrorResponse(request, HttpStatus::BAD_REQUEST,
@@ -1942,9 +1996,9 @@ bool LightwaveWebServer::executeBatchAction(const String& action, JsonVariant pa
     else if (action == "setPalette") {
         if (!params.containsKey("paletteId")) return false;
         uint8_t id = params["paletteId"];
-        if (id >= gGradientPaletteCount) return false;
+        if (id >= gMasterPaletteCount) return false;
         currentPaletteIndex = id;
-        targetPalette = CRGBPalette16(gGradientPalettes[currentPaletteIndex]);
+        targetPalette = CRGBPalette16(gMasterPalettes[currentPaletteIndex]);
         return true;
     }
     else if (action == "setZoneEffect") {

@@ -17,20 +17,55 @@ BlendingEngine::BlendingEngine()
 
 // ====== BLEND MODES ======
 CRGB BlendingEngine::blendPixels(CRGB base, CRGB blend, BlendMode mode, uint8_t alpha) {
-    // Week 1-2: Only implement OVERWRITE
-    // Week 5: Implement all 8+ blend modes
+    if (alpha == 0) return base;
+    if (alpha < 255) {
+        blend.nscale8(alpha);
+    }
+
     switch (mode) {
         case BLEND_ADDITIVE:
-            // Week 5: Implement additive blending
-            return base;
+            return base + blend;
 
         case BLEND_MULTIPLY:
-            // Week 5: Implement multiply blending
-            return base;
+            return CRGB(
+                scale8(base.r, blend.r),
+                scale8(base.g, blend.g),
+                scale8(base.b, blend.b)
+            );
 
         case BLEND_SCREEN:
-            // Week 5: Implement screen blending
-            return base;
+            return CRGB(
+                255 - scale8(255 - base.r, 255 - blend.r),
+                255 - scale8(255 - base.g, 255 - blend.g),
+                255 - scale8(255 - base.b, 255 - blend.b)
+            );
+
+        case BLEND_OVERLAY:
+            // High contrast mix: multiply if base < 128, screen if base > 128
+            return CRGB(
+                (base.r < 128) ? scale8(base.r * 2, blend.r) : 255 - scale8(255 - base.r, 255 - blend.r),
+                (base.g < 128) ? scale8(base.g * 2, blend.g) : 255 - scale8(255 - base.g, 255 - blend.g),
+                (base.b < 128) ? scale8(base.b * 2, blend.b) : 255 - scale8(255 - base.b, 255 - blend.b)
+            );
+            
+        case BLEND_LIGHTEN_ONLY:
+            return CRGB(
+                max(base.r, blend.r),
+                max(base.g, blend.g),
+                max(base.b, blend.b)
+            );
+            
+        case BLEND_DARKEN_ONLY:
+            return CRGB(
+                min(base.r, blend.r),
+                min(base.g, blend.g),
+                min(base.b, blend.b)
+            );
+
+        case BLEND_ALPHA:
+            // Standard alpha blending: blend * alpha + base * (1-alpha)
+            // (Assumes alpha is already applied to blend via nscale8 above)
+            return blend + base.nscale8(255 - alpha);
 
         case BLEND_OVERWRITE:
         default:

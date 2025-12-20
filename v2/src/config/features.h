@@ -1,0 +1,124 @@
+/**
+ * @file features.h
+ * @brief Compile-time feature flags for LightwaveOS v2
+ *
+ * These flags control which optional features are compiled into the firmware.
+ * Most flags can be overridden via platformio.ini build_flags.
+ */
+
+#pragma once
+
+// ============================================================================
+// Core Features (defined in platformio.ini)
+// ============================================================================
+
+// Actor System - always enabled in v2
+#ifndef FEATURE_ACTOR_SYSTEM
+#define FEATURE_ACTOR_SYSTEM 1
+#endif
+
+// Plugin Runtime - effect plugin system
+#ifndef FEATURE_PLUGIN_RUNTIME
+#define FEATURE_PLUGIN_RUNTIME 1
+#endif
+
+// CQRS State Management
+#ifndef FEATURE_CQRS_STATE
+#define FEATURE_CQRS_STATE 1
+#endif
+
+// HAL Abstraction Layer
+#ifndef FEATURE_HAL_ABSTRACTION
+#define FEATURE_HAL_ABSTRACTION 1
+#endif
+
+// ============================================================================
+// Network Features (defined in esp32dev_wifi environment)
+// ============================================================================
+
+// Web Server with REST API and WebSocket
+#ifndef FEATURE_WEB_SERVER
+#define FEATURE_WEB_SERVER 0
+#endif
+
+// Multi-Device Synchronization
+#ifndef FEATURE_MULTI_DEVICE
+#define FEATURE_MULTI_DEVICE 0
+#endif
+
+// ============================================================================
+// Optional Features
+// ============================================================================
+
+// Serial Menu Interface
+#ifndef FEATURE_SERIAL_MENU
+#define FEATURE_SERIAL_MENU 1
+#endif
+
+// Performance Monitoring
+#ifndef FEATURE_PERFORMANCE_MONITOR
+#define FEATURE_PERFORMANCE_MONITOR 1
+#endif
+
+// Zone System
+#ifndef FEATURE_ZONE_SYSTEM
+#define FEATURE_ZONE_SYSTEM 1
+#endif
+
+// Transition Engine
+#ifndef FEATURE_TRANSITIONS
+#define FEATURE_TRANSITIONS 1
+#endif
+
+// Audio Reactive Effects (requires I2S microphone)
+#ifndef FEATURE_AUDIO_SYNC
+#define FEATURE_AUDIO_SYNC 0
+#endif
+
+// OTA Updates
+#ifndef FEATURE_OTA_UPDATE
+#define FEATURE_OTA_UPDATE 0
+#endif
+
+// ESP-NOW Wireless Encoders
+#ifndef FEATURE_WIRELESS_ENCODERS
+#define FEATURE_WIRELESS_ENCODERS 0
+#endif
+
+// M5Stack ROTATE8 Encoder Support
+#ifndef FEATURE_ROTATE8_ENCODER
+#define FEATURE_ROTATE8_ENCODER 0
+#endif
+
+// ============================================================================
+// Enhancement Engines (optional color and motion enhancements)
+// ============================================================================
+
+// ColorEngine - Cross-palette blending, diffusion, temporal rotation
+#ifndef FEATURE_COLOR_ENGINE
+#define FEATURE_COLOR_ENGINE 1
+#endif
+
+// MotionEngine - Phase offset, auto-rotation, particle physics
+#ifndef FEATURE_MOTION_ENGINE
+#define FEATURE_MOTION_ENGINE 1
+#endif
+
+// ============================================================================
+// Debug Features
+// ============================================================================
+
+// Debug Mode
+#ifndef DEBUG
+#define DEBUG 0
+#endif
+
+// Memory Debug (tracks allocations)
+#ifndef FEATURE_MEMORY_DEBUG
+#define FEATURE_MEMORY_DEBUG 0
+#endif
+
+// Effect Profiling
+#ifndef FEATURE_EFFECT_PROFILER
+#define FEATURE_EFFECT_PROFILER 0
+#endif

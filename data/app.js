@@ -75,6 +75,9 @@ const API = {
     loadUserPreset: (slot) => API.request('/api/v1/presets/load', { method: 'POST', body: JSON.stringify({ type: 'user', slot }) }),
     deleteUserPreset: (slot) => API.request('/api/v1/presets/user', { method: 'DELETE', body: JSON.stringify({ slot }) }),
 
+    // Effect Metadata API (Phase C.2)
+    getEffectMetadata: (id) => API.request(`/api/v1/effects/metadata?id=${id}`),
+
     // Enhancement Engine APIs
     setColorBlend: (enabled) => API.request('/enhancement/color/blend', { method: 'POST', body: JSON.stringify({ enabled }) }),
     setColorDiffusion: (amount) => API.request('/enhancement/color/diffusion', { method: 'POST', body: JSON.stringify({ amount }) }),
@@ -223,6 +226,11 @@ function syncZoneState(msg) {
             if (sLabel) sLabel.textContent = zone.speed;
             if (effectSelect) effectSelect.value = zone.effectId;
             if (paletteSelect) paletteSelect.value = zone.paletteId;
+
+            // Fetch metadata for the selected zone's effect
+            if (idx === state.selectedZone - 1) {
+                fetchEffectMetadata(zone.effectId);
+            }
         }
     }
 
@@ -478,7 +486,53 @@ function nextEffect() {
 function setZoneEffect() {
     const sel = document.getElementById('effect-select');
     if (!sel) return;
-    API.setZoneEffect(state.selectedZone - 1, parseInt(sel.value));
+    const effectId = parseInt(sel.value);
+    API.setZoneEffect(state.selectedZone - 1, effectId);
+    fetchEffectMetadata(effectId);
+}
+
+// ========== Effect Info (Phase C.2) ==========
+let effectInfoExpanded = false;
+
+function toggleEffectInfo() {
+    effectInfoExpanded = !effectInfoExpanded;
+    const content = document.getElementById('effect-info-content');
+    const chevron = document.getElementById('effect-info-chevron');
+    if (content) content.classList.toggle('hidden', !effectInfoExpanded);
+    if (chevron) chevron.style.transform = effectInfoExpanded ? 'rotate(180deg)' : '';
+}
+
+function fetchEffectMetadata(effectId) {
+    API.getEffectMetadata(effectId).then(r => {
+        if (r.success && r.data) {
+            displayEffectMetadata(r.data);
+        }
+    }).catch(() => {
+        // Silently fail - metadata is optional
+    });
+}
+
+function displayEffectMetadata(meta) {
+    const categoryEl = document.getElementById('effect-category');
+    const descEl = document.getElementById('effect-description');
+    const featuresEl = document.getElementById('effect-features');
+
+    if (categoryEl) categoryEl.textContent = meta.category || '-';
+    if (descEl) descEl.textContent = meta.description || '-';
+
+    if (featuresEl && meta.features) {
+        const badges = [];
+        if (meta.features.centerOrigin) badges.push({ label: 'CENTER ORIGIN', color: 'bg-green-500/20 text-green-400' });
+        if (meta.features.usesPalette) badges.push({ label: 'PALETTE', color: 'bg-purple-500/20 text-purple-400' });
+        if (meta.features.usesSpeed) badges.push({ label: 'SPEED', color: 'bg-blue-500/20 text-blue-400' });
+        if (meta.features.zoneAware) badges.push({ label: 'ZONE AWARE', color: 'bg-amber-500/20 text-amber-400' });
+        if (meta.features.physicsBased) badges.push({ label: 'PHYSICS', color: 'bg-pink-500/20 text-pink-400' });
+        if (meta.features.dualStrip) badges.push({ label: 'DUAL STRIP', color: 'bg-cyan-500/20 text-cyan-400' });
+
+        featuresEl.innerHTML = badges.map(b =>
+            `<span class="px-2 py-0.5 rounded text-[10px] font-medium ${b.color}">${b.label}</span>`
+        ).join('');
+    }
 }
 
 function enableZone() {

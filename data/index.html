@@ -139,6 +139,32 @@
                     </button>
                 </div>
 
+                <!-- Effect Info Card (collapsible) -->
+                <div id="effect-info-card" class="bg-surface/50 border border-border-subtle rounded-lg overflow-hidden">
+                    <button onclick="toggleEffectInfo()" class="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-text-secondary hover:text-text-primary transition-colors">
+                        <span class="flex items-center gap-2">
+                            <span class="iconify" data-icon="solar:info-circle-bold-duotone" data-width="14"></span>
+                            Effect Info
+                        </span>
+                        <span id="effect-info-chevron" class="iconify transition-transform" data-icon="solar:alt-arrow-down-bold-duotone" data-width="12"></span>
+                    </button>
+                    <div id="effect-info-content" class="px-3 pb-3 hidden">
+                        <div class="space-y-2 text-xs">
+                            <div class="flex items-center gap-2">
+                                <span class="text-text-muted">Category:</span>
+                                <span id="effect-category" class="px-2 py-0.5 rounded bg-accent-cyan/10 text-accent-cyan font-medium">-</span>
+                            </div>
+                            <div>
+                                <span class="text-text-muted">Description:</span>
+                                <p id="effect-description" class="mt-1 text-text-secondary leading-relaxed">-</p>
+                            </div>
+                            <div class="flex flex-wrap gap-1.5" id="effect-features">
+                                <!-- Feature badges will be inserted here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Per-Zone Brightness -->
                 <div class="flex flex-col gap-1.5">
                     <div class="flex justify-between items-center">

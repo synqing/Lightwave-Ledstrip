@@ -780,6 +780,144 @@ function saveToSlot(slot) {
 
 function resetToDefaults() { setZoneCount(3); }
 
+// ========== Preset Sharing (Phase C.3) ==========
+
+function exportPresetToUrl() {
+    // Build minimal preset object from current state
+    const preset = {
+        v: 1,  // Version for future compatibility
+        zc: state.zoneCount,
+        z: state.zones.slice(0, state.zoneCount).map(z => ({
+            e: z.effectId,
+            b: z.brightness,
+            s: z.speed,
+            p: z.paletteId,
+            on: z.enabled
+        }))
+    };
+
+    // Encode to base64
+    const json = JSON.stringify(preset);
+    const base64 = btoa(json);
+    return `${window.location.origin}${window.location.pathname}#preset=${base64}`;
+}
+
+function importPresetFromUrl() {
+    const hash = window.location.hash;
+    if (!hash.startsWith('#preset=')) return false;
+
+    try {
+        const base64 = hash.substring(8);  // Remove '#preset='
+        const json = atob(base64);
+        const preset = JSON.parse(json);
+
+        // Validate version
+        if (preset.v !== 1) {
+            console.warn('Unknown preset version:', preset.v);
+            return false;
+        }
+
+        // Apply preset
+        if (preset.zc && preset.zc >= 1 && preset.zc <= 4) {
+            setZoneCount(preset.zc);
+        }
+
+        if (preset.z && Array.isArray(preset.z)) {
+            preset.z.forEach((z, idx) => {
+                if (idx < 4) {
+                    if (z.e !== undefined) API.setZoneEffect(idx, z.e);
+                    if (z.b !== undefined) API.setZoneBrightness(idx, z.b);
+                    if (z.s !== undefined) API.setZoneSpeed(idx, z.s);
+                    if (z.p !== undefined) API.setZonePalette(idx, z.p);
+                    if (z.on !== undefined) API.setZoneEnabled(idx, z.on);
+                }
+            });
+        }
+
+        // Clear hash to prevent re-import on refresh
+        history.replaceState(null, '', window.location.pathname);
+        console.log('Preset imported from URL');
+        return true;
+    } catch (e) {
+        console.error('Failed to import preset:', e);
+        return false;
+    }
+}
+
+function showShareModal() {
+    const url = exportPresetToUrl();
+    document.getElementById('share-url').value = url;
+    document.getElementById('share-modal').classList.remove('hidden');
+
+    // Generate QR code if library available
+    generateQRCode(url);
+}
+
+function closeShareModal() {
+    document.getElementById('share-modal').classList.add('hidden');
+}
+
+function copyShareUrl() {
+    const urlInput = document.getElementById('share-url');
+    urlInput.select();
+    navigator.clipboard.writeText(urlInput.value).then(() => {
+        const btn = document.getElementById('copy-btn');
+        const originalText = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = originalText, 2000);
+    }).catch(() => {
+        // Fallback for older browsers
+        document.execCommand('copy');
+    });
+}
+
+function generateQRCode(url) {
+    const container = document.getElementById('qr-code');
+    if (!container) return;
+
+    // Check if QRCode library is loaded
+    if (typeof QRCode === 'undefined') {
+        container.innerHTML = '<span class="text-text-muted text-xs">QR library not loaded</span>';
+        return;
+    }
+
+    container.innerHTML = '';
+    new QRCode(container, {
+        text: url,
+        width: 128,
+        height: 128,
+        colorDark: '#00d4ff',
+        colorLight: '#0a0f14',
+        correctLevel: QRCode.CorrectLevel.L
+    });
+}
+
+function downloadPresetJson() {
+    const preset = {
+        version: 1,
+        name: 'My Preset',
+        created: new Date().toISOString(),
+        zoneCount: state.zoneCount,
+        zones: state.zones.slice(0, state.zoneCount).map(z => ({
+            effectId: z.effectId,
+            brightness: z.brightness,
+            speed: z.speed,
+            paletteId: z.paletteId,
+            enabled: z.enabled
+        }))
+    };
+
+    const json = JSON.stringify(preset, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'lightwave-preset.json';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
 // ========== Firmware Update ==========
 function toggleFirmware() {
     const content = document.getElementById('firmware-content');
@@ -980,6 +1118,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateMixerChannels(state.zoneCount);
     selectZone(1);
     updateConnectionStatus();
+
+    // Check for shared preset in URL (Phase C.3)
+    setTimeout(() => importPresetFromUrl(), 500);  // Delay to allow WS to sync first
 
     // Initialize firmware file input handler
     const firmwareFileInput = document.getElementById('firmware-file');

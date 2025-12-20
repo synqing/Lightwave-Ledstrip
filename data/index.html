@@ -546,10 +546,16 @@
                     <!-- User preset buttons will be inserted here by JS -->
                 </div>
             </div>
-            <button onclick="savePreset()" class="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-accent-cyan text-black text-sm font-semibold hover:opacity-90 transition-opacity whitespace-nowrap">
-                <span class="iconify" data-icon="solar:diskette-bold-duotone" data-width="16"></span>
-                Save
-            </button>
+            <div class="flex gap-2">
+                <button onclick="savePreset()" class="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-accent-cyan text-black text-sm font-semibold hover:opacity-90 transition-opacity whitespace-nowrap">
+                    <span class="iconify" data-icon="solar:diskette-bold-duotone" data-width="16"></span>
+                    Save
+                </button>
+                <button onclick="showShareModal()" class="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-elevated border border-border-interactive text-text-secondary text-sm font-medium hover:text-text-primary hover:border-accent-cyan/50 transition-all whitespace-nowrap">
+                    <span class="iconify" data-icon="solar:share-bold-duotone" data-width="16"></span>
+                    Share
+                </button>
+            </div>
         </div>
     </footer>
 
@@ -565,6 +571,44 @@
         </div>
     </div>
 
+    <!-- Share Preset Modal (Phase C.3) -->
+    <div id="share-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div class="bg-surface border border-border-subtle rounded-xl p-6 w-96 shadow-2xl">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-text-primary">Share Preset</h3>
+                <button onclick="closeShareModal()" class="text-text-muted hover:text-text-primary transition-colors">
+                    <span class="iconify" data-icon="solar:close-circle-bold-duotone" data-width="24"></span>
+                </button>
+            </div>
+
+            <!-- QR Code -->
+            <div class="flex justify-center mb-4">
+                <div id="qr-code" class="w-32 h-32 bg-elevated rounded-lg flex items-center justify-center">
+                    <span class="text-text-muted text-xs">QR Code</span>
+                </div>
+            </div>
+
+            <!-- Share URL -->
+            <div class="mb-4">
+                <label class="text-xs font-medium text-text-muted mb-1 block">Share Link</label>
+                <div class="flex gap-2">
+                    <input id="share-url" type="text" readonly class="flex-1 px-3 py-2 rounded-lg bg-elevated border border-border-subtle text-text-secondary text-xs font-mono focus:outline-none">
+                    <button id="copy-btn" onclick="copyShareUrl()" class="px-4 py-2 rounded-lg bg-accent-cyan text-black text-sm font-semibold hover:opacity-90 transition-opacity whitespace-nowrap">
+                        Copy
+                    </button>
+                </div>
+            </div>
+
+            <!-- Download JSON -->
+            <button onclick="downloadPresetJson()" class="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-elevated border border-border-interactive text-text-secondary text-sm font-medium hover:text-text-primary hover:border-accent-cyan/50 transition-all">
+                <span class="iconify" data-icon="solar:download-bold-duotone" data-width="16"></span>
+                Download JSON
+            </button>
+        </div>
+    </div>
+
+    <!-- QR Code Library (optional, loaded async) -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js" async defer></script>
     <script src="app.js"></script>
 </body>
 </html>

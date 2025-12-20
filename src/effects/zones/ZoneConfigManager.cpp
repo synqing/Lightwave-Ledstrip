@@ -16,6 +16,7 @@ void ZoneConfig::calculateChecksum() {
         sum += zoneBrightness[i];
         sum += zoneSpeed[i];
         sum += zonePalette[i];
+        sum += zoneBlendMode[i];
     }
 
     checksum = sum;
@@ -33,6 +34,7 @@ bool ZoneConfig::isValid() const {
         sum += zoneBrightness[i];
         sum += zoneSpeed[i];
         sum += zonePalette[i];
+        sum += zoneBlendMode[i];
     }
 
     return (checksum == sum) && (zoneCount >= 1 && zoneCount <= 4);
@@ -51,6 +53,7 @@ const ZonePreset ZONE_PRESETS[ZONE_PRESET_COUNT] = {
             .zoneBrightness = {255, 255, 255, 255},  // Full brightness
             .zoneSpeed = {25, 25, 25, 25},  // Mid-range speed
             .zonePalette = {0, 0, 0, 0},  // Use global palette
+            .zoneBlendMode = {0, 0, 0, 0},  // Default: Overwrite
             .systemEnabled = false,
             .checksum = 0  // Will be calculated on load
         }
@@ -66,6 +69,7 @@ const ZonePreset ZONE_PRESETS[ZONE_PRESET_COUNT] = {
             .zoneBrightness = {255, 200, 255, 255},  // Slightly dimmer outer
             .zoneSpeed = {25, 30, 25, 25},  // Slightly faster outer
             .zonePalette = {0, 0, 0, 0},  // Use global palette
+            .zoneBlendMode = {0, 0, 0, 0},  // Default: Overwrite
             .systemEnabled = false,
             .checksum = 0
         }
@@ -81,6 +85,7 @@ const ZonePreset ZONE_PRESETS[ZONE_PRESET_COUNT] = {
             .zoneBrightness = {255, 220, 180, 255},  // Gradient brightness
             .zoneSpeed = {20, 25, 35, 25},  // Varied speeds
             .zonePalette = {0, 0, 0, 0},  // Use global palette
+            .zoneBlendMode = {0, 0, 0, 0},  // Default: Overwrite
             .systemEnabled = false,
             .checksum = 0
         }
@@ -96,6 +101,7 @@ const ZonePreset ZONE_PRESETS[ZONE_PRESET_COUNT] = {
             .zoneBrightness = {255, 230, 200, 170},  // Gradient: bright center to dim outer
             .zoneSpeed = {15, 25, 35, 45},  // Gradient: slow center to fast outer
             .zonePalette = {0, 0, 0, 0},  // Use global palette
+            .zoneBlendMode = {0, 0, 0, 0},  // Default: Overwrite
             .systemEnabled = false,
             .checksum = 0
         }
@@ -111,6 +117,7 @@ const ZonePreset ZONE_PRESETS[ZONE_PRESET_COUNT] = {
             .zoneBrightness = {255, 255, 255, 255},  // Full brightness for showcase
             .zoneSpeed = {20, 25, 30, 25},  // Balanced speeds
             .zonePalette = {0, 0, 0, 0},  // Use global palette
+            .zoneBlendMode = {0, 0, 0, 0},  // Default: Overwrite
             .systemEnabled = false,
             .checksum = 0
         }
@@ -242,6 +249,7 @@ void ZoneConfigManager::exportConfig(ZoneConfig& config) {
         config.zoneBrightness[i] = m_composer->getZoneBrightness(i);
         config.zoneSpeed[i] = m_composer->getZoneSpeed(i);
         config.zonePalette[i] = m_composer->getZonePalette(i);
+        config.zoneBlendMode[i] = (uint8_t)m_composer->getZoneBlendMode(i);
     }
 }
 
@@ -257,6 +265,7 @@ void ZoneConfigManager::importConfig(const ZoneConfig& config) {
         m_composer->setZoneBrightness(i, config.zoneBrightness[i]);
         m_composer->setZoneSpeed(i, config.zoneSpeed[i]);
         m_composer->setZonePalette(i, config.zonePalette[i]);
+        m_composer->setZoneBlendMode(i, (BlendMode)config.zoneBlendMode[i]);
     }
 
     // Note: We don't auto-enable the system - user must use "zone on"
@@ -273,7 +282,7 @@ bool ZoneConfigManager::validateConfig(const ZoneConfig& config) const {
 
     // Validate effect IDs (0-46 for 47 total effects)
     extern const uint8_t NUM_EFFECTS;
-    extern const uint8_t gGradientPaletteCount;
+    extern const uint8_t gMasterPaletteCount;
     for (uint8_t i = 0; i < 4; i++) {
         if (config.zoneEffects[i] >= NUM_EFFECTS) {
             return false;
@@ -283,7 +292,11 @@ bool ZoneConfigManager::validateConfig(const ZoneConfig& config) const {
             return false;
         }
         // Validate palette (0=global, 1-N=specific palette)
-        if (config.zonePalette[i] > gGradientPaletteCount) {
+        if (config.zonePalette[i] > gMasterPaletteCount) {
+            return false;
+        }
+        // Validate blend mode
+        if (config.zoneBlendMode[i] >= BLEND_MODE_COUNT) {
             return false;
         }
         // Brightness 0-255 is always valid, no need to check

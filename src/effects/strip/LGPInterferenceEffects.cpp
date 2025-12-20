@@ -320,30 +320,58 @@ void lgpInterferenceScanner() {
     }
 }
 
+#include "LGPInterferenceEffects.h"
+#include "../../effects/engines/MotionEngine.h"
+
 // ============== LGP WAVE COLLISION ==============
 // Simulates wave packets colliding in the light guide
+// Refactored to use MotionEngine for physics (Week 4 Plan)
 void lgpWaveCollision() {
-    static float wave1Pos = 0;
-    static float wave2Pos = HardwareConfig::STRIP_LENGTH;
-    static float wave1Vel = 2.0f;
-    static float wave2Vel = -2.0f;
+    // Motion Engine Integration
+    static int p1_id = -1;
+    static int p2_id = -1;
     
-    float speed = paletteSpeed / 255.0f;
+    // Access engine instance
+    MomentumEngine& momentum = MotionEngine::getInstance().getMomentumEngine();
+    
+    float speedFactor = paletteSpeed / 255.0f;
     float intensity = visualParams.getIntensityNorm();
     
-    // Update wave positions
-    wave1Pos += wave1Vel * speed;
-    wave2Pos += wave2Vel * speed;
+    // Initialize particles if needed
+    if (p1_id == -1 || !momentum.getParticle(p1_id)->active) {
+        // Wave 1: Moves Right
+        p1_id = momentum.addParticle(0.0f, 0.5f, 1.0f, CRGB::White, BOUNDARY_BOUNCE);
+        if (p1_id != -1) {
+             momentum.getParticle(p1_id)->drag = 1.0f; // No drag, constant motion
+        }
+        
+        // Wave 2: Moves Left
+        p2_id = momentum.addParticle(1.0f, -0.5f, 1.0f, CRGB::White, BOUNDARY_BOUNCE);
+        if (p2_id != -1) {
+             momentum.getParticle(p2_id)->drag = 1.0f; // No drag
+        }
+    }
     
-    // Bounce at edges
-    if (wave1Pos < 0 || wave1Pos > HardwareConfig::STRIP_LENGTH) {
-        wave1Vel = -wave1Vel;
-        wave1Pos = constrain(wave1Pos, 0, HardwareConfig::STRIP_LENGTH);
+    // Update velocities based on current speed setting
+    // We override velocity to bind it to the speed knob
+    Particle* p1 = momentum.getParticle(p1_id);
+    Particle* p2 = momentum.getParticle(p2_id);
+    
+    if (p1) {
+        // Preserve direction, update magnitude
+        float dir = (p1->velocity >= 0) ? 1.0f : -1.0f;
+        p1->velocity = dir * (0.2f + 0.8f * speedFactor); // Min speed 0.2
     }
-    if (wave2Pos < 0 || wave2Pos > HardwareConfig::STRIP_LENGTH) {
-        wave2Vel = -wave2Vel;
-        wave2Pos = constrain(wave2Pos, 0, HardwareConfig::STRIP_LENGTH);
+    
+    if (p2) {
+        // Preserve direction, update magnitude
+        float dir = (p2->velocity >= 0) ? 1.0f : -1.0f;
+        p2->velocity = dir * (0.2f + 0.8f * speedFactor);
     }
+    
+    // Get positions from physics engine (0.0-1.0) and map to strip
+    float wave1Pos = (p1 ? p1->position : 0.0f) * HardwareConfig::STRIP_LENGTH;
+    float wave2Pos = (p2 ? p2->position : 1.0f) * HardwareConfig::STRIP_LENGTH;
     
     fadeToBlackBy(strip1, HardwareConfig::STRIP_LENGTH, 30);
     fadeToBlackBy(strip2, HardwareConfig::STRIP_LENGTH, 30);
@@ -1141,22 +1169,24 @@ void lgpChaosVisualization() {
             break;
             
         case 6:
-            // Double pendulum (simplified)
+            // Double pendulum (simplified) - using fast trig lookup
             {
                 static float theta1 = 0.5f, theta2 = 0.5f, p1 = 0, p2 = 0;
                 float delta = theta2 - theta1;
-                float den = 2 - cos(delta) * cos(delta);
-                
-                float num1 = -p1 * p2 * sin(delta) / den;
-                float num2 = (p2*p2 - 2*p1*p2*cos(delta) + 2*p1*p1) * sin(delta) * cos(delta) / (den*den);
-                
-                dx = (p1 - p2*cos(delta)) / den;
-                dy = (2*p2 - p1*cos(delta)) / den;
-                
+                float cosDelta = TrigLookup::cosf_lookup(delta);
+                float sinDelta = TrigLookup::sinf_lookup(delta);
+                float den = 2 - cosDelta * cosDelta;
+
+                float num1 = -p1 * p2 * sinDelta / den;
+                float num2 = (p2*p2 - 2*p1*p2*cosDelta + 2*p1*p1) * sinDelta * cosDelta / (den*den);
+
+                dx = (p1 - p2*cosDelta) / den;
+                dy = (2*p2 - p1*cosDelta) / den;
+
                 theta1 += dx * dt; theta2 += dy * dt;
-                p1 += (num1 + num2 - 2*sin(theta1)) * dt;
-                p2 += (num1 + num2 - sin(theta2)) * dt;
-                
+                p1 += (num1 + num2 - 2*TrigLookup::sinf_lookup(theta1)) * dt;
+                p2 += (num1 + num2 - TrigLookup::sinf_lookup(theta2)) * dt;
+
                 x = theta1; y = theta2;
             }
             break;

@@ -9,6 +9,9 @@
 #if FEATURE_PERFORMANCE_MONITOR
 #include "../hardware/PerformanceMonitor.h"
 #endif
+#if FEATURE_NARRATIVE_ENGINE
+#include "../core/NarrativeEngine.h"
+#endif
 
 // External variables
 extern SerialFxEngine fxEngine;
@@ -21,15 +24,15 @@ extern uint8_t paletteSpeed;
 extern PerformanceMonitor perfMon;
 #endif
 
-// Palette system
+// Palette system (using master palette system with 57 palettes)
 extern CRGBPalette16 currentPalette;
 extern CRGBPalette16 targetPalette;
 extern uint8_t currentPaletteIndex;
 extern bool paletteAutoCycle;
 extern uint32_t paletteCycleInterval;
-extern const char* const paletteNames[];
-extern const TProgmemRGBGradientPaletteRef gGradientPalettes[];
-extern const uint8_t gGradientPaletteCount;
+extern const char* const MasterPaletteNames[];
+extern const TProgmemRGBGradientPaletteRef gMasterPalettes[];
+extern const uint8_t gMasterPaletteCount;
 
 // Palette control functions
 extern void setPaletteIndex(uint8_t index);
@@ -115,13 +118,13 @@ private:
       Serial.print(F("Palette: "));
       Serial.print(currentPaletteIndex);
       Serial.print(F(" - "));
-      Serial.println(paletteNames[currentPaletteIndex]);
+      Serial.println(MasterPaletteNames[currentPaletteIndex]);
     } else if (cmd == "pprev" || cmd == "palette prev") {
       prevPalette();
       Serial.print(F("Palette: "));
       Serial.print(currentPaletteIndex);
       Serial.print(F(" - "));
-      Serial.println(paletteNames[currentPaletteIndex]);
+      Serial.println(MasterPaletteNames[currentPaletteIndex]);
     } else if (cmd == "pauto" || cmd == "palette auto") {
       paletteAutoCycle = !paletteAutoCycle;
       Serial.print(F("Palette auto-cycle: "));
@@ -153,6 +156,29 @@ private:
       showWaveMenu();
     } else if (cmd == "pipeline" || cmd == "pipe") {
       showPipelineMenu();
+#if FEATURE_NARRATIVE_ENGINE
+    } else if (cmd == "ne" || cmd == "nengine") {
+      NarrativeEngine::getInstance().printStatus();
+    } else if (cmd == "neon") {
+      NarrativeEngine::getInstance().enable();
+      Serial.println(F("NarrativeEngine ENABLED"));
+    } else if (cmd == "neoff") {
+      NarrativeEngine::getInstance().disable();
+      Serial.println(F("NarrativeEngine DISABLED"));
+    } else if (cmd == "netrigger") {
+      NarrativeEngine::getInstance().trigger();
+      Serial.println(F("NarrativeEngine triggered BUILD phase"));
+    } else if (cmd.startsWith("netempo ")) {
+      float tempo = cmd.substring(8).toFloat();
+      if (tempo >= 1.0f && tempo <= 30.0f) {
+        NarrativeEngine::getInstance().setTempo(tempo);
+        Serial.print(F("NarrativeEngine tempo set to "));
+        Serial.print(tempo, 1);
+        Serial.println(F("s"));
+      } else {
+        Serial.println(F("Invalid tempo (1.0-30.0 seconds)"));
+      }
+#endif
     } else {
       Serial.println(F("Unknown command. Type 'help' for commands."));
     }
@@ -193,6 +219,15 @@ private:
     Serial.println(F("  pd, perfdetail- Detailed performance report"));
     Serial.println(F("  pg, perfgraph - Performance graph"));
     Serial.println(F("  perfreset     - Reset peak metrics"));
+#if FEATURE_NARRATIVE_ENGINE
+    Serial.println(F(""));
+    Serial.println(F("Narrative Engine:"));
+    Serial.println(F("  ne, nengine   - Show status"));
+    Serial.println(F("  neon          - Enable engine"));
+    Serial.println(F("  neoff         - Disable engine"));
+    Serial.println(F("  netrigger     - Force BUILD phase"));
+    Serial.println(F("  netempo <1-30>- Set cycle duration"));
+#endif
     Serial.println(F("=================="));
   }
   
@@ -218,7 +253,7 @@ private:
     Serial.print(F("Palette: "));
     Serial.print(currentPaletteIndex);
     Serial.print(F(" - "));
-    Serial.println(paletteNames[currentPaletteIndex]);
+    Serial.println(MasterPaletteNames[currentPaletteIndex]);
     
     Serial.print(F("Brightness: "));
     Serial.println(brightnessVal);
@@ -298,7 +333,7 @@ private:
       if (i == currentPaletteIndex) {
         Serial.print(F(">>> "));
       }
-      Serial.print(paletteNames[i]);
+      Serial.print(MasterPaletteNames[i]);
       if (i == currentPaletteIndex) {
         Serial.print(F(" <<<"));
       }
@@ -469,7 +504,7 @@ private:
       Serial.print(F("Set palette to: "));
       Serial.print(paletteNum);
       Serial.print(F(" - "));
-      Serial.println(paletteNames[paletteNum]);
+      Serial.println(MasterPaletteNames[paletteNum]);
     } else {
       Serial.println(F("Invalid palette number (0-32)"));
     }

@@ -31,6 +31,13 @@ struct PhaseController {
 };
 
 // ====== MOMENTUM ENGINE ======
+enum BoundaryMode {
+    BOUNDARY_WRAP,
+    BOUNDARY_BOUNCE,
+    BOUNDARY_CLAMP,
+    BOUNDARY_DIE
+};
+
 struct Particle {
     float position;              // Current position (0.0-1.0 normalized)
     float velocity;              // Current velocity
@@ -39,6 +46,7 @@ struct Particle {
     float drag;                  // Air resistance coefficient (0-1)
     bool active;                 // Is particle active?
     CRGB color;                  // Particle color
+    BoundaryMode boundaryMode;   // How to handle edges
 
     Particle()
         : position(0)
@@ -48,6 +56,7 @@ struct Particle {
         , drag(0.98f)
         , active(false)
         , color(CRGB::White)
+        , boundaryMode(BOUNDARY_WRAP)
     {}
 };
 
@@ -61,7 +70,7 @@ public:
     MomentumEngine() : activeParticleCount(0) {}
 
     void reset();
-    int addParticle(float pos, float vel, float mass = 1.0f, CRGB color = CRGB::White);
+    int addParticle(float pos, float vel, float mass = 1.0f, CRGB color = CRGB::White, BoundaryMode boundary = BOUNDARY_WRAP);
     void applyForce(int particleId, float force);
     void update(float deltaTime);
     Particle* getParticle(int particleId);

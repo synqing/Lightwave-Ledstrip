@@ -54,7 +54,7 @@
 // Visual Enhancement Infrastructure (ColorEngine, MotionEngine, BlendingEngine)
 // DISABLED by default for backward compatibility - Enable via platformio.ini build flag
 #ifndef FEATURE_ENHANCEMENT_ENGINES
-#define FEATURE_ENHANCEMENT_ENGINES 0   // Visual enhancement engines - DISABLED by default
+#define FEATURE_ENHANCEMENT_ENGINES 1   // Visual enhancement engines - ENABLED
 #endif
 
 // Individual engine flags (controlled by master flag)
@@ -62,10 +62,12 @@
   #define FEATURE_COLOR_ENGINE 1        // Cross-palette blending, diffusion, temporal rotation
   #define FEATURE_MOTION_ENGINE 1       // Phase control, easing curves, momentum physics
   #define FEATURE_BLENDING_ENGINE 1     // Zone blend modes, layer ordering, dual-strip coordination
+  #define FEATURE_NARRATIVE_ENGINE 1    // Global dramatic timing (BUILD→HOLD→RELEASE→REST)
 #else
   #define FEATURE_COLOR_ENGINE 0
   #define FEATURE_MOTION_ENGINE 0
   #define FEATURE_BLENDING_ENGINE 0
+  #define FEATURE_NARRATIVE_ENGINE 0
 #endif
 
 // LED Strips features (now permanent after matrix removal)

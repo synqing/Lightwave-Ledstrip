@@ -8,9 +8,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current Focus
 
-- **Branch**: `feature/zone-composer`
-- **Active Work**: Multi-zone effect system with web interface
-- **Recent**: Zone Composer core + LGP Novel Physics effects implemented
+- **Branch**: `main`
+- **Active Work**: Security hardening, performance optimization, encoder support
+- **Recent**: WiFi credentials externalized, CORS headers added, TrigLookup optimization, M5ROTATE8 encoder support
 
 ## First Steps for New Agents
 
@@ -53,7 +53,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Design Philosophy
 
 - **CENTER ORIGIN**: Effects radiate from LED 79/80 because the LGP creates interference patterns - edge-originating effects look wrong on this hardware
-- **No HMI**: Control is web/serial only - removed encoders/buttons for simplicity
+- **Optional HMI**: M5ROTATE8 encoder support available (`src/hardware/EncoderManager.cpp`), but primary control is web/serial
 - **Performance**: Target 120 FPS, minimize heap allocations in render loops
 - **Dual-Strip Symmetry**: Strip 1 and Strip 2 should complement each other
 
@@ -110,7 +110,7 @@ pio run -t clean
 - **Dual WS2812 strips**: GPIO 4 (Strip 1), GPIO 5 (Strip 2)
 - **160 LEDs per strip** = 320 total
 - **Center point**: LED 79/80 (effects originate here)
-- **No HMI**: Encoders/buttons removed - serial + web control only
+- **Optional HMI**: M5ROTATE8 8-encoder unit via I2C (enable with `FEATURE_ROTATE8_ENCODER`)
 
 ## Architecture Overview
 
@@ -193,7 +193,39 @@ Set in `platformio.ini` or `src/config/features.h`:
 | `FEATURE_INTERFERENCE_CALC` | Wave physics calculations |
 | `FEATURE_PHYSICS_SIMULATION` | Physics-based effects |
 
-## Web API Endpoints
+## Web API
+
+### API v1 (Recommended)
+
+The v1 API provides standardized responses, rate limiting, and rich metadata.
+
+**Base URL**: `http://lightwaveos.local/api/v1/`
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/` | GET | API discovery with HATEOAS links |
+| `/api/v1/openapi.json` | GET | OpenAPI 3.0 specification |
+| `/api/v1/device/status` | GET | Uptime, heap, network status |
+| `/api/v1/device/info` | GET | Firmware, SDK, flash info |
+| `/api/v1/effects` | GET | Paginated effects with categories |
+| `/api/v1/effects/current` | GET | Current effect state |
+| `/api/v1/effects/metadata?id=N` | GET | Effect metadata by ID |
+| `/api/v1/effects/set` | POST | Set effect `{effectId: N}` |
+| `/api/v1/parameters` | GET/POST | Visual parameters |
+| `/api/v1/transitions/types` | GET | 12 transition types |
+| `/api/v1/transitions/trigger` | POST | Trigger transition |
+| `/api/v1/batch` | POST | Batch operations (max 10) |
+
+**Response Format**:
+```json
+{"success": true, "data": {...}, "timestamp": 12345, "version": "1.0"}
+```
+
+**Rate Limiting**: 20 req/sec HTTP, 50 msg/sec WebSocket. Exceeding returns 429.
+
+**Full Documentation**: [docs/api/API_V1.md](docs/api/API_V1.md)
+
+### Legacy API (Backward Compatible)
 
 ```
 POST /api/effect      - Set effect by ID
@@ -204,7 +236,13 @@ POST /api/zone/count  - Set zone count (1-4)
 POST /api/zone/effect - Set zone-specific effect
 ```
 
-WebSocket commands: `setEffect`, `setBrightness`, `setZoneEffect`, etc.
+### WebSocket Commands
+
+Connect to `ws://lightwaveos.local/ws`
+
+**v1 Commands**: `transition.trigger`, `effects.getMetadata`, `batch`, `parameters.get`
+
+**Legacy Commands**: `setEffect`, `setBrightness`, `setZoneEffect`, etc.
 
 ## Zone System
 

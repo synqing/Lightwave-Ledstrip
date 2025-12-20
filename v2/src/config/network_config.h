@@ -1,0 +1,103 @@
+/**
+ * @file network_config.h
+ * @brief Network configuration for LightwaveOS v2
+ *
+ * WiFi credentials are configured via build flags in platformio.ini.
+ *
+ * To set your credentials:
+ * 1. Copy wifi_credentials.ini.template to wifi_credentials.ini
+ * 2. Edit wifi_credentials.ini with your network details
+ * 3. This file is gitignored - your credentials stay private
+ *
+ * Or add build flags directly to platformio.ini:
+ *   -D WIFI_SSID=\"YourNetwork\"
+ *   -D WIFI_PASSWORD=\"YourPassword\"
+ */
+
+#pragma once
+
+#include "features.h"
+
+#if FEATURE_WEB_SERVER
+
+namespace lightwaveos {
+namespace config {
+
+/**
+ * @brief Network configuration constants
+ */
+namespace NetworkConfig {
+    // ========================================================================
+    // WiFi Credentials (from build flags or defaults)
+    // ========================================================================
+
+    #ifdef WIFI_SSID
+        constexpr const char* WIFI_SSID_VALUE = WIFI_SSID;
+    #else
+        constexpr const char* WIFI_SSID_VALUE = "CONFIGURE_ME";
+    #endif
+
+    #ifdef WIFI_PASSWORD
+        constexpr const char* WIFI_PASSWORD_VALUE = WIFI_PASSWORD;
+    #else
+        constexpr const char* WIFI_PASSWORD_VALUE = "";
+    #endif
+
+    // ========================================================================
+    // Access Point Settings (fallback when WiFi fails)
+    // ========================================================================
+
+    #ifdef AP_SSID_CUSTOM
+        constexpr const char* AP_SSID = AP_SSID_CUSTOM;
+    #else
+        constexpr const char* AP_SSID = "LightwaveOS-Setup";
+    #endif
+
+    #ifdef AP_PASSWORD_CUSTOM
+        constexpr const char* AP_PASSWORD = AP_PASSWORD_CUSTOM;
+    #else
+        constexpr const char* AP_PASSWORD = "lightwave123";
+    #endif
+
+    // ========================================================================
+    // Network Settings
+    // ========================================================================
+
+    constexpr uint16_t WEB_SERVER_PORT = 80;
+    constexpr uint16_t WEBSOCKET_PORT = 81;
+    constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = 20000;
+    constexpr uint8_t WIFI_RETRY_COUNT = 5;
+
+    // ========================================================================
+    // mDNS Settings
+    // ========================================================================
+
+    constexpr const char* MDNS_HOSTNAME = "lightwaveos";
+
+    // ========================================================================
+    // OTA Security
+    // ========================================================================
+
+    constexpr const char* OTA_UPDATE_TOKEN = "LW-OTA-2024-SecureUpdate";
+
+    // ========================================================================
+    // WebSocket Settings
+    // ========================================================================
+
+    constexpr size_t WS_MAX_CLIENTS = 4;
+    constexpr uint32_t WS_PING_INTERVAL_MS = 30000;
+
+    // ========================================================================
+    // WiFiManager Settings
+    // ========================================================================
+
+    constexpr uint32_t SCAN_INTERVAL_MS = 60000;        // Re-scan every minute
+    constexpr uint32_t RECONNECT_DELAY_MS = 5000;       // 5s between reconnect attempts
+    constexpr uint32_t MAX_RECONNECT_DELAY_MS = 60000;  // Max 1 minute backoff
+
+} // namespace NetworkConfig
+
+} // namespace config
+} // namespace lightwaveos
+
+#endif // FEATURE_WEB_SERVER

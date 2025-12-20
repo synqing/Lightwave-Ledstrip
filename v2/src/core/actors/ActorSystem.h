@@ -1,0 +1,230 @@
+/**
+ * @file ActorSystem.h
+ * @brief Orchestrates all Actors in the LightwaveOS v2 system
+ *
+ * The ActorSystem is the top-level manager that:
+ * - Creates and owns all Actor instances
+ * - Starts/stops Actors in the correct order
+ * - Provides access to Actors for external code
+ * - Handles system-wide events (shutdown, etc.)
+ *
+ * Startup order:
+ * 1. StateStoreActor - Load saved state
+ * 2. RendererActor - Initialize LEDs
+ * 3. NetworkActor - Start web server
+ * 4. HmiActor - Start encoder polling
+ * 5. PluginManagerActor - Load plugins
+ * 6. SyncManagerActor - Connect to peers
+ *
+ * Shutdown order: Reverse of startup
+ *
+ * @author LightwaveOS Team
+ * @version 2.0.0
+ */
+
+#pragma once
+
+#include "Actor.h"
+#include "RendererActor.h"
+#include "../bus/MessageBus.h"
+#include <memory>
+
+namespace lightwaveos {
+namespace actors {
+
+// ============================================================================
+// System State
+// ============================================================================
+
+/**
+ * @brief Overall system state
+ */
+enum class SystemState : uint8_t {
+    UNINITIALIZED = 0,  // Not yet started
+    STARTING,           // Actors being created
+    RUNNING,            // All actors running
+    STOPPING,           // Shutdown in progress
+    STOPPED             // All actors stopped
+};
+
+/**
+ * @brief System-wide statistics
+ */
+struct SystemStats {
+    uint32_t uptimeMs;              // Time since start
+    uint32_t totalMessages;         // Total messages processed
+    uint32_t heapFreeBytes;         // Current free heap
+    uint32_t heapMinFreeBytes;      // Minimum free heap ever
+    uint8_t activeActors;           // Number of running actors
+
+    SystemStats()
+        : uptimeMs(0), totalMessages(0)
+        , heapFreeBytes(0), heapMinFreeBytes(0)
+        , activeActors(0) {}
+};
+
+// ============================================================================
+// ActorSystem Class
+// ============================================================================
+
+/**
+ * @brief Top-level Actor orchestration
+ *
+ * Singleton class that manages the lifecycle of all Actors.
+ *
+ * Usage:
+ *   ActorSystem::instance().init();
+ *   ActorSystem::instance().start();
+ *   // ... application running ...
+ *   ActorSystem::instance().shutdown();
+ */
+class ActorSystem {
+public:
+    /**
+     * @brief Get the singleton instance
+     */
+    static ActorSystem& instance();
+
+    // Prevent copying
+    ActorSystem(const ActorSystem&) = delete;
+    ActorSystem& operator=(const ActorSystem&) = delete;
+
+    // ========================================================================
+    // Lifecycle
+    // ========================================================================
+
+    /**
+     * @brief Initialize the system (create actors)
+     *
+     * Creates all Actor instances but does not start them.
+     * Call this once during setup().
+     *
+     * @return true if all actors created successfully
+     */
+    bool init();
+
+    /**
+     * @brief Start all actors
+     *
+     * Starts actors in dependency order. Call after init().
+     *
+     * @return true if all actors started successfully
+     */
+    bool start();
+
+    /**
+     * @brief Shutdown all actors gracefully
+     *
+     * Stops actors in reverse order. Blocks until complete.
+     */
+    void shutdown();
+
+    /**
+     * @brief Get current system state
+     */
+    SystemState getState() const { return m_state; }
+
+    /**
+     * @brief Check if system is running
+     */
+    bool isRunning() const { return m_state == SystemState::RUNNING; }
+
+    // ========================================================================
+    // Actor Access
+    // ========================================================================
+
+    /**
+     * @brief Get the RendererActor
+     *
+     * Returns nullptr if not initialized.
+     */
+    RendererActor* getRenderer() { return m_renderer.get(); }
+    const RendererActor* getRenderer() const { return m_renderer.get(); }
+
+    // Future: getNetwork(), getHmi(), getStateStore(), etc.
+
+    // ========================================================================
+    // Convenience Commands
+    // ========================================================================
+
+    /**
+     * @brief Set the current effect
+     *
+     * Sends a SET_EFFECT message to the RendererActor.
+     *
+     * @param effectId Effect ID to set
+     * @return true if message was sent
+     */
+    bool setEffect(uint8_t effectId);
+
+    /**
+     * @brief Set brightness
+     * @param brightness Brightness level (0-255)
+     */
+    bool setBrightness(uint8_t brightness);
+
+    /**
+     * @brief Set animation speed
+     * @param speed Speed level (1-50)
+     */
+    bool setSpeed(uint8_t speed);
+
+    /**
+     * @brief Set palette
+     * @param paletteIndex Palette index
+     */
+    bool setPalette(uint8_t paletteIndex);
+
+    // ========================================================================
+    // Diagnostics
+    // ========================================================================
+
+    /**
+     * @brief Get system statistics
+     */
+    SystemStats getStats() const;
+
+    /**
+     * @brief Print system status to serial
+     */
+    void printStatus();
+
+    /**
+     * @brief Get uptime in milliseconds
+     */
+    uint32_t getUptimeMs() const;
+
+private:
+    // Private constructor for singleton
+    ActorSystem();
+    ~ActorSystem();
+
+    // Actor instances (using unique_ptr for RAII cleanup)
+    std::unique_ptr<RendererActor> m_renderer;
+    // Future: std::unique_ptr<NetworkActor> m_network;
+    // Future: std::unique_ptr<HmiActor> m_hmi;
+    // Future: std::unique_ptr<StateStoreActor> m_stateStore;
+    // Future: std::unique_ptr<SyncManagerActor> m_syncManager;
+    // Future: std::unique_ptr<PluginManagerActor> m_pluginManager;
+
+    // State
+    SystemState m_state;
+    uint32_t m_startTime;
+};
+
+// ============================================================================
+// Global Access Macro
+// ============================================================================
+
+/**
+ * @brief Quick access to the ActorSystem singleton
+ */
+#define ACTOR_SYSTEM (::lightwaveos::actors::ActorSystem::instance())
+
+/**
+ * @brief Quick access to the RendererActor
+ */
+#define RENDERER (::lightwaveos::actors::ActorSystem::instance().getRenderer())
+
+} // namespace actors
+} // namespace lightwaveos

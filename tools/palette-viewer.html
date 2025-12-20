@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LightwaveOS Master Palette Collection</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+            color: #fff;
+        }
+        .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        .section-title {
+            text-align: center;
+            color: #6c9;
+            margin: 40px 0 20px;
+            font-size: 18px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 10px;
+        }
+        .section-subtitle {
+            text-align: center;
+            color: #666;
+            font-size: 12px;
+            margin-bottom: 20px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        .palette {
+            background: #252540;
+            border-radius: 8px;
+            padding: 12px;
+        }
+        .palette-name {
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: #fff;
+        }
+        .palette-index {
+            color: #888;
+            font-weight: normal;
+            font-size: 11px;
+        }
+        .palette-bar {
+            height: 28px;
+            border-radius: 4px;
+        }
+        .toc {
+            max-width: 900px;
+            margin: 0 auto 30px;
+            padding: 15px;
+            background: #252540;
+            border-radius: 8px;
+        }
+        .toc-title {
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        .toc-links {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .toc-links a {
+            color: #6c9;
+            text-decoration: none;
+        }
+        .toc-links a:hover {
+            text-decoration: underline;
+        }
+        @media (max-width: 600px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>LightwaveOS Master Palette Collection</h1>
+    <p class="subtitle">75 palettes: 33 cpt-city + 24 Crameri + 18 R Colorspace</p>
+
+    <div class="toc">
+        <div class="toc-title">Jump to:</div>
+        <div class="toc-links">
+            <a href="#cpt-city">cpt-city (0-32)</a>
+            <a href="#crameri">Crameri Scientific (33-56)</a>
+            <a href="#colorspace">R Colorspace (57-74)</a>
+        </div>
+    </div>
+
+    <!-- CPT-CITY PALETTES (0-32) -->
+    <div class="section-title" id="cpt-city">cpt-city Palettes</div>
+    <p class="section-subtitle">Artistic gradient palettes from cpt-city archive (indices 0-32)</p>
+    <div class="grid">
+        <!-- 0: Sunset Real -->
+        <div class="palette">
+            <div class="palette-name">Sunset Real <span class="palette-index">#0</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(120,0,0) 0%, rgb(179,22,0) 9%, rgb(255,104,0) 20%, rgb(167,22,18) 33%, rgb(100,0,103) 53%, rgb(16,0,130) 78%, rgb(0,0,160) 100%);"></div>
+        </div>
+        <!-- 1: Rivendell -->
+        <div class="palette">
+            <div class="palette-name">Rivendell <span class="palette-index">#1</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(1,14,5) 0%, rgb(16,36,14) 40%, rgb(56,68,30) 65%, rgb(150,156,99) 95%, rgb(150,156,99) 100%);"></div>
+        </div>
+        <!-- 2: Ocean Breeze 036 -->
+        <div class="palette">
+            <div class="palette-name">Ocean Breeze 036 <span class="palette-index">#2</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(1,6,7) 0%, rgb(1,99,111) 35%, rgb(144,209,255) 60%, rgb(0,73,82) 100%);"></div>
+        </div>
+        <!-- 3: RGI 15 -->
+        <div class="palette">
+            <div class="palette-name">RGI 15 <span class="palette-index">#3</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(4,1,31) 0%, rgb(55,1,16) 12%, rgb(197,3,7) 25%, rgb(59,2,17) 37%, rgb(6,2,34) 50%, rgb(39,6,33) 62%, rgb(112,13,32) 75%, rgb(56,9,35) 87%, rgb(22,6,38) 100%);"></div>
+        </div>
+        <!-- 4: Retro 2 -->
+        <div class="palette">
+            <div class="palette-name">Retro 2 <span class="palette-index">#4</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(188,135,1) 0%, rgb(46,7,1) 100%);"></div>
+        </div>
+        <!-- 5: Analogous 1 -->
+        <div class="palette">
+            <div class="palette-name">Analogous 1 <span class="palette-index">#5</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(3,0,255) 0%, rgb(23,0,255) 25%, rgb(67,0,255) 50%, rgb(142,0,45) 75%, rgb(255,0,0) 100%);"></div>
+        </div>
+        <!-- 6: Pink Splash 08 -->
+        <div class="palette">
+            <div class="palette-name">Pink Splash 08 <span class="palette-index">#6</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(126,11,255) 0%, rgb(197,1,22) 50%, rgb(210,157,172) 69%, rgb(157,3,112) 87%, rgb(157,3,112) 100%);"></div>
+        </div>
+        <!-- 7: Coral Reef -->
+        <div class="palette">
+            <div class="palette-name">Coral Reef <span class="palette-index">#7</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(40,199,197) 0%, rgb(10,152,155) 20%, rgb(1,111,120) 38%, rgb(43,127,162) 38%, rgb(10,73,111) 55%, rgb(1,34,71) 100%);"></div>
+        </div>
+        <!-- 8: Ocean Breeze 068 -->
+        <div class="palette">
+            <div class="palette-name">Ocean Breeze 068 <span class="palette-index">#8</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(100,156,153) 0%, rgb(1,99,137) 20%, rgb(1,68,84) 40%, rgb(35,142,168) 41%, rgb(0,63,117) 70%, rgb(1,10,10) 100%);"></div>
+        </div>
+        <!-- 9: Pink Splash 07 -->
+        <div class="palette">
+            <div class="palette-name">Pink Splash 07 <span class="palette-index">#9</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(229,1,1) 0%, rgb(242,4,63) 24%, rgb(255,12,255) 40%, rgb(249,81,252) 50%, rgb(255,11,235) 60%, rgb(244,5,68) 76%, rgb(232,1,5) 100%);"></div>
+        </div>
+        <!-- 10: Vintage 01 -->
+        <div class="palette">
+            <div class="palette-name">Vintage 01 <span class="palette-index">#10</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(4,1,1) 0%, rgb(16,0,1) 20%, rgb(97,104,3) 30%, rgb(255,131,19) 40%, rgb(67,9,4) 50%, rgb(16,0,1) 60%, rgb(4,1,1) 90%, rgb(4,1,1) 100%);"></div>
+        </div>
+        <!-- 11: Departure -->
+        <div class="palette">
+            <div class="palette-name">Departure <span class="palette-index">#11</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(8,3,0) 0%, rgb(23,7,0) 16%, rgb(75,38,6) 25%, rgb(169,99,38) 33%, rgb(213,169,119) 42%, rgb(255,255,255) 45%, rgb(135,255,138) 54%, rgb(22,255,24) 58%, rgb(0,255,0) 67%, rgb(0,136,0) 75%, rgb(0,55,0) 83%, rgb(0,55,0) 100%);"></div>
+        </div>
+        <!-- 12: Landscape 64 -->
+        <div class="palette">
+            <div class="palette-name">Landscape 64 <span class="palette-index">#12</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(0,0,0) 0%, rgb(2,25,1) 15%, rgb(15,115,5) 30%, rgb(79,213,1) 50%, rgb(126,211,47) 50%, rgb(188,209,247) 51%, rgb(144,182,205) 60%, rgb(59,117,250) 80%, rgb(1,37,192) 100%);"></div>
+        </div>
+        <!-- 13: Landscape 33 -->
+        <div class="palette">
+            <div class="palette-name">Landscape 33 <span class="palette-index">#13</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(1,5,0) 0%, rgb(32,23,1) 7%, rgb(161,55,1) 15%, rgb(229,144,1) 25%, rgb(39,142,74) 26%, rgb(1,4,1) 100%);"></div>
+        </div>
+        <!-- 14: Rainbow Sherbet -->
+        <div class="palette">
+            <div class="palette-name">Rainbow Sherbet <span class="palette-index">#14</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(255,33,4) 0%, rgb(255,68,25) 17%, rgb(255,7,25) 34%, rgb(255,82,103) 50%, rgb(255,255,242) 67%, rgb(42,255,22) 82%, rgb(87,255,65) 100%);"></div>
+        </div>
+        <!-- 15: GR65 Hult -->
+        <div class="palette">
+            <div class="palette-name">GR65 Hult <span class="palette-index">#15</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(247,176,247) 0%, rgb(255,136,255) 19%, rgb(220,29,226) 35%, rgb(7,82,178) 63%, rgb(1,124,109) 85%, rgb(1,124,109) 100%);"></div>
+        </div>
+        <!-- 16: GR64 Hult -->
+        <div class="palette">
+            <div class="palette-name">GR64 Hult <span class="palette-index">#16</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(1,124,109) 0%, rgb(1,93,79) 26%, rgb(52,65,1) 41%, rgb(115,127,1) 51%, rgb(52,65,1) 59%, rgb(1,86,72) 79%, rgb(0,55,45) 94%, rgb(0,55,45) 100%);"></div>
+        </div>
+        <!-- 17: GMT Dry Wet -->
+        <div class="palette">
+            <div class="palette-name">GMT Dry Wet <span class="palette-index">#17</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(47,30,2) 0%, rgb(213,147,24) 16%, rgb(103,219,52) 33%, rgb(3,219,207) 50%, rgb(1,48,214) 67%, rgb(1,1,111) 83%, rgb(1,7,33) 100%);"></div>
+        </div>
+        <!-- 18: IB Jul01 -->
+        <div class="palette">
+            <div class="palette-name">IB Jul01 <span class="palette-index">#18</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(194,1,1) 0%, rgb(1,29,18) 37%, rgb(57,131,28) 52%, rgb(113,1,1) 100%);"></div>
+        </div>
+        <!-- 19: Vintage 57 -->
+        <div class="palette">
+            <div class="palette-name">Vintage 57 <span class="palette-index">#19</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(2,1,1) 0%, rgb(18,1,0) 21%, rgb(69,29,1) 41%, rgb(167,135,10) 60%, rgb(46,56,4) 100%);"></div>
+        </div>
+        <!-- 20: IB15 -->
+        <div class="palette">
+            <div class="palette-name">IB15 <span class="palette-index">#20</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(113,91,147) 0%, rgb(157,88,78) 28%, rgb(208,85,33) 35%, rgb(255,29,11) 42%, rgb(137,31,39) 55%, rgb(59,33,89) 100%);"></div>
+        </div>
+        <!-- 21: Fuschia 7 -->
+        <div class="palette">
+            <div class="palette-name">Fuschia 7 <span class="palette-index">#21</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(43,3,153) 0%, rgb(100,4,103) 25%, rgb(188,5,66) 50%, rgb(161,11,115) 75%, rgb(135,20,182) 100%);"></div>
+        </div>
+        <!-- 22: Emerald Dragon -->
+        <div class="palette">
+            <div class="palette-name">Emerald Dragon <span class="palette-index">#22</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(97,255,1) 0%, rgb(47,133,1) 40%, rgb(13,43,1) 70%, rgb(2,10,1) 100%);"></div>
+        </div>
+        <!-- 23: Lava -->
+        <div class="palette">
+            <div class="palette-name">Lava <span class="palette-index">#23</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(0,0,0) 0%, rgb(18,0,0) 18%, rgb(113,0,0) 38%, rgb(142,3,1) 42%, rgb(175,17,1) 47%, rgb(213,44,2) 57%, rgb(255,82,4) 68%, rgb(255,115,4) 74%, rgb(255,156,4) 79%, rgb(255,203,4) 85%, rgb(255,255,4) 92%, rgb(255,255,71) 96%, rgb(255,255,255) 100%);"></div>
+        </div>
+        <!-- 24: Fire -->
+        <div class="palette">
+            <div class="palette-name">Fire <span class="palette-index">#24</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(1,1,0) 0%, rgb(32,5,0) 30%, rgb(192,24,0) 57%, rgb(220,105,5) 77%, rgb(252,255,31) 94%, rgb(252,255,111) 98%, rgb(255,255,255) 100%);"></div>
+        </div>
+        <!-- 25: Colorful -->
+        <div class="palette">
+            <div class="palette-name">Colorful <span class="palette-index">#25</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(10,85,5) 0%, rgb(29,109,18) 10%, rgb(59,138,42) 24%, rgb(83,99,52) 36%, rgb(110,66,64) 42%, rgb(123,49,65) 43%, rgb(139,35,66) 44%, rgb(192,117,98) 45%, rgb(255,255,137) 49%, rgb(100,180,155) 66%, rgb(22,121,174) 100%);"></div>
+        </div>
+        <!-- 26: Magenta Evening -->
+        <div class="palette">
+            <div class="palette-name">Magenta Evening <span class="palette-index">#26</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(71,27,39) 0%, rgb(130,11,51) 12%, rgb(213,2,64) 25%, rgb(232,1,66) 27%, rgb(252,1,69) 30%, rgb(123,2,51) 42%, rgb(46,9,35) 100%);"></div>
+        </div>
+        <!-- 27: Pink Purple -->
+        <div class="palette">
+            <div class="palette-name">Pink Purple <span class="palette-index">#27</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(19,2,39) 0%, rgb(26,4,45) 10%, rgb(33,6,52) 20%, rgb(68,62,125) 30%, rgb(118,187,240) 40%, rgb(163,215,247) 43%, rgb(217,244,255) 45%, rgb(159,149,221) 48%, rgb(113,78,188) 58%, rgb(128,57,155) 72%, rgb(146,40,123) 100%);"></div>
+        </div>
+        <!-- 28: Autumn 19 -->
+        <div class="palette">
+            <div class="palette-name">Autumn 19 <span class="palette-index">#28</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(26,1,1) 0%, rgb(67,4,1) 20%, rgb(118,14,1) 33%, rgb(137,152,52) 41%, rgb(113,65,1) 44%, rgb(133,149,59) 48%, rgb(137,152,52) 49%, rgb(113,65,1) 53%, rgb(139,154,46) 56%, rgb(113,13,1) 64%, rgb(55,3,1) 80%, rgb(17,1,1) 98%, rgb(17,1,1) 100%);"></div>
+        </div>
+        <!-- 29: Blue Magenta White -->
+        <div class="palette">
+            <div class="palette-name">Blue Magenta White <span class="palette-index">#29</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(0,0,0) 0%, rgb(0,0,45) 16%, rgb(0,0,255) 33%, rgb(42,0,255) 50%, rgb(255,0,255) 67%, rgb(255,55,255) 83%, rgb(255,255,255) 100%);"></div>
+        </div>
+        <!-- 30: Black Magenta Red -->
+        <div class="palette">
+            <div class="palette-name">Black Magenta Red <span class="palette-index">#30</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(0,0,0) 0%, rgb(42,0,45) 25%, rgb(255,0,255) 50%, rgb(255,0,45) 75%, rgb(255,0,0) 100%);"></div>
+        </div>
+        <!-- 31: Red Magenta Yellow -->
+        <div class="palette">
+            <div class="palette-name">Red Magenta Yellow <span class="palette-index">#31</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(0,0,0) 0%, rgb(42,0,0) 16%, rgb(255,0,0) 33%, rgb(255,0,45) 50%, rgb(255,0,255) 67%, rgb(255,55,45) 83%, rgb(255,255,0) 100%);"></div>
+        </div>
+        <!-- 32: Blue Cyan Yellow -->
+        <div class="palette">
+            <div class="palette-name">Blue Cyan Yellow <span class="palette-index">#32</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(0,0,255) 0%, rgb(0,55,255) 25%, rgb(0,255,255) 50%, rgb(42,255,45) 75%, rgb(255,255,0) 100%);"></div>
+        </div>
+    </div>
+
+    <!-- CRAMERI PALETTES (33-56) -->
+    <div class="section-title" id="crameri">Crameri Scientific Palettes</div>
+    <p class="section-subtitle">Perceptually uniform, colorblind-friendly palettes by Fabio Crameri (indices 33-56)</p>
+    <div class="grid">
+        <!-- 33: Vik -->
+        <div class="palette">
+            <div class="palette-name">Vik <span class="palette-index">#33</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(3,43,113) 0%, rgb(11,95,146) 14%, rgb(95,157,188) 29%, rgb(196,219,231) 43%, rgb(235,237,233) 57%, rgb(194,165,105) 71%, rgb(154,107,20) 86%, rgb(115,48,0) 100%);"></div>
+        </div>
+        <!-- 34: Tokyo -->
+        <div class="palette">
+            <div class="palette-name">Tokyo <span class="palette-index">#34</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(52,22,66) 0%, rgb(105,50,98) 14%, rgb(134,91,120) 29%, rgb(142,124,131) 43%, rgb(146,155,139) 57%, rgb(153,188,148) 71%, rgb(180,229,166) 86%, rgb(235,254,203) 100%);"></div>
+        </div>
+        <!-- 35: Roma -->
+        <div class="palette">
+            <div class="palette-name">Roma <span class="palette-index">#35</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(146,66,14) 0%, rgb(178,132,42) 14%, rgb(213,200,91) 29%, rgb(229,235,173) 43%, rgb(170,232,215) 57%, rgb(89,185,210) 71%, rgb(61,128,186) 86%, rgb(39,76,164) 100%);"></div>
+        </div>
+        <!-- 36: Oleron -->
+        <div class="palette">
+            <div class="palette-name">Oleron <span class="palette-index">#36</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(50,63,114) 0%, rgb(103,116,167) 14%, rgb(160,173,223) 29%, rgb(209,222,250) 43%, rgb(26,76,0) 57%, rgb(134,120,43) 71%, rgb(204,170,115) 86%, rgb(248,226,192) 100%);"></div>
+        </div>
+        <!-- 37: Lisbon -->
+        <div class="palette">
+            <div class="palette-name">Lisbon <span class="palette-index">#37</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(187,198,229) 0%, rgb(104,137,179) 14%, rgb(36,77,117) 29%, rgb(16,31,47) 43%, rgb(23,25,25) 57%, rgb(97,91,57) 71%, rgb(160,152,101) 86%, rgb(224,220,175) 100%);"></div>
+        </div>
+        <!-- 38: La Jolla -->
+        <div class="palette">
+            <div class="palette-name">La Jolla <span class="palette-index">#38</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(253,244,173) 0%, rgb(247,219,110) 14%, rgb(237,178,84) 29%, rgb(229,137,81) 43%, rgb(217,95,78) 57%, rgb(166,70,69) 71%, rgb(106,53,43) 86%, rgb(49,34,14) 100%);"></div>
+        </div>
+        <!-- 39: Hawaii -->
+        <div class="palette">
+            <div class="palette-name">Hawaii <span class="palette-index">#39</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(144,29,99) 0%, rgb(149,62,73) 14%, rgb(153,94,51) 29%, rgb(157,129,31) 43%, rgb(150,170,44) 57%, rgb(123,201,106) 71%, rgb(96,222,176) 86%, rgb(135,239,238) 100%);"></div>
+        </div>
+        <!-- 40: Devon -->
+        <div class="palette">
+            <div class="palette-name">Devon <span class="palette-index">#40</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(42,41,91) 0%, rgb(39,71,123) 14%, rgb(50,101,165) 29%, rgb(94,128,207) 43%, rgb(154,155,231) 57%, rgb(190,184,242) 71%, rgb(215,212,247) 86%, rgb(242,240,252) 100%);"></div>
+        </div>
+        <!-- 41: Cork -->
+        <div class="palette">
+            <div class="palette-name">Cork <span class="palette-index">#41</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(42,50,101) 0%, rgb(58,103,149) 14%, rgb(128,159,189) 29%, rgb(205,217,229) 43%, rgb(231,239,237) 57%, rgb(140,188,144) 71%, rgb(76,147,79) 86%, rgb(65,97,23) 100%);"></div>
+        </div>
+        <!-- 42: Broc -->
+        <div class="palette">
+            <div class="palette-name">Broc <span class="palette-index">#42</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(42,50,101) 0%, rgb(59,104,150) 14%, rgb(131,160,190) 29%, rgb(209,220,231) 43%, rgb(239,241,237) 57%, rgb(191,191,133) 71%, rgb(126,126,74) 86%, rgb(65,65,23) 100%);"></div>
+        </div>
+        <!-- 43: Berlin -->
+        <div class="palette">
+            <div class="palette-name">Berlin <span class="palette-index">#43</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(121,171,237) 0%, rgb(54,133,173) 14%, rgb(29,76,98) 29%, rgb(16,26,32) 43%, rgb(25,11,9) 57%, rgb(90,28,6) 71%, rgb(156,79,61) 86%, rgb(221,141,134) 100%);"></div>
+        </div>
+        <!-- 44: Bamako -->
+        <div class="palette">
+            <div class="palette-name">Bamako <span class="palette-index">#44</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(11,70,71) 0%, rgb(32,83,58) 14%, rgb(54,98,45) 29%, rgb(81,115,29) 43%, rgb(115,136,9) 57%, rgb(159,149,11) 71%, rgb(209,185,67) 86%, rgb(241,216,125) 100%);"></div>
+        </div>
+        <!-- 45: Acton -->
+        <div class="palette">
+            <div class="palette-name">Acton <span class="palette-index">#45</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(62,48,91) 0%, rgb(99,77,121) 14%, rgb(140,98,142) 29%, rgb(177,103,149) 43%, rgb(209,124,166) 57%, rgb(212,153,187) 71%, rgb(214,181,206) 86%, rgb(223,213,228) 100%);"></div>
+        </div>
+        <!-- 46: Batlow -->
+        <div class="palette">
+            <div class="palette-name">Batlow <span class="palette-index">#46</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(9,42,92) 0%, rgb(22,76,97) 14%, rgb(55,105,88) 29%, rgb(102,122,63) 43%, rgb(158,137,46) 57%, rgb(223,150,82) 71%, rgb(252,169,148) 86%, rgb(252,192,215) 100%);"></div>
+        </div>
+        <!-- 47: Bilbao -->
+        <div class="palette">
+            <div class="palette-name">Bilbao <span class="palette-index">#47</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(232,232,232) 0%, rgb(199,197,187) 14%, rgb(187,178,143) 29%, rgb(175,154,110) 43%, rgb(167,125,97) 57%, rgb(158,94,84) 71%, rgb(135,59,59) 86%, rgb(97,20,22) 100%);"></div>
+        </div>
+        <!-- 48: Buda -->
+        <div class="palette">
+            <div class="palette-name">Buda <span class="palette-index">#48</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(179,28,166) 0%, rgb(183,63,149) 14%, rgb(192,92,139) 29%, rgb(201,120,130) 43%, rgb(209,146,123) 57%, rgb(216,174,116) 71%, rgb(223,203,109) 86%, rgb(237,236,103) 100%);"></div>
+        </div>
+        <!-- 49: Davos -->
+        <div class="palette">
+            <div class="palette-name">Davos <span class="palette-index">#49</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(41,47,98) 0%, rgb(40,90,146) 14%, rgb(72,121,195) 29%, rgb(107,144,186) 43%, rgb(143,168,176) 57%, rgb(181,193,164) 71%, rgb(219,219,164) 86%, rgb(243,243,223) 100%);"></div>
+        </div>
+        <!-- 50: GrayC -->
+        <div class="palette">
+            <div class="palette-name">GrayC <span class="palette-index">#50</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(237,237,237) 0%, rgb(202,202,202) 14%, rgb(167,167,167) 29%, rgb(134,134,134) 43%, rgb(104,104,104) 57%, rgb(74,74,74) 71%, rgb(46,46,46) 86%, rgb(20,20,20) 100%);"></div>
+        </div>
+        <!-- 51: Imola -->
+        <div class="palette">
+            <div class="palette-name">Imola <span class="palette-index">#51</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(32,62,173) 0%, rgb(43,83,162) 14%, rgb(55,104,150) 29%, rgb(72,123,134) 43%, rgb(97,147,123) 57%, rgb(128,179,115) 71%, rgb(163,213,107) 86%, rgb(221,244,102) 100%);"></div>
+        </div>
+        <!-- 52: La Paz -->
+        <div class="palette">
+            <div class="palette-name">La Paz <span class="palette-index">#52</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(31,35,116) 0%, rgb(38,74,143) 14%, rgb(51,109,161) 29%, rgb(80,140,167) 43%, rgb(126,160,158) 57%, rgb(173,167,140) 71%, rgb(228,187,153) 86%, rgb(255,226,213) 100%);"></div>
+        </div>
+        <!-- 53: Nuuk -->
+        <div class="palette">
+            <div class="palette-name">Nuuk <span class="palette-index">#53</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(28,94,135) 0%, rgb(63,108,130) 14%, rgb(104,131,139) 29%, rgb(145,155,150) 43%, rgb(172,174,150) 57%, rgb(188,187,139) 71%, rgb(205,204,131) 86%, rgb(238,238,156) 100%);"></div>
+        </div>
+        <!-- 54: Oslo -->
+        <div class="palette">
+            <div class="palette-name">Oslo <span class="palette-index">#54</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(9,16,28) 0%, rgb(16,45,72) 14%, rgb(29,77,123) 29%, rgb(56,108,177) 43%, rgb(99,138,203) 57%, rgb(139,163,201) 71%, rgb(180,188,200) 86%, rgb(229,229,229) 100%);"></div>
+        </div>
+        <!-- 55: Tofino -->
+        <div class="palette">
+            <div class="palette-name">Tofino <span class="palette-index">#55</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(179,187,236) 0%, rgb(95,125,193) 14%, rgb(44,68,114) 29%, rgb(18,26,41) 43%, rgb(14,22,18) 57%, rgb(40,87,44) 71%, rgb(80,147,80) 86%, rgb(172,205,131) 100%);"></div>
+        </div>
+        <!-- 56: Turku -->
+        <div class="palette">
+            <div class="palette-name">Turku <span class="palette-index">#56</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(23,23,23) 0%, rgb(58,57,51) 14%, rgb(94,90,73) 29%, rgb(133,124,92) 43%, rgb(180,153,115) 57%, rgb(218,160,136) 71%, rgb(249,178,174) 86%, rgb(255,213,212) 100%);"></div>
+        </div>
+    </div>
+
+    <!-- R COLORSPACE PALETTES (57-74) -->
+    <div class="section-title" id="colorspace">R Colorspace Palettes</div>
+    <p class="section-subtitle">LGP-optimized with Chromatic Luminance Shift (indices 57-74)</p>
+    <div class="grid">
+        <!-- 57: Viridis -->
+        <div class="palette">
+            <div class="palette-name">Viridis <span class="palette-index">#57</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(68,1,84) 0%, rgb(71,39,117) 14%, rgb(62,74,137) 29%, rgb(49,104,142) 43%, rgb(38,130,142) 57%, rgb(53,183,121) 71%, rgb(144,215,67) 86%, rgb(253,231,37) 100%);"></div>
+        </div>
+        <!-- 58: Plasma -->
+        <div class="palette">
+            <div class="palette-name">Plasma <span class="palette-index">#58</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(13,8,135) 0%, rgb(75,3,161) 14%, rgb(126,3,168) 29%, rgb(168,34,150) 43%, rgb(203,70,121) 57%, rgb(229,107,93) 71%, rgb(248,149,64) 86%, rgb(240,249,33) 100%);"></div>
+        </div>
+        <!-- 59: Inferno -->
+        <div class="palette">
+            <div class="palette-name">Inferno <span class="palette-index">#59</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(0,0,4) 0%, rgb(22,11,57) 14%, rgb(66,10,91) 29%, rgb(120,28,85) 43%, rgb(172,50,58) 57%, rgb(219,92,32) 71%, rgb(252,157,40) 86%, rgb(252,255,164) 100%);"></div>
+        </div>
+        <!-- 60: Magma -->
+        <div class="palette">
+            <div class="palette-name">Magma <span class="palette-index">#60</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(0,0,4) 0%, rgb(18,13,51) 14%, rgb(51,16,91) 29%, rgb(95,22,109) 43%, rgb(147,37,103) 57%, rgb(196,71,91) 71%, rgb(237,130,98) 86%, rgb(252,253,191) 100%);"></div>
+        </div>
+        <!-- 61: Cubhelix -->
+        <div class="palette">
+            <div class="palette-name">Cubhelix <span class="palette-index">#61</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(0,0,0) 0%, rgb(22,11,43) 14%, rgb(19,54,62) 29%, rgb(25,107,49) 43%, rgb(89,135,55) 57%, rgb(175,130,107) 71%, rgb(210,157,193) 86%, rgb(232,232,232) 100%);"></div>
+        </div>
+        <!-- 62: Abyss -->
+        <div class="palette">
+            <div class="palette-name">Abyss <span class="palette-index">#62</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(0,0,10) 0%, rgb(5,15,45) 25%, rgb(15,40,90) 50%, rgb(30,70,130) 75%, rgb(50,100,160) 100%);"></div>
+        </div>
+        <!-- 63: Bathy -->
+        <div class="palette">
+            <div class="palette-name">Bathy <span class="palette-index">#63</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(8,8,32) 0%, rgb(20,30,80) 20%, rgb(35,60,120) 40%, rgb(50,100,150) 60%, rgb(80,150,180) 80%, rgb(120,200,220) 100%);"></div>
+        </div>
+        <!-- 64: Ocean -->
+        <div class="palette">
+            <div class="palette-name">Ocean <span class="palette-index">#64</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(0,32,32) 0%, rgb(0,64,96) 25%, rgb(0,100,140) 50%, rgb(32,150,180) 75%, rgb(80,200,200) 100%);"></div>
+        </div>
+        <!-- 65: Nighttime -->
+        <div class="palette">
+            <div class="palette-name">Nighttime <span class="palette-index">#65</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(5,5,20) 0%, rgb(15,10,50) 25%, rgb(30,20,80) 50%, rgb(50,35,100) 75%, rgb(80,60,130) 100%);"></div>
+        </div>
+        <!-- 66: Seafloor -->
+        <div class="palette">
+            <div class="palette-name">Seafloor <span class="palette-index">#66</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(10,20,60) 0%, rgb(20,50,100) 25%, rgb(30,90,120) 50%, rgb(50,130,110) 75%, rgb(80,160,100) 100%);"></div>
+        </div>
+        <!-- 67: IBCSO -->
+        <div class="palette">
+            <div class="palette-name">IBCSO <span class="palette-index">#67</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(5,5,30) 0%, rgb(15,25,70) 25%, rgb(30,50,110) 50%, rgb(50,80,150) 75%, rgb(80,120,180) 100%);"></div>
+        </div>
+        <!-- 68: Copper -->
+        <div class="palette">
+            <div class="palette-name">Copper <span class="palette-index">#68</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(0,0,0) 0%, rgb(50,25,12) 20%, rgb(100,55,30) 40%, rgb(160,95,55) 60%, rgb(210,150,95) 80%, rgb(255,200,160) 100%);"></div>
+        </div>
+        <!-- 69: Hot -->
+        <div class="palette">
+            <div class="palette-name">Hot <span class="palette-index">#69</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(10,0,0) 0%, rgb(80,0,0) 16%, rgb(170,0,0) 33%, rgb(255,60,0) 50%, rgb(255,150,0) 67%, rgb(255,220,0) 83%, rgb(255,255,100) 100%);"></div>
+        </div>
+        <!-- 70: Cool -->
+        <div class="palette">
+            <div class="palette-name">Cool <span class="palette-index">#70</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(0,255,255) 0%, rgb(50,200,255) 20%, rgb(100,150,255) 40%, rgb(150,100,255) 60%, rgb(200,50,255) 80%, rgb(255,0,255) 100%);"></div>
+        </div>
+        <!-- 71: Earth -->
+        <div class="palette">
+            <div class="palette-name">Earth <span class="palette-index">#71</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(30,50,30) 0%, rgb(70,90,50) 20%, rgb(130,120,70) 40%, rgb(170,150,90) 60%, rgb(200,180,130) 80%, rgb(235,215,180) 100%);"></div>
+        </div>
+        <!-- 72: Sealand -->
+        <div class="palette">
+            <div class="palette-name">Sealand <span class="palette-index">#72</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(20,60,120) 0%, rgb(40,100,140) 20%, rgb(70,150,130) 40%, rgb(100,180,100) 60%, rgb(150,200,80) 80%, rgb(180,220,100) 100%);"></div>
+        </div>
+        <!-- 73: Split -->
+        <div class="palette">
+            <div class="palette-name">Split <span class="palette-index">#73</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(30,50,150) 0%, rgb(60,90,180) 20%, rgb(100,140,200) 40%, rgb(200,190,180) 50%, rgb(200,140,130) 60%, rgb(200,80,70) 80%, rgb(180,40,40) 100%);"></div>
+        </div>
+        <!-- 74: Red2Green -->
+        <div class="palette">
+            <div class="palette-name">Red2Green <span class="palette-index">#74</span></div>
+            <div class="palette-bar" style="background: linear-gradient(to right, rgb(180,30,30) 0%, rgb(220,80,50) 20%, rgb(240,150,80) 40%, rgb(255,240,100) 50%, rgb(180,220,80) 60%, rgb(100,180,60) 80%, rgb(40,140,40) 100%);"></div>
+        </div>
+    </div>
+
+    <p style="text-align:center; color:#666; margin-top:40px; font-size:12px;">
+        LightwaveOS Master Palette Collection |
+        <a href="https://soliton.vm.bytemark.co.uk/pub/cpt-city/" style="color:#6c9;">cpt-city</a> |
+        <a href="https://www.fabiocrameri.ch/colourmaps/" style="color:#6c9;">Crameri</a> |
+        <a href="https://colorspace.r-forge.r-project.org/" style="color:#6c9;">R colorspace</a>
+    </p>
+</body>
+</html>

@@ -86,6 +86,13 @@ private:
     void handleTransitionTrigger(AsyncWebServerRequest* request, uint8_t* data, size_t len);
     void handleBatch(AsyncWebServerRequest* request, uint8_t* data, size_t len);
 
+    // User preset handlers (Phase C.1)
+    void handlePresetsList(AsyncWebServerRequest* request);
+    void handleUserPresetsList(AsyncWebServerRequest* request);
+    void handleUserPresetSave(AsyncWebServerRequest* request, uint8_t* data, size_t len);
+    void handleUserPresetDelete(AsyncWebServerRequest* request, uint8_t* data, size_t len);
+    void handlePresetLoad(AsyncWebServerRequest* request, uint8_t* data, size_t len);
+
     // v1 helper methods
     bool checkRateLimit(AsyncWebServerRequest* request);
     bool executeBatchAction(const String& action, JsonVariant params);

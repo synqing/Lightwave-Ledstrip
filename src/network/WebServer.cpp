@@ -1157,6 +1157,125 @@ void LightwaveWebServer::onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient 
                 }
 
                 // ============================================================
+                // User Preset Commands (Phase C.1)
+                // ============================================================
+                else if (type == "presets.list") {
+                    // Return all presets (builtin + user)
+                    StaticJsonDocument<1536> response;
+                    response["type"] = "presets.list";
+                    response["success"] = true;
+
+                    // Built-in presets
+                    JsonArray builtin = response.createNestedArray("builtin");
+                    for (uint8_t i = 0; i < ZONE_PRESET_COUNT; i++) {
+                        JsonObject p = builtin.createNestedObject();
+                        p["id"] = i;
+                        p["name"] = zoneComposer.getPresetName(i);
+                    }
+
+                    // User presets
+                    JsonArray user = response.createNestedArray("user");
+                    for (uint8_t i = 0; i < MAX_USER_PRESETS; i++) {
+                        JsonObject p = user.createNestedObject();
+                        p["slot"] = i;
+                        UserPreset preset;
+                        if (zoneComposer.getUserPreset(i, preset)) {
+                            p["name"] = preset.name;
+                            p["saved"] = true;
+                        } else {
+                            p["name"] = nullptr;
+                            p["saved"] = false;
+                        }
+                    }
+                    response["filledCount"] = zoneComposer.getFilledUserPresetCount();
+
+                    String output;
+                    serializeJson(response, output);
+                    client->text(output);
+                }
+                else if (type == "presets.save") {
+                    // Save current config to user preset slot
+                    uint8_t slot = doc["slot"] | 255;
+                    const char* name = doc["name"] | "";
+
+                    StaticJsonDocument<256> response;
+                    response["type"] = "presets.saved";
+
+                    if (slot >= MAX_USER_PRESETS) {
+                        response["success"] = false;
+                        response["error"] = "Invalid slot (0-7)";
+                    } else if (strlen(name) == 0) {
+                        response["success"] = false;
+                        response["error"] = "Name required";
+                    } else if (zoneComposer.saveUserPreset(slot, name)) {
+                        response["success"] = true;
+                        response["slot"] = slot;
+                        response["name"] = name;
+                        webServer.broadcastZoneState();
+                    } else {
+                        response["success"] = false;
+                        response["error"] = "Save failed";
+                    }
+
+                    String output;
+                    serializeJson(response, output);
+                    client->text(output);
+                }
+                else if (type == "presets.load") {
+                    // Load a builtin or user preset
+                    const char* presetType = doc["presetType"] | "builtin";
+                    uint8_t id = doc["id"] | 255;
+                    uint8_t slot = doc["slot"] | 255;
+
+                    StaticJsonDocument<256> response;
+                    response["type"] = "presets.loaded";
+
+                    bool success = false;
+                    if (strcmp(presetType, "builtin") == 0 && id < ZONE_PRESET_COUNT) {
+                        success = zoneComposer.loadPreset(id);
+                        response["presetType"] = "builtin";
+                        response["id"] = id;
+                    } else if (strcmp(presetType, "user") == 0 && slot < MAX_USER_PRESETS) {
+                        success = zoneComposer.loadUserPreset(slot);
+                        response["presetType"] = "user";
+                        response["slot"] = slot;
+                    }
+
+                    response["success"] = success;
+                    if (!success) {
+                        response["error"] = "Load failed or invalid preset";
+                    } else {
+                        webServer.broadcastZoneState();
+                    }
+
+                    String output;
+                    serializeJson(response, output);
+                    client->text(output);
+                }
+                else if (type == "presets.delete") {
+                    // Delete a user preset
+                    uint8_t slot = doc["slot"] | 255;
+
+                    StaticJsonDocument<256> response;
+                    response["type"] = "presets.deleted";
+
+                    if (slot >= MAX_USER_PRESETS) {
+                        response["success"] = false;
+                        response["error"] = "Invalid slot (0-7)";
+                    } else if (zoneComposer.deleteUserPreset(slot)) {
+                        response["success"] = true;
+                        response["slot"] = slot;
+                    } else {
+                        response["success"] = false;
+                        response["error"] = "Delete failed or slot empty";
+                    }
+
+                    String output;
+                    serializeJson(response, output);
+                    client->text(output);
+                }
+
+                // ============================================================
                 // v1 API Parity - Transitions
                 // ============================================================
                 else if (type == "transition.getTypes") {
@@ -1484,6 +1603,52 @@ void LightwaveWebServer::setupV1Routes() {
         }
     );
 
+    // ================================================================
+    // User Presets Endpoints (Phase C.1)
+    // ================================================================
+
+    // GET /api/v1/presets - List all presets (built-in + user)
+    server->on("/api/v1/presets", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        handlePresetsList(request);
+    });
+
+    // GET /api/v1/presets/user - Get all user presets
+    server->on("/api/v1/presets/user", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        handleUserPresetsList(request);
+    });
+
+    // POST /api/v1/presets/user - Save current config to user slot
+    server->on("/api/v1/presets/user", HTTP_POST,
+        [](AsyncWebServerRequest* request) {},
+        NULL,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+            if (!checkRateLimit(request)) return;
+            handleUserPresetSave(request, data, len);
+        }
+    );
+
+    // DELETE /api/v1/presets/user - Delete user preset from slot
+    server->on("/api/v1/presets/user", HTTP_DELETE,
+        [](AsyncWebServerRequest* request) {},
+        NULL,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+            if (!checkRateLimit(request)) return;
+            handleUserPresetDelete(request, data, len);
+        }
+    );
+
+    // POST /api/v1/presets/load - Load a preset (built-in or user)
+    server->on("/api/v1/presets/load", HTTP_POST,
+        [](AsyncWebServerRequest* request) {},
+        NULL,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+            if (!checkRateLimit(request)) return;
+            handlePresetLoad(request, data, len);
+        }
+    );
+
     // OpenAPI Specification endpoint - serves JSON from PROGMEM
     server->on("/api/v1/openapi.json", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
@@ -1520,6 +1685,7 @@ void LightwaveWebServer::handleApiDiscovery(AsyncWebServerRequest* request) {
         links["effects"] = "/api/v1/effects";
         links["parameters"] = "/api/v1/parameters";
         links["transitions"] = "/api/v1/transitions/types";
+        links["presets"] = "/api/v1/presets";
         links["batch"] = "/api/v1/batch";
         links["openapi"] = "/api/v1/openapi.json";
         links["websocket"] = "ws://lightwaveos.local/ws";
@@ -2027,6 +2193,199 @@ bool LightwaveWebServer::executeBatchAction(const String& action, JsonVariant pa
     }
 
     return false;
+}
+
+// ============================================================================
+// User Presets Handlers (Phase C.1)
+// ============================================================================
+
+void LightwaveWebServer::handlePresetsList(AsyncWebServerRequest* request) {
+    sendSuccessResponseLarge(request, [](JsonObject& data) {
+        // Built-in presets
+        JsonArray builtin = data.createNestedArray("builtin");
+        for (uint8_t i = 0; i < ZONE_PRESET_COUNT; i++) {
+            JsonObject preset = builtin.createNestedObject();
+            preset["id"] = i;
+            preset["name"] = ZONE_PRESETS[i].name;
+        }
+
+        // User presets
+        JsonArray user = data.createNestedArray("user");
+        for (uint8_t i = 0; i < MAX_USER_PRESETS; i++) {
+            JsonObject preset = user.createNestedObject();
+            preset["slot"] = i;
+
+            UserPreset userPreset;
+            if (zoneComposer.getUserPreset(i, userPreset)) {
+                preset["name"] = userPreset.name;
+                preset["saved"] = true;
+            } else {
+                preset["name"] = nullptr;
+                preset["saved"] = false;
+            }
+        }
+
+        data["maxUserPresets"] = MAX_USER_PRESETS;
+        data["filledCount"] = zoneComposer.getFilledUserPresetCount();
+    }, 1024);
+}
+
+void LightwaveWebServer::handleUserPresetsList(AsyncWebServerRequest* request) {
+    sendSuccessResponseLarge(request, [](JsonObject& data) {
+        JsonArray presets = data.createNestedArray("presets");
+        for (uint8_t i = 0; i < MAX_USER_PRESETS; i++) {
+            JsonObject preset = presets.createNestedObject();
+            preset["slot"] = i;
+
+            UserPreset userPreset;
+            if (zoneComposer.getUserPreset(i, userPreset)) {
+                preset["name"] = userPreset.name;
+                preset["saved"] = true;
+
+                // Include config summary
+                JsonObject config = preset.createNestedObject("config");
+                config["zoneCount"] = userPreset.config.zoneCount;
+                config["systemEnabled"] = userPreset.config.systemEnabled;
+            } else {
+                preset["name"] = nullptr;
+                preset["saved"] = false;
+            }
+        }
+        data["maxSlots"] = MAX_USER_PRESETS;
+        data["filledCount"] = zoneComposer.getFilledUserPresetCount();
+    }, 1024);
+}
+
+void LightwaveWebServer::handleUserPresetSave(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
+    StaticJsonDocument<256> doc;
+    DeserializationError error = deserializeJson(doc, data, len);
+
+    if (error) {
+        sendErrorResponse(request, 400, "INVALID_JSON", "Failed to parse JSON body");
+        return;
+    }
+
+    if (!doc.containsKey("slot") || !doc.containsKey("name")) {
+        sendErrorResponse(request, 400, "MISSING_PARAMS", "Required: slot (0-7), name (string)");
+        return;
+    }
+
+    uint8_t slot = doc["slot"];
+    const char* name = doc["name"];
+
+    if (slot >= MAX_USER_PRESETS) {
+        sendErrorResponse(request, 400, "INVALID_SLOT", "Slot must be 0-7");
+        return;
+    }
+
+    if (!name || strlen(name) == 0) {
+        sendErrorResponse(request, 400, "INVALID_NAME", "Name cannot be empty");
+        return;
+    }
+
+    if (zoneComposer.saveUserPreset(slot, name)) {
+        sendSuccessResponse(request, [slot, name](JsonObject& data) {
+            data["slot"] = slot;
+            data["name"] = name;
+            data["message"] = "Preset saved successfully";
+        });
+        broadcastZoneState();  // Notify all clients
+    } else {
+        sendErrorResponse(request, 500, "SAVE_FAILED", "Failed to save preset to NVS");
+    }
+}
+
+void LightwaveWebServer::handleUserPresetDelete(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
+    StaticJsonDocument<128> doc;
+    DeserializationError error = deserializeJson(doc, data, len);
+
+    if (error) {
+        sendErrorResponse(request, 400, "INVALID_JSON", "Failed to parse JSON body");
+        return;
+    }
+
+    if (!doc.containsKey("slot")) {
+        sendErrorResponse(request, 400, "MISSING_SLOT", "Required: slot (0-7)");
+        return;
+    }
+
+    uint8_t slot = doc["slot"];
+    if (slot >= MAX_USER_PRESETS) {
+        sendErrorResponse(request, 400, "INVALID_SLOT", "Slot must be 0-7");
+        return;
+    }
+
+    if (zoneComposer.deleteUserPreset(slot)) {
+        sendSuccessResponse(request, [slot](JsonObject& data) {
+            data["slot"] = slot;
+            data["message"] = "Preset deleted successfully";
+        });
+        broadcastZoneState();  // Notify all clients
+    } else {
+        sendErrorResponse(request, 500, "DELETE_FAILED", "Failed to delete preset");
+    }
+}
+
+void LightwaveWebServer::handlePresetLoad(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
+    StaticJsonDocument<256> doc;
+    DeserializationError error = deserializeJson(doc, data, len);
+
+    if (error) {
+        sendErrorResponse(request, 400, "INVALID_JSON", "Failed to parse JSON body");
+        return;
+    }
+
+    if (!doc.containsKey("type")) {
+        sendErrorResponse(request, 400, "MISSING_TYPE", "Required: type ('builtin' or 'user')");
+        return;
+    }
+
+    const char* type = doc["type"];
+    bool success = false;
+
+    if (strcmp(type, "builtin") == 0) {
+        if (!doc.containsKey("id")) {
+            sendErrorResponse(request, 400, "MISSING_ID", "Required: id (0-4) for builtin preset");
+            return;
+        }
+        uint8_t id = doc["id"];
+        if (id >= ZONE_PRESET_COUNT) {
+            sendErrorResponse(request, 400, "INVALID_ID", "Built-in preset ID must be 0-4");
+            return;
+        }
+        success = zoneComposer.loadPreset(id);
+    }
+    else if (strcmp(type, "user") == 0) {
+        if (!doc.containsKey("slot")) {
+            sendErrorResponse(request, 400, "MISSING_SLOT", "Required: slot (0-7) for user preset");
+            return;
+        }
+        uint8_t slot = doc["slot"];
+        if (slot >= MAX_USER_PRESETS) {
+            sendErrorResponse(request, 400, "INVALID_SLOT", "User preset slot must be 0-7");
+            return;
+        }
+        success = zoneComposer.loadUserPreset(slot);
+    }
+    else {
+        sendErrorResponse(request, 400, "INVALID_TYPE", "Type must be 'builtin' or 'user'");
+        return;
+    }
+
+    if (success) {
+        sendSuccessResponse(request, [type, &doc](JsonObject& data) {
+            data["type"] = type;
+            if (strcmp(type, "builtin") == 0) {
+                data["id"] = doc["id"].as<uint8_t>();
+            } else {
+                data["slot"] = doc["slot"].as<uint8_t>();
+            }
+            data["message"] = "Preset loaded successfully";
+        });
+        broadcastZoneState();  // Notify all clients
+    } else {
+        sendErrorResponse(request, 404, "PRESET_NOT_FOUND", "Preset not found or invalid");
+    }
 }
 
 #endif // FEATURE_WEB_SERVER

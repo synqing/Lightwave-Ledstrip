@@ -504,12 +504,21 @@
     <!-- Preset Bar -->
     <footer class="fixed bottom-0 left-0 right-0 z-40 bg-surface/95 backdrop-blur border-t border-border-subtle p-3 md:p-4">
         <div class="max-w-[80rem] mx-auto flex items-center justify-between gap-2 md:gap-4">
-            <div class="flex gap-1.5 md:gap-2 overflow-x-auto no-scrollbar">
-                <button onclick="loadPreset(0)" class="px-3 py-1.5 rounded-lg bg-elevated border border-border-interactive text-xs font-medium text-text-secondary hover:text-text-primary hover:border-accent-cyan/50 transition-all whitespace-nowrap">P0</button>
-                <button onclick="loadPreset(1)" class="px-3 py-1.5 rounded-lg bg-elevated border border-border-interactive text-xs font-medium text-text-secondary hover:text-text-primary hover:border-accent-cyan/50 transition-all whitespace-nowrap">P1</button>
-                <button onclick="loadPreset(2)" class="px-3 py-1.5 rounded-lg bg-elevated border border-border-interactive text-xs font-medium text-text-secondary hover:text-text-primary hover:border-accent-cyan/50 transition-all whitespace-nowrap">P2</button>
-                <button onclick="loadPreset(3)" class="px-3 py-1.5 rounded-lg bg-elevated border border-border-interactive text-xs font-medium text-text-secondary hover:text-text-primary hover:border-accent-cyan/50 transition-all whitespace-nowrap">P3</button>
-                <button onclick="loadPreset(4)" class="px-3 py-1.5 rounded-lg bg-elevated border border-border-interactive text-xs font-medium text-text-secondary hover:text-text-primary hover:border-accent-cyan/50 transition-all whitespace-nowrap">P4</button>
+            <div class="flex gap-1.5 md:gap-2 overflow-x-auto no-scrollbar items-center">
+                <!-- Built-in Presets -->
+                <span class="text-xs text-text-muted mr-1">Presets:</span>
+                <button onclick="loadPreset(0)" class="px-3 py-1.5 rounded-lg bg-elevated border border-border-interactive text-xs font-medium text-text-secondary hover:text-text-primary hover:border-accent-cyan/50 transition-all whitespace-nowrap">Single</button>
+                <button onclick="loadPreset(1)" class="px-3 py-1.5 rounded-lg bg-elevated border border-border-interactive text-xs font-medium text-text-secondary hover:text-text-primary hover:border-accent-cyan/50 transition-all whitespace-nowrap">Dual</button>
+                <button onclick="loadPreset(2)" class="px-3 py-1.5 rounded-lg bg-elevated border border-border-interactive text-xs font-medium text-text-secondary hover:text-text-primary hover:border-accent-cyan/50 transition-all whitespace-nowrap">Triple</button>
+                <button onclick="loadPreset(3)" class="px-3 py-1.5 rounded-lg bg-elevated border border-border-interactive text-xs font-medium text-text-secondary hover:text-text-primary hover:border-accent-cyan/50 transition-all whitespace-nowrap">Quad</button>
+                <button onclick="loadPreset(4)" class="px-3 py-1.5 rounded-lg bg-elevated border border-border-interactive text-xs font-medium text-text-secondary hover:text-text-primary hover:border-accent-cyan/50 transition-all whitespace-nowrap">Alt</button>
+                <!-- Separator -->
+                <div class="w-px h-6 bg-border-subtle mx-1"></div>
+                <!-- User Presets (dynamically populated) -->
+                <span class="text-xs text-text-muted mr-1">Saved:</span>
+                <div id="user-presets-container" class="flex gap-1.5">
+                    <!-- User preset buttons will be inserted here by JS -->
+                </div>
             </div>
             <button onclick="savePreset()" class="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-accent-cyan text-black text-sm font-semibold hover:opacity-90 transition-opacity whitespace-nowrap">
                 <span class="iconify" data-icon="solar:diskette-bold-duotone" data-width="16"></span>
@@ -517,6 +526,18 @@
             </button>
         </div>
     </footer>
+
+    <!-- Preset Save Modal -->
+    <div id="preset-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div class="bg-surface border border-border-subtle rounded-xl p-6 w-80 shadow-2xl">
+            <h3 class="text-lg font-semibold text-text-primary mb-4">Save Preset</h3>
+            <input id="preset-name-input" type="text" maxlength="15" placeholder="Preset name" class="w-full px-4 py-2 rounded-lg bg-elevated border border-border-interactive text-text-primary placeholder-text-muted focus:border-accent-cyan focus:outline-none mb-4">
+            <div class="flex gap-3 justify-end">
+                <button onclick="closePresetModal()" class="px-4 py-2 rounded-lg bg-elevated border border-border-interactive text-text-secondary hover:text-text-primary transition-colors">Cancel</button>
+                <button onclick="confirmSavePreset()" class="px-4 py-2 rounded-lg bg-accent-cyan text-black font-semibold hover:opacity-90 transition-opacity">Save</button>
+            </div>
+        </div>
+    </div>
 
     <script src="app.js"></script>
 </body>

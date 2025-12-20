@@ -391,6 +391,40 @@ const char* ZoneComposer::getPresetName(uint8_t presetId) const {
     return m_configManager->getPresetName(presetId);
 }
 
+// ============================================================================
+// User Preset Management (Phase C.1) - Wrappers for ZoneConfigManager
+// ============================================================================
+
+bool ZoneComposer::saveUserPreset(uint8_t slot, const char* name) {
+    if (!m_configManager) return false;
+    return m_configManager->saveUserPreset(slot, name);
+}
+
+bool ZoneComposer::loadUserPreset(uint8_t slot) {
+    if (!m_configManager) return false;
+    return m_configManager->loadUserPreset(slot);
+}
+
+bool ZoneComposer::deleteUserPreset(uint8_t slot) {
+    if (!m_configManager) return false;
+    return m_configManager->deleteUserPreset(slot);
+}
+
+bool ZoneComposer::hasUserPreset(uint8_t slot) const {
+    if (!m_configManager) return false;
+    return m_configManager->hasUserPreset(slot);
+}
+
+bool ZoneComposer::getUserPreset(uint8_t slot, UserPreset& preset) const {
+    if (!m_configManager) return false;
+    return m_configManager->getUserPreset(slot, preset);
+}
+
+uint8_t ZoneComposer::getFilledUserPresetCount() const {
+    if (!m_configManager) return 0;
+    return m_configManager->getFilledUserPresetCount();
+}
+
 void ZoneComposer::printStatus() const {
     Serial.println("\n========== ZONE COMPOSER STATUS ==========");
     Serial.printf("System: %s\n", m_enabled ? "ENABLED" : "DISABLED");

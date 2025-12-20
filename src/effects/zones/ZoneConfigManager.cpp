@@ -304,3 +304,224 @@ bool ZoneConfigManager::validateConfig(const ZoneConfig& config) const {
 
     return true;
 }
+
+// ============================================================================
+// UserPreset Methods (Phase C.1)
+// ============================================================================
+
+void UserPreset::calculateChecksum() {
+    // Checksum covers name + config data
+    uint16_t sum = 0;
+
+    // Sum name bytes
+    for (size_t i = 0; i < USER_PRESET_NAME_LEN; i++) {
+        sum += static_cast<uint8_t>(name[i]);
+    }
+
+    // Sum config bytes (use the ZoneConfig checksum as base)
+    config.calculateChecksum();
+    sum += config.checksum;
+
+    checksum = sum;
+}
+
+bool UserPreset::isValid() const {
+    // Recalculate and compare
+    uint16_t sum = 0;
+
+    for (size_t i = 0; i < USER_PRESET_NAME_LEN; i++) {
+        sum += static_cast<uint8_t>(name[i]);
+    }
+
+    // Temporarily cast away const to calculate config checksum
+    ZoneConfig tempConfig = config;
+    tempConfig.calculateChecksum();
+    sum += tempConfig.checksum;
+
+    return (checksum == sum) && !isEmpty() && config.isValid();
+}
+
+// ============================================================================
+// User Preset NVS Operations
+// ============================================================================
+
+void ZoneConfigManager::getUserPresetKey(uint8_t slot, char* key, size_t keyLen) const {
+    snprintf(key, keyLen, "preset_%d", slot);
+}
+
+bool ZoneConfigManager::saveUserPreset(uint8_t slot, const char* name) {
+    if (slot >= MAX_USER_PRESETS) {
+        Serial.printf("❌ Invalid preset slot %d (valid: 0-%d)\n", slot, MAX_USER_PRESETS - 1);
+        return false;
+    }
+
+    if (!name || name[0] == '\0') {
+        Serial.println("❌ Preset name cannot be empty");
+        return false;
+    }
+
+    if (!m_composer) {
+        Serial.println("❌ No zone composer available");
+        return false;
+    }
+
+    // Build preset from current state
+    UserPreset preset;
+    preset.setName(name);
+    exportConfig(preset.config);
+    preset.config.calculateChecksum();
+    preset.calculateChecksum();
+
+    // Open NVS
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(NVS_USER_PRESET_NAMESPACE, NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        Serial.printf("❌ NVS open failed: %s\n", esp_err_to_name(err));
+        return false;
+    }
+
+    // Generate key and save
+    char key[16];
+    getUserPresetKey(slot, key, sizeof(key));
+
+    err = nvs_set_blob(handle, key, &preset, sizeof(UserPreset));
+    if (err == ESP_OK) {
+        err = nvs_commit(handle);
+    }
+
+    nvs_close(handle);
+
+    if (err == ESP_OK) {
+        Serial.printf("✅ Saved user preset %d: \"%s\"\n", slot, name);
+        return true;
+    } else {
+        Serial.printf("❌ Failed to save preset: %s\n", esp_err_to_name(err));
+        return false;
+    }
+}
+
+bool ZoneConfigManager::loadUserPreset(uint8_t slot) {
+    UserPreset preset;
+    if (!getUserPreset(slot, preset)) {
+        return false;
+    }
+
+    // Validate the config within the preset
+    if (!validateConfig(preset.config)) {
+        Serial.printf("⚠️  User preset %d has invalid configuration\n", slot);
+        return false;
+    }
+
+    // Apply to zone composer
+    importConfig(preset.config);
+    Serial.printf("✅ Loaded user preset %d: \"%s\"\n", slot, preset.name);
+    return true;
+}
+
+bool ZoneConfigManager::deleteUserPreset(uint8_t slot) {
+    if (slot >= MAX_USER_PRESETS) {
+        Serial.printf("❌ Invalid preset slot %d\n", slot);
+        return false;
+    }
+
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(NVS_USER_PRESET_NAMESPACE, NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        Serial.printf("❌ NVS open failed: %s\n", esp_err_to_name(err));
+        return false;
+    }
+
+    char key[16];
+    getUserPresetKey(slot, key, sizeof(key));
+
+    err = nvs_erase_key(handle, key);
+    if (err == ESP_OK || err == ESP_ERR_NVS_NOT_FOUND) {
+        nvs_commit(handle);
+        nvs_close(handle);
+        Serial.printf("✅ Deleted user preset %d\n", slot);
+        return true;
+    }
+
+    nvs_close(handle);
+    Serial.printf("❌ Failed to delete preset: %s\n", esp_err_to_name(err));
+    return false;
+}
+
+bool ZoneConfigManager::hasUserPreset(uint8_t slot) const {
+    if (slot >= MAX_USER_PRESETS) {
+        return false;
+    }
+
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(NVS_USER_PRESET_NAMESPACE, NVS_READONLY, &handle);
+    if (err != ESP_OK) {
+        return false;
+    }
+
+    char key[16];
+    getUserPresetKey(slot, key, sizeof(key));
+
+    size_t size = 0;
+    err = nvs_get_blob(handle, key, nullptr, &size);
+    nvs_close(handle);
+
+    return (err == ESP_OK && size == sizeof(UserPreset));
+}
+
+bool ZoneConfigManager::getUserPreset(uint8_t slot, UserPreset& preset) const {
+    if (slot >= MAX_USER_PRESETS) {
+        Serial.printf("❌ Invalid preset slot %d\n", slot);
+        return false;
+    }
+
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(NVS_USER_PRESET_NAMESPACE, NVS_READONLY, &handle);
+    if (err != ESP_OK) {
+        return false;
+    }
+
+    char key[16];
+    getUserPresetKey(slot, key, sizeof(key));
+
+    size_t size = sizeof(UserPreset);
+    err = nvs_get_blob(handle, key, &preset, &size);
+    nvs_close(handle);
+
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        return false;
+    }
+
+    if (err != ESP_OK) {
+        Serial.printf("❌ Failed to read preset %d: %s\n", slot, esp_err_to_name(err));
+        return false;
+    }
+
+    // Validate checksum
+    if (!preset.isValid()) {
+        Serial.printf("⚠️  User preset %d has invalid checksum\n", slot);
+        return false;
+    }
+
+    return true;
+}
+
+bool ZoneConfigManager::getUserPresetName(uint8_t slot, char* name, size_t maxLen) const {
+    UserPreset preset;
+    if (!getUserPreset(slot, preset)) {
+        return false;
+    }
+
+    strncpy(name, preset.name, maxLen - 1);
+    name[maxLen - 1] = '\0';
+    return true;
+}
+
+uint8_t ZoneConfigManager::getFilledUserPresetCount() const {
+    uint8_t count = 0;
+    for (uint8_t i = 0; i < MAX_USER_PRESETS; i++) {
+        if (hasUserPreset(i)) {
+            count++;
+        }
+    }
+    return count;
+}

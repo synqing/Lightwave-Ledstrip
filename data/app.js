@@ -69,6 +69,12 @@ const API = {
     saveConfig: () => API.request('/zone/config/save', { method: 'POST' }),
     getStatus: () => API.request('/status'),
 
+    // User Preset APIs (Phase C.1)
+    getUserPresets: () => API.request('/api/v1/presets/user'),
+    saveUserPreset: (slot, name) => API.request('/api/v1/presets/user', { method: 'POST', body: JSON.stringify({ slot, name }) }),
+    loadUserPreset: (slot) => API.request('/api/v1/presets/load', { method: 'POST', body: JSON.stringify({ type: 'user', slot }) }),
+    deleteUserPreset: (slot) => API.request('/api/v1/presets/user', { method: 'DELETE', body: JSON.stringify({ slot }) }),
+
     // Enhancement Engine APIs
     setColorBlend: (enabled) => API.request('/enhancement/color/blend', { method: 'POST', body: JSON.stringify({ enabled }) }),
     setColorDiffusion: (amount) => API.request('/enhancement/color/diffusion', { method: 'POST', body: JSON.stringify({ amount }) }),
@@ -622,8 +628,102 @@ function updateAutoRotateSpeed(input) {
 }
 
 // ========== Presets ==========
+// User preset state
+let userPresets = [];
+
 function loadPreset(id) { API.loadPreset(id); }
-function savePreset() { API.saveConfig(); }
+
+function loadUserPreset(slot) {
+    API.loadUserPreset(slot).then(r => {
+        if (r.success) {
+            console.log('Loaded user preset', slot);
+        }
+    });
+}
+
+function savePreset() {
+    // Show save modal
+    document.getElementById('preset-modal').classList.remove('hidden');
+    document.getElementById('preset-name-input').value = '';
+    document.getElementById('preset-name-input').focus();
+}
+
+function closePresetModal() {
+    document.getElementById('preset-modal').classList.add('hidden');
+}
+
+function confirmSavePreset() {
+    const name = document.getElementById('preset-name-input').value.trim();
+    if (!name) {
+        alert('Please enter a preset name');
+        return;
+    }
+
+    // Find first empty slot, or use slot 0
+    let slot = userPresets.findIndex(p => !p.saved);
+    if (slot === -1) slot = 0;
+
+    API.saveUserPreset(slot, name).then(r => {
+        if (r.success) {
+            closePresetModal();
+            refreshUserPresets();
+        } else {
+            alert('Failed to save preset: ' + (r.error?.message || 'Unknown error'));
+        }
+    });
+}
+
+function deleteUserPreset(slot, event) {
+    event.stopPropagation();
+    if (!confirm('Delete this preset?')) return;
+
+    API.deleteUserPreset(slot).then(r => {
+        if (r.success) {
+            refreshUserPresets();
+        }
+    });
+}
+
+function refreshUserPresets() {
+    API.getUserPresets().then(r => {
+        if (r.success && r.data.presets) {
+            userPresets = r.data.presets;
+            updateUserPresetButtons();
+        }
+    });
+}
+
+function updateUserPresetButtons() {
+    const container = document.getElementById('user-presets-container');
+    if (!container) return;
+
+    container.innerHTML = userPresets.map((p, i) => {
+        if (p.saved) {
+            return `<button onclick="loadUserPreset(${i})" class="group relative px-3 py-1.5 rounded-lg bg-accent-cyan/10 border border-accent-cyan/30 text-xs font-medium text-accent-cyan hover:bg-accent-cyan/20 transition-all whitespace-nowrap">
+                <span>${p.name.substring(0, 8)}</span>
+                <span onclick="deleteUserPreset(${i}, event)" class="absolute -top-1 -right-1 hidden group-hover:flex w-4 h-4 items-center justify-center rounded-full bg-red-500 text-white text-[10px]">&times;</span>
+            </button>`;
+        } else {
+            return `<button onclick="saveToSlot(${i})" class="px-3 py-1.5 rounded-lg bg-elevated border border-dashed border-border-subtle text-xs font-medium text-text-muted hover:border-accent-cyan/50 transition-all whitespace-nowrap opacity-50">
+                +
+            </button>`;
+        }
+    }).join('');
+}
+
+function saveToSlot(slot) {
+    const name = prompt('Enter preset name:');
+    if (!name || !name.trim()) return;
+
+    API.saveUserPreset(slot, name.trim()).then(r => {
+        if (r.success) {
+            refreshUserPresets();
+        } else {
+            alert('Failed to save: ' + (r.error?.message || 'Unknown error'));
+        }
+    });
+}
+
 function resetToDefaults() { setZoneCount(3); }
 
 // ========== Firmware Update ==========
@@ -816,6 +916,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Load data
     await loadEffects();
     await loadPalettes();
+    refreshUserPresets();  // Load user presets for preset bar
 
     // Connect WebSocket
     WS.connect();

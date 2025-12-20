@@ -54,6 +54,14 @@ public:
     bool loadPreset(uint8_t presetId);
     const char* getPresetName(uint8_t presetId) const;
 
+    // User preset management (Phase C.1)
+    bool saveUserPreset(uint8_t slot, const char* name);
+    bool loadUserPreset(uint8_t slot);
+    bool deleteUserPreset(uint8_t slot);
+    bool hasUserPreset(uint8_t slot) const;
+    bool getUserPreset(uint8_t slot, UserPreset& preset) const;
+    uint8_t getFilledUserPresetCount() const;
+
     // Main rendering
     void render();
 

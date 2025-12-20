@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en" class="antialiased">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>K1-Lightwave Controller</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.iconify.design/3/3.1.0/iconify.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Geist', 'Inter', 'sans-serif'], mono: ['Space Mono', 'monospace'] },
+                    colors: {
+                        canvas: '#1c2130',
+                        surface: '#252d3f',
+                        elevated: '#2f3849',
+                        text: { primary: '#e6e9ef', secondary: '#b5bdca', tertiary: '#8b92a0' },
+                        accent: { cyan: '#00d4ff', zone1: '#6ee7f3', zone2: '#22dd88', zone3: '#ffb84d' },
+                        border: { subtle: '#3a4254', interactive: '#4a5568' }
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-canvas text-text-primary flex flex-col min-h-screen selection:bg-accent-cyan selection:text-canvas">
+
+    <!-- Status Bar -->
+    <header class="sticky top-0 z-50 bg-canvas/80 backdrop-blur-md border-b border-border-subtle h-12 flex items-center justify-between px-4 md:px-6">
+        <div class="flex items-center gap-4 md:gap-6 text-xs text-text-secondary">
+            <div class="flex items-center gap-1.5">
+                <span class="iconify text-text-tertiary" data-icon="solar:graph-up-bold-duotone" data-width="14"></span>
+                <span>FPS: <span id="status-fps" class="font-semibold text-text-primary">--</span></span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <span class="iconify text-text-tertiary" data-icon="solar:cpu-bolt-bold-duotone" data-width="14"></span>
+                <span>MEM: <span id="status-mem" class="font-semibold text-text-primary">--</span></span>
+            </div>
+            <div class="hidden sm:flex items-center gap-1.5">
+                <span class="iconify text-text-tertiary" data-icon="solar:music-library-2-bold-duotone" data-width="14"></span>
+                <span>FX: <span id="status-fx" class="font-semibold text-text-primary">--</span></span>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <span id="status-text" class="text-xs font-semibold tracking-wide">OFFLINE</span>
+            <div id="status-dot" class="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(255,85,85,0.6)]"></div>
+        </div>
+    </header>
+
+    <main class="flex-1 flex flex-col items-center w-full px-4 py-6 md:px-8 pb-28 overflow-x-hidden">
+
+        <!-- Header -->
+        <h1 class="text-xl md:text-2xl font-semibold tracking-tight mb-6 text-center text-white">K1-Lightwave</h1>
+
+        <!-- Hero Visualization -->
+        <div class="w-full max-w-[60rem] aspect-[32/6] bg-black rounded-[20px] md:rounded-[28px] border border-white/5 shadow-[0_0_4rem_rgba(0,0,0,0.9)] relative overflow-hidden flex mb-8">
+            <!-- Zone 3 Left (12.5%) -->
+            <div class="relative h-full w-[12.5%] border-r border-white/5">
+                <div id="vis-z3-l" class="zone-overlay absolute inset-0 bg-accent-zone3 transition-opacity duration-300 opacity-0"></div>
+            </div>
+            <!-- Zone 2 Left (28.125%) -->
+            <div class="relative h-full w-[28.125%] border-r border-white/5">
+                <div id="vis-z2-l" class="zone-overlay absolute inset-0 bg-accent-zone2 transition-opacity duration-300 opacity-0"></div>
+            </div>
+            <!-- Zone 1 Center (18.75%) -->
+            <div class="relative h-full w-[18.75%] border-r border-white/5">
+                <div id="vis-z1" class="zone-overlay absolute inset-0 bg-accent-zone1 transition-opacity duration-300 opacity-50"></div>
+                <div class="absolute top-0 bottom-0 left-1/2 w-px bg-white/20 z-10"></div>
+            </div>
+            <!-- Zone 2 Right (28.125%) -->
+            <div class="relative h-full w-[28.125%] border-r border-white/5">
+                <div id="vis-z2-r" class="zone-overlay absolute inset-0 bg-accent-zone2 transition-opacity duration-300 opacity-0"></div>
+            </div>
+            <!-- Zone 3 Right (12.5%) -->
+            <div class="relative h-full w-[12.5%]">
+                <div id="vis-z3-r" class="zone-overlay absolute inset-0 bg-accent-zone3 transition-opacity duration-300 opacity-0"></div>
+            </div>
+            <!-- Gloss overlay -->
+            <div class="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent pointer-events-none rounded-[20px] md:rounded-[28px]"></div>
+        </div>
+
+        <!-- Main Content Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 w-full max-w-[80rem]">
+
+            <!-- Zone Composer Card -->
+            <div class="bg-surface border border-border-subtle rounded-xl p-4 md:p-6 flex flex-col gap-4">
+                <!-- Card Header -->
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="iconify text-accent-cyan" data-icon="solar:layers-minimalistic-bold-duotone" data-width="20"></span>
+                        <h2 class="text-base md:text-lg font-semibold tracking-tight text-white">Zone Composer</h2>
+                    </div>
+                    <div class="flex bg-elevated rounded-lg p-0.5">
+                        <button onclick="setZoneCount(1)" id="zc-1" class="w-6 h-6 text-xs text-text-secondary hover:text-white rounded transition-colors">1</button>
+                        <button onclick="setZoneCount(2)" id="zc-2" class="w-6 h-6 text-xs text-text-secondary hover:text-white rounded transition-colors">2</button>
+                        <button onclick="setZoneCount(3)" id="zc-3" class="w-6 h-6 text-xs text-black bg-accent-cyan font-semibold rounded">3</button>
+                        <button onclick="setZoneCount(4)" id="zc-4" class="w-6 h-6 text-xs text-text-secondary hover:text-white rounded transition-colors">4</button>
+                    </div>
+                </div>
+
+                <!-- Zone Tabs -->
+                <div class="flex border-b border-border-subtle" role="tablist">
+                    <button onclick="selectZone(4)" id="tab-z4" class="hidden flex-1 pb-2 text-sm text-text-secondary hover:text-text-primary transition-colors flex justify-center items-center gap-1.5 border-b-2 border-transparent" role="tab">
+                        <span class="w-2 h-2 rounded-full bg-accent-zone3"></span>Z4
+                    </button>
+                    <button onclick="selectZone(3)" id="tab-z3" class="flex-1 pb-2 text-sm text-text-secondary hover:text-text-primary transition-colors flex justify-center items-center gap-1.5 border-b-2 border-transparent" role="tab">
+                        <span class="w-2 h-2 rounded-full bg-accent-zone3"></span>Z3
+                    </button>
+                    <button onclick="selectZone(2)" id="tab-z2" class="flex-1 pb-2 text-sm text-text-secondary hover:text-text-primary transition-colors flex justify-center items-center gap-1.5 border-b-2 border-transparent" role="tab">
+                        <span class="w-2 h-2 rounded-full bg-accent-zone2"></span>Z2
+                    </button>
+                    <button onclick="selectZone(1)" id="tab-z1" class="flex-1 pb-2 text-sm font-semibold text-text-primary flex justify-center items-center gap-1.5 border-b-2 border-accent-zone1" role="tab" aria-selected="true">
+                        <span class="w-2 h-2 rounded-full bg-accent-zone1"></span>Z1
+                    </button>
+                </div>
+
+                <!-- LED Range Badge -->
+                <div id="range-badge" class="w-full py-2 px-3 rounded text-xs font-mono font-medium text-center border bg-accent-zone1/10 text-accent-zone1 border-accent-zone1/20">
+                    LEDs 65-94
+                </div>
+
+                <!-- Effect Selection -->
+                <div class="flex gap-2 items-center">
+                    <button onclick="prevEffect()" class="w-9 h-9 flex items-center justify-center rounded-lg bg-elevated border border-border-interactive text-text-secondary hover:text-white transition-colors" aria-label="Previous effect">
+                        <span class="iconify" data-icon="solar:arrow-left-bold-duotone"></span>
+                    </button>
+                    <div class="relative flex-1">
+                        <select id="effect-select" onchange="setZoneEffect()" class="w-full appearance-none bg-elevated border border-border-interactive text-text-primary rounded-lg pl-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent-cyan">
+                            <option value="0">Loading effects...</option>
+                        </select>
+                        <div class="absolute right-2.5 top-2.5 pointer-events-none text-text-secondary">
+                            <span class="iconify" data-icon="solar:alt-arrow-down-bold-duotone" data-width="14"></span>
+                        </div>
+                    </div>
+                    <button onclick="nextEffect()" class="w-9 h-9 flex items-center justify-center rounded-lg bg-elevated border border-border-interactive text-text-secondary hover:text-white transition-colors" aria-label="Next effect">
+                        <span class="iconify" data-icon="solar:arrow-right-bold-duotone"></span>
+                    </button>
+                </div>
+
+                <!-- Per-Zone Brightness -->
+                <div class="flex flex-col gap-1.5">
+                    <div class="flex justify-between items-center">
+                        <label class="text-xs font-medium text-text-secondary">Zone Brightness</label>
+                        <span class="font-mono text-xs font-semibold text-accent-cyan" id="zone-brightness-label">255</span>
+                    </div>
+                    <input type="range" min="0" max="255" value="255" class="slider-input" id="zone-brightness-slider" oninput="setZoneBrightness(this.value)">
+                </div>
+
+                <!-- Per-Zone Speed -->
+                <div class="flex flex-col gap-1.5">
+                    <div class="flex justify-between items-center">
+                        <label class="text-xs font-medium text-text-secondary">Zone Speed</label>
+                        <span class="font-mono text-xs font-semibold text-accent-cyan" id="zone-speed-label">25</span>
+                    </div>
+                    <input type="range" min="1" max="50" value="25" class="slider-input" id="zone-speed-slider" oninput="setZoneSpeed(this.value)">
+                </div>
+
+                <!-- Per-Zone Palette -->
+                <div class="flex flex-col gap-1.5">
+                    <label class="text-xs font-medium text-text-secondary">Zone Palette</label>
+                    <div class="relative">
+                        <select id="zone-palette-select" onchange="setZonePalette(this.value)" class="w-full appearance-none bg-elevated border border-border-interactive text-text-primary rounded-lg pl-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent-cyan">
+                            <option value="0">Use Global Palette</option>
+                        </select>
+                        <div class="absolute right-2.5 top-2.5 pointer-events-none text-text-secondary">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Enable/Disable Buttons -->
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="enableZone()" class="py-2 rounded-lg bg-accent-cyan text-black text-sm font-semibold hover:opacity-90 transition-opacity">Enable</button>
+                    <button onclick="disableZone()" class="py-2 rounded-lg bg-elevated border border-border-interactive text-text-secondary text-sm font-medium hover:bg-surface hover:text-text-primary transition-colors">Disable</button>
+                </div>
+
+                <!-- Reset to Defaults -->
+                <button onclick="resetToDefaults()" class="w-full text-xs text-text-tertiary hover:text-text-secondary transition-colors text-center pt-2 border-t border-border-subtle">
+                    Reset to Defaults (3 Zones)
+                </button>
+            </div>
+        </div>
+
+        <!-- Zone Mixer (Always Visible) -->
+        <div class="w-full max-w-[80rem] mt-6 md:mt-8 bg-surface border border-border-subtle rounded-xl p-4 md:p-6">
+            <div class="flex items-center gap-2 mb-4 md:mb-6">
+                <span class="iconify text-accent-cyan" data-icon="solar:soundwave-bold-duotone" data-width="20"></span>
+                <h2 class="text-base md:text-lg font-semibold tracking-tight text-white">Zone Mixer</h2>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+                <!-- Zone 4 (disabled by default) -->
+                <div id="mixer-zone-4" class="flex flex-col items-center gap-3 p-3 md:p-4 bg-canvas rounded-xl border border-border-subtle opacity-30 pointer-events-none transition-all duration-300">
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-accent-zone3"></span>
+                        <span class="text-xs font-semibold text-text-primary">Zone 4</span>
+                    </div>
+                    <div class="flex gap-4 md:gap-6 items-end">
+                        <div class="flex flex-col items-center gap-1">
+                            <span class="text-[10px] text-text-tertiary">BRT</span>
+                            <input type="range" min="0" max="255" value="255" class="mixer-fader" id="mixer-b-3" orient="vertical" oninput="setMixerBrightness(3, this.value)" disabled>
+                            <span class="font-mono text-[10px] text-accent-cyan" id="mixer-b-label-3">255</span>
+                        </div>
+                        <div class="flex flex-col items-center gap-1">
+                            <span class="text-[10px] text-text-tertiary">SPD</span>
+                            <input type="range" min="1" max="50" value="25" class="mixer-fader" id="mixer-s-3" orient="vertical" oninput="setMixerSpeed(3, this.value)" disabled>
+                            <span class="font-mono text-[10px] text-accent-cyan" id="mixer-s-label-3">25</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Zone 3 -->
+                <div id="mixer-zone-3" class="flex flex-col items-center gap-3 p-3 md:p-4 bg-canvas rounded-xl border border-border-subtle transition-all duration-300">
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-accent-zone3"></span>
+                        <span class="text-xs font-semibold text-text-primary">Zone 3</span>
+                    </div>
+                    <div class="flex gap-4 md:gap-6 items-end">
+                        <div class="flex flex-col items-center gap-1">
+                            <span class="text-[10px] text-text-tertiary">BRT</span>
+                            <input type="range" min="0" max="255" value="255" class="mixer-fader" id="mixer-b-2" orient="vertical" oninput="setMixerBrightness(2, this.value)">
+                            <span class="font-mono text-[10px] text-accent-cyan" id="mixer-b-label-2">255</span>
+                        </div>
+                        <div class="flex flex-col items-center gap-1">
+                            <span class="text-[10px] text-text-tertiary">SPD</span>
+                            <input type="range" min="1" max="50" value="25" class="mixer-fader" id="mixer-s-2" orient="vertical" oninput="setMixerSpeed(2, this.value)">
+                            <span class="font-mono text-[10px] text-accent-cyan" id="mixer-s-label-2">25</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Zone 2 -->
+                <div id="mixer-zone-2" class="flex flex-col items-center gap-3 p-3 md:p-4 bg-canvas rounded-xl border border-border-subtle transition-all duration-300">
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-accent-zone2"></span>
+                        <span class="text-xs font-semibold text-text-primary">Zone 2</span>
+                    </div>
+                    <div class="flex gap-4 md:gap-6 items-end">
+                        <div class="flex flex-col items-center gap-1">
+                            <span class="text-[10px] text-text-tertiary">BRT</span>
+                            <input type="range" min="0" max="255" value="255" class="mixer-fader" id="mixer-b-1" orient="vertical" oninput="setMixerBrightness(1, this.value)">
+                            <span class="font-mono text-[10px] text-accent-cyan" id="mixer-b-label-1">255</span>
+                        </div>
+                        <div class="flex flex-col items-center gap-1">
+                            <span class="text-[10px] text-text-tertiary">SPD</span>
+                            <input type="range" min="1" max="50" value="25" class="mixer-fader" id="mixer-s-1" orient="vertical" oninput="setMixerSpeed(1, this.value)">
+                            <span class="font-mono text-[10px] text-accent-cyan" id="mixer-s-label-1">25</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Zone 1 -->
+                <div id="mixer-zone-1" class="flex flex-col items-center gap-3 p-3 md:p-4 bg-canvas rounded-xl border border-border-subtle transition-all duration-300">
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-accent-zone1"></span>
+                        <span class="text-xs font-semibold text-text-primary">Zone 1</span>
+                    </div>
+                    <div class="flex gap-4 md:gap-6 items-end">
+                        <div class="flex flex-col items-center gap-1">
+                            <span class="text-[10px] text-text-tertiary">BRT</span>
+                            <input type="range" min="0" max="255" value="255" class="mixer-fader" id="mixer-b-0" orient="vertical" oninput="setMixerBrightness(0, this.value)">
+                            <span class="font-mono text-[10px] text-accent-cyan" id="mixer-b-label-0">255</span>
+                        </div>
+                        <div class="flex flex-col items-center gap-1">
+                            <span class="text-[10px] text-text-tertiary">SPD</span>
+                            <input type="range" min="1" max="50" value="25" class="mixer-fader" id="mixer-s-0" orient="vertical" oninput="setMixerSpeed(0, this.value)">
+                            <span class="font-mono text-[10px] text-accent-cyan" id="mixer-s-label-0">25</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Other Settings Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 w-full max-w-[80rem] mt-6 md:mt-8">
+
+            <!-- Global Settings Card -->
+            <div class="bg-surface border border-border-subtle rounded-xl p-4 md:p-6 flex flex-col gap-4">
+                <div class="flex items-center gap-2">
+                    <span class="iconify text-accent-cyan" data-icon="solar:tuning-bold-duotone" data-width="20"></span>
+                    <h2 class="text-base md:text-lg font-semibold tracking-tight text-white">Global Settings</h2>
+                </div>
+
+                <!-- Palette -->
+                <div class="flex flex-col gap-1.5">
+                    <label class="text-xs font-medium text-text-secondary">Color Palette</label>
+                    <div class="relative">
+                        <select id="palette-select" onchange="setPalette()" class="w-full appearance-none bg-elevated border border-border-interactive text-text-primary rounded-lg pl-3 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent-cyan">
+                            <option value="0">Loading palettes...</option>
+                        </select>
+                        <div class="absolute right-2.5 top-2.5 pointer-events-none text-text-secondary">
+                            <span class="iconify" data-icon="solar:alt-arrow-down-bold-duotone" data-width="14"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Random Transitions -->
+                <div class="flex items-center justify-between pt-2">
+                    <label class="text-xs font-medium text-text-secondary">Random Transitions</label>
+                    <div class="relative inline-block w-11 h-6">
+                        <input type="checkbox" id="toggle-transitions" onchange="toggleTransitions()" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-elevated appearance-none cursor-pointer transition-all duration-200 left-0.5 top-0.5">
+                        <label for="toggle-transitions" class="toggle-label block h-6 rounded-full bg-elevated cursor-pointer"></label>
+                    </div>
+                </div>
+
+                <!-- Info -->
+                <div class="text-xs text-text-tertiary pt-2 border-t border-border-subtle">
+                    Brightness & Speed are per-zone controls in the Zone Composer and Mixer below.
+                </div>
+            </div>
+
+            <!-- Visual Pipeline Card -->
+            <div class="bg-surface border border-border-subtle rounded-xl overflow-hidden">
+                <button onclick="togglePipeline()" class="w-full p-4 md:p-6 flex items-center justify-between hover:bg-elevated/50 transition-colors">
+                    <div class="flex items-center gap-2">
+                        <span class="iconify text-accent-cyan" data-icon="solar:graph-new-bold-duotone" data-width="20"></span>
+                        <h2 class="text-base md:text-lg font-semibold tracking-tight text-white">Visual Pipeline</h2>
+                    </div>
+                    <span class="iconify text-text-secondary transition-transform duration-300" id="pipeline-chevron" data-icon="solar:alt-arrow-down-bold-duotone"></span>
+                </button>
+                <div id="pipeline-content" class="max-h-0 overflow-hidden transition-all duration-300 px-4 md:px-6">
+                    <div class="pb-4 md:pb-6 space-y-4">
+                        <div class="flex flex-col gap-1.5">
+                            <div class="flex justify-between items-center">
+                                <label class="text-xs font-medium text-text-secondary">Intensity</label>
+                                <span class="font-mono text-xs font-semibold text-accent-cyan" id="val-int">128</span>
+                            </div>
+                            <input type="range" min="0" max="255" value="128" class="slider-input" id="slider-intensity" oninput="updatePipeline(this, 'val-int')">
+                        </div>
+                        <div class="flex flex-col gap-1.5">
+                            <div class="flex justify-between items-center">
+                                <label class="text-xs font-medium text-text-secondary">Saturation</label>
+                                <span class="font-mono text-xs font-semibold text-accent-cyan" id="val-sat">200</span>
+                            </div>
+                            <input type="range" min="0" max="255" value="200" class="slider-input" id="slider-saturation" oninput="updatePipeline(this, 'val-sat')">
+                        </div>
+                        <div class="flex flex-col gap-1.5">
+                            <div class="flex justify-between items-center">
+                                <label class="text-xs font-medium text-text-secondary">Complexity</label>
+                                <span class="font-mono text-xs font-semibold text-accent-cyan" id="val-com">45</span>
+                            </div>
+                            <input type="range" min="0" max="255" value="45" class="slider-input" id="slider-complexity" oninput="updatePipeline(this, 'val-com')">
+                        </div>
+                        <div class="flex flex-col gap-1.5">
+                            <div class="flex justify-between items-center">
+                                <label class="text-xs font-medium text-text-secondary">Variation</label>
+                                <span class="font-mono text-xs font-semibold text-accent-cyan" id="val-var">180</span>
+                            </div>
+                            <input type="range" min="0" max="255" value="180" class="slider-input" id="slider-variation" oninput="updatePipeline(this, 'val-var')">
+                        </div>
+                        <!-- Info -->
+                        <div class="text-xs text-text-tertiary pt-2 border-t border-border-subtle">
+                            These parameters affect ALL zones globally in zone mode.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Firmware Update Card -->
+        <div class="bg-surface border border-border-subtle rounded-xl overflow-hidden">
+            <button onclick="toggleFirmware()" class="w-full p-4 md:p-6 flex items-center justify-between hover:bg-elevated/50 transition-colors">
+                <div class="flex items-center gap-2">
+                    <span class="iconify text-accent-cyan" data-icon="solar:cloud-upload-bold-duotone" data-width="20"></span>
+                    <h2 class="text-base md:text-lg font-semibold tracking-tight text-white">Firmware Update</h2>
+                </div>
+                <span class="iconify text-text-secondary transition-transform duration-300" id="firmware-chevron" data-icon="solar:alt-arrow-down-bold-duotone"></span>
+            </button>
+            <div id="firmware-content" class="max-h-0 overflow-hidden transition-all duration-300 px-4 md:px-6">
+                <div class="pb-4 md:pb-6 space-y-4">
+                    <!-- File Input -->
+                    <div class="flex flex-col gap-2">
+                        <label class="text-xs font-medium text-text-secondary">Select firmware file (.bin)</label>
+                        <input type="file" id="firmware-file" accept=".bin" class="block w-full text-sm text-text-secondary
+                            file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0
+                            file:text-sm file:font-semibold file:bg-elevated file:text-text-primary
+                            hover:file:bg-border-interactive cursor-pointer">
+                    </div>
+
+                    <!-- File Info -->
+                    <div id="firmware-info" class="hidden p-3 bg-canvas rounded-lg border border-border-subtle">
+                        <div class="flex justify-between text-xs">
+                            <span class="text-text-secondary">File:</span>
+                            <span id="firmware-filename" class="text-text-primary font-medium">-</span>
+                        </div>
+                        <div class="flex justify-between text-xs mt-1">
+                            <span class="text-text-secondary">Size:</span>
+                            <span id="firmware-filesize" class="text-text-primary font-medium">-</span>
+                        </div>
+                    </div>
+
+                    <!-- Progress Bar -->
+                    <div id="firmware-progress-container" class="hidden">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-xs font-medium text-text-secondary">Upload Progress</span>
+                            <span id="firmware-progress-label" class="font-mono text-xs font-semibold text-accent-cyan">0%</span>
+                        </div>
+                        <div class="w-full bg-elevated rounded-full h-2 overflow-hidden">
+                            <div id="firmware-progress-bar" class="bg-accent-cyan h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Status Message -->
+                    <div id="firmware-status" class="hidden p-3 rounded-lg text-sm font-medium text-center"></div>
+
+                    <!-- Upload Button -->
+                    <button onclick="uploadFirmware()" id="firmware-upload-btn" class="w-full py-2.5 rounded-lg bg-accent-cyan text-black text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        <span class="flex items-center justify-center gap-2">
+                            <span class="iconify" data-icon="solar:upload-bold-duotone" data-width="16"></span>
+                            Upload Firmware
+                        </span>
+                    </button>
+
+                    <!-- Warning -->
+                    <div class="text-xs text-text-tertiary pt-2 border-t border-border-subtle">
+                        <span class="text-yellow-500 font-semibold">Warning:</span> Do not disconnect power during upload. Device will restart automatically after successful update.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Enhancement Engines Card -->
+        <div class="bg-surface border border-border-subtle rounded-xl overflow-hidden md:col-span-2 lg:col-span-3">
+            <button onclick="toggleEnhancements()" class="w-full p-4 md:p-6 flex items-center justify-between hover:bg-elevated/50 transition-colors">
+                <div class="flex items-center gap-2">
+                    <span class="iconify text-accent-cyan" data-icon="solar:filters-bold-duotone" data-width="20"></span>
+                    <h2 class="text-base md:text-lg font-semibold tracking-tight text-white">Enhancement Engines</h2>
+                    <span class="text-xs text-text-tertiary ml-2">(EXPERIMENTAL)</span>
+                </div>
+                <span class="iconify text-text-secondary transition-transform duration-300" id="enhancements-chevron" data-icon="solar:alt-arrow-down-bold-duotone"></span>
+            </button>
+            <div id="enhancements-content" class="max-h-0 overflow-hidden transition-all duration-300 px-4 md:px-6">
+                <div class="pb-4 md:pb-6 space-y-6">
+                    <!-- ColorEngine Section -->
+                    <div class="space-y-3">
+                        <h3 class="text-sm font-semibold text-text-primary flex items-center gap-2">
+                            <span class="iconify text-accent-zone2" data-icon="solar:pallete-bold-duotone" data-width="16"></span>
+                            ColorEngine
+                        </h3>
+                        <div class="flex flex-col gap-1.5">
+                            <div class="flex justify-between items-center">
+                                <label class="text-xs font-medium text-text-secondary">Cross-Palette Blend</label>
+                                <div class="relative inline-block w-11 h-6">
+                                    <input type="checkbox" id="toggle-blend" onchange="toggleCrossBlend()" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-elevated appearance-none cursor-pointer transition-all duration-200 left-0.5 top-0.5">
+                                    <label for="toggle-blend" class="toggle-label block h-6 rounded-full bg-elevated cursor-pointer"></label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex flex-col gap-1.5">
+                            <div class="flex justify-between items-center">
+                                <label class="text-xs font-medium text-text-secondary">Color Diffusion</label>
+                                <span class="font-mono text-xs font-semibold text-accent-cyan" id="val-diffusion">0</span>
+                            </div>
+                            <input type="range" min="0" max="255" value="0" class="slider-input" id="slider-diffusion" oninput="updateDiffusion(this)">
+                        </div>
+                        <div class="flex flex-col gap-1.5">
+                            <div class="flex justify-between items-center">
+                                <label class="text-xs font-medium text-text-secondary">Rotation Speed (°/frame)</label>
+                                <span class="font-mono text-xs font-semibold text-accent-cyan" id="val-rotation">0.0</span>
+                            </div>
+                            <input type="range" min="0" max="100" value="0" step="1" class="slider-input" id="slider-rotation" oninput="updateRotation(this)">
+                        </div>
+                    </div>
+
+                    <!-- MotionEngine Section -->
+                    <div class="space-y-3 pt-4 border-t border-border-subtle">
+                        <h3 class="text-sm font-semibold text-text-primary flex items-center gap-2">
+                            <span class="iconify text-accent-zone1" data-icon="solar:circular-motion-bold-duotone" data-width="16"></span>
+                            MotionEngine
+                        </h3>
+                        <div class="flex flex-col gap-1.5">
+                            <div class="flex justify-between items-center">
+                                <label class="text-xs font-medium text-text-secondary">Phase Offset (degrees)</label>
+                                <span class="font-mono text-xs font-semibold text-accent-cyan" id="val-phase">0</span>
+                            </div>
+                            <input type="range" min="0" max="360" value="0" class="slider-input" id="slider-phase" oninput="updatePhase(this)">
+                        </div>
+                        <div class="flex flex-col gap-1.5">
+                            <div class="flex justify-between items-center">
+                                <label class="text-xs font-medium text-text-secondary">Auto-Rotate</label>
+                                <div class="relative inline-block w-11 h-6">
+                                    <input type="checkbox" id="toggle-autorotate" onchange="toggleAutoRotate()" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-elevated appearance-none cursor-pointer transition-all duration-200 left-0.5 top-0.5">
+                                    <label for="toggle-autorotate" class="toggle-label block h-6 rounded-full bg-elevated cursor-pointer"></label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex flex-col gap-1.5" id="autorotate-speed-container" style="display: none;">
+                            <div class="flex justify-between items-center">
+                                <label class="text-xs font-medium text-text-secondary">Auto-Rotate Speed (°/sec)</label>
+                                <span class="font-mono text-xs font-semibold text-accent-cyan" id="val-autorotate-speed">10</span>
+                            </div>
+                            <input type="range" min="1" max="100" value="10" class="slider-input" id="slider-autorotate-speed" oninput="updateAutoRotateSpeed(this)">
+                        </div>
+                    </div>
+
+                    <!-- Info -->
+                    <div class="text-xs text-text-tertiary pt-2 border-t border-border-subtle">
+                        Enhancement engines provide advanced color blending, motion physics, and compositing. Enable FEATURE_ENHANCEMENT_ENGINES in platformio.ini to use these features.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Preset Bar -->
+    <footer class="fixed bottom-0 left-0 right-0 z-40 bg-surface/95 backdrop-blur border-t border-border-subtle p-3 md:p-4">
+        <div class="max-w-[80rem] mx-auto flex items-center justify-between gap-2 md:gap-4">
+            <div class="flex gap-1.5 md:gap-2 overflow-x-auto no-scrollbar">
+                <button onclick="loadPreset(0)" class="px-3 py-1.5 rounded-lg bg-elevated border border-border-interactive text-xs font-medium text-text-secondary hover:text-text-primary hover:border-accent-cyan/50 transition-all whitespace-nowrap">P0</button>
+                <button onclick="loadPreset(1)" class="px-3 py-1.5 rounded-lg bg-elevated border border-border-interactive text-xs font-medium text-text-secondary hover:text-text-primary hover:border-accent-cyan/50 transition-all whitespace-nowrap">P1</button>
+                <button onclick="loadPreset(2)" class="px-3 py-1.5 rounded-lg bg-elevated border border-border-interactive text-xs font-medium text-text-secondary hover:text-text-primary hover:border-accent-cyan/50 transition-all whitespace-nowrap">P2</button>
+                <button onclick="loadPreset(3)" class="px-3 py-1.5 rounded-lg bg-elevated border border-border-interactive text-xs font-medium text-text-secondary hover:text-text-primary hover:border-accent-cyan/50 transition-all whitespace-nowrap">P3</button>
+                <button onclick="loadPreset(4)" class="px-3 py-1.5 rounded-lg bg-elevated border border-border-interactive text-xs font-medium text-text-secondary hover:text-text-primary hover:border-accent-cyan/50 transition-all whitespace-nowrap">P4</button>
+            </div>
+            <button onclick="savePreset()" class="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-accent-cyan text-black text-sm font-semibold hover:opacity-90 transition-opacity whitespace-nowrap">
+                <span class="iconify" data-icon="solar:diskette-bold-duotone" data-width="16"></span>
+                Save
+            </button>
+        </div>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>

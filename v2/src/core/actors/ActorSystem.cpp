@@ -1,0 +1,299 @@
+/**
+ * @file ActorSystem.cpp
+ * @brief Implementation of the ActorSystem orchestrator
+ *
+ * @author LightwaveOS Team
+ * @version 2.0.0
+ */
+
+#include "ActorSystem.h"
+
+#ifndef NATIVE_BUILD
+#include <Arduino.h>
+#include <esp_log.h>
+#include <esp_heap_caps.h>
+
+static const char* TAG = "ActorSystem";
+#endif
+
+namespace lightwaveos {
+namespace actors {
+
+// ============================================================================
+// Singleton Instance
+// ============================================================================
+
+ActorSystem& ActorSystem::instance()
+{
+    static ActorSystem instance;
+    return instance;
+}
+
+// ============================================================================
+// Constructor / Destructor
+// ============================================================================
+
+ActorSystem::ActorSystem()
+    : m_state(SystemState::UNINITIALIZED)
+    , m_startTime(0)
+{
+}
+
+ActorSystem::~ActorSystem()
+{
+    if (m_state == SystemState::RUNNING) {
+        shutdown();
+    }
+}
+
+// ============================================================================
+// Lifecycle
+// ============================================================================
+
+bool ActorSystem::init()
+{
+    if (m_state != SystemState::UNINITIALIZED) {
+#ifndef NATIVE_BUILD
+        ESP_LOGW(TAG, "Already initialized (state=%d)", static_cast<int>(m_state));
+#endif
+        return false;
+    }
+
+#ifndef NATIVE_BUILD
+    ESP_LOGI(TAG, "Initializing Actor System...");
+    ESP_LOGI(TAG, "Free heap: %lu bytes", esp_get_free_heap_size());
+#endif
+
+    m_state = SystemState::STARTING;
+
+    // Create actors in dependency order
+    // For now, we only have the RendererActor
+    // Future: Create StateStoreActor, NetworkActor, HmiActor, etc.
+
+    try {
+        // Create RendererActor
+        m_renderer = std::make_unique<RendererActor>();
+
+        if (m_renderer == nullptr) {
+#ifndef NATIVE_BUILD
+            ESP_LOGE(TAG, "Failed to create RendererActor");
+#endif
+            m_state = SystemState::UNINITIALIZED;
+            return false;
+        }
+
+#ifndef NATIVE_BUILD
+        ESP_LOGI(TAG, "Actors created successfully");
+        ESP_LOGI(TAG, "Free heap after init: %lu bytes", esp_get_free_heap_size());
+#endif
+
+    } catch (...) {
+#ifndef NATIVE_BUILD
+        ESP_LOGE(TAG, "Exception during actor creation");
+#endif
+        m_state = SystemState::UNINITIALIZED;
+        return false;
+    }
+
+    return true;
+}
+
+bool ActorSystem::start()
+{
+    if (m_state != SystemState::STARTING) {
+        if (m_state == SystemState::UNINITIALIZED) {
+            // Auto-init if not done
+            if (!init()) {
+                return false;
+            }
+        } else {
+#ifndef NATIVE_BUILD
+            ESP_LOGW(TAG, "Cannot start - wrong state: %d", static_cast<int>(m_state));
+#endif
+            return false;
+        }
+    }
+
+#ifndef NATIVE_BUILD
+    ESP_LOGI(TAG, "Starting actors...");
+#endif
+
+    // Start actors in dependency order
+    // 1. StateStoreActor (load config) - future
+    // 2. RendererActor (init LEDs)
+    // 3. NetworkActor (start server) - future
+    // 4. HmiActor (start encoder) - future
+    // 5. PluginManagerActor - future
+    // 6. SyncManagerActor - future
+
+    // Start RendererActor
+    if (m_renderer && !m_renderer->start()) {
+#ifndef NATIVE_BUILD
+        ESP_LOGE(TAG, "Failed to start RendererActor");
+#endif
+        m_state = SystemState::STOPPED;
+        return false;
+    }
+
+    m_startTime = millis();
+    m_state = SystemState::RUNNING;
+
+#ifndef NATIVE_BUILD
+    ESP_LOGI(TAG, "All actors started successfully");
+    ESP_LOGI(TAG, "Free heap: %lu bytes", esp_get_free_heap_size());
+#endif
+
+    return true;
+}
+
+void ActorSystem::shutdown()
+{
+    if (m_state != SystemState::RUNNING) {
+#ifndef NATIVE_BUILD
+        ESP_LOGW(TAG, "Not running - nothing to shutdown");
+#endif
+        return;
+    }
+
+#ifndef NATIVE_BUILD
+    ESP_LOGI(TAG, "Shutting down actors...");
+#endif
+
+    m_state = SystemState::STOPPING;
+
+    // Stop actors in reverse order
+    // Future: SyncManagerActor, PluginManagerActor, HmiActor, NetworkActor, etc.
+
+    // Stop RendererActor
+    if (m_renderer) {
+        m_renderer->stop();
+    }
+
+    m_state = SystemState::STOPPED;
+
+#ifndef NATIVE_BUILD
+    ESP_LOGI(TAG, "All actors stopped");
+    ESP_LOGI(TAG, "Final heap: %lu bytes", esp_get_free_heap_size());
+#endif
+}
+
+// ============================================================================
+// Convenience Commands
+// ============================================================================
+
+bool ActorSystem::setEffect(uint8_t effectId)
+{
+    if (!m_renderer || !m_renderer->isRunning()) {
+        return false;
+    }
+
+    Message msg(MessageType::SET_EFFECT, effectId);
+    return m_renderer->send(msg, pdMS_TO_TICKS(10));
+}
+
+bool ActorSystem::setBrightness(uint8_t brightness)
+{
+    if (!m_renderer || !m_renderer->isRunning()) {
+        return false;
+    }
+
+    Message msg(MessageType::SET_BRIGHTNESS, brightness);
+    return m_renderer->send(msg, pdMS_TO_TICKS(10));
+}
+
+bool ActorSystem::setSpeed(uint8_t speed)
+{
+    if (!m_renderer || !m_renderer->isRunning()) {
+        return false;
+    }
+
+    Message msg(MessageType::SET_SPEED, speed);
+    return m_renderer->send(msg, pdMS_TO_TICKS(10));
+}
+
+bool ActorSystem::setPalette(uint8_t paletteIndex)
+{
+    if (!m_renderer || !m_renderer->isRunning()) {
+        return false;
+    }
+
+    Message msg(MessageType::SET_PALETTE, paletteIndex);
+    return m_renderer->send(msg, pdMS_TO_TICKS(10));
+}
+
+// ============================================================================
+// Diagnostics
+// ============================================================================
+
+SystemStats ActorSystem::getStats() const
+{
+    SystemStats stats;
+
+    stats.uptimeMs = getUptimeMs();
+
+    // Get MessageBus stats
+    stats.totalMessages = bus::MessageBus::instance().getTotalPublished();
+
+#ifndef NATIVE_BUILD
+    // Get heap stats
+    stats.heapFreeBytes = esp_get_free_heap_size();
+    stats.heapMinFreeBytes = esp_get_minimum_free_heap_size();
+#endif
+
+    // Count active actors
+    stats.activeActors = 0;
+    if (m_renderer && m_renderer->isRunning()) stats.activeActors++;
+    // Future: count other actors
+
+    return stats;
+}
+
+void ActorSystem::printStatus()
+{
+#ifndef NATIVE_BUILD
+    SystemStats stats = getStats();
+
+    Serial.println(F("\n=== LightwaveOS v2 Actor System ==="));
+    Serial.printf("State: %d\n", static_cast<int>(m_state));
+    Serial.printf("Uptime: %lu ms\n", stats.uptimeMs);
+    Serial.printf("Active actors: %d\n", stats.activeActors);
+    Serial.printf("Total messages: %lu\n", stats.totalMessages);
+    Serial.printf("Heap: %lu / min %lu bytes\n",
+                  stats.heapFreeBytes, stats.heapMinFreeBytes);
+
+    // Renderer stats
+    if (m_renderer && m_renderer->isRunning()) {
+        const RenderStats& rs = m_renderer->getStats();
+        Serial.println(F("\n--- Renderer ---"));
+        Serial.printf("Effect: %d (%s)\n",
+                      m_renderer->getCurrentEffect(),
+                      m_renderer->getEffectName(m_renderer->getCurrentEffect()));
+        Serial.printf("Brightness: %d\n", m_renderer->getBrightness());
+        Serial.printf("Speed: %d\n", m_renderer->getSpeed());
+        Serial.printf("FPS: %d (target: %d)\n", rs.currentFPS, LedConfig::TARGET_FPS);
+        Serial.printf("CPU: %d%%\n", rs.cpuPercent);
+        Serial.printf("Frames: %lu, Drops: %lu\n", rs.framesRendered, rs.frameDrops);
+        Serial.printf("Frame time: avg=%lu, min=%lu, max=%lu us\n",
+                      rs.avgFrameTimeUs, rs.minFrameTimeUs, rs.maxFrameTimeUs);
+        Serial.printf("Stack watermark: %d words\n",
+                      m_renderer->getStackHighWaterMark());
+    }
+
+    // MessageBus stats
+    Serial.println(F("\n--- MessageBus ---"));
+    bus::MessageBus::instance().dumpSubscriptions();
+
+    Serial.println(F("===================================\n"));
+#endif
+}
+
+uint32_t ActorSystem::getUptimeMs() const
+{
+    if (m_state != SystemState::RUNNING) {
+        return 0;
+    }
+    return millis() - m_startTime;
+}
+
+} // namespace actors
+} // namespace lightwaveos

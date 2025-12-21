@@ -2,2390 +2,1901 @@
 
 #if FEATURE_WEB_SERVER
 
-#include "WiFiManager.h"
-#include "../effects/EffectMetadata.h"
-#include "../config/network_config.h"
-#include "../config/hardware_config.h"
-#include "OpenApiSpec.h"
-#include <FastLED.h>
 #include <ESPmDNS.h>
-#include <Update.h>
-#include <AsyncJson.h>
+#include <FastLED.h>
 
-#if FEATURE_AUDIO_SYNC
-#include "../audio/audio_web_handlers.h"
-#endif
-
-#if FEATURE_ENHANCEMENT_ENGINES
+#include "OpenApiSpec.h"
+#include "OpenApiSpecV2.h"
+#include "WebServerV2.h"
+#include "../effects.h"
+#include "../effects/EffectMetadata.h"
+#include "../effects/transitions/TransitionEngine.h"
+#include "../effects/zones/ZoneComposer.h"
 #include "../effects/engines/ColorEngine.h"
 #include "../effects/engines/MotionEngine.h"
-#endif
+#include "../config/hardware_config.h"
+#include "../hardware/PerformanceMonitor.h"
 
-// External references from main.cpp
-extern uint8_t currentEffect;
-extern uint8_t gHue;
-extern CRGB strip1[];
-extern CRGB strip2[];
-extern bool useOptimizedEffects;
-extern bool useRandomTransitions;
-extern uint8_t effectSpeed;
-extern uint8_t effectIntensity, effectSaturation, effectComplexity, effectVariation;
-
-// Zone Composer
-#include "../effects/zones/ZoneComposer.h"
-extern ZoneComposer zoneComposer;
-
-// External references from main.cpp
-#include "../effects.h"
-extern CRGBPalette16 currentPalette;
-extern CRGBPalette16 targetPalette;
-extern uint8_t currentPaletteIndex;
-
-// Master palette system externs (definitions in Palettes_Master.h, included in main.cpp)
+// Palette externs (avoid including full PROGMEM headers)
 extern const TProgmemRGBGradientPaletteRef gMasterPalettes[];
 extern const uint8_t gMasterPaletteCount;
-extern const char* const MasterPaletteNames[];
-extern const uint8_t master_palette_flags[];
-extern const uint8_t master_palette_max_brightness[];
+extern const char* MasterPaletteNames[];
 
-// Palette flag definitions (must match Palettes_Master.h)
-#define PAL_WARM        0x01
-#define PAL_COOL        0x02
-#define PAL_HIGH_SAT    0x04
-#define PAL_WHITE_HEAVY 0x08
-#define PAL_CALM        0x10
-#define PAL_VIVID       0x20
-
-// Helper functions (inline implementations to avoid linking issues)
-inline bool paletteHasFlag(uint8_t idx, uint8_t flag) {
-    if (idx >= gMasterPaletteCount) return false;
-    return (master_palette_flags[idx] & flag) != 0;
-}
-inline bool isPaletteWarm(uint8_t idx) { return paletteHasFlag(idx, PAL_WARM); }
-inline bool isPaletteCool(uint8_t idx) { return paletteHasFlag(idx, PAL_COOL); }
-inline bool isPaletteCalm(uint8_t idx) { return paletteHasFlag(idx, PAL_CALM); }
-inline bool isPaletteVivid(uint8_t idx) { return paletteHasFlag(idx, PAL_VIVID); }
-inline bool isCrameriPalette(uint8_t idx) { return idx >= 33 && idx < gMasterPaletteCount; }
-inline bool isCptCityPalette(uint8_t idx) { return idx < 33; }
-inline uint8_t getPaletteMaxBrightness(uint8_t idx) {
-    if (idx >= gMasterPaletteCount) return 255;
-    return master_palette_max_brightness[idx];
-}
-
-// Forward declarations
-void startAdvancedTransition(uint8_t newEffect);
+// External references from main.cpp (keep these minimal and explicit)
+extern uint8_t currentEffect;
+extern uint8_t effectSpeed;
+extern uint8_t effectIntensity, effectSaturation, effectComplexity, effectVariation;
+extern uint8_t currentPaletteIndex;
+extern uint8_t fadeAmount;
+extern CRGB leds[];
+extern CRGB transitionSourceBuffer[];
+extern TransitionEngine transitionEngine;
+extern ZoneComposer zoneComposer;
+extern PerformanceMonitor perfMon;
 
 // Global instance
 LightwaveWebServer webServer;
 
-LightwaveWebServer::LightwaveWebServer() {
-    server = new AsyncWebServer(NetworkConfig::WEB_SERVER_PORT);
-    ws = new AsyncWebSocket("/ws");
-}
+LightwaveWebServer::LightwaveWebServer() = default;
 
 LightwaveWebServer::~LightwaveWebServer() {
-    delete ws;
-    delete server;
+    stop();
 }
 
 bool LightwaveWebServer::begin() {
-    Serial.println("[WebServer] Starting web server (network-independent)");
+    Serial.println("[WebServer] Starting ESP-IDF httpd web server (robust backend)");
     
-    // Initialize SPIFFS
     if (!SPIFFS.begin(true)) {
         Serial.println("[WebServer] Failed to mount SPIFFS");
         return false;
     }
     
-    // Initialize network services regardless of WiFi state
-    return beginNetworkServices();
-}
+    IdfHttpServer::Config cfg{};
+    cfg.port = NetworkConfig::WEB_SERVER_PORT;
+    cfg.maxOpenSockets = 8;
+    cfg.maxReqBodyBytes = 2048;
+    cfg.maxWsFrameBytes = 2048;
 
-bool LightwaveWebServer::beginNetworkServices() {
-    Serial.println("[WebServer] Initializing network services");
-
-    // Setup CORS headers for all responses
-    // Allows web apps from any origin to access the API
-    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
-    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Headers", "Content-Type, X-OTA-Token");
-
-    // Setup WebSocket handlers
-    ws->onEvent(onWsEvent);
-    server->addHandler(ws);
-
-    // Setup HTTP routes
-    setupRoutes();
-
-    // Start the server immediately - it will work in AP or STA mode
-    server->begin();
-    isRunning = true;
-    
-    Serial.printf("[WebServer] Server started on port %d\n", NetworkConfig::WEB_SERVER_PORT);
-    
-    // Start mDNS if we have a connection
-    startMDNS();
-    
-    // Start monitoring WiFi state changes
-    startWiFiMonitor();
-    
-    return true;
-}
-
-void LightwaveWebServer::startWiFiMonitor() {
-    // Create a task to monitor WiFi state and update services accordingly
-    xTaskCreate(
-        [](void* param) {
-            LightwaveWebServer* server = static_cast<LightwaveWebServer*>(param);
-            WiFiManager& wifi = WiFiManager::getInstance();
-            WiFiManager::WiFiState lastState = WiFiManager::STATE_WIFI_INIT;
-            
-            while (true) {
-                WiFiManager::WiFiState currentState = wifi.getState();
-                
-                // Handle state changes
-                if (currentState != lastState) {
-                    Serial.printf("[WebServer] WiFi state changed: %s -> %s\n",
-                                  wifi.getStateString().c_str(), 
-                                  wifi.getStateString().c_str());
-                    
-                    switch (currentState) {
-                        case WiFiManager::STATE_WIFI_CONNECTED:
-                            server->onWiFiConnected();
-                            break;
-                            
-                        case WiFiManager::STATE_WIFI_AP_MODE:
-                            server->onAPModeStarted();
-                            break;
-                            
-                        case WiFiManager::STATE_WIFI_DISCONNECTED:
-                        case WiFiManager::STATE_WIFI_FAILED:
-                            server->onWiFiDisconnected();
-                            break;
-                            
-                        default:
-                            break;
-                    }
-                    
-                    lastState = currentState;
-                }
-                
-                vTaskDelay(pdMS_TO_TICKS(1000)); // Check every second
-            }
-        },
-        "WebServerWiFiMon",
-        8192,  // Increased from 2048 - needs more stack for mDNS and JSON operations
-        this,
-        1,
-        nullptr
-    );
-}
-
-void LightwaveWebServer::onWiFiConnected() {
-    Serial.printf("[WebServer] WiFi connected - IP: %s\n", WiFi.localIP().toString().c_str());
-    
-    // Restart mDNS with new IP
-    startMDNS();
-    
-    // Broadcast connection status to all WebSocket clients
-    StaticJsonDocument<256> doc;
-    doc["type"] = "network";
-    doc["event"] = "wifi_connected";
-    doc["ip"] = WiFi.localIP().toString();
-    doc["ssid"] = WiFi.SSID();
-    doc["rssi"] = WiFi.RSSI();
-    
-    String output;
-    serializeJson(doc, output);
-    ws->textAll(output);
-}
-
-void LightwaveWebServer::onAPModeStarted() {
-    Serial.printf("[WebServer] AP mode active - IP: %s\n", WiFi.softAPIP().toString().c_str());
-    
-    // Broadcast AP status to all WebSocket clients
-    StaticJsonDocument<256> doc;
-    doc["type"] = "network";
-    doc["event"] = "ap_mode";
-    doc["ip"] = WiFi.softAPIP().toString();
-    doc["ssid"] = NetworkConfig::AP_SSID;
-    
-    String output;
-    serializeJson(doc, output);
-    ws->textAll(output);
-}
-
-void LightwaveWebServer::onWiFiDisconnected() {
-    Serial.println("[WebServer] WiFi disconnected");
-    
-    // Stop mDNS when disconnected
-    MDNS.end();
-    
-    // Broadcast disconnection to WebSocket clients
-    StaticJsonDocument<256> doc;
-    doc["type"] = "network";
-    doc["event"] = "wifi_disconnected";
-    
-    String output;
-    serializeJson(doc, output);
-    ws->textAll(output);
-}
-
-void LightwaveWebServer::startMDNS() {
-    // Only start mDNS if we have a valid IP
-    if (WiFi.status() == WL_CONNECTED || WiFi.getMode() & WIFI_MODE_AP) {
-        // If mDNS is already running, stop it first to allow clean re-initialization
-        if (mdnsStarted) {
-            MDNS.end();
-            mdnsStarted = false;
-            delay(100); // Brief delay to ensure clean shutdown
-        }
-
-        // Initialize mDNS
-        if (MDNS.begin(NetworkConfig::MDNS_HOSTNAME)) {
-            Serial.printf("[WebServer] mDNS responder started: http://%s.local\n", NetworkConfig::MDNS_HOSTNAME);
-
-            // Add service to mDNS-SD
-            MDNS.addService("http", "tcp", NetworkConfig::WEB_SERVER_PORT);
-            MDNS.addService("ws", "tcp", NetworkConfig::WEB_SERVER_PORT);
-
-            // Add some TXT records
-            MDNS.addServiceTxt("http", "tcp", "version", "1.0.0");
-            MDNS.addServiceTxt("http", "tcp", "board", "ESP32-S3");
-
-            mdnsStarted = true;
-        } else {
-            Serial.println("[WebServer] Error starting mDNS");
-        }
+    if (!m_http.begin(cfg)) {
+        Serial.println("[WebServer] httpd_start failed");
+        return false;
     }
-}
 
-void LightwaveWebServer::setupRoutes() {
-    // Setup v1 API routes first
-    setupV1Routes();
+    m_http.setWsHandlers(&LightwaveWebServer::onWsClientEvent,
+                         &LightwaveWebServer::onWsMessage,
+                         this);
 
-    // Serve static files from SPIFFS
-    server->serveStatic("/", SPIFFS, "/").setDefaultFile("index.html");
+    registerRoutes();
+
+    m_running = true;
+    startMDNS();
     
-    // API endpoints
-    server->on("/api/status", HTTP_GET, [](AsyncWebServerRequest *request){
-        AsyncJsonResponse *response = new AsyncJsonResponse();
-        JsonObject root = response->getRoot();
-        
-        WiFiManager& wifi = WiFiManager::getInstance();
-        
-        root["effect"] = currentEffect;
-        root["brightness"] = FastLED.getBrightness();
-        root["gHue"] = gHue;
-        root["optimized"] = useOptimizedEffects;
-        root["transitions"] = useRandomTransitions;
-        root["freeHeap"] = ESP.getFreeHeap();
-        
-        // Network status
-        JsonObject network = root.createNestedObject("network");
-        network["state"] = wifi.getStateString();
-        network["connected"] = wifi.isConnected();
-        network["ap_mode"] = wifi.isAPMode();
-        
-        if (wifi.isConnected()) {
-            network["ssid"] = WiFi.SSID();
-            network["ip"] = WiFi.localIP().toString();
-            network["rssi"] = WiFi.RSSI();
-            network["channel"] = WiFi.channel();
-            network["uptime"] = wifi.getUptimeSeconds();
-        } else if (wifi.isAPMode()) {
-            network["ap_ip"] = WiFi.softAPIP().toString();
-            network["ap_clients"] = WiFi.softAPgetStationNum();
-        }
-        
-        response->setLength();
-        request->send(response);
-    });
-    
-    // Effect control
-    server->on("/api/effect", HTTP_POST, [](AsyncWebServerRequest *request){},
-        NULL,
-        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
-            StaticJsonDocument<256> doc;
-            DeserializationError error = deserializeJson(doc, data, len);
-
-            if (!error && doc.containsKey("effect")) {
-                uint8_t newEffect = doc["effect"];
-                if (newEffect >= NUM_EFFECTS) {
-                    request->send(400, "application/json", "{\"error\":\"Invalid effect ID\"}");
-                    return;
-                }
-                startAdvancedTransition(newEffect);
-                request->send(200, "application/json", "{\"status\":\"ok\"}");
-                return;
-            }
-            request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
-        }
-    );
-    
-    // Brightness control
-    server->on("/api/brightness", HTTP_POST, [](AsyncWebServerRequest *request){},
-        NULL,
-        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
-            StaticJsonDocument<256> doc;
-            DeserializationError error = deserializeJson(doc, data, len);
-
-            if (!error && doc.containsKey("brightness")) {
-                uint8_t brightness = doc["brightness"];
-                FastLED.setBrightness(brightness);
-                request->send(200, "application/json", "{\"status\":\"ok\"}");
-                return;
-            }
-            request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
-        }
-    );
-    
-    // Network control endpoints
-    server->on("/api/network/scan", HTTP_GET, [](AsyncWebServerRequest *request){
-        WiFiManager& wifi = WiFiManager::getInstance();
-        wifi.scanNetworks();
-        request->send(200, "application/json", "{\"status\":\"scanning\"}");
-    });
-    
-    server->on("/api/network/connect", HTTP_POST, [](AsyncWebServerRequest *request){},
-        NULL,
-        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
-            StaticJsonDocument<256> doc;
-            DeserializationError error = deserializeJson(doc, data, len);
-
-            if (!error && doc.containsKey("ssid") && doc.containsKey("password")) {
-                WiFiManager& wifi = WiFiManager::getInstance();
-                wifi.setCredentials(doc["ssid"], doc["password"]);
-                wifi.reconnect();
-                request->send(200, "application/json", "{\"status\":\"connecting\"}");
-                return;
-            }
-            request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
-        }
-    );
-    
-    // OTA update endpoint (secured with token authentication)
-    server->on("/update", HTTP_POST,
-        [this](AsyncWebServerRequest *request){
-            shouldReboot = !Update.hasError();
-            AsyncWebServerResponse *response = request->beginResponse(200, "text/plain",
-                shouldReboot ? "OK" : "FAIL");
-            response->addHeader("Connection", "close");
-            request->send(response);
-        },
-        [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
-            // Token authentication check on first chunk
-            if(!index){
-                // Check for X-OTA-Token header
-                if (!request->hasHeader("X-OTA-Token") ||
-                    request->header("X-OTA-Token") != NetworkConfig::OTA_UPDATE_TOKEN) {
-                    Serial.println("[OTA] Unauthorized update attempt blocked!");
-                    request->send(401, "text/plain", "Unauthorized: Invalid or missing OTA token");
-                    return;
-                }
-                Serial.printf("[OTA] Authorized update start: %s\n", filename.c_str());
-                if(!Update.begin((ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000)){
-                    Update.printError(Serial);
-                }
-            }
-            if(!Update.hasError()){
-                if(Update.write(data, len) != len){
-                    Update.printError(Serial);
-                }
-            }
-            if(final){
-                if(Update.end(true)){
-                    Serial.printf("[OTA] Update Success: %uB\n", index+len);
-                } else {
-                    Update.printError(Serial);
-                }
-            }
-        }
-    );
-
-    // ========== NEW WEBAPP API ENDPOINTS ==========
-
-    // Speed control
-    server->on("/api/speed", HTTP_POST, [](AsyncWebServerRequest *request){},
-        NULL,
-        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
-            StaticJsonDocument<256> doc;
-            DeserializationError error = deserializeJson(doc, data, len);
-
-            if (!error && doc.containsKey("speed")) {
-                uint8_t newSpeed = doc["speed"];
-                if (newSpeed >= 1 && newSpeed <= 50) {
-                    effectSpeed = newSpeed;
-                    request->send(200, "application/json", "{\"status\":\"ok\"}");
-                } else {
-                    request->send(400, "application/json", "{\"error\":\"Speed must be 1-50\"}");
-                }
-            } else {
-                request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
-            }
-        }
-    );
-
-    // Palette control
-    server->on("/api/palette", HTTP_POST, [](AsyncWebServerRequest *request){},
-        NULL,
-        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
-            StaticJsonDocument<256> doc;
-            DeserializationError error = deserializeJson(doc, data, len);
-
-            if (!error && doc.containsKey("paletteId")) {
-                uint8_t paletteId = doc["paletteId"];
-                if (paletteId >= gMasterPaletteCount) {
-                    request->send(400, "application/json", "{\"error\":\"Invalid palette ID\"}");
-                    return;
-                }
-                currentPaletteIndex = paletteId;
-                targetPalette = CRGBPalette16(gMasterPalettes[currentPaletteIndex]);
-                request->send(200, "application/json", "{\"status\":\"ok\"}");
-                return;
-            }
-            request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
-        }
-    );
-
-    // Get palettes list with metadata (57 palettes)
-    // Supports optional filter query param: ?filter=warm|cool|calm|vivid|crameri|cptcity
-    server->on("/api/palettes", HTTP_GET, [](AsyncWebServerRequest *request){
-        AsyncJsonResponse *response = new AsyncJsonResponse();
-        JsonObject root = response->getRoot();
-        JsonArray palettes = root.createNestedArray("palettes");
-
-        // Check for filter parameter
-        String filter = "";
-        if (request->hasParam("filter")) {
-            filter = request->getParam("filter")->value();
-        }
-
-        for (uint8_t i = 0; i < gMasterPaletteCount; i++) {
-            // Apply filter if specified
-            if (filter.length() > 0) {
-                if (filter == "warm" && !isPaletteWarm(i)) continue;
-                if (filter == "cool" && !isPaletteCool(i)) continue;
-                if (filter == "calm" && !isPaletteCalm(i)) continue;
-                if (filter == "vivid" && !isPaletteVivid(i)) continue;
-                if (filter == "crameri" && !isCrameriPalette(i)) continue;
-                if (filter == "cptcity" && !isCptCityPalette(i)) continue;
-            }
-
-            JsonObject palette = palettes.createNestedObject();
-            palette["id"] = i;
-            palette["name"] = MasterPaletteNames[i];
-            palette["source"] = isCrameriPalette(i) ? "crameri" : "cptcity";
-            palette["warm"] = isPaletteWarm(i);
-            palette["cool"] = isPaletteCool(i);
-            palette["calm"] = isPaletteCalm(i);
-            palette["vivid"] = isPaletteVivid(i);
-            palette["maxBrightness"] = getPaletteMaxBrightness(i);
-        }
-
-        root["total"] = gMasterPaletteCount;
-        root["filtered"] = palettes.size();
-
-        response->setLength();
-        request->send(response);
-    });
-
-    // Get effects list (paginated to avoid 2KB JSON limit)
-    server->on("/api/effects", HTTP_GET, [](AsyncWebServerRequest *request){
-        AsyncJsonResponse *response = new AsyncJsonResponse();
-        JsonObject root = response->getRoot();
-        JsonArray effectsList = root.createNestedArray("effects");
-
-        // Add effects in chunks
-        extern const uint8_t NUM_EFFECTS;
-        extern Effect effects[];
-
-        uint8_t start = request->hasParam("start") ? request->getParam("start")->value().toInt() : 0;
-        uint8_t count = request->hasParam("count") ? request->getParam("count")->value().toInt() : 20;
-        uint8_t end = min((uint8_t)(start + count), NUM_EFFECTS);
-
-        for (uint8_t i = start; i < end; i++) {
-            JsonObject effect = effectsList.createNestedObject();
-            effect["id"] = i;
-            effect["name"] = effects[i].name;
-            // Category determined by ID ranges
-            if (i <= 4) effect["category"] = "Classic";
-            else if (i <= 7) effect["category"] = "Shockwave";
-            else if (i <= 11) effect["category"] = "LGP Interference";
-            else if (i <= 14) effect["category"] = "LGP Geometric";
-            else if (i <= 20) effect["category"] = "LGP Advanced";
-            else if (i <= 23) effect["category"] = "LGP Organic";
-            else if (i <= 32) effect["category"] = "LGP Quantum";
-            else if (i <= 34) effect["category"] = "LGP Color Mixing";
-            else if (i <= 40) effect["category"] = "LGP Physics";
-            else if (i <= 45) effect["category"] = "LGP Novel Physics";
-            else effect["category"] = "Audio";
-        }
-
-        root["total"] = NUM_EFFECTS;
-        root["start"] = start;
-        root["count"] = end - start;
-
-        response->setLength();
-        request->send(response);
-    });
-
-    // Visual pipeline control
-    server->on("/api/pipeline", HTTP_POST, [](AsyncWebServerRequest *request){},
-        NULL,
-        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
-            StaticJsonDocument<512> doc;
-            DeserializationError error = deserializeJson(doc, data, len);
-
-            if (!error) {
-                bool updated = false;
-                if (doc.containsKey("intensity")) {
-                    effectIntensity = doc["intensity"];
-                    updated = true;
-                }
-                if (doc.containsKey("saturation")) {
-                    effectSaturation = doc["saturation"];
-                    updated = true;
-                }
-                if (doc.containsKey("complexity")) {
-                    effectComplexity = doc["complexity"];
-                    updated = true;
-                }
-                if (doc.containsKey("variation")) {
-                    effectVariation = doc["variation"];
-                    updated = true;
-                }
-
-                if (updated) {
-                    request->send(200, "application/json", "{\"status\":\"ok\"}");
-                } else {
-                    request->send(400, "application/json", "{\"error\":\"No valid parameters\"}");
-                }
-            } else {
-                request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
-            }
-        }
-    );
-
-    // Transitions control
-    server->on("/api/transitions", HTTP_POST, [](AsyncWebServerRequest *request){},
-        NULL,
-        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
-            StaticJsonDocument<256> doc;
-            DeserializationError error = deserializeJson(doc, data, len);
-
-            if (!error && doc.containsKey("enabled")) {
-                extern bool useRandomTransitions;
-                useRandomTransitions = doc["enabled"];
-                request->send(200, "application/json", "{\"status\":\"ok\"}");
-                return;
-            }
-            request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
-        }
-    );
-
-    // ========== ZONE COMPOSER API ENDPOINTS ==========
-
-    // Get zone status
-    server->on("/api/zone/status", HTTP_GET, [](AsyncWebServerRequest *request){
-        AsyncResponseStream *response = request->beginResponseStream("application/json");
-        StaticJsonDocument<512> doc;
-
-        doc["enabled"] = zoneComposer.isEnabled();
-        doc["zoneCount"] = zoneComposer.getZoneCount();
-
-        JsonArray zones = doc.createNestedArray("zones");
-        for (uint8_t i = 0; i < zoneComposer.getZoneCount(); i++) {
-            JsonObject zone = zones.createNestedObject();
-            zone["id"] = i;
-            zone["enabled"] = zoneComposer.isZoneEnabled(i);
-            zone["effectId"] = zoneComposer.getZoneEffect(i);
-            zone["brightness"] = zoneComposer.getZoneBrightness(i);
-            zone["speed"] = zoneComposer.getZoneSpeed(i);
-        }
-
-        serializeJson(doc, *response);
-        request->send(response);
-    });
-
-    // Enable/disable zone mode
-    server->on("/api/zone/enable", HTTP_POST, [](AsyncWebServerRequest *request){},
-        NULL,
-        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
-            StaticJsonDocument<256> doc;
-            DeserializationError error = deserializeJson(doc, data, len);
-
-            if (!error && doc.containsKey("enabled")) {
-                bool enable = doc["enabled"];
-                if (enable) {
-                    zoneComposer.enable();
-                } else {
-                    zoneComposer.disable();
-                }
-                request->send(200, "application/json", "{\"status\":\"ok\"}");
-            } else {
-                request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
-            }
-        }
-    );
-
-    // Configure individual zone
-    server->on("/api/zone/config", HTTP_POST, [](AsyncWebServerRequest *request){},
-        NULL,
-        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
-            StaticJsonDocument<256> doc;
-            DeserializationError error = deserializeJson(doc, data, len);
-
-            if (!error && doc.containsKey("zoneId")) {
-                uint8_t zoneId = doc["zoneId"];
-                if (zoneId >= HardwareConfig::MAX_ZONES) {
-                    request->send(400, "application/json", "{\"error\":\"Invalid zone ID\"}");
-                    return;
-                }
-
-                if (doc.containsKey("effectId")) {
-                    uint8_t effectId = doc["effectId"];
-                    if (effectId >= NUM_EFFECTS) {
-                        request->send(400, "application/json", "{\"error\":\"Invalid effect ID\"}");
-                        return;
-                    }
-                    zoneComposer.setZoneEffect(zoneId, effectId);
-                }
-
-                if (doc.containsKey("enabled")) {
-                    bool enabled = doc["enabled"];
-                    zoneComposer.enableZone(zoneId, enabled);
-                }
-
-                request->send(200, "application/json", "{\"status\":\"ok\"}");
-            } else {
-                request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
-            }
-        }
-    );
-
-    // Set zone count
-    server->on("/api/zone/count", HTTP_POST, [](AsyncWebServerRequest *request){},
-        NULL,
-        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
-            StaticJsonDocument<256> doc;
-            DeserializationError error = deserializeJson(doc, data, len);
-
-            if (!error && doc.containsKey("count")) {
-                uint8_t count = doc["count"];
-                zoneComposer.setZoneCount(count);
-                request->send(200, "application/json", "{\"status\":\"ok\"}");
-            } else {
-                request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
-            }
-        }
-    );
-
-    // Get zone presets
-    server->on("/api/zone/presets", HTTP_GET, [](AsyncWebServerRequest *request){
-        AsyncResponseStream *response = request->beginResponseStream("application/json");
-        StaticJsonDocument<512> doc;
-
-        JsonArray presets = doc.createNestedArray("presets");
-        for (uint8_t i = 0; i < 5; i++) {  // 5 presets (0-4)
-            JsonObject preset = presets.createNestedObject();
-            preset["id"] = i;
-            preset["name"] = String("Preset ") + String(i);
-        }
-
-        serializeJson(doc, *response);
-        request->send(response);
-    });
-
-    // Load zone preset
-    server->on("/api/zone/preset/load", HTTP_POST, [](AsyncWebServerRequest *request){},
-        NULL,
-        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
-            StaticJsonDocument<256> doc;
-            DeserializationError error = deserializeJson(doc, data, len);
-
-            if (!error && doc.containsKey("presetId")) {
-                uint8_t presetId = doc["presetId"];
-                if (zoneComposer.loadPreset(presetId)) {
-                    request->send(200, "application/json", "{\"status\":\"ok\"}");
-                } else {
-                    request->send(400, "application/json", "{\"error\":\"Invalid preset ID\"}");
-                }
-            } else {
-                request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
-            }
-        }
-    );
-
-    // Save zone config to NVS
-    server->on("/api/zone/config/save", HTTP_POST, [](AsyncWebServerRequest *request){
-        if (zoneComposer.saveConfig()) {
-            request->send(200, "application/json", "{\"status\":\"ok\"}");
-        } else {
-            request->send(500, "application/json", "{\"error\":\"Failed to save config\"}");
-        }
-    });
-
-    // Load zone config from NVS
-    server->on("/api/zone/config/load", HTTP_POST, [](AsyncWebServerRequest *request){
-        if (zoneComposer.loadConfig()) {
-            request->send(200, "application/json", "{\"status\":\"ok\"}");
-        } else {
-            request->send(500, "application/json", "{\"error\":\"Failed to load config\"}");
-        }
-    });
-
-    // Set zone brightness
-    server->on("/api/zone/brightness", HTTP_POST, [](AsyncWebServerRequest *request){},
-        NULL,
-        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
-            StaticJsonDocument<256> doc;
-            DeserializationError error = deserializeJson(doc, data, len);
-
-            if (!error && doc.containsKey("zoneId") && doc.containsKey("brightness")) {
-                uint8_t zoneId = doc["zoneId"];
-                if (zoneId >= HardwareConfig::MAX_ZONES) {
-                    request->send(400, "application/json", "{\"error\":\"Invalid zone ID\"}");
-                    return;
-                }
-                uint8_t brightness = doc["brightness"];
-                zoneComposer.setZoneBrightness(zoneId, brightness);
-                request->send(200, "application/json", "{\"status\":\"ok\"}");
-            } else {
-                request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
-            }
-        }
-    );
-
-    // Set zone speed
-    server->on("/api/zone/speed", HTTP_POST, [](AsyncWebServerRequest *request){},
-        NULL,
-        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
-            StaticJsonDocument<256> doc;
-            DeserializationError error = deserializeJson(doc, data, len);
-
-            if (!error && doc.containsKey("zoneId") && doc.containsKey("speed")) {
-                uint8_t zoneId = doc["zoneId"];
-                if (zoneId >= HardwareConfig::MAX_ZONES) {
-                    request->send(400, "application/json", "{\"error\":\"Invalid zone ID\"}");
-                    return;
-                }
-                uint8_t speed = doc["speed"];
-                zoneComposer.setZoneSpeed(zoneId, speed);
-                request->send(200, "application/json", "{\"status\":\"ok\"}");
-            } else {
-                request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
-            }
-        }
-    );
-
-#if FEATURE_ENHANCEMENT_ENGINES
-    // =============== ENHANCEMENT ENGINE CONTROLS ===============
-
-    // ColorEngine: Enable/disable cross-palette blending
-    server->on("/api/enhancement/color/blend", HTTP_POST, [](AsyncWebServerRequest *request){},
-        NULL,
-        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
-            extern ColorEngine* g_colorEngine;
-            StaticJsonDocument<256> doc;
-            DeserializationError error = deserializeJson(doc, data, len);
-
-            if (!error && doc.containsKey("enabled")) {
-                bool enabled = doc["enabled"];
-                ColorEngine::getInstance().enableCrossBlend(enabled);
-                request->send(200, "application/json", "{\"status\":\"ok\"}");
-            } else {
-                request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
-            }
-        }
-    );
-
-    // ColorEngine: Set diffusion amount
-    server->on("/api/enhancement/color/diffusion", HTTP_POST, [](AsyncWebServerRequest *request){},
-        NULL,
-        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
-            StaticJsonDocument<256> doc;
-            DeserializationError error = deserializeJson(doc, data, len);
-
-            if (!error && doc.containsKey("amount")) {
-                uint8_t amount = doc["amount"];
-                ColorEngine::getInstance().setDiffusionAmount(amount);
-                ColorEngine::getInstance().enableDiffusion(amount > 0);
-                request->send(200, "application/json", "{\"status\":\"ok\"}");
-            } else {
-                request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
-            }
-        }
-    );
-
-    // ColorEngine: Set temporal rotation speed
-    server->on("/api/enhancement/color/rotation", HTTP_POST, [](AsyncWebServerRequest *request){},
-        NULL,
-        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
-            StaticJsonDocument<256> doc;
-            DeserializationError error = deserializeJson(doc, data, len);
-
-            if (!error && doc.containsKey("speed")) {
-                float speed = doc["speed"];
-                ColorEngine::getInstance().setRotationSpeed(speed);
-                ColorEngine::getInstance().enableTemporalRotation(speed > 0);
-                request->send(200, "application/json", "{\"status\":\"ok\"}");
-            } else {
-                request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
-            }
-        }
-    );
-
-    // MotionEngine: Set phase offset
-    server->on("/api/enhancement/motion/phase", HTTP_POST, [](AsyncWebServerRequest *request){},
-        NULL,
-        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
-            StaticJsonDocument<256> doc;
-            DeserializationError error = deserializeJson(doc, data, len);
-
-            if (!error && doc.containsKey("offset")) {
-                float offset = doc["offset"];
-                MotionEngine::getInstance().getPhaseController().setStripPhaseOffset(offset);
-                request->send(200, "application/json", "{\"status\":\"ok\"}");
-            } else {
-                request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
-            }
-        }
-    );
-
-    // MotionEngine: Enable/disable auto-rotation
-    server->on("/api/enhancement/motion/auto-rotate", HTTP_POST, [](AsyncWebServerRequest *request){},
-        NULL,
-        [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
-            StaticJsonDocument<256> doc;
-            DeserializationError error = deserializeJson(doc, data, len);
-
-            if (!error && doc.containsKey("enabled") && doc.containsKey("speed")) {
-                bool enabled = doc["enabled"];
-                float speed = doc["speed"];
-
-                if (enabled) {
-                    MotionEngine::getInstance().getPhaseController().enableAutoRotate(speed);
-                } else {
-                    MotionEngine::getInstance().getPhaseController().enableAutoRotate(0);
-                }
-                request->send(200, "application/json", "{\"status\":\"ok\"}");
-            } else {
-                request->send(400, "application/json", "{\"error\":\"Invalid request\"}");
-            }
-        }
-    );
-
-    // Get enhancement engine status
-    server->on("/api/enhancement/status", HTTP_GET, [](AsyncWebServerRequest *request){
-        AsyncJsonResponse *response = new AsyncJsonResponse();
-        JsonObject root = response->getRoot();
-
-        root["colorEngineActive"] = ColorEngine::getInstance().isActive();
-        root["motionEngineEnabled"] = MotionEngine::getInstance().isEnabled();
-
-        response->setLength();
-        request->send(response);
-    });
-#endif
-
-#if FEATURE_AUDIO_SYNC
-    // Audio web handlers - separate development track
-    // See: src/effects/strip/LGPAudioReactive.cpp for 6 ready effects
-    // Enable FEATURE_AUDIO_SYNC in features.h when audio hardware is connected
-#endif
-
-    // Handle CORS preflight requests and 404s
-    server->onNotFound([](AsyncWebServerRequest *request){
-        if (request->method() == HTTP_OPTIONS) {
-            // Preflight CORS request - headers already set globally
-            request->send(204);
-        } else {
-            request->send(404, "text/plain", "Not found");
-        }
-    });
+    Serial.printf("[WebServer] httpd started on port %u\n", (unsigned)NetworkConfig::WEB_SERVER_PORT);
+    return true;
 }
 
 void LightwaveWebServer::stop() {
-    if (isRunning) {
-        server->end();
-        isRunning = false;
-        Serial.println("[WebServer] Server stopped");
-    }
+    if (!m_running) return;
+    stopMDNS();
+    m_http.stop();
+    m_running = false;
 }
 
 void LightwaveWebServer::update() {
-    if (!isRunning) return;
-
-    // Clean up WebSocket clients
-    ws->cleanupClients();
-
-    // Handle reboot if needed
-    if(shouldReboot){
-        Serial.println("Rebooting...");
-        delay(100);
-        ESP.restart();
-    }
-
-    // Periodic status broadcast
-    static uint32_t lastBroadcast = 0;
-    if (millis() - lastBroadcast > 5000) {
-        lastBroadcast = millis();
-        broadcastStatus();
-    }
-
-    // Idle connection cleanup (check every 30 seconds)
-    static uint32_t lastIdleCheck = 0;
-    if (millis() - lastIdleCheck > 30000) {
-        lastIdleCheck = millis();
-
-        uint32_t idleClients[ConnectionManager::MAX_WS_CLIENTS];
-        uint8_t idleCount = 0;
-        connectionMgr.checkIdleConnections(idleClients, idleCount);
-
-        for (uint8_t i = 0; i < idleCount; i++) {
-            AsyncWebSocketClient* client = ws->client(idleClients[i]);
-            if (client) {
-                Serial.printf("[WebSocket] Closing idle connection: %u\n", idleClients[i]);
-                client->close(1000, "Idle timeout");
-            }
-            connectionMgr.onDisconnect(idleClients[i]);
-        }
+    // httpd is event-driven; nothing required per-loop for basic operation.
+    // Keep a heartbeat hook for future WS status broadcasts.
+    const uint32_t now = millis();
+    if (now - m_lastHeartbeatMs > 1000) {
+        m_lastHeartbeatMs = now;
     }
 }
 
-void LightwaveWebServer::broadcastStatus() {
-    if (ws->count() == 0) return;
-    
-    StaticJsonDocument<512> doc;
-    WiFiManager& wifi = WiFiManager::getInstance();
-    
-    doc["type"] = "status";
-    doc["effect"] = currentEffect;
-    doc["brightness"] = FastLED.getBrightness();
-    doc["gHue"] = gHue;
-    doc["freeHeap"] = ESP.getFreeHeap();
-    
-    // Network status
-    JsonObject network = doc.createNestedObject("network");
-    network["state"] = wifi.getStateString();
-    network["connected"] = wifi.isConnected();
-    
-    if (wifi.isConnected()) {
-        network["ssid"] = WiFi.SSID();
-        network["rssi"] = WiFi.RSSI();
-    }
-    
-    String output;
-    serializeJson(doc, output);
-    ws->textAll(output);
+void LightwaveWebServer::sendLEDUpdate() {
+    // Future: optional binary streaming channel; left intentionally blank in Phase 2 skeleton.
 }
 
-// Broadcast zone configuration to all connected clients
-void LightwaveWebServer::broadcastZoneState() {
-    if (ws->count() == 0) return;
-
-    StaticJsonDocument<768> doc;
-    doc["type"] = "zone.state";
-    doc["enabled"] = zoneComposer.isEnabled();
-    doc["zoneCount"] = zoneComposer.getZoneCount();
-
-    JsonArray zones = doc.createNestedArray("zones");
-    for (uint8_t i = 0; i < 4; i++) {
-        JsonObject zone = zones.createNestedObject();
-        zone["id"] = i;
-        zone["enabled"] = zoneComposer.isZoneEnabled(i);
-        zone["effectId"] = zoneComposer.getZoneEffect(i);
-        zone["brightness"] = zoneComposer.getZoneBrightness(i);
-        zone["speed"] = zoneComposer.getZoneSpeed(i);
-        zone["paletteId"] = zoneComposer.getZonePalette(i);
+void LightwaveWebServer::notifyEffectChange(uint8_t effectId) {
+    // API v2 docs event: effects.changed
+    cJSON* ev2 = cJSON_CreateObject();
+    cJSON_AddStringToObject(ev2, "type", "effects.changed");
+    cJSON_AddNumberToObject(ev2, "effectId", effectId);
+    cJSON_AddStringToObject(ev2, "name", effects[effectId].name);
+    cJSON_AddNumberToObject(ev2, "timestamp", millis());
+    char* out = cJSON_PrintUnformatted(ev2);
+    if (out) {
+        m_http.wsBroadcastText(out, strlen(out));
+        cJSON_free(out);
     }
+    cJSON_Delete(ev2);
 
-    String output;
-    serializeJson(doc, output);
-    ws->textAll(output);
+    // Legacy v2 project event: effectChanged
+    cJSON* legacy = cJSON_CreateObject();
+    cJSON_AddStringToObject(legacy, "type", "effectChanged");
+    cJSON_AddNumberToObject(legacy, "effectId", effectId);
+    cJSON_AddStringToObject(legacy, "name", effects[effectId].name);
+    char* out2 = cJSON_PrintUnformatted(legacy);
+    if (out2) {
+        m_http.wsBroadcastText(out2, strlen(out2));
+        cJSON_free(out2);
+    }
+    cJSON_Delete(legacy);
 }
 
-// WebSocket event handler
-void LightwaveWebServer::onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
-                                  AwsEventType type, void *arg, uint8_t *data, size_t len) {
-    if (type == WS_EVT_CONNECT) {
-        IPAddress clientIP = client->remoteIP();
+void LightwaveWebServer::notifyError(const String& message) {
+    cJSON* root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "type", "error");
+    cJSON_AddStringToObject(root, "message", message.c_str());
+    char* out = cJSON_PrintUnformatted(root);
+    if (out) {
+        m_http.wsBroadcastText(out, strlen(out));
+        cJSON_free(out);
+    }
+    cJSON_Delete(root);
+}
 
-        // Check if we can accept this connection
-        if (!webServer.connectionMgr.canAcceptConnection(clientIP)) {
-            Serial.printf("[WebSocket] Connection rejected from %s: limit exceeded\n",
-                          clientIP.toString().c_str());
-            client->close(1008, "Connection limit exceeded");
+void LightwaveWebServer::startMDNS() {
+    if (m_mdnsStarted) return;
+    if (WiFi.status() != WL_CONNECTED && !(WiFi.getMode() & WIFI_MODE_AP)) {
             return;
         }
 
-        // Register the connection
-        webServer.connectionMgr.onConnect(clientIP, client->id());
-        Serial.printf("[WebSocket] Client connected: %s (id: %u, total: %d)\n",
-                      clientIP.toString().c_str(), client->id(),
-                      webServer.connectionMgr.getActiveCount());
+        if (MDNS.begin(NetworkConfig::MDNS_HOSTNAME)) {
+            MDNS.addService("http", "tcp", NetworkConfig::WEB_SERVER_PORT);
+            MDNS.addService("ws", "tcp", NetworkConfig::WEB_SERVER_PORT);
+        m_mdnsStarted = true;
+        Serial.printf("[WebServer] mDNS started: http://%s.local\n", NetworkConfig::MDNS_HOSTNAME);
+    }
+}
 
-        // Send initial status to new client
-        webServer.broadcastStatus();
-        webServer.broadcastZoneState();  // Send zone state to new client
+void LightwaveWebServer::stopMDNS() {
+    if (!m_mdnsStarted) return;
+    MDNS.end();
+    m_mdnsStarted = false;
+}
 
-    } else if (type == WS_EVT_DISCONNECT) {
-        webServer.connectionMgr.onDisconnect(client->id());
-        Serial.printf("[WebSocket] Client disconnected (id: %u, remaining: %d)\n",
-                      client->id(), webServer.connectionMgr.getActiveCount());
+void LightwaveWebServer::registerRoutes() {
+    // ====================================================================
+    // API v1 Routes (legacy, maintained for backward compatibility)
+    // ====================================================================
+    m_http.registerGet("/api/v1/", &LightwaveWebServer::handleApiDiscovery);
+    m_http.registerOptions("/api/v1/", &IdfHttpServer::corsOptionsHandler);
 
-    } else if (type == WS_EVT_DATA) {
-        IPAddress clientIP = client->remoteIP();
+    // OpenAPI spec (compat: /spec and /openapi.json)
+    m_http.registerGet("/api/v1/spec", &LightwaveWebServer::handleOpenApi);
+    m_http.registerGet("/api/v1/openapi.json", &LightwaveWebServer::handleOpenApi);
 
-        // Rate limit check
-        if (!webServer.rateLimiter.checkWebSocket(clientIP)) {
-            Serial.printf("[WebSocket] Rate limited: %s\n", clientIP.toString().c_str());
-            String errorMsg = buildWsError(ErrorCodes::RATE_LIMITED,
-                                           "Too many messages, please slow down");
-            client->text(errorMsg);
-            return;
+    // Core endpoints
+    m_http.registerGet("/api/v1/device/status", &LightwaveWebServer::handleDeviceStatus);
+    m_http.registerGet("/api/v1/effects", &LightwaveWebServer::handleEffectsList);
+    m_http.registerGet("/api/v1/effects/current", &LightwaveWebServer::handleEffectsCurrent);
+
+    // ====================================================================
+    // API v2 Routes (Zone Composer + Transitions)
+    // ====================================================================
+    if (!WebServerV2::registerV2Routes(m_http)) {
+        Serial.println("[WebServer] Warning: Some v2 routes failed to register");
+    } else {
+        Serial.println("[WebServer] API v2 routes registered (transitions, zones, batch)");
+    }
+
+    // ====================================================================
+    // Static UI (best-effort)
+    // ====================================================================
+    m_http.registerGet("/", &LightwaveWebServer::handleStaticRoot);
+    // Asset handler - fixed set of known files
+    m_http.registerGet("/app.js", &LightwaveWebServer::handleStaticAsset);
+    m_http.registerGet("/styles.css", &LightwaveWebServer::handleStaticAsset);
+}
+
+void LightwaveWebServer::onWsClientEvent(int clientFd, bool connected, void* ctx) {
+    auto* self = static_cast<LightwaveWebServer*>(ctx);
+    if (!self) return;
+    if (connected) self->m_wsClientCount++;
+    else if (self->m_wsClientCount > 0) self->m_wsClientCount--;
+
+    // On connect: emit legacy initial state to the connecting client (helps older dashboards).
+    if (connected && clientFd >= 0) {
+        // Legacy: status
+        cJSON* status = cJSON_CreateObject();
+        cJSON_AddStringToObject(status, "type", "status");
+        cJSON_AddNumberToObject(status, "effectId", currentEffect);
+        cJSON_AddStringToObject(status, "effectName", effects[currentEffect].name);
+        cJSON_AddNumberToObject(status, "brightness", FastLED.getBrightness());
+        cJSON_AddNumberToObject(status, "speed", effectSpeed);
+        cJSON_AddNumberToObject(status, "paletteId", currentPaletteIndex);
+        cJSON_AddNumberToObject(status, "hue", 0);
+        cJSON_AddNumberToObject(status, "fps", perfMon.getCurrentFPS());
+        cJSON_AddNumberToObject(status, "cpuPercent", perfMon.getCPUUsage());
+        cJSON_AddNumberToObject(status, "freeHeap", ESP.getFreeHeap());
+        cJSON_AddNumberToObject(status, "uptime", millis() / 1000);
+        char* s = cJSON_PrintUnformatted(status);
+        if (s) {
+            self->m_http.wsSendText(clientFd, s, strlen(s));
+            cJSON_free(s);
         }
+        cJSON_Delete(status);
 
-        // Record activity for idle timeout tracking
-        webServer.connectionMgr.onActivity(client->id());
-        // Handle WebSocket data - use stack buffer to avoid heap fragmentation
-        if (len > 511) {
-            Serial.println("[WebSocket] Message too large, rejected");
-            return;
+        // Legacy: zone.state
+        cJSON* zs = cJSON_CreateObject();
+        cJSON_AddStringToObject(zs, "type", "zone.state");
+        cJSON_AddBoolToObject(zs, "enabled", zoneComposer.isEnabled());
+        cJSON_AddNumberToObject(zs, "zoneCount", zoneComposer.getZoneCount());
+        cJSON* zones = cJSON_AddArrayToObject(zs, "zones");
+        for (uint8_t i = 0; i < zoneComposer.getZoneCount(); i++) {
+            cJSON* z = cJSON_CreateObject();
+            cJSON_AddNumberToObject(z, "id", i);
+            cJSON_AddBoolToObject(z, "enabled", zoneComposer.isZoneEnabled(i));
+            cJSON_AddNumberToObject(z, "effectId", zoneComposer.getZoneEffect(i));
+            cJSON_AddNumberToObject(z, "brightness", zoneComposer.getZoneBrightness(i));
+            cJSON_AddNumberToObject(z, "speed", zoneComposer.getZoneSpeed(i));
+            cJSON_AddNumberToObject(z, "paletteId", zoneComposer.getZonePalette(i));
+            cJSON_AddItemToArray(zones, z);
         }
-        char messageBuffer[512];
-        memcpy(messageBuffer, data, len);
-        messageBuffer[len] = '\0';
-
-        StaticJsonDocument<512> doc;
-        DeserializationError error = deserializeJson(doc, messageBuffer);
-
-        if (!error) {
-            // Check for new "type" format first
-            if (doc.containsKey("type")) {
-                String type = doc["type"].as<String>();
-
-                // Global effect control
-                if (type == "setEffect") {
-                    uint8_t effectId = doc["effectId"];
-                    if (effectId < NUM_EFFECTS) {
-                        startAdvancedTransition(effectId);
-                    }
-                } else if (type == "nextEffect") {
-                    extern uint8_t currentEffect;
-                    currentEffect = (currentEffect + 1) % NUM_EFFECTS;
-                    startAdvancedTransition(currentEffect);
-                } else if (type == "prevEffect") {
-                    extern uint8_t currentEffect;
-                    currentEffect = (currentEffect - 1 + NUM_EFFECTS) % NUM_EFFECTS;
-                    startAdvancedTransition(currentEffect);
-                }
-
-                // Global parameters
-                else if (type == "setBrightness") {
-                    uint8_t value = doc["value"];
-                    FastLED.setBrightness(value);
-                } else if (type == "setSpeed") {
-                    uint8_t value = doc["value"];
-                    if (value >= 1 && value <= 50) {
-                        effectSpeed = value;
-                    }
-                } else if (type == "setPalette") {
-                    uint8_t paletteId = doc["paletteId"];
-                    if (paletteId < gMasterPaletteCount) {
-                        currentPaletteIndex = paletteId;
-                        targetPalette = CRGBPalette16(gMasterPalettes[currentPaletteIndex]);
-                    }
-                } else if (type == "setPipeline") {
-                    if (doc.containsKey("intensity")) effectIntensity = doc["intensity"];
-                    if (doc.containsKey("saturation")) effectSaturation = doc["saturation"];
-                    if (doc.containsKey("complexity")) effectComplexity = doc["complexity"];
-                    if (doc.containsKey("variation")) effectVariation = doc["variation"];
-                } else if (type == "toggleTransitions") {
-                    extern bool useRandomTransitions;
-                    useRandomTransitions = doc["enabled"];
-                }
-
-                // Zone Composer control - broadcast state after each change
-                else if (type == "zone.enable") {
-                    bool enable = doc["enable"];
-                    if (enable) zoneComposer.enable();
-                    else zoneComposer.disable();
-                    webServer.broadcastZoneState();
-                } else if (type == "zone.setCount") {
-                    uint8_t count = doc["count"];
-                    zoneComposer.setZoneCount(count);
-                    webServer.broadcastZoneState();
-                } else if (type == "zone.setEffect") {
-                    uint8_t zoneId = doc["zoneId"];
-                    uint8_t effectId = doc["effectId"];
-                    zoneComposer.setZoneEffect(zoneId, effectId);
-                    webServer.broadcastZoneState();
-                } else if (type == "zone.enableZone") {
-                    uint8_t zoneId = doc["zoneId"];
-                    bool enabled = doc["enabled"];
-                    zoneComposer.enableZone(zoneId, enabled);
-                    webServer.broadcastZoneState();
-                } else if (type == "zone.loadPreset") {
-                    uint8_t presetId = doc["presetId"];
-                    zoneComposer.loadPreset(presetId);
-                    webServer.broadcastZoneState();
-                } else if (type == "zone.save") {
-                    zoneComposer.saveConfig();
-                    // No broadcast needed - save doesn't change runtime state
-                } else if (type == "zone.load") {
-                    zoneComposer.loadConfig();
-                    webServer.broadcastZoneState();
-                } else if (type == "zone.setBrightness") {
-                    uint8_t zoneId = doc["zoneId"];
-                    uint8_t brightness = doc["brightness"];
-                    zoneComposer.setZoneBrightness(zoneId, brightness);
-                    webServer.broadcastZoneState();
-                } else if (type == "zone.setSpeed") {
-                    uint8_t zoneId = doc["zoneId"];
-                    uint8_t speed = doc["speed"];
-                    zoneComposer.setZoneSpeed(zoneId, speed);
-                    webServer.broadcastZoneState();
-                } else if (type == "zone.setPalette") {
-                    uint8_t zoneId = doc["zoneId"];
-                    uint8_t paletteId = doc["paletteId"];
-                    if (paletteId <= gMasterPaletteCount) {
-                        zoneComposer.setZonePalette(zoneId, paletteId);
-                        webServer.broadcastZoneState();
-                    }
-                }
-
-                // ============================================================
-                // User Preset Commands (Phase C.1)
-                // ============================================================
-                else if (type == "presets.list") {
-                    // Return all presets (builtin + user)
-                    StaticJsonDocument<1536> response;
-                    response["type"] = "presets.list";
-                    response["success"] = true;
-
-                    // Built-in presets
-                    JsonArray builtin = response.createNestedArray("builtin");
-                    for (uint8_t i = 0; i < ZONE_PRESET_COUNT; i++) {
-                        JsonObject p = builtin.createNestedObject();
-                        p["id"] = i;
-                        p["name"] = zoneComposer.getPresetName(i);
-                    }
-
-                    // User presets
-                    JsonArray user = response.createNestedArray("user");
-                    for (uint8_t i = 0; i < MAX_USER_PRESETS; i++) {
-                        JsonObject p = user.createNestedObject();
-                        p["slot"] = i;
-                        UserPreset preset;
-                        if (zoneComposer.getUserPreset(i, preset)) {
-                            p["name"] = preset.name;
-                            p["saved"] = true;
-                        } else {
-                            p["name"] = nullptr;
-                            p["saved"] = false;
-                        }
-                    }
-                    response["filledCount"] = zoneComposer.getFilledUserPresetCount();
-
-                    String output;
-                    serializeJson(response, output);
-                    client->text(output);
-                }
-                else if (type == "presets.save") {
-                    // Save current config to user preset slot
-                    uint8_t slot = doc["slot"] | 255;
-                    const char* name = doc["name"] | "";
-
-                    StaticJsonDocument<256> response;
-                    response["type"] = "presets.saved";
-
-                    if (slot >= MAX_USER_PRESETS) {
-                        response["success"] = false;
-                        response["error"] = "Invalid slot (0-7)";
-                    } else if (strlen(name) == 0) {
-                        response["success"] = false;
-                        response["error"] = "Name required";
-                    } else if (zoneComposer.saveUserPreset(slot, name)) {
-                        response["success"] = true;
-                        response["slot"] = slot;
-                        response["name"] = name;
-                        webServer.broadcastZoneState();
-                    } else {
-                        response["success"] = false;
-                        response["error"] = "Save failed";
-                    }
-
-                    String output;
-                    serializeJson(response, output);
-                    client->text(output);
-                }
-                else if (type == "presets.load") {
-                    // Load a builtin or user preset
-                    const char* presetType = doc["presetType"] | "builtin";
-                    uint8_t id = doc["id"] | 255;
-                    uint8_t slot = doc["slot"] | 255;
-
-                    StaticJsonDocument<256> response;
-                    response["type"] = "presets.loaded";
-
-                    bool success = false;
-                    if (strcmp(presetType, "builtin") == 0 && id < ZONE_PRESET_COUNT) {
-                        success = zoneComposer.loadPreset(id);
-                        response["presetType"] = "builtin";
-                        response["id"] = id;
-                    } else if (strcmp(presetType, "user") == 0 && slot < MAX_USER_PRESETS) {
-                        success = zoneComposer.loadUserPreset(slot);
-                        response["presetType"] = "user";
-                        response["slot"] = slot;
-                    }
-
-                    response["success"] = success;
-                    if (!success) {
-                        response["error"] = "Load failed or invalid preset";
-                    } else {
-                        webServer.broadcastZoneState();
-                    }
-
-                    String output;
-                    serializeJson(response, output);
-                    client->text(output);
-                }
-                else if (type == "presets.delete") {
-                    // Delete a user preset
-                    uint8_t slot = doc["slot"] | 255;
-
-                    StaticJsonDocument<256> response;
-                    response["type"] = "presets.deleted";
-
-                    if (slot >= MAX_USER_PRESETS) {
-                        response["success"] = false;
-                        response["error"] = "Invalid slot (0-7)";
-                    } else if (zoneComposer.deleteUserPreset(slot)) {
-                        response["success"] = true;
-                        response["slot"] = slot;
-                    } else {
-                        response["success"] = false;
-                        response["error"] = "Delete failed or slot empty";
-                    }
-
-                    String output;
-                    serializeJson(response, output);
-                    client->text(output);
-                }
-
-                // ============================================================
-                // v1 API Parity - Transitions
-                // ============================================================
-                else if (type == "transition.getTypes") {
-                    // Return transition types list via WebSocket
-                    StaticJsonDocument<1024> response;
-                    response["type"] = "transition.types";
-                    response["success"] = true;
-
-                    JsonArray types = response.createNestedArray("types");
-                    const char* transNames[] = {
-                        "FADE", "WIPE_OUT", "WIPE_IN", "DISSOLVE", "PHASE_SHIFT",
-                        "PULSEWAVE", "IMPLOSION", "IRIS", "NUCLEAR", "STARGATE",
-                        "KALEIDOSCOPE", "MANDALA"
-                    };
-                    for (uint8_t i = 0; i < 12; i++) {
-                        JsonObject t = types.createNestedObject();
-                        t["id"] = i;
-                        t["name"] = transNames[i];
-                    }
-
-                    String output;
-                    serializeJson(response, output);
-                    client->text(output);
-                }
-                else if (type == "transition.trigger") {
-                    uint8_t toEffect = doc["toEffect"] | 0;
-                    if (toEffect < NUM_EFFECTS) {
-                        startAdvancedTransition(toEffect);
-                        webServer.broadcastStatus();
-                    }
-                }
-                else if (type == "transition.config") {
-                    if (doc.containsKey("enabled")) {
-                        useRandomTransitions = doc["enabled"];
-                    }
-                    webServer.broadcastStatus();
-                }
-
-                // ============================================================
-                // v1 API Parity - Batch Operations
-                // ============================================================
-                else if (type == "batch") {
-                    if (doc.containsKey("operations") && doc["operations"].is<JsonArray>()) {
-                        JsonArray ops = doc["operations"];
-                        uint8_t processed = 0;
-                        uint8_t failed = 0;
-
-                        for (JsonVariant op : ops) {
-                            String action = op["action"] | "";
-                            if (webServer.executeBatchAction(action, op)) {
-                                processed++;
-                            } else {
-                                failed++;
-                            }
-                        }
-
-                        // Send batch result
-                        StaticJsonDocument<256> response;
-                        response["type"] = "batch.result";
-                        response["success"] = true;
-                        response["processed"] = processed;
-                        response["failed"] = failed;
-
-                        String output;
-                        serializeJson(response, output);
-                        client->text(output);
-                    }
-                }
-
-                // ============================================================
-                // v1 API Parity - Device Info
-                // ============================================================
-                else if (type == "device.getStatus") {
-                    StaticJsonDocument<512> response;
-                    response["type"] = "device.status";
-                    response["success"] = true;
-
-                    JsonObject data = response.createNestedObject("data");
-                    data["uptime"] = millis() / 1000;
-                    data["freeHeap"] = ESP.getFreeHeap();
-                    data["cpuFreq"] = ESP.getCpuFreqMHz();
-                    data["wsClients"] = webServer.ws->count();
-
-                    String output;
-                    serializeJson(response, output);
-                    client->text(output);
-                }
-                else if (type == "effects.getCurrent") {
-                    extern Effect effects[];
-                    StaticJsonDocument<256> response;
-                    response["type"] = "effects.current";
-                    response["success"] = true;
-
-                    JsonObject data = response.createNestedObject("data");
-                    data["effectId"] = currentEffect;
-                    data["name"] = effects[currentEffect].name;
-                    data["brightness"] = FastLED.getBrightness();
-                    data["speed"] = effectSpeed;
-                    data["paletteId"] = currentPaletteIndex;
-
-                    String output;
-                    serializeJson(response, output);
-                    client->text(output);
-                }
-                else if (type == "effects.getMetadata") {
-                    uint8_t effectId = doc["effectId"] | 0;
-                    extern Effect effects[];
-
-                    StaticJsonDocument<512> response;
-                    response["type"] = "effects.metadata";
-
-                    if (effectId >= NUM_EFFECTS) {
-                        response["success"] = false;
-                        response["error"] = "Effect ID out of range";
-                    } else {
-                        response["success"] = true;
-                        JsonObject data = response.createNestedObject("data");
-                        data["effectId"] = effectId;
-                        data["name"] = effects[effectId].name;
-
-                        EffectMeta meta = getEffectMeta(effectId);
-                        char categoryBuf[24];
-                        char descBuf[64];
-
-                        getEffectCategoryName(effectId, categoryBuf, sizeof(categoryBuf));
-                        data["category"] = categoryBuf;
-                        data["categoryId"] = meta.category;
-
-                        getEffectDescription(effectId, descBuf, sizeof(descBuf));
-                        data["description"] = descBuf;
-
-                        JsonObject features = data.createNestedObject("features");
-                        features["centerOrigin"] = (meta.features & EffectFeatures::CENTER_ORIGIN) != 0;
-                        features["usesSpeed"] = (meta.features & EffectFeatures::USES_SPEED) != 0;
-                        features["usesPalette"] = (meta.features & EffectFeatures::USES_PALETTE) != 0;
-                        features["zoneAware"] = (meta.features & EffectFeatures::ZONE_AWARE) != 0;
-                        features["dualStrip"] = (meta.features & EffectFeatures::DUAL_STRIP) != 0;
-                        features["physicsBased"] = (meta.features & EffectFeatures::PHYSICS_BASED) != 0;
-                    }
-
-                    String output;
-                    serializeJson(response, output);
-                    client->text(output);
-                }
-                else if (type == "effects.getCategories") {
-                    StaticJsonDocument<512> response;
-                    response["type"] = "effects.categories";
-                    response["success"] = true;
-
-                    JsonArray categories = response.createNestedArray("categories");
-                    char categoryBuf[24];
-
-                    for (uint8_t c = 0; c < CAT_COUNT; c++) {
-                        strncpy_P(categoryBuf, (char*)pgm_read_ptr(&CATEGORY_NAMES[c]), sizeof(categoryBuf) - 1);
-                        categoryBuf[sizeof(categoryBuf) - 1] = '\0';
-
-                        JsonObject cat = categories.createNestedObject();
-                        cat["id"] = c;
-                        cat["name"] = categoryBuf;
-                    }
-
-                    String output;
-                    serializeJson(response, output);
-                    client->text(output);
-                }
-                else if (type == "parameters.get") {
-                    StaticJsonDocument<256> response;
-                    response["type"] = "parameters";
-                    response["success"] = true;
-
-                    JsonObject data = response.createNestedObject("data");
-                    data["brightness"] = FastLED.getBrightness();
-                    data["speed"] = effectSpeed;
-                    data["paletteId"] = currentPaletteIndex;
-                    data["intensity"] = effectIntensity;
-                    data["saturation"] = effectSaturation;
-                    data["complexity"] = effectComplexity;
-                    data["variation"] = effectVariation;
-
-                    String output;
-                    serializeJson(response, output);
-                    client->text(output);
-                }
-            }
-            // Legacy "cmd" format for backward compatibility
-            else if (doc.containsKey("cmd")) {
-                String cmd = doc["cmd"];
-
-                if (cmd == "effect") {
-                    uint8_t effect = doc["value"];
-                    if (effect < NUM_EFFECTS) {
-                        startAdvancedTransition(effect);
-                    }
-                } else if (cmd == "brightness") {
-                    uint8_t brightness = doc["value"];
-                    FastLED.setBrightness(brightness);
-                } else if (cmd == "palette") {
-                    uint8_t palette = doc["value"];
-                    if (palette < gMasterPaletteCount) {
-                        currentPaletteIndex = palette;
-                        targetPalette = CRGBPalette16(gMasterPalettes[currentPaletteIndex]);
-                    }
-                }
-            }
-
-            // Broadcast updated status
-            webServer.broadcastStatus();
+        char* zso = cJSON_PrintUnformatted(zs);
+        if (zso) {
+            self->m_http.wsSendText(clientFd, zso, strlen(zso));
+            cJSON_free(zso);
         }
+        cJSON_Delete(zs);
     }
 }
 
 // ============================================================================
-// API v1 Implementation
+// WebSocket v2 Command Handlers
 // ============================================================================
 
-bool LightwaveWebServer::checkRateLimit(AsyncWebServerRequest* request) {
-    IPAddress clientIP = request->client()->remoteIP();
-    if (!rateLimiter.checkHTTP(clientIP)) {
-        sendErrorResponse(request, HttpStatus::TOO_MANY_REQUESTS,
-                          ErrorCodes::RATE_LIMITED,
-                          "Too many requests, please slow down");
-        return false;
-    }
-    return true;
-}
+// Forward declarations for v2 handlers
+static void handleV2DeviceGetStatus(LightwaveWebServer* self);
+static void handleV2DeviceGetInfo(LightwaveWebServer* self);
+static void handleV2EffectsList(LightwaveWebServer* self, cJSON* data);
+static void handleV2EffectsGetCurrent(LightwaveWebServer* self);
+static void handleV2EffectsSetCurrent(LightwaveWebServer* self, cJSON* data);
+static void handleV2EffectsGetMetadata(LightwaveWebServer* self, cJSON* data);
+static void handleV2ParametersGet(LightwaveWebServer* self);
+static void handleV2ParametersSet(LightwaveWebServer* self, cJSON* data);
+static void handleV2TransitionsList(LightwaveWebServer* self);
+static void handleV2TransitionsTrigger(LightwaveWebServer* self, cJSON* data);
+static void handleV2ZonesList(LightwaveWebServer* self);
+static void handleV2ZonesGet(LightwaveWebServer* self, cJSON* data);
+static void handleV2ZonesUpdate(LightwaveWebServer* self, cJSON* data);
+static void handleV2ZonesSetEffect(LightwaveWebServer* self, cJSON* data);
+static void handleV2Batch(LightwaveWebServer* self, cJSON* data);
 
-void LightwaveWebServer::setupV1Routes() {
-    // ============================================================
-    // API V1 ENDPOINTS
-    // ============================================================
+// Helper to send v2 response
+static int s_wsReplyClientFd = -1; // set per-message by onWsMessage; -1 means broadcast
+static void sendV2Response(LightwaveWebServer* self, const char* type, bool success, cJSON* data, const char* error = nullptr) {
+    cJSON* resp = cJSON_CreateObject();
+    cJSON_AddStringToObject(resp, "type", type);
+    cJSON_AddBoolToObject(resp, "success", success);
 
-    // API Discovery - GET /api/v1/
-    server->on("/api/v1/", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        handleApiDiscovery(request);
-    });
-
-    // Device endpoints
-    server->on("/api/v1/device/status", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        handleDeviceStatus(request);
-    });
-
-    server->on("/api/v1/device/info", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        handleDeviceInfo(request);
-    });
-
-    // Effects endpoints
-    server->on("/api/v1/effects", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        handleEffectsList(request);
-    });
-
-    server->on("/api/v1/effects/current", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        handleEffectsCurrent(request);
-    });
-
-    server->on("/api/v1/effects/metadata", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        handleEffectMetadata(request);
-    });
-
-    server->on("/api/v1/effects/set", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        NULL,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            if (!checkRateLimit(request)) return;
-            handleEffectsSet(request, data, len);
-        }
-    );
-
-    // Parameters endpoints
-    server->on("/api/v1/parameters", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        handleParametersGet(request);
-    });
-
-    server->on("/api/v1/parameters", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        NULL,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            if (!checkRateLimit(request)) return;
-            handleParametersSet(request, data, len);
-        }
-    );
-
-    // Transitions endpoints
-    server->on("/api/v1/transitions/types", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        handleTransitionTypes(request);
-    });
-
-    server->on("/api/v1/transitions/config", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        handleTransitionConfigGet(request);
-    });
-
-    server->on("/api/v1/transitions/config", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        NULL,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            if (!checkRateLimit(request)) return;
-            handleTransitionConfigSet(request, data, len);
-        }
-    );
-
-    server->on("/api/v1/transitions/trigger", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        NULL,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            if (!checkRateLimit(request)) return;
-            handleTransitionTrigger(request, data, len);
-        }
-    );
-
-    // Batch endpoint
-    server->on("/api/v1/batch", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        NULL,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            if (!checkRateLimit(request)) return;
-            handleBatch(request, data, len);
-        }
-    );
-
-    // ================================================================
-    // User Presets Endpoints (Phase C.1)
-    // ================================================================
-
-    // GET /api/v1/presets - List all presets (built-in + user)
-    server->on("/api/v1/presets", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        handlePresetsList(request);
-    });
-
-    // GET /api/v1/presets/user - Get all user presets
-    server->on("/api/v1/presets/user", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        handleUserPresetsList(request);
-    });
-
-    // POST /api/v1/presets/user - Save current config to user slot
-    server->on("/api/v1/presets/user", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        NULL,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            if (!checkRateLimit(request)) return;
-            handleUserPresetSave(request, data, len);
-        }
-    );
-
-    // DELETE /api/v1/presets/user - Delete user preset from slot
-    server->on("/api/v1/presets/user", HTTP_DELETE,
-        [](AsyncWebServerRequest* request) {},
-        NULL,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            if (!checkRateLimit(request)) return;
-            handleUserPresetDelete(request, data, len);
-        }
-    );
-
-    // POST /api/v1/presets/load - Load a preset (built-in or user)
-    server->on("/api/v1/presets/load", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        NULL,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            if (!checkRateLimit(request)) return;
-            handlePresetLoad(request, data, len);
-        }
-    );
-
-    // OpenAPI Specification endpoint - serves JSON from PROGMEM
-    server->on("/api/v1/openapi.json", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        // Stream the OpenAPI spec directly from PROGMEM
-        AsyncWebServerResponse* response = request->beginResponse_P(
-            200, "application/json",
-            reinterpret_cast<const uint8_t*>(OPENAPI_SPEC),
-            strlen_P(OPENAPI_SPEC));
-        response->addHeader("Cache-Control", "public, max-age=3600");
-        request->send(response);
-    });
-}
-
-// ============================================================
-// API Discovery
-// ============================================================
-void LightwaveWebServer::handleApiDiscovery(AsyncWebServerRequest* request) {
-    sendSuccessResponseLarge(request, [](JsonObject& data) {
-        data["name"] = "LightwaveOS";
-        data["apiVersion"] = API_VERSION;
-        data["description"] = "ESP32-S3 LED Control System";
-
-        // Hardware info
-        JsonObject hw = data.createNestedObject("hardware");
-        hw["ledsTotal"] = HardwareConfig::TOTAL_LEDS;
-        hw["strips"] = HardwareConfig::NUM_STRIPS;
-        hw["centerPoint"] = HardwareConfig::STRIP_CENTER_POINT;
-        hw["maxZones"] = HardwareConfig::MAX_ZONES;
-
-        // HATEOAS links
-        JsonObject links = data.createNestedObject("_links");
-        links["self"] = "/api/v1/";
-        links["device"] = "/api/v1/device/status";
-        links["effects"] = "/api/v1/effects";
-        links["parameters"] = "/api/v1/parameters";
-        links["transitions"] = "/api/v1/transitions/types";
-        links["presets"] = "/api/v1/presets";
-        links["batch"] = "/api/v1/batch";
-        links["openapi"] = "/api/v1/openapi.json";
-        links["websocket"] = "ws://lightwaveos.local/ws";
-    }, 1024);
-}
-
-// ============================================================
-// Device Endpoints
-// ============================================================
-void LightwaveWebServer::handleDeviceStatus(AsyncWebServerRequest* request) {
-    WiFiManager& wifi = WiFiManager::getInstance();
-    size_t wsClientCount = ws->count();
-
-    sendSuccessResponse(request, [&wifi, wsClientCount](JsonObject& data) {
-        data["uptime"] = millis() / 1000;
-        data["freeHeap"] = ESP.getFreeHeap();
-        data["heapSize"] = ESP.getHeapSize();
-        data["cpuFreq"] = ESP.getCpuFreqMHz();
-
-        JsonObject network = data.createNestedObject("network");
-        network["connected"] = wifi.isConnected();
-        network["apMode"] = wifi.isAPMode();
-        if (wifi.isConnected()) {
-            network["ip"] = WiFi.localIP().toString();
-            network["rssi"] = WiFi.RSSI();
-        }
-
-        data["wsClients"] = wsClientCount;
-    });
-}
-
-void LightwaveWebServer::handleDeviceInfo(AsyncWebServerRequest* request) {
-    sendSuccessResponse(request, [](JsonObject& data) {
-        data["firmware"] = "1.0.0";
-        data["board"] = "ESP32-S3-DevKitC-1";
-        data["sdk"] = ESP.getSdkVersion();
-        data["flashSize"] = ESP.getFlashChipSize();
-        data["sketchSize"] = ESP.getSketchSize();
-        data["freeSketch"] = ESP.getFreeSketchSpace();
-    });
-}
-
-// ============================================================
-// Effects Endpoints
-// ============================================================
-void LightwaveWebServer::handleEffectsList(AsyncWebServerRequest* request) {
-    extern Effect effects[];
-
-    // Support pagination
-    uint8_t start = 0;
-    uint8_t count = 20;
-    if (request->hasParam("start")) {
-        start = request->getParam("start")->value().toInt();
-    }
-    if (request->hasParam("count")) {
-        count = request->getParam("count")->value().toInt();
-    }
-    uint8_t end = min((uint8_t)(start + count), NUM_EFFECTS);
-
-    // Check if detailed metadata requested
-    bool includeDetails = request->hasParam("details");
-
-    sendSuccessResponseLarge(request, [&](JsonObject& data) {
-        data["total"] = NUM_EFFECTS;
-        data["start"] = start;
-        data["count"] = end - start;
-
-        JsonArray effectsArr = data.createNestedArray("effects");
-        char categoryBuf[24];
-        char descBuf[64];
-
-        for (uint8_t i = start; i < end; i++) {
-            JsonObject effect = effectsArr.createNestedObject();
-            effect["id"] = i;
-            effect["name"] = effects[i].name;
-
-            // Get metadata from PROGMEM
-            EffectMeta meta = getEffectMeta(i);
-            getEffectCategoryName(i, categoryBuf, sizeof(categoryBuf));
-            effect["category"] = categoryBuf;
-            effect["categoryId"] = meta.category;
-
-            // Feature flags
-            effect["centerOrigin"] = (meta.features & EffectFeatures::CENTER_ORIGIN) != 0;
-
-            if (includeDetails) {
-                getEffectDescription(i, descBuf, sizeof(descBuf));
-                effect["description"] = descBuf;
-                effect["usesSpeed"] = (meta.features & EffectFeatures::USES_SPEED) != 0;
-                effect["usesPalette"] = (meta.features & EffectFeatures::USES_PALETTE) != 0;
-                effect["zoneAware"] = (meta.features & EffectFeatures::ZONE_AWARE) != 0;
-                effect["dualStrip"] = (meta.features & EffectFeatures::DUAL_STRIP) != 0;
-                effect["physicsBased"] = (meta.features & EffectFeatures::PHYSICS_BASED) != 0;
-            }
-        }
-
-        // Include category list for filtering UI
-        JsonArray categories = data.createNestedArray("categories");
-        for (uint8_t c = 0; c < CAT_COUNT; c++) {
-            strncpy_P(categoryBuf, (char*)pgm_read_ptr(&CATEGORY_NAMES[c]), sizeof(categoryBuf) - 1);
-            categoryBuf[sizeof(categoryBuf) - 1] = '\0';
-
-            JsonObject cat = categories.createNestedObject();
-            cat["id"] = c;
-            cat["name"] = categoryBuf;
-        }
-    }, 3072);  // Larger buffer for detailed responses
-}
-
-void LightwaveWebServer::handleEffectsCurrent(AsyncWebServerRequest* request) {
-    extern Effect effects[];
-
-    sendSuccessResponse(request, [](JsonObject& data) {
-        extern Effect effects[];
-        data["effectId"] = currentEffect;
-        data["name"] = effects[currentEffect].name;
-        data["brightness"] = FastLED.getBrightness();
-        data["speed"] = effectSpeed;
-        data["paletteId"] = currentPaletteIndex;
-    });
-}
-
-void LightwaveWebServer::handleEffectMetadata(AsyncWebServerRequest* request) {
-    extern Effect effects[];
-
-    // Get effect ID from query parameter
-    if (!request->hasParam("id")) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::MISSING_FIELD, "Effect ID required", "id");
-        return;
+    if (data) {
+        cJSON_AddItemToObject(resp, "data", data);
     }
 
-    uint8_t effectId = request->getParam("id")->value().toInt();
-    if (effectId >= NUM_EFFECTS) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "id");
-        return;
+    if (error) {
+        // Docs format: error is an object with code/message.
+        cJSON* err = cJSON_AddObjectToObject(resp, "error");
+        cJSON_AddStringToObject(err, "code", "INTERNAL_ERROR");
+        cJSON_AddStringToObject(err, "message", error);
     }
+
+    cJSON_AddNumberToObject(resp, "timestamp", millis());
+    cJSON_AddStringToObject(resp, "version", "2.0.0");
+
+    char* out = cJSON_PrintUnformatted(resp);
+    if (out) {
+        if (s_wsReplyClientFd >= 0) {
+            self->sendWsToClient(s_wsReplyClientFd, out, strlen(out));
+                } else {
+            self->broadcastWs(out, strlen(out));
+        }
+        cJSON_free(out);
+    }
+    cJSON_Delete(resp);
+}
+
+// ============================================================================
+// Device Handlers
+// ============================================================================
+
+static void handleV2DeviceGetStatus(LightwaveWebServer* self) {
+    cJSON* data = cJSON_CreateObject();
+    cJSON_AddNumberToObject(data, "uptime", millis() / 1000);
+    cJSON_AddNumberToObject(data, "freeHeap", ESP.getFreeHeap());
+    cJSON_AddNumberToObject(data, "cpuFreq", ESP.getCpuFreqMHz());
+    cJSON_AddNumberToObject(data, "wsClients", (double)self->getClientCount());
+
+    sendV2Response(self, "device.status", true, data);
+}
+
+static void handleV2DeviceGetInfo(LightwaveWebServer* self) {
+    cJSON* data = cJSON_CreateObject();
+    cJSON_AddStringToObject(data, "firmware", "LightwaveOS");
+    cJSON_AddStringToObject(data, "version", "2.0.0");
+    cJSON_AddStringToObject(data, "sdkVersion", ESP.getSdkVersion());
+    cJSON_AddNumberToObject(data, "flashSize", ESP.getFlashChipSize());
+    cJSON_AddNumberToObject(data, "flashSpeed", ESP.getFlashChipSpeed());
+    cJSON_AddStringToObject(data, "chipModel", ESP.getChipModel());
+    cJSON_AddNumberToObject(data, "chipCores", ESP.getChipCores());
+    cJSON_AddNumberToObject(data, "chipRevision", ESP.getChipRevision());
+
+    // Hardware config
+    cJSON* hw = cJSON_AddObjectToObject(data, "hardware");
+    cJSON_AddNumberToObject(hw, "ledsTotal", HardwareConfig::NUM_LEDS);
+    cJSON_AddNumberToObject(hw, "strips", 2);
+    cJSON_AddNumberToObject(hw, "ledsPerStrip", HardwareConfig::STRIP_LENGTH);
+    cJSON_AddNumberToObject(hw, "centerPoint", HardwareConfig::STRIP_CENTER_POINT);
+    cJSON_AddNumberToObject(hw, "maxZones", HardwareConfig::MAX_ZONES);
+
+    sendV2Response(self, "device.info", true, data);
+}
+
+// ============================================================================
+// Effects Handlers
+// ============================================================================
+
+static void handleV2EffectsList(LightwaveWebServer* self, cJSON* data) {
+    // Docs (API_V2.md): page is 1-based, limit max 50, details optional.
+    int page = 1;
+    int limit = 20;
+    bool details = false;
+
+    if (data) {
+        cJSON* pageNode = cJSON_GetObjectItemCaseSensitive(data, "page");
+        if (pageNode && cJSON_IsNumber(pageNode)) {
+            page = (int)pageNode->valuedouble;
+        }
+        cJSON* limitNode = cJSON_GetObjectItemCaseSensitive(data, "limit");
+        if (limitNode && cJSON_IsNumber(limitNode)) {
+            limit = constrain((int)limitNode->valuedouble, 1, 50);
+        }
+        cJSON* detailsNode = cJSON_GetObjectItemCaseSensitive(data, "details");
+        if (detailsNode && cJSON_IsBool(detailsNode)) {
+            details = cJSON_IsTrue(detailsNode);
+        }
+    }
+    if (page < 1) page = 1;
+
+    cJSON* respData = cJSON_CreateObject();
+    cJSON* effectsArr = cJSON_AddArrayToObject(respData, "effects");
+
+    int startIdx = (page - 1) * limit;
+    int endIdx = min(startIdx + limit, (int)NUM_EFFECTS);
 
     char categoryBuf[24];
-    char descBuf[64];
+    char descBuf[80];
 
-    sendSuccessResponse(request, [effectId, &categoryBuf, &descBuf](JsonObject& data) {
-        extern Effect effects[];
+    for (int i = startIdx; i < endIdx; i++) {
+        cJSON* e = cJSON_CreateObject();
+        cJSON_AddNumberToObject(e, "id", i);
+        cJSON_AddStringToObject(e, "name", effects[i].name);
 
-        data["effectId"] = effectId;
-        data["name"] = effects[effectId].name;
+        if (details) {
+            // Add category/description when requested
+            getEffectCategoryName(i, categoryBuf, sizeof(categoryBuf));
+            cJSON_AddStringToObject(e, "category", categoryBuf);
+            getEffectDescription(i, descBuf, sizeof(descBuf));
+            cJSON_AddStringToObject(e, "description", descBuf);
+        }
 
-        // Get metadata from PROGMEM
-        EffectMeta meta = getEffectMeta(effectId);
+        cJSON_AddItemToArray(effectsArr, e);
+    }
 
-        getEffectCategoryName(effectId, categoryBuf, sizeof(categoryBuf));
-        data["category"] = categoryBuf;
-        data["categoryId"] = meta.category;
+    // Pagination metadata
+    cJSON* pagination = cJSON_AddObjectToObject(respData, "pagination");
+    cJSON_AddNumberToObject(pagination, "page", page);
+    cJSON_AddNumberToObject(pagination, "limit", limit);
+    cJSON_AddNumberToObject(pagination, "total", NUM_EFFECTS);
 
-        getEffectDescription(effectId, descBuf, sizeof(descBuf));
-        data["description"] = descBuf;
-
-        // Feature flags object
-        JsonObject features = data.createNestedObject("features");
-        features["centerOrigin"] = (meta.features & EffectFeatures::CENTER_ORIGIN) != 0;
-        features["usesSpeed"] = (meta.features & EffectFeatures::USES_SPEED) != 0;
-        features["usesPalette"] = (meta.features & EffectFeatures::USES_PALETTE) != 0;
-        features["zoneAware"] = (meta.features & EffectFeatures::ZONE_AWARE) != 0;
-        features["dualStrip"] = (meta.features & EffectFeatures::DUAL_STRIP) != 0;
-        features["physicsBased"] = (meta.features & EffectFeatures::PHYSICS_BASED) != 0;
-        features["audioReactive"] = (meta.features & EffectFeatures::AUDIO_REACTIVE) != 0;
-
-        // Raw features byte for compact storage
-        data["featureFlags"] = meta.features;
-    });
+    sendV2Response(self, "effects.list", true, respData);
 }
 
-void LightwaveWebServer::handleEffectsSet(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    StaticJsonDocument<256> doc;
-    if (deserializeJson(doc, data, len)) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::INVALID_JSON, "Malformed JSON");
+static void handleV2EffectsGetCurrent(LightwaveWebServer* self) {
+    cJSON* data = cJSON_CreateObject();
+    cJSON_AddNumberToObject(data, "effectId", currentEffect);
+    cJSON_AddStringToObject(data, "name", effects[currentEffect].name);
+    cJSON_AddNumberToObject(data, "brightness", FastLED.getBrightness());
+    cJSON_AddNumberToObject(data, "speed", effectSpeed);
+    cJSON_AddNumberToObject(data, "paletteId", currentPaletteIndex);
+
+    // Visual parameters
+    cJSON* params = cJSON_AddObjectToObject(data, "parameters");
+    cJSON_AddNumberToObject(params, "intensity", effectIntensity);
+    cJSON_AddNumberToObject(params, "saturation", effectSaturation);
+    cJSON_AddNumberToObject(params, "complexity", effectComplexity);
+    cJSON_AddNumberToObject(params, "variation", effectVariation);
+
+    // Effect metadata
+    char categoryBuf[24];
+    char descBuf[80];
+    getEffectCategoryName(currentEffect, categoryBuf, sizeof(categoryBuf));
+    getEffectDescription(currentEffect, descBuf, sizeof(descBuf));
+
+    cJSON* meta = cJSON_AddObjectToObject(data, "metadata");
+    cJSON_AddStringToObject(meta, "category", categoryBuf);
+    cJSON_AddStringToObject(meta, "description", descBuf);
+
+    EffectMeta effectMeta = getEffectMeta(currentEffect);
+    cJSON_AddBoolToObject(meta, "centerOrigin", (effectMeta.features & EffectFeatures::CENTER_ORIGIN) != 0);
+    cJSON_AddBoolToObject(meta, "usesPalette", (effectMeta.features & EffectFeatures::USES_PALETTE) != 0);
+    cJSON_AddBoolToObject(meta, "usesSpeed", (effectMeta.features & EffectFeatures::USES_SPEED) != 0);
+    cJSON_AddBoolToObject(meta, "physicsBased", (effectMeta.features & EffectFeatures::PHYSICS_BASED) != 0);
+
+    sendV2Response(self, "effects.current", true, data);
+}
+
+static void handleV2EffectsSetCurrent(LightwaveWebServer* self, cJSON* data) {
+    if (!data) {
+        sendV2Response(self, "effects.current", false, nullptr, "Missing data object");
         return;
     }
 
-    VALIDATE_REQUEST(doc, RequestSchemas::SetEffect, RequestSchemas::SetEffectSize, request);
+    cJSON* effectIdNode = cJSON_GetObjectItemCaseSensitive(data, "effectId");
+    if (!effectIdNode || !cJSON_IsNumber(effectIdNode)) {
+        sendV2Response(self, "effects.current", false, nullptr, "Missing effectId");
+                    return;
+                }
 
-    uint8_t effectId = doc["effectId"];
+    uint8_t newEffectId = (uint8_t)effectIdNode->valuedouble;
+    if (newEffectId >= NUM_EFFECTS) {
+        sendV2Response(self, "effects.current", false, nullptr, "Invalid effectId");
+                        return;
+                    }
+
+    // Update the effect
+    currentEffect = newEffectId;
+
+    // Respond with current state
+    handleV2EffectsGetCurrent(self);
+}
+
+static void handleV2EffectsGetMetadata(LightwaveWebServer* self, cJSON* data) {
+    if (!data) {
+        sendV2Response(self, "effects.metadata", false, nullptr, "Missing data object");
+        return;
+    }
+
+    cJSON* effectIdNode = cJSON_GetObjectItemCaseSensitive(data, "effectId");
+    if (!effectIdNode || !cJSON_IsNumber(effectIdNode)) {
+        sendV2Response(self, "effects.metadata", false, nullptr, "Missing effectId");
+        return;
+    }
+
+    uint8_t effectId = (uint8_t)effectIdNode->valuedouble;
     if (effectId >= NUM_EFFECTS) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "effectId");
+        sendV2Response(self, "effects.metadata", false, nullptr, "Invalid effectId");
         return;
     }
 
-    startAdvancedTransition(effectId);
+    cJSON* respData = cJSON_CreateObject();
+    cJSON_AddNumberToObject(respData, "effectId", effectId);
+    cJSON_AddStringToObject(respData, "name", effects[effectId].name);
 
-    sendSuccessResponse(request, [effectId](JsonObject& respData) {
-        extern Effect effects[];
-        respData["effectId"] = effectId;
-        respData["name"] = effects[effectId].name;
-    });
+    char categoryBuf[24];
+    char descBuf[80];
+    getEffectCategoryName(effectId, categoryBuf, sizeof(categoryBuf));
+    getEffectDescription(effectId, descBuf, sizeof(descBuf));
 
-    broadcastStatus();
-}
+    cJSON_AddStringToObject(respData, "category", categoryBuf);
+    cJSON_AddStringToObject(respData, "description", descBuf);
 
-// ============================================================
-// Parameters Endpoints
-// ============================================================
-void LightwaveWebServer::handleParametersGet(AsyncWebServerRequest* request) {
-    sendSuccessResponse(request, [](JsonObject& data) {
-        data["brightness"] = FastLED.getBrightness();
-        data["speed"] = effectSpeed;
-        data["paletteId"] = currentPaletteIndex;
-        data["intensity"] = effectIntensity;
-        data["saturation"] = effectSaturation;
-        data["complexity"] = effectComplexity;
-        data["variation"] = effectVariation;
-    });
-}
+    // Feature flags
+    EffectMeta meta = getEffectMeta(effectId);
+    cJSON* features = cJSON_AddObjectToObject(respData, "features");
+    cJSON_AddBoolToObject(features, "centerOrigin", (meta.features & EffectFeatures::CENTER_ORIGIN) != 0);
+    cJSON_AddBoolToObject(features, "usesSpeed", (meta.features & EffectFeatures::USES_SPEED) != 0);
+    cJSON_AddBoolToObject(features, "usesPalette", (meta.features & EffectFeatures::USES_PALETTE) != 0);
+    cJSON_AddBoolToObject(features, "zoneAware", (meta.features & EffectFeatures::ZONE_AWARE) != 0);
+    cJSON_AddBoolToObject(features, "dualStrip", (meta.features & EffectFeatures::DUAL_STRIP) != 0);
+    cJSON_AddBoolToObject(features, "physicsBased", (meta.features & EffectFeatures::PHYSICS_BASED) != 0);
+    cJSON_AddBoolToObject(features, "audioReactive", (meta.features & EffectFeatures::AUDIO_REACTIVE) != 0);
 
-void LightwaveWebServer::handleParametersSet(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    StaticJsonDocument<256> doc;
-    if (deserializeJson(doc, data, len)) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::INVALID_JSON, "Malformed JSON");
-        return;
+    // Custom parameters
+    cJSON* params = cJSON_AddArrayToObject(respData, "customParams");
+    for (uint8_t i = 0; i < meta.paramCount; i++) {
+        cJSON* param = cJSON_CreateObject();
+        cJSON_AddStringToObject(param, "name", meta.params[i].name);
+        cJSON_AddNumberToObject(param, "min", meta.params[i].minVal);
+        cJSON_AddNumberToObject(param, "max", meta.params[i].maxVal);
+        cJSON_AddNumberToObject(param, "default", meta.params[i].defaultVal);
+        cJSON_AddNumberToObject(param, "target", (int)meta.params[i].target);
+        cJSON_AddItemToArray(params, param);
     }
 
-    // Validate and apply parameters
-    bool updated = false;
-
-    if (doc.containsKey("brightness")) {
-        uint8_t val = doc["brightness"];
-        FastLED.setBrightness(val);
-        updated = true;
-    }
-
-    if (doc.containsKey("speed")) {
-        uint8_t val = doc["speed"];
-        if (val >= 1 && val <= 50) {
-            effectSpeed = val;
-            updated = true;
-        } else {
-            sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                              ErrorCodes::OUT_OF_RANGE, "Speed must be 1-50", "speed");
-            return;
-        }
-    }
-
-    if (doc.containsKey("paletteId")) {
-        uint8_t val = doc["paletteId"];
-        if (val < gMasterPaletteCount) {
-            currentPaletteIndex = val;
-            targetPalette = CRGBPalette16(gMasterPalettes[currentPaletteIndex]);
-            updated = true;
-        } else {
-            sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                              ErrorCodes::OUT_OF_RANGE, "Invalid palette ID", "paletteId");
-            return;
-        }
-    }
-
-    if (doc.containsKey("intensity")) {
-        effectIntensity = doc["intensity"];
-        updated = true;
-    }
-    if (doc.containsKey("saturation")) {
-        effectSaturation = doc["saturation"];
-        updated = true;
-    }
-    if (doc.containsKey("complexity")) {
-        effectComplexity = doc["complexity"];
-        updated = true;
-    }
-    if (doc.containsKey("variation")) {
-        effectVariation = doc["variation"];
-        updated = true;
-    }
-
-    if (updated) {
-        sendSuccessResponse(request);
-        broadcastStatus();
-    } else {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::MISSING_FIELD, "No valid parameters provided");
-    }
-}
-
-// ============================================================
-// Transitions Endpoints
-// ============================================================
-void LightwaveWebServer::handleTransitionTypes(AsyncWebServerRequest* request) {
-    sendSuccessResponseLarge(request, [](JsonObject& data) {
-        // Transition types
-        JsonArray types = data.createNestedArray("types");
-        const char* transNames[] = {
-            "FADE", "WIPE_OUT", "WIPE_IN", "DISSOLVE", "PHASE_SHIFT",
-            "PULSEWAVE", "IMPLOSION", "IRIS", "NUCLEAR", "STARGATE",
-            "KALEIDOSCOPE", "MANDALA"
-        };
-        const char* transDescs[] = {
-            "CENTER ORIGIN crossfade - radiates from center",
-            "Wipe from center outward",
-            "Wipe from edges inward",
-            "Random pixel transition",
-            "Frequency-based morph",
-            "Concentric energy pulses from center",
-            "Particles converge to center",
-            "Mechanical aperture from center",
-            "Chain reaction explosion from center",
-            "Event horizon portal at center",
-            "Symmetric crystal patterns",
-            "Sacred geometry from center"
-        };
-        bool centerOrigin[] = {true, true, true, false, false, true, true, true, true, true, true, true};
-
-        for (uint8_t i = 0; i < 12; i++) {
-            JsonObject t = types.createNestedObject();
-            t["id"] = i;
-            t["name"] = transNames[i];
-            t["description"] = transDescs[i];
-            t["centerOrigin"] = centerOrigin[i];
-        }
-
-        // Easing curves
-        JsonArray easing = data.createNestedArray("easingCurves");
-        const char* easeNames[] = {
-            "LINEAR", "IN_QUAD", "OUT_QUAD", "IN_OUT_QUAD",
-            "IN_CUBIC", "OUT_CUBIC", "IN_OUT_CUBIC",
-            "IN_ELASTIC", "OUT_ELASTIC", "IN_OUT_ELASTIC",
-            "IN_BOUNCE", "OUT_BOUNCE",
-            "IN_BACK", "OUT_BACK", "IN_OUT_BACK"
-        };
-        for (uint8_t i = 0; i < 15; i++) {
-            JsonObject e = easing.createNestedObject();
-            e["id"] = i;
-            e["name"] = easeNames[i];
-        }
-    }, 2048);
-}
-
-void LightwaveWebServer::handleTransitionConfigGet(AsyncWebServerRequest* request) {
-    sendSuccessResponse(request, [](JsonObject& data) {
-        data["enabled"] = useRandomTransitions;
-        data["defaultDuration"] = 1000;
-        data["defaultType"] = 0;  // FADE
-        data["defaultEasing"] = 3;  // IN_OUT_QUAD
-    });
-}
-
-void LightwaveWebServer::handleTransitionConfigSet(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    StaticJsonDocument<256> doc;
-    if (deserializeJson(doc, data, len)) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::INVALID_JSON, "Malformed JSON");
-        return;
-    }
-
-    if (doc.containsKey("enabled")) {
-        useRandomTransitions = doc["enabled"];
-    }
-
-    sendSuccessResponse(request);
-    broadcastStatus();
-}
-
-void LightwaveWebServer::handleTransitionTrigger(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    StaticJsonDocument<256> doc;
-    if (deserializeJson(doc, data, len)) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::INVALID_JSON, "Malformed JSON");
-        return;
-    }
-
-    VALIDATE_REQUEST(doc, RequestSchemas::TriggerTransition, RequestSchemas::TriggerTransitionSize, request);
-
-    uint8_t toEffect = doc["toEffect"];
-    if (toEffect >= NUM_EFFECTS) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "toEffect");
-        return;
-    }
-
-    uint8_t transType = doc["type"] | 0;
-    uint32_t duration = doc["duration"] | 1000;
-
-    // Use standard transition mechanism
-    startAdvancedTransition(toEffect);
-
-    sendSuccessResponse(request, [toEffect, transType, duration](JsonObject& respData) {
-        extern Effect effects[];
-        respData["effectId"] = toEffect;
-        respData["name"] = effects[toEffect].name;
-        respData["transitionType"] = transType;
-        respData["duration"] = duration;
-    });
-
-    broadcastStatus();
-}
-
-// ============================================================
-// Batch Operations
-// ============================================================
-void LightwaveWebServer::handleBatch(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    StaticJsonDocument<2048> doc;
-    if (deserializeJson(doc, data, len)) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::INVALID_JSON, "Malformed JSON");
-        return;
-    }
-
-    if (!doc.containsKey("operations") || !doc["operations"].is<JsonArray>()) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::MISSING_FIELD, "operations array required");
-        return;
-    }
-
-    JsonArray ops = doc["operations"];
-    if (ops.size() > 10) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Max 10 operations per batch");
-        return;
-    }
-
-    StaticJsonDocument<1024> resultDoc;
-    resultDoc["success"] = true;
-    JsonObject resultData = resultDoc.createNestedObject("data");
-    resultData["processed"] = 0;
-    resultData["failed"] = 0;
-    JsonArray results = resultData.createNestedArray("results");
-
-    for (JsonVariant op : ops) {
-        String action = op["action"] | "";
-        JsonObject result = results.createNestedObject();
-        result["action"] = action;
-
-        bool success = executeBatchAction(action, op);
-        result["success"] = success;
-
-        if (success) {
-            resultData["processed"] = resultData["processed"].as<int>() + 1;
-        } else {
-            resultData["failed"] = resultData["failed"].as<int>() + 1;
-        }
-    }
-
-    resultDoc["timestamp"] = millis();
-    resultDoc["version"] = API_VERSION;
-
-    String output;
-    serializeJson(resultDoc, output);
-    request->send(HttpStatus::OK, "application/json", output);
-
-    broadcastStatus();
-}
-
-bool LightwaveWebServer::executeBatchAction(const String& action, JsonVariant params) {
-    if (action == "setBrightness") {
-        if (!params.containsKey("value")) return false;
-        uint8_t val = params["value"];
-        FastLED.setBrightness(val);
-        return true;
-    }
-    else if (action == "setSpeed") {
-        if (!params.containsKey("value")) return false;
-        uint8_t val = params["value"];
-        if (val < 1 || val > 50) return false;
-        effectSpeed = val;
-        return true;
-    }
-    else if (action == "setEffect") {
-        if (!params.containsKey("effectId")) return false;
-        uint8_t id = params["effectId"];
-        if (id >= NUM_EFFECTS) return false;
-        startAdvancedTransition(id);
-        return true;
-    }
-    else if (action == "setPalette") {
-        if (!params.containsKey("paletteId")) return false;
-        uint8_t id = params["paletteId"];
-        if (id >= gMasterPaletteCount) return false;
-        currentPaletteIndex = id;
-        targetPalette = CRGBPalette16(gMasterPalettes[currentPaletteIndex]);
-        return true;
-    }
-    else if (action == "setZoneEffect") {
-        if (!params.containsKey("zoneId") || !params.containsKey("effectId")) return false;
-        uint8_t zoneId = params["zoneId"];
-        uint8_t effectId = params["effectId"];
-        if (zoneId >= HardwareConfig::MAX_ZONES || effectId >= NUM_EFFECTS) return false;
-        zoneComposer.setZoneEffect(zoneId, effectId);
-        return true;
-    }
-    else if (action == "setZoneBrightness") {
-        if (!params.containsKey("zoneId") || !params.containsKey("brightness")) return false;
-        uint8_t zoneId = params["zoneId"];
-        uint8_t brightness = params["brightness"];
-        if (zoneId >= HardwareConfig::MAX_ZONES) return false;
-        zoneComposer.setZoneBrightness(zoneId, brightness);
-        return true;
-    }
-    else if (action == "setZoneSpeed") {
-        if (!params.containsKey("zoneId") || !params.containsKey("speed")) return false;
-        uint8_t zoneId = params["zoneId"];
-        uint8_t speed = params["speed"];
-        if (zoneId >= HardwareConfig::MAX_ZONES || speed < 1 || speed > 50) return false;
-        zoneComposer.setZoneSpeed(zoneId, speed);
-        return true;
-    }
-
-    return false;
+    sendV2Response(self, "effects.metadata", true, respData);
 }
 
 // ============================================================================
-// User Presets Handlers (Phase C.1)
+// Parameters Handlers
 // ============================================================================
 
-void LightwaveWebServer::handlePresetsList(AsyncWebServerRequest* request) {
-    sendSuccessResponseLarge(request, [](JsonObject& data) {
-        // Built-in presets
-        JsonArray builtin = data.createNestedArray("builtin");
-        for (uint8_t i = 0; i < ZONE_PRESET_COUNT; i++) {
-            JsonObject preset = builtin.createNestedObject();
-            preset["id"] = i;
-            preset["name"] = ZONE_PRESETS[i].name;
+static void handleV2ParametersGet(LightwaveWebServer* self) {
+    cJSON* data = cJSON_CreateObject();
+    cJSON_AddNumberToObject(data, "brightness", FastLED.getBrightness());
+    cJSON_AddNumberToObject(data, "speed", effectSpeed);
+    cJSON_AddNumberToObject(data, "paletteId", currentPaletteIndex);
+    cJSON_AddNumberToObject(data, "intensity", effectIntensity);
+    cJSON_AddNumberToObject(data, "saturation", effectSaturation);
+    cJSON_AddNumberToObject(data, "complexity", effectComplexity);
+    cJSON_AddNumberToObject(data, "variation", effectVariation);
+    cJSON_AddNumberToObject(data, "fadeAmount", fadeAmount);
+
+    // Docs: response type is "parameters"
+    sendV2Response(self, "parameters", true, data);
+}
+
+static void handleV2ParametersSet(LightwaveWebServer* self, cJSON* data) {
+    if (!data) {
+        sendV2Response(self, "parameters.current", false, nullptr, "Missing data object");
+                    return;
+                }
+
+    bool changed = false;
+
+    cJSON* node = cJSON_GetObjectItemCaseSensitive(data, "brightness");
+    if (node && cJSON_IsNumber(node)) {
+        FastLED.setBrightness((uint8_t)node->valuedouble);
+        changed = true;
+    }
+
+    node = cJSON_GetObjectItemCaseSensitive(data, "speed");
+    if (node && cJSON_IsNumber(node)) {
+        effectSpeed = constrain((uint8_t)node->valuedouble, 1, 50);
+        changed = true;
+    }
+
+    node = cJSON_GetObjectItemCaseSensitive(data, "paletteId");
+    if (node && cJSON_IsNumber(node)) {
+        currentPaletteIndex = (uint8_t)node->valuedouble;
+        changed = true;
+    }
+
+    node = cJSON_GetObjectItemCaseSensitive(data, "intensity");
+    if (node && cJSON_IsNumber(node)) {
+        effectIntensity = (uint8_t)node->valuedouble;
+        changed = true;
+    }
+
+    node = cJSON_GetObjectItemCaseSensitive(data, "saturation");
+    if (node && cJSON_IsNumber(node)) {
+        effectSaturation = (uint8_t)node->valuedouble;
+        changed = true;
+    }
+
+    node = cJSON_GetObjectItemCaseSensitive(data, "complexity");
+    if (node && cJSON_IsNumber(node)) {
+        effectComplexity = (uint8_t)node->valuedouble;
+        changed = true;
+    }
+
+    node = cJSON_GetObjectItemCaseSensitive(data, "variation");
+    if (node && cJSON_IsNumber(node)) {
+        effectVariation = (uint8_t)node->valuedouble;
+        changed = true;
+    }
+
+    node = cJSON_GetObjectItemCaseSensitive(data, "fadeAmount");
+    if (node && cJSON_IsNumber(node)) {
+        fadeAmount = (uint8_t)node->valuedouble;
+        changed = true;
+    }
+
+    // Respond with current state
+    handleV2ParametersGet(self);
+}
+
+// ============================================================================
+// Transitions Handlers
+// ============================================================================
+
+static const char* getTransitionName(TransitionType type) {
+    switch (type) {
+        case TRANSITION_FADE: return "Fade";
+        case TRANSITION_WIPE_OUT: return "Wipe Out";
+        case TRANSITION_WIPE_IN: return "Wipe In";
+        case TRANSITION_DISSOLVE: return "Dissolve";
+        case TRANSITION_PHASE_SHIFT: return "Phase Shift";
+        case TRANSITION_PULSEWAVE: return "Pulse Wave";
+        case TRANSITION_IMPLOSION: return "Implosion";
+        case TRANSITION_IRIS: return "Iris";
+        case TRANSITION_NUCLEAR: return "Nuclear";
+        case TRANSITION_STARGATE: return "Stargate";
+        case TRANSITION_KALEIDOSCOPE: return "Kaleidoscope";
+        case TRANSITION_MANDALA: return "Mandala";
+        default: return "Unknown";
+    }
+}
+
+static void handleV2TransitionsList(LightwaveWebServer* self) {
+    cJSON* data = cJSON_CreateObject();
+    cJSON* types = cJSON_AddArrayToObject(data, "types");
+
+    for (int i = 0; i < TRANSITION_COUNT; i++) {
+        cJSON* t = cJSON_CreateObject();
+        cJSON_AddNumberToObject(t, "id", i);
+        cJSON_AddStringToObject(t, "name", getTransitionName((TransitionType)i));
+        cJSON_AddBoolToObject(t, "centerOrigin", true); // All transitions are CENTER ORIGIN
+        cJSON_AddItemToArray(types, t);
+    }
+
+    cJSON_AddNumberToObject(data, "count", TRANSITION_COUNT);
+    cJSON_AddNumberToObject(data, "defaultDuration", 1000);
+
+    sendV2Response(self, "transitions.list", true, data);
+}
+
+static void handleV2TransitionsTrigger(LightwaveWebServer* self, cJSON* data) {
+    if (!data) {
+        sendV2Response(self, "transitions.triggered", false, nullptr, "Missing data object");
+        return;
+    }
+
+    // Get target effect
+    cJSON* effectIdNode = cJSON_GetObjectItemCaseSensitive(data, "targetEffectId");
+    if (!effectIdNode || !cJSON_IsNumber(effectIdNode)) {
+        sendV2Response(self, "transitions.triggered", false, nullptr, "Missing targetEffectId");
+        return;
+    }
+
+    uint8_t targetEffect = (uint8_t)effectIdNode->valuedouble;
+    if (targetEffect >= NUM_EFFECTS) {
+        sendV2Response(self, "transitions.triggered", false, nullptr, "Invalid targetEffectId");
+        return;
+    }
+
+    // Get transition type (optional, defaults to random)
+    TransitionType transType = TransitionEngine::getRandomTransition();
+    cJSON* typeNode = cJSON_GetObjectItemCaseSensitive(data, "type");
+    if (typeNode && cJSON_IsNumber(typeNode)) {
+        int typeVal = (int)typeNode->valuedouble;
+        if (typeVal >= 0 && typeVal < TRANSITION_COUNT) {
+            transType = (TransitionType)typeVal;
+        }
+    }
+
+    // Get duration (optional, defaults to 1000ms)
+    uint32_t duration = 1000;
+    cJSON* durationNode = cJSON_GetObjectItemCaseSensitive(data, "duration");
+    if (durationNode && cJSON_IsNumber(durationNode)) {
+        duration = constrain((uint32_t)durationNode->valuedouble, 100, 5000);
+    }
+
+    // Store current state before transition
+    memcpy(transitionSourceBuffer, leds, HardwareConfig::NUM_LEDS * sizeof(CRGB));
+
+    // Update effect
+    currentEffect = targetEffect;
+
+    // Start transition (main loop will handle the actual transition)
+    transitionEngine.startTransition(
+        transitionSourceBuffer,
+        leds,
+        leds,
+        transType,
+        duration,
+        EASE_IN_OUT_QUAD
+    );
+
+    // Response
+    cJSON* respData = cJSON_CreateObject();
+    cJSON_AddNumberToObject(respData, "targetEffectId", targetEffect);
+    cJSON_AddStringToObject(respData, "effectName", effects[targetEffect].name);
+    cJSON_AddNumberToObject(respData, "transitionType", transType);
+    cJSON_AddStringToObject(respData, "transitionName", getTransitionName(transType));
+    cJSON_AddNumberToObject(respData, "duration", duration);
+
+    sendV2Response(self, "transitions.triggered", true, respData);
+}
+
+// ============================================================================
+// Zones Handlers
+// ============================================================================
+
+static void handleV2ZonesList(LightwaveWebServer* self) {
+    cJSON* data = cJSON_CreateObject();
+    cJSON_AddBoolToObject(data, "enabled", zoneComposer.isEnabled());
+    cJSON_AddNumberToObject(data, "zoneCount", zoneComposer.getZoneCount());
+    cJSON_AddNumberToObject(data, "maxZones", HardwareConfig::MAX_ZONES);
+
+    cJSON* zones = cJSON_AddArrayToObject(data, "zones");
+
+    for (uint8_t i = 0; i < zoneComposer.getZoneCount(); i++) {
+        cJSON* z = cJSON_CreateObject();
+        cJSON_AddNumberToObject(z, "id", i);
+        cJSON_AddBoolToObject(z, "enabled", zoneComposer.isZoneEnabled(i));
+        cJSON_AddNumberToObject(z, "effectId", zoneComposer.getZoneEffect(i));
+
+        if (zoneComposer.getZoneEffect(i) < NUM_EFFECTS) {
+            cJSON_AddStringToObject(z, "effectName", effects[zoneComposer.getZoneEffect(i)].name);
         }
 
-        // User presets
-        JsonArray user = data.createNestedArray("user");
-        for (uint8_t i = 0; i < MAX_USER_PRESETS; i++) {
-            JsonObject preset = user.createNestedObject();
-            preset["slot"] = i;
+        cJSON_AddNumberToObject(z, "brightness", zoneComposer.getZoneBrightness(i));
+        cJSON_AddNumberToObject(z, "speed", zoneComposer.getZoneSpeed(i));
+        cJSON_AddNumberToObject(z, "paletteId", zoneComposer.getZonePalette(i));
+        cJSON_AddNumberToObject(z, "blendMode", (int)zoneComposer.getZoneBlendMode(i));
 
-            UserPreset userPreset;
-            if (zoneComposer.getUserPreset(i, userPreset)) {
-                preset["name"] = userPreset.name;
-                preset["saved"] = true;
-            } else {
-                preset["name"] = nullptr;
-                preset["saved"] = false;
+        // Visual params
+        cJSON* params = cJSON_AddObjectToObject(z, "visualParams");
+        VisualParams vp = zoneComposer.getZoneVisualParams(i);
+        cJSON_AddNumberToObject(params, "intensity", vp.intensity);
+        cJSON_AddNumberToObject(params, "saturation", vp.saturation);
+        cJSON_AddNumberToObject(params, "complexity", vp.complexity);
+        cJSON_AddNumberToObject(params, "variation", vp.variation);
+
+        cJSON_AddItemToArray(zones, z);
+    }
+
+    sendV2Response(self, "zones.list", true, data);
+}
+
+static void handleV2ZonesGet(LightwaveWebServer* self, cJSON* data) {
+    if (!data) {
+        sendV2Response(self, "zones.zone", false, nullptr, "Missing data object");
+            return;
+        }
+
+    cJSON* zoneIdNode = cJSON_GetObjectItemCaseSensitive(data, "zoneId");
+    if (!zoneIdNode || !cJSON_IsNumber(zoneIdNode)) {
+        sendV2Response(self, "zones.zone", false, nullptr, "Missing zoneId");
+            return;
+        }
+
+    uint8_t zoneId = (uint8_t)zoneIdNode->valuedouble;
+    if (zoneId >= zoneComposer.getZoneCount()) {
+        sendV2Response(self, "zones.zone", false, nullptr, "Invalid zoneId");
+            return;
+        }
+
+    cJSON* respData = cJSON_CreateObject();
+    cJSON_AddNumberToObject(respData, "id", zoneId);
+    cJSON_AddBoolToObject(respData, "enabled", zoneComposer.isZoneEnabled(zoneId));
+    cJSON_AddNumberToObject(respData, "effectId", zoneComposer.getZoneEffect(zoneId));
+
+    if (zoneComposer.getZoneEffect(zoneId) < NUM_EFFECTS) {
+        cJSON_AddStringToObject(respData, "effectName", effects[zoneComposer.getZoneEffect(zoneId)].name);
+    }
+
+    cJSON_AddNumberToObject(respData, "brightness", zoneComposer.getZoneBrightness(zoneId));
+    cJSON_AddNumberToObject(respData, "speed", zoneComposer.getZoneSpeed(zoneId));
+    cJSON_AddNumberToObject(respData, "paletteId", zoneComposer.getZonePalette(zoneId));
+    cJSON_AddNumberToObject(respData, "blendMode", (int)zoneComposer.getZoneBlendMode(zoneId));
+
+    // Visual params
+    cJSON* params = cJSON_AddObjectToObject(respData, "visualParams");
+    VisualParams vp = zoneComposer.getZoneVisualParams(zoneId);
+    cJSON_AddNumberToObject(params, "intensity", vp.intensity);
+    cJSON_AddNumberToObject(params, "saturation", vp.saturation);
+    cJSON_AddNumberToObject(params, "complexity", vp.complexity);
+    cJSON_AddNumberToObject(params, "variation", vp.variation);
+
+    sendV2Response(self, "zones.zone", true, respData);
+}
+
+static void handleV2ZonesUpdate(LightwaveWebServer* self, cJSON* data) {
+    if (!data) {
+        sendV2Response(self, "zones.updated", false, nullptr, "Missing data object");
+        return;
+    }
+
+    cJSON* zoneIdNode = cJSON_GetObjectItemCaseSensitive(data, "zoneId");
+    if (!zoneIdNode || !cJSON_IsNumber(zoneIdNode)) {
+        sendV2Response(self, "zones.updated", false, nullptr, "Missing zoneId");
+        return;
+    }
+
+    uint8_t zoneId = (uint8_t)zoneIdNode->valuedouble;
+    if (zoneId >= HardwareConfig::MAX_ZONES) {
+        sendV2Response(self, "zones.updated", false, nullptr, "Invalid zoneId");
+        return;
+    }
+
+    // Update zone properties
+    cJSON* node = cJSON_GetObjectItemCaseSensitive(data, "enabled");
+    if (node && cJSON_IsBool(node)) {
+        zoneComposer.enableZone(zoneId, cJSON_IsTrue(node));
+    }
+
+    node = cJSON_GetObjectItemCaseSensitive(data, "brightness");
+    if (node && cJSON_IsNumber(node)) {
+        zoneComposer.setZoneBrightness(zoneId, (uint8_t)node->valuedouble);
+    }
+
+    node = cJSON_GetObjectItemCaseSensitive(data, "speed");
+    if (node && cJSON_IsNumber(node)) {
+        zoneComposer.setZoneSpeed(zoneId, constrain((uint8_t)node->valuedouble, 1, 50));
+    }
+
+    node = cJSON_GetObjectItemCaseSensitive(data, "paletteId");
+    if (node && cJSON_IsNumber(node)) {
+        zoneComposer.setZonePalette(zoneId, (uint8_t)node->valuedouble);
+    }
+
+    node = cJSON_GetObjectItemCaseSensitive(data, "blendMode");
+    if (node && cJSON_IsNumber(node)) {
+        zoneComposer.setZoneBlendMode(zoneId, (BlendMode)(int)node->valuedouble);
+    }
+
+    // Visual params
+    cJSON* params = cJSON_GetObjectItemCaseSensitive(data, "visualParams");
+    if (params) {
+        node = cJSON_GetObjectItemCaseSensitive(params, "intensity");
+        if (node && cJSON_IsNumber(node)) {
+            zoneComposer.setZoneIntensity(zoneId, (uint8_t)node->valuedouble);
+        }
+
+        node = cJSON_GetObjectItemCaseSensitive(params, "saturation");
+        if (node && cJSON_IsNumber(node)) {
+            zoneComposer.setZoneSaturation(zoneId, (uint8_t)node->valuedouble);
+        }
+
+        node = cJSON_GetObjectItemCaseSensitive(params, "complexity");
+        if (node && cJSON_IsNumber(node)) {
+            zoneComposer.setZoneComplexity(zoneId, (uint8_t)node->valuedouble);
+        }
+
+        node = cJSON_GetObjectItemCaseSensitive(params, "variation");
+        if (node && cJSON_IsNumber(node)) {
+            zoneComposer.setZoneVariation(zoneId, (uint8_t)node->valuedouble);
+        }
+    }
+
+    // Return updated zone state
+    handleV2ZonesGet(self, data);
+}
+
+static void handleV2ZonesSetEffect(LightwaveWebServer* self, cJSON* data) {
+    if (!data) {
+        sendV2Response(self, "zones.effectSet", false, nullptr, "Missing data object");
+        return;
+    }
+
+    cJSON* zoneIdNode = cJSON_GetObjectItemCaseSensitive(data, "zoneId");
+    cJSON* effectIdNode = cJSON_GetObjectItemCaseSensitive(data, "effectId");
+
+    if (!zoneIdNode || !cJSON_IsNumber(zoneIdNode)) {
+        sendV2Response(self, "zones.effectSet", false, nullptr, "Missing zoneId");
+        return;
+    }
+
+    if (!effectIdNode || !cJSON_IsNumber(effectIdNode)) {
+        sendV2Response(self, "zones.effectSet", false, nullptr, "Missing effectId");
+        return;
+    }
+
+    uint8_t zoneId = (uint8_t)zoneIdNode->valuedouble;
+    uint8_t effectId = (uint8_t)effectIdNode->valuedouble;
+
+    if (zoneId >= HardwareConfig::MAX_ZONES) {
+        sendV2Response(self, "zones.effectSet", false, nullptr, "Invalid zoneId");
+        return;
+    }
+
+    if (effectId >= NUM_EFFECTS) {
+        sendV2Response(self, "zones.effectSet", false, nullptr, "Invalid effectId");
+        return;
+    }
+
+    zoneComposer.setZoneEffect(zoneId, effectId);
+
+    // Return updated zone state
+    handleV2ZonesGet(self, data);
+}
+
+// ============================================================================
+// Batch Handler
+// ============================================================================
+
+static void handleV2Batch(LightwaveWebServer* self, cJSON* data) {
+    if (!data) {
+        sendV2Response(self, "batch.result", false, nullptr, "Missing data object");
+        return;
+    }
+
+    cJSON* operations = cJSON_GetObjectItemCaseSensitive(data, "operations");
+    if (!operations || !cJSON_IsArray(operations)) {
+        sendV2Response(self, "batch.result", false, nullptr, "Missing operations array");
+        return;
+    }
+
+    int opCount = cJSON_GetArraySize(operations);
+    if (opCount > 10) {
+        sendV2Response(self, "batch.result", false, nullptr, "Max 10 operations per batch");
+        return;
+    }
+
+    cJSON* results = cJSON_CreateArray();
+    int successCount = 0;
+
+    for (int i = 0; i < opCount; i++) {
+        cJSON* op = cJSON_GetArrayItem(operations, i);
+        cJSON* typeNode = cJSON_GetObjectItemCaseSensitive(op, "type");
+        cJSON* opData = cJSON_GetObjectItemCaseSensitive(op, "data");
+
+        cJSON* result = cJSON_CreateObject();
+        cJSON_AddNumberToObject(result, "index", i);
+
+        if (!typeNode || !cJSON_IsString(typeNode)) {
+            cJSON_AddBoolToObject(result, "success", false);
+            cJSON_AddStringToObject(result, "error", "Missing type");
+            cJSON_AddItemToArray(results, result);
+            continue;
+        }
+
+        const char* type = typeNode->valuestring;
+        bool success = true;
+        const char* error = nullptr;
+
+        // Execute operation (simplified - just update state, no broadcast per-op)
+        if (strcmp(type, "effects.setCurrent") == 0) {
+            if (opData) {
+                cJSON* effectIdNode = cJSON_GetObjectItemCaseSensitive(opData, "effectId");
+                if (effectIdNode && cJSON_IsNumber(effectIdNode)) {
+                    uint8_t effectId = (uint8_t)effectIdNode->valuedouble;
+                    if (effectId < NUM_EFFECTS) {
+                        currentEffect = effectId;
+                    } else {
+                        success = false;
+                        error = "Invalid effectId";
+                    }
+                }
+            }
+        } else if (strcmp(type, "parameters.set") == 0) {
+            if (opData) {
+                cJSON* node = cJSON_GetObjectItemCaseSensitive(opData, "brightness");
+                if (node && cJSON_IsNumber(node)) {
+                    FastLED.setBrightness((uint8_t)node->valuedouble);
+                }
+                node = cJSON_GetObjectItemCaseSensitive(opData, "speed");
+                if (node && cJSON_IsNumber(node)) {
+                    effectSpeed = constrain((uint8_t)node->valuedouble, 1, 50);
+                }
+            }
+        } else if (strcmp(type, "zones.setEffect") == 0) {
+            if (opData) {
+                cJSON* zoneIdNode = cJSON_GetObjectItemCaseSensitive(opData, "zoneId");
+                cJSON* effectIdNode = cJSON_GetObjectItemCaseSensitive(opData, "effectId");
+                if (zoneIdNode && effectIdNode) {
+                    uint8_t zoneId = (uint8_t)zoneIdNode->valuedouble;
+                    uint8_t effectId = (uint8_t)effectIdNode->valuedouble;
+                    if (zoneId < HardwareConfig::MAX_ZONES && effectId < NUM_EFFECTS) {
+                        zoneComposer.setZoneEffect(zoneId, effectId);
+                    } else {
+                        success = false;
+                        error = "Invalid zone or effect";
+                    }
+                }
+            }
+        } else {
+            success = false;
+            error = "Unknown operation type";
+        }
+
+        cJSON_AddBoolToObject(result, "success", success);
+        if (error) {
+            cJSON_AddStringToObject(result, "error", error);
+        }
+        cJSON_AddItemToArray(results, result);
+
+        if (success) successCount++;
+    }
+
+    cJSON* respData = cJSON_CreateObject();
+    cJSON_AddItemToObject(respData, "results", results);
+    cJSON_AddNumberToObject(respData, "totalOperations", opCount);
+    cJSON_AddNumberToObject(respData, "successCount", successCount);
+    cJSON_AddNumberToObject(respData, "failureCount", opCount - successCount);
+
+    sendV2Response(self, "batch.result", true, respData);
+}
+
+// ============================================================================
+// Enhancement / Palette WebSocket Handlers
+// ============================================================================
+
+static void handleV2EnhancementsSummary(LightwaveWebServer* self) {
+    cJSON* data = cJSON_CreateObject();
+    cJSON* color = cJSON_AddObjectToObject(data, "colorEngine");
+#if FEATURE_COLOR_ENGINE
+    cJSON_AddBoolToObject(color, "available", true);
+    cJSON_AddBoolToObject(color, "enabled", ColorEngine::getInstance().isEnabled());
+#else
+    cJSON_AddBoolToObject(color, "available", false);
+    cJSON_AddBoolToObject(color, "enabled", false);
+#endif
+    cJSON* motion = cJSON_AddObjectToObject(data, "motionEngine");
+#if FEATURE_MOTION_ENGINE
+    cJSON_AddBoolToObject(motion, "available", true);
+    cJSON_AddBoolToObject(motion, "enabled", MotionEngine::getInstance().isEnabled());
+#else
+    cJSON_AddBoolToObject(motion, "available", false);
+    cJSON_AddBoolToObject(motion, "enabled", false);
+#endif
+    sendV2Response(self, "enhancements.summary", true, data);
+}
+
+static void handleV2EnhancementsColorGet(LightwaveWebServer* self) {
+#if !FEATURE_COLOR_ENGINE
+    sendV2Response(self, "enhancements.color", false, nullptr, "Color engine not available");
+#else
+    ColorEngine& ce = ColorEngine::getInstance();
+    cJSON* data = cJSON_CreateObject();
+    cJSON_AddBoolToObject(data, "enabled", ce.isEnabled());
+    cJSON* cb = cJSON_AddObjectToObject(data, "crossBlend");
+    cJSON_AddBoolToObject(cb, "enabled", ce.isCrossBlendEnabled());
+    const uint8_t pal1 = ce.getCrossBlendPalette1();
+    const uint8_t pal2 = ce.getCrossBlendPalette2();
+    const int pal3 = ce.getCrossBlendPalette3();
+    cJSON_AddNumberToObject(cb, "palette1", pal1);
+    cJSON_AddNumberToObject(cb, "palette2", pal2);
+    if (pal3 < 0) cJSON_AddNullToObject(cb, "palette3");
+    else cJSON_AddNumberToObject(cb, "palette3", pal3);
+    cJSON_AddNumberToObject(cb, "blend1", ce.getBlendFactor1());
+    cJSON_AddNumberToObject(cb, "blend2", ce.getBlendFactor2());
+    cJSON_AddNumberToObject(cb, "blend3", ce.getBlendFactor3());
+    cJSON* tr = cJSON_AddObjectToObject(data, "temporalRotation");
+    cJSON_AddBoolToObject(tr, "enabled", ce.isTemporalRotationEnabled());
+    cJSON_AddNumberToObject(tr, "speed", ce.getRotationSpeed());
+    cJSON_AddNumberToObject(tr, "phase", ce.getRotationPhase());
+    cJSON* df = cJSON_AddObjectToObject(data, "diffusion");
+    cJSON_AddBoolToObject(df, "enabled", ce.isDiffusionEnabled());
+    cJSON_AddNumberToObject(df, "amount", ce.getDiffusionAmount());
+    sendV2Response(self, "enhancements.color", true, data);
+#endif
+}
+
+static void handleV2EnhancementsColorSet(LightwaveWebServer* self, cJSON* doc) {
+#if !FEATURE_COLOR_ENGINE
+    sendV2Response(self, "enhancements.color", false, nullptr, "Color engine not available");
+    cJSON_Delete(doc);
+    return;
+#else
+    if (!doc) {
+        sendV2Response(self, "enhancements.color", false, nullptr, "Missing data");
+        return;
+    }
+    ColorEngine& ce = ColorEngine::getInstance();
+    cJSON* updated = cJSON_CreateArray();
+    cJSON* current = cJSON_CreateObject();
+    cJSON* node = cJSON_GetObjectItemCaseSensitive(doc, "enabled");
+    if (node && cJSON_IsBool(node)) {
+        ce.setEnabled(cJSON_IsTrue(node));
+        cJSON_AddItemToArray(updated, cJSON_CreateString("enabled"));
+        cJSON_AddBoolToObject(current, "enabled", ce.isEnabled());
+    }
+    node = cJSON_GetObjectItemCaseSensitive(doc, "crossBlend");
+    if (node && cJSON_IsObject(node)) {
+        cJSON* cbEnabled = cJSON_GetObjectItemCaseSensitive(node, "enabled");
+        if (cbEnabled && cJSON_IsBool(cbEnabled)) {
+            ce.enableCrossBlend(cJSON_IsTrue(cbEnabled));
+        }
+        cJSON* p1 = cJSON_GetObjectItemCaseSensitive(node, "palette1");
+        cJSON* p2 = cJSON_GetObjectItemCaseSensitive(node, "palette2");
+        cJSON* p3 = cJSON_GetObjectItemCaseSensitive(node, "palette3");
+        if (p1 && cJSON_IsNumber(p1) && p2 && cJSON_IsNumber(p2)) {
+            int pal3 = -1;
+            if (p3) {
+                if (cJSON_IsNull(p3)) pal3 = -1;
+                else if (cJSON_IsNumber(p3)) pal3 = (int)p3->valuedouble;
+            }
+            ce.setCrossBlendPalettes((uint8_t)p1->valuedouble, (uint8_t)p2->valuedouble, pal3);
+        }
+        cJSON_AddItemToArray(updated, cJSON_CreateString("crossBlend"));
+    }
+    node = cJSON_GetObjectItemCaseSensitive(doc, "temporalRotation");
+    if (node && cJSON_IsObject(node)) {
+        cJSON* trEnabled = cJSON_GetObjectItemCaseSensitive(node, "enabled");
+        if (trEnabled && cJSON_IsBool(trEnabled)) {
+            ce.enableTemporalRotation(cJSON_IsTrue(trEnabled));
+        }
+        cJSON* speed = cJSON_GetObjectItemCaseSensitive(node, "speed");
+        if (speed && cJSON_IsNumber(speed)) {
+            ce.setRotationSpeed((float)speed->valuedouble);
+        }
+        cJSON_AddItemToArray(updated, cJSON_CreateString("temporalRotation"));
+    }
+    node = cJSON_GetObjectItemCaseSensitive(doc, "diffusion");
+    if (node && cJSON_IsObject(node)) {
+        cJSON* dfEnabled = cJSON_GetObjectItemCaseSensitive(node, "enabled");
+        if (dfEnabled && cJSON_IsBool(dfEnabled)) {
+            ce.enableDiffusion(cJSON_IsTrue(dfEnabled));
+        }
+        cJSON* amt = cJSON_GetObjectItemCaseSensitive(doc, "amount");
+        if (amt && cJSON_IsNumber(amt)) {
+            ce.setDiffusionAmount((uint8_t)amt->valuedouble);
+        }
+        cJSON_AddItemToArray(updated, cJSON_CreateString("diffusion"));
+    }
+    cJSON_Delete(doc);
+    cJSON* data = cJSON_CreateObject();
+    cJSON_AddItemToObject(data, "updated", updated);
+    cJSON_AddItemToObject(data, "current", current);
+    sendV2Response(self, "enhancements.color", true, data);
+#endif
+}
+
+static void handleV2EnhancementsColorReset(LightwaveWebServer* self) {
+#if !FEATURE_COLOR_ENGINE
+    sendV2Response(self, "enhancements.color", false, nullptr, "Color engine not available");
+#else
+    ColorEngine::getInstance().reset();
+    cJSON* data = cJSON_CreateObject();
+    cJSON_AddStringToObject(data, "message", "Color engine reset to defaults");
+    sendV2Response(self, "enhancements.color", true, data);
+#endif
+}
+
+static void handleV2EnhancementsMotionGet(LightwaveWebServer* self) {
+#if !FEATURE_MOTION_ENGINE
+    cJSON* data = cJSON_CreateObject();
+    cJSON_AddBoolToObject(data, "enabled", false);
+    cJSON_AddStringToObject(data, "message", "Motion engine not available");
+    sendV2Response(self, "enhancements.motion", true, data);
+#else
+    MotionEngine& me = MotionEngine::getInstance();
+    cJSON* data = cJSON_CreateObject();
+    cJSON_AddBoolToObject(data, "enabled", me.isEnabled());
+    cJSON_AddNumberToObject(data, "warpStrength", me.getWarpStrength());
+    cJSON_AddNumberToObject(data, "warpFrequency", me.getWarpFrequency());
+    sendV2Response(self, "enhancements.motion", true, data);
+#endif
+}
+
+static void handleV2EnhancementsMotionSet(LightwaveWebServer* self, cJSON* doc) {
+#if !FEATURE_MOTION_ENGINE
+    sendV2Response(self, "enhancements.motion", false, nullptr, "Motion engine not available");
+    cJSON_Delete(doc);
+    return;
+#else
+    if (!doc) {
+        sendV2Response(self, "enhancements.motion", false, nullptr, "Missing data");
+        return;
+    }
+    MotionEngine& me = MotionEngine::getInstance();
+    cJSON* updated = cJSON_CreateArray();
+    cJSON* current = cJSON_CreateObject();
+    cJSON* node = cJSON_GetObjectItemCaseSensitive(doc, "enabled");
+    if (node && cJSON_IsBool(node)) {
+        if (cJSON_IsTrue(node)) me.enable();
+        else me.disable();
+        cJSON_AddItemToArray(updated, cJSON_CreateString("enabled"));
+        cJSON_AddBoolToObject(current, "enabled", me.isEnabled());
+    }
+    node = cJSON_GetObjectItemCaseSensitive(doc, "warpStrength");
+    if (node && cJSON_IsNumber(node)) {
+        me.setWarpStrength((uint8_t)node->valuedouble);
+        cJSON_AddItemToArray(updated, cJSON_CreateString("warpStrength"));
+        cJSON_AddNumberToObject(current, "warpStrength", me.getWarpStrength());
+    }
+    node = cJSON_GetObjectItemCaseSensitive(doc, "warpFrequency");
+    if (node && cJSON_IsNumber(node)) {
+        me.setWarpFrequency((uint8_t)node->valuedouble);
+        cJSON_AddItemToArray(updated, cJSON_CreateString("warpFrequency"));
+        cJSON_AddNumberToObject(current, "warpFrequency", me.getWarpFrequency());
+    }
+    cJSON_Delete(doc);
+    cJSON* data = cJSON_CreateObject();
+    cJSON_AddItemToObject(data, "updated", updated);
+    cJSON_AddItemToObject(data, "current", current);
+    sendV2Response(self, "enhancements.motion", true, data);
+#endif
+}
+
+static void handleV2PalettesList(LightwaveWebServer* self) {
+    cJSON* data = cJSON_CreateObject();
+    cJSON* arr = cJSON_AddArrayToObject(data, "palettes");
+    for (uint8_t i = 0; i < gMasterPaletteCount; i++) {
+        cJSON* p = cJSON_CreateObject();
+        cJSON_AddNumberToObject(p, "id", i);
+        cJSON_AddStringToObject(p, "name", MasterPaletteNames[i]);
+        cJSON* colors = cJSON_AddArrayToObject(p, "colors");
+        // Simplified: placeholder samples; full palette sampling can be added later.
+        for (int j = 0; j < 4; j++) {
+            cJSON* c = cJSON_CreateObject();
+            cJSON_AddNumberToObject(c, "r", 128);
+            cJSON_AddNumberToObject(c, "g", 128);
+            cJSON_AddNumberToObject(c, "b", 128);
+            cJSON_AddItemToArray(colors, c);
+        }
+        cJSON_AddItemToArray(arr, p);
+    }
+    cJSON_AddNumberToObject(data, "total", gMasterPaletteCount);
+    sendV2Response(self, "palettes.list", true, data);
+}
+
+static void handleV2PalettesGet(LightwaveWebServer* self, cJSON* doc) {
+    if (!doc) {
+        sendV2Response(self, "palettes.get", false, nullptr, "Missing data");
+        return;
+    }
+    cJSON* idNode = cJSON_GetObjectItemCaseSensitive(doc, "id");
+    if (!idNode || !cJSON_IsNumber(idNode)) {
+        sendV2Response(self, "palettes.get", false, nullptr, "Missing palette id");
+        cJSON_Delete(doc);
+        return;
+    }
+    const int id = (int)idNode->valuedouble;
+    if (id < 0 || id >= gMasterPaletteCount) {
+        sendV2Response(self, "palettes.get", false, nullptr, "Invalid palette id");
+        cJSON_Delete(doc);
+            return;
+        }
+    cJSON_Delete(doc);
+    cJSON* data = cJSON_CreateObject();
+    cJSON_AddNumberToObject(data, "id", id);
+    cJSON_AddStringToObject(data, "name", MasterPaletteNames[id]);
+    // Simplified: full gradient omitted for brevity
+    sendV2Response(self, "palettes.get", true, data);
+}
+
+// ============================================================================
+// Main WebSocket Message Handler
+// ============================================================================
+
+void LightwaveWebServer::onWsMessage(int clientFd, const char* json, size_t len, void* ctx) {
+    auto* self = static_cast<LightwaveWebServer*>(ctx);
+    if (!self || !json || len == 0) return;
+
+    // Docs hard limit
+    if (len > 1024) {
+        Serial.printf("[WebServer] WS[%d] message too large: %zu bytes (max 1024)\n", clientFd, len);
+        s_wsReplyClientFd = clientFd;
+        sendV2Response(self, "error", false, nullptr, "Message too large");
+        return;
+    }
+
+    cJSON* doc = cJSON_ParseWithLength(json, len);
+    if (!doc) {
+        Serial.printf("[WebServer] WS[%d] malformed JSON (len=%zu)\n", clientFd, len);
+        // Best-effort legacy error frame
+        cJSON* err = cJSON_CreateObject();
+        cJSON_AddStringToObject(err, "type", "error");
+        cJSON_AddStringToObject(err, "message", "Malformed JSON");
+        char* out = cJSON_PrintUnformatted(err);
+        if (out) {
+            self->m_http.wsSendText(clientFd, out, strlen(out));
+            cJSON_free(out);
+        }
+        cJSON_Delete(err);
+        return;
+    }
+
+    cJSON* typeNode = cJSON_GetObjectItemCaseSensitive(doc, "type");
+    if (!typeNode || !cJSON_IsString(typeNode)) {
+        Serial.printf("[WebServer] WS[%d] missing type field\n", clientFd);
+        s_wsReplyClientFd = clientFd;
+        sendV2Response(self, "error", false, nullptr, "Missing type field");
+        cJSON_Delete(doc);
+        return;
+    }
+    const char* type = typeNode->valuestring;
+
+    // Set default reply target for v2 response envelopes
+    s_wsReplyClientFd = clientFd;
+
+    // =========================================================================
+    // API v2 (docs) - flat message format
+    // =========================================================================
+    if (strcmp(type, "device.getStatus") == 0) {
+        handleV2DeviceGetStatus(self);
+        cJSON_Delete(doc);
+        return;
+    }
+    if (strcmp(type, "device.getInfo") == 0) {
+        handleV2DeviceGetInfo(self);
+        cJSON_Delete(doc);
+        return;
+    }
+    if (strcmp(type, "effects.list") == 0) {
+        handleV2EffectsList(self, doc); // page/limit/details are at top level
+        cJSON_Delete(doc);
+        return;
+    }
+    if (strcmp(type, "effects.getCurrent") == 0) {
+        // If legacy requestId is present, handle legacy mode below.
+        cJSON* reqId = cJSON_GetObjectItemCaseSensitive(doc, "requestId");
+        if (!reqId || !cJSON_IsString(reqId)) {
+            handleV2EffectsGetCurrent(self);
+            cJSON_Delete(doc);
+        return;
+    }
+    }
+    if (strcmp(type, "effects.getMetadata") == 0) {
+        handleV2EffectsGetMetadata(self, doc); // effectId at top level
+        cJSON_Delete(doc);
+            return;
+        }
+    if (strcmp(type, "effects.setCurrent") == 0) {
+        cJSON* eid = cJSON_GetObjectItemCaseSensitive(doc, "effectId");
+        if (!eid || !cJSON_IsNumber(eid)) {
+            sendV2Response(self, "error", false, nullptr, "Missing effectId");
+            cJSON_Delete(doc);
+            return;
+        }
+        const uint8_t prev = currentEffect;
+        const uint8_t next = (uint8_t)eid->valuedouble;
+        if (next >= NUM_EFFECTS) {
+            sendV2Response(self, "error", false, nullptr, "Invalid effectId");
+            cJSON_Delete(doc);
+            return;
+        }
+        currentEffect = next;
+
+        // Broadcast per docs: effects.changed (no success/version)
+        cJSON* ev = cJSON_CreateObject();
+        cJSON_AddStringToObject(ev, "type", "effects.changed");
+        cJSON_AddNumberToObject(ev, "effectId", next);
+        cJSON_AddStringToObject(ev, "name", effects[next].name);
+        cJSON_AddNumberToObject(ev, "timestamp", millis());
+        char* out = cJSON_PrintUnformatted(ev);
+        if (out) {
+            // broadcast to all
+            self->m_http.wsBroadcastText(out, strlen(out));
+            cJSON_free(out);
+        }
+        cJSON_Delete(ev);
+
+        // Optional: transition.started if transition object provided
+        cJSON* trans = cJSON_GetObjectItemCaseSensitive(doc, "transition");
+        if (trans && cJSON_IsObject(trans)) {
+            cJSON* tType = cJSON_GetObjectItemCaseSensitive(trans, "type");
+            cJSON* tDur = cJSON_GetObjectItemCaseSensitive(trans, "duration");
+            if (tType && cJSON_IsNumber(tType) && tDur && cJSON_IsNumber(tDur)) {
+                cJSON* tev = cJSON_CreateObject();
+                cJSON_AddStringToObject(tev, "type", "transition.started");
+                cJSON_AddNumberToObject(tev, "fromEffect", prev);
+                cJSON_AddNumberToObject(tev, "toEffect", next);
+                cJSON_AddNumberToObject(tev, "transitionType", (int)tType->valuedouble);
+                cJSON_AddNumberToObject(tev, "duration", (int)tDur->valuedouble);
+                cJSON_AddNumberToObject(tev, "timestamp", millis());
+                char* tout = cJSON_PrintUnformatted(tev);
+                if (tout) {
+                    self->m_http.wsBroadcastText(tout, strlen(tout));
+                    cJSON_free(tout);
+                }
+                cJSON_Delete(tev);
             }
         }
 
-        data["maxUserPresets"] = MAX_USER_PRESETS;
-        data["filledCount"] = zoneComposer.getFilledUserPresetCount();
-    }, 1024);
-}
+        cJSON_Delete(doc);
+        return;
+    }
+    if (strcmp(type, "parameters.get") == 0) {
+        cJSON* reqId = cJSON_GetObjectItemCaseSensitive(doc, "requestId");
+        if (!reqId || !cJSON_IsString(reqId)) {
+            handleV2ParametersGet(self);
+            cJSON_Delete(doc);
+            return;
+        }
+    }
+    if (strcmp(type, "parameters.set") == 0) {
+        // Apply fields and broadcast parameters.changed (no success/version)
+        cJSON* updated = cJSON_CreateArray();
+        bool changed = false;
 
-void LightwaveWebServer::handleUserPresetsList(AsyncWebServerRequest* request) {
-    sendSuccessResponseLarge(request, [](JsonObject& data) {
-        JsonArray presets = data.createNestedArray("presets");
-        for (uint8_t i = 0; i < MAX_USER_PRESETS; i++) {
-            JsonObject preset = presets.createNestedObject();
-            preset["slot"] = i;
+        auto mark = [&](const char* k){ cJSON_AddItemToArray(updated, cJSON_CreateString(k)); changed = true; };
 
-            UserPreset userPreset;
-            if (zoneComposer.getUserPreset(i, userPreset)) {
-                preset["name"] = userPreset.name;
-                preset["saved"] = true;
+        cJSON* n = nullptr;
+        n = cJSON_GetObjectItemCaseSensitive(doc, "brightness");
+        if (n && cJSON_IsNumber(n)) { FastLED.setBrightness((uint8_t)n->valuedouble); mark("brightness"); }
+        n = cJSON_GetObjectItemCaseSensitive(doc, "speed");
+        if (n && cJSON_IsNumber(n)) { effectSpeed = constrain((uint8_t)n->valuedouble, 1, 50); mark("speed"); }
+        n = cJSON_GetObjectItemCaseSensitive(doc, "paletteId");
+        if (n && cJSON_IsNumber(n)) { currentPaletteIndex = (uint8_t)n->valuedouble; mark("paletteId"); }
+        n = cJSON_GetObjectItemCaseSensitive(doc, "intensity");
+        if (n && cJSON_IsNumber(n)) { effectIntensity = (uint8_t)n->valuedouble; mark("intensity"); }
+        n = cJSON_GetObjectItemCaseSensitive(doc, "variation");
+        if (n && cJSON_IsNumber(n)) { effectVariation = (uint8_t)n->valuedouble; mark("variation"); }
+        n = cJSON_GetObjectItemCaseSensitive(doc, "complexity");
+        if (n && cJSON_IsNumber(n)) { effectComplexity = (uint8_t)n->valuedouble; mark("complexity"); }
+        n = cJSON_GetObjectItemCaseSensitive(doc, "saturation");
+        if (n && cJSON_IsNumber(n)) { effectSaturation = (uint8_t)n->valuedouble; mark("saturation"); }
 
-                // Include config summary
-                JsonObject config = preset.createNestedObject("config");
-                config["zoneCount"] = userPreset.config.zoneCount;
-                config["systemEnabled"] = userPreset.config.systemEnabled;
+        if (!changed) {
+            cJSON_Delete(updated);
+            sendV2Response(self, "error", false, nullptr, "No recognised fields to update");
+            cJSON_Delete(doc);
+        return;
+    }
+
+        cJSON* ev = cJSON_CreateObject();
+        cJSON_AddStringToObject(ev, "type", "parameters.changed");
+        cJSON_AddItemToObject(ev, "updated", updated);
+        cJSON* cur = cJSON_AddObjectToObject(ev, "current");
+        cJSON_AddNumberToObject(cur, "brightness", FastLED.getBrightness());
+        cJSON_AddNumberToObject(cur, "speed", effectSpeed);
+        cJSON_AddNumberToObject(cur, "paletteId", currentPaletteIndex);
+        cJSON_AddNumberToObject(cur, "intensity", effectIntensity);
+        cJSON_AddNumberToObject(cur, "saturation", effectSaturation);
+        cJSON_AddNumberToObject(cur, "complexity", effectComplexity);
+        cJSON_AddNumberToObject(cur, "variation", effectVariation);
+        cJSON_AddNumberToObject(ev, "timestamp", millis());
+        char* out = cJSON_PrintUnformatted(ev);
+        if (out) {
+            self->m_http.wsBroadcastText(out, strlen(out));
+            cJSON_free(out);
+        }
+        cJSON_Delete(ev);
+
+        cJSON_Delete(doc);
+        return;
+    }
+    if (strcmp(type, "transitions.list") == 0) {
+        handleV2TransitionsList(self);
+        cJSON_Delete(doc);
+        return;
+    }
+    if (strcmp(type, "transitions.trigger") == 0) {
+        cJSON* toEff = cJSON_GetObjectItemCaseSensitive(doc, "toEffect");
+        if (!toEff || !cJSON_IsNumber(toEff)) {
+            sendV2Response(self, "error", false, nullptr, "Missing toEffect");
+            cJSON_Delete(doc);
+        return;
+    }
+        const uint8_t prev = currentEffect;
+        const uint8_t next = (uint8_t)toEff->valuedouble;
+        if (next >= NUM_EFFECTS) {
+            sendV2Response(self, "error", false, nullptr, "Invalid toEffect");
+            cJSON_Delete(doc);
+            return;
+        }
+        TransitionType transType = TransitionEngine::getRandomTransition();
+        cJSON* t = cJSON_GetObjectItemCaseSensitive(doc, "type");
+        if (t && cJSON_IsNumber(t)) {
+            const int tv = (int)t->valuedouble;
+            if (tv >= 0 && tv < TRANSITION_COUNT) transType = (TransitionType)tv;
+        }
+        uint32_t duration = 1000;
+        cJSON* d = cJSON_GetObjectItemCaseSensitive(doc, "duration");
+        if (d && cJSON_IsNumber(d)) duration = constrain((uint32_t)d->valuedouble, 100U, 5000U);
+
+        memcpy(transitionSourceBuffer, leds, HardwareConfig::NUM_LEDS * sizeof(CRGB));
+        currentEffect = next;
+        transitionEngine.startTransition(transitionSourceBuffer, leds, leds, transType, duration, EASE_IN_OUT_QUAD);
+
+        // Broadcast per docs: transition.started
+        cJSON* ev = cJSON_CreateObject();
+        cJSON_AddStringToObject(ev, "type", "transition.started");
+        cJSON_AddNumberToObject(ev, "fromEffect", prev);
+        cJSON_AddNumberToObject(ev, "toEffect", next);
+        cJSON_AddNumberToObject(ev, "transitionType", (int)transType);
+        cJSON_AddNumberToObject(ev, "duration", (int)duration);
+        cJSON_AddNumberToObject(ev, "timestamp", millis());
+        char* out = cJSON_PrintUnformatted(ev);
+        if (out) { self->m_http.wsBroadcastText(out, strlen(out)); cJSON_free(out); }
+        cJSON_Delete(ev);
+
+        cJSON_Delete(doc);
+        return;
+    }
+    if (strcmp(type, "zones.list") == 0) {
+        handleV2ZonesList(self);
+        cJSON_Delete(doc);
+        return;
+    }
+    if (strcmp(type, "zones.get") == 0) {
+        handleV2ZonesGet(self, doc);
+        cJSON_Delete(doc);
+        return;
+    }
+    if (strcmp(type, "zones.update") == 0) {
+        cJSON* zid = cJSON_GetObjectItemCaseSensitive(doc, "zoneId");
+        if (!zid || !cJSON_IsNumber(zid)) {
+            sendV2Response(self, "error", false, nullptr, "Missing zoneId");
+            cJSON_Delete(doc);
+        return;
+    }
+        const uint8_t zoneId = (uint8_t)zid->valuedouble;
+        if (zoneId >= HardwareConfig::MAX_ZONES) {
+            sendV2Response(self, "error", false, nullptr, "Invalid zoneId");
+            cJSON_Delete(doc);
+            return;
+        }
+        cJSON* updated = cJSON_CreateArray();
+        auto mark = [&](const char* k){ cJSON_AddItemToArray(updated, cJSON_CreateString(k)); };
+        cJSON* n = nullptr;
+        n = cJSON_GetObjectItemCaseSensitive(doc, "enabled");
+        if (n && cJSON_IsBool(n)) { zoneComposer.enableZone(zoneId, cJSON_IsTrue(n)); mark("enabled"); }
+        n = cJSON_GetObjectItemCaseSensitive(doc, "brightness");
+        if (n && cJSON_IsNumber(n)) { zoneComposer.setZoneBrightness(zoneId, (uint8_t)n->valuedouble); mark("brightness"); }
+        n = cJSON_GetObjectItemCaseSensitive(doc, "speed");
+        if (n && cJSON_IsNumber(n)) { zoneComposer.setZoneSpeed(zoneId, constrain((uint8_t)n->valuedouble, 1, 50)); mark("speed"); }
+
+        // Broadcast per docs: zones.changed
+        cJSON* ev = cJSON_CreateObject();
+        cJSON_AddStringToObject(ev, "type", "zones.changed");
+        cJSON_AddNumberToObject(ev, "zoneId", zoneId);
+        cJSON_AddItemToObject(ev, "updated", updated);
+        cJSON_AddNumberToObject(ev, "timestamp", millis());
+        char* out = cJSON_PrintUnformatted(ev);
+        if (out) { self->m_http.wsBroadcastText(out, strlen(out)); cJSON_free(out); }
+        cJSON_Delete(ev);
+
+        cJSON_Delete(doc);
+        return;
+    }
+    if (strcmp(type, "zones.setEffect") == 0) {
+        cJSON* zid = cJSON_GetObjectItemCaseSensitive(doc, "zoneId");
+        cJSON* eid = cJSON_GetObjectItemCaseSensitive(doc, "effectId");
+        if (!zid || !eid || !cJSON_IsNumber(zid) || !cJSON_IsNumber(eid)) {
+            sendV2Response(self, "error", false, nullptr, "Missing zoneId/effectId");
+            cJSON_Delete(doc);
+            return;
+        }
+        const uint8_t zoneId = (uint8_t)zid->valuedouble;
+        const uint8_t effId = (uint8_t)eid->valuedouble;
+        if (zoneId >= HardwareConfig::MAX_ZONES || effId >= NUM_EFFECTS) {
+            sendV2Response(self, "error", false, nullptr, "Invalid zoneId/effectId");
+            cJSON_Delete(doc);
+            return;
+        }
+        zoneComposer.setZoneEffect(zoneId, effId);
+        cJSON* ev = cJSON_CreateObject();
+        cJSON_AddStringToObject(ev, "type", "zones.effectChanged");
+        cJSON_AddNumberToObject(ev, "zoneId", zoneId);
+        cJSON_AddNumberToObject(ev, "effectId", effId);
+        cJSON_AddStringToObject(ev, "effectName", effects[effId].name);
+        cJSON_AddNumberToObject(ev, "timestamp", millis());
+        char* out = cJSON_PrintUnformatted(ev);
+        if (out) { self->m_http.wsBroadcastText(out, strlen(out)); cJSON_free(out); }
+        cJSON_Delete(ev);
+        cJSON_Delete(doc);
+        return;
+    }
+    if (strcmp(type, "batch") == 0) {
+        // Docs format: operations[{method,path,body}]
+        cJSON* ops = cJSON_GetObjectItemCaseSensitive(doc, "operations");
+        if (!ops || !cJSON_IsArray(ops)) {
+            sendV2Response(self, "batch.result", false, nullptr, "Missing operations array");
+            cJSON_Delete(doc);
+            return;
+        }
+        const int opCount = cJSON_GetArraySize(ops);
+        if (opCount > 10) {
+            sendV2Response(self, "batch.result", false, nullptr, "Max 10 operations per batch");
+            cJSON_Delete(doc);
+            return;
+        }
+        int succeeded = 0, failed = 0;
+        for (int i = 0; i < opCount; i++) {
+            cJSON* op = cJSON_GetArrayItem(ops, i);
+            cJSON* m = cJSON_GetObjectItemCaseSensitive(op, "method");
+            cJSON* p = cJSON_GetObjectItemCaseSensitive(op, "path");
+            cJSON* b = cJSON_GetObjectItemCaseSensitive(op, "body");
+            if (!m || !p || !cJSON_IsString(m) || !cJSON_IsString(p)) { failed++; continue; }
+            if (strcmp(m->valuestring, "PATCH") == 0 && strcmp(p->valuestring, "/api/v2/parameters") == 0) {
+                // reuse parameter parsing path
+                bool ok = false;
+                if (b && cJSON_IsObject(b)) {
+                    cJSON* n = cJSON_GetObjectItemCaseSensitive(b, "brightness");
+                    if (n && cJSON_IsNumber(n)) { FastLED.setBrightness((uint8_t)n->valuedouble); ok = true; }
+                    n = cJSON_GetObjectItemCaseSensitive(b, "speed");
+                    if (n && cJSON_IsNumber(n)) { effectSpeed = constrain((uint8_t)n->valuedouble, 1, 50); ok = true; }
+                }
+                ok ? succeeded++ : failed++;
+            } else if (strcmp(m->valuestring, "PUT") == 0 && strcmp(p->valuestring, "/api/v2/effects/current") == 0) {
+                bool ok = false;
+                if (b && cJSON_IsObject(b)) {
+                    cJSON* n = cJSON_GetObjectItemCaseSensitive(b, "effectId");
+                    if (n && cJSON_IsNumber(n) && (int)n->valuedouble >= 0 && (int)n->valuedouble < NUM_EFFECTS) {
+                        currentEffect = (uint8_t)n->valuedouble;
+                        ok = true;
+                    }
+                }
+                ok ? succeeded++ : failed++;
             } else {
-                preset["name"] = nullptr;
-                preset["saved"] = false;
+                failed++;
             }
         }
-        data["maxSlots"] = MAX_USER_PRESETS;
-        data["filledCount"] = zoneComposer.getFilledUserPresetCount();
-    }, 1024);
-}
-
-void LightwaveWebServer::handleUserPresetSave(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    StaticJsonDocument<256> doc;
-    DeserializationError error = deserializeJson(doc, data, len);
-
-    if (error) {
-        sendErrorResponse(request, 400, "INVALID_JSON", "Failed to parse JSON body");
+        cJSON* respData = cJSON_CreateObject();
+        cJSON_AddNumberToObject(respData, "processed", opCount);
+        cJSON_AddNumberToObject(respData, "succeeded", succeeded);
+        cJSON_AddNumberToObject(respData, "failed", failed);
+        sendV2Response(self, "batch.result", true, respData);
+        cJSON_Delete(doc);
+        return;
+    }
+    if (strcmp(type, "ping") == 0) {
+        cJSON* pong = cJSON_CreateObject();
+        cJSON_AddNumberToObject(pong, "serverTime", millis());
+        sendV2Response(self, "pong", true, pong);
+        cJSON_Delete(doc);
         return;
     }
 
-    if (!doc.containsKey("slot") || !doc.containsKey("name")) {
-        sendErrorResponse(request, 400, "MISSING_PARAMS", "Required: slot (0-7), name (string)");
+    // Enhancement endpoints
+    if (strcmp(type, "enhancements.get") == 0) {
+        handleV2EnhancementsSummary(self);
+        cJSON_Delete(doc);
         return;
     }
-
-    uint8_t slot = doc["slot"];
-    const char* name = doc["name"];
-
-    if (slot >= MAX_USER_PRESETS) {
-        sendErrorResponse(request, 400, "INVALID_SLOT", "Slot must be 0-7");
+    if (strcmp(type, "enhancements.color.get") == 0) {
+        handleV2EnhancementsColorGet(self);
+        cJSON_Delete(doc);
         return;
     }
-
-    if (!name || strlen(name) == 0) {
-        sendErrorResponse(request, 400, "INVALID_NAME", "Name cannot be empty");
+    if (strcmp(type, "enhancements.color.set") == 0) {
+        handleV2EnhancementsColorSet(self, doc);
+        return; // doc deleted inside handler
+    }
+    if (strcmp(type, "enhancements.color.reset") == 0) {
+        handleV2EnhancementsColorReset(self);
+        cJSON_Delete(doc);
         return;
     }
-
-    if (zoneComposer.saveUserPreset(slot, name)) {
-        sendSuccessResponse(request, [slot, name](JsonObject& data) {
-            data["slot"] = slot;
-            data["name"] = name;
-            data["message"] = "Preset saved successfully";
-        });
-        broadcastZoneState();  // Notify all clients
-    } else {
-        sendErrorResponse(request, 500, "SAVE_FAILED", "Failed to save preset to NVS");
-    }
-}
-
-void LightwaveWebServer::handleUserPresetDelete(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    StaticJsonDocument<128> doc;
-    DeserializationError error = deserializeJson(doc, data, len);
-
-    if (error) {
-        sendErrorResponse(request, 400, "INVALID_JSON", "Failed to parse JSON body");
+    if (strcmp(type, "enhancements.motion.get") == 0) {
+        handleV2EnhancementsMotionGet(self);
+        cJSON_Delete(doc);
         return;
     }
+    if (strcmp(type, "enhancements.motion.set") == 0) {
+        handleV2EnhancementsMotionSet(self, doc);
+        return; // doc deleted inside handler
+    }
 
-    if (!doc.containsKey("slot")) {
-        sendErrorResponse(request, 400, "MISSING_SLOT", "Required: slot (0-7)");
+    // Palette endpoints
+    if (strcmp(type, "palettes.list") == 0) {
+        handleV2PalettesList(self);
+        cJSON_Delete(doc);
         return;
     }
-
-    uint8_t slot = doc["slot"];
-    if (slot >= MAX_USER_PRESETS) {
-        sendErrorResponse(request, 400, "INVALID_SLOT", "Slot must be 0-7");
-        return;
+    if (strcmp(type, "palettes.get") == 0) {
+        handleV2PalettesGet(self, doc);
+        return; // doc deleted inside handler
     }
 
-    if (zoneComposer.deleteUserPreset(slot)) {
-        sendSuccessResponse(request, [slot](JsonObject& data) {
-            data["slot"] = slot;
-            data["message"] = "Preset deleted successfully";
-        });
-        broadcastZoneState();  // Notify all clients
-    } else {
-        sendErrorResponse(request, 500, "DELETE_FAILED", "Failed to delete preset");
-    }
-}
+    // =========================================================================
+    // Legacy compatibility (v2/src network WebServer.cpp)
+    // =========================================================================
+    cJSON* requestIdNode = cJSON_GetObjectItemCaseSensitive(doc, "requestId");
+    const bool legacyReqResp = requestIdNode && cJSON_IsString(requestIdNode);
 
-void LightwaveWebServer::handlePresetLoad(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    StaticJsonDocument<256> doc;
-    DeserializationError error = deserializeJson(doc, data, len);
-
-    if (error) {
-        sendErrorResponse(request, 400, "INVALID_JSON", "Failed to parse JSON body");
-        return;
-    }
-
-    if (!doc.containsKey("type")) {
-        sendErrorResponse(request, 400, "MISSING_TYPE", "Required: type ('builtin' or 'user')");
-        return;
-    }
-
-    const char* type = doc["type"];
-    bool success = false;
-
-    if (strcmp(type, "builtin") == 0) {
-        if (!doc.containsKey("id")) {
-            sendErrorResponse(request, 400, "MISSING_ID", "Required: id (0-4) for builtin preset");
-            return;
-        }
-        uint8_t id = doc["id"];
-        if (id >= ZONE_PRESET_COUNT) {
-            sendErrorResponse(request, 400, "INVALID_ID", "Built-in preset ID must be 0-4");
-            return;
-        }
-        success = zoneComposer.loadPreset(id);
-    }
-    else if (strcmp(type, "user") == 0) {
-        if (!doc.containsKey("slot")) {
-            sendErrorResponse(request, 400, "MISSING_SLOT", "Required: slot (0-7) for user preset");
-            return;
-        }
-        uint8_t slot = doc["slot"];
-        if (slot >= MAX_USER_PRESETS) {
-            sendErrorResponse(request, 400, "INVALID_SLOT", "User preset slot must be 0-7");
-            return;
-        }
-        success = zoneComposer.loadUserPreset(slot);
-    }
-    else {
-        sendErrorResponse(request, 400, "INVALID_TYPE", "Type must be 'builtin' or 'user'");
-        return;
-    }
-
-    if (success) {
-        sendSuccessResponse(request, [type, &doc](JsonObject& data) {
-            data["type"] = type;
-            if (strcmp(type, "builtin") == 0) {
-                data["id"] = doc["id"].as<uint8_t>();
-            } else {
-                data["slot"] = doc["slot"].as<uint8_t>();
+    if (strcmp(type, "setEffect") == 0) {
+        cJSON* eid = cJSON_GetObjectItemCaseSensitive(doc, "effectId");
+        if (eid && cJSON_IsNumber(eid)) {
+            const uint8_t id = (uint8_t)eid->valuedouble;
+            if (id < NUM_EFFECTS) {
+                currentEffect = id;
+                self->notifyEffectChange(id);
             }
-            data["message"] = "Preset loaded successfully";
-        });
-        broadcastZoneState();  // Notify all clients
-    } else {
-        sendErrorResponse(request, 404, "PRESET_NOT_FOUND", "Preset not found or invalid");
+        }
+    } else if (strcmp(type, "nextEffect") == 0) {
+        currentEffect = (uint8_t)((currentEffect + 1) % NUM_EFFECTS);
+        self->notifyEffectChange(currentEffect);
+    } else if (strcmp(type, "prevEffect") == 0) {
+        currentEffect = (uint8_t)((currentEffect + NUM_EFFECTS - 1) % NUM_EFFECTS);
+        self->notifyEffectChange(currentEffect);
+    } else if (strcmp(type, "setBrightness") == 0) {
+        cJSON* v = cJSON_GetObjectItemCaseSensitive(doc, "value");
+        if (v && cJSON_IsNumber(v)) FastLED.setBrightness((uint8_t)v->valuedouble);
+    } else if (strcmp(type, "setSpeed") == 0) {
+        cJSON* v = cJSON_GetObjectItemCaseSensitive(doc, "value");
+        if (v && cJSON_IsNumber(v)) effectSpeed = constrain((uint8_t)v->valuedouble, 1, 50);
+    } else if (strcmp(type, "setPalette") == 0) {
+        cJSON* v = cJSON_GetObjectItemCaseSensitive(doc, "paletteId");
+        if (v && cJSON_IsNumber(v)) currentPaletteIndex = (uint8_t)v->valuedouble;
+    } else if (strcmp(type, "zone.enable") == 0) {
+        cJSON* en = cJSON_GetObjectItemCaseSensitive(doc, "enable");
+        if (en && cJSON_IsBool(en)) {
+            if (cJSON_IsTrue(en)) zoneComposer.enable();
+            else zoneComposer.disable();
+        }
+    } else if (strcmp(type, "zone.setEffect") == 0) {
+        cJSON* zid = cJSON_GetObjectItemCaseSensitive(doc, "zoneId");
+        cJSON* eid = cJSON_GetObjectItemCaseSensitive(doc, "effectId");
+        if (zid && eid && cJSON_IsNumber(zid) && cJSON_IsNumber(eid)) {
+            zoneComposer.setZoneEffect((uint8_t)zid->valuedouble, (uint8_t)eid->valuedouble);
+        }
+    } else if (strcmp(type, "getStatus") == 0) {
+        // Broadcast legacy status
+        cJSON* status = cJSON_CreateObject();
+        cJSON_AddStringToObject(status, "type", "status");
+        cJSON_AddNumberToObject(status, "effectId", currentEffect);
+        cJSON_AddStringToObject(status, "effectName", effects[currentEffect].name);
+        cJSON_AddNumberToObject(status, "brightness", FastLED.getBrightness());
+        cJSON_AddNumberToObject(status, "speed", effectSpeed);
+        cJSON_AddNumberToObject(status, "paletteId", currentPaletteIndex);
+        cJSON_AddNumberToObject(status, "hue", 0);
+        cJSON_AddNumberToObject(status, "fps", perfMon.getCurrentFPS());
+        cJSON_AddNumberToObject(status, "cpuPercent", perfMon.getCPUUsage());
+        cJSON_AddNumberToObject(status, "freeHeap", ESP.getFreeHeap());
+        cJSON_AddNumberToObject(status, "uptime", millis() / 1000);
+        char* out = cJSON_PrintUnformatted(status);
+        if (out) { self->m_http.wsBroadcastText(out, strlen(out)); cJSON_free(out); }
+        cJSON_Delete(status);
+    } else if (legacyReqResp && strcmp(type, "effects.getCurrent") == 0) {
+        cJSON* resp = cJSON_CreateObject();
+        cJSON_AddStringToObject(resp, "type", "effects.current");
+        cJSON_AddStringToObject(resp, "requestId", requestIdNode->valuestring);
+        cJSON* d = cJSON_AddObjectToObject(resp, "data");
+        cJSON_AddNumberToObject(d, "effectId", currentEffect);
+        cJSON_AddStringToObject(d, "name", effects[currentEffect].name);
+        cJSON_AddNumberToObject(d, "brightness", FastLED.getBrightness());
+        cJSON_AddNumberToObject(d, "speed", effectSpeed);
+        char* out = cJSON_PrintUnformatted(resp);
+        if (out) { self->m_http.wsSendText(clientFd, out, strlen(out)); cJSON_free(out); }
+        cJSON_Delete(resp);
+    } else if (legacyReqResp && strcmp(type, "parameters.get") == 0) {
+        cJSON* resp = cJSON_CreateObject();
+        cJSON_AddStringToObject(resp, "type", "parameters");
+        cJSON_AddStringToObject(resp, "requestId", requestIdNode->valuestring);
+        cJSON* d = cJSON_AddObjectToObject(resp, "data");
+        cJSON_AddNumberToObject(d, "brightness", FastLED.getBrightness());
+        cJSON_AddNumberToObject(d, "speed", effectSpeed);
+        cJSON_AddNumberToObject(d, "paletteId", currentPaletteIndex);
+        cJSON_AddNumberToObject(d, "hue", 0);
+        char* out = cJSON_PrintUnformatted(resp);
+        if (out) { self->m_http.wsSendText(clientFd, out, strlen(out)); cJSON_free(out); }
+        cJSON_Delete(resp);
+        cJSON_Delete(doc);
+        return;
     }
+
+    // =========================================================================
+    // Unknown command type - log and return error
+    // =========================================================================
+    Serial.printf("[WebServer] WS[%d] unknown command type: '%s' (len=%zu)\n", clientFd, type, len);
+    sendV2Response(self, "error", false, nullptr, "Unknown command type");
+    cJSON_Delete(doc);
+}
+
+esp_err_t LightwaveWebServer::handleApiDiscovery(httpd_req_t* req) {
+    // Minimal v1 discovery response: { success: true, data: { ... } }
+    static constexpr const char* API_VERSION = "1.0";
+    cJSON* root = cJSON_CreateObject();
+    cJSON_AddBoolToObject(root, "success", true);
+
+    cJSON* data = cJSON_AddObjectToObject(root, "data");
+    cJSON_AddStringToObject(data, "name", "LightwaveOS");
+    cJSON_AddStringToObject(data, "apiVersion", API_VERSION);
+    cJSON_AddStringToObject(data, "description", "ESP32-S3 LED Control System");
+
+    cJSON* hw = cJSON_AddObjectToObject(data, "hardware");
+    cJSON_AddNumberToObject(hw, "ledsTotal", 320);
+    cJSON_AddNumberToObject(hw, "strips", 2);
+    cJSON_AddNumberToObject(hw, "centerPoint", 79);
+    cJSON_AddNumberToObject(hw, "maxZones", 4);
+
+    cJSON* links = cJSON_AddObjectToObject(data, "_links");
+    cJSON_AddStringToObject(links, "self", "/api/v1/");
+    cJSON_AddStringToObject(links, "device", "/api/v1/device/status");
+    cJSON_AddStringToObject(links, "effects", "/api/v1/effects");
+    cJSON_AddStringToObject(links, "parameters", "/api/v1/parameters");
+    cJSON_AddStringToObject(links, "transitions", "/api/v1/transitions/types");
+    cJSON_AddStringToObject(links, "batch", "/api/v1/batch");
+    cJSON_AddStringToObject(links, "openapi", "/api/v1/openapi.json");
+    cJSON_AddStringToObject(links, "websocket", "/ws");
+
+    cJSON_AddNumberToObject(root, "timestamp", millis());
+    cJSON_AddStringToObject(root, "version", API_VERSION);
+
+    // Access server instance via global (safe: single server)
+    esp_err_t res = webServer.m_http.sendJson(req, 200, root);
+    cJSON_Delete(root);
+    return res;
+}
+
+esp_err_t LightwaveWebServer::handleOpenApi(httpd_req_t* req) {
+    // Serve OpenAPI spec from PROGMEM.
+    // IMPORTANT: do NOT call corsOptionsHandler() here (it sends a 204 response).
+    // Instead, attach the same CORS headers and proceed with a normal 200 response.
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Headers", "Content-Type, X-OTA-Token");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_status(req, "200 OK");
+
+    // OPENAPI_SPEC is in PROGMEM; we can send via chunked response.
+    httpd_resp_send(req, OPENAPI_SPEC, HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+}
+
+esp_err_t LightwaveWebServer::handleDeviceStatus(httpd_req_t* req) {
+    static constexpr const char* API_VERSION = "1.0";
+    cJSON* root = cJSON_CreateObject();
+    cJSON_AddBoolToObject(root, "success", true);
+
+    cJSON* data = cJSON_AddObjectToObject(root, "data");
+    cJSON_AddNumberToObject(data, "uptime", millis() / 1000);
+    cJSON_AddNumberToObject(data, "freeHeap", ESP.getFreeHeap());
+    cJSON_AddNumberToObject(data, "cpuFreq", ESP.getCpuFreqMHz());
+    cJSON_AddNumberToObject(data, "wsClients", (double)webServer.getClientCount());
+
+    cJSON_AddNumberToObject(root, "timestamp", millis());
+    cJSON_AddStringToObject(root, "version", API_VERSION);
+
+    esp_err_t res = webServer.m_http.sendJson(req, 200, root);
+    cJSON_Delete(root);
+    return res;
+}
+
+esp_err_t LightwaveWebServer::handleEffectsList(httpd_req_t* req) {
+    static constexpr const char* API_VERSION = "1.0";
+    cJSON* root = cJSON_CreateObject();
+    cJSON_AddBoolToObject(root, "success", true);
+    cJSON* data = cJSON_AddObjectToObject(root, "data");
+    cJSON* effectsArr = cJSON_AddArrayToObject(data, "effects");
+
+    for (uint16_t i = 0; i < NUM_EFFECTS; i++) {
+        cJSON* e = cJSON_CreateObject();
+        cJSON_AddNumberToObject(e, "id", i);
+        cJSON_AddStringToObject(e, "name", effects[i].name);
+        cJSON_AddItemToArray(effectsArr, e);
+    }
+
+    cJSON_AddNumberToObject(root, "timestamp", millis());
+    cJSON_AddStringToObject(root, "version", API_VERSION);
+
+    esp_err_t res = webServer.m_http.sendJson(req, 200, root);
+    cJSON_Delete(root);
+    return res;
+}
+
+esp_err_t LightwaveWebServer::handleEffectsCurrent(httpd_req_t* req) {
+    static constexpr const char* API_VERSION = "1.0";
+    cJSON* root = cJSON_CreateObject();
+    cJSON_AddBoolToObject(root, "success", true);
+
+    cJSON* data = cJSON_AddObjectToObject(root, "data");
+    cJSON_AddNumberToObject(data, "effectId", currentEffect);
+    cJSON_AddStringToObject(data, "name", effects[currentEffect].name);
+    cJSON_AddNumberToObject(data, "brightness", FastLED.getBrightness());
+    cJSON_AddNumberToObject(data, "speed", effectSpeed);
+    cJSON_AddNumberToObject(data, "paletteId", currentPaletteIndex);
+    cJSON_AddNumberToObject(data, "intensity", effectIntensity);
+    cJSON_AddNumberToObject(data, "saturation", effectSaturation);
+    cJSON_AddNumberToObject(data, "complexity", effectComplexity);
+    cJSON_AddNumberToObject(data, "variation", effectVariation);
+
+    cJSON_AddNumberToObject(root, "timestamp", millis());
+    cJSON_AddStringToObject(root, "version", API_VERSION);
+
+    esp_err_t res = webServer.m_http.sendJson(req, 200, root);
+    cJSON_Delete(root);
+    return res;
+}
+
+static esp_err_t sendSpiffsFile(httpd_req_t* req, const char* path, const char* contentType) {
+    File f = SPIFFS.open(path, "r");
+    if (!f) {
+        httpd_resp_set_status(req, "404 Not Found");
+        return httpd_resp_send(req, "Not found", HTTPD_RESP_USE_STRLEN);
+    }
+
+    httpd_resp_set_type(req, contentType);
+    httpd_resp_set_status(req, "200 OK");
+
+    // Stream in chunks
+    uint8_t buf[1024];
+    while (f.available()) {
+        const size_t r = f.read(buf, sizeof(buf));
+        if (r == 0) break;
+        const esp_err_t err = httpd_resp_send_chunk(req, (const char*)buf, r);
+        if (err != ESP_OK) {
+            f.close();
+            httpd_resp_send_chunk(req, nullptr, 0);
+            return err;
+        }
+    }
+    f.close();
+    return httpd_resp_send_chunk(req, nullptr, 0);
+}
+
+esp_err_t LightwaveWebServer::handleStaticRoot(httpd_req_t* req) {
+    return sendSpiffsFile(req, "/index.html", "text/html");
+}
+
+esp_err_t LightwaveWebServer::handleStaticAsset(httpd_req_t* req) {
+    const char* uri = req->uri ? req->uri : "/";
+    if (strcmp(uri, "/app.js") == 0) {
+        return sendSpiffsFile(req, "/app.js", "application/javascript");
+    }
+    if (strcmp(uri, "/styles.css") == 0) {
+        return sendSpiffsFile(req, "/styles.css", "text/css");
+    }
+    httpd_resp_set_status(req, "404 Not Found");
+    return httpd_resp_send(req, "Not found", HTTPD_RESP_USE_STRLEN);
 }
 
 #endif // FEATURE_WEB_SERVER
+
+

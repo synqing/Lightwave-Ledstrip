@@ -16,15 +16,20 @@
 // HMI REMOVED - No encoders or buttons on this hardware configuration
 #define FEATURE_BUTTON_CONTROL 0         // Physical button support - DISABLED
 
-// Network features - DISABLED BY DEFAULT because WiFi is fucking worthless
-// To enable WiFi/WebServer, either:
-// 1. Change FEATURE_WEB_SERVER to 1 below
-// 2. Or add to platformio.ini: build_flags = -D FEATURE_WEB_SERVER=1
+// Network features - OFF by default.
+// Enable via PlatformIO env build_flags (recommended for deterministic builds):
+// -D FEATURE_WEB_SERVER=1
+// -D FEATURE_WEBSOCKET=1
+// -D FEATURE_OTA_UPDATE=1
 #ifndef FEATURE_WEB_SERVER
-#define FEATURE_WEB_SERVER 1            // Web interface ENABLED for webapp
+#define FEATURE_WEB_SERVER 0            // Web interface default: DISABLED
 #endif
-#define FEATURE_WEBSOCKET 1             // WebSocket support
-#define FEATURE_OTA_UPDATE 1            // Over-the-air updates (enabled)
+#ifndef FEATURE_WEBSOCKET
+#define FEATURE_WEBSOCKET 0             // WebSocket default: DISABLED
+#endif
+#ifndef FEATURE_OTA_UPDATE
+#define FEATURE_OTA_UPDATE 0            // OTA default: DISABLED (enable only in WiFi envs)
+#endif
 
 // LED Layout Configuration
 // All matrix code has been surgically removed - strips mode is now permanent
@@ -63,11 +68,22 @@
   #define FEATURE_MOTION_ENGINE 1       // Phase control, easing curves, momentum physics
   #define FEATURE_BLENDING_ENGINE 1     // Zone blend modes, layer ordering, dual-strip coordination
   #define FEATURE_NARRATIVE_ENGINE 1    // Global dramatic timing (BUILD→HOLD→RELEASE→REST)
+  #define FEATURE_NARRATIVE_TENSION 1   // Tension curves & parameter modulation (Phases 3-4)
+  #define FEATURE_PATTERN_REGISTRY 1    // Pattern taxonomy registry (Phase 2.1)
+  #define FEATURE_VISUAL_VERIFICATION 1 // Visual verification tooling (Phase 3.2)
 #else
   #define FEATURE_COLOR_ENGINE 0
   #define FEATURE_MOTION_ENGINE 0
   #define FEATURE_BLENDING_ENGINE 0
   #define FEATURE_NARRATIVE_ENGINE 0
+  #define FEATURE_NARRATIVE_TENSION 0
+  #define FEATURE_PATTERN_REGISTRY 0
+  #define FEATURE_VISUAL_VERIFICATION 0
+#endif
+
+// ShowDirector - Choreographed multi-minute light shows
+#ifndef FEATURE_SHOWS
+#define FEATURE_SHOWS 1                  // ShowDirector system with 10 builtin shows
 #endif
 
 // LED Strips features (now permanent after matrix removal)

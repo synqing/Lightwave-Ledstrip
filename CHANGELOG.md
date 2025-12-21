@@ -80,6 +80,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Camera integration for computer vision applications
 - Advanced physics: quantum mechanics and relativistic effects
 
+### Changed
+- Web control plane refactor (robustness-first):
+  - Replaced ESPAsyncWebServer/AsyncTCP web stack with ESP-IDF `esp_http_server` backend (REST + WebSocket) in WiFi environments.
+  - Default build (`esp32dev`) no longer compiles any web stack dependencies.
+  - JSON handling remains cJSON-only.
+  - Feature flags: `FEATURE_WEB_SERVER`, `FEATURE_WEBSOCKET`, `FEATURE_OTA_UPDATE` now default to OFF unless enabled via PlatformIO env build flags.
+
+### Fixed
+- Eliminated cross-platform dependency leakage in ESP32 builds (no ESP8266/RP2040 async TCP libraries pulled into ESP32-S3 builds).
+
 ---
 
 ## Previous Releases

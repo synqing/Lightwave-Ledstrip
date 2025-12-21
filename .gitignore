@@ -95,3 +95,6 @@ docs/templates/
 COMMIT_PLAN.md
 OTHER_FILES_ANALYSIS.md
 execute_commit_plan.sh
+
+# Development dashboard (separate build project)
+lightwave-dashboard/

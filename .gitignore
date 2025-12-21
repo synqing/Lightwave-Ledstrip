@@ -16,6 +16,7 @@ compile_commands.json
 .vscode/launch.json
 .vscode/ipch
 .idea/
+.cursor/
 *.sublime-project
 *.sublime-workspace
 
@@ -87,6 +88,10 @@ tools/upload.sh
 docs/CHANGELOG.md
 docs/TODO.md
 
-# Figma template samples (local development artifacts)
-docs/templates/Figma_Sample1/
-docs/templates/Figma_Sample2/
+# Template/design files (local development artifacts)
+docs/templates/
+
+# Temporary commit planning files
+COMMIT_PLAN.md
+OTHER_FILES_ANALYSIS.md
+execute_commit_plan.sh

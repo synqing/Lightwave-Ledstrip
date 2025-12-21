@@ -8,8 +8,6 @@
 WiFiManager* WiFiManager::instance = nullptr;
 
 bool WiFiManager::begin() {
-    Serial.println("[WiFiManager] Starting non-blocking WiFi management");
-    
     // Create synchronization primitives
     wifiEventGroup = xEventGroupCreate();
     if (!wifiEventGroup) {
@@ -42,13 +40,12 @@ bool WiFiManager::begin() {
     );
     
     if (result != pdPASS) {
-        Serial.println("[WiFiManager] Failed to create WiFi task");
+        Serial.println("[WiFi] Task creation failed");
         vEventGroupDelete(wifiEventGroup);
         vSemaphoreDelete(stateMutex);
         return false;
     }
-    
-    Serial.printf("[WiFiManager] Task created on Core %d\n", TASK_CORE);
+
     return true;
 }
 
@@ -74,9 +71,7 @@ void WiFiManager::stop() {
 
 void WiFiManager::wifiTask(void* parameter) {
     WiFiManager* manager = static_cast<WiFiManager*>(parameter);
-    
-    Serial.println("[WiFiManager] Task started");
-    
+
     // Start Soft-AP immediately if enabled
     if (manager->apEnabled) {
         manager->startSoftAP();
@@ -120,34 +115,28 @@ void WiFiManager::wifiTask(void* parameter) {
 }
 
 void WiFiManager::handleStateInit() {
-    Serial.println("[WiFiManager] STATE: INIT");
-    
     // Check if we have credentials
     if (ssid.isEmpty()) {
-        Serial.println("[WiFiManager] No credentials, switching to AP mode");
         setState(STATE_WIFI_AP_MODE);
         return;
     }
-    
+
     // Check if we have cached channel info and it's recent
     if (bestChannel > 0 && (millis() - lastScanTime < SCAN_INTERVAL_MS)) {
-        Serial.printf("[WiFiManager] Using cached channel %d\n", bestChannel);
         setState(STATE_WIFI_CONNECTING);
     } else {
-        Serial.println("[WiFiManager] Starting network scan");
         setState(STATE_WIFI_SCANNING);
     }
 }
 
 void WiFiManager::handleStateScanning() {
     static bool scanStarted = false;
-    
+
     if (!scanStarted) {
-        Serial.println("[WiFiManager] STATE: SCANNING");
         performAsyncScan();
         scanStarted = true;
     }
-    
+
     // Wait for scan complete event
     EventBits_t bits = xEventGroupWaitBits(
         wifiEventGroup,
@@ -156,16 +145,14 @@ void WiFiManager::handleStateScanning() {
         pdFALSE, // Wait for any bit
         pdMS_TO_TICKS(100)
     );
-    
+
     if (bits & EVENT_SCAN_COMPLETE) {
         scanStarted = false;
         updateBestChannel();
-        
+
         if (bestChannel > 0) {
-            Serial.printf("[WiFiManager] Best channel: %d\n", bestChannel);
             setState(STATE_WIFI_CONNECTING);
         } else {
-            Serial.println("[WiFiManager] No suitable networks found");
             setState(STATE_WIFI_FAILED);
         }
     }
@@ -174,18 +161,17 @@ void WiFiManager::handleStateScanning() {
 void WiFiManager::handleStateConnecting() {
     static uint32_t connectStartTime = 0;
     static bool connectStarted = false;
-    
+
     if (!connectStarted) {
-        Serial.println("[WiFiManager] STATE: CONNECTING");
         connectStartTime = millis();
         connectStarted = connectToAP();
-        
+
         if (!connectStarted) {
             setState(STATE_WIFI_FAILED);
             return;
         }
     }
-    
+
     // Wait for connection events
     EventBits_t bits = xEventGroupWaitBits(
         wifiEventGroup,
@@ -194,34 +180,25 @@ void WiFiManager::handleStateConnecting() {
         pdFALSE, // Wait for any bit
         pdMS_TO_TICKS(100)
     );
-    
+
     if (bits & EVENT_GOT_IP) {
         connectStarted = false;
         successfulConnections++;
         lastConnectionTime = millis();
         reconnectDelay = RECONNECT_DELAY_MS; // Reset backoff
-        Serial.printf("[WiFiManager] Connected! IP: %s\n", WiFi.localIP().toString().c_str());
+        attemptsOnCurrentNetwork = 0;         // Reset attempt counter
+        Serial.printf("[WiFi] Connected to %s: %s\n", ssid.c_str(), WiFi.localIP().toString().c_str());
         setState(STATE_WIFI_CONNECTED);
-    } else if (bits & EVENT_CONNECTION_FAILED || 
+    } else if (bits & EVENT_CONNECTION_FAILED ||
                (millis() - connectStartTime > CONNECT_TIMEOUT_MS)) {
         connectStarted = false;
         connectionAttempts++;
-        Serial.println("[WiFiManager] Connection failed");
         setState(STATE_WIFI_FAILED);
     }
 }
 
 void WiFiManager::handleStateConnected() {
-    static uint32_t lastStatusPrint = 0;
-    
-    // Print status periodically
-    if (millis() - lastStatusPrint > 30000) {
-        lastStatusPrint = millis();
-        Serial.printf("[WiFiManager] Connected to %s, RSSI: %d dBm, Channel: %d\n",
-                      WiFi.SSID().c_str(), WiFi.RSSI(), WiFi.channel());
-    }
-    
-    // Check for disconnection event
+    // Check for disconnection event (no periodic status spam)
     EventBits_t bits = xEventGroupWaitBits(
         wifiEventGroup,
         EVENT_DISCONNECTED,
@@ -229,61 +206,62 @@ void WiFiManager::handleStateConnected() {
         pdFALSE, // Wait for any bit
         0        // Don't block
     );
-    
+
     if (bits & EVENT_DISCONNECTED) {
-        Serial.println("[WiFiManager] Disconnected from AP");
+        Serial.println("[WiFi] Disconnected");
         setState(STATE_WIFI_DISCONNECTED);
     }
 }
 
 void WiFiManager::handleStateFailed() {
-    Serial.println("[WiFiManager] STATE: FAILED");
-    
-    // If AP mode is enabled, we can stay in AP mode
-    if (apEnabled) {
-        Serial.println("[WiFiManager] Falling back to AP mode");
+    attemptsOnCurrentNetwork++;
+
+    Serial.printf("[WiFi] Connection failed (%d/%d attempts on %s)\n",
+                  attemptsOnCurrentNetwork, NetworkConfig::WIFI_ATTEMPTS_PER_NETWORK, ssid.c_str());
+
+    // Check if we should switch to next network
+    if (attemptsOnCurrentNetwork >= NetworkConfig::WIFI_ATTEMPTS_PER_NETWORK) {
+        if (hasSecondaryNetwork()) {
+            switchToNextNetwork();
+            reconnectDelay = RECONNECT_DELAY_MS;  // Reset backoff for new network
+            setState(STATE_WIFI_INIT);
+            return;
+        }
+    }
+
+    // If AP mode is enabled and we've exhausted all networks, fall back to it
+    if (apEnabled && attemptsOnCurrentNetwork >= NetworkConfig::WIFI_ATTEMPTS_PER_NETWORK && !hasSecondaryNetwork()) {
         setState(STATE_WIFI_AP_MODE);
         return;
     }
-    
-    // Otherwise, wait with backoff before retrying
-    Serial.printf("[WiFiManager] Waiting %dms before retry\n", reconnectDelay);
+
+    // Otherwise, wait with backoff before retrying same network
     vTaskDelay(pdMS_TO_TICKS(reconnectDelay));
-    
+
     // Exponential backoff
     reconnectDelay = min(reconnectDelay * 2, MAX_RECONNECT_DELAY_MS);
-    
+
     // Try again
     setState(STATE_WIFI_INIT);
 }
 
 void WiFiManager::handleStateAPMode() {
+    // Stay in AP mode until device restart (no automatic retry)
     static uint32_t lastStatusPrint = 0;
-    
-    // Print AP status periodically
-    if (millis() - lastStatusPrint > 30000) {
+    static bool initialPrint = true;
+
+    // Print status once on entry, then every 60 seconds (reduced spam)
+    if (initialPrint || (millis() - lastStatusPrint > 60000)) {
         lastStatusPrint = millis();
-        Serial.printf("[WiFiManager] AP Mode - SSID: %s, IP: %s, Clients: %d\n",
-                      apSSID.c_str(), WiFi.softAPIP().toString().c_str(),
-                      WiFi.softAPgetStationNum());
-    }
-    
-    // Periodically try to connect to WiFi if we have credentials
-    static uint32_t lastRetryTime = 0;
-    if (!ssid.isEmpty() && (millis() - lastRetryTime > 60000)) {
-        lastRetryTime = millis();
-        Serial.println("[WiFiManager] Retrying WiFi connection from AP mode");
-        setState(STATE_WIFI_INIT);
+        initialPrint = false;
+        Serial.printf("[WiFi] AP: %s @ %s\n",
+                      apSSID.c_str(), WiFi.softAPIP().toString().c_str());
     }
 }
 
 void WiFiManager::handleStateDisconnected() {
-    Serial.println("[WiFiManager] STATE: DISCONNECTED");
-    
-    // Wait a bit before reconnecting
+    // Wait before reconnecting
     vTaskDelay(pdMS_TO_TICKS(reconnectDelay));
-    
-    // Try to reconnect
     setState(STATE_WIFI_INIT);
 }
 
@@ -297,17 +275,12 @@ void WiFiManager::performAsyncScan() {
 
 bool WiFiManager::connectToAP() {
     connectionAttempts++;
-    
-    Serial.printf("[WiFiManager] Connecting to %s", ssid.c_str());
-    if (bestChannel > 0) {
-        Serial.printf(" on channel %d", bestChannel);
-    }
-    Serial.println();
-    
+
+    Serial.printf("[WiFi] Connecting to %s...\n", ssid.c_str());
+
     // Configure static IP if requested
     if (useStaticIP) {
         if (!WiFi.config(staticIP, gateway, subnet, dns1, dns2)) {
-            Serial.println("[WiFiManager] Failed to configure static IP");
             return false;
         }
     }
@@ -334,15 +307,11 @@ bool WiFiManager::connectToAP() {
 }
 
 void WiFiManager::startSoftAP() {
-    Serial.printf("[WiFiManager] Starting Soft-AP: %s\n", apSSID.c_str());
-    
     // Configure AP
     if (WiFi.softAP(apSSID.c_str(), apPassword.c_str(), apChannel)) {
-        Serial.printf("[WiFiManager] AP started - IP: %s\n", 
+        Serial.printf("[WiFi] AP: %s @ %s\n", apSSID.c_str(),
                       WiFi.softAPIP().toString().c_str());
         xEventGroupSetBits(wifiEventGroup, EVENT_AP_START);
-    } else {
-        Serial.println("[WiFiManager] Failed to start AP");
     }
 }
 
@@ -377,8 +346,6 @@ void WiFiManager::updateBestChannel() {
     
     lastScanTime = millis();
     WiFi.scanDelete(); // Clean up scan results
-    
-    Serial.printf("[WiFiManager] Found %d networks\n", n);
 }
 
 void WiFiManager::setState(WiFiState newState) {
@@ -413,6 +380,41 @@ String WiFiManager::getStateString() const {
 void WiFiManager::setCredentials(const String& newSSID, const String& newPassword) {
     ssid = newSSID;
     password = newPassword;
+    // Also load secondary network from config if available
+    ssid2 = NetworkConfig::WIFI_SSID_2_VALUE;
+    password2 = NetworkConfig::WIFI_PASSWORD_2_VALUE;
+    currentNetworkIndex = 0;
+    attemptsOnCurrentNetwork = 0;
+
+    if (hasSecondaryNetwork()) {
+        Serial.printf("[WiFi] Configured networks: %s (primary), %s (fallback)\n",
+                      ssid.c_str(), ssid2.c_str());
+    }
+}
+
+bool WiFiManager::hasSecondaryNetwork() const {
+    return ssid2.length() > 0 && ssid2 != "";
+}
+
+void WiFiManager::switchToNextNetwork() {
+    if (!hasSecondaryNetwork()) return;
+
+    currentNetworkIndex = (currentNetworkIndex + 1) % 2;
+    attemptsOnCurrentNetwork = 0;
+
+    // Update active credentials
+    if (currentNetworkIndex == 0) {
+        ssid = NetworkConfig::WIFI_SSID_VALUE;
+        password = NetworkConfig::WIFI_PASSWORD_VALUE;
+    } else {
+        ssid = ssid2;
+        password = password2;
+    }
+
+    Serial.printf("[WiFi] Switching to network: %s\n", ssid.c_str());
+
+    // Clear cached channel info for new network
+    bestChannel = 0;
 }
 
 void WiFiManager::setStaticIP(const IPAddress& ip, const IPAddress& gw, 
@@ -457,49 +459,35 @@ void WiFiManager::scanNetworks() {
     }
 }
 
-// WiFi event handler
+// WiFi event handler - minimal logging
 void WiFiManager::onWiFiEvent(WiFiEvent_t event) {
     WiFiManager& manager = getInstance();
-    
+
     switch (event) {
         case SYSTEM_EVENT_SCAN_DONE:
-            Serial.println("[WiFiManager] Scan complete");
             xEventGroupSetBits(manager.wifiEventGroup, EVENT_SCAN_COMPLETE);
             break;
-            
+
         case SYSTEM_EVENT_STA_CONNECTED:
-            Serial.println("[WiFiManager] Connected to AP");
             xEventGroupSetBits(manager.wifiEventGroup, EVENT_CONNECTED);
             break;
-            
+
         case SYSTEM_EVENT_STA_GOT_IP:
-            Serial.printf("[WiFiManager] Got IP: %s\n", WiFi.localIP().toString().c_str());
             xEventGroupSetBits(manager.wifiEventGroup, EVENT_GOT_IP);
             break;
-            
+
         case SYSTEM_EVENT_STA_DISCONNECTED:
-            Serial.println("[WiFiManager] Disconnected from AP");
             xEventGroupSetBits(manager.wifiEventGroup, EVENT_DISCONNECTED);
             break;
-            
-        case SYSTEM_EVENT_STA_AUTHMODE_CHANGE:
-            Serial.println("[WiFiManager] Auth mode changed");
-            break;
-            
+
         case SYSTEM_EVENT_AP_START:
-            Serial.println("[WiFiManager] AP started");
             xEventGroupSetBits(manager.wifiEventGroup, EVENT_AP_START);
             break;
-            
+
         case SYSTEM_EVENT_AP_STACONNECTED:
-            Serial.println("[WiFiManager] Station connected to AP");
             xEventGroupSetBits(manager.wifiEventGroup, EVENT_AP_STACONNECTED);
             break;
-            
-        case SYSTEM_EVENT_AP_STADISCONNECTED:
-            Serial.println("[WiFiManager] Station disconnected from AP");
-            break;
-            
+
         default:
             break;
     }

@@ -62,6 +62,10 @@ private:
     // Connection parameters
     String ssid;
     String password;
+    String ssid2;
+    String password2;
+    uint8_t currentNetworkIndex = 0;     // 0 = primary, 1 = secondary
+    uint8_t attemptsOnCurrentNetwork = 0;
     bool useStaticIP = false;
     IPAddress staticIP;
     IPAddress gateway;
@@ -118,6 +122,8 @@ private:
     void updateBestChannel();
     bool isChannelCongested(uint8_t channel);
     void setState(WiFiState newState);
+    void switchToNextNetwork();
+    bool hasSecondaryNetwork() const;
     
     // Event handlers
     static void onWiFiEvent(WiFiEvent_t event);

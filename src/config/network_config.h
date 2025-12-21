@@ -19,7 +19,7 @@
 // ============================================================
 
 namespace NetworkConfig {
-    // WiFi credentials (from build flags or defaults)
+    // WiFi credentials - Primary network (from build flags or defaults)
     #ifdef WIFI_SSID
         constexpr const char* WIFI_SSID_VALUE = WIFI_SSID;
     #else
@@ -31,6 +31,22 @@ namespace NetworkConfig {
     #else
         constexpr const char* WIFI_PASSWORD_VALUE = "";
     #endif
+
+    // WiFi credentials - Secondary/fallback network
+    #ifdef WIFI_SSID_2
+        constexpr const char* WIFI_SSID_2_VALUE = WIFI_SSID_2;
+    #else
+        constexpr const char* WIFI_SSID_2_VALUE = "";
+    #endif
+
+    #ifdef WIFI_PASSWORD_2
+        constexpr const char* WIFI_PASSWORD_2_VALUE = WIFI_PASSWORD_2;
+    #else
+        constexpr const char* WIFI_PASSWORD_2_VALUE = "";
+    #endif
+
+    // Multi-network settings
+    constexpr uint8_t WIFI_ATTEMPTS_PER_NETWORK = 2;  // Try each network 2 times before switching
 
     // Access Point settings (fallback when no WiFi configured)
     #ifdef AP_SSID_CUSTOM

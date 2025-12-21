@@ -14,6 +14,8 @@
 #include "LGPQuantumEffects.h"
 #include "LGPColorMixingEffects.h"
 #include "LGPNovelPhysicsEffects.h"
+// Legacy effects disabled - see plugins/legacy/ when ready to integrate
+// #include "../plugins/legacy/LegacyEffectRegistration.h"
 #include <FastLED.h>
 
 namespace lightwaveos {
@@ -515,29 +517,33 @@ uint8_t registerAllEffects(RendererActor* renderer) {
 
     uint8_t total = 0;
 
-    // Register core effects (IDs 0-12)
+    // =============== REGISTER ALL NATIVE V2 EFFECTS ===============
+    // 65 total effects organized by category
+    // Legacy v1 effects are disabled until plugins/legacy is properly integrated
+
+    // Core effects (13) - IDs 0-12
     total += registerCoreEffects(renderer);
 
-    // Register LGP Interference effects (IDs 13-17)
-    total += registerLGPInterferenceEffects(renderer, 13);
+    // LGP Interference effects (5) - IDs 13-17
+    total += registerLGPInterferenceEffects(renderer, total);
 
-    // Register LGP Geometric effects (IDs 18-25)
-    total += registerLGPGeometricEffects(renderer, 18);
+    // LGP Geometric effects (8) - IDs 18-25
+    total += registerLGPGeometricEffects(renderer, total);
 
-    // Register LGP Advanced effects (IDs 26-33)
-    total += registerLGPAdvancedEffects(renderer, 26);
+    // LGP Advanced effects (8) - IDs 26-33
+    total += registerLGPAdvancedEffects(renderer, total);
 
-    // Register LGP Organic effects (IDs 34-39)
-    total += registerLGPOrganicEffects(renderer, 34);
+    // LGP Organic effects (6) - IDs 34-39
+    total += registerLGPOrganicEffects(renderer, total);
 
-    // Register LGP Quantum effects (IDs 40-49)
-    total += registerLGPQuantumEffects(renderer, 40);
+    // LGP Quantum effects (10) - IDs 40-49
+    total += registerLGPQuantumEffects(renderer, total);
 
-    // Register LGP Color Mixing effects (IDs 50-59)
-    total += registerLGPColorMixingEffects(renderer, 50);
+    // LGP Color Mixing effects (10) - IDs 50-59
+    total += registerLGPColorMixingEffects(renderer, total);
 
-    // Register LGP Novel Physics effects (IDs 60-64)
-    total += registerLGPNovelPhysicsEffects(renderer, 60);
+    // LGP Novel Physics effects (5) - IDs 60-64
+    total += registerLGPNovelPhysicsEffects(renderer, total);
 
     return total;
 }

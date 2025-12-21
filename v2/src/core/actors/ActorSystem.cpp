@@ -67,8 +67,9 @@ bool ActorSystem::init()
     m_state = SystemState::STARTING;
 
     // Create actors in dependency order
-    // For now, we only have the RendererActor
-    // Future: Create StateStoreActor, NetworkActor, HmiActor, etc.
+    // 1. RendererActor (must be first - other actors may depend on it)
+    // 2. ShowDirectorActor (depends on RendererActor)
+    // Future: StateStoreActor, NetworkActor, HmiActor, etc.
 
     try {
         // Create RendererActor
@@ -77,6 +78,17 @@ bool ActorSystem::init()
         if (m_renderer == nullptr) {
 #ifndef NATIVE_BUILD
             ESP_LOGE(TAG, "Failed to create RendererActor");
+#endif
+            m_state = SystemState::UNINITIALIZED;
+            return false;
+        }
+
+        // Create ShowDirectorActor
+        m_showDirector = std::make_unique<ShowDirectorActor>();
+
+        if (m_showDirector == nullptr) {
+#ifndef NATIVE_BUILD
+            ESP_LOGE(TAG, "Failed to create ShowDirectorActor");
 #endif
             m_state = SystemState::UNINITIALIZED;
             return false;
@@ -121,15 +133,25 @@ bool ActorSystem::start()
     // Start actors in dependency order
     // 1. StateStoreActor (load config) - future
     // 2. RendererActor (init LEDs)
-    // 3. NetworkActor (start server) - future
-    // 4. HmiActor (start encoder) - future
-    // 5. PluginManagerActor - future
-    // 6. SyncManagerActor - future
+    // 3. ShowDirectorActor (depends on RendererActor)
+    // 4. NetworkActor (start server) - future
+    // 5. HmiActor (start encoder) - future
+    // 6. PluginManagerActor - future
+    // 7. SyncManagerActor - future
 
     // Start RendererActor
     if (m_renderer && !m_renderer->start()) {
 #ifndef NATIVE_BUILD
         ESP_LOGE(TAG, "Failed to start RendererActor");
+#endif
+        m_state = SystemState::STOPPED;
+        return false;
+    }
+
+    // Start ShowDirectorActor
+    if (m_showDirector && !m_showDirector->start()) {
+#ifndef NATIVE_BUILD
+        ESP_LOGE(TAG, "Failed to start ShowDirectorActor");
 #endif
         m_state = SystemState::STOPPED;
         return false;
@@ -163,6 +185,11 @@ void ActorSystem::shutdown()
 
     // Stop actors in reverse order
     // Future: SyncManagerActor, PluginManagerActor, HmiActor, NetworkActor, etc.
+
+    // Stop ShowDirectorActor
+    if (m_showDirector) {
+        m_showDirector->stop();
+    }
 
     // Stop RendererActor
     if (m_renderer) {
@@ -243,6 +270,7 @@ SystemStats ActorSystem::getStats() const
     // Count active actors
     stats.activeActors = 0;
     if (m_renderer && m_renderer->isRunning()) stats.activeActors++;
+    if (m_showDirector && m_showDirector->isRunning()) stats.activeActors++;
     // Future: count other actors
 
     return stats;
@@ -277,6 +305,21 @@ void ActorSystem::printStatus()
                       rs.avgFrameTimeUs, rs.minFrameTimeUs, rs.maxFrameTimeUs);
         Serial.printf("Stack watermark: %d words\n",
                       m_renderer->getStackHighWaterMark());
+    }
+
+    // ShowDirector stats
+    if (m_showDirector && m_showDirector->isRunning()) {
+        Serial.println(F("\n--- ShowDirector ---"));
+        Serial.printf("Has show: %s\n", m_showDirector->hasShow() ? "YES" : "NO");
+        if (m_showDirector->hasShow()) {
+            Serial.printf("Show ID: %d\n", m_showDirector->getCurrentShowId());
+            Serial.printf("Playing: %s\n", m_showDirector->isPlaying() ? "YES" : "NO");
+            Serial.printf("Paused: %s\n", m_showDirector->isPaused() ? "YES" : "NO");
+            Serial.printf("Chapter: %d\n", m_showDirector->getCurrentChapter());
+            Serial.printf("Progress: %.1f%%\n", m_showDirector->getProgress() * 100.0f);
+            Serial.printf("Elapsed: %lu ms\n", m_showDirector->getElapsedMs());
+            Serial.printf("Remaining: %lu ms\n", m_showDirector->getRemainingMs());
+        }
     }
 
     // MessageBus stats

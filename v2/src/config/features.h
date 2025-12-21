@@ -94,6 +94,11 @@
 // Enhancement Engines (optional color and motion enhancements)
 // ============================================================================
 
+// Enhancement Engines - Combines ColorEngine and MotionEngine
+#ifndef FEATURE_ENHANCEMENT_ENGINES
+#define FEATURE_ENHANCEMENT_ENGINES 1
+#endif
+
 // ColorEngine - Cross-palette blending, diffusion, temporal rotation
 #ifndef FEATURE_COLOR_ENGINE
 #define FEATURE_COLOR_ENGINE 1
@@ -102,6 +107,11 @@
 // MotionEngine - Phase offset, auto-rotation, particle physics
 #ifndef FEATURE_MOTION_ENGINE
 #define FEATURE_MOTION_ENGINE 1
+#endif
+
+// Pattern Registry - Pattern taxonomy and metadata system
+#ifndef FEATURE_PATTERN_REGISTRY
+#define FEATURE_PATTERN_REGISTRY 1
 #endif
 
 // ============================================================================

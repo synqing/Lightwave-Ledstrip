@@ -17,6 +17,8 @@ struct MockAsyncWebSocketClient {
 #define millis() 0
 #else
 #include <Arduino.h>
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <WebSocketsClient.h>
 #endif
 

@@ -26,6 +26,7 @@
 
 #include "Actor.h"
 #include "RendererActor.h"
+#include "ShowDirectorActor.h"
 #include "../bus/MessageBus.h"
 #include <memory>
 
@@ -141,6 +142,14 @@ public:
     RendererActor* getRenderer() { return m_renderer.get(); }
     const RendererActor* getRenderer() const { return m_renderer.get(); }
 
+    /**
+     * @brief Get the ShowDirectorActor
+     *
+     * Returns nullptr if not initialized.
+     */
+    ShowDirectorActor* getShowDirector() { return m_showDirector.get(); }
+    const ShowDirectorActor* getShowDirector() const { return m_showDirector.get(); }
+
     // Future: getNetwork(), getHmi(), getStateStore(), etc.
 
     // ========================================================================
@@ -201,6 +210,7 @@ private:
 
     // Actor instances (using unique_ptr for RAII cleanup)
     std::unique_ptr<RendererActor> m_renderer;
+    std::unique_ptr<ShowDirectorActor> m_showDirector;
     // Future: std::unique_ptr<NetworkActor> m_network;
     // Future: std::unique_ptr<HmiActor> m_hmi;
     // Future: std::unique_ptr<StateStoreActor> m_stateStore;

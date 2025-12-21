@@ -24,6 +24,12 @@
 using namespace lightwaveos::transitions;
 using namespace lightwaveos::palettes;
 
+// Stub for legacy effect ID tracking - no-op when legacy effects are disabled
+// When legacy/LegacyEffectWrapper is re-enabled, this will be replaced by the real implementation
+namespace lightwaveos { namespace actors {
+    void setCurrentLegacyEffectId(uint8_t) {}  // No-op stub
+}}
+
 #ifndef NATIVE_BUILD
 #include <Arduino.h>
 #include <esp_log.h>
@@ -359,6 +365,11 @@ void RendererActor::renderFrame()
     // Call the effect render function
     EffectRenderFn fn = m_effects[m_currentEffect].fn;
     if (fn != nullptr) {
+        // Set current effect ID for legacy effect wrappers (if needed)
+        // This allows legacy effect wrappers to look up the correct function
+        // Note: Stub defined at top of file when legacy effects are disabled
+        setCurrentLegacyEffectId(m_currentEffect);
+        
         fn(ctx);
     }
 

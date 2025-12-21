@@ -54,10 +54,8 @@ void SyncManagerActor::onStart() {
     m_peerManager.setConnectionCallback(onPeerConnectionChanged);
     m_peerManager.setMessageCallback(onPeerMessage);
 
-    // Subscribe to state changes
-    m_stateStore.subscribe([this](const state::SystemState& state) {
-        onStateStoreChanged(state);
-    });
+    // Subscribe to state changes (use static callback wrapper)
+    m_stateStore.subscribe(onStateChanged);
 
     // Start state machine
     transitionTo(SyncState::DISCOVERING);
@@ -552,6 +550,11 @@ void SyncManagerActor::onPeerDiscovered(const PeerInfo& peer, bool added) {
         // Try to connect to new peer
         s_instance->m_peerManager.connectToPeer(peer);
     }
+}
+
+void SyncManagerActor::onStateChanged(const state::SystemState& newState) {
+    if (!s_instance) return;
+    s_instance->onStateStoreChanged(newState);
 }
 
 void SyncManagerActor::onStateStoreChanged(const state::SystemState& newState) {

@@ -86,6 +86,15 @@ enum class MessageType : uint8_t {
     SYNC_RESPONSE       = 0x69,
     SYNC_STATE          = 0x6A,
 
+    // Show control commands (0x70-0x7F)
+    SHOW_LOAD           = 0x70,
+    SHOW_START          = 0x71,
+    SHOW_STOP           = 0x72,
+    SHOW_PAUSE          = 0x73,
+    SHOW_RESUME         = 0x74,
+    SHOW_SEEK           = 0x75,
+    SHOW_UNLOAD         = 0x76,
+
     // Events/Notifications (0x80-0xFF)
     EFFECT_CHANGED      = 0x80,
     FRAME_RENDERED      = 0x81,
@@ -104,7 +113,15 @@ enum class MessageType : uint8_t {
     // Network Events (0xA0-0xAF)
     CLIENT_CONNECTED    = 0xA0,
     CLIENT_DISCONNECTED = 0xA1,
-    COMMAND_RECEIVED    = 0xA2
+    COMMAND_RECEIVED    = 0xA2,
+
+    // Show Events (0xB0-0xBF)
+    SHOW_STARTED        = 0xB0,
+    SHOW_STOPPED        = 0xB1,
+    SHOW_PAUSED          = 0xB2,
+    SHOW_RESUMED         = 0xB3,
+    SHOW_CHAPTER_CHANGED = 0xB4,
+    SHOW_COMPLETED       = 0xB5
 };
 
 // ============================================================================

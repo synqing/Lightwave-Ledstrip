@@ -22,6 +22,8 @@ NarrativeEngine::NarrativeEngine()
     , m_paused(false)
     , m_pauseStartMs(0)
     , m_totalPausedMs(0)
+    , m_tensionOverride(-1.0f)
+    , m_manualPhaseControl(false)
 {
     // Configure default 4-second cycle
     m_cycle.buildDuration = 1.5f;
@@ -153,6 +155,11 @@ float NarrativeEngine::getZonePhaseOffset(uint8_t zoneId) const {
 // ============================================================================
 
 float NarrativeEngine::getIntensity() const {
+    // Manual override takes precedence (v1 compatibility)
+    if (m_tensionOverride >= 0.0f) {
+        return constrain(m_tensionOverride, 0.0f, 1.0f);
+    }
+    
     if (!m_enabled) return 1.0f;
     return m_cycle.getIntensity();
 }
@@ -176,6 +183,76 @@ float NarrativeEngine::getCycleT() const {
     if (total <= 0.0f) return 0.0f;
 
     return Easing::clamp01(elapsed / total);
+}
+
+// ============================================================================
+// v1 NarrativeTension Compatibility Methods
+// ============================================================================
+
+float NarrativeEngine::getTempoMultiplier() const {
+    float tension = getTension();
+    // Formula: multiplier = 1.0 + (tension * 0.5)
+    return 1.0f + (tension * 0.5f);
+}
+
+float NarrativeEngine::getComplexityScaling() const {
+    float tension = getTension();
+    // Formula: complexity = baseComplexity * (0.5 + tension * 0.5)
+    return 0.5f + (tension * 0.5f);
+}
+
+void NarrativeEngine::setTensionOverride(float tension) {
+    if (tension < 0.0f) {
+        m_tensionOverride = -1.0f;  // Disable override
+    } else {
+        m_tensionOverride = constrain(tension, 0.0f, 1.0f);
+    }
+}
+
+void NarrativeEngine::setPhase(NarrativePhase phase, uint32_t durationMs) {
+    // Validate phase
+    if (phase > PHASE_REST) {
+        phase = PHASE_BUILD;  // Clamp to valid range
+    }
+    
+    // Clamp duration to valid range (100ms - 60000ms)
+    if (durationMs < 100) {
+        durationMs = 100;
+    } else if (durationMs > 60000) {
+        durationMs = 60000;
+    }
+    
+    // Convert milliseconds to seconds
+    float durationSeconds = durationMs / 1000.0f;
+    
+    // Set phase duration based on which phase
+    switch (phase) {
+        case PHASE_BUILD:
+            setBuildDuration(durationSeconds);
+            break;
+        case PHASE_HOLD:
+            setHoldDuration(durationSeconds);
+            break;
+        case PHASE_RELEASE:
+            setReleaseDuration(durationSeconds);
+            break;
+        case PHASE_REST:
+            setRestDuration(durationSeconds);
+            break;
+    }
+    
+    // Manually set the phase in the cycle (v1 compatibility)
+    // This allows manual phase control while still using the cycle's auto-advance logic
+    m_cycle.phase = phase;
+    m_cycle.phaseStartMs = millis();
+    m_cycle.initialized = true;
+    m_manualPhaseControl = true;
+    
+    // Update edge detection
+    NarrativePhase previousPhase = m_lastPhase;
+    m_phaseJustChanged = (phase != previousPhase);
+    m_justEnteredPhase = phase;
+    m_lastPhase = previousPhase;
 }
 
 // ============================================================================

@@ -22,6 +22,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include "SyncProtocol.h"
 #include <cstdint>
 

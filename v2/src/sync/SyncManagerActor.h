@@ -247,12 +247,17 @@ private:
      */
     static void onPeerDiscovered(const PeerInfo& peer, bool added);
 
+    /**
+     * @brief Static callback for state store changes (wraps instance method)
+     */
+    static void onStateChanged(const state::SystemState& newState);
+
     // ========================================================================
     // State Store Subscription
     // ========================================================================
 
     /**
-     * @brief Callback for state store changes
+     * @brief Instance callback for state store changes
      */
     void onStateStoreChanged(const state::SystemState& newState);
 

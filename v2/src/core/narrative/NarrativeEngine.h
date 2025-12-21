@@ -91,13 +91,29 @@ public:
 
     /**
      * @brief Get global intensity (no zone offset) - returns 0-1
+     * Alias: getTension() for v1 compatibility
      */
     float getIntensity() const;
+    float getTension() const { return getIntensity(); }  // v1 compatibility alias
 
     /**
      * @brief Get zone-specific intensity (applies phase offset) - returns 0-1
      */
     float getIntensity(uint8_t zoneId) const;
+
+    /**
+     * @brief Get tempo multiplier based on tension (1.0-1.5x)
+     * Formula: multiplier = 1.0 + (tension * 0.5)
+     * @return Tempo multiplier
+     */
+    float getTempoMultiplier() const;
+
+    /**
+     * @brief Get complexity scaling factor based on tension (0.5-1.0)
+     * Formula: complexity = baseComplexity * (0.5 + tension * 0.5)
+     * @return Complexity scaling factor
+     */
+    float getComplexityScaling() const;
 
     /**
      * @brief Get current phase
@@ -107,8 +123,10 @@ public:
 
     /**
      * @brief Get progress within current phase (0-1)
+     * Alias: getPhaseProgress() for v1 compatibility
      */
     float getPhaseT() const;
+    float getPhaseProgress() const { return getPhaseT(); }  // v1 compatibility alias
     float getPhaseT(uint8_t zoneId) const;
 
     /**
@@ -122,12 +140,32 @@ public:
      */
     bool justEntered(NarrativePhase phase) const;
 
+    /**
+     * @brief Check if currently in specific phase
+     * @param phase Phase to check
+     * @return true if in specified phase
+     */
+    bool isIn(NarrativePhase phase) const { return getPhase() == phase; }
+
     // ==================== Manual Control ====================
 
     void trigger();   // Force restart from BUILD
     void pause();
     void resume();
     void reset();
+
+    /**
+     * @brief Set manual tension override (for testing/debugging)
+     * @param tension Override value (0.0-1.0), or -1.0 to disable override
+     */
+    void setTensionOverride(float tension);
+
+    /**
+     * @brief Transition to new narrative phase with specified duration (v1 compatibility)
+     * @param phase NarrativePhase enum (BUILD|HOLD|RELEASE|REST)
+     * @param durationMs Phase duration in milliseconds (100-60000)
+     */
+    void setPhase(NarrativePhase phase, uint32_t durationMs);
 
     // ==================== Debug ====================
 
@@ -160,6 +198,10 @@ private:
     bool m_paused = false;
     uint32_t m_pauseStartMs = 0;
     uint32_t m_totalPausedMs = 0;
+
+    // v1 NarrativeTension compatibility
+    float m_tensionOverride = -1.0f;  // Manual override value (-1.0 = disabled)
+    bool m_manualPhaseControl = false; // True when using manual phase control
 };
 
 } // namespace narrative

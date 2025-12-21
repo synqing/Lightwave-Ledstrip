@@ -81,26 +81,26 @@ void PeerDiscovery::processScanResults(int resultCount) {
     return;
 #else
     for (int i = 0; i < resultCount; i++) {
-        // Get TXT record for board type
-        const char* board = MDNS.txt(i, MDNS_TXT_BOARD);
-        if (!board || strcmp(board, MDNS_TXT_BOARD_VALUE) != 0) {
+        // Get TXT record for board type (MDNS.txt returns String)
+        String boardStr = MDNS.txt(i, MDNS_TXT_BOARD);
+        if (boardStr.isEmpty() || strcmp(boardStr.c_str(), MDNS_TXT_BOARD_VALUE) != 0) {
             continue; // Not a LightwaveOS device
         }
 
         // Get UUID from TXT record
-        const char* uuid = MDNS.txt(i, MDNS_TXT_UUID);
-        if (!uuid || strlen(uuid) != 15) {
+        String uuidStr = MDNS.txt(i, MDNS_TXT_UUID);
+        if (uuidStr.isEmpty() || uuidStr.length() != 15) {
             continue; // Invalid UUID
         }
 
         // Skip self
-        if (DEVICE_UUID.matches(uuid)) {
+        if (DEVICE_UUID.matches(uuidStr.c_str())) {
             continue;
         }
 
         // Build PeerInfo
         PeerInfo peer;
-        strncpy(peer.uuid, uuid, sizeof(peer.uuid) - 1);
+        strncpy(peer.uuid, uuidStr.c_str(), sizeof(peer.uuid) - 1);
         peer.uuid[sizeof(peer.uuid) - 1] = '\0';
 
         String hostname = MDNS.hostname(i);

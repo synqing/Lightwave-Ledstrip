@@ -25,7 +25,9 @@ void confetti() {
     // Spawn confetti ONLY at center LEDs 79/80 (MANDATORY CENTER ORIGIN)
     if (random8() < 80) {
         int centerPos = HardwareConfig::STRIP_CENTER_POINT + random8(2); // 79 or 80 only
-        leds[centerPos] += CHSV(gHue + random8(64), 200, 255);
+        // Use palette colors instead of rainbow (gHue is FORBIDDEN)
+        uint8_t paletteIndex = random8();
+        leds[centerPos] += ColorFromPalette(currentPalette, paletteIndex, 255);
     }
     
     // Move confetti outward from center with fading
@@ -52,7 +54,9 @@ void stripConfetti() {
     // Spawn new confetti at CENTER (LEDs 79/80)
     if (random8() < 80) {
         int centerPos = HardwareConfig::STRIP_CENTER_POINT + random8(2); // 79 or 80
-        CRGB color = CHSV(gHue + random8(64), 200, 255);
+        // Use palette colors instead of rainbow (gHue is FORBIDDEN)
+        uint8_t paletteIndex = random8();
+        CRGB color = ColorFromPalette(currentPalette, paletteIndex, 255);
         strip1[centerPos] += color;
         if (centerPos < HardwareConfig::STRIP2_LED_COUNT) {
             strip2[centerPos] += color;
@@ -94,13 +98,19 @@ void sinelon() {
     int pos1 = HardwareConfig::STRIP_CENTER_POINT + distFromCenter;
     int pos2 = HardwareConfig::STRIP_CENTER_POINT - distFromCenter;
     
+    // Use palette colors instead of rainbow (gHue is FORBIDDEN)
+    static uint8_t baseIndex = 0;
+    baseIndex++; // Slow color drift within palette
+
     if (pos1 < HardwareConfig::STRIP_LENGTH) {
-        strip1[pos1] += CHSV(gHue, 255, 192);
-        strip2[pos1] += CHSV(gHue, 255, 192);
+        CRGB color = ColorFromPalette(currentPalette, baseIndex, 192);
+        strip1[pos1] += color;
+        strip2[pos1] += color;
     }
     if (pos2 >= 0) {
-        strip1[pos2] += CHSV(gHue + 128, 255, 192);  // Different hue
-        strip2[pos2] += CHSV(gHue + 128, 255, 192);
+        CRGB color = ColorFromPalette(currentPalette, baseIndex + 128, 192);
+        strip1[pos2] += color;
+        strip2[pos2] += color;
     }
 }
 
@@ -172,10 +182,14 @@ void bpm() {
         // Intensity decreases with distance from center
         uint8_t intensity = beat - (distFromCenter * 3);
         intensity = max(intensity, (uint8_t)32); // Minimum brightness
-        
-        leds[i] = ColorFromPalette(currentPalette, 
-                                  gHue + (distFromCenter * 2), 
-                                  intensity);
+
+        // Position-based palette index (no gHue - rainbow cycling forbidden)
+        uint8_t paletteIndex = (uint8_t)(distFromCenter * 2);
+
+        // Get color at full brightness, then scale - preserves saturation
+        CRGB color = ColorFromPalette(currentPalette, paletteIndex, 255);
+        color.nscale8(intensity);
+        leds[i] = color;
     }
 }
 
@@ -269,9 +283,9 @@ void rippleEffect() {
                 brightness = (brightness * (HardwareConfig::STRIP_HALF_LENGTH - ripples[r].radius)) / HardwareConfig::STRIP_HALF_LENGTH;
                 brightness = brightness * visualParams.getIntensityNorm();
                 
-                CRGB color = ColorFromPalette(currentPalette, ripples[r].hue + distFromCenter, brightness);
-                // Apply saturation control
-                color = blend(CRGB::White, color, visualParams.saturation);
+                // Get color at full brightness, then scale - preserves saturation
+                CRGB color = ColorFromPalette(currentPalette, ripples[r].hue + distFromCenter, 255);
+                color.nscale8(brightness);
                 strip1[i] += color;
                 strip2[i] += color;
             }
@@ -323,10 +337,14 @@ void stripBPM() {
     for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
         // Calculate distance from CENTER (79/80)
         float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
-        uint8_t colorIndex = gHue + (distFromCenter * 2);
-        uint8_t brightness = beat - gHue + (distFromCenter * 10);
-        
-        CRGB color = ColorFromPalette(currentPalette, colorIndex, brightness);
+
+        // Position-based palette index (no gHue - rainbow cycling forbidden)
+        uint8_t colorIndex = (uint8_t)(distFromCenter * 2);
+        uint8_t brightness = beat + (uint8_t)(distFromCenter * 3);
+
+        // Get color at full brightness, then scale - preserves saturation
+        CRGB color = ColorFromPalette(currentPalette, colorIndex, 255);
+        color.nscale8(brightness);
         strip1[i] = color;
         strip2[i] = color;
     }
@@ -353,11 +371,13 @@ void stripPlasma() {
         float v2 = TrigLookup::sinf_lookup(normalizedDist * 5.0f - time / 150.0f);
         float v3 = TrigLookup::sinf_lookup(normalizedDist * 3.0f + time / 200.0f);
 
-        // Use palette with small offset instead of full spectrum
-        uint8_t paletteIndex = (uint8_t)((v1 + v2 + v3) * 10.0f + 15.0f);  // 0-45 range (not rainbow)
+        // Position-based palette index (no gHue - rainbow cycling forbidden)
+        uint8_t paletteIndex = (uint8_t)((v1 + v2 + v3) * 10.0f + 15.0f) + (uint8_t)(distFromCenter * 2);
         uint8_t brightness = (uint8_t)((v1 + v2) * 63.75f + 191.25f);
 
-        CRGB color = ColorFromPalette(currentPalette, gHue + paletteIndex, brightness);
+        // Get color at full brightness, then scale - preserves saturation
+        CRGB color = ColorFromPalette(currentPalette, paletteIndex, 255);
+        color.nscale8(brightness);
         strip1[i] = color;
         strip2[i] = color;
     }
@@ -384,10 +404,14 @@ void plasma() {
         float v2 = TrigLookup::sinf_lookup(distFromCenter / 5.0f - time / 150.0f);
         float v3 = TrigLookup::sinf_lookup(distFromCenter / 3.0f + time / 200.0f);
 
-        uint8_t hue = (uint8_t)((v1 + v2 + v3) * 42.5f + 127.5f) + gHue;
+        // Use palette colors instead of rainbow (gHue is FORBIDDEN)
+        uint8_t paletteIndex = (uint8_t)((v1 + v2 + v3) * 42.5f + 127.5f) + (uint8_t)(distFromCenter * 2);
         uint8_t brightness = (uint8_t)((v1 + v2) * 63.75f + 191.25f);
 
-        leds[i] = CHSV(hue, 255, brightness);
+        // Get color at full brightness, then scale - preserves saturation
+        CRGB color = ColorFromPalette(currentPalette, paletteIndex, 255);
+        color.nscale8(brightness);
+        leds[i] = color;
     }
 }
 
@@ -419,12 +443,9 @@ void fire() {
     
     // Map heat to both strips with CENTER ORIGIN
     for(int j = 0; j < HardwareConfig::STRIP_LENGTH; j++) {
-        // Scale heat by intensity
+        // Scale heat by intensity - HeatColor already returns vibrant colors
         uint8_t scaledHeat = heat[j] * visualParams.getIntensityNorm();
         CRGB color = HeatColor(scaledHeat);
-
-        // Apply saturation control (desaturate towards white)
-        color = blend(CRGB::White, color, visualParams.saturation);
 
         strip1[j] = color;
 
@@ -514,10 +535,14 @@ void heartbeatEffect() {
             float distFromCenter = abs((float)i - HardwareConfig::STRIP_CENTER_POINT);
             float normalizedDist = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
             
-            // Pulse intensity decreases with distance
+            // Position-based palette index (no gHue - rainbow cycling forbidden)
+            uint8_t paletteIndex = (uint8_t)(distFromCenter * 2);
             uint8_t brightness = 255 * (1.0f - normalizedDist);
-            CRGB color = ColorFromPalette(currentPalette, gHue + normalizedDist * 50, brightness);
-            
+
+            // Get color at full brightness, then scale - preserves saturation
+            CRGB color = ColorFromPalette(currentPalette, paletteIndex, 255);
+            color.nscale8(brightness);
+
             strip1[i] += color;
             strip2[i] += color;
         }
@@ -543,8 +568,13 @@ void breathingEffect() {
         if (distFromCenter <= radius) {
             float intensity = 1.0f - (distFromCenter / radius) * 0.5f;
             uint8_t brightness = 255 * intensity * breath;
-            
-            CRGB color = ColorFromPalette(currentPalette, gHue + distFromCenter * 3, brightness);
+
+            // Position-based palette index (no gHue - rainbow cycling forbidden)
+            uint8_t paletteIndex = (uint8_t)(distFromCenter * 3);
+
+            // Get color at full brightness, then scale - preserves saturation
+            CRGB color = ColorFromPalette(currentPalette, paletteIndex, 255);
+            color.nscale8(brightness);
             strip1[i] = color;
             strip2[i] = color;
         }
@@ -562,12 +592,16 @@ void shockwaveEffect() {
     fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, 25);
     
     // Spawn new shockwave from CENTER - complexity controls frequency
+    // Use random palette index instead of gHue (rainbow cycling forbidden)
+    static uint8_t paletteOffset = 0;
+    paletteOffset += 7;  // Slowly rotate through palette
+
     uint8_t spawnChance = 20 * visualParams.getComplexityNorm();
     if (random8() < spawnChance) {
         for (int w = 0; w < 5; w++) {
             if (shockwaves[w] < 0) {
                 shockwaves[w] = 0;
-                waveHues[w] = gHue + random8(64);
+                waveHues[w] = paletteOffset + random8(64);  // No gHue
                 break;
             }
         }
@@ -598,9 +632,9 @@ void shockwaveEffect() {
                     uint8_t brightness = 255 * intensity * decay;
                     brightness = brightness * visualParams.getIntensityNorm();
                     
-                    CRGB color = ColorFromPalette(currentPalette, waveHues[w], brightness);
-                    // Apply saturation control
-                    color = blend(CRGB::White, color, visualParams.saturation);
+                    // Get color at full brightness, then scale - preserves saturation
+                    CRGB color = ColorFromPalette(currentPalette, waveHues[w], 255);
+                    color.nscale8(brightness);
                     strip1[i] += color;
                     strip2[i] += color;
                 }
@@ -626,9 +660,13 @@ void vortexEffect() {
         intensity *= (1.0f - normalizedDist * 0.5f); // Fade towards edges
 
         uint8_t brightness = 255 * intensity;
-        uint8_t hue = gHue + distFromCenter * 5 + vortexAngle * 20;
 
-        CRGB color = ColorFromPalette(currentPalette, hue, brightness);
+        // Position-based palette index (no gHue - rainbow cycling forbidden)
+        uint8_t paletteIndex = (uint8_t)(distFromCenter * 5 + vortexAngle * 20);
+
+        // Get color at full brightness, then scale - preserves saturation
+        CRGB color = ColorFromPalette(currentPalette, paletteIndex, 255);
+        color.nscale8(brightness);
 
         // Opposite spiral direction for strip2
         if (i < HardwareConfig::STRIP_CENTER_POINT) {
@@ -649,10 +687,11 @@ void collisionEffect() {
     static float approachT = 0.0f;
     static uint32_t holdStartMs = 0;
     static float explosionT = 0.0f;
-    
+    static uint8_t collisionPaletteBase = 0;  // Palette base for colors (no gHue - rainbow forbidden)
+
     fadeToBlackBy(strip1, HardwareConfig::STRIP1_LED_COUNT, 30);
     fadeToBlackBy(strip2, HardwareConfig::STRIP2_LED_COUNT, 30);
-    
+
     if (!exploding) {
         float step = (0.01f + (paletteSpeed / 255.0f) * 0.05f) * (0.5f + visualParams.getIntensityNorm());
         approachT = Easing::clamp01(approachT + step);
@@ -660,22 +699,31 @@ void collisionEffect() {
         float eased = Easing::ease(approachT, EASE_IN_OUT_CUBIC);
         float particle1Pos = eased * HardwareConfig::STRIP_CENTER_POINT;
         float particle2Pos = (HardwareConfig::STRIP_LENGTH - 1) - eased * (HardwareConfig::STRIP_LENGTH - 1 - HardwareConfig::STRIP_CENTER_POINT);
-        
-        // Draw particles
+
+        // Draw particles - use palette-based colors
         for (int trail = 0; trail < 10; trail++) {
             int pos1 = (int)particle1Pos - trail;
             int pos2 = (int)particle2Pos + trail;
-            
+
             if (pos1 >= 0 && pos1 < HardwareConfig::STRIP_LENGTH) {
                 uint8_t brightness = 255 - (trail * 25);
-                strip1[pos1] = ColorFromPalette(currentPalette, gHue, brightness);
-                strip2[pos1] = ColorFromPalette(currentPalette, gHue + 128, brightness);
+                // Get colors at full brightness, then scale
+                CRGB c1 = ColorFromPalette(currentPalette, collisionPaletteBase, 255);
+                CRGB c2 = ColorFromPalette(currentPalette, collisionPaletteBase + 128, 255);
+                c1.nscale8(brightness);
+                c2.nscale8(brightness);
+                strip1[pos1] = c1;
+                strip2[pos1] = c2;
             }
-            
+
             if (pos2 >= 0 && pos2 < HardwareConfig::STRIP_LENGTH) {
                 uint8_t brightness = 255 - (trail * 25);
-                strip1[pos2] = ColorFromPalette(currentPalette, gHue + 128, brightness);
-                strip2[pos2] = ColorFromPalette(currentPalette, gHue, brightness);
+                CRGB c1 = ColorFromPalette(currentPalette, collisionPaletteBase + 128, 255);
+                CRGB c2 = ColorFromPalette(currentPalette, collisionPaletteBase, 255);
+                c1.nscale8(brightness);
+                c2.nscale8(brightness);
+                strip1[pos2] = c1;
+                strip2[pos2] = c2;
             }
         }
         
@@ -689,7 +737,10 @@ void collisionEffect() {
             for (int i = HardwareConfig::STRIP_CENTER_POINT - 2; i <= HardwareConfig::STRIP_CENTER_POINT + 2; i++) {
                 if (i >= 0 && i < HardwareConfig::STRIP_LENGTH) {
                     uint8_t b = (uint8_t)(255.0f * beat);
-                    CRGB c = ColorFromPalette(currentPalette, gHue + (i - HardwareConfig::STRIP_CENTER_POINT) * 10, b);
+                    // Position-based palette index (no gHue - rainbow cycling forbidden)
+                    uint8_t paletteIdx = collisionPaletteBase + (uint8_t)((i - HardwareConfig::STRIP_CENTER_POINT) * 10);
+                    CRGB c = ColorFromPalette(currentPalette, paletteIdx, 255);
+                    c.nscale8(b);
                     strip1[i] += c;
                     strip2[i] += c;
                 }
@@ -715,8 +766,11 @@ void collisionEffect() {
             if (distFromCenter <= explosionRadius && distFromCenter >= explosionRadius - 10) {
                 float intensity = 1.0f - ((distFromCenter - (explosionRadius - 10)) / 10.0f);
                 uint8_t brightness = 255 * intensity * envelope;
-                
-                CRGB color = ColorFromPalette(currentPalette, gHue + random8(64), brightness);
+
+                // Position-based palette index (no gHue - rainbow cycling forbidden)
+                uint8_t paletteIdx = collisionPaletteBase + random8(64);
+                CRGB color = ColorFromPalette(currentPalette, paletteIdx, 255);
+                color.nscale8(brightness);
                 strip1[i] += color;
                 strip2[i] += color;
             }

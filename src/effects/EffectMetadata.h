@@ -164,84 +164,243 @@ const char* const EFFECT_DESCRIPTIONS[] PROGMEM = {
 };
 
 // ============================================================================
+// Per-Effect Parameter Definitions (Phase C.4)
+// ============================================================================
+
+/**
+ * @brief Target parameter for effect-specific controls
+ * Maps semantic names (e.g., "Flame Height") to underlying VisualParams fields
+ */
+enum class ParamTarget : uint8_t {
+    INTENSITY = 0,   // Maps to visualParams.intensity
+    SATURATION = 1,  // Maps to visualParams.saturation
+    COMPLEXITY = 2,  // Maps to visualParams.complexity
+    VARIATION = 3    // Maps to visualParams.variation
+};
+
+/**
+ * @brief Definition for a single effect parameter
+ * Stored inline in EffectMeta for PROGMEM efficiency
+ */
+struct EffectParamDef {
+    char name[16];         // Human-readable name ("Flame Height")
+    uint8_t minVal;        // Minimum value (typically 0)
+    uint8_t maxVal;        // Maximum value (typically 255)
+    uint8_t defaultVal;    // Default value
+    ParamTarget target;    // Which VisualParam this maps to
+};
+
+// Helper to create empty param (for unused slots)
+#define EMPTY_PARAM {"", 0, 0, 0, ParamTarget::INTENSITY}
+
+// ============================================================================
 // Effect Metadata Structure
 // ============================================================================
+
+/**
+ * @brief Complete metadata for an effect
+ * Includes category, features, and up to 4 custom parameter definitions
+ */
 struct EffectMeta {
     uint8_t category;
     uint8_t features;
+    uint8_t paramCount;              // Number of custom params (0-4)
+    EffectParamDef params[4];        // Parameter definitions (PROGMEM-safe)
 };
 
-// Compact metadata array (2 bytes per effect = ~94 bytes for 47 effects)
+// Shorthand for standard features
+#define STD_FEATURES (EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::ZONE_AWARE)
+#define LGP_FEATURES (EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED)
+#define LGP_GEO_FEATURES (EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP)
+
+// Full metadata array with parameter definitions
+// Effects with paramCount > 0 have custom parameter labels; others use defaults
 const EffectMeta PROGMEM EFFECT_METADATA[] = {
-    // Classic (0-4)
-    {CAT_CLASSIC, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::ZONE_AWARE},  // Fire
-    {CAT_CLASSIC, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::ZONE_AWARE},  // Ocean
-    {CAT_CLASSIC, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::ZONE_AWARE},  // Wave
-    {CAT_CLASSIC, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::ZONE_AWARE},  // Ripple
-    {CAT_CLASSIC, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::ZONE_AWARE},  // Sinelon
+    // =========================================================================
+    // Classic Effects (0-4) - WITH CUSTOM PARAMS
+    // =========================================================================
 
-    // Shockwave (5-8)
-    {CAT_SHOCKWAVE, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::ZONE_AWARE},  // Shockwave
-    {CAT_SHOCKWAVE, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::ZONE_AWARE},  // Collision
-    {CAT_SHOCKWAVE, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::ZONE_AWARE},  // Gravity Well
-    {CAT_SHOCKWAVE, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::ZONE_AWARE},  // Reserved
+    // 0: Fire - 2 custom params
+    {CAT_CLASSIC, STD_FEATURES, 2, {
+        {"Flame Height", 0, 255, 180, ParamTarget::INTENSITY},
+        {"Spark Rate", 0, 255, 100, ParamTarget::VARIATION},
+        EMPTY_PARAM, EMPTY_PARAM
+    }},
 
-    // LGP Interference (9-12)
-    {CAT_LGP_INTERFERENCE, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
-    {CAT_LGP_INTERFERENCE, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
-    {CAT_LGP_INTERFERENCE, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
-    {CAT_LGP_INTERFERENCE, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
+    // 1: Ocean - 3 custom params
+    {CAT_CLASSIC, STD_FEATURES, 3, {
+        {"Wave Height", 0, 255, 150, ParamTarget::INTENSITY},
+        {"Turbulence", 0, 255, 128, ParamTarget::COMPLEXITY},
+        {"Foam", 0, 255, 80, ParamTarget::VARIATION},
+        EMPTY_PARAM
+    }},
 
-    // LGP Geometric (13-15)
-    {CAT_LGP_GEOMETRIC, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP},
-    {CAT_LGP_GEOMETRIC, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP},
-    {CAT_LGP_GEOMETRIC, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP},
+    // 2: Wave - 2 custom params
+    {CAT_CLASSIC, STD_FEATURES, 2, {
+        {"Amplitude", 0, 255, 180, ParamTarget::INTENSITY},
+        {"Wavelength", 0, 255, 128, ParamTarget::COMPLEXITY},
+        EMPTY_PARAM, EMPTY_PARAM
+    }},
 
-    // LGP Advanced (16-21)
-    {CAT_LGP_ADVANCED, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
-    {CAT_LGP_ADVANCED, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
-    {CAT_LGP_ADVANCED, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
-    {CAT_LGP_ADVANCED, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
-    {CAT_LGP_ADVANCED, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
-    {CAT_LGP_ADVANCED, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
+    // 3: Ripple - 3 custom params
+    {CAT_CLASSIC, STD_FEATURES, 3, {
+        {"Ring Size", 0, 255, 150, ParamTarget::INTENSITY},
+        {"Frequency", 0, 255, 100, ParamTarget::COMPLEXITY},
+        {"Decay", 0, 255, 180, ParamTarget::VARIATION},
+        EMPTY_PARAM
+    }},
 
-    // LGP Organic (22-24)
-    {CAT_LGP_ORGANIC, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP},
-    {CAT_LGP_ORGANIC, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP},
-    {CAT_LGP_ORGANIC, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP},
+    // 4: Sinelon - 2 custom params
+    {CAT_CLASSIC, STD_FEATURES, 2, {
+        {"Trail Length", 0, 255, 200, ParamTarget::INTENSITY},
+        {"Bounce Rate", 0, 255, 128, ParamTarget::VARIATION},
+        EMPTY_PARAM, EMPTY_PARAM
+    }},
 
-    // LGP Quantum (25-33)
-    {CAT_LGP_QUANTUM, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
-    {CAT_LGP_QUANTUM, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
-    {CAT_LGP_QUANTUM, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
-    {CAT_LGP_QUANTUM, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
-    {CAT_LGP_QUANTUM, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
-    {CAT_LGP_QUANTUM, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
-    {CAT_LGP_QUANTUM, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
-    {CAT_LGP_QUANTUM, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
-    {CAT_LGP_QUANTUM, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
+    // =========================================================================
+    // Shockwave Effects (5-8) - WITH CUSTOM PARAMS
+    // =========================================================================
 
-    // LGP Color Mixing (34-35)
-    {CAT_LGP_COLOR_MIXING, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP},
-    {CAT_LGP_COLOR_MIXING, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP},
+    // 5: Shockwave - 2 custom params
+    {CAT_SHOCKWAVE, STD_FEATURES, 2, {
+        {"Pulse Width", 0, 255, 150, ParamTarget::INTENSITY},
+        {"Expansion", 0, 255, 180, ParamTarget::VARIATION},
+        EMPTY_PARAM, EMPTY_PARAM
+    }},
 
-    // LGP Physics (36-41)
-    {CAT_LGP_PHYSICS, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
-    {CAT_LGP_PHYSICS, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
-    {CAT_LGP_PHYSICS, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
-    {CAT_LGP_PHYSICS, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
-    {CAT_LGP_PHYSICS, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
-    {CAT_LGP_PHYSICS, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
+    // 6: Collision - 2 custom params
+    {CAT_SHOCKWAVE, STD_FEATURES, 2, {
+        {"Impact Force", 0, 255, 200, ParamTarget::INTENSITY},
+        {"Splash", 0, 255, 150, ParamTarget::VARIATION},
+        EMPTY_PARAM, EMPTY_PARAM
+    }},
 
-    // LGP Novel Physics (42-46)
-    {CAT_LGP_NOVEL_PHYSICS, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
-    {CAT_LGP_NOVEL_PHYSICS, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
-    {CAT_LGP_NOVEL_PHYSICS, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
-    {CAT_LGP_NOVEL_PHYSICS, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
-    {CAT_LGP_NOVEL_PHYSICS, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_SPEED | EffectFeatures::USES_PALETTE | EffectFeatures::DUAL_STRIP | EffectFeatures::PHYSICS_BASED},
+    // 7: Gravity Well - 2 custom params
+    {CAT_SHOCKWAVE, STD_FEATURES, 2, {
+        {"Pull Strength", 0, 255, 180, ParamTarget::INTENSITY},
+        {"Distortion", 0, 255, 100, ParamTarget::COMPLEXITY},
+        EMPTY_PARAM, EMPTY_PARAM
+    }},
 
-    // Audio Reactive (47+)
-    {CAT_AUDIO_REACTIVE, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_PALETTE | EffectFeatures::AUDIO_REACTIVE}
+    // 8: Reserved
+    {CAT_SHOCKWAVE, STD_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},
+
+    // =========================================================================
+    // LGP Interference (9-12) - WITH CUSTOM PARAMS
+    // =========================================================================
+
+    // 9: Holographic
+    {CAT_LGP_INTERFERENCE, LGP_FEATURES, 2, {
+        {"Fringe Width", 0, 255, 128, ParamTarget::INTENSITY},
+        {"Phase Shift", 0, 255, 100, ParamTarget::VARIATION},
+        EMPTY_PARAM, EMPTY_PARAM
+    }},
+
+    // 10: Standing Wave
+    {CAT_LGP_INTERFERENCE, LGP_FEATURES, 2, {
+        {"Node Count", 0, 255, 150, ParamTarget::COMPLEXITY},
+        {"Resonance", 0, 255, 180, ParamTarget::INTENSITY},
+        EMPTY_PARAM, EMPTY_PARAM
+    }},
+
+    // 11: Scanning
+    {CAT_LGP_INTERFERENCE, LGP_FEATURES, 2, {
+        {"Beam Width", 0, 255, 100, ParamTarget::INTENSITY},
+        {"Scan Rate", 0, 255, 150, ParamTarget::VARIATION},
+        EMPTY_PARAM, EMPTY_PARAM
+    }},
+
+    // 12: Wave Collision
+    {CAT_LGP_INTERFERENCE, LGP_FEATURES, 2, {
+        {"Wave Count", 0, 255, 128, ParamTarget::COMPLEXITY},
+        {"Interference", 0, 255, 180, ParamTarget::INTENSITY},
+        EMPTY_PARAM, EMPTY_PARAM
+    }},
+
+    // =========================================================================
+    // LGP Geometric (13-15) - WITH CUSTOM PARAMS
+    // =========================================================================
+
+    // 13: Diamond Lattice
+    {CAT_LGP_GEOMETRIC, LGP_GEO_FEATURES, 2, {
+        {"Facet Size", 0, 255, 150, ParamTarget::INTENSITY},
+        {"Sparkle", 0, 255, 100, ParamTarget::VARIATION},
+        EMPTY_PARAM, EMPTY_PARAM
+    }},
+
+    // 14: Concentric Rings
+    {CAT_LGP_GEOMETRIC, LGP_GEO_FEATURES, 2, {
+        {"Ring Count", 0, 255, 128, ParamTarget::COMPLEXITY},
+        {"Expansion", 0, 255, 180, ParamTarget::VARIATION},
+        EMPTY_PARAM, EMPTY_PARAM
+    }},
+
+    // 15: Star Burst
+    {CAT_LGP_GEOMETRIC, LGP_GEO_FEATURES, 2, {
+        {"Ray Count", 0, 255, 150, ParamTarget::COMPLEXITY},
+        {"Brightness", 0, 255, 200, ParamTarget::INTENSITY},
+        EMPTY_PARAM, EMPTY_PARAM
+    }},
+
+    // =========================================================================
+    // LGP Advanced (16-21) - No custom params (use defaults)
+    // =========================================================================
+    {CAT_LGP_ADVANCED, LGP_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 16: Moire
+    {CAT_LGP_ADVANCED, LGP_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 17: Radial Ripple
+    {CAT_LGP_ADVANCED, LGP_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 18: Vortex
+    {CAT_LGP_ADVANCED, LGP_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 19: Chromatic Shear
+    {CAT_LGP_ADVANCED, LGP_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 20: Fresnel
+    {CAT_LGP_ADVANCED, LGP_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 21: Photonic Crystal
+
+    // =========================================================================
+    // LGP Organic (22-24) - No custom params
+    // =========================================================================
+    {CAT_LGP_ORGANIC, LGP_GEO_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 22: Aurora
+    {CAT_LGP_ORGANIC, LGP_GEO_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 23: Bioluminescent
+    {CAT_LGP_ORGANIC, LGP_GEO_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 24: Plasma Membrane
+
+    // =========================================================================
+    // LGP Quantum (25-33) - No custom params
+    // =========================================================================
+    {CAT_LGP_QUANTUM, LGP_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 25: Quantum Tunneling
+    {CAT_LGP_QUANTUM, LGP_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 26: Gravitational Lens
+    {CAT_LGP_QUANTUM, LGP_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 27: Time Crystal
+    {CAT_LGP_QUANTUM, LGP_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 28: Metamaterial
+    {CAT_LGP_QUANTUM, LGP_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 29: GRIN Cloak
+    {CAT_LGP_QUANTUM, LGP_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 30: Caustic Fan
+    {CAT_LGP_QUANTUM, LGP_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 31: Birefringent
+    {CAT_LGP_QUANTUM, LGP_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 32: Anisotropic
+    {CAT_LGP_QUANTUM, LGP_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 33: Evanescent
+
+    // =========================================================================
+    // LGP Color Mixing (34-35) - No custom params
+    // =========================================================================
+    {CAT_LGP_COLOR_MIXING, LGP_GEO_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 34: Chromatic Aberration
+    {CAT_LGP_COLOR_MIXING, LGP_GEO_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 35: Color Momentum
+
+    // =========================================================================
+    // LGP Physics (36-41) - No custom params
+    // =========================================================================
+    {CAT_LGP_PHYSICS, LGP_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 36: Liquid Crystal
+    {CAT_LGP_PHYSICS, LGP_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 37: Prism Cascade
+    {CAT_LGP_PHYSICS, LGP_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 38: Silk Flow
+    {CAT_LGP_PHYSICS, LGP_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 39: Beam Collision
+    {CAT_LGP_PHYSICS, LGP_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 40: Dual Laser
+    {CAT_LGP_PHYSICS, LGP_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 41: Tidal
+
+    // =========================================================================
+    // LGP Novel Physics (42-46) - No custom params
+    // =========================================================================
+    {CAT_LGP_NOVEL_PHYSICS, LGP_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 42: Chladni
+    {CAT_LGP_NOVEL_PHYSICS, LGP_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 43: Gravitational Chirp
+    {CAT_LGP_NOVEL_PHYSICS, LGP_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 44: Entanglement
+    {CAT_LGP_NOVEL_PHYSICS, LGP_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 45: Mycelial
+    {CAT_LGP_NOVEL_PHYSICS, LGP_FEATURES, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}},  // 46: Riley Dissonance
+
+    // =========================================================================
+    // Audio Reactive (47+) - No custom params
+    // =========================================================================
+    {CAT_AUDIO_REACTIVE, EffectFeatures::CENTER_ORIGIN | EffectFeatures::USES_PALETTE | EffectFeatures::AUDIO_REACTIVE, 0, {EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM, EMPTY_PARAM}}
 };
 
 // Number of metadata entries

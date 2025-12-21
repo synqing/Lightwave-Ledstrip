@@ -96,11 +96,8 @@ void fireTuned() {
             }
         }
         
-        // Apply saturation control
-        if (saturation < 255) {
-            color = blend(CRGB::White, color, saturation);
-        }
-        
+        // Saturation control removed - blend(White) causes washed-out colors
+        // Colors are already properly saturated from palette
         strip1[j] = color;
         strip2[j] = color;
     }
@@ -168,14 +165,12 @@ void stripBPMTuned() {
             }
             
             if (brightness > 0) {
-                uint8_t colorIndex = gHue + (p * 64) + (distFromCenter * 2);
-                CRGB color = ColorFromPalette(currentPalette, colorIndex, brightness);
-                
-                // Apply saturation
-                if (saturation < 255) {
-                    color = blend(CRGB::White, color, saturation);
-                }
-                
+                // Use position-based palette index (removed gHue rainbow cycling)
+                uint8_t colorIndex = (p * 64) + (distFromCenter * 2);
+                // Get color at full brightness, then scale - preserves saturation
+                CRGB color = ColorFromPalette(currentPalette, colorIndex, 255);
+                color.nscale8(brightness);
+
                 strip1[i] += color;
                 strip2[i] += color;
             }
@@ -392,37 +387,31 @@ void gravityWellTuned() {
                 uint8_t brightness = 128 + (speed * 20) + (intensity * 127);
                 brightness = constrain(brightness, 0, 255);
                 
-                CRGB color = ColorFromPalette(currentPalette, particles[p].hue, brightness);
-                
-                // Apply saturation
-                if (saturation < 255) {
-                    color = blend(CRGB::White, color, saturation);
-                }
-                
+                // Get color at full brightness, then scale - preserves saturation
+                CRGB color = ColorFromPalette(currentPalette, particles[p].hue, 255);
+                color.nscale8(brightness);
+
                 // Different colors for each strip based on mass
                 strip1[pos] += color;
-                CRGB color2 = ColorFromPalette(currentPalette, 
-                                              particles[p].hue + (particles[p].mass * 50), 
-                                              brightness);
-                if (saturation < 255) {
-                    color2 = blend(CRGB::White, color2, saturation);
-                }
+                CRGB color2 = ColorFromPalette(currentPalette,
+                                              particles[p].hue + (particles[p].mass * 50),
+                                              255);
+                color2.nscale8(brightness);
                 strip2[pos] += color2;
-                
+
                 // Enhanced motion blur trail
                 int blurLength = 1 + (speed * 2) + (intensity * 3);
                 for (int blur = 1; blur <= blurLength; blur++) {
                     int blurPos = pos - (particles[p].velocity > 0 ? blur : -blur);
                     if (blurPos >= 0 && blurPos < HardwareConfig::STRIP_LENGTH) {
                         uint8_t blurBright = brightness / (blur + 1);
-                        CRGB blurColor1 = ColorFromPalette(currentPalette, particles[p].hue, blurBright);
-                        CRGB blurColor2 = ColorFromPalette(currentPalette, 
-                                                          particles[p].hue + (particles[p].mass * 50), 
-                                                          blurBright);
-                        if (saturation < 255) {
-                            blurColor1 = blend(CRGB::White, blurColor1, saturation);
-                            blurColor2 = blend(CRGB::White, blurColor2, saturation);
-                        }
+                        // Get colors at full brightness, then scale
+                        CRGB blurColor1 = ColorFromPalette(currentPalette, particles[p].hue, 255);
+                        blurColor1.nscale8(blurBright);
+                        CRGB blurColor2 = ColorFromPalette(currentPalette,
+                                                          particles[p].hue + (particles[p].mass * 50),
+                                                          255);
+                        blurColor2.nscale8(blurBright);
                         strip1[blurPos] += blurColor1;
                         strip2[blurPos] += blurColor2;
                     }

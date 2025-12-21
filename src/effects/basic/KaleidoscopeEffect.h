@@ -34,7 +34,9 @@ public:
             }
             
             uint8_t colorIndex = radii[i] + (rotationAngle >> 6);
-            CRGB color = ColorFromPalette(currentPalette, colorIndex, brightness);
+            // Get color at full brightness, then scale - preserves saturation
+            CRGB color = ColorFromPalette(currentPalette, colorIndex, 255);
+            color.nscale8(brightness);
             leds[i] = color;
         }
     }

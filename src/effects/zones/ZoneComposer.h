@@ -7,6 +7,7 @@
 #include "../engines/BlendingEngine.h"
 #include "../../effects.h"
 #include "../../config/hardware_config.h"
+#include "../../core/EffectTypes.h"  // For VisualParams
 
 // Forward declaration
 class ZoneConfigManager;
@@ -38,6 +39,18 @@ public:
     // Per-zone blend mode control
     void setZoneBlendMode(uint8_t zoneId, BlendMode mode);
     BlendMode getZoneBlendMode(uint8_t zoneId) const;
+
+    // Per-zone visual parameters (Phase C.4)
+    void setZoneVisualParams(uint8_t zoneId, const VisualParams& params);
+    VisualParams getZoneVisualParams(uint8_t zoneId) const;
+    void setZoneIntensity(uint8_t zoneId, uint8_t value);
+    uint8_t getZoneIntensity(uint8_t zoneId) const;
+    void setZoneSaturation(uint8_t zoneId, uint8_t value);
+    uint8_t getZoneSaturation(uint8_t zoneId) const;
+    void setZoneComplexity(uint8_t zoneId, uint8_t value);
+    uint8_t getZoneComplexity(uint8_t zoneId) const;
+    void setZoneVariation(uint8_t zoneId, uint8_t value);
+    uint8_t getZoneVariation(uint8_t zoneId) const;
 
     // Zone queries (for config export)
     uint8_t getZoneEffect(uint8_t zoneId) const;
@@ -77,6 +90,7 @@ private:
     uint8_t m_zoneSpeed[HardwareConfig::MAX_ZONES];       // Per-zone speed (1-50)
     uint8_t m_zonePalette[HardwareConfig::MAX_ZONES];    // Per-zone palette (0=global)
     BlendMode m_zoneBlendMode[HardwareConfig::MAX_ZONES]; // Per-zone blend mode
+    VisualParams m_zoneVisualParams[HardwareConfig::MAX_ZONES];  // Per-zone visual params (Phase C.4)
     bool m_enabled;                     // Global zone system enable
 
     // Dynamic zone configuration selection

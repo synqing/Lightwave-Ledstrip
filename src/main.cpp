@@ -13,10 +13,19 @@
 #include "effects/engines/ColorEngine.h"
 #include "effects/engines/MotionEngine.h"
 #include "effects/engines/BlendingEngine.h"
+#include "effects/strip/EnhancedStripEffects.h"
 #endif
 
 #if FEATURE_NARRATIVE_ENGINE
 #include "core/NarrativeEngine.h"
+#endif
+
+#if FEATURE_NARRATIVE_TENSION
+#include "core/NarrativeTension.h"
+#endif
+
+#if FEATURE_SHOWS
+#include "core/shows/ShowDirector.h"
 #endif
 
 #if FEATURE_WEB_SERVER
@@ -90,6 +99,11 @@ uint8_t brightnessVal = HardwareConfig::STRIP_BRIGHTNESS;
 
 // Visual parameters (serial-controlled only, no encoder HMI)
 VisualParams visualParams;
+
+#if FEATURE_NARRATIVE_TENSION
+// Global accessor for NarrativeTension (for effects)
+// Defined in src/core/NarrativeTension.cpp
+#endif
 
 // Advanced Transition System
 TransitionEngine transitionEngine(HardwareConfig::NUM_LEDS);
@@ -205,6 +219,9 @@ extern void spectrumLightshowEngine();
 #include "effects/strip/LGPQuantumEffects.h"
 #include "effects/strip/LGPColorMixingEffects.h"
 #include "effects/strip/LGPNovelPhysics.h"
+#include "effects/strip/LGPOrganicWavePatterns.h"
+#include "effects/strip/LGPFluidPlasmaEffects.h"
+#include "effects/strip/LGPMathematicalEffects.h"
 // #include "effects/strip/LGPAudioReactive.h"  // Removed: all old audio-reactive modes retired
 
 // New Light Guide Plate Physics Effects
@@ -213,19 +230,18 @@ extern void spectrumLightshowEngine();
 // Effects array - Matrix mode has been surgically removed
 // USELESS EFFECTS PURGED - Only the good shit remains
 Effect effects[] = {
-// DISABLED: Enhanced effects have bugs causing hangs - need debugging
-// #if FEATURE_ENHANCEMENT_ENGINES
-//     // =============== ENHANCED EFFECTS (TOP OF LIST) ===============
-//     // Week 3: ColorEngine - dual/triple palette blending and diffusion
-//     {"Fire+", fireEnhanced, EFFECT_TYPE_STANDARD},
-//     {"Ocean+", stripOceanEnhanced, EFFECT_TYPE_STANDARD},
-//     {"LGP Holographic+", lgpHolographicEnhanced, EFFECT_TYPE_STANDARD},
-//
-//     // Week 4: MotionEngine - momentum physics, phase control, speed modulation
-//     {"Shockwave+", shockwaveEnhanced, EFFECT_TYPE_STANDARD},
-//     {"Collision+", collisionEnhanced, EFFECT_TYPE_STANDARD},
-//     {"LGP Wave Collision+", lgpWaveCollisionEnhanced, EFFECT_TYPE_STANDARD},
-// #endif
+#if FEATURE_ENHANCEMENT_ENGINES
+    // =============== ENHANCED EFFECTS (TOP OF LIST) ===============
+    // Week 3: ColorEngine - dual/triple palette blending and diffusion
+    {"Fire+", fireEnhanced, EFFECT_TYPE_STANDARD},
+    {"Ocean+", stripOceanEnhanced, EFFECT_TYPE_STANDARD},
+    {"LGP Holographic+", lgpHolographicEnhanced, EFFECT_TYPE_STANDARD},
+
+    // Week 4: MotionEngine - momentum physics, phase control, speed modulation
+    {"Shockwave+", shockwaveEnhanced, EFFECT_TYPE_STANDARD},
+    {"Collision+", collisionEnhanced, EFFECT_TYPE_STANDARD},
+    {"LGP Wave Collision+", lgpWaveCollisionEnhanced, EFFECT_TYPE_STANDARD},
+#endif
 
     // =============== QUALITY STRIP EFFECTS ===============
     // Signature effects with CENTER ORIGIN
@@ -288,6 +304,11 @@ Effect effects[] = {
     {"LGP Chromatic Aberration", lgpChromaticAberration, EFFECT_TYPE_STANDARD},
     {"LGP Color Accelerator", lgpColorAccelerator, EFFECT_TYPE_STANDARD},
     
+    // =============== NEW CHROMATIC DISPERSION EFFECTS (Phase 2.2) ===============
+    {"LGP Chromatic Lens", lgpChromaticLens, EFFECT_TYPE_STANDARD},
+    {"LGP Chromatic Pulse", lgpChromaticPulse, EFFECT_TYPE_STANDARD},
+    {"LGP Chromatic Interference", lgpChromaticInterference, EFFECT_TYPE_STANDARD},
+    
     // =============== LGP PHYSICS-BASED EFFECTS ===============
     // Advanced physics simulations for Light Guide Plate
     {"LGP Liquid Crystal", lgpLiquidCrystal, EFFECT_TYPE_STANDARD},
@@ -304,6 +325,92 @@ Effect effects[] = {
     {"LGP Quantum Entangle", lgpQuantumEntanglementCollapse, EFFECT_TYPE_STANDARD},
     {"LGP Mycelial Network", lgpMycelialNetwork, EFFECT_TYPE_STANDARD},
     {"LGP Riley Dissonance", lgpRileyDissonance, EFFECT_TYPE_STANDARD},
+
+    // =============== ADDITIONAL CORE EFFECTS ===============
+    // Basic effects with CENTER ORIGIN compliance
+    {"Solid Color", solidColor, EFFECT_TYPE_STANDARD},
+    {"Pulse", pulseEffect, EFFECT_TYPE_STANDARD},
+    {"Confetti", confetti, EFFECT_TYPE_STANDARD},
+    {"Strip Confetti", stripConfetti, EFFECT_TYPE_STANDARD},
+    {"Juggle", juggle, EFFECT_TYPE_STANDARD},
+    {"Strip Juggle", stripJuggle, EFFECT_TYPE_STANDARD},
+    {"BPM", bpm, EFFECT_TYPE_STANDARD},
+    {"Strip BPM", stripBPM, EFFECT_TYPE_STANDARD},
+    {"Strip Plasma", stripPlasma, EFFECT_TYPE_STANDARD},
+    {"Plasma", plasma, EFFECT_TYPE_STANDARD},
+    {"Heartbeat", heartbeatEffect, EFFECT_TYPE_STANDARD},
+    {"Breathing", breathingEffect, EFFECT_TYPE_STANDARD},
+    {"Vortex", vortexEffect, EFFECT_TYPE_STANDARD},
+
+    // =============== LGP GEOMETRIC (ADDITIONAL) ===============
+    {"LGP Hexagonal Grid", lgpHexagonalGrid, EFFECT_TYPE_STANDARD},
+    {"LGP Spiral Vortex", lgpSpiralVortex, EFFECT_TYPE_STANDARD},
+    {"LGP Sierpinski", lgpSierpinskiTriangles, EFFECT_TYPE_STANDARD},
+    {"LGP Chevron Waves", lgpChevronWaves, EFFECT_TYPE_STANDARD},
+    {"LGP Mesh Network", lgpMeshNetwork, EFFECT_TYPE_STANDARD},
+
+    // =============== LGP COLOR MIXING (ADDITIONAL) ===============
+    {"LGP Color Temperature", lgpColorTemperature, EFFECT_TYPE_STANDARD},
+    {"LGP RGB Prism", lgpRGBPrism, EFFECT_TYPE_STANDARD},
+    {"LGP Complementary", lgpComplementaryMixing, EFFECT_TYPE_STANDARD},
+    {"LGP Additive Mix", lgpAdditiveSubtractive, EFFECT_TYPE_STANDARD},
+    {"LGP Quantum Colors", lgpQuantumColors, EFFECT_TYPE_STANDARD},
+    {"LGP Doppler Shift", lgpDopplerShift, EFFECT_TYPE_STANDARD},
+    {"LGP HSV Cylinder", lgpHSVCylinder, EFFECT_TYPE_STANDARD},
+    {"LGP Perceptual Blend", lgpPerceptualBlend, EFFECT_TYPE_STANDARD},
+    {"LGP Metameric", lgpMetamericColors, EFFECT_TYPE_STANDARD},
+    {"LGP DNA Helix", lgpDNAHelix, EFFECT_TYPE_STANDARD},
+    {"LGP Phase Transition", lgpPhaseTransition, EFFECT_TYPE_STANDARD},
+
+    // =============== LGP INTERFERENCE (ADDITIONAL) ===============
+    {"LGP Box Wave", lgpBoxWave, EFFECT_TYPE_STANDARD},
+    {"LGP Soliton Explorer", lgpSolitonExplorer, EFFECT_TYPE_STANDARD},
+    {"LGP Rogue Wave", lgpRogueWaveGenerator, EFFECT_TYPE_STANDARD},
+    {"LGP Turing Pattern", lgpTuringPatternEngine, EFFECT_TYPE_STANDARD},
+    {"LGP Kelvin-Helmholtz", lgpKelvinHelmholtzInstabilities, EFFECT_TYPE_STANDARD},
+    {"LGP Faraday Rotation", lgpFaradayRotation, EFFECT_TYPE_STANDARD},
+    {"LGP Brillouin Zones", lgpBrillouinZones, EFFECT_TYPE_STANDARD},
+    {"LGP Shock Formation", lgpShockWaveFormation, EFFECT_TYPE_STANDARD},
+    {"LGP Chaos Visual", lgpChaosVisualization, EFFECT_TYPE_STANDARD},
+    {"LGP Neural Avalanche", lgpNeuralAvalancheCascades, EFFECT_TYPE_STANDARD},
+    {"LGP Cardiac Spirals", lgpCardiacArrhythmiaSpirals, EFFECT_TYPE_STANDARD},
+
+    // =============== LGP ORGANIC (ADDITIONAL) ===============
+    {"LGP Neural Network", lgpNeuralNetwork, EFFECT_TYPE_STANDARD},
+    {"LGP Crystalline", lgpCrystallineGrowth, EFFECT_TYPE_STANDARD},
+    {"LGP Fluid Dynamics", lgpFluidDynamics, EFFECT_TYPE_STANDARD},
+
+    // =============== LGP ORGANIC WAVE PATTERNS ===============
+    {"LGP Plankton Waves", lgpBioluminescentPlanktonWaves, EFFECT_TYPE_STANDARD},
+    {"LGP Bacterial Growth", lgpBacterialColonyGrowth, EFFECT_TYPE_STANDARD},
+    {"LGP DNA Replication", lgpDNAReplicationFork, EFFECT_TYPE_STANDARD},
+    {"LGP Protein Folding", lgpProteinFoldingDynamics, EFFECT_TYPE_STANDARD},
+    {"LGP Mycelium Growth", lgpMyceliumNetworkGrowth, EFFECT_TYPE_STANDARD},
+    {"LGP Slime Mold", lgpSlimeMoldOptimization, EFFECT_TYPE_STANDARD},
+
+    // =============== LGP ADVANCED (ADDITIONAL) ===============
+    {"LGP Modal Cavity", lgpModalCavity, EFFECT_TYPE_STANDARD},
+    {"LGP Evanescent Drift", lgpEvanescentDrift, EFFECT_TYPE_STANDARD},
+
+    // =============== LGP QUANTUM (ADDITIONAL) ===============
+    {"LGP Soliton Waves", lgpSolitonWaves, EFFECT_TYPE_STANDARD},
+    {"LGP Sonic Boom", lgpSonicBoom, EFFECT_TYPE_STANDARD},
+
+    // =============== LGP FLUID & PLASMA EFFECTS ===============
+    // Physics-based fluid dynamics and plasma phenomena
+    {"LGP Benard Convection", lgpBenardConvection, EFFECT_TYPE_STANDARD},
+    {"LGP Rayleigh-Taylor", lgpRayleighTaylorInstability, EFFECT_TYPE_STANDARD},
+    {"LGP Plasma Pinch", lgpPlasmaPinch, EFFECT_TYPE_STANDARD},
+    {"LGP Magnetic Reconnect", lgpMagneticReconnection, EFFECT_TYPE_STANDARD},
+    {"LGP KH Enhanced", lgpKelvinHelmholtzEnhanced, EFFECT_TYPE_STANDARD},
+
+    // =============== LGP MATHEMATICAL EFFECTS ===============
+    // Mathematical systems and geometric patterns
+    {"LGP Cellular Automata", lgpCellularAutomata, EFFECT_TYPE_STANDARD},
+    {"LGP Gray-Scott", lgpGrayScottReactionDiffusion, EFFECT_TYPE_STANDARD},
+    {"LGP Mandelbrot Zoom", lgpMandelbrotZoom, EFFECT_TYPE_STANDARD},
+    {"LGP Strange Attractor", lgpStrangeAttractor, EFFECT_TYPE_STANDARD},
+    {"LGP Kuramoto Sync", lgpKuramotoOscillators, EFFECT_TYPE_STANDARD},
 
 // Audio effects removed
 
@@ -506,13 +613,8 @@ void setup() {
     
     // Wait for USB CDC to enumerate (ESP32-S3 specific)
     #ifdef ARDUINO_USB_CDC_ON_BOOT
-    delay(2000);  // Give USB time to enumerate
-    while (!Serial && millis() < 5000) {
-        delay(10);  // Wait up to 5 seconds for serial
-    }
+    delay(500);  // Reduced from 2000+5000+1000 - just enough for USB
     #endif
-    
-    delay(1000);
     
     Serial.println("\n=== LightwaveOS - Dual LED Strips ===");
     Serial.println("Matrix mode has been surgically removed");
@@ -794,6 +896,14 @@ void setup() {
     Serial.println("✅ NarrativeEngine initialized (dramatic timing)");
     #endif
 
+    #if FEATURE_NARRATIVE_TENSION
+    NarrativeTension& tension = NarrativeTension::getInstance();
+    tension.initialize();
+    tension.setPhase(PHASE_BUILD, 15000);  // 15 second build
+    g_narrativeTension = &tension;
+    Serial.println("✅ NarrativeTension initialized (tension curves & parameter modulation)");
+    #endif
+
     Serial.println("Enhancement engines ready - Week 1-2 skeleton phase\n");
 #endif
 
@@ -890,6 +1000,13 @@ void renderUpdateCallback() {
     // Update dramatic timing (top layer - before physics)
     if (NarrativeEngine::getInstance().isEnabled()) {
         NarrativeEngine::getInstance().update();
+    }
+#endif
+
+#if FEATURE_NARRATIVE_TENSION
+    // Update tension system for parameter modulation
+    if (g_narrativeTension && g_narrativeTension->isEnabled()) {
+        g_narrativeTension->update();
     }
 #endif
 
@@ -1561,6 +1678,12 @@ void loop() {
 #if FEATURE_PERFORMANCE_MONITOR
     perfMon.startSection();
 #endif
+
+#if FEATURE_SHOWS
+    // Update ShowDirector (choreographed shows) BEFORE effect rendering
+    ShowDirector::getInstance().update();
+#endif
+
     effectUpdateCallback();  // Run the current effect
     renderUpdateCallback();  // Handle transitions
 #if FEATURE_PERFORMANCE_MONITOR

@@ -5,6 +5,7 @@
 #include "../../config/hardware_config.h"
 #include "../../core/EffectTypes.h"
 #include "../../utils/TrigLookup.h"
+#include "../utils/FastLEDOptim.h"
 #include <math.h>
 
 #ifndef TWO_PI
@@ -45,24 +46,27 @@ void lgpColorTemperature() {
             warm.r = 255;
             warm.g = 180 - (normalizedDist * 100);
             warm.b = 50 + (normalizedDist * 50);
-            strip1[i] = warm.scale8(intensity * 255);
+            // Optimized: Use FastLEDOptim::fastScale8 instead of scale8(intensity * 255)
+            uint8_t intensity8 = visualParams.intensity;
+            strip1[i] = FastLEDOptim::fastScaleRGB(warm, intensity8);
             
             // Cool side (blues/cyans)
             cool.r = 150 + (normalizedDist * 50);
             cool.g = 200 + (normalizedDist * 55);
             cool.b = 255;
-            strip2[i] = cool.scale8(intensity * 255);
+            strip2[i] = FastLEDOptim::fastScaleRGB(cool, intensity8);
         } else {
             // Mirror for other half
             warm.r = 255;
             warm.g = 180 - (normalizedDist * 100);
             warm.b = 50 + (normalizedDist * 50);
-            strip1[i] = warm.scale8(intensity * 255);
+            uint8_t intensity8 = visualParams.intensity;
+            strip1[i] = FastLEDOptim::fastScaleRGB(warm, intensity8);
             
             cool.r = 150 + (normalizedDist * 50);
             cool.g = 200 + (normalizedDist * 55);
             cool.b = 255;
-            strip2[i] = cool.scale8(intensity * 255);
+            strip2[i] = FastLEDOptim::fastScaleRGB(cool, intensity8);
         }
     }
 }
@@ -85,24 +89,39 @@ void lgpRGBPrism() {
         float normalizedDist = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
         
         // Different wavelengths refract differently
-        float redAngle = TrigLookup::sinf_lookup(normalizedDist * dispersion + prismAngle);
-        float greenAngle = TrigLookup::sinf_lookup(normalizedDist * dispersion * 1.1f + prismAngle);
-        float blueAngle = TrigLookup::sinf_lookup(normalizedDist * dispersion * 1.2f + prismAngle);
+        // Optimized: Use FastLED sin16 for better performance
+        float redPhase = (normalizedDist * dispersion + prismAngle) * TWO_PI;
+        float greenPhase = (normalizedDist * dispersion * 1.1f + prismAngle) * TWO_PI;
+        float bluePhase = (normalizedDist * dispersion * 1.2f + prismAngle) * TWO_PI;
+        
+        uint16_t redPhase16 = FastLEDOptim::radiansToPhase16(redPhase);
+        uint16_t greenPhase16 = FastLEDOptim::radiansToPhase16(greenPhase);
+        uint16_t bluePhase16 = FastLEDOptim::radiansToPhase16(bluePhase);
+        
+        int16_t redWave16 = FastLEDOptim::fastSin16(redPhase16);
+        int16_t greenWave16 = FastLEDOptim::fastSin16(greenPhase16);
+        int16_t blueWave16 = FastLEDOptim::fastSin16(bluePhase16);
+        
+        // Convert to 8-bit brightness (0-255)
+        uint8_t redBrightness = (redWave16 >> 8) + 128;
+        uint8_t greenBrightness = (greenWave16 >> 8) + 128;
+        uint8_t blueBrightness = (blueWave16 >> 8) + 128;
         
         // Strip 1: Red channel dominant
-        strip1[i].r = 128 + 127 * redAngle * intensity;
-        strip1[i].g = 64 * abs(greenAngle) * intensity;
+        uint8_t intensity8 = visualParams.intensity;
+        strip1[i].r = FastLEDOptim::fastScale8(redBrightness, intensity8);
+        strip1[i].g = FastLEDOptim::fastScale8(abs(greenBrightness - 128) + 64, intensity8);
         strip1[i].b = 0;
         
         // Strip 2: Blue channel dominant
         strip2[i].r = 0;
-        strip2[i].g = 64 * abs(greenAngle) * intensity;
-        strip2[i].b = 128 + 127 * blueAngle * intensity;
+        strip2[i].g = FastLEDOptim::fastScale8(abs(greenBrightness - 128) + 64, intensity8);
+        strip2[i].b = FastLEDOptim::fastScale8(blueBrightness, intensity8);
         
         // Green emerges at intersection
         if (distFromCenter < 10) {
-            strip1[i].g += 128 * intensity;
-            strip2[i].g += 128 * intensity;
+            strip1[i].g = FastLEDOptim::fastQAdd8(strip1[i].g, FastLEDOptim::fastScale8(128, intensity8));
+            strip2[i].g = FastLEDOptim::fastQAdd8(strip2[i].g, FastLEDOptim::fastScale8(128, intensity8));
         }
     }
 }
@@ -120,24 +139,33 @@ void lgpComplementaryMixing() {
     for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
         float distFromCenter = abs(i - HardwareConfig::STRIP_CENTER_POINT);
         float normalizedDist = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
-        
-        // Base hue rotates over time
-        uint8_t baseHue = gHue + (colorPhase * 255);
-        uint8_t complementHue = baseHue + 128;  // Exact opposite
-        
+
+        // Use palette colors instead of rainbow (gHue is FORBIDDEN)
+        // Phase-based palette index for slow color drift
+        uint8_t paletteIndex1 = (uint8_t)(colorPhase * 255) + (uint8_t)(distFromCenter * 2);
+        uint8_t paletteIndex2 = paletteIndex1 + 128;  // Complementary in palette
+
         // Intensity falls off from edges
         uint8_t edgeIntensity = 255 * (1 - normalizedDist * variation);
-        
+
         // Mix complementary colors
         if (normalizedDist > 0.5f) {
-            // Strong colors at edges
-            strip1[i] = CHSV(baseHue, 255, edgeIntensity * intensity);
-            strip2[i] = CHSV(complementHue, 255, edgeIntensity * intensity);
+            // Strong colors at edges - get at full brightness, then scale
+            CRGB color1 = ColorFromPalette(currentPalette, paletteIndex1, 255);
+            CRGB color2 = ColorFromPalette(currentPalette, paletteIndex2, 255);
+            color1.nscale8(edgeIntensity * intensity);
+            color2.nscale8(edgeIntensity * intensity);
+            strip1[i] = color1;
+            strip2[i] = color2;
         } else {
-            // Mixing zone - desaturate toward center
-            uint8_t saturation = 255 * (normalizedDist * 2);
-            strip1[i] = CHSV(baseHue, saturation, 128 * intensity);
-            strip2[i] = CHSV(complementHue, saturation, 128 * intensity);
+            // Mixing zone - reduced brightness toward center
+            uint8_t brightness = 128 * intensity;
+            CRGB color1 = ColorFromPalette(currentPalette, paletteIndex1, 255);
+            CRGB color2 = ColorFromPalette(currentPalette, paletteIndex2, 255);
+            color1.nscale8(brightness);
+            color2.nscale8(brightness);
+            strip1[i] = color1;
+            strip2[i] = color2;
         }
     }
 }
@@ -177,8 +205,16 @@ void lgpQuantumColors() {
         // Uncertainty principle - fuzzy at observation boundary
         uint8_t uncertainty = 255 * (0.5f + 0.5f * TrigLookup::sinf_lookup(distFromCenter * 20));
 
-        strip1[i] = ColorFromPalette(currentPalette, gHue + paletteOffset, uncertainty * intensity);
-        strip2[i] = ColorFromPalette(currentPalette, gHue + paletteOffset + 128, (255 - uncertainty) * intensity);
+        // Position-based palette index (no gHue - rainbow cycling forbidden)
+        uint8_t paletteIndex = (uint8_t)(distFromCenter * 3) + paletteOffset;
+
+        // Get colors at full brightness, then scale - preserves saturation
+        CRGB color1 = ColorFromPalette(currentPalette, paletteIndex, 255);
+        CRGB color2 = ColorFromPalette(currentPalette, paletteIndex + 128, 255);
+        color1.nscale8(uncertainty * intensity);
+        color2.nscale8((255 - uncertainty) * intensity);
+        strip1[i] = color1;
+        strip2[i] = color2;
     }
 }
 
@@ -208,18 +244,24 @@ void lgpDopplerShift() {
             dopplerFactor = 1.0f + (velocity / 100.0f);
         }
         
-        // Apply frequency shift to hue
-        uint8_t shiftedHue = gHue;
+        // Position-based palette index with Doppler shift (no gHue - rainbow forbidden)
+        uint8_t baseIndex = (uint8_t)(distFromCenter * 2);
+        uint8_t shiftedIndex;
         if (dopplerFactor > 1.0f) {
-            shiftedHue = gHue - (30 * (dopplerFactor - 1.0f));  // Blue shift
+            shiftedIndex = baseIndex - (uint8_t)(30 * (dopplerFactor - 1.0f));  // Blue shift
         } else {
-            shiftedHue = gHue + (30 * (1.0f - dopplerFactor));  // Red shift
+            shiftedIndex = baseIndex + (uint8_t)(30 * (1.0f - dopplerFactor));  // Red shift
         }
-        
+
         uint8_t brightness = 255 * intensity * (1 - distFromCenter / HardwareConfig::STRIP_HALF_LENGTH);
-        
-        strip1[i] = CHSV(shiftedHue, 255, brightness);
-        strip2[i] = CHSV(shiftedHue + 90, 255, brightness);
+
+        // Get colors at full brightness, then scale - preserves saturation
+        CRGB color1 = ColorFromPalette(currentPalette, shiftedIndex, 255);
+        CRGB color2 = ColorFromPalette(currentPalette, shiftedIndex + 64, 255);
+        color1.nscale8(brightness);
+        color2.nscale8(brightness);
+        strip1[i] = color1;
+        strip2[i] = color2;
     }
 }
 
@@ -334,16 +376,26 @@ void lgpDNAHelix() {
             connectionIntensity = 1;
         }
 
-        uint8_t brightness = 255 * intensity;
+        // Position-based palette indices (no gHue - rainbow cycling forbidden)
+        uint8_t paletteIndex1 = (uint8_t)(distFromCenter * 2) + paletteOffset1;
+        uint8_t paletteIndex2 = (uint8_t)(distFromCenter * 2) + paletteOffset2;
+
+        // Get colors at full brightness, then scale - preserves saturation
+        CRGB color1 = ColorFromPalette(currentPalette, paletteIndex1, 255);
+        CRGB color2 = ColorFromPalette(currentPalette, paletteIndex2, 255);
+        color1.nscale8(255 * strand1Intensity * intensity);
+        color2.nscale8(255 * strand2Intensity * intensity);
 
         // Draw strands
-        strip1[i] = ColorFromPalette(currentPalette, gHue + paletteOffset1, brightness * strand1Intensity);
-        strip2[i] = ColorFromPalette(currentPalette, gHue + paletteOffset2, brightness * strand2Intensity);
+        strip1[i] = color1;
+        strip2[i] = color2;
 
         // Add connections
         if (connectionIntensity > 0) {
-            CRGB conn2 = ColorFromPalette(currentPalette, gHue + paletteOffset2, brightness);
-            CRGB conn1 = ColorFromPalette(currentPalette, gHue + paletteOffset1, brightness);
+            CRGB conn2 = ColorFromPalette(currentPalette, paletteIndex2, 255);
+            CRGB conn1 = ColorFromPalette(currentPalette, paletteIndex1, 255);
+            conn2.nscale8(255 * intensity);
+            conn1.nscale8(255 * intensity);
             strip1[i] = blend(strip1[i], conn2, 128);
             strip2[i] = blend(strip2[i], conn1, 128);
         }
@@ -371,39 +423,49 @@ void lgpPhaseTransition() {
         uint8_t paletteOffset;
         uint8_t brightness;
 
+        // Position-based palette index (no gHue - rainbow cycling forbidden)
+        uint8_t baseIndex = (uint8_t)(distFromCenter * 2);
+
         if (localTemp < 0.25f) {
             // Solid phase - crystalline structure
             float crystal = TrigLookup::sinf_lookup(distFromCenter * 10) * 0.5f + 0.5f;
             paletteOffset = 0 + crystal * 5;  // Small range for solid
-            brightness = 255 * intensity;
-            color = ColorFromPalette(currentPalette, gHue + paletteOffset, brightness);
+            brightness = 255;
+            color = ColorFromPalette(currentPalette, baseIndex + paletteOffset, 255);
+            color.nscale8(brightness * intensity);
         } else if (localTemp < 0.5f) {
             // Liquid phase - flowing motion
             float flow = TrigLookup::sinf_lookup(distFromCenter * 0.5f + phaseAnimation);
             paletteOffset = 10 + flow * 5;  // Small range for liquid
-            brightness = 200 * intensity;
-            color = ColorFromPalette(currentPalette, gHue + paletteOffset, brightness);
+            brightness = 200;
+            color = ColorFromPalette(currentPalette, baseIndex + paletteOffset, 255);
+            color.nscale8(brightness * intensity);
         } else if (localTemp < 0.75f) {
             // Gas phase - dispersed particles
             float dispersion = random8() / 255.0f;
             if (dispersion < 0.3f) {
                 paletteOffset = 20;
-                brightness = 150 * intensity;
-                color = ColorFromPalette(currentPalette, gHue + paletteOffset, brightness);
+                brightness = 150;
+                color = ColorFromPalette(currentPalette, baseIndex + paletteOffset, 255);
+                color.nscale8(brightness * intensity);
             } else {
                 color = CRGB::Black;
+                brightness = 0;
             }
         } else {
             // Plasma phase - ionized, energetic
             float plasma = TrigLookup::sinf_lookup(distFromCenter * 20 + phaseAnimation * 10);
             paletteOffset = 30 + plasma * 10;  // Reduced from 40
-            brightness = 255 * intensity;
-            color = ColorFromPalette(currentPalette, gHue + paletteOffset, brightness);
+            brightness = 255;
+            color = ColorFromPalette(currentPalette, baseIndex + paletteOffset, 255);
+            color.nscale8(brightness * intensity);
         }
 
         // Different phases on each strip create phase boundary effects
         strip1[i] = color;
-        strip2[i] = ColorFromPalette(currentPalette, gHue + paletteOffset + 60, brightness);
+        CRGB color2 = ColorFromPalette(currentPalette, baseIndex + paletteOffset + 60, 255);
+        color2.nscale8(brightness * intensity);
+        strip2[i] = color2;
     }
 }
 
@@ -421,8 +483,8 @@ void lgpHSVCylinder() {
         float distFromCenter = abs(i - HardwareConfig::STRIP_CENTER_POINT);
         float normalizedDist = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
 
-        // Use palette with small offset instead of full hue rotation
-        uint8_t paletteIndex = (cylinderRotation * 10) + (normalizedDist * complexity * 30);
+        // Position-based palette index (no gHue - rainbow cycling forbidden)
+        uint8_t paletteIndex = (uint8_t)(cylinderRotation * 10) + (uint8_t)(normalizedDist * complexity * 30) + (uint8_t)(distFromCenter * 2);
 
         // Strip 2: Travels through SATURATION (radius from center)
         uint8_t sat2 = 255 * (1 - normalizedDist);
@@ -430,8 +492,13 @@ void lgpHSVCylinder() {
         // Value (height) oscillates
         uint8_t val = 128 + 127 * TrigLookup::sinf_lookup(cylinderRotation + distFromCenter * 0.1f);
 
-        strip1[i] = ColorFromPalette(currentPalette, gHue + paletteIndex, val * intensity);
-        strip2[i] = ColorFromPalette(currentPalette, gHue + 128, sat2 * (val * intensity) / 255);
+        // Get colors at full brightness, then scale - preserves saturation
+        CRGB color1 = ColorFromPalette(currentPalette, paletteIndex, 255);
+        CRGB color2 = ColorFromPalette(currentPalette, paletteIndex + 128, 255);
+        color1.nscale8(val * intensity);
+        color2.nscale8(sat2 * (val * intensity) / 255);
+        strip1[i] = color1;
+        strip2[i] = color2;
     }
 }
 
@@ -485,23 +552,39 @@ void lgpChromaticAberration() {
         float normalizedDist = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
         
         // Lens equation with chromatic aberration
-        float redFocus = TrigLookup::sinf_lookup((normalizedDist - 0.1f * aberration) * PI + lensPosition);
-        float greenFocus = TrigLookup::sinf_lookup(normalizedDist * PI + lensPosition);
-        float blueFocus = TrigLookup::sinf_lookup((normalizedDist + 0.1f * aberration) * PI + lensPosition);
+        // Optimized: Use FastLED sin16 for better performance
+        float redPhase = ((normalizedDist - 0.1f * aberration) * PI + lensPosition);
+        float greenPhase = (normalizedDist * PI + lensPosition);
+        float bluePhase = ((normalizedDist + 0.1f * aberration) * PI + lensPosition);
         
-        // Create rainbow halos at boundaries
+        uint16_t redPhase16 = FastLEDOptim::radiansToPhase16(redPhase);
+        uint16_t greenPhase16 = FastLEDOptim::radiansToPhase16(greenPhase);
+        uint16_t bluePhase16 = FastLEDOptim::radiansToPhase16(bluePhase);
+        
+        int16_t redWave16 = FastLEDOptim::fastSin16(redPhase16);
+        int16_t greenWave16 = FastLEDOptim::fastSin16(greenPhase16);
+        int16_t blueWave16 = FastLEDOptim::fastSin16(bluePhase16);
+        
+        // Convert to 8-bit brightness (0-255)
+        uint8_t redBrightness = constrain((redWave16 >> 8) + 128, 0, 255);
+        uint8_t greenBrightness = constrain((greenWave16 >> 8) + 128, 0, 255);
+        uint8_t blueBrightness = constrain((blueWave16 >> 8) + 128, 0, 255);
+        
+        uint8_t intensity8 = visualParams.intensity;
+        
+        // Create chromatic aberration effect
         CRGB aberratedColor;
-        aberratedColor.r = constrain(128 + 127 * redFocus, 0, 255) * intensity;
-        aberratedColor.g = constrain(128 + 127 * greenFocus, 0, 255) * intensity;
-        aberratedColor.b = constrain(128 + 127 * blueFocus, 0, 255) * intensity;
+        aberratedColor.r = FastLEDOptim::fastScale8(redBrightness, intensity8);
+        aberratedColor.g = FastLEDOptim::fastScale8(greenBrightness, intensity8);
+        aberratedColor.b = FastLEDOptim::fastScale8(blueBrightness, intensity8);
         
         strip1[i] = aberratedColor;
         
         // Opposite aberration on strip2
         CRGB aberratedColor2;
-        aberratedColor2.r = constrain(128 + 127 * blueFocus, 0, 255) * intensity;
-        aberratedColor2.g = constrain(128 + 127 * greenFocus, 0, 255) * intensity;
-        aberratedColor2.b = constrain(128 + 127 * redFocus, 0, 255) * intensity;
+        aberratedColor2.r = FastLEDOptim::fastScale8(blueBrightness, intensity8);
+        aberratedColor2.g = FastLEDOptim::fastScale8(greenBrightness, intensity8);
+        aberratedColor2.b = FastLEDOptim::fastScale8(redBrightness, intensity8);
         
         strip2[i] = aberratedColor2;
     }
@@ -570,8 +653,9 @@ void lgpMetamericColors() {
         float distFromCenter = abs(i - HardwareConfig::STRIP_CENTER_POINT);
         float normalizedDist = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
         
-        // Target color (what we want to match)
-        CRGB targetColor = CHSV(gHue, 200, 200);
+        // Target color from palette (no gHue - rainbow cycling forbidden)
+        uint8_t paletteIndex = (uint8_t)(distFromCenter * 2) + (uint8_t)(spectralShift * 10);
+        CRGB targetColor = ColorFromPalette(currentPalette, paletteIndex, 200);
         
         if (normalizedDist > 0.5f) {
             // Edges: Different spectral distributions
@@ -599,5 +683,220 @@ void lgpMetamericColors() {
             strip1[i] = targetColor.scale8(intensity * 255);
             strip2[i] = targetColor.scale8(intensity * 255);
         }
+    }
+}
+
+// ============== CHROMATIC LENS (Static Aberration) ==============
+// Static chromatic aberration effect simulating a lens with fixed dispersion
+// Based on physics equations from LGP_OPTICAL_PHYSICS_REFERENCE.md
+void lgpChromaticLens() {
+    float intensity = visualParams.getIntensityNorm();
+    float aberration = visualParams.getComplexityNorm() * 0.3f;  // 0.0-0.3 aberration amount
+    
+    for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+        float distFromCenter = abs(i - HardwareConfig::STRIP_CENTER_POINT);
+        float normalizedDist = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
+        
+        // Chromatic dispersion: different wavelengths focus at different positions
+        // Using FastLED optimization utilities for performance
+        float redPhase = (normalizedDist - 0.1f * aberration) * PI;
+        float greenPhase = normalizedDist * PI;
+        float bluePhase = (normalizedDist + 0.1f * aberration) * PI;
+        
+        uint16_t redPhase16 = FastLEDOptim::radiansToPhase16(redPhase);
+        uint16_t greenPhase16 = FastLEDOptim::radiansToPhase16(greenPhase);
+        uint16_t bluePhase16 = FastLEDOptim::radiansToPhase16(bluePhase);
+        
+        int16_t redWave16 = FastLEDOptim::fastSin16(redPhase16);
+        int16_t greenWave16 = FastLEDOptim::fastSin16(greenPhase16);
+        int16_t blueWave16 = FastLEDOptim::fastSin16(bluePhase16);
+        
+        // Convert to RGB brightness (0-255)
+        uint8_t redBrightness = constrain((redWave16 >> 8) + 128, 0, 255);
+        uint8_t greenBrightness = constrain((greenWave16 >> 8) + 128, 0, 255);
+        uint8_t blueBrightness = constrain((blueWave16 >> 8) + 128, 0, 255);
+        
+        uint8_t intensity8 = visualParams.intensity;
+        
+        // Apply chromatic separation
+        CRGB color1;
+        color1.r = FastLEDOptim::fastScale8(redBrightness, intensity8);
+        color1.g = FastLEDOptim::fastScale8(greenBrightness, intensity8);
+        color1.b = FastLEDOptim::fastScale8(blueBrightness, intensity8);
+        
+        // Strip 2: Complementary aberration (opposite direction)
+        CRGB color2;
+        color2.r = FastLEDOptim::fastScale8(blueBrightness, intensity8);
+        color2.g = FastLEDOptim::fastScale8(greenBrightness, intensity8);
+        color2.b = FastLEDOptim::fastScale8(redBrightness, intensity8);
+        
+        strip1[i] = color1;
+        strip2[i] = color2;
+    }
+}
+
+// ============== CHROMATIC PULSE (Aberration Sweeps from Centre) ==============
+// Dynamic chromatic aberration that pulses outward from centre
+// Creates a "breathing" lens effect
+void lgpChromaticPulse() {
+    float intensity = visualParams.getIntensityNorm();
+    float speed = paletteSpeed / 255.0f;
+    float aberration = visualParams.getComplexityNorm() * 0.3f;
+    
+    static float pulsePhase = 0;
+    pulsePhase += speed * 0.02f;
+    
+    // Pulse amplitude: 0.0-1.0
+    float pulseAmplitude = (FastLEDOptim::fastSin8((uint8_t)(pulsePhase * 255)) / 255.0f) * 0.5f + 0.5f;
+    float currentAberration = aberration * pulseAmplitude;
+    
+    for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+        float distFromCenter = abs(i - HardwareConfig::STRIP_CENTER_POINT);
+        float normalizedDist = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
+        
+        // Chromatic dispersion with pulsing aberration
+        float redPhase = (normalizedDist - 0.1f * currentAberration) * PI + pulsePhase;
+        float greenPhase = normalizedDist * PI + pulsePhase;
+        float bluePhase = (normalizedDist + 0.1f * currentAberration) * PI + pulsePhase;
+        
+        uint16_t redPhase16 = FastLEDOptim::radiansToPhase16(redPhase);
+        uint16_t greenPhase16 = FastLEDOptim::radiansToPhase16(greenPhase);
+        uint16_t bluePhase16 = FastLEDOptim::radiansToPhase16(bluePhase);
+        
+        int16_t redWave16 = FastLEDOptim::fastSin16(redPhase16);
+        int16_t greenWave16 = FastLEDOptim::fastSin16(greenPhase16);
+        int16_t blueWave16 = FastLEDOptim::fastSin16(bluePhase16);
+        
+        uint8_t redBrightness = constrain((redWave16 >> 8) + 128, 0, 255);
+        uint8_t greenBrightness = constrain((greenWave16 >> 8) + 128, 0, 255);
+        uint8_t blueBrightness = constrain((blueWave16 >> 8) + 128, 0, 255);
+        
+        uint8_t intensity8 = visualParams.intensity;
+        
+        // Create pulsing chromatic effect
+        CRGB color1;
+        color1.r = FastLEDOptim::fastScale8(redBrightness, intensity8);
+        color1.g = FastLEDOptim::fastScale8(greenBrightness, intensity8);
+        color1.b = FastLEDOptim::fastScale8(blueBrightness, intensity8);
+        
+        // Strip 2: Phase-shifted pulse
+        CRGB color2;
+        float phase2 = pulsePhase + PI;
+        uint16_t redPhase16_2 = FastLEDOptim::radiansToPhase16((normalizedDist - 0.1f * currentAberration) * PI + phase2);
+        uint16_t greenPhase16_2 = FastLEDOptim::radiansToPhase16(normalizedDist * PI + phase2);
+        uint16_t bluePhase16_2 = FastLEDOptim::radiansToPhase16((normalizedDist + 0.1f * currentAberration) * PI + phase2);
+        
+        int16_t redWave16_2 = FastLEDOptim::fastSin16(redPhase16_2);
+        int16_t greenWave16_2 = FastLEDOptim::fastSin16(greenPhase16_2);
+        int16_t blueWave16_2 = FastLEDOptim::fastSin16(bluePhase16_2);
+        
+        uint8_t redBrightness2 = constrain((redWave16_2 >> 8) + 128, 0, 255);
+        uint8_t greenBrightness2 = constrain((greenWave16_2 >> 8) + 128, 0, 255);
+        uint8_t blueBrightness2 = constrain((blueWave16_2 >> 8) + 128, 0, 255);
+        
+        color2.r = FastLEDOptim::fastScale8(redBrightness2, intensity8);
+        color2.g = FastLEDOptim::fastScale8(greenBrightness2, intensity8);
+        color2.b = FastLEDOptim::fastScale8(blueBrightness2, intensity8);
+        
+        strip1[i] = color1;
+        strip2[i] = color2;
+    }
+}
+
+// ============== CHROMATIC INTERFERENCE (Dual-Edge with Dispersion) ==============
+// Combines dual-edge interference with chromatic dispersion
+// Creates complex interference patterns with wavelength-dependent effects
+void lgpChromaticInterference() {
+    float intensity = visualParams.getIntensityNorm();
+    float speed = paletteSpeed / 255.0f;
+    float aberration = visualParams.getComplexityNorm() * 0.3f;
+    float variation = visualParams.getVariationNorm();
+    
+    static float phase1 = 0, phase2 = 0;
+    phase1 += speed * 0.01f;
+    phase2 += speed * 0.015f;  // Slightly different speed for interference
+    
+    for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
+        float distFromCenter = abs(i - HardwareConfig::STRIP_CENTER_POINT);
+        float normalizedDist = distFromCenter / HardwareConfig::STRIP_HALF_LENGTH;
+        
+        // Edge 1 contribution (left edge)
+        float edge1Dist = (float)i / HardwareConfig::STRIP_LENGTH;
+        float edge1RedPhase = (edge1Dist - 0.1f * aberration) * TWO_PI + phase1;
+        float edge1GreenPhase = edge1Dist * TWO_PI + phase1;
+        float edge1BluePhase = (edge1Dist + 0.1f * aberration) * TWO_PI + phase1;
+        
+        // Edge 2 contribution (right edge)
+        float edge2Dist = 1.0f - edge1Dist;
+        float edge2RedPhase = (edge2Dist - 0.1f * aberration) * TWO_PI + phase2;
+        float edge2GreenPhase = edge2Dist * TWO_PI + phase2;
+        float edge2BluePhase = (edge2Dist + 0.1f * aberration) * TWO_PI + phase2;
+        
+        // Calculate interference for each wavelength
+        uint16_t edge1RedPhase16 = FastLEDOptim::radiansToPhase16(edge1RedPhase);
+        uint16_t edge1GreenPhase16 = FastLEDOptim::radiansToPhase16(edge1GreenPhase);
+        uint16_t edge1BluePhase16 = FastLEDOptim::radiansToPhase16(edge1BluePhase);
+        
+        uint16_t edge2RedPhase16 = FastLEDOptim::radiansToPhase16(edge2RedPhase);
+        uint16_t edge2GreenPhase16 = FastLEDOptim::radiansToPhase16(edge2GreenPhase);
+        uint16_t edge2BluePhase16 = FastLEDOptim::radiansToPhase16(edge2BluePhase);
+        
+        // Interference calculation: I = I1 + I2 + 2√(I1×I2) × cos(Δφ)
+        int16_t edge1RedWave = FastLEDOptim::fastSin16(edge1RedPhase16);
+        int16_t edge1GreenWave = FastLEDOptim::fastSin16(edge1GreenPhase16);
+        int16_t edge1BlueWave = FastLEDOptim::fastSin16(edge1BluePhase16);
+        
+        int16_t edge2RedWave = FastLEDOptim::fastSin16(edge2RedPhase16);
+        int16_t edge2GreenWave = FastLEDOptim::fastSin16(edge2GreenPhase16);
+        int16_t edge2BlueWave = FastLEDOptim::fastSin16(edge2BluePhase16);
+        
+        // Convert to amplitude (0-255)
+        uint8_t edge1RedAmp = (edge1RedWave >> 8) + 128;
+        uint8_t edge1GreenAmp = (edge1GreenWave >> 8) + 128;
+        uint8_t edge1BlueAmp = (edge1BlueWave >> 8) + 128;
+        
+        uint8_t edge2RedAmp = (edge2RedWave >> 8) + 128;
+        uint8_t edge2GreenAmp = (edge2GreenWave >> 8) + 128;
+        uint8_t edge2BlueAmp = (edge2BlueWave >> 8) + 128;
+        
+        // Calculate phase difference for interference
+        uint16_t redPhaseDiff = abs((int16_t)edge1RedPhase16 - (int16_t)edge2RedPhase16);
+        uint16_t greenPhaseDiff = abs((int16_t)edge1GreenPhase16 - (int16_t)edge2GreenPhase16);
+        uint16_t bluePhaseDiff = abs((int16_t)edge1BluePhase16 - (int16_t)edge2BluePhase16);
+        
+        // Interference term: cos(phase_diff)
+        int16_t redInterference = FastLEDOptim::fastCos16(redPhaseDiff);
+        int16_t greenInterference = FastLEDOptim::fastCos16(greenPhaseDiff);
+        int16_t blueInterference = FastLEDOptim::fastCos16(bluePhaseDiff);
+        
+        // Simplified interference: I = I1 + I2 + interference_term
+        uint8_t redBrightness = FastLEDOptim::fastQAdd8(
+            FastLEDOptim::fastQAdd8(edge1RedAmp, edge2RedAmp),
+            FastLEDOptim::fastScale8((redInterference >> 8) + 128, 128)
+        );
+        uint8_t greenBrightness = FastLEDOptim::fastQAdd8(
+            FastLEDOptim::fastQAdd8(edge1GreenAmp, edge2GreenAmp),
+            FastLEDOptim::fastScale8((greenInterference >> 8) + 128, 128)
+        );
+        uint8_t blueBrightness = FastLEDOptim::fastQAdd8(
+            FastLEDOptim::fastQAdd8(edge1BlueAmp, edge2BlueAmp),
+            FastLEDOptim::fastScale8((blueInterference >> 8) + 128, 128)
+        );
+        
+        uint8_t intensity8 = visualParams.intensity;
+        
+        CRGB color1;
+        color1.r = FastLEDOptim::fastScale8(redBrightness, intensity8);
+        color1.g = FastLEDOptim::fastScale8(greenBrightness, intensity8);
+        color1.b = FastLEDOptim::fastScale8(blueBrightness, intensity8);
+        
+        // Strip 2: Phase-shifted interference
+        CRGB color2;
+        color2.r = FastLEDOptim::fastScale8(blueBrightness, intensity8);
+        color2.g = FastLEDOptim::fastScale8(greenBrightness, intensity8);
+        color2.b = FastLEDOptim::fastScale8(redBrightness, intensity8);
+        
+        strip1[i] = color1;
+        strip2[i] = color2;
     }
 }

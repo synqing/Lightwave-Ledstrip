@@ -15,6 +15,9 @@ extern CRGBPalette16 currentPalette;
 extern const TProgmemRGBGradientPaletteRef gMasterPalettes[];
 extern const uint8_t gMasterPaletteCount;
 
+// Visual parameters for per-zone parameter support (Phase C.4)
+extern VisualParams visualParams;
+
 ZoneComposer::ZoneComposer()
     : m_zoneCount(3)  // Default to 3-zone mode
     , m_enabled(true)   // Zone mode ON by default at boot
@@ -255,7 +258,11 @@ void ZoneComposer::renderZone(uint8_t zoneId) {
     // Effects that use effectSpeed will now use the zone-specific value
     effectSpeed = m_zoneSpeed[zoneId];
 
-    // Step 3: Apply per-zone palette (save original first)
+    // Step 3: Apply per-zone visual parameters (Phase C.4 - swap/restore pattern)
+    VisualParams savedParams = visualParams;
+    visualParams = m_zoneVisualParams[zoneId];
+
+    // Step 4: Apply per-zone palette (save original first)
     CRGBPalette16 savedPalette = currentPalette;
     uint8_t zonePaletteId = m_zonePalette[zoneId];
     if (zonePaletteId > 0 && zonePaletteId <= gMasterPaletteCount) {
@@ -263,16 +270,18 @@ void ZoneComposer::renderZone(uint8_t zoneId) {
         currentPalette = gMasterPalettes[zonePaletteId - 1];
     }
 
-    // Step 4: Execute effect - it renders to full strip1/strip2
+    // Step 5: Execute effect - it renders to full strip1/strip2
+    // Effect now uses zone-specific speed, palette, and visual params
     effects[effectId].function();
 
-    // Step 5: Restore original palette
+    // Step 6: Restore original palette and visual params
     currentPalette = savedPalette;
+    visualParams = savedParams;
 
-    // Step 6: Extract zone segment and map to output (applies per-zone brightness)
+    // Step 7: Extract zone segment and map to output (applies per-zone brightness)
     mapZoneToOutput(zoneId);
 
-    // Step 7: Clear strips for next zone
+    // Step 8: Clear strips for next zone
     fill_solid(strip1, 160, CRGB::Black);
     fill_solid(strip2, 160, CRGB::Black);
 }
@@ -440,6 +449,11 @@ void ZoneComposer::printStatus() const {
         Serial.printf("  Speed: %d\n", m_zoneSpeed[i]);
         Serial.printf("  Palette: %d%s\n", m_zonePalette[i],
                      m_zonePalette[i] == 0 ? " (global)" : "");
+        Serial.printf("  VisualParams: I=%d S=%d C=%d V=%d\n",
+                     m_zoneVisualParams[i].intensity,
+                     m_zoneVisualParams[i].saturation,
+                     m_zoneVisualParams[i].complexity,
+                     m_zoneVisualParams[i].variation);
 
         const ZoneDefinition& zone = m_activeConfig[i];  // Use active config
         Serial.printf("  Strip1 Range: [%d-%d] + [%d-%d]\n",
@@ -452,4 +466,83 @@ void ZoneComposer::printStatus() const {
     }
 
     Serial.println("===========================================\n");
+}
+
+// ============================================================================
+// Per-Zone Visual Parameters (Phase C.4)
+// ============================================================================
+
+void ZoneComposer::setZoneVisualParams(uint8_t zoneId, const VisualParams& params) {
+    if (zoneId >= HardwareConfig::MAX_ZONES) {
+        Serial.printf("ERROR: Invalid zone ID %d\n", zoneId);
+        return;
+    }
+    m_zoneVisualParams[zoneId] = params;
+}
+
+VisualParams ZoneComposer::getZoneVisualParams(uint8_t zoneId) const {
+    if (zoneId >= HardwareConfig::MAX_ZONES) {
+        return VisualParams();  // Return default
+    }
+    return m_zoneVisualParams[zoneId];
+}
+
+void ZoneComposer::setZoneIntensity(uint8_t zoneId, uint8_t value) {
+    if (zoneId >= HardwareConfig::MAX_ZONES) {
+        Serial.printf("ERROR: Invalid zone ID %d\n", zoneId);
+        return;
+    }
+    m_zoneVisualParams[zoneId].intensity = value;
+}
+
+uint8_t ZoneComposer::getZoneIntensity(uint8_t zoneId) const {
+    if (zoneId >= HardwareConfig::MAX_ZONES) {
+        return 128;  // Default intensity
+    }
+    return m_zoneVisualParams[zoneId].intensity;
+}
+
+void ZoneComposer::setZoneSaturation(uint8_t zoneId, uint8_t value) {
+    if (zoneId >= HardwareConfig::MAX_ZONES) {
+        Serial.printf("ERROR: Invalid zone ID %d\n", zoneId);
+        return;
+    }
+    m_zoneVisualParams[zoneId].saturation = value;
+}
+
+uint8_t ZoneComposer::getZoneSaturation(uint8_t zoneId) const {
+    if (zoneId >= HardwareConfig::MAX_ZONES) {
+        return 255;  // Default saturation
+    }
+    return m_zoneVisualParams[zoneId].saturation;
+}
+
+void ZoneComposer::setZoneComplexity(uint8_t zoneId, uint8_t value) {
+    if (zoneId >= HardwareConfig::MAX_ZONES) {
+        Serial.printf("ERROR: Invalid zone ID %d\n", zoneId);
+        return;
+    }
+    m_zoneVisualParams[zoneId].complexity = value;
+}
+
+uint8_t ZoneComposer::getZoneComplexity(uint8_t zoneId) const {
+    if (zoneId >= HardwareConfig::MAX_ZONES) {
+        return 128;  // Default complexity
+    }
+    return m_zoneVisualParams[zoneId].complexity;
+}
+
+void ZoneComposer::setZoneVariation(uint8_t zoneId, uint8_t value) {
+    if (zoneId >= HardwareConfig::MAX_ZONES) {
+        Serial.printf("ERROR: Invalid zone ID %d\n", zoneId);
+        return;
+    }
+    m_zoneVisualParams[zoneId].variation = value;
+}
+
+uint8_t ZoneComposer::getZoneVariation(uint8_t zoneId) const {
+    if (zoneId >= HardwareConfig::MAX_ZONES) {
+        return 0;  // Default variation
+    }
+    return m_zoneVisualParams[zoneId].variation;
 }

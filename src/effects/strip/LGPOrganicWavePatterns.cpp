@@ -240,7 +240,8 @@ void lgpBacterialColonyGrowth() {
         float density = bacteriaDensity[i];
         float biofilm = biofilmMatrix[i];
         float signal = quorumSignal[i];
-        
+        float distFromCenter = abs(i - HardwareConfig::STRIP_CENTER_POINT);
+
         // Brightness based on bacterial density
         uint8_t brightness = constrain((density * 0.7f + biofilm * 0.3f) * 255 * intensity, 0, 255);
 
@@ -258,8 +259,17 @@ void lgpBacterialColonyGrowth() {
             paletteIndex1 += 20;
         }
 
-        strip1[i] = ColorFromPalette(currentPalette, gHue + paletteIndex1, brightness);
-        strip2[i] = ColorFromPalette(currentPalette, gHue + paletteIndex2, brightness);
+        // Position-based indices (no gHue - rainbow cycling forbidden)
+        uint8_t finalIndex1 = paletteIndex1 + (uint8_t)(distFromCenter * 2);
+        uint8_t finalIndex2 = paletteIndex2 + (uint8_t)(distFromCenter * 2);
+
+        // Get colors at full brightness, then scale - preserves saturation
+        CRGB color1 = ColorFromPalette(currentPalette, finalIndex1, 255);
+        CRGB color2 = ColorFromPalette(currentPalette, finalIndex2, 255);
+        color1.nscale8(brightness);
+        color2.nscale8(brightness);
+        strip1[i] = color1;
+        strip2[i] = color2;
     }
 }
 
@@ -405,8 +415,17 @@ void lgpDNAReplicationFork() {
             }
         }
 
-        strip1[i] = ColorFromPalette(currentPalette, gHue + paletteOffset1, brightness);
-        strip2[i] = ColorFromPalette(currentPalette, gHue + paletteOffset2, brightness);
+        // Position-based indices (no gHue - rainbow cycling forbidden)
+        uint8_t paletteIndex1 = paletteOffset1 + (uint8_t)(distFromCenter * 2);
+        uint8_t paletteIndex2 = paletteOffset2 + (uint8_t)(distFromCenter * 2);
+
+        // Get colors at full brightness, then scale - preserves saturation
+        CRGB color1 = ColorFromPalette(currentPalette, paletteIndex1, 255);
+        CRGB color2 = ColorFromPalette(currentPalette, paletteIndex2, 255);
+        color1.nscale8(brightness);
+        color2.nscale8(brightness);
+        strip1[i] = color1;
+        strip2[i] = color2;
     }
 }
 
@@ -530,6 +549,7 @@ void lgpProteinFoldingDynamics() {
         float secondary = secondaryStructure[i];
         float tertiary = tertiaryContacts[i];
         float folded = (secondary + tertiary) / 2;
+        float distFromCenter = abs(i - HardwareConfig::STRIP_CENTER_POINT);
 
         uint8_t brightness = constrain((0.3f + folded * 0.7f) * 255 * intensity, 0, 255);
 
@@ -562,8 +582,17 @@ void lgpProteinFoldingDynamics() {
             brightness = 255;
         }
 
-        strip1[i] = ColorFromPalette(currentPalette, gHue + paletteOffset1, brightness);
-        strip2[i] = ColorFromPalette(currentPalette, gHue + paletteOffset2, brightness);
+        // Position-based indices (no gHue - rainbow cycling forbidden)
+        uint8_t paletteIndex1 = paletteOffset1 + (uint8_t)(distFromCenter * 2);
+        uint8_t paletteIndex2 = paletteOffset2 + (uint8_t)(distFromCenter * 2);
+
+        // Get colors at full brightness, then scale - preserves saturation
+        CRGB color1 = ColorFromPalette(currentPalette, paletteIndex1, 255);
+        CRGB color2 = ColorFromPalette(currentPalette, paletteIndex2, 255);
+        color1.nscale8(brightness);
+        color2.nscale8(brightness);
+        strip1[i] = color1;
+        strip2[i] = color2;
     }
 }
 
@@ -702,25 +731,31 @@ void lgpMyceliumNetworkGrowth() {
         brightness += signal * 55;
         brightness = min(255, (int)brightness);
         
-        // Color based on network state
-        uint8_t hue1 = gHue + (networkAge[i] * 40);  // Age gradient
-        uint8_t hue2 = gHue + (nutrientFlow[i] * 60);  // Nutrient flow
-        
-        // Special colors
+        // Position-based palette index (no gHue - rainbow cycling forbidden)
+        float distFromCenter = abs(i - HardwareConfig::STRIP_CENTER_POINT);
+        uint8_t paletteIndex1 = (uint8_t)(networkAge[i] * 40) + (uint8_t)(distFromCenter * 2);
+        uint8_t paletteIndex2 = (uint8_t)(nutrientFlow[i] * 60) + (uint8_t)(distFromCenter * 2);
+
+        // Special colors (palette offsets instead of absolute hues)
         if (spores > 0.5f) {
-            // Fruiting bodies - orange/red
-            hue1 = 16 + (spores * 32);
+            // Fruiting bodies - warm palette region
+            paletteIndex1 = 10 + (uint8_t)(spores * 20);
             brightness = 255;
         } else if (signal > 0.5f) {
-            // Active communication - blue pulse
-            hue1 = 160 + (signal * 40);
+            // Active communication - cool palette region
+            paletteIndex1 = 100 + (uint8_t)(signal * 30);
         } else if (density > 0.8f && complexity > 0.7f) {
-            // Dense anastomosed regions - purple
-            hue1 = 192 + (density * 32);
+            // Dense anastomosed regions - deep palette region
+            paletteIndex1 = 140 + (uint8_t)(density * 20);
         }
-        
-        strip1[i] = CHSV(hue1, saturation * 255, brightness);
-        strip2[i] = CHSV(hue2, saturation * 255, brightness);
+
+        // Get colors at full brightness, then scale - preserves saturation
+        CRGB color1 = ColorFromPalette(currentPalette, paletteIndex1, 255);
+        CRGB color2 = ColorFromPalette(currentPalette, paletteIndex2, 255);
+        color1.nscale8(brightness);
+        color2.nscale8(brightness);
+        strip1[i] = color1;
+        strip2[i] = color2;
     }
 }
 
@@ -851,36 +886,42 @@ void lgpSlimeMoldOptimization() {
         
         // Brightness based on slime presence and tube thickness
         uint8_t brightness = constrain((density * 0.6f + tube * 0.4f) * 255 * intensity, 0, 255);
-        
-        // Color based on state
-        uint8_t hue1 = gHue + 64;  // Base yellow for slime
-        uint8_t hue2 = gHue + 64;
-        
-        // Food sources - bright green
+
+        // Position-based palette index (no gHue - rainbow cycling forbidden)
+        float distFromCenter = abs(i - HardwareConfig::STRIP_CENTER_POINT);
+        uint8_t paletteIndex1 = 40 + (uint8_t)(distFromCenter * 2);  // Base warm region for slime
+        uint8_t paletteIndex2 = 40 + (uint8_t)(distFromCenter * 2);
+
+        // Food sources - bright green palette region
         for(int f = 0; f < numFoodSources; f++) {
             if (abs(i - foodSources[f]) < 2) {
-                hue1 = 96;
+                paletteIndex1 = 80;
                 brightness = 255;
             }
         }
-        
-        // Active flow regions - orange
+
+        // Active flow regions - warmer palette region
         if (abs(flowDirection[i]) > 0.5f) {
-            hue1 = 32 + (abs(flowDirection[i]) * 32);
+            paletteIndex1 = 20 + (uint8_t)(abs(flowDirection[i]) * 20);
         }
-        
-        // Thick transport tubes - darker yellow
+
+        // Thick transport tubes - deeper warm palette region
         if (tube > 0.5f) {
-            hue1 = 48 + (tube * 32);
+            paletteIndex1 = 30 + (uint8_t)(tube * 20);
             brightness = min(255, brightness + 50);
         }
-        
+
         // Pulsation visualization
         if (variation > 0.66f) {
             brightness *= (1 + 0.2f * TrigLookup::sinf_lookup(oscillationPhase + i * 0.05f));
         }
-        
-        strip1[i] = CHSV(hue1, saturation * 255, brightness);
-        strip2[i] = CHSV(hue2, saturation * 255, brightness);
+
+        // Get colors at full brightness, then scale - preserves saturation
+        CRGB color1 = ColorFromPalette(currentPalette, paletteIndex1, 255);
+        CRGB color2 = ColorFromPalette(currentPalette, paletteIndex2, 255);
+        color1.nscale8(brightness);
+        color2.nscale8(brightness);
+        strip1[i] = color1;
+        strip2[i] = color2;
     }
 }

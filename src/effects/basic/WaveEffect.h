@@ -20,8 +20,10 @@ public:
         for (uint16_t i = 0; i < HardwareConfig::NUM_LEDS; i++) {
             uint8_t brightness = sin8((i * 10) + (wavePosition >> 4));
             uint8_t colorIndex = angles[i] + (wavePosition >> 6);
-            
-            CRGB color = ColorFromPalette(currentPalette, colorIndex, brightness);
+
+            // Get color at full brightness, then scale - preserves saturation
+            CRGB color = ColorFromPalette(currentPalette, colorIndex, 255);
+            color.nscale8(brightness);
             leds[i] = color;
         }
     }

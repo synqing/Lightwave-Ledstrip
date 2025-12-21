@@ -466,33 +466,39 @@ void lgpMetamaterialCloaking() {
     for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
         // Plane waves from left
         uint8_t wave = sin8(i * 4 + (time >> 2));
-        uint8_t hue = gHue + (i >> 2);
-        
+        // Use position-based palette index (no gHue rainbow)
+        uint8_t paletteIndex = (i >> 1);
+
         // Check if within cloak region
         float distFromCloak = abs((float)i - cloakPos);
-        
+
         if (distFromCloak < cloakRadius) {
             // Inside metamaterial - negative refraction
             float bendAngle = (distFromCloak / cloakRadius) * PI;
-            
+
             // Light bends backwards
             wave = sin8(i * 4 * refractiveIndex + (time >> 2) + bendAngle * 128);
-            
+
             // Phase shift creates invisibility
             if (distFromCloak < cloakRadius * 0.5f) {
                 // Perfect cloaking region - destructive interference
                 wave = scale8(wave, 255 * (distFromCloak / (cloakRadius * 0.5f)));
             }
-            
+
             // Edge glow from trapped surface waves
             if (abs(distFromCloak - cloakRadius) < 2) {
                 wave = 255;
-                hue = 160;  // Cyan edge
+                paletteIndex = 160;  // Use palette position for edge
             }
         }
-        
-        strip1[i] = CHSV(hue, 200, wave);
-        strip2[i] = CHSV(hue + 128, 200, wave);
+
+        // Use palette colors instead of CHSV rainbow
+        CRGB color1 = ColorFromPalette(currentPalette, paletteIndex, 255);
+        CRGB color2 = ColorFromPalette(currentPalette, paletteIndex + 128, 255);
+        color1.nscale8(wave);
+        color2.nscale8(wave);
+        strip1[i] = color1;
+        strip2[i] = color2;
     }
     
     // Sync to unified buffer
@@ -550,10 +556,16 @@ void lgpGrinCloak() {
         }
 
         uint8_t brightness = (uint8_t)constrain(brightnessF, 0.0f, 255.0f);
-        uint8_t hue        = gHue + (uint8_t)(sample * 1.5f);
+        // Use sample-based palette index (no gHue rainbow)
+        uint8_t paletteIndex = (uint8_t)(sample * 1.5f);
 
-        strip1[i] = CHSV(hue,             (uint8_t)(saturationNorm * 255.0f), brightness);
-        strip2[i] = CHSV(hue + 128,       (uint8_t)(saturationNorm * 255.0f), brightness);
+        // Use palette colors instead of CHSV rainbow
+        CRGB color1 = ColorFromPalette(currentPalette, paletteIndex, 255);
+        CRGB color2 = ColorFromPalette(currentPalette, paletteIndex + 128, 255);
+        color1.nscale8(brightness);
+        color2.nscale8(brightness);
+        strip1[i] = color1;
+        strip2[i] = color2;
     }
 
     memcpy(leds, strip1, sizeof(CRGB) * HardwareConfig::STRIP_LENGTH);
@@ -591,10 +603,16 @@ void lgpCausticFan() {
         brightnessF = constrain(brightnessF + (sin8(i * 3 + (time >> 2)) >> 2), 0, 255);
 
         uint8_t brightness = (uint8_t)brightnessF;
-        uint8_t hue        = gHue + (uint8_t)(x * 1.5f) + (time >> 4);
+        // Use position-based palette index with subtle animation (no gHue rainbow)
+        uint8_t paletteIndex = (uint8_t)(x * 1.5f) + (time >> 6);
 
-        strip1[i] = CHSV(hue,             (uint8_t)(saturationNorm * 255.0f), brightness);
-        strip2[i] = CHSV(hue + 96,        (uint8_t)(saturationNorm * 255.0f), brightness);
+        // Use palette colors instead of CHSV rainbow
+        CRGB color1 = ColorFromPalette(currentPalette, paletteIndex, 255);
+        CRGB color2 = ColorFromPalette(currentPalette, paletteIndex + 96, 255);
+        color1.nscale8(brightness);
+        color2.nscale8(brightness);
+        strip1[i] = color1;
+        strip2[i] = color2;
     }
 
     memcpy(leds, strip1, sizeof(CRGB) * HardwareConfig::STRIP_LENGTH);
@@ -633,11 +651,16 @@ void lgpBirefringentShear() {
         uint8_t beat     = (uint8_t)abs((int)wave1 - (int)wave2);
         uint8_t brightness = qadd8(combined, scale8(beat, 96));
 
-        uint8_t hue1 = gHue + (uint8_t)(idx) + (time >> 4);
-        uint8_t hue2 = hue1 + 128;
+        // Use position-based palette index with subtle animation (no gHue rainbow)
+        uint8_t paletteIndex = (uint8_t)(idx) + (time >> 6);
 
-        strip1[i] = CHSV(hue1, (uint8_t)(saturationNorm * 255.0f), brightness);
-        strip2[i] = CHSV(hue2, (uint8_t)(saturationNorm * 255.0f), brightness);
+        // Use palette colors instead of CHSV rainbow
+        CRGB color1 = ColorFromPalette(currentPalette, paletteIndex, 255);
+        CRGB color2 = ColorFromPalette(currentPalette, paletteIndex + 128, 255);
+        color1.nscale8(brightness);
+        color2.nscale8(brightness);
+        strip1[i] = color1;
+        strip2[i] = color2;
     }
 
     memcpy(leds, strip1, sizeof(CRGB) * HardwareConfig::STRIP_LENGTH);
@@ -689,10 +712,17 @@ void lgpAnisotropicCloak() {
             brightnessF = 255.0f;
         }
 
-        uint8_t hue = gHue + (uint8_t)(sample) + (uint8_t)(sideBias * 20.0f);
+        // Use sample-based palette index with side bias (no gHue rainbow)
+        uint8_t paletteIndex = (uint8_t)(sample) + (uint8_t)(sideBias * 20.0f);
+        uint8_t brightness = (uint8_t)constrain(brightnessF, 0.0f, 255.0f);
 
-        strip1[i] = CHSV(hue,             (uint8_t)(saturationNorm * 255.0f), (uint8_t)constrain(brightnessF, 0.0f, 255.0f));
-        strip2[i] = CHSV(hue + 128,       (uint8_t)(saturationNorm * 255.0f), (uint8_t)constrain(brightnessF, 0.0f, 255.0f));
+        // Use palette colors instead of CHSV rainbow
+        CRGB color1 = ColorFromPalette(currentPalette, paletteIndex, 255);
+        CRGB color2 = ColorFromPalette(currentPalette, paletteIndex + 128, 255);
+        color1.nscale8(brightness);
+        color2.nscale8(brightness);
+        strip1[i] = color1;
+        strip2[i] = color2;
     }
 
     memcpy(leds, strip1, sizeof(CRGB) * HardwareConfig::STRIP_LENGTH);
@@ -719,7 +749,8 @@ void lgpEvanescentSkin() {
 
     for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
         float brightnessF;
-        float hue = gHue + (i >> 1);
+        // Use position-based palette index (no gHue rainbow)
+        uint8_t paletteIndex = (i >> 1);
 
         if (rimMode) {
             float distFromCenter = fabsf((float)i - HardwareConfig::STRIP_CENTER_POINT);
@@ -738,8 +769,13 @@ void lgpEvanescentSkin() {
         brightnessF = constrain(brightnessF, 0.0f, 255.0f);
         uint8_t brightness = (uint8_t)brightnessF;
 
-        strip1[i] = CHSV((uint8_t)hue,        (uint8_t)(saturationNorm * 255.0f), brightness);
-        strip2[i] = CHSV((uint8_t)hue + 128,  (uint8_t)(saturationNorm * 255.0f), brightness);
+        // Use palette colors instead of CHSV rainbow
+        CRGB color1 = ColorFromPalette(currentPalette, paletteIndex, 255);
+        CRGB color2 = ColorFromPalette(currentPalette, paletteIndex + 128, 255);
+        color1.nscale8(brightness);
+        color2.nscale8(brightness);
+        strip1[i] = color1;
+        strip2[i] = color2;
     }
 
     memcpy(leds, strip1, sizeof(CRGB) * HardwareConfig::STRIP_LENGTH);

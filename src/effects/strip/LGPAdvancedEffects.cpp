@@ -37,15 +37,23 @@ void lgpMoireCurtains() {
     for (uint16_t i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
         float distFromCenter = abs((int)i - HardwareConfig::STRIP_CENTER_POINT);
 
+        // Use distance for palette index (no gHue rainbow)
+        uint8_t paletteIndex = (uint8_t)(distFromCenter * 2);
+
         // Left strip
         uint16_t leftPhase = (uint16_t)(sin16(distFromCenter * leftFreq * 410 + phase) + 32768) >> 8;
         uint8_t leftBright = scale8(leftPhase, visualParams.intensity);
-        strip1[i] = ColorFromPalette(currentPalette, gHue + (uint8_t)(distFromCenter/2), leftBright);
+        // Get color at FULL brightness first, then scale - preserves saturation
+        CRGB color1 = ColorFromPalette(currentPalette, paletteIndex, 255);
+        color1.nscale8(leftBright);
+        strip1[i] = color1;
 
         // Right strip - slightly different frequency
         uint16_t rightPhase = (uint16_t)(sin16(distFromCenter * rightFreq * 410 + phase) + 32768) >> 8;
         uint8_t rightBright = scale8(rightPhase, visualParams.intensity);
-        strip2[i] = ColorFromPalette(currentPalette, gHue + (uint8_t)(distFromCenter/2) + 128, rightBright);
+        CRGB color2 = ColorFromPalette(currentPalette, paletteIndex + 128, 255);
+        color2.nscale8(rightBright);
+        strip2[i] = color2;
     }
     
     // Sync to unified buffer
@@ -78,11 +86,17 @@ void lgpRadialRipple() {
         // Square wave thresholding for sharp rings
         uint8_t brightness = (wave > (int16_t)ringSharpness - 32768) ? 255 : 0;
         brightness = scale8(brightness, visualParams.intensity);
-        
-        // Apply to both strips with phase offset
-        uint8_t hue = gHue + (distSquared >> 10);
-        strip1[i] = ColorFromPalette(currentPalette, hue, brightness);
-        strip2[i] = ColorFromPalette(currentPalette, hue + 64, brightness);
+
+        // Use distance-based palette index (no gHue rainbow)
+        uint8_t paletteIndex = distFromCenter * 255;
+
+        // Get color at FULL brightness first, then scale - preserves saturation
+        CRGB color1 = ColorFromPalette(currentPalette, paletteIndex, 255);
+        CRGB color2 = ColorFromPalette(currentPalette, paletteIndex + 64, 255);
+        color1.nscale8(brightness);
+        color2.nscale8(brightness);
+        strip1[i] = color1;
+        strip2[i] = color2;
     }
     
     // Sync to unified buffer
@@ -114,13 +128,18 @@ void lgpHolographicVortex() {
         uint8_t brightness = sin8(phase >> 8);
         uint8_t paletteIndex = (phase >> 10);
 
-        // Add depth via brightness modulation
-        brightness = scale8(brightness, 255 - (uint8_t)(r * 127));
-        brightness = scale8(brightness, visualParams.intensity);
+        // Add depth via brightness modulation (reduce triple scaling to single)
+        brightness = scale8(brightness, 255 - (uint8_t)(r * 64));  // Gentler radial decay
+        brightness = max(brightness, (uint8_t)64);  // Floor to prevent total darkness
 
-        // Anti-phase for holographic effect
-        strip1[i] = ColorFromPalette(currentPalette, gHue + paletteIndex, brightness);
-        strip2[i] = ColorFromPalette(currentPalette, gHue + paletteIndex + 128, brightness);
+        // Get color at FULL brightness first, then scale - preserves saturation
+        // Use paletteIndex only (no gHue rainbow)
+        CRGB color1 = ColorFromPalette(currentPalette, paletteIndex, 255);
+        CRGB color2 = ColorFromPalette(currentPalette, paletteIndex + 128, 255);
+        color1.nscale8(brightness);
+        color2.nscale8(brightness);
+        strip1[i] = color1;
+        strip2[i] = color2;
     }
     
     // Sync to unified buffer

@@ -31,6 +31,17 @@ void lgpDopplerShift();
 // Chromatic Aberration Field - Wavelength-dependent refraction
 void lgpChromaticAberration();
 
+// ========== NEW CHROMATIC DISPERSION EFFECTS (Phase 2.2) ==========
+
+// Chromatic Lens - Static chromatic aberration effect
+void lgpChromaticLens();
+
+// Chromatic Pulse - Dynamic aberration that pulses from centre
+void lgpChromaticPulse();
+
+// Chromatic Interference - Dual-edge interference with dispersion
+void lgpChromaticInterference();
+
 // ========== ADVANCED MIXING TECHNIQUES ==========
 
 // HSV Cylindrical Mixing - Full color space exploration

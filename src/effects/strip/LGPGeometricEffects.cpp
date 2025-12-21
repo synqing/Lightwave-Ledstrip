@@ -51,8 +51,13 @@ void lgpDiamondLattice() {
         // Use palette instead of rainbow - map distance to palette index
         uint8_t paletteIndex = distFromCenter * 2;
 
-        strip1[i] = ColorFromPalette(currentPalette, gHue + paletteIndex, brightness);
-        strip2[i] = ColorFromPalette(currentPalette, gHue + paletteIndex + 128, brightness);
+        // Get color at FULL brightness first, then scale - preserves saturation
+        CRGB color1 = ColorFromPalette(currentPalette, paletteIndex, 255);
+        CRGB color2 = ColorFromPalette(currentPalette, paletteIndex + 128, 255);
+        color1.nscale8(brightness);
+        color2.nscale8(brightness);
+        strip1[i] = color1;
+        strip2[i] = color2;
     }
 }
 
@@ -93,12 +98,18 @@ void lgpHexagonalGrid() {
         }
         
         uint8_t brightness = pattern * 255 * intensity;
-        
-        // Chromatic shift for iridescence
-        uint8_t hue = gHue + (pattern * 60) + (i * 0.5f);
-        
-        strip1[i] = CHSV(hue, 200, brightness);
-        strip2[i] = CHSV(hue + 60, 200, brightness);
+
+        // Position-based palette index for iridescence (no gHue - rainbow forbidden)
+        float distFromCenter = abs(i - HardwareConfig::STRIP_CENTER_POINT);
+        uint8_t paletteIndex = (uint8_t)(pattern * 60) + (uint8_t)(distFromCenter * 2);
+
+        // Get colors at full brightness, then scale - preserves saturation
+        CRGB color1 = ColorFromPalette(currentPalette, paletteIndex, 255);
+        CRGB color2 = ColorFromPalette(currentPalette, paletteIndex + 40, 255);
+        color1.nscale8(brightness);
+        color2.nscale8(brightness);
+        strip1[i] = color1;
+        strip2[i] = color2;
     }
 }
 
@@ -144,12 +155,16 @@ void lgpSpiralVortex() {
         
         uint8_t brightness = 128 + (127 * spiral * intensity);
 
-        // Color rotates with spiral - use palette instead of full spectrum
-        uint8_t paletteIndex = (spiralAngle * 255 / TWO_PI);
+        // Position-based palette index (no gHue - rainbow cycling forbidden)
+        uint8_t paletteIndex = (uint8_t)(spiralAngle * 255 / TWO_PI) + (uint8_t)(distFromCenter * 2);
 
-        // Opposite spirals on each strip
-        strip1[i] = ColorFromPalette(currentPalette, gHue + paletteIndex, brightness);
-        strip2[i] = ColorFromPalette(currentPalette, gHue + paletteIndex + 128, brightness);
+        // Get colors at full brightness, then scale - preserves saturation
+        CRGB color1 = ColorFromPalette(currentPalette, paletteIndex, 255);
+        CRGB color2 = ColorFromPalette(currentPalette, paletteIndex + 128, 255);
+        color1.nscale8(brightness);
+        color2.nscale8(brightness);
+        strip1[i] = color1;
+        strip2[i] = color2;
     }
 }
 
@@ -186,12 +201,20 @@ void lgpSierpinskiTriangles() {
         
         // Create smooth transitions
         float smooth = TrigLookup::sinf_lookup(bitCount * PI / maxDepth);
-        
+
         uint8_t brightness = smooth * 255 * intensity;
-        uint8_t hue = gHue + (bitCount * 30);
-        
-        strip1[i] = CHSV(hue, 255, brightness);
-        strip2[i] = CHSV(hue + 128, 255, brightness);
+
+        // Position-based palette index (no gHue - rainbow cycling forbidden)
+        float distFromCenter = abs(i - HardwareConfig::STRIP_CENTER_POINT);
+        uint8_t paletteIndex = (uint8_t)(bitCount * 30) + (uint8_t)(distFromCenter * 2);
+
+        // Get colors at full brightness, then scale - preserves saturation
+        CRGB color1 = ColorFromPalette(currentPalette, paletteIndex, 255);
+        CRGB color2 = ColorFromPalette(currentPalette, paletteIndex + 128, 255);
+        color1.nscale8(brightness);
+        color2.nscale8(brightness);
+        strip1[i] = color1;
+        strip2[i] = color2;
     }
 }
 
@@ -227,12 +250,17 @@ void lgpChevronWaves() {
         chevron = tanh(chevron * 3) * 0.5f + 0.5f;
         
         uint8_t brightness = chevron * 255 * intensity;
-        
-        // Color gradient along chevron
-        uint8_t hue = gHue + (distFromCenter * 2) + (wavePos * 0.5f);
-        
-        strip1[i] += CHSV(hue, 255, brightness);
-        strip2[i] += CHSV(hue + 90, 255, brightness);
+
+        // Position-based palette index (no gHue - rainbow cycling forbidden)
+        uint8_t paletteIndex = (uint8_t)(distFromCenter * 2) + (uint8_t)(wavePos * 0.5f);
+
+        // Get colors at full brightness, then scale - preserves saturation
+        CRGB color1 = ColorFromPalette(currentPalette, paletteIndex, 255);
+        CRGB color2 = ColorFromPalette(currentPalette, paletteIndex + 64, 255);
+        color1.nscale8(brightness);
+        color2.nscale8(brightness);
+        strip1[i] += color1;
+        strip2[i] += color2;
     }
 }
 
@@ -277,9 +305,15 @@ void lgpConcentricRings() {
 
         uint8_t brightness = 128 + (127 * rings * intensity);
 
-        // Use single palette color - no gradient (no rainbow)
-        strip1[i] = ColorFromPalette(currentPalette, gHue, brightness);
-        strip2[i] = ColorFromPalette(currentPalette, gHue + 128, brightness);
+        // Get color at FULL brightness first, then scale - preserves saturation
+        // Use distance-based palette index for color variation (not gHue rainbow)
+        uint8_t paletteIndex = distFromCenter * 3;
+        CRGB color1 = ColorFromPalette(currentPalette, paletteIndex, 255);
+        CRGB color2 = ColorFromPalette(currentPalette, paletteIndex + 128, 255);
+        color1.nscale8(brightness);
+        color2.nscale8(brightness);
+        strip1[i] = color1;
+        strip2[i] = color2;
     }
 }
 
@@ -316,11 +350,16 @@ void lgpStarBurst() {
 
         uint8_t brightness = 128 + (127 * star * intensity);
 
-        // Color varies with distance - symmetric from center
+        // Color varies with distance - symmetric from center (no gHue rainbow)
         uint8_t paletteIndex = distFromCenter + (star * 50);
 
-        strip1[i] += ColorFromPalette(currentPalette, gHue + paletteIndex, brightness);
-        strip2[i] += ColorFromPalette(currentPalette, gHue + paletteIndex + 85, brightness);
+        // Get color at FULL brightness first, then scale - preserves saturation
+        CRGB color1 = ColorFromPalette(currentPalette, paletteIndex, 255);
+        CRGB color2 = ColorFromPalette(currentPalette, paletteIndex + 85, 255);
+        color1.nscale8(brightness);
+        color2.nscale8(brightness);
+        strip1[i] += color1;
+        strip2[i] += color2;
     }
 }
 
@@ -346,24 +385,39 @@ void lgpMeshNetwork() {
     // Place nodes
     for(int n = 0; n < nodeCount; n++) {
         float nodePos = (float)n / nodeCount * HardwareConfig::STRIP_LENGTH;
-        
+
+        // Node-based palette index (no gHue - rainbow cycling forbidden)
+        uint8_t nodePaletteIndex = (uint8_t)(n * 20);
+
         // Draw node
         for(int i = 0; i < HardwareConfig::STRIP_LENGTH; i++) {
             float distToNode = abs(i - nodePos);
-            
+            float distFromCenter = abs(i - HardwareConfig::STRIP_CENTER_POINT);
+
+            // Add position variance to palette index
+            uint8_t paletteIndex = nodePaletteIndex + (uint8_t)(distFromCenter * 0.5f);
+
             if (distToNode < 3) {
-                // Node core
+                // Node core - get at full brightness, then scale
                 uint8_t nodeBright = 255 * intensity;
-                strip1[i] = CHSV(gHue + (n * 20), 255, nodeBright);
-                strip2[i] = CHSV(gHue + (n * 20) + 128, 255, nodeBright);
+                CRGB color1 = ColorFromPalette(currentPalette, paletteIndex, 255);
+                CRGB color2 = ColorFromPalette(currentPalette, paletteIndex + 128, 255);
+                color1.nscale8(nodeBright);
+                color2.nscale8(nodeBright);
+                strip1[i] = color1;
+                strip2[i] = color2;
             } else if (distToNode < 20) {
                 // Connections to nearby nodes
                 float connection = TrigLookup::sinf_lookup(distToNode * 0.5f + networkPhase + n);
                 connection *= exp(-distToNode * 0.1f);  // Decay
-                
+
                 uint8_t connBright = abs(connection) * 128 * intensity;
-                strip1[i] += CHSV(gHue + (n * 20), 200, connBright);
-                strip2[i] += CHSV(gHue + (n * 20) + 128, 200, connBright);
+                CRGB color1 = ColorFromPalette(currentPalette, paletteIndex, 255);
+                CRGB color2 = ColorFromPalette(currentPalette, paletteIndex + 128, 255);
+                color1.nscale8(connBright);
+                color2.nscale8(connBright);
+                strip1[i] += color1;
+                strip2[i] += color2;
             }
         }
     }

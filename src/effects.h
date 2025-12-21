@@ -3,6 +3,10 @@
 
 #include <stdint.h>
 #include "core/EffectTypes.h"
+#include "effects/PatternRegistry.h"
+
+// Forward declaration
+struct PatternMetadata;
 
 // Effect function pointer type
 typedef void (*EffectFunction)();
@@ -18,6 +22,7 @@ struct Effect {
     const char* name;
     EffectFunction function;
     EffectType type;
+    const PatternMetadata* metadata = nullptr;  // Optional: pattern taxonomy metadata (nullptr = not yet tagged)
 };
 
 // External declarations

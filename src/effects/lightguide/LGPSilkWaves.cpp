@@ -63,22 +63,21 @@ public:
             float combined = wave1 + wave2 * (1.0f - distFromCenter);
             combined = constrain(combined, 0, 1);
             
-            // Color calculation - smooth gradients
-            float hueShift = sin(position * PI + colorPhase) * 30;
-            uint8_t hue1 = gHue + (uint8_t)(position * 60) + (uint8_t)hueShift;
-            uint8_t hue2 = hue1 + 30;  // Slight offset for depth
-            
+            // Palette-based color (no gHue rainbow cycling)
+            // Use distance from center + position variation for smooth gradients
+            float indexShift = sin(position * PI + colorPhase) * 30;
+            uint8_t paletteIndex1 = (uint8_t)(distFromCenter * 128) + (uint8_t)(position * 60) + (uint8_t)indexShift;
+            uint8_t paletteIndex2 = paletteIndex1 + 30;  // Slight offset for depth
+
             // Brightness modulation
             uint8_t brightness1 = 80 + (uint8_t)(combined * 175);
             uint8_t brightness2 = 80 + (uint8_t)((1.0f - combined * 0.7f) * 175);
-            
-            // Saturation creates silk sheen effect
-            uint8_t saturation1 = 180 + (uint8_t)(wave1 * 75);
-            uint8_t saturation2 = 200 + (uint8_t)(wave2 * 55);
-            
-            // Create colors
-            CRGB color1 = CHSV(hue1, saturation1, brightness1);
-            CRGB color2 = CHSV(hue2, saturation2, brightness2);
+
+            // Get colors at full brightness, then scale (preserves saturation)
+            CRGB color1 = ColorFromPalette(currentPalette, paletteIndex1, 255);
+            CRGB color2 = ColorFromPalette(currentPalette, paletteIndex2, 255);
+            color1.nscale8(brightness1);
+            color2.nscale8(brightness2);
             
             // Temporal smoothing for silk-like flow
             smoothBuffer1[i] = blend(smoothBuffer1[i], color1, 200);

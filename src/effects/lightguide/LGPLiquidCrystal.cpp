@@ -57,25 +57,27 @@ public:
             float combinedWave = wave1 + wave2 + wave3;
             combinedWave = constrain(combinedWave, 0, 1);
             
-            // Color flow speed varies with position
+            // Color flow speed varies with position (no rainbow cycling)
             float flowSpeed = (1.0f - distFromCenter) * visualParams.getComplexityNorm() * 2.0f;
             colorFlow[i] += flowSpeed;
             if (colorFlow[i] > 360) colorFlow[i] -= 360;
-            
-            // Calculate color
-            uint8_t hue1 = (uint8_t)(colorFlow[i] / 360.0f * 255);
-            uint8_t hue2 = hue1 + (uint8_t)(combinedWave * 64);
-            
+
+            // Palette-based color (no rainbow cycling)
+            // Use distance from center + flow position for palette index
+            uint8_t paletteIndex1 = (uint8_t)(distFromCenter * 128) + (uint8_t)(colorFlow[i] * 0.35f);
+            uint8_t paletteIndex2 = paletteIndex1 + (uint8_t)(combinedWave * 64);
+
             // Brightness based on wave and distance
             uint8_t brightness1 = 100 + (uint8_t)(combinedWave * 155);
             uint8_t brightness2 = 100 + (uint8_t)((1.0f - combinedWave) * 155);
-            
-            // Saturation varies smoothly
-            uint8_t saturation = 200 + (uint8_t)(sin(distFromCenter * PI + phase1) * 55);
-            
-            // Apply to strips with complementary patterns
-            strip1[i] = CHSV(hue1, saturation, brightness1);
-            strip2[i] = CHSV(hue2, 255 - saturation/4, brightness2);
+
+            // Get colors at full brightness, then scale (preserves saturation)
+            CRGB color1 = ColorFromPalette(currentPalette, paletteIndex1, 255);
+            CRGB color2 = ColorFromPalette(currentPalette, paletteIndex2, 255);
+            color1.nscale8(brightness1);
+            color2.nscale8(brightness2);
+            strip1[i] = color1;
+            strip2[i] = color2;
         }
         
         // Add gentle color pulse from center

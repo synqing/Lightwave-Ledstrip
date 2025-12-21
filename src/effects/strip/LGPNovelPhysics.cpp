@@ -96,20 +96,21 @@ void lgpChladniHarmonics() {
 
         uint8_t brightness = constrain(totalBrightness, 20, 255);
 
-        // Color: warm tones for plate, cool for particles
-        uint8_t hue1 = gHue + (uint8_t)(plateDisplacement * 30);
-        uint8_t hue2 = gHue + 128 + (uint8_t)(plateDisplacement * 30);  // 180-degree phase offset
+        // Use displacement-based palette index (no gHue rainbow)
+        uint8_t paletteIndex1 = (uint8_t)(plateDisplacement * 30) + (uint8_t)(distFromCenter * 2);
+        uint8_t paletteIndex2 = paletteIndex1 + 128;  // Offset for strip2
 
-        uint8_t sat = saturation * 255;
-
-        // Strip1 = TOP surface (phase 0)
-        // Strip2 = BOTTOM surface (phase 180) - inverted displacement
-        strip1[i] = CHSV(hue1, sat, brightness);
+        // Use palette colors instead of CHSV rainbow
+        CRGB color1 = ColorFromPalette(currentPalette, paletteIndex1, 255);
+        color1.nscale8(brightness);
+        strip1[i] = color1;
 
         // Bottom surface has opposite phase
         float bottomDisplacement = -plateDisplacement;
         float bottomBrightness = (particleBrightness + abs(bottomDisplacement) * intensity) * 255;
-        strip2[i] = CHSV(hue2, sat, constrain(bottomBrightness, 20, 255));
+        CRGB color2 = ColorFromPalette(currentPalette, paletteIndex2, 255);
+        color2.nscale8(constrain(bottomBrightness, 20, 255));
+        strip2[i] = color2;
     }
 }
 
@@ -231,16 +232,23 @@ void lgpGravitationalWaveChirp() {
         uint8_t brightness1 = 128 + constrain((int)(wave1 * 127), -127, 127);
         uint8_t brightness2 = 128 + constrain((int)(wave2 * 127), -127, 127);
 
-        // Color: deep purple for gravitational waves, shifts during merger
-        uint8_t baseHue = 200;  // Purple
-        if (merging) baseHue = 40;  // Yellow during merger
-        else if (ringdown) baseHue = 160;  // Cyan during ringdown
+        // Color: use palette with phase-based variation (no gHue rainbow)
+        // Different palette regions for different phases
+        uint8_t paletteBase = 0;  // Default region
+        if (merging) paletteBase = 64;  // Different region during merger
+        else if (ringdown) paletteBase = 128;  // Different region during ringdown
 
-        uint8_t hue1 = baseHue + gHue;
-        uint8_t hue2 = baseHue + gHue + 30;
+        // Position-based palette index with distance variation
+        uint8_t paletteIndex1 = paletteBase + (uint8_t)(normalizedDist * 64);
+        uint8_t paletteIndex2 = paletteIndex1 + 30;
 
-        strip1[i] = CHSV(hue1, saturation * 255, brightness1);
-        strip2[i] = CHSV(hue2, saturation * 255, brightness2);
+        // Get colors at full brightness, then scale (preserves saturation)
+        CRGB color1 = ColorFromPalette(currentPalette, paletteIndex1, 255);
+        CRGB color2 = ColorFromPalette(currentPalette, paletteIndex2, 255);
+        color1.nscale8(brightness1);
+        color2.nscale8(brightness2);
+        strip1[i] = color1;
+        strip2[i] = color2;
     }
 }
 
@@ -604,30 +612,30 @@ void lgpRileyDissonance() {
         uint8_t brightness1 = 128 + (int)(pattern1 * 127 * intensity);
         uint8_t brightness2 = 128 + (int)(pattern2 * 127 * intensity);
 
-        // Color: can be B&W or colored based on saturation
-        uint8_t hue1, hue2;
-        uint8_t sat;
-
+        // Color: can be B&W or palette-based based on saturation
         if (saturation < 0.3f) {
             // Near B&W: classic Riley
-            hue1 = 0;
-            hue2 = 0;
-            sat = 0;
+            strip1[i] = CHSV(0, 0, brightness1);
+            strip2[i] = CHSV(0, 0, brightness2);
         } else {
-            // Colored: complementary colors increase dissonance
-            hue1 = gHue;
-            hue2 = gHue + 128;  // Complementary
-            sat = saturation * 255;
+            // Colored: use palette with complementary indices (no gHue rainbow)
+            // Position-based palette index with rivalry zone variation
+            uint8_t paletteIndex1 = (uint8_t)(normalizedDist * 128);
+            uint8_t paletteIndex2 = paletteIndex1 + 128;  // Complementary
 
-            // Shift hue in rivalry zones
+            // Shift palette index in rivalry zones
             if (rivalryZone > 0.5f) {
-                hue1 += (uint8_t)(rivalryZone * 30);
-                hue2 -= (uint8_t)(rivalryZone * 30);
+                paletteIndex1 += (uint8_t)(rivalryZone * 30);
+                paletteIndex2 -= (uint8_t)(rivalryZone * 30);
             }
-        }
 
-        // Apply to strips: different patterns create binocular rivalry
-        strip1[i] = CHSV(hue1, sat, brightness1);
-        strip2[i] = CHSV(hue2, sat, brightness2);
+            // Get colors at full brightness, then scale
+            CRGB color1 = ColorFromPalette(currentPalette, paletteIndex1, 255);
+            CRGB color2 = ColorFromPalette(currentPalette, paletteIndex2, 255);
+            color1.nscale8(brightness1);
+            color2.nscale8(brightness2);
+            strip1[i] = color1;
+            strip2[i] = color2;
+        }
     }
 }

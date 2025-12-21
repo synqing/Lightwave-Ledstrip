@@ -10,6 +10,15 @@ const CONFIG = {
     DEBOUNCE_PIPELINE: 250,
 };
 
+// ========== Utility Functions ==========
+function debounce(fn, delay) {
+    let timer = null;
+    return function(...args) {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn.apply(this, args), delay);
+    };
+}
+
 // ========== State ==========
 const state = {
     ws: null,
@@ -29,6 +38,15 @@ const state = {
     palettes: [],
     fps: 0,
     memoryFree: 0,
+    // Shows state
+    shows: [],
+    showPlaying: false,
+    showPaused: false,
+    currentShowId: -1,
+    showProgress: 0,
+    showElapsed: 0,
+    showChapter: '',
+    showName: '',
 };
 
 // Zone display configuration
@@ -85,6 +103,14 @@ const API = {
     setMotionPhase: (offset) => API.request('/enhancement/motion/phase', { method: 'POST', body: JSON.stringify({ offset }) }),
     setMotionAutoRotate: (enabled, speed) => API.request('/enhancement/motion/auto-rotate', { method: 'POST', body: JSON.stringify({ enabled, speed }) }),
     getEnhancementStatus: () => API.request('/enhancement/status'),
+
+    // Shows API (Phase 5)
+    getShows: () => API.request('/v1/shows'),
+    startShow: (showId) => API.request('/v1/shows/start', { method: 'POST', body: JSON.stringify({ showId }) }),
+    stopShow: () => API.request('/v1/shows/stop', { method: 'POST' }),
+    pauseShow: () => API.request('/v1/shows/pause', { method: 'POST' }),
+    seekShow: (timeMs) => API.request('/v1/shows/seek', { method: 'POST', body: JSON.stringify({ timeMs }) }),
+    getShowStatus: () => API.request('/v1/shows/status'),
 };
 
 // ========== WebSocket ==========
@@ -140,8 +166,31 @@ const WS = {
             case 'zone.state':
                 syncZoneState(msg);
                 break;
+            case 'zone.paramChanged':
+                handleParamChanged(msg);
+                break;
+            case 'effects.params':
+                // Handle WebSocket response for effect params
+                if (msg.effectId !== undefined && msg.zoneId !== undefined) {
+                    const params = getParameterLabels(msg.effectId, msg);
+                    renderEffectParameters(params, msg.values || {}, msg.zoneId);
+                }
+                break;
             case 'error':
                 console.error('Server:', msg.message);
+                break;
+            // Shows events
+            case 'show.progress':
+                updateShowProgress(msg);
+                break;
+            case 'show.started':
+                handleShowStarted(msg);
+                break;
+            case 'show.stopped':
+                handleShowStopped();
+                break;
+            case 'show.paused':
+                handleShowPaused(msg.paused);
                 break;
         }
     }
@@ -227,9 +276,10 @@ function syncZoneState(msg) {
             if (effectSelect) effectSelect.value = zone.effectId;
             if (paletteSelect) paletteSelect.value = zone.paletteId;
 
-            // Fetch metadata for the selected zone's effect
+            // Fetch metadata and parameters for the selected zone's effect
             if (idx === state.selectedZone - 1) {
                 fetchEffectMetadata(zone.effectId);
+                fetchEffectParameters(zone.effectId, idx);
             }
         }
     }
@@ -349,12 +399,17 @@ function selectZone(id) {
         const sSlider = document.getElementById('zone-speed-slider');
         const sLabel = document.getElementById('zone-speed-label');
         const pSelect = document.getElementById('zone-palette-select');
+        const effectSelect = document.getElementById('effect-select');
 
         if (bSlider) { bSlider.value = zone.brightness; updateSliderTrack(bSlider); }
         if (bLabel) bLabel.textContent = zone.brightness;
         if (sSlider) { sSlider.value = zone.speed; updateSliderTrack(sSlider); }
         if (sLabel) sLabel.textContent = zone.speed;
         if (pSelect) pSelect.value = zone.paletteId;
+        if (effectSelect) effectSelect.value = zone.effectId;
+
+        // Fetch effect parameters for this zone
+        fetchEffectParameters(zone.effectId, id - 1);
     }
 }
 
@@ -487,8 +542,10 @@ function setZoneEffect() {
     const sel = document.getElementById('effect-select');
     if (!sel) return;
     const effectId = parseInt(sel.value);
-    API.setZoneEffect(state.selectedZone - 1, effectId);
+    const zoneId = state.selectedZone - 1;
+    API.setZoneEffect(zoneId, effectId);
     fetchEffectMetadata(effectId);
+    fetchEffectParameters(effectId, zoneId);
 }
 
 // ========== Effect Info (Phase C.2) ==========
@@ -500,6 +557,163 @@ function toggleEffectInfo() {
     const chevron = document.getElementById('effect-info-chevron');
     if (content) content.classList.toggle('hidden', !effectInfoExpanded);
     if (chevron) chevron.style.transform = effectInfoExpanded ? 'rotate(180deg)' : '';
+}
+
+// ========== Effect Parameters (Phase C.4.8) ==========
+let effectParamsExpanded = false;
+const effectParamsCache = new Map();  // Cache: effectId -> parameter definitions
+const effectParamTimeouts = {};  // Debounce timers per parameter key
+
+// Universal fallback labels
+const UNIVERSAL_PARAMS = [
+    { name: 'Intensity', key: 'intensity', min: 0, max: 255, default: 128, description: 'overall brightness/strength' },
+    { name: 'Saturation', key: 'saturation', min: 0, max: 255, default: 200, description: 'color vividness' },
+    { name: 'Complexity', key: 'complexity', min: 0, max: 255, default: 128, description: 'pattern detail level' },
+    { name: 'Variation', key: 'variation', min: 0, max: 255, default: 128, description: 'random variation amount' }
+];
+
+function toggleEffectParams() {
+    effectParamsExpanded = !effectParamsExpanded;
+    const content = document.getElementById('effect-params-content');
+    const chevron = document.getElementById('effect-params-chevron');
+    if (content) content.classList.toggle('hidden', !effectParamsExpanded);
+    if (chevron) chevron.style.transform = effectParamsExpanded ? 'rotate(180deg)' : '';
+}
+
+// Get parameter labels with 3-tier fallback logic
+function getParameterLabels(effectId, metadata) {
+    // Tier 1: Effect has custom params (paramCount > 0)
+    if (metadata && metadata.paramCount > 0 && metadata.parameters) {
+        return metadata.parameters;
+    }
+
+    // Tier 2: Category defaults (could be added here in future)
+
+    // Tier 3: Universal labels
+    return UNIVERSAL_PARAMS;
+}
+
+// Fetch effect parameters from API
+async function fetchEffectParameters(effectId, zoneId) {
+    // Check cache first
+    const cacheKey = `${effectId}`;
+    if (effectParamsCache.has(cacheKey)) {
+        const cached = effectParamsCache.get(cacheKey);
+        renderEffectParameters(cached.params, cached.values, zoneId);
+        return;
+    }
+
+    try {
+        const res = await fetch(`${CONFIG.API_BASE}/v1/effects/parameters?id=${effectId}&zoneId=${zoneId}`);
+        if (!res.ok) {
+            // API not available, use universal fallback
+            renderEffectParameters(UNIVERSAL_PARAMS, {}, zoneId);
+            return;
+        }
+
+        const data = await res.json();
+        if (data.success && data.data) {
+            const params = getParameterLabels(effectId, data.data);
+            const values = data.data.values || {};
+
+            // Cache the result
+            effectParamsCache.set(cacheKey, { params, values });
+
+            renderEffectParameters(params, values, zoneId);
+        } else {
+            renderEffectParameters(UNIVERSAL_PARAMS, {}, zoneId);
+        }
+    } catch (e) {
+        console.warn('Effect params fetch failed, using fallback:', e);
+        renderEffectParameters(UNIVERSAL_PARAMS, {}, zoneId);
+    }
+}
+
+// Render parameter sliders
+function renderEffectParameters(params, values, zoneId) {
+    const container = document.getElementById('effect-params-sliders');
+    const titleEl = document.getElementById('effect-params-title');
+    if (!container) return;
+
+    // Update title with effect name if available
+    const effectSelect = document.getElementById('effect-select');
+    const effectName = effectSelect ? effectSelect.options[effectSelect.selectedIndex]?.text : 'Effect';
+    if (titleEl) titleEl.textContent = `${effectName} Parameters`;
+
+    if (!params || params.length === 0) {
+        container.innerHTML = '<div class="text-xs text-text-tertiary text-center py-2">No parameters available</div>';
+        return;
+    }
+
+    container.innerHTML = params.map(param => {
+        const currentValue = values[param.key] !== undefined ? values[param.key] : (param.default || 128);
+        const min = param.min !== undefined ? param.min : 0;
+        const max = param.max !== undefined ? param.max : 255;
+        const desc = param.description || param.key;
+
+        return `
+            <div class="flex flex-col gap-1">
+                <div class="flex justify-between items-center">
+                    <label class="text-xs font-medium text-text-secondary">${param.name}</label>
+                    <span class="font-mono text-xs font-semibold text-accent-cyan" id="param-val-${param.key}">${currentValue}</span>
+                </div>
+                <input type="range" min="${min}" max="${max}" value="${currentValue}"
+                    class="slider-input"
+                    id="param-slider-${param.key}"
+                    data-param-key="${param.key}"
+                    data-zone-id="${zoneId}"
+                    oninput="updateEffectParam('${param.key}', this.value, ${zoneId})">
+                <span class="text-[10px] text-text-tertiary pl-1">${desc}</span>
+            </div>
+        `;
+    }).join('');
+
+    // Initialize slider tracks
+    params.forEach(param => {
+        const slider = document.getElementById(`param-slider-${param.key}`);
+        if (slider) updateSliderTrack(slider);
+    });
+}
+
+// Update effect parameter (debounced)
+function updateEffectParam(key, value, zoneId) {
+    const val = parseInt(value);
+    const labelEl = document.getElementById(`param-val-${key}`);
+    const sliderEl = document.getElementById(`param-slider-${key}`);
+
+    if (labelEl) labelEl.textContent = val;
+    if (sliderEl) updateSliderTrack(sliderEl);
+
+    // Debounce the API call
+    clearTimeout(effectParamTimeouts[key]);
+    effectParamTimeouts[key] = setTimeout(() => {
+        sendEffectParam(key, val, zoneId);
+    }, CONFIG.DEBOUNCE_SLIDER);
+}
+
+// Send parameter update via WebSocket
+function sendEffectParam(key, value, zoneId) {
+    WS.send({
+        type: 'zone.setParam',
+        zoneId: zoneId,
+        param: key,
+        value: value
+    });
+}
+
+// Handle parameter change broadcasts from server
+function handleParamChanged(msg) {
+    // msg: { type: 'zone.paramChanged', zoneId, param, value }
+    if (msg.zoneId === state.selectedZone - 1) {
+        const labelEl = document.getElementById(`param-val-${msg.param}`);
+        const sliderEl = document.getElementById(`param-slider-${msg.param}`);
+
+        if (labelEl) labelEl.textContent = msg.value;
+        if (sliderEl) {
+            sliderEl.value = msg.value;
+            updateSliderTrack(sliderEl);
+        }
+    }
 }
 
 function fetchEffectMetadata(effectId) {
@@ -918,6 +1132,218 @@ function downloadPresetJson() {
     URL.revokeObjectURL(url);
 }
 
+// ========== Shows ==========
+function toggleShows() {
+    const content = document.getElementById('shows-content');
+    const chevron = document.getElementById('shows-chevron');
+    if (!content) return;
+
+    if (content.style.maxHeight && content.style.maxHeight !== '0px') {
+        content.style.maxHeight = '0px';
+        if (chevron) chevron.style.transform = 'rotate(0deg)';
+    } else {
+        content.style.maxHeight = content.scrollHeight + 'px';
+        if (chevron) chevron.style.transform = 'rotate(180deg)';
+    }
+}
+
+// Show duration icons based on length
+const showIcons = {
+    short: 'solar:clock-circle-bold-duotone',      // < 3 min
+    medium: 'solar:clock-square-bold-duotone',     // 3-5 min
+    long: 'solar:alarm-bold-duotone',              // > 5 min
+    loop: 'solar:repeat-bold-duotone'              // looping shows
+};
+
+function getShowIcon(show) {
+    if (show.looping) return showIcons.loop;
+    const mins = show.duration / 60000;
+    if (mins < 3) return showIcons.short;
+    if (mins <= 5) return showIcons.medium;
+    return showIcons.long;
+}
+
+function formatShowDuration(ms) {
+    const totalSeconds = Math.floor(ms / 1000);
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+async function loadShows() {
+    try {
+        const res = await API.getShows();
+        if (res && res.success && res.data && res.data.shows) {
+            state.shows = res.data.shows;
+            renderShowGrid();
+        } else {
+            // Fallback: try direct endpoint
+            const fallbackRes = await fetch(`${CONFIG.API_BASE}/v1/shows`);
+            if (fallbackRes.ok) {
+                const data = await fallbackRes.json();
+                if (data.success && data.data && data.data.shows) {
+                    state.shows = data.data.shows;
+                    renderShowGrid();
+                }
+            }
+        }
+    } catch (e) {
+        console.error('Failed to load shows:', e);
+        document.getElementById('show-grid').innerHTML =
+            '<div class="col-span-full text-center py-4 text-text-tertiary text-sm">Shows not available</div>';
+    }
+}
+
+function renderShowGrid() {
+    const grid = document.getElementById('show-grid');
+    if (!grid) return;
+
+    if (!state.shows || state.shows.length === 0) {
+        grid.innerHTML = '<div class="col-span-full text-center py-4 text-text-tertiary text-sm">No shows available</div>';
+        return;
+    }
+
+    grid.innerHTML = state.shows.map(show => `
+        <button onclick="startShow(${show.id})" class="group p-3 rounded-xl bg-canvas border border-border-subtle hover:border-accent-cyan/50 transition-all text-left ${state.currentShowId === show.id ? 'ring-2 ring-accent-cyan' : ''}">
+            <div class="flex items-center gap-2 mb-2">
+                <span class="iconify text-accent-cyan" data-icon="${getShowIcon(show)}" data-width="16"></span>
+                <span class="text-xs font-semibold text-white truncate">${show.name}</span>
+            </div>
+            <div class="flex items-center justify-between text-[10px] text-text-tertiary">
+                <span>${formatShowDuration(show.duration)}</span>
+                ${show.looping ? '<span class="text-accent-zone2">Loop</span>' : ''}
+            </div>
+        </button>
+    `).join('');
+}
+
+function startShow(showId) {
+    console.log('Starting show:', showId);
+    WS.send({ type: 'show.start', showId });
+}
+
+function stopShow() {
+    console.log('Stopping show');
+    WS.send({ type: 'show.stop' });
+}
+
+function pauseShow() {
+    console.log('Toggle pause show');
+    WS.send({ type: 'show.pause' });
+}
+
+function handleShowStarted(msg) {
+    state.showPlaying = true;
+    state.showPaused = false;
+    state.currentShowId = msg.showId !== undefined ? msg.showId : -1;
+    state.showName = msg.showName || 'Unknown Show';
+    state.showChapter = msg.chapterName || 'Starting...';
+
+    updateShowPlayingUI();
+    renderShowGrid(); // Update selection highlight
+}
+
+function handleShowStopped() {
+    state.showPlaying = false;
+    state.showPaused = false;
+    state.currentShowId = -1;
+    state.showProgress = 0;
+    state.showElapsed = 0;
+    state.showChapter = '';
+    state.showName = '';
+
+    updateShowPlayingUI();
+    renderShowGrid();
+}
+
+function handleShowPaused(paused) {
+    state.showPaused = paused;
+    updatePauseButton();
+}
+
+function updateShowProgress(msg) {
+    // msg: { showId, showName, elapsed, remaining, progress, chapter, chapterName, playing, paused, tension }
+    state.showPlaying = msg.playing;
+    state.showPaused = msg.paused;
+    state.currentShowId = msg.showId !== undefined ? msg.showId : state.currentShowId;
+    state.showName = msg.showName || state.showName;
+    state.showChapter = msg.chapterName || '';
+    state.showProgress = msg.progress || 0;
+    state.showElapsed = msg.elapsed || 0;
+
+    // Update UI elements
+    const nameEl = document.getElementById('show-now-playing-name');
+    const chapterEl = document.getElementById('show-now-playing-chapter');
+    const progressBar = document.getElementById('show-progress-bar');
+    const elapsedEl = document.getElementById('show-elapsed');
+    const remainingEl = document.getElementById('show-remaining');
+
+    if (nameEl) nameEl.textContent = state.showName;
+    if (chapterEl) chapterEl.textContent = `Chapter: ${state.showChapter || '--'}`;
+    if (progressBar) progressBar.style.width = `${state.showProgress * 100}%`;
+    if (elapsedEl) elapsedEl.textContent = formatShowDuration(msg.elapsed || 0);
+    if (remainingEl) remainingEl.textContent = `-${formatShowDuration(msg.remaining || 0)}`;
+
+    updateShowPlayingUI();
+    updatePauseButton();
+}
+
+function updateShowPlayingUI() {
+    const nowPlaying = document.getElementById('show-now-playing');
+    const statusBadge = document.getElementById('show-status-badge');
+
+    if (nowPlaying) {
+        nowPlaying.classList.toggle('hidden', !state.showPlaying);
+    }
+
+    if (statusBadge) {
+        if (state.showPlaying) {
+            statusBadge.classList.remove('hidden');
+            statusBadge.textContent = state.showPaused ? 'PAUSED' : 'PLAYING';
+            statusBadge.className = state.showPaused
+                ? 'px-2 py-0.5 rounded-full text-[10px] font-semibold bg-yellow-500/20 text-yellow-400'
+                : 'px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-500/20 text-green-400 animate-pulse';
+        } else {
+            statusBadge.classList.add('hidden');
+        }
+    }
+
+    // Recalculate panel height if open
+    const content = document.getElementById('shows-content');
+    if (content && content.style.maxHeight !== '0px') {
+        content.style.maxHeight = content.scrollHeight + 'px';
+    }
+}
+
+function updatePauseButton() {
+    const pauseBtn = document.getElementById('show-pause-btn');
+    if (pauseBtn) {
+        const icon = pauseBtn.querySelector('.iconify');
+        if (icon) {
+            icon.setAttribute('data-icon', state.showPaused ? 'solar:play-bold' : 'solar:pause-bold');
+        }
+    }
+}
+
+// Poll for show status periodically when a show is playing
+let showStatusInterval = null;
+
+function startShowStatusPolling() {
+    if (showStatusInterval) return;
+    showStatusInterval = setInterval(() => {
+        if (state.showPlaying && state.connected) {
+            WS.send({ type: 'show.status' });
+        }
+    }, 1000); // Poll every second for smooth progress updates
+}
+
+function stopShowStatusPolling() {
+    if (showStatusInterval) {
+        clearInterval(showStatusInterval);
+        showStatusInterval = null;
+    }
+}
+
 // ========== Firmware Update ==========
 function toggleFirmware() {
     const content = document.getElementById('firmware-content');
@@ -1108,6 +1534,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Load data
     await loadEffects();
     await loadPalettes();
+    await loadShows();  // Load available shows
     refreshUserPresets();  // Load user presets for preset bar
 
     // Connect WebSocket
@@ -1119,8 +1546,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     selectZone(1);
     updateConnectionStatus();
 
+    // Fetch initial effect parameters for zone 1
+    const zone = state.zones[0];
+    if (zone) {
+        fetchEffectParameters(zone.effectId, 0);
+    }
+
     // Check for shared preset in URL (Phase C.3)
     setTimeout(() => importPresetFromUrl(), 500);  // Delay to allow WS to sync first
+
+    // Start show status polling (for progress updates)
+    startShowStatusPolling();
 
     // Initialize firmware file input handler
     const firmwareFileInput = document.getElementById('firmware-file');
@@ -1171,5 +1607,163 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (sSlider) sSlider.value = zone.speed;
     }
 
-    console.log('K1-Lightwave initialized');
+    // ========== V3 UI Compatibility Layer ==========
+
+    // Populate effect list for V3 UI
+    function populateEffectList() {
+        const effectList = document.getElementById('effect-list');
+        if (!effectList || !state.effects.length) return;
+
+        effectList.innerHTML = '';
+        state.effects.forEach(fx => {
+            const item = document.createElement('div');
+            item.className = 'effect-item flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all';
+            item.dataset.effectId = fx.id;
+            item.dataset.category = fx.category || 'classic';
+            item.innerHTML = `
+                <span class="iconify" style="color: var(--text-secondary);" data-icon="lucide:sparkles" data-width="14"></span>
+                <span class="text-sm font-medium">${fx.name}</span>
+            `;
+            item.style.cssText = 'background: var(--bg-overlay); border: 1px solid transparent;';
+
+            item.addEventListener('click', () => {
+                // Deselect all
+                effectList.querySelectorAll('.effect-item').forEach(el => {
+                    el.style.background = 'var(--bg-overlay)';
+                    el.style.borderColor = 'transparent';
+                });
+                // Select this one
+                item.style.background = 'var(--gold-glow)';
+                item.style.borderColor = 'var(--gold)';
+
+                // Set the effect
+                const effectId = parseInt(item.dataset.effectId);
+                API.setZoneEffect(state.selectedZone, effectId);
+                updateCurrentEffect(effectId, fx.name);
+            });
+
+            effectList.appendChild(item);
+        });
+    }
+
+    // Category chip filtering
+    document.querySelectorAll('#category-chips .chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+            const category = chip.dataset.category;
+            const effectList = document.getElementById('effect-list');
+            if (!effectList) return;
+
+            effectList.querySelectorAll('.effect-item').forEach(item => {
+                if (category === 'all' || item.dataset.category === category) {
+                    item.style.display = 'flex';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        });
+    });
+
+    // Effects tab category chips
+    document.querySelectorAll('#effects-category-chips .chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+            const category = chip.dataset.category;
+            const grid = document.getElementById('effects-grid');
+            if (!grid) return;
+
+            grid.querySelectorAll('.effect-item').forEach(item => {
+                if (category === 'all' || item.dataset.category === category) {
+                    item.style.display = 'block';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        });
+    });
+
+    // V3 Brightness slider
+    const v3BrightnessSlider = document.getElementById('brightness-slider');
+    const v3BrightnessValue = document.getElementById('brightness-value');
+    if (v3BrightnessSlider) {
+        v3BrightnessSlider.addEventListener('input', debounce(() => {
+            const val = parseInt(v3BrightnessSlider.value);
+            if (v3BrightnessValue) v3BrightnessValue.textContent = val;
+            API.setBrightness(val);
+        }, CONFIG.DEBOUNCE_SLIDER));
+    }
+
+    // V3 Speed slider
+    const v3SpeedSlider = document.getElementById('speed-slider');
+    const v3SpeedValue = document.getElementById('speed-value');
+    if (v3SpeedSlider) {
+        v3SpeedSlider.addEventListener('input', debounce(() => {
+            const val = parseInt(v3SpeedSlider.value);
+            if (v3SpeedValue) v3SpeedValue.textContent = val;
+            API.setSpeed(val);
+        }, CONFIG.DEBOUNCE_SLIDER));
+    }
+
+    // V3 Visual Pipeline sliders
+    const pipelineSliders = {
+        'slider-intensity': 'val-int',
+        'slider-saturation': 'val-sat',
+        'slider-complexity': 'val-com',
+        'slider-variation': 'val-var'
+    };
+
+    function updatePipeline() {
+        const i = parseInt(document.getElementById('slider-intensity')?.value || 128);
+        const s = parseInt(document.getElementById('slider-saturation')?.value || 200);
+        const c = parseInt(document.getElementById('slider-complexity')?.value || 128);
+        const v = parseInt(document.getElementById('slider-variation')?.value || 128);
+        API.setPipeline(i, s, c, v);
+    }
+
+    Object.entries(pipelineSliders).forEach(([sliderId, labelId]) => {
+        const slider = document.getElementById(sliderId);
+        const label = document.getElementById(labelId);
+        if (slider) {
+            slider.addEventListener('input', () => {
+                if (label) label.textContent = slider.value;
+            });
+            slider.addEventListener('change', debounce(updatePipeline, CONFIG.DEBOUNCE_PIPELINE));
+        }
+    });
+
+    // Update zone bars based on state
+    function updateZoneBars() {
+        document.querySelectorAll('.zone-bar').forEach(bar => {
+            const zoneIdx = parseInt(bar.dataset.zone);
+            const zone = state.zones[zoneIdx];
+            if (zone) {
+                const heightPercent = (zone.brightness / 255) * 100;
+                bar.style.height = `${heightPercent}%`;
+            }
+        });
+    }
+
+    // Populate effect list after effects are loaded
+    populateEffectList();
+    updateZoneBars();
+
+    // Override updateCurrentEffect to also update V3 UI
+    const originalUpdateCurrentEffect = updateCurrentEffect;
+    window.updateCurrentEffect = function(id, name) {
+        originalUpdateCurrentEffect(id, name);
+
+        // Also update V3 effect list selection
+        const effectList = document.getElementById('effect-list');
+        if (effectList) {
+            effectList.querySelectorAll('.effect-item').forEach(item => {
+                if (parseInt(item.dataset.effectId) === id) {
+                    item.style.background = 'var(--gold-glow)';
+                    item.style.borderColor = 'var(--gold)';
+                } else {
+                    item.style.background = 'var(--bg-overlay)';
+                    item.style.borderColor = 'transparent';
+                }
+            });
+        }
+    };
+
+    console.log('K1-Lightwave initialized (V3 UI enabled)');
 });

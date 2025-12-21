@@ -3,7 +3,6 @@
 
 #include <Arduino.h>
 #include <SPIFFS.h>
-#include <ArduinoJson.h>
 #include "../config/hardware_config.h"
 #include "../core/EffectTypes.h"
 

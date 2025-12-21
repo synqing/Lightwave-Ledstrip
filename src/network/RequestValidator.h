@@ -14,8 +14,8 @@
  * RAM Cost: ~100 bytes for validation logic (schemas stored as constants)
  */
 
-#include <ArduinoJson.h>
 #include "ApiResponse.h"
+#include <cJSON.h>
 
 // ============================================================================
 // Field Types
@@ -77,14 +77,19 @@ public:
      * @param schemaSize Number of fields in schema
      * @return ValidationResult indicating success or failure with details
      */
-    static ValidationResult validate(const JsonDocument& doc,
+    static ValidationResult validate(const cJSON* doc,
                                        const FieldSchema* schema,
                                        size_t schemaSize) {
+        if (doc == nullptr || !cJSON_IsObject(doc)) {
+            return ValidationResult::error(ErrorCodes::INVALID_JSON, "Invalid JSON object");
+        }
+
         for (size_t i = 0; i < schemaSize; i++) {
             const FieldSchema& field = schema[i];
 
             // Check if field exists
-            if (!doc.containsKey(field.name)) {
+            const cJSON* value = cJSON_GetObjectItemCaseSensitive(doc, field.name);
+            if (value == nullptr) {
                 if (field.required) {
                     return ValidationResult::error(
                         ErrorCodes::MISSING_FIELD,
@@ -96,7 +101,7 @@ public:
             }
 
             // Validate type and range
-            ValidationResult result = validateField(doc[field.name], field);
+            ValidationResult result = validateField(value, field);
             if (!result.valid) {
                 return result;
             }
@@ -108,7 +113,7 @@ public:
     /**
      * @brief Validate a single field value against its schema
      */
-    static ValidationResult validateField(JsonVariantConst value,
+    static ValidationResult validateField(const cJSON* value,
                                             const FieldSchema& field) {
         switch (field.type) {
             case FieldType::UINT8:
@@ -137,8 +142,8 @@ public:
     }
 
 private:
-    static ValidationResult validateUint8(JsonVariantConst value, const FieldSchema& field) {
-        if (!value.is<unsigned int>() && !value.is<int>()) {
+    static ValidationResult validateUint8(const cJSON* value, const FieldSchema& field) {
+        if (!cJSON_IsNumber(value)) {
             return ValidationResult::error(
                 ErrorCodes::INVALID_TYPE,
                 "Expected unsigned integer",
@@ -146,7 +151,15 @@ private:
             );
         }
 
-        int val = value.as<int>();
+        const double dv = value->valuedouble;
+        if (dv < 0 || dv > 255) {
+            return ValidationResult::error(
+                ErrorCodes::OUT_OF_RANGE,
+                "Value must be 0-255",
+                field.name
+            );
+        }
+        int val = (int)dv;
         if (val < 0 || val > 255) {
             return ValidationResult::error(
                 ErrorCodes::OUT_OF_RANGE,
@@ -166,8 +179,8 @@ private:
         return ValidationResult::success();
     }
 
-    static ValidationResult validateUint16(JsonVariantConst value, const FieldSchema& field) {
-        if (!value.is<unsigned int>() && !value.is<int>()) {
+    static ValidationResult validateUint16(const cJSON* value, const FieldSchema& field) {
+        if (!cJSON_IsNumber(value)) {
             return ValidationResult::error(
                 ErrorCodes::INVALID_TYPE,
                 "Expected unsigned integer",
@@ -175,7 +188,15 @@ private:
             );
         }
 
-        int val = value.as<int>();
+        const double dv = value->valuedouble;
+        if (dv < 0 || dv > 65535) {
+            return ValidationResult::error(
+                ErrorCodes::OUT_OF_RANGE,
+                "Value must be 0-65535",
+                field.name
+            );
+        }
+        int val = (int)dv;
         if (val < 0 || val > 65535) {
             return ValidationResult::error(
                 ErrorCodes::OUT_OF_RANGE,
@@ -195,8 +216,8 @@ private:
         return ValidationResult::success();
     }
 
-    static ValidationResult validateUint32(JsonVariantConst value, const FieldSchema& field) {
-        if (!value.is<unsigned long>() && !value.is<unsigned int>() && !value.is<int>()) {
+    static ValidationResult validateUint32(const cJSON* value, const FieldSchema& field) {
+        if (!cJSON_IsNumber(value)) {
             return ValidationResult::error(
                 ErrorCodes::INVALID_TYPE,
                 "Expected unsigned integer",
@@ -206,7 +227,7 @@ private:
 
         // Note: ArduinoJson handles large values, we trust the range here
         if (field.maxVal > 0) {
-            unsigned long val = value.as<unsigned long>();
+            unsigned long val = (unsigned long)value->valuedouble;
             if (val < (unsigned long)field.minVal || val > (unsigned long)field.maxVal) {
                 return ValidationResult::error(
                     ErrorCodes::OUT_OF_RANGE,
@@ -219,8 +240,8 @@ private:
         return ValidationResult::success();
     }
 
-    static ValidationResult validateInt32(JsonVariantConst value, const FieldSchema& field) {
-        if (!value.is<int>()) {
+    static ValidationResult validateInt32(const cJSON* value, const FieldSchema& field) {
+        if (!cJSON_IsNumber(value)) {
             return ValidationResult::error(
                 ErrorCodes::INVALID_TYPE,
                 "Expected integer",
@@ -229,7 +250,7 @@ private:
         }
 
         if (field.maxVal != 0 || field.minVal != 0) {
-            int val = value.as<int>();
+            int val = (int)value->valuedouble;
             if (val < field.minVal || val > field.maxVal) {
                 return ValidationResult::error(
                     ErrorCodes::OUT_OF_RANGE,
@@ -242,8 +263,9 @@ private:
         return ValidationResult::success();
     }
 
-    static ValidationResult validateBool(JsonVariantConst value, const FieldSchema& field) {
-        if (!value.is<bool>()) {
+    static ValidationResult validateBool(const cJSON* value, const FieldSchema& field) {
+        (void)field;
+        if (!cJSON_IsBool(value)) {
             return ValidationResult::error(
                 ErrorCodes::INVALID_TYPE,
                 "Expected boolean",
@@ -253,8 +275,8 @@ private:
         return ValidationResult::success();
     }
 
-    static ValidationResult validateString(JsonVariantConst value, const FieldSchema& field) {
-        if (!value.is<const char*>()) {
+    static ValidationResult validateString(const cJSON* value, const FieldSchema& field) {
+        if (!cJSON_IsString(value) || value->valuestring == nullptr) {
             return ValidationResult::error(
                 ErrorCodes::INVALID_TYPE,
                 "Expected string",
@@ -262,7 +284,7 @@ private:
             );
         }
 
-        const char* str = value.as<const char*>();
+        const char* str = value->valuestring;
         size_t len = strlen(str);
 
         if (field.minVal > 0 && len < (size_t)field.minVal) {
@@ -284,8 +306,8 @@ private:
         return ValidationResult::success();
     }
 
-    static ValidationResult validateArray(JsonVariantConst value, const FieldSchema& field) {
-        if (!value.is<JsonArrayConst>()) {
+    static ValidationResult validateArray(const cJSON* value, const FieldSchema& field) {
+        if (!cJSON_IsArray(value)) {
             return ValidationResult::error(
                 ErrorCodes::INVALID_TYPE,
                 "Expected array",
@@ -293,10 +315,9 @@ private:
             );
         }
 
-        JsonArrayConst arr = value.as<JsonArrayConst>();
-        size_t size = arr.size();
+        int size = cJSON_GetArraySize(value);
 
-        if (field.minVal > 0 && size < (size_t)field.minVal) {
+        if (field.minVal > 0 && size < field.minVal) {
             return ValidationResult::error(
                 ErrorCodes::OUT_OF_RANGE,
                 "Array too small",
@@ -304,7 +325,7 @@ private:
             );
         }
 
-        if (field.maxVal > 0 && size > (size_t)field.maxVal) {
+        if (field.maxVal > 0 && size > field.maxVal) {
             return ValidationResult::error(
                 ErrorCodes::OUT_OF_RANGE,
                 "Array too large",
@@ -315,8 +336,9 @@ private:
         return ValidationResult::success();
     }
 
-    static ValidationResult validateObject(JsonVariantConst value, const FieldSchema& field) {
-        if (!value.is<JsonObjectConst>()) {
+    static ValidationResult validateObject(const cJSON* value, const FieldSchema& field) {
+        (void)field;
+        if (!cJSON_IsObject(value)) {
             return ValidationResult::error(
                 ErrorCodes::INVALID_TYPE,
                 "Expected object",

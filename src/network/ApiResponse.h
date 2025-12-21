@@ -13,12 +13,16 @@
  * Error:   {"success": false, "error": {"code": "...", "message": "...", "field": "..."}, ...}
  */
 
-#include <ArduinoJson.h>
-#include <ESPAsyncWebServer.h>
+#include <Arduino.h>
+#include <cJSON.h>
 #include <functional>
 
 // API version
 #define API_VERSION "1.0"
+
+// Forward declaration to avoid hard dependency on ESPAsyncWebServer.
+// (The robust Phase 2 web backend uses esp_http_server instead.)
+class AsyncWebServerRequest;
 
 // ============================================================================
 // Error Codes (constexpr strings stored in flash)
@@ -56,79 +60,67 @@ namespace HttpStatus {
 // Response Helpers
 // ============================================================================
 
+namespace ApiResponseInternal {
+    inline void sendJson(AsyncWebServerRequest* request, uint16_t httpCode, cJSON* root) {
+        // Always include timestamp/version if not already present
+        if (!cJSON_HasObjectItem(root, "timestamp")) {
+            cJSON_AddNumberToObject(root, "timestamp", millis());
+        }
+        if (!cJSON_HasObjectItem(root, "version")) {
+            cJSON_AddStringToObject(root, "version", API_VERSION);
+        }
+
+        char* output = cJSON_PrintUnformatted(root);
+        if (output == nullptr) {
+            // Fallback minimal error (avoid recursion)
+            request->send(HttpStatus::INTERNAL_ERROR, "application/json",
+                          "{\"success\":false,\"error\":{\"code\":\"INTERNAL_ERROR\",\"message\":\"JSON encode failed\"}}");
+            return;
+        }
+
+        request->send(httpCode, "application/json", output);
+        cJSON_free(output);
+    }
+} // namespace ApiResponseInternal
+
 /**
  * @brief Send a standardized success response with optional data
  * @param request The async web request to respond to
- * @param data Optional JSON document containing response data
+ * @param dataBuilder Optional builder that populates the data object
  */
 inline void sendSuccessResponse(AsyncWebServerRequest* request,
-                                 const JsonDocument& data) {
-    StaticJsonDocument<512> response;
-    response["success"] = true;
-    if (!data.isNull() && data.size() > 0) {
-        response["data"] = data;
-    }
-    response["timestamp"] = millis();
-    response["version"] = API_VERSION;
+                                std::function<void(cJSON* data)> dataBuilder = nullptr) {
+    cJSON* response = cJSON_CreateObject();
+    cJSON_AddBoolToObject(response, "success", true);
 
-    String output;
-    serializeJson(response, output);
-    request->send(HttpStatus::OK, "application/json", output);
+    if (dataBuilder) {
+        cJSON* data = cJSON_AddObjectToObject(response, "data");
+        dataBuilder(data);
+    }
+
+    ApiResponseInternal::sendJson(request, HttpStatus::OK, response);
+    cJSON_Delete(response);
 }
 
 /**
  * @brief Send a standardized success response with no data
  * @param request The async web request to respond to
  */
-inline void sendSuccessResponse(AsyncWebServerRequest* request) {
-    StaticJsonDocument<128> response;
-    response["success"] = true;
-    response["timestamp"] = millis();
-    response["version"] = API_VERSION;
-
-    String output;
-    serializeJson(response, output);
-    request->send(HttpStatus::OK, "application/json", output);
+inline void sendSuccessResponseNoData(AsyncWebServerRequest* request) {
+    sendSuccessResponse(request, nullptr);
 }
 
 /**
- * @brief Send a standardized success response using a builder function
+ * @brief Send a standardized success response with large data buffer (legacy signature)
  * @param request The async web request to respond to
  * @param builder Function that populates the data object
- */
-inline void sendSuccessResponse(AsyncWebServerRequest* request,
-                                 std::function<void(JsonObject&)> builder) {
-    StaticJsonDocument<512> response;
-    response["success"] = true;
-    JsonObject data = response.createNestedObject("data");
-    builder(data);
-    response["timestamp"] = millis();
-    response["version"] = API_VERSION;
-
-    String output;
-    serializeJson(response, output);
-    request->send(HttpStatus::OK, "application/json", output);
-}
-
-/**
- * @brief Send a standardized success response with large data buffer
- * @param request The async web request to respond to
- * @param builder Function that populates the data object
- * @param bufferSize Size of JSON buffer (for large responses)
+ * @param bufferSize Ignored (cJSON is dynamic)
  */
 inline void sendSuccessResponseLarge(AsyncWebServerRequest* request,
-                                      std::function<void(JsonObject&)> builder,
+                                      std::function<void(cJSON* data)> builder,
                                       size_t bufferSize = 1024) {
-    DynamicJsonDocument response(bufferSize);
-    response["success"] = true;
-    JsonObject data = response.createNestedObject("data");
-    builder(data);
-    response["timestamp"] = millis();
-    response["version"] = API_VERSION;
-
-    String output;
-    serializeJson(response, output);
-    request->send(HttpStatus::OK, "application/json", output);
+    (void)bufferSize;
+    sendSuccessResponse(request, builder);
 }
 
 /**
@@ -144,22 +136,18 @@ inline void sendErrorResponse(AsyncWebServerRequest* request,
                                const char* errorCode,
                                const char* message,
                                const char* field = nullptr) {
-    StaticJsonDocument<256> response;
-    response["success"] = false;
+    cJSON* response = cJSON_CreateObject();
+    cJSON_AddBoolToObject(response, "success", false);
 
-    JsonObject error = response.createNestedObject("error");
-    error["code"] = errorCode;
-    error["message"] = message;
+    cJSON* error = cJSON_AddObjectToObject(response, "error");
+    cJSON_AddStringToObject(error, "code", errorCode ? errorCode : ErrorCodes::INTERNAL_ERROR);
+    cJSON_AddStringToObject(error, "message", message ? message : "Error");
     if (field != nullptr) {
-        error["field"] = field;
+        cJSON_AddStringToObject(error, "field", field);
     }
 
-    response["timestamp"] = millis();
-    response["version"] = API_VERSION;
-
-    String output;
-    serializeJson(response, output);
-    request->send(httpCode, "application/json", output);
+    ApiResponseInternal::sendJson(request, httpCode, response);
+    cJSON_Delete(response);
 }
 
 /**
@@ -174,22 +162,20 @@ inline void sendErrorResponseWithDetails(AsyncWebServerRequest* request,
                                           uint16_t httpCode,
                                           const char* errorCode,
                                           const char* message,
-                                          std::function<void(JsonObject&)> detailsBuilder) {
-    StaticJsonDocument<384> response;
-    response["success"] = false;
+                                          std::function<void(cJSON* details)> detailsBuilder) {
+    cJSON* response = cJSON_CreateObject();
+    cJSON_AddBoolToObject(response, "success", false);
 
-    JsonObject error = response.createNestedObject("error");
-    error["code"] = errorCode;
-    error["message"] = message;
-    JsonObject details = error.createNestedObject("details");
-    detailsBuilder(details);
+    cJSON* error = cJSON_AddObjectToObject(response, "error");
+    cJSON_AddStringToObject(error, "code", errorCode ? errorCode : ErrorCodes::INTERNAL_ERROR);
+    cJSON_AddStringToObject(error, "message", message ? message : "Error");
+    cJSON* details = cJSON_AddObjectToObject(error, "details");
+    if (detailsBuilder) {
+        detailsBuilder(details);
+    }
 
-    response["timestamp"] = millis();
-    response["version"] = API_VERSION;
-
-    String output;
-    serializeJson(response, output);
-    request->send(httpCode, "application/json", output);
+    ApiResponseInternal::sendJson(request, httpCode, response);
+    cJSON_Delete(response);
 }
 
 // ============================================================================
@@ -219,11 +205,10 @@ inline void sendLegacySuccess(AsyncWebServerRequest* request) {
 inline void sendLegacyError(AsyncWebServerRequest* request,
                              const char* message,
                              uint16_t httpCode = HttpStatus::BAD_REQUEST) {
-    StaticJsonDocument<128> doc;
-    doc["error"] = message;
-    String output;
-    serializeJson(doc, output);
-    request->send(httpCode, "application/json", output);
+    cJSON* root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "error", message ? message : "Error");
+    ApiResponseInternal::sendJson(request, httpCode, root);
+    cJSON_Delete(root);
 }
 
 // ============================================================================
@@ -239,18 +224,22 @@ inline void sendLegacyError(AsyncWebServerRequest* request,
  */
 inline String buildWsResponse(const char* responseType,
                                const char* requestId,
-                               std::function<void(JsonObject&)> builder) {
-    StaticJsonDocument<512> response;
-    response["type"] = responseType;
+                               std::function<void(cJSON* data)> builder) {
+    cJSON* response = cJSON_CreateObject();
+    cJSON_AddStringToObject(response, "type", responseType ? responseType : "response");
     if (requestId != nullptr && strlen(requestId) > 0) {
-        response["requestId"] = requestId;
+        cJSON_AddStringToObject(response, "requestId", requestId);
     }
-    response["success"] = true;
-    JsonObject data = response.createNestedObject("data");
-    builder(data);
+    cJSON_AddBoolToObject(response, "success", true);
+    cJSON* data = cJSON_AddObjectToObject(response, "data");
+    if (builder) {
+        builder(data);
+    }
 
-    String output;
-    serializeJson(response, output);
+    char* out = cJSON_PrintUnformatted(response);
+    String output = out ? String(out) : String("{}");
+    if (out) cJSON_free(out);
+    cJSON_Delete(response);
     return output;
 }
 
@@ -264,18 +253,20 @@ inline String buildWsResponse(const char* responseType,
 inline String buildWsError(const char* errorCode,
                             const char* message,
                             const char* requestId = nullptr) {
-    StaticJsonDocument<256> response;
-    response["type"] = "error";
+    cJSON* response = cJSON_CreateObject();
+    cJSON_AddStringToObject(response, "type", "error");
     if (requestId != nullptr && strlen(requestId) > 0) {
-        response["requestId"] = requestId;
+        cJSON_AddStringToObject(response, "requestId", requestId);
     }
-    response["success"] = false;
-    JsonObject error = response.createNestedObject("error");
-    error["code"] = errorCode;
-    error["message"] = message;
+    cJSON_AddBoolToObject(response, "success", false);
+    cJSON* err = cJSON_AddObjectToObject(response, "error");
+    cJSON_AddStringToObject(err, "code", errorCode ? errorCode : ErrorCodes::INTERNAL_ERROR);
+    cJSON_AddStringToObject(err, "message", message ? message : "Error");
 
-    String output;
-    serializeJson(response, output);
+    char* out = cJSON_PrintUnformatted(response);
+    String output = out ? String(out) : String("{}");
+    if (out) cJSON_free(out);
+    cJSON_Delete(response);
     return output;
 }
 

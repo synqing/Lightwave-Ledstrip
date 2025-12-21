@@ -7,130 +7,77 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
-#include <ESPAsyncWebServer.h>
-#include <AsyncWebSocket.h>
-#include <ArduinoJson.h>
 #include <SPIFFS.h>
+#include <cJSON.h>
 
-// v1 API infrastructure
-#include "ApiResponse.h"
-#include "RequestValidator.h"
-#include "RateLimiter.h"
-#include "ConnectionManager.h"
+#include "IdfHttpServer.h"
+#include "../config/network_config.h"
 
-// Web server configuration - use values from NetworkConfig (see config/network_config.h)
-// Avoid macro redefinitions by not defining new macros here.
-
+/**
+ * LightwaveWebServer
+ *
+ * Robust web control plane (REST + WebSocket) using ESP-IDF `esp_http_server`.
+ *
+ * Notes:
+ * - Compiled only when FEATURE_WEB_SERVER=1 (WiFi environments).
+ * - JSON is cJSON only.
+ */
 class LightwaveWebServer {
-private:
-    AsyncWebServer* server;
-    AsyncWebSocket* ws;
-
-    // v1 API infrastructure
-    RateLimiter rateLimiter;
-    ConnectionManager connectionMgr;
-
-    // Connection state
-    bool isConnected = false;
-    bool isRunning = false;
-    bool shouldReboot = false;
-    bool mdnsStarted = false;
-    uint32_t lastHeartbeat = 0;
-
-    // JSON document size
-    static constexpr size_t JSON_DOC_SIZE = 2048;
-    
-    // WebSocket event handler
-    void onWebSocketEvent(AsyncWebSocket* server, AsyncWebSocketClient* client,
-                         AwsEventType type, void* arg, uint8_t* data, size_t len);
-    
-    // Command handlers
-    void handleCommand(AsyncWebSocketClient* client, const JsonDocument& doc);
-    void handleSetParameter(const JsonDocument& doc);
-    void handleSetEffect(const JsonDocument& doc);
-    void handleSetPalette(const JsonDocument& doc);
-    void handleTogglePower();
-    void handleEmergencyStop();
-    void handleSavePreset(const JsonDocument& doc);
-    
-    // State broadcast
-    void broadcastState();
-    void broadcastStatus();
-    void broadcastZoneState();  // Broadcast zone config to all clients
-    void broadcastPerformance();
-    void broadcastLEDData();
-    
-    // Network status handlers
-    void onWiFiConnected();
-    void onAPModeStarted();
-    void onWiFiDisconnected();
-    void startWiFiMonitor();
-    void startMDNS();
-    bool beginNetworkServices();
-    void setupRoutes();
-    void setupV1Routes();  // v1 API routes
-
-    // v1 API endpoint handlers
-    void handleApiDiscovery(AsyncWebServerRequest* request);
-    void handleDeviceStatus(AsyncWebServerRequest* request);
-    void handleDeviceInfo(AsyncWebServerRequest* request);
-    void handleEffectsList(AsyncWebServerRequest* request);
-    void handleEffectsCurrent(AsyncWebServerRequest* request);
-    void handleEffectMetadata(AsyncWebServerRequest* request);
-    void handleEffectsSet(AsyncWebServerRequest* request, uint8_t* data, size_t len);
-    void handleParametersGet(AsyncWebServerRequest* request);
-    void handleParametersSet(AsyncWebServerRequest* request, uint8_t* data, size_t len);
-    void handleTransitionTypes(AsyncWebServerRequest* request);
-    void handleTransitionConfigGet(AsyncWebServerRequest* request);
-    void handleTransitionConfigSet(AsyncWebServerRequest* request, uint8_t* data, size_t len);
-    void handleTransitionTrigger(AsyncWebServerRequest* request, uint8_t* data, size_t len);
-    void handleBatch(AsyncWebServerRequest* request, uint8_t* data, size_t len);
-
-    // User preset handlers (Phase C.1)
-    void handlePresetsList(AsyncWebServerRequest* request);
-    void handleUserPresetsList(AsyncWebServerRequest* request);
-    void handleUserPresetSave(AsyncWebServerRequest* request, uint8_t* data, size_t len);
-    void handleUserPresetDelete(AsyncWebServerRequest* request, uint8_t* data, size_t len);
-    void handlePresetLoad(AsyncWebServerRequest* request, uint8_t* data, size_t len);
-
-    // v1 helper methods
-    bool checkRateLimit(AsyncWebServerRequest* request);
-    bool executeBatchAction(const String& action, JsonVariant params);
-
-    // Static WebSocket handler
-    static void onWsEvent(AsyncWebSocket* server, AsyncWebSocketClient* client,
-                          AwsEventType type, void* arg, uint8_t* data, size_t len);
-    
-    // OTA firmware update handler
-    void handleOTAUpdate(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final);
-    
 public:
     LightwaveWebServer();
     ~LightwaveWebServer();
-    
-    // Initialize and start server
+
     bool begin();
     void stop();
-    
+
     // Update functions (call from main loop)
     void update();
     void sendLEDUpdate();
-    
+
     // Connection status
-    bool hasClients() const { return ws->count() > 0; }
-    size_t getClientCount() const { return ws->count(); }
-    
-    // Send notifications
+    bool hasClients() const { return m_wsClientCount > 0; }
+    size_t getClientCount() const { return m_wsClientCount; }
+
+    // Notifications
     void notifyEffectChange(uint8_t effectId);
     void notifyError(const String& message);
-    
-    // Get server instance for adding routes
-    AsyncWebServer* getServer() { return server; }
+
+    // WebSocket broadcast (public for v2 handlers)
+    void broadcastWs(const char* msg, size_t len) { m_http.wsBroadcastText(msg, len); }
+    void sendWsToClient(int clientFd, const char* msg, size_t len) { m_http.wsSendText(clientFd, msg, len); }
+
+private:
+    IdfHttpServer m_http;
+    size_t m_wsClientCount = 0;
+
+    bool m_running = false;
+    bool m_mdnsStarted = false;
+    uint32_t m_lastHeartbeatMs = 0;
+
+    void startMDNS();
+    void stopMDNS();
+
+    // Route registration (minimal in Phase 2; expanded in subsequent todos)
+    void registerRoutes();
+
+    // WebSocket handlers
+    static void onWsClientEvent(int clientFd, bool connected, void* ctx);
+    static void onWsMessage(int clientFd, const char* json, size_t len, void* ctx);
+
+    // REST handlers
+    static esp_err_t handleApiDiscovery(httpd_req_t* req);
+    static esp_err_t handleOpenApi(httpd_req_t* req);
+    static esp_err_t handleDeviceStatus(httpd_req_t* req);
+    static esp_err_t handleEffectsList(httpd_req_t* req);
+    static esp_err_t handleEffectsCurrent(httpd_req_t* req);
+    static esp_err_t handleStaticRoot(httpd_req_t* req);
+    static esp_err_t handleStaticAsset(httpd_req_t* req);
 };
 
-// Global instance
 extern LightwaveWebServer webServer;
 
 #endif // FEATURE_WEB_SERVER
 
-#endif // WEB_SERVER_H 
+#endif // WEB_SERVER_H
+
+

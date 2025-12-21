@@ -113,6 +113,12 @@ public:
     void disable();
     bool isEnabled() const { return m_enabled; }
 
+    // API v2 "warp" parameters (stored configuration; effects may consume later)
+    uint8_t getWarpStrength() const { return m_warpStrength; }
+    uint8_t getWarpFrequency() const { return m_warpFrequency; }
+    void setWarpStrength(uint8_t v) { m_warpStrength = v; }
+    void setWarpFrequency(uint8_t v) { m_warpFrequency = v; }
+
     // Update all subsystems
     void update();
 
@@ -138,6 +144,10 @@ private:
     uint32_t m_lastUpdateTime;
     float m_deltaTime;
     bool m_enabled;
+
+    // API v2 configuration
+    uint8_t m_warpStrength;
+    uint8_t m_warpFrequency;
 };
 
 #endif // FEATURE_MOTION_ENGINE

@@ -167,6 +167,8 @@ MotionEngine::MotionEngine()
     : m_lastUpdateTime(0)
     , m_deltaTime(0)
     , m_enabled(false)
+    , m_warpStrength(0)
+    , m_warpFrequency(0)
 {}
 
 void MotionEngine::enable() {

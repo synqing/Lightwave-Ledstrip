@@ -31,11 +31,23 @@ public:
                           const CRGBPalette16* pal3 = nullptr);
     void setBlendFactors(uint8_t pal1Amount, uint8_t pal2Amount,
                          uint8_t pal3Amount = 0);
+    bool isCrossBlendEnabled() const { return m_crossBlendEnabled; }
+    uint8_t getCrossBlendPalette1() const { return m_crossBlendPaletteId1; }
+    uint8_t getCrossBlendPalette2() const { return m_crossBlendPaletteId2; }
+    int getCrossBlendPalette3() const { return m_crossBlendPaletteId3; } // -1 if unset
+    uint8_t getBlendFactor1() const { return m_blendFactor1; }
+    uint8_t getBlendFactor2() const { return m_blendFactor2; }
+    uint8_t getBlendFactor3() const { return m_blendFactor3; }
+
+    // Set palettes by ID using the master palette table.
+    void setCrossBlendPalettes(uint8_t palette1Id, uint8_t palette2Id, int palette3Id = -1);
 
     // ====== TEMPORAL PALETTE ROTATION ======
     void enableTemporalRotation(bool enable);
     void setRotationSpeed(float degreesPerFrame);
     float getRotationPhase() const { return m_rotationPhase; }
+    bool isTemporalRotationEnabled() const { return m_rotationEnabled; }
+    float getRotationSpeed() const { return m_rotationSpeed; }
 
     // ====== COLOR DIFFUSION ======
     void enableDiffusion(bool enable);
@@ -48,7 +60,11 @@ public:
 
     // ====== UTILITY ======
     void reset();
+    void setEnabled(bool enable) { m_enabled = enable; }
+    bool isEnabled() const { return m_enabled; }
     bool isActive() const { return m_active; }
+    bool isDiffusionEnabled() const { return m_diffusionEnabled; }
+    uint8_t getDiffusionAmount() const { return m_diffusionAmount; }
 
 private:
     // Private constructor (singleton pattern)
@@ -57,6 +73,7 @@ private:
     ColorEngine& operator=(const ColorEngine&) = delete;
 
     // ====== INTERNAL STATE ======
+    bool m_enabled;
     bool m_active;
 
     // Cross-palette blending state
@@ -67,6 +84,9 @@ private:
     uint8_t m_blendFactor1;
     uint8_t m_blendFactor2;
     uint8_t m_blendFactor3;
+    uint8_t m_crossBlendPaletteId1;
+    uint8_t m_crossBlendPaletteId2;
+    int m_crossBlendPaletteId3; // -1 if unset
 
     // Temporal rotation state
     bool m_rotationEnabled;

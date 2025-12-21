@@ -28,6 +28,11 @@ The Light Crystals system can be configured with a **Light Guide Plate/Panel** s
 - **Interference Zones**: Areas where light from opposing edges meets and interacts
 - **Scattering Points**: Surface imperfections or intentional features that extract light
 
+### Film Stack Notes (prism/BEF builds)
+- **Diffuser layers** soften fine interference detail but improve legibility of slow envelopes and “mist” looks.
+- **Prism/BEF films** redistribute emission angles and can make “planes” and sharp boundaries read more strongly on-axis.
+- Treat diffusion/prism behaviour as part of the medium: patterns should offer a diffusion control (or equivalent softness lever) to tune for a given stack.
+
 ## Technical Implementation
 
 ### Coordinate System
@@ -387,7 +392,6 @@ enum LightGuideEncoderFunction {
 - **Audio Input**: Sound-reactive light guide effects
 
 ### Software Enhancements
-- **Machine Learning**: AI-powered gesture recognition and pattern generation
 - **Network Integration**: Synchronized light guide displays across multiple units
 - **Advanced Physics**: Quantum mechanics visualizations, relativistic effects
 - **User-Generated Content**: Framework for users to create custom effects

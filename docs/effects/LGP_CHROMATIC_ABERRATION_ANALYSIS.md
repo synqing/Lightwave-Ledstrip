@@ -329,7 +329,7 @@ The effect accurately simulates several optical phenomena:
 1. **Chromatic Dispersion**: Wavelength-dependent refraction matching Cauchy's equation
 2. **Abbe Number**: Dispersion strength proportional to optical material properties
 3. **Focal Shift**: Different focal lengths for R/G/B channels
-4. **Rainbow Formation**: Edge color separation mimics prism effects
+4. **Spectral Separation**: Controlled edge colour separation that reads like prismatic splitting without requiring hue-wheel sweeps
 
 ### SIMPLIFICATIONS FOR PERFORMANCE
 

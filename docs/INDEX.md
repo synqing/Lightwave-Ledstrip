@@ -47,10 +47,20 @@ Core system design documents in `architecture/`:
 | Document | Description |
 |----------|-------------|
 | [effects/ENHANCED_EFFECTS_GUIDE.md](effects/ENHANCED_EFFECTS_GUIDE.md) | Enhanced effects guide |
-| [effects/LIGHT_SHOW_MECHANICS_COMPREHENSIVE.md](architecture/LIGHT_SHOW_MECHANICS_COMPREHENSIVE.md) | Light show mechanics |
+| [effects/LIGHT_SHOW_MECHANICS_COMPREHENSIVE.md](effects/LIGHT_SHOW_MECHANICS_COMPREHENSIVE.md) | Light show mechanics |
 | `effects/LGP_*.md` | Light Guide Plate effect docs |
 
 ---
+
+## Lightshow Creation (LGP)
+
+Canonical documents for creating shows and patterns specifically for the dual‑edge LGP system:
+
+| Document | Description |
+|----------|-------------|
+| [features/CREATIVE_PATTERN_DEVELOPMENT_GUIDE.md](features/CREATIVE_PATTERN_DEVELOPMENT_GUIDE.md) | LGP physics → design levers → pattern taxonomy (centre origin, no rainbows) |
+| [effects/STORYTELLING_FRAMEWORK.md](effects/STORYTELLING_FRAMEWORK.md) | Narrative construction (motifs, pacing, scene cards) |
+| [guides/IMPLEMENTATION_PLAYBOOK_LIGHT_PATTERNS.md](guides/IMPLEMENTATION_PLAYBOOK_LIGHT_PATTERNS.md) | Engineering spec + testing + safety/constraints |
 
 ## Features
 

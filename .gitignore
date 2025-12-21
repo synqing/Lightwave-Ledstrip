@@ -43,6 +43,13 @@ wifi_credentials.ini
 # Local tooling caches
 .cache/
 
+# Claude / local agent tooling (keep folder structure tracked via .claude/.gitkeep)
+.claude/**
+!.claude/.gitkeep
+
+# Local semantic tooling / MCP manifests (environment-specific)
+.code-context/
+
 # ==========================================
 # ARCHIVE FOLDERS - Not tracked in git
 # ==========================================
@@ -79,3 +86,7 @@ tools/upload.sh
 # Duplicate docs (single source of truth at root)
 docs/CHANGELOG.md
 docs/TODO.md
+
+# Figma template samples (local development artifacts)
+docs/templates/Figma_Sample1/
+docs/templates/Figma_Sample2/

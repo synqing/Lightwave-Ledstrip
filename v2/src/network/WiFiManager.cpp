@@ -18,9 +18,12 @@
 #if FEATURE_WEB_SERVER
 
 #include <esp_wifi.h>
+#include "../config/network_config.h"
 
 namespace lightwaveos {
 namespace network {
+
+using namespace lightwaveos::config;
 
 // ============================================================================
 // Static Member Initialization
@@ -250,6 +253,7 @@ void WiFiManager::handleStateConnecting() {
         m_successfulConnections++;
         m_lastConnectionTime = millis();
         m_reconnectDelay = RECONNECT_DELAY_MS;  // Reset backoff
+        m_attemptsOnCurrentNetwork = 0;         // Reset attempt counter
 
         Serial.printf("[WiFiManager] Connected! IP: %s, RSSI: %d dBm\n",
                       WiFi.localIP().toString().c_str(), WiFi.RSSI());
@@ -294,14 +298,29 @@ void WiFiManager::handleStateConnected() {
 void WiFiManager::handleStateFailed() {
     Serial.println("[WiFiManager] STATE: FAILED");
 
-    // If AP mode is enabled, we can serve the config portal
-    if (m_apEnabled) {
+    m_attemptsOnCurrentNetwork++;
+
+    Serial.printf("[WiFiManager] Connection failed (%d/%d attempts on %s)\n",
+                  m_attemptsOnCurrentNetwork, NetworkConfig::WIFI_ATTEMPTS_PER_NETWORK, m_ssid.c_str());
+
+    // Check if we should switch to next network
+    if (m_attemptsOnCurrentNetwork >= NetworkConfig::WIFI_ATTEMPTS_PER_NETWORK) {
+        if (hasSecondaryNetwork()) {
+            switchToNextNetwork();
+            m_reconnectDelay = RECONNECT_DELAY_MS;  // Reset backoff for new network
+            setState(STATE_WIFI_INIT);
+            return;
+        }
+    }
+
+    // If AP mode is enabled and we've exhausted all networks, fall back to it
+    if (m_apEnabled && m_attemptsOnCurrentNetwork >= NetworkConfig::WIFI_ATTEMPTS_PER_NETWORK && !hasSecondaryNetwork()) {
         Serial.println("[WiFiManager] Falling back to AP mode for configuration");
         setState(STATE_WIFI_AP_MODE);
         return;
     }
 
-    // Otherwise, wait with backoff before retrying
+    // Otherwise, wait with backoff before retrying same network
     Serial.printf("[WiFiManager] Waiting %d ms before retry (backoff)\n", m_reconnectDelay);
     vTaskDelay(pdMS_TO_TICKS(m_reconnectDelay));
 
@@ -486,7 +505,43 @@ String WiFiManager::getStateString() const {
 void WiFiManager::setCredentials(const String& ssid, const String& password) {
     m_ssid = ssid;
     m_password = password;
-    Serial.printf("[WiFiManager] Credentials set for '%s'\n", ssid.c_str());
+    // Also load secondary network from config if available
+    m_ssid2 = NetworkConfig::WIFI_SSID_2_VALUE;
+    m_password2 = NetworkConfig::WIFI_PASSWORD_2_VALUE;
+    m_currentNetworkIndex = 0;
+    m_attemptsOnCurrentNetwork = 0;
+
+    if (hasSecondaryNetwork()) {
+        Serial.printf("[WiFiManager] Configured networks: %s (primary), %s (fallback)\n",
+                      ssid.c_str(), m_ssid2.c_str());
+    } else {
+        Serial.printf("[WiFiManager] Credentials set for '%s'\n", ssid.c_str());
+    }
+}
+
+bool WiFiManager::hasSecondaryNetwork() const {
+    return m_ssid2.length() > 0 && m_ssid2 != "";
+}
+
+void WiFiManager::switchToNextNetwork() {
+    if (!hasSecondaryNetwork()) return;
+
+    m_currentNetworkIndex = (m_currentNetworkIndex + 1) % 2;
+    m_attemptsOnCurrentNetwork = 0;
+
+    // Update active credentials
+    if (m_currentNetworkIndex == 0) {
+        m_ssid = NetworkConfig::WIFI_SSID_VALUE;
+        m_password = NetworkConfig::WIFI_PASSWORD_VALUE;
+    } else {
+        m_ssid = m_ssid2;
+        m_password = m_password2;
+    }
+
+    Serial.printf("[WiFiManager] Switching to network: %s\n", m_ssid.c_str());
+
+    // Clear cached channel info for new network
+    m_bestChannel = 0;
 }
 
 void WiFiManager::setStaticIP(const IPAddress& ip, const IPAddress& gw,

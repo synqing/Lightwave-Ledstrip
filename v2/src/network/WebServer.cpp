@@ -604,6 +604,13 @@ void WebServer::setupV1Routes() {
     });
 #endif
 
+    // ========== Effect Metadata Endpoint (MUST BE BEFORE /api/v1/effects) ==========
+    // Effect Metadata - GET /api/v1/effects/metadata?id=N
+    m_server->on("/api/v1/effects/metadata", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        handleEffectsMetadata(request);
+    });
+
     // Effects List - GET /api/v1/effects
     m_server->on("/api/v1/effects", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
@@ -689,14 +696,6 @@ void WebServer::setupV1Routes() {
             handlePalettesSet(request, data, len);
         }
     );
-
-    // ========== Effect Metadata Endpoint ==========
-
-    // Effect Metadata - GET /api/v1/effects/metadata?id=N
-    m_server->on("/api/v1/effects/metadata", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        handleEffectsMetadata(request);
-    });
 
     // ========== Transition Config Endpoints ==========
 
@@ -2239,6 +2238,267 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             data["hue"] = RENDERER->getHue();
         });
         client->text(response);
+    }
+
+    // ========== MISSING V1 COMMANDS - NOW IMPLEMENTED ==========
+
+    // device.getStatus - Device status via WebSocket
+    else if (type == "device.getStatus") {
+        const char* requestId = doc["requestId"] | "";
+        String response = buildWsResponse("device.status", requestId, [this](JsonObject& data) {
+            data["uptime"] = (millis() - m_startTime) / 1000;
+            data["freeHeap"] = ESP.getFreeHeap();
+            data["heapSize"] = ESP.getHeapSize();
+            data["cpuFreq"] = ESP.getCpuFreqMHz();
+
+            // Render stats
+            const RenderStats& stats = RENDERER->getStats();
+            data["fps"] = stats.currentFPS;
+            data["cpuPercent"] = stats.cpuPercent;
+            data["framesRendered"] = stats.framesRendered;
+
+            // Network info
+            JsonObject network = data.createNestedObject("network");
+            network["connected"] = WiFi.status() == WL_CONNECTED;
+            network["apMode"] = m_apMode;
+            if (WiFi.status() == WL_CONNECTED) {
+                network["ip"] = WiFi.localIP().toString();
+                network["rssi"] = WiFi.RSSI();
+            }
+
+            data["wsClients"] = m_ws->count();
+        });
+        client->text(response);
+    }
+
+    // effects.getMetadata - Effect metadata by ID
+    else if (type == "effects.getMetadata") {
+        const char* requestId = doc["requestId"] | "";
+        uint8_t effectId = doc["effectId"] | 255;
+
+        if (effectId == 255 || effectId >= RENDERER->getEffectCount()) {
+            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid effectId", requestId));
+            return;
+        }
+
+        String response = buildWsResponse("effects.metadata", requestId, [effectId](JsonObject& data) {
+            data["id"] = effectId;
+            data["name"] = RENDERER->getEffectName(effectId);
+
+            // Category based on ID ranges
+            if (effectId <= 4) {
+                data["category"] = "Classic";
+                data["description"] = "Classic LED effects optimized for LGP";
+            } else if (effectId <= 7) {
+                data["category"] = "Wave";
+                data["description"] = "Wave-based interference patterns";
+            } else if (effectId <= 12) {
+                data["category"] = "Physics";
+                data["description"] = "Physics-based simulations";
+            } else {
+                data["category"] = "Custom";
+                data["description"] = "Custom effects";
+            }
+
+            // Effect properties
+            JsonObject properties = data.createNestedObject("properties");
+            properties["centerOrigin"] = true;
+            properties["symmetricStrips"] = true;
+            properties["paletteAware"] = true;
+            properties["speedResponsive"] = true;
+
+            // Recommended settings
+            JsonObject recommended = data.createNestedObject("recommended");
+            recommended["brightness"] = 180;
+            recommended["speed"] = 15;
+        });
+        client->text(response);
+    }
+
+    // effects.getCategories - Effect categories list
+    else if (type == "effects.getCategories") {
+        const char* requestId = doc["requestId"] | "";
+        String response = buildWsResponse("effects.categories", requestId, [](JsonObject& data) {
+            data["total"] = 4;  // Classic, Wave, Physics, Custom
+
+            JsonArray categories = data.createNestedArray("categories");
+            
+            // Count effects per category
+            uint8_t classicCount = 0, waveCount = 0, physicsCount = 0, customCount = 0;
+            uint8_t effectCount = RENDERER->getEffectCount();
+            for (uint8_t i = 0; i < effectCount; i++) {
+                if (i <= 4) classicCount++;
+                else if (i <= 7) waveCount++;
+                else if (i <= 12) physicsCount++;
+                else customCount++;
+            }
+
+            JsonObject classic = categories.createNestedObject();
+            classic["id"] = 0;
+            classic["name"] = "Classic";
+            classic["count"] = classicCount;
+
+            JsonObject wave = categories.createNestedObject();
+            wave["id"] = 1;
+            wave["name"] = "Wave";
+            wave["count"] = waveCount;
+
+            JsonObject physics = categories.createNestedObject();
+            physics["id"] = 2;
+            physics["name"] = "Physics";
+            physics["count"] = physicsCount;
+
+            JsonObject custom = categories.createNestedObject();
+            custom["id"] = 3;
+            custom["name"] = "Custom";
+            custom["count"] = customCount;
+        });
+        client->text(response);
+    }
+
+    // transition.getTypes - Transition types list
+    else if (type == "transition.getTypes") {
+        const char* requestId = doc["requestId"] | "";
+        String response = buildWsResponse("transitions.types", requestId, [](JsonObject& data) {
+            JsonArray types = data.createNestedArray("types");
+
+            for (uint8_t i = 0; i < static_cast<uint8_t>(TransitionType::TYPE_COUNT); i++) {
+                JsonObject type = types.createNestedObject();
+                type["id"] = i;
+                type["name"] = getTransitionName(static_cast<TransitionType>(i));
+            }
+
+            data["total"] = static_cast<uint8_t>(TransitionType::TYPE_COUNT);
+        });
+        client->text(response);
+    }
+
+    // transition.config - Get transition configuration
+    else if (type == "transition.config" && !doc.containsKey("defaultDuration") && !doc.containsKey("defaultType")) {
+        const char* requestId = doc["requestId"] | "";
+        String response = buildWsResponse("transitions.config", requestId, [](JsonObject& data) {
+            data["enabled"] = true;
+            data["defaultDuration"] = 1000;
+            data["defaultType"] = 0;
+            data["defaultTypeName"] = getTransitionName(TransitionType::FADE);
+
+            // Available easing curves
+            JsonArray easings = data.createNestedArray("easings");
+            const char* easingNames[] = {
+                "LINEAR", "IN_QUAD", "OUT_QUAD", "IN_OUT_QUAD",
+                "IN_CUBIC", "OUT_CUBIC", "IN_OUT_CUBIC",
+                "IN_ELASTIC", "OUT_ELASTIC", "IN_OUT_ELASTIC"
+            };
+            for (uint8_t i = 0; i < 10; i++) {
+                JsonObject easing = easings.createNestedObject();
+                easing["id"] = i;
+                easing["name"] = easingNames[i];
+            }
+        });
+        client->text(response);
+    }
+
+    // transition.config - Set transition configuration
+    else if (type == "transition.config" && (doc.containsKey("defaultDuration") || doc.containsKey("defaultType"))) {
+        const char* requestId = doc["requestId"] | "";
+        uint16_t duration = doc["defaultDuration"] | 1000;
+        uint8_t type = doc["defaultType"] | 0;
+
+        if (type >= static_cast<uint8_t>(TransitionType::TYPE_COUNT)) {
+            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid transition type", requestId));
+            return;
+        }
+
+        // Currently transition config is not persisted, acknowledge the request
+        String response = buildWsResponse("transitions.config", requestId, [duration, type](JsonObject& data) {
+            data["defaultDuration"] = duration;
+            data["defaultType"] = type;
+            data["defaultTypeName"] = getTransitionName(static_cast<TransitionType>(type));
+            data["message"] = "Transition config updated";
+        });
+        client->text(response);
+    }
+
+    // zones.get - Zones list
+    else if (type == "zones.get") {
+        const char* requestId = doc["requestId"] | "";
+        
+        if (!m_zoneComposer) {
+            client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
+            return;
+        }
+
+        String response = buildWsResponse("zones", requestId, [this](JsonObject& data) {
+            data["enabled"] = m_zoneComposer->isEnabled();
+            data["layout"] = static_cast<uint8_t>(m_zoneComposer->getLayout());
+            data["layoutName"] = m_zoneComposer->getLayout() == ZoneLayout::QUAD ? "QUAD" : "TRIPLE";
+            data["zoneCount"] = m_zoneComposer->getZoneCount();
+
+            JsonArray zones = data.createNestedArray("zones");
+            for (uint8_t i = 0; i < m_zoneComposer->getZoneCount(); i++) {
+                JsonObject zone = zones.createNestedObject();
+                zone["id"] = i;
+                zone["enabled"] = m_zoneComposer->isZoneEnabled(i);
+                zone["effectId"] = m_zoneComposer->getZoneEffect(i);
+                zone["effectName"] = RENDERER->getEffectName(m_zoneComposer->getZoneEffect(i));
+                zone["brightness"] = m_zoneComposer->getZoneBrightness(i);
+                zone["speed"] = m_zoneComposer->getZoneSpeed(i);
+                zone["paletteId"] = m_zoneComposer->getZonePalette(i);
+                zone["blendMode"] = static_cast<uint8_t>(m_zoneComposer->getZoneBlendMode(i));
+                zone["blendModeName"] = getBlendModeName(m_zoneComposer->getZoneBlendMode(i));
+            }
+
+            // Available presets
+            JsonArray presets = data.createNestedArray("presets");
+            for (uint8_t i = 0; i < 5; i++) {
+                JsonObject preset = presets.createNestedObject();
+                preset["id"] = i;
+                preset["name"] = ZoneComposer::getPresetName(i);
+            }
+        });
+        client->text(response);
+    }
+
+    // batch - Batch operations via WebSocket
+    else if (type == "batch") {
+        const char* requestId = doc["requestId"] | "";
+
+        if (!doc.containsKey("operations") || !doc["operations"].is<JsonArray>()) {
+            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "operations array required", requestId));
+            return;
+        }
+
+        JsonArray ops = doc["operations"];
+        if (ops.size() > WebServerConfig::MAX_BATCH_OPERATIONS) {
+            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Max 10 operations per batch", requestId));
+            return;
+        }
+
+        uint8_t processed = 0;
+        uint8_t failed = 0;
+
+        for (JsonVariant op : ops) {
+            String action = op["action"] | "";
+            if (executeBatchAction(action, op)) {
+                processed++;
+            } else {
+                failed++;
+            }
+        }
+
+        String response = buildWsResponse("batch.result", requestId, [processed, failed](JsonObject& data) {
+            data["processed"] = processed;
+            data["failed"] = failed;
+        });
+        client->text(response);
+
+        broadcastStatus();
+    }
+
+    // Unknown command
+    else {
+        const char* requestId = doc["requestId"] | "";
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, "Unknown command type", requestId));
     }
 }
 

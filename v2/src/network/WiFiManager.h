@@ -135,9 +135,11 @@ public:
     // ========================================================================
 
     /**
-     * @brief Set WiFi credentials
+     * @brief Set WiFi credentials (primary network)
      * @param ssid Network SSID
      * @param password Network password
+     * 
+     * Also loads secondary network from NetworkConfig if available.
      */
     void setCredentials(const String& ssid, const String& password);
 
@@ -343,6 +345,8 @@ private:
     void updateBestChannel();
     bool isChannelCongested(uint8_t channel);
     void setState(WiFiState newState);
+    void switchToNextNetwork();
+    bool hasSecondaryNetwork() const;
 
     // ========================================================================
     // Event Handler
@@ -376,6 +380,10 @@ private:
 
     String m_ssid;
     String m_password;
+    String m_ssid2;
+    String m_password2;
+    uint8_t m_currentNetworkIndex = 0;     // 0 = primary, 1 = secondary
+    uint8_t m_attemptsOnCurrentNetwork = 0;
     bool m_useStaticIP = false;
     IPAddress m_staticIP;
     IPAddress m_gateway;

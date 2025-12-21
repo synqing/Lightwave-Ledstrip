@@ -119,8 +119,8 @@ private:
     bool m_initialized;     // Initialization flag
 };
 
-// Convenience macro for accessing the instance
-#define DEVICE_UUID lightwaveos::sync::DeviceUUID::instance()
-
 } // namespace sync
 } // namespace lightwaveos
+
+// Convenience macro for accessing the instance (must be outside namespace)
+#define DEVICE_UUID lightwaveos::sync::DeviceUUID::instance()

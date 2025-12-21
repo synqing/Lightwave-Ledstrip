@@ -14,7 +14,7 @@
  *
  * Threading:
  * - All methods should be called from SyncManagerActor (Core 0)
- * - Uses ESPAsyncTCP for non-blocking WebSocket operations
+ * - Uses ESP-IDF esp_websocket_client for non-blocking WebSocket operations
  *
  * @author LightwaveOS Team
  * @version 2.0.0
@@ -26,12 +26,18 @@
 #include "SyncProtocol.h"
 #include <cstdint>
 
-// Forward declarations
+// ESP-IDF WebSocket client handle type
+// NOTE: The actual esp_websocket_client.h is included ONLY in the .cpp file
+// to avoid Arduino/lwIP header conflicts. Here we just forward-declare the handle type.
 #ifdef NATIVE_BUILD
-struct MockAsyncWebSocketClient;
-using AsyncWebSocketClient = MockAsyncWebSocketClient;
+// Mock handle type for native/test builds
+typedef void* esp_websocket_client_handle_t;
+typedef const char* esp_event_base_t;
 #else
-class AsyncWebSocketClient;
+// Forward declaration of the opaque handle type (avoid including esp_websocket_client.h in header)
+typedef struct esp_websocket_client* esp_websocket_client_handle_t;
+// esp_event_base_t is defined in esp_event_base.h as: typedef const char* esp_event_base_t;
+typedef const char* esp_event_base_t;
 #endif
 
 namespace lightwaveos {
@@ -54,7 +60,7 @@ struct PeerConnection {
     char uuid[16];              // Peer UUID
     uint8_t ip[4];              // Peer IP address
     uint16_t port;              // Peer WebSocket port
-    AsyncWebSocketClient* client; // WebSocket client (nullptr if not connected)
+    esp_websocket_client_handle_t client; // ESP-IDF WebSocket client handle (nullptr if not connected)
     uint32_t lastActivityMs;    // Last message sent/received
     uint32_t lastPingMs;        // Last ping sent
     uint32_t reconnectDelayMs;  // Current backoff delay
@@ -210,6 +216,39 @@ private:
      * @return Pointer to empty slot or nullptr
      */
     PeerConnection* findEmptySlot();
+
+    /**
+     * @brief Find connection slot by client handle
+     * @return Pointer to slot or nullptr
+     */
+    PeerConnection* findSlotByHandle(esp_websocket_client_handle_t handle);
+
+    /**
+     * @brief Static callback wrapper for ESP-IDF WebSocket events
+     *
+     * Required because ESP-IDF uses C-style callbacks. This static method
+     * extracts the PeerManager instance from handler_args and forwards
+     * to the instance method.
+     *
+     * @param handler_args Pointer to PeerConnection (set during client init)
+     * @param base Event base (WEBSOCKET_EVENTS)
+     * @param event_id Event type (WEBSOCKET_EVENT_*)
+     * @param event_data Event-specific data
+     */
+    static void wsEventHandler(void* handler_args, esp_event_base_t base,
+                               int32_t event_id, void* event_data);
+
+    /**
+     * @brief Instance method to handle WebSocket events
+     *
+     * Called by wsEventHandler after resolving the instance pointer.
+     * Dispatches to onConnect/onDisconnect/onMessage based on event type.
+     *
+     * @param event_id ESP-IDF WebSocket event ID
+     * @param event_data Event-specific data (esp_websocket_event_data_t*)
+     * @param conn The PeerConnection associated with this client
+     */
+    void handleWebSocketEvent(int32_t event_id, void* event_data, PeerConnection* conn);
 
     /**
      * @brief Handle WebSocket connection event

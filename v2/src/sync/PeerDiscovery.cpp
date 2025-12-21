@@ -80,6 +80,11 @@ void PeerDiscovery::processScanResults(int resultCount) {
     (void)resultCount;
     return;
 #else
+    // Guard against negative results (error condition) or excessive count
+    if (resultCount <= 0) {
+        return;
+    }
+
     for (int i = 0; i < resultCount; i++) {
         // Get TXT record for board type (MDNS.txt returns String)
         String boardStr = MDNS.txt(i, MDNS_TXT_BOARD);

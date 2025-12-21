@@ -499,15 +499,16 @@ inline ActorConfig StateStore() {
  * @brief Configuration for SyncManagerActor
  *
  * Handles multi-device synchronization. Runs on Core 0 with network.
+ * Tick interval of 100ms for heartbeat/discovery updates.
  */
 inline ActorConfig SyncManager() {
     return ActorConfig(
         "SyncManager",  // name
-        2048,           // stackSize (8KB)
+        8192,           // stackSize (8KB) - needs more for JSON serialization
         2,              // priority
-        0,              // coreId (Core 0)
+        0,              // coreId (Core 0 - network)
         16,             // queueSize
-        0               // tickInterval (event-driven)
+        pdMS_TO_TICKS(100) // tickInterval (100ms for heartbeats/discovery)
     );
 }
 

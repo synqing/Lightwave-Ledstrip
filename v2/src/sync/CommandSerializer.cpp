@@ -413,11 +413,28 @@ ParsedCommand CommandSerializer::parse(const char* json, size_t length) {
             break;
 
         case CommandType::SET_INTENSITY:
+            if (findInt(json, "\"i\"", &val1)) {
+                result.params.singleParam.value = static_cast<uint8_t>(val1);
+                result.valid = true;
+            }
+            break;
+
         case CommandType::SET_SATURATION:
+            if (findInt(json, "\"a\"", &val1)) {
+                result.params.singleParam.value = static_cast<uint8_t>(val1);
+                result.valid = true;
+            }
+            break;
+
         case CommandType::SET_COMPLEXITY:
+            if (findInt(json, "\"x\"", &val1)) {
+                result.params.singleParam.value = static_cast<uint8_t>(val1);
+                result.valid = true;
+            }
+            break;
+
         case CommandType::SET_VARIATION:
-            // These all use a single "value" parameter
-            if (findInt(json, "\"v\"", &val1)) {
+            if (findInt(json, "\"r\"", &val1)) {
                 result.params.singleParam.value = static_cast<uint8_t>(val1);
                 result.valid = true;
             }

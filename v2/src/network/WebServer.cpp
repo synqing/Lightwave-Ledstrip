@@ -213,9 +213,9 @@ void WebServer::startMDNS() {
 #if FEATURE_MULTI_DEVICE
         // Add TXT records for multi-device sync discovery
         MDNS.addServiceTxt("ws", "tcp", "board", "ESP32-S3");
-        MDNS.addServiceTxt("ws", "tcp", "uuid", lightwaveos::sync::DEVICE_UUID.toString());
+        MDNS.addServiceTxt("ws", "tcp", "uuid", DEVICE_UUID.toString());
         MDNS.addServiceTxt("ws", "tcp", "syncver", "1");
-        Serial.printf("[WebServer] Sync UUID: %s\n", lightwaveos::sync::DEVICE_UUID.toString());
+        Serial.printf("[WebServer] Sync UUID: %s\n", DEVICE_UUID.toString());
 #endif
 
         m_mdnsStarted = true;
@@ -598,7 +598,7 @@ void WebServer::setupV1Routes() {
         char buffer[256];
         size_t len = snprintf(buffer, sizeof(buffer),
             "{\"success\":true,\"data\":{\"enabled\":true,\"uuid\":\"%s\"},\"version\":\"1.0\"}",
-            lightwaveos::sync::DEVICE_UUID.toString()
+            DEVICE_UUID.toString()
         );
         request->send(200, "application/json", buffer);
     });

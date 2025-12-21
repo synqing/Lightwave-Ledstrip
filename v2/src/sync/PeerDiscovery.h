@@ -64,8 +64,11 @@ public:
     /**
      * @brief Trigger an mDNS scan for peers
      *
-     * Non-blocking. Results will be available in getPeers() after
-     * the scan completes. Typical scan time is 500ms-2s.
+     * WARNING: This is a BLOCKING call. MDNS.queryService() typically
+     * takes 500ms-2s to complete. Do not call from time-critical loops.
+     * Call from SyncManagerActor or a background task.
+     *
+     * Results will be available in getPeers() after the scan completes.
      */
     void scan();
 

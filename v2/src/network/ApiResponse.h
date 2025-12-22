@@ -65,7 +65,7 @@ namespace HttpStatus {
  * @brief Send a standardized success response with no data
  */
 inline void sendSuccessResponse(AsyncWebServerRequest* request) {
-    StaticJsonDocument<128> response;
+    JsonDocument response;
     response["success"] = true;
     response["timestamp"] = millis();
     response["version"] = API_VERSION;
@@ -80,9 +80,9 @@ inline void sendSuccessResponse(AsyncWebServerRequest* request) {
  */
 inline void sendSuccessResponse(AsyncWebServerRequest* request,
                                  std::function<void(JsonObject&)> builder) {
-    StaticJsonDocument<512> response;
+    JsonDocument response;
     response["success"] = true;
-    JsonObject data = response.createNestedObject("data");
+    JsonObject data = response["data"].to<JsonObject>();
     builder(data);
     response["timestamp"] = millis();
     response["version"] = API_VERSION;
@@ -94,13 +94,16 @@ inline void sendSuccessResponse(AsyncWebServerRequest* request,
 
 /**
  * @brief Send a standardized success response with large data buffer
+ * Note: bufferSize parameter is kept for API compatibility but is no longer used
+ *       since ArduinoJson v7 uses dynamic allocation for JsonDocument
  */
 inline void sendSuccessResponseLarge(AsyncWebServerRequest* request,
                                       std::function<void(JsonObject&)> builder,
                                       size_t bufferSize = 1024) {
-    DynamicJsonDocument response(bufferSize);
+    (void)bufferSize; // Unused in ArduinoJson v7
+    JsonDocument response;
     response["success"] = true;
-    JsonObject data = response.createNestedObject("data");
+    JsonObject data = response["data"].to<JsonObject>();
     builder(data);
     response["timestamp"] = millis();
     response["version"] = API_VERSION;
@@ -118,10 +121,10 @@ inline void sendErrorResponse(AsyncWebServerRequest* request,
                                const char* errorCode,
                                const char* message,
                                const char* field = nullptr) {
-    StaticJsonDocument<256> response;
+    JsonDocument response;
     response["success"] = false;
 
-    JsonObject error = response.createNestedObject("error");
+    JsonObject error = response["error"].to<JsonObject>();
     error["code"] = errorCode;
     error["message"] = message;
     if (field != nullptr) {
@@ -134,6 +137,35 @@ inline void sendErrorResponse(AsyncWebServerRequest* request,
     String output;
     serializeJson(response, output);
     request->send(httpCode, "application/json", output);
+}
+
+/**
+ * @brief Send a rate limit exceeded (429) error response with Retry-After header
+ * @param request The HTTP request
+ * @param retryAfterSeconds Seconds until client should retry (sent in Retry-After header)
+ */
+inline void sendRateLimitError(AsyncWebServerRequest* request, uint32_t retryAfterSeconds) {
+    JsonDocument response;
+    response["success"] = false;
+
+    JsonObject error = response["error"].to<JsonObject>();
+    error["code"] = ErrorCodes::RATE_LIMITED;
+    error["message"] = "Too many requests. Please wait before retrying.";
+    error["retryAfter"] = retryAfterSeconds;
+
+    response["timestamp"] = millis();
+    response["version"] = API_VERSION;
+
+    String output;
+    serializeJson(response, output);
+
+    // Create response with Retry-After header
+    AsyncWebServerResponse* resp = request->beginResponse(HttpStatus::TOO_MANY_REQUESTS,
+                                                           "application/json", output);
+    char retryHeader[16];
+    snprintf(retryHeader, sizeof(retryHeader), "%lu", (unsigned long)retryAfterSeconds);
+    resp->addHeader("Retry-After", retryHeader);
+    request->send(resp);
 }
 
 // ============================================================================
@@ -155,11 +187,30 @@ inline void sendLegacySuccess(AsyncWebServerRequest* request) {
 inline void sendLegacyError(AsyncWebServerRequest* request,
                              const char* message,
                              uint16_t httpCode = HttpStatus::BAD_REQUEST) {
-    StaticJsonDocument<128> doc;
+    JsonDocument doc;
     doc["error"] = message;
     String output;
     serializeJson(doc, output);
     request->send(httpCode, "application/json", output);
+}
+
+/**
+ * @brief Send a legacy-format rate limit error response with Retry-After header
+ * Returns: {"error": "Rate limit exceeded", "retryAfter": N}
+ */
+inline void sendLegacyRateLimitError(AsyncWebServerRequest* request, uint32_t retryAfterSeconds) {
+    JsonDocument doc;
+    doc["error"] = "Rate limit exceeded";
+    doc["retryAfter"] = retryAfterSeconds;
+    String output;
+    serializeJson(doc, output);
+
+    AsyncWebServerResponse* resp = request->beginResponse(HttpStatus::TOO_MANY_REQUESTS,
+                                                           "application/json", output);
+    char retryHeader[16];
+    snprintf(retryHeader, sizeof(retryHeader), "%lu", (unsigned long)retryAfterSeconds);
+    resp->addHeader("Retry-After", retryHeader);
+    request->send(resp);
 }
 
 // ============================================================================
@@ -172,13 +223,13 @@ inline void sendLegacyError(AsyncWebServerRequest* request,
 inline String buildWsResponse(const char* responseType,
                                const char* requestId,
                                std::function<void(JsonObject&)> builder) {
-    StaticJsonDocument<512> response;
+    JsonDocument response;
     response["type"] = responseType;
     if (requestId != nullptr && strlen(requestId) > 0) {
         response["requestId"] = requestId;
     }
     response["success"] = true;
-    JsonObject data = response.createNestedObject("data");
+    JsonObject data = response["data"].to<JsonObject>();
     builder(data);
 
     String output;
@@ -192,15 +243,35 @@ inline String buildWsResponse(const char* responseType,
 inline String buildWsError(const char* errorCode,
                             const char* message,
                             const char* requestId = nullptr) {
-    StaticJsonDocument<256> response;
+    JsonDocument response;
     response["type"] = "error";
     if (requestId != nullptr && strlen(requestId) > 0) {
         response["requestId"] = requestId;
     }
     response["success"] = false;
-    JsonObject error = response.createNestedObject("error");
+    JsonObject error = response["error"].to<JsonObject>();
     error["code"] = errorCode;
     error["message"] = message;
+
+    String output;
+    serializeJson(response, output);
+    return output;
+}
+
+/**
+ * @brief Build a WebSocket rate limit error response with retry info
+ */
+inline String buildWsRateLimitError(uint32_t retryAfterSeconds, const char* requestId = nullptr) {
+    JsonDocument response;
+    response["type"] = "error";
+    if (requestId != nullptr && strlen(requestId) > 0) {
+        response["requestId"] = requestId;
+    }
+    response["success"] = false;
+    JsonObject error = response["error"].to<JsonObject>();
+    error["code"] = ErrorCodes::RATE_LIMITED;
+    error["message"] = "Too many messages. Please wait before retrying.";
+    error["retryAfter"] = retryAfterSeconds;
 
     String output;
     serializeJson(response, output);

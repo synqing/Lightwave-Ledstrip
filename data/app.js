@@ -169,6 +169,21 @@ const WS = {
             case 'zone.paramChanged':
                 handleParamChanged(msg);
                 break;
+            case 'zone.paletteChanged':
+                // Handle zone palette change confirmation from server
+                if (msg.zoneId !== undefined && msg.paletteId !== undefined) {
+                    const zoneIdx = msg.zoneId;
+                    if (state.zones[zoneIdx]) {
+                        state.zones[zoneIdx].paletteId = msg.paletteId;
+                        // Update UI if this is the selected zone
+                        if (zoneIdx === state.selectedZone - 1) {
+                            const paletteSelect = document.getElementById('zone-palette-select');
+                            // Convert palette ID to dropdown value (0 = global, 1+ = palette ID + 1)
+                            if (paletteSelect) paletteSelect.value = msg.paletteId === 0 ? 0 : msg.paletteId + 1;
+                        }
+                    }
+                }
+                break;
             case 'effects.params':
                 // Handle WebSocket response for effect params
                 if (msg.effectId !== undefined && msg.zoneId !== undefined) {
@@ -274,7 +289,8 @@ function syncZoneState(msg) {
             if (sSlider) { sSlider.value = zone.speed; updateSliderTrack(sSlider); }
             if (sLabel) sLabel.textContent = zone.speed;
             if (effectSelect) effectSelect.value = zone.effectId;
-            if (paletteSelect) paletteSelect.value = zone.paletteId;
+            // Convert palette ID to dropdown value (0 = global, 1+ = palette ID + 1)
+            if (paletteSelect) paletteSelect.value = zone.paletteId === 0 ? 0 : zone.paletteId + 1;
 
             // Fetch metadata and parameters for the selected zone's effect
             if (idx === state.selectedZone - 1) {
@@ -405,7 +421,8 @@ function selectZone(id) {
         if (bLabel) bLabel.textContent = zone.brightness;
         if (sSlider) { sSlider.value = zone.speed; updateSliderTrack(sSlider); }
         if (sLabel) sLabel.textContent = zone.speed;
-        if (pSelect) pSelect.value = zone.paletteId;
+        // Convert palette ID to dropdown value (0 = global, 1+ = palette ID + 1)
+        if (pSelect) pSelect.value = zone.paletteId === 0 ? 0 : zone.paletteId + 1;
         if (effectSelect) effectSelect.value = zone.effectId;
 
         // Fetch effect parameters for this zone
@@ -458,9 +475,16 @@ function setZoneSpeed(value) {
 
 function setZonePalette(value) {
     const zoneId = state.selectedZone - 1;
-    const paletteId = parseInt(value);
+    const dropdownValue = parseInt(value);
+    
+    // Convert dropdown value to actual palette ID (0 = global, 1+ = palette ID offset by 1)
+    const paletteId = dropdownValue === 0 ? 0 : dropdownValue - 1;
 
     if (state.zones[zoneId]) state.zones[zoneId].paletteId = paletteId;
+
+    // Update UI dropdown immediately for better UX
+    const paletteSelect = document.getElementById('zone-palette-select');
+    if (paletteSelect) paletteSelect.value = dropdownValue;
 
     // Send via WebSocket for faster response
     WS.send({ type: 'zone.setPalette', zoneId, paletteId });

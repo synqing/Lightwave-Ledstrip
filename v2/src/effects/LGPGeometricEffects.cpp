@@ -193,9 +193,9 @@ void effectChevronWaves(RenderContext& ctx) {
         uint8_t brightness = (uint8_t)(chevron * 255 * intensityNorm);
         uint8_t hue = ctx.hue + (uint8_t)(distFromCenter * 2) + (uint8_t)(chevronPos * 0.5f);
 
-        ctx.leds[i] += CHSV(hue, 255, brightness);
+        ctx.leds[i] += ColorFromPalette(*ctx.palette, hue, brightness);
         if (i + STRIP_LENGTH < ctx.numLeds) {
-            ctx.leds[i + STRIP_LENGTH] += CHSV(hue + 90, 255, brightness);
+            ctx.leds[i + STRIP_LENGTH] += ColorFromPalette(*ctx.palette, hue + 90, brightness);
         }
     }
 }

@@ -23,6 +23,8 @@
 #include "effects/transitions/TransitionEngine.h"
 #include "effects/transitions/TransitionTypes.h"
 #include "core/narrative/NarrativeEngine.h"
+#include "core/actors/ShowDirectorActor.h"
+#include "core/shows/BuiltinShows.h"
 
 #if FEATURE_WEB_SERVER
 #include "network/WiFiManager.h"
@@ -46,6 +48,9 @@ ZoneConfigManager* zoneConfigMgr = nullptr;
 
 // Effect count is now dynamic via RENDERER->getEffectCount()
 // Effect names retrieved via RENDERER->getEffectName(id)
+
+// Current show index for serial navigation
+static uint8_t currentShowIndex = 0;
 
 // ==================== Setup ====================
 
@@ -202,6 +207,12 @@ void setup() {
     Serial.println("\nAuto-Play (Narrative) Commands:");
     Serial.println("  A       - Toggle auto-play mode");
     Serial.println("  @       - Print narrative status");
+    Serial.println("\nShow Playback Commands:");
+    Serial.println("  W       - List all shows (10 presets)");
+    Serial.println("  w       - Toggle show playback");
+    Serial.println("  </>     - Previous/Next show");
+    Serial.println("  {/}     - Seek backward/forward 30s");
+    Serial.println("  #       - Print show status");
 #if FEATURE_WEB_SERVER
     Serial.println("\nWeb API:");
     Serial.println("  GET  /api/v1/effects - List effects");
@@ -667,6 +678,157 @@ void loop() {
                 case '@':
                     // Print narrative status
                     NARRATIVE.printStatus();
+                    break;
+
+                // ========== Show Playback Commands ==========
+
+                case 'W':
+                    // List all shows
+                    {
+                        Serial.printf("\n=== Shows (%d available) ===\n", BUILTIN_SHOW_COUNT);
+                        for (uint8_t i = 0; i < BUILTIN_SHOW_COUNT; i++) {
+                            // Read show info from PROGMEM
+                            ShowDefinition show;
+                            memcpy_P(&show, &BUILTIN_SHOWS[i], sizeof(ShowDefinition));
+                            char nameBuf[20];
+                            strncpy_P(nameBuf, show.name, sizeof(nameBuf) - 1);
+                            nameBuf[sizeof(nameBuf) - 1] = '\0';
+
+                            uint32_t mins = show.totalDurationMs / 60000;
+                            uint32_t secs = (show.totalDurationMs % 60000) / 1000;
+
+                            Serial.printf("  %d: %-12s %d:%02d %s%s\n",
+                                          i, nameBuf, mins, secs,
+                                          show.looping ? "[loops]" : "",
+                                          (i == currentShowIndex) ? " <--" : "");
+                        }
+                        Serial.println();
+                    }
+                    break;
+
+                case 'w':
+                    // Toggle show playback
+                    {
+                        ShowDirectorActor* showDir = ACTOR_SYSTEM.getShowDirector();
+                        if (showDir) {
+                            if (showDir->isPlaying()) {
+                                // Stop the show
+                                Message stopMsg(MessageType::SHOW_STOP);
+                                showDir->send(stopMsg);
+                                Serial.println("Show: STOPPED");
+                            } else {
+                                // Load and start the show
+                                Message loadMsg(MessageType::SHOW_LOAD, currentShowIndex);
+                                showDir->send(loadMsg);
+                                delay(10);  // Allow load to process
+                                Message startMsg(MessageType::SHOW_START);
+                                showDir->send(startMsg);
+
+                                // Get show name for display
+                                ShowDefinition show;
+                                memcpy_P(&show, &BUILTIN_SHOWS[currentShowIndex], sizeof(ShowDefinition));
+                                char nameBuf[20];
+                                strncpy_P(nameBuf, show.name, sizeof(nameBuf) - 1);
+                                nameBuf[sizeof(nameBuf) - 1] = '\0';
+                                Serial.printf("Show: PLAYING '%s'\n", nameBuf);
+                            }
+                        } else {
+                            Serial.println("ERROR: ShowDirector not available");
+                        }
+                    }
+                    break;
+
+                case '<':
+                    // Previous show
+                    {
+                        currentShowIndex = (currentShowIndex + BUILTIN_SHOW_COUNT - 1) % BUILTIN_SHOW_COUNT;
+                        ShowDefinition show;
+                        memcpy_P(&show, &BUILTIN_SHOWS[currentShowIndex], sizeof(ShowDefinition));
+                        char nameBuf[20];
+                        strncpy_P(nameBuf, show.name, sizeof(nameBuf) - 1);
+                        nameBuf[sizeof(nameBuf) - 1] = '\0';
+                        Serial.printf("Show %d: %s\n", currentShowIndex, nameBuf);
+                    }
+                    break;
+
+                case '>':
+                    // Next show
+                    {
+                        currentShowIndex = (currentShowIndex + 1) % BUILTIN_SHOW_COUNT;
+                        ShowDefinition show;
+                        memcpy_P(&show, &BUILTIN_SHOWS[currentShowIndex], sizeof(ShowDefinition));
+                        char nameBuf[20];
+                        strncpy_P(nameBuf, show.name, sizeof(nameBuf) - 1);
+                        nameBuf[sizeof(nameBuf) - 1] = '\0';
+                        Serial.printf("Show %d: %s\n", currentShowIndex, nameBuf);
+                    }
+                    break;
+
+                case '{':
+                    // Seek backward 30s
+                    {
+                        ShowDirectorActor* showDir = ACTOR_SYSTEM.getShowDirector();
+                        if (showDir && showDir->isPlaying()) {
+                            uint32_t elapsed = showDir->getElapsedMs();
+                            uint32_t newTime = (elapsed > 30000) ? (elapsed - 30000) : 0;
+                            Message seekMsg(MessageType::SHOW_SEEK, 0, 0, 0, newTime);
+                            showDir->send(seekMsg);
+                            Serial.printf("Seek: %d:%02d\n", newTime / 60000, (newTime % 60000) / 1000);
+                        } else {
+                            Serial.println("No show playing");
+                        }
+                    }
+                    break;
+
+                case '}':
+                    // Seek forward 30s
+                    {
+                        ShowDirectorActor* showDir = ACTOR_SYSTEM.getShowDirector();
+                        if (showDir && showDir->isPlaying()) {
+                            uint32_t elapsed = showDir->getElapsedMs();
+                            uint32_t remaining = showDir->getRemainingMs();
+                            uint32_t newTime = (remaining > 30000) ? (elapsed + 30000) : (elapsed + remaining);
+                            Message seekMsg(MessageType::SHOW_SEEK, 0, 0, 0, newTime);
+                            showDir->send(seekMsg);
+                            Serial.printf("Seek: %d:%02d\n", newTime / 60000, (newTime % 60000) / 1000);
+                        } else {
+                            Serial.println("No show playing");
+                        }
+                    }
+                    break;
+
+                case '#':
+                    // Print show status
+                    {
+                        ShowDirectorActor* showDir = ACTOR_SYSTEM.getShowDirector();
+                        if (showDir) {
+                            if (showDir->hasShow()) {
+                                ShowDefinition show;
+                                memcpy_P(&show, &BUILTIN_SHOWS[showDir->getCurrentShowId()], sizeof(ShowDefinition));
+                                char nameBuf[20];
+                                strncpy_P(nameBuf, show.name, sizeof(nameBuf) - 1);
+                                nameBuf[sizeof(nameBuf) - 1] = '\0';
+
+                                uint32_t elapsed = showDir->getElapsedMs();
+                                uint32_t total = show.totalDurationMs;
+
+                                Serial.println("\n=== Show Status ===");
+                                Serial.printf("  Show: %s\n", nameBuf);
+                                Serial.printf("  State: %s\n",
+                                              showDir->isPlaying() ? (showDir->isPaused() ? "PAUSED" : "PLAYING") : "STOPPED");
+                                Serial.printf("  Progress: %d:%02d / %d:%02d (%.0f%%)\n",
+                                              elapsed / 60000, (elapsed % 60000) / 1000,
+                                              total / 60000, (total % 60000) / 1000,
+                                              showDir->getProgress() * 100.0f);
+                                Serial.printf("  Chapter: %d\n", showDir->getCurrentChapter());
+                                Serial.println();
+                            } else {
+                                Serial.printf("No show loaded. Selected: %d\n", currentShowIndex);
+                            }
+                        } else {
+                            Serial.println("ShowDirector not available");
+                        }
+                    }
                     break;
             }
         }

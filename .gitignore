@@ -1,3 +1,4 @@
+# Logs
 # PlatformIO
 .pio
 .pio-home/
@@ -56,6 +57,8 @@ wifi_credentials.ini
 # ==========================================
 Master_Archive/
 archives/
+baseline_*
+reports/
 
 # ==========================================
 # GENERATED/TEMPORARY CONTENT
@@ -98,4 +101,3 @@ execute_commit_plan.sh
 
 # Development dashboard (separate build project)
 # lightwave-dashboard/ -> Now tracked
-

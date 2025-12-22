@@ -463,7 +463,7 @@ function setZonePalette(value) {
     if (state.zones[zoneId]) state.zones[zoneId].paletteId = paletteId;
 
     // Send via WebSocket for faster response
-    sendWS({ type: 'zone.setPalette', zoneId, paletteId });
+    WS.send({ type: 'zone.setPalette', zoneId, paletteId });
 }
 
 function updateZoneVisualization() {

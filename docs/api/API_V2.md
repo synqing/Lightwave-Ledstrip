@@ -1732,6 +1732,62 @@ ws.onerror = (error) => {
 
 ---
 
+### Command: `ledStream.subscribe`
+
+Subscribe to real-time LED data streaming.
+
+**Send:**
+```json
+{
+  "type": "ledStream.subscribe",
+  "requestId": "optional-id"
+}
+```
+
+**Receive (Success):**
+```json
+{
+  "type": "ledStream.subscribed",
+  "requestId": "optional-id",
+  "success": true,
+  "data": {
+    "clientId": 1,
+    "frameSize": 961,
+    "targetFps": 20,
+    "magicByte": 254,
+    "accepted": true
+  }
+}
+```
+
+**Receive (Failure):**
+```json
+{
+  "type": "ledStream.rejected",
+  "requestId": "optional-id",
+  "success": false,
+  "error": {
+    "code": "RESOURCE_EXHAUSTED",
+    "message": "Subscriber table full"
+  }
+}
+```
+
+**Binary Stream:**
+Upon successful subscription, the server sends binary WebSocket frames at ~20 FPS.
+- **Size:** 961 bytes
+- **Format:** `[MAGIC_BYTE (0xFE)] [R0][G0][B0] ... [R319][G319][B319]`
+- **Encoding:** Raw binary (Uint8Array)
+
+**Send Unsubscribe:**
+```json
+{
+  "type": "ledStream.unsubscribe"
+}
+```
+
+---
+
 ### Command: `device.getStatus`
 
 Get device status over WebSocket.

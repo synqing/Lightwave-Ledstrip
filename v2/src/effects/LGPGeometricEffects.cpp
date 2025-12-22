@@ -92,9 +92,9 @@ void effectHexagonalGrid(RenderContext& ctx) {
         uint8_t brightness = (uint8_t)(pattern * 255 * intensityNorm);
         uint8_t hue = ctx.hue + (uint8_t)(pattern * 60) + (i >> 1);
 
-        ctx.leds[i] = CHSV(hue, 200, brightness);
+        ctx.leds[i] = ColorFromPalette(*ctx.palette, hue, brightness);
         if (i + STRIP_LENGTH < ctx.numLeds) {
-            ctx.leds[i + STRIP_LENGTH] = CHSV(hue + 60, 200, brightness);
+            ctx.leds[i + STRIP_LENGTH] = ColorFromPalette(*ctx.palette, hue + 60, brightness);
         }
     }
 }
@@ -159,9 +159,9 @@ void effectSierpinskiTriangles(RenderContext& ctx) {
         uint8_t brightness = (uint8_t)(smooth * 255 * intensityNorm);
         uint8_t hue = ctx.hue + (bitCount * 30);
 
-        ctx.leds[i] = CHSV(hue, 255, brightness);
+        ctx.leds[i] = ColorFromPalette(*ctx.palette, hue, brightness);
         if (i + STRIP_LENGTH < ctx.numLeds) {
-            ctx.leds[i + STRIP_LENGTH] = CHSV(hue + 128, 255, brightness);
+            ctx.leds[i + STRIP_LENGTH] = ColorFromPalette(*ctx.palette, hue + 128, brightness);
         }
     }
 }
@@ -284,9 +284,9 @@ void effectMeshNetwork(RenderContext& ctx) {
             if (distToNode < 3) {
                 // Node core
                 uint8_t nodeBright = (uint8_t)(255 * intensityNorm);
-                ctx.leds[i] = CHSV(ctx.hue + (n * 20), 255, nodeBright);
+                ctx.leds[i] = ColorFromPalette(*ctx.palette, ctx.hue + (n * 20), nodeBright);
                 if (i + STRIP_LENGTH < ctx.numLeds) {
-                    ctx.leds[i + STRIP_LENGTH] = CHSV(ctx.hue + (n * 20) + 128, 255, nodeBright);
+                    ctx.leds[i + STRIP_LENGTH] = ColorFromPalette(*ctx.palette, ctx.hue + (n * 20) + 128, nodeBright);
                 }
             } else if (distToNode < 20) {
                 // Connections to nearby nodes
@@ -294,9 +294,9 @@ void effectMeshNetwork(RenderContext& ctx) {
                 connection *= exp(-distToNode * 0.1f);
 
                 uint8_t connBright = (uint8_t)(abs(connection) * 128 * intensityNorm);
-                ctx.leds[i] += CHSV(ctx.hue + (n * 20), 200, connBright);
+                ctx.leds[i] += ColorFromPalette(*ctx.palette, ctx.hue + (n * 20), connBright);
                 if (i + STRIP_LENGTH < ctx.numLeds) {
-                    ctx.leds[i + STRIP_LENGTH] += CHSV(ctx.hue + (n * 20) + 128, 200, connBright);
+                    ctx.leds[i + STRIP_LENGTH] += ColorFromPalette(*ctx.palette, ctx.hue + (n * 20) + 128, connBright);
                 }
             }
         }

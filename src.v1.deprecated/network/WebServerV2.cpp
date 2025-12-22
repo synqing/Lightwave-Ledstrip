@@ -95,9 +95,7 @@ static const uint8_t ZONE_PRESET_COUNTS[] = {1, 2, 3, 4, 4};
 // ============================================================================
 
 static void addCorsHeaders(httpd_req_t* req) {
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Headers", "Content-Type, X-OTA-Token");
+    IdfHttpServer::addCorsHeaders(req);
 }
 
 static cJSON* createV2Response(bool success) {

@@ -65,6 +65,8 @@ public:
     // Utility: send JSON response from cJSON root (serialised unformatted).
     esp_err_t sendJson(httpd_req_t* req, int statusCode, cJSON* root) const;
 
+    static void addCorsHeaders(httpd_req_t* req);
+
     // Default CORS OPTIONS handler (204 No Content).
     static esp_err_t corsOptionsHandler(httpd_req_t* req);
     static esp_err_t handle404(httpd_req_t* req, httpd_err_code_t err);
@@ -81,8 +83,6 @@ private:
     // WS client list
     static constexpr size_t MAX_WS_CLIENTS = 8;
     int m_wsClientFds[MAX_WS_CLIENTS];
-
-    static void addCorsHeaders(httpd_req_t* req);
     void recordRoute(const char* method, const char* uri, bool ok);
 
     bool registerInternalHandlers();
@@ -101,5 +101,4 @@ private:
     std::vector<String> m_routes;
     static IdfHttpServer* s_lastInstance;
 };
-
 

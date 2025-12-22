@@ -2,7 +2,49 @@
 
 #include <cstring>
 
+#include "../config/features.h"
+
+#if FEATURE_NETWORK
+#include "../config/network_config.h"
+#endif
+
 IdfHttpServer* IdfHttpServer::s_lastInstance = nullptr;
+
+static bool isAllowedCorsOrigin(const char* origin) {
+    if (!origin || !origin[0]) return false;
+
+    const char* scheme = nullptr;
+    if (strncmp(origin, "http://", 7) == 0) scheme = origin + 7;
+    if (strncmp(origin, "https://", 8) == 0) scheme = origin + 8;
+    if (!scheme) return false;
+
+    const char* hostport = scheme;
+    const size_t hostLen = strcspn(hostport, ":/");
+    if (hostLen == 0) return false;
+
+    auto hostEquals = [&](const char* expected) -> bool {
+        const size_t expectedLen = strlen(expected);
+        return hostLen == expectedLen && strncmp(hostport, expected, hostLen) == 0;
+    };
+
+    if (hostEquals("localhost") || hostEquals("127.0.0.1") || hostEquals("0.0.0.0")) {
+        return true;
+    }
+
+#if FEATURE_NETWORK
+    if (hostEquals(NetworkConfig::MDNS_HOSTNAME)) {
+        return true;
+    }
+
+    char mdnsLocal[64];
+    snprintf(mdnsLocal, sizeof(mdnsLocal), "%s.local", NetworkConfig::MDNS_HOSTNAME);
+    if (hostEquals(mdnsLocal)) {
+        return true;
+    }
+#endif
+
+    return false;
+}
 
 IdfHttpServer::IdfHttpServer() {
     for (size_t i = 0; i < MAX_WS_CLIENTS; i++) {
@@ -143,10 +185,15 @@ bool IdfHttpServer::registerOptions(const char* uri, esp_err_t (*handler)(httpd_
 }
 
 void IdfHttpServer::addCorsHeaders(httpd_req_t* req) {
-    // CORS (per-response) – equivalent to DefaultHeaders in AsyncWebServer
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    char origin[192];
+    const bool hasOrigin = httpd_req_get_hdr_value_str(req, "Origin", origin, sizeof(origin)) == ESP_OK;
+    if (hasOrigin && isAllowedCorsOrigin(origin)) {
+        httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", origin);
+        httpd_resp_set_hdr(req, "Vary", "Origin");
+    }
     httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Headers", "Content-Type, X-OTA-Token");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Headers", "Content-Type, Authorization, X-OTA-Token");
+    httpd_resp_set_hdr(req, "Access-Control-Max-Age", "86400");
 }
 
 esp_err_t IdfHttpServer::corsOptionsHandler(httpd_req_t* req) {
@@ -391,5 +438,3 @@ void IdfHttpServer::wsSendText(int clientFd, const char* msg, size_t len) {
 
     (void)httpd_ws_send_frame_async(m_server, clientFd, &frame);
 }
-
-

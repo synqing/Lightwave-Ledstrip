@@ -1779,9 +1779,7 @@ esp_err_t LightwaveWebServer::handleOpenApi(httpd_req_t* req) {
     // Serve OpenAPI spec from PROGMEM.
     // IMPORTANT: do NOT call corsOptionsHandler() here (it sends a 204 response).
     // Instead, attach the same CORS headers and proceed with a normal 200 response.
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Headers", "Content-Type, X-OTA-Token");
+    IdfHttpServer::addCorsHeaders(req);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_status(req, "200 OK");
 
@@ -1898,5 +1896,4 @@ esp_err_t LightwaveWebServer::handleStaticAsset(httpd_req_t* req) {
 }
 
 #endif // FEATURE_WEB_SERVER
-
 

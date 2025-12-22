@@ -97,4 +97,5 @@ OTHER_FILES_ANALYSIS.md
 execute_commit_plan.sh
 
 # Development dashboard (separate build project)
-lightwave-dashboard/
+# lightwave-dashboard/ -> Now tracked
+

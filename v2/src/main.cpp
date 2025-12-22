@@ -44,14 +44,8 @@ using namespace lightwaveos::narrative;
 ZoneComposer zoneComposer;
 ZoneConfigManager* zoneConfigMgr = nullptr;
 
-// ==================== Effect Names for Menu ====================
-
-static const char* effectNames[] = {
-    "Fire", "Ocean", "Plasma", "Confetti", "Sinelon",
-    "Juggle", "BPM", "Wave", "Ripple", "Heartbeat",
-    "Interference", "Breathing", "Pulse"
-};
-static const uint8_t NUM_EFFECTS = sizeof(effectNames) / sizeof(effectNames[0]);
+// Effect count is now dynamic via RENDERER->getEffectCount()
+// Effect names retrieved via RENDERER->getEffectName(id)
 
 // ==================== Setup ====================
 
@@ -187,12 +181,14 @@ void setup() {
     Serial.println("ACTOR SYSTEM: OPERATIONAL");
     Serial.println("==========================================\n");
     Serial.println("Commands:");
-    Serial.println("  0-9/a-c - Select effect (single mode)");
+    Serial.println("  SPACE   - Next effect (quick tap)");
+    Serial.println("  0-9/a-k - Select effect by key");
     Serial.println("  n/N     - Next/Prev effect");
     Serial.println("  +/-     - Adjust brightness");
     Serial.println("  [/]     - Adjust speed");
-    Serial.println("  p       - Next palette");
+    Serial.println("  ,/.     - Prev/Next palette (75 total)");
     Serial.println("  l       - List effects");
+    Serial.println("  P       - List palettes");
     Serial.println("  s       - Print status");
     Serial.println("\nZone Commands:");
     Serial.println("  z       - Toggle zone mode");
@@ -224,34 +220,236 @@ void loop() {
 
     // Handle serial commands
     if (Serial.available()) {
-        char cmd = Serial.read();
+        bool handledMulti = false;
+        int peekChar = Serial.peek();
+        if (peekChar == 'v' || peekChar == 'V') {
+            String input = Serial.readStringUntil('\n');
+            input.trim();
+            String inputLower = input;
+            inputLower.toLowerCase();
 
-        // Check if in zone mode for special handling
-        bool inZoneMode = zoneComposer.isEnabled();
+            if (inputLower.startsWith("validate ")) {
+                handledMulti = true;
 
-        // Zone mode: 1-5 selects presets
-        if (inZoneMode && cmd >= '1' && cmd <= '5') {
-            uint8_t preset = cmd - '1';
-            zoneComposer.loadPreset(preset);
-            Serial.printf("Zone Preset: %s\n", ZoneComposer::getPresetName(preset));
+                // Parse effect ID
+                int effectId = input.substring(9).toInt();
+                uint8_t effectCount = RENDERER->getEffectCount();
+
+                if (effectId < 0 || effectId >= effectCount) {
+                    Serial.printf("ERROR: Invalid effect ID. Valid range: 0-%d\n", effectCount - 1);
+                } else {
+                    // Save current effect
+                    uint8_t savedEffect = RENDERER->getCurrentEffect();
+                    const char* effectName = RENDERER->getEffectName(effectId);
+
+                    // Memory baseline
+                    uint32_t heapBefore = ESP.getFreeHeap();
+
+                    Serial.printf("\n=== Validating Effect: %s (ID %d) ===\n", effectName, effectId);
+
+                    // Switch to effect temporarily
+                    ACTOR_SYSTEM.setEffect(effectId);
+                    delay(100);  // Allow effect to initialize
+
+                    // Validation checks
+                    bool centreOriginPass = false;
+                    bool hueSpanPass = false;
+                    bool frameRatePass = false;
+                    bool memoryPass = false;
+
+                    // Centre-origin check: Measure brightness at LEDs 79-80 vs edges
+                    uint32_t centreBrightnessSum = 0;
+                    uint32_t edgeBrightnessSum = 0;
+                    uint16_t centreSamples = 0;
+                    uint16_t edgeSamples = 0;
+
+                    // Hue span tracking
+                    float minHue = 360.0f;
+                    float maxHue = 0.0f;
+                    bool hueInitialized = false;
+
+                    // Capture LED buffer without heap allocations
+                    constexpr uint16_t TOTAL_LEDS = 320;  // 2 strips × 160 LEDs
+                    CRGB ledBuffer[TOTAL_LEDS];
+
+                    // Capture for 2 seconds total:
+                    // - first 1 second: brightness + hue sampling
+                    // - full 2 seconds: FPS stabilisation
+                    uint32_t validationStart = millis();
+                    uint32_t validationEnd = validationStart + 2000;
+                    uint16_t samplesCollected = 0;
+
+                    while (millis() < validationEnd) {
+                        delay(8);  // ~120 FPS pacing
+
+                        // Snapshot the LED buffer
+                        RENDERER->getBufferCopy(ledBuffer);
+
+                        // Only sample brightness/hue for first second to limit compute cost
+                        if (millis() - validationStart < 1000 && samplesCollected < 120) {
+                            samplesCollected++;
+
+                            // Centre-origin: LEDs 79-80 vs edges (0-10, 150-159)
+                            for (int i = 79; i <= 80; i++) {
+                                uint16_t brightness = (uint16_t)ledBuffer[i].r + ledBuffer[i].g + ledBuffer[i].b;
+                                centreBrightnessSum += brightness;
+                                centreSamples++;
+                            }
+
+                            for (int i = 0; i <= 10; i++) {
+                                uint16_t brightness = (uint16_t)ledBuffer[i].r + ledBuffer[i].g + ledBuffer[i].b;
+                                edgeBrightnessSum += brightness;
+                                edgeSamples++;
+                            }
+                            for (int i = 150; i <= 159; i++) {
+                                uint16_t brightness = (uint16_t)ledBuffer[i].r + ledBuffer[i].g + ledBuffer[i].b;
+                                edgeBrightnessSum += brightness;
+                                edgeSamples++;
+                            }
+
+                            // Hue span: convert RGB to hue (degrees), track min/max
+                            for (int i = 0; i < TOTAL_LEDS; i++) {
+                                CRGB rgb = ledBuffer[i];
+                                if (rgb.r == 0 && rgb.g == 0 && rgb.b == 0) continue;  // Skip black
+
+                                uint8_t maxVal = max(max(rgb.r, rgb.g), rgb.b);
+                                uint8_t minVal = min(min(rgb.r, rgb.g), rgb.b);
+                                if (maxVal == 0 || maxVal == minVal) continue;
+
+                                float delta = (maxVal - minVal) / 255.0f;
+                                float hue = 0.0f;
+
+                                if (maxVal == rgb.r) {
+                                    hue = 60.0f * fmod((((rgb.g - rgb.b) / 255.0f) / delta), 6.0f);
+                                } else if (maxVal == rgb.g) {
+                                    hue = 60.0f * (((rgb.b - rgb.r) / 255.0f) / delta + 2.0f);
+                                } else {
+                                    hue = 60.0f * (((rgb.r - rgb.g) / 255.0f) / delta + 4.0f);
+                                }
+                                if (hue < 0) hue += 360.0f;
+
+                                if (!hueInitialized) {
+                                    minHue = maxHue = hue;
+                                    hueInitialized = true;
+                                } else {
+                                    if (hue < minHue) minHue = hue;
+                                    if (hue > maxHue) maxHue = hue;
+                                }
+                            }
+                        }
+                    }
+
+                    // Frame rate check (after 2s run)
+                    const RenderStats& finalStats = RENDERER->getStats();
+                    frameRatePass = (finalStats.currentFPS >= 120);
+
+                    // Centre-origin validation
+                    float centreAvg = 0.0f;
+                    float edgeAvg = 0.0f;
+                    float ratio = 0.0f;
+                    if (centreSamples > 0 && edgeSamples > 0) {
+                        centreAvg = centreBrightnessSum / (float)centreSamples;
+                        edgeAvg = edgeBrightnessSum / (float)edgeSamples;
+                        ratio = (edgeAvg > 0.0f) ? (centreAvg / edgeAvg) : 0.0f;
+                        centreOriginPass = (centreAvg > edgeAvg * 1.2f);
+                    }
+
+                    // Hue span validation
+                    float hueSpan = 0.0f;
+                    if (hueInitialized) {
+                        hueSpan = maxHue - minHue;
+                        if (hueSpan > 180.0f) hueSpan = 360.0f - hueSpan;  // wrap-around
+                        hueSpanPass = (hueSpan < 60.0f);
+                    }
+
+                    // Memory check (heap delta should be near-zero; allow small drift)
+                    uint32_t heapAfter = ESP.getFreeHeap();
+                    int32_t heapDelta = (int32_t)heapAfter - (int32_t)heapBefore;
+                    memoryPass = (abs(heapDelta) <= 256);
+
+                    // Output validation report
+                    Serial.println("\n--- Validation Results ---");
+                    Serial.printf("[%s] Centre-origin: %s (centre: %.0f, edge: %.0f, ratio: %.2fx)\n",
+                                  centreOriginPass ? "✓" : "✗",
+                                  centreOriginPass ? "PASS" : "FAIL",
+                                  centreAvg, edgeAvg, ratio);
+
+                    Serial.printf("[%s] Hue span: %s (hue range: %.1f°, limit: <60°)\n",
+                                  hueSpanPass ? "✓" : "✗",
+                                  hueSpanPass ? "PASS" : "FAIL",
+                                  hueSpan);
+
+                    Serial.printf("[%s] Frame rate: %s (%d FPS, target: ≥120 FPS)\n",
+                                  frameRatePass ? "✓" : "✗",
+                                  frameRatePass ? "PASS" : "FAIL",
+                                  finalStats.currentFPS);
+
+                    Serial.printf("[%s] Memory: %s (free heap Δ %ld bytes)\n",
+                                  memoryPass ? "✓" : "✗",
+                                  memoryPass ? "PASS" : "FAIL",
+                                  (long)heapDelta);
+
+                    int passCount = (centreOriginPass ? 1 : 0) + (hueSpanPass ? 1 : 0) +
+                                    (frameRatePass ? 1 : 0) + (memoryPass ? 1 : 0);
+                    int totalChecks = 4;
+
+                    Serial.printf("\nOverall: %s (%d/%d checks passed)\n",
+                                  (passCount == totalChecks) ? "PASS" : "PARTIAL",
+                                  passCount, totalChecks);
+
+                    // Restore original effect
+                    ACTOR_SYSTEM.setEffect(savedEffect);
+                    delay(50);
+
+                    Serial.println("========================================\n");
+                }
+            } else {
+                // Treat non-validate 'v...' input as handled to avoid consuming and then reading a stale single-char command
+                handledMulti = true;
+                Serial.println("Unknown command. Use: validate <effect_id>");
+            }
         }
-        // Numeric and alpha effect selection (single mode)
-        else if (!inZoneMode && cmd >= '0' && cmd <= '9') {
-            uint8_t e = cmd - '0';
-            if (e < NUM_EFFECTS) {
-                currentEffect = e;
-                ACTOR_SYSTEM.setEffect(e);
-                Serial.printf("Effect %d: %s\n", e, effectNames[e]);
-            }
-        } else if (!inZoneMode && cmd >= 'a' && cmd <= 'c') {
-            uint8_t e = 10 + (cmd - 'a');
-            if (e < NUM_EFFECTS) {
-                currentEffect = e;
-                ACTOR_SYSTEM.setEffect(e);
-                Serial.printf("Effect %d: %s\n", e, effectNames[e]);
-            }
+
+        if (handledMulti) {
+            // Do not process single-character commands after consuming a full-line command
         } else {
-            switch (cmd) {
+            // Single character commands
+            char cmd = Serial.read();
+
+            // Check if in zone mode for special handling
+            bool inZoneMode = zoneComposer.isEnabled();
+
+            // Zone mode: 1-5 selects presets
+            if (inZoneMode && cmd >= '1' && cmd <= '5') {
+                uint8_t preset = cmd - '1';
+                zoneComposer.loadPreset(preset);
+                Serial.printf("Zone Preset: %s\n", ZoneComposer::getPresetName(preset));
+            }
+            // Numeric and alpha effect selection (single mode)
+            else if (!inZoneMode && cmd >= '0' && cmd <= '9') {
+                uint8_t e = cmd - '0';
+                if (e < RENDERER->getEffectCount()) {
+                    currentEffect = e;
+                    ACTOR_SYSTEM.setEffect(e);
+                    Serial.printf("Effect %d: %s\n", e, RENDERER->getEffectName(e));
+                }
+            } else {
+                // Check if this is an effect selection key (a-k = effects 10-20, excludes command letters)
+                // Command letters: n, l, p, s, t, z are handled in switch below
+                bool isEffectKey = false;
+                if (!inZoneMode && cmd >= 'a' && cmd <= 'k' &&
+                    cmd != 'n' && cmd != 'l' && cmd != 'p' && cmd != 's' && cmd != 't' && cmd != 'z') {
+                    uint8_t e = 10 + (cmd - 'a');
+                    if (e < RENDERER->getEffectCount()) {
+                        currentEffect = e;
+                        ACTOR_SYSTEM.setEffect(e);
+                        Serial.printf("Effect %d: %s\n", e, RENDERER->getEffectName(e));
+                        isEffectKey = true;
+                    }
+                }
+
+                if (!isEffectKey)
+                switch (cmd) {
                 case 'z':
                     // Toggle zone mode
                     zoneComposer.setEnabled(!zoneComposer.isEnabled());
@@ -290,19 +488,22 @@ void loop() {
                     }
                     break;
 
+                case ' ':  // Spacebar - quick next effect (no Enter needed)
                 case 'n':
                     if (!inZoneMode) {
-                        currentEffect = (currentEffect + 1) % NUM_EFFECTS;
+                        uint8_t effectCount = RENDERER->getEffectCount();
+                        currentEffect = (currentEffect + 1) % effectCount;
                         ACTOR_SYSTEM.setEffect(currentEffect);
-                        Serial.printf("Effect %d: %s\n", currentEffect, effectNames[currentEffect]);
+                        Serial.printf("Effect %d: %s\n", currentEffect, RENDERER->getEffectName(currentEffect));
                     }
                     break;
 
                 case 'N':
                     if (!inZoneMode) {
-                        currentEffect = (currentEffect + NUM_EFFECTS - 1) % NUM_EFFECTS;
+                        uint8_t effectCount = RENDERER->getEffectCount();
+                        currentEffect = (currentEffect + effectCount - 1) % effectCount;
                         ACTOR_SYSTEM.setEffect(currentEffect);
-                        Serial.printf("Effect %d: %s\n", currentEffect, effectNames[currentEffect]);
+                        Serial.printf("Effect %d: %s\n", currentEffect, RENDERER->getEffectName(currentEffect));
                     }
                     break;
 
@@ -351,22 +552,62 @@ void loop() {
                     }
                     break;
 
+                case '.':  // Next palette (quick key)
                 case 'p':
                     {
-                        uint8_t p = (RENDERER->getPaletteIndex() + 1) % 8;
+                        uint8_t paletteCount = RENDERER->getPaletteCount();
+                        uint8_t p = (RENDERER->getPaletteIndex() + 1) % paletteCount;
                         ACTOR_SYSTEM.setPalette(p);
-                        Serial.printf("Palette: %d\n", p);
+                        Serial.printf("Palette %d/%d: %s\n", p, paletteCount, RENDERER->getPaletteName(p));
+                    }
+                    break;
+
+                case ',':  // Previous palette
+                    {
+                        uint8_t paletteCount = RENDERER->getPaletteCount();
+                        uint8_t current = RENDERER->getPaletteIndex();
+                        uint8_t p = (current + paletteCount - 1) % paletteCount;
+                        ACTOR_SYSTEM.setPalette(p);
+                        Serial.printf("Palette %d/%d: %s\n", p, paletteCount, RENDERER->getPaletteName(p));
                     }
                     break;
 
                 case 'l':
-                    Serial.println("\n=== Effects ===");
-                    for (uint8_t i = 0; i < NUM_EFFECTS; i++) {
-                        char key = (i < 10) ? ('0' + i) : ('a' + i - 10);
-                        Serial.printf("  %c: %s%s\n", key, effectNames[i],
-                                      (!inZoneMode && i == currentEffect) ? " <--" : "");
+                    {
+                        uint8_t effectCount = RENDERER->getEffectCount();
+                        Serial.printf("\n=== Effects (%d total) ===\n", effectCount);
+                        for (uint8_t i = 0; i < effectCount; i++) {
+                            char key = (i < 10) ? ('0' + i) : ('a' + i - 10);
+                            Serial.printf("  %2d [%c]: %s%s\n", i, key, RENDERER->getEffectName(i),
+                                          (!inZoneMode && i == currentEffect) ? " <--" : "");
+                        }
+                        Serial.println();
                     }
-                    Serial.println();
+                    break;
+
+                case 'P':
+                    // List all palettes
+                    {
+                        uint8_t paletteCount = RENDERER->getPaletteCount();
+                        uint8_t currentPalette = RENDERER->getPaletteIndex();
+                        Serial.printf("\n=== Palettes (%d total) ===\n", paletteCount);
+                        Serial.println("--- Artistic (cpt-city) ---");
+                        for (uint8_t i = 0; i <= 32; i++) {
+                            Serial.printf("  %2d: %s%s\n", i, RENDERER->getPaletteName(i),
+                                          (i == currentPalette) ? " <--" : "");
+                        }
+                        Serial.println("--- Scientific (Crameri) ---");
+                        for (uint8_t i = 33; i <= 56; i++) {
+                            Serial.printf("  %2d: %s%s\n", i, RENDERER->getPaletteName(i),
+                                          (i == currentPalette) ? " <--" : "");
+                        }
+                        Serial.println("--- LGP-Optimized (viridis family) ---");
+                        for (uint8_t i = 57; i <= 74; i++) {
+                            Serial.printf("  %2d: %s%s\n", i, RENDERER->getPaletteName(i),
+                                          (i == currentPalette) ? " <--" : "");
+                        }
+                        Serial.println();
+                    }
                     break;
 
                 case 's':
@@ -382,20 +623,22 @@ void loop() {
                 case 't':
                     // Random transition to next effect
                     if (!inZoneMode) {
-                        uint8_t nextEffect = (currentEffect + 1) % NUM_EFFECTS;
+                        uint8_t effectCount = RENDERER->getEffectCount();
+                        uint8_t nextEffect = (currentEffect + 1) % effectCount;
                         RENDERER->startRandomTransition(nextEffect);
                         currentEffect = nextEffect;
-                        Serial.printf("Transition to: %s\n", effectNames[currentEffect]);
+                        Serial.printf("Transition to: %s\n", RENDERER->getEffectName(currentEffect));
                     }
                     break;
 
                 case 'T':
                     // Fade transition to next effect
                     if (!inZoneMode) {
-                        uint8_t nextEffect = (currentEffect + 1) % NUM_EFFECTS;
+                        uint8_t effectCount = RENDERER->getEffectCount();
+                        uint8_t nextEffect = (currentEffect + 1) % effectCount;
                         RENDERER->startTransition(nextEffect, 0);  // 0 = FADE
                         currentEffect = nextEffect;
-                        Serial.printf("Fade to: %s\n", effectNames[currentEffect]);
+                        Serial.printf("Fade to: %s\n", RENDERER->getEffectName(currentEffect));
                     }
                     break;
 
@@ -427,6 +670,7 @@ void loop() {
                     break;
             }
         }
+        }
     }
 
     // Update NarrativeEngine (auto-play mode)
@@ -444,7 +688,7 @@ void loop() {
             Serial.printf("[Status] FPS: %d, CPU: %d%%, Effect: %s\n",
                           stats.currentFPS,
                           stats.cpuPercent,
-                          effectNames[currentEffect]);
+                          RENDERER->getEffectName(currentEffect));
         }
         lastStatus = now;
     }

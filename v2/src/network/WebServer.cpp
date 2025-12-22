@@ -1865,9 +1865,9 @@ void WebServer::handleNarrativeConfigSet(AsyncWebServerRequest* request, uint8_t
 // ============================================================================
 
 void WebServer::handleOpenApiSpec(AsyncWebServerRequest* request) {
-    // Return a minimal OpenAPI 3.0.3 specification stub
-    // Full spec would be stored in PROGMEM or LittleFS for production
-    DynamicJsonDocument doc(4096);
+    // OpenAPI 3.0.3 specification for LightwaveOS API v1
+    // Expanded to document all implemented REST endpoints
+    DynamicJsonDocument doc(8192);  // Increased from 4096 to fit all endpoints
 
     doc["openapi"] = "3.0.3";
 
@@ -1883,44 +1883,190 @@ void WebServer::handleOpenApiSpec(AsyncWebServerRequest* request) {
 
     JsonObject paths = doc.createNestedObject("paths");
 
-    // /device/status
+    // ========== Device Endpoints ==========
+
+    // GET /device/status
     JsonObject deviceStatus = paths.createNestedObject("/device/status");
     JsonObject getDeviceStatus = deviceStatus.createNestedObject("get");
-    getDeviceStatus["summary"] = "Get device status";
+    getDeviceStatus["summary"] = "Get device status (uptime, heap, FPS)";
     getDeviceStatus["tags"].add("Device");
 
-    // /effects
+    // GET /device/info
+    JsonObject deviceInfo = paths.createNestedObject("/device/info");
+    JsonObject getDeviceInfo = deviceInfo.createNestedObject("get");
+    getDeviceInfo["summary"] = "Get device info (firmware, hardware, SDK)";
+    getDeviceInfo["tags"].add("Device");
+
+    // ========== Effects Endpoints ==========
+
+    // GET /effects
     JsonObject effects = paths.createNestedObject("/effects");
     JsonObject getEffects = effects.createNestedObject("get");
-    getEffects["summary"] = "List all effects";
+    getEffects["summary"] = "List effects with pagination";
     getEffects["tags"].add("Effects");
+    JsonArray effectsParams = getEffects.createNestedArray("parameters");
+    JsonObject pageParam = effectsParams.createNestedObject();
+    pageParam["name"] = "page";
+    pageParam["in"] = "query";
+    pageParam["schema"]["type"] = "integer";
+    JsonObject limitParam = effectsParams.createNestedObject();
+    limitParam["name"] = "limit";
+    limitParam["in"] = "query";
+    limitParam["schema"]["type"] = "integer";
+    JsonObject categoryParam = effectsParams.createNestedObject();
+    categoryParam["name"] = "category";
+    categoryParam["in"] = "query";
+    categoryParam["schema"]["type"] = "string";
+    JsonObject detailsParam = effectsParams.createNestedObject();
+    detailsParam["name"] = "details";
+    detailsParam["in"] = "query";
+    detailsParam["schema"]["type"] = "boolean";
 
-    // /effects/set
+    // GET /effects/current
+    JsonObject effectsCurrent = paths.createNestedObject("/effects/current");
+    JsonObject getEffectsCurrent = effectsCurrent.createNestedObject("get");
+    getEffectsCurrent["summary"] = "Get current effect state";
+    getEffectsCurrent["tags"].add("Effects");
+
+    // POST /effects/set
     JsonObject effectsSet = paths.createNestedObject("/effects/set");
     JsonObject postEffectsSet = effectsSet.createNestedObject("post");
-    postEffectsSet["summary"] = "Set current effect";
+    postEffectsSet["summary"] = "Set current effect by ID";
     postEffectsSet["tags"].add("Effects");
 
-    // /parameters
+    // GET /effects/metadata
+    JsonObject effectsMeta = paths.createNestedObject("/effects/metadata");
+    JsonObject getEffectsMeta = effectsMeta.createNestedObject("get");
+    getEffectsMeta["summary"] = "Get effect metadata by ID";
+    getEffectsMeta["tags"].add("Effects");
+    JsonArray metaParams = getEffectsMeta.createNestedArray("parameters");
+    JsonObject idParam = metaParams.createNestedObject();
+    idParam["name"] = "id";
+    idParam["in"] = "query";
+    idParam["required"] = true;
+    idParam["schema"]["type"] = "integer";
+
+    // GET /effects/families
+    JsonObject effectsFamilies = paths.createNestedObject("/effects/families");
+    JsonObject getEffectsFamilies = effectsFamilies.createNestedObject("get");
+    getEffectsFamilies["summary"] = "List effect families/categories";
+    getEffectsFamilies["tags"].add("Effects");
+
+    // ========== Palettes Endpoints ==========
+
+    // GET /palettes
+    JsonObject palettes = paths.createNestedObject("/palettes");
+    JsonObject getPalettes = palettes.createNestedObject("get");
+    getPalettes["summary"] = "List palettes with pagination";
+    getPalettes["tags"].add("Palettes");
+    JsonArray paletteParams = getPalettes.createNestedArray("parameters");
+    JsonObject palPageParam = paletteParams.createNestedObject();
+    palPageParam["name"] = "page";
+    palPageParam["in"] = "query";
+    palPageParam["schema"]["type"] = "integer";
+    JsonObject palLimitParam = paletteParams.createNestedObject();
+    palLimitParam["name"] = "limit";
+    palLimitParam["in"] = "query";
+    palLimitParam["schema"]["type"] = "integer";
+
+    // GET /palettes/current
+    JsonObject palettesCurrent = paths.createNestedObject("/palettes/current");
+    JsonObject getPalettesCurrent = palettesCurrent.createNestedObject("get");
+    getPalettesCurrent["summary"] = "Get current palette";
+    getPalettesCurrent["tags"].add("Palettes");
+
+    // POST /palettes/set
+    JsonObject palettesSet = paths.createNestedObject("/palettes/set");
+    JsonObject postPalettesSet = palettesSet.createNestedObject("post");
+    postPalettesSet["summary"] = "Set palette by ID";
+    postPalettesSet["tags"].add("Palettes");
+
+    // ========== Parameters Endpoints ==========
+
+    // GET /parameters
     JsonObject parameters = paths.createNestedObject("/parameters");
     JsonObject getParams = parameters.createNestedObject("get");
-    getParams["summary"] = "Get current parameters";
+    getParams["summary"] = "Get visual parameters";
     getParams["tags"].add("Parameters");
+
+    // POST /parameters
     JsonObject postParams = parameters.createNestedObject("post");
-    postParams["summary"] = "Update parameters";
+    postParams["summary"] = "Update visual parameters (brightness, speed, etc.)";
     postParams["tags"].add("Parameters");
 
-    // /zones
-    JsonObject zones = paths.createNestedObject("/zones");
-    JsonObject getZones = zones.createNestedObject("get");
-    getZones["summary"] = "List all zones";
-    getZones["tags"].add("Zones");
+    // ========== Transitions Endpoints ==========
 
-    // /transitions/types
+    // GET /transitions/types
     JsonObject transTypes = paths.createNestedObject("/transitions/types");
     JsonObject getTransTypes = transTypes.createNestedObject("get");
     getTransTypes["summary"] = "List transition types";
     getTransTypes["tags"].add("Transitions");
+
+    // GET /transitions/config
+    JsonObject transConfig = paths.createNestedObject("/transitions/config");
+    JsonObject getTransConfig = transConfig.createNestedObject("get");
+    getTransConfig["summary"] = "Get transition configuration";
+    getTransConfig["tags"].add("Transitions");
+
+    // POST /transitions/config
+    JsonObject postTransConfig = transConfig.createNestedObject("post");
+    postTransConfig["summary"] = "Update transition configuration";
+    postTransConfig["tags"].add("Transitions");
+
+    // POST /transitions/trigger
+    JsonObject transTrigger = paths.createNestedObject("/transitions/trigger");
+    JsonObject postTransTrigger = transTrigger.createNestedObject("post");
+    postTransTrigger["summary"] = "Trigger a transition";
+    postTransTrigger["tags"].add("Transitions");
+
+    // ========== Narrative Endpoints ==========
+
+    // GET /narrative/status
+    JsonObject narrativeStatus = paths.createNestedObject("/narrative/status");
+    JsonObject getNarrativeStatus = narrativeStatus.createNestedObject("get");
+    getNarrativeStatus["summary"] = "Get narrative engine status";
+    getNarrativeStatus["tags"].add("Narrative");
+
+    // GET /narrative/config
+    JsonObject narrativeConfig = paths.createNestedObject("/narrative/config");
+    JsonObject getNarrativeConfig = narrativeConfig.createNestedObject("get");
+    getNarrativeConfig["summary"] = "Get narrative configuration";
+    getNarrativeConfig["tags"].add("Narrative");
+
+    // POST /narrative/config
+    JsonObject postNarrativeConfig = narrativeConfig.createNestedObject("post");
+    postNarrativeConfig["summary"] = "Update narrative configuration";
+    postNarrativeConfig["tags"].add("Narrative");
+
+    // ========== Zones Endpoints ==========
+
+    // GET /zones
+    JsonObject zones = paths.createNestedObject("/zones");
+    JsonObject getZones = zones.createNestedObject("get");
+    getZones["summary"] = "List all zones with configuration";
+    getZones["tags"].add("Zones");
+
+    // POST /zones/layout
+    JsonObject zonesLayout = paths.createNestedObject("/zones/layout");
+    JsonObject postZonesLayout = zonesLayout.createNestedObject("post");
+    postZonesLayout["summary"] = "Set zone layout configuration";
+    postZonesLayout["tags"].add("Zones");
+
+    // ========== Batch Endpoints ==========
+
+    // POST /batch
+    JsonObject batch = paths.createNestedObject("/batch");
+    JsonObject postBatch = batch.createNestedObject("post");
+    postBatch["summary"] = "Execute batch operations (max 10)";
+    postBatch["tags"].add("Batch");
+
+    // ========== Sync Endpoints ==========
+
+    // GET /sync/status
+    JsonObject syncStatus = paths.createNestedObject("/sync/status");
+    JsonObject getSyncStatus = syncStatus.createNestedObject("get");
+    getSyncStatus["summary"] = "Get multi-device sync status";
+    getSyncStatus["tags"].add("Sync");
 
     String output;
     serializeJson(doc, output);
@@ -3266,6 +3412,73 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
         String response = buildWsResponse("narrative.config", requestId, [updated](JsonObject& data) {
             data["message"] = updated ? "Narrative config updated" : "No changes";
             data["updated"] = updated;
+        });
+        client->text(response);
+    }
+
+    // palettes.list - Return paginated palette list
+    else if (type == "palettes.list") {
+        const char* requestId = doc["requestId"] | "";
+        uint8_t page = doc["page"] | 1;
+        uint8_t limit = doc["limit"] | 20;
+
+        if (page < 1) page = 1;
+        if (limit < 1) limit = 1;
+        if (limit > 50) limit = 50;
+
+        uint8_t startIdx = (page - 1) * limit;
+        uint8_t endIdx = min((uint8_t)(startIdx + limit), (uint8_t)MASTER_PALETTE_COUNT);
+
+        String response = buildWsResponse("palettes.list", requestId, [startIdx, endIdx, page, limit](JsonObject& data) {
+            JsonArray palettes = data.createNestedArray("palettes");
+
+            for (uint8_t i = startIdx; i < endIdx; i++) {
+                JsonObject palette = palettes.createNestedObject();
+                palette["id"] = i;
+                palette["name"] = MasterPaletteNames[i];
+                palette["category"] = getPaletteCategory(i);
+            }
+
+            JsonObject pagination = data.createNestedObject("pagination");
+            pagination["page"] = page;
+            pagination["limit"] = limit;
+            pagination["total"] = MASTER_PALETTE_COUNT;
+            pagination["pages"] = (MASTER_PALETTE_COUNT + limit - 1) / limit;
+        });
+        client->text(response);
+    }
+
+    // palettes.get - Get single palette details
+    else if (type == "palettes.get") {
+        const char* requestId = doc["requestId"] | "";
+        uint8_t paletteId = doc["paletteId"] | 255;
+
+        if (paletteId == 255) {
+            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "paletteId required", requestId));
+            return;
+        }
+
+        if (paletteId >= MASTER_PALETTE_COUNT) {
+            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Palette ID out of range", requestId));
+            return;
+        }
+
+        String response = buildWsResponse("palettes.get", requestId, [paletteId](JsonObject& data) {
+            JsonObject palette = data.createNestedObject("palette");
+            palette["id"] = paletteId;
+            palette["name"] = MasterPaletteNames[paletteId];
+            palette["category"] = getPaletteCategory(paletteId);
+
+            JsonObject flags = palette.createNestedObject("flags");
+            flags["warm"] = isPaletteWarm(paletteId);
+            flags["cool"] = isPaletteCool(paletteId);
+            flags["calm"] = isPaletteCalm(paletteId);
+            flags["vivid"] = isPaletteVivid(paletteId);
+            flags["cvdFriendly"] = isPaletteCVDFriendly(paletteId);
+            flags["whiteHeavy"] = paletteHasFlag(paletteId, PAL_WHITE_HEAVY);
+
+            palette["avgBrightness"] = getPaletteAvgBrightness(paletteId);
+            palette["maxBrightness"] = getPaletteMaxBrightness(paletteId);
         });
         client->text(response);
     }

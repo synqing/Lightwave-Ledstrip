@@ -205,6 +205,31 @@ public:
      */
     bool isDiffusionEnabled() const { return m_diffusionEnabled; }
 
+    /**
+     * @brief Get blend factor for palette 1
+     */
+    uint8_t getBlendFactor1() const { return m_blendFactor1; }
+
+    /**
+     * @brief Get blend factor for palette 2
+     */
+    uint8_t getBlendFactor2() const { return m_blendFactor2; }
+
+    /**
+     * @brief Get blend factor for palette 3
+     */
+    uint8_t getBlendFactor3() const { return m_blendFactor3; }
+
+    /**
+     * @brief Get rotation speed in degrees per frame
+     */
+    float getRotationSpeed() const { return m_rotationSpeed; }
+
+    /**
+     * @brief Get diffusion amount (0-255)
+     */
+    uint8_t getDiffusionAmount() const { return m_diffusionAmount; }
+
 private:
     // Private constructor (singleton pattern)
     ColorEngine();

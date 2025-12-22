@@ -23,6 +23,8 @@
 #include "../palettes/Palettes_Master.h"
 #include "../effects/PatternRegistry.h"
 #include "../core/narrative/NarrativeEngine.h"
+#include "../effects/enhancement/MotionEngine.h"
+#include "../effects/enhancement/ColorEngine.h"
 #include <ESPmDNS.h>
 #include <LittleFS.h>
 
@@ -3479,6 +3481,469 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
 
             palette["avgBrightness"] = getPaletteAvgBrightness(paletteId);
             palette["maxBrightness"] = getPaletteMaxBrightness(paletteId);
+        });
+        client->text(response);
+    }
+
+    // ========================================================================
+    // Motion Engine - Core, Phase, and Speed Commands
+    // ========================================================================
+
+    // motion.getStatus - Get motion engine status
+    else if (type == "motion.getStatus") {
+        const char* requestId = doc["requestId"] | "";
+        auto& engine = lightwaveos::enhancement::MotionEngine::getInstance();
+
+        String response = buildWsResponse("motion.getStatus", requestId, [&engine](JsonObject& data) {
+            data["enabled"] = engine.isEnabled();
+            data["phaseOffset"] = engine.getPhaseController().stripPhaseOffset;
+            data["autoRotateSpeed"] = engine.getPhaseController().phaseVelocity;
+            data["baseSpeed"] = engine.getSpeedModulator().getBaseSpeed();
+        });
+        client->text(response);
+    }
+
+    // motion.enable - Enable motion engine
+    else if (type == "motion.enable") {
+        const char* requestId = doc["requestId"] | "";
+        auto& engine = lightwaveos::enhancement::MotionEngine::getInstance();
+        engine.enable();
+
+        String response = buildWsResponse("motion.enable", requestId, [](JsonObject& data) {
+            data["enabled"] = true;
+        });
+        client->text(response);
+    }
+
+    // motion.disable - Disable motion engine
+    else if (type == "motion.disable") {
+        const char* requestId = doc["requestId"] | "";
+        auto& engine = lightwaveos::enhancement::MotionEngine::getInstance();
+        engine.disable();
+
+        String response = buildWsResponse("motion.disable", requestId, [](JsonObject& data) {
+            data["enabled"] = false;
+        });
+        client->text(response);
+    }
+
+    // motion.phase.setOffset - Set strip phase offset
+    else if (type == "motion.phase.setOffset") {
+        const char* requestId = doc["requestId"] | "";
+        float degrees = doc["degrees"] | -1.0f;
+
+        if (degrees < 0.0f || degrees > 360.0f) {
+            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "degrees must be 0-360", requestId));
+            return;
+        }
+
+        auto& engine = lightwaveos::enhancement::MotionEngine::getInstance();
+        engine.getPhaseController().setStripPhaseOffset(degrees);
+
+        String response = buildWsResponse("motion.phase.setOffset", requestId, [degrees](JsonObject& data) {
+            data["degrees"] = degrees;
+        });
+        client->text(response);
+    }
+
+    // motion.phase.enableAutoRotate - Enable auto-rotation
+    else if (type == "motion.phase.enableAutoRotate") {
+        const char* requestId = doc["requestId"] | "";
+        float degreesPerSecond = doc["degreesPerSecond"] | 0.0f;
+
+        auto& engine = lightwaveos::enhancement::MotionEngine::getInstance();
+        engine.getPhaseController().enableAutoRotate(degreesPerSecond);
+
+        String response = buildWsResponse("motion.phase.enableAutoRotate", requestId, [degreesPerSecond](JsonObject& data) {
+            data["degreesPerSecond"] = degreesPerSecond;
+            data["autoRotate"] = true;
+        });
+        client->text(response);
+    }
+
+    // motion.phase.getPhase - Get current phase
+    else if (type == "motion.phase.getPhase") {
+        const char* requestId = doc["requestId"] | "";
+        auto& engine = lightwaveos::enhancement::MotionEngine::getInstance();
+        float radians = engine.getPhaseController().getStripPhaseRadians();
+        float degrees = radians * 180.0f / 3.14159265f;
+
+        String response = buildWsResponse("motion.phase.getPhase", requestId, [degrees, radians](JsonObject& data) {
+            data["degrees"] = degrees;
+            data["radians"] = radians;
+        });
+        client->text(response);
+    }
+
+    // motion.speed.setModulation - Set speed modulation mode
+    else if (type == "motion.speed.setModulation") {
+        const char* requestId = doc["requestId"] | "";
+        const char* modTypeStr = doc["type"] | "";
+        float depth = doc["depth"] | 0.5f;
+
+        if (depth < 0.0f || depth > 1.0f) {
+            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "depth must be 0.0-1.0", requestId));
+            return;
+        }
+
+        // Parse modulation type string
+        lightwaveos::enhancement::SpeedModulator::ModulationType modType;
+        if (strcmp(modTypeStr, "CONSTANT") == 0) {
+            modType = lightwaveos::enhancement::SpeedModulator::MOD_CONSTANT;
+        } else if (strcmp(modTypeStr, "SINE_WAVE") == 0) {
+            modType = lightwaveos::enhancement::SpeedModulator::MOD_SINE_WAVE;
+        } else if (strcmp(modTypeStr, "EXPONENTIAL_DECAY") == 0) {
+            modType = lightwaveos::enhancement::SpeedModulator::MOD_EXPONENTIAL_DECAY;
+        } else {
+            client->text(buildWsError(ErrorCodes::INVALID_VALUE, "Invalid type (CONSTANT, SINE_WAVE, EXPONENTIAL_DECAY)", requestId));
+            return;
+        }
+
+        auto& engine = lightwaveos::enhancement::MotionEngine::getInstance();
+        engine.getSpeedModulator().setModulation(modType, depth);
+
+        String response = buildWsResponse("motion.speed.setModulation", requestId, [modTypeStr, depth](JsonObject& data) {
+            data["type"] = modTypeStr;
+            data["depth"] = depth;
+        });
+        client->text(response);
+    }
+
+    // motion.speed.setBaseSpeed - Set base speed
+    else if (type == "motion.speed.setBaseSpeed") {
+        const char* requestId = doc["requestId"] | "";
+        float speed = doc["speed"] | -1.0f;
+
+        if (speed < 0.0f) {
+            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "speed required", requestId));
+            return;
+        }
+
+        auto& engine = lightwaveos::enhancement::MotionEngine::getInstance();
+        engine.getSpeedModulator().setBaseSpeed(speed);
+
+        String response = buildWsResponse("motion.speed.setBaseSpeed", requestId, [speed](JsonObject& data) {
+            data["speed"] = speed;
+        });
+        client->text(response);
+    }
+
+    // ========================================================================
+    // Motion Engine - Momentum/Particle Physics Commands
+    // ========================================================================
+
+    // motion.momentum.getStatus - Get particle system status
+    else if (type == "motion.momentum.getStatus") {
+        const char* requestId = doc["requestId"] | "";
+        auto& momentum = lightwaveos::enhancement::MotionEngine::getInstance().getMomentumEngine();
+
+        String response = buildWsResponse("motion.momentum.getStatus", requestId, [&momentum](JsonObject& data) {
+            data["activeCount"] = momentum.getActiveCount();
+            data["maxParticles"] = lightwaveos::enhancement::MomentumEngine::MAX_PARTICLES;
+        });
+        client->text(response);
+    }
+
+    // motion.momentum.addParticle - Create a new particle
+    else if (type == "motion.momentum.addParticle") {
+        const char* requestId = doc["requestId"] | "";
+        auto& momentum = lightwaveos::enhancement::MotionEngine::getInstance().getMomentumEngine();
+
+        float pos = doc["position"] | 0.5f;
+        float vel = doc["velocity"] | 0.0f;
+        float mass = doc["mass"] | 1.0f;
+
+        // Parse boundary mode from string
+        lightwaveos::enhancement::BoundaryMode mode = lightwaveos::enhancement::BOUNDARY_WRAP;
+        String boundaryStr = doc["boundary"] | "WRAP";
+        if (boundaryStr == "BOUNCE") mode = lightwaveos::enhancement::BOUNDARY_BOUNCE;
+        else if (boundaryStr == "CLAMP") mode = lightwaveos::enhancement::BOUNDARY_CLAMP;
+        else if (boundaryStr == "DIE") mode = lightwaveos::enhancement::BOUNDARY_DIE;
+
+        int id = momentum.addParticle(pos, vel, mass, CRGB::White, mode);
+
+        String response = buildWsResponse("motion.momentum.addParticle", requestId, [id](JsonObject& data) {
+            data["particleId"] = id;
+            data["success"] = (id >= 0);
+        });
+        client->text(response);
+    }
+
+    // motion.momentum.applyForce - Apply force to a particle
+    else if (type == "motion.momentum.applyForce") {
+        const char* requestId = doc["requestId"] | "";
+
+        if (!doc.containsKey("particleId")) {
+            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "particleId required", requestId));
+            return;
+        }
+
+        int particleId = doc["particleId"] | -1;
+        float force = doc["force"] | 0.0f;
+
+        if (particleId < 0 || particleId >= lightwaveos::enhancement::MomentumEngine::MAX_PARTICLES) {
+            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "particleId out of range (0-31)", requestId));
+            return;
+        }
+
+        auto& momentum = lightwaveos::enhancement::MotionEngine::getInstance().getMomentumEngine();
+        momentum.applyForce(particleId, force);
+
+        String response = buildWsResponse("motion.momentum.applyForce", requestId, [particleId, force](JsonObject& data) {
+            data["particleId"] = particleId;
+            data["force"] = force;
+            data["applied"] = true;
+        });
+        client->text(response);
+    }
+
+    // motion.momentum.getParticle - Get particle state
+    else if (type == "motion.momentum.getParticle") {
+        const char* requestId = doc["requestId"] | "";
+
+        if (!doc.containsKey("particleId")) {
+            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "particleId required", requestId));
+            return;
+        }
+
+        int particleId = doc["particleId"] | -1;
+
+        if (particleId < 0 || particleId >= lightwaveos::enhancement::MomentumEngine::MAX_PARTICLES) {
+            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "particleId out of range (0-31)", requestId));
+            return;
+        }
+
+        auto& momentum = lightwaveos::enhancement::MotionEngine::getInstance().getMomentumEngine();
+        auto* particle = momentum.getParticle(particleId);
+
+        if (!particle) {
+            client->text(buildWsError(ErrorCodes::INTERNAL_ERROR, "Failed to get particle", requestId));
+            return;
+        }
+
+        String response = buildWsResponse("motion.momentum.getParticle", requestId, [particleId, particle](JsonObject& data) {
+            data["particleId"] = particleId;
+            data["position"] = particle->position;
+            data["velocity"] = particle->velocity;
+            data["mass"] = particle->mass;
+            data["alive"] = particle->active;
+        });
+        client->text(response);
+    }
+
+    // motion.momentum.reset - Clear all particles
+    else if (type == "motion.momentum.reset") {
+        const char* requestId = doc["requestId"] | "";
+        auto& momentum = lightwaveos::enhancement::MotionEngine::getInstance().getMomentumEngine();
+
+        momentum.reset();
+
+        String response = buildWsResponse("motion.momentum.reset", requestId, [](JsonObject& data) {
+            data["message"] = "All particles cleared";
+            data["activeCount"] = 0;
+        });
+        client->text(response);
+    }
+
+    // motion.momentum.update - Force physics tick
+    else if (type == "motion.momentum.update") {
+        const char* requestId = doc["requestId"] | "";
+        float deltaTime = doc["deltaTime"] | 0.016f;  // Default ~60fps
+
+        auto& momentum = lightwaveos::enhancement::MotionEngine::getInstance().getMomentumEngine();
+        momentum.update(deltaTime);
+
+        String response = buildWsResponse("motion.momentum.update", requestId, [deltaTime, &momentum](JsonObject& data) {
+            data["deltaTime"] = deltaTime;
+            data["activeCount"] = momentum.getActiveCount();
+            data["updated"] = true;
+        });
+        client->text(response);
+    }
+
+    // ========================================================================
+    // Color Engine - Cross-palette blending, rotation, diffusion
+    // ========================================================================
+
+    // color.getStatus - Get current engine state
+    else if (type == "color.getStatus") {
+        const char* requestId = doc["requestId"] | "";
+        auto& engine = lightwaveos::enhancement::ColorEngine::getInstance();
+
+        String response = buildWsResponse("color.getStatus", requestId, [&engine](JsonObject& data) {
+            data["active"] = engine.isActive();
+            data["blendEnabled"] = engine.isCrossBlendEnabled();
+
+            JsonArray blendFactors = data.createNestedArray("blendFactors");
+            blendFactors.add(engine.getBlendFactor1());
+            blendFactors.add(engine.getBlendFactor2());
+            blendFactors.add(engine.getBlendFactor3());
+
+            data["rotationEnabled"] = engine.isRotationEnabled();
+            data["rotationSpeed"] = engine.getRotationSpeed();
+            data["rotationPhase"] = engine.getRotationPhase();
+
+            data["diffusionEnabled"] = engine.isDiffusionEnabled();
+            data["diffusionAmount"] = engine.getDiffusionAmount();
+        });
+        client->text(response);
+    }
+
+    // color.enableBlend - Enable/disable cross-palette blending
+    else if (type == "color.enableBlend") {
+        const char* requestId = doc["requestId"] | "";
+
+        if (!doc.containsKey("enable")) {
+            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "enable required", requestId));
+            return;
+        }
+
+        bool enable = doc["enable"] | false;
+        auto& engine = lightwaveos::enhancement::ColorEngine::getInstance();
+        engine.enableCrossBlend(enable);
+
+        String response = buildWsResponse("color.enableBlend", requestId, [enable](JsonObject& data) {
+            data["blendEnabled"] = enable;
+        });
+        client->text(response);
+    }
+
+    // color.setBlendPalettes - Set 2-3 palettes to blend
+    else if (type == "color.setBlendPalettes") {
+        const char* requestId = doc["requestId"] | "";
+
+        if (!doc.containsKey("palette1") || !doc.containsKey("palette2")) {
+            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "palette1 and palette2 required", requestId));
+            return;
+        }
+
+        uint8_t p1 = doc["palette1"] | 0;
+        uint8_t p2 = doc["palette2"] | 0;
+        uint8_t p3 = doc["palette3"] | 255; // 255 = not specified
+
+        if (p1 >= MASTER_PALETTE_COUNT || p2 >= MASTER_PALETTE_COUNT ||
+            (p3 != 255 && p3 >= MASTER_PALETTE_COUNT)) {
+            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Palette ID out of range", requestId));
+            return;
+        }
+
+        auto& engine = lightwaveos::enhancement::ColorEngine::getInstance();
+        CRGBPalette16 pal1(gMasterPalettes[p1]);
+        CRGBPalette16 pal2(gMasterPalettes[p2]);
+
+        if (p3 != 255) {
+            CRGBPalette16 pal3(gMasterPalettes[p3]);
+            engine.setBlendPalettes(pal1, pal2, &pal3);
+        } else {
+            engine.setBlendPalettes(pal1, pal2, nullptr);
+        }
+
+        String response = buildWsResponse("color.setBlendPalettes", requestId, [p1, p2, p3](JsonObject& data) {
+            JsonArray palettes = data.createNestedArray("blendPalettes");
+            palettes.add(p1);
+            palettes.add(p2);
+            if (p3 != 255) palettes.add(p3);
+        });
+        client->text(response);
+    }
+
+    // color.setBlendFactors - Set blend weights
+    else if (type == "color.setBlendFactors") {
+        const char* requestId = doc["requestId"] | "";
+
+        if (!doc.containsKey("factor1") || !doc.containsKey("factor2")) {
+            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "factor1 and factor2 required", requestId));
+            return;
+        }
+
+        uint8_t f1 = doc["factor1"] | 0;
+        uint8_t f2 = doc["factor2"] | 0;
+        uint8_t f3 = doc["factor3"] | 0;
+
+        auto& engine = lightwaveos::enhancement::ColorEngine::getInstance();
+        engine.setBlendFactors(f1, f2, f3);
+
+        String response = buildWsResponse("color.setBlendFactors", requestId, [f1, f2, f3](JsonObject& data) {
+            JsonArray factors = data.createNestedArray("blendFactors");
+            factors.add(f1);
+            factors.add(f2);
+            factors.add(f3);
+        });
+        client->text(response);
+    }
+
+    // color.enableRotation - Enable temporal hue rotation
+    else if (type == "color.enableRotation") {
+        const char* requestId = doc["requestId"] | "";
+
+        if (!doc.containsKey("enable")) {
+            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "enable required", requestId));
+            return;
+        }
+
+        bool enable = doc["enable"] | false;
+        auto& engine = lightwaveos::enhancement::ColorEngine::getInstance();
+        engine.enableTemporalRotation(enable);
+
+        String response = buildWsResponse("color.enableRotation", requestId, [enable](JsonObject& data) {
+            data["rotationEnabled"] = enable;
+        });
+        client->text(response);
+    }
+
+    // color.setRotationSpeed - Set rotation speed
+    else if (type == "color.setRotationSpeed") {
+        const char* requestId = doc["requestId"] | "";
+
+        if (!doc.containsKey("degreesPerFrame")) {
+            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "degreesPerFrame required", requestId));
+            return;
+        }
+
+        float speed = doc["degreesPerFrame"] | 0.0f;
+        auto& engine = lightwaveos::enhancement::ColorEngine::getInstance();
+        engine.setRotationSpeed(speed);
+
+        String response = buildWsResponse("color.setRotationSpeed", requestId, [speed](JsonObject& data) {
+            data["rotationSpeed"] = speed;
+        });
+        client->text(response);
+    }
+
+    // color.enableDiffusion - Enable Gaussian blur
+    else if (type == "color.enableDiffusion") {
+        const char* requestId = doc["requestId"] | "";
+
+        if (!doc.containsKey("enable")) {
+            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "enable required", requestId));
+            return;
+        }
+
+        bool enable = doc["enable"] | false;
+        auto& engine = lightwaveos::enhancement::ColorEngine::getInstance();
+        engine.enableDiffusion(enable);
+
+        String response = buildWsResponse("color.enableDiffusion", requestId, [enable](JsonObject& data) {
+            data["diffusionEnabled"] = enable;
+        });
+        client->text(response);
+    }
+
+    // color.setDiffusionAmount - Set blur intensity
+    else if (type == "color.setDiffusionAmount") {
+        const char* requestId = doc["requestId"] | "";
+
+        if (!doc.containsKey("amount")) {
+            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "amount required", requestId));
+            return;
+        }
+
+        uint8_t amount = doc["amount"] | 0;
+        auto& engine = lightwaveos::enhancement::ColorEngine::getInstance();
+        engine.setDiffusionAmount(amount);
+
+        String response = buildWsResponse("color.setDiffusionAmount", requestId, [amount](JsonObject& data) {
+            data["diffusionAmount"] = amount;
         });
         client->text(response);
     }

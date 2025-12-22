@@ -14,8 +14,11 @@
 #include "LGPQuantumEffects.h"
 #include "LGPColorMixingEffects.h"
 #include "LGPNovelPhysicsEffects.h"
+#include "LGPChromaticEffects.h"
 // Legacy effects disabled - see plugins/legacy/ when ready to integrate
 // #include "../plugins/legacy/LegacyEffectRegistration.h"
+#include "utils/FastLEDOptim.h"
+#include "../core/narrative/NarrativeEngine.h"
 #include <FastLED.h>
 
 namespace lightwaveos {
@@ -35,6 +38,8 @@ static uint32_t plasmaTime = 0;
 
 void effectFire(RenderContext& ctx) {
     // CENTER ORIGIN FIRE - Sparks ignite at center 79/80 and spread outward
+    // Narrative integration: spark frequency modulated by tension
+    using namespace lightwaveos::narrative;
 
     // Cool down every cell
     for (int i = 0; i < STRIP_LENGTH; i++) {
@@ -47,7 +52,12 @@ void effectFire(RenderContext& ctx) {
     }
 
     // Ignite new sparks at CENTER PAIR (79/80)
-    uint8_t sparkChance = 80 + ctx.speed;
+    // Apply narrative tension to spark frequency (opt-in, backward compatible)
+    float narrativeTension = 1.0f;
+    if (NARRATIVE.isEnabled()) {
+        narrativeTension = NARRATIVE.getTension();  // 0.0-1.0
+    }
+    uint8_t sparkChance = (uint8_t)((80 + ctx.speed) * (0.5f + narrativeTension * 0.5f));
     if (random8() < sparkChance) {
         int center = CENTER_LEFT + random8(2);  // 79 or 80
         fireHeat[center] = qadd8(fireHeat[center], random8(160, 255));
@@ -71,10 +81,19 @@ void effectFire(RenderContext& ctx) {
 
 void effectOcean(RenderContext& ctx) {
     // CENTER ORIGIN OCEAN - Waves emanate from center 79/80
+    // Narrative integration: wave intensity modulated by narrative intensity
+    using namespace lightwaveos::narrative;
+    
     static uint32_t waterOffset = 0;
     waterOffset += ctx.speed / 2;
 
     if (waterOffset > 65535) waterOffset = waterOffset % 65536;
+    
+    // Get narrative intensity for wave modulation (opt-in, backward compatible)
+    float narrativeIntensity = 1.0f;
+    if (NARRATIVE.isEnabled()) {
+        narrativeIntensity = NARRATIVE.getIntensity();
+    }
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         // Calculate distance from CENTER PAIR
@@ -84,10 +103,13 @@ void effectOcean(RenderContext& ctx) {
         uint8_t wave1 = sin8((uint16_t)(distFromCenter * 10) + waterOffset);
         uint8_t wave2 = sin8((uint16_t)(distFromCenter * 7) - waterOffset * 2);
         uint8_t combinedWave = (wave1 + wave2) / 2;
+        
+        // Apply narrative intensity modulation to wave amplitude
+        combinedWave = (uint8_t)(combinedWave * narrativeIntensity);
 
         // Ocean colors from deep blue to cyan
         uint8_t hue = 160 + (combinedWave >> 3);
-        uint8_t brightness = 100 + (combinedWave >> 1);
+        uint8_t brightness = 100 + (uint8_t)((combinedWave >> 1) * narrativeIntensity);
         uint8_t saturation = 255 - (combinedWave >> 2);
 
         CRGB color = CHSV(hue, saturation, brightness);
@@ -104,17 +126,24 @@ void effectOcean(RenderContext& ctx) {
 
 void effectPlasma(RenderContext& ctx) {
     // CENTER ORIGIN PLASMA - Plasma field from center
-    plasmaTime += ctx.speed;
+    // Narrative integration: speed modulated by tempo multiplier
+    using namespace utils;
+    using namespace lightwaveos::narrative;
+    
+    // Apply narrative tempo multiplier to speed (opt-in, backward compatible)
+    float narrativeSpeed = ctx.speed;
+    if (NARRATIVE.isEnabled()) {
+        narrativeSpeed *= NARRATIVE.getTempoMultiplier();
+    }
+    
+    plasmaTime += (uint16_t)narrativeSpeed;
     if (plasmaTime > 65535) plasmaTime = plasmaTime % 65536;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs((float)i - CENTER_LEFT);
-        float normalizedDist = distFromCenter / HALF_LENGTH;
-
-        // Plasma waves radiating from center
-        float v1 = sin16((uint16_t)(normalizedDist * 8.0f * 256 + plasmaTime)) / 32768.0f;
-        float v2 = sin16((uint16_t)(normalizedDist * 5.0f * 256 - plasmaTime * 0.75f)) / 32768.0f;
-        float v3 = sin16((uint16_t)(normalizedDist * 3.0f * 256 + plasmaTime * 0.5f)) / 32768.0f;
+        // Use utility function for center-based sin16 calculations
+        float v1 = fastled_center_sin16(i, CENTER_LEFT, HALF_LENGTH, 8.0f, plasmaTime);
+        float v2 = fastled_center_sin16(i, CENTER_LEFT, HALF_LENGTH, 5.0f, (uint16_t)(-plasmaTime * 0.75f));
+        float v3 = fastled_center_sin16(i, CENTER_LEFT, HALF_LENGTH, 3.0f, (uint16_t)(plasmaTime * 0.5f));
 
         uint8_t paletteIndex = (uint8_t)((v1 + v2 + v3) * 10.0f + 15.0f) + ctx.hue;
         uint8_t brightness = (uint8_t)((v1 + v2 + 2.0f) * 63.75f);
@@ -173,10 +202,11 @@ void effectConfetti(RenderContext& ctx) {
 
 void effectSinelon(RenderContext& ctx) {
     // CENTER ORIGIN SINELON - Oscillates outward from center
+    using namespace utils;
     fadeToBlackBy(ctx.leds, ctx.numLeds, 20);
 
-    // Oscillate from center outward
-    int distFromCenter = beatsin16(13, 0, HALF_LENGTH);
+    // Oscillate from center outward using utility function
+    int distFromCenter = fastled_beatsin16(13, 0, HALF_LENGTH);
 
     // Set both sides of center
     int pos1 = CENTER_RIGHT + distFromCenter;  // Right side
@@ -518,7 +548,7 @@ uint8_t registerAllEffects(RendererActor* renderer) {
     uint8_t total = 0;
 
     // =============== REGISTER ALL NATIVE V2 EFFECTS ===============
-    // 65 total effects organized by category
+    // 68 total effects organized by category
     // Legacy v1 effects are disabled until plugins/legacy is properly integrated
 
     // Core effects (13) - IDs 0-12
@@ -544,6 +574,19 @@ uint8_t registerAllEffects(RendererActor* renderer) {
 
     // LGP Novel Physics effects (5) - IDs 60-64
     total += registerLGPNovelPhysicsEffects(renderer, total);
+
+    // LGP Chromatic effects (3) - IDs 65-67 (physics-accurate Cauchy dispersion)
+    total += registerLGPChromaticEffects(renderer, total);
+
+    // =============== EFFECT COUNT PARITY VALIDATION ===============
+    // Runtime validation: ensure registered count matches expected
+    constexpr uint8_t EXPECTED_EFFECT_COUNT = 68;
+    if (total != EXPECTED_EFFECT_COUNT) {
+        Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
+        Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");
+    } else {
+        Serial.printf("[OK] Effect count validated: %d effects registered (matches expected)\n", total);
+    }
 
     return total;
 }

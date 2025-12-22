@@ -51,6 +51,10 @@ RendererActor::RendererActor()
     , m_speed(LedConfig::DEFAULT_SPEED)
     , m_paletteIndex(0)
     , m_hue(0)
+    , m_intensity(128)
+    , m_saturation(255)
+    , m_complexity(128)
+    , m_variation(0)
     , m_effectCount(0)
     , m_lastFrameTime(0)
     , m_frameCount(0)
@@ -200,11 +204,19 @@ void RendererActor::onMessage(const Message& msg)
             break;
 
         case MessageType::SET_INTENSITY:
-            // Future: effect intensity parameter
+            handleSetIntensity(msg.param1);
             break;
 
         case MessageType::SET_SATURATION:
-            // Future: saturation control
+            handleSetSaturation(msg.param1);
+            break;
+
+        case MessageType::SET_COMPLEXITY:
+            handleSetComplexity(msg.param1);
+            break;
+
+        case MessageType::SET_VARIATION:
+            handleSetVariation(msg.param1);
             break;
 
         case MessageType::HEALTH_CHECK:
@@ -351,6 +363,10 @@ void RendererActor::renderFrame()
     ctx.brightness = m_brightness;
     ctx.speed = m_speed;
     ctx.hue = m_hue;
+    ctx.intensity = m_intensity;
+    ctx.saturation = m_saturation;
+    ctx.complexity = m_complexity;
+    ctx.variation = m_variation;
     ctx.frameCount = m_frameCount;
     ctx.palette = &m_currentPalette;
 
@@ -512,6 +528,46 @@ void RendererActor::handleSetPalette(uint8_t paletteIndex)
         Message evt(MessageType::PALETTE_CHANGED);
         evt.param1 = m_paletteIndex;
         bus::MessageBus::instance().publish(evt);
+    }
+}
+
+void RendererActor::handleSetIntensity(uint8_t intensity)
+{
+    if (m_intensity != intensity) {
+        m_intensity = intensity;
+#ifndef NATIVE_BUILD
+        ESP_LOGD(TAG, "Intensity: %d", m_intensity);
+#endif
+    }
+}
+
+void RendererActor::handleSetSaturation(uint8_t saturation)
+{
+    if (m_saturation != saturation) {
+        m_saturation = saturation;
+#ifndef NATIVE_BUILD
+        ESP_LOGD(TAG, "Saturation: %d", m_saturation);
+#endif
+    }
+}
+
+void RendererActor::handleSetComplexity(uint8_t complexity)
+{
+    if (m_complexity != complexity) {
+        m_complexity = complexity;
+#ifndef NATIVE_BUILD
+        ESP_LOGD(TAG, "Complexity: %d", m_complexity);
+#endif
+    }
+}
+
+void RendererActor::handleSetVariation(uint8_t variation)
+{
+    if (m_variation != variation) {
+        m_variation = variation;
+#ifndef NATIVE_BUILD
+        ESP_LOGD(TAG, "Variation: %d", m_variation);
+#endif
     }
 }
 

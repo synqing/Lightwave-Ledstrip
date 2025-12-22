@@ -341,20 +341,20 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
      PM_STR("Plasma pattern"),
      PM_STR("Standard optical effects"), PM_STR("")},
 
-    // Index 65: Heartbeat
-    {PM_STR("Heartbeat"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN,
-     PM_STR("Heartbeat pattern"),
-     PM_STR("Standard optical effects"), PM_STR("")},
+    // Index 65: LGP Chromatic Lens (physics-accurate Cauchy dispersion)
+    {PM_STR("LGP Chromatic Lens"), PatternFamily::ADVANCED_OPTICAL, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::SPECTRAL,
+     PM_STR("Physics-accurate chromatic lens with Cauchy equation dispersion"),
+     PM_STR("Cauchy equation dispersion, wavelength-dependent refraction, lens-like color separation"), PM_STR("LGP Chromatic Aberration, LGP Chromatic Shear")},
 
-    // Index 66: Breathing
-    {PM_STR("Breathing"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN,
-     PM_STR("Breathing pattern"),
-     PM_STR("Standard optical effects"), PM_STR("")},
+    // Index 66: LGP Chromatic Pulse (physics-accurate Cauchy dispersion)
+    {PM_STR("LGP Chromatic Pulse"), PatternFamily::ADVANCED_OPTICAL, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::SPECTRAL,
+     PM_STR("Pulsing chromatic dispersion with physics-accurate Cauchy equation"),
+     PM_STR("Cauchy equation dispersion, pulsing aberration, expanding/contracting color separation"), PM_STR("LGP Chromatic Lens, LGP Chromatic Aberration")},
 
-    // Index 67: Vortex
-    {PM_STR("Vortex"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING,
-     PM_STR("Vortex pattern"),
-     PM_STR("Standard optical effects"), PM_STR("")},
+    // Index 67: LGP Chromatic Interference (physics-accurate Cauchy dispersion)
+    {PM_STR("LGP Chromatic Interference"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::TRAVELING | PatternTags::SPECTRAL,
+     PM_STR("Dual-edge interference with physics-accurate chromatic dispersion"),
+     PM_STR("Cauchy equation dispersion, wave interference, dual-edge injection, constructive/destructive patterns"), PM_STR("LGP Chromatic Lens, LGP Wave Collision, LGP Interference Scanner")},
 
     // Index 68: LGP Hexagonal Grid
     {PM_STR("LGP Hexagonal Grid"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP,
@@ -610,6 +610,18 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
 const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(PatternMetadata);
 
 // ============================================================================
+// Effect Count Parity Validation
+// ============================================================================
+
+// Expected number of implemented effects (must match registerAllEffects() return value)
+constexpr uint8_t EXPECTED_EFFECT_COUNT = 68;
+
+// Compile-time assertion: metadata must have at least as many entries as implemented effects
+// This ensures we can always map effect IDs to metadata (allows for future effects in metadata)
+static_assert(PATTERN_METADATA_COUNT >= EXPECTED_EFFECT_COUNT,
+              "PATTERN_METADATA_COUNT must be >= EXPECTED_EFFECT_COUNT (metadata must cover all implemented effects)");
+
+// ============================================================================
 // Pattern Registry Implementation
 // ============================================================================
 
@@ -630,7 +642,8 @@ const PatternMetadata* getPatternMetadata(const char* name) {
 const PatternMetadata* getPatternMetadata(uint8_t index) {
     // Map effect ID to metadata index (stable ID mapping)
     // Effect IDs match v1/v2 registration order exactly
-    if (index >= PATTERN_METADATA_COUNT) {
+    // Phase 2 parity enforcement: only expose metadata for implemented effects
+    if (index >= EXPECTED_EFFECT_COUNT) {
         return nullptr;
     }
     return &PATTERN_METADATA[index];
@@ -638,7 +651,8 @@ const PatternMetadata* getPatternMetadata(uint8_t index) {
 
 uint8_t getPatternsByFamily(PatternFamily family, uint8_t* output, uint8_t maxOutput) {
     uint8_t count = 0;
-    for (uint8_t i = 0; i < PATTERN_METADATA_COUNT && count < maxOutput; i++) {
+    // Only return implemented effect IDs
+    for (uint8_t i = 0; i < EXPECTED_EFFECT_COUNT && count < maxOutput; i++) {
         PatternMetadata meta;
         memcpy_P(&meta, &PATTERN_METADATA[i], sizeof(PatternMetadata));
         if (meta.family == family) {
@@ -675,12 +689,14 @@ bool patternInFamily(const char* name, PatternFamily family) {
 }
 
 uint8_t getPatternCount() {
-    return PATTERN_METADATA_COUNT;
+    // Only count implemented effects (metadata may contain future patterns)
+    return EXPECTED_EFFECT_COUNT;
 }
 
 uint8_t getFamilyCount(PatternFamily family) {
     uint8_t count = 0;
-    for (uint8_t i = 0; i < PATTERN_METADATA_COUNT; i++) {
+    // Only count implemented effects (metadata may contain future patterns)
+    for (uint8_t i = 0; i < EXPECTED_EFFECT_COUNT; i++) {
         PatternMetadata meta;
         memcpy_P(&meta, &PATTERN_METADATA[i], sizeof(PatternMetadata));
         if (meta.family == family) {

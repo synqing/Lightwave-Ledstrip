@@ -70,6 +70,11 @@ public:
     float getReleaseDuration() const { return m_cycle.releaseDuration; }
     float getRestDuration() const { return m_cycle.restDuration; }
     float getTotalDuration() const { return m_cycle.getTotalDuration(); }
+    EasingCurve getBuildCurve() const { return m_cycle.buildCurve; }
+    EasingCurve getReleaseCurve() const { return m_cycle.releaseCurve; }
+    float getHoldBreathe() const { return m_cycle.holdBreathe; }
+    float getSnapAmount() const { return m_cycle.snapAmount; }
+    float getDurationVariance() const { return m_cycle.durationVariance; }
 
     // ==================== Configuration - Curves ====================
 

@@ -109,6 +109,11 @@ struct RenderContext {
     uint8_t brightness;           // Current brightness (0-255)
     uint8_t speed;                // Animation speed (1-50)
     uint8_t hue;                  // Global hue offset
+    // Visual parameters (universal effect controls)
+    uint8_t intensity;            // Effect intensity/amplitude (0-255)
+    uint8_t saturation;           // Color saturation (0-255)
+    uint8_t complexity;           // Effect complexity/detail (0-255)
+    uint8_t variation;            // Effect variation/mode (0-255)
     uint32_t frameCount;          // Frame counter
     uint32_t deltaTimeMs;         // Time since last frame
     CRGBPalette16* palette;       // Current color palette
@@ -155,6 +160,10 @@ public:
     uint8_t getSpeed() const { return m_speed; }
     uint8_t getPaletteIndex() const { return m_paletteIndex; }
     uint8_t getHue() const { return m_hue; }
+    uint8_t getIntensity() const { return m_intensity; }
+    uint8_t getSaturation() const { return m_saturation; }
+    uint8_t getComplexity() const { return m_complexity; }
+    uint8_t getVariation() const { return m_variation; }
     const RenderStats& getStats() const { return m_stats; }
 
     /**
@@ -317,6 +326,10 @@ private:
      * @brief Handle SET_PALETTE message
      */
     void handleSetPalette(uint8_t paletteIndex);
+    void handleSetIntensity(uint8_t intensity);
+    void handleSetSaturation(uint8_t saturation);
+    void handleSetComplexity(uint8_t complexity);
+    void handleSetVariation(uint8_t variation);
 
     // ========================================================================
     // State
@@ -333,6 +346,10 @@ private:
     uint8_t m_speed;
     uint8_t m_paletteIndex;
     uint8_t m_hue;
+    uint8_t m_intensity;
+    uint8_t m_saturation;
+    uint8_t m_complexity;
+    uint8_t m_variation;
 
     // Palette
     CRGBPalette16 m_currentPalette;

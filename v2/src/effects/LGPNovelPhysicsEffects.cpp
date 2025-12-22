@@ -73,7 +73,7 @@ void effectChladniHarmonics(RenderContext& ctx) {
     fadeToBlackBy(ctx.leds, ctx.numLeds, 15);
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs(i - CENTER_LEFT);
+        float distFromCenter = centerPairDistance(i);
         float normalizedPos = distFromCenter / (float)HALF_LENGTH;
 
         // Mode shape: standing wave pattern
@@ -150,7 +150,7 @@ void effectGravitationalWaveChirp(RenderContext& ctx) {
     fadeToBlackBy(ctx.leds, ctx.numLeds, 25);
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs(i - CENTER_LEFT);
+        float distFromCenter = centerPairDistance(i);
         float normalizedDist = distFromCenter / (float)HALF_LENGTH;
 
         float wave1 = 0, wave2 = 0;
@@ -246,7 +246,7 @@ void effectQuantumEntanglementCollapse(RenderContext& ctx) {
     fadeToBlackBy(ctx.leds, ctx.numLeds, 20);
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs(i - CENTER_LEFT);
+        float distFromCenter = centerPairDistance(i);
         float normalizedDist = distFromCenter / (float)HALF_LENGTH;
 
         uint8_t hue1, hue2, brightness1, brightness2;
@@ -418,7 +418,7 @@ void effectRileyDissonance(RenderContext& ctx) {
     float freq2 = baseFreq * (1 - freqMismatch / 2);
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs(i - CENTER_LEFT);
+        float distFromCenter = centerPairDistance(i);
         float normalizedDist = distFromCenter / (float)HALF_LENGTH;
         float position = (float)i / STRIP_LENGTH;
 

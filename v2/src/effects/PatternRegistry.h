@@ -170,6 +170,33 @@ uint8_t getPatternCount();
  */
 uint8_t getFamilyCount(PatternFamily family);
 
+/**
+ * Check if an effect is LGP-sensitive (should skip ColorCorrectionEngine)
+ * @param effectId Effect ID to check
+ * @return true if effect is LGP-sensitive and should skip color correction
+ * 
+ * LGP-sensitive effects are those that rely on precise amplitude relationships
+ * for interference patterns. Color correction breaks these relationships.
+ * 
+ * Includes:
+ * - INTERFERENCE family effects (10, 13-17)
+ * - ADVANCED_OPTICAL family effects with CENTER_ORIGIN tag (26-33, 65-67)
+ * - Specific IDs: 10, 13, 16, 26, 32, 65, 66, 67
+ */
+bool isLGPSensitive(uint8_t effectId);
+
+/**
+ * Check if an effect is stateful (reads previous frame buffer)
+ * @param effectId Effect ID to check
+ * @return true if effect is stateful and should skip color correction
+ * 
+ * Stateful effects read from ctx.leds in the previous frame for propagation.
+ * ColorCorrectionEngine mutates m_leds in-place, corrupting the feedback loop.
+ * 
+ * Currently includes: 3 (Confetti), 8 (Ripple)
+ */
+bool isStatefulEffect(uint8_t effectId);
+
 } // namespace PatternRegistry
 
 // ============================================================================

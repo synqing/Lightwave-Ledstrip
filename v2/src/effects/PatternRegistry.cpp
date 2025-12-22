@@ -202,4 +202,50 @@ uint8_t getFamilyCount(PatternFamily family) {
     return count;
 }
 
+bool isLGPSensitive(uint8_t effectId) {
+    if (effectId >= EXPECTED_EFFECT_COUNT) {
+        return false;
+    }
+    
+    const PatternMetadata* metadata = getPatternMetadata(effectId);
+    if (!metadata) {
+        return false;
+    }
+    
+    // Check specific effect IDs that are known to be LGP-sensitive
+    // These are the effects showing severe regression at Tap B
+    if (effectId == 10 || effectId == 13 || effectId == 16 || 
+        effectId == 26 || effectId == 32 || effectId == 65 || 
+        effectId == 66 || effectId == 67) {
+        return true;
+    }
+    
+    // Check if effect is in INTERFERENCE family
+    if (metadata->family == PatternFamily::INTERFERENCE) {
+        return true;
+    }
+    
+    // Check if effect is in ADVANCED_OPTICAL family with CENTER_ORIGIN tag
+    if (metadata->family == PatternFamily::ADVANCED_OPTICAL && 
+        metadata->hasTag(PatternTags::CENTER_ORIGIN)) {
+        return true;
+    }
+    
+    // Check if effect is in QUANTUM or ORGANIC family with CENTER_ORIGIN and PHYSICS tags
+    // These are LGP physics-based effects that need precise amplitude relationships
+    if ((metadata->family == PatternFamily::QUANTUM || metadata->family == PatternFamily::ORGANIC) &&
+        metadata->hasTag(PatternTags::CENTER_ORIGIN) && 
+        metadata->hasTag(PatternTags::PHYSICS)) {
+        return true;
+    }
+    
+    return false;
+}
+
+bool isStatefulEffect(uint8_t effectId) {
+    // Stateful effects read from ctx.leds in previous frame
+    // Currently: Confetti (3) and Ripple (8)
+    return (effectId == 3 || effectId == 8);
+}
+
 } // namespace PatternRegistry

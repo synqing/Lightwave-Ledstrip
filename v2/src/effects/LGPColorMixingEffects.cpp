@@ -54,7 +54,7 @@ void effectColorTemperature(RenderContext& ctx) {
     float intensity = ctx.brightness / 255.0f;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs(i - CENTER_LEFT);
+        float distFromCenter = (float)centerPairDistance((uint16_t)i);
         float normalizedDist = distFromCenter / (float)HALF_LENGTH;
 
         CRGB warm, cool;
@@ -87,7 +87,7 @@ void effectRGBPrism(RenderContext& ctx) {
     prismAngle += speed * 0.02f;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs(i - CENTER_LEFT);
+        float distFromCenter = (float)centerPairDistance((uint16_t)i);
         float normalizedDist = distFromCenter / (float)HALF_LENGTH;
 
         float redAngle = sin(normalizedDist * dispersion + prismAngle);
@@ -127,7 +127,7 @@ void effectComplementaryMixing(RenderContext& ctx) {
     colorPhase += speed * 0.01f;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs(i - CENTER_LEFT);
+        float distFromCenter = (float)centerPairDistance((uint16_t)i);
         float normalizedDist = distFromCenter / (float)HALF_LENGTH;
 
         uint8_t baseHue = ctx.hue + (uint8_t)(colorPhase * 255);
@@ -162,7 +162,7 @@ void effectQuantumColors(RenderContext& ctx) {
     int numStates = 4;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs(i - CENTER_LEFT);
+        float distFromCenter = (float)centerPairDistance((uint16_t)i);
         float normalizedDist = distFromCenter / (float)HALF_LENGTH;
 
         float probability = sin(waveFunction + normalizedDist * TWO_PI * numStates);
@@ -198,7 +198,7 @@ void effectDopplerShift(RenderContext& ctx) {
     sourcePosition += speed * 5;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs(i - CENTER_LEFT);
+        float distFromCenter = (float)centerPairDistance((uint16_t)i);
 
         float relativePos = i - fmod(sourcePosition, (float)STRIP_LENGTH);
         float velocity = speed * 10;
@@ -266,7 +266,7 @@ void effectColorAccelerator(RenderContext& ctx) {
         debrisRadius += speed * 8;
 
         for (int i = 0; i < STRIP_LENGTH; i++) {
-            float distFromCenter = abs(i - CENTER_LEFT);
+            float distFromCenter = (float)centerPairDistance((uint16_t)i);
 
             if (distFromCenter <= debrisRadius) {
                 uint8_t debrisHue = random8();
@@ -300,7 +300,7 @@ void effectDNAHelix(RenderContext& ctx) {
     float helixPitch = 20.0f;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs(i - CENTER_LEFT);
+        float distFromCenter = (float)centerPairDistance((uint16_t)i);
         float normalizedDist = distFromCenter / (float)HALF_LENGTH;
 
         float angle1 = (distFromCenter / helixPitch) * TWO_PI + helixRotation;
@@ -352,7 +352,7 @@ void effectPhaseTransition(RenderContext& ctx) {
     phaseAnimation += temperature * 0.1f;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs(i - CENTER_LEFT);
+        float distFromCenter = (float)centerPairDistance((uint16_t)i);
         float normalizedDist = distFromCenter / (float)HALF_LENGTH;
 
         float localTemp = temperature + (normalizedDist * pressure);
@@ -408,7 +408,7 @@ void effectChromaticAberration(RenderContext& ctx) {
     lensPosition += ctx.speed * 0.01f;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs(i - CENTER_LEFT);
+        float distFromCenter = (float)centerPairDistance((uint16_t)i);
         float normalizedDist = distFromCenter / (float)HALF_LENGTH;
 
         float redFocus = sin((normalizedDist - 0.1f * aberration) * PI + lensPosition);
@@ -442,7 +442,7 @@ void effectPerceptualBlend(RenderContext& ctx) {
     blendPhase += speed * 0.01f;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs(i - CENTER_LEFT);
+        float distFromCenter = (float)centerPairDistance((uint16_t)i);
         float normalizedDist = distFromCenter / (float)HALF_LENGTH;
 
         float L = 50 + 50 * sin(blendPhase);

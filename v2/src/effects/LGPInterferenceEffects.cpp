@@ -46,7 +46,7 @@ void effectBoxWave(RenderContext& ctx) {
     fadeToBlackBy(ctx.leds, ctx.numLeds, 20);
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs(i - CENTER_LEFT);
+        float distFromCenter = (float)centerPairDistance((uint16_t)i);
         float normalizedDist = distFromCenter / (float)HALF_LENGTH;
 
         // Base box pattern from center
@@ -85,7 +85,7 @@ void effectHolographic(RenderContext& ctx) {
     int numLayers = 4;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float dist = abs(i - CENTER_LEFT);
+        float dist = (float)centerPairDistance((uint16_t)i);
         float normalized = dist / (float)HALF_LENGTH;
 
         float layerSum = 0;
@@ -132,7 +132,7 @@ void effectModalResonance(RenderContext& ctx) {
     float baseMode = 5 + sin(modalModePhase) * 4;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs(i - CENTER_LEFT);
+        float distFromCenter = (float)centerPairDistance((uint16_t)i);
         float normalizedDist = distFromCenter / (float)HALF_LENGTH;
 
         // Mode pattern
@@ -168,7 +168,7 @@ void effectInterferenceScanner(RenderContext& ctx) {
     scanPhase2 += speedNorm * 0.03f;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float dist = abs(i - CENTER_LEFT);
+        float dist = (float)centerPairDistance((uint16_t)i);
         float normalizedDist = dist / (float)HALF_LENGTH;
 
         // Radial scan from center
@@ -243,7 +243,7 @@ void effectWaveCollision(RenderContext& ctx) {
         uint8_t brightness = (uint8_t)(128 + 127 * interference * intensityNorm);
 
         // CENTER ORIGIN color mapping
-        float distFromCenter = abs(i - CENTER_LEFT);
+        float distFromCenter = (float)centerPairDistance((uint16_t)i);
         uint8_t paletteIndex = (uint8_t)(distFromCenter * 2) + (uint8_t)(interference * 50);
 
         ctx.leds[i] = ColorFromPalette(*ctx.palette, ctx.hue + paletteIndex, brightness);

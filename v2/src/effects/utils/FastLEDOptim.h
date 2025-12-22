@@ -26,6 +26,7 @@
 #define FASTLED_OPTIM_H
 
 #include <FastLED.h>
+#include <math.h>
 #include <stdint.h>
 
 namespace lightwaveos {
@@ -181,7 +182,9 @@ inline uint8_t fastled_beatsin8(uint8_t beatsPerMinute, uint8_t min, uint8_t max
  */
 inline float fastled_center_sin16(int position, int center, float halfLength, 
                                    float frequency, uint16_t phase) {
-    float distFromCenter = abs((float)position - center);
+    float distA = fabsf((float)position - (float)center);
+    float distB = fabsf((float)position - (float)(center + 1));
+    float distFromCenter = fminf(distA, distB);
     float normalizedDist = distFromCenter / halfLength;
     uint16_t angle = (uint16_t)(normalizedDist * frequency * 256.0f + phase);
     return fastled_sin16_normalized(angle);
@@ -192,4 +195,3 @@ inline float fastled_center_sin16(int position, int center, float halfLength,
 } // namespace lightwaveos
 
 #endif // FASTLED_OPTIM_H
-

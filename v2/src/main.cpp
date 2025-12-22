@@ -213,6 +213,21 @@ void setup() {
     Serial.println("  </>     - Previous/Next show");
     Serial.println("  {/}     - Seek backward/forward 30s");
     Serial.println("  #       - Print show status");
+    Serial.println("\nColor Correction Commands:");
+    Serial.println("  c       - Cycle correction mode (OFF→HSV→RGB→BOTH→OFF)");
+    Serial.println("  C       - Show color correction status");
+    Serial.println("  e       - Toggle auto-exposure");
+    Serial.println("  g       - Toggle/cycle gamma (off→2.2→2.5→2.8→off)");
+    Serial.println("  B       - Toggle brown guardrail");
+    Serial.println("  cc      - Show correction mode (0=OFF,1=HSV,2=RGB,3=BOTH)");
+    Serial.println("  cc N    - Set correction mode (0-3, accepts 'cc1' or 'cc 1')");
+    Serial.println("  ae      - Show auto-exposure status");
+    Serial.println("  ae 0/1  - Disable/enable auto-exposure (accepts 'ae0' or 'ae 0')");
+    Serial.println("  gamma   - Show gamma status");
+    Serial.println("  gamma N - Set gamma (0=off, 1.0-3.0, accepts 'gamma1.5' or 'gamma 1.5')");
+    Serial.println("  brown   - Show brown guardrail status");
+    Serial.println("  brown 0/1 - Disable/enable brown guardrail (accepts 'brown0' or 'brown 0')");
+    Serial.println("  Csave   - Save color settings to NVS");
 #if FEATURE_WEB_SERVER
     Serial.println("\nWeb API:");
     Serial.println("  GET  /api/v1/effects - List effects");
@@ -233,7 +248,292 @@ void loop() {
     if (Serial.available()) {
         bool handledMulti = false;
         int peekChar = Serial.peek();
-        if (peekChar == 'v' || peekChar == 'V') {
+
+        // Color correction commands (cc, ae, gamma, brown) and capture commands
+        if (peekChar == 'c' && Serial.available() > 1) {
+            // Peek ahead to check for 'cc' command
+            String input = Serial.readStringUntil('\n');
+            input.trim();
+            String inputLower = input;
+            inputLower.toLowerCase();
+
+            // -----------------------------------------------------------------
+            // Capture commands: capture on/off/status/dump
+            // -----------------------------------------------------------------
+            if (inputLower.startsWith("capture")) {
+                handledMulti = true;
+
+                // Ack what we received
+                Serial.printf("[CAPTURE] recv='%s'\n", input.c_str());
+
+                // Strip the leading keyword
+                String subcmd = inputLower.substring(7); // after "capture"
+                subcmd.trim();
+
+                if (subcmd == "off") {
+                    RENDERER->setCaptureMode(false, 0);
+                    Serial.println("Capture mode disabled");
+                }
+                else if (subcmd.startsWith("on")) {
+                    uint8_t tapMask = 0x07;  // default all taps
+                    if (subcmd.length() > 2) {
+                        tapMask = 0;
+                        if (subcmd.indexOf('a') >= 0) tapMask |= 0x01;
+                        if (subcmd.indexOf('b') >= 0) tapMask |= 0x02;
+                        if (subcmd.indexOf('c') >= 0) tapMask |= 0x04;
+                    }
+                    RENDERER->setCaptureMode(true, tapMask);
+                    Serial.printf("Capture mode enabled (tapMask=0x%02X: %s%s%s)\n",
+                                  tapMask,
+                                  (tapMask & 0x01) ? "A" : "",
+                                  (tapMask & 0x02) ? "B" : "",
+                                  (tapMask & 0x04) ? "C" : "");
+                }
+                else if (subcmd.startsWith("dump")) {
+                    using namespace lightwaveos::actors;
+                    RendererActor::CaptureTap tap;
+                    bool valid = false;
+
+                    if (subcmd.indexOf('a') >= 0) { tap = RendererActor::CaptureTap::TAP_A_PRE_CORRECTION; valid = true; }
+                    else if (subcmd.indexOf('b') >= 0) { tap = RendererActor::CaptureTap::TAP_B_POST_CORRECTION; valid = true; }
+                    else if (subcmd.indexOf('c') >= 0) { tap = RendererActor::CaptureTap::TAP_C_PRE_WS2812; valid = true; }
+
+                    if (valid) {
+                        CRGB frame[320];
+                        // If we have no captured frame yet (common right after enabling capture or switching effects),
+                        // force a one-shot capture at the requested tap and retry.
+                        if (!RENDERER->getCapturedFrame(tap, frame)) {
+                            RENDERER->forceOneShotCapture(tap);
+                            delay(10);  // allow capture to complete
+                        }
+
+                        if (RENDERER->getCapturedFrame(tap, frame)) {
+                            auto metadata = RENDERER->getCaptureMetadata();
+
+                            Serial.write(0xFD);  // Magic
+                            Serial.write(0x01);  // Version
+                            Serial.write((uint8_t)tap);
+                            Serial.write(metadata.effectId);
+                            Serial.write(metadata.paletteId);
+                            Serial.write(metadata.brightness);
+                            Serial.write(metadata.speed);
+                            Serial.write((uint8_t)(metadata.frameIndex & 0xFF));
+                            Serial.write((uint8_t)((metadata.frameIndex >> 8) & 0xFF));
+                            Serial.write((uint8_t)((metadata.frameIndex >> 16) & 0xFF));
+                            Serial.write((uint8_t)((metadata.frameIndex >> 24) & 0xFF));
+                            Serial.write((uint8_t)(metadata.timestampUs & 0xFF));
+                            Serial.write((uint8_t)((metadata.timestampUs >> 8) & 0xFF));
+                            Serial.write((uint8_t)((metadata.timestampUs >> 16) & 0xFF));
+                            Serial.write((uint8_t)((metadata.timestampUs >> 24) & 0xFF));
+                            uint16_t frameLen = 320 * 3;  // RGB × 320 LEDs
+                            Serial.write((uint8_t)(frameLen & 0xFF));
+                            Serial.write((uint8_t)((frameLen >> 8) & 0xFF));
+
+                            // Payload
+                            Serial.write((uint8_t*)frame, frameLen);
+
+                            Serial.printf("\nFrame dumped: tap=%d, effect=%d, palette=%d, frame=%u\n",
+                                          (int)tap, metadata.effectId, metadata.paletteId, (unsigned int)metadata.frameIndex);
+                        } else {
+                            Serial.println("No frame captured for this tap");
+                        }
+                    } else {
+                        Serial.println("Usage: capture dump <a|b|c>");
+                    }
+                }
+                else if (subcmd == "status") {
+                    auto metadata = RENDERER->getCaptureMetadata();
+                    Serial.println("\n=== Capture Status ===");
+                    Serial.printf("  Enabled: %s\n", RENDERER->isCaptureModeEnabled() ? "YES" : "NO");
+                    Serial.printf("  Last capture: effect=%d, palette=%d, frame=%lu\n",
+                                  metadata.effectId, metadata.paletteId, metadata.frameIndex);
+                    Serial.println();
+                }
+                else {
+                    Serial.println("Usage: capture <on [a|b|c]|off|dump <a|b|c>|status>");
+                }
+            }
+
+            if (input == "c") {
+                // Single 'c' - let single-char handler process it (don't set handledMulti)
+                // But we've already consumed it, so handle it here
+                handledMulti = true;
+                auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
+                auto currentMode = engine.getMode();
+                uint8_t modeInt = (uint8_t)currentMode;
+                modeInt = (modeInt + 1) % 4;  // Cycle: 0→1→2→3→0
+                engine.setMode((lightwaveos::enhancement::CorrectionMode)modeInt);
+                const char* modeNames[] = {"OFF", "HSV", "RGB", "BOTH"};
+                Serial.printf("Color correction mode: %d (%s)\n", modeInt, modeNames[modeInt]);
+            } else if (input.startsWith("cc")) {
+                handledMulti = true;
+                auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
+
+                if (input == "cc") {
+                    // Show current mode
+                    auto mode = engine.getMode();
+                    Serial.printf("Color correction mode: %d\n", (int)mode);
+                    Serial.println("  0=OFF, 1=HSV, 2=RGB, 3=BOTH");
+                } else if (input.length() > 2) {
+                    // Set mode - handle both "cc1" and "cc 1" formats
+                    // Find first digit after "cc" (skip whitespace)
+                    int startIdx = 2;
+                    while (startIdx < input.length() && (input[startIdx] == ' ' || input[startIdx] == '\t')) {
+                        startIdx++;
+                    }
+                    if (startIdx < input.length()) {
+                        uint8_t mode = input.substring(startIdx).toInt();
+                        if (mode <= 3) {
+                            engine.setMode((lightwaveos::enhancement::CorrectionMode)mode);
+                            Serial.printf("Color correction mode set to: %d\n", mode);
+                        } else {
+                            Serial.println("Invalid mode. Use 0-3");
+                        }
+                    }
+                }
+            }
+            // If input doesn't start with 'c' or 'cc', let it fall through (but this shouldn't happen)
+        }
+        // -----------------------------------------------------------------
+        // Effect selection command (multi-digit safe): "effect <id>"
+        // -----------------------------------------------------------------
+        else if (peekChar == 'e' && Serial.available() > 1) {
+            String input = Serial.readStringUntil('\n');
+            input.trim();
+            String inputLower = input;
+            inputLower.toLowerCase();
+
+            if (inputLower.startsWith("effect ")) {
+                handledMulti = true;
+
+                int effectId = input.substring(7).toInt();
+                uint8_t effectCount = RENDERER->getEffectCount();
+                if (effectId < 0 || effectId >= effectCount) {
+                    Serial.printf("ERROR: Invalid effect ID. Valid range: 0-%d\n", effectCount - 1);
+                } else {
+                    currentEffect = (uint8_t)effectId;
+                    ACTOR_SYSTEM.setEffect((uint8_t)effectId);
+                    Serial.printf("Effect %d: %s\n", effectId, RENDERER->getEffectName(effectId));
+                }
+            }
+        }
+        else if (peekChar == 'a' && Serial.available() > 1) {
+            String input = Serial.readStringUntil('\n');
+            input.trim();
+
+            if (input.startsWith("ae")) {
+                handledMulti = true;
+                auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
+                auto& cfg = engine.getConfig();
+
+                if (input == "ae") {
+                    Serial.printf("Auto-exposure: %s, target=%d\n",
+                                  cfg.autoExposureEnabled ? "ON" : "OFF",
+                                  cfg.autoExposureTarget);
+                } else if (input.length() > 2) {
+                    // Handle both "ae0"/"ae1" and "ae 0"/"ae 1" formats
+                    int startIdx = 2;
+                    while (startIdx < input.length() && (input[startIdx] == ' ' || input[startIdx] == '\t')) {
+                        startIdx++;
+                    }
+                    if (startIdx < input.length()) {
+                        String arg = input.substring(startIdx);
+                        if (arg == "0") {
+                            cfg.autoExposureEnabled = false;
+                            Serial.println("Auto-exposure: OFF");
+                        } else if (arg == "1") {
+                            cfg.autoExposureEnabled = true;
+                            Serial.println("Auto-exposure: ON");
+                        } else {
+                            int target = arg.toInt();
+                            if (target > 0 && target <= 255) {
+                                cfg.autoExposureTarget = target;
+                                Serial.printf("Auto-exposure target: %d\n", target);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        else if (peekChar == 'g') {
+            String input = Serial.readStringUntil('\n');
+            input.trim();
+
+            if (input.startsWith("gamma")) {
+                handledMulti = true;
+                auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
+                auto& cfg = engine.getConfig();
+
+                if (input == "gamma") {
+                    Serial.printf("Gamma: %s, value=%.1f\n",
+                                  cfg.gammaEnabled ? "ON" : "OFF",
+                                  cfg.gammaValue);
+                } else if (input.length() > 5) {
+                    // Handle both "gamma1.5" and "gamma 1.5" formats
+                    int startIdx = 5;
+                    while (startIdx < input.length() && (input[startIdx] == ' ' || input[startIdx] == '\t')) {
+                        startIdx++;
+                    }
+                    if (startIdx < input.length()) {
+                        float val = input.substring(startIdx).toFloat();
+                        if (val == 0) {
+                            cfg.gammaEnabled = false;
+                            Serial.println("Gamma: OFF");
+                        } else if (val >= 1.0f && val <= 3.0f) {
+                            cfg.gammaEnabled = true;
+                            cfg.gammaValue = val;
+                            Serial.printf("Gamma set to: %.1f\n", val);
+                        } else {
+                            Serial.println("Invalid gamma. Use 0 (off) or 1.0-3.0");
+                        }
+                    }
+                }
+            }
+        }
+        else if (peekChar == 'b' && Serial.available() > 1) {
+            String input = Serial.readStringUntil('\n');
+            input.trim();
+
+            if (input.startsWith("brown")) {
+                handledMulti = true;
+                auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
+                auto& cfg = engine.getConfig();
+
+                if (input == "brown") {
+                    Serial.printf("Brown guardrail: %s\n",
+                                  cfg.brownGuardrailEnabled ? "ON" : "OFF");
+                    Serial.printf("  Max green: %d%% of red\n", cfg.maxGreenPercentOfRed);
+                    Serial.printf("  Max blue: %d%% of red\n", cfg.maxBluePercentOfRed);
+                } else if (input.length() > 5) {
+                    // Handle both "brown0"/"brown1" and "brown 0"/"brown 1" formats
+                    int startIdx = 5;
+                    while (startIdx < input.length() && (input[startIdx] == ' ' || input[startIdx] == '\t')) {
+                        startIdx++;
+                    }
+                    if (startIdx < input.length()) {
+                        String arg = input.substring(startIdx);
+                        if (arg == "0") {
+                            cfg.brownGuardrailEnabled = false;
+                            Serial.println("Brown guardrail: OFF");
+                        } else if (arg == "1") {
+                            cfg.brownGuardrailEnabled = true;
+                            Serial.println("Brown guardrail: ON");
+                        }
+                    }
+                }
+            }
+        }
+        else if (peekChar == 'C' && Serial.available() > 1) {
+            String input = Serial.readStringUntil('\n');
+            input.trim();
+
+            if (input == "Csave") {
+                handledMulti = true;
+                lightwaveos::enhancement::ColorCorrectionEngine::getInstance().saveToNVS();
+                Serial.println("Color correction settings saved to NVS");
+            }
+        }
+        else if (peekChar == 'v' || peekChar == 'V') {
             String input = Serial.readStringUntil('\n');
             input.trim();
             String inputLower = input;
@@ -418,6 +718,106 @@ void loop() {
                 // Treat non-validate 'v...' input as handled to avoid consuming and then reading a stale single-char command
                 handledMulti = true;
                 Serial.println("Unknown command. Use: validate <effect_id>");
+            }
+        }
+        else if (peekChar == 'c' && Serial.available() > 1) {
+            String input = Serial.readStringUntil('\n');
+            input.trim();
+            String inputLower = input;
+            inputLower.toLowerCase();
+
+            if (inputLower.startsWith("capture ")) {
+                handledMulti = true;
+                String subcmd = inputLower.substring(8);
+                
+                if (subcmd == "off") {
+                    RENDERER->setCaptureMode(false, 0);
+                    Serial.println("Capture mode disabled");
+                }
+                else if (subcmd.startsWith("on")) {
+                    // Parse tap mask: "on" (all), "on a" (tap A), "on b" (tap B), "on c" (tap C), "on ab" (taps A+B), etc.
+                    uint8_t tapMask = 0x07;  // Default: all taps
+                    if (subcmd.length() > 3) {
+                        tapMask = 0;
+                        if (subcmd.indexOf('a') >= 0) tapMask |= 0x01;  // Tap A
+                        if (subcmd.indexOf('b') >= 0) tapMask |= 0x02;  // Tap B
+                        if (subcmd.indexOf('c') >= 0) tapMask |= 0x04;  // Tap C
+                    }
+                    RENDERER->setCaptureMode(true, tapMask);
+                    Serial.printf("Capture mode enabled (tapMask=0x%02X: %s%s%s)\n",
+                                 tapMask,
+                                 (tapMask & 0x01) ? "A" : "",
+                                 (tapMask & 0x02) ? "B" : "",
+                                 (tapMask & 0x04) ? "C" : "");
+                }
+                else if (subcmd.startsWith("dump ")) {
+                    // Dump captured frame: "dump a", "dump b", "dump c"
+                    using namespace lightwaveos::actors;
+                    RendererActor::CaptureTap tap;
+                    bool valid = false;
+                    
+                    if (subcmd.indexOf(" a") >= 0) {
+                        tap = RendererActor::CaptureTap::TAP_A_PRE_CORRECTION;
+                        valid = true;
+                    } else if (subcmd.indexOf(" b") >= 0) {
+                        tap = RendererActor::CaptureTap::TAP_B_POST_CORRECTION;
+                        valid = true;
+                    } else if (subcmd.indexOf(" c") >= 0) {
+                        tap = RendererActor::CaptureTap::TAP_C_PRE_WS2812;
+                        valid = true;
+                    }
+                    
+                    if (valid) {
+                        CRGB frame[320];
+                        if (RENDERER->getCapturedFrame(tap, frame)) {
+                            auto metadata = RENDERER->getCaptureMetadata();
+                            
+                            // Binary frame format:
+                            // Header: [MAGIC=0xFD][VERSION=0x01][TAP_ID][EFFECT_ID][PALETTE_ID][BRIGHTNESS][SPEED][FRAME_INDEX(4)][TIMESTAMP(4)][FRAME_LEN(2)]
+                            // Payload: [RGB×320]
+                            Serial.write(0xFD);  // Magic
+                            Serial.write(0x01);  // Version
+                            Serial.write((uint8_t)tap);
+                            Serial.write(metadata.effectId);
+                            Serial.write(metadata.paletteId);
+                            Serial.write(metadata.brightness);
+                            Serial.write(metadata.speed);
+                            Serial.write((uint8_t)(metadata.frameIndex & 0xFF));
+                            Serial.write((uint8_t)((metadata.frameIndex >> 8) & 0xFF));
+                            Serial.write((uint8_t)((metadata.frameIndex >> 16) & 0xFF));
+                            Serial.write((uint8_t)((metadata.frameIndex >> 24) & 0xFF));
+                            Serial.write((uint8_t)(metadata.timestampUs & 0xFF));
+                            Serial.write((uint8_t)((metadata.timestampUs >> 8) & 0xFF));
+                            Serial.write((uint8_t)((metadata.timestampUs >> 16) & 0xFF));
+                            Serial.write((uint8_t)((metadata.timestampUs >> 24) & 0xFF));
+                            uint16_t frameLen = 320 * 3;  // RGB × 320 LEDs
+                            Serial.write((uint8_t)(frameLen & 0xFF));
+                            Serial.write((uint8_t)((frameLen >> 8) & 0xFF));
+                            
+                            // Payload: RGB data
+                            Serial.write((uint8_t*)frame, frameLen);
+                            
+                            Serial.printf("\nFrame dumped: tap=%d, effect=%d, palette=%d, frame=%u\n",
+                                         (int)tap, metadata.effectId, metadata.paletteId, (unsigned int)metadata.frameIndex);
+                        } else {
+                            Serial.println("No frame captured for this tap");
+                        }
+                    } else {
+                        Serial.println("Usage: capture dump <a|b|c>");
+                    }
+                }
+                else if (subcmd == "status") {
+                    handledMulti = true;
+                    auto metadata = RENDERER->getCaptureMetadata();
+                    Serial.println("\n=== Capture Status ===");
+                    Serial.printf("  Enabled: %s\n", RENDERER->isCaptureModeEnabled() ? "YES" : "NO");
+                    Serial.printf("  Last capture: effect=%d, palette=%d, frame=%lu\n",
+                                 metadata.effectId, metadata.paletteId, metadata.frameIndex);
+                    Serial.println();
+                }
+                else {
+                    Serial.println("Usage: capture <on [a|b|c]|off|dump <a|b|c>|status>");
+                }
             }
         }
 
@@ -828,6 +1228,88 @@ void loop() {
                         } else {
                             Serial.println("ShowDirector not available");
                         }
+                    }
+                    break;
+
+                // ========== Color Correction Keystrokes ==========
+
+                case 'c':
+                    // Cycle color correction mode (OFF → HSV → RGB → BOTH → OFF)
+                    {
+                        auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
+                        auto currentMode = engine.getMode();
+                        uint8_t modeInt = (uint8_t)currentMode;
+                        modeInt = (modeInt + 1) % 4;  // Cycle: 0→1→2→3→0
+                        engine.setMode((lightwaveos::enhancement::CorrectionMode)modeInt);
+                        const char* modeNames[] = {"OFF", "HSV", "RGB", "BOTH"};
+                        Serial.printf("Color correction mode: %d (%s)\n", modeInt, modeNames[modeInt]);
+                    }
+                    break;
+
+                case 'C':
+                    // Show color correction status
+                    {
+                        auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
+                        auto mode = engine.getMode();
+                        auto& cfg = engine.getConfig();
+                        const char* modeNames[] = {"OFF", "HSV", "RGB", "BOTH"};
+                        Serial.println("\n=== Color Correction Status ===");
+                        Serial.printf("  Mode: %d (%s)\n", (int)mode, modeNames[(int)mode]);
+                        Serial.printf("  Auto-exposure: %s, target=%d\n",
+                                      cfg.autoExposureEnabled ? "ON" : "OFF",
+                                      cfg.autoExposureTarget);
+                        Serial.printf("  Gamma: %s, value=%.1f\n",
+                                      cfg.gammaEnabled ? "ON" : "OFF",
+                                      cfg.gammaValue);
+                        Serial.printf("  Brown guardrail: %s\n",
+                                      cfg.brownGuardrailEnabled ? "ON" : "OFF");
+                        Serial.println();
+                    }
+                    break;
+
+                case 'e':
+                    // Toggle auto-exposure
+                    {
+                        auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
+                        auto& cfg = engine.getConfig();
+                        cfg.autoExposureEnabled = !cfg.autoExposureEnabled;
+                        Serial.printf("Auto-exposure: %s\n", cfg.autoExposureEnabled ? "ON" : "OFF");
+                    }
+                    break;
+
+                case 'g':
+                    // Toggle gamma or cycle common values
+                    {
+                        auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
+                        auto& cfg = engine.getConfig();
+                        if (!cfg.gammaEnabled) {
+                            // Enable with default 2.2
+                            cfg.gammaEnabled = true;
+                            cfg.gammaValue = 2.2f;
+                            Serial.printf("Gamma: ON (%.1f)\n", cfg.gammaValue);
+                        } else {
+                            // Cycle through common values: 2.2 → 2.5 → 2.8 → off
+                            if (cfg.gammaValue < 2.3f) {
+                                cfg.gammaValue = 2.5f;
+                                Serial.printf("Gamma: %.1f\n", cfg.gammaValue);
+                            } else if (cfg.gammaValue < 2.6f) {
+                                cfg.gammaValue = 2.8f;
+                                Serial.printf("Gamma: %.1f\n", cfg.gammaValue);
+                            } else {
+                                cfg.gammaEnabled = false;
+                                Serial.println("Gamma: OFF");
+                            }
+                        }
+                    }
+                    break;
+
+                case 'B':
+                    // Toggle brown guardrail
+                    {
+                        auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
+                        auto& cfg = engine.getConfig();
+                        cfg.brownGuardrailEnabled = !cfg.brownGuardrailEnabled;
+                        Serial.printf("Brown guardrail: %s\n", cfg.brownGuardrailEnabled ? "ON" : "OFF");
                     }
                     break;
             }

@@ -30,6 +30,7 @@
 
 #include "Actor.h"
 #include "../bus/MessageBus.h"
+#include "../../effects/enhancement/ColorCorrectionEngine.h"
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
@@ -272,6 +273,64 @@ public:
      */
     transitions::TransitionEngine* getTransitionEngine() { return m_transitionEngine; }
 
+    // ========================================================================
+    // Frame Capture System (for testbed)
+    // ========================================================================
+
+    /**
+     * @brief Frame capture tap points
+     */
+    enum class CaptureTap : uint8_t {
+        TAP_A_PRE_CORRECTION = 0,   // After renderFrame(), before processBuffer()
+        TAP_B_POST_CORRECTION = 1,  // After processBuffer(), before showLeds()
+        TAP_C_PRE_WS2812 = 2        // After showLeds() copy, before FastLED.show()
+    };
+
+    /**
+     * @brief Enable/disable frame capture mode
+     * @param enabled True to enable capture, false to disable
+     * @param tapMask Bitmask of taps to capture (bit 0=Tap A, bit 1=Tap B, bit 2=Tap C)
+     */
+    void setCaptureMode(bool enabled, uint8_t tapMask = 0x07);
+
+    /**
+     * @brief Check if capture mode is enabled
+     */
+    bool isCaptureModeEnabled() const { return m_captureEnabled; }
+
+    /**
+     * @brief Get captured frame for a specific tap
+     * @param tap Tap point to retrieve
+     * @param outBuffer Buffer to copy into (must be TOTAL_LEDS size)
+     * @return true if frame was captured, false if not available
+     */
+    bool getCapturedFrame(CaptureTap tap, CRGB* outBuffer) const;
+
+    /**
+     * @brief Get capture metadata (effect ID, palette ID, frame index, timestamp)
+     */
+    struct CaptureMetadata {
+        uint8_t effectId;
+        uint8_t paletteId;
+        uint8_t brightness;
+        uint8_t speed;
+        uint32_t frameIndex;
+        uint32_t timestampUs;
+    };
+    CaptureMetadata getCaptureMetadata() const;
+
+    /**
+     * @brief Force a single render/capture cycle for the requested tap.
+     *
+     * This is intended for on-demand serial `capture dump` requests, to avoid
+     * returning "No frame captured" when the caller requests a dump before the
+     * next normal render tick has produced a captured frame.
+     *
+     * IMPORTANT: This method must not permanently mutate the live LED state
+     * buffer used by buffer-feedback effects. It snapshots and restores `m_leds`.
+     */
+    void forceOneShotCapture(CaptureTap tap);
+
 protected:
     // ========================================================================
     // Actor Overrides
@@ -383,6 +442,28 @@ private:
     CRGB m_transitionSourceBuffer[LedConfig::TOTAL_LEDS];
     uint8_t m_pendingEffect;
     bool m_transitionPending;
+
+    // Frame capture system (for testbed)
+    bool m_captureEnabled;
+    uint8_t m_captureTapMask;  // Bitmask: bit 0=Tap A, bit 1=Tap B, bit 2=Tap C
+    
+    // Performance metrics for color correction
+    uint32_t m_correctionSkipCount;   // Number of frames where correction was skipped
+    uint32_t m_correctionApplyCount;  // Number of frames where correction was applied
+    CRGB m_captureTapA[LedConfig::TOTAL_LEDS];  // Pre-correction
+    CRGB m_captureTapB[LedConfig::TOTAL_LEDS];  // Post-correction
+    CRGB m_captureTapC[LedConfig::TOTAL_LEDS];  // Pre-WS2812 (per-strip, interleaved)
+    CaptureMetadata m_captureMetadata;
+    bool m_captureTapAValid;
+    bool m_captureTapBValid;
+    bool m_captureTapCValid;
+
+    /**
+     * @brief Capture frame at specified tap point
+     * @param tap Tap point to capture
+     * @param sourceBuffer Source buffer to copy from
+     */
+    void captureFrame(CaptureTap tap, const CRGB* sourceBuffer);
 };
 
 } // namespace actors

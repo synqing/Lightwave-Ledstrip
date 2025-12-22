@@ -24,6 +24,15 @@ constexpr uint16_t CENTER_RIGHT = 80;  // First LED of right half
 constexpr uint16_t HALF_LENGTH = 80;   // LEDs per half
 constexpr uint16_t STRIP_LENGTH = 160; // LEDs per strip
 
+constexpr uint16_t centerPairDistance(uint16_t index) {
+    return (index <= CENTER_LEFT) ? (CENTER_LEFT - index) : (index - CENTER_RIGHT);
+}
+
+constexpr float centerPairSignedPosition(uint16_t index) {
+    return (index <= CENTER_LEFT) ? -((float)(CENTER_LEFT - index) + 0.5f)
+                                  : ((float)(index - CENTER_RIGHT) + 0.5f);
+}
+
 // ==================== Helper Macros ====================
 
 // Set LED with bounds checking for strip 1 (0-159)

@@ -9,6 +9,7 @@
  */
 
 #include "LGPChromaticEffects.h"
+#include "CoreEffects.h"
 #include "../core/actors/RendererActor.h"
 #include "utils/FastLEDOptim.h"
 #include <FastLED.h>
@@ -23,10 +24,7 @@ using namespace lightwaveos::actors;
 // Constants
 // ============================================================================
 
-constexpr int STRIP_LENGTH = 160;
-constexpr int CENTER_LEFT = 79;
-constexpr int CENTER_RIGHT = 80;
-constexpr int HALF_LENGTH = 80;
+// STRIP_LENGTH and other constants are defined in global headers
 // PI is defined in Arduino.h
 
 // Animation state (persistent across frames)
@@ -38,10 +36,11 @@ static float interferencePhase = 0.0f;
 // Physics-Accurate Chromatic Dispersion (Cauchy Equation)
 // ============================================================================
 
-CRGB chromaticDispersion(float position, float aberration, float phase, float intensity) {
+static CRGB chromaticDispersion(float position, float aberration, float phase, float intensity) {
     // Normalize position from centre (0.0 = centre, 1.0 = edge)
-    float distFromCenter = fabsf(position - 79.5f);
-    float normalizedDist = distFromCenter / 79.5f;
+    // Use standardized center distance calculation
+    float distFromCenter = (float)centerPairDistance((uint16_t)position);
+    float normalizedDist = distFromCenter / (float)HALF_LENGTH;
     
     // Cauchy dispersion (b1 reference):
     // n(λ) = n0 + B/(λ² - C)
@@ -95,6 +94,77 @@ CRGB chromaticDispersion(float position, float aberration, float phase, float in
     return CRGB(r, g, b);
 }
 
+/**
+ * @brief Palette-aware chromatic dispersion.
+ *
+ * The original physics-based RGB method can be very near-neutral (subtle dispersion),
+ * which the post-render white guardrail may classify as "whitish" under CC modes.
+ *
+ * This variant uses the active palette as a spectral source so palette selection
+ * meaningfully affects these effects, while still using the dispersion phases
+ * as the modulation mechanism.
+ */
+static CRGB chromaticDispersionPalette(float position,
+                                       float aberration,
+                                       float phase,
+                                       float intensity,
+                                       const CRGBPalette16* palette,
+                                       uint8_t baseHue)
+{
+    if (palette == nullptr) {
+        return chromaticDispersion(position, aberration, phase, intensity);
+    }
+
+    // Normalised distance from centre (0..1)
+    float distFromCenter = (float)centerPairDistance((uint16_t)position);
+    float normalizedDist = distFromCenter / (float)HALF_LENGTH;
+    if (normalizedDist < 0.0f) normalizedDist = 0.0f;
+    if (normalizedDist > 1.0f) normalizedDist = 1.0f;
+
+    // Use palette as a "spectrum" source: distance selects along palette,
+    // phase scrolls it slowly to keep the effect alive.
+    uint8_t phaseScroll = (uint8_t)((phase * 255.0f) / (2.0f * PI));
+    uint8_t idx = baseHue + (uint8_t)(normalizedDist * 255.0f) + phaseScroll;
+
+    // Chromatic separation in palette space: stronger separation as aberration increases.
+    // Keep this deliberately larger than the physically tiny Δn mapping so it remains visible.
+    int16_t sep = (int16_t)(8 + (aberration * 24.0f));   // ~8..80
+
+    CRGB cR = ColorFromPalette(*palette, (uint8_t)(idx - sep), 255);
+    CRGB cG = ColorFromPalette(*palette, (uint8_t)(idx),       255);
+    CRGB cB = ColorFromPalette(*palette, (uint8_t)(idx + sep), 255);
+
+    // Dispersion modulation weights (0..1) derived from the original channel foci.
+    // We recompute a simplified version here to avoid depending on internal offsets.
+    float aberr = aberration;
+    if (aberr < 0.0f) aberr = 0.0f;
+    if (aberr > 3.0f) aberr = 3.0f;
+
+    // Use slightly exaggerated offsets so the per-channel weights differ enough to matter.
+    float redOffset  = -0.04f * aberr;
+    float blueOffset = +0.05f * aberr;
+
+    float redFocus   = 0.5f + 0.5f * sinf((normalizedDist + redOffset) * PI + phase);
+    float greenFocus = 0.5f + 0.5f * sinf((normalizedDist) * PI + phase);
+    float blueFocus  = 0.5f + 0.5f * sinf((normalizedDist + blueOffset) * PI + phase);
+
+    float wSum = redFocus + greenFocus + blueFocus;
+    if (wSum < 0.001f) wSum = 1.0f;
+
+    // Weighted blend of the three palette samples
+    float rF = (cR.r * redFocus + cG.r * greenFocus + cB.r * blueFocus) / wSum;
+    float gF = (cR.g * redFocus + cG.g * greenFocus + cB.g * blueFocus) / wSum;
+    float bF = (cR.b * redFocus + cG.b * greenFocus + cB.b * blueFocus) / wSum;
+
+    CRGB out((uint8_t)constrain((int)rF, 0, 255),
+             (uint8_t)constrain((int)gF, 0, 255),
+             (uint8_t)constrain((int)bF, 0, 255));
+
+    // Apply intensity scaling (0..1)
+    out.nscale8_video((uint8_t)(constrain(intensity * 255.0f, 0.0f, 255.0f)));
+    return out;
+}
+
 // ============================================================================
 // Effect 1: Chromatic Lens
 // ============================================================================
@@ -110,7 +180,7 @@ void effectChromaticLens(RenderContext& ctx) {
     if (lensPhase > 2.0f * PI) lensPhase -= 2.0f * PI;
     
     for (int i = 0; i < STRIP_LENGTH && i < ctx.numLeds; i++) {
-        CRGB color = chromaticDispersion((float)i, aberration, lensPhase, intensity);
+        CRGB color = chromaticDispersionPalette((float)i, aberration, lensPhase, intensity, ctx.palette, ctx.hue);
         ctx.leds[i] = color;
     }
     
@@ -120,7 +190,7 @@ void effectChromaticLens(RenderContext& ctx) {
             int mirrorIdx = STRIP_LENGTH * 2 - 1 - i;
             if (mirrorIdx < ctx.numLeds) {
                 // Invert color channels for visual variety
-                CRGB color = chromaticDispersion((float)i, aberration, lensPhase + PI, intensity);
+                CRGB color = chromaticDispersionPalette((float)i, aberration, lensPhase + PI, intensity, ctx.palette, ctx.hue);
                 ctx.leds[mirrorIdx] = CRGB(color.b, color.g, color.r);
             }
         }
@@ -150,7 +220,7 @@ void effectChromaticPulse(RenderContext& ctx) {
     float phase = pulsePhase * 0.5f;
     
     for (int i = 0; i < STRIP_LENGTH && i < ctx.numLeds; i++) {
-        CRGB color = chromaticDispersion((float)i, aberration, phase, intensity);
+        CRGB color = chromaticDispersionPalette((float)i, aberration, phase, intensity, ctx.palette, ctx.hue);
         ctx.leds[i] = color;
     }
     
@@ -159,7 +229,7 @@ void effectChromaticPulse(RenderContext& ctx) {
         for (int i = 0; i < STRIP_LENGTH; i++) {
             int mirrorIdx = STRIP_LENGTH * 2 - 1 - i;
             if (mirrorIdx < ctx.numLeds) {
-                CRGB color = chromaticDispersion((float)i, aberration, phase + PI * 0.5f, intensity);
+                CRGB color = chromaticDispersionPalette((float)i, aberration, phase + PI * 0.5f, intensity, ctx.palette, ctx.hue);
                 ctx.leds[mirrorIdx] = color;
             }
         }
@@ -197,7 +267,7 @@ void effectChromaticInterference(RenderContext& ctx) {
         
         // Apply chromatic dispersion with interference modulation
         float phase = interferencePhase + interference * 0.5f;
-        CRGB color = chromaticDispersion(position, aberration, phase, intensity);
+        CRGB color = chromaticDispersionPalette(position, aberration, phase, intensity, ctx.palette, ctx.hue);
         
         // Modulate intensity based on interference (constructive = brighter, destructive = dimmer)
         float interferenceIntensity = 0.5f + 0.5f * interference;
@@ -215,8 +285,8 @@ void effectChromaticInterference(RenderContext& ctx) {
             if (mirrorIdx < ctx.numLeds) {
                 float position = (float)i;
                 
-                float distFromLeft = position / 79.5f;
-                float distFromRight = (159.0f - position) / 79.5f;
+                float distFromLeft = position / (float)HALF_LENGTH;
+                float distFromRight = ((float)(STRIP_LENGTH - 1) - position) / (float)HALF_LENGTH;
                 
                 float leftPhase = interferencePhase - distFromLeft * PI * 2.0f;
                 float rightPhase = interferencePhase - distFromRight * PI * 2.0f;
@@ -225,7 +295,7 @@ void effectChromaticInterference(RenderContext& ctx) {
                 interference = interference / 2.0f;
                 
                 float phase = interferencePhase + interference * 0.5f + PI;
-                CRGB color = chromaticDispersion(position, aberration, phase, intensity);
+                CRGB color = chromaticDispersionPalette(position, aberration, phase, intensity, ctx.palette, ctx.hue);
                 
                 float interferenceIntensity = 0.5f + 0.5f * interference;
                 color.r = (uint8_t)(color.r * interferenceIntensity);

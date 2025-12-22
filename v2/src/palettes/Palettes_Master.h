@@ -42,6 +42,7 @@ constexpr uint8_t PAL_WHITE_HEAVY = 0x08;  // Contains significant white/bright 
 constexpr uint8_t PAL_CALM        = 0x10;  // Subtle, calm transitions
 constexpr uint8_t PAL_VIVID       = 0x20;  // Vivid, high-contrast transitions
 constexpr uint8_t PAL_CVD_FRIENDLY = 0x40; // Colorblind-safe (Crameri/Colorspace)
+constexpr uint8_t PAL_EXCLUDED    = 0x80;  // Exclude from random selection (grayscale, pure white)
 
 // =============================================================================
 // PALETTE CATEGORY RANGES

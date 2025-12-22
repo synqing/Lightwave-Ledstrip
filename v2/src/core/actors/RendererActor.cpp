@@ -19,6 +19,7 @@
 #include "RendererActor.h"
 #include "../../effects/zones/ZoneComposer.h"
 #include "../../effects/transitions/TransitionEngine.h"
+#include "../../effects/PatternRegistry.h"
 #include "../../palettes/Palettes_Master.h"
 
 using namespace lightwaveos::transitions;
@@ -64,12 +65,22 @@ RendererActor::RendererActor()
     , m_transitionEngine(nullptr)
     , m_pendingEffect(0)
     , m_transitionPending(false)
+    , m_captureEnabled(false)
+    , m_captureTapMask(0)
+    , m_correctionSkipCount(0)
+    , m_correctionApplyCount(0)
+    , m_captureTapAValid(false)
+    , m_captureTapBValid(false)
+    , m_captureTapCValid(false)
 {
     // Initialize LED buffers to black
     memset(m_strip1, 0, sizeof(m_strip1));
     memset(m_strip2, 0, sizeof(m_strip2));
     memset(m_leds, 0, sizeof(m_leds));
     memset(m_transitionSourceBuffer, 0, sizeof(m_transitionSourceBuffer));
+    memset(m_captureTapA, 0, sizeof(m_captureTapA));
+    memset(m_captureTapB, 0, sizeof(m_captureTapB));
+    memset(m_captureTapC, 0, sizeof(m_captureTapC));
 
     // Create transition engine
     m_transitionEngine = new TransitionEngine();
@@ -258,6 +269,29 @@ void RendererActor::onTick()
     // Render the current effect
     renderFrame();
 
+    // TAP A: Capture pre-correction (after renderFrame, before processBuffer)
+    if (m_captureEnabled && (m_captureTapMask & 0x01)) {
+        captureFrame(CaptureTap::TAP_A_PRE_CORRECTION, m_leds);
+    }
+
+    // Post-render color correction pipeline (skip for LGP-sensitive and stateful effects)
+    // LGP-sensitive effects rely on precise amplitude relationships for interference patterns
+    // Stateful effects read previous frame state, and correction mutates buffer in-place
+    bool isLGPSensitive = ::PatternRegistry::isLGPSensitive(m_currentEffect);
+    bool isStateful = ::PatternRegistry::isStatefulEffect(m_currentEffect);
+    
+    if (!isLGPSensitive && !isStateful) {
+        enhancement::ColorCorrectionEngine::getInstance().processBuffer(m_leds, LedConfig::TOTAL_LEDS);
+        m_correctionApplyCount++;
+    } else {
+        m_correctionSkipCount++;
+    }
+
+    // TAP B: Capture post-correction (after processBuffer, before showLeds)
+    if (m_captureEnabled && (m_captureTapMask & 0x02)) {
+        captureFrame(CaptureTap::TAP_B_POST_CORRECTION, m_leds);
+    }
+
     // Push to strips
     showLeds();
 
@@ -299,6 +333,127 @@ void RendererActor::onStop()
     // Turn off all LEDs
     memset(m_leds, 0, sizeof(m_leds));
     showLeds();
+}
+
+// ============================================================================
+// Frame Capture System (for testbed)
+// ============================================================================
+
+void RendererActor::setCaptureMode(bool enabled, uint8_t tapMask) {
+    m_captureEnabled = enabled;
+    m_captureTapMask = tapMask & 0x07;  // Only bits 0-2 are valid
+    
+    if (!enabled) {
+        m_captureTapAValid = false;
+        m_captureTapBValid = false;
+        m_captureTapCValid = false;
+    }
+    
+    ESP_LOGI("Renderer", "Capture mode %s (tapMask=0x%02X)", 
+             enabled ? "enabled" : "disabled", m_captureTapMask);
+}
+
+bool RendererActor::getCapturedFrame(CaptureTap tap, CRGB* outBuffer) const {
+    if (!m_captureEnabled || outBuffer == nullptr) {
+        return false;
+    }
+    
+    bool valid = false;
+    const CRGB* source = nullptr;
+    
+    switch (tap) {
+        case CaptureTap::TAP_A_PRE_CORRECTION:
+            valid = m_captureTapAValid;
+            source = m_captureTapA;
+            break;
+        case CaptureTap::TAP_B_POST_CORRECTION:
+            valid = m_captureTapBValid;
+            source = m_captureTapB;
+            break;
+        case CaptureTap::TAP_C_PRE_WS2812:
+            valid = m_captureTapCValid;
+            source = m_captureTapC;
+            break;
+        default:
+            return false;
+    }
+    
+    if (valid && source != nullptr) {
+        memcpy(outBuffer, source, sizeof(CRGB) * LedConfig::TOTAL_LEDS);
+        return true;
+    }
+    
+    return false;
+}
+
+RendererActor::CaptureMetadata RendererActor::getCaptureMetadata() const {
+    return m_captureMetadata;
+}
+
+void RendererActor::forceOneShotCapture(CaptureTap tap) {
+    // Preserve the live LED state buffer so buffer-feedback effects are not disturbed.
+    CRGB savedLeds[LedConfig::TOTAL_LEDS];
+    memcpy(savedLeds, m_leds, sizeof(savedLeds));
+
+    // Preserve hue increment side-effect inside renderFrame()
+    const uint8_t savedHue = m_hue;
+
+    // Render one frame into m_leds (based on the preserved previous state)
+    renderFrame();
+
+    if (tap == CaptureTap::TAP_A_PRE_CORRECTION) {
+        captureFrame(CaptureTap::TAP_A_PRE_CORRECTION, m_leds);
+    } else {
+        // For Tap B/C we need the post-correction buffer, but we must not mutate m_leds.
+        CRGB corrected[LedConfig::TOTAL_LEDS];
+        memcpy(corrected, m_leds, sizeof(corrected));
+
+        enhancement::ColorCorrectionEngine::getInstance().processBuffer(corrected, LedConfig::TOTAL_LEDS);
+
+        if (tap == CaptureTap::TAP_B_POST_CORRECTION) {
+            captureFrame(CaptureTap::TAP_B_POST_CORRECTION, corrected);
+        } else if (tap == CaptureTap::TAP_C_PRE_WS2812) {
+            // Tap C is "pre-WS2812" after strip split. The split is a straight copy in showLeds(),
+            // so the unified interleaved buffer is equivalent to the corrected buffer.
+            captureFrame(CaptureTap::TAP_C_PRE_WS2812, corrected);
+        }
+    }
+
+    // Restore state so this on-demand capture does not perturb effect behaviour.
+    memcpy(m_leds, savedLeds, sizeof(savedLeds));
+    m_hue = savedHue;
+}
+
+void RendererActor::captureFrame(CaptureTap tap, const CRGB* sourceBuffer) {
+    if (sourceBuffer == nullptr) {
+        return;
+    }
+    
+    // Update metadata
+    m_captureMetadata.effectId = m_currentEffect;
+    m_captureMetadata.paletteId = m_paletteIndex;
+    m_captureMetadata.brightness = m_brightness;
+    m_captureMetadata.speed = m_speed;
+    m_captureMetadata.frameIndex = m_frameCount;
+    m_captureMetadata.timestampUs = micros();
+    
+    // Copy frame data
+    switch (tap) {
+        case CaptureTap::TAP_A_PRE_CORRECTION:
+            memcpy(m_captureTapA, sourceBuffer, sizeof(CRGB) * LedConfig::TOTAL_LEDS);
+            m_captureTapAValid = true;
+            break;
+        case CaptureTap::TAP_B_POST_CORRECTION:
+            memcpy(m_captureTapB, sourceBuffer, sizeof(CRGB) * LedConfig::TOTAL_LEDS);
+            m_captureTapBValid = true;
+            break;
+        case CaptureTap::TAP_C_PRE_WS2812:
+            memcpy(m_captureTapC, sourceBuffer, sizeof(CRGB) * LedConfig::TOTAL_LEDS);
+            m_captureTapCValid = true;
+            break;
+        default:
+            break;
+    }
 }
 
 // ============================================================================
@@ -400,6 +555,16 @@ void RendererActor::showLeds()
     memcpy(m_strip1, &m_leds[0], sizeof(CRGB) * LedConfig::LEDS_PER_STRIP);
     memcpy(m_strip2, &m_leds[LedConfig::LEDS_PER_STRIP],
            sizeof(CRGB) * LedConfig::LEDS_PER_STRIP);
+
+    // TAP C: Capture pre-WS2812 (after strip split, before FastLED.show)
+    if (m_captureEnabled && (m_captureTapMask & 0x04)) {
+        // Interleave strip1 and strip2 into unified format for capture
+        for (uint16_t i = 0; i < LedConfig::LEDS_PER_STRIP; i++) {
+            m_captureTapC[i] = m_strip1[i];
+            m_captureTapC[i + LedConfig::LEDS_PER_STRIP] = m_strip2[i];
+        }
+        captureFrame(CaptureTap::TAP_C_PRE_WS2812, m_captureTapC);
+    }
 
     // Push to hardware
     FastLED.show();
@@ -519,6 +684,10 @@ void RendererActor::handleSetPalette(uint8_t paletteIndex)
 
         // Load palette from master palette array (75 palettes)
         m_currentPalette = gMasterPalettes[paletteIndex];
+
+        // Apply color correction for WHITE_HEAVY palettes
+        uint8_t flags = master_palette_flags[paletteIndex];
+        enhancement::ColorCorrectionEngine::getInstance().correctPalette(m_currentPalette, flags);
 
 #ifndef NATIVE_BUILD
         ESP_LOGD(TAG, "Palette: %d (%s)", m_paletteIndex, getPaletteName(m_paletteIndex));

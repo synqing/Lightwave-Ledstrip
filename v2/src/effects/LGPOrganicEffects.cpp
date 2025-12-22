@@ -384,7 +384,7 @@ void effectFluidDynamics(RenderContext& ctx) {
         pressure[i] *= 0.98f;
 
         // Add source/sink at center
-        if (abs(i - CENTER_LEFT) < 5) {
+        if (centerPairDistance(i) < 5) {
             pressure[i] += sin8(fluidTime >> 2) / 255.0f;
         }
     }
@@ -396,7 +396,7 @@ void effectFluidDynamics(RenderContext& ctx) {
         uint8_t brightness = (uint8_t)constrain((pressure[i] + 1.0f) * 127, 0, 255);
         brightness = scale8(brightness, ctx.brightness);
 
-        float distFromCenter = abs((int)i - CENTER_LEFT);
+        float distFromCenter = (float)centerPairDistance(i);
         uint8_t paletteIndex = (uint8_t)(velocity[i] * 20) + (uint8_t)(distFromCenter / 4);
 
         ctx.leds[i] = ColorFromPalette(*ctx.palette, ctx.hue + paletteIndex, brightness);

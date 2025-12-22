@@ -97,7 +97,7 @@ void effectOcean(RenderContext& ctx) {
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         // Calculate distance from CENTER PAIR
-        float distFromCenter = abs((float)i - CENTER_LEFT);
+        float distFromCenter = (float)centerPairDistance((uint16_t)i);
 
         // Create wave motion from center outward
         uint8_t wave1 = sin8((uint16_t)(distFromCenter * 10) + waterOffset);
@@ -262,7 +262,7 @@ void effectBPM(RenderContext& ctx) {
     uint8_t beat = beatsin8(BeatsPerMinute, 64, 255);
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs((float)i - CENTER_LEFT);
+        float distFromCenter = (float)centerPairDistance((uint16_t)i);
 
         // Intensity decreases with distance from center
         uint8_t intensity = beat - (uint8_t)(distFromCenter * 3);
@@ -287,7 +287,7 @@ void effectWave(RenderContext& ctx) {
     fadeToBlackBy(ctx.leds, ctx.numLeds, 20);
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs((float)i - CENTER_LEFT);
+        float distFromCenter = (float)centerPairDistance((uint16_t)i);
 
         // Wave propagates outward from center
         uint8_t brightness = sin8((uint16_t)(distFromCenter * 15) + (waveOffset >> 4));
@@ -339,7 +339,7 @@ void effectRipple(RenderContext& ctx) {
 
         // Draw ripple
         for (int i = 0; i < STRIP_LENGTH; i++) {
-            float distFromCenter = abs((float)i - CENTER_LEFT);
+            float distFromCenter = (float)centerPairDistance((uint16_t)i);
             float wavePos = distFromCenter - ripples[r].radius;
 
             if (abs(wavePos) < 3.0f) {
@@ -437,7 +437,7 @@ void effectInterference(RenderContext& ctx) {
     wave2Phase -= ctx.speed / 30.0f;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs((float)i - CENTER_LEFT);
+        float distFromCenter = (float)centerPairDistance((uint16_t)i);
         float normalizedDist = distFromCenter / HALF_LENGTH;
 
         // Two waves emanating from center
@@ -467,7 +467,7 @@ void effectBreathing(RenderContext& ctx) {
     fadeToBlackBy(ctx.leds, ctx.numLeds, 15);
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs((float)i - CENTER_LEFT);
+        float distFromCenter = (float)centerPairDistance((uint16_t)i);
 
         if (distFromCenter <= radius) {
             float intensity = 1.0f - (distFromCenter / radius) * 0.5f;

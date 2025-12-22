@@ -45,7 +45,7 @@ void effectDiamondLattice(RenderContext& ctx) {
     float diamondFreq = 6.0f;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs(i - CENTER_LEFT);
+        float distFromCenter = (float)centerPairDistance((uint16_t)i);
         float normalizedDist = distFromCenter / (float)HALF_LENGTH;
 
         // Create crossing diagonal waves from center
@@ -78,7 +78,7 @@ void effectHexagonalGrid(RenderContext& ctx) {
     float hexSize = 10.0f;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float pos = (float)i / STRIP_LENGTH;
+        float pos = centerPairSignedPosition((uint16_t)i) / (float)HALF_LENGTH;
 
         // Three waves at 120 degree angles
         float wave1 = sin(pos * hexSize * TWO_PI + hexPhase);
@@ -111,7 +111,7 @@ void effectSpiralVortex(RenderContext& ctx) {
     int spiralArms = 4;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs(i - CENTER_LEFT);
+        float distFromCenter = (float)centerPairDistance((uint16_t)i);
         float normalizedDist = distFromCenter / (float)HALF_LENGTH;
 
         // Spiral equation
@@ -142,7 +142,7 @@ void effectSierpinskiTriangles(RenderContext& ctx) {
     int maxDepth = 5;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        uint16_t x = i;
+        uint16_t x = centerPairDistance((uint16_t)i);
         uint16_t y = sierpinskiIteration >> 4;
 
         // XOR creates Sierpinski triangle
@@ -181,7 +181,7 @@ void effectChevronWaves(RenderContext& ctx) {
     fadeToBlackBy(ctx.leds, ctx.numLeds, 40);
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs(i - CENTER_LEFT);
+        float distFromCenter = (float)centerPairDistance((uint16_t)i);
 
         // Create V-shape from center
         float chevronPhase = distFromCenter * chevronAngle + chevronPos;
@@ -212,7 +212,7 @@ void effectConcentricRings(RenderContext& ctx) {
     float ringCount = 10.0f;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs(i - CENTER_LEFT);
+        float distFromCenter = (float)centerPairDistance((uint16_t)i);
         float normalizedDist = distFromCenter / (float)HALF_LENGTH;
 
         // Bessel function-like
@@ -243,7 +243,7 @@ void effectStarBurst(RenderContext& ctx) {
     fadeToBlackBy(ctx.leds, ctx.numLeds, 20);
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs(i - CENTER_LEFT);
+        float distFromCenter = (float)centerPairDistance((uint16_t)i);
         float normalizedDist = distFromCenter / (float)HALF_LENGTH;
 
         // Star equation - radially symmetric from center
@@ -276,10 +276,10 @@ void effectMeshNetwork(RenderContext& ctx) {
     fadeToBlackBy(ctx.leds, ctx.numLeds, 50);
 
     for (int n = 0; n < nodeCount; n++) {
-        float nodePos = (float)n / nodeCount * STRIP_LENGTH;
+        float nodePos = (float)n / nodeCount * HALF_LENGTH;
 
         for (int i = 0; i < STRIP_LENGTH; i++) {
-            float distToNode = abs(i - nodePos);
+            float distToNode = fabsf((float)centerPairDistance((uint16_t)i) - nodePos);
 
             if (distToNode < 3) {
                 // Node core

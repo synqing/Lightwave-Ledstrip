@@ -70,7 +70,9 @@ namespace WebServerConfig {
     constexpr const char* AP_PASSWORD = "lightwave123";
     constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = 15000;
     constexpr uint32_t STATUS_BROADCAST_INTERVAL_MS = 5000;
-    constexpr uint8_t MAX_WS_CLIENTS = 4;
+    // Allow multiple open dashboard tabs + dev tools without immediately thrashing connections.
+    // This also bounds subscriber tables and per-frame broadcast iteration.
+    constexpr uint8_t MAX_WS_CLIENTS = 8;
     constexpr uint8_t MAX_BATCH_OPERATIONS = 10;
 }
 
@@ -79,11 +81,26 @@ namespace WebServerConfig {
 // ============================================================================
 
 namespace LedStreamConfig {
-    constexpr uint16_t TOTAL_LEDS = 320;              // Total LEDs (2 strips × 160)
-    constexpr uint16_t FRAME_SIZE = TOTAL_LEDS * 3;   // RGB bytes per frame (960 bytes)
+    // Dual-strip configuration
+    constexpr uint16_t LEDS_PER_STRIP = 160;          // LEDs per strip (top/bottom edges)
+    constexpr uint8_t NUM_STRIPS = 2;                 // Number of independent strips
+    constexpr uint16_t TOTAL_LEDS = LEDS_PER_STRIP * NUM_STRIPS;  // Total LEDs (320)
+    
+    // Frame format version 1: explicit dual-strip format
+    constexpr uint8_t FRAME_VERSION = 1;              // Frame format version
+    constexpr uint8_t MAGIC_BYTE = 0xFE;              // Frame header magic byte
+    
+    // Frame structure: [MAGIC][VERSION][NUM_STRIPS][LEDS_PER_STRIP][STRIP0_ID][RGB×160][STRIP1_ID][RGB×160]
+    constexpr uint8_t FRAME_HEADER_SIZE = 4;          // Magic + Version + NumStrips + LEDsPerStrip
+    constexpr uint16_t FRAME_SIZE_PER_STRIP = 1 + (LEDS_PER_STRIP * 3);  // StripID + RGB data (481 bytes)
+    constexpr uint16_t FRAME_PAYLOAD_SIZE = NUM_STRIPS * FRAME_SIZE_PER_STRIP;  // Both strips (962 bytes)
+    constexpr uint16_t FRAME_SIZE = FRAME_HEADER_SIZE + FRAME_PAYLOAD_SIZE;  // Total frame size (966 bytes)
+    
+    // Legacy format (v0): [MAGIC][RGB×320] = 961 bytes
+    constexpr uint16_t LEGACY_FRAME_SIZE = 1 + (TOTAL_LEDS * 3);  // 961 bytes
+    
     constexpr uint8_t TARGET_FPS = 20;                // Max streaming FPS (throttled)
     constexpr uint32_t FRAME_INTERVAL_MS = 1000 / TARGET_FPS;  // ~50ms between frames
-    constexpr uint8_t MAGIC_BYTE = 0xFE;              // Frame header magic byte
 }
 
 // ============================================================================
@@ -539,7 +556,7 @@ private:
     // LED frame streaming state
     SubscriptionManager<WebServerConfig::MAX_WS_CLIENTS> m_ledStreamSubscribers;
     uint32_t m_lastLedBroadcast;          // Last LED frame broadcast time
-    uint8_t m_ledFrameBuffer[LedStreamConfig::FRAME_SIZE + 1];  // +1 for magic byte
+    uint8_t m_ledFrameBuffer[LedStreamConfig::FRAME_SIZE];  // Dual-strip frame buffer
 #if defined(ESP32)
     mutable portMUX_TYPE m_ledStreamMux = portMUX_INITIALIZER_UNLOCKED;
 #endif

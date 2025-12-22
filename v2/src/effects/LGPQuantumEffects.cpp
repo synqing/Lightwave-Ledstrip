@@ -122,13 +122,15 @@ void effectQuantumTunneling(RenderContext& ctx) {
                         // TUNNEL THROUGH!
                         particlePos[p] += direction * barrierWidth;
 
-                        // Flash effect
+                        // Flash effect - use particle color instead of white
+                        uint8_t flashHue = ctx.hue + p * 25;
                         for (int8_t f = -5; f <= 5; f++) {
                             int16_t flashPos = particlePos[p] + f;
                             if (flashPos >= 0 && flashPos < STRIP_LENGTH) {
-                                ctx.leds[flashPos] = CRGB::White;
+                                uint8_t flashBright = 255 - abs(f) * 20;
+                                ctx.leds[flashPos] = CHSV(flashHue, 255, flashBright);
                                 if (flashPos + STRIP_LENGTH < ctx.numLeds) {
-                                    ctx.leds[flashPos + STRIP_LENGTH] = CRGB::White;
+                                    ctx.leds[flashPos + STRIP_LENGTH] = CHSV(flashHue + 128, 255, flashBright);
                                 }
                             }
                         }
@@ -222,8 +224,10 @@ void effectGravitationalLensing(RenderContext& ctx) {
                     uint8_t paletteIndex = (uint8_t)(abs(totalDeflection) * 20);
                     uint8_t brightness = 255 - step * 3;
 
+                    // Clamp brightness to avoid white saturation
                     if (abs(totalDeflection) > 0.5f) {
-                        brightness = 255;
+                        brightness = 240;  // Slightly below 255 to avoid white guardrail
+                        paletteIndex = (uint8_t)(abs(totalDeflection) * 30);  // Use deflection-based color
                     }
 
                     ctx.leds[pixelPos] += ColorFromPalette(*ctx.palette, ctx.hue + paletteIndex, brightness);
@@ -252,7 +256,7 @@ void effectTimeCrystal(RenderContext& ctx) {
     uint8_t dimensions = 3;
 
     for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs((float)i - CENTER_LEFT) / CENTER_LEFT;
+        float distFromCenter = (float)centerPairDistance((uint16_t)i) / (float)HALF_LENGTH;
 
         float crystal = 0;
 
@@ -270,9 +274,10 @@ void effectTimeCrystal(RenderContext& ctx) {
 
         uint8_t paletteIndex = (uint8_t)(crystal * 20) + (uint8_t)(distFromCenter * 20);
 
+        // Use bright color from palette instead of white (paletteIndex=0)
         if (abs(crystal) > 0.9f) {
-            brightness = 255;
-            paletteIndex = 0;
+            brightness = 240;  // Slightly below 255 to avoid white guardrail
+            paletteIndex = (uint8_t)(abs(crystal) * 50);  // Use crystal value for color
         }
 
         ctx.leds[i] = ColorFromPalette(*ctx.palette, ctx.hue + paletteIndex, brightness);
@@ -310,9 +315,12 @@ void effectSolitonWaves(RenderContext& ctx) {
 
                 int16_t collisionPos = (solitonPos[s] + solitonPos[other]) / 2;
                 if (collisionPos >= 0 && collisionPos < STRIP_LENGTH) {
-                    ctx.leds[collisionPos] = CRGB::White;
+                    // Use blended color from colliding solitons instead of white
+                    uint8_t blendHue = (solitonHue[s] + solitonHue[other]) / 2;
+                    uint8_t blendBright = qadd8(solitonAmp[s], solitonAmp[other]) / 2;
+                    ctx.leds[collisionPos] = CHSV(blendHue + ctx.hue, 255, blendBright);
                     if (collisionPos + STRIP_LENGTH < ctx.numLeds) {
-                        ctx.leds[collisionPos + STRIP_LENGTH] = CRGB::White;
+                        ctx.leds[collisionPos + STRIP_LENGTH] = CHSV(blendHue + ctx.hue + 30, 255, scale8(blendBright, 200));
                     }
                 }
             }
@@ -581,7 +589,7 @@ void effectEvanescentSkin(RenderContext& ctx) {
         float hue = ctx.hue + (i >> 1);
 
         if (rimMode) {
-            float distFromCenter = abs((float)i - CENTER_LEFT);
+            float distFromCenter = (float)centerPairDistance(i);
             float skinDistance = abs(distFromCenter - ringRadius);
             float envelope = 1.0f / (1.0f + lambda * skinDistance);
             float carrier = sin(distFromCenter * skinFreq * 0.05f + anim * TWO_PI);

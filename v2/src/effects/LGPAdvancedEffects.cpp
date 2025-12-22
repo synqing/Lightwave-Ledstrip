@@ -47,7 +47,7 @@ void effectMoireCurtains(RenderContext& ctx) {
     moirePhase += ctx.speed;
 
     for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs((int)i - CENTER_LEFT);
+        float distFromCenter = (float)centerPairDistance(i);
 
         // Left strip
         uint16_t leftPhaseVal = (uint16_t)(sin16(distFromCenter * leftFreq * 410 + moirePhase) + 32768) >> 8;
@@ -73,7 +73,7 @@ void effectRadialRipple(RenderContext& ctx) {
     radialTime += ringSpeed;
 
     for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs((float)i - CENTER_LEFT) / CENTER_LEFT;
+        float distFromCenter = (float)centerPairDistance(i) / (float)HALF_LENGTH;
 
         // Square the distance for circular appearance
         uint16_t distSquared = (uint16_t)(distFromCenter * distFromCenter * 65535);
@@ -104,8 +104,8 @@ void effectHolographicVortex(RenderContext& ctx) {
     uint8_t tightness = ctx.brightness >> 2;
 
     for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs((float)i - CENTER_LEFT);
-        float r = distFromCenter / CENTER_LEFT;
+        float distFromCenter = (float)centerPairDistance(i);
+        float r = distFromCenter / (float)HALF_LENGTH;
 
         // Symmetric azimuthal angle
         uint16_t theta = (uint16_t)(distFromCenter * 410);
@@ -137,27 +137,26 @@ void effectEvanescentDrift(RenderContext& ctx) {
     uint8_t alpha = 255 - ctx.brightness;
 
     for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
-        uint8_t distFromLeftEdge = i;
-        uint8_t distFromRightEdge = STRIP_LENGTH - 1 - i;
-        uint8_t distFromEdge = min(distFromLeftEdge, distFromRightEdge);
+        uint16_t distFromCenter = centerPairDistance(i);
+        uint8_t dist8 = (uint8_t)distFromCenter;
 
         // Exponential decay approximation
         uint8_t decay = 255;
-        for (uint8_t j = 0; j < distFromEdge && j < 8; j++) {
+        for (uint16_t j = 0; j < distFromCenter && j < 8; j++) {
             decay = scale8(decay, alpha);
         }
 
         // Wave patterns
-        uint8_t wave1 = sin8((i << 2) + (evanescentPhase1 >> 8));
-        uint8_t wave2 = sin8((i << 2) + (evanescentPhase2 >> 8));
+        uint8_t wave1 = sin8((dist8 << 2) + (evanescentPhase1 >> 8));
+        uint8_t wave2 = sin8((dist8 << 2) + (evanescentPhase2 >> 8));
 
         // Apply decay
         wave1 = scale8(wave1, decay);
         wave2 = scale8(wave2, decay);
 
-        ctx.leds[i] = ColorFromPalette(*ctx.palette, ctx.hue + i, wave1);
+        ctx.leds[i] = ColorFromPalette(*ctx.palette, ctx.hue + dist8, wave1);
         if (i + STRIP_LENGTH < ctx.numLeds) {
-            ctx.leds[i + STRIP_LENGTH] = ColorFromPalette(*ctx.palette, ctx.hue + i + 85, wave2);
+            ctx.leds[i + STRIP_LENGTH] = ColorFromPalette(*ctx.palette, ctx.hue + dist8 + 85, wave2);
         }
     }
 }
@@ -178,7 +177,7 @@ void effectChromaticShear(RenderContext& ctx) {
     uint8_t shearAmount = 128;
 
     for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
-        float distFromCenter = abs((int)i - CENTER_LEFT);
+        float distFromCenter = (float)centerPairDistance(i);
         uint8_t distPos = (distFromCenter * 255) / HALF_LENGTH;
 
         // Apply shear transformation
@@ -193,8 +192,8 @@ void effectChromaticShear(RenderContext& ctx) {
         uint8_t rightBright = ctx.brightness;
 
         // Add interference at center
-        if (abs(i - CENTER_LEFT) < 20) {
-            uint8_t centerBlend = 255 - abs(i - CENTER_LEFT) * 12;
+        if (centerPairDistance(i) < 20) {
+            uint8_t centerBlend = 255 - centerPairDistance(i) * 12;
             leftBright = scale8(leftBright, 255 - (centerBlend >> 1));
             rightBright = scale8(rightBright, 255 - (centerBlend >> 1));
         }
@@ -216,7 +215,7 @@ void effectModalCavity(RenderContext& ctx) {
     uint8_t beatMode = modeNumber + 2;
 
     for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
-        float x = (float)i / STRIP_LENGTH;
+        float x = (float)centerPairDistance(i) / (float)HALF_LENGTH;
 
         // Primary mode
         int16_t mode1 = sin16((uint16_t)(x * modeNumber * 32768));
@@ -250,7 +249,7 @@ void effectFresnelZones(RenderContext& ctx) {
 
     for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
         // Distance from center
-        int16_t dist = abs((int16_t)i - CENTER_LEFT);
+        uint16_t dist = centerPairDistance(i);
 
         // Fresnel zone calculation
         uint16_t zoneRadius = sqrt16(dist << 8) * zoneCount;
@@ -286,7 +285,7 @@ void effectPhotonicCrystal(RenderContext& ctx) {
 
     for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
         // CENTER ORIGIN: Calculate distance from center
-        uint16_t distFromCenter = abs((int16_t)i - CENTER_LEFT);
+        uint16_t distFromCenter = centerPairDistance(i);
 
         // Periodic structure
         uint8_t cellPosition = distFromCenter % latticeSize;

@@ -247,17 +247,82 @@ void WebServer::setupRoutes() {
     // Setup legacy routes for backward compatibility
     setupLegacyRoutes();
 
-    // Serve static files from LittleFS (web UI)
-    m_server->serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
+    m_server->on("/", HTTP_GET, [](AsyncWebServerRequest* request) {
+        if (LittleFS.exists("/index.html")) {
+            request->send(LittleFS, "/index.html", "text/html");
+            return;
+        }
+
+        const char* html =
+            "<!doctype html><html><head><meta charset=\"utf-8\"/>"
+            "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"/>"
+            "<title>LightwaveOS</title></head><body>"
+            "<h1>LightwaveOS Web UI not installed</h1>"
+            "<p>The device web server is running, but no UI files were found on LittleFS.</p>"
+            "<p>API is available at <a href=\"/api/v1/\">/api/v1/</a>.</p>"
+            "</body></html>";
+        request->send(200, "text/html", html);
+    });
+
+    m_server->on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest* request) {
+        if (LittleFS.exists("/favicon.ico")) {
+            request->send(LittleFS, "/favicon.ico", "image/x-icon");
+            return;
+        }
+        request->send(HttpStatus::NO_CONTENT);
+    });
+
+    // Serve the dashboard assets explicitly.
+    // We intentionally avoid serveStatic() here because its gzip probing can spam VFS errors
+    // on missing *.gz files (ESP-IDF logs these at error level).
+    m_server->on("/assets/app.js", HTTP_GET, [](AsyncWebServerRequest* request) {
+        if (LittleFS.exists("/assets/app.js")) {
+            request->send(LittleFS, "/assets/app.js", "application/javascript");
+            return;
+        }
+        request->send(HttpStatus::NOT_FOUND, "text/plain", "Missing /assets/app.js");
+    });
+
+    m_server->on("/assets/styles.css", HTTP_GET, [](AsyncWebServerRequest* request) {
+        if (LittleFS.exists("/assets/styles.css")) {
+            request->send(LittleFS, "/assets/styles.css", "text/css");
+            return;
+        }
+        request->send(HttpStatus::NOT_FOUND, "text/plain", "Missing /assets/styles.css");
+    });
+
+    m_server->on("/vite.svg", HTTP_GET, [](AsyncWebServerRequest* request) {
+        if (LittleFS.exists("/vite.svg")) {
+            request->send(LittleFS, "/vite.svg", "image/svg+xml");
+            return;
+        }
+        request->send(HttpStatus::NOT_FOUND, "text/plain", "Missing /vite.svg");
+    });
 
     // Handle CORS preflight and 404
     m_server->onNotFound([](AsyncWebServerRequest* request) {
         if (request->method() == HTTP_OPTIONS) {
             request->send(HttpStatus::NO_CONTENT);
-        } else {
-            sendErrorResponse(request, HttpStatus::NOT_FOUND,
-                              ErrorCodes::NOT_FOUND, "Endpoint not found");
+            return;
         }
+
+        String url = request->url();
+        if (!url.startsWith("/api") && !url.startsWith("/ws")) {
+            if (LittleFS.exists("/index.html")) {
+                int slash = url.lastIndexOf('/');
+                int dot = url.lastIndexOf('.');
+                bool hasExtension = (dot > slash);
+                if (!hasExtension) {
+                    request->send(LittleFS, "/index.html", "text/html");
+                    return;
+                }
+            }
+            request->send(HttpStatus::NOT_FOUND, "text/plain", "Not found");
+            return;
+        }
+
+        sendErrorResponse(request, HttpStatus::NOT_FOUND,
+                          ErrorCodes::NOT_FOUND, "Endpoint not found");
     });
 }
 
@@ -637,6 +702,16 @@ void WebServer::setupV1Routes() {
         }
     );
 
+    // Set Effect - PUT /api/v1/effects/current (V2 API compatibility)
+    m_server->on("/api/v1/effects/current", HTTP_PUT,
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            handleEffectsSet(request, data, len);
+        }
+    );
+
     // Get Parameters - GET /api/v1/parameters
     m_server->on("/api/v1/parameters", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
@@ -645,6 +720,16 @@ void WebServer::setupV1Routes() {
 
     // Set Parameters - POST /api/v1/parameters
     m_server->on("/api/v1/parameters", HTTP_POST,
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            handleParametersSet(request, data, len);
+        }
+    );
+
+    // Set Parameters - PATCH /api/v1/parameters (V2 API compatibility)
+    m_server->on("/api/v1/parameters", HTTP_PATCH,
         [](AsyncWebServerRequest* request) {},
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
@@ -1039,12 +1124,19 @@ void WebServer::handleEffectsList(AsyncWebServerRequest* request) {
     uint8_t effectCount = RENDERER->getEffectCount();
 
     // Parse pagination query parameters
+    // Support both "page" (V1) and "offset" (V2) query params
     int page = 1;
     int limit = 20;
     int categoryFilter = -1;  // -1 = no filter
     bool details = false;
 
-    if (request->hasParam("page")) {
+    // V2 API uses "offset" instead of "page"
+    if (request->hasParam("offset")) {
+        int offset = request->getParam("offset")->value().toInt();
+        if (offset < 0) offset = 0;
+        // Convert offset to 1-indexed page (will recalculate after limit is known)
+        page = (offset / limit) + 1;
+    } else if (request->hasParam("page")) {
         page = request->getParam("page")->value().toInt();
         if (page < 1) page = 1;
     }
@@ -1053,6 +1145,12 @@ void WebServer::handleEffectsList(AsyncWebServerRequest* request) {
         // Clamp limit between 1 and 50
         if (limit < 1) limit = 1;
         if (limit > 50) limit = 50;
+        // Recalculate page if offset was used (since limit affects page calculation)
+        if (request->hasParam("offset") && !request->hasParam("page")) {
+            int offset = request->getParam("offset")->value().toInt();
+            if (offset < 0) offset = 0;
+            page = (offset / limit) + 1;
+        }
     }
     if (request->hasParam("category")) {
         categoryFilter = request->getParam("category")->value().toInt();
@@ -2402,6 +2500,8 @@ void WebServer::onWsEvent(AsyncWebSocket* server, AsyncWebSocketClient* client,
 }
 
 void WebServer::handleWsConnect(AsyncWebSocketClient* client) {
+    // Ensure stale client entries are purged before applying connection limits.
+    m_ws->cleanupClients();
     if (m_ws->count() > WebServerConfig::MAX_WS_CLIENTS) {
         Serial.printf("[WebSocket] Max clients reached, rejecting %u\n", client->id());
         client->close(1008, "Connection limit");
@@ -2563,12 +2663,16 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             String response = buildWsResponse("ledStream.subscribed", requestId, [clientId](JsonObject& data) {
                 data["clientId"] = clientId;
                 data["frameSize"] = LedStreamConfig::FRAME_SIZE;
+                data["frameVersion"] = LedStreamConfig::FRAME_VERSION;
+                data["numStrips"] = LedStreamConfig::NUM_STRIPS;
+                data["ledsPerStrip"] = LedStreamConfig::LEDS_PER_STRIP;
                 data["targetFps"] = LedStreamConfig::TARGET_FPS;
                 data["magicByte"] = LedStreamConfig::MAGIC_BYTE;
                 data["accepted"] = true;
             });
             client->text(response);
-            Serial.printf("[WebSocket] Client %u subscribed to LED stream (OK)\n", clientId);
+            Serial.printf("[WebSocket] Client %u subscribed to LED stream (v%d, %d bytes)\n", 
+                         clientId, LedStreamConfig::FRAME_VERSION, LedStreamConfig::FRAME_SIZE);
         } else {
             // Manually build rejection response to set success=false
             JsonDocument response;
@@ -3948,6 +4052,120 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
         client->text(response);
     }
 
+    // ========================================================================
+    // Color Correction Engine - White/Brown guardrails, gamma, auto-exposure
+    // ========================================================================
+
+    // colorCorrection.getConfig - Get full configuration
+    else if (type == "colorCorrection.getConfig") {
+        const char* requestId = doc["requestId"] | "";
+        auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
+        auto& cfg = engine.getConfig();
+
+        String response = buildWsResponse("colorCorrection.getConfig", requestId, [&cfg](JsonObject& data) {
+            data["mode"] = (uint8_t)cfg.mode;
+            data["modeNames"] = "OFF,HSV,RGB,BOTH";
+            data["hsvMinSaturation"] = cfg.hsvMinSaturation;
+            data["rgbWhiteThreshold"] = cfg.rgbWhiteThreshold;
+            data["rgbTargetMin"] = cfg.rgbTargetMin;
+            data["autoExposureEnabled"] = cfg.autoExposureEnabled;
+            data["autoExposureTarget"] = cfg.autoExposureTarget;
+            data["gammaEnabled"] = cfg.gammaEnabled;
+            data["gammaValue"] = cfg.gammaValue;
+            data["brownGuardrailEnabled"] = cfg.brownGuardrailEnabled;
+            data["maxGreenPercentOfRed"] = cfg.maxGreenPercentOfRed;
+            data["maxBluePercentOfRed"] = cfg.maxBluePercentOfRed;
+        });
+        client->text(response);
+    }
+
+    // colorCorrection.setMode - Set correction mode
+    else if (type == "colorCorrection.setMode") {
+        const char* requestId = doc["requestId"] | "";
+
+        if (!doc.containsKey("mode")) {
+            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "mode required (0-3)", requestId));
+            return;
+        }
+
+        uint8_t mode = doc["mode"] | 2;
+        if (mode > 3) {
+            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "mode must be 0-3 (OFF,HSV,RGB,BOTH)", requestId));
+            return;
+        }
+
+        auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
+        engine.setMode((lightwaveos::enhancement::CorrectionMode)mode);
+
+        String response = buildWsResponse("colorCorrection.setMode", requestId, [mode](JsonObject& data) {
+            data["mode"] = mode;
+            const char* names[] = {"OFF", "HSV", "RGB", "BOTH"};
+            data["modeName"] = names[mode];
+        });
+        client->text(response);
+    }
+
+    // colorCorrection.setConfig - Update configuration fields
+    else if (type == "colorCorrection.setConfig") {
+        const char* requestId = doc["requestId"] | "";
+        auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
+        auto& cfg = engine.getConfig();
+
+        // Update any fields provided
+        if (doc.containsKey("mode")) {
+            uint8_t mode = doc["mode"];
+            if (mode <= 3) cfg.mode = (lightwaveos::enhancement::CorrectionMode)mode;
+        }
+        if (doc.containsKey("hsvMinSaturation")) {
+            cfg.hsvMinSaturation = doc["hsvMinSaturation"];
+        }
+        if (doc.containsKey("rgbWhiteThreshold")) {
+            cfg.rgbWhiteThreshold = doc["rgbWhiteThreshold"];
+        }
+        if (doc.containsKey("rgbTargetMin")) {
+            cfg.rgbTargetMin = doc["rgbTargetMin"];
+        }
+        if (doc.containsKey("autoExposureEnabled")) {
+            cfg.autoExposureEnabled = doc["autoExposureEnabled"];
+        }
+        if (doc.containsKey("autoExposureTarget")) {
+            cfg.autoExposureTarget = doc["autoExposureTarget"];
+        }
+        if (doc.containsKey("gammaEnabled")) {
+            cfg.gammaEnabled = doc["gammaEnabled"];
+        }
+        if (doc.containsKey("gammaValue")) {
+            float val = doc["gammaValue"];
+            if (val >= 1.0f && val <= 3.0f) cfg.gammaValue = val;
+        }
+        if (doc.containsKey("brownGuardrailEnabled")) {
+            cfg.brownGuardrailEnabled = doc["brownGuardrailEnabled"];
+        }
+        if (doc.containsKey("maxGreenPercentOfRed")) {
+            cfg.maxGreenPercentOfRed = doc["maxGreenPercentOfRed"];
+        }
+        if (doc.containsKey("maxBluePercentOfRed")) {
+            cfg.maxBluePercentOfRed = doc["maxBluePercentOfRed"];
+        }
+
+        String response = buildWsResponse("colorCorrection.setConfig", requestId, [&cfg](JsonObject& data) {
+            data["mode"] = (uint8_t)cfg.mode;
+            data["updated"] = true;
+        });
+        client->text(response);
+    }
+
+    // colorCorrection.save - Save configuration to NVS
+    else if (type == "colorCorrection.save") {
+        const char* requestId = doc["requestId"] | "";
+        lightwaveos::enhancement::ColorCorrectionEngine::getInstance().saveToNVS();
+
+        String response = buildWsResponse("colorCorrection.save", requestId, [](JsonObject& data) {
+            data["saved"] = true;
+        });
+        client->text(response);
+    }
+
     // Unknown command
     else {
         const char* requestId = doc["requestId"] | "";
@@ -4043,17 +4261,38 @@ void WebServer::broadcastLEDFrame() {
     // Get LED buffer from renderer
     if (!RENDERER) return;
 
-    // Build binary frame: [magic byte][RGB data...]
-    m_ledFrameBuffer[0] = LedStreamConfig::MAGIC_BYTE;
-
     // Copy LED data cross-core safely (do NOT read renderer buffer directly)
     CRGB leds[LedStreamConfig::TOTAL_LEDS];
     RENDERER->getBufferCopy(leds);
-    uint8_t* dst = &m_ledFrameBuffer[1];
-    for (uint16_t i = 0; i < LedStreamConfig::TOTAL_LEDS; i++) {
+
+    // Build dual-strip frame format v1:
+    // Header: [MAGIC=0xFE][VERSION=0x01][NUM_STRIPS=0x02][LEDS_PER_STRIP=160]
+    // Strip 0 (TOP edge, GPIO4): [STRIP_ID=0][RGB×160]
+    // Strip 1 (BOTTOM edge, GPIO5): [STRIP_ID=1][RGB×160]
+    
+    uint8_t* dst = m_ledFrameBuffer;
+    
+    // Header
+    *dst++ = LedStreamConfig::MAGIC_BYTE;
+    *dst++ = LedStreamConfig::FRAME_VERSION;
+    *dst++ = LedStreamConfig::NUM_STRIPS;
+    *dst++ = (uint8_t)LedStreamConfig::LEDS_PER_STRIP;  // Cast to uint8_t (160 fits)
+    
+    // Strip 0 (TOP edge, GPIO4): indices 0..159
+    *dst++ = 0;  // Strip ID
+    for (uint16_t i = 0; i < LedStreamConfig::LEDS_PER_STRIP; i++) {
         *dst++ = leds[i].r;
         *dst++ = leds[i].g;
         *dst++ = leds[i].b;
+    }
+    
+    // Strip 1 (BOTTOM edge, GPIO5): indices 160..319
+    *dst++ = 1;  // Strip ID
+    for (uint16_t i = 0; i < LedStreamConfig::LEDS_PER_STRIP; i++) {
+        uint16_t unifiedIdx = LedStreamConfig::LEDS_PER_STRIP + i;
+        *dst++ = leds[unifiedIdx].r;
+        *dst++ = leds[unifiedIdx].g;
+        *dst++ = leds[unifiedIdx].b;
     }
 
     // Send to subscribed clients only
@@ -4081,7 +4320,7 @@ void WebServer::broadcastLEDFrame() {
             toRemove[removeCount++] = clientId;
             continue;
         }
-        c->binary(m_ledFrameBuffer, LedStreamConfig::FRAME_SIZE + 1);
+        c->binary(m_ledFrameBuffer, LedStreamConfig::FRAME_SIZE);
     }
 
     if (removeCount > 0) {

@@ -27,7 +27,8 @@ using namespace lightwaveos::actors;
  * @param intensity Brightness multiplier (0.0-1.0)
  * @return CRGB color with physics-accurate dispersion
  */
-CRGB chromaticDispersion(float position, float aberration, float phase, float intensity);
+// Implementation detail (kept internal to `LGPChromaticEffects.cpp`).
+// If dispersion needs to be reused elsewhere, promote it to a shared utility module.
 
 // ==================== Chromatic Effects ====================
 

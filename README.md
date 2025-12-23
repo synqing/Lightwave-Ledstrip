@@ -205,3 +205,4 @@ Built with:
 - [FastLED](https://github.com/FastLED/FastLED) - LED control library
 - [ArduinoJson](https://arduinojson.org/) - JSON parsing
 - ESP32 Arduino Core
+    

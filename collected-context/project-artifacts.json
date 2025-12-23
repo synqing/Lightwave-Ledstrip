@@ -1,0 +1,1972 @@
+{
+  "documentation": [
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/README.md",
+      "name": "README.md",
+      "size": 8140
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/CLAUDE.md",
+      "name": "CLAUDE.md",
+      "size": 12659
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/CHANGELOG.md",
+      "name": "CHANGELOG.md",
+      "size": 4628
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/CONSTRAINTS.md",
+      "name": "CONSTRAINTS.md",
+      "size": 5111
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/CRITICAL_LED_FIX.md",
+      "name": "CRITICAL_LED_FIX.md",
+      "size": 4371
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/DEVELOPMENT_PIPELINE_AUDIT.md",
+      "name": "DEVELOPMENT_PIPELINE_AUDIT.md",
+      "size": 21689
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/PARTITION_OPTIMIZATION.md",
+      "name": "PARTITION_OPTIMIZATION.md",
+      "size": 2472
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/PERFORMANCE_REPORT.md",
+      "name": "PERFORMANCE_REPORT.md",
+      "size": 4404
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/TODO.md",
+      "name": "TODO.md",
+      "size": 3712
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/DASHBOARD_V3_INTEGRATION_PLAN.md",
+      "name": "docs/DASHBOARD_V3_INTEGRATION_PLAN.md",
+      "size": 16724
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/INDEX.md",
+      "name": "docs/INDEX.md",
+      "size": 4750
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/PRD_WEBAPP_DASHBOARD.md",
+      "name": "docs/PRD_WEBAPP_DASHBOARD.md",
+      "size": 17691
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/analysis/01_EXECUTIVE_SUMMARY_AND_RESEARCH.md",
+      "name": "docs/analysis/01_EXECUTIVE_SUMMARY_AND_RESEARCH.md",
+      "size": 8702
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/analysis/02_CODE_ALIGNMENT_ANALYSIS.md",
+      "name": "docs/analysis/02_CODE_ALIGNMENT_ANALYSIS.md",
+      "size": 16552
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/analysis/03_GAP_ANALYSIS.md",
+      "name": "docs/analysis/03_GAP_ANALYSIS.md",
+      "size": 17662
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/analysis/04_PHASED_ACTION_PLAN.md",
+      "name": "docs/analysis/04_PHASED_ACTION_PLAN.md",
+      "size": 19560
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/analysis/05_SUCCESS_METRICS_AND_REFERENCES.md",
+      "name": "docs/analysis/05_SUCCESS_METRICS_AND_REFERENCES.md",
+      "size": 13564
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/analysis/RESEARCH_ANALYSIS_REPORT.md",
+      "name": "docs/analysis/RESEARCH_ANALYSIS_REPORT.md",
+      "size": 36169
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/analysis/a1. LGP_CREATIVE_PATTERN_GUIDE.md",
+      "name": "docs/analysis/a1. LGP_CREATIVE_PATTERN_GUIDE.md",
+      "size": 28776
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/analysis/a2. LIGHTSHOW_STORYTELLING_FRAMEWORK.md",
+      "name": "docs/analysis/a2. LIGHTSHOW_STORYTELLING_FRAMEWORK.md",
+      "size": 38179
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/analysis/a3. PATTERN_IMPLEMENTATION_PLAYBOOK.md",
+      "name": "docs/analysis/a3. PATTERN_IMPLEMENTATION_PLAYBOOK.md",
+      "size": 52641
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/analysis/b1. LGP_OPTICAL_PHYSICS_REFERENCE.md",
+      "name": "docs/analysis/b1. LGP_OPTICAL_PHYSICS_REFERENCE.md",
+      "size": 19988
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/analysis/b2. LGP_PATTERN_TAXONOMY.md",
+      "name": "docs/analysis/b2. LGP_PATTERN_TAXONOMY.md",
+      "size": 25214
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/analysis/b3. LGP_STORYTELLING_FRAMEWORK.md",
+      "name": "docs/analysis/b3. LGP_STORYTELLING_FRAMEWORK.md",
+      "size": 18990
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/analysis/b4. LGP_PATTERN_DEVELOPMENT_PLAYBOOK.md",
+      "name": "docs/analysis/b4. LGP_PATTERN_DEVELOPMENT_PLAYBOOK.md",
+      "size": 22804
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/analysis/b5. LGP_CREATIVE_PATTERN_DEVELOPMENT_GUIDE.md",
+      "name": "docs/analysis/b5. LGP_CREATIVE_PATTERN_DEVELOPMENT_GUIDE.md",
+      "size": 8820
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/analysis/c1. CREATIVE_PATTERN_DEVELOPMENT_GUIDE.md",
+      "name": "docs/analysis/c1. CREATIVE_PATTERN_DEVELOPMENT_GUIDE.md",
+      "size": 8876
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/analysis/c2. STORYTELLING_FRAMEWORK.md",
+      "name": "docs/analysis/c2. STORYTELLING_FRAMEWORK.md",
+      "size": 6592
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/analysis/c3. IMPLEMENTATION_PLAYBOOK_LIGHT_PATTERNS.md",
+      "name": "docs/analysis/c3. IMPLEMENTATION_PLAYBOOK_LIGHT_PATTERNS.md",
+      "size": 4764
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/api/API.md",
+      "name": "docs/api/API.md",
+      "size": 8445
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/api/API_V1.md",
+      "name": "docs/api/API_V1.md",
+      "size": 23045
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/api/API_V2.md",
+      "name": "docs/api/API_V2.md",
+      "size": 51038
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/api/ENHANCEMENT_ENGINE_API.md",
+      "name": "docs/api/ENHANCEMENT_ENGINE_API.md",
+      "size": 17502
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/audits/capture_analysis_complete.md",
+      "name": "docs/audits/capture_analysis_complete.md",
+      "size": 5682
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/audits/capture_analysis_implementation_status.md",
+      "name": "docs/audits/capture_analysis_implementation_status.md",
+      "size": 4238
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/audits/capture_analysis_results_2025-12-23.md",
+      "name": "docs/audits/capture_analysis_results_2025-12-23.md",
+      "size": 10996
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/audits/center_distance_refactor_analysis.md",
+      "name": "docs/audits/center_distance_refactor_analysis.md",
+      "size": 2751
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/audits/color_processing_algorithm_analysis_2025-01-22.md",
+      "name": "docs/audits/color_processing_algorithm_analysis_2025-01-22.md",
+      "size": 12095
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/audits/effects_39_43_fixes_2025-12-23.md",
+      "name": "docs/audits/effects_39_43_fixes_2025-12-23.md",
+      "size": 7199
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/audits/fastled_ws2812_colour_pipeline_research.md",
+      "name": "docs/audits/fastled_ws2812_colour_pipeline_research.md",
+      "size": 17389
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/audits/lgp_physics_aware_color_processing_analysis_2025-01-22.md",
+      "name": "docs/audits/lgp_physics_aware_color_processing_analysis_2025-01-22.md",
+      "size": 12189
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/audits/next_stage_color_pipeline_plan.md",
+      "name": "docs/audits/next_stage_color_pipeline_plan.md",
+      "size": 7057
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/audits/pattern_registry_code_audit_2025-12-23.md",
+      "name": "docs/audits/pattern_registry_code_audit_2025-12-23.md",
+      "size": 12000
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/audits/testbed_implementation_summary_2025-01-22.md",
+      "name": "docs/audits/testbed_implementation_summary_2025-01-22.md",
+      "size": 7477
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/audits/v4/LightwaveOS_Dashboard_v4_AUDIT_REPORT.md",
+      "name": "docs/audits/v4/LightwaveOS_Dashboard_v4_AUDIT_REPORT.md",
+      "size": 10268
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/audits/visual_regression_audit_2025-01-22.md",
+      "name": "docs/audits/visual_regression_audit_2025-01-22.md",
+      "size": 24352
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/creative/03_FIGMA_PROMPT_GUIDE.md",
+      "name": "docs/creative/03_FIGMA_PROMPT_GUIDE.md",
+      "size": 10269
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/creative/1.0-Research/01_K1_NODE1_ARCHITECTURE.md",
+      "name": "docs/creative/1.0-Research/01_K1_NODE1_ARCHITECTURE.md",
+      "size": 13378
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/creative/1.0-Research/02_UI_REQUIREMENTS.md",
+      "name": "docs/creative/1.0-Research/02_UI_REQUIREMENTS.md",
+      "size": 11231
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/creative/1.0-Research/03_FIGMA_PROMPT_GUIDE.md",
+      "name": "docs/creative/1.0-Research/03_FIGMA_PROMPT_GUIDE.md",
+      "size": 16317
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/creative/1.0-Research/04_DESIGN_TOKENS.md",
+      "name": "docs/creative/1.0-Research/04_DESIGN_TOKENS.md",
+      "size": 11820
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/creative/1.0-Research/README.md",
+      "name": "docs/creative/1.0-Research/README.md",
+      "size": 3744
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/creative/AURA_BUILD_PROMPTS.md",
+      "name": "docs/creative/AURA_BUILD_PROMPTS.md",
+      "size": 11658
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/creative/FIGMA_MAKE_PROMPT.md",
+      "name": "docs/creative/FIGMA_MAKE_PROMPT.md",
+      "size": 7132
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/creative/figma_4-prompt_compression_e8e95b76.plan.md",
+      "name": "docs/creative/figma_4-prompt_compression_e8e95b76.plan.md",
+      "size": 8252
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/effects/DUAL_STRIP_WAVE_ENGINE_IMPLEMENTATION.md",
+      "name": "docs/effects/DUAL_STRIP_WAVE_ENGINE_IMPLEMENTATION.md",
+      "size": 50828
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/effects/EFFECTS.md",
+      "name": "docs/effects/EFFECTS.md",
+      "size": 3113
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/effects/ENHANCED_EFFECTS_GUIDE.md",
+      "name": "docs/effects/ENHANCED_EFFECTS_GUIDE.md",
+      "size": 24312
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/effects/LGP_CHROMATIC_ABERRATION_ANALYSIS.md",
+      "name": "docs/effects/LGP_CHROMATIC_ABERRATION_ANALYSIS.md",
+      "size": 12909
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/effects/LGP_Metamaterial_Cloak.md",
+      "name": "docs/effects/LGP_Metamaterial_Cloak.md",
+      "size": 7680
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/effects/LGP_PULSE_WAVE.md",
+      "name": "docs/effects/LGP_PULSE_WAVE.md",
+      "size": 5095
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/effects/LGP_QUANTUM_RESONANCE.md",
+      "name": "docs/effects/LGP_QUANTUM_RESONANCE.md",
+      "size": 5224
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/effects/LIGHT_SHOW_MECHANICS_COMPREHENSIVE.md",
+      "name": "docs/effects/LIGHT_SHOW_MECHANICS_COMPREHENSIVE.md",
+      "size": 63243
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/effects/WAVE_ENGINE_IMPLEMENTATION_SUMMARY.md",
+      "name": "docs/effects/WAVE_ENGINE_IMPLEMENTATION_SUMMARY.md",
+      "size": 3041
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/features/201. LGP-Advanced-Patterns.md",
+      "name": "docs/features/201. LGP-Advanced-Patterns.md",
+      "size": 4051
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/features/202. LGP.Interference.Discovery.md",
+      "name": "docs/features/202. LGP.Interference.Discovery.md",
+      "size": 8593
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/features/ADVANCED_FEATURES_IMPLEMENTATION_GUIDE.md",
+      "name": "docs/features/ADVANCED_FEATURES_IMPLEMENTATION_GUIDE.md",
+      "size": 46335
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/features/Community Patterns/COMMUNITY_PATTERNS_README.md",
+      "name": "docs/features/Community Patterns/COMMUNITY_PATTERNS_README.md",
+      "size": 1972
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/features/Community Patterns/JUPYTER_NOTEBOOK_LAYOUT_GUIDE.md",
+      "name": "docs/features/Community Patterns/JUPYTER_NOTEBOOK_LAYOUT_GUIDE.md",
+      "size": 8400
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/features/Community Patterns/SDK_Documentation/01_Getting_Started/QUICK_START_SCRIPT.md",
+      "name": "docs/features/Community Patterns/SDK_Documentation/01_Getting_Started/QUICK_START_SCRIPT.md",
+      "size": 315
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/features/Community Patterns/SDK_Documentation/01_Getting_Started/README.md",
+      "name": "docs/features/Community Patterns/SDK_Documentation/01_Getting_Started/README.md",
+      "size": 2738
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/features/Community Patterns/SDK_Documentation/02_Core_Concepts/02. PRISM.Core-Concepts.md",
+      "name": "docs/features/Community Patterns/SDK_Documentation/02_Core_Concepts/02. PRISM.Core-Concepts.md",
+      "size": 3035
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/features/Community Patterns/SDK_Documentation/03_Pattern_Development/006. PRISM.Pattern-Creators-Guide.md",
+      "name": "docs/features/Community Patterns/SDK_Documentation/03_Pattern_Development/006. PRISM.Pattern-Creators-Guide.md",
+      "size": 32512
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/features/Community Patterns/SDK_Documentation/03_Pattern_Development/PATTERN_TEMPLATE_SYSTEM.md",
+      "name": "docs/features/Community Patterns/SDK_Documentation/03_Pattern_Development/PATTERN_TEMPLATE_SYSTEM.md",
+      "size": 34152
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/features/Community Patterns/SDK_Documentation/03_Pattern_Development/README.md",
+      "name": "docs/features/Community Patterns/SDK_Documentation/03_Pattern_Development/README.md",
+      "size": 6103
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/features/Community Patterns/SDK_Documentation/04_Tools_and_Workflow/DEVELOPMENT_TOOLS_SPECIFICATION.md",
+      "name": "docs/features/Community Patterns/SDK_Documentation/04_Tools_and_Workflow/DEVELOPMENT_TOOLS_SPECIFICATION.md",
+      "size": 60826
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/features/Community Patterns/SDK_Documentation/04_Tools_and_Workflow/README.md",
+      "name": "docs/features/Community Patterns/SDK_Documentation/04_Tools_and_Workflow/README.md",
+      "size": 7907
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/features/Community Patterns/SDK_Documentation/05_Distribution/LIGHTSHOW_CARD_GENERATOR.md",
+      "name": "docs/features/Community Patterns/SDK_Documentation/05_Distribution/LIGHTSHOW_CARD_GENERATOR.md",
+      "size": 43404
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/features/Community Patterns/SDK_Documentation/05_Distribution/README.md",
+      "name": "docs/features/Community Patterns/SDK_Documentation/05_Distribution/README.md",
+      "size": 7487
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/features/Community Patterns/SDK_Documentation/06_Reference/007. PRISM.SDK-Architecture-Specs.md",
+      "name": "docs/features/Community Patterns/SDK_Documentation/06_Reference/007. PRISM.SDK-Architecture-Specs.md",
+      "size": 41806
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/features/Community Patterns/SDK_Documentation/06_Reference/README.md",
+      "name": "docs/features/Community Patterns/SDK_Documentation/06_Reference/README.md",
+      "size": 8657
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/features/Community Patterns/SDK_Documentation/07_Advanced_Topics/README.md",
+      "name": "docs/features/Community Patterns/SDK_Documentation/07_Advanced_Topics/README.md",
+      "size": 6883
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/features/Community Patterns/SDK_Documentation/08_Appendices/README.md",
+      "name": "docs/features/Community Patterns/SDK_Documentation/08_Appendices/README.md",
+      "size": 7694
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/features/Community Patterns/SDK_Documentation/README.md",
+      "name": "docs/features/Community Patterns/SDK_Documentation/README.md",
+      "size": 8925
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/features/FASTLED_ADVANCED_FEATURES_ANALYSIS.md",
+      "name": "docs/features/FASTLED_ADVANCED_FEATURES_ANALYSIS.md",
+      "size": 48437
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/features/FASTLED_IMPLEMENTATION_PLAN.md",
+      "name": "docs/features/FASTLED_IMPLEMENTATION_PLAN.md",
+      "size": 52228
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/features/OTA_Multi_Level_Support.md",
+      "name": "docs/features/OTA_Multi_Level_Support.md",
+      "size": 4376
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/features/WEB_INTERFACE_GUIDE.md",
+      "name": "docs/features/WEB_INTERFACE_GUIDE.md",
+      "size": 5319
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/guides/108. LED.VFS-TE-Test.md",
+      "name": "docs/guides/108. LED.VFS-TE-Test.md",
+      "size": 4092
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/guides/K1-Lightwave.md",
+      "name": "docs/guides/K1-Lightwave.md",
+      "size": 15208
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/guides/LIGHT_CRYSTALS_MIGRATION.md",
+      "name": "docs/guides/LIGHT_CRYSTALS_MIGRATION.md",
+      "size": 1682
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/hardware/LIGHT_GUIDE_PLATE.md",
+      "name": "docs/hardware/LIGHT_GUIDE_PLATE.md",
+      "size": 18730
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/hardware/USB_SETUP.md",
+      "name": "docs/hardware/USB_SETUP.md",
+      "size": 2121
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/hardware/WIFI_ANTENNA_GUIDE.md",
+      "name": "docs/hardware/WIFI_ANTENNA_GUIDE.md",
+      "size": 5896
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/implementation/AUDIO_SYNQ_IMPLEMENTATION_SUMMARY.md",
+      "name": "docs/implementation/AUDIO_SYNQ_IMPLEMENTATION_SUMMARY.md",
+      "size": 2639
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/implementation/DASHBOARD_ARCHITECTURAL_CODIFICATION.md",
+      "name": "docs/implementation/DASHBOARD_ARCHITECTURAL_CODIFICATION.md",
+      "size": 9090
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/implementation/I2C_MUTEX_FIX.md",
+      "name": "docs/implementation/I2C_MUTEX_FIX.md",
+      "size": 1036
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/implementation/README.md",
+      "name": "docs/implementation/README.md",
+      "size": 8140
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/implementation/STRUCTURAL_FIXES_IMPLEMENTED.md",
+      "name": "docs/implementation/STRUCTURAL_FIXES_IMPLEMENTED.md",
+      "size": 2487
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/implementation/WiFi_CONTROL.md",
+      "name": "docs/implementation/WiFi_CONTROL.md",
+      "size": 1816
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/optimization/FASTLED_OPTIMIZATIONS_IMPLEMENTED.md",
+      "name": "docs/optimization/FASTLED_OPTIMIZATIONS_IMPLEMENTED.md",
+      "size": 1
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/optimization/HEAP_TRACE_ANALYSIS.md",
+      "name": "docs/optimization/HEAP_TRACE_ANALYSIS.md",
+      "size": 11622
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/optimization/OPTIMIZATION_SUMMARY.md",
+      "name": "docs/optimization/OPTIMIZATION_SUMMARY.md",
+      "size": 2173
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/optimization/STABILITY_ANALYSIS_AND_FIXES.md",
+      "name": "docs/optimization/STABILITY_ANALYSIS_AND_FIXES.md",
+      "size": 23328
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/planning/PROJECT_EVOLUTION_TIMELINE.md",
+      "name": "docs/planning/PROJECT_EVOLUTION_TIMELINE.md",
+      "size": 29440
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/planning/phase3_operating_plan.md",
+      "name": "docs/planning/phase3_operating_plan.md",
+      "size": 5043
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/security/ARCHITECTURE_SECURITY_REVIEW.md",
+      "name": "docs/security/ARCHITECTURE_SECURITY_REVIEW.md",
+      "size": 37272
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/security/SECURITY_FINDINGS_SUMMARY.md",
+      "name": "docs/security/SECURITY_FINDINGS_SUMMARY.md",
+      "size": 7959
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/shows/README.md",
+      "name": "docs/shows/README.md",
+      "size": 24283
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/LED_Simulator_Design.md",
+      "name": "docs/templates/LED_Simulator_Design.md",
+      "size": 2382
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/LightwaveOS Dashboard Design/README.md",
+      "name": "docs/templates/LightwaveOS Dashboard Design/README.md",
+      "size": 335
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/LightwaveOS Dashboard Design/src/Attributions.md",
+      "name": "docs/templates/LightwaveOS Dashboard Design/src/Attributions.md",
+      "size": 289
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/Pattern_Story_Template.md",
+      "name": "docs/templates/Pattern_Story_Template.md",
+      "size": 414
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/README.md",
+      "name": "docs/templates/dashboard/README.md",
+      "size": 2555
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@babel/code-frame/README.md",
+      "name": "docs/templates/dashboard/node_modules/@babel/code-frame/README.md",
+      "size": 334
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@babel/compat-data/README.md",
+      "name": "docs/templates/dashboard/node_modules/@babel/compat-data/README.md",
+      "size": 307
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@babel/core/README.md",
+      "name": "docs/templates/dashboard/node_modules/@babel/core/README.md",
+      "size": 401
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@babel/generator/README.md",
+      "name": "docs/templates/dashboard/node_modules/@babel/generator/README.md",
+      "size": 434
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@babel/helper-compilation-targets/README.md",
+      "name": "docs/templates/dashboard/node_modules/@babel/helper-compilation-targets/README.md",
+      "size": 376
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@babel/helper-globals/README.md",
+      "name": "docs/templates/dashboard/node_modules/@babel/helper-globals/README.md",
+      "size": 330
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@babel/helper-module-imports/README.md",
+      "name": "docs/templates/dashboard/node_modules/@babel/helper-module-imports/README.md",
+      "size": 355
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@babel/helper-module-transforms/README.md",
+      "name": "docs/templates/dashboard/node_modules/@babel/helper-module-transforms/README.md",
+      "size": 387
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@babel/helper-plugin-utils/README.md",
+      "name": "docs/templates/dashboard/node_modules/@babel/helper-plugin-utils/README.md",
+      "size": 332
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@babel/helper-string-parser/README.md",
+      "name": "docs/templates/dashboard/node_modules/@babel/helper-string-parser/README.md",
+      "size": 335
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@babel/helper-validator-identifier/README.md",
+      "name": "docs/templates/dashboard/node_modules/@babel/helper-validator-identifier/README.md",
+      "size": 369
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@babel/helper-validator-option/README.md",
+      "name": "docs/templates/dashboard/node_modules/@babel/helper-validator-option/README.md",
+      "size": 346
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@babel/helpers/README.md",
+      "name": "docs/templates/dashboard/node_modules/@babel/helpers/README.md",
+      "size": 302
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@babel/parser/CHANGELOG.md",
+      "name": "docs/templates/dashboard/node_modules/@babel/parser/CHANGELOG.md",
+      "size": 38238
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@babel/parser/README.md",
+      "name": "docs/templates/dashboard/node_modules/@babel/parser/README.md",
+      "size": 412
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@babel/plugin-transform-react-jsx-self/README.md",
+      "name": "docs/templates/dashboard/node_modules/@babel/plugin-transform-react-jsx-self/README.md",
+      "size": 403
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@babel/plugin-transform-react-jsx-source/README.md",
+      "name": "docs/templates/dashboard/node_modules/@babel/plugin-transform-react-jsx-source/README.md",
+      "size": 415
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@babel/template/README.md",
+      "name": "docs/templates/dashboard/node_modules/@babel/template/README.md",
+      "size": 444
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@babel/traverse/README.md",
+      "name": "docs/templates/dashboard/node_modules/@babel/traverse/README.md",
+      "size": 525
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@babel/types/README.md",
+      "name": "docs/templates/dashboard/node_modules/@babel/types/README.md",
+      "size": 446
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@eslint/config-array/README.md",
+      "name": "docs/templates/dashboard/node_modules/@eslint/config-array/README.md",
+      "size": 17362
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@eslint/config-helpers/README.md",
+      "name": "docs/templates/dashboard/node_modules/@eslint/config-helpers/README.md",
+      "size": 5160
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@eslint/core/README.md",
+      "name": "docs/templates/dashboard/node_modules/@eslint/core/README.md",
+      "size": 3831
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@eslint/eslintrc/README.md",
+      "name": "docs/templates/dashboard/node_modules/@eslint/eslintrc/README.md",
+      "size": 7395
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@eslint/js/README.md",
+      "name": "docs/templates/dashboard/node_modules/@eslint/js/README.md",
+      "size": 2577
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@eslint/object-schema/README.md",
+      "name": "docs/templates/dashboard/node_modules/@eslint/object-schema/README.md",
+      "size": 8345
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@eslint/plugin-kit/README.md",
+      "name": "docs/templates/dashboard/node_modules/@eslint/plugin-kit/README.md",
+      "size": 12317
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@eslint-community/eslint-utils/README.md",
+      "name": "docs/templates/dashboard/node_modules/@eslint-community/eslint-utils/README.md",
+      "size": 1684
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@eslint-community/regexpp/README.md",
+      "name": "docs/templates/dashboard/node_modules/@eslint-community/regexpp/README.md",
+      "size": 5663
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@humanfs/core/README.md",
+      "name": "docs/templates/dashboard/node_modules/@humanfs/core/README.md",
+      "size": 3336
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@humanfs/node/README.md",
+      "name": "docs/templates/dashboard/node_modules/@humanfs/node/README.md",
+      "size": 3148
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@humanwhocodes/module-importer/CHANGELOG.md",
+      "name": "docs/templates/dashboard/node_modules/@humanwhocodes/module-importer/CHANGELOG.md",
+      "size": 530
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@humanwhocodes/module-importer/README.md",
+      "name": "docs/templates/dashboard/node_modules/@humanwhocodes/module-importer/README.md",
+      "size": 2092
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@humanwhocodes/retry/README.md",
+      "name": "docs/templates/dashboard/node_modules/@humanwhocodes/retry/README.md",
+      "size": 4267
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@jridgewell/gen-mapping/README.md",
+      "name": "docs/templates/dashboard/node_modules/@jridgewell/gen-mapping/README.md",
+      "size": 7506
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@jridgewell/remapping/README.md",
+      "name": "docs/templates/dashboard/node_modules/@jridgewell/remapping/README.md",
+      "size": 7304
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@jridgewell/resolve-uri/README.md",
+      "name": "docs/templates/dashboard/node_modules/@jridgewell/resolve-uri/README.md",
+      "size": 2826
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@jridgewell/sourcemap-codec/README.md",
+      "name": "docs/templates/dashboard/node_modules/@jridgewell/sourcemap-codec/README.md",
+      "size": 10051
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@jridgewell/trace-mapping/README.md",
+      "name": "docs/templates/dashboard/node_modules/@jridgewell/trace-mapping/README.md",
+      "size": 14417
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@oxc-project/runtime/CHANGELOG.md",
+      "name": "docs/templates/dashboard/node_modules/@oxc-project/runtime/CHANGELOG.md",
+      "size": 1337
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@oxc-project/runtime/README.md",
+      "name": "docs/templates/dashboard/node_modules/@oxc-project/runtime/README.md",
+      "size": 122
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@oxc-project/types/README.md",
+      "name": "docs/templates/dashboard/node_modules/@oxc-project/types/README.md",
+      "size": 55
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@rolldown/binding-darwin-arm64/README.md",
+      "name": "docs/templates/dashboard/node_modules/@rolldown/binding-darwin-arm64/README.md",
+      "size": 104
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@rolldown/pluginutils/README.md",
+      "name": "docs/templates/dashboard/node_modules/@rolldown/pluginutils/README.md",
+      "size": 2286
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@types/babel__core/README.md",
+      "name": "docs/templates/dashboard/node_modules/@types/babel__core/README.md",
+      "size": 1045
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@types/babel__generator/README.md",
+      "name": "docs/templates/dashboard/node_modules/@types/babel__generator/README.md",
+      "size": 708
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@types/babel__template/README.md",
+      "name": "docs/templates/dashboard/node_modules/@types/babel__template/README.md",
+      "size": 783
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@types/babel__traverse/README.md",
+      "name": "docs/templates/dashboard/node_modules/@types/babel__traverse/README.md",
+      "size": 893
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@types/estree/README.md",
+      "name": "docs/templates/dashboard/node_modules/@types/estree/README.md",
+      "size": 458
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@types/json-schema/README.md",
+      "name": "docs/templates/dashboard/node_modules/@types/json-schema/README.md",
+      "size": 622
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@types/node/README.md",
+      "name": "docs/templates/dashboard/node_modules/@types/node/README.md",
+      "size": 1586
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@types/react/README.md",
+      "name": "docs/templates/dashboard/node_modules/@types/react/README.md",
+      "size": 1750
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@types/react-dom/README.md",
+      "name": "docs/templates/dashboard/node_modules/@types/react-dom/README.md",
+      "size": 807
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@typescript-eslint/eslint-plugin/README.md",
+      "name": "docs/templates/dashboard/node_modules/@typescript-eslint/eslint-plugin/README.md",
+      "size": 754
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@typescript-eslint/parser/README.md",
+      "name": "docs/templates/dashboard/node_modules/@typescript-eslint/parser/README.md",
+      "size": 859
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@typescript-eslint/project-service/README.md",
+      "name": "docs/templates/dashboard/node_modules/@typescript-eslint/project-service/README.md",
+      "size": 764
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@typescript-eslint/scope-manager/README.md",
+      "name": "docs/templates/dashboard/node_modules/@typescript-eslint/scope-manager/README.md",
+      "size": 696
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@typescript-eslint/tsconfig-utils/README.md",
+      "name": "docs/templates/dashboard/node_modules/@typescript-eslint/tsconfig-utils/README.md",
+      "size": 832
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@typescript-eslint/type-utils/README.md",
+      "name": "docs/templates/dashboard/node_modules/@typescript-eslint/type-utils/README.md",
+      "size": 769
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@typescript-eslint/types/README.md",
+      "name": "docs/templates/dashboard/node_modules/@typescript-eslint/types/README.md",
+      "size": 432
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@typescript-eslint/typescript-estree/README.md",
+      "name": "docs/templates/dashboard/node_modules/@typescript-eslint/typescript-estree/README.md",
+      "size": 789
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@typescript-eslint/utils/README.md",
+      "name": "docs/templates/dashboard/node_modules/@typescript-eslint/utils/README.md",
+      "size": 700
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@typescript-eslint/visitor-keys/README.md",
+      "name": "docs/templates/dashboard/node_modules/@typescript-eslint/visitor-keys/README.md",
+      "size": 366
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/@vitejs/plugin-react/README.md",
+      "name": "docs/templates/dashboard/node_modules/@vitejs/plugin-react/README.md",
+      "size": 4892
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/acorn/CHANGELOG.md",
+      "name": "docs/templates/dashboard/node_modules/acorn/CHANGELOG.md",
+      "size": 23249
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/acorn/README.md",
+      "name": "docs/templates/dashboard/node_modules/acorn/README.md",
+      "size": 10799
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/acorn-jsx/README.md",
+      "name": "docs/templates/dashboard/node_modules/acorn-jsx/README.md",
+      "size": 1929
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/ajv/README.md",
+      "name": "docs/templates/dashboard/node_modules/ajv/README.md",
+      "size": 85598
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/ansi-styles/readme.md",
+      "name": "docs/templates/dashboard/node_modules/ansi-styles/readme.md",
+      "size": 4327
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/argparse/CHANGELOG.md",
+      "name": "docs/templates/dashboard/node_modules/argparse/CHANGELOG.md",
+      "size": 5966
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/argparse/README.md",
+      "name": "docs/templates/dashboard/node_modules/argparse/README.md",
+      "size": 2768
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/balanced-match/LICENSE.md",
+      "name": "docs/templates/dashboard/node_modules/balanced-match/LICENSE.md",
+      "size": 1096
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/balanced-match/README.md",
+      "name": "docs/templates/dashboard/node_modules/balanced-match/README.md",
+      "size": 3502
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/baseline-browser-mapping/README.md",
+      "name": "docs/templates/dashboard/node_modules/baseline-browser-mapping/README.md",
+      "size": 21428
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/brace-expansion/README.md",
+      "name": "docs/templates/dashboard/node_modules/brace-expansion/README.md",
+      "size": 4058
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/browserslist/README.md",
+      "name": "docs/templates/dashboard/node_modules/browserslist/README.md",
+      "size": 2761
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/callsites/readme.md",
+      "name": "docs/templates/dashboard/node_modules/callsites/readme.md",
+      "size": 1887
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/caniuse-lite/README.md",
+      "name": "docs/templates/dashboard/node_modules/caniuse-lite/README.md",
+      "size": 164
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/chalk/readme.md",
+      "name": "docs/templates/dashboard/node_modules/chalk/readme.md",
+      "size": 13365
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/color-convert/CHANGELOG.md",
+      "name": "docs/templates/dashboard/node_modules/color-convert/CHANGELOG.md",
+      "size": 1417
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/color-convert/README.md",
+      "name": "docs/templates/dashboard/node_modules/color-convert/README.md",
+      "size": 2853
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/color-name/README.md",
+      "name": "docs/templates/dashboard/node_modules/color-name/README.md",
+      "size": 384
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/convert-source-map/README.md",
+      "name": "docs/templates/dashboard/node_modules/convert-source-map/README.md",
+      "size": 7421
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/cross-spawn/README.md",
+      "name": "docs/templates/dashboard/node_modules/cross-spawn/README.md",
+      "size": 4117
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/csstype/README.md",
+      "name": "docs/templates/dashboard/node_modules/csstype/README.md",
+      "size": 10887
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/debug/README.md",
+      "name": "docs/templates/dashboard/node_modules/debug/README.md",
+      "size": 22115
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/detect-libc/README.md",
+      "name": "docs/templates/dashboard/node_modules/detect-libc/README.md",
+      "size": 3215
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/electron-to-chromium/README.md",
+      "name": "docs/templates/dashboard/node_modules/electron-to-chromium/README.md",
+      "size": 6460
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/escalade/readme.md",
+      "name": "docs/templates/dashboard/node_modules/escalade/readme.md",
+      "size": 6993
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/escape-string-regexp/readme.md",
+      "name": "docs/templates/dashboard/node_modules/escape-string-regexp/readme.md",
+      "size": 1059
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/eslint/README.md",
+      "name": "docs/templates/dashboard/node_modules/eslint/README.md",
+      "size": 20147
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/eslint-plugin-react-hooks/README.md",
+      "name": "docs/templates/dashboard/node_modules/eslint-plugin-react-hooks/README.md",
+      "size": 4286
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/eslint-plugin-react-refresh/README.md",
+      "name": "docs/templates/dashboard/node_modules/eslint-plugin-react-refresh/README.md",
+      "size": 5761
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/eslint-scope/README.md",
+      "name": "docs/templates/dashboard/node_modules/eslint-scope/README.md",
+      "size": 11614
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/eslint-visitor-keys/README.md",
+      "name": "docs/templates/dashboard/node_modules/eslint-visitor-keys/README.md",
+      "size": 6760
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/espree/README.md",
+      "name": "docs/templates/dashboard/node_modules/espree/README.md",
+      "size": 14256
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/esquery/README.md",
+      "name": "docs/templates/dashboard/node_modules/esquery/README.md",
+      "size": 2187
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/esrecurse/README.md",
+      "name": "docs/templates/dashboard/node_modules/esrecurse/README.md",
+      "size": 5102
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/estraverse/README.md",
+      "name": "docs/templates/dashboard/node_modules/estraverse/README.md",
+      "size": 4865
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/esutils/README.md",
+      "name": "docs/templates/dashboard/node_modules/esutils/README.md",
+      "size": 6828
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/fast-deep-equal/README.md",
+      "name": "docs/templates/dashboard/node_modules/fast-deep-equal/README.md",
+      "size": 3323
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/fast-json-stable-stringify/README.md",
+      "name": "docs/templates/dashboard/node_modules/fast-json-stable-stringify/README.md",
+      "size": 3517
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/fast-levenshtein/LICENSE.md",
+      "name": "docs/templates/dashboard/node_modules/fast-levenshtein/LICENSE.md",
+      "size": 1100
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/fast-levenshtein/README.md",
+      "name": "docs/templates/dashboard/node_modules/fast-levenshtein/README.md",
+      "size": 3414
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/fdir/README.md",
+      "name": "docs/templates/dashboard/node_modules/fdir/README.md",
+      "size": 3851
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/file-entry-cache/README.md",
+      "name": "docs/templates/dashboard/node_modules/file-entry-cache/README.md",
+      "size": 5495
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/find-up/readme.md",
+      "name": "docs/templates/dashboard/node_modules/find-up/readme.md",
+      "size": 4025
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/flat-cache/README.md",
+      "name": "docs/templates/dashboard/node_modules/flat-cache/README.md",
+      "size": 3066
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/flat-cache/changelog.md",
+      "name": "docs/templates/dashboard/node_modules/flat-cache/changelog.md",
+      "size": 16026
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/flatted/README.md",
+      "name": "docs/templates/dashboard/node_modules/flatted/README.md",
+      "size": 4608
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/gensync/README.md",
+      "name": "docs/templates/dashboard/node_modules/gensync/README.md",
+      "size": 5350
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/glob-parent/README.md",
+      "name": "docs/templates/dashboard/node_modules/glob-parent/README.md",
+      "size": 4198
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/globals/readme.md",
+      "name": "docs/templates/dashboard/node_modules/globals/readme.md",
+      "size": 1623
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/has-flag/readme.md",
+      "name": "docs/templates/dashboard/node_modules/has-flag/readme.md",
+      "size": 1600
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/hermes-estree/README.md",
+      "name": "docs/templates/dashboard/node_modules/hermes-estree/README.md",
+      "size": 83
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/hermes-parser/README.md",
+      "name": "docs/templates/dashboard/node_modules/hermes-parser/README.md",
+      "size": 1803
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/ignore/README.md",
+      "name": "docs/templates/dashboard/node_modules/ignore/README.md",
+      "size": 11798
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/import-fresh/readme.md",
+      "name": "docs/templates/dashboard/node_modules/import-fresh/readme.md",
+      "size": 1145
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/imurmurhash/README.md",
+      "name": "docs/templates/dashboard/node_modules/imurmurhash/README.md",
+      "size": 4763
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/is-extglob/README.md",
+      "name": "docs/templates/dashboard/node_modules/is-extglob/README.md",
+      "size": 3469
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/is-glob/README.md",
+      "name": "docs/templates/dashboard/node_modules/is-glob/README.md",
+      "size": 7145
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/isexe/README.md",
+      "name": "docs/templates/dashboard/node_modules/isexe/README.md",
+      "size": 1395
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/js-tokens/CHANGELOG.md",
+      "name": "docs/templates/dashboard/node_modules/js-tokens/CHANGELOG.md",
+      "size": 4481
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/js-tokens/README.md",
+      "name": "docs/templates/dashboard/node_modules/js-tokens/README.md",
+      "size": 7388
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/js-yaml/README.md",
+      "name": "docs/templates/dashboard/node_modules/js-yaml/README.md",
+      "size": 8501
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/jsesc/README.md",
+      "name": "docs/templates/dashboard/node_modules/jsesc/README.md",
+      "size": 14215
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/json-buffer/README.md",
+      "name": "docs/templates/dashboard/node_modules/json-buffer/README.md",
+      "size": 659
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/json-schema-traverse/README.md",
+      "name": "docs/templates/dashboard/node_modules/json-schema-traverse/README.md",
+      "size": 2694
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/json5/LICENSE.md",
+      "name": "docs/templates/dashboard/node_modules/json5/LICENSE.md",
+      "size": 1145
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/json5/README.md",
+      "name": "docs/templates/dashboard/node_modules/json5/README.md",
+      "size": 10419
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/keyv/README.md",
+      "name": "docs/templates/dashboard/node_modules/keyv/README.md",
+      "size": 15631
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/levn/README.md",
+      "name": "docs/templates/dashboard/node_modules/levn/README.md",
+      "size": 10468
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/lightningcss/README.md",
+      "name": "docs/templates/dashboard/node_modules/lightningcss/README.md",
+      "size": 6058
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/lightningcss-darwin-arm64/README.md",
+      "name": "docs/templates/dashboard/node_modules/lightningcss-darwin-arm64/README.md",
+      "size": 119
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/locate-path/readme.md",
+      "name": "docs/templates/dashboard/node_modules/locate-path/readme.md",
+      "size": 2205
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/lodash.merge/README.md",
+      "name": "docs/templates/dashboard/node_modules/lodash.merge/README.md",
+      "size": 446
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/lru-cache/README.md",
+      "name": "docs/templates/dashboard/node_modules/lru-cache/README.md",
+      "size": 5987
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/minimatch/README.md",
+      "name": "docs/templates/dashboard/node_modules/minimatch/README.md",
+      "size": 7171
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/ms/license.md",
+      "name": "docs/templates/dashboard/node_modules/ms/license.md",
+      "size": 1079
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/ms/readme.md",
+      "name": "docs/templates/dashboard/node_modules/ms/readme.md",
+      "size": 1886
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/nanoid/README.md",
+      "name": "docs/templates/dashboard/node_modules/nanoid/README.md",
+      "size": 1552
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/natural-compare/README.md",
+      "name": "docs/templates/dashboard/node_modules/natural-compare/README.md",
+      "size": 3352
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/node-releases/README.md",
+      "name": "docs/templates/dashboard/node_modules/node-releases/README.md",
+      "size": 505
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/optionator/CHANGELOG.md",
+      "name": "docs/templates/dashboard/node_modules/optionator/CHANGELOG.md",
+      "size": 1995
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/optionator/README.md",
+      "name": "docs/templates/dashboard/node_modules/optionator/README.md",
+      "size": 15047
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/p-limit/readme.md",
+      "name": "docs/templates/dashboard/node_modules/p-limit/readme.md",
+      "size": 2770
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/p-locate/readme.md",
+      "name": "docs/templates/dashboard/node_modules/p-locate/readme.md",
+      "size": 2557
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/parent-module/readme.md",
+      "name": "docs/templates/dashboard/node_modules/parent-module/readme.md",
+      "size": 1460
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/path-exists/readme.md",
+      "name": "docs/templates/dashboard/node_modules/path-exists/readme.md",
+      "size": 1427
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/path-key/readme.md",
+      "name": "docs/templates/dashboard/node_modules/path-key/readme.md",
+      "size": 1347
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/picocolors/README.md",
+      "name": "docs/templates/dashboard/node_modules/picocolors/README.md",
+      "size": 622
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/picomatch/README.md",
+      "name": "docs/templates/dashboard/node_modules/picomatch/README.md",
+      "size": 28608
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/postcss/README.md",
+      "name": "docs/templates/dashboard/node_modules/postcss/README.md",
+      "size": 1200
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/prelude-ls/CHANGELOG.md",
+      "name": "docs/templates/dashboard/node_modules/prelude-ls/CHANGELOG.md",
+      "size": 4123
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/prelude-ls/README.md",
+      "name": "docs/templates/dashboard/node_modules/prelude-ls/README.md",
+      "size": 613
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/punycode/README.md",
+      "name": "docs/templates/dashboard/node_modules/punycode/README.md",
+      "size": 5719
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/react/README.md",
+      "name": "docs/templates/dashboard/node_modules/react/README.md",
+      "size": 1158
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/react-dom/README.md",
+      "name": "docs/templates/dashboard/node_modules/react-dom/README.md",
+      "size": 1096
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/react-refresh/README.md",
+      "name": "docs/templates/dashboard/node_modules/react-refresh/README.md",
+      "size": 584
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/resolve-from/readme.md",
+      "name": "docs/templates/dashboard/node_modules/resolve-from/readme.md",
+      "size": 1838
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/scheduler/README.md",
+      "name": "docs/templates/dashboard/node_modules/scheduler/README.md",
+      "size": 346
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/semver/README.md",
+      "name": "docs/templates/dashboard/node_modules/semver/README.md",
+      "size": 16974
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/shebang-command/readme.md",
+      "name": "docs/templates/dashboard/node_modules/shebang-command/readme.md",
+      "size": 495
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/shebang-regex/readme.md",
+      "name": "docs/templates/dashboard/node_modules/shebang-regex/readme.md",
+      "size": 649
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/source-map-js/README.md",
+      "name": "docs/templates/dashboard/node_modules/source-map-js/README.md",
+      "size": 26040
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/strip-json-comments/readme.md",
+      "name": "docs/templates/dashboard/node_modules/strip-json-comments/readme.md",
+      "size": 1961
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/supports-color/readme.md",
+      "name": "docs/templates/dashboard/node_modules/supports-color/readme.md",
+      "size": 2294
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/tinyglobby/README.md",
+      "name": "docs/templates/dashboard/node_modules/tinyglobby/README.md",
+      "size": 932
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/ts-api-utils/LICENSE.md",
+      "name": "docs/templates/dashboard/node_modules/ts-api-utils/LICENSE.md",
+      "size": 1038
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/ts-api-utils/README.md",
+      "name": "docs/templates/dashboard/node_modules/ts-api-utils/README.md",
+      "size": 8328
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/type-check/README.md",
+      "name": "docs/templates/dashboard/node_modules/type-check/README.md",
+      "size": 10220
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/typescript/README.md",
+      "name": "docs/templates/dashboard/node_modules/typescript/README.md",
+      "size": 2842
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/typescript/SECURITY.md",
+      "name": "docs/templates/dashboard/node_modules/typescript/SECURITY.md",
+      "size": 2656
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/typescript-eslint/README.md",
+      "name": "docs/templates/dashboard/node_modules/typescript-eslint/README.md",
+      "size": 688
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/undici-types/README.md",
+      "name": "docs/templates/dashboard/node_modules/undici-types/README.md",
+      "size": 455
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/update-browserslist-db/README.md",
+      "name": "docs/templates/dashboard/node_modules/update-browserslist-db/README.md",
+      "size": 856
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/uri-js/README.md",
+      "name": "docs/templates/dashboard/node_modules/uri-js/README.md",
+      "size": 6416
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/vite/LICENSE.md",
+      "name": "docs/templates/dashboard/node_modules/vite/LICENSE.md",
+      "size": 102083
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/vite/README.md",
+      "name": "docs/templates/dashboard/node_modules/vite/README.md",
+      "size": 1152
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/which/CHANGELOG.md",
+      "name": "docs/templates/dashboard/node_modules/which/CHANGELOG.md",
+      "size": 2667
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/which/README.md",
+      "name": "docs/templates/dashboard/node_modules/which/README.md",
+      "size": 1352
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/word-wrap/README.md",
+      "name": "docs/templates/dashboard/node_modules/word-wrap/README.md",
+      "size": 6336
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/yallist/README.md",
+      "name": "docs/templates/dashboard/node_modules/yallist/README.md",
+      "size": 4717
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/yocto-queue/readme.md",
+      "name": "docs/templates/dashboard/node_modules/yocto-queue/readme.md",
+      "size": 2096
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/zod/README.md",
+      "name": "docs/templates/dashboard/node_modules/zod/README.md",
+      "size": 6281
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/zod-validation-error/README.md",
+      "name": "docs/templates/dashboard/node_modules/zod-validation-error/README.md",
+      "size": 21876
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/dashboard/node_modules/zod-validation-error/README.v3.md",
+      "name": "docs/templates/dashboard/node_modules/zod-validation-error/README.v3.md",
+      "size": 19166
+    },
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/templates/instructions.md",
+      "name": "docs/templates/instructions.md",
+      "size": 15527
+    }
+  ],
+  "architecture": [
+    {
+      "type": "documentation",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/ARCHITECTURE.md",
+      "name": "ARCHITECTURE.md",
+      "size": 6213
+    },
+    {
+      "type": "architecture",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/architecture/00_LIGHTWAVEOS_INFRASTRUCTURE_COMPREHENSIVE.md",
+      "name": "docs/architecture/00_LIGHTWAVEOS_INFRASTRUCTURE_COMPREHENSIVE.md",
+      "size": 57916
+    },
+    {
+      "type": "architecture",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/architecture/01_PRESET_MANAGEMENT_SYSTEM.md",
+      "name": "docs/architecture/01_PRESET_MANAGEMENT_SYSTEM.md",
+      "size": 26096
+    },
+    {
+      "type": "architecture",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/architecture/02_MEMORY_DEBUGGING_HEAP_TRACER.md",
+      "name": "docs/architecture/02_MEMORY_DEBUGGING_HEAP_TRACER.md",
+      "size": 29362
+    },
+    {
+      "type": "architecture",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/architecture/03_SERIAL_MENU_INTERFACE.md",
+      "name": "docs/architecture/03_SERIAL_MENU_INTERFACE.md",
+      "size": 34081
+    },
+    {
+      "type": "architecture",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/architecture/04_DUAL_I2C_ARCHITECTURE.md",
+      "name": "docs/architecture/04_DUAL_I2C_ARCHITECTURE.md",
+      "size": 28759
+    },
+    {
+      "type": "architecture",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/architecture/05_SYNC_PROPAGATION_MODES.md",
+      "name": "docs/architecture/05_SYNC_PROPAGATION_MODES.md",
+      "size": 22826
+    },
+    {
+      "type": "architecture",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/architecture/06_ERROR_HANDLING_FAULT_TOLERANCE.md",
+      "name": "docs/architecture/06_ERROR_HANDLING_FAULT_TOLERANCE.md",
+      "size": 28374
+    },
+    {
+      "type": "architecture",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/architecture/07_SECURITY_ARCHITECTURE.md",
+      "name": "docs/architecture/07_SECURITY_ARCHITECTURE.md",
+      "size": 33570
+    },
+    {
+      "type": "architecture",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/architecture/08_TESTING_DEBUGGING_STRATEGIES.md",
+      "name": "docs/architecture/08_TESTING_DEBUGGING_STRATEGIES.md",
+      "size": 33227
+    },
+    {
+      "type": "architecture",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/architecture/09_CONFIGURATION_SETTINGS_PERSISTENCE.md",
+      "name": "docs/architecture/09_CONFIGURATION_SETTINGS_PERSISTENCE.md",
+      "size": 35513
+    },
+    {
+      "type": "architecture",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/architecture/10_POWER_MANAGEMENT_THERMAL_CONTROL.md",
+      "name": "docs/architecture/10_POWER_MANAGEMENT_THERMAL_CONTROL.md",
+      "size": 37535
+    },
+    {
+      "type": "architecture",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/architecture/GENESIS_AUDIO_SYNC_INTEGRATION_PLAN.md",
+      "name": "docs/architecture/GENESIS_AUDIO_SYNC_INTEGRATION_PLAN.md",
+      "size": 8267
+    },
+    {
+      "type": "architecture",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/architecture/GENESIS_AUDIO_SYNC_INTEGRATION_PLAN_ENHANCED.md",
+      "name": "docs/architecture/GENESIS_AUDIO_SYNC_INTEGRATION_PLAN_ENHANCED.md",
+      "size": 17554
+    },
+    {
+      "type": "architecture",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/architecture/GENESIS_AUDIO_SYNC_INTEGRATION_PLAN_PRACTICAL.md",
+      "name": "docs/architecture/GENESIS_AUDIO_SYNC_INTEGRATION_PLAN_PRACTICAL.md",
+      "size": 8627
+    },
+    {
+      "type": "architecture",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/architecture/LED_DATA_STREAMING_ARCHITECTURE.md",
+      "name": "docs/architecture/LED_DATA_STREAMING_ARCHITECTURE.md",
+      "size": 4379
+    },
+    {
+      "type": "architecture",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/architecture/LIGHT_SHOW_MECHANICS_COMPREHENSIVE.md",
+      "name": "docs/architecture/LIGHT_SHOW_MECHANICS_COMPREHENSIVE.md",
+      "size": 63240
+    },
+    {
+      "type": "architecture",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/architecture/MATRIX_CODE_REMOVAL_PLAN.md",
+      "name": "docs/architecture/MATRIX_CODE_REMOVAL_PLAN.md",
+      "size": 43755
+    },
+    {
+      "type": "architecture",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/docs/architecture/PROJECT_STATUS.md",
+      "name": "docs/architecture/PROJECT_STATUS.md",
+      "size": 3911
+    }
+  ],
+  "plans": [
+    {
+      "type": "plan",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/.cursor/plans/fix_lightwaveos_dashboard_design_9b126779.plan.md",
+      "name": "fix_lightwaveos_dashboard_design_9b126779.plan.md",
+      "size": 2526
+    },
+    {
+      "type": "plan",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/.cursor/plans/history-research-crossref_0bdec6ad.plan.md",
+      "name": "history-research-crossref_0bdec6ad.plan.md",
+      "size": 1636
+    },
+    {
+      "type": "plan",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/.cursor/plans/response_type_fixes_+_remaining_tasks_7b7b522c.plan.md",
+      "name": "response_type_fixes_+_remaining_tasks_7b7b522c.plan.md",
+      "size": 6860
+    },
+    {
+      "type": "plan",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/.cursor/plans/rest_+_websocket_api_resolution_plan_16ab8fa2.plan.md",
+      "name": "rest_+_websocket_api_resolution_plan_16ab8fa2.plan.md",
+      "size": 3271
+    }
+  ],
+  "config": [
+    {
+      "type": "config",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/package.json",
+      "name": "package.json",
+      "size": 51
+    },
+    {
+      "type": "config",
+      "path": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/platformio.ini",
+      "name": "platformio.ini",
+      "size": 4163
+    }
+  ]
+}

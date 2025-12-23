@@ -26,3 +26,7 @@ dist-ssr
 # Test results
 playwright-report/
 test-results/
+
+# Build artifacts
+baseline_*
+reports/

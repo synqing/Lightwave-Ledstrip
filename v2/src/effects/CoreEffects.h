@@ -43,6 +43,13 @@ constexpr float centerPairSignedPosition(uint16_t index) {
 #define SET_STRIP2(ctx, idx, color) \
     if ((idx) >= STRIP_LENGTH && (idx) < 320) { (ctx).leds[(idx)] = (color); }
 
+// Set Strip 2 LED with safe bounds checking (defensive programming)
+// Standard pattern for setting Strip 2 LEDs with explicit bounds check
+#define SET_STRIP2_SAFE(ctx, idx, color) \
+    if ((idx) + STRIP_LENGTH < (ctx).numLeds) { \
+        (ctx).leds[(idx) + STRIP_LENGTH] = (color); \
+    }
+
 // Set symmetric LEDs from center (both strips)
 #define SET_CENTER_PAIR(ctx, dist, color) do { \
     uint16_t left1 = CENTER_LEFT - (dist); \

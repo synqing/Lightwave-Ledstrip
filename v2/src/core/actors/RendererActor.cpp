@@ -21,6 +21,9 @@
 #include "../../effects/transitions/TransitionEngine.h"
 #include "../../effects/PatternRegistry.h"
 #include "../../palettes/Palettes_Master.h"
+#include "../../plugins/api/IEffect.h"
+#include "../../plugins/api/EffectContext.h"
+#include "../../plugins/runtime/LegacyEffectAdapter.h"
 
 using namespace lightwaveos::transitions;
 using namespace lightwaveos::palettes;
@@ -88,8 +91,9 @@ RendererActor::RendererActor()
     // Initialize effect registry
     for (uint8_t i = 0; i < MAX_EFFECTS; i++) {
         m_effects[i].name = nullptr;
-        m_effects[i].fn = nullptr;
+        m_effects[i].effect = nullptr;
         m_effects[i].active = false;
+        m_legacyAdapters[i] = nullptr;
     }
 
     // Default palette - load from master palette system (index 0: Sunset Real)
@@ -129,8 +133,20 @@ bool RendererActor::registerEffect(uint8_t id, const char* name, EffectRenderFn 
         return false;
     }
 
+    // Create LegacyEffectAdapter to wrap function pointer
+    // Allocate adapter (owned by RendererActor)
+    if (m_legacyAdapters[id] != nullptr) {
+        // Already registered - clean up old adapter
+        delete m_legacyAdapters[id];
+    }
+    
+    m_legacyAdapters[id] = new plugins::runtime::LegacyEffectAdapter(name, fn);
+    if (m_legacyAdapters[id] == nullptr) {
+        return false;  // Allocation failed
+    }
+
     m_effects[id].name = name;
-    m_effects[id].fn = fn;
+    m_effects[id].effect = m_legacyAdapters[id];
     m_effects[id].active = true;
 
     // Update count
@@ -139,7 +155,38 @@ bool RendererActor::registerEffect(uint8_t id, const char* name, EffectRenderFn 
     }
 
 #ifndef NATIVE_BUILD
-    ESP_LOGD(TAG, "Registered effect %d: %s", id, name);
+    ESP_LOGD(TAG, "Registered effect %d: %s (legacy -> IEffect adapter)", id, name);
+#endif
+
+    return true;
+}
+
+bool RendererActor::registerEffect(uint8_t id, plugins::IEffect* effect)
+{
+    if (id >= MAX_EFFECTS || effect == nullptr) {
+        return false;
+    }
+
+    // Clean up any existing legacy adapter for this ID
+    if (m_legacyAdapters[id] != nullptr) {
+        delete m_legacyAdapters[id];
+        m_legacyAdapters[id] = nullptr;
+    }
+
+    // Get name from effect metadata
+    const plugins::EffectMetadata& meta = effect->getMetadata();
+    
+    m_effects[id].name = meta.name;
+    m_effects[id].effect = effect;
+    m_effects[id].active = true;
+
+    // Update count
+    if (id >= m_effectCount) {
+        m_effectCount = id + 1;
+    }
+
+#ifndef NATIVE_BUILD
+    ESP_LOGD(TAG, "Registered effect %d: %s (IEffect native)", id, meta.name);
 #endif
 
     return true;
@@ -163,10 +210,10 @@ const char* RendererActor::getPaletteName(uint8_t id) const
     return lightwaveos::palettes::getPaletteName(id);
 }
 
-EffectRenderFn RendererActor::getEffectFunction(uint8_t id) const
+plugins::IEffect* RendererActor::getEffectInstance(uint8_t id) const
 {
     if (id < MAX_EFFECTS && m_effects[id].active) {
-        return m_effects[id].fn;
+        return m_effects[id].effect;
     }
     return nullptr;
 }
@@ -511,37 +558,38 @@ void RendererActor::renderFrame()
         return;
     }
 
-    // Build render context
-    RenderContext ctx;
-    ctx.leds = m_leds;
-    ctx.numLeds = LedConfig::TOTAL_LEDS;
-    ctx.brightness = m_brightness;
-    ctx.speed = m_speed;
-    ctx.hue = m_hue;
-    ctx.intensity = m_intensity;
-    ctx.saturation = m_saturation;
-    ctx.complexity = m_complexity;
-    ctx.variation = m_variation;
-    ctx.frameCount = m_frameCount;
-    ctx.palette = &m_currentPalette;
-
     // Calculate delta time (in ms)
     uint32_t now = micros();
+    uint32_t deltaTimeMs;
     if (now >= m_lastFrameTime) {
-        ctx.deltaTimeMs = (now - m_lastFrameTime) / 1000;
+        deltaTimeMs = (now - m_lastFrameTime) / 1000;
     } else {
-        ctx.deltaTimeMs = ((UINT32_MAX - m_lastFrameTime) + now) / 1000;
+        deltaTimeMs = ((UINT32_MAX - m_lastFrameTime) + now) / 1000;
     }
 
-    // Call the effect render function
-    EffectRenderFn fn = m_effects[m_currentEffect].fn;
-    if (fn != nullptr) {
-        // Set current effect ID for legacy effect wrappers (if needed)
-        // This allows legacy effect wrappers to look up the correct function
-        // Note: Stub defined at top of file when legacy effects are disabled
-        setCurrentLegacyEffectId(m_currentEffect);
+    // IEffect-only path (all effects are IEffect instances)
+    if (m_effects[m_currentEffect].effect != nullptr) {
+        plugins::EffectContext ctx;
+        ctx.leds = m_leds;
+        ctx.ledCount = LedConfig::TOTAL_LEDS;
+        ctx.centerPoint = LedConfig::CENTER_POINT;
+        ctx.palette = plugins::PaletteRef(&m_currentPalette);
+        ctx.brightness = m_brightness;
+        ctx.speed = m_speed;
+        ctx.gHue = m_hue;
+        ctx.intensity = m_intensity;
+        ctx.saturation = m_saturation;
+        ctx.complexity = m_complexity;
+        ctx.variation = m_variation;
+        ctx.frameNumber = m_frameCount;
+        // Use frame count as proxy for total time (millis() not always available)
+        ctx.totalTimeMs = m_frameCount * 8;  // ~8ms per frame at 120 FPS
+        ctx.deltaTimeMs = deltaTimeMs;
+        ctx.zoneId = 0xFF;  // Global render
+        ctx.zoneStart = 0;
+        ctx.zoneLength = 0;
         
-        fn(ctx);
+        m_effects[m_currentEffect].effect->render(ctx);
     }
 
     // Increment hue for effects that use it
@@ -622,7 +670,53 @@ void RendererActor::handleSetEffect(uint8_t effectId)
 
     if (m_currentEffect != effectId) {
         uint8_t oldEffect = m_currentEffect;
+        
+        // Cleanup old effect
+        if (m_effects[oldEffect].effect != nullptr) {
+#ifndef NATIVE_BUILD
+            ESP_LOGI(TAG, "IEffect cleanup: %s (ID %d)", m_effects[oldEffect].name, oldEffect);
+#endif
+            m_effects[oldEffect].effect->cleanup();
+        }
+        
         m_currentEffect = effectId;
+        
+        // Initialize new effect
+        if (m_effects[effectId].effect != nullptr) {
+#ifndef NATIVE_BUILD
+            ESP_LOGI(TAG, "IEffect init: %s (ID %d)", m_effects[effectId].name, effectId);
+#endif
+            plugins::EffectContext initCtx;
+            initCtx.leds = m_leds;
+            initCtx.ledCount = LedConfig::TOTAL_LEDS;
+            initCtx.centerPoint = LedConfig::CENTER_POINT;
+            initCtx.palette = plugins::PaletteRef(&m_currentPalette);
+            initCtx.brightness = m_brightness;
+            initCtx.speed = m_speed;
+            initCtx.gHue = m_hue;
+            initCtx.intensity = m_intensity;
+            initCtx.saturation = m_saturation;
+            initCtx.complexity = m_complexity;
+            initCtx.variation = m_variation;
+            initCtx.frameNumber = m_frameCount;
+            initCtx.totalTimeMs = m_frameCount * 8;  // Approximate
+            initCtx.deltaTimeMs = 8;  // Default
+            initCtx.zoneId = 0xFF;
+            initCtx.zoneStart = 0;
+            initCtx.zoneLength = 0;
+            
+            if (!m_effects[effectId].effect->init(initCtx)) {
+                // Initialization failed - revert to previous effect
+                m_currentEffect = oldEffect;
+#ifndef NATIVE_BUILD
+                ESP_LOGW(TAG, "IEffect %d init failed, reverting to %d", effectId, oldEffect);
+#endif
+                return;
+            }
+#ifndef NATIVE_BUILD
+            ESP_LOGI(TAG, "IEffect init: SUCCESS");
+#endif
+        }
 
 #ifndef NATIVE_BUILD
         ESP_LOGI(TAG, "Effect changed: %d (%s) -> %d (%s)",

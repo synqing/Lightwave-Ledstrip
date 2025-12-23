@@ -19,6 +19,7 @@
 
 #include <stdint.h>
 #include <Arduino.h>
+#include "../plugins/api/IEffect.h"
 
 // ============================================================================
 // Pattern Family Enumeration (10 families from taxonomy)
@@ -197,6 +198,20 @@ bool isLGPSensitive(uint8_t effectId);
  */
 bool isStatefulEffect(uint8_t effectId);
 
+/**
+ * Get IEffect metadata for an effect (if available)
+ * @param effectId Effect ID to query
+ * @return Pointer to EffectMetadata, or nullptr if not available or not an IEffect
+ */
+const lightwaveos::plugins::EffectMetadata* getIEffectMetadata(uint8_t effectId);
+
+/**
+ * Check if an effect has IEffect metadata available
+ * @param effectId Effect ID to check
+ * @return true if effect is an IEffect instance with metadata
+ */
+bool hasIEffectMetadata(uint8_t effectId);
+
 } // namespace PatternRegistry
 
 // ============================================================================
@@ -207,4 +222,3 @@ extern const PatternMetadata PATTERN_METADATA[];
 extern const uint8_t PATTERN_METADATA_COUNT;
 
 #endif // PATTERN_REGISTRY_H
-

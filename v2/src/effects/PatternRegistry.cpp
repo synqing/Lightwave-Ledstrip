@@ -6,6 +6,8 @@
  */
 
 #include "PatternRegistry.h"
+#include "../core/actors/ActorSystem.h"
+#include "../core/actors/RendererActor.h"
 
 // ============================================================================
 // Pattern Metadata Definitions (PROGMEM)
@@ -246,6 +248,30 @@ bool isStatefulEffect(uint8_t effectId) {
     // Stateful effects read from ctx.leds in previous frame
     // Currently: Confetti (3) and Ripple (8)
     return (effectId == 3 || effectId == 8);
+}
+
+const lightwaveos::plugins::EffectMetadata* getIEffectMetadata(uint8_t effectId) {
+    if (effectId >= EXPECTED_EFFECT_COUNT) {
+        return nullptr;
+    }
+    
+    // Access RendererActor via ActorSystem
+    using namespace lightwaveos::actors;
+    RendererActor* renderer = ActorSystem::instance().getRenderer();
+    if (!renderer) {
+        return nullptr;
+    }
+    
+    lightwaveos::plugins::IEffect* effect = renderer->getEffectInstance(effectId);
+    if (!effect) {
+        return nullptr;
+    }
+    
+    return &effect->getMetadata();
+}
+
+bool hasIEffectMetadata(uint8_t effectId) {
+    return getIEffectMetadata(effectId) != nullptr;
 }
 
 } // namespace PatternRegistry

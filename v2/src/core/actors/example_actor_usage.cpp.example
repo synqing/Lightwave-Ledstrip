@@ -217,9 +217,8 @@ void effectCenterFire(RenderContext& ctx)
 // Effect Registration
 // ============================================================================
 
-void registerBuiltinEffects()
+void registerBuiltinEffects(RendererActor* renderer)
 {
-    RendererActor* renderer = ACTOR_SYSTEM.getRenderer();
     if (renderer == nullptr) return;
 
     renderer->registerEffect(0, "Solid", effectSolid);
@@ -303,18 +302,19 @@ void exampleActorSetup()
     // Initialize the Actor system
     Serial.println(F("Initializing Actor System..."));
 
-    if (!ACTOR_SYSTEM.init()) {
+    ActorSystem& actors = ActorSystem::instance();
+    if (!actors.init()) {
         Serial.println(F("ERROR: Failed to initialize Actor System!"));
         return;
     }
 
     // Register effects BEFORE starting
-    registerBuiltinEffects();
+    registerBuiltinEffects(actors.getRenderer());
 
     // Start all actors
     Serial.println(F("Starting Actors..."));
 
-    if (!ACTOR_SYSTEM.start()) {
+    if (!actors.start()) {
         Serial.println(F("ERROR: Failed to start Actor System!"));
         return;
     }
@@ -329,7 +329,7 @@ void exampleActorSetup()
     Serial.println();
 
     // Set initial effect
-    ACTOR_SYSTEM.setEffect(1);  // Center Pulse
+    actors.setEffect(1);  // Center Pulse
 }
 
 // ============================================================================
@@ -338,6 +338,8 @@ void exampleActorSetup()
 
 void exampleActorLoop()
 {
+    ActorSystem& actors = ActorSystem::instance();
+
     // Handle serial commands
     if (Serial.available()) {
         String cmd = Serial.readStringUntil('\n');
@@ -350,7 +352,7 @@ void exampleActorLoop()
         switch (c) {
             case 'e': {
                 int effectId = cmd.substring(1).toInt();
-                if (ACTOR_SYSTEM.setEffect(effectId)) {
+                if (actors.setEffect(effectId)) {
                     Serial.printf("Effect set to %d\n", effectId);
                 }
                 break;
@@ -358,7 +360,7 @@ void exampleActorLoop()
 
             case 'b': {
                 int brightness = cmd.substring(1).toInt();
-                if (ACTOR_SYSTEM.setBrightness(brightness)) {
+                if (actors.setBrightness(brightness)) {
                     Serial.printf("Brightness set to %d\n", brightness);
                 }
                 break;
@@ -366,7 +368,7 @@ void exampleActorLoop()
 
             case 's': {
                 int speed = cmd.substring(1).toInt();
-                if (ACTOR_SYSTEM.setSpeed(speed)) {
+                if (actors.setSpeed(speed)) {
                     Serial.printf("Speed set to %d\n", speed);
                 }
                 break;
@@ -374,14 +376,14 @@ void exampleActorLoop()
 
             case 'p': {
                 int palette = cmd.substring(1).toInt();
-                if (ACTOR_SYSTEM.setPalette(palette)) {
+                if (actors.setPalette(palette)) {
                     Serial.printf("Palette set to %d\n", palette);
                 }
                 break;
             }
 
             case '?':
-                ACTOR_SYSTEM.printStatus();
+                actors.printStatus();
                 break;
 
             case 'h':

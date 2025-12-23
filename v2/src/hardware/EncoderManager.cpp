@@ -563,9 +563,6 @@ void EncoderManager::performI2CBusRecovery(uint8_t sda, uint8_t scl) {
     delay(50);
 }
 
-} // namespace hardware
-} // namespace lightwaveos
-
 // ============================================================================
 // Event Handler Helper (for main.cpp integration)
 // ============================================================================
@@ -579,20 +576,22 @@ void EncoderManager::performI2CBusRecovery(uint8_t sda, uint8_t scl) {
  *
  * Example usage in main.cpp:
  *
- *   #if FEATURE_ROTATE8_ENCODER
+ *   // In main loop:
  *   EncoderEvent event;
  *   while (xQueueReceive(encoderManager.getEventQueue(), &event, 0) == pdTRUE) {
- *       handleEncoderEvent(event);
+ *       handleEncoderEvent(event, actors, renderer);
  *   }
  *   #endif
  *
  * @param event The encoder event to process
+ * @param actors Reference to ActorSystem
+ * @param renderer Pointer to RendererActor
  */
-void handleEncoderEvent(const lightwaveos::hardware::EncoderEvent& event) {
+void handleEncoderEvent(const EncoderEvent& event, 
+                       lightwaveos::actors::ActorSystem& actors,
+                       lightwaveos::actors::RendererActor* renderer) {
     using namespace lightwaveos::actors;
 
-    // Get current state for relative adjustments
-    auto* renderer = ACTOR_SYSTEM.getRenderer();
     if (!renderer) return;
 
     switch (event.encoder_id) {
@@ -605,7 +604,7 @@ void handleEncoderEvent(const lightwaveos::hardware::EncoderEvent& event) {
             int16_t newEffect = (int16_t)current + event.delta;
             if (newEffect < 0) newEffect = effectCount - 1;
             if (newEffect >= effectCount) newEffect = 0;
-            ACTOR_SYSTEM.setEffect((uint8_t)newEffect);
+            actors.setEffect((uint8_t)newEffect);
             break;
         }
 
@@ -614,7 +613,7 @@ void handleEncoderEvent(const lightwaveos::hardware::EncoderEvent& event) {
             uint8_t current = renderer->getBrightness();
             int16_t newVal = (int16_t)current + (event.delta * 8);
             newVal = constrain(newVal, 0, 255);
-            ACTOR_SYSTEM.setBrightness((uint8_t)newVal);
+            actors.setBrightness((uint8_t)newVal);
             break;
         }
 
@@ -626,7 +625,7 @@ void handleEncoderEvent(const lightwaveos::hardware::EncoderEvent& event) {
             int16_t newPalette = (int16_t)current + event.delta;
             if (newPalette < 0) newPalette = paletteCount - 1;
             if (newPalette >= paletteCount) newPalette = 0;
-            ACTOR_SYSTEM.setPalette((uint8_t)newPalette);
+            actors.setPalette((uint8_t)newPalette);
             break;
         }
 
@@ -635,7 +634,7 @@ void handleEncoderEvent(const lightwaveos::hardware::EncoderEvent& event) {
             uint8_t current = renderer->getSpeed();
             int16_t newVal = (int16_t)current + event.delta;
             newVal = constrain(newVal, 1, 50);
-            ACTOR_SYSTEM.setSpeed((uint8_t)newVal);
+            actors.setSpeed((uint8_t)newVal);
             break;
         }
 
@@ -648,5 +647,8 @@ void handleEncoderEvent(const lightwaveos::hardware::EncoderEvent& event) {
             break;
     }
 }
+
+} // namespace hardware
+} // namespace lightwaveos
 
 #endif // FEATURE_ROTATE8_ENCODER

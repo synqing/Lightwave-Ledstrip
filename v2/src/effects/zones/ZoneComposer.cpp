@@ -7,6 +7,8 @@
 
 #include "ZoneComposer.h"
 #include <Arduino.h>
+#include "../../plugins/api/IEffect.h"
+#include "../../plugins/api/EffectContext.h"
 
 namespace lightwaveos {
 namespace zones {
@@ -178,29 +180,38 @@ void ZoneComposer::renderZone(uint8_t zoneId, CRGB* leds, uint16_t numLeds,
     // Clear temp buffer
     memset(m_tempBuffer, 0, sizeof(m_tempBuffer));
 
-    // Get the effect function
-    EffectRenderFn effectFunc = m_renderer->getEffectFunction(zone.effectId);
-    if (!effectFunc) {
+    // Get the IEffect instance
+    plugins::IEffect* effect = m_renderer->getEffectInstance(zone.effectId);
+    if (!effect) {
         return;
     }
 
-    // Create RenderContext for this zone's effect
+    // Create EffectContext for this zone's effect
     // Use zone-specific speed and potentially zone-specific palette
     CRGBPalette16 zonePalette = *palette;  // Copy global palette
     // TODO: Support zone-specific palettes
 
-    RenderContext ctx;
+    plugins::EffectContext ctx;
     ctx.leds = m_tempBuffer;
-    ctx.numLeds = numLeds;
+    ctx.ledCount = numLeds;
+    ctx.centerPoint = 79;  // Center point for LGP
+    ctx.palette = plugins::PaletteRef(&zonePalette);
     ctx.brightness = zone.brightness;
     ctx.speed = zone.speed;
-    ctx.hue = hue;
-    ctx.frameCount = frameCount;
+    ctx.gHue = hue;
+    ctx.intensity = 128;  // Default values
+    ctx.saturation = 255;
+    ctx.complexity = 128;
+    ctx.variation = 0;
+    ctx.frameNumber = frameCount;
+    ctx.totalTimeMs = frameCount * 8;  // ~8ms per frame at 120 FPS
     ctx.deltaTimeMs = 8;  // ~120 FPS
-    ctx.palette = &zonePalette;
+    ctx.zoneId = zoneId;  // Zone ID for zone-aware effects
+    ctx.zoneStart = 0;
+    ctx.zoneLength = numLeds;
 
     // Render effect to temp buffer
-    effectFunc(ctx);
+    effect->render(ctx);
 
     // Extract zone segment and apply brightness
     // Then composite into output buffer

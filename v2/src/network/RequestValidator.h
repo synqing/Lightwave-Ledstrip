@@ -716,7 +716,7 @@ namespace RequestSchemas {
  *
  * Usage:
  * @code
- * StaticJsonDocument<256> doc;
+ * JsonDocument doc;
  * VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::SetEffect, request);
  * // Request is valid, doc contains parsed JSON
  * @endcode
@@ -738,7 +738,7 @@ namespace RequestSchemas {
  *
  * Usage:
  * @code
- * StaticJsonDocument<128> doc;
+ * JsonDocument doc;
  * VALIDATE_LEGACY_OR_RETURN(data, len, doc, RequestSchemas::LegacySetEffect, request);
  * // Request is valid, doc contains parsed JSON
  * @endcode

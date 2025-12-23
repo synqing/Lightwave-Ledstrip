@@ -222,19 +222,5 @@ private:
     uint32_t m_startTime;
 };
 
-// ============================================================================
-// Global Access Macro
-// ============================================================================
-
-/**
- * @brief Quick access to the ActorSystem singleton
- */
-#define ACTOR_SYSTEM (::lightwaveos::actors::ActorSystem::instance())
-
-/**
- * @brief Quick access to the RendererActor
- */
-#define RENDERER (::lightwaveos::actors::ActorSystem::instance().getRenderer())
-
 } // namespace actors
 } // namespace lightwaveos

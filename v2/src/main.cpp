@@ -15,6 +15,7 @@
 #include <Arduino.h>
 #include "config/features.h"
 #include "core/actors/ActorSystem.h"
+#include "hardware/EncoderManager.h"
 #include "core/actors/RendererActor.h"
 #include "core/persistence/NVSManager.h"
 #include "core/persistence/ZoneConfigManager.h"
@@ -25,12 +26,16 @@
 #include "core/narrative/NarrativeEngine.h"
 #include "core/actors/ShowDirectorActor.h"
 #include "core/shows/BuiltinShows.h"
+#include "plugins/api/IEffect.h"
 
 #if FEATURE_WEB_SERVER
 #include "network/WiFiManager.h"
 #include "network/WebServer.h"
 using namespace lightwaveos::network;
 using namespace lightwaveos::config;
+
+// Global WebServer instance pointer
+WebServer* webServerInstance = nullptr;
 #endif
 
 using namespace lightwaveos::persistence;
@@ -40,14 +45,19 @@ using namespace lightwaveos::effects;
 using namespace lightwaveos::zones;
 using namespace lightwaveos::transitions;
 using namespace lightwaveos::narrative;
+using namespace lightwaveos::plugins;
 
 // ==================== Global Zone Composer ====================
 
 ZoneComposer zoneComposer;
 ZoneConfigManager* zoneConfigMgr = nullptr;
 
-// Effect count is now dynamic via RENDERER->getEffectCount()
-// Effect names retrieved via RENDERER->getEffectName(id)
+// Global Actor System Access
+ActorSystem& actors = ActorSystem::instance();
+RendererActor* renderer = nullptr;
+
+// Effect count is now dynamic via renderer->getEffectCount()
+// Effect names retrieved via renderer->getEffectName(id)
 
 // Current show index for serial navigation
 static uint8_t currentShowIndex = 0;
@@ -65,15 +75,16 @@ void setup() {
 
     // Initialize Actor System (creates RendererActor)
     Serial.println("Initializing Actor System...");
-    if (!ACTOR_SYSTEM.init()) {
+    if (!actors.init()) {
         Serial.println("ERROR: Actor System init failed!");
         while(1) delay(1000);  // Halt
     }
+    renderer = actors.getRenderer();
     Serial.println("  Actor System: INITIALIZED\n");
 
     // Register ALL effects (core + LGP) BEFORE starting actors
     Serial.println("Registering effects...");
-    uint8_t effectCount = registerAllEffects(RENDERER);
+    uint8_t effectCount = registerAllEffects(renderer);
     Serial.printf("  Effects registered: %d\n\n", effectCount);
 
     // Initialize NVS (must be before Zone Composer to load saved config)
@@ -86,11 +97,11 @@ void setup() {
 
     // Initialize Zone Composer
     Serial.println("Initializing Zone Composer...");
-    if (!zoneComposer.init(RENDERER)) {
+    if (!zoneComposer.init(renderer)) {
         Serial.println("ERROR: Zone Composer init failed!");
     } else {
         // Attach zone composer to renderer
-        RENDERER->setZoneComposer(&zoneComposer);
+        renderer->setZoneComposer(&zoneComposer);
 
         // Create config manager
         zoneConfigMgr = new ZoneConfigManager(&zoneComposer);
@@ -109,7 +120,7 @@ void setup() {
 
     // Start all actors (RendererActor runs on Core 1 at 120 FPS)
     Serial.println("Starting Actor System...");
-    if (!ACTOR_SYSTEM.start()) {
+    if (!actors.start()) {
         Serial.println("ERROR: Actor System start failed!");
         while(1) delay(1000);  // Halt
     }
@@ -119,18 +130,18 @@ void setup() {
     Serial.println("Loading system state...");
     uint8_t savedEffect, savedBrightness, savedSpeed, savedPalette;
     if (zoneConfigMgr && zoneConfigMgr->loadSystemState(savedEffect, savedBrightness, savedSpeed, savedPalette)) {
-        ACTOR_SYSTEM.setEffect(savedEffect);
-        ACTOR_SYSTEM.setBrightness(savedBrightness);
-        ACTOR_SYSTEM.setSpeed(savedSpeed);
-        ACTOR_SYSTEM.setPalette(savedPalette);
+        actors.setEffect(savedEffect);
+        actors.setBrightness(savedBrightness);
+        actors.setSpeed(savedSpeed);
+        actors.setPalette(savedPalette);
         Serial.printf("  Restored: Effect=%d, Brightness=%d, Speed=%d, Palette=%d\n",
                       savedEffect, savedBrightness, savedSpeed, savedPalette);
     } else {
         // First boot defaults
-        ACTOR_SYSTEM.setEffect(0);       // Fire
-        ACTOR_SYSTEM.setBrightness(128); // 50% brightness
-        ACTOR_SYSTEM.setSpeed(15);       // Medium speed
-        ACTOR_SYSTEM.setPalette(0);      // Party colors
+        actors.setEffect(0);       // Fire
+        actors.setBrightness(128); // 50% brightness
+        actors.setSpeed(15);       // Medium speed
+        actors.setPalette(0);      // Party colors
         Serial.println("  Using defaults (first boot)");
     }
     Serial.println();
@@ -173,7 +184,11 @@ void setup() {
 
     // Start WebServer
     Serial.println("Starting Web Server...");
-    if (!webServer.begin()) {
+    
+    // Instantiate WebServer with dependencies
+    webServerInstance = new WebServer(actors, renderer);
+    
+    if (!webServerInstance->begin()) {
         Serial.println("WARNING: Web Server failed to start!");
     } else {
         Serial.println("  Web Server: RUNNING");
@@ -244,6 +259,15 @@ void loop() {
     static uint8_t currentEffect = 0;
     uint32_t now = millis();
 
+#if FEATURE_ROTATE8_ENCODER
+    // Handle encoder events
+    using namespace lightwaveos::hardware;
+    EncoderEvent event;
+    while (xQueueReceive(encoderManager.getEventQueue(), &event, 0) == pdTRUE) {
+        handleEncoderEvent(event, actors, renderer);
+    }
+#endif
+
     // Handle serial commands
     if (Serial.available()) {
         bool handledMulti = false;
@@ -271,7 +295,7 @@ void loop() {
                 subcmd.trim();
 
                 if (subcmd == "off") {
-                    RENDERER->setCaptureMode(false, 0);
+                    renderer->setCaptureMode(false, 0);
                     Serial.println("Capture mode disabled");
                 }
                 else if (subcmd.startsWith("on")) {
@@ -282,7 +306,7 @@ void loop() {
                         if (subcmd.indexOf('b') >= 0) tapMask |= 0x02;
                         if (subcmd.indexOf('c') >= 0) tapMask |= 0x04;
                     }
-                    RENDERER->setCaptureMode(true, tapMask);
+                    renderer->setCaptureMode(true, tapMask);
                     Serial.printf("Capture mode enabled (tapMask=0x%02X: %s%s%s)\n",
                                   tapMask,
                                   (tapMask & 0x01) ? "A" : "",
@@ -302,13 +326,13 @@ void loop() {
                         CRGB frame[320];
                         // If we have no captured frame yet (common right after enabling capture or switching effects),
                         // force a one-shot capture at the requested tap and retry.
-                        if (!RENDERER->getCapturedFrame(tap, frame)) {
-                            RENDERER->forceOneShotCapture(tap);
+                        if (!renderer->getCapturedFrame(tap, frame)) {
+                            renderer->forceOneShotCapture(tap);
                             delay(10);  // allow capture to complete
                         }
 
-                        if (RENDERER->getCapturedFrame(tap, frame)) {
-                            auto metadata = RENDERER->getCaptureMetadata();
+                        if (renderer->getCapturedFrame(tap, frame)) {
+                            auto metadata = renderer->getCaptureMetadata();
 
                             Serial.write(0xFD);  // Magic
                             Serial.write(0x01);  // Version
@@ -342,9 +366,9 @@ void loop() {
                     }
                 }
                 else if (subcmd == "status") {
-                    auto metadata = RENDERER->getCaptureMetadata();
+                    auto metadata = renderer->getCaptureMetadata();
                     Serial.println("\n=== Capture Status ===");
-                    Serial.printf("  Enabled: %s\n", RENDERER->isCaptureModeEnabled() ? "YES" : "NO");
+                    Serial.printf("  Enabled: %s\n", renderer->isCaptureModeEnabled() ? "YES" : "NO");
                     Serial.printf("  Last capture: effect=%d, palette=%d, frame=%lu\n",
                                   metadata.effectId, metadata.paletteId, metadata.frameIndex);
                     Serial.println();
@@ -407,13 +431,13 @@ void loop() {
                 handledMulti = true;
 
                 int effectId = input.substring(7).toInt();
-                uint8_t effectCount = RENDERER->getEffectCount();
+                uint8_t effectCount = renderer->getEffectCount();
                 if (effectId < 0 || effectId >= effectCount) {
                     Serial.printf("ERROR: Invalid effect ID. Valid range: 0-%d\n", effectCount - 1);
                 } else {
                     currentEffect = (uint8_t)effectId;
-                    ACTOR_SYSTEM.setEffect((uint8_t)effectId);
-                    Serial.printf("Effect %d: %s\n", effectId, RENDERER->getEffectName(effectId));
+                    actors.setEffect((uint8_t)effectId);
+                    Serial.printf("Effect %d: %s\n", effectId, renderer->getEffectName(effectId));
                 }
             }
         }
@@ -544,14 +568,14 @@ void loop() {
 
                 // Parse effect ID
                 int effectId = input.substring(9).toInt();
-                uint8_t effectCount = RENDERER->getEffectCount();
+                uint8_t effectCount = renderer->getEffectCount();
 
                 if (effectId < 0 || effectId >= effectCount) {
                     Serial.printf("ERROR: Invalid effect ID. Valid range: 0-%d\n", effectCount - 1);
                 } else {
                     // Save current effect
-                    uint8_t savedEffect = RENDERER->getCurrentEffect();
-                    const char* effectName = RENDERER->getEffectName(effectId);
+                    uint8_t savedEffect = renderer->getCurrentEffect();
+                    const char* effectName = renderer->getEffectName(effectId);
 
                     // Memory baseline
                     uint32_t heapBefore = ESP.getFreeHeap();
@@ -559,7 +583,7 @@ void loop() {
                     Serial.printf("\n=== Validating Effect: %s (ID %d) ===\n", effectName, effectId);
 
                     // Switch to effect temporarily
-                    ACTOR_SYSTEM.setEffect(effectId);
+                    actors.setEffect(effectId);
                     delay(100);  // Allow effect to initialize
 
                     // Validation checks
@@ -594,7 +618,7 @@ void loop() {
                         delay(8);  // ~120 FPS pacing
 
                         // Snapshot the LED buffer
-                        RENDERER->getBufferCopy(ledBuffer);
+                        renderer->getBufferCopy(ledBuffer);
 
                         // Only sample brightness/hue for first second to limit compute cost
                         if (millis() - validationStart < 1000 && samplesCollected < 120) {
@@ -651,7 +675,7 @@ void loop() {
                     }
 
                     // Frame rate check (after 2s run)
-                    const RenderStats& finalStats = RENDERER->getStats();
+                    const RenderStats& finalStats = renderer->getStats();
                     frameRatePass = (finalStats.currentFPS >= 120);
 
                     // Centre-origin validation
@@ -709,7 +733,7 @@ void loop() {
                                   passCount, totalChecks);
 
                     // Restore original effect
-                    ACTOR_SYSTEM.setEffect(savedEffect);
+                    actors.setEffect(savedEffect);
                     delay(50);
 
                     Serial.println("========================================\n");
@@ -731,7 +755,7 @@ void loop() {
                 String subcmd = inputLower.substring(8);
                 
                 if (subcmd == "off") {
-                    RENDERER->setCaptureMode(false, 0);
+                    renderer->setCaptureMode(false, 0);
                     Serial.println("Capture mode disabled");
                 }
                 else if (subcmd.startsWith("on")) {
@@ -743,7 +767,7 @@ void loop() {
                         if (subcmd.indexOf('b') >= 0) tapMask |= 0x02;  // Tap B
                         if (subcmd.indexOf('c') >= 0) tapMask |= 0x04;  // Tap C
                     }
-                    RENDERER->setCaptureMode(true, tapMask);
+                    renderer->setCaptureMode(true, tapMask);
                     Serial.printf("Capture mode enabled (tapMask=0x%02X: %s%s%s)\n",
                                  tapMask,
                                  (tapMask & 0x01) ? "A" : "",
@@ -769,8 +793,8 @@ void loop() {
                     
                     if (valid) {
                         CRGB frame[320];
-                        if (RENDERER->getCapturedFrame(tap, frame)) {
-                            auto metadata = RENDERER->getCaptureMetadata();
+                        if (renderer->getCapturedFrame(tap, frame)) {
+                            auto metadata = renderer->getCaptureMetadata();
                             
                             // Binary frame format:
                             // Header: [MAGIC=0xFD][VERSION=0x01][TAP_ID][EFFECT_ID][PALETTE_ID][BRIGHTNESS][SPEED][FRAME_INDEX(4)][TIMESTAMP(4)][FRAME_LEN(2)]
@@ -808,9 +832,9 @@ void loop() {
                 }
                 else if (subcmd == "status") {
                     handledMulti = true;
-                    auto metadata = RENDERER->getCaptureMetadata();
+                    auto metadata = renderer->getCaptureMetadata();
                     Serial.println("\n=== Capture Status ===");
-                    Serial.printf("  Enabled: %s\n", RENDERER->isCaptureModeEnabled() ? "YES" : "NO");
+                    Serial.printf("  Enabled: %s\n", renderer->isCaptureModeEnabled() ? "YES" : "NO");
                     Serial.printf("  Last capture: effect=%d, palette=%d, frame=%lu\n",
                                  metadata.effectId, metadata.paletteId, metadata.frameIndex);
                     Serial.println();
@@ -839,10 +863,10 @@ void loop() {
             // Numeric and alpha effect selection (single mode)
             else if (!inZoneMode && cmd >= '0' && cmd <= '9') {
                 uint8_t e = cmd - '0';
-                if (e < RENDERER->getEffectCount()) {
+                if (e < renderer->getEffectCount()) {
                     currentEffect = e;
-                    ACTOR_SYSTEM.setEffect(e);
-                    Serial.printf("Effect %d: %s\n", e, RENDERER->getEffectName(e));
+                    actors.setEffect(e);
+                    Serial.printf("Effect %d: %s\n", e, renderer->getEffectName(e));
                 }
             } else {
                 // Check if this is an effect selection key (a-k = effects 10-20, excludes command letters)
@@ -851,10 +875,10 @@ void loop() {
                 if (!inZoneMode && cmd >= 'a' && cmd <= 'k' &&
                     cmd != 'n' && cmd != 'l' && cmd != 'p' && cmd != 's' && cmd != 't' && cmd != 'z') {
                     uint8_t e = 10 + (cmd - 'a');
-                    if (e < RENDERER->getEffectCount()) {
+                    if (e < renderer->getEffectCount()) {
                         currentEffect = e;
-                        ACTOR_SYSTEM.setEffect(e);
-                        Serial.printf("Effect %d: %s\n", e, RENDERER->getEffectName(e));
+                        actors.setEffect(e);
+                        Serial.printf("Effect %d: %s\n", e, renderer->getEffectName(e));
                         isEffectKey = true;
                     }
                 }
@@ -882,10 +906,10 @@ void loop() {
                         Serial.println("Saving settings to NVS...");
                         bool zoneOk = zoneConfigMgr->saveToNVS();
                         bool sysOk = zoneConfigMgr->saveSystemState(
-                            RENDERER->getCurrentEffect(),
-                            RENDERER->getBrightness(),
-                            RENDERER->getSpeed(),
-                            RENDERER->getPaletteIndex()
+                            renderer->getCurrentEffect(),
+                            renderer->getBrightness(),
+                            renderer->getSpeed(),
+                            renderer->getPaletteIndex()
                         );
                         if (zoneOk && sysOk) {
                             Serial.println("  All settings saved!");
@@ -902,29 +926,29 @@ void loop() {
                 case ' ':  // Spacebar - quick next effect (no Enter needed)
                 case 'n':
                     if (!inZoneMode) {
-                        uint8_t effectCount = RENDERER->getEffectCount();
+                        uint8_t effectCount = renderer->getEffectCount();
                         currentEffect = (currentEffect + 1) % effectCount;
-                        ACTOR_SYSTEM.setEffect(currentEffect);
-                        Serial.printf("Effect %d: %s\n", currentEffect, RENDERER->getEffectName(currentEffect));
+                        actors.setEffect(currentEffect);
+                        Serial.printf("Effect %d: %s\n", currentEffect, renderer->getEffectName(currentEffect));
                     }
                     break;
 
                 case 'N':
                     if (!inZoneMode) {
-                        uint8_t effectCount = RENDERER->getEffectCount();
+                        uint8_t effectCount = renderer->getEffectCount();
                         currentEffect = (currentEffect + effectCount - 1) % effectCount;
-                        ACTOR_SYSTEM.setEffect(currentEffect);
-                        Serial.printf("Effect %d: %s\n", currentEffect, RENDERER->getEffectName(currentEffect));
+                        actors.setEffect(currentEffect);
+                        Serial.printf("Effect %d: %s\n", currentEffect, renderer->getEffectName(currentEffect));
                     }
                     break;
 
                 case '+':
                 case '=':
                     {
-                        uint8_t b = RENDERER->getBrightness();
+                        uint8_t b = renderer->getBrightness();
                         if (b < 160) {
                             b = min((int)b + 16, 160);
-                            ACTOR_SYSTEM.setBrightness(b);
+                            actors.setBrightness(b);
                             Serial.printf("Brightness: %d\n", b);
                         }
                     }
@@ -932,10 +956,10 @@ void loop() {
 
                 case '-':
                     {
-                        uint8_t b = RENDERER->getBrightness();
+                        uint8_t b = renderer->getBrightness();
                         if (b > 16) {
                             b = max((int)b - 16, 16);
-                            ACTOR_SYSTEM.setBrightness(b);
+                            actors.setBrightness(b);
                             Serial.printf("Brightness: %d\n", b);
                         }
                     }
@@ -943,10 +967,10 @@ void loop() {
 
                 case '[':
                     {
-                        uint8_t s = RENDERER->getSpeed();
+                        uint8_t s = renderer->getSpeed();
                         if (s > 1) {
                             s = max((int)s - 5, 1);
-                            ACTOR_SYSTEM.setSpeed(s);
+                            actors.setSpeed(s);
                             Serial.printf("Speed: %d\n", s);
                         }
                     }
@@ -954,10 +978,10 @@ void loop() {
 
                 case ']':
                     {
-                        uint8_t s = RENDERER->getSpeed();
+                        uint8_t s = renderer->getSpeed();
                         if (s < 50) {
                             s = min((int)s + 5, 50);
-                            ACTOR_SYSTEM.setSpeed(s);
+                            actors.setSpeed(s);
                             Serial.printf("Speed: %d\n", s);
                         }
                     }
@@ -966,30 +990,31 @@ void loop() {
                 case '.':  // Next palette (quick key)
                 case 'p':
                     {
-                        uint8_t paletteCount = RENDERER->getPaletteCount();
-                        uint8_t p = (RENDERER->getPaletteIndex() + 1) % paletteCount;
-                        ACTOR_SYSTEM.setPalette(p);
-                        Serial.printf("Palette %d/%d: %s\n", p, paletteCount, RENDERER->getPaletteName(p));
+                        uint8_t paletteCount = renderer->getPaletteCount();
+                        uint8_t p = (renderer->getPaletteIndex() + 1) % paletteCount;
+                        actors.setPalette(p);
+                        Serial.printf("Palette %d/%d: %s\n", p, paletteCount, renderer->getPaletteName(p));
                     }
                     break;
 
                 case ',':  // Previous palette
                     {
-                        uint8_t paletteCount = RENDERER->getPaletteCount();
-                        uint8_t current = RENDERER->getPaletteIndex();
+                        uint8_t paletteCount = renderer->getPaletteCount();
+                        uint8_t current = renderer->getPaletteIndex();
                         uint8_t p = (current + paletteCount - 1) % paletteCount;
-                        ACTOR_SYSTEM.setPalette(p);
-                        Serial.printf("Palette %d/%d: %s\n", p, paletteCount, RENDERER->getPaletteName(p));
+                        actors.setPalette(p);
+                        Serial.printf("Palette %d/%d: %s\n", p, paletteCount, renderer->getPaletteName(p));
                     }
                     break;
 
                 case 'l':
                     {
-                        uint8_t effectCount = RENDERER->getEffectCount();
+                        uint8_t effectCount = renderer->getEffectCount();
                         Serial.printf("\n=== Effects (%d total) ===\n", effectCount);
                         for (uint8_t i = 0; i < effectCount; i++) {
                             char key = (i < 10) ? ('0' + i) : ('a' + i - 10);
-                            Serial.printf("  %2d [%c]: %s%s\n", i, key, RENDERER->getEffectName(i),
+                            const char* type = (renderer->getEffectInstance(i) != nullptr) ? " [IEffect]" : " [Legacy]";
+                            Serial.printf("  %2d [%c]: %s%s%s\n", i, key, renderer->getEffectName(i), type,
                                           (!inZoneMode && i == currentEffect) ? " <--" : "");
                         }
                         Serial.println();
@@ -999,22 +1024,22 @@ void loop() {
                 case 'P':
                     // List all palettes
                     {
-                        uint8_t paletteCount = RENDERER->getPaletteCount();
-                        uint8_t currentPalette = RENDERER->getPaletteIndex();
+                        uint8_t paletteCount = renderer->getPaletteCount();
+                        uint8_t currentPalette = renderer->getPaletteIndex();
                         Serial.printf("\n=== Palettes (%d total) ===\n", paletteCount);
                         Serial.println("--- Artistic (cpt-city) ---");
                         for (uint8_t i = 0; i <= 32; i++) {
-                            Serial.printf("  %2d: %s%s\n", i, RENDERER->getPaletteName(i),
+                            Serial.printf("  %2d: %s%s\n", i, renderer->getPaletteName(i),
                                           (i == currentPalette) ? " <--" : "");
                         }
                         Serial.println("--- Scientific (Crameri) ---");
                         for (uint8_t i = 33; i <= 56; i++) {
-                            Serial.printf("  %2d: %s%s\n", i, RENDERER->getPaletteName(i),
+                            Serial.printf("  %2d: %s%s\n", i, renderer->getPaletteName(i),
                                           (i == currentPalette) ? " <--" : "");
                         }
                         Serial.println("--- LGP-Optimized (viridis family) ---");
                         for (uint8_t i = 57; i <= 74; i++) {
-                            Serial.printf("  %2d: %s%s\n", i, RENDERER->getPaletteName(i),
+                            Serial.printf("  %2d: %s%s\n", i, renderer->getPaletteName(i),
                                           (i == currentPalette) ? " <--" : "");
                         }
                         Serial.println();
@@ -1022,34 +1047,46 @@ void loop() {
                     break;
 
                 case 's':
-                    ACTOR_SYSTEM.printStatus();
+                    actors.printStatus();
                     if (zoneComposer.isEnabled()) {
                         zoneComposer.printStatus();
                     }
-                    if (RENDERER->isTransitionActive()) {
+                    if (renderer->isTransitionActive()) {
                         Serial.println("  Transition: ACTIVE");
+                    }
+                    // Show IEffect status for current effect
+                    {
+                        uint8_t current = renderer->getCurrentEffect();
+                        IEffect* effect = renderer->getEffectInstance(current);
+                        if (effect != nullptr) {
+                            Serial.printf("  Current effect type: IEffect (native)\n");
+                            const EffectMetadata& meta = effect->getMetadata();
+                            Serial.printf("  Metadata: %s - %s\n", meta.name, meta.description);
+                        } else {
+                            Serial.printf("  Current effect type: Legacy (function pointer)\n");
+                        }
                     }
                     break;
 
                 case 't':
                     // Random transition to next effect
                     if (!inZoneMode) {
-                        uint8_t effectCount = RENDERER->getEffectCount();
+                        uint8_t effectCount = renderer->getEffectCount();
                         uint8_t nextEffect = (currentEffect + 1) % effectCount;
-                        RENDERER->startRandomTransition(nextEffect);
+                        renderer->startRandomTransition(nextEffect);
                         currentEffect = nextEffect;
-                        Serial.printf("Transition to: %s\n", RENDERER->getEffectName(currentEffect));
+                        Serial.printf("Transition to: %s\n", renderer->getEffectName(currentEffect));
                     }
                     break;
 
                 case 'T':
                     // Fade transition to next effect
                     if (!inZoneMode) {
-                        uint8_t effectCount = RENDERER->getEffectCount();
+                        uint8_t effectCount = renderer->getEffectCount();
                         uint8_t nextEffect = (currentEffect + 1) % effectCount;
-                        RENDERER->startTransition(nextEffect, 0);  // 0 = FADE
+                        renderer->startTransition(nextEffect, 0);  // 0 = FADE
                         currentEffect = nextEffect;
-                        Serial.printf("Fade to: %s\n", RENDERER->getEffectName(currentEffect));
+                        Serial.printf("Fade to: %s\n", renderer->getEffectName(currentEffect));
                     }
                     break;
 
@@ -1109,7 +1146,7 @@ void loop() {
                 case 'w':
                     // Toggle show playback
                     {
-                        ShowDirectorActor* showDir = ACTOR_SYSTEM.getShowDirector();
+                        ShowDirectorActor* showDir = actors.getShowDirector();
                         if (showDir) {
                             if (showDir->isPlaying()) {
                                 // Stop the show
@@ -1167,7 +1204,7 @@ void loop() {
                 case '{':
                     // Seek backward 30s
                     {
-                        ShowDirectorActor* showDir = ACTOR_SYSTEM.getShowDirector();
+                        ShowDirectorActor* showDir = actors.getShowDirector();
                         if (showDir && showDir->isPlaying()) {
                             uint32_t elapsed = showDir->getElapsedMs();
                             uint32_t newTime = (elapsed > 30000) ? (elapsed - 30000) : 0;
@@ -1183,7 +1220,7 @@ void loop() {
                 case '}':
                     // Seek forward 30s
                     {
-                        ShowDirectorActor* showDir = ACTOR_SYSTEM.getShowDirector();
+                        ShowDirectorActor* showDir = actors.getShowDirector();
                         if (showDir && showDir->isPlaying()) {
                             uint32_t elapsed = showDir->getElapsedMs();
                             uint32_t remaining = showDir->getRemainingMs();
@@ -1200,7 +1237,7 @@ void loop() {
                 case '#':
                     // Print show status
                     {
-                        ShowDirectorActor* showDir = ACTOR_SYSTEM.getShowDirector();
+                        ShowDirectorActor* showDir = actors.getShowDirector();
                         if (showDir) {
                             if (showDir->hasShow()) {
                                 ShowDefinition show;
@@ -1312,6 +1349,61 @@ void loop() {
                         Serial.printf("Brown guardrail: %s\n", cfg.brownGuardrailEnabled ? "ON" : "OFF");
                     }
                     break;
+
+                case 'I':
+                    // Show IEffect pilot status
+                    {
+                        Serial.println("\n=== IEffect Pilot Status ===");
+                        uint8_t effectCount = renderer->getEffectCount();
+                        uint8_t ieffectCount = 0;
+                        uint8_t legacyCount = 0;
+                        
+                        // Count all effects first
+                        for (uint8_t i = 0; i < effectCount; i++) {
+                            if (renderer->getEffectInstance(i) != nullptr) {
+                                ieffectCount++;
+                            } else {
+                                legacyCount++;
+                            }
+                        }
+                        
+                        Serial.println("\nPilot Effects (IEffect Native):");
+                        uint8_t pilotIds[] = {15, 22, 67};  // Modal Resonance, Chevron Waves, Chromatic Interference
+                        const char* pilotNames[] = {"LGP Modal Resonance", "LGP Chevron Waves", "LGP Chromatic Interference"};
+                        
+                        for (uint8_t i = 0; i < 3; i++) {
+                            uint8_t id = pilotIds[i];
+                            if (id < effectCount) {
+                                lightwaveos::plugins::IEffect* effect = renderer->getEffectInstance(id);
+                                if (effect != nullptr) {
+                                    const lightwaveos::plugins::EffectMetadata& meta = effect->getMetadata();
+                                    Serial.printf("  [✓] ID %2d: %s\n", id, pilotNames[i]);
+                                    Serial.printf("      Type: IEffect Native\n");
+                                    Serial.printf("      Metadata: %s - %s\n", meta.name, meta.description);
+                                } else {
+                                    Serial.printf("  [✗] ID %2d: %s - NOT REGISTERED AS IEffect!\n", id, pilotNames[i]);
+                                }
+                            }
+                        }
+                        
+                        Serial.println("\nAll Effects Summary:");
+                        Serial.printf("  IEffect Native: %d effects\n", ieffectCount);
+                        Serial.printf("  Legacy (function pointer): %d effects\n", legacyCount);
+                        Serial.printf("  Total: %d effects\n", effectCount);
+                        
+                        uint8_t current = renderer->getCurrentEffect();
+                        lightwaveos::plugins::IEffect* currentEffect = renderer->getEffectInstance(current);
+                        Serial.printf("\nCurrent Effect (ID %d):\n", current);
+                        Serial.printf("  Name: %s\n", renderer->getEffectName(current));
+                        Serial.printf("  Type: %s\n", currentEffect ? "IEffect Native" : "Legacy (function pointer)");
+                        if (currentEffect) {
+                            const lightwaveos::plugins::EffectMetadata& meta = currentEffect->getMetadata();
+                            Serial.printf("  Category: %d\n", (int)meta.category);
+                            Serial.printf("  Version: %d\n", meta.version);
+                        }
+                        Serial.println();
+                    }
+                    break;
             }
         }
         }
@@ -1322,7 +1414,7 @@ void loop() {
 
     // Print status every 10 seconds
     if (now - lastStatus > 10000) {
-        const RenderStats& stats = RENDERER->getStats();
+        const RenderStats& stats = renderer->getStats();
         if (zoneComposer.isEnabled()) {
             Serial.printf("[Status] FPS: %d, CPU: %d%%, Mode: ZONES (%d zones)\n",
                           stats.currentFPS,
@@ -1332,7 +1424,7 @@ void loop() {
             Serial.printf("[Status] FPS: %d, CPU: %d%%, Effect: %s\n",
                           stats.currentFPS,
                           stats.cpuPercent,
-                          RENDERER->getEffectName(currentEffect));
+                          renderer->getEffectName(currentEffect));
         }
         lastStatus = now;
     }
@@ -1340,7 +1432,9 @@ void loop() {
     // Update WebServer (if enabled)
     // Note: WiFiManager runs on its own FreeRTOS task
 #if FEATURE_WEB_SERVER
-    webServer.update();
+    if (webServerInstance) {
+        webServerInstance->update();
+    }
 #endif
 
     // Main loop is mostly idle - actors run in background

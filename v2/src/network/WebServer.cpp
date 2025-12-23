@@ -3,7 +3,7 @@
  * @brief Web Server implementation for LightwaveOS v2
  *
  * Implements REST API and WebSocket server integrated with Actor System.
- * All state changes are routed through ACTOR_SYSTEM for thread safety.
+ * All state changes are routed through m_actorSystem for thread safety.
  */
 
 #include "WebServer.h"
@@ -13,6 +13,11 @@
 #include "ApiResponse.h"
 #include "RequestValidator.h"
 #include "WiFiManager.h"
+#include "webserver/RateLimiter.h"
+#include "webserver/LedStreamBroadcaster.h"
+#include "webserver/handlers/DeviceHandlers.h"
+#include "webserver/handlers/EffectHandlers.h"
+#include "webserver/handlers/ZoneHandlers.h"
 #include "../config/network_config.h"
 #include "../core/actors/ActorSystem.h"
 #include <Update.h>
@@ -43,14 +48,14 @@ using namespace lightwaveos::palettes;
 namespace lightwaveos {
 namespace network {
 
-// Global instance
-WebServer webServer;
+// Global instance pointer (initialized in setup)
+WebServer* webServerInstance = nullptr;
 
 // ============================================================================
 // Constructor / Destructor
 // ============================================================================
 
-WebServer::WebServer()
+WebServer::WebServer(ActorSystem& actors, RendererActor* renderer)
     : m_server(nullptr)
     , m_ws(nullptr)
     , m_running(false)
@@ -59,13 +64,15 @@ WebServer::WebServer()
     , m_lastBroadcast(0)
     , m_startTime(0)
     , m_zoneComposer(nullptr)
-    , m_lastLedBroadcast(0)
+    , m_ledBroadcaster(nullptr)
+    , m_actorSystem(actors)
+    , m_renderer(renderer)
 {
-    memset(m_ledFrameBuffer, 0, sizeof(m_ledFrameBuffer));
 }
 
 WebServer::~WebServer() {
     stop();
+    delete m_ledBroadcaster;
     delete m_ws;
     delete m_server;
 }
@@ -87,6 +94,9 @@ bool WebServer::begin() {
     // Create server instances
     m_server = new AsyncWebServer(WebServerConfig::HTTP_PORT);
     m_ws = new AsyncWebSocket("/ws");
+    
+    // Create LED stream broadcaster
+    m_ledBroadcaster = new webserver::LedStreamBroadcaster(m_ws, WebServerConfig::MAX_WS_CLIENTS);
 
     // Initialize WiFi
     if (!initWiFi()) {
@@ -115,8 +125,8 @@ bool WebServer::begin() {
     m_startTime = millis();
 
     // Get zone composer reference if available
-    if (RENDERER) {
-        m_zoneComposer = RENDERER->getZoneComposer();
+    if (m_renderer) {
+        m_zoneComposer = m_renderer->getZoneComposer();
     }
 
     Serial.printf("[WebServer] Server running on port %d\n", WebServerConfig::HTTP_PORT);
@@ -415,10 +425,10 @@ void WebServer::setupLegacyRoutes() {
             }
             bool zoneOk = zoneConfigMgr->saveToNVS();
             bool sysOk = zoneConfigMgr->saveSystemState(
-                RENDERER->getCurrentEffect(),
-                RENDERER->getBrightness(),
-                RENDERER->getSpeed(),
-                RENDERER->getPaletteIndex()
+                m_renderer->getCurrentEffect(),
+                m_renderer->getBrightness(),
+                m_renderer->getSpeed(),
+                m_renderer->getPaletteIndex()
             );
             if (zoneOk && sysOk) {
                 sendSuccessResponse(request, [](JsonObject& data) {
@@ -448,10 +458,10 @@ void WebServer::setupLegacyRoutes() {
             uint8_t effectId, brightness, speed, paletteId;
             bool sysOk = zoneConfigMgr->loadSystemState(effectId, brightness, speed, paletteId);
             if (sysOk) {
-                ACTOR_SYSTEM.setEffect(effectId);
-                ACTOR_SYSTEM.setBrightness(brightness);
-                ACTOR_SYSTEM.setSpeed(speed);
-                ACTOR_SYSTEM.setPalette(paletteId);
+                m_actorSystem.setEffect(effectId);
+                m_actorSystem.setBrightness(brightness);
+                m_actorSystem.setSpeed(speed);
+                m_actorSystem.setPalette(paletteId);
             }
             sendSuccessResponse(request, [zoneOk, sysOk](JsonObject& data) {
                 data["message"] = zoneOk || sysOk ? "Configuration loaded" : "No saved configuration";
@@ -467,7 +477,7 @@ void WebServer::setupLegacyRoutes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
-            StaticJsonDocument<128> doc;
+            JsonDocument doc;
             VALIDATE_LEGACY_OR_RETURN(data, len, doc, RequestSchemas::LegacyZonePreset, request);
 
             // Schema validates preset is 0-4
@@ -644,13 +654,13 @@ void WebServer::setupV1Routes() {
     // Device Status - GET /api/v1/device/status
     m_server->on("/api/v1/device/status", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
-        handleDeviceStatus(request);
+        webserver::handlers::DeviceHandlers::handleStatus(request, m_actorSystem, m_renderer, m_startTime, m_apMode, m_ws->count());
     });
 
     // Device Info - GET /api/v1/device/info
     m_server->on("/api/v1/device/info", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
-        handleDeviceInfo(request);
+        webserver::handlers::DeviceHandlers::handleInfo(request, m_actorSystem, m_renderer);
     });
 
 #if FEATURE_MULTI_DEVICE
@@ -671,25 +681,25 @@ void WebServer::setupV1Routes() {
     // Effect Metadata - GET /api/v1/effects/metadata?id=N
     m_server->on("/api/v1/effects/metadata", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
-        handleEffectsMetadata(request);
+        webserver::handlers::EffectHandlers::handleMetadata(request, m_renderer);
     });
 
     // Effect Families - GET /api/v1/effects/families
     m_server->on("/api/v1/effects/families", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
-        handleEffectsFamilies(request);
+        webserver::handlers::EffectHandlers::handleFamilies(request);
     });
 
     // Effects List - GET /api/v1/effects
     m_server->on("/api/v1/effects", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
-        handleEffectsList(request);
+        webserver::handlers::EffectHandlers::handleList(request, m_renderer);
     });
 
     // Current Effect - GET /api/v1/effects/current
     m_server->on("/api/v1/effects/current", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
-        handleEffectsCurrent(request);
+        webserver::handlers::EffectHandlers::handleCurrent(request, m_renderer);
     });
 
     // Set Effect - POST /api/v1/effects/set
@@ -698,7 +708,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
-            handleEffectsSet(request, data, len);
+            webserver::handlers::EffectHandlers::handleSet(request, data, len, m_actorSystem, m_renderer, [this](){ broadcastStatus(); });
         }
     );
 
@@ -708,7 +718,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
-            handleEffectsSet(request, data, len);
+            webserver::handlers::EffectHandlers::handleSet(request, data, len, m_actorSystem, m_renderer, [this](){ broadcastStatus(); });
         }
     );
 
@@ -841,7 +851,7 @@ void WebServer::setupV1Routes() {
     // List all zones - GET /api/v1/zones
     m_server->on("/api/v1/zones", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
-        handleZonesList(request);
+        webserver::handlers::ZoneHandlers::handleList(request, m_actorSystem, m_renderer, m_zoneComposer);
     });
 
     // Set zone layout - POST /api/v1/zones/layout
@@ -850,7 +860,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
-            handleZonesLayout(request, data, len);
+            webserver::handlers::ZoneHandlers::handleLayout(request, data, len, m_zoneComposer, [this](){ broadcastZoneState(); });
         }
     );
 
@@ -858,7 +868,7 @@ void WebServer::setupV1Routes() {
     // Using regex-style path with parameter
     m_server->on("^\\/api\\/v1\\/zones\\/([0-3])$", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
-        handleZoneGet(request);
+        webserver::handlers::ZoneHandlers::handleGet(request, m_actorSystem, m_renderer, m_zoneComposer);
     });
 
     // Set zone effect - POST /api/v1/zones/:id/effect
@@ -867,7 +877,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
-            handleZoneSetEffect(request, data, len);
+            webserver::handlers::ZoneHandlers::handleSetEffect(request, data, len, m_actorSystem, m_renderer, m_zoneComposer, [this](){ broadcastZoneState(); });
         }
     );
 
@@ -877,7 +887,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
-            handleZoneSetBrightness(request, data, len);
+            webserver::handlers::ZoneHandlers::handleSetBrightness(request, data, len, m_zoneComposer, [this](){ broadcastZoneState(); });
         }
     );
 
@@ -887,7 +897,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
-            handleZoneSetSpeed(request, data, len);
+            webserver::handlers::ZoneHandlers::handleSetSpeed(request, data, len, m_zoneComposer, [this](){ broadcastZoneState(); });
         }
     );
 
@@ -897,7 +907,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
-            handleZoneSetPalette(request, data, len);
+            webserver::handlers::ZoneHandlers::handleSetPalette(request, data, len, m_zoneComposer, [this](){ broadcastZoneState(); });
         }
     );
 
@@ -907,7 +917,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
-            handleZoneSetBlend(request, data, len);
+            webserver::handlers::ZoneHandlers::handleSetBlend(request, data, len, m_zoneComposer, [this](){ broadcastZoneState(); });
         }
     );
 
@@ -917,7 +927,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
-            handleZoneSetEnabled(request, data, len);
+            webserver::handlers::ZoneHandlers::handleSetEnabled(request, data, len, m_zoneComposer, [this](){ broadcastZoneState(); });
         }
     );
 }
@@ -927,13 +937,13 @@ void WebServer::setupV1Routes() {
 // ============================================================================
 
 void WebServer::handleLegacyStatus(AsyncWebServerRequest* request) {
-    if (!ACTOR_SYSTEM.isRunning()) {
+    if (!m_actorSystem.isRunning()) {
         sendLegacyError(request, "System not ready", HttpStatus::SERVICE_UNAVAILABLE);
         return;
     }
 
-    StaticJsonDocument<512> doc;
-    RendererActor* renderer = RENDERER;
+    JsonDocument doc;
+    RendererActor* renderer = m_renderer;
 
     doc["effect"] = renderer->getCurrentEffect();
     doc["brightness"] = renderer->getBrightness();
@@ -942,7 +952,7 @@ void WebServer::handleLegacyStatus(AsyncWebServerRequest* request) {
     doc["freeHeap"] = ESP.getFreeHeap();
 
     // Network info
-    JsonObject network = doc.createNestedObject("network");
+    JsonObject network = doc["network"].to<JsonObject>();
     network["connected"] = WiFi.status() == WL_CONNECTED;
     network["ap_mode"] = m_apMode;
     if (WiFi.status() == WL_CONNECTED) {
@@ -958,47 +968,47 @@ void WebServer::handleLegacyStatus(AsyncWebServerRequest* request) {
 }
 
 void WebServer::handleLegacySetEffect(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    StaticJsonDocument<128> doc;
+    JsonDocument doc;
     VALIDATE_LEGACY_OR_RETURN(data, len, doc, RequestSchemas::LegacySetEffect, request);
 
     uint8_t effectId = doc["effect"];
-    if (effectId >= RENDERER->getEffectCount()) {
+    if (effectId >= m_renderer->getEffectCount()) {
         sendLegacyError(request, "Invalid effect ID");
         return;
     }
 
-    ACTOR_SYSTEM.setEffect(effectId);
+    m_actorSystem.setEffect(effectId);
     sendLegacySuccess(request);
     broadcastStatus();
 }
 
 void WebServer::handleLegacySetBrightness(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    StaticJsonDocument<128> doc;
+    JsonDocument doc;
     VALIDATE_LEGACY_OR_RETURN(data, len, doc, RequestSchemas::LegacySetBrightness, request);
 
     uint8_t brightness = doc["brightness"];
-    ACTOR_SYSTEM.setBrightness(brightness);
+    m_actorSystem.setBrightness(brightness);
     sendLegacySuccess(request);
     broadcastStatus();
 }
 
 void WebServer::handleLegacySetSpeed(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    StaticJsonDocument<128> doc;
+    JsonDocument doc;
     VALIDATE_LEGACY_OR_RETURN(data, len, doc, RequestSchemas::LegacySetSpeed, request);
 
     // Range is validated by schema (1-50)
     uint8_t speed = doc["speed"];
-    ACTOR_SYSTEM.setSpeed(speed);
+    m_actorSystem.setSpeed(speed);
     sendLegacySuccess(request);
     broadcastStatus();
 }
 
 void WebServer::handleLegacySetPalette(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    StaticJsonDocument<128> doc;
+    JsonDocument doc;
     VALIDATE_LEGACY_OR_RETURN(data, len, doc, RequestSchemas::LegacySetPalette, request);
 
     uint8_t paletteId = doc["paletteId"];
-    ACTOR_SYSTEM.setPalette(paletteId);
+    m_actorSystem.setPalette(paletteId);
     sendLegacySuccess(request);
     broadcastStatus();
 }
@@ -1009,7 +1019,7 @@ void WebServer::handleLegacyZoneCount(AsyncWebServerRequest* request, uint8_t* d
         return;
     }
 
-    StaticJsonDocument<128> doc;
+    JsonDocument doc;
     VALIDATE_LEGACY_OR_RETURN(data, len, doc, RequestSchemas::LegacyZoneCount, request);
 
     // Range validated by schema (1-4)
@@ -1025,7 +1035,7 @@ void WebServer::handleLegacyZoneEffect(AsyncWebServerRequest* request, uint8_t* 
         return;
     }
 
-    StaticJsonDocument<128> doc;
+    JsonDocument doc;
     VALIDATE_LEGACY_OR_RETURN(data, len, doc, RequestSchemas::LegacyZoneEffect, request);
 
     uint8_t zoneId = doc["zoneId"];
@@ -1052,14 +1062,14 @@ void WebServer::handleApiDiscovery(AsyncWebServerRequest* request) {
         data["description"] = "ESP32-S3 LED Control System v2";
 
         // Hardware info
-        JsonObject hw = data.createNestedObject("hardware");
+        JsonObject hw = data["hardware"].to<JsonObject>();
         hw["ledsTotal"] = LedConfig::TOTAL_LEDS;
         hw["strips"] = LedConfig::NUM_STRIPS;
         hw["centerPoint"] = LedConfig::CENTER_POINT;
         hw["maxZones"] = 4;
 
         // HATEOAS links
-        JsonObject links = data.createNestedObject("_links");
+        JsonObject links = data["_links"].to<JsonObject>();
         links["self"] = "/api/v1/";
         links["device"] = "/api/v1/device/status";
         links["effects"] = "/api/v1/effects";
@@ -1070,263 +1080,17 @@ void WebServer::handleApiDiscovery(AsyncWebServerRequest* request) {
     }, 1024);
 }
 
-void WebServer::handleDeviceStatus(AsyncWebServerRequest* request) {
-    if (!ACTOR_SYSTEM.isRunning()) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::SYSTEM_NOT_READY, "System not ready");
-        return;
-    }
-
-    sendSuccessResponse(request, [this](JsonObject& data) {
-        data["uptime"] = (millis() - m_startTime) / 1000;
-        data["freeHeap"] = ESP.getFreeHeap();
-        data["heapSize"] = ESP.getHeapSize();
-        data["cpuFreq"] = ESP.getCpuFreqMHz();
-
-        // Render stats
-        const RenderStats& stats = RENDERER->getStats();
-        data["fps"] = stats.currentFPS;
-        data["cpuPercent"] = stats.cpuPercent;
-        data["framesRendered"] = stats.framesRendered;
-
-        // Network info
-        JsonObject network = data.createNestedObject("network");
-        network["connected"] = WiFi.status() == WL_CONNECTED;
-        network["apMode"] = m_apMode;
-        if (WiFi.status() == WL_CONNECTED) {
-            network["ip"] = WiFi.localIP().toString();
-            network["rssi"] = WiFi.RSSI();
-        }
-
-        data["wsClients"] = m_ws->count();
-    });
-}
-
-void WebServer::handleDeviceInfo(AsyncWebServerRequest* request) {
-    sendSuccessResponse(request, [](JsonObject& data) {
-        data["firmware"] = "2.0.0";
-        data["board"] = "ESP32-S3-DevKitC-1";
-        data["sdk"] = ESP.getSdkVersion();
-        data["flashSize"] = ESP.getFlashChipSize();
-        data["sketchSize"] = ESP.getSketchSize();
-        data["freeSketch"] = ESP.getFreeSketchSpace();
-        data["architecture"] = "Actor System v2";
-    });
-}
-
-void WebServer::handleEffectsList(AsyncWebServerRequest* request) {
-    if (!RENDERER) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::SYSTEM_NOT_READY, "Renderer not available");
-        return;
-    }
-
-    uint8_t effectCount = RENDERER->getEffectCount();
-
-    // Parse pagination query parameters
-    // Support both "page" (V1) and "offset" (V2) query params
-    int page = 1;
-    int limit = 20;
-    int categoryFilter = -1;  // -1 = no filter
-    bool details = false;
-
-    // V2 API uses "offset" instead of "page"
-    if (request->hasParam("offset")) {
-        int offset = request->getParam("offset")->value().toInt();
-        if (offset < 0) offset = 0;
-        // Convert offset to 1-indexed page (will recalculate after limit is known)
-        page = (offset / limit) + 1;
-    } else if (request->hasParam("page")) {
-        page = request->getParam("page")->value().toInt();
-        if (page < 1) page = 1;
-    }
-    if (request->hasParam("limit")) {
-        limit = request->getParam("limit")->value().toInt();
-        // Clamp limit between 1 and 50
-        if (limit < 1) limit = 1;
-        if (limit > 50) limit = 50;
-        // Recalculate page if offset was used (since limit affects page calculation)
-        if (request->hasParam("offset") && !request->hasParam("page")) {
-            int offset = request->getParam("offset")->value().toInt();
-            if (offset < 0) offset = 0;
-            page = (offset / limit) + 1;
-        }
-    }
-    if (request->hasParam("category")) {
-        categoryFilter = request->getParam("category")->value().toInt();
-    }
-    if (request->hasParam("details")) {
-        String detailsStr = request->getParam("details")->value();
-        details = (detailsStr == "true" || detailsStr == "1");
-    }
-
-    // Calculate pagination values
-    int total = effectCount;
-    int pages = (total + limit - 1) / limit;  // Ceiling division
-    if (page > pages && pages > 0) page = pages;  // Clamp page to max
-    int startIdx = (page - 1) * limit;
-    int endIdx = startIdx + limit;
-    if (endIdx > total) endIdx = total;
-
-    // Capture values for lambda
-    const int capturedPage = page;
-    const int capturedLimit = limit;
-    const int capturedTotal = total;
-    const int capturedPages = pages;
-    const int capturedStartIdx = startIdx;
-    const int capturedEndIdx = endIdx;
-    const int capturedCategoryFilter = categoryFilter;
-    const bool capturedDetails = details;
-
-    sendSuccessResponseLarge(request, [capturedPage, capturedLimit, capturedTotal,
-                                       capturedPages, capturedStartIdx, capturedEndIdx,
-                                       capturedCategoryFilter, capturedDetails](JsonObject& data) {
-        // Add pagination object
-        JsonObject pagination = data.createNestedObject("pagination");
-        pagination["page"] = capturedPage;
-        pagination["limit"] = capturedLimit;
-        pagination["total"] = capturedTotal;
-        pagination["pages"] = capturedPages;
-
-        // Helper lambda to get category info
-        auto getCategoryId = [](uint8_t effectId) -> int {
-            if (effectId <= 4) return 0;       // Classic
-            else if (effectId <= 7) return 1;  // Wave
-            else if (effectId <= 12) return 2; // Physics
-            else return 3;                     // Custom
-        };
-
-        auto getCategoryName = [](int categoryId) -> const char* {
-            switch (categoryId) {
-                case 0: return "Classic";
-                case 1: return "Wave";
-                case 2: return "Physics";
-                default: return "Custom";
-            }
-        };
-
-        // Build effects array with pagination
-        JsonArray effects = data.createNestedArray("effects");
-
-        // If category filter is applied, we need to filter first then paginate
-        if (capturedCategoryFilter >= 0) {
-            // Collect matching effects
-            int matchCount = 0;
-            int addedCount = 0;
-
-            for (uint8_t i = 0; i < RENDERER->getEffectCount(); i++) {
-                int effectCategory = getCategoryId(i);
-                if (effectCategory == capturedCategoryFilter) {
-                    // Check if this match is within our page window
-                    if (matchCount >= capturedStartIdx && addedCount < capturedLimit) {
-                        JsonObject effect = effects.createNestedObject();
-                        effect["id"] = i;
-                        effect["name"] = RENDERER->getEffectName(i);
-                        effect["category"] = getCategoryName(effectCategory);
-                        effect["categoryId"] = effectCategory;
-
-                        if (capturedDetails) {
-                            // Add extended metadata
-                            JsonObject features = effect.createNestedObject("features");
-                            features["centerOrigin"] = true;
-                            features["usesSpeed"] = true;
-                            features["usesPalette"] = true;
-                            features["zoneAware"] = (effectCategory != 2);  // Physics effects may not be zone-aware
-                        }
-                        addedCount++;
-                    }
-                    matchCount++;
-                }
-            }
-        } else {
-            // No category filter - simple pagination
-            for (int i = capturedStartIdx; i < capturedEndIdx; i++) {
-                JsonObject effect = effects.createNestedObject();
-                effect["id"] = i;
-                effect["name"] = RENDERER->getEffectName(i);
-                int categoryId = getCategoryId(i);
-                effect["category"] = getCategoryName(categoryId);
-                effect["categoryId"] = categoryId;
-
-                if (capturedDetails) {
-                    // Add extended metadata
-                    JsonObject features = effect.createNestedObject("features");
-                    features["centerOrigin"] = true;
-                    features["usesSpeed"] = true;
-                    features["usesPalette"] = true;
-                    features["zoneAware"] = (categoryId != 2);
-                }
-            }
-        }
-
-        // Add categories summary
-        JsonArray categories = data.createNestedArray("categories");
-        const char* categoryNames[] = {"Classic", "Wave", "Physics", "Custom"};
-        for (int i = 0; i < 4; i++) {
-            JsonObject cat = categories.createNestedObject();
-            cat["id"] = i;
-            cat["name"] = categoryNames[i];
-        }
-    }, 4096);  // Increased buffer for pagination metadata
-}
-
-void WebServer::handleEffectsCurrent(AsyncWebServerRequest* request) {
-    if (!RENDERER) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::SYSTEM_NOT_READY, "Renderer not available");
-        return;
-    }
-
-    sendSuccessResponse(request, [](JsonObject& data) {
-        uint8_t effectId = RENDERER->getCurrentEffect();
-        data["effectId"] = effectId;
-        data["name"] = RENDERER->getEffectName(effectId);
-        data["brightness"] = RENDERER->getBrightness();
-        data["speed"] = RENDERER->getSpeed();
-        data["paletteId"] = RENDERER->getPaletteIndex();
-    });
-}
-
-void WebServer::handleEffectsSet(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    StaticJsonDocument<256> doc;
-    VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::SetEffect, request);
-
-    uint8_t effectId = doc["effectId"];
-    if (effectId >= RENDERER->getEffectCount()) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "effectId");
-        return;
-    }
-
-    // Check for transition options
-    bool useTransition = doc["transition"] | false;
-    uint8_t transitionType = doc["transitionType"] | 0;
-
-    if (useTransition) {
-        RENDERER->startTransition(effectId, transitionType);
-    } else {
-        ACTOR_SYSTEM.setEffect(effectId);
-    }
-
-    sendSuccessResponse(request, [effectId](JsonObject& respData) {
-        respData["effectId"] = effectId;
-        respData["name"] = RENDERER->getEffectName(effectId);
-    });
-
-    broadcastStatus();
-}
-
 void WebServer::handleParametersGet(AsyncWebServerRequest* request) {
-    sendSuccessResponse(request, [](JsonObject& data) {
-        data["brightness"] = RENDERER->getBrightness();
-        data["speed"] = RENDERER->getSpeed();
-        data["paletteId"] = RENDERER->getPaletteIndex();
-        data["hue"] = RENDERER->getHue();
+    sendSuccessResponse(request, [this](JsonObject& data) {
+        data["brightness"] = m_renderer->getBrightness();
+        data["speed"] = m_renderer->getSpeed();
+        data["paletteId"] = m_renderer->getPaletteIndex();
+        data["hue"] = m_renderer->getHue();
     });
 }
 
 void WebServer::handleParametersSet(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     // Parse and validate - all fields are optional but must be valid if present
     auto vr = RequestValidator::parseAndValidate(data, len, doc, RequestSchemas::SetParameters);
     if (!vr.valid) {
@@ -1339,20 +1103,20 @@ void WebServer::handleParametersSet(AsyncWebServerRequest* request, uint8_t* dat
 
     if (doc.containsKey("brightness")) {
         uint8_t val = doc["brightness"];
-        ACTOR_SYSTEM.setBrightness(val);
+        m_actorSystem.setBrightness(val);
         updated = true;
     }
 
     if (doc.containsKey("speed")) {
         uint8_t val = doc["speed"];
         // Range already validated by schema (1-50)
-        ACTOR_SYSTEM.setSpeed(val);
+        m_actorSystem.setSpeed(val);
         updated = true;
     }
 
     if (doc.containsKey("paletteId")) {
         uint8_t val = doc["paletteId"];
-        ACTOR_SYSTEM.setPalette(val);
+        m_actorSystem.setPalette(val);
         updated = true;
     }
 
@@ -1367,10 +1131,10 @@ void WebServer::handleParametersSet(AsyncWebServerRequest* request, uint8_t* dat
 
 void WebServer::handleTransitionTypes(AsyncWebServerRequest* request) {
     sendSuccessResponseLarge(request, [](JsonObject& data) {
-        JsonArray types = data.createNestedArray("types");
+        JsonArray types = data["types"].to<JsonArray>();
 
         for (uint8_t i = 0; i < static_cast<uint8_t>(TransitionType::TYPE_COUNT); i++) {
-            JsonObject t = types.createNestedObject();
+            JsonObject t = types.add<JsonObject>();
             t["id"] = i;
             t["name"] = getTransitionName(static_cast<TransitionType>(i));
             t["duration"] = getDefaultDuration(static_cast<TransitionType>(i));
@@ -1380,11 +1144,11 @@ void WebServer::handleTransitionTypes(AsyncWebServerRequest* request) {
 }
 
 void WebServer::handleTransitionTrigger(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::TriggerTransition, request);
 
     uint8_t toEffect = doc["toEffect"];
-    if (toEffect >= RENDERER->getEffectCount()) {
+    if (toEffect >= m_renderer->getEffectCount()) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
                           ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "toEffect");
         return;
@@ -1394,14 +1158,14 @@ void WebServer::handleTransitionTrigger(AsyncWebServerRequest* request, uint8_t*
     bool randomType = doc["random"] | false;
 
     if (randomType) {
-        RENDERER->startRandomTransition(toEffect);
+        m_renderer->startRandomTransition(toEffect);
     } else {
-        RENDERER->startTransition(toEffect, transitionType);
+        m_renderer->startTransition(toEffect, transitionType);
     }
 
-    sendSuccessResponse(request, [toEffect, transitionType](JsonObject& respData) {
+    sendSuccessResponse(request, [this, toEffect, transitionType](JsonObject& respData) {
         respData["effectId"] = toEffect;
-        respData["name"] = RENDERER->getEffectName(toEffect);
+        respData["name"] = m_renderer->getEffectName(toEffect);
         respData["transitionType"] = transitionType;
     });
 
@@ -1409,7 +1173,7 @@ void WebServer::handleTransitionTrigger(AsyncWebServerRequest* request, uint8_t*
 }
 
 void WebServer::handleBatch(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    StaticJsonDocument<2048> doc;
+    JsonDocument doc;
     VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::BatchOperations, request);
 
     // Schema validates operations is an array with 1-10 items
@@ -1438,33 +1202,33 @@ void WebServer::handleBatch(AsyncWebServerRequest* request, uint8_t* data, size_
 bool WebServer::executeBatchAction(const String& action, JsonVariant params) {
     if (action == "setBrightness") {
         if (!params.containsKey("value")) return false;
-        ACTOR_SYSTEM.setBrightness(params["value"]);
+        m_actorSystem.setBrightness(params["value"]);
         return true;
     }
     else if (action == "setSpeed") {
         if (!params.containsKey("value")) return false;
         uint8_t val = params["value"];
         if (val < 1 || val > 50) return false;
-        ACTOR_SYSTEM.setSpeed(val);
+        m_actorSystem.setSpeed(val);
         return true;
     }
     else if (action == "setEffect") {
         if (!params.containsKey("effectId")) return false;
         uint8_t id = params["effectId"];
-        if (id >= RENDERER->getEffectCount()) return false;
-        ACTOR_SYSTEM.setEffect(id);
+        if (id >= m_renderer->getEffectCount()) return false;
+        m_actorSystem.setEffect(id);
         return true;
     }
     else if (action == "setPalette") {
         if (!params.containsKey("paletteId")) return false;
-        ACTOR_SYSTEM.setPalette(params["paletteId"]);
+        m_actorSystem.setPalette(params["paletteId"]);
         return true;
     }
     else if (action == "transition") {
         if (!params.containsKey("toEffect")) return false;
         uint8_t toEffect = params["toEffect"];
         uint8_t type = params["type"] | 0;
-        RENDERER->startTransition(toEffect, type);
+        m_renderer->startTransition(toEffect, type);
         return true;
     }
     else if (action == "setZoneEffect" && m_zoneComposer) {
@@ -1483,7 +1247,7 @@ bool WebServer::executeBatchAction(const String& action, JsonVariant params) {
 // ============================================================================
 
 void WebServer::handlePalettesList(AsyncWebServerRequest* request) {
-    if (!RENDERER) {
+    if (!m_renderer) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::SYSTEM_NOT_READY, "Renderer not available");
         return;
@@ -1556,32 +1320,32 @@ void WebServer::handlePalettesList(AsyncWebServerRequest* request) {
     if (endIdx > filteredCount) endIdx = filteredCount;
 
     // Build response - buffer sized for up to 50 palettes per page
-    DynamicJsonDocument doc(8192);
+    JsonDocument doc;
     doc["success"] = true;
     doc["timestamp"] = millis();
     doc["version"] = API_VERSION;
 
-    JsonObject data = doc.createNestedObject("data");
+    JsonObject data = doc["data"].to<JsonObject>();
 
     // Categorize palettes (static counts, not affected by filters)
-    JsonObject categories = data.createNestedObject("categories");
+    JsonObject categories = data["categories"].to<JsonObject>();
     categories["artistic"] = CPT_CITY_END - CPT_CITY_START + 1;
     categories["scientific"] = CRAMERI_END - CRAMERI_START + 1;
     categories["lgpOptimized"] = COLORSPACE_END - COLORSPACE_START + 1;
 
-    JsonArray palettes = data.createNestedArray("palettes");
+    JsonArray palettes = data["palettes"].to<JsonArray>();
 
     // Second pass: add only the paginated subset of filtered palettes
     for (uint16_t idx = startIdx; idx < endIdx; idx++) {
         uint8_t i = filteredIds[idx];
 
-        JsonObject palette = palettes.createNestedObject();
+        JsonObject palette = palettes.add<JsonObject>();
         palette["id"] = i;
         palette["name"] = MasterPaletteNames[i];
         palette["category"] = getPaletteCategory(i);
 
         // Flags
-        JsonObject flags = palette.createNestedObject("flags");
+        JsonObject flags = palette["flags"].to<JsonObject>();
         flags["warm"] = isPaletteWarm(i);
         flags["cool"] = isPaletteCool(i);
         flags["calm"] = isPaletteCalm(i);
@@ -1595,7 +1359,7 @@ void WebServer::handlePalettesList(AsyncWebServerRequest* request) {
     }
 
     // Add pagination object
-    JsonObject pagination = data.createNestedObject("pagination");
+    JsonObject pagination = data["pagination"].to<JsonObject>();
     pagination["page"] = page;
     pagination["limit"] = limit;
     pagination["total"] = filteredCount;
@@ -1607,19 +1371,19 @@ void WebServer::handlePalettesList(AsyncWebServerRequest* request) {
 }
 
 void WebServer::handlePalettesCurrent(AsyncWebServerRequest* request) {
-    if (!RENDERER) {
+    if (!m_renderer) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::SYSTEM_NOT_READY, "Renderer not available");
         return;
     }
 
-    sendSuccessResponse(request, [](JsonObject& data) {
-        uint8_t id = RENDERER->getPaletteIndex();
+    sendSuccessResponse(request, [this](JsonObject& data) {
+        uint8_t id = m_renderer->getPaletteIndex();
         data["paletteId"] = id;
         data["name"] = MasterPaletteNames[id];
         data["category"] = getPaletteCategory(id);
 
-        JsonObject flags = data.createNestedObject("flags");
+        JsonObject flags = data["flags"].to<JsonObject>();
         flags["warm"] = isPaletteWarm(id);
         flags["cool"] = isPaletteCool(id);
         flags["calm"] = isPaletteCalm(id);
@@ -1632,7 +1396,7 @@ void WebServer::handlePalettesCurrent(AsyncWebServerRequest* request) {
 }
 
 void WebServer::handlePalettesSet(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::SetPalette, request);
 
     uint8_t paletteId = doc["paletteId"];
@@ -1642,7 +1406,7 @@ void WebServer::handlePalettesSet(AsyncWebServerRequest* request, uint8_t* data,
         return;
     }
 
-    ACTOR_SYSTEM.setPalette(paletteId);
+    m_actorSystem.setPalette(paletteId);
 
     sendSuccessResponse(request, [paletteId](JsonObject& respData) {
         respData["paletteId"] = paletteId;
@@ -1653,112 +1417,14 @@ void WebServer::handlePalettesSet(AsyncWebServerRequest* request, uint8_t* data,
     broadcastStatus();
 }
 
-// ============================================================================
-// Effect Metadata Handler
-// ============================================================================
 
-void WebServer::handleEffectsMetadata(AsyncWebServerRequest* request) {
-    if (!RENDERER) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::SYSTEM_NOT_READY, "Renderer not available");
-        return;
-    }
-
-    // Get effect ID from query parameter
-    if (!request->hasParam("id")) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
-        return;
-    }
-
-    uint8_t effectId = request->getParam("id")->value().toInt();
-    uint8_t effectCount = RENDERER->getEffectCount();
-
-    if (effectId >= effectCount) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "id");
-        return;
-    }
-
-    sendSuccessResponse(request, [effectId](JsonObject& data) {
-        data["id"] = effectId;
-        data["name"] = RENDERER->getEffectName(effectId);
-
-        // Query PatternRegistry for metadata
-        const PatternMetadata* meta = PatternRegistry::getPatternMetadata(effectId);
-        if (meta) {
-            // Get family name
-            char familyName[32];
-            PatternRegistry::getFamilyName(meta->family, familyName, sizeof(familyName));
-            data["family"] = familyName;
-            data["familyId"] = static_cast<uint8_t>(meta->family);
-            
-            // Story and optical intent
-            if (meta->story) {
-                data["story"] = meta->story;
-            }
-            if (meta->opticalIntent) {
-                data["opticalIntent"] = meta->opticalIntent;
-            }
-            
-            // Tags as array
-            JsonArray tags = data.createNestedArray("tags");
-            if (meta->hasTag(PatternTags::STANDING)) tags.add("STANDING");
-            if (meta->hasTag(PatternTags::TRAVELING)) tags.add("TRAVELING");
-            if (meta->hasTag(PatternTags::MOIRE)) tags.add("MOIRE");
-            if (meta->hasTag(PatternTags::DEPTH)) tags.add("DEPTH");
-            if (meta->hasTag(PatternTags::SPECTRAL)) tags.add("SPECTRAL");
-            if (meta->hasTag(PatternTags::CENTER_ORIGIN)) tags.add("CENTER_ORIGIN");
-            if (meta->hasTag(PatternTags::DUAL_STRIP)) tags.add("DUAL_STRIP");
-            if (meta->hasTag(PatternTags::PHYSICS)) tags.add("PHYSICS");
-        } else {
-            // Fallback if metadata not found
-            data["family"] = "Unknown";
-            data["familyId"] = 255;
-        }
-
-        // Effect properties
-        JsonObject properties = data.createNestedObject("properties");
-        properties["centerOrigin"] = true;  // All v2 effects are center-origin
-        properties["symmetricStrips"] = true;
-        properties["paletteAware"] = true;
-        properties["speedResponsive"] = true;
-
-        // Recommended settings
-        JsonObject recommended = data.createNestedObject("recommended");
-        recommended["brightness"] = 180;
-        recommended["speed"] = 15;
-    });
-}
-
-void WebServer::handleEffectsFamilies(AsyncWebServerRequest* request) {
-    sendSuccessResponse(request, [](JsonObject& data) {
-        JsonArray families = data.createNestedArray("families");
-        
-        // Iterate through all 10 pattern families
-        for (uint8_t i = 0; i < 10; i++) {
-            PatternFamily family = static_cast<PatternFamily>(i);
-            uint8_t count = PatternRegistry::getFamilyCount(family);
-            
-            JsonObject familyObj = families.createNestedObject();
-            familyObj["id"] = i;
-            
-            char familyName[32];
-            PatternRegistry::getFamilyName(family, familyName, sizeof(familyName));
-            familyObj["name"] = familyName;
-            familyObj["count"] = count;
-        }
-        
-        data["total"] = 10;
-    });
-}
 
 // ============================================================================
 // Transition Config Handlers
 // ============================================================================
 
 void WebServer::handleTransitionConfigGet(AsyncWebServerRequest* request) {
-    if (!RENDERER) {
+    if (!m_renderer) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::SYSTEM_NOT_READY, "Renderer not available");
         return;
@@ -1772,14 +1438,14 @@ void WebServer::handleTransitionConfigGet(AsyncWebServerRequest* request) {
         data["defaultTypeName"] = getTransitionName(TransitionType::FADE);
 
         // Available easing curves (simplified list)
-        JsonArray easings = data.createNestedArray("easings");
+        JsonArray easings = data["easings"].to<JsonArray>();
         const char* easingNames[] = {
             "LINEAR", "IN_QUAD", "OUT_QUAD", "IN_OUT_QUAD",
             "IN_CUBIC", "OUT_CUBIC", "IN_OUT_CUBIC",
             "IN_ELASTIC", "OUT_ELASTIC", "IN_OUT_ELASTIC"
         };
         for (uint8_t i = 0; i < 10; i++) {
-            JsonObject easing = easings.createNestedObject();
+            JsonObject easing = easings.add<JsonObject>();
             easing["id"] = i;
             easing["name"] = easingNames[i];
         }
@@ -1787,7 +1453,7 @@ void WebServer::handleTransitionConfigGet(AsyncWebServerRequest* request) {
 }
 
 void WebServer::handleTransitionConfigSet(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     // Validate - all fields are optional but if present must be valid
     auto vr = RequestValidator::parseAndValidate(data, len, doc, RequestSchemas::TransitionConfig);
     if (!vr.valid) {
@@ -1839,7 +1505,7 @@ void WebServer::handleNarrativeStatus(AsyncWebServerRequest* request) {
         data["phaseId"] = static_cast<uint8_t>(phase);
         
         // Phase durations
-        JsonObject durations = data.createNestedObject("durations");
+        JsonObject durations = data["durations"].to<JsonObject>();
         durations["build"] = narrative.getBuildDuration();
         durations["hold"] = narrative.getHoldDuration();
         durations["release"] = narrative.getReleaseDuration();
@@ -1858,7 +1524,7 @@ void WebServer::handleNarrativeConfigGet(AsyncWebServerRequest* request) {
     
     sendSuccessResponse(request, [&narrative](JsonObject& data) {
         // Phase durations
-        JsonObject durations = data.createNestedObject("durations");
+        JsonObject durations = data["durations"].to<JsonObject>();
         durations["build"] = narrative.getBuildDuration();
         durations["hold"] = narrative.getHoldDuration();
         durations["release"] = narrative.getReleaseDuration();
@@ -1866,7 +1532,7 @@ void WebServer::handleNarrativeConfigGet(AsyncWebServerRequest* request) {
         durations["total"] = narrative.getTotalDuration();
         
         // Curves
-        JsonObject curves = data.createNestedObject("curves");
+        JsonObject curves = data["curves"].to<JsonObject>();
         curves["build"] = static_cast<uint8_t>(narrative.getBuildCurve());
         curves["release"] = static_cast<uint8_t>(narrative.getReleaseCurve());
         
@@ -1881,7 +1547,7 @@ void WebServer::handleNarrativeConfigGet(AsyncWebServerRequest* request) {
 
 void WebServer::handleNarrativeConfigSet(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
     using namespace lightwaveos::narrative;
-    StaticJsonDocument<512> doc;
+    JsonDocument doc;
     DeserializationError error = deserializeJson(doc, data, len);
     
     if (error) {
@@ -1967,507 +1633,210 @@ void WebServer::handleNarrativeConfigSet(AsyncWebServerRequest* request, uint8_t
 void WebServer::handleOpenApiSpec(AsyncWebServerRequest* request) {
     // OpenAPI 3.0.3 specification for LightwaveOS API v1
     // Expanded to document all implemented REST endpoints
-    DynamicJsonDocument doc(8192);  // Increased from 4096 to fit all endpoints
+    JsonDocument doc;
 
     doc["openapi"] = "3.0.3";
 
-    JsonObject info = doc.createNestedObject("info");
+    JsonObject info = doc["info"].to<JsonObject>();
     info["title"] = "LightwaveOS API";
     info["version"] = "2.0.0";
     info["description"] = "REST API for LightwaveOS ESP32-S3 LED Control System";
 
-    JsonArray servers = doc.createNestedArray("servers");
-    JsonObject server = servers.createNestedObject();
+    JsonArray servers = doc["servers"].to<JsonArray>();
+    JsonObject server = servers.add<JsonObject>();
     server["url"] = "http://lightwaveos.local/api/v1";
     server["description"] = "Local device";
 
-    JsonObject paths = doc.createNestedObject("paths");
+    JsonObject paths = doc["paths"].to<JsonObject>();
 
     // ========== Device Endpoints ==========
 
     // GET /device/status
-    JsonObject deviceStatus = paths.createNestedObject("/device/status");
-    JsonObject getDeviceStatus = deviceStatus.createNestedObject("get");
+    JsonObject deviceStatus = paths["/device/status"].to<JsonObject>();
+    JsonObject getDeviceStatus = deviceStatus["get"].to<JsonObject>();
     getDeviceStatus["summary"] = "Get device status (uptime, heap, FPS)";
     getDeviceStatus["tags"].add("Device");
 
     // GET /device/info
-    JsonObject deviceInfo = paths.createNestedObject("/device/info");
-    JsonObject getDeviceInfo = deviceInfo.createNestedObject("get");
+    JsonObject deviceInfo = paths["/device/info"].to<JsonObject>();
+    JsonObject getDeviceInfo = deviceInfo["get"].to<JsonObject>();
     getDeviceInfo["summary"] = "Get device info (firmware, hardware, SDK)";
     getDeviceInfo["tags"].add("Device");
 
     // ========== Effects Endpoints ==========
 
     // GET /effects
-    JsonObject effects = paths.createNestedObject("/effects");
-    JsonObject getEffects = effects.createNestedObject("get");
+    JsonObject effects = paths["/effects"].to<JsonObject>();
+    JsonObject getEffects = effects["get"].to<JsonObject>();
     getEffects["summary"] = "List effects with pagination";
     getEffects["tags"].add("Effects");
-    JsonArray effectsParams = getEffects.createNestedArray("parameters");
-    JsonObject pageParam = effectsParams.createNestedObject();
+    JsonArray effectsParams = getEffects["parameters"].to<JsonArray>();
+    JsonObject pageParam = effectsParams.add<JsonObject>();
     pageParam["name"] = "page";
     pageParam["in"] = "query";
     pageParam["schema"]["type"] = "integer";
-    JsonObject limitParam = effectsParams.createNestedObject();
+    JsonObject limitParam = effectsParams.add<JsonObject>();
     limitParam["name"] = "limit";
     limitParam["in"] = "query";
     limitParam["schema"]["type"] = "integer";
-    JsonObject categoryParam = effectsParams.createNestedObject();
+    JsonObject categoryParam = effectsParams.add<JsonObject>();
     categoryParam["name"] = "category";
     categoryParam["in"] = "query";
     categoryParam["schema"]["type"] = "string";
-    JsonObject detailsParam = effectsParams.createNestedObject();
+    JsonObject detailsParam = effectsParams.add<JsonObject>();
     detailsParam["name"] = "details";
     detailsParam["in"] = "query";
     detailsParam["schema"]["type"] = "boolean";
 
     // GET /effects/current
-    JsonObject effectsCurrent = paths.createNestedObject("/effects/current");
-    JsonObject getEffectsCurrent = effectsCurrent.createNestedObject("get");
+    JsonObject effectsCurrent = paths["/effects/current"].to<JsonObject>();
+    JsonObject getEffectsCurrent = effectsCurrent["get"].to<JsonObject>();
     getEffectsCurrent["summary"] = "Get current effect state";
     getEffectsCurrent["tags"].add("Effects");
 
     // POST /effects/set
-    JsonObject effectsSet = paths.createNestedObject("/effects/set");
-    JsonObject postEffectsSet = effectsSet.createNestedObject("post");
+    JsonObject effectsSet = paths["/effects/set"].to<JsonObject>();
+    JsonObject postEffectsSet = effectsSet["post"].to<JsonObject>();
     postEffectsSet["summary"] = "Set current effect by ID";
     postEffectsSet["tags"].add("Effects");
 
     // GET /effects/metadata
-    JsonObject effectsMeta = paths.createNestedObject("/effects/metadata");
-    JsonObject getEffectsMeta = effectsMeta.createNestedObject("get");
+    JsonObject effectsMeta = paths["/effects/metadata"].to<JsonObject>();
+    JsonObject getEffectsMeta = effectsMeta["get"].to<JsonObject>();
     getEffectsMeta["summary"] = "Get effect metadata by ID";
     getEffectsMeta["tags"].add("Effects");
-    JsonArray metaParams = getEffectsMeta.createNestedArray("parameters");
-    JsonObject idParam = metaParams.createNestedObject();
+    JsonArray metaParams = getEffectsMeta["parameters"].to<JsonArray>();
+    JsonObject idParam = metaParams.add<JsonObject>();
     idParam["name"] = "id";
     idParam["in"] = "query";
     idParam["required"] = true;
     idParam["schema"]["type"] = "integer";
 
     // GET /effects/families
-    JsonObject effectsFamilies = paths.createNestedObject("/effects/families");
-    JsonObject getEffectsFamilies = effectsFamilies.createNestedObject("get");
+    JsonObject effectsFamilies = paths["/effects/families"].to<JsonObject>();
+    JsonObject getEffectsFamilies = effectsFamilies["get"].to<JsonObject>();
     getEffectsFamilies["summary"] = "List effect families/categories";
     getEffectsFamilies["tags"].add("Effects");
 
     // ========== Palettes Endpoints ==========
 
     // GET /palettes
-    JsonObject palettes = paths.createNestedObject("/palettes");
-    JsonObject getPalettes = palettes.createNestedObject("get");
+    JsonObject palettes = paths["/palettes"].to<JsonObject>();
+    JsonObject getPalettes = palettes["get"].to<JsonObject>();
     getPalettes["summary"] = "List palettes with pagination";
     getPalettes["tags"].add("Palettes");
-    JsonArray paletteParams = getPalettes.createNestedArray("parameters");
-    JsonObject palPageParam = paletteParams.createNestedObject();
+    JsonArray paletteParams = getPalettes["parameters"].to<JsonArray>();
+    JsonObject palPageParam = paletteParams.add<JsonObject>();
     palPageParam["name"] = "page";
     palPageParam["in"] = "query";
     palPageParam["schema"]["type"] = "integer";
-    JsonObject palLimitParam = paletteParams.createNestedObject();
+    JsonObject palLimitParam = paletteParams.add<JsonObject>();
     palLimitParam["name"] = "limit";
     palLimitParam["in"] = "query";
     palLimitParam["schema"]["type"] = "integer";
 
     // GET /palettes/current
-    JsonObject palettesCurrent = paths.createNestedObject("/palettes/current");
-    JsonObject getPalettesCurrent = palettesCurrent.createNestedObject("get");
+    JsonObject palettesCurrent = paths["/palettes/current"].to<JsonObject>();
+    JsonObject getPalettesCurrent = palettesCurrent["get"].to<JsonObject>();
     getPalettesCurrent["summary"] = "Get current palette";
     getPalettesCurrent["tags"].add("Palettes");
 
     // POST /palettes/set
-    JsonObject palettesSet = paths.createNestedObject("/palettes/set");
-    JsonObject postPalettesSet = palettesSet.createNestedObject("post");
+    JsonObject palettesSet = paths["/palettes/set"].to<JsonObject>();
+    JsonObject postPalettesSet = palettesSet["post"].to<JsonObject>();
     postPalettesSet["summary"] = "Set palette by ID";
     postPalettesSet["tags"].add("Palettes");
 
     // ========== Parameters Endpoints ==========
 
     // GET /parameters
-    JsonObject parameters = paths.createNestedObject("/parameters");
-    JsonObject getParams = parameters.createNestedObject("get");
+    JsonObject parameters = paths["/parameters"].to<JsonObject>();
+    JsonObject getParams = parameters["get"].to<JsonObject>();
     getParams["summary"] = "Get visual parameters";
     getParams["tags"].add("Parameters");
 
     // POST /parameters
-    JsonObject postParams = parameters.createNestedObject("post");
+    JsonObject postParams = parameters["post"].to<JsonObject>();
     postParams["summary"] = "Update visual parameters (brightness, speed, etc.)";
     postParams["tags"].add("Parameters");
 
     // ========== Transitions Endpoints ==========
 
     // GET /transitions/types
-    JsonObject transTypes = paths.createNestedObject("/transitions/types");
-    JsonObject getTransTypes = transTypes.createNestedObject("get");
+    JsonObject transTypes = paths["/transitions/types"].to<JsonObject>();
+    JsonObject getTransTypes = transTypes["get"].to<JsonObject>();
     getTransTypes["summary"] = "List transition types";
     getTransTypes["tags"].add("Transitions");
 
     // GET /transitions/config
-    JsonObject transConfig = paths.createNestedObject("/transitions/config");
-    JsonObject getTransConfig = transConfig.createNestedObject("get");
+    JsonObject transConfig = paths["/transitions/config"].to<JsonObject>();
+    JsonObject getTransConfig = transConfig["get"].to<JsonObject>();
     getTransConfig["summary"] = "Get transition configuration";
     getTransConfig["tags"].add("Transitions");
 
     // POST /transitions/config
-    JsonObject postTransConfig = transConfig.createNestedObject("post");
+    JsonObject postTransConfig = transConfig["post"].to<JsonObject>();
     postTransConfig["summary"] = "Update transition configuration";
     postTransConfig["tags"].add("Transitions");
 
     // POST /transitions/trigger
-    JsonObject transTrigger = paths.createNestedObject("/transitions/trigger");
-    JsonObject postTransTrigger = transTrigger.createNestedObject("post");
+    JsonObject transTrigger = paths["/transitions/trigger"].to<JsonObject>();
+    JsonObject postTransTrigger = transTrigger["post"].to<JsonObject>();
     postTransTrigger["summary"] = "Trigger a transition";
     postTransTrigger["tags"].add("Transitions");
 
     // ========== Narrative Endpoints ==========
 
     // GET /narrative/status
-    JsonObject narrativeStatus = paths.createNestedObject("/narrative/status");
-    JsonObject getNarrativeStatus = narrativeStatus.createNestedObject("get");
+    JsonObject narrativeStatus = paths["/narrative/status"].to<JsonObject>();
+    JsonObject getNarrativeStatus = narrativeStatus["get"].to<JsonObject>();
     getNarrativeStatus["summary"] = "Get narrative engine status";
     getNarrativeStatus["tags"].add("Narrative");
 
     // GET /narrative/config
-    JsonObject narrativeConfig = paths.createNestedObject("/narrative/config");
-    JsonObject getNarrativeConfig = narrativeConfig.createNestedObject("get");
+    JsonObject narrativeConfig = paths["/narrative/config"].to<JsonObject>();
+    JsonObject getNarrativeConfig = narrativeConfig["get"].to<JsonObject>();
     getNarrativeConfig["summary"] = "Get narrative configuration";
     getNarrativeConfig["tags"].add("Narrative");
 
     // POST /narrative/config
-    JsonObject postNarrativeConfig = narrativeConfig.createNestedObject("post");
+    JsonObject postNarrativeConfig = narrativeConfig["post"].to<JsonObject>();
     postNarrativeConfig["summary"] = "Update narrative configuration";
     postNarrativeConfig["tags"].add("Narrative");
 
     // ========== Zones Endpoints ==========
 
     // GET /zones
-    JsonObject zones = paths.createNestedObject("/zones");
-    JsonObject getZones = zones.createNestedObject("get");
+    JsonObject zones = paths["/zones"].to<JsonObject>();
+    JsonObject getZones = zones["get"].to<JsonObject>();
     getZones["summary"] = "List all zones with configuration";
     getZones["tags"].add("Zones");
 
     // POST /zones/layout
-    JsonObject zonesLayout = paths.createNestedObject("/zones/layout");
-    JsonObject postZonesLayout = zonesLayout.createNestedObject("post");
+    JsonObject zonesLayout = paths["/zones/layout"].to<JsonObject>();
+    JsonObject postZonesLayout = zonesLayout["post"].to<JsonObject>();
     postZonesLayout["summary"] = "Set zone layout configuration";
     postZonesLayout["tags"].add("Zones");
 
     // ========== Batch Endpoints ==========
 
     // POST /batch
-    JsonObject batch = paths.createNestedObject("/batch");
-    JsonObject postBatch = batch.createNestedObject("post");
+    JsonObject batch = paths["/batch"].to<JsonObject>();
+    JsonObject postBatch = batch["post"].to<JsonObject>();
     postBatch["summary"] = "Execute batch operations (max 10)";
     postBatch["tags"].add("Batch");
 
     // ========== Sync Endpoints ==========
 
     // GET /sync/status
-    JsonObject syncStatus = paths.createNestedObject("/sync/status");
-    JsonObject getSyncStatus = syncStatus.createNestedObject("get");
+    JsonObject syncStatus = paths["/sync/status"].to<JsonObject>();
+    JsonObject getSyncStatus = syncStatus["get"].to<JsonObject>();
     getSyncStatus["summary"] = "Get multi-device sync status";
     getSyncStatus["tags"].add("Sync");
 
     String output;
     serializeJson(doc, output);
     request->send(HttpStatus::OK, "application/json", output);
-}
-
-// ============================================================================
-// Zone v1 REST Handlers
-// ============================================================================
-
-void WebServer::handleZonesList(AsyncWebServerRequest* request) {
-    if (!m_zoneComposer) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
-        return;
-    }
-
-    sendSuccessResponseLarge(request, [this](JsonObject& data) {
-        data["enabled"] = m_zoneComposer->isEnabled();
-        data["layout"] = static_cast<uint8_t>(m_zoneComposer->getLayout());
-        data["layoutName"] = m_zoneComposer->getLayout() == ZoneLayout::QUAD ? "QUAD" : "TRIPLE";
-        data["zoneCount"] = m_zoneComposer->getZoneCount();
-
-        JsonArray zones = data.createNestedArray("zones");
-        for (uint8_t i = 0; i < m_zoneComposer->getZoneCount(); i++) {
-            JsonObject zone = zones.createNestedObject();
-            zone["id"] = i;
-            zone["enabled"] = m_zoneComposer->isZoneEnabled(i);
-            zone["effectId"] = m_zoneComposer->getZoneEffect(i);
-            zone["effectName"] = RENDERER->getEffectName(m_zoneComposer->getZoneEffect(i));
-            zone["brightness"] = m_zoneComposer->getZoneBrightness(i);
-            zone["speed"] = m_zoneComposer->getZoneSpeed(i);
-            zone["paletteId"] = m_zoneComposer->getZonePalette(i);
-            zone["blendMode"] = static_cast<uint8_t>(m_zoneComposer->getZoneBlendMode(i));
-            zone["blendModeName"] = getBlendModeName(m_zoneComposer->getZoneBlendMode(i));
-        }
-
-        // Available presets
-        JsonArray presets = data.createNestedArray("presets");
-        for (uint8_t i = 0; i < 5; i++) {
-            JsonObject preset = presets.createNestedObject();
-            preset["id"] = i;
-            preset["name"] = ZoneComposer::getPresetName(i);
-        }
-    }, 1536);
-}
-
-void WebServer::handleZonesLayout(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    if (!m_zoneComposer) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
-        return;
-    }
-
-    StaticJsonDocument<128> doc;
-    VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::ZoneLayout, request);
-
-    // Schema validates zoneCount is 3 or 4
-    uint8_t zoneCount = doc["zoneCount"];
-
-    ZoneLayout layout = (zoneCount == 4) ? ZoneLayout::QUAD : ZoneLayout::TRIPLE;
-    m_zoneComposer->setLayout(layout);
-
-    sendSuccessResponse(request, [zoneCount, layout](JsonObject& respData) {
-        respData["zoneCount"] = zoneCount;
-        respData["layout"] = static_cast<uint8_t>(layout);
-        respData["layoutName"] = (layout == ZoneLayout::QUAD) ? "QUAD" : "TRIPLE";
-    });
-
-    broadcastZoneState();
-}
-
-void WebServer::handleZoneGet(AsyncWebServerRequest* request) {
-    if (!m_zoneComposer) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
-        return;
-    }
-
-    // Extract zone ID from URL path parameter
-    // URL format: /api/v1/zones/0, /api/v1/zones/1, etc.
-    String path = request->url();
-    uint8_t zoneId = path.charAt(path.length() - 1) - '0';
-
-    if (zoneId >= m_zoneComposer->getZoneCount()) {
-        sendErrorResponse(request, HttpStatus::NOT_FOUND,
-                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range");
-        return;
-    }
-
-    sendSuccessResponse(request, [this, zoneId](JsonObject& data) {
-        data["id"] = zoneId;
-        data["enabled"] = m_zoneComposer->isZoneEnabled(zoneId);
-        data["effectId"] = m_zoneComposer->getZoneEffect(zoneId);
-        data["effectName"] = RENDERER->getEffectName(m_zoneComposer->getZoneEffect(zoneId));
-        data["brightness"] = m_zoneComposer->getZoneBrightness(zoneId);
-        data["speed"] = m_zoneComposer->getZoneSpeed(zoneId);
-        data["paletteId"] = m_zoneComposer->getZonePalette(zoneId);
-        data["blendMode"] = static_cast<uint8_t>(m_zoneComposer->getZoneBlendMode(zoneId));
-        data["blendModeName"] = getBlendModeName(m_zoneComposer->getZoneBlendMode(zoneId));
-    });
-}
-
-uint8_t WebServer::extractZoneIdFromPath(AsyncWebServerRequest* request) {
-    // Extract zone ID from path like /api/v1/zones/2/effect
-    String path = request->url();
-    // Find the digit after "/zones/"
-    int zonesIdx = path.indexOf("/zones/");
-    if (zonesIdx >= 0 && zonesIdx + 7 < path.length()) {
-        char digit = path.charAt(zonesIdx + 7);
-        if (digit >= '0' && digit <= '3') {
-            return digit - '0';
-        }
-    }
-    return 255;  // Invalid
-}
-
-void WebServer::handleZoneSetEffect(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    if (!m_zoneComposer) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
-        return;
-    }
-
-    uint8_t zoneId = extractZoneIdFromPath(request);
-    if (zoneId >= m_zoneComposer->getZoneCount()) {
-        sendErrorResponse(request, HttpStatus::NOT_FOUND,
-                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range");
-        return;
-    }
-
-    StaticJsonDocument<128> doc;
-    VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::ZoneEffect, request);
-
-    uint8_t effectId = doc["effectId"];
-    if (effectId >= RENDERER->getEffectCount()) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "effectId");
-        return;
-    }
-
-    m_zoneComposer->setZoneEffect(zoneId, effectId);
-
-    sendSuccessResponse(request, [zoneId, effectId](JsonObject& respData) {
-        respData["zoneId"] = zoneId;
-        respData["effectId"] = effectId;
-        respData["effectName"] = RENDERER->getEffectName(effectId);
-    });
-
-    broadcastZoneState();
-}
-
-void WebServer::handleZoneSetBrightness(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    if (!m_zoneComposer) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
-        return;
-    }
-
-    uint8_t zoneId = extractZoneIdFromPath(request);
-    if (zoneId >= m_zoneComposer->getZoneCount()) {
-        sendErrorResponse(request, HttpStatus::NOT_FOUND,
-                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range");
-        return;
-    }
-
-    StaticJsonDocument<128> doc;
-    VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::ZoneBrightness, request);
-
-    uint8_t brightness = doc["brightness"];
-    m_zoneComposer->setZoneBrightness(zoneId, brightness);
-
-    sendSuccessResponse(request, [zoneId, brightness](JsonObject& respData) {
-        respData["zoneId"] = zoneId;
-        respData["brightness"] = brightness;
-    });
-
-    broadcastZoneState();
-}
-
-void WebServer::handleZoneSetSpeed(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    if (!m_zoneComposer) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
-        return;
-    }
-
-    uint8_t zoneId = extractZoneIdFromPath(request);
-    if (zoneId >= m_zoneComposer->getZoneCount()) {
-        sendErrorResponse(request, HttpStatus::NOT_FOUND,
-                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range");
-        return;
-    }
-
-    StaticJsonDocument<128> doc;
-    VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::ZoneSpeed, request);
-
-    // Schema validates speed is 1-50
-    uint8_t speed = doc["speed"];
-    m_zoneComposer->setZoneSpeed(zoneId, speed);
-
-    sendSuccessResponse(request, [zoneId, speed](JsonObject& respData) {
-        respData["zoneId"] = zoneId;
-        respData["speed"] = speed;
-    });
-
-    broadcastZoneState();
-}
-
-void WebServer::handleZoneSetPalette(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    if (!m_zoneComposer) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
-        return;
-    }
-
-    uint8_t zoneId = extractZoneIdFromPath(request);
-    if (zoneId >= m_zoneComposer->getZoneCount()) {
-        sendErrorResponse(request, HttpStatus::NOT_FOUND,
-                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range");
-        return;
-    }
-
-    StaticJsonDocument<128> doc;
-    VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::ZonePalette, request);
-
-    uint8_t paletteId = doc["paletteId"];
-    if (paletteId >= MASTER_PALETTE_COUNT) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Palette ID out of range (0-74)", "paletteId");
-        return;
-    }
-
-    m_zoneComposer->setZonePalette(zoneId, paletteId);
-
-    sendSuccessResponse(request, [zoneId, paletteId](JsonObject& respData) {
-        respData["zoneId"] = zoneId;
-        respData["paletteId"] = paletteId;
-        respData["paletteName"] = MasterPaletteNames[paletteId];
-    });
-
-    broadcastZoneState();
-}
-
-void WebServer::handleZoneSetBlend(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    if (!m_zoneComposer) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
-        return;
-    }
-
-    uint8_t zoneId = extractZoneIdFromPath(request);
-    if (zoneId >= m_zoneComposer->getZoneCount()) {
-        sendErrorResponse(request, HttpStatus::NOT_FOUND,
-                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range");
-        return;
-    }
-
-    StaticJsonDocument<128> doc;
-    VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::ZoneBlend, request);
-
-    // Schema validates blendMode is 0-7
-    uint8_t blendModeVal = doc["blendMode"];
-    BlendMode blendMode = static_cast<BlendMode>(blendModeVal);
-    m_zoneComposer->setZoneBlendMode(zoneId, blendMode);
-
-    sendSuccessResponse(request, [zoneId, blendModeVal, blendMode](JsonObject& respData) {
-        respData["zoneId"] = zoneId;
-        respData["blendMode"] = blendModeVal;
-        respData["blendModeName"] = getBlendModeName(blendMode);
-    });
-
-    broadcastZoneState();
-}
-
-void WebServer::handleZoneSetEnabled(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    if (!m_zoneComposer) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
-        return;
-    }
-
-    uint8_t zoneId = extractZoneIdFromPath(request);
-    if (zoneId >= m_zoneComposer->getZoneCount()) {
-        sendErrorResponse(request, HttpStatus::NOT_FOUND,
-                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range");
-        return;
-    }
-
-    StaticJsonDocument<128> doc;
-    VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::ZoneEnabled, request);
-
-    bool enabled = doc["enabled"];
-    m_zoneComposer->setZoneEnabled(zoneId, enabled);
-
-    sendSuccessResponse(request, [zoneId, enabled](JsonObject& respData) {
-        respData["zoneId"] = zoneId;
-        respData["enabled"] = enabled;
-    });
-
-    broadcastZoneState();
 }
 
 // ============================================================================
@@ -2478,15 +1847,15 @@ void WebServer::onWsEvent(AsyncWebSocket* server, AsyncWebSocketClient* client,
                           AwsEventType type, void* arg, uint8_t* data, size_t len) {
     switch (type) {
         case WS_EVT_CONNECT:
-            webServer.handleWsConnect(client);
+            if (webServerInstance) webServerInstance->handleWsConnect(client);
             break;
 
         case WS_EVT_DISCONNECT:
-            webServer.handleWsDisconnect(client);
+            if (webServerInstance) webServerInstance->handleWsDisconnect(client);
             break;
 
         case WS_EVT_DATA:
-            webServer.handleWsMessage(client, data, len);
+            if (webServerInstance) webServerInstance->handleWsMessage(client, data, len);
             break;
 
         case WS_EVT_ERROR:
@@ -2562,40 +1931,40 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
     // Effect control
     if (type == "setEffect") {
         uint8_t effectId = doc["effectId"] | 0;
-        if (effectId < RENDERER->getEffectCount()) {
-            ACTOR_SYSTEM.setEffect(effectId);
+        if (effectId < m_renderer->getEffectCount()) {
+            m_actorSystem.setEffect(effectId);
             broadcastStatus();
         }
     }
     else if (type == "nextEffect") {
-        uint8_t current = RENDERER->getCurrentEffect();
-        uint8_t next = (current + 1) % RENDERER->getEffectCount();
-        ACTOR_SYSTEM.setEffect(next);
+        uint8_t current = m_renderer->getCurrentEffect();
+        uint8_t next = (current + 1) % m_renderer->getEffectCount();
+        m_actorSystem.setEffect(next);
         broadcastStatus();
     }
     else if (type == "prevEffect") {
-        uint8_t current = RENDERER->getCurrentEffect();
-        uint8_t prev = (current + RENDERER->getEffectCount() - 1) % RENDERER->getEffectCount();
-        ACTOR_SYSTEM.setEffect(prev);
+        uint8_t current = m_renderer->getCurrentEffect();
+        uint8_t prev = (current + m_renderer->getEffectCount() - 1) % m_renderer->getEffectCount();
+        m_actorSystem.setEffect(prev);
         broadcastStatus();
     }
 
     // Parameter control
     else if (type == "setBrightness") {
         uint8_t value = doc["value"] | 128;
-        ACTOR_SYSTEM.setBrightness(value);
+        m_actorSystem.setBrightness(value);
         broadcastStatus();
     }
     else if (type == "setSpeed") {
         uint8_t value = doc["value"] | 15;
         if (value >= 1 && value <= 50) {
-            ACTOR_SYSTEM.setSpeed(value);
+            m_actorSystem.setSpeed(value);
             broadcastStatus();
         }
     }
     else if (type == "setPalette") {
         uint8_t paletteId = doc["paletteId"] | 0;
-        ACTOR_SYSTEM.setPalette(paletteId);
+        m_actorSystem.setPalette(paletteId);
         broadcastStatus();
     }
 
@@ -2605,11 +1974,11 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
         uint8_t transType = doc["transitionType"] | 0;
         bool random = doc["random"] | false;
 
-        if (toEffect < RENDERER->getEffectCount()) {
+        if (toEffect < m_renderer->getEffectCount()) {
             if (random) {
-                RENDERER->startRandomTransition(toEffect);
+                m_renderer->startRandomTransition(toEffect);
             } else {
-                RENDERER->startTransition(toEffect, transType);
+                m_renderer->startTransition(toEffect, transType);
             }
             broadcastStatus();
         }
@@ -2662,17 +2031,17 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
         if (ok) {
             String response = buildWsResponse("ledStream.subscribed", requestId, [clientId](JsonObject& data) {
                 data["clientId"] = clientId;
-                data["frameSize"] = LedStreamConfig::FRAME_SIZE;
-                data["frameVersion"] = LedStreamConfig::FRAME_VERSION;
-                data["numStrips"] = LedStreamConfig::NUM_STRIPS;
-                data["ledsPerStrip"] = LedStreamConfig::LEDS_PER_STRIP;
-                data["targetFps"] = LedStreamConfig::TARGET_FPS;
-                data["magicByte"] = LedStreamConfig::MAGIC_BYTE;
+                data["frameSize"] = webserver::LedStreamConfig::FRAME_SIZE;
+                data["frameVersion"] = webserver::LedStreamConfig::FRAME_VERSION;
+                data["numStrips"] = webserver::LedStreamConfig::NUM_STRIPS;
+                data["ledsPerStrip"] = webserver::LedStreamConfig::LEDS_PER_STRIP;
+                data["targetFps"] = webserver::LedStreamConfig::TARGET_FPS;
+                data["magicByte"] = webserver::LedStreamConfig::MAGIC_BYTE;
                 data["accepted"] = true;
             });
             client->text(response);
             Serial.printf("[WebSocket] Client %u subscribed to LED stream (v%d, %d bytes)\n", 
-                         clientId, LedStreamConfig::FRAME_VERSION, LedStreamConfig::FRAME_SIZE);
+                         clientId, webserver::LedStreamConfig::FRAME_VERSION, webserver::LedStreamConfig::FRAME_SIZE);
         } else {
             // Manually build rejection response to set success=false
             JsonDocument response;
@@ -2681,7 +2050,7 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
                 response["requestId"] = requestId;
             }
             response["success"] = false;
-            JsonObject error = response.createNestedObject("error");
+            JsonObject error = response["error"].to<JsonObject>();
             error["code"] = "RESOURCE_EXHAUSTED";
             error["message"] = "Subscriber table full";
             
@@ -2705,21 +2074,21 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
     // Request-response pattern with requestId
     else if (type == "effects.getCurrent") {
         const char* requestId = doc["requestId"] | "";
-        String response = buildWsResponse("effects.current", requestId, [](JsonObject& data) {
-            data["effectId"] = RENDERER->getCurrentEffect();
-            data["name"] = RENDERER->getEffectName(RENDERER->getCurrentEffect());
-            data["brightness"] = RENDERER->getBrightness();
-            data["speed"] = RENDERER->getSpeed();
+        String response = buildWsResponse("effects.current", requestId, [this](JsonObject& data) {
+            data["effectId"] = m_renderer->getCurrentEffect();
+            data["name"] = m_renderer->getEffectName(m_renderer->getCurrentEffect());
+            data["brightness"] = m_renderer->getBrightness();
+            data["speed"] = m_renderer->getSpeed();
         });
         client->text(response);
     }
     else if (type == "parameters.get") {
         const char* requestId = doc["requestId"] | "";
-        String response = buildWsResponse("parameters", requestId, [](JsonObject& data) {
-            data["brightness"] = RENDERER->getBrightness();
-            data["speed"] = RENDERER->getSpeed();
-            data["paletteId"] = RENDERER->getPaletteIndex();
-            data["hue"] = RENDERER->getHue();
+        String response = buildWsResponse("parameters", requestId, [this](JsonObject& data) {
+            data["brightness"] = m_renderer->getBrightness();
+            data["speed"] = m_renderer->getSpeed();
+            data["paletteId"] = m_renderer->getPaletteIndex();
+            data["hue"] = m_renderer->getHue();
         });
         client->text(response);
     }
@@ -2736,13 +2105,13 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             data["cpuFreq"] = ESP.getCpuFreqMHz();
 
             // Render stats
-            const RenderStats& stats = RENDERER->getStats();
+            const RenderStats& stats = m_renderer->getStats();
             data["fps"] = stats.currentFPS;
             data["cpuPercent"] = stats.cpuPercent;
             data["framesRendered"] = stats.framesRendered;
 
             // Network info
-            JsonObject network = data.createNestedObject("network");
+            JsonObject network = data["network"].to<JsonObject>();
             network["connected"] = WiFi.status() == WL_CONNECTED;
             network["apMode"] = m_apMode;
             if (WiFi.status() == WL_CONNECTED) {
@@ -2760,14 +2129,14 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
         const char* requestId = doc["requestId"] | "";
         uint8_t effectId = doc["effectId"] | 255;
 
-        if (effectId == 255 || effectId >= RENDERER->getEffectCount()) {
+        if (effectId == 255 || effectId >= m_renderer->getEffectCount()) {
             client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid effectId", requestId));
             return;
         }
 
-        String response = buildWsResponse("effects.metadata", requestId, [effectId](JsonObject& data) {
+        String response = buildWsResponse("effects.metadata", requestId, [this, effectId](JsonObject& data) {
             data["id"] = effectId;
-            data["name"] = RENDERER->getEffectName(effectId);
+            data["name"] = m_renderer->getEffectName(effectId);
 
             // Query PatternRegistry for metadata
             const PatternMetadata* meta = PatternRegistry::getPatternMetadata(effectId);
@@ -2787,7 +2156,7 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
                 }
                 
                 // Tags as array
-                JsonArray tags = data.createNestedArray("tags");
+                JsonArray tags = data["tags"].to<JsonArray>();
                 if (meta->hasTag(PatternTags::STANDING)) tags.add("STANDING");
                 if (meta->hasTag(PatternTags::TRAVELING)) tags.add("TRAVELING");
                 if (meta->hasTag(PatternTags::MOIRE)) tags.add("MOIRE");
@@ -2803,14 +2172,14 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             }
 
             // Effect properties
-            JsonObject properties = data.createNestedObject("properties");
+            JsonObject properties = data["properties"].to<JsonObject>();
             properties["centerOrigin"] = true;
             properties["symmetricStrips"] = true;
             properties["paletteAware"] = true;
             properties["speedResponsive"] = true;
 
             // Recommended settings
-            JsonObject recommended = data.createNestedObject("recommended");
+            JsonObject recommended = data["recommended"].to<JsonObject>();
             recommended["brightness"] = 180;
             recommended["speed"] = 15;
         });
@@ -2821,14 +2190,14 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
     else if (type == "effects.getCategories") {
         const char* requestId = doc["requestId"] | "";
         String response = buildWsResponse("effects.categories", requestId, [](JsonObject& data) {
-            JsonArray families = data.createNestedArray("categories");
+            JsonArray families = data["categories"].to<JsonArray>();
             
             // Return all 10 pattern families from registry
             for (uint8_t i = 0; i < 10; i++) {
                 PatternFamily family = static_cast<PatternFamily>(i);
                 uint8_t count = PatternRegistry::getFamilyCount(family);
                 
-                JsonObject familyObj = families.createNestedObject();
+                JsonObject familyObj = families.add<JsonObject>();
                 familyObj["id"] = i;
                 
                 char familyName[32];
@@ -2863,7 +2232,7 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             PatternRegistry::getFamilyName(static_cast<PatternFamily>(familyId), familyName, sizeof(familyName));
             data["familyName"] = familyName;
             
-            JsonArray effects = data.createNestedArray("effects");
+            JsonArray effects = data["effects"].to<JsonArray>();
             for (uint8_t i = 0; i < count; i++) {
                 effects.add(patternIndices[i]);
             }
@@ -2877,10 +2246,10 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
     else if (type == "transition.getTypes") {
         const char* requestId = doc["requestId"] | "";
         String response = buildWsResponse("transitions.types", requestId, [](JsonObject& data) {
-            JsonArray types = data.createNestedArray("types");
+            JsonArray types = data["types"].to<JsonArray>();
 
             for (uint8_t i = 0; i < static_cast<uint8_t>(TransitionType::TYPE_COUNT); i++) {
-                JsonObject type = types.createNestedObject();
+                JsonObject type = types.add<JsonObject>();
                 type["id"] = i;
                 type["name"] = getTransitionName(static_cast<TransitionType>(i));
             }
@@ -2900,14 +2269,14 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             data["defaultTypeName"] = getTransitionName(TransitionType::FADE);
 
             // Available easing curves
-            JsonArray easings = data.createNestedArray("easings");
+            JsonArray easings = data["easings"].to<JsonArray>();
             const char* easingNames[] = {
                 "LINEAR", "IN_QUAD", "OUT_QUAD", "IN_OUT_QUAD",
                 "IN_CUBIC", "OUT_CUBIC", "IN_OUT_CUBIC",
                 "IN_ELASTIC", "OUT_ELASTIC", "IN_OUT_ELASTIC"
             };
             for (uint8_t i = 0; i < 10; i++) {
-                JsonObject easing = easings.createNestedObject();
+                JsonObject easing = easings.add<JsonObject>();
                 easing["id"] = i;
                 easing["name"] = easingNames[i];
             }
@@ -2951,13 +2320,13 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             data["layoutName"] = m_zoneComposer->getLayout() == ZoneLayout::QUAD ? "QUAD" : "TRIPLE";
             data["zoneCount"] = m_zoneComposer->getZoneCount();
 
-            JsonArray zones = data.createNestedArray("zones");
+            JsonArray zones = data["zones"].to<JsonArray>();
             for (uint8_t i = 0; i < m_zoneComposer->getZoneCount(); i++) {
-                JsonObject zone = zones.createNestedObject();
+                JsonObject zone = zones.add<JsonObject>();
                 zone["id"] = i;
                 zone["enabled"] = m_zoneComposer->isZoneEnabled(i);
                 zone["effectId"] = m_zoneComposer->getZoneEffect(i);
-                zone["effectName"] = RENDERER->getEffectName(m_zoneComposer->getZoneEffect(i));
+                zone["effectName"] = m_renderer->getEffectName(m_zoneComposer->getZoneEffect(i));
                 zone["brightness"] = m_zoneComposer->getZoneBrightness(i);
                 zone["speed"] = m_zoneComposer->getZoneSpeed(i);
                 zone["paletteId"] = m_zoneComposer->getZonePalette(i);
@@ -2966,9 +2335,9 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             }
 
             // Available presets
-            JsonArray presets = data.createNestedArray("presets");
+            JsonArray presets = data["presets"].to<JsonArray>();
             for (uint8_t i = 0; i < 5; i++) {
-                JsonObject preset = presets.createNestedObject();
+                JsonObject preset = presets.add<JsonObject>();
                 preset["id"] = i;
                 preset["name"] = ZoneComposer::getPresetName(i);
             }
@@ -3046,17 +2415,17 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
         if (limit < 1) limit = 1;
         if (limit > 50) limit = 50;
 
-        uint8_t effectCount = RENDERER->getEffectCount();
+        uint8_t effectCount = m_renderer->getEffectCount();
         uint8_t startIdx = (page - 1) * limit;
         uint8_t endIdx = min((uint8_t)(startIdx + limit), effectCount);
 
-        String response = buildWsResponse("effects.list", requestId, [effectCount, startIdx, endIdx, page, limit, details](JsonObject& data) {
-            JsonArray effects = data.createNestedArray("effects");
+        String response = buildWsResponse("effects.list", requestId, [this, effectCount, startIdx, endIdx, page, limit, details](JsonObject& data) {
+            JsonArray effects = data["effects"].to<JsonArray>();
 
             for (uint8_t i = startIdx; i < endIdx; i++) {
-                JsonObject effect = effects.createNestedObject();
+                JsonObject effect = effects.add<JsonObject>();
                 effect["id"] = i;
-                effect["name"] = RENDERER->getEffectName(i);
+                effect["name"] = m_renderer->getEffectName(i);
 
                 if (details) {
                     // Category based on ID ranges
@@ -3072,7 +2441,7 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
                 }
             }
 
-            JsonObject pagination = data.createNestedObject("pagination");
+            JsonObject pagination = data["pagination"].to<JsonObject>();
             pagination["page"] = page;
             pagination["limit"] = limit;
             pagination["total"] = effectCount;
@@ -3091,7 +2460,7 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             return;
         }
 
-        if (effectId >= RENDERER->getEffectCount()) {
+        if (effectId >= m_renderer->getEffectCount()) {
             client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid effectId", requestId));
             return;
         }
@@ -3109,16 +2478,16 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
         }
 
         if (useTransition && transType < static_cast<uint8_t>(TransitionType::TYPE_COUNT)) {
-            RENDERER->startTransition(effectId, transType);
+            m_renderer->startTransition(effectId, transType);
         } else {
-            ACTOR_SYSTEM.setEffect(effectId);
+            m_actorSystem.setEffect(effectId);
         }
 
         broadcastStatus();
 
-        String response = buildWsResponse("effects.changed", requestId, [effectId, useTransition](JsonObject& data) {
+        String response = buildWsResponse("effects.changed", requestId, [this, effectId, useTransition](JsonObject& data) {
             data["effectId"] = effectId;
-            data["name"] = RENDERER->getEffectName(effectId);
+            data["name"] = m_renderer->getEffectName(effectId);
             data["transitionActive"] = useTransition;
         });
         client->text(response);
@@ -3135,36 +2504,36 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
 
         if (doc.containsKey("brightness")) {
             uint8_t value = doc["brightness"] | 128;
-            ACTOR_SYSTEM.setBrightness(value);
+            m_actorSystem.setBrightness(value);
             updatedBrightness = true;
         }
 
         if (doc.containsKey("speed")) {
             uint8_t value = doc["speed"] | 15;
             if (value >= 1 && value <= 50) {
-                ACTOR_SYSTEM.setSpeed(value);
+                m_actorSystem.setSpeed(value);
                 updatedSpeed = true;
             }
         }
 
         if (doc.containsKey("paletteId")) {
             uint8_t value = doc["paletteId"] | 0;
-            ACTOR_SYSTEM.setPalette(value);
+            m_actorSystem.setPalette(value);
             updatedPalette = true;
         }
 
         broadcastStatus();
 
-        String response = buildWsResponse("parameters.changed", requestId, [updatedBrightness, updatedSpeed, updatedPalette](JsonObject& data) {
-            JsonArray updated = data.createNestedArray("updated");
+        String response = buildWsResponse("parameters.changed", requestId, [this, updatedBrightness, updatedSpeed, updatedPalette](JsonObject& data) {
+            JsonArray updated = data["updated"].to<JsonArray>();
             if (updatedBrightness) updated.add("brightness");
             if (updatedSpeed) updated.add("speed");
             if (updatedPalette) updated.add("paletteId");
 
-            JsonObject current = data.createNestedObject("current");
-            current["brightness"] = RENDERER->getBrightness();
-            current["speed"] = RENDERER->getSpeed();
-            current["paletteId"] = RENDERER->getPaletteIndex();
+            JsonObject current = data["current"].to<JsonObject>();
+            current["brightness"] = m_renderer->getBrightness();
+            current["speed"] = m_renderer->getSpeed();
+            current["paletteId"] = m_renderer->getPaletteIndex();
         });
         client->text(response);
     }
@@ -3182,13 +2551,13 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             data["enabled"] = m_zoneComposer->isEnabled();
             data["zoneCount"] = m_zoneComposer->getZoneCount();
 
-            JsonArray zones = data.createNestedArray("zones");
+            JsonArray zones = data["zones"].to<JsonArray>();
             for (uint8_t i = 0; i < m_zoneComposer->getZoneCount(); i++) {
-                JsonObject zone = zones.createNestedObject();
+                JsonObject zone = zones.add<JsonObject>();
                 zone["id"] = i;
                 zone["enabled"] = m_zoneComposer->isZoneEnabled(i);
                 zone["effectId"] = m_zoneComposer->getZoneEffect(i);
-                zone["effectName"] = RENDERER->getEffectName(m_zoneComposer->getZoneEffect(i));
+                zone["effectName"] = m_renderer->getEffectName(m_zoneComposer->getZoneEffect(i));
                 zone["brightness"] = m_zoneComposer->getZoneBrightness(i);
                 zone["speed"] = m_zoneComposer->getZoneSpeed(i);
                 zone["paletteId"] = m_zoneComposer->getZonePalette(i);
@@ -3220,7 +2589,7 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
 
         if (doc.containsKey("effectId")) {
             uint8_t effectId = doc["effectId"] | 0;
-            if (effectId < RENDERER->getEffectCount()) {
+            if (effectId < m_renderer->getEffectCount()) {
                 m_zoneComposer->setZoneEffect(zoneId, effectId);
                 updatedEffect = true;
             }
@@ -3249,13 +2618,13 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
         String response = buildWsResponse("zones.changed", requestId, [this, zoneId, updatedEffect, updatedBrightness, updatedSpeed, updatedPalette](JsonObject& data) {
             data["zoneId"] = zoneId;
 
-            JsonArray updated = data.createNestedArray("updated");
+            JsonArray updated = data["updated"].to<JsonArray>();
             if (updatedEffect) updated.add("effectId");
             if (updatedBrightness) updated.add("brightness");
             if (updatedSpeed) updated.add("speed");
             if (updatedPalette) updated.add("paletteId");
 
-            JsonObject current = data.createNestedObject("current");
+            JsonObject current = data["current"].to<JsonObject>();
             current["effectId"] = m_zoneComposer->getZoneEffect(zoneId);
             current["brightness"] = m_zoneComposer->getZoneBrightness(zoneId);
             current["speed"] = m_zoneComposer->getZoneSpeed(zoneId);
@@ -3285,7 +2654,7 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             return;
         }
 
-        if (effectId >= RENDERER->getEffectCount()) {
+        if (effectId >= m_renderer->getEffectCount()) {
             client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid effectId", requestId));
             return;
         }
@@ -3293,10 +2662,10 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
         m_zoneComposer->setZoneEffect(zoneId, effectId);
         broadcastZoneState();
 
-        String response = buildWsResponse("zones.effectChanged", requestId, [zoneId, effectId](JsonObject& data) {
+        String response = buildWsResponse("zones.effectChanged", requestId, [this, zoneId, effectId](JsonObject& data) {
             data["zoneId"] = zoneId;
             data["effectId"] = effectId;
-            data["effectName"] = RENDERER->getEffectName(effectId);
+            data["effectName"] = m_renderer->getEffectName(effectId);
         });
         client->text(response);
     }
@@ -3322,22 +2691,22 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
     else if (type == "transitions.list") {
         const char* requestId = doc["requestId"] | "";
         String response = buildWsResponse("transitions.list", requestId, [](JsonObject& data) {
-            JsonArray types = data.createNestedArray("types");
+            JsonArray types = data["types"].to<JsonArray>();
 
             for (uint8_t i = 0; i < static_cast<uint8_t>(TransitionType::TYPE_COUNT); i++) {
-                JsonObject type = types.createNestedObject();
+                JsonObject type = types.add<JsonObject>();
                 type["id"] = i;
                 type["name"] = getTransitionName(static_cast<TransitionType>(i));
             }
 
-            JsonArray easings = data.createNestedArray("easingCurves");
+            JsonArray easings = data["easingCurves"].to<JsonArray>();
             const char* easingNames[] = {
                 "LINEAR", "IN_QUAD", "OUT_QUAD", "IN_OUT_QUAD",
                 "IN_CUBIC", "OUT_CUBIC", "IN_OUT_CUBIC",
                 "IN_ELASTIC", "OUT_ELASTIC", "IN_OUT_ELASTIC"
             };
             for (uint8_t i = 0; i < 10; i++) {
-                JsonObject easing = easings.createNestedObject();
+                JsonObject easing = easings.add<JsonObject>();
                 easing["id"] = i;
                 easing["name"] = easingNames[i];
             }
@@ -3359,19 +2728,19 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             return;
         }
 
-        if (toEffect >= RENDERER->getEffectCount()) {
+        if (toEffect >= m_renderer->getEffectCount()) {
             client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid toEffect", requestId));
             return;
         }
 
-        uint8_t fromEffect = RENDERER->getCurrentEffect();
-        RENDERER->startTransition(toEffect, transType);
+        uint8_t fromEffect = m_renderer->getCurrentEffect();
+        m_renderer->startTransition(toEffect, transType);
         broadcastStatus();
 
-        String response = buildWsResponse("transition.started", requestId, [fromEffect, toEffect, transType, duration](JsonObject& data) {
+        String response = buildWsResponse("transition.started", requestId, [this, fromEffect, toEffect, transType, duration](JsonObject& data) {
             data["fromEffect"] = fromEffect;
             data["toEffect"] = toEffect;
-            data["toEffectName"] = RENDERER->getEffectName(toEffect);
+            data["toEffectName"] = m_renderer->getEffectName(toEffect);
             data["transitionType"] = transType;
             data["transitionName"] = getTransitionName(static_cast<TransitionType>(transType));
             data["duration"] = duration;
@@ -3405,7 +2774,7 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             data["phaseId"] = static_cast<uint8_t>(phase);
             
             // Phase durations
-            JsonObject durations = data.createNestedObject("durations");
+            JsonObject durations = data["durations"].to<JsonObject>();
             durations["build"] = narrative.getBuildDuration();
             durations["hold"] = narrative.getHoldDuration();
             durations["release"] = narrative.getReleaseDuration();
@@ -3427,7 +2796,7 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
         
         String response = buildWsResponse("narrative.config", requestId, [&narrative](JsonObject& data) {
             // Phase durations
-            JsonObject durations = data.createNestedObject("durations");
+            JsonObject durations = data["durations"].to<JsonObject>();
             durations["build"] = narrative.getBuildDuration();
             durations["hold"] = narrative.getHoldDuration();
             durations["release"] = narrative.getReleaseDuration();
@@ -3435,7 +2804,7 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             durations["total"] = narrative.getTotalDuration();
             
             // Curves
-            JsonObject curves = data.createNestedObject("curves");
+            JsonObject curves = data["curves"].to<JsonObject>();
             curves["build"] = static_cast<uint8_t>(narrative.getBuildCurve());
             curves["release"] = static_cast<uint8_t>(narrative.getReleaseCurve());
             
@@ -3536,16 +2905,16 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
         uint8_t endIdx = min((uint8_t)(startIdx + limit), (uint8_t)MASTER_PALETTE_COUNT);
 
         String response = buildWsResponse("palettes.list", requestId, [startIdx, endIdx, page, limit](JsonObject& data) {
-            JsonArray palettes = data.createNestedArray("palettes");
+            JsonArray palettes = data["palettes"].to<JsonArray>();
 
             for (uint8_t i = startIdx; i < endIdx; i++) {
-                JsonObject palette = palettes.createNestedObject();
+                JsonObject palette = palettes.add<JsonObject>();
                 palette["id"] = i;
                 palette["name"] = MasterPaletteNames[i];
                 palette["category"] = getPaletteCategory(i);
             }
 
-            JsonObject pagination = data.createNestedObject("pagination");
+            JsonObject pagination = data["pagination"].to<JsonObject>();
             pagination["page"] = page;
             pagination["limit"] = limit;
             pagination["total"] = MASTER_PALETTE_COUNT;
@@ -3570,12 +2939,12 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
         }
 
         String response = buildWsResponse("palettes.get", requestId, [paletteId](JsonObject& data) {
-            JsonObject palette = data.createNestedObject("palette");
+            JsonObject palette = data["palette"].to<JsonObject>();
             palette["id"] = paletteId;
             palette["name"] = MasterPaletteNames[paletteId];
             palette["category"] = getPaletteCategory(paletteId);
 
-            JsonObject flags = palette.createNestedObject("flags");
+            JsonObject flags = palette["flags"].to<JsonObject>();
             flags["warm"] = isPaletteWarm(paletteId);
             flags["cool"] = isPaletteCool(paletteId);
             flags["calm"] = isPaletteCalm(paletteId);
@@ -3878,7 +3247,7 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             data["active"] = engine.isActive();
             data["blendEnabled"] = engine.isCrossBlendEnabled();
 
-            JsonArray blendFactors = data.createNestedArray("blendFactors");
+            JsonArray blendFactors = data["blendFactors"].to<JsonArray>();
             blendFactors.add(engine.getBlendFactor1());
             blendFactors.add(engine.getBlendFactor2());
             blendFactors.add(engine.getBlendFactor3());
@@ -3943,7 +3312,7 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
         }
 
         String response = buildWsResponse("color.setBlendPalettes", requestId, [p1, p2, p3](JsonObject& data) {
-            JsonArray palettes = data.createNestedArray("blendPalettes");
+            JsonArray palettes = data["blendPalettes"].to<JsonArray>();
             palettes.add(p1);
             palettes.add(p2);
             if (p3 != 255) palettes.add(p3);
@@ -3968,7 +3337,7 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
         engine.setBlendFactors(f1, f2, f3);
 
         String response = buildWsResponse("color.setBlendFactors", requestId, [f1, f2, f3](JsonObject& data) {
-            JsonArray factors = data.createNestedArray("blendFactors");
+            JsonArray factors = data["blendFactors"].to<JsonArray>();
             factors.add(f1);
             factors.add(f2);
             factors.add(f3);
@@ -4180,18 +3549,18 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
 void WebServer::broadcastStatus() {
     if (m_ws->count() == 0) return;
 
-    StaticJsonDocument<512> doc;
+    JsonDocument doc;
     doc["type"] = "status";
 
-    if (RENDERER) {
-        doc["effectId"] = RENDERER->getCurrentEffect();
-        doc["effectName"] = RENDERER->getEffectName(RENDERER->getCurrentEffect());
-        doc["brightness"] = RENDERER->getBrightness();
-        doc["speed"] = RENDERER->getSpeed();
-        doc["paletteId"] = RENDERER->getPaletteIndex();
-        doc["hue"] = RENDERER->getHue();
+    if (m_renderer) {
+        doc["effectId"] = m_renderer->getCurrentEffect();
+        doc["effectName"] = m_renderer->getEffectName(m_renderer->getCurrentEffect());
+        doc["brightness"] = m_renderer->getBrightness();
+        doc["speed"] = m_renderer->getSpeed();
+        doc["paletteId"] = m_renderer->getPaletteIndex();
+        doc["hue"] = m_renderer->getHue();
 
-        const RenderStats& stats = RENDERER->getStats();
+        const RenderStats& stats = m_renderer->getStats();
         doc["fps"] = stats.currentFPS;
         doc["cpuPercent"] = stats.cpuPercent;
     }
@@ -4207,14 +3576,14 @@ void WebServer::broadcastStatus() {
 void WebServer::broadcastZoneState() {
     if (m_ws->count() == 0 || !m_zoneComposer) return;
 
-    StaticJsonDocument<768> doc;
+    JsonDocument doc;
     doc["type"] = "zone.state";
     doc["enabled"] = m_zoneComposer->isEnabled();
     doc["zoneCount"] = m_zoneComposer->getZoneCount();
 
-    JsonArray zones = doc.createNestedArray("zones");
+    JsonArray zones = doc["zones"].to<JsonArray>();
     for (uint8_t i = 0; i < m_zoneComposer->getZoneCount(); i++) {
-        JsonObject zone = zones.createNestedObject();
+        JsonObject zone = zones.add<JsonObject>();
         zone["id"] = i;
         zone["enabled"] = m_zoneComposer->isZoneEnabled(i);
         zone["effectId"] = m_zoneComposer->getZoneEffect(i);
@@ -4231,7 +3600,7 @@ void WebServer::broadcastZoneState() {
 void WebServer::notifyEffectChange(uint8_t effectId, const char* name) {
     if (m_ws->count() == 0) return;
 
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     doc["type"] = "effectChanged";
     doc["effectId"] = effectId;
     doc["name"] = name;
@@ -4250,130 +3619,32 @@ void WebServer::notifyParameterChange() {
 // ============================================================================
 
 void WebServer::broadcastLEDFrame() {
-    // Skip if no subscribers or no clients connected
-    if (!hasLEDStreamSubscribers() || m_ws->count() == 0) return;
-
-    // Throttle to target FPS
-    uint32_t now = millis();
-    if (now - m_lastLedBroadcast < LedStreamConfig::FRAME_INTERVAL_MS) return;
-    m_lastLedBroadcast = now;
-
-    // Get LED buffer from renderer
-    if (!RENDERER) return;
-
-    // Copy LED data cross-core safely (do NOT read renderer buffer directly)
-    CRGB leds[LedStreamConfig::TOTAL_LEDS];
-    RENDERER->getBufferCopy(leds);
-
-    // Build dual-strip frame format v1:
-    // Header: [MAGIC=0xFE][VERSION=0x01][NUM_STRIPS=0x02][LEDS_PER_STRIP=160]
-    // Strip 0 (TOP edge, GPIO4): [STRIP_ID=0][RGB×160]
-    // Strip 1 (BOTTOM edge, GPIO5): [STRIP_ID=1][RGB×160]
+    if (!m_ledBroadcaster || !m_renderer) return;
     
-    uint8_t* dst = m_ledFrameBuffer;
+    // Get LED buffer from renderer (cross-core safe copy)
+    CRGB leds[webserver::LedStreamConfig::TOTAL_LEDS];
+    m_renderer->getBufferCopy(leds);
     
-    // Header
-    *dst++ = LedStreamConfig::MAGIC_BYTE;
-    *dst++ = LedStreamConfig::FRAME_VERSION;
-    *dst++ = LedStreamConfig::NUM_STRIPS;
-    *dst++ = (uint8_t)LedStreamConfig::LEDS_PER_STRIP;  // Cast to uint8_t (160 fits)
-    
-    // Strip 0 (TOP edge, GPIO4): indices 0..159
-    *dst++ = 0;  // Strip ID
-    for (uint16_t i = 0; i < LedStreamConfig::LEDS_PER_STRIP; i++) {
-        *dst++ = leds[i].r;
-        *dst++ = leds[i].g;
-        *dst++ = leds[i].b;
-    }
-    
-    // Strip 1 (BOTTOM edge, GPIO5): indices 160..319
-    *dst++ = 1;  // Strip ID
-    for (uint16_t i = 0; i < LedStreamConfig::LEDS_PER_STRIP; i++) {
-        uint16_t unifiedIdx = LedStreamConfig::LEDS_PER_STRIP + i;
-        *dst++ = leds[unifiedIdx].r;
-        *dst++ = leds[unifiedIdx].g;
-        *dst++ = leds[unifiedIdx].b;
-    }
-
-    // Send to subscribed clients only
-    // NOTE: Avoid version-fragile iteration (getClients()) by sending only to our tracked subscribers.
-    uint32_t ids[WebServerConfig::MAX_WS_CLIENTS];
-    size_t count = 0;
-#if defined(ESP32)
-    portENTER_CRITICAL(&m_ledStreamMux);
-#endif
-    count = m_ledStreamSubscribers.count();
-    for (size_t i = 0; i < count; i++) {
-        ids[i] = m_ledStreamSubscribers.get(i);
-    }
-#if defined(ESP32)
-    portEXIT_CRITICAL(&m_ledStreamMux);
-#endif
-
-    uint32_t toRemove[WebServerConfig::MAX_WS_CLIENTS];
-    uint8_t removeCount = 0;
-
-    for (size_t i = 0; i < count; i++) {
-        uint32_t clientId = ids[i];
-        AsyncWebSocketClient* c = m_ws->client(clientId);
-        if (!c || c->status() != WS_CONNECTED) {
-            toRemove[removeCount++] = clientId;
-            continue;
-        }
-        c->binary(m_ledFrameBuffer, LedStreamConfig::FRAME_SIZE);
-    }
-
-    if (removeCount > 0) {
-#if defined(ESP32)
-        portENTER_CRITICAL(&m_ledStreamMux);
-#endif
-        for (uint8_t r = 0; r < removeCount; r++) {
-            m_ledStreamSubscribers.remove(toRemove[r]);
-        }
-#if defined(ESP32)
-        portEXIT_CRITICAL(&m_ledStreamMux);
-#endif
-    }
+    // Broadcast to subscribed clients (throttling handled internally)
+    m_ledBroadcaster->broadcast(leds);
 }
 
 bool WebServer::setLEDStreamSubscription(AsyncWebSocketClient* client, bool subscribe) {
-    if (!client) return false;
+    if (!client || !m_ledBroadcaster) return false;
     uint32_t clientId = client->id();
-    bool success = false;
-    bool wasPresent = false;
-
-#if defined(ESP32)
-    portENTER_CRITICAL(&m_ledStreamMux);
-#endif
-    if (subscribe) {
-        success = m_ledStreamSubscribers.add(clientId);
-    } else {
-        wasPresent = m_ledStreamSubscribers.remove(clientId);
-        success = true;
-    }
-#if defined(ESP32)
-    portEXIT_CRITICAL(&m_ledStreamMux);
-#endif
-
+    bool success = m_ledBroadcaster->setSubscription(clientId, subscribe);
+    
     if (subscribe && success) {
         Serial.printf("[WebServer] Client %u subscribed to LED stream\n", clientId);
-    } else if (!subscribe && wasPresent) {
+    } else if (!subscribe) {
         Serial.printf("[WebServer] Client %u unsubscribed from LED stream\n", clientId);
     }
-
+    
     return success;
 }
 
 bool WebServer::hasLEDStreamSubscribers() const {
-    bool has = false;
-#if defined(ESP32)
-    portENTER_CRITICAL(&m_ledStreamMux);
-#endif
-    has = m_ledStreamSubscribers.count() > 0;
-#if defined(ESP32)
-    portEXIT_CRITICAL(&m_ledStreamMux);
-#endif
-    return has;
+    return m_ledBroadcaster && m_ledBroadcaster->hasSubscribers();
 }
 
 // ============================================================================

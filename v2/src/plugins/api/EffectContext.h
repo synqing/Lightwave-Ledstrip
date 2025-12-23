@@ -63,6 +63,16 @@ public:
 #endif
 
     bool isValid() const { return m_palette != nullptr; }
+    
+    /**
+     * @brief Get raw palette pointer (for adapter compatibility)
+     * @return Raw palette pointer
+     */
+#ifndef NATIVE_BUILD
+    const CRGBPalette16* getRaw() const { return m_palette; }
+#else
+    const void* getRaw() const { return m_palette; }
+#endif
 
 private:
 #ifndef NATIVE_BUILD

@@ -161,6 +161,40 @@ inline uint8_t fastled_beatsin8(uint8_t beatsPerMinute, uint8_t min, uint8_t max
 }
 
 // ============================================================================
+// Hue Wrapping Utilities (No-Rainbows Rule Compliance)
+// ============================================================================
+
+/**
+ * @brief Wrap hue value to prevent rainbow cycling (no-rainbows rule)
+ * 
+ * Prevents hue from cycling through the full spectrum by wrapping within
+ * a maximum range from the base hue. Ensures compliance with no-rainbows
+ * rule (< 60° hue range).
+ * 
+ * @param hue Base hue (0-255)
+ * @param offset Hue offset to add
+ * @param maxRange Maximum hue range from base (default 60 for no-rainbows rule)
+ * @return Wrapped hue value within acceptable range
+ * 
+ * Example:
+ *   uint8_t safeHue = fastled_wrap_hue_safe(ctx.hue, offset, 60);
+ */
+inline uint8_t fastled_wrap_hue_safe(uint8_t hue, int16_t offset, uint8_t maxRange = 60) {
+    int16_t result = (int16_t)hue + offset;
+    // Wrap to keep within 0-255 range
+    while (result < 0) result += 256;
+    while (result >= 256) result -= 256;
+    // Clamp to maxRange if needed (no-rainbows rule)
+    int16_t diff = result - hue;
+    if (diff > maxRange && diff < 256 - maxRange) {
+        result = hue + maxRange;
+    } else if (diff < -maxRange && diff > -(256 - maxRange)) {
+        result = hue - maxRange;
+    }
+    return (uint8_t)result;
+}
+
+// ============================================================================
 // Combined Helper Functions
 // ============================================================================
 

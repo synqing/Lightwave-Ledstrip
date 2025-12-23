@@ -39,6 +39,7 @@
 // Forward declarations
 namespace lightwaveos { namespace zones { class ZoneComposer; } }
 namespace lightwaveos { namespace transitions { class TransitionEngine; enum class TransitionType : uint8_t; } }
+namespace lightwaveos { namespace plugins { class IEffect; namespace runtime { class LegacyEffectAdapter; } } }
 
 namespace lightwaveos {
 namespace actors {
@@ -181,9 +182,10 @@ public:
     // ========================================================================
 
     /**
-     * @brief Register an effect render function
+     * @brief Register an effect render function (legacy)
      *
-     * Effects should be registered before start().
+     * Automatically wraps function pointer in LegacyEffectAdapter.
+     * All effects go through IEffect path.
      *
      * @param id Effect ID (0-255)
      * @param name Human-readable name
@@ -191,6 +193,15 @@ public:
      * @return true if registered successfully
      */
     bool registerEffect(uint8_t id, const char* name, EffectRenderFn fn);
+
+    /**
+     * @brief Register an IEffect instance (native)
+     *
+     * @param id Effect ID (0-255)
+     * @param effect IEffect instance pointer
+     * @return true if registered successfully
+     */
+    bool registerEffect(uint8_t id, plugins::IEffect* effect);
 
     /**
      * @brief Get number of registered effects
@@ -203,11 +214,11 @@ public:
     const char* getEffectName(uint8_t id) const;
 
     /**
-     * @brief Get effect render function by ID
+     * @brief Get IEffect instance by ID
      * @param id Effect ID
-     * @return Effect function pointer, or nullptr if not found
+     * @return IEffect pointer, or nullptr if not found
      */
-    EffectRenderFn getEffectFunction(uint8_t id) const;
+    plugins::IEffect* getEffectInstance(uint8_t id) const;
 
     /**
      * @brief Get pointer to current palette
@@ -413,15 +424,19 @@ private:
     // Palette
     CRGBPalette16 m_currentPalette;
 
-    // Effect registry
+    // Effect registry - IEffect-only
     static constexpr uint8_t MAX_EFFECTS = 80;
     struct EffectEntry {
         const char* name;
-        EffectRenderFn fn;
+        plugins::IEffect* effect;   // All effects are IEffect instances (native or adapter)
         bool active;
     };
     EffectEntry m_effects[MAX_EFFECTS];
     uint8_t m_effectCount;
+    
+    // Storage for LegacyEffectAdapter instances (one per legacy effect)
+    // These are allocated during registration and owned by RendererActor
+    plugins::runtime::LegacyEffectAdapter* m_legacyAdapters[MAX_EFFECTS];
 
     // Timing
     uint32_t m_lastFrameTime;

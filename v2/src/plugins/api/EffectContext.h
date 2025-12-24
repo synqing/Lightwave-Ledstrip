@@ -105,6 +105,35 @@ struct AudioContext {
 
     /// Get tempo tracking confidence (0.0-1.0)
     float tempoConfidence() const { return musicalGrid.tempo_confidence; }
+
+    /// Get waveform sample count
+    uint8_t waveformSize() const { return audio::CONTROLBUS_WAVEFORM_N; }
+
+    /// Get raw waveform sample at index (int16_t: -32768 to 32767)
+    int16_t getWaveformSample(uint8_t index) const {
+        if (index < audio::CONTROLBUS_WAVEFORM_N) {
+            return controlBus.waveform[index];
+        }
+        return 0;
+    }
+
+    /// Get normalized waveform amplitude at index (0.0-1.0, based on abs(sample)/32768)
+    float getWaveformAmplitude(uint8_t index) const {
+        if (index < audio::CONTROLBUS_WAVEFORM_N) {
+            int16_t sample = controlBus.waveform[index];
+            int16_t absSample = (sample < 0) ? -sample : sample;
+            return static_cast<float>(absSample) / 32768.0f;
+        }
+        return 0.0f;
+    }
+
+    /// Get normalized waveform sample with sign (-1.0 to +1.0)
+    float getWaveformNormalized(uint8_t index) const {
+        if (index < audio::CONTROLBUS_WAVEFORM_N) {
+            return static_cast<float>(controlBus.waveform[index]) / 32768.0f;
+        }
+        return 0.0f;
+    }
 };
 
 #else
@@ -128,6 +157,10 @@ struct AudioContext {
     bool isOnDownbeat() const { return false; }
     float bpm() const { return 120.0f; }
     float tempoConfidence() const { return 0.0f; }
+    uint8_t waveformSize() const { return 32; }
+    int16_t getWaveformSample(uint8_t) const { return 0; }
+    float getWaveformAmplitude(uint8_t) const { return 0.0f; }
+    float getWaveformNormalized(uint8_t) const { return 0.0f; }
 };
 #endif
 

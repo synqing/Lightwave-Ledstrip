@@ -89,6 +89,8 @@
 #include "ieffect/LGPBeatPulseEffect.h"
 #include "ieffect/LGPSpectrumBarsEffect.h"
 #include "ieffect/LGPBassBreathEffect.h"
+#include "ieffect/AudioWaveformEffect.h"
+#include "ieffect/AudioBloomEffect.h"
 #include "utils/FastLEDOptim.h"
 #include "../core/narrative/NarrativeEngine.h"
 #include <FastLED.h>
@@ -751,9 +753,21 @@ uint8_t registerAllEffects(RendererActor* renderer) {
         total++;
     }
 
+    // Audio Waveform (ID 72) - True time-domain waveform visualization
+    static ieffect::AudioWaveformEffect audioWaveformInstance;
+    if (renderer->registerEffect(total, &audioWaveformInstance)) {
+        total++;
+    }
+
+    // Audio Bloom (ID 73) - Centre bloom pulses triggered by audio transients
+    static ieffect::AudioBloomEffect audioBloomInstance;
+    if (renderer->registerEffect(total, &audioBloomInstance)) {
+        total++;
+    }
+
     // =============== EFFECT COUNT PARITY VALIDATION ===============
     // Runtime validation: ensure registered count matches expected
-    constexpr uint8_t EXPECTED_EFFECT_COUNT = 72;  // 68 core + 4 audio
+    constexpr uint8_t EXPECTED_EFFECT_COUNT = 74;  // 68 core + 6 audio
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

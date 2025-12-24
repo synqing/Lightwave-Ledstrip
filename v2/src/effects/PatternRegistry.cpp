@@ -105,7 +105,12 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
     {PM_STR("LGP Chromatic Interference"), PatternFamily::ADVANCED_OPTICAL, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Interfering dispersion patterns"), PM_STR("Cauchy equation + Interference"), PM_STR("")},
 
     // --- Audio-Reactive Effects (68+) - Phase 2 ---
-    {PM_STR("Audio Test"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Audio-reactive spectrum visualization"), PM_STR("RMS energy, 8-band spectrum, beat detection"), PM_STR("")}
+    {PM_STR("Audio Test"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Audio-reactive spectrum visualization"), PM_STR("RMS energy, 8-band spectrum, beat detection"), PM_STR("")},
+    {PM_STR("Beat Pulse"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Beat-synchronized radial pulse from centre"), PM_STR("Tempo tracking, beat detection"), PM_STR("")},
+    {PM_STR("Spectrum Bars"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("8-band spectrum analyzer from centre to edge"), PM_STR("Frequency analysis, band energy"), PM_STR("")},
+    {PM_STR("Bass Breath"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Organic breathing driven by bass energy"), PM_STR("Bass band tracking, breathing simulation"), PM_STR("")},
+    {PM_STR("Audio Waveform"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("True time-domain waveform visualization mirrored from centre"), PM_STR("Waveform samples, time-domain display"), PM_STR("")},
+    {PM_STR("Audio Bloom"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Centre bloom pulses triggered by audio transients"), PM_STR("Flux detection, pulse generation, radial decay"), PM_STR("")}
 };
 
 const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(PatternMetadata);
@@ -115,7 +120,7 @@ const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(Pattern
 // ============================================================================
 
 // Expected number of implemented effects (must match registerAllEffects() return value)
-constexpr uint8_t EXPECTED_EFFECT_COUNT = 69;  // 68 core + 1 audio test
+constexpr uint8_t EXPECTED_EFFECT_COUNT = 74;  // 68 core + 6 audio
 
 // Compile-time assertion: metadata must have at least as many entries as implemented effects
 // This ensures we can always map effect IDs to metadata (allows for future effects in metadata)

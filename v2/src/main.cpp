@@ -257,6 +257,7 @@ void setup() {
 void loop() {
     static uint32_t lastStatus = 0;
     static uint8_t currentEffect = 0;
+    static uint8_t lastAudioEffectIndex = 0;  // Track which audio effect (0=Waveform, 1=Bloom)
     uint32_t now = millis();
 
 #if FEATURE_ROTATE8_ENCODER
@@ -863,10 +864,31 @@ void loop() {
             // Numeric and alpha effect selection (single mode)
             else if (!inZoneMode && cmd >= '0' && cmd <= '9') {
                 uint8_t e = cmd - '0';
-                if (e < renderer->getEffectCount()) {
-                    currentEffect = e;
-                    actors.setEffect(e);
-                    Serial.printf("Effect %d: %s\n", e, renderer->getEffectName(e));
+                
+                // Special case: '6' cycles through audio effects (72=Waveform, 73=Bloom)
+                if (e == 6) {
+                    const uint8_t audioEffects[] = {72, 73};  // Audio Waveform, Audio Bloom
+                    const uint8_t audioEffectCount = sizeof(audioEffects) / sizeof(audioEffects[0]);
+                    
+                    // Cycle to next audio effect
+                    lastAudioEffectIndex = (lastAudioEffectIndex + 1) % audioEffectCount;
+                    uint8_t audioEffectId = audioEffects[lastAudioEffectIndex];
+                    
+                    if (audioEffectId < renderer->getEffectCount()) {
+                        currentEffect = audioEffectId;
+                        actors.setEffect(audioEffectId);
+                        Serial.printf("Audio Effect %d: %s\n", audioEffectId, renderer->getEffectName(audioEffectId));
+                    } else {
+                        Serial.printf("ERROR: Audio effect %d not available (effect count: %d)\n", 
+                                     audioEffectId, renderer->getEffectCount());
+                    }
+                } else {
+                    // Normal numeric effect selection (0-5, 7-9)
+                    if (e < renderer->getEffectCount()) {
+                        currentEffect = e;
+                        actors.setEffect(e);
+                        Serial.printf("Effect %d: %s\n", e, renderer->getEffectName(e));
+                    }
                 }
             } else {
                 // Check if this is an effect selection key (a-k = effects 10-20, excludes command letters)

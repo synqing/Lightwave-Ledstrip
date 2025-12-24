@@ -17,7 +17,20 @@
 #if FEATURE_AUDIO_SYNC
 
 #include <cstring>
+#include <cmath>
+
+#ifndef NATIVE_BUILD
 #include <esp_log.h>
+#include <esp_timer.h>
+#else
+// Native build stubs for ESP-IDF APIs
+#define ESP_LOGI(tag, fmt, ...)
+#define ESP_LOGD(tag, fmt, ...)
+#define ESP_LOGE(tag, fmt, ...)
+#define ESP_LOGW(tag, fmt, ...)
+inline uint64_t esp_timer_get_time() { return 0; }
+inline uint32_t esp_log_timestamp() { return 0; }
+#endif
 
 static const char* TAG = "AudioActor";
 
@@ -31,7 +44,6 @@ namespace audio {
 AudioActor::AudioActor()
     : Actor(ActorConfigs::Audio())
     , m_state(AudioActorState::UNINITIALIZED)
-    , m_newHopAvailable(false)
 {
     m_stats.reset();
     memset(m_hopBuffer, 0, sizeof(m_hopBuffer));
@@ -112,10 +124,8 @@ void AudioActor::onStart()
     m_state = AudioActorState::RUNNING;
     m_stats.state = m_state;
 
-    ESP_LOGI(TAG, "AudioActor started successfully");
-    ESP_LOGI(TAG, "  Tick interval: %d ms", AUDIO_ACTOR_TICK_MS);
-    ESP_LOGI(TAG, "  Hop size: %d samples", HOP_SIZE);
-    ESP_LOGI(TAG, "  Frame rate: %.1f Hz", HOP_RATE_HZ);
+    ESP_LOGI(TAG, "AudioActor started (tick=%dms, hop=%d, rate=%.1fHz)",
+             AUDIO_ACTOR_TICK_MS, HOP_SIZE, HOP_RATE_HZ);
 }
 
 void AudioActor::onMessage(const actors::Message& msg)
@@ -156,20 +166,20 @@ void AudioActor::onTick()
     m_stats.tickCount++;
 
     // Record tick start time
-    uint32_t tickStart = esp_log_timestamp();
+    uint64_t tickStart = esp_timer_get_time();
 
     // Capture one hop of audio
     captureHop();
 
     // Record tick time
-    m_stats.lastTickTimeUs = (esp_log_timestamp() - tickStart) * 1000;
+    m_stats.lastTickTimeUs = esp_timer_get_time() - tickStart;
 
-    // Log periodically (every 62 ticks = ~1 second)
-    if ((m_stats.tickCount % 62) == 0) {
+    // Log periodically (every 620 ticks = ~10 seconds) - just enough to confirm alive
+    if ((m_stats.tickCount % 620) == 0) {
         const CaptureStats& cstats = m_capture.getStats();
-        ESP_LOGD(TAG, "Audio tick: captures=%lu, fails=%lu, peak=%d",
-                 cstats.hopsCapured, cstats.dmaTimeouts + cstats.readErrors,
-                 cstats.peakSample);
+        const ControlBusFrame& frame = m_controlBus.GetFrame();
+        ESP_LOGI(TAG, "Audio alive: cap=%lu pk=%d rms=%.2f",
+                 cstats.hopsCapured, cstats.peakSample, frame.rms);
     }
 }
 
@@ -207,16 +217,77 @@ void AudioActor::captureHop()
         m_stats.captureSuccessCount++;
         m_newHopAvailable = true;
 
-        // Phase 2: Process the hop here
-        // - Goertzel frequency analysis
-        // - Band energy extraction
-        // - Beat detection
-        // - Publish to ControlBus
+        // Phase 2: Process the hop through DSP pipeline
+        processHop();
 
     } else {
         m_stats.captureFailCount++;
         handleCaptureError(result);
     }
+}
+
+// ============================================================================
+// Phase 2: DSP Processing
+// ============================================================================
+
+void AudioActor::processHop()
+{
+    // 1. Build AudioTime for this hop
+    uint64_t now_us = esp_timer_get_time();
+    AudioTime now(m_sampleIndex, SAMPLE_RATE, now_us);
+
+    // Update monotonic counters
+    m_sampleIndex += HOP_SIZE;
+    m_hopCount++;
+
+    // 2. Compute RMS energy
+    float rms = computeRMS(m_hopBuffer, HOP_SIZE);
+
+    // 3. Compute spectral flux (half-wave rectified RMS derivative)
+    float flux = std::max(0.0f, rms - m_prevRMS);
+    m_prevRMS = rms;
+
+    // 4. Accumulate samples for Goertzel (512-sample window = 2 hops)
+    m_analyzer.accumulate(m_hopBuffer, HOP_SIZE);
+
+    // 5. Build ControlBusRawInput
+    ControlBusRawInput raw;
+    raw.rms = rms;
+    raw.flux = flux;
+
+    // Initialize bands to zero (will be filled if Goertzel window is ready)
+    for (int i = 0; i < NUM_BANDS; ++i) {
+        raw.bands[i] = 0.0f;
+    }
+
+    // 6. Get band energies when Goertzel window is full (every 2 hops)
+    if (m_analyzer.analyze(raw.bands)) {
+        // Fresh band data available - Goertzel completed a 512-sample window
+        ESP_LOGD(TAG, "Goertzel: bands[0]=%.3f bands[1]=%.3f", raw.bands[0], raw.bands[1]);
+    }
+
+    // 7. Update ControlBus with attack/release smoothing
+    m_controlBus.UpdateFromHop(now, raw);
+
+    // 8. Publish frame to renderer via lock-free SnapshotBuffer
+    m_controlBusBuffer.Publish(m_controlBus.GetFrame());
+}
+
+float AudioActor::computeRMS(const int16_t* samples, size_t count)
+{
+    if (count == 0) return 0.0f;
+
+    // Accumulate sum of squares
+    int64_t sumSq = 0;
+    for (size_t i = 0; i < count; ++i) {
+        int32_t s = samples[i];
+        sumSq += s * s;
+    }
+
+    // Compute RMS and normalize to [0.0, 1.0]
+    // Max int16_t is 32767, so max RMS is 32767 (for DC signal)
+    float rms = std::sqrt(static_cast<float>(sumSq) / count);
+    return std::min(1.0f, rms / 32768.0f);
 }
 
 void AudioActor::handleCaptureError(CaptureResult result)

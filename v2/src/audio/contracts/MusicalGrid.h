@@ -1,87 +1,88 @@
 #pragma once
-#include "config/features.h"
-#if FEATURE_AUDIO_SYNC
-
+#include <stdint.h>
+#include <math.h>
 #include "AudioTime.h"
-#include <cstdint>
+#include "SnapshotBuffer.h"
 
-namespace lightwaveos {
-namespace audio {
+namespace lightwaveos::audio {
 
 /**
- * @brief Snapshot of musical grid state for effects
+ * @brief Snapshot consumed by effects (BY VALUE).
  */
 struct MusicalGridSnapshot {
     AudioTime t;
-    float bpm_smoothed = 120.0f;        // Smoothed BPM estimate
-    float tempo_confidence = 0.0f;      // Confidence in BPM [0,1]
-    uint64_t beat_index = 0;            // Total beats since start
-    float beat_phase01 = 0.0f;          // Phase within beat [0,1)
-    bool beat_tick = false;             // True on beat transition
-    uint64_t bar_index = 0;             // Total bars since start
-    float bar_phase01 = 0.0f;           // Phase within bar [0,1)
-    bool downbeat_tick = false;         // True on downbeat (beat 1)
-    uint8_t beat_in_bar = 0;            // Which beat in bar (0-3 for 4/4)
-    uint8_t beats_per_bar = 4;          // Time signature numerator
+
+    float bpm_smoothed = 120.0f;
+    float tempo_confidence = 0.0f; // 0..1
+
+    // Phases (0..1)
+    float beat_phase01 = 0.0f;
+    float bar_phase01  = 0.0f;
+
+    // Ticks (true only on frames where boundary crossed / observation applied)
+    bool beat_tick = false;
+    bool downbeat_tick = false;
+
+    uint64_t beat_index = 0;
+    uint64_t bar_index  = 0;
+
+    uint8_t beats_per_bar = 4; // e.g. 4/4
+    uint8_t beat_unit     = 4;
+    uint8_t beat_in_bar   = 0; // 0..beats_per_bar-1
 };
 
 /**
- * @brief Musical grid PLL - tracks beat phase and tempo
+ * @brief Render-domain PLL-style musical grid.
  *
- * IMPORTANT: Tick() must be called from the RENDER thread at 120 FPS.
- * Audio thread only calls OnTempoEstimate() and OnBeatObservation().
+ * Non-negotiable: Tick() is called ONLY by the renderer at ~120 FPS.
+ * Audio thread ONLY calls OnTempoEstimate() / OnBeatObservation().
+ *
+ * Internally publishes snapshots to a SnapshotBuffer so you can ReadLatest(mg) BY VALUE.
  */
 class MusicalGrid {
 public:
     MusicalGrid();
 
-    /**
-     * @brief Advance the grid phase (called from RENDER thread at 120 FPS)
-     * @param now Current render time (extrapolated from audio)
-     */
-    void Tick(const AudioTime& now);
+    void Reset();
 
-    /**
-     * @brief Feed a new tempo estimate (called from AUDIO thread)
-     * @param bpm Estimated tempo in BPM
-     * @param confidence Confidence in estimate [0,1]
-     */
-    void OnTempoEstimate(float bpm, float confidence);
+    void SetTimeSignature(uint8_t beats_per_bar, uint8_t beat_unit);
 
-    /**
-     * @brief Feed a beat observation (called from AUDIO thread)
-     * @param now Time of the beat observation
-     * @param strength Strength of the beat [0,1]
-     * @param is_downbeat True if this is beat 1 of a bar
-     */
-    void OnBeatObservation(const AudioTime& now, float strength, bool is_downbeat);
+    // Audio-domain observations (do NOT call Tick from audio thread)
+    void OnTempoEstimate(const AudioTime& t, float bpm, float confidence01);
+    void OnBeatObservation(const AudioTime& t, float strength01, bool is_downbeat);
 
-    /**
-     * @brief Get the latest snapshot for effects
-     * @param out Destination for snapshot copy
-     */
-    void ReadLatest(MusicalGridSnapshot& out) const;
+    // Render-domain update (120 FPS)
+    void Tick(const AudioTime& render_now);
 
-    /**
-     * @brief Set beats per bar (time signature numerator)
-     */
-    void SetBeatsPerBar(uint8_t beats) { m_beatsPerBar = beats; }
+    // BY-VALUE snapshot read (thread-safe pattern, even if you later share it cross-core)
+    uint32_t ReadLatest(MusicalGridSnapshot& out) const { return m_snap.ReadLatest(out); }
 
 private:
-    MusicalGridSnapshot m_snapshot;
-    AudioTime m_lastTickTime;
-    float m_targetBpm = 120.0f;
-    float m_bpmConfidence = 0.0f;
-    uint8_t m_beatsPerBar = 4;
+    SnapshotBuffer<MusicalGridSnapshot> m_snap;
 
-    // PLL state
-    float m_phase = 0.0f;           // Current phase [0,1)
-    float m_phaseIncrement = 0.0f;  // Phase increment per sample
+    // Core state
+    bool m_has_tick = false;
+    AudioTime m_last_tick_t{};
 
-    void updatePhaseIncrement();
+    float m_bpm_target = 120.0f;
+    float m_bpm_smoothed = 120.0f;
+    float m_conf = 0.0f;
+
+    double m_beat_float = 0.0;      // continuous beat counter
+    uint64_t m_prev_beat_index = 0; // for beat_tick generation
+
+    uint8_t m_beats_per_bar = 4;
+    uint8_t m_beat_unit = 4;
+
+    // Pending beat observation (time-stamped)
+    bool m_pending_beat = false;
+    AudioTime m_pending_beat_t{};
+    float m_pending_strength = 0.0f;
+    bool m_pending_is_downbeat = false;
+
+private:
+    static float clamp01(float x);
+    static float wrapHalf(float phase01); // maps [0,1) to [-0.5,0.5)
 };
 
-} // namespace audio
-} // namespace lightwaveos
-
-#endif // FEATURE_AUDIO_SYNC
+} // namespace lightwaveos::audio

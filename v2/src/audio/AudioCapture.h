@@ -2,26 +2,22 @@
  * @file AudioCapture.h
  * @brief I2S audio capture driver for SPH0645 MEMS microphone
  *
- * This module provides low-level I2S audio capture using the ESP-IDF/Arduino
- * I2S driver. It handles the SPH0645's 32-bit slot format with 24-bit
- * 2's complement samples.
+ * This module provides low-level I2S audio capture using the ESP-IDF legacy
+ * I2S driver with Emotiscope-derived configuration corrections.
  *
  * Key features:
  * - Uses ESP-IDF legacy driver (driver/i2s.h) for Arduino compatibility
+ * - SPH0645 RIGHT channel selection (despite SEL=GND)
  * - DMA-based capture with 4 x 512 sample buffers
  * - 256-sample hop size for Tab5 parity (62.5 Hz frames)
- * - Proper 32-bit to 16-bit sample conversion (>>16 shift)
- *
- * Note: The ESP-IDF 5.x new I2S driver (driver/i2s_std.h) is not available
- * in the Arduino framework. This implementation uses the legacy driver
- * which is available in both ESP-IDF 4.x and Arduino ESP32.
+ * - Emotiscope sample conversion: >>14 shift + DC offset correction
  *
  * Thread Safety:
  * - init()/deinit() must be called from the same task
  * - captureHop() is single-threaded (called only from AudioActor)
  *
  * @author LightwaveOS Team
- * @version 2.0.0
+ * @version 2.1.0
  */
 
 #pragma once
@@ -170,7 +166,7 @@ private:
 
     bool m_initialized;
 
-    // I2S port number
+    // I2S port number (legacy API)
     static constexpr i2s_port_t I2S_PORT = I2S_NUM_0;
 
     // Statistics
@@ -185,7 +181,13 @@ private:
     // ========================================================================
 
     /**
-     * @brief Configure I2S driver
+     * @brief Configure I2S driver (legacy API)
+     *
+     * Uses corrected configuration based on Emotiscope analysis:
+     * - I2S_CHANNEL_FMT_ONLY_RIGHT (despite SPH0645 SEL=GND being "left")
+     * - MSB communication format
+     * - 32-bit slots for SPH0645
+     *
      * @return true if configuration succeeded
      */
     bool configureI2S();

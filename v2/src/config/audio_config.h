@@ -8,7 +8,7 @@
  * Critical constraints:
  * - Hop size = 256 (Tab5 parity for beat tracker)
  * - ESP-IDF 5.x new I2S driver (driver/i2s_std.h)
- * - 32-bit I2S slots, shift >>16 for 16-bit samples
+ * - Emotiscope-proven sample conversion (see AudioCapture.cpp)
  */
 
 #pragma once
@@ -73,19 +73,23 @@ constexpr size_t DMA_BUFFER_COUNT = 4;
 constexpr size_t DMA_BUFFER_SAMPLES = 512;
 
 // ============================================================================
-// SPH0645 Sample Format
+// SPH0645 Sample Format (Emotiscope-proven conversion)
 // ============================================================================
 
 /**
  * SPH0645 outputs 24-bit 2's complement, MSB-first, 18-bit precision.
- * Configure I2S for 32-bit slots, then extract:
+ * Configure I2S for 32-bit slots with:
+ * - I2S_STD_SLOT_RIGHT (despite SEL=GND being "left")
+ * - WS polarity inverted (.ws_pol = true)
  *
- *   int32_t raw = i2s_buffer[i];
- *   int16_t sample = (int16_t)(raw >> 16);  // Standard 16-bit
- *   // Or: raw >> 14 for 18-bit precision scaling
+ * Sample conversion (see AudioCapture.cpp):
+ *   1. Shift >> 14 (not 16) to preserve 18-bit precision
+ *   2. Add DC bias +7000
+ *   3. Clip to ±131072 (18-bit range)
+ *   4. Subtract DC offset 360
+ *   5. Shift >> 2 to fit 16-bit range
  */
 constexpr uint8_t I2S_BITS_PER_SAMPLE = 32;   // 32-bit slots for SPH0645
-constexpr uint8_t SAMPLE_SHIFT_BITS = 16;     // Shift to 16-bit signed
 
 // ============================================================================
 // ControlBus Band Configuration

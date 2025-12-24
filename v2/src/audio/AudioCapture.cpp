@@ -2,15 +2,16 @@
  * @file AudioCapture.cpp
  * @brief I2S audio capture implementation for SPH0645 MEMS microphone
  *
- * Uses ESP-IDF legacy I2S driver (driver/i2s.h) for Arduino compatibility.
+ * Uses ESP-IDF legacy I2S driver with Emotiscope-derived corrections.
  *
  * SPH0645 Sample Format:
  * - Outputs 24-bit 2's complement, MSB-first, 18-bit effective precision
  * - I2S configured for 32-bit samples
- * - Conversion: int16_t sample = (int16_t)(raw >> 16)
+ * - Uses RIGHT channel (despite SEL=GND being labeled "left")
+ * - Conversion: (raw >> 14) + 7000, clip to 18-bit, subtract 360
  *
  * @author LightwaveOS Team
- * @version 2.0.0
+ * @version 2.1.0
  */
 
 #include "AudioCapture.h"
@@ -18,12 +19,20 @@
 #if FEATURE_AUDIO_SYNC
 
 #include <cstring>
+#include <cmath>
 #include <esp_log.h>
+#include <esp_timer.h>
 
 static const char* TAG = "AudioCapture";
 
 namespace lightwaveos {
 namespace audio {
+
+// Emotiscope-proven sample conversion constants
+static constexpr int32_t DC_BIAS_ADD = 7000;       // Pre-clip bias adjustment
+static constexpr int32_t DC_BIAS_SUB = 360;        // Post-clip DC removal
+static constexpr int32_t CLIP_MAX = 131072;        // 18-bit max value (2^17)
+static constexpr int32_t CLIP_MIN = -131072;       // 18-bit min value
 
 // ============================================================================
 // Constructor / Destructor
@@ -52,8 +61,7 @@ bool AudioCapture::init()
         return true;
     }
 
-    ESP_LOGI(TAG, "Initializing I2S for SPH0645 at %d Hz, %d-bit samples",
-             SAMPLE_RATE, I2S_BITS_PER_SAMPLE);
+    ESP_LOGI(TAG, "Initializing I2S for SPH0645 (RIGHT channel, Emotiscope conversion)");
 
     // Configure I2S driver
     if (!configureI2S()) {
@@ -80,7 +88,8 @@ bool AudioCapture::init()
     ESP_LOGI(TAG, "I2S initialized successfully");
     ESP_LOGI(TAG, "  Sample rate: %d Hz", SAMPLE_RATE);
     ESP_LOGI(TAG, "  Hop size: %d samples (%.1f ms)", HOP_SIZE, HOP_DURATION_MS);
-    ESP_LOGI(TAG, "  DMA: %d buffers x %d samples", DMA_BUFFER_COUNT, DMA_BUFFER_SAMPLES);
+    ESP_LOGI(TAG, "  Pins: BCLK=%d WS=%d DIN=%d", I2S_BCLK_PIN, I2S_LRCL_PIN, I2S_DOUT_PIN);
+    ESP_LOGI(TAG, "  Channel: RIGHT (Emotiscope-derived)");
 
     return true;
 }
@@ -127,8 +136,8 @@ CaptureResult AudioCapture::captureHop(int16_t* buffer)
     const size_t expectedBytes = HOP_SIZE * sizeof(int32_t);
     size_t bytesRead = 0;
 
-    // Record start time for statistics
-    uint32_t startTime = esp_log_timestamp();
+    // Record start time for statistics (microseconds)
+    uint64_t startTime = esp_timer_get_time();
 
     // Read from I2S DMA buffer
     // Timeout: 2x hop duration to allow some slack
@@ -136,8 +145,8 @@ CaptureResult AudioCapture::captureHop(int16_t* buffer)
 
     esp_err_t err = i2s_read(I2S_PORT, m_dmaBuffer, expectedBytes, &bytesRead, timeout);
 
-    uint32_t endTime = esp_log_timestamp();
-    uint32_t readTimeUs = (endTime - startTime) * 1000;  // Convert ms to us
+    uint64_t endTime = esp_timer_get_time();
+    uint32_t readTimeUs = static_cast<uint32_t>(endTime - startTime);
 
     // Update timing statistics
     if (readTimeUs > m_stats.maxReadTimeUs) {
@@ -149,7 +158,7 @@ CaptureResult AudioCapture::captureHop(int16_t* buffer)
     // Handle errors
     if (err == ESP_ERR_TIMEOUT) {
         m_stats.dmaTimeouts++;
-        ESP_LOGW(TAG, "DMA timeout after %lu ms", (unsigned long)(endTime - startTime));
+        ESP_LOGD(TAG, "DMA timeout after %lu us", (unsigned long)readTimeUs);
         return CaptureResult::DMA_TIMEOUT;
     }
 
@@ -162,19 +171,33 @@ CaptureResult AudioCapture::captureHop(int16_t* buffer)
     // Verify we got the expected amount
     const size_t samplesRead = bytesRead / sizeof(int32_t);
     if (samplesRead < HOP_SIZE) {
-        // Partial read - this shouldn't happen with proper DMA config
-        ESP_LOGW(TAG, "Partial read: %d/%d samples", samplesRead, HOP_SIZE);
-        // Zero-pad remaining samples
+        ESP_LOGW(TAG, "Partial read: %zu/%d samples", samplesRead, HOP_SIZE);
         memset(&buffer[samplesRead], 0, (HOP_SIZE - samplesRead) * sizeof(int16_t));
     }
 
-    // Convert 32-bit I2S samples to 16-bit signed
-    // SPH0645 format: 24-bit 2's complement in upper 24 bits of 32-bit word
-    // Shift right by 16 to get signed 16-bit sample
+    // Convert samples using Emotiscope formula:
+    // 1. Shift right by 14 (not 16!) to preserve 18-bit precision
+    // 2. Add DC bias (+7000) to center in positive range
+    // 3. Clip to 18-bit range
+    // 4. Remove DC offset (-360)
+    // 5. Scale to 16-bit
+
     int16_t peak = 0;
     for (size_t i = 0; i < HOP_SIZE; i++) {
-        // Extract 16-bit sample from 32-bit slot
-        int16_t sample = static_cast<int16_t>(m_dmaBuffer[i] >> SAMPLE_SHIFT_BITS);
+        // Step 1: Shift by 14 to get 18-bit value with sign preserved
+        int32_t raw = (m_dmaBuffer[i] >> 14) + DC_BIAS_ADD;
+
+        // Step 2: Clip to 18-bit range
+        if (raw < CLIP_MIN) raw = CLIP_MIN;
+        if (raw > CLIP_MAX) raw = CLIP_MAX;
+
+        // Step 3: Remove DC offset
+        raw -= DC_BIAS_SUB;
+
+        // Step 4: Scale from 18-bit range to 16-bit
+        // 18-bit range is ±131072, 16-bit is ±32768
+        // Divide by 4 (shift right by 2) to fit
+        int16_t sample = static_cast<int16_t>(raw >> 2);
         buffer[i] = sample;
 
         // Track peak for level metering
@@ -198,28 +221,21 @@ CaptureResult AudioCapture::captureHop(int16_t* buffer)
 bool AudioCapture::configureI2S()
 {
     // I2S driver configuration for SPH0645
+    // CRITICAL: Use RIGHT channel (Emotiscope-derived - despite SEL=GND)
     i2s_config_t i2sConfig = {
         .mode = static_cast<i2s_mode_t>(I2S_MODE_MASTER | I2S_MODE_RX),
         .sample_rate = SAMPLE_RATE,
         .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,  // 32-bit slots for SPH0645
-        .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT,   // SEL tied to GND = left channel
-        .communication_format = I2S_COMM_FORMAT_STAND_I2S,  // Standard I2S (Philips)
+        .channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT,  // RIGHT channel (Emotiscope fix!)
+        .communication_format = I2S_COMM_FORMAT_STAND_I2S,  // Standard I2S format
         .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
-        .dma_buf_count = DMA_BUFFER_COUNT,
-        .dma_buf_len = DMA_BUFFER_SAMPLES,
+        .dma_buf_count = static_cast<int>(DMA_BUFFER_COUNT),
+        .dma_buf_len = static_cast<int>(DMA_BUFFER_SAMPLES),
         .use_apll = false,                             // Use PLL clock
         .tx_desc_auto_clear = false,                   // RX only
         .fixed_mclk = 0,                               // No fixed MCLK
         .mclk_multiple = I2S_MCLK_MULTIPLE_256,        // MCLK = 256 * Fs
         .bits_per_chan = I2S_BITS_PER_CHAN_32BIT,      // 32-bit channel width
-#if SOC_I2S_SUPPORTS_TDM
-        .chan_mask = I2S_TDM_ACTIVE_CH0,               // Only channel 0
-        .total_chan = 1,                               // Mono
-        .left_align = true,                            // Left-aligned data
-        .big_edin = false,                             // Little endian
-        .bit_order_msb = true,                         // MSB first
-        .skip_msk = false,                             // Don't skip any data
-#endif
     };
 
     esp_err_t err = i2s_driver_install(I2S_PORT, &i2sConfig, 0, nullptr);
@@ -228,7 +244,7 @@ bool AudioCapture::configureI2S()
         return false;
     }
 
-    ESP_LOGI(TAG, "I2S driver installed");
+    ESP_LOGI(TAG, "I2S driver installed (RIGHT channel mode)");
     return true;
 }
 
@@ -248,10 +264,8 @@ bool AudioCapture::configurePins()
         return false;
     }
 
-    ESP_LOGI(TAG, "I2S pins configured:");
-    ESP_LOGI(TAG, "  BCLK: GPIO %d", I2S_BCLK_PIN);
-    ESP_LOGI(TAG, "  WS:   GPIO %d", I2S_LRCL_PIN);
-    ESP_LOGI(TAG, "  DIN:  GPIO %d", I2S_DOUT_PIN);
+    ESP_LOGI(TAG, "I2S pins: BCLK=%d WS=%d DIN=%d",
+             I2S_BCLK_PIN, I2S_LRCL_PIN, I2S_DOUT_PIN);
 
     return true;
 }

@@ -33,9 +33,15 @@
 
 #if FEATURE_AUDIO_SYNC
 
+#include <atomic>
+
 #include "../core/actors/Actor.h"
 #include "../config/audio_config.h"
 #include "AudioCapture.h"
+#include "GoertzelAnalyzer.h"
+#include "contracts/AudioTime.h"
+#include "contracts/ControlBus.h"
+#include "contracts/SnapshotBuffer.h"
 
 namespace lightwaveos {
 namespace audio {
@@ -170,6 +176,32 @@ public:
      */
     bool hasNewHop();
 
+    // ========================================================================
+    // Phase 2: Cross-Core Access
+    // ========================================================================
+
+    /**
+     * @brief Get the ControlBus snapshot buffer for cross-core reads
+     *
+     * RendererActor calls this to get a reference to the SnapshotBuffer,
+     * then reads snapshots by value for thread-safe access.
+     *
+     * @return Reference to the ControlBusFrame SnapshotBuffer
+     */
+    const SnapshotBuffer<ControlBusFrame>& getControlBusBuffer() const {
+        return m_controlBusBuffer;
+    }
+
+    /**
+     * @brief Get current sample index (monotonic)
+     */
+    uint64_t getSampleIndex() const { return m_sampleIndex; }
+
+    /**
+     * @brief Get hop count since start
+     */
+    uint32_t getHopCount() const { return m_hopCount; }
+
 protected:
     // ========================================================================
     // Actor Overrides
@@ -222,8 +254,30 @@ private:
     // Sample buffer for last captured hop
     int16_t m_hopBuffer[HOP_SIZE];
 
-    // Flag for new hop availability
-    volatile bool m_newHopAvailable;
+    // Flag for new hop availability (atomic for thread safety on dual-core ESP32)
+    std::atomic<bool> m_newHopAvailable{false};
+
+    // ========================================================================
+    // Phase 2: DSP Processing State
+    // ========================================================================
+
+    // Goertzel frequency analyzer (8 bands, 512-sample window)
+    GoertzelAnalyzer m_analyzer;
+
+    // ControlBus state machine (smoothing, attack/release)
+    ControlBus m_controlBus;
+
+    // Lock-free buffer for cross-core sharing with RendererActor
+    SnapshotBuffer<ControlBusFrame> m_controlBusBuffer;
+
+    // Monotonic sample counter (64-bit for no overflow)
+    uint64_t m_sampleIndex = 0;
+
+    // Hop counter since start
+    uint32_t m_hopCount = 0;
+
+    // Previous RMS for flux calculation
+    float m_prevRMS = 0.0f;
 
     // ========================================================================
     // Internal Methods
@@ -233,6 +287,27 @@ private:
      * @brief Perform one capture cycle
      */
     void captureHop();
+
+    /**
+     * @brief Process captured hop through DSP pipeline (Phase 2)
+     *
+     * Called after successful capture. Performs:
+     * 1. RMS calculation
+     * 2. Spectral flux calculation
+     * 3. Goertzel band analysis (accumulated over 512 samples)
+     * 4. ControlBus update with smoothing
+     * 5. SnapshotBuffer publish for renderer
+     */
+    void processHop();
+
+    /**
+     * @brief Compute RMS energy of sample buffer
+     *
+     * @param samples Pointer to int16_t samples
+     * @param count Number of samples
+     * @return Normalized RMS value [0.0, 1.0]
+     */
+    float computeRMS(const int16_t* samples, size_t count);
 
     /**
      * @brief Handle capture error

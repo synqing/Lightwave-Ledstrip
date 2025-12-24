@@ -1,60 +1,74 @@
 #pragma once
-#include "config/features.h"
-#if FEATURE_AUDIO_SYNC
-
 #include <atomic>
-#include <cstdint>
+#include <stdint.h>
 
-namespace lightwaveos {
-namespace audio {
+namespace lightwaveos::audio {
 
 /**
- * @brief Lock-free double-buffer for single-writer/multi-reader cross-core data
+ * @brief Lock-free double buffer (publish on one core, read on another).
  *
- * Writer (audio core) calls Publish() to swap buffers.
- * Readers (render core) call ReadLatest() to get a copy.
+ * - Writer calls Publish(value). No dynamic allocation.
+ * - Reader calls ReadLatest(out) and receives a BY-VALUE copy.
+ * - Sequence increments on each publish; reader can detect staleness.
  */
 template <typename T>
-class SnapshotBuffer {
+class SnapshotBuffer final {
 public:
     SnapshotBuffer() = default;
 
+    SnapshotBuffer(const SnapshotBuffer&) = delete;
+    SnapshotBuffer& operator=(const SnapshotBuffer&) = delete;
+    SnapshotBuffer(SnapshotBuffer&&) = delete;
+    SnapshotBuffer& operator=(SnapshotBuffer&&) = delete;
+
     /**
-     * @brief Publish a new snapshot (writer side)
-     * Atomically swaps buffers and increments sequence number.
+     * @brief Publish a new snapshot (writer thread).
      */
-    void Publish(const T& snapshot) {
-        uint32_t back = 1 - m_frontIndex.load(std::memory_order_acquire);
-        m_buffer[back] = snapshot;
-        m_frontIndex.store(back, std::memory_order_release);
-        m_sequence.fetch_add(1, std::memory_order_release);
+    void Publish(const T& v) {
+        // Write into the inactive buffer first.
+        const uint32_t cur = m_active.load(std::memory_order_relaxed);
+        const uint32_t nxt = cur ^ 1U;
+
+        m_buf[nxt] = v;
+
+        // Make sure payload write lands before we flip active + seq.
+        std::atomic_thread_fence(std::memory_order_release);
+        m_active.store(nxt, std::memory_order_release);
+        m_seq.fetch_add(1U, std::memory_order_release);
     }
 
     /**
-     * @brief Read the latest snapshot (reader side)
-     * @param out Destination for the snapshot copy
-     * @return Sequence number (increments on each Publish)
+     * @brief Read latest snapshot by value (reader thread). Returns sequence id.
+     *
+     * If writer publishes during the copy, we retry once.
      */
     uint32_t ReadLatest(T& out) const {
-        uint32_t front = m_frontIndex.load(std::memory_order_acquire);
-        out = m_buffer[front];
-        return m_sequence.load(std::memory_order_acquire);
+        uint32_t s0 = m_seq.load(std::memory_order_acquire);
+        uint32_t idx = m_active.load(std::memory_order_acquire);
+
+        out = m_buf[idx];
+
+        std::atomic_thread_fence(std::memory_order_acquire);
+        uint32_t s1 = m_seq.load(std::memory_order_acquire);
+
+        if (s1 != s0) {
+            // One retry for consistency.
+            idx = m_active.load(std::memory_order_acquire);
+            out = m_buf[idx];
+            s1 = m_seq.load(std::memory_order_acquire);
+        }
+        return s1;
     }
 
     /**
-     * @brief Get current sequence number without copying data
+     * @brief Current sequence counter (monotonic, wraps at 2^32).
      */
-    uint32_t GetSequence() const {
-        return m_sequence.load(std::memory_order_acquire);
-    }
+    uint32_t Sequence() const { return m_seq.load(std::memory_order_acquire); }
 
 private:
-    T m_buffer[2];
-    std::atomic<uint32_t> m_frontIndex{0};
-    std::atomic<uint32_t> m_sequence{0};
+    alignas(4) T m_buf[2]{};
+    mutable std::atomic<uint32_t> m_active{0};
+    mutable std::atomic<uint32_t> m_seq{0};
 };
 
-} // namespace audio
-} // namespace lightwaveos
-
-#endif // FEATURE_AUDIO_SYNC
+} // namespace lightwaveos::audio

@@ -25,6 +25,11 @@
 #include "../../plugins/api/EffectContext.h"
 #include "../../plugins/runtime/LegacyEffectAdapter.h"
 
+// Audio integration (Phase 2)
+#if FEATURE_AUDIO_SYNC
+#include "../../audio/AudioActor.h"
+#endif
+
 using namespace lightwaveos::transitions;
 using namespace lightwaveos::palettes;
 
@@ -75,6 +80,12 @@ RendererActor::RendererActor()
     , m_captureTapAValid(false)
     , m_captureTapBValid(false)
     , m_captureTapCValid(false)
+#if FEATURE_AUDIO_SYNC
+    , m_musicalGrid()                // Explicit default init for audio state
+    , m_lastControlBus()
+    , m_lastMusicalGrid()
+    , m_lastAudioTime()
+#endif
 {
     // Initialize LED buffers to black
     memset(m_strip1, 0, sizeof(m_strip1));
@@ -588,7 +599,57 @@ void RendererActor::renderFrame()
         ctx.zoneId = 0xFF;  // Global render
         ctx.zoneStart = 0;
         ctx.zoneLength = 0;
-        
+
+        // =====================================================================
+        // Phase 2: Audio Context Integration
+        // =====================================================================
+#if FEATURE_AUDIO_SYNC
+        if (m_controlBusBuffer != nullptr) {
+            // 1. Read latest ControlBusFrame BY VALUE (thread-safe)
+            uint32_t seq = m_controlBusBuffer->ReadLatest(m_lastControlBus);
+
+            // 2. Extrapolate AudioTime from audio snapshot
+            uint64_t now_us = micros();
+            if (seq != m_lastControlBusSeq) {
+                // New audio frame arrived - resync extrapolation base
+                m_lastAudioTime = m_lastControlBus.t;
+                m_lastAudioMicros = now_us;
+                m_lastControlBusSeq = seq;
+            }
+
+            // 3. Build extrapolated render-time AudioTime
+            //    Render runs at 120 FPS, audio at 62.5 Hz - extrapolate samples
+            uint64_t dt_us = now_us - m_lastAudioMicros;
+            uint64_t extrapolated_samples = m_lastAudioTime.sample_index +
+                (dt_us * m_lastAudioTime.sample_rate_hz / 1000000);
+            audio::AudioTime render_now(
+                extrapolated_samples,
+                m_lastAudioTime.sample_rate_hz,
+                now_us
+            );
+
+            // 4. Tick MusicalGrid at 120 FPS (PLL freewheel pattern)
+            //    This keeps beat phase smooth even if audio stalls
+            m_musicalGrid.Tick(render_now);
+            m_musicalGrid.ReadLatest(m_lastMusicalGrid);
+
+            // 5. Compute staleness for ctx.audio.available
+            float age_s = audio::AudioTime_SecondsBetween(m_lastControlBus.t, render_now);
+            bool is_fresh = (age_s >= 0.0f && age_s < 0.10f);  // Fresh if < 100ms old
+
+            // 6. Populate AudioContext (by-value copies for thread safety)
+            ctx.audio.controlBus = m_lastControlBus;
+            ctx.audio.musicalGrid = m_lastMusicalGrid;
+            ctx.audio.available = is_fresh;
+        } else {
+            // AudioActor not connected - effects should fall back to time-based
+            ctx.audio.available = false;
+        }
+#else
+        // Audio sync disabled at compile time
+        ctx.audio.available = false;
+#endif
+
         m_effects[m_currentEffect].effect->render(ctx);
     }
 

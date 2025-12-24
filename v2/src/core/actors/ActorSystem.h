@@ -28,7 +28,13 @@
 #include "RendererActor.h"
 #include "ShowDirectorActor.h"
 #include "../bus/MessageBus.h"
+#include "../../config/features.h"
 #include <memory>
+
+// Audio integration (Phase 2)
+#if FEATURE_AUDIO_SYNC
+#include "../../audio/AudioActor.h"
+#endif
 
 namespace lightwaveos {
 namespace actors {
@@ -150,6 +156,16 @@ public:
     ShowDirectorActor* getShowDirector() { return m_showDirector.get(); }
     const ShowDirectorActor* getShowDirector() const { return m_showDirector.get(); }
 
+#if FEATURE_AUDIO_SYNC
+    /**
+     * @brief Get the AudioActor (Phase 2)
+     *
+     * Returns nullptr if not initialized or FEATURE_AUDIO_SYNC disabled.
+     */
+    audio::AudioActor* getAudio() { return m_audio.get(); }
+    const audio::AudioActor* getAudio() const { return m_audio.get(); }
+#endif
+
     // Future: getNetwork(), getHmi(), getStateStore(), etc.
 
     // ========================================================================
@@ -211,6 +227,9 @@ private:
     // Actor instances (using unique_ptr for RAII cleanup)
     std::unique_ptr<RendererActor> m_renderer;
     std::unique_ptr<ShowDirectorActor> m_showDirector;
+#if FEATURE_AUDIO_SYNC
+    std::unique_ptr<audio::AudioActor> m_audio;  // Phase 2: Audio capture and DSP
+#endif
     // Future: std::unique_ptr<NetworkActor> m_network;
     // Future: std::unique_ptr<HmiActor> m_hmi;
     // Future: std::unique_ptr<StateStoreActor> m_stateStore;

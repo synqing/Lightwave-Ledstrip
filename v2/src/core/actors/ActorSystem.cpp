@@ -94,6 +94,22 @@ bool ActorSystem::init()
             return false;
         }
 
+#if FEATURE_AUDIO_SYNC
+        // Create AudioActor (Phase 2)
+        m_audio = std::make_unique<audio::AudioActor>();
+
+        if (m_audio == nullptr) {
+#ifndef NATIVE_BUILD
+            ESP_LOGE(TAG, "Failed to create AudioActor");
+#endif
+            m_state = SystemState::UNINITIALIZED;
+            return false;
+        }
+#ifndef NATIVE_BUILD
+        ESP_LOGI(TAG, "AudioActor created (Phase 2 audio sync enabled)");
+#endif
+#endif
+
 #ifndef NATIVE_BUILD
         ESP_LOGI(TAG, "Actors created successfully");
         ESP_LOGI(TAG, "Free heap after init: %lu bytes", esp_get_free_heap_size());
@@ -157,6 +173,25 @@ bool ActorSystem::start()
         return false;
     }
 
+#if FEATURE_AUDIO_SYNC
+    // Start AudioActor (Phase 2)
+    if (m_audio && !m_audio->start()) {
+#ifndef NATIVE_BUILD
+        ESP_LOGE(TAG, "Failed to start AudioActor");
+#endif
+        // Audio failure is non-fatal - continue without audio
+        ESP_LOGW(TAG, "Continuing without audio sync");
+    } else if (m_audio) {
+        // Wire up audio buffer to renderer for cross-core access
+        if (m_renderer) {
+            m_renderer->setAudioBuffer(&m_audio->getControlBusBuffer());
+#ifndef NATIVE_BUILD
+            ESP_LOGI(TAG, "Audio integration enabled - RendererActor connected to AudioActor");
+#endif
+        }
+    }
+#endif
+
     m_startTime = millis();
     m_state = SystemState::RUNNING;
 
@@ -185,6 +220,20 @@ void ActorSystem::shutdown()
 
     // Stop actors in reverse order
     // Future: SyncManagerActor, PluginManagerActor, HmiActor, NetworkActor, etc.
+
+#if FEATURE_AUDIO_SYNC
+    // Stop AudioActor (Phase 2) - must stop before renderer
+    if (m_audio) {
+        // Disconnect audio buffer from renderer first
+        if (m_renderer) {
+            m_renderer->setAudioBuffer(nullptr);
+        }
+        m_audio->stop();
+#ifndef NATIVE_BUILD
+        ESP_LOGI(TAG, "AudioActor stopped");
+#endif
+    }
+#endif
 
     // Stop ShowDirectorActor
     if (m_showDirector) {
@@ -271,6 +320,9 @@ SystemStats ActorSystem::getStats() const
     stats.activeActors = 0;
     if (m_renderer && m_renderer->isRunning()) stats.activeActors++;
     if (m_showDirector && m_showDirector->isRunning()) stats.activeActors++;
+#if FEATURE_AUDIO_SYNC
+    if (m_audio && m_audio->isRunning()) stats.activeActors++;
+#endif
     // Future: count other actors
 
     return stats;

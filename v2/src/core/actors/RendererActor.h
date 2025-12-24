@@ -31,15 +31,27 @@
 #include "Actor.h"
 #include "../bus/MessageBus.h"
 #include "../../effects/enhancement/ColorCorrectionEngine.h"
+#include "../../config/features.h"
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
+#endif
+
+// Audio contracts for Phase 2 integration
+#if FEATURE_AUDIO_SYNC
+#include "../../audio/contracts/AudioTime.h"
+#include "../../audio/contracts/ControlBus.h"
+#include "../../audio/contracts/MusicalGrid.h"
+#include "../../audio/contracts/SnapshotBuffer.h"
 #endif
 
 // Forward declarations
 namespace lightwaveos { namespace zones { class ZoneComposer; } }
 namespace lightwaveos { namespace transitions { class TransitionEngine; enum class TransitionType : uint8_t; } }
 namespace lightwaveos { namespace plugins { class IEffect; namespace runtime { class LegacyEffectAdapter; } } }
+#if FEATURE_AUDIO_SYNC
+namespace lightwaveos { namespace audio { class AudioActor; } }
+#endif
 
 namespace lightwaveos {
 namespace actors {
@@ -285,6 +297,47 @@ public:
     transitions::TransitionEngine* getTransitionEngine() { return m_transitionEngine; }
 
     // ========================================================================
+    // Audio Integration (Phase 2)
+    // ========================================================================
+
+#if FEATURE_AUDIO_SYNC
+    /**
+     * @brief Set the audio SnapshotBuffer reference
+     *
+     * Called by ActorSystem during initialization to connect the renderer
+     * to the AudioActor's ControlBusFrame buffer.
+     *
+     * @param buffer Pointer to AudioActor's SnapshotBuffer (nullptr to disable)
+     */
+    void setAudioBuffer(const audio::SnapshotBuffer<audio::ControlBusFrame>* buffer) {
+        m_controlBusBuffer = buffer;
+    }
+
+    /**
+     * @brief Check if audio integration is active
+     */
+    bool isAudioEnabled() const { return m_controlBusBuffer != nullptr; }
+
+    /**
+     * @brief Feed tempo estimate to MusicalGrid (from AudioActor)
+     *
+     * Called directly by AudioActor when beat tracker updates tempo.
+     */
+    void onTempoEstimate(const audio::AudioTime& t, float bpm, float confidence) {
+        m_musicalGrid.OnTempoEstimate(t, bpm, confidence);
+    }
+
+    /**
+     * @brief Feed beat observation to MusicalGrid (from AudioActor)
+     *
+     * Called directly by AudioActor when beat tracker detects a beat.
+     */
+    void onBeatObservation(const audio::AudioTime& t, float strength, bool is_downbeat) {
+        m_musicalGrid.OnBeatObservation(t, strength, is_downbeat);
+    }
+#endif
+
+    // ========================================================================
     // Frame Capture System (for testbed)
     // ========================================================================
 
@@ -472,6 +525,46 @@ private:
     bool m_captureTapAValid;
     bool m_captureTapBValid;
     bool m_captureTapCValid;
+
+    // ========================================================================
+    // Audio State (Phase 2 - Audio Sync)
+    // ========================================================================
+
+#if FEATURE_AUDIO_SYNC
+    /**
+     * MusicalGrid PLL - owned by renderer for 120 FPS Tick()
+     *
+     * This is the key insight from the plan: MusicalGrid.Tick() must be
+     * called in the RENDER domain at 120 FPS for smooth beat phase, not
+     * in the audio domain at 62.5 Hz. This gives "PLL freewheel" behavior
+     * where beat phase stays smooth even if audio stalls momentarily.
+     */
+    audio::MusicalGrid m_musicalGrid;
+
+    /// Last ControlBusFrame read from AudioActor (by-value copy)
+    audio::ControlBusFrame m_lastControlBus;
+
+    /// Last MusicalGridSnapshot from our owned m_musicalGrid
+    audio::MusicalGridSnapshot m_lastMusicalGrid;
+
+    /// Sequence number from last SnapshotBuffer read (for change detection)
+    uint32_t m_lastControlBusSeq = 0;
+
+    /// AudioTime from last ControlBus read (for extrapolation)
+    audio::AudioTime m_lastAudioTime;
+
+    /// micros() when we last read a new ControlBus frame
+    uint64_t m_lastAudioMicros = 0;
+
+    /**
+     * Pointer to AudioActor's SnapshotBuffer (set during init)
+     *
+     * This is a raw pointer because AudioActor owns the buffer, and
+     * we just read from it via the lock-free ReadLatest() method.
+     * Set to nullptr if AudioActor isn't running.
+     */
+    const audio::SnapshotBuffer<audio::ControlBusFrame>* m_controlBusBuffer = nullptr;
+#endif
 
     /**
      * @brief Capture frame at specified tap point

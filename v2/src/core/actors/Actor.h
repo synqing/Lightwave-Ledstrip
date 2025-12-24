@@ -121,7 +121,13 @@ enum class MessageType : uint8_t {
     SHOW_PAUSED          = 0xB2,
     SHOW_RESUMED         = 0xB3,
     SHOW_CHAPTER_CHANGED = 0xB4,
-    SHOW_COMPLETED       = 0xB5
+    SHOW_COMPLETED       = 0xB5,
+
+    // Audio Events (0xC0-0xCF) - Phase 2
+    AUDIO_TEMPO_ESTIMATE   = 0xC0,  // param4 = bpm * 100 (fixed point)
+    AUDIO_BEAT_OBSERVATION = 0xC1,  // param1 = strength (0-255), param2 = is_downbeat
+    AUDIO_BANDS_UPDATED    = 0xC2,  // Notification that band analysis completed
+    AUDIO_ERROR            = 0xC3   // param1 = error code
 };
 
 // ============================================================================

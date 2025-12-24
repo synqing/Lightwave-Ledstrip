@@ -1,0 +1,88 @@
+/**
+ * @file LGPSpectrumBarsEffect.cpp
+ * @brief 8-band spectrum analyzer implementation
+ */
+
+#include "LGPSpectrumBarsEffect.h"
+#include "../CoreEffects.h"
+
+#ifndef NATIVE_BUILD
+#include <FastLED.h>
+#endif
+
+#include <cmath>
+#include <cstring>
+
+namespace lightwaveos {
+namespace effects {
+namespace ieffect {
+
+bool LGPSpectrumBarsEffect::init(plugins::EffectContext& ctx) {
+    (void)ctx;
+    memset(m_smoothedBands, 0, sizeof(m_smoothedBands));
+    return true;
+}
+
+void LGPSpectrumBarsEffect::render(plugins::EffectContext& ctx) {
+    // Update smoothed bands (fast attack, slow decay)
+    for (int i = 0; i < 8; ++i) {
+        float target = ctx.audio.available ? ctx.audio.getBand(i) : 0.3f;
+        if (target > m_smoothedBands[i]) {
+            m_smoothedBands[i] = target;  // Instant attack
+        } else {
+            m_smoothedBands[i] *= 0.92f;  // Slow decay (~200ms)
+        }
+    }
+
+    // Clear buffer
+    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+
+    // Render CENTER PAIR: bands map from center (bass) to edges (treble)
+    // Each band gets 10 LEDs (80 / 8 = 10)
+    constexpr int LEDS_PER_BAND = 10;
+
+    for (int dist = 0; dist < HALF_LENGTH; ++dist) {
+        // Which band does this LED belong to?
+        uint8_t bandIdx = (uint8_t)(dist / LEDS_PER_BAND);
+        if (bandIdx > 7) bandIdx = 7;
+
+        float bandEnergy = m_smoothedBands[bandIdx];
+
+        // Position within band (0-1)
+        int posInBand = dist % LEDS_PER_BAND;
+        float normalizedPos = (float)posInBand / LEDS_PER_BAND;
+
+        // Bar visualization: bright if energy > position in band
+        float brightness;
+        if (normalizedPos < bandEnergy) {
+            brightness = 0.6f + bandEnergy * 0.4f;
+        } else {
+            brightness = 0.03f;  // Dim background
+        }
+
+        uint8_t bright = (uint8_t)(brightness * ctx.brightness);
+
+        // Color: each band gets different hue (spread across palette)
+        uint8_t hue = ctx.gHue + bandIdx * 28;  // ~224 degrees spread
+        CRGB color = ctx.palette.getColor(hue, bright);
+
+        SET_CENTER_PAIR(ctx, dist, color);
+    }
+}
+
+void LGPSpectrumBarsEffect::cleanup() {}
+
+const plugins::EffectMetadata& LGPSpectrumBarsEffect::getMetadata() const {
+    static plugins::EffectMetadata meta{
+        "Spectrum Bars",
+        "8-band spectrum from center to edge",
+        plugins::EffectCategory::PARTY,
+        1,
+        "LightwaveOS"
+    };
+    return meta;
+}
+
+} // namespace ieffect
+} // namespace effects
+} // namespace lightwaveos

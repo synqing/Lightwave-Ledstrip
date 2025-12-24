@@ -85,6 +85,10 @@
 #include "ieffect/LGPRileyDissonanceEffect.h"
 #include "ieffect/LGPChromaticLensEffect.h"
 #include "ieffect/LGPChromaticPulseEffect.h"
+#include "ieffect/LGPAudioTestEffect.h"
+#include "ieffect/LGPBeatPulseEffect.h"
+#include "ieffect/LGPSpectrumBarsEffect.h"
+#include "ieffect/LGPBassBreathEffect.h"
 #include "utils/FastLEDOptim.h"
 #include "../core/narrative/NarrativeEngine.h"
 #include <FastLED.h>
@@ -722,9 +726,34 @@ uint8_t registerAllEffects(RendererActor* renderer) {
         // Effect already counted in registerLGPChromaticEffects (count++), just register it
     }
 
+    // Audio-Reactive effects (Phase 2) - ID 68+
+    // LGP Audio Test (ID 68) - IEffect native, demonstrates audio pipeline
+    static ieffect::LGPAudioTestEffect audioTestInstance;
+    if (renderer->registerEffect(total, &audioTestInstance)) {
+        total++;  // Count this effect
+    }
+
+    // LGP Beat Pulse (ID 69) - Beat-synchronized radial pulse
+    static ieffect::LGPBeatPulseEffect beatPulseInstance;
+    if (renderer->registerEffect(total, &beatPulseInstance)) {
+        total++;
+    }
+
+    // LGP Spectrum Bars (ID 70) - 8-band spectrum analyzer
+    static ieffect::LGPSpectrumBarsEffect spectrumBarsInstance;
+    if (renderer->registerEffect(total, &spectrumBarsInstance)) {
+        total++;
+    }
+
+    // LGP Bass Breath (ID 71) - Organic breathing driven by bass
+    static ieffect::LGPBassBreathEffect bassBreathInstance;
+    if (renderer->registerEffect(total, &bassBreathInstance)) {
+        total++;
+    }
+
     // =============== EFFECT COUNT PARITY VALIDATION ===============
     // Runtime validation: ensure registered count matches expected
-    constexpr uint8_t EXPECTED_EFFECT_COUNT = 68;
+    constexpr uint8_t EXPECTED_EFFECT_COUNT = 72;  // 68 core + 4 audio
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

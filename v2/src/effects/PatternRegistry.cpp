@@ -102,7 +102,10 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
     // --- LGP Chromatic Effects (65-67) ---
     {PM_STR("LGP Chromatic Lens"), PatternFamily::ADVANCED_OPTICAL, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Simulated lens dispersion"), PM_STR("Cauchy equation"), PM_STR("")},
     {PM_STR("LGP Chromatic Pulse"), PatternFamily::ADVANCED_OPTICAL, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Pulsing dispersion wave"), PM_STR("Cauchy equation"), PM_STR("")},
-    {PM_STR("LGP Chromatic Interference"), PatternFamily::ADVANCED_OPTICAL, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Interfering dispersion patterns"), PM_STR("Cauchy equation + Interference"), PM_STR("")}
+    {PM_STR("LGP Chromatic Interference"), PatternFamily::ADVANCED_OPTICAL, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Interfering dispersion patterns"), PM_STR("Cauchy equation + Interference"), PM_STR("")},
+
+    // --- Audio-Reactive Effects (68+) - Phase 2 ---
+    {PM_STR("Audio Test"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Audio-reactive spectrum visualization"), PM_STR("RMS energy, 8-band spectrum, beat detection"), PM_STR("")}
 };
 
 const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(PatternMetadata);
@@ -112,7 +115,7 @@ const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(Pattern
 // ============================================================================
 
 // Expected number of implemented effects (must match registerAllEffects() return value)
-constexpr uint8_t EXPECTED_EFFECT_COUNT = 68;
+constexpr uint8_t EXPECTED_EFFECT_COUNT = 69;  // 68 core + 1 audio test
 
 // Compile-time assertion: metadata must have at least as many entries as implemented effects
 // This ensures we can always map effect IDs to metadata (allows for future effects in metadata)

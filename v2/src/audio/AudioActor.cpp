@@ -386,7 +386,9 @@ void AudioActor::processHop()
     if (m_analyzer.analyze(bandsRaw)) {
         // Fresh band data available - Goertzel completed a 512-sample window
         for (int i = 0; i < NUM_BANDS; ++i) {
-            raw.bands[i] = mapLevelDb(bandsRaw[i], -65.0f, -12.0f) * activity;
+            float band = mapLevelDb(bandsRaw[i], -65.0f, -12.0f);
+            m_lastBands[i] = band;
+            raw.bands[i] = band * activity;
         }
 
         // Throttle Goertzel debug logging to once per ~2 seconds (prevents serial spam)
@@ -404,10 +406,7 @@ void AudioActor::processHop()
                      m_capture.getStats().peakSample, m_lastPeakCentered, m_lastMinSample, m_lastMaxSample, m_lastMeanSample);
         }
 
-        // Update persisted bands
-        for (int i = 0; i < NUM_BANDS; ++i) {
-            m_lastBands[i] = raw.bands[i];
-        }
+        // Persisted bands updated above (unscaled)
     } else {
         // No new analysis this hop - reuse last known bands
         // This prevents "picket fence" dropouts where bands would be 0 every other hop
@@ -422,8 +421,9 @@ void AudioActor::processHop()
     if (m_chromaAnalyzer.analyze(chromaRaw)) {
         // Fresh chroma data available
         for (int i = 0; i < 12; ++i) {
-            raw.chroma[i] = mapLevelDb(chromaRaw[i], -65.0f, -12.0f) * activity;
-            lastChroma[i] = raw.chroma[i];
+            float chroma = mapLevelDb(chromaRaw[i], -65.0f, -12.0f);
+            lastChroma[i] = chroma;
+            raw.chroma[i] = chroma * activity;
         }
     } else {
         // No new chroma this hop - reuse last known chroma

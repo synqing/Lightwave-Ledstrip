@@ -62,8 +62,9 @@ public:
 
 private:
     // Target frequencies for 8 bands
+    // Note: Band 7 set to 7800Hz to avoid Goertzel instability at Nyquist (8000Hz)
     static constexpr float TARGET_FREQS[NUM_BANDS] = {
-        60.0f, 120.0f, 250.0f, 500.0f, 1000.0f, 2000.0f, 4000.0f, 8000.0f
+        60.0f, 120.0f, 250.0f, 500.0f, 1000.0f, 2000.0f, 4000.0f, 7800.0f
     };
 
     // Accumulation buffer (rolling window)

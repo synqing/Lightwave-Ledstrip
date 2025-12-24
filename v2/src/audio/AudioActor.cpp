@@ -178,8 +178,10 @@ void AudioActor::onTick()
     if ((m_stats.tickCount % 620) == 0) {
         const CaptureStats& cstats = m_capture.getStats();
         const ControlBusFrame& frame = m_controlBus.GetFrame();
-        ESP_LOGI(TAG, "Audio alive: cap=%lu pk=%d rms=%.2f",
-                 cstats.hopsCapured, cstats.peakSample, frame.rms);
+        ESP_LOGI(TAG, "Audio alive: cap=%lu pk=%d pkC=%d rms=%.4f->%.3f pre=%.4f g=%.2f dc=%.1f clip=%u flux=%.3f min=%d max=%d mean=%.1f",
+                 cstats.hopsCapured, cstats.peakSample, m_lastPeakCentered, m_lastRmsRaw, frame.rms,
+                 m_lastRmsPreGain, m_lastAgcGain, m_lastDcEstimate, (unsigned)m_lastClipCount, m_lastFluxMapped,
+                 m_lastMinSample, m_lastMaxSample, m_lastMeanSample);
     }
 }
 
@@ -232,6 +234,19 @@ void AudioActor::captureHop()
 
 void AudioActor::processHop()
 {
+    auto clamp01 = [](float x) -> float {
+        if (x < 0.0f) return 0.0f;
+        if (x > 1.0f) return 1.0f;
+        return x;
+    };
+
+    auto mapLevelDb = [&](float x, float dbFloor, float dbCeil) -> float {
+        const float eps = 1e-6f;
+        float db = 20.0f * log10f(x + eps);
+        float t = (db - dbFloor) / (dbCeil - dbFloor);
+        return clamp01(t);
+    };
+
     // 1. Build AudioTime for this hop
     uint64_t now_us = esp_timer_get_time();
     AudioTime now(m_sampleIndex, SAMPLE_RATE, now_us);
@@ -240,30 +255,181 @@ void AudioActor::processHop()
     m_sampleIndex += HOP_SIZE;
     m_hopCount++;
 
-    // 2. Compute RMS energy
-    float rms = computeRMS(m_hopBuffer, HOP_SIZE);
+    int32_t minRaw = 32767;
+    int32_t maxRaw = -32768;
+    int64_t sumRaw = 0;
+    for (size_t i = 0; i < HOP_SIZE; ++i) {
+        int32_t s = m_hopBuffer[i];
+        if (s < minRaw) minRaw = s;
+        if (s > maxRaw) maxRaw = s;
+        sumRaw += s;
+    }
+    float meanRaw = (float)sumRaw / (float)HOP_SIZE;
+    m_lastMeanSample = meanRaw;
+
+    constexpr float dcAlpha = 0.001f;
+    // TARGET RMS: 0.25 (-12dB) is a strong signal for the visualizer.
+    // Previous value 0.010 was way too low (-40dB).
+    constexpr float agcTargetRms = 0.25f; 
+    constexpr float agcSilenceFloor = 0.00050f;
+    constexpr float agcGateRange = 0.00050f;
+    constexpr float agcMinGain = 1.0f;    // Don't attenuate below unity
+    constexpr float agcMaxGain = 100.0f;  // Reduced from 300.0f - 300x is dangerously high
+    constexpr float agcAttack = 0.08f;
+    constexpr float agcRelease = 0.02f;
+
+    int32_t minC = 32767;
+    int32_t maxC = -32768;
+    int32_t peakC = 0;
+    uint16_t clipCount = 0;
+
+    int64_t sumSqPre = 0;
+    for (size_t i = 0; i < HOP_SIZE; ++i) {
+        float x = (float)m_hopBuffer[i];
+        m_dcEstimate += dcAlpha * (x - m_dcEstimate);
+        float dcRemoved = x - m_dcEstimate;
+
+        int32_t preI = (int32_t)lroundf(dcRemoved);
+        if (preI < -32768) preI = -32768;
+        if (preI > 32767) preI = 32767;
+        sumSqPre += (int64_t)preI * (int64_t)preI;
+
+        float g = m_agcGain;
+        int32_t gI = (int32_t)lroundf(dcRemoved * g);
+        int32_t c = gI;
+        if (c < -32768) c = -32768;
+        if (c > 32767) c = 32767;
+        if (c != gI) clipCount++;
+
+        m_hopBufferCentered[i] = (int16_t)c;
+        if (c < minC) minC = c;
+        if (c > maxC) maxC = c;
+        int32_t a = (c < 0) ? -c : c;
+        if (a > peakC) peakC = a;
+    }
+    m_lastMinSample = (int16_t)minC;
+    m_lastMaxSample = (int16_t)maxC;
+    m_lastPeakCentered = (int16_t)peakC;
+    m_lastDcEstimate = m_dcEstimate;
+    m_lastClipCount = clipCount;
+
+    float rmsPre = 0.0f;
+    if (HOP_SIZE > 0) {
+        float rmsPreAbs = std::sqrt(static_cast<float>(sumSqPre) / (float)HOP_SIZE);
+        rmsPre = std::min(1.0f, rmsPreAbs / 32768.0f);
+    }
+    m_lastRmsPreGain = rmsPre;
+
+    if (clipCount > 0) {
+        m_agcGain *= 0.90f;
+    } else if (rmsPre <= agcSilenceFloor) {
+        m_agcGain += 0.01f * (1.0f - m_agcGain);
+    } else {
+        float desired = agcTargetRms / (rmsPre + 1e-6f);
+        if (desired < agcMinGain) desired = agcMinGain;
+        if (desired > agcMaxGain) desired = agcMaxGain;
+        float rate = (desired > m_agcGain) ? agcAttack : agcRelease;
+        m_agcGain += rate * (desired - m_agcGain);
+    }
+    if (m_agcGain < agcMinGain) m_agcGain = agcMinGain;
+    if (m_agcGain > agcMaxGain) m_agcGain = agcMaxGain;
+    m_lastAgcGain = m_agcGain;
+
+    float activity = clamp01((rmsPre - agcSilenceFloor) / agcGateRange);
+    float rmsRaw = computeRMS(m_hopBufferCentered, HOP_SIZE);
+    float rmsMapped = mapLevelDb(rmsRaw, -65.0f, -12.0f); // Ceiling -12dB matches target
+    rmsMapped *= activity;
+    m_lastRmsRaw = rmsRaw;
+    m_lastRmsMapped = rmsMapped;
 
     // 3. Compute spectral flux (half-wave rectified RMS derivative)
-    float flux = std::max(0.0f, rms - m_prevRMS);
-    m_prevRMS = rms;
+    float fluxMapped = std::max(0.0f, rmsMapped - m_prevRMS);
+    m_prevRMS = rmsMapped;
+    m_lastFluxMapped = fluxMapped;
 
     // 4. Accumulate samples for Goertzel (512-sample window = 2 hops)
-    m_analyzer.accumulate(m_hopBuffer, HOP_SIZE);
+    m_analyzer.accumulate(m_hopBufferCentered, HOP_SIZE);
+
+    // 4.5. Accumulate samples for Chromagram (512-sample window = 2 hops)
+    m_chromaAnalyzer.accumulate(m_hopBufferCentered, HOP_SIZE);
 
     // 5. Build ControlBusRawInput
     ControlBusRawInput raw;
-    raw.rms = rms;
-    raw.flux = flux;
+    raw.rms = rmsMapped;
+    raw.flux = fluxMapped;
 
-    // Initialize bands to zero (will be filled if Goertzel window is ready)
-    for (int i = 0; i < NUM_BANDS; ++i) {
-        raw.bands[i] = 0.0f;
+    // 5.5. Downsample waveform: 256 samples -> 128 points (2 samples per point)
+    // Use peak (abs max) of each pair to preserve transients (matches Sensory Bridge style)
+    constexpr uint8_t WAVEFORM_POINTS = audio::CONTROLBUS_WAVEFORM_N;
+    constexpr uint8_t SAMPLES_PER_POINT = HOP_SIZE / WAVEFORM_POINTS;  // 256 / 128 = 2
+    for (uint8_t i = 0; i < WAVEFORM_POINTS; ++i) {
+        int16_t peak = 0;
+        int16_t peakSample = 0;
+        uint16_t startIdx = i * SAMPLES_PER_POINT;
+        for (uint8_t j = 0; j < SAMPLES_PER_POINT && (startIdx + j) < HOP_SIZE; ++j) {
+            int16_t sample = m_hopBufferCentered[startIdx + j];
+            int16_t absSample = (sample < 0) ? -sample : sample;
+            if (absSample > peak) {
+                peak = absSample;
+                peakSample = sample;  // Preserve sign
+            }
+        }
+        if (activity < 1.0f) {
+            raw.waveform[i] = static_cast<int16_t>(lroundf(peakSample * activity));
+        } else {
+            raw.waveform[i] = peakSample;
+        }
     }
 
     // 6. Get band energies when Goertzel window is full (every 2 hops)
-    if (m_analyzer.analyze(raw.bands)) {
+    float bandsRaw[NUM_BANDS] = {0};
+    if (m_analyzer.analyze(bandsRaw)) {
         // Fresh band data available - Goertzel completed a 512-sample window
-        ESP_LOGD(TAG, "Goertzel: bands[0]=%.3f bands[1]=%.3f", raw.bands[0], raw.bands[1]);
+        for (int i = 0; i < NUM_BANDS; ++i) {
+            raw.bands[i] = mapLevelDb(bandsRaw[i], -65.0f, -12.0f) * activity;
+        }
+
+        // Throttle Goertzel debug logging to once per ~2 seconds (prevents serial spam)
+        m_goertzelLogCounter++;
+        if (m_goertzelLogCounter >= GOERTZEL_LOG_INTERVAL) {
+            m_goertzelLogCounter = 0;
+            // Use ANSI color codes (bright green) for visual distinction from DMA dbg
+            ESP_LOGD(TAG,
+                     "\033[1;32mGoertzel: raw=[%.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f] "
+                     "map=[%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f] "
+                     "rms=%.4f->%.3f pre=%.4f g=%.2f dc=%.1f clip=%u pk=%d pkC=%d min=%d max=%d mean=%.1f\033[0m",
+                     bandsRaw[0], bandsRaw[1], bandsRaw[2], bandsRaw[3], bandsRaw[4], bandsRaw[5], bandsRaw[6], bandsRaw[7],
+                     raw.bands[0], raw.bands[1], raw.bands[2], raw.bands[3], raw.bands[4], raw.bands[5], raw.bands[6], raw.bands[7],
+                     rmsRaw, rmsMapped, m_lastRmsPreGain, m_lastAgcGain, m_lastDcEstimate, (unsigned)m_lastClipCount,
+                     m_capture.getStats().peakSample, m_lastPeakCentered, m_lastMinSample, m_lastMaxSample, m_lastMeanSample);
+        }
+
+        // Update persisted bands
+        for (int i = 0; i < NUM_BANDS; ++i) {
+            m_lastBands[i] = raw.bands[i];
+        }
+    } else {
+        // No new analysis this hop - reuse last known bands
+        // This prevents "picket fence" dropouts where bands would be 0 every other hop
+        for (int i = 0; i < NUM_BANDS; ++i) {
+            raw.bands[i] = m_lastBands[i] * activity;
+        }
+    }
+
+    // 6.5. Get chromagram when ChromaAnalyzer window is full (every 2 hops)
+    float chromaRaw[12] = {0};
+    static float lastChroma[12] = {0};
+    if (m_chromaAnalyzer.analyze(chromaRaw)) {
+        // Fresh chroma data available
+        for (int i = 0; i < 12; ++i) {
+            raw.chroma[i] = mapLevelDb(chromaRaw[i], -65.0f, -12.0f) * activity;
+            lastChroma[i] = raw.chroma[i];
+        }
+    } else {
+        // No new chroma this hop - reuse last known chroma
+        for (int i = 0; i < 12; ++i) {
+            raw.chroma[i] = lastChroma[i] * activity;
+        }
     }
 
     // 7. Update ControlBus with attack/release smoothing

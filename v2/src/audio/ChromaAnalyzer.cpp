@@ -1,4 +1,9 @@
-#include "GoertzelAnalyzer.h"
+/**
+ * @file ChromaAnalyzer.cpp
+ * @brief 12-bin chromagram analyzer implementation
+ */
+
+#include "ChromaAnalyzer.h"
 
 #if FEATURE_AUDIO_SYNC
 
@@ -10,20 +15,18 @@ namespace lightwaveos {
 namespace audio {
 
 // Define static constexpr arrays (C++17 requires definition)
-constexpr float GoertzelAnalyzer::TARGET_FREQS[NUM_BANDS];
+constexpr float ChromaAnalyzer::NOTE_FREQS[NUM_OCTAVES * NUM_CHROMA];
 
-GoertzelAnalyzer::GoertzelAnalyzer() {
-    // Precompute Goertzel coefficients for all target frequencies
-    for (uint8_t i = 0; i < NUM_BANDS; ++i) {
-        m_coefficients[i] = computeCoefficient(TARGET_FREQS[i], SAMPLE_RATE_HZ, WINDOW_SIZE);
+ChromaAnalyzer::ChromaAnalyzer() {
+    // Precompute Goertzel coefficients for all note frequencies
+    for (uint8_t i = 0; i < NUM_OCTAVES * NUM_CHROMA; ++i) {
+        m_coefficients[i] = computeCoefficient(NOTE_FREQS[i], SAMPLE_RATE_HZ, WINDOW_SIZE);
     }
 
     // Precompute normalization factors
-    // Adjusted to map half-scale sine waves (amp=16000) to > 0.3
-    // Theoretical max raw magnitude for full scale is N/2 = 256
-    // We use uniform normalization for now to ensure flat frequency response
+    // Use uniform normalization similar to GoertzelAnalyzer
     float uniformFactor = 1.0f / 250.0f;
-    for (uint8_t i = 0; i < NUM_BANDS; ++i) {
+    for (uint8_t i = 0; i < NUM_OCTAVES * NUM_CHROMA; ++i) {
         m_normFactors[i] = uniformFactor;
     }
 
@@ -31,7 +34,7 @@ GoertzelAnalyzer::GoertzelAnalyzer() {
     std::memset(m_accumBuffer, 0, sizeof(m_accumBuffer));
 }
 
-float GoertzelAnalyzer::computeCoefficient(float targetFreq, uint32_t sampleRate, size_t windowSize) {
+float ChromaAnalyzer::computeCoefficient(float targetFreq, uint32_t sampleRate, size_t windowSize) {
     // Compute normalized frequency k (bin index)
     // k = (targetFreq / sampleRate) * windowSize
     float k = (targetFreq / static_cast<float>(sampleRate)) * static_cast<float>(windowSize);
@@ -41,7 +44,7 @@ float GoertzelAnalyzer::computeCoefficient(float targetFreq, uint32_t sampleRate
     return 2.0f * std::cos(omega);
 }
 
-void GoertzelAnalyzer::accumulate(const int16_t* samples, size_t count) {
+void ChromaAnalyzer::accumulate(const int16_t* samples, size_t count) {
     for (size_t i = 0; i < count; ++i) {
         m_accumBuffer[m_accumIndex] = samples[i];
         m_accumIndex++;
@@ -53,7 +56,7 @@ void GoertzelAnalyzer::accumulate(const int16_t* samples, size_t count) {
     }
 }
 
-float GoertzelAnalyzer::computeGoertzel(const int16_t* buffer, size_t N, float coeff) const {
+float ChromaAnalyzer::computeGoertzel(const int16_t* buffer, size_t N, float coeff) const {
     // Goertzel algorithm state variables
     float s0 = 0.0f; // Current state
     float s1 = 0.0f; // Previous state 1
@@ -77,18 +80,33 @@ float GoertzelAnalyzer::computeGoertzel(const int16_t* buffer, size_t N, float c
     return magnitude;
 }
 
-bool GoertzelAnalyzer::analyze(float* bandsOut) {
+bool ChromaAnalyzer::analyze(float* chromaOut) {
     // Only compute if we have a full window
     if (!m_windowFull) {
         return false;
     }
 
-    // Compute magnitude for each frequency band
-    for (uint8_t i = 0; i < NUM_BANDS; ++i) {
-        float rawMagnitude = computeGoertzel(m_accumBuffer, WINDOW_SIZE, m_coefficients[i]);
+    // Initialize chromagram to zero
+    float chromaRaw[NUM_CHROMA] = {0.0f};
 
-        // Normalize to [0,1] and clamp
-        bandsOut[i] = std::min(1.0f, rawMagnitude * m_normFactors[i]);
+    // Compute magnitude for each note frequency and fold into pitch classes
+    for (uint8_t octave = 0; octave < NUM_OCTAVES; ++octave) {
+        for (uint8_t note = 0; note < NUM_CHROMA; ++note) {
+            uint8_t noteIndex = octave * NUM_CHROMA + note;
+            float rawMagnitude = computeGoertzel(m_accumBuffer, WINDOW_SIZE, m_coefficients[noteIndex]);
+
+            // Normalize to [0,1] and clamp
+            float normalized = std::min(1.0f, rawMagnitude * m_normFactors[noteIndex]);
+
+            // Fold into pitch class (note % 12)
+            // Weight by 0.5 per octave (matching Sensory Bridge aggregation)
+            chromaRaw[note] += normalized * 0.5f;
+        }
+    }
+
+    // Normalize chromagram output (clamp to [0,1])
+    for (uint8_t i = 0; i < NUM_CHROMA; ++i) {
+        chromaOut[i] = std::min(1.0f, chromaRaw[i]);
     }
 
     // Reset window flag (continue accumulating for next window)
@@ -97,7 +115,7 @@ bool GoertzelAnalyzer::analyze(float* bandsOut) {
     return true;
 }
 
-void GoertzelAnalyzer::reset() {
+void ChromaAnalyzer::reset() {
     m_accumIndex = 0;
     m_windowFull = false;
     std::memset(m_accumBuffer, 0, sizeof(m_accumBuffer));
@@ -107,3 +125,4 @@ void GoertzelAnalyzer::reset() {
 } // namespace lightwaveos
 
 #endif // FEATURE_AUDIO_SYNC
+

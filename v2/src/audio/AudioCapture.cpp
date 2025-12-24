@@ -2,16 +2,17 @@
  * @file AudioCapture.cpp
  * @brief I2S audio capture implementation for SPH0645 MEMS microphone
  *
- * Uses ESP-IDF legacy I2S driver with Emotiscope-derived corrections.
+ * Uses ESP-IDF legacy I2S driver with ESP32-S3 register fixes for SPH0645.
  *
  * SPH0645 Sample Format:
- * - Outputs 24-bit 2's complement, MSB-first, 18-bit effective precision
- * - I2S configured for 32-bit samples
- * - Uses RIGHT channel (despite SEL=GND being labeled "left")
- * - Conversion: (raw >> 14) + 7000, clip to 18-bit, subtract 360
+ * - Outputs 18-bit data, MSB-first, in 32-bit I2S slots
+ * - I2S configured for 32-bit samples, LEFT channel (SEL=GND)
+ * - Register fixes: MSB shift enabled, timing delay (BIT(9))
+ * - Conversion: >>14 shift to extract 18-bit value, then scale to 16-bit
+ * - DC removal handled in AudioActor
  *
  * @author LightwaveOS Team
- * @version 2.1.0
+ * @version 2.2.0
  */
 
 #include "AudioCapture.h"
@@ -23,6 +24,10 @@
 #include <esp_log.h>
 #include <esp_timer.h>
 
+// ESP32-S3 register access for WS polarity fix (SPH0645 requirement)
+// The legacy I2S driver doesn't expose WS polarity, so we set the register directly
+#include "soc/i2s_reg.h"
+
 static const char* TAG = "AudioCapture";
 
 namespace lightwaveos {
@@ -31,7 +36,7 @@ namespace audio {
 // Emotiscope-proven sample conversion constants
 static constexpr int32_t DC_BIAS_ADD = 7000;       // Pre-clip bias adjustment
 static constexpr int32_t DC_BIAS_SUB = 360;        // Post-clip DC removal
-static constexpr int32_t CLIP_MAX = 131072;        // 18-bit max value (2^17)
+static constexpr int32_t CLIP_MAX = 131071;        // 18-bit max value (2^17 - 1)
 static constexpr int32_t CLIP_MIN = -131072;       // 18-bit min value
 
 // ============================================================================
@@ -89,7 +94,7 @@ bool AudioCapture::init()
     ESP_LOGI(TAG, "  Sample rate: %d Hz", SAMPLE_RATE);
     ESP_LOGI(TAG, "  Hop size: %d samples (%.1f ms)", HOP_SIZE, HOP_DURATION_MS);
     ESP_LOGI(TAG, "  Pins: BCLK=%d WS=%d DIN=%d", I2S_BCLK_PIN, I2S_LRCL_PIN, I2S_DOUT_PIN);
-    ESP_LOGI(TAG, "  Channel: RIGHT (Emotiscope-derived)");
+    ESP_LOGI(TAG, "  Channel: RIGHT");
 
     return true;
 }
@@ -175,28 +180,65 @@ CaptureResult AudioCapture::captureHop(int16_t* buffer)
         memset(&buffer[samplesRead], 0, (HOP_SIZE - samplesRead) * sizeof(int16_t));
     }
 
-    // Convert samples using Emotiscope formula:
-    // 1. Shift right by 14 (not 16!) to preserve 18-bit precision
-    // 2. Add DC bias (+7000) to center in positive range
-    // 3. Clip to 18-bit range
-    // 4. Remove DC offset (-360)
-    // 5. Scale to 16-bit
+    static uint32_t s_dbgHop = 0;
+    static bool s_firstPrint = true;
+    s_dbgHop++;
+    
+    // Print first time immediately, then every 50 hops (~0.8 seconds) for visibility
+    if (s_firstPrint || (s_dbgHop % 50) == 0) {
+        s_firstPrint = false;
+        int32_t rawMin = INT32_MAX;
+        int32_t rawMax = INT32_MIN;
+        for (size_t i = 0; i < HOP_SIZE; ++i) {
+            int32_t v = m_dmaBuffer[i];
+            if (v < rawMin) rawMin = v;
+            if (v > rawMax) rawMax = v;
+        }
 
+        auto peakShift = [&](int shift) -> int32_t {
+            int32_t pk = 0;
+            for (size_t i = 0; i < HOP_SIZE; ++i) {
+                int32_t s = (m_dmaBuffer[i] >> shift);
+                int32_t a = (s < 0) ? -s : s;
+                if (a > pk) pk = a;
+            }
+            return pk;
+        };
+
+        // Check MSB shift register state for diagnostic
+        bool msbShiftEnabled = (REG_GET_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_MSB_SHIFT) != 0);
+        const char* channelFmt = "RIGHT";  // Current config uses RIGHT channel
+
+        // Use ESP_LOGI (same level as "Audio alive") with ANSI color codes (bright cyan)
+        ESP_LOGI(TAG,
+                 "\033[1;36mDMA dbg: hop=%lu ch=%s msb_shift=%s raw0=%08X raw1=%08X min=%ld max=%ld "
+                 "pk>>8=%ld pk>>10=%ld pk>>12=%ld pk>>14=%ld pk>>16=%ld\033[0m",
+                 (unsigned long)s_dbgHop, channelFmt, msbShiftEnabled ? "ON" : "OFF",
+                 (uint32_t)m_dmaBuffer[0], (uint32_t)m_dmaBuffer[1],
+                 (long)rawMin, (long)rawMax,
+                 (long)peakShift(8), (long)peakShift(10), (long)peakShift(12), 
+                 (long)peakShift(14), (long)peakShift(16));
+    }
+
+    // Convert samples from 32-bit I2S slots to 16-bit signed samples
+    // SPH0645 outputs 18-bit data, MSB-aligned in 32-bit slot.
+    // With MSB shift enabled, hardware aligns data; >>14 typically extracts 18-bit value.
+    // NOTE: Validate shift against DMA dbg output (pk>>N values) - the diagnostic
+    //       shows which shift produces the largest peak, indicating correct alignment.
+    // 1. Shift right by 14 to extract 18-bit value (may need adjustment based on diagnostics)
+    // 2. Clip to 18-bit range (safety)
+    // 3. Scale to 16-bit (>> 2)
+    // 4. DC removal is handled in AudioActor
+    
     int16_t peak = 0;
     for (size_t i = 0; i < HOP_SIZE; i++) {
         // Step 1: Shift by 14 to get 18-bit value with sign preserved
-        int32_t raw = (m_dmaBuffer[i] >> 14) + DC_BIAS_ADD;
-
-        // Step 2: Clip to 18-bit range
+        // If DMA dbg shows pk>>12 or pk>>16 is much larger, adjust this shift accordingly
+        int32_t raw = (m_dmaBuffer[i] >> 14);
+        raw += DC_BIAS_ADD;
         if (raw < CLIP_MIN) raw = CLIP_MIN;
         if (raw > CLIP_MAX) raw = CLIP_MAX;
-
-        // Step 3: Remove DC offset
         raw -= DC_BIAS_SUB;
-
-        // Step 4: Scale from 18-bit range to 16-bit
-        // 18-bit range is ±131072, 16-bit is ±32768
-        // Divide by 4 (shift right by 2) to fit
         int16_t sample = static_cast<int16_t>(raw >> 2);
         buffer[i] = sample;
 
@@ -221,12 +263,12 @@ CaptureResult AudioCapture::captureHop(int16_t* buffer)
 bool AudioCapture::configureI2S()
 {
     // I2S driver configuration for SPH0645
-    // CRITICAL: Use RIGHT channel (Emotiscope-derived - despite SEL=GND)
+    // ALIGNED WITH K1.LIGHTWAVE: Use LEFT channel and specific register hacks
     i2s_config_t i2sConfig = {
         .mode = static_cast<i2s_mode_t>(I2S_MODE_MASTER | I2S_MODE_RX),
         .sample_rate = SAMPLE_RATE,
         .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,  // 32-bit slots for SPH0645
-        .channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT,  // RIGHT channel (Emotiscope fix!)
+        .channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT,   // SPH0645: RIGHT slot on ESP32-S3
         .communication_format = I2S_COMM_FORMAT_STAND_I2S,  // Standard I2S format
         .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
         .dma_buf_count = static_cast<int>(DMA_BUFFER_COUNT),
@@ -244,7 +286,21 @@ bool AudioCapture::configureI2S()
         return false;
     }
 
-    ESP_LOGI(TAG, "I2S driver installed (RIGHT channel mode)");
+    // =========================================================================
+    // CRITICAL: SPH0645 Timing Fixes (ESP32-S3 + SPH0645 alignment)
+    // =========================================================================
+    // SPH0645 requires:
+    // 1. REG_SET_BIT(I2S_RX_TIMING_REG(I2S_PORT), BIT(9)); -> Delay sampling by 1 BCLK
+    // 2. REG_SET_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_MSB_SHIFT); -> Enable MSB shift
+    //    (SPH0645 outputs MSB-first with 1 BCLK delay after WS, MSB shift aligns data)
+    // =========================================================================
+    
+    // ESP32-S3 Specific Fixes for SPH0645
+    REG_SET_BIT(I2S_RX_TIMING_REG(I2S_PORT), BIT(9));
+    REG_SET_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_MSB_SHIFT);
+    REG_SET_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_WS_IDLE_POL);
+    
+    ESP_LOGI(TAG, "I2S driver installed (RIGHT channel, WS inverted, MSB shift, timing delay for SPH0645)");
     return true;
 }
 

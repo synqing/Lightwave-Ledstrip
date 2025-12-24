@@ -73,21 +73,24 @@ constexpr size_t DMA_BUFFER_COUNT = 4;
 constexpr size_t DMA_BUFFER_SAMPLES = 512;
 
 // ============================================================================
-// SPH0645 Sample Format (Emotiscope-proven conversion)
+// SPH0645 Sample Format and I2S Configuration
 // ============================================================================
 
 /**
- * SPH0645 outputs 24-bit 2's complement, MSB-first, 18-bit precision.
- * Configure I2S for 32-bit slots with:
- * - I2S_STD_SLOT_RIGHT (despite SEL=GND being "left")
- * - WS polarity inverted (.ws_pol = true)
+ * SPH0645 outputs 18-bit data, MSB-first, in 32-bit I2S slots.
+ * 
+ * I2S Configuration (ESP32-S3 legacy driver):
+ * - I2S_CHANNEL_FMT_ONLY_RIGHT (SEL=GND wiring; ESP32-S3 expects right slot)
+ * - 32-bit slots (I2S_BITS_PER_SAMPLE_32BIT)
+ * - MSB shift enabled (REG_SET_BIT I2S_RX_MSB_SHIFT) - aligns SPH0645 data
+ * - Timing delay enabled (REG_SET_BIT BIT(9) in I2S_RX_TIMING_REG)
+ * - WS idle polarity inverted (REG_SET_BIT I2S_RX_WS_IDLE_POL)
  *
  * Sample conversion (see AudioCapture.cpp):
- *   1. Shift >> 14 (not 16) to preserve 18-bit precision
- *   2. Add DC bias +7000
- *   3. Clip to ±131072 (18-bit range)
- *   4. Subtract DC offset 360
- *   5. Shift >> 2 to fit 16-bit range
+ *   1. Shift >> 14 to extract 18-bit value (validate via DMA dbg pk>>N output)
+ *   2. Clip to ±131072 (18-bit signed range)
+ *   3. Scale to 16-bit (>> 2)
+ *   4. DC removal handled in AudioActor
  */
 constexpr uint8_t I2S_BITS_PER_SAMPLE = 32;   // 32-bit slots for SPH0645
 
@@ -110,7 +113,7 @@ constexpr uint8_t I2S_BITS_PER_SAMPLE = 32;   // 32-bit slots for SPH0645
 constexpr uint8_t NUM_BANDS = 8;
 
 constexpr uint16_t BAND_CENTER_FREQUENCIES[NUM_BANDS] = {
-    60, 120, 250, 500, 1000, 2000, 4000, 8000
+    60, 120, 250, 500, 1000, 2000, 4000, 7800
 };
 
 // ============================================================================
@@ -133,7 +136,7 @@ constexpr float STALENESS_THRESHOLD_MS = 100.0f;  // 100ms = 6 frames @ 62.5 Hz
  */
 constexpr uint8_t AUDIO_ACTOR_PRIORITY = 4;
 constexpr uint8_t AUDIO_ACTOR_CORE = 0;
-constexpr uint16_t AUDIO_ACTOR_STACK_WORDS = 3072;  // 12KB stack
+constexpr uint16_t AUDIO_ACTOR_STACK_WORDS = 8192;  // 32KB stack (Increased from 4096 for safety)
 constexpr uint16_t AUDIO_ACTOR_TICK_MS = 16;        // Match hop duration
 
 } // namespace audio

@@ -7,10 +7,11 @@
  *
  * Key features:
  * - Uses ESP-IDF legacy driver (driver/i2s.h) for Arduino compatibility
- * - SPH0645 RIGHT channel selection (despite SEL=GND)
+ * - SPH0645 RIGHT slot on ESP32-S3 (SEL=GND wiring; WS inverted in legacy driver)
  * - DMA-based capture with 4 x 512 sample buffers
  * - 256-sample hop size for Tab5 parity (62.5 Hz frames)
- * - Emotiscope sample conversion: >>14 shift + DC offset correction
+ * - I2S register fixes: MSB shift enabled, timing delay (BIT(9))
+ * - Sample conversion: >>14 shift to extract 18-bit data (validate via DMA dbg)
  *
  * Thread Safety:
  * - init()/deinit() must be called from the same task
@@ -183,10 +184,11 @@ private:
     /**
      * @brief Configure I2S driver (legacy API)
      *
-     * Uses corrected configuration based on Emotiscope analysis:
-     * - I2S_CHANNEL_FMT_ONLY_RIGHT (despite SPH0645 SEL=GND being "left")
-     * - MSB communication format
-     * - 32-bit slots for SPH0645
+     * SPH0645 configuration for ESP32-S3:
+     * - I2S_CHANNEL_FMT_ONLY_LEFT (SEL=GND on Adafruit breakout)
+     * - 32-bit slots for SPH0645 (18-bit data, MSB-aligned)
+     * - MSB shift enabled (REG_SET_BIT I2S_RX_MSB_SHIFT)
+     * - Timing delay enabled (REG_SET_BIT BIT(9) in timing reg)
      *
      * @return true if configuration succeeded
      */

@@ -39,6 +39,7 @@
 #include "../config/audio_config.h"
 #include "AudioCapture.h"
 #include "GoertzelAnalyzer.h"
+#include "ChromaAnalyzer.h"
 #include "contracts/AudioTime.h"
 #include "contracts/ControlBus.h"
 #include "contracts/SnapshotBuffer.h"
@@ -253,6 +254,7 @@ private:
 
     // Sample buffer for last captured hop
     int16_t m_hopBuffer[HOP_SIZE];
+    int16_t m_hopBufferCentered[HOP_SIZE];
 
     // Flag for new hop availability (atomic for thread safety on dual-core ESP32)
     std::atomic<bool> m_newHopAvailable{false};
@@ -263,6 +265,9 @@ private:
 
     // Goertzel frequency analyzer (8 bands, 512-sample window)
     GoertzelAnalyzer m_analyzer;
+
+    // Chromagram analyzer (12 pitch classes, 512-sample window)
+    ChromaAnalyzer m_chromaAnalyzer;
 
     // ControlBus state machine (smoothing, attack/release)
     ControlBus m_controlBus;
@@ -278,6 +283,28 @@ private:
 
     // Previous RMS for flux calculation
     float m_prevRMS = 0.0f;
+
+    // Last valid frequency bands (persisted between Goertzel updates)
+    float m_lastBands[8] = {0};
+
+    float m_lastRmsRaw = 0.0f;
+    float m_lastRmsMapped = 0.0f;
+    float m_lastFluxMapped = 0.0f;
+    int16_t m_lastMinSample = 0;
+    int16_t m_lastMaxSample = 0;
+    int16_t m_lastPeakCentered = 0;
+    float m_lastMeanSample = 0.0f;
+    float m_lastRmsPreGain = 0.0f;
+    float m_lastAgcGain = 1.0f;
+    float m_lastDcEstimate = 0.0f;
+    uint16_t m_lastClipCount = 0;
+
+    float m_dcEstimate = 0.0f;
+    float m_agcGain = 1.0f;
+
+    // Throttle for Goertzel debug logging (log once per ~2 seconds)
+    uint32_t m_goertzelLogCounter = 0;
+    static constexpr uint32_t GOERTZEL_LOG_INTERVAL = 62;  // ~2 seconds @ 31 Hz
 
     // ========================================================================
     // Internal Methods
@@ -330,7 +357,7 @@ namespace ActorConfigs {
 inline actors::ActorConfig Audio() {
     return actors::ActorConfig(
         "Audio",                                    // name
-        AUDIO_ACTOR_STACK_WORDS,                    // stackSize (12KB)
+        AUDIO_ACTOR_STACK_WORDS,                    // stackSize (16KB)
         AUDIO_ACTOR_PRIORITY,                       // priority (4)
         AUDIO_ACTOR_CORE,                           // coreId (0)
         16,                                         // queueSize

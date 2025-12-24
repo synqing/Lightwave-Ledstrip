@@ -20,6 +20,7 @@ void ControlBus::Reset() {
     m_flux_s = 0.0f;
     for (uint8_t i = 0; i < CONTROLBUS_NUM_BANDS; ++i)  m_bands_s[i] = 0.0f;
     for (uint8_t i = 0; i < CONTROLBUS_NUM_CHROMA; ++i) m_chroma_s[i] = 0.0f;
+    // Waveform array is zero-initialized by ControlBusFrame{} constructor
 }
 
 void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& raw) {
@@ -44,6 +45,12 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     for (uint8_t i = 0; i < CONTROLBUS_NUM_CHROMA; ++i) {
         m_chroma_s[i] = lerp(m_chroma_s[i], clamp01(raw.chroma[i]), m_alpha_slow);
         m_frame.chroma[i] = m_chroma_s[i];
+    }
+
+    // Waveform: copy directly (no smoothing - time-domain data should remain sharp)
+    // AudioActor will downsample the hop buffer into this array
+    for (uint8_t i = 0; i < CONTROLBUS_WAVEFORM_N; ++i) {
+        m_frame.waveform[i] = raw.waveform[i];
     }
 }
 

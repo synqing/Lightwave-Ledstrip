@@ -6,9 +6,9 @@
  *
  * SPH0645 Sample Format:
  * - Outputs 18-bit data, MSB-first, in 32-bit I2S slots
- * - I2S configured for 32-bit samples, LEFT channel (SEL=GND)
- * - Register fixes: MSB shift enabled, timing delay (BIT(9))
- * - Conversion: >>14 shift to extract 18-bit value, then scale to 16-bit
+ * - I2S configured for 32-bit samples, RIGHT slot on ESP32-S3 (SEL=GND wiring)
+ * - Register fixes: MSB shift enabled, timing delay (BIT(9)), WS polarity inverted
+ * - Conversion: >>14 shift with bias/clip, then scale to 16-bit
  * - DC removal handled in AudioActor
  *
  * @author LightwaveOS Team

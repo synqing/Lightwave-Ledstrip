@@ -46,3 +46,8 @@ Thumbs.db
 *.log
 *.tmp
 .commit_message.txt
+
+# Test Artifacts & Bundles
+test_goertzel
+audio_audit_bundle/
+audio_audit_bundle.zip

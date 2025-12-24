@@ -22,6 +22,9 @@
 #include <cstdint>
 #include <cmath>
 
+// Feature flags
+#include "../../config/features.h"
+
 // Forward declare FastLED types for native builds
 #ifdef NATIVE_BUILD
 #include "../../../test/unit/mocks/fastled_mock.h"
@@ -29,8 +32,104 @@
 #include <FastLED.h>
 #endif
 
+// Audio contracts (Phase 2)
+#if FEATURE_AUDIO_SYNC
+#include "../../audio/contracts/ControlBus.h"
+#include "../../audio/contracts/MusicalGrid.h"
+#endif
+
 namespace lightwaveos {
 namespace plugins {
+
+// ============================================================================
+// Audio Context (Phase 2)
+// ============================================================================
+
+#if FEATURE_AUDIO_SYNC
+/**
+ * @brief Audio context passed to effects (by-value copies for thread safety)
+ *
+ * This struct contains copies (not references!) of audio data from the
+ * AudioActor. It's populated by RendererActor each frame with extrapolated
+ * timing for smooth 120 FPS beat phase.
+ *
+ * Thread Safety:
+ * - All data is copied by value in renderFrame()
+ * - No references to AudioActor's buffers
+ * - Safe to use throughout effect render()
+ */
+struct AudioContext {
+    audio::ControlBusFrame controlBus;      ///< DSP signals (RMS, flux, bands)
+    audio::MusicalGridSnapshot musicalGrid; ///< Beat/tempo tracking
+    bool available = false;                  ///< True if audio data is fresh (<100ms old)
+
+    // ========================================================================
+    // Convenience Accessors
+    // ========================================================================
+
+    /// Get RMS energy level (0.0-1.0)
+    float rms() const { return controlBus.rms; }
+
+    /// Get spectral flux (onset detection signal)
+    float flux() const { return controlBus.flux; }
+
+    /// Get frequency band energy (0-7: bass to treble)
+    float getBand(uint8_t i) const {
+        return (i < audio::CONTROLBUS_NUM_BANDS) ? controlBus.bands[i] : 0.0f;
+    }
+
+    /// Get bass energy (bands 0-1 averaged)
+    float bass() const { return (controlBus.bands[0] + controlBus.bands[1]) * 0.5f; }
+
+    /// Get mid energy (bands 2-4 averaged)
+    float mid() const {
+        return (controlBus.bands[2] + controlBus.bands[3] + controlBus.bands[4]) / 3.0f;
+    }
+
+    /// Get treble energy (bands 5-7 averaged)
+    float treble() const {
+        return (controlBus.bands[5] + controlBus.bands[6] + controlBus.bands[7]) / 3.0f;
+    }
+
+    /// Get beat phase (0.0-1.0, wraps each beat)
+    float beatPhase() const { return musicalGrid.beat_phase01; }
+
+    /// Check if currently on a beat (single-frame pulse)
+    bool isOnBeat() const { return musicalGrid.beat_tick; }
+
+    /// Check if on a downbeat (beat 1 of measure)
+    bool isOnDownbeat() const { return musicalGrid.downbeat_tick; }
+
+    /// Get current BPM estimate
+    float bpm() const { return musicalGrid.bpm_smoothed; }
+
+    /// Get tempo tracking confidence (0.0-1.0)
+    float tempoConfidence() const { return musicalGrid.tempo_confidence; }
+};
+
+#else
+/**
+ * @brief Stub AudioContext when FEATURE_AUDIO_SYNC is disabled
+ *
+ * Provides the same API with sensible defaults so effects compile
+ * without #if guards everywhere.
+ */
+struct AudioContext {
+    bool available = false;
+
+    float rms() const { return 0.0f; }
+    float flux() const { return 0.0f; }
+    float getBand(uint8_t) const { return 0.0f; }
+    float bass() const { return 0.0f; }
+    float mid() const { return 0.0f; }
+    float treble() const { return 0.0f; }
+    float beatPhase() const { return 0.0f; }
+    bool isOnBeat() const { return false; }
+    bool isOnDownbeat() const { return false; }
+    float bpm() const { return 120.0f; }
+    float tempoConfidence() const { return 0.0f; }
+};
+#endif
 
 /**
  * @brief Palette wrapper for portable color lookups
@@ -136,6 +235,12 @@ struct EffectContext {
     uint8_t zoneId;             ///< Current zone ID (0-3, or 0xFF if global)
     uint16_t zoneStart;         ///< Zone start index in global buffer
     uint16_t zoneLength;        ///< Zone length
+
+    //--------------------------------------------------------------------------
+    // Audio Context (Phase 2 - Audio Sync)
+    //--------------------------------------------------------------------------
+
+    AudioContext audio;         ///< Audio-reactive data (by-value copy)
 
     //--------------------------------------------------------------------------
     // Helper Methods
@@ -255,6 +360,7 @@ struct EffectContext {
         , zoneId(0xFF)
         , zoneStart(0)
         , zoneLength(0)
+        , audio()  // Default-initialized (available=false)
     {}
 };
 

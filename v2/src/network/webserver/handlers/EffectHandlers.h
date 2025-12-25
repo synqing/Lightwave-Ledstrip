@@ -26,6 +26,8 @@ public:
     static void handleSet(AsyncWebServerRequest* request, uint8_t* data, size_t len, lightwaveos::actors::ActorSystem& actors, lightwaveos::actors::RendererActor* renderer, std::function<void()> broadcastStatus);
     static void handleMetadata(AsyncWebServerRequest* request, lightwaveos::actors::RendererActor* renderer);
     static void handleFamilies(AsyncWebServerRequest* request);
+    static void handleParametersGet(AsyncWebServerRequest* request, lightwaveos::actors::RendererActor* renderer);
+    static void handleParametersSet(AsyncWebServerRequest* request, uint8_t* data, size_t len, lightwaveos::actors::RendererActor* renderer);
 };
 
 } // namespace handlers

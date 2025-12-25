@@ -30,6 +30,12 @@
 #include "../core/narrative/NarrativeEngine.h"
 #include "../effects/enhancement/MotionEngine.h"
 #include "../effects/enhancement/ColorEngine.h"
+#include "../plugins/api/IEffect.h"
+#if FEATURE_AUDIO_SYNC
+#include "../audio/AudioTuning.h"
+#include "../config/audio_config.h"
+#endif
+#include <cstring>
 #include <ESPmDNS.h>
 #include <LittleFS.h>
 
@@ -684,6 +690,32 @@ void WebServer::setupV1Routes() {
         webserver::handlers::EffectHandlers::handleMetadata(request, m_renderer);
     });
 
+    // Effect Parameters - GET /api/v1/effects/parameters?id=N
+    m_server->on("/api/v1/effects/parameters", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        webserver::handlers::EffectHandlers::handleParametersGet(request, m_renderer);
+    });
+
+    // Effect Parameters - POST /api/v1/effects/parameters
+    m_server->on("/api/v1/effects/parameters", HTTP_POST,
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            webserver::handlers::EffectHandlers::handleParametersSet(request, data, len, m_renderer);
+        }
+    );
+
+    // Effect Parameters - PATCH /api/v1/effects/parameters (compat)
+    m_server->on("/api/v1/effects/parameters", HTTP_PATCH,
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            webserver::handlers::EffectHandlers::handleParametersSet(request, data, len, m_renderer);
+        }
+    );
+
     // Effect Families - GET /api/v1/effects/families
     m_server->on("/api/v1/effects/families", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
@@ -745,6 +777,32 @@ void WebServer::setupV1Routes() {
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             handleParametersSet(request, data, len);
+        }
+    );
+
+    // Get Audio Parameters - GET /api/v1/audio/parameters
+    m_server->on("/api/v1/audio/parameters", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        handleAudioParametersGet(request);
+    });
+
+    // Set Audio Parameters - POST /api/v1/audio/parameters
+    m_server->on("/api/v1/audio/parameters", HTTP_POST,
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            handleAudioParametersSet(request, data, len);
+        }
+    );
+
+    // Set Audio Parameters - PATCH /api/v1/audio/parameters (V2 API compatibility)
+    m_server->on("/api/v1/audio/parameters", HTTP_PATCH,
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            handleAudioParametersSet(request, data, len);
         }
     );
 
@@ -1074,6 +1132,7 @@ void WebServer::handleApiDiscovery(AsyncWebServerRequest* request) {
         links["device"] = "/api/v1/device/status";
         links["effects"] = "/api/v1/effects";
         links["parameters"] = "/api/v1/parameters";
+        links["audioParameters"] = "/api/v1/audio/parameters";
         links["transitions"] = "/api/v1/transitions/types";
         links["batch"] = "/api/v1/batch";
         links["websocket"] = "ws://lightwaveos.local/ws";
@@ -1086,6 +1145,10 @@ void WebServer::handleParametersGet(AsyncWebServerRequest* request) {
         data["speed"] = m_renderer->getSpeed();
         data["paletteId"] = m_renderer->getPaletteIndex();
         data["hue"] = m_renderer->getHue();
+        data["intensity"] = m_renderer->getIntensity();
+        data["saturation"] = m_renderer->getSaturation();
+        data["complexity"] = m_renderer->getComplexity();
+        data["variation"] = m_renderer->getVariation();
     });
 }
 
@@ -1120,6 +1183,36 @@ void WebServer::handleParametersSet(AsyncWebServerRequest* request, uint8_t* dat
         updated = true;
     }
 
+    if (doc.containsKey("intensity")) {
+        uint8_t val = doc["intensity"];
+        m_actorSystem.setIntensity(val);
+        updated = true;
+    }
+
+    if (doc.containsKey("saturation")) {
+        uint8_t val = doc["saturation"];
+        m_actorSystem.setSaturation(val);
+        updated = true;
+    }
+
+    if (doc.containsKey("complexity")) {
+        uint8_t val = doc["complexity"];
+        m_actorSystem.setComplexity(val);
+        updated = true;
+    }
+
+    if (doc.containsKey("variation")) {
+        uint8_t val = doc["variation"];
+        m_actorSystem.setVariation(val);
+        updated = true;
+    }
+
+    if (doc.containsKey("hue")) {
+        uint8_t val = doc["hue"];
+        m_actorSystem.setHue(val);
+        updated = true;
+    }
+
     if (updated) {
         sendSuccessResponse(request);
         broadcastStatus();
@@ -1128,6 +1221,206 @@ void WebServer::handleParametersSet(AsyncWebServerRequest* request, uint8_t* dat
                           ErrorCodes::MISSING_FIELD, "No valid parameters provided");
     }
 }
+
+#if FEATURE_AUDIO_SYNC
+void WebServer::handleAudioParametersGet(AsyncWebServerRequest* request) {
+    auto* audio = m_actorSystem.getAudio();
+    if (!audio) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::SYSTEM_NOT_READY, "Audio system not available");
+        return;
+    }
+
+    audio::AudioPipelineTuning pipeline = audio->getPipelineTuning();
+    audio::AudioDspState state = audio->getDspState();
+    audio::AudioContractTuning contract = m_renderer ? m_renderer->getAudioContractTuning()
+                                                     : audio::clampAudioContractTuning(audio::AudioContractTuning{});
+
+    sendSuccessResponse(request, [&](JsonObject& data) {
+        JsonObject pipelineObj = data["pipeline"].to<JsonObject>();
+        pipelineObj["dcAlpha"] = pipeline.dcAlpha;
+        pipelineObj["agcTargetRms"] = pipeline.agcTargetRms;
+        pipelineObj["agcMinGain"] = pipeline.agcMinGain;
+        pipelineObj["agcMaxGain"] = pipeline.agcMaxGain;
+        pipelineObj["agcAttack"] = pipeline.agcAttack;
+        pipelineObj["agcRelease"] = pipeline.agcRelease;
+        pipelineObj["agcClipReduce"] = pipeline.agcClipReduce;
+        pipelineObj["agcIdleReturnRate"] = pipeline.agcIdleReturnRate;
+        pipelineObj["noiseFloorMin"] = pipeline.noiseFloorMin;
+        pipelineObj["noiseFloorRise"] = pipeline.noiseFloorRise;
+        pipelineObj["noiseFloorFall"] = pipeline.noiseFloorFall;
+        pipelineObj["gateStartFactor"] = pipeline.gateStartFactor;
+        pipelineObj["gateRangeFactor"] = pipeline.gateRangeFactor;
+        pipelineObj["gateRangeMin"] = pipeline.gateRangeMin;
+        pipelineObj["rmsDbFloor"] = pipeline.rmsDbFloor;
+        pipelineObj["rmsDbCeil"] = pipeline.rmsDbCeil;
+        pipelineObj["bandDbFloor"] = pipeline.bandDbFloor;
+        pipelineObj["bandDbCeil"] = pipeline.bandDbCeil;
+        pipelineObj["chromaDbFloor"] = pipeline.chromaDbFloor;
+        pipelineObj["chromaDbCeil"] = pipeline.chromaDbCeil;
+        pipelineObj["fluxScale"] = pipeline.fluxScale;
+
+        JsonObject controlBus = data["controlBus"].to<JsonObject>();
+        controlBus["alphaFast"] = pipeline.controlBusAlphaFast;
+        controlBus["alphaSlow"] = pipeline.controlBusAlphaSlow;
+
+        JsonObject contractObj = data["contract"].to<JsonObject>();
+        contractObj["audioStalenessMs"] = contract.audioStalenessMs;
+        contractObj["bpmMin"] = contract.bpmMin;
+        contractObj["bpmMax"] = contract.bpmMax;
+        contractObj["bpmTau"] = contract.bpmTau;
+        contractObj["confidenceTau"] = contract.confidenceTau;
+        contractObj["phaseCorrectionGain"] = contract.phaseCorrectionGain;
+        contractObj["barCorrectionGain"] = contract.barCorrectionGain;
+        contractObj["beatsPerBar"] = contract.beatsPerBar;
+        contractObj["beatUnit"] = contract.beatUnit;
+
+        JsonObject stateObj = data["state"].to<JsonObject>();
+        stateObj["rmsRaw"] = state.rmsRaw;
+        stateObj["rmsMapped"] = state.rmsMapped;
+        stateObj["rmsPreGain"] = state.rmsPreGain;
+        stateObj["fluxMapped"] = state.fluxMapped;
+        stateObj["agcGain"] = state.agcGain;
+        stateObj["dcEstimate"] = state.dcEstimate;
+        stateObj["noiseFloor"] = state.noiseFloor;
+        stateObj["minSample"] = state.minSample;
+        stateObj["maxSample"] = state.maxSample;
+        stateObj["peakCentered"] = state.peakCentered;
+        stateObj["meanSample"] = state.meanSample;
+        stateObj["clipCount"] = state.clipCount;
+
+        JsonObject caps = data["capabilities"].to<JsonObject>();
+        caps["sampleRate"] = audio::SAMPLE_RATE;
+        caps["hopSize"] = audio::HOP_SIZE;
+        caps["fftSize"] = audio::FFT_SIZE;
+        caps["goertzelWindow"] = audio::GOERTZEL_WINDOW;
+        caps["bandCount"] = audio::NUM_BANDS;
+        caps["chromaCount"] = audio::CONTROLBUS_NUM_CHROMA;
+        caps["waveformPoints"] = audio::CONTROLBUS_WAVEFORM_N;
+    });
+}
+
+void WebServer::handleAudioParametersSet(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
+    auto* audio = m_actorSystem.getAudio();
+    if (!audio) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::SYSTEM_NOT_READY, "Audio system not available");
+        return;
+    }
+
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, data, len);
+    if (error) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::INVALID_JSON, "Invalid JSON payload");
+        return;
+    }
+
+    bool updatedPipeline = false;
+    bool updatedContract = false;
+    bool resetState = false;
+
+    audio::AudioPipelineTuning pipeline = audio->getPipelineTuning();
+    audio::AudioContractTuning contract = m_renderer ? m_renderer->getAudioContractTuning()
+                                                     : audio::clampAudioContractTuning(audio::AudioContractTuning{});
+
+    auto applyFloat = [](JsonVariant source, const char* key, float& target, bool& updated) {
+        if (!source.is<JsonObject>()) return;
+        if (source.containsKey(key)) {
+            target = source[key].as<float>();
+            updated = true;
+        }
+    };
+
+    auto applyUint8 = [](JsonVariant source, const char* key, uint8_t& target, bool& updated) {
+        if (!source.is<JsonObject>()) return;
+        if (source.containsKey(key)) {
+            target = source[key].as<uint8_t>();
+            updated = true;
+        }
+    };
+
+    JsonVariant pipelineSrc = doc.as<JsonVariant>();
+    if (doc.containsKey("pipeline")) {
+        pipelineSrc = doc["pipeline"];
+    }
+    applyFloat(pipelineSrc, "dcAlpha", pipeline.dcAlpha, updatedPipeline);
+    applyFloat(pipelineSrc, "agcTargetRms", pipeline.agcTargetRms, updatedPipeline);
+    applyFloat(pipelineSrc, "agcMinGain", pipeline.agcMinGain, updatedPipeline);
+    applyFloat(pipelineSrc, "agcMaxGain", pipeline.agcMaxGain, updatedPipeline);
+    applyFloat(pipelineSrc, "agcAttack", pipeline.agcAttack, updatedPipeline);
+    applyFloat(pipelineSrc, "agcRelease", pipeline.agcRelease, updatedPipeline);
+    applyFloat(pipelineSrc, "agcClipReduce", pipeline.agcClipReduce, updatedPipeline);
+    applyFloat(pipelineSrc, "agcIdleReturnRate", pipeline.agcIdleReturnRate, updatedPipeline);
+    applyFloat(pipelineSrc, "noiseFloorMin", pipeline.noiseFloorMin, updatedPipeline);
+    applyFloat(pipelineSrc, "noiseFloorRise", pipeline.noiseFloorRise, updatedPipeline);
+    applyFloat(pipelineSrc, "noiseFloorFall", pipeline.noiseFloorFall, updatedPipeline);
+    applyFloat(pipelineSrc, "gateStartFactor", pipeline.gateStartFactor, updatedPipeline);
+    applyFloat(pipelineSrc, "gateRangeFactor", pipeline.gateRangeFactor, updatedPipeline);
+    applyFloat(pipelineSrc, "gateRangeMin", pipeline.gateRangeMin, updatedPipeline);
+    applyFloat(pipelineSrc, "rmsDbFloor", pipeline.rmsDbFloor, updatedPipeline);
+    applyFloat(pipelineSrc, "rmsDbCeil", pipeline.rmsDbCeil, updatedPipeline);
+    applyFloat(pipelineSrc, "bandDbFloor", pipeline.bandDbFloor, updatedPipeline);
+    applyFloat(pipelineSrc, "bandDbCeil", pipeline.bandDbCeil, updatedPipeline);
+    applyFloat(pipelineSrc, "chromaDbFloor", pipeline.chromaDbFloor, updatedPipeline);
+    applyFloat(pipelineSrc, "chromaDbCeil", pipeline.chromaDbCeil, updatedPipeline);
+    applyFloat(pipelineSrc, "fluxScale", pipeline.fluxScale, updatedPipeline);
+
+    JsonVariant controlBusSrc = doc.as<JsonVariant>();
+    if (doc.containsKey("controlBus")) {
+        controlBusSrc = doc["controlBus"];
+    }
+    applyFloat(controlBusSrc, "alphaFast", pipeline.controlBusAlphaFast, updatedPipeline);
+    applyFloat(controlBusSrc, "alphaSlow", pipeline.controlBusAlphaSlow, updatedPipeline);
+
+    JsonVariant contractSrc = doc.as<JsonVariant>();
+    if (doc.containsKey("contract")) {
+        contractSrc = doc["contract"];
+    }
+    applyFloat(contractSrc, "audioStalenessMs", contract.audioStalenessMs, updatedContract);
+    applyFloat(contractSrc, "bpmMin", contract.bpmMin, updatedContract);
+    applyFloat(contractSrc, "bpmMax", contract.bpmMax, updatedContract);
+    applyFloat(contractSrc, "bpmTau", contract.bpmTau, updatedContract);
+    applyFloat(contractSrc, "confidenceTau", contract.confidenceTau, updatedContract);
+    applyFloat(contractSrc, "phaseCorrectionGain", contract.phaseCorrectionGain, updatedContract);
+    applyFloat(contractSrc, "barCorrectionGain", contract.barCorrectionGain, updatedContract);
+    applyUint8(contractSrc, "beatsPerBar", contract.beatsPerBar, updatedContract);
+    applyUint8(contractSrc, "beatUnit", contract.beatUnit, updatedContract);
+
+    if (doc.containsKey("resetState")) {
+        resetState = doc["resetState"] | false;
+    }
+
+    if (updatedPipeline) {
+        audio->setPipelineTuning(pipeline);
+    }
+    if (updatedContract && m_renderer) {
+        m_renderer->setAudioContractTuning(contract);
+    }
+    if (resetState) {
+        audio->resetDspState();
+    }
+
+    sendSuccessResponse(request, [updatedPipeline, updatedContract, resetState](JsonObject& resp) {
+        JsonArray updated = resp["updated"].to<JsonArray>();
+        if (updatedPipeline) updated.add("pipeline");
+        if (updatedContract) updated.add("contract");
+        if (resetState) updated.add("state");
+    });
+}
+#else
+void WebServer::handleAudioParametersGet(AsyncWebServerRequest* request) {
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void WebServer::handleAudioParametersSet(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
+    (void)data;
+    (void)len;
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+#endif
 
 void WebServer::handleTransitionTypes(AsyncWebServerRequest* request) {
     sendSuccessResponseLarge(request, [](JsonObject& data) {
@@ -1712,6 +2005,22 @@ void WebServer::handleOpenApiSpec(AsyncWebServerRequest* request) {
     idParam["required"] = true;
     idParam["schema"]["type"] = "integer";
 
+    // GET/POST /effects/parameters
+    JsonObject effectsParametersPath = paths["/effects/parameters"].to<JsonObject>();
+    JsonObject getEffectsParams = effectsParametersPath["get"].to<JsonObject>();
+    getEffectsParams["summary"] = "Get effect parameter schema and values";
+    getEffectsParams["tags"].add("Effects");
+    JsonArray effectParamQuery = getEffectsParams["parameters"].to<JsonArray>();
+    JsonObject effectIdParam = effectParamQuery.add<JsonObject>();
+    effectIdParam["name"] = "id";
+    effectIdParam["in"] = "query";
+    effectIdParam["required"] = false;
+    effectIdParam["schema"]["type"] = "integer";
+
+    JsonObject postEffectsParams = effectsParametersPath["post"].to<JsonObject>();
+    postEffectsParams["summary"] = "Update effect parameters";
+    postEffectsParams["tags"].add("Effects");
+
     // GET /effects/families
     JsonObject effectsFamilies = paths["/effects/families"].to<JsonObject>();
     JsonObject getEffectsFamilies = effectsFamilies["get"].to<JsonObject>();
@@ -1759,6 +2068,16 @@ void WebServer::handleOpenApiSpec(AsyncWebServerRequest* request) {
     JsonObject postParams = parameters["post"].to<JsonObject>();
     postParams["summary"] = "Update visual parameters (brightness, speed, etc.)";
     postParams["tags"].add("Parameters");
+
+    // ========== Audio Parameters Endpoints ==========
+    JsonObject audioParams = paths["/audio/parameters"].to<JsonObject>();
+    JsonObject getAudioParams = audioParams["get"].to<JsonObject>();
+    getAudioParams["summary"] = "Get audio pipeline and contract parameters";
+    getAudioParams["tags"].add("Audio");
+
+    JsonObject postAudioParams = audioParams["post"].to<JsonObject>();
+    postAudioParams["summary"] = "Update audio pipeline and contract parameters";
+    postAudioParams["tags"].add("Audio");
 
     // ========== Transitions Endpoints ==========
 
@@ -2079,6 +2398,12 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             data["name"] = m_renderer->getEffectName(m_renderer->getCurrentEffect());
             data["brightness"] = m_renderer->getBrightness();
             data["speed"] = m_renderer->getSpeed();
+            data["paletteId"] = m_renderer->getPaletteIndex();
+            data["hue"] = m_renderer->getHue();
+            data["intensity"] = m_renderer->getIntensity();
+            data["saturation"] = m_renderer->getSaturation();
+            data["complexity"] = m_renderer->getComplexity();
+            data["variation"] = m_renderer->getVariation();
         });
         client->text(response);
     }
@@ -2089,9 +2414,92 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             data["speed"] = m_renderer->getSpeed();
             data["paletteId"] = m_renderer->getPaletteIndex();
             data["hue"] = m_renderer->getHue();
+            data["intensity"] = m_renderer->getIntensity();
+            data["saturation"] = m_renderer->getSaturation();
+            data["complexity"] = m_renderer->getComplexity();
+            data["variation"] = m_renderer->getVariation();
         });
         client->text(response);
     }
+#if FEATURE_AUDIO_SYNC
+    else if (type == "audio.parameters.get") {
+        const char* requestId = doc["requestId"] | "";
+        auto* audio = m_actorSystem.getAudio();
+        if (!audio) {
+            client->text(buildWsError(ErrorCodes::SYSTEM_NOT_READY, "Audio system not available", requestId));
+            return;
+        }
+
+        audio::AudioPipelineTuning pipeline = audio->getPipelineTuning();
+        audio::AudioDspState state = audio->getDspState();
+        audio::AudioContractTuning contract = m_renderer ? m_renderer->getAudioContractTuning()
+                                                         : audio::clampAudioContractTuning(audio::AudioContractTuning{});
+
+        String response = buildWsResponse("audio.parameters", requestId, [&](JsonObject& data) {
+            JsonObject pipelineObj = data["pipeline"].to<JsonObject>();
+            pipelineObj["dcAlpha"] = pipeline.dcAlpha;
+            pipelineObj["agcTargetRms"] = pipeline.agcTargetRms;
+            pipelineObj["agcMinGain"] = pipeline.agcMinGain;
+            pipelineObj["agcMaxGain"] = pipeline.agcMaxGain;
+            pipelineObj["agcAttack"] = pipeline.agcAttack;
+            pipelineObj["agcRelease"] = pipeline.agcRelease;
+            pipelineObj["agcClipReduce"] = pipeline.agcClipReduce;
+            pipelineObj["agcIdleReturnRate"] = pipeline.agcIdleReturnRate;
+            pipelineObj["noiseFloorMin"] = pipeline.noiseFloorMin;
+            pipelineObj["noiseFloorRise"] = pipeline.noiseFloorRise;
+            pipelineObj["noiseFloorFall"] = pipeline.noiseFloorFall;
+            pipelineObj["gateStartFactor"] = pipeline.gateStartFactor;
+            pipelineObj["gateRangeFactor"] = pipeline.gateRangeFactor;
+            pipelineObj["gateRangeMin"] = pipeline.gateRangeMin;
+            pipelineObj["rmsDbFloor"] = pipeline.rmsDbFloor;
+            pipelineObj["rmsDbCeil"] = pipeline.rmsDbCeil;
+            pipelineObj["bandDbFloor"] = pipeline.bandDbFloor;
+            pipelineObj["bandDbCeil"] = pipeline.bandDbCeil;
+            pipelineObj["chromaDbFloor"] = pipeline.chromaDbFloor;
+            pipelineObj["chromaDbCeil"] = pipeline.chromaDbCeil;
+            pipelineObj["fluxScale"] = pipeline.fluxScale;
+
+            JsonObject controlBus = data["controlBus"].to<JsonObject>();
+            controlBus["alphaFast"] = pipeline.controlBusAlphaFast;
+            controlBus["alphaSlow"] = pipeline.controlBusAlphaSlow;
+
+            JsonObject contractObj = data["contract"].to<JsonObject>();
+            contractObj["audioStalenessMs"] = contract.audioStalenessMs;
+            contractObj["bpmMin"] = contract.bpmMin;
+            contractObj["bpmMax"] = contract.bpmMax;
+            contractObj["bpmTau"] = contract.bpmTau;
+            contractObj["confidenceTau"] = contract.confidenceTau;
+            contractObj["phaseCorrectionGain"] = contract.phaseCorrectionGain;
+            contractObj["barCorrectionGain"] = contract.barCorrectionGain;
+            contractObj["beatsPerBar"] = contract.beatsPerBar;
+            contractObj["beatUnit"] = contract.beatUnit;
+
+            JsonObject stateObj = data["state"].to<JsonObject>();
+            stateObj["rmsRaw"] = state.rmsRaw;
+            stateObj["rmsMapped"] = state.rmsMapped;
+            stateObj["rmsPreGain"] = state.rmsPreGain;
+            stateObj["fluxMapped"] = state.fluxMapped;
+            stateObj["agcGain"] = state.agcGain;
+            stateObj["dcEstimate"] = state.dcEstimate;
+            stateObj["noiseFloor"] = state.noiseFloor;
+            stateObj["minSample"] = state.minSample;
+            stateObj["maxSample"] = state.maxSample;
+            stateObj["peakCentered"] = state.peakCentered;
+            stateObj["meanSample"] = state.meanSample;
+            stateObj["clipCount"] = state.clipCount;
+
+            JsonObject caps = data["capabilities"].to<JsonObject>();
+            caps["sampleRate"] = audio::SAMPLE_RATE;
+            caps["hopSize"] = audio::HOP_SIZE;
+            caps["fftSize"] = audio::FFT_SIZE;
+            caps["goertzelWindow"] = audio::GOERTZEL_WINDOW;
+            caps["bandCount"] = audio::NUM_BANDS;
+            caps["chromaCount"] = audio::CONTROLBUS_NUM_CHROMA;
+            caps["waveformPoints"] = audio::CONTROLBUS_WAVEFORM_N;
+        });
+        client->text(response);
+    }
+#endif
 
     // ========== MISSING V1 COMMANDS - NOW IMPLEMENTED ==========
 
@@ -2182,6 +2590,41 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             JsonObject recommended = data["recommended"].to<JsonObject>();
             recommended["brightness"] = 180;
             recommended["speed"] = 15;
+        });
+        client->text(response);
+    }
+    else if (type == "effects.parameters.get") {
+        const char* requestId = doc["requestId"] | "";
+        uint8_t effectId = doc["effectId"] | m_renderer->getCurrentEffect();
+
+        if (effectId >= m_renderer->getEffectCount()) {
+            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid effectId", requestId));
+            return;
+        }
+
+        plugins::IEffect* effect = m_renderer->getEffectInstance(effectId);
+        String response = buildWsResponse("effects.parameters", requestId, [this, effectId, effect](JsonObject& data) {
+            data["effectId"] = effectId;
+            data["name"] = m_renderer->getEffectName(effectId);
+            data["hasParameters"] = (effect != nullptr && effect->getParameterCount() > 0);
+
+            JsonArray params = data["parameters"].to<JsonArray>();
+            if (!effect) {
+                return;
+            }
+
+            uint8_t count = effect->getParameterCount();
+            for (uint8_t i = 0; i < count; ++i) {
+                const plugins::EffectParameter* param = effect->getParameter(i);
+                if (!param) continue;
+                JsonObject p = params.add<JsonObject>();
+                p["name"] = param->name;
+                p["displayName"] = param->displayName;
+                p["min"] = param->minValue;
+                p["max"] = param->maxValue;
+                p["default"] = param->defaultValue;
+                p["value"] = effect->getParameter(param->name);
+            }
         });
         client->text(response);
     }
@@ -2493,6 +2936,61 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
         client->text(response);
     }
 
+    else if (type == "effects.parameters.set") {
+        const char* requestId = doc["requestId"] | "";
+        uint8_t effectId = doc["effectId"] | m_renderer->getCurrentEffect();
+
+        if (effectId >= m_renderer->getEffectCount()) {
+            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid effectId", requestId));
+            return;
+        }
+
+        plugins::IEffect* effect = m_renderer->getEffectInstance(effectId);
+        if (!effect) {
+            client->text(buildWsError(ErrorCodes::INVALID_VALUE, "Effect has no parameters", requestId));
+            return;
+        }
+
+        if (!doc.containsKey("parameters") || !doc["parameters"].is<JsonObject>()) {
+            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "Missing parameters object", requestId));
+            return;
+        }
+
+        JsonObject params = doc["parameters"].as<JsonObject>();
+        String response = buildWsResponse("effects.parameters.changed", requestId,
+                                          [this, effectId, effect, params](JsonObject& data) {
+            data["effectId"] = effectId;
+            data["name"] = m_renderer->getEffectName(effectId);
+
+            JsonArray queuedArr = data["queued"].to<JsonArray>();
+            JsonArray failedArr = data["failed"].to<JsonArray>();
+
+            for (JsonPair kv : params) {
+                const char* key = kv.key().c_str();
+                float value = kv.value().as<float>();
+                bool known = false;
+                uint8_t count = effect->getParameterCount();
+                for (uint8_t i = 0; i < count; ++i) {
+                    const plugins::EffectParameter* param = effect->getParameter(i);
+                    if (param && strcmp(param->name, key) == 0) {
+                        known = true;
+                        break;
+                    }
+                }
+                if (!known) {
+                    failedArr.add(key);
+                    continue;
+                }
+                if (m_renderer->enqueueEffectParameterUpdate(effectId, key, value)) {
+                    queuedArr.add(key);
+                } else {
+                    failedArr.add(key);
+                }
+            }
+        });
+        client->text(response);
+    }
+
     // parameters.set - Update parameters
     else if (type == "parameters.set") {
         const char* requestId = doc["requestId"] | "";
@@ -2501,6 +2999,11 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
         bool updatedBrightness = false;
         bool updatedSpeed = false;
         bool updatedPalette = false;
+        bool updatedIntensity = false;
+        bool updatedSaturation = false;
+        bool updatedComplexity = false;
+        bool updatedVariation = false;
+        bool updatedHue = false;
 
         if (doc.containsKey("brightness")) {
             uint8_t value = doc["brightness"] | 128;
@@ -2522,21 +3025,165 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             updatedPalette = true;
         }
 
+        if (doc.containsKey("intensity")) {
+            uint8_t value = doc["intensity"] | 128;
+            m_actorSystem.setIntensity(value);
+            updatedIntensity = true;
+        }
+
+        if (doc.containsKey("saturation")) {
+            uint8_t value = doc["saturation"] | 255;
+            m_actorSystem.setSaturation(value);
+            updatedSaturation = true;
+        }
+
+        if (doc.containsKey("complexity")) {
+            uint8_t value = doc["complexity"] | 128;
+            m_actorSystem.setComplexity(value);
+            updatedComplexity = true;
+        }
+
+        if (doc.containsKey("variation")) {
+            uint8_t value = doc["variation"] | 0;
+            m_actorSystem.setVariation(value);
+            updatedVariation = true;
+        }
+
+        if (doc.containsKey("hue")) {
+            uint8_t value = doc["hue"] | 0;
+            m_actorSystem.setHue(value);
+            updatedHue = true;
+        }
+
         broadcastStatus();
 
-        String response = buildWsResponse("parameters.changed", requestId, [this, updatedBrightness, updatedSpeed, updatedPalette](JsonObject& data) {
+        String response = buildWsResponse("parameters.changed", requestId, [this, updatedBrightness, updatedSpeed, updatedPalette, updatedIntensity, updatedSaturation, updatedComplexity, updatedVariation, updatedHue](JsonObject& data) {
             JsonArray updated = data["updated"].to<JsonArray>();
             if (updatedBrightness) updated.add("brightness");
             if (updatedSpeed) updated.add("speed");
             if (updatedPalette) updated.add("paletteId");
+            if (updatedIntensity) updated.add("intensity");
+            if (updatedSaturation) updated.add("saturation");
+            if (updatedComplexity) updated.add("complexity");
+            if (updatedVariation) updated.add("variation");
+            if (updatedHue) updated.add("hue");
 
             JsonObject current = data["current"].to<JsonObject>();
             current["brightness"] = m_renderer->getBrightness();
             current["speed"] = m_renderer->getSpeed();
             current["paletteId"] = m_renderer->getPaletteIndex();
+            current["hue"] = m_renderer->getHue();
+            current["intensity"] = m_renderer->getIntensity();
+            current["saturation"] = m_renderer->getSaturation();
+            current["complexity"] = m_renderer->getComplexity();
+            current["variation"] = m_renderer->getVariation();
         });
         client->text(response);
     }
+#if FEATURE_AUDIO_SYNC
+    else if (type == "audio.parameters.set") {
+        const char* requestId = doc["requestId"] | "";
+        auto* audio = m_actorSystem.getAudio();
+        if (!audio) {
+            client->text(buildWsError(ErrorCodes::SYSTEM_NOT_READY, "Audio system not available", requestId));
+            return;
+        }
+
+        bool updatedPipeline = false;
+        bool updatedContract = false;
+        bool resetState = false;
+
+        audio::AudioPipelineTuning pipeline = audio->getPipelineTuning();
+        audio::AudioContractTuning contract = m_renderer ? m_renderer->getAudioContractTuning()
+                                                         : audio::clampAudioContractTuning(audio::AudioContractTuning{});
+
+        auto applyFloat = [](JsonVariant source, const char* key, float& target, bool& updated) {
+            if (!source.is<JsonObject>()) return;
+            if (source.containsKey(key)) {
+                target = source[key].as<float>();
+                updated = true;
+            }
+        };
+
+        auto applyUint8 = [](JsonVariant source, const char* key, uint8_t& target, bool& updated) {
+            if (!source.is<JsonObject>()) return;
+            if (source.containsKey(key)) {
+                target = source[key].as<uint8_t>();
+                updated = true;
+            }
+        };
+
+        JsonVariant pipelineSrc = doc.as<JsonVariant>();
+        if (doc.containsKey("pipeline")) {
+            pipelineSrc = doc["pipeline"];
+        }
+        applyFloat(pipelineSrc, "dcAlpha", pipeline.dcAlpha, updatedPipeline);
+        applyFloat(pipelineSrc, "agcTargetRms", pipeline.agcTargetRms, updatedPipeline);
+        applyFloat(pipelineSrc, "agcMinGain", pipeline.agcMinGain, updatedPipeline);
+        applyFloat(pipelineSrc, "agcMaxGain", pipeline.agcMaxGain, updatedPipeline);
+        applyFloat(pipelineSrc, "agcAttack", pipeline.agcAttack, updatedPipeline);
+        applyFloat(pipelineSrc, "agcRelease", pipeline.agcRelease, updatedPipeline);
+        applyFloat(pipelineSrc, "agcClipReduce", pipeline.agcClipReduce, updatedPipeline);
+        applyFloat(pipelineSrc, "agcIdleReturnRate", pipeline.agcIdleReturnRate, updatedPipeline);
+        applyFloat(pipelineSrc, "noiseFloorMin", pipeline.noiseFloorMin, updatedPipeline);
+        applyFloat(pipelineSrc, "noiseFloorRise", pipeline.noiseFloorRise, updatedPipeline);
+        applyFloat(pipelineSrc, "noiseFloorFall", pipeline.noiseFloorFall, updatedPipeline);
+        applyFloat(pipelineSrc, "gateStartFactor", pipeline.gateStartFactor, updatedPipeline);
+        applyFloat(pipelineSrc, "gateRangeFactor", pipeline.gateRangeFactor, updatedPipeline);
+        applyFloat(pipelineSrc, "gateRangeMin", pipeline.gateRangeMin, updatedPipeline);
+        applyFloat(pipelineSrc, "rmsDbFloor", pipeline.rmsDbFloor, updatedPipeline);
+        applyFloat(pipelineSrc, "rmsDbCeil", pipeline.rmsDbCeil, updatedPipeline);
+        applyFloat(pipelineSrc, "bandDbFloor", pipeline.bandDbFloor, updatedPipeline);
+        applyFloat(pipelineSrc, "bandDbCeil", pipeline.bandDbCeil, updatedPipeline);
+        applyFloat(pipelineSrc, "chromaDbFloor", pipeline.chromaDbFloor, updatedPipeline);
+        applyFloat(pipelineSrc, "chromaDbCeil", pipeline.chromaDbCeil, updatedPipeline);
+        applyFloat(pipelineSrc, "fluxScale", pipeline.fluxScale, updatedPipeline);
+
+        JsonVariant controlBusSrc = doc.as<JsonVariant>();
+        if (doc.containsKey("controlBus")) {
+            controlBusSrc = doc["controlBus"];
+        }
+        applyFloat(controlBusSrc, "alphaFast", pipeline.controlBusAlphaFast, updatedPipeline);
+        applyFloat(controlBusSrc, "alphaSlow", pipeline.controlBusAlphaSlow, updatedPipeline);
+
+        JsonVariant contractSrc = doc.as<JsonVariant>();
+        if (doc.containsKey("contract")) {
+            contractSrc = doc["contract"];
+        }
+        applyFloat(contractSrc, "audioStalenessMs", contract.audioStalenessMs, updatedContract);
+        applyFloat(contractSrc, "bpmMin", contract.bpmMin, updatedContract);
+        applyFloat(contractSrc, "bpmMax", contract.bpmMax, updatedContract);
+        applyFloat(contractSrc, "bpmTau", contract.bpmTau, updatedContract);
+        applyFloat(contractSrc, "confidenceTau", contract.confidenceTau, updatedContract);
+        applyFloat(contractSrc, "phaseCorrectionGain", contract.phaseCorrectionGain, updatedContract);
+        applyFloat(contractSrc, "barCorrectionGain", contract.barCorrectionGain, updatedContract);
+        applyUint8(contractSrc, "beatsPerBar", contract.beatsPerBar, updatedContract);
+        applyUint8(contractSrc, "beatUnit", contract.beatUnit, updatedContract);
+
+        if (doc.containsKey("resetState")) {
+            resetState = doc["resetState"] | false;
+        }
+
+        if (updatedPipeline) {
+            audio->setPipelineTuning(pipeline);
+        }
+        if (updatedContract && m_renderer) {
+            m_renderer->setAudioContractTuning(contract);
+        }
+        if (resetState) {
+            audio->resetDspState();
+        }
+
+        String response = buildWsResponse("audio.parameters.changed", requestId,
+                                          [updatedPipeline, updatedContract, resetState](JsonObject& data) {
+            JsonArray updated = data["updated"].to<JsonArray>();
+            if (updatedPipeline) updated.add("pipeline");
+            if (updatedContract) updated.add("contract");
+            if (resetState) updated.add("state");
+        });
+        client->text(response);
+    }
+#endif
 
     // zones.list - Return all zones (alias for zones.get with v2 naming)
     else if (type == "zones.list") {
@@ -3559,6 +4206,10 @@ void WebServer::broadcastStatus() {
         doc["speed"] = m_renderer->getSpeed();
         doc["paletteId"] = m_renderer->getPaletteIndex();
         doc["hue"] = m_renderer->getHue();
+        doc["intensity"] = m_renderer->getIntensity();
+        doc["saturation"] = m_renderer->getSaturation();
+        doc["complexity"] = m_renderer->getComplexity();
+        doc["variation"] = m_renderer->getVariation();
 
         const RenderStats& stats = m_renderer->getStats();
         doc["fps"] = stats.currentFPS;

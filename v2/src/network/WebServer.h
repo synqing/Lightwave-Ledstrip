@@ -261,6 +261,8 @@ private:
     void handleApiDiscovery(AsyncWebServerRequest* request);
     void handleParametersGet(AsyncWebServerRequest* request);
     void handleParametersSet(AsyncWebServerRequest* request, uint8_t* data, size_t len);
+    void handleAudioParametersGet(AsyncWebServerRequest* request);
+    void handleAudioParametersSet(AsyncWebServerRequest* request, uint8_t* data, size_t len);
     void handleTransitionTypes(AsyncWebServerRequest* request);
     void handleTransitionTrigger(AsyncWebServerRequest* request, uint8_t* data, size_t len);
     void handleBatch(AsyncWebServerRequest* request, uint8_t* data, size_t len);

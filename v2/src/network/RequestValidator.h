@@ -505,7 +505,12 @@ namespace RequestSchemas {
     constexpr FieldSchema SetParameters[] = {
         {"brightness", FieldType::UINT8, false, 0, 255},
         {"speed",      FieldType::UINT8, false, 1, 50},
-        {"paletteId",  FieldType::UINT8, false, 0, 255}
+        {"paletteId",  FieldType::UINT8, false, 0, 255},
+        {"intensity",  FieldType::UINT8, false, 0, 255},
+        {"saturation", FieldType::UINT8, false, 0, 255},
+        {"complexity", FieldType::UINT8, false, 0, 255},
+        {"variation",  FieldType::UINT8, false, 0, 255},
+        {"hue",        FieldType::UINT8, false, 0, 255}
     };
     constexpr size_t SetParametersSize = sizeof(SetParameters) / sizeof(FieldSchema);
 

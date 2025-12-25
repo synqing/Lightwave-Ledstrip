@@ -2,8 +2,10 @@
 #include "../../../core/actors/ActorSystem.h"
 #include "../../../core/actors/RendererActor.h"
 #include "../../../effects/PatternRegistry.h"
+#include "../../../plugins/api/IEffect.h"
 #include "../../RequestValidator.h"
 #include "../../ApiResponse.h"
+#include <cstring>
 
 using namespace lightwaveos::actors;
 using namespace lightwaveos::effects;
@@ -201,6 +203,11 @@ void EffectHandlers::handleCurrent(AsyncWebServerRequest* request, RendererActor
         data["brightness"] = renderer->getBrightness();
         data["speed"] = renderer->getSpeed();
         data["paletteId"] = renderer->getPaletteIndex();
+        data["hue"] = renderer->getHue();
+        data["intensity"] = renderer->getIntensity();
+        data["saturation"] = renderer->getSaturation();
+        data["complexity"] = renderer->getComplexity();
+        data["variation"] = renderer->getVariation();
         
         // Include IEffect metadata if available
         plugins::IEffect* ieffect = renderer->getEffectInstance(effectId);
@@ -213,6 +220,126 @@ void EffectHandlers::handleCurrent(AsyncWebServerRequest* request, RendererActor
             data["version"] = meta.version;
         } else {
             data["isIEffect"] = false;
+        }
+    });
+}
+
+void EffectHandlers::handleParametersGet(AsyncWebServerRequest* request, RendererActor* renderer) {
+    if (!renderer) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::SYSTEM_NOT_READY, "Renderer not available");
+        return;
+    }
+
+    uint8_t effectId = renderer->getCurrentEffect();
+    if (request->hasParam("id")) {
+        effectId = static_cast<uint8_t>(request->getParam("id")->value().toInt());
+    }
+
+    if (effectId >= renderer->getEffectCount()) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "id");
+        return;
+    }
+
+    plugins::IEffect* effect = renderer->getEffectInstance(effectId);
+
+    sendSuccessResponse(request, [renderer, effectId, effect](JsonObject& data) {
+        data["effectId"] = effectId;
+        data["name"] = renderer->getEffectName(effectId);
+        data["hasParameters"] = (effect != nullptr && effect->getParameterCount() > 0);
+
+        JsonArray params = data["parameters"].to<JsonArray>();
+        if (!effect) {
+            return;
+        }
+
+        uint8_t count = effect->getParameterCount();
+        for (uint8_t i = 0; i < count; ++i) {
+            const plugins::EffectParameter* param = effect->getParameter(i);
+            if (!param) continue;
+            JsonObject p = params.add<JsonObject>();
+            p["name"] = param->name;
+            p["displayName"] = param->displayName;
+            p["min"] = param->minValue;
+            p["max"] = param->maxValue;
+            p["default"] = param->defaultValue;
+            p["value"] = effect->getParameter(param->name);
+        }
+    });
+}
+
+void EffectHandlers::handleParametersSet(AsyncWebServerRequest* request, uint8_t* data, size_t len, RendererActor* renderer) {
+    if (!renderer) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::SYSTEM_NOT_READY, "Renderer not available");
+        return;
+    }
+
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, data, len);
+    if (error) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::INVALID_JSON, "Invalid JSON payload");
+        return;
+    }
+
+    if (!doc.containsKey("effectId")) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::MISSING_FIELD, "Missing effectId", "effectId");
+        return;
+    }
+
+    uint8_t effectId = doc["effectId"];
+    if (effectId >= renderer->getEffectCount()) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "effectId");
+        return;
+    }
+
+    plugins::IEffect* effect = renderer->getEffectInstance(effectId);
+    if (!effect) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::INVALID_VALUE, "Effect has no parameters");
+        return;
+    }
+
+    if (!doc.containsKey("parameters") || !doc["parameters"].is<JsonObject>()) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::MISSING_FIELD, "Missing parameters object", "parameters");
+        return;
+    }
+
+    JsonObject params = doc["parameters"].as<JsonObject>();
+
+    sendSuccessResponse(request, [effectId, renderer, effect, params](JsonObject& data) {
+        data["effectId"] = effectId;
+        data["name"] = renderer->getEffectName(effectId);
+
+        JsonArray queuedArr = data["queued"].to<JsonArray>();
+        JsonArray failedArr = data["failed"].to<JsonArray>();
+
+        for (JsonPair kv : params) {
+            const char* key = kv.key().c_str();
+            float value = kv.value().as<float>();
+            bool known = false;
+            uint8_t count = effect->getParameterCount();
+            for (uint8_t i = 0; i < count; ++i) {
+                const plugins::EffectParameter* param = effect->getParameter(i);
+                if (param && strcmp(param->name, key) == 0) {
+                    known = true;
+                    break;
+                }
+            }
+            if (!known) {
+                failedArr.add(key);
+                continue;
+            }
+            if (renderer->enqueueEffectParameterUpdate(effectId, key, value)) {
+                queuedArr.add(key);
+            } else {
+                failedArr.add(key);
+            }
         }
     });
 }

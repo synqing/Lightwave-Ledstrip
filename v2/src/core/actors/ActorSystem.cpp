@@ -297,6 +297,56 @@ bool ActorSystem::setPalette(uint8_t paletteIndex)
     return m_renderer->send(msg, pdMS_TO_TICKS(10));
 }
 
+bool ActorSystem::setIntensity(uint8_t intensity)
+{
+    if (!m_renderer || !m_renderer->isRunning()) {
+        return false;
+    }
+
+    Message msg(MessageType::SET_INTENSITY, intensity);
+    return m_renderer->send(msg, pdMS_TO_TICKS(10));
+}
+
+bool ActorSystem::setSaturation(uint8_t saturation)
+{
+    if (!m_renderer || !m_renderer->isRunning()) {
+        return false;
+    }
+
+    Message msg(MessageType::SET_SATURATION, saturation);
+    return m_renderer->send(msg, pdMS_TO_TICKS(10));
+}
+
+bool ActorSystem::setComplexity(uint8_t complexity)
+{
+    if (!m_renderer || !m_renderer->isRunning()) {
+        return false;
+    }
+
+    Message msg(MessageType::SET_COMPLEXITY, complexity);
+    return m_renderer->send(msg, pdMS_TO_TICKS(10));
+}
+
+bool ActorSystem::setVariation(uint8_t variation)
+{
+    if (!m_renderer || !m_renderer->isRunning()) {
+        return false;
+    }
+
+    Message msg(MessageType::SET_VARIATION, variation);
+    return m_renderer->send(msg, pdMS_TO_TICKS(10));
+}
+
+bool ActorSystem::setHue(uint8_t hue)
+{
+    if (!m_renderer || !m_renderer->isRunning()) {
+        return false;
+    }
+
+    Message msg(MessageType::SET_HUE, hue);
+    return m_renderer->send(msg, pdMS_TO_TICKS(10));
+}
+
 // ============================================================================
 // Diagnostics
 // ============================================================================

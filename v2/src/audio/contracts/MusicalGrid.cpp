@@ -36,6 +36,7 @@ void MusicalGrid::Reset() {
     m_pending_beat = false;
     m_pending_strength = 0.0f;
     m_pending_is_downbeat = false;
+    m_tuning = MusicalGridTuning{};
 
     MusicalGridSnapshot s;
     s.bpm_smoothed = m_bpm_smoothed;
@@ -52,10 +53,14 @@ void MusicalGrid::SetTimeSignature(uint8_t beats_per_bar, uint8_t beat_unit) {
     m_beat_unit = beat_unit;
 }
 
+void MusicalGrid::setTuning(const MusicalGridTuning& tuning) {
+    m_tuning = tuning;
+}
+
 void MusicalGrid::OnTempoEstimate(const AudioTime& /*t*/, float bpm, float confidence01) {
     // Clamp BPM to a sane musical range.
-    if (bpm < 30.0f) bpm = 30.0f;
-    if (bpm > 300.0f) bpm = 300.0f;
+    if (bpm < m_tuning.bpmMin) bpm = m_tuning.bpmMin;
+    if (bpm > m_tuning.bpmMax) bpm = m_tuning.bpmMax;
 
     m_bpm_target = bpm;
 
@@ -114,12 +119,12 @@ void MusicalGrid::Tick(const AudioTime& render_now) {
     }
 
     // Smooth BPM toward target (render-domain time constant ~0.5s)
-    const float tau = 0.50f;
+    const float tau = m_tuning.bpmTau;
     const float a = (tau > 0.0f) ? (1.0f - expf(-dt_s / tau)) : 1.0f;
     m_bpm_smoothed = m_bpm_smoothed + (m_bpm_target - m_bpm_smoothed) * a;
 
     // Confidence decays during silence/stalls (graceful degradation).
-    const float conf_tau = 1.00f;
+    const float conf_tau = m_tuning.confidenceTau;
     const float conf_decay = (conf_tau > 0.0f) ? expf(-dt_s / conf_tau) : 0.0f;
     m_conf *= conf_decay;
 
@@ -140,16 +145,14 @@ void MusicalGrid::Tick(const AudioTime& render_now) {
         float phase_err = wrapHalf(phase_err01);             // [-0.5,0.5)
 
         // Phase correction gain: strong beats pull harder, but never hard-jump.
-        const float k_phase = 0.35f;
-        m_beat_float -= (double)(phase_err * k_phase * m_pending_strength);
+        m_beat_float -= (double)(phase_err * m_tuning.phaseCorrectionGain * m_pending_strength);
 
         // Optional downbeat assist: align bar phase more aggressively when explicitly tagged.
         if (m_pending_is_downbeat && m_beats_per_bar > 0) {
             const double bar_at_obs = beat_at_obs / (double)m_beats_per_bar;
             float bar_err01 = (float)fract(bar_at_obs);
             float bar_err = wrapHalf(bar_err01);
-            const float k_bar = 0.20f;
-            m_beat_float -= (double)(bar_err * (float)m_beats_per_bar * k_bar * m_pending_strength);
+            m_beat_float -= (double)(bar_err * (float)m_beats_per_bar * m_tuning.barCorrectionGain * m_pending_strength);
         }
 
         // Consuming an observation bumps confidence (it's live signal).

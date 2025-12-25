@@ -23,6 +23,15 @@ void ControlBus::Reset() {
     // Waveform array is zero-initialized by ControlBusFrame{} constructor
 }
 
+void ControlBus::setSmoothing(float alphaFast, float alphaSlow) {
+    if (alphaFast < 0.0f) alphaFast = 0.0f;
+    if (alphaFast > 1.0f) alphaFast = 1.0f;
+    if (alphaSlow < 0.0f) alphaSlow = 0.0f;
+    if (alphaSlow > 1.0f) alphaSlow = 1.0f;
+    m_alpha_fast = alphaFast;
+    m_alpha_slow = alphaSlow;
+}
+
 void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& raw) {
     m_frame.t = now;
     m_frame.hop_seq++;

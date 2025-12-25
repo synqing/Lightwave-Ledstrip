@@ -38,6 +38,7 @@
 #include "../core/actors/Actor.h"
 #include "../config/audio_config.h"
 #include "AudioCapture.h"
+#include "AudioTuning.h"
 #include "GoertzelAnalyzer.h"
 #include "ChromaAnalyzer.h"
 #include "contracts/AudioTime.h"
@@ -75,6 +76,26 @@ struct AudioActorStats {
         lastTickTimeUs = 0;
         state = AudioActorState::UNINITIALIZED;
     }
+};
+
+/**
+ * @brief Snapshot of DSP state for diagnostics
+ */
+struct AudioDspState {
+    float rmsRaw = 0.0f;
+    float rmsMapped = 0.0f;
+    float rmsPreGain = 0.0f;
+    float fluxMapped = 0.0f;
+
+    float agcGain = 1.0f;
+    float dcEstimate = 0.0f;
+    float noiseFloor = 0.0f;
+
+    int16_t minSample = 0;
+    int16_t maxSample = 0;
+    int16_t peakCentered = 0;
+    float meanSample = 0.0f;
+    uint16_t clipCount = 0;
 };
 
 /**
@@ -203,6 +224,26 @@ public:
      */
     uint32_t getHopCount() const { return m_hopCount; }
 
+    /**
+     * @brief Get current audio pipeline tuning (by value)
+     */
+    AudioPipelineTuning getPipelineTuning() const;
+
+    /**
+     * @brief Update audio pipeline tuning
+     */
+    void setPipelineTuning(const AudioPipelineTuning& tuning);
+
+    /**
+     * @brief Reset DSP state (AGC, DC estimate, noise floor)
+     */
+    void resetDspState();
+
+    /**
+     * @brief Get last DSP diagnostics snapshot
+     */
+    AudioDspState getDspState() const;
+
 protected:
     // ========================================================================
     // Actor Overrides
@@ -301,6 +342,14 @@ private:
 
     float m_dcEstimate = 0.0f;
     float m_agcGain = 1.0f;
+    float m_noiseFloor = 0.001f;
+
+    AudioPipelineTuning m_pipelineTuning;
+    std::atomic<uint32_t> m_pipelineTuningSeq{0};
+
+    AudioDspState m_dspState;
+    std::atomic<uint32_t> m_dspStateSeq{0};
+    std::atomic<bool> m_dspResetPending{false};
 
     // Throttle for Goertzel debug logging (log once per ~2 seconds)
     uint32_t m_goertzelLogCounter = 0;

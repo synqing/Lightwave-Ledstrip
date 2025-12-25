@@ -53,6 +53,10 @@ public:
 
     ControlBusFrame GetFrame() const { return m_frame; }
 
+    void setSmoothing(float alphaFast, float alphaSlow);
+    float getAlphaFast() const { return m_alpha_fast; }
+    float getAlphaSlow() const { return m_alpha_slow; }
+
 private:
     ControlBusFrame m_frame{};
 

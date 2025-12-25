@@ -33,12 +33,15 @@
 #include "../../effects/enhancement/ColorCorrectionEngine.h"
 #include "../../config/features.h"
 
+#include <atomic>
+
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
 #endif
 
 // Audio contracts for Phase 2 integration
 #if FEATURE_AUDIO_SYNC
+#include "../../audio/AudioTuning.h"
 #include "../../audio/contracts/AudioTime.h"
 #include "../../audio/contracts/ControlBus.h"
 #include "../../audio/contracts/MusicalGrid.h"
@@ -335,6 +338,9 @@ public:
     void onBeatObservation(const audio::AudioTime& t, float strength, bool is_downbeat) {
         m_musicalGrid.OnBeatObservation(t, strength, is_downbeat);
     }
+
+    audio::AudioContractTuning getAudioContractTuning() const;
+    void setAudioContractTuning(const audio::AudioContractTuning& tuning);
 #endif
 
     // ========================================================================
@@ -369,6 +375,11 @@ public:
      * @return true if frame was captured, false if not available
      */
     bool getCapturedFrame(CaptureTap tap, CRGB* outBuffer) const;
+
+    /**
+     * @brief Queue a parameter update to be applied on the render thread
+     */
+    bool enqueueEffectParameterUpdate(uint8_t effectId, const char* name, float value);
 
     /**
      * @brief Get capture metadata (effect ID, palette ID, frame index, timestamp)
@@ -419,6 +430,8 @@ private:
      * @brief Render current effect to LED buffer
      */
     void renderFrame();
+    void applyPendingAudioContractTuning();
+    void applyPendingEffectParameterUpdates();
 
     /**
      * @brief Push LED buffer to physical strips
@@ -453,6 +466,7 @@ private:
     void handleSetSaturation(uint8_t saturation);
     void handleSetComplexity(uint8_t complexity);
     void handleSetVariation(uint8_t variation);
+    void handleSetHue(uint8_t hue);
 
     // ========================================================================
     // State
@@ -490,6 +504,16 @@ private:
     // Storage for LegacyEffectAdapter instances (one per legacy effect)
     // These are allocated during registration and owned by RendererActor
     plugins::runtime::LegacyEffectAdapter* m_legacyAdapters[MAX_EFFECTS];
+
+    struct EffectParamUpdate {
+        uint8_t effectId;
+        char name[24];
+        float value;
+    };
+    static constexpr uint8_t PARAM_QUEUE_SIZE = 16;
+    EffectParamUpdate m_paramQueue[PARAM_QUEUE_SIZE];
+    std::atomic<uint8_t> m_paramQueueHead{0};
+    std::atomic<uint8_t> m_paramQueueTail{0};
 
     // Timing
     uint32_t m_lastFrameTime;
@@ -555,6 +579,11 @@ private:
 
     /// micros() when we last read a new ControlBus frame
     uint64_t m_lastAudioMicros = 0;
+
+    audio::AudioContractTuning m_audioContractTuning;
+    audio::AudioContractTuning m_audioContractPending;
+    std::atomic<uint32_t> m_audioContractSeq{0};
+    std::atomic<bool> m_audioContractDirty{false};
 
     /**
      * Pointer to AudioActor's SnapshotBuffer (set during init)

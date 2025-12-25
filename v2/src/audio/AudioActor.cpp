@@ -18,6 +18,7 @@
 
 #include <cstring>
 #include <cmath>
+#include <algorithm>
 
 #ifndef NATIVE_BUILD
 #include <esp_log.h>
@@ -47,6 +48,8 @@ AudioActor::AudioActor()
 {
     m_stats.reset();
     memset(m_hopBuffer, 0, sizeof(m_hopBuffer));
+    m_pipelineTuning = clampAudioPipelineTuning(AudioPipelineTuning{});
+    m_noiseFloor = m_pipelineTuning.noiseFloorMin;
 }
 
 AudioActor::~AudioActor()
@@ -79,6 +82,48 @@ void AudioActor::resetStats()
 {
     m_stats.reset();
     m_capture.resetStats();
+}
+
+AudioPipelineTuning AudioActor::getPipelineTuning() const
+{
+    AudioPipelineTuning out;
+    uint32_t v0;
+    uint32_t v1;
+    do {
+        v0 = m_pipelineTuningSeq.load(std::memory_order_acquire);
+        if (v0 & 1U) continue;
+        out = m_pipelineTuning;
+        v1 = m_pipelineTuningSeq.load(std::memory_order_acquire);
+    } while (v0 != v1 || (v1 & 1U));
+    return out;
+}
+
+void AudioActor::setPipelineTuning(const AudioPipelineTuning& tuning)
+{
+    AudioPipelineTuning clamped = clampAudioPipelineTuning(tuning);
+    uint32_t v = m_pipelineTuningSeq.load(std::memory_order_relaxed);
+    m_pipelineTuningSeq.store(v + 1U, std::memory_order_release);
+    m_pipelineTuning = clamped;
+    m_pipelineTuningSeq.store(v + 2U, std::memory_order_release);
+}
+
+void AudioActor::resetDspState()
+{
+    m_dspResetPending.store(true, std::memory_order_release);
+}
+
+AudioDspState AudioActor::getDspState() const
+{
+    AudioDspState out;
+    uint32_t v0;
+    uint32_t v1;
+    do {
+        v0 = m_dspStateSeq.load(std::memory_order_acquire);
+        if (v0 & 1U) continue;
+        out = m_dspState;
+        v1 = m_dspStateSeq.load(std::memory_order_acquire);
+    } while (v0 != v1 || (v1 & 1U));
+    return out;
 }
 
 // ============================================================================
@@ -242,10 +287,25 @@ void AudioActor::processHop()
 
     auto mapLevelDb = [&](float x, float dbFloor, float dbCeil) -> float {
         const float eps = 1e-6f;
+        if (dbCeil <= dbFloor + 1e-3f) {
+            return 0.0f;
+        }
         float db = 20.0f * log10f(x + eps);
         float t = (db - dbFloor) / (dbCeil - dbFloor);
         return clamp01(t);
     };
+
+    const AudioPipelineTuning tuning = getPipelineTuning();
+
+    if (m_dspResetPending.exchange(false, std::memory_order_acq_rel)) {
+        m_dcEstimate = 0.0f;
+        m_agcGain = 1.0f;
+        m_noiseFloor = tuning.noiseFloorMin;
+        m_prevRMS = 0.0f;
+        m_analyzer.reset();
+        m_chromaAnalyzer.reset();
+        m_controlBus.Reset();
+    }
 
     // 1. Build AudioTime for this hop
     uint64_t now_us = esp_timer_get_time();
@@ -267,16 +327,19 @@ void AudioActor::processHop()
     float meanRaw = (float)sumRaw / (float)HOP_SIZE;
     m_lastMeanSample = meanRaw;
 
-    constexpr float dcAlpha = 0.001f;
-    // TARGET RMS: 0.25 (-12dB) is a strong signal for the visualizer.
-    // Previous value 0.010 was way too low (-40dB).
-    constexpr float agcTargetRms = 0.25f; 
-    constexpr float agcSilenceFloor = 0.00050f;
-    constexpr float agcGateRange = 0.00050f;
-    constexpr float agcMinGain = 1.0f;    // Don't attenuate below unity
-    constexpr float agcMaxGain = 100.0f;  // Reduced from 300.0f - 300x is dangerously high
-    constexpr float agcAttack = 0.08f;
-    constexpr float agcRelease = 0.02f;
+    const float dcAlpha = tuning.dcAlpha;
+    const float agcTargetRms = tuning.agcTargetRms;
+    const float agcMinGain = tuning.agcMinGain;    // Don't attenuate below min
+    const float agcMaxGain = tuning.agcMaxGain;
+    const float agcAttack = tuning.agcAttack;
+    const float agcRelease = tuning.agcRelease;
+
+    const float noiseFloorMin = tuning.noiseFloorMin;
+    const float noiseFloorRise = tuning.noiseFloorRise;
+    const float noiseFloorFall = tuning.noiseFloorFall;
+    const float gateStartFactor = tuning.gateStartFactor;
+    const float gateRangeFactor = tuning.gateRangeFactor;
+    const float gateRangeMin = tuning.gateRangeMin;
 
     int32_t minC = 32767;
     int32_t maxC = -32768;
@@ -320,10 +383,26 @@ void AudioActor::processHop()
     }
     m_lastRmsPreGain = rmsPre;
 
+    if (m_noiseFloor < noiseFloorMin) {
+        m_noiseFloor = noiseFloorMin;
+    }
+    if (rmsPre < m_noiseFloor) {
+        m_noiseFloor += noiseFloorFall * (rmsPre - m_noiseFloor);
+    } else {
+        m_noiseFloor += noiseFloorRise * (rmsPre - m_noiseFloor);
+    }
+    if (m_noiseFloor < noiseFloorMin) {
+        m_noiseFloor = noiseFloorMin;
+    }
+
+    float gateStart = m_noiseFloor * gateStartFactor;
+    float gateRange = std::max(gateRangeMin, m_noiseFloor * gateRangeFactor);
+    float activity = clamp01((rmsPre - gateStart) / gateRange);
+
     if (clipCount > 0) {
-        m_agcGain *= 0.90f;
-    } else if (rmsPre <= agcSilenceFloor) {
-        m_agcGain += 0.01f * (1.0f - m_agcGain);
+        m_agcGain *= tuning.agcClipReduce;
+    } else if (rmsPre <= gateStart) {
+        m_agcGain += tuning.agcIdleReturnRate * (1.0f - m_agcGain);
     } else {
         float desired = agcTargetRms / (rmsPre + 1e-6f);
         if (desired < agcMinGain) desired = agcMinGain;
@@ -335,17 +414,38 @@ void AudioActor::processHop()
     if (m_agcGain > agcMaxGain) m_agcGain = agcMaxGain;
     m_lastAgcGain = m_agcGain;
 
-    float activity = clamp01((rmsPre - agcSilenceFloor) / agcGateRange);
     float rmsRaw = computeRMS(m_hopBufferCentered, HOP_SIZE);
-    float rmsMapped = mapLevelDb(rmsRaw, -65.0f, -12.0f); // Ceiling -12dB matches target
+    float rmsMapped = mapLevelDb(rmsRaw, tuning.rmsDbFloor, tuning.rmsDbCeil);
     rmsMapped *= activity;
     m_lastRmsRaw = rmsRaw;
     m_lastRmsMapped = rmsMapped;
 
     // 3. Compute spectral flux (half-wave rectified RMS derivative)
-    float fluxMapped = std::max(0.0f, rmsMapped - m_prevRMS);
+    float fluxMapped = std::max(0.0f, rmsMapped - m_prevRMS) * tuning.fluxScale;
+    if (fluxMapped > 1.0f) fluxMapped = 1.0f;
     m_prevRMS = rmsMapped;
     m_lastFluxMapped = fluxMapped;
+
+    {
+        AudioDspState state;
+        state.rmsRaw = m_lastRmsRaw;
+        state.rmsMapped = m_lastRmsMapped;
+        state.rmsPreGain = m_lastRmsPreGain;
+        state.fluxMapped = m_lastFluxMapped;
+        state.agcGain = m_lastAgcGain;
+        state.dcEstimate = m_lastDcEstimate;
+        state.noiseFloor = m_noiseFloor;
+        state.minSample = m_lastMinSample;
+        state.maxSample = m_lastMaxSample;
+        state.peakCentered = m_lastPeakCentered;
+        state.meanSample = m_lastMeanSample;
+        state.clipCount = m_lastClipCount;
+
+        uint32_t v = m_dspStateSeq.load(std::memory_order_relaxed);
+        m_dspStateSeq.store(v + 1U, std::memory_order_release);
+        m_dspState = state;
+        m_dspStateSeq.store(v + 2U, std::memory_order_release);
+    }
 
     // 4. Accumulate samples for Goertzel (512-sample window = 2 hops)
     m_analyzer.accumulate(m_hopBufferCentered, HOP_SIZE);
@@ -386,7 +486,7 @@ void AudioActor::processHop()
     if (m_analyzer.analyze(bandsRaw)) {
         // Fresh band data available - Goertzel completed a 512-sample window
         for (int i = 0; i < NUM_BANDS; ++i) {
-            float band = mapLevelDb(bandsRaw[i], -65.0f, -12.0f);
+            float band = mapLevelDb(bandsRaw[i], tuning.bandDbFloor, tuning.bandDbCeil);
             m_lastBands[i] = band;
             raw.bands[i] = band * activity;
         }
@@ -421,7 +521,7 @@ void AudioActor::processHop()
     if (m_chromaAnalyzer.analyze(chromaRaw)) {
         // Fresh chroma data available
         for (int i = 0; i < 12; ++i) {
-            float chroma = mapLevelDb(chromaRaw[i], -65.0f, -12.0f);
+            float chroma = mapLevelDb(chromaRaw[i], tuning.chromaDbFloor, tuning.chromaDbCeil);
             lastChroma[i] = chroma;
             raw.chroma[i] = chroma * activity;
         }
@@ -433,6 +533,7 @@ void AudioActor::processHop()
     }
 
     // 7. Update ControlBus with attack/release smoothing
+    m_controlBus.setSmoothing(tuning.controlBusAlphaFast, tuning.controlBusAlphaSlow);
     m_controlBus.UpdateFromHop(now, raw);
 
     // 8. Publish frame to renderer via lock-free SnapshotBuffer

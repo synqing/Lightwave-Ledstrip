@@ -57,6 +57,7 @@ enum class MessageType : uint8_t {
     SET_INTENSITY       = 0x05,
     SET_COMPLEXITY      = 0x06,
     SET_VARIATION       = 0x07,
+    SET_HUE             = 0x08,
 
     // Zone commands (0x20-0x3F)
     ZONE_ENABLE         = 0x20,

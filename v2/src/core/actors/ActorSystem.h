@@ -200,6 +200,36 @@ public:
      */
     bool setPalette(uint8_t paletteIndex);
 
+    /**
+     * @brief Set intensity
+     * @param intensity Intensity level (0-255)
+     */
+    bool setIntensity(uint8_t intensity);
+
+    /**
+     * @brief Set saturation
+     * @param saturation Saturation level (0-255)
+     */
+    bool setSaturation(uint8_t saturation);
+
+    /**
+     * @brief Set complexity
+     * @param complexity Complexity level (0-255)
+     */
+    bool setComplexity(uint8_t complexity);
+
+    /**
+     * @brief Set variation
+     * @param variation Variation level (0-255)
+     */
+    bool setVariation(uint8_t variation);
+
+    /**
+     * @brief Set global hue
+     * @param hue Hue (0-255)
+     */
+    bool setHue(uint8_t hue);
+
     // ========================================================================
     // Diagnostics
     // ========================================================================

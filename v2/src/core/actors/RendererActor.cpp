@@ -39,6 +39,8 @@ namespace lightwaveos { namespace actors {
     void setCurrentLegacyEffectId(uint8_t) {}  // No-op stub
 }}
 
+#include <cstring>
+
 #ifndef NATIVE_BUILD
 #include <Arduino.h>
 #include <esp_log.h>
@@ -48,6 +50,19 @@ static const char* TAG = "Renderer";
 
 namespace lightwaveos {
 namespace actors {
+
+#if FEATURE_AUDIO_SYNC
+static audio::MusicalGridTuning toMusicalGridTuning(const audio::AudioContractTuning& tuning) {
+    audio::MusicalGridTuning grid;
+    grid.bpmMin = tuning.bpmMin;
+    grid.bpmMax = tuning.bpmMax;
+    grid.bpmTau = tuning.bpmTau;
+    grid.confidenceTau = tuning.confidenceTau;
+    grid.phaseCorrectionGain = tuning.phaseCorrectionGain;
+    grid.barCorrectionGain = tuning.barCorrectionGain;
+    return grid;
+}
+#endif
 
 // ============================================================================
 // Constructor / Destructor
@@ -109,6 +124,13 @@ RendererActor::RendererActor()
 
     // Default palette - load from master palette system (index 0: Sunset Real)
     m_currentPalette = gMasterPalettes[0];
+
+#if FEATURE_AUDIO_SYNC
+    m_audioContractTuning = audio::clampAudioContractTuning(audio::AudioContractTuning{});
+    m_audioContractPending = m_audioContractTuning;
+    m_musicalGrid.setTuning(toMusicalGridTuning(m_audioContractTuning));
+    m_musicalGrid.SetTimeSignature(m_audioContractTuning.beatsPerBar, m_audioContractTuning.beatUnit);
+#endif
 }
 
 RendererActor::~RendererActor()
@@ -288,6 +310,10 @@ void RendererActor::onMessage(const Message& msg)
             handleSetVariation(msg.param1);
             break;
 
+        case MessageType::SET_HUE:
+            handleSetHue(msg.param1);
+            break;
+
         case MessageType::HEALTH_CHECK:
             // Respond with health status
             {
@@ -448,6 +474,79 @@ RendererActor::CaptureMetadata RendererActor::getCaptureMetadata() const {
     return m_captureMetadata;
 }
 
+#if FEATURE_AUDIO_SYNC
+audio::AudioContractTuning RendererActor::getAudioContractTuning() const {
+    audio::AudioContractTuning out;
+    uint32_t v0;
+    uint32_t v1;
+    do {
+        v0 = m_audioContractSeq.load(std::memory_order_acquire);
+        if (v0 & 1U) continue;
+        out = m_audioContractPending;
+        v1 = m_audioContractSeq.load(std::memory_order_acquire);
+    } while (v0 != v1 || (v1 & 1U));
+    return out;
+}
+
+void RendererActor::setAudioContractTuning(const audio::AudioContractTuning& tuning) {
+    audio::AudioContractTuning clamped = audio::clampAudioContractTuning(tuning);
+    uint32_t v = m_audioContractSeq.load(std::memory_order_relaxed);
+    m_audioContractSeq.store(v + 1U, std::memory_order_release);
+    m_audioContractPending = clamped;
+    m_audioContractSeq.store(v + 2U, std::memory_order_release);
+    m_audioContractDirty.store(true, std::memory_order_release);
+}
+
+void RendererActor::applyPendingAudioContractTuning() {
+    if (!m_audioContractDirty.exchange(false, std::memory_order_acq_rel)) {
+        return;
+    }
+    audio::AudioContractTuning pending = getAudioContractTuning();
+    m_audioContractTuning = pending;
+    m_musicalGrid.setTuning(toMusicalGridTuning(m_audioContractTuning));
+    m_musicalGrid.SetTimeSignature(m_audioContractTuning.beatsPerBar, m_audioContractTuning.beatUnit);
+}
+#endif
+
+bool RendererActor::enqueueEffectParameterUpdate(uint8_t effectId, const char* name, float value) {
+    if (!name || name[0] == '\0') {
+        return false;
+    }
+
+    uint8_t head = m_paramQueueHead.load(std::memory_order_relaxed);
+    uint8_t next = static_cast<uint8_t>((head + 1) % PARAM_QUEUE_SIZE);
+    uint8_t tail = m_paramQueueTail.load(std::memory_order_acquire);
+    if (next == tail) {
+        return false;
+    }
+
+    EffectParamUpdate& slot = m_paramQueue[head];
+    slot.effectId = effectId;
+    strncpy(slot.name, name, sizeof(slot.name) - 1);
+    slot.name[sizeof(slot.name) - 1] = '\0';
+    slot.value = value;
+
+    m_paramQueueHead.store(next, std::memory_order_release);
+    return true;
+}
+
+void RendererActor::applyPendingEffectParameterUpdates() {
+    uint8_t tail = m_paramQueueTail.load(std::memory_order_relaxed);
+    uint8_t head = m_paramQueueHead.load(std::memory_order_acquire);
+    while (tail != head) {
+        const EffectParamUpdate& update = m_paramQueue[tail];
+        if (update.effectId < m_effectCount) {
+            plugins::IEffect* effect = m_effects[update.effectId].effect;
+            if (effect) {
+                effect->setParameter(update.name, update.value);
+            }
+        }
+        tail = static_cast<uint8_t>((tail + 1) % PARAM_QUEUE_SIZE);
+        m_paramQueueTail.store(tail, std::memory_order_release);
+        head = m_paramQueueHead.load(std::memory_order_acquire);
+    }
+}
+
 void RendererActor::forceOneShotCapture(CaptureTap tap) {
     // Preserve the live LED state buffer so buffer-feedback effects are not disturbed.
     CRGB savedLeds[LedConfig::TOTAL_LEDS];
@@ -544,6 +643,11 @@ void RendererActor::initLeds()
 
 void RendererActor::renderFrame()
 {
+#if FEATURE_AUDIO_SYNC
+    applyPendingAudioContractTuning();
+#endif
+    applyPendingEffectParameterUpdates();
+
     // EXCLUSIVE MODE: If transition active, ONLY update transition
     // v1 pattern: effect OR transition, never both
     if (m_transitionEngine && m_transitionEngine->isActive()) {
@@ -635,7 +739,8 @@ void RendererActor::renderFrame()
 
             // 5. Compute staleness for ctx.audio.available
             float age_s = audio::AudioTime_SecondsBetween(m_lastControlBus.t, render_now);
-            bool is_fresh = (age_s >= 0.0f && age_s < 0.10f);  // Fresh if < 100ms old
+            float staleness_s = m_audioContractTuning.audioStalenessMs / 1000.0f;
+            bool is_fresh = (age_s >= 0.0f && age_s < staleness_s);
 
             // 6. Populate AudioContext (by-value copies for thread safety)
             ctx.audio.controlBus = m_lastControlBus;
@@ -891,6 +996,16 @@ void RendererActor::handleSetVariation(uint8_t variation)
         m_variation = variation;
 #ifndef NATIVE_BUILD
         ESP_LOGD(TAG, "Variation: %d", m_variation);
+#endif
+    }
+}
+
+void RendererActor::handleSetHue(uint8_t hue)
+{
+    if (m_hue != hue) {
+        m_hue = hue;
+#ifndef NATIVE_BUILD
+        ESP_LOGD(TAG, "Hue: %d", m_hue);
 #endif
     }
 }

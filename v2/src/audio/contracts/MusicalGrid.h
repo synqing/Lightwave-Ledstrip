@@ -32,6 +32,18 @@ struct MusicalGridSnapshot {
 };
 
 /**
+ * @brief Tunable musical grid parameters (render-domain PLL)
+ */
+struct MusicalGridTuning {
+    float bpmMin = 30.0f;
+    float bpmMax = 300.0f;
+    float bpmTau = 0.50f;
+    float confidenceTau = 1.00f;
+    float phaseCorrectionGain = 0.35f;
+    float barCorrectionGain = 0.20f;
+};
+
+/**
  * @brief Render-domain PLL-style musical grid.
  *
  * Non-negotiable: Tick() is called ONLY by the renderer at ~120 FPS.
@@ -46,6 +58,9 @@ public:
     void Reset();
 
     void SetTimeSignature(uint8_t beats_per_bar, uint8_t beat_unit);
+
+    void setTuning(const MusicalGridTuning& tuning);
+    MusicalGridTuning getTuning() const { return m_tuning; }
 
     // Audio-domain observations (do NOT call Tick from audio thread)
     void OnTempoEstimate(const AudioTime& t, float bpm, float confidence01);
@@ -79,6 +94,8 @@ private:
     AudioTime m_pending_beat_t{};
     float m_pending_strength = 0.0f;
     bool m_pending_is_downbeat = false;
+
+    MusicalGridTuning m_tuning;
 
 private:
     static float clamp01(float x);

@@ -36,6 +36,10 @@ public:
 private:
     static constexpr uint8_t WAVEFORM_HISTORY_SIZE = 4;
     static constexpr uint8_t WAVEFORM_SIZE = 128;  // CONTROLBUS_WAVEFORM_N
+    static constexpr float SWEET_SPOT_MIN_LEVEL = 750.0f;
+    static constexpr float PEAK_FOLLOW_ATTACK = 0.25f;
+    static constexpr float PEAK_FOLLOW_RELEASE = 0.005f;
+    static constexpr float PEAK_SCALE_ATTACK = 0.25f;
     
     // Waveform history ring buffer (4 frames)
     int16_t m_waveformHistory[WAVEFORM_HISTORY_SIZE][WAVEFORM_SIZE];
@@ -45,6 +49,8 @@ private:
     float m_waveformLast[WAVEFORM_SIZE] = {0.0f};
     
     // Peak scaling state
+    float m_maxWaveformValFollower = SWEET_SPOT_MIN_LEVEL;
+    float m_waveformPeakScaled = 0.0f;
     float m_waveformPeakScaledLast = 0.0f;
     
     // Sum colour state (RGB smoothing)
@@ -57,4 +63,3 @@ private:
 } // namespace ieffect
 } // namespace effects
 } // namespace lightwaveos
-

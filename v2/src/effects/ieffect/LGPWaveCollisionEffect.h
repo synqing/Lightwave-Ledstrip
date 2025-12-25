@@ -26,6 +26,23 @@ public:
     void render(plugins::EffectContext& ctx) override;
     void cleanup() override;
     const plugins::EffectMetadata& getMetadata() const override;
+
+private:
+    float m_packetRadius1 = 0.0f;
+    float m_packetRadius2 = 0.0f;
+    float m_packetSpeed = 0.0f;
+    uint32_t m_lastHopSeq = 0;
+    static constexpr uint8_t CHROMA_HISTORY = 4;
+    float m_chromaEnergyHist[CHROMA_HISTORY] = {0.0f};
+    float m_chromaEnergySum = 0.0f;
+    uint8_t m_chromaHistIdx = 0;
+    float m_energyAvg = 0.0f;
+    float m_energyDelta = 0.0f;
+    uint8_t m_dominantBin = 0;
+    float m_energyAvgSmooth = 0.0f;
+    float m_energyDeltaSmooth = 0.0f;
+    float m_dominantBinSmooth = 0.0f;
+    float m_collisionBoost = 0.0f;
 };
 
 } // namespace ieffect

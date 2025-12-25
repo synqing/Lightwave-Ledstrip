@@ -21,6 +21,8 @@ bool AudioWaveformEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
     memset(m_waveformHistory, 0, sizeof(m_waveformHistory));
     memset(m_waveformLast, 0, sizeof(m_waveformLast));
+    m_maxWaveformValFollower = SWEET_SPOT_MIN_LEVEL;
+    m_waveformPeakScaled = 0.0f;
     m_waveformPeakScaledLast = 0.0f;
     m_sumColorLast[0] = 0.0f;
     m_sumColorLast[1] = 0.0f;
@@ -34,19 +36,7 @@ void AudioWaveformEffect::render(plugins::EffectContext& ctx) {
     // Clear buffer
     memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
 
-    // If audio not available, show subtle idle animation
     if (!ctx.audio.available) {
-        float phase = ctx.getPhase(0.5f);
-        float idleBrightness = 0.1f + 0.05f * sinf(phase * 2.0f * 3.14159265f);
-        uint8_t bright = (uint8_t)(idleBrightness * ctx.brightness);
-        CRGB idleColor = ctx.palette.getColor(ctx.gHue, bright);
-        
-        if (ctx.centerPoint < ctx.ledCount) {
-            ctx.leds[ctx.centerPoint] = idleColor;
-        }
-        if (ctx.centerPoint > 0) {
-            ctx.leds[ctx.centerPoint - 1] = idleColor;
-        }
         return;
     }
 
@@ -54,55 +44,105 @@ void AudioWaveformEffect::render(plugins::EffectContext& ctx) {
     bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
     if (newHop) {
         m_lastHopSeq = ctx.audio.controlBus.hop_seq;
-        
+
+        float maxWaveformValRaw = 0.0f;
+
         // Push current waveform into history ring buffer
         for (uint8_t i = 0; i < WAVEFORM_SIZE; ++i) {
-            m_waveformHistory[m_historyIndex][i] = ctx.audio.getWaveformSample(i);
+            int16_t sample = ctx.audio.getWaveformSample(i);
+            m_waveformHistory[m_historyIndex][i] = sample;
+            int32_t absSample = (sample < 0) ? -sample : sample;
+            if (absSample > maxWaveformValRaw) {
+                maxWaveformValRaw = (float)absSample;
+            }
         }
         m_historyIndex = (m_historyIndex + 1) % WAVEFORM_HISTORY_SIZE;
 
-        // Update waveform_peak_scaled_last (0.05/0.95 smoothing)
-        float waveformPeakScaled = ctx.audio.rms();  // Use RMS as peak proxy
-        m_waveformPeakScaledLast = waveformPeakScaled * 0.05f + m_waveformPeakScaledLast * 0.95f;
-
-        // Compute sum_color from chromagram (matching Sensory Bridge light_mode_waveform)
-        const float led_share = 255.0f / 12.0f;
-        CRGB sum_color = CRGB(0, 0, 0);
-        float brightness_sum = 0.0f;
-
-        for (uint8_t c = 0; c < 12; ++c) {
-            float prog = c / 12.0f;
-            float bin = ctx.audio.controlBus.chroma[c];
-
-            // Apply squaring and gain
-            float bright = bin;
-            bright = bright * bright;  // Square once
-            bright *= 1.5f;
-            if (bright > 1.0f) bright = 1.0f;
-
-            bright *= led_share;
-
-            // Use palette for colour (no hue wheel)
-            uint8_t paletteIdx = (uint8_t)(prog * 255.0f + ctx.gHue) % 256;
-            CRGB out_col = ctx.palette.getColor(paletteIdx, (uint8_t)(bright * ctx.brightness));
-            sum_color += out_col;
+        float maxWaveformVal = maxWaveformValRaw - SWEET_SPOT_MIN_LEVEL;
+        if (maxWaveformVal > m_maxWaveformValFollower) {
+            float delta = maxWaveformVal - m_maxWaveformValFollower;
+            m_maxWaveformValFollower += delta * PEAK_FOLLOW_ATTACK;
+        } else if (maxWaveformVal < m_maxWaveformValFollower) {
+            float delta = m_maxWaveformValFollower - maxWaveformVal;
+            m_maxWaveformValFollower -= delta * PEAK_FOLLOW_RELEASE;
+            if (m_maxWaveformValFollower < SWEET_SPOT_MIN_LEVEL) {
+                m_maxWaveformValFollower = SWEET_SPOT_MIN_LEVEL;
+            }
         }
 
-        // Smooth sum_color (0.05/0.95 matching Sensory Bridge)
-        float sum_color_float[3] = {
-            (float)sum_color.r,
-            (float)sum_color.g,
-            (float)sum_color.b
-        };
+        float waveformPeakScaledRaw = 0.0f;
+        if (m_maxWaveformValFollower > 0.0f) {
+            waveformPeakScaledRaw = maxWaveformVal / m_maxWaveformValFollower;
+        }
 
-        sum_color_float[0] = sum_color_float[0] * 0.05f + m_sumColorLast[0] * 0.95f;
-        sum_color_float[1] = sum_color_float[1] * 0.05f + m_sumColorLast[1] * 0.95f;
-        sum_color_float[2] = sum_color_float[2] * 0.05f + m_sumColorLast[2] * 0.95f;
-
-        m_sumColorLast[0] = sum_color_float[0];
-        m_sumColorLast[1] = sum_color_float[1];
-        m_sumColorLast[2] = sum_color_float[2];
+        if (waveformPeakScaledRaw > m_waveformPeakScaled) {
+            float delta = waveformPeakScaledRaw - m_waveformPeakScaled;
+            m_waveformPeakScaled += delta * PEAK_SCALE_ATTACK;
+        } else if (waveformPeakScaledRaw < m_waveformPeakScaled) {
+            float delta = m_waveformPeakScaled - waveformPeakScaledRaw;
+            m_waveformPeakScaled -= delta * PEAK_SCALE_ATTACK;
+        }
     }
+
+    // Smooth waveform_peak_scaled (0.05/0.95 matching Sensory Bridge)
+    m_waveformPeakScaledLast = m_waveformPeakScaled * 0.05f + m_waveformPeakScaledLast * 0.95f;
+
+    // Compute sum_colour from chromagram (matching Sensory Bridge light_mode_waveform)
+    float chromaMax = 0.0f;
+    for (uint8_t c = 0; c < 12; ++c) {
+        float v = ctx.audio.controlBus.chroma[c];
+        if (v > chromaMax) chromaMax = v;
+    }
+
+    const float chromaNorm = (chromaMax > 0.0f) ? (1.0f / chromaMax) : 0.0f;
+    const float led_share = 255.0f / 12.0f;
+    CRGB sum_color = CRGB(0, 0, 0);
+    float brightness_sum = 0.0f;
+    const bool chromaticMode = (ctx.saturation >= 128);
+
+    for (uint8_t c = 0; c < 12; ++c) {
+        float prog = c / 12.0f;
+        float bin = ctx.audio.controlBus.chroma[c] * chromaNorm;
+
+        // Apply squaring and gain
+        float bright = bin;
+        bright = bright * bright;  // Square once
+        bright *= 1.5f;
+        if (bright > 1.0f) bright = 1.0f;
+
+        bright *= led_share;
+
+        if (chromaticMode) {
+            uint8_t paletteIdx = (uint8_t)(prog * 255.0f + ctx.gHue);
+            uint8_t brightU8 = (uint8_t)bright;
+            brightU8 = (uint8_t)((brightU8 * ctx.brightness) / 255);
+            CRGB out_col = ctx.palette.getColor(paletteIdx, brightU8);
+            sum_color += out_col;
+        } else {
+            brightness_sum += bright;
+        }
+    }
+
+    if (!chromaticMode) {
+        uint8_t brightU8 = (uint8_t)brightness_sum;
+        brightU8 = (uint8_t)((brightU8 * ctx.brightness) / 255);
+        sum_color = ctx.palette.getColor(ctx.gHue, brightU8);
+    }
+
+    // Smooth sum_colour (0.05/0.95 matching Sensory Bridge)
+    float sum_color_float[3] = {
+        (float)sum_color.r,
+        (float)sum_color.g,
+        (float)sum_color.b
+    };
+
+    sum_color_float[0] = sum_color_float[0] * 0.05f + m_sumColorLast[0] * 0.95f;
+    sum_color_float[1] = sum_color_float[1] * 0.05f + m_sumColorLast[1] * 0.95f;
+    sum_color_float[2] = sum_color_float[2] * 0.05f + m_sumColorLast[2] * 0.95f;
+
+    m_sumColorLast[0] = sum_color_float[0];
+    m_sumColorLast[1] = sum_color_float[1];
+    m_sumColorLast[2] = sum_color_float[2];
 
     // Render waveform (matching Sensory Bridge algorithm)
     // Map ctx.speed to smoothing rate (MOOD equivalent)
@@ -122,10 +162,8 @@ void AudioWaveformEffect::render(plugins::EffectContext& ctx) {
         }
         waveform_sample /= (float)WAVEFORM_HISTORY_SIZE;
 
-        // Normalize to [-1, 1] range (matching Sensory Bridge: / 128.0)
-        // Note: Sensory Bridge stores samples in a normalized range, so /128.0 works
-        // Our int16_t samples need /32768.0, but we'll match the legacy behavior
-        float input_wave_sample = waveform_sample / 32768.0f;
+        // Normalise to Sensory Bridge scale
+        float input_wave_sample = waveform_sample / 128.0f;
 
         // Apply follower smoothing (matching Sensory Bridge)
         m_waveformLast[i] = input_wave_sample * smoothing + m_waveformLast[i] * (1.0f - smoothing);

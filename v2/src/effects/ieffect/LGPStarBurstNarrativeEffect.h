@@ -1,13 +1,10 @@
 /**
- * @file LGPStarBurstEffect.h
- * @brief LGP Star Burst - Explosive radial lines
- * 
- * Effect ID: 24
+ * @file LGPStarBurstNarrativeEffect.h
+ * @brief LGP Star Burst (Narrative) - Story conductor + chord-based coloring
+ *
+ * Effect ID: 74
  * Family: GEOMETRIC
  * Tags: CENTER_ORIGIN
- * 
- * Instance State:
- * - m_phase: Phase accumulator
  */
 
 #pragma once
@@ -19,18 +16,32 @@ namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
-class LGPStarBurstEffect : public plugins::IEffect {
+class LGPStarBurstNarrativeEffect : public plugins::IEffect {
 public:
-    LGPStarBurstEffect();
-    ~LGPStarBurstEffect() override = default;
+    LGPStarBurstNarrativeEffect();
+    ~LGPStarBurstNarrativeEffect() override = default;
 
-    // IEffect interface
     bool init(plugins::EffectContext& ctx) override;
     void render(plugins::EffectContext& ctx) override;
     void cleanup() override;
     const plugins::EffectMetadata& getMetadata() const override;
 
 private:
+    // Story Conductor state
+    enum class StoryPhase { REST, BUILD, HOLD, RELEASE };
+    StoryPhase m_storyPhase = StoryPhase::REST;
+    float m_storyTimeS = 0.0f;
+    float m_quietTimeS = 0.0f;
+    float m_phraseHoldS = 0.0f;
+
+    // Key/palette gating
+    uint8_t m_candidateRootBin = 0;
+    bool m_candidateMinor = false;
+    uint8_t m_keyRootBin = 0;
+    bool m_keyMinor = false;
+    float m_keyRootBinSmooth = 0.0f;
+
+    // Audio features
     float m_phase;
     float m_burst = 0.0f;
     uint32_t m_lastHopSeq = 0;

@@ -14,6 +14,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../CoreEffects.h"
 #include <FastLED.h>
 
 namespace lightwaveos {
@@ -37,13 +38,24 @@ private:
         float radius;
         float speed;
         uint8_t hue;
+        uint8_t intensity;
         bool active;
     };
     static constexpr uint8_t MAX_RIPPLES = 5;
     Ripple m_ripples[MAX_RIPPLES];
+    uint32_t m_lastHopSeq = 0;
+    uint8_t m_spawnCooldown = 0;
+    float m_lastChromaEnergy = 0.0f;
+    static constexpr uint8_t CHROMA_HISTORY = 4;
+    float m_chromaEnergyHist[CHROMA_HISTORY] = {0.0f};
+    float m_chromaEnergySum = 0.0f;
+    uint8_t m_chromaHistIdx = 0;
+
+    // Radial LED history buffer (centre-out)
+    CRGB m_radial[HALF_LENGTH];
+    CRGB m_radialAux[HALF_LENGTH];
 };
 
 } // namespace ieffect
 } // namespace effects
 } // namespace lightwaveos
-

@@ -91,6 +91,7 @@
 #include "ieffect/LGPBassBreathEffect.h"
 #include "ieffect/AudioWaveformEffect.h"
 #include "ieffect/AudioBloomEffect.h"
+#include "ieffect/LGPStarBurstNarrativeEffect.h"
 #include "utils/FastLEDOptim.h"
 #include "../core/narrative/NarrativeEngine.h"
 #include <FastLED.h>
@@ -765,9 +766,15 @@ uint8_t registerAllEffects(RendererActor* renderer) {
         total++;
     }
 
+    // LGP Star Burst Narrative (ID 74) - Story conductor + chord-based color
+    static ieffect::LGPStarBurstNarrativeEffect starBurstNarrativeInstance;
+    if (renderer->registerEffect(total, &starBurstNarrativeInstance)) {
+        total++;
+    }
+
     // =============== EFFECT COUNT PARITY VALIDATION ===============
     // Runtime validation: ensure registered count matches expected
-    constexpr uint8_t EXPECTED_EFFECT_COUNT = 74;  // 68 core + 6 audio
+    constexpr uint8_t EXPECTED_EFFECT_COUNT = 75;  // 68 core + 6 audio + 1 narrative
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

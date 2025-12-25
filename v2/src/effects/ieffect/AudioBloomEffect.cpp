@@ -32,28 +32,15 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
     // Clear output buffer
     memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
 
-    // If audio not available, show subtle idle animation
     if (!ctx.audio.available) {
-        float phase = ctx.getPhase(0.3f);
-        float idleBrightness = 0.1f + 0.05f * sinf(phase * 2.0f * 3.14159265f);
-        uint8_t bright = (uint8_t)(idleBrightness * ctx.brightness);
-        CRGB idleColor = ctx.palette.getColor(ctx.gHue, bright);
-        
-        if (ctx.centerPoint < ctx.ledCount) {
-            ctx.leds[ctx.centerPoint] = idleColor;
-        }
-        if (ctx.centerPoint > 0) {
-            ctx.leds[ctx.centerPoint - 1] = idleColor;
-        }
         return;
     }
-
-    m_iter++;
 
     // Check if we have a new hop (update on hop sequence change)
     bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
     if (newHop) {
         m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+        m_iter++;
     }
 
     // Update on even iterations (matching Sensory Bridge's bitRead(iter, 0) == 0)
@@ -62,6 +49,7 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
         const float led_share = 255.0f / 12.0f;
         CRGB sum_color = CRGB(0, 0, 0);
         float brightness_sum = 0.0f;
+        const bool chromaticMode = (ctx.saturation >= 128);
 
         for (uint8_t i = 0; i < 12; ++i) {
             float prog = i / 12.0f;
@@ -75,11 +63,22 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
 
             bright *= led_share;
 
-            // Use palette for colour (no hue wheel)
-            // Map chroma bin to palette index
-            uint8_t paletteIdx = (uint8_t)(prog * 255.0f + ctx.gHue) % 256;
-            CRGB out_col = ctx.palette.getColor(paletteIdx, (uint8_t)(bright * ctx.brightness));
-            sum_color += out_col;
+            if (chromaticMode) {
+                // Use palette for colour (no hue wheel)
+                uint8_t paletteIdx = (uint8_t)(prog * 255.0f + ctx.gHue);
+                uint8_t brightU8 = (uint8_t)bright;
+                brightU8 = (uint8_t)((brightU8 * ctx.brightness) / 255);
+                CRGB out_col = ctx.palette.getColor(paletteIdx, brightU8);
+                sum_color += out_col;
+            } else {
+                brightness_sum += bright;
+            }
+        }
+
+        if (!chromaticMode) {
+            uint8_t brightU8 = (uint8_t)brightness_sum;
+            brightU8 = (uint8_t)((brightU8 * ctx.brightness) / 255);
+            sum_color = ctx.palette.getColor(ctx.gHue, brightU8);
         }
 
         // Determine scroll step (fast/slow based on speed)
@@ -169,31 +168,10 @@ void AudioBloomEffect::fadeTopHalf(CRGB* buffer, uint16_t len) {
 }
 
 void AudioBloomEffect::increaseSaturation(CRGB* buffer, uint16_t len, uint8_t amount) {
-    // Approximate HSV conversion, increase saturation, convert back
     for (uint16_t i = 0; i < len; ++i) {
-        CRGB& rgb = buffer[i];
-        
-        // Approximate RGB to HSV (simplified)
-        uint8_t maxVal = std::max({rgb.r, rgb.g, rgb.b});
-        uint8_t minVal = std::min({rgb.r, rgb.g, rgb.b});
-        uint8_t delta = maxVal - minVal;
-        
-        if (delta > 0 && maxVal > 0) {
-            // Increase saturation by adding to delta
-            uint8_t newDelta = qadd8(delta, amount);
-            if (newDelta > maxVal) newDelta = maxVal;
-            
-            // Scale RGB components to increase saturation
-            float scale = (float)newDelta / (float)delta;
-            int16_t r = (int16_t)(rgb.r * scale);
-            int16_t g = (int16_t)(rgb.g * scale);
-            int16_t b = (int16_t)(rgb.b * scale);
-            
-            // Clamp to valid range
-            rgb.r = (uint8_t)std::max(0, std::min(255, (int)r));
-            rgb.g = (uint8_t)std::max(0, std::min(255, (int)g));
-            rgb.b = (uint8_t)std::max(0, std::min(255, (int)b));
-        }
+        CHSV hsv = rgb2hsv_approximate(buffer[i]);
+        hsv.s = qadd8(hsv.s, amount);
+        buffer[i] = hsv;
     }
 }
 

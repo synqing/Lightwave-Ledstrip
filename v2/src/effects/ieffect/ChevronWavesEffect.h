@@ -34,6 +34,17 @@ public:
 private:
     // Instance state (was: static float chevronPos)
     float m_chevronPos;
+    uint32_t m_lastHopSeq = 0;
+    static constexpr uint8_t CHROMA_HISTORY = 4;
+    float m_chromaEnergyHist[CHROMA_HISTORY] = {0.0f};
+    float m_chromaEnergySum = 0.0f;
+    uint8_t m_chromaHistIdx = 0;
+    float m_energyAvg = 0.0f;
+    float m_energyDelta = 0.0f;
+    uint8_t m_dominantBin = 0;
+    float m_energyAvgSmooth = 0.0f;
+    float m_energyDeltaSmooth = 0.0f;
+    float m_dominantBinSmooth = 0.0f;
     
     // Constants
     static constexpr float CHEVRON_COUNT = 6.0f;
@@ -44,4 +55,3 @@ private:
 } // namespace ieffect
 } // namespace effects
 } // namespace lightwaveos
-

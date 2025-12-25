@@ -9,7 +9,7 @@
  * - Uses ESP-IDF legacy driver (driver/i2s.h) for Arduino compatibility
  * - SPH0645 RIGHT slot on ESP32-S3 (SEL=GND wiring; WS inverted in legacy driver)
  * - DMA-based capture with 4 x 512 sample buffers
- * - 256-sample hop size for Tab5 parity (62.5 Hz frames)
+ * - 128-sample hop size for FAST LANE (125 Hz frames)
  * - I2S register fixes: MSB shift enabled, timing delay (BIT(9))
  * - Sample conversion: >>14 shift to extract 18-bit data (validate via DMA dbg)
  *
@@ -18,7 +18,7 @@
  * - captureHop() is single-threaded (called only from AudioActor)
  *
  * @author LightwaveOS Team
- * @version 2.1.0
+ * @version 2.2.0
  */
 
 #pragma once
@@ -72,15 +72,15 @@ struct CaptureStats {
  * @brief I2S audio capture wrapper for SPH0645 MEMS microphone
  *
  * Provides RAII-style initialization and hop-based audio capture.
- * Each hop is 256 samples at 16 kHz = 16 ms of audio.
+ * Each hop is HOP_FAST (128) samples at 16 kHz = 8 ms of audio.
  *
  * Usage:
  *   AudioCapture capture;
  *   if (capture.init()) {
- *       int16_t buffer[256];
+ *       int16_t buffer[HOP_FAST];
  *       while (running) {
  *           if (capture.captureHop(buffer) == CaptureResult::SUCCESS) {
- *               // Process 256 samples
+ *               // Process HOP_FAST samples
  *           }
  *       }
  *       capture.deinit();
@@ -141,11 +141,11 @@ public:
     /**
      * @brief Capture one hop of audio samples
      *
-     * Blocks until HOP_SIZE (256) samples are available from DMA.
-     * Performs 32-bit to 16-bit conversion (>>16 shift).
+     * Blocks until HOP_FAST (128) samples are available from DMA.
+     * Performs 32-bit to 16-bit conversion with SPH0645 format handling.
      *
      * @param buffer Output buffer for 16-bit signed samples
-     *               Must be at least HOP_SIZE (256) elements
+     *               Must be at least HOP_FAST (128) elements
      * @return CaptureResult indicating success or error type
      */
     CaptureResult captureHop(int16_t* buffer);

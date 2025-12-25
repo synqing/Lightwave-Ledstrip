@@ -302,12 +302,23 @@ public:
 
 #if FEATURE_AUDIO_SYNC
     /**
-     * @brief Set the audio SnapshotBuffer reference
+     * @brief Set the audio SnapshotBuffer references (FAST + BEAT lanes)
      *
      * Called by ActorSystem during initialization to connect the renderer
-     * to the AudioActor's ControlBusFrame buffer.
+     * to the AudioActor's snapshot buffers.
      *
-     * @param buffer Pointer to AudioActor's SnapshotBuffer (nullptr to disable)
+     * @param controlBus Pointer to ControlBusFrame buffer (FAST LANE - 125 Hz)
+     * @param beatObs Pointer to BeatObsFrame buffer (BEAT LANE - 62.5 Hz)
+     */
+    void setAudioBuffers(
+        const audio::SnapshotBuffer<audio::ControlBusFrame>* controlBus,
+        const audio::SnapshotBuffer<audio::BeatObsFrame>* beatObs) {
+        m_controlBusBuffer = controlBus;
+        m_beatObsBuffer = beatObs;
+    }
+
+    /**
+     * @brief Legacy setter for backward compatibility
      */
     void setAudioBuffer(const audio::SnapshotBuffer<audio::ControlBusFrame>* buffer) {
         m_controlBusBuffer = buffer;
@@ -557,13 +568,26 @@ private:
     uint64_t m_lastAudioMicros = 0;
 
     /**
-     * Pointer to AudioActor's SnapshotBuffer (set during init)
+     * Pointer to AudioActor's ControlBus SnapshotBuffer (FAST LANE - 125 Hz)
      *
      * This is a raw pointer because AudioActor owns the buffer, and
      * we just read from it via the lock-free ReadLatest() method.
      * Set to nullptr if AudioActor isn't running.
      */
     const audio::SnapshotBuffer<audio::ControlBusFrame>* m_controlBusBuffer = nullptr;
+
+    /**
+     * Pointer to AudioActor's BeatObs SnapshotBuffer (BEAT LANE - 62.5 Hz)
+     *
+     * Used to feed beat observations to MusicalGrid for tempo tracking.
+     */
+    const audio::SnapshotBuffer<audio::BeatObsFrame>* m_beatObsBuffer = nullptr;
+
+    /// Last BeatObsFrame read from AudioActor (by-value copy)
+    audio::BeatObsFrame m_lastBeatObs;
+
+    /// Sequence number from last BeatObs read (for change detection)
+    uint32_t m_lastBeatObsSeq = 0;
 #endif
 
     /**

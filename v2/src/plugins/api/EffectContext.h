@@ -143,7 +143,29 @@ struct AudioContext {
  * Provides the same API with sensible defaults so effects compile
  * without #if guards everywhere.
  */
+
+/// Stub ControlBusFrame for disabled audio sync
+struct StubControlBusFrame {
+    uint32_t hop_seq = 0;
+    float rms = 0.0f;
+    float flux = 0.0f;
+    float bands[8] = {0};
+    float chroma[12] = {0};
+    int16_t waveform[128] = {0};
+};
+
+/// Stub MusicalGridSnapshot for disabled audio sync
+struct StubMusicalGridSnapshot {
+    float beat_phase01 = 0.0f;
+    bool beat_tick = false;
+    bool downbeat_tick = false;
+    float bpm_smoothed = 120.0f;
+    float tempo_confidence = 0.0f;
+};
+
 struct AudioContext {
+    StubControlBusFrame controlBus;      ///< Stub DSP signals
+    StubMusicalGridSnapshot musicalGrid; ///< Stub beat/tempo
     bool available = false;
 
     float rms() const { return 0.0f; }
@@ -157,7 +179,7 @@ struct AudioContext {
     bool isOnDownbeat() const { return false; }
     float bpm() const { return 120.0f; }
     float tempoConfidence() const { return 0.0f; }
-    uint8_t waveformSize() const { return 32; }
+    uint8_t waveformSize() const { return 128; }
     int16_t getWaveformSample(uint8_t) const { return 0; }
     float getWaveformAmplitude(uint8_t) const { return 0.0f; }
     float getWaveformNormalized(uint8_t) const { return 0.0f; }

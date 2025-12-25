@@ -2,12 +2,21 @@
  * @file audio_config.h
  * @brief Audio pipeline configuration for LightwaveOS v2
  *
- * I2S configuration for SPH0645 MEMS microphone and Tab5-compatible
- * audio processing parameters.
+ * I2S configuration for SPH0645 MEMS microphone with TWO-RATE PIPELINE:
+ *
+ * FAST LANE (125 Hz / 8ms):
+ *   - HOP_FAST = 128 samples
+ *   - Quick texture updates (RMS, flux, bands)
+ *   - Punchy, low-latency visual micro-motion
+ *
+ * BEAT LANE (62.5 Hz / 16ms - Tab5 parity):
+ *   - HOP_BEAT = 256 samples
+ *   - WINDOW_BEAT = 512 samples (32ms for bass coherence)
+ *   - Stable tempo/beat tracking
  *
  * Critical constraints:
- * - Hop size = 256 (Tab5 parity for beat tracker)
- * - ESP-IDF 5.x new I2S driver (driver/i2s_std.h)
+ * - Beat lane must stay at 256-hop for Tab5 parity
+ * - ESP-IDF 5.x new I2S driver (driver/i2s_std.h) - currently using legacy for Arduino compat
  * - Emotiscope-proven sample conversion (see AudioCapture.cpp)
  */
 
@@ -39,25 +48,48 @@ constexpr gpio_num_t I2S_DOUT_PIN = GPIO_NUM_13;  // Data Out (mic output)
 constexpr gpio_num_t I2S_LRCL_PIN = GPIO_NUM_12;  // Left/Right Clock (Word Select)
 
 // ============================================================================
-// Audio Processing Parameters (Tab5 Parity)
+// Audio Processing Parameters (Two-Rate Pipeline)
 // ============================================================================
 
 /**
- * Tab5 beat tracker timing: 16kHz / FFT_N=512 / HOP_N=256 = 62.5 Hz frames
+ * Two-rate pipeline architecture:
  *
- * DO NOT change hop size without updating:
+ * FAST LANE: 128 samples @ 16kHz = 8ms = 125 Hz
+ *   - Texture features (RMS, flux, bands)
+ *   - Sliding 512-sample window for Goertzel (75% overlap)
+ *   - Fast, punchy visual response
+ *
+ * BEAT LANE: 256 samples @ 16kHz = 16ms = 62.5 Hz (Tab5 parity)
+ *   - Beat/tempo tracking with longer integration
+ *   - 512-sample analysis window
+ *   - Stable musical time grid
+ *
+ * DO NOT change beat hop size without updating:
  * - Filter constants in ControlBus
  * - Resonator Q values in beat tracker
  * - Attack/release envelope timing
  */
 constexpr uint16_t SAMPLE_RATE = 16000;       // 16 kHz (Tab5 standard)
-constexpr uint16_t HOP_SIZE = 256;            // 16ms hop @ 16kHz = 62.5 Hz frames
-constexpr uint16_t FFT_SIZE = 512;            // For beat tracker spectral analysis
+
+// Fast lane (texture) - 125 Hz updates
+constexpr uint16_t HOP_FAST = 128;            // 8ms hop @ 16kHz = 125 Hz frames
+constexpr float HOP_FAST_MS = (HOP_FAST * 1000.0f) / SAMPLE_RATE;  // 8ms
+constexpr float HOP_FAST_HZ = SAMPLE_RATE / static_cast<float>(HOP_FAST);  // 125 Hz
+
+// Beat lane (tempo/beat) - 62.5 Hz updates (Tab5 parity)
+constexpr uint16_t HOP_BEAT = 256;            // 16ms hop @ 16kHz = 62.5 Hz frames
+constexpr uint16_t WINDOW_BEAT = 512;         // 32ms window for beat analysis
+constexpr float HOP_BEAT_MS = (HOP_BEAT * 1000.0f) / SAMPLE_RATE;  // 16ms
+constexpr float HOP_BEAT_HZ = SAMPLE_RATE / static_cast<float>(HOP_BEAT);  // 62.5 Hz
+
+// Goertzel analysis window (sliding, updated every HOP_FAST)
 constexpr uint16_t GOERTZEL_WINDOW = 512;     // 32ms window for bass coherence
 
-// Derived timing constants
-constexpr float HOP_DURATION_MS = (HOP_SIZE * 1000.0f) / SAMPLE_RATE;  // 16ms
-constexpr float HOP_RATE_HZ = SAMPLE_RATE / static_cast<float>(HOP_SIZE);  // 62.5 Hz
+// Legacy aliases for backward compatibility
+constexpr uint16_t HOP_SIZE = HOP_FAST;       // Actor ticks at fast rate
+constexpr uint16_t FFT_SIZE = WINDOW_BEAT;    // For beat tracker spectral analysis
+constexpr float HOP_DURATION_MS = HOP_FAST_MS;
+constexpr float HOP_RATE_HZ = HOP_FAST_HZ;
 
 // ============================================================================
 // I2S DMA Configuration
@@ -127,17 +159,43 @@ constexpr uint16_t BAND_CENTER_FREQUENCIES[NUM_BANDS] = {
 constexpr float STALENESS_THRESHOLD_MS = 100.0f;  // 100ms = 6 frames @ 62.5 Hz
 
 // ============================================================================
+// Beat Tracker Configuration
+// ============================================================================
+
+/**
+ * Band-weighted spectral flux for transient detection.
+ * Bass bands (0-1) are weighted heavier to detect kick drums.
+ */
+constexpr float BASS_WEIGHT = 2.0f;      // Weight for bands 0-1 (sub-bass, bass)
+constexpr float MID_WEIGHT = 1.0f;       // Weight for bands 2-4 (low-mid to upper-mid)
+constexpr float HIGH_WEIGHT = 0.5f;      // Weight for bands 5-7 (presence to air)
+
+/**
+ * Adaptive threshold parameters.
+ * threshold = ema_mean + k * ema_std
+ */
+constexpr float ONSET_THRESHOLD_K = 1.5f;        // Std dev multiplier
+constexpr float ONSET_EMA_ALPHA = 0.1f;          // EMA smoothing (higher = more reactive)
+constexpr float RMS_FLOOR = 0.02f;               // Minimum RMS to consider (silence gate)
+
+/**
+ * BPM tracking range (prevents octave errors).
+ */
+constexpr float MIN_BPM = 60.0f;
+constexpr float MAX_BPM = 180.0f;
+
+// ============================================================================
 // Actor Configuration
 // ============================================================================
 
 /**
  * AudioActor runs on Core 0 at priority 4 (below Renderer at 5).
- * 16ms tick interval matches hop size for precise timing.
+ * 8ms tick interval matches fast hop size for texture updates.
  */
 constexpr uint8_t AUDIO_ACTOR_PRIORITY = 4;
 constexpr uint8_t AUDIO_ACTOR_CORE = 0;
-constexpr uint16_t AUDIO_ACTOR_STACK_WORDS = 8192;  // 32KB stack (Increased from 4096 for safety)
-constexpr uint16_t AUDIO_ACTOR_TICK_MS = 16;        // Match hop duration
+constexpr uint16_t AUDIO_ACTOR_STACK_WORDS = 8192;  // 32KB stack
+constexpr uint16_t AUDIO_ACTOR_TICK_MS = 8;         // Match HOP_FAST (125 Hz)
 
 } // namespace audio
 } // namespace lightwaveos

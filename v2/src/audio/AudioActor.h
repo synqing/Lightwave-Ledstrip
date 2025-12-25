@@ -1,27 +1,33 @@
 /**
  * @file AudioActor.h
- * @brief Actor for audio capture and processing pipeline
+ * @brief Actor for audio capture and two-rate processing pipeline
+ *
+ * TWO-RATE PIPELINE ARCHITECTURE:
  *
  * The AudioActor runs on Core 0 and handles:
  * - I2S audio capture from SPH0645 microphone
- * - 256-sample hop capture at 62.5 Hz (Tab5 parity)
- * - Future: Goertzel frequency analysis, beat detection
+ * - FAST LANE: 128-sample hops at 125 Hz (8ms) for texture
+ * - BEAT LANE: 256-sample accumulation at 62.5 Hz (16ms) for beat/tempo
+ *
+ * Data Products:
+ *   ControlBusFrame (125 Hz) - RMS, flux, bands, chroma for visual texture
+ *   BeatObsFrame (62.5 Hz)   - Beat pulses, BPM, confidence for musical time
  *
  * Architecture:
- *   AudioActor (Core 0, Priority 4)
+ *   AudioActor (Core 0, Priority 4, 8ms tick)
  *     |
- *     +-> AudioCapture (I2S DMA)
+ *     +-> AudioCapture (I2S DMA, 128 samples/tick)
  *     |
- *     +-> [Phase 2: AudioProcessor]
+ *     +-> GoertzelAnalyzer (sliding 512-window, updates every tick)
  *     |
- *     +-> [Phase 2: ControlBus output]
- *
- * The actor ticks every 16ms (matching hop duration) to capture
- * audio samples. Processing is deferred to Phase 2 implementation.
+ *     +-> ControlBus (smoothing) -> SnapshotBuffer<ControlBusFrame>
+ *     |
+ *     +-> BeatTracker (every 2 ticks) -> SnapshotBuffer<BeatObsFrame>
  *
  * Thread Safety:
  * - All capture/processing runs in the actor's task (Core 0)
- * - Results are published via MessageBus (lock-free)
+ * - Results are published via lock-free SnapshotBuffers
+ * - RendererActor reads snapshots BY VALUE (no cross-core references)
  *
  * @author LightwaveOS Team
  * @version 2.0.0
@@ -40,6 +46,7 @@
 #include "AudioCapture.h"
 #include "GoertzelAnalyzer.h"
 #include "ChromaAnalyzer.h"
+#include "BeatTracker.h"
 #include "contracts/AudioTime.h"
 #include "contracts/ControlBus.h"
 #include "contracts/SnapshotBuffer.h"
@@ -182,15 +189,28 @@ public:
     // ========================================================================
 
     /**
-     * @brief Get the ControlBus snapshot buffer for cross-core reads
+     * @brief Get the ControlBus snapshot buffer for cross-core reads (FAST LANE)
      *
      * RendererActor calls this to get a reference to the SnapshotBuffer,
      * then reads snapshots by value for thread-safe access.
+     * Updates at 125 Hz (every tick).
      *
      * @return Reference to the ControlBusFrame SnapshotBuffer
      */
     const SnapshotBuffer<ControlBusFrame>& getControlBusBuffer() const {
         return m_controlBusBuffer;
+    }
+
+    /**
+     * @brief Get the BeatObs snapshot buffer for cross-core reads (BEAT LANE)
+     *
+     * RendererActor calls this to get beat observations for MusicalGrid.
+     * Updates at 62.5 Hz (every 2nd tick).
+     *
+     * @return Reference to the BeatObsFrame SnapshotBuffer
+     */
+    const SnapshotBuffer<BeatObsFrame>& getBeatObsBuffer() const {
+        return m_beatObsBuffer;
     }
 
     /**
@@ -252,9 +272,9 @@ private:
     // Statistics
     AudioActorStats m_stats;
 
-    // Sample buffer for last captured hop
-    int16_t m_hopBuffer[HOP_SIZE];
-    int16_t m_hopBufferCentered[HOP_SIZE];
+    // Sample buffer for last captured hop (FAST LANE: 128 samples)
+    int16_t m_hopBuffer[HOP_FAST];
+    int16_t m_hopBufferCentered[HOP_FAST];
 
     // Flag for new hop availability (atomic for thread safety on dual-core ESP32)
     std::atomic<bool> m_newHopAvailable{false};
@@ -269,11 +289,24 @@ private:
     // Chromagram analyzer (12 pitch classes, 512-sample window)
     ChromaAnalyzer m_chromaAnalyzer;
 
+    // Beat tracker (band-weighted spectral flux + adaptive threshold)
+    BeatTracker m_beatTracker;
+
     // ControlBus state machine (smoothing, attack/release)
     ControlBus m_controlBus;
 
-    // Lock-free buffer for cross-core sharing with RendererActor
+    // Lock-free buffer for cross-core sharing with RendererActor (FAST LANE - 125 Hz)
     SnapshotBuffer<ControlBusFrame> m_controlBusBuffer;
+
+    // Lock-free buffer for beat observations (BEAT LANE - 62.5 Hz)
+    SnapshotBuffer<BeatObsFrame> m_beatObsBuffer;
+
+    // Beat lane ring buffer: accumulates 2x HOP_FAST = HOP_BEAT samples
+    int16_t m_beatRingBuffer[HOP_BEAT];
+    uint16_t m_beatRingWriteIndex = 0;
+
+    // Tick counter for beat lane cadence (process every 2nd tick)
+    uint8_t m_tickCounter = 0;
 
     // Monotonic sample counter (64-bit for no overflow)
     uint64_t m_sampleIndex = 0;
@@ -316,16 +349,25 @@ private:
     void captureHop();
 
     /**
-     * @brief Process captured hop through DSP pipeline (Phase 2)
+     * @brief Process captured hop through DSP pipeline (FAST LANE - 125 Hz)
      *
      * Called after successful capture. Performs:
      * 1. RMS calculation
      * 2. Spectral flux calculation
-     * 3. Goertzel band analysis (accumulated over 512 samples)
+     * 3. Goertzel band analysis (sliding 512-sample window)
      * 4. ControlBus update with smoothing
      * 5. SnapshotBuffer publish for renderer
      */
     void processHop();
+
+    /**
+     * @brief Process beat lane every 2nd tick (BEAT LANE - 62.5 Hz)
+     *
+     * Called after every 2nd hop (256 samples accumulated). Performs:
+     * 1. BeatTracker processing (band-weighted spectral flux)
+     * 2. BeatObsFrame publish for MusicalGrid
+     */
+    void processBeatLane(const AudioTime& now);
 
     /**
      * @brief Compute RMS energy of sample buffer

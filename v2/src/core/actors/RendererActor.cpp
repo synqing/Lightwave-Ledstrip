@@ -85,6 +85,7 @@ RendererActor::RendererActor()
     , m_lastControlBus()
     , m_lastMusicalGrid()
     , m_lastAudioTime()
+    , m_lastBeatObs()                // Beat observation frame
 #endif
 {
     // Initialize LED buffers to black
@@ -601,11 +602,11 @@ void RendererActor::renderFrame()
         ctx.zoneLength = 0;
 
         // =====================================================================
-        // Phase 2: Audio Context Integration
+        // Phase 2: Audio Context Integration (Two-Rate Pipeline)
         // =====================================================================
 #if FEATURE_AUDIO_SYNC
         if (m_controlBusBuffer != nullptr) {
-            // 1. Read latest ControlBusFrame BY VALUE (thread-safe)
+            // 1. Read latest ControlBusFrame BY VALUE (FAST LANE - 125 Hz)
             uint32_t seq = m_controlBusBuffer->ReadLatest(m_lastControlBus);
 
             // 2. Extrapolate AudioTime from audio snapshot
@@ -618,7 +619,7 @@ void RendererActor::renderFrame()
             }
 
             // 3. Build extrapolated render-time AudioTime
-            //    Render runs at 120 FPS, audio at 62.5 Hz - extrapolate samples
+            //    Render runs at 120 FPS, audio at 125 Hz - extrapolate samples
             uint64_t dt_us = now_us - m_lastAudioMicros;
             uint64_t extrapolated_samples = m_lastAudioTime.sample_index +
                 (dt_us * m_lastAudioTime.sample_rate_hz / 1000000);
@@ -628,16 +629,43 @@ void RendererActor::renderFrame()
                 now_us
             );
 
-            // 4. Tick MusicalGrid at 120 FPS (PLL freewheel pattern)
+            // 4. Read BeatObsFrame and feed to MusicalGrid (BEAT LANE - 62.5 Hz)
+            if (m_beatObsBuffer != nullptr) {
+                uint32_t beatSeq = m_beatObsBuffer->ReadLatest(m_lastBeatObs);
+                if (beatSeq != m_lastBeatObsSeq) {
+                    // New beat observation arrived - feed to MusicalGrid
+                    m_lastBeatObsSeq = beatSeq;
+
+                    // Feed tempo estimate if valid
+                    if (m_lastBeatObs.tempo_valid) {
+                        m_musicalGrid.OnTempoEstimate(
+                            m_lastBeatObs.t_obs,
+                            m_lastBeatObs.bpm_est,
+                            m_lastBeatObs.tempo_conf
+                        );
+                    }
+
+                    // Feed beat observation if pulse detected
+                    if (m_lastBeatObs.beat_pulse) {
+                        m_musicalGrid.OnBeatObservation(
+                            m_lastBeatObs.t_obs,
+                            m_lastBeatObs.beat_strength,
+                            m_lastBeatObs.downbeat_pulse
+                        );
+                    }
+                }
+            }
+
+            // 5. Tick MusicalGrid at 120 FPS (PLL freewheel pattern)
             //    This keeps beat phase smooth even if audio stalls
             m_musicalGrid.Tick(render_now);
             m_musicalGrid.ReadLatest(m_lastMusicalGrid);
 
-            // 5. Compute staleness for ctx.audio.available
+            // 6. Compute staleness for ctx.audio.available
             float age_s = audio::AudioTime_SecondsBetween(m_lastControlBus.t, render_now);
             bool is_fresh = (age_s >= 0.0f && age_s < 0.10f);  // Fresh if < 100ms old
 
-            // 6. Populate AudioContext (by-value copies for thread safety)
+            // 7. Populate AudioContext (by-value copies for thread safety)
             ctx.audio.controlBus = m_lastControlBus;
             ctx.audio.musicalGrid = m_lastMusicalGrid;
             ctx.audio.available = is_fresh;

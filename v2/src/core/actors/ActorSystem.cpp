@@ -182,11 +182,14 @@ bool ActorSystem::start()
         // Audio failure is non-fatal - continue without audio
         ESP_LOGW(TAG, "Continuing without audio sync");
     } else if (m_audio) {
-        // Wire up audio buffer to renderer for cross-core access
+        // Wire up audio buffers to renderer for cross-core access (two-rate pipeline)
         if (m_renderer) {
-            m_renderer->setAudioBuffer(&m_audio->getControlBusBuffer());
+            m_renderer->setAudioBuffers(
+                &m_audio->getControlBusBuffer(),  // FAST LANE - 125 Hz
+                &m_audio->getBeatObsBuffer()      // BEAT LANE - 62.5 Hz
+            );
 #ifndef NATIVE_BUILD
-            ESP_LOGI(TAG, "Audio integration enabled - RendererActor connected to AudioActor");
+            ESP_LOGI(TAG, "Audio integration enabled - RendererActor connected to AudioActor (fast+beat lanes)");
 #endif
         }
     }

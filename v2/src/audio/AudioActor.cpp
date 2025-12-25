@@ -1,12 +1,15 @@
 /**
  * @file AudioActor.cpp
- * @brief Actor implementation for audio capture and processing
+ * @brief Actor implementation for audio capture and two-rate processing
  *
- * Phase 1 Implementation:
- * - Initializes AudioCapture on Core 0
- * - Captures 256-sample hops every 16ms tick
- * - Tracks capture statistics
- * - Does NOT process audio (deferred to Phase 2)
+ * TWO-RATE PIPELINE:
+ * - Tick interval: 8ms (125 Hz)
+ * - FAST LANE: Every tick captures 128 samples, publishes ControlBusFrame
+ * - BEAT LANE: Every 2nd tick runs BeatTracker, publishes BeatObsFrame
+ *
+ * This provides:
+ * - 125 Hz texture updates for responsive visuals
+ * - 62.5 Hz beat observations for stable musical time (Tab5 parity)
  *
  * @author LightwaveOS Team
  * @version 2.0.0
@@ -47,6 +50,8 @@ AudioActor::AudioActor()
 {
     m_stats.reset();
     memset(m_hopBuffer, 0, sizeof(m_hopBuffer));
+    memset(m_hopBufferCentered, 0, sizeof(m_hopBufferCentered));
+    memset(m_beatRingBuffer, 0, sizeof(m_beatRingBuffer));
 }
 
 AudioActor::~AudioActor()
@@ -124,8 +129,8 @@ void AudioActor::onStart()
     m_state = AudioActorState::RUNNING;
     m_stats.state = m_state;
 
-    ESP_LOGI(TAG, "AudioActor started (tick=%dms, hop=%d, rate=%.1fHz)",
-             AUDIO_ACTOR_TICK_MS, HOP_SIZE, HOP_RATE_HZ);
+    ESP_LOGI(TAG, "AudioActor started: tick=%dms, fast_hop=%d@%.1fHz, beat_hop=%d@%.1fHz",
+             AUDIO_ACTOR_TICK_MS, HOP_FAST, HOP_FAST_HZ, HOP_BEAT, HOP_BEAT_HZ);
 }
 
 void AudioActor::onMessage(const actors::Message& msg)
@@ -164,24 +169,25 @@ void AudioActor::onTick()
     }
 
     m_stats.tickCount++;
+    m_tickCounter++;
 
     // Record tick start time
     uint64_t tickStart = esp_timer_get_time();
 
-    // Capture one hop of audio
+    // Capture one hop of audio (128 samples @ 8ms tick)
     captureHop();
 
     // Record tick time
     m_stats.lastTickTimeUs = esp_timer_get_time() - tickStart;
 
-    // Log periodically (every 620 ticks = ~10 seconds) - just enough to confirm alive
-    if ((m_stats.tickCount % 620) == 0) {
+    // Log periodically (every 1250 ticks = ~10 seconds @ 125 Hz)
+    if ((m_stats.tickCount % 1250) == 0) {
         const CaptureStats& cstats = m_capture.getStats();
         const ControlBusFrame& frame = m_controlBus.GetFrame();
-        ESP_LOGI(TAG, "Audio alive: cap=%lu pk=%d pkC=%d rms=%.4f->%.3f pre=%.4f g=%.2f dc=%.1f clip=%u flux=%.3f min=%d max=%d mean=%.1f",
+        ESP_LOGI(TAG, "Audio alive: cap=%lu pk=%d pkC=%d rms=%.4f->%.3f pre=%.4f g=%.2f dc=%.1f clip=%u flux=%.3f bpm=%.1f beat=%d",
                  cstats.hopsCapured, cstats.peakSample, m_lastPeakCentered, m_lastRmsRaw, frame.rms,
                  m_lastRmsPreGain, m_lastAgcGain, m_lastDcEstimate, (unsigned)m_lastClipCount, m_lastFluxMapped,
-                 m_lastMinSample, m_lastMaxSample, m_lastMeanSample);
+                 m_beatTracker.getBPM(), m_beatTracker.isBeat() ? 1 : 0);
     }
 }
 
@@ -251,26 +257,26 @@ void AudioActor::processHop()
     uint64_t now_us = esp_timer_get_time();
     AudioTime now(m_sampleIndex, SAMPLE_RATE, now_us);
 
-    // Update monotonic counters
-    m_sampleIndex += HOP_SIZE;
+    // Update monotonic counters (FAST LANE: 128 samples per tick)
+    m_sampleIndex += HOP_FAST;
     m_hopCount++;
 
     int32_t minRaw = 32767;
     int32_t maxRaw = -32768;
     int64_t sumRaw = 0;
-    for (size_t i = 0; i < HOP_SIZE; ++i) {
+    for (size_t i = 0; i < HOP_FAST; ++i) {
         int32_t s = m_hopBuffer[i];
         if (s < minRaw) minRaw = s;
         if (s > maxRaw) maxRaw = s;
         sumRaw += s;
     }
-    float meanRaw = (float)sumRaw / (float)HOP_SIZE;
+    float meanRaw = (float)sumRaw / (float)HOP_FAST;
     m_lastMeanSample = meanRaw;
 
     constexpr float dcAlpha = 0.001f;
     // TARGET RMS: 0.25 (-12dB) is a strong signal for the visualizer.
     // Previous value 0.010 was way too low (-40dB).
-    constexpr float agcTargetRms = 0.25f; 
+    constexpr float agcTargetRms = 0.25f;
     constexpr float agcSilenceFloor = 0.00050f;
     constexpr float agcGateRange = 0.00050f;
     constexpr float agcMinGain = 1.0f;    // Don't attenuate below unity
@@ -284,7 +290,7 @@ void AudioActor::processHop()
     uint16_t clipCount = 0;
 
     int64_t sumSqPre = 0;
-    for (size_t i = 0; i < HOP_SIZE; ++i) {
+    for (size_t i = 0; i < HOP_FAST; ++i) {
         float x = (float)m_hopBuffer[i];
         m_dcEstimate += dcAlpha * (x - m_dcEstimate);
         float dcRemoved = x - m_dcEstimate;
@@ -314,8 +320,8 @@ void AudioActor::processHop()
     m_lastClipCount = clipCount;
 
     float rmsPre = 0.0f;
-    if (HOP_SIZE > 0) {
-        float rmsPreAbs = std::sqrt(static_cast<float>(sumSqPre) / (float)HOP_SIZE);
+    if (HOP_FAST > 0) {
+        float rmsPreAbs = std::sqrt(static_cast<float>(sumSqPre) / (float)HOP_FAST);
         rmsPre = std::min(1.0f, rmsPreAbs / 32768.0f);
     }
     m_lastRmsPreGain = rmsPre;
@@ -336,7 +342,7 @@ void AudioActor::processHop()
     m_lastAgcGain = m_agcGain;
 
     float activity = clamp01((rmsPre - agcSilenceFloor) / agcGateRange);
-    float rmsRaw = computeRMS(m_hopBufferCentered, HOP_SIZE);
+    float rmsRaw = computeRMS(m_hopBufferCentered, HOP_FAST);
     float rmsMapped = mapLevelDb(rmsRaw, -65.0f, -12.0f); // Ceiling -12dB matches target
     rmsMapped *= activity;
     m_lastRmsRaw = rmsRaw;
@@ -347,44 +353,39 @@ void AudioActor::processHop()
     m_prevRMS = rmsMapped;
     m_lastFluxMapped = fluxMapped;
 
-    // 4. Accumulate samples for Goertzel (512-sample window = 2 hops)
-    m_analyzer.accumulate(m_hopBufferCentered, HOP_SIZE);
+    // 4. Accumulate samples for Goertzel (512-sample window, 128-sample hops)
+    m_analyzer.accumulate(m_hopBufferCentered, HOP_FAST);
 
-    // 4.5. Accumulate samples for Chromagram (512-sample window = 2 hops)
-    m_chromaAnalyzer.accumulate(m_hopBufferCentered, HOP_SIZE);
+    // 4.5. Accumulate samples for Chromagram (512-sample window, 128-sample hops)
+    m_chromaAnalyzer.accumulate(m_hopBufferCentered, HOP_FAST);
+
+    // 4.6. Accumulate samples into beat ring buffer for BEAT LANE
+    for (size_t i = 0; i < HOP_FAST; ++i) {
+        m_beatRingBuffer[m_beatRingWriteIndex] = m_hopBufferCentered[i];
+        m_beatRingWriteIndex = (m_beatRingWriteIndex + 1) % HOP_BEAT;
+    }
 
     // 5. Build ControlBusRawInput
     ControlBusRawInput raw;
     raw.rms = rmsMapped;
     raw.flux = fluxMapped;
 
-    // 5.5. Downsample waveform: 256 samples -> 128 points (2 samples per point)
-    // Use peak (abs max) of each pair to preserve transients (matches Sensory Bridge style)
+    // 5.5. Waveform: copy HOP_FAST samples directly (now 128 samples = WAVEFORM_N)
+    // Since HOP_FAST == CONTROLBUS_WAVEFORM_N (128), no downsampling needed
     constexpr uint8_t WAVEFORM_POINTS = audio::CONTROLBUS_WAVEFORM_N;
-    constexpr uint8_t SAMPLES_PER_POINT = HOP_SIZE / WAVEFORM_POINTS;  // 256 / 128 = 2
+    static_assert(HOP_FAST == WAVEFORM_POINTS, "HOP_FAST must equal WAVEFORM_N for 1:1 mapping");
     for (uint8_t i = 0; i < WAVEFORM_POINTS; ++i) {
-        int16_t peak = 0;
-        int16_t peakSample = 0;
-        uint16_t startIdx = i * SAMPLES_PER_POINT;
-        for (uint8_t j = 0; j < SAMPLES_PER_POINT && (startIdx + j) < HOP_SIZE; ++j) {
-            int16_t sample = m_hopBufferCentered[startIdx + j];
-            int16_t absSample = (sample < 0) ? -sample : sample;
-            if (absSample > peak) {
-                peak = absSample;
-                peakSample = sample;  // Preserve sign
-            }
-        }
         if (activity < 1.0f) {
-            raw.waveform[i] = static_cast<int16_t>(lroundf(peakSample * activity));
+            raw.waveform[i] = static_cast<int16_t>(lroundf(m_hopBufferCentered[i] * activity));
         } else {
-            raw.waveform[i] = peakSample;
+            raw.waveform[i] = m_hopBufferCentered[i];
         }
     }
 
-    // 6. Get band energies when Goertzel window is full (every 2 hops)
+    // 6. Get band energies from sliding Goertzel window (updates every tick now)
     float bandsRaw[NUM_BANDS] = {0};
     if (m_analyzer.analyze(bandsRaw)) {
-        // Fresh band data available - Goertzel completed a 512-sample window
+        // Fresh band data available - sliding window always has data after startup
         for (int i = 0; i < NUM_BANDS; ++i) {
             float band = mapLevelDb(bandsRaw[i], -65.0f, -12.0f);
             m_lastBands[i] = band;
@@ -408,14 +409,13 @@ void AudioActor::processHop()
 
         // Persisted bands updated above (unscaled)
     } else {
-        // No new analysis this hop - reuse last known bands
-        // This prevents "picket fence" dropouts where bands would be 0 every other hop
+        // Window not ready yet (startup) - reuse last known bands
         for (int i = 0; i < NUM_BANDS; ++i) {
             raw.bands[i] = m_lastBands[i] * activity;
         }
     }
 
-    // 6.5. Get chromagram when ChromaAnalyzer window is full (every 2 hops)
+    // 6.5. Get chromagram from sliding ChromaAnalyzer window
     float chromaRaw[12] = {0};
     static float lastChroma[12] = {0};
     if (m_chromaAnalyzer.analyze(chromaRaw)) {
@@ -426,7 +426,7 @@ void AudioActor::processHop()
             raw.chroma[i] = chroma * activity;
         }
     } else {
-        // No new chroma this hop - reuse last known chroma
+        // No chroma yet (startup) - reuse last known chroma
         for (int i = 0; i < 12; ++i) {
             raw.chroma[i] = lastChroma[i] * activity;
         }
@@ -435,8 +435,13 @@ void AudioActor::processHop()
     // 7. Update ControlBus with attack/release smoothing
     m_controlBus.UpdateFromHop(now, raw);
 
-    // 8. Publish frame to renderer via lock-free SnapshotBuffer
+    // 8. Publish frame to renderer via lock-free SnapshotBuffer (FAST LANE - 125 Hz)
     m_controlBusBuffer.Publish(m_controlBus.GetFrame());
+
+    // 9. BEAT LANE: Process every 2nd tick (62.5 Hz)
+    if ((m_tickCounter % 2) == 0) {
+        processBeatLane(now);
+    }
 }
 
 float AudioActor::computeRMS(const int16_t* samples, size_t count)
@@ -486,6 +491,39 @@ void AudioActor::handleCaptureError(CaptureResult result)
 
     // If too many consecutive failures, consider recovery
     // For now, just log - Phase 2 may add auto-recovery logic
+}
+
+// ============================================================================
+// Beat Lane Processing (62.5 Hz)
+// ============================================================================
+
+void AudioActor::processBeatLane(const AudioTime& now)
+{
+    // Get current ControlBusFrame for band energies and RMS
+    const ControlBusFrame& frame = m_controlBus.GetFrame();
+
+    // Run beat tracker with current band energies and RMS
+    m_beatTracker.process(now, frame.bands, frame.rms);
+
+    // Build BeatObsFrame for MusicalGrid
+    BeatObsFrame beatObs;
+    beatObs.t_obs = now;
+    beatObs.beat_pulse = m_beatTracker.isBeat();
+    beatObs.beat_strength = m_beatTracker.getBeatStrength();
+    beatObs.downbeat_pulse = false;  // TODO: downbeat detection in future
+    beatObs.tempo_valid = m_beatTracker.hasValidTempo();
+    beatObs.bpm_est = m_beatTracker.getBPM();
+    beatObs.tempo_conf = m_beatTracker.getConfidence();
+    beatObs.weighted_flux = m_beatTracker.getWeightedFlux();
+
+    // Publish to renderer via lock-free SnapshotBuffer (BEAT LANE - 62.5 Hz)
+    m_beatObsBuffer.Publish(beatObs);
+
+    // Log beat events (throttled to prevent spam)
+    if (beatObs.beat_pulse) {
+        ESP_LOGD(TAG, "BEAT! bpm=%.1f conf=%.2f strength=%.2f flux=%.3f",
+                 beatObs.bpm_est, beatObs.tempo_conf, beatObs.beat_strength, beatObs.weighted_flux);
+    }
 }
 
 } // namespace audio

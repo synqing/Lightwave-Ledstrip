@@ -341,6 +341,22 @@ public:
 
     audio::AudioContractTuning getAudioContractTuning() const;
     void setAudioContractTuning(const audio::AudioContractTuning& tuning);
+
+    /**
+     * @brief Get the cached ControlBusFrame for audio streaming
+     *
+     * Returns a const reference to the last ControlBusFrame read from AudioActor.
+     * Safe to call from WebServer thread - returns a copy stored by value.
+     */
+    const audio::ControlBusFrame& getCachedAudioFrame() const { return m_lastControlBus; }
+
+    /**
+     * @brief Get the cached MusicalGridSnapshot for beat event streaming
+     *
+     * Returns a const reference to the last MusicalGridSnapshot.
+     * Safe to call from WebServer thread - returns a copy stored by value.
+     */
+    const audio::MusicalGridSnapshot& getLastMusicalGrid() const { return m_lastMusicalGrid; }
 #endif
 
     // ========================================================================

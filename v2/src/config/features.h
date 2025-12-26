@@ -75,6 +75,16 @@
 #define FEATURE_AUDIO_SYNC 0
 #endif
 
+// Audio Overlap-Add sliding window for bands/chroma
+#ifndef FEATURE_AUDIO_OA
+#define FEATURE_AUDIO_OA 1
+#endif
+
+// Optional 75% overlap (128-sample advance within 256-sample hop)
+#ifndef FEATURE_AUDIO_OA_75
+#define FEATURE_AUDIO_OA_75 0
+#endif
+
 // OTA Updates
 #ifndef FEATURE_OTA_UPDATE
 #define FEATURE_OTA_UPDATE 0

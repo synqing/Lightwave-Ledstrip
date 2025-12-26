@@ -40,6 +40,10 @@ namespace ErrorCodes {
     constexpr const char* CONNECTION_LIMIT = "CONNECTION_LIMIT";
     constexpr const char* FEATURE_DISABLED = "FEATURE_DISABLED";
     constexpr const char* SYSTEM_NOT_READY = "SYSTEM_NOT_READY";
+    constexpr const char* AUDIO_UNAVAILABLE = "AUDIO_UNAVAILABLE";
+    constexpr const char* INVALID_ACTION = "INVALID_ACTION";
+    constexpr const char* STORAGE_FULL = "STORAGE_FULL";
+    constexpr const char* INVALID_PARAMETER = "INVALID_PARAMETER";
 }
 
 // HTTP Status Codes
@@ -55,6 +59,7 @@ namespace HttpStatus {
     constexpr uint16_t TOO_MANY_REQUESTS = 429;
     constexpr uint16_t INTERNAL_ERROR = 500;
     constexpr uint16_t SERVICE_UNAVAILABLE = 503;
+    constexpr uint16_t INSUFFICIENT_STORAGE = 507;
 }
 
 // ============================================================================

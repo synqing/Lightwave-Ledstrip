@@ -263,8 +263,25 @@ bool ActorSystem::setEffect(uint8_t effectId)
         return false;
     }
 
+    // Queue backpressure: reject if queue > 90% full
+    uint8_t utilization = m_renderer->getQueueUtilization();
+    if (utilization >= 90) {
+#ifndef NATIVE_BUILD
+        ESP_LOGW(TAG, "setEffect(%d) rejected - queue saturated (utilization: %d%%)",
+                 effectId, utilization);
+#endif
+        return false;
+    }
+
     Message msg(MessageType::SET_EFFECT, effectId);
-    return m_renderer->send(msg, pdMS_TO_TICKS(10));
+    bool success = m_renderer->send(msg, pdMS_TO_TICKS(10));
+    if (!success) {
+#ifndef NATIVE_BUILD
+        ESP_LOGW(TAG, "setEffect(%d) failed - queue may be full (utilization: %d%%)",
+                 effectId, m_renderer->getQueueUtilization());
+#endif
+    }
+    return success;
 }
 
 bool ActorSystem::setBrightness(uint8_t brightness)
@@ -273,8 +290,25 @@ bool ActorSystem::setBrightness(uint8_t brightness)
         return false;
     }
 
+    // Queue backpressure: reject if queue > 90% full
+    uint8_t utilization = m_renderer->getQueueUtilization();
+    if (utilization >= 90) {
+#ifndef NATIVE_BUILD
+        ESP_LOGW(TAG, "setBrightness(%d) rejected - queue saturated (utilization: %d%%)",
+                 brightness, utilization);
+#endif
+        return false;
+    }
+
     Message msg(MessageType::SET_BRIGHTNESS, brightness);
-    return m_renderer->send(msg, pdMS_TO_TICKS(10));
+    bool success = m_renderer->send(msg, pdMS_TO_TICKS(10));
+    if (!success) {
+#ifndef NATIVE_BUILD
+        ESP_LOGW(TAG, "setBrightness(%d) failed - queue may be full (utilization: %d%%)",
+                 brightness, m_renderer->getQueueUtilization());
+#endif
+    }
+    return success;
 }
 
 bool ActorSystem::setSpeed(uint8_t speed)
@@ -283,8 +317,25 @@ bool ActorSystem::setSpeed(uint8_t speed)
         return false;
     }
 
+    // Queue backpressure: reject if queue > 90% full
+    uint8_t utilization = m_renderer->getQueueUtilization();
+    if (utilization >= 90) {
+#ifndef NATIVE_BUILD
+        ESP_LOGW(TAG, "setSpeed(%d) rejected - queue saturated (utilization: %d%%)",
+                 speed, utilization);
+#endif
+        return false;
+    }
+
     Message msg(MessageType::SET_SPEED, speed);
-    return m_renderer->send(msg, pdMS_TO_TICKS(10));
+    bool success = m_renderer->send(msg, pdMS_TO_TICKS(10));
+    if (!success) {
+#ifndef NATIVE_BUILD
+        ESP_LOGW(TAG, "setSpeed(%d) failed - queue may be full (utilization: %d%%)",
+                 speed, m_renderer->getQueueUtilization());
+#endif
+    }
+    return success;
 }
 
 bool ActorSystem::setPalette(uint8_t paletteIndex)

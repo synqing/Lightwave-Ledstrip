@@ -322,6 +322,12 @@ public:
      */
     UBaseType_t getQueueLength() const;
 
+    /**
+     * @brief Get queue utilization percentage (0-100)
+     * @return Utilization percentage, or 0 if queue is null
+     */
+    uint8_t getQueueUtilization() const;
+
     // ========================================================================
     // Diagnostics
     // ========================================================================

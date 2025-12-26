@@ -168,7 +168,31 @@ bool Actor::send(const Message& msg, TickType_t timeout)
         return false;
     }
 
+    // Check queue utilization before sending
+    UBaseType_t currentLength = uxQueueMessagesWaiting(m_queue);
+    UBaseType_t queueCapacity = m_config.queueSize;
+    
+    // Warn if queue is > 80% full
+    if (queueCapacity > 0) {
+        uint8_t utilizationPercent = (currentLength * 100) / queueCapacity;
+        if (utilizationPercent >= 80) {
+#ifndef NATIVE_BUILD
+            ESP_LOGW(TAG, "[%s] Queue utilization high: %d%% (%d/%d messages)",
+                     m_config.name, utilizationPercent, currentLength, queueCapacity);
+#endif
+        }
+    }
+
     BaseType_t result = xQueueSend(m_queue, &msg, timeout);
+    
+    // Log failure if queue was full
+    if (result != pdTRUE) {
+#ifndef NATIVE_BUILD
+        ESP_LOGW(TAG, "[%s] Failed to send message (queue full or timeout): type=0x%02X, queue=%d/%d",
+                 m_config.name, static_cast<uint8_t>(msg.type), currentLength, queueCapacity);
+#endif
+    }
+    
     return (result == pdTRUE);
 }
 
@@ -195,6 +219,15 @@ UBaseType_t Actor::getQueueLength() const
         return 0;
     }
     return uxQueueMessagesWaiting(m_queue);
+}
+
+uint8_t Actor::getQueueUtilization() const
+{
+    if (m_queue == nullptr || m_config.queueSize == 0) {
+        return 0;
+    }
+    UBaseType_t currentLength = uxQueueMessagesWaiting(m_queue);
+    return (currentLength * 100) / m_config.queueSize;
 }
 
 // ============================================================================

@@ -97,6 +97,16 @@ bool GoertzelAnalyzer::analyze(float* bandsOut) {
     return true;
 }
 
+bool GoertzelAnalyzer::analyzeWindow(const int16_t* window, size_t N, float* bandsOut) {
+    if (!window || !bandsOut) return false;
+    if (N != WINDOW_SIZE) return false;
+    for (uint8_t i = 0; i < NUM_BANDS; ++i) {
+        float rawMagnitude = computeGoertzel(window, WINDOW_SIZE, m_coefficients[i]);
+        bandsOut[i] = std::min(1.0f, rawMagnitude * m_normFactors[i]);
+    }
+    return true;
+}
+
 void GoertzelAnalyzer::reset() {
     m_accumIndex = 0;
     m_windowFull = false;

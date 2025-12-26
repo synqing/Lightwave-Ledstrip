@@ -296,6 +296,8 @@ private:
     // Sample buffer for last captured hop
     int16_t m_hopBuffer[HOP_SIZE];
     int16_t m_hopBufferCentered[HOP_SIZE];
+    int16_t m_prevHopCentered[HOP_SIZE];
+    bool m_prevHopValid = false;
 
     // Flag for new hop availability (atomic for thread safety on dual-core ESP32)
     std::atomic<bool> m_newHopAvailable{false};

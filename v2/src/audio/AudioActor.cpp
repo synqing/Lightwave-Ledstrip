@@ -447,11 +447,21 @@ void AudioActor::processHop()
         m_dspStateSeq.store(v + 2U, std::memory_order_release);
     }
 
-    // 4. Accumulate samples for Goertzel (512-sample window = 2 hops)
+    // 4. Analysis window preparation (Overlap-Add)
+    // Build 512-sample window from previous + current hop for per-hop analysis
+    int16_t window512[GoertzelAnalyzer::WINDOW_SIZE];
+    bool oaReady = false;
+#if FEATURE_AUDIO_OA
+    if (m_prevHopValid) {
+        std::memcpy(window512, m_prevHopCentered, HOP_SIZE * sizeof(int16_t));
+        std::memcpy(window512 + HOP_SIZE, m_hopBufferCentered, HOP_SIZE * sizeof(int16_t));
+        oaReady = true;
+    }
+#else
+    // Fallback to original accumulation for 32ms cadence
     m_analyzer.accumulate(m_hopBufferCentered, HOP_SIZE);
-
-    // 4.5. Accumulate samples for Chromagram (512-sample window = 2 hops)
     m_chromaAnalyzer.accumulate(m_hopBufferCentered, HOP_SIZE);
+#endif
 
     // 5. Build ControlBusRawInput
     ControlBusRawInput raw;
@@ -481,9 +491,14 @@ void AudioActor::processHop()
         }
     }
 
-    // 6. Get band energies when Goertzel window is full (every 2 hops)
+    // 6. Get band energies
     float bandsRaw[NUM_BANDS] = {0};
+#if FEATURE_AUDIO_OA
+    if (oaReady ? m_analyzer.analyzeWindow(window512, GoertzelAnalyzer::WINDOW_SIZE, bandsRaw)
+                : m_analyzer.analyze(bandsRaw)) {
+#else
     if (m_analyzer.analyze(bandsRaw)) {
+#endif
         // Fresh band data available - Goertzel completed a 512-sample window
         for (int i = 0; i < NUM_BANDS; ++i) {
             float band = mapLevelDb(bandsRaw[i], tuning.bandDbFloor, tuning.bandDbCeil);
@@ -515,10 +530,15 @@ void AudioActor::processHop()
         }
     }
 
-    // 6.5. Get chromagram when ChromaAnalyzer window is full (every 2 hops)
+    // 6.5. Get chromagram
     float chromaRaw[12] = {0};
     static float lastChroma[12] = {0};
+#if FEATURE_AUDIO_OA
+    if (oaReady ? m_chromaAnalyzer.analyzeWindow(window512, ChromaAnalyzer::WINDOW_SIZE, chromaRaw)
+                : m_chromaAnalyzer.analyze(chromaRaw)) {
+#else
     if (m_chromaAnalyzer.analyze(chromaRaw)) {
+#endif
         // Fresh chroma data available
         for (int i = 0; i < 12; ++i) {
             float chroma = mapLevelDb(chromaRaw[i], tuning.chromaDbFloor, tuning.chromaDbCeil);
@@ -531,6 +551,12 @@ void AudioActor::processHop()
             raw.chroma[i] = lastChroma[i] * activity;
         }
     }
+
+#if FEATURE_AUDIO_OA
+    // Update previous hop buffer for next window
+    std::memcpy(m_prevHopCentered, m_hopBufferCentered, HOP_SIZE * sizeof(int16_t));
+    m_prevHopValid = true;
+#endif
 
     // 7. Update ControlBus with attack/release smoothing
     m_controlBus.setSmoothing(tuning.controlBusAlphaFast, tuning.controlBusAlphaSlow);

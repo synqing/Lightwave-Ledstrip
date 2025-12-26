@@ -59,6 +59,15 @@ public:
     bool analyze(float* chromaOut);
 
     /**
+     * @brief Compute chromagram on an explicit window buffer
+     * @param window Pointer to WINDOW_SIZE samples (contiguous)
+     * @param N Number of samples (must be WINDOW_SIZE)
+     * @param chromaOut Output array of 12 floats [0,1]
+     * @return true if computation succeeded, false otherwise
+     */
+    bool analyzeWindow(const int16_t* window, size_t N, float* chromaOut);
+
+    /**
      * @brief Reset the accumulator to start fresh
      */
     void reset();
@@ -112,4 +121,3 @@ private:
 } // namespace lightwaveos
 
 #endif // FEATURE_AUDIO_SYNC
-

@@ -56,6 +56,15 @@ public:
     bool analyze(float* bandsOut);
 
     /**
+     * @brief Compute magnitudes on an explicit window buffer
+     * @param window Pointer to WINDOW_SIZE samples (contiguous)
+     * @param N Number of samples (must be WINDOW_SIZE)
+     * @param bandsOut Output array of 8 floats [0,1]
+     * @return true if computation succeeded, false otherwise
+     */
+    bool analyzeWindow(const int16_t* window, size_t N, float* bandsOut);
+
+    /**
      * @brief Reset the accumulator to start fresh
      */
     void reset();

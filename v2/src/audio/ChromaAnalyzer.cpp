@@ -115,6 +115,24 @@ bool ChromaAnalyzer::analyze(float* chromaOut) {
     return true;
 }
 
+bool ChromaAnalyzer::analyzeWindow(const int16_t* window, size_t N, float* chromaOut) {
+    if (!window || !chromaOut) return false;
+    if (N != WINDOW_SIZE) return false;
+    float chromaRaw[NUM_CHROMA] = {0.0f};
+    for (uint8_t octave = 0; octave < NUM_OCTAVES; ++octave) {
+        for (uint8_t note = 0; note < NUM_CHROMA; ++note) {
+            uint8_t noteIndex = octave * NUM_CHROMA + note;
+            float rawMagnitude = computeGoertzel(window, WINDOW_SIZE, m_coefficients[noteIndex]);
+            float normalized = std::min(1.0f, rawMagnitude * m_normFactors[noteIndex]);
+            chromaRaw[note] += normalized * 0.5f;
+        }
+    }
+    for (uint8_t i = 0; i < NUM_CHROMA; ++i) {
+        chromaOut[i] = std::min(1.0f, chromaRaw[i]);
+    }
+    return true;
+}
+
 void ChromaAnalyzer::reset() {
     m_accumIndex = 0;
     m_windowFull = false;
@@ -125,4 +143,3 @@ void ChromaAnalyzer::reset() {
 } // namespace lightwaveos
 
 #endif // FEATURE_AUDIO_SYNC
-

@@ -34,6 +34,7 @@
 #if FEATURE_AUDIO_SYNC
 #include "../audio/AudioTuning.h"
 #include "../config/audio_config.h"
+#include "../core/persistence/AudioTuningManager.h"
 #endif
 #include <cstring>
 #include <ESPmDNS.h>
@@ -80,6 +81,9 @@ WebServer::WebServer(ActorSystem& actors, RendererActor* renderer)
 
 WebServer::~WebServer() {
     stop();
+#if FEATURE_AUDIO_SYNC
+    delete m_audioBroadcaster;
+#endif
     delete m_ledBroadcaster;
     delete m_ws;
     delete m_server;
@@ -105,6 +109,11 @@ bool WebServer::begin() {
     
     // Create LED stream broadcaster
     m_ledBroadcaster = new webserver::LedStreamBroadcaster(m_ws, WebServerConfig::MAX_WS_CLIENTS);
+
+#if FEATURE_AUDIO_SYNC
+    // Create audio stream broadcaster
+    m_audioBroadcaster = new webserver::AudioStreamBroadcaster(m_ws);
+#endif
 
     // Initialize WiFi
     if (!initWiFi()) {
@@ -164,6 +173,14 @@ void WebServer::update() {
 
     // LED frame streaming to subscribed clients (20 FPS)
     broadcastLEDFrame();
+
+#if FEATURE_AUDIO_SYNC
+    // Audio frame streaming to subscribed clients (30 FPS)
+    broadcastAudioFrame();
+
+    // Beat event streaming (fires on beat_tick/downbeat_tick)
+    broadcastBeatEvent();
+#endif
 
     // Periodic status broadcast
     uint32_t now = millis();
@@ -820,6 +837,80 @@ void WebServer::setupV1Routes() {
         }
     );
 
+    // Audio Control - POST /api/v1/audio/control (pause/resume)
+    m_server->on("/api/v1/audio/control", HTTP_POST,
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            handleAudioControl(request, data, len);
+        }
+    );
+
+    // Audio State - GET /api/v1/audio/state
+    m_server->on("/api/v1/audio/state", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        handleAudioStateGet(request);
+    });
+
+    // Audio Presets - GET /api/v1/audio/presets
+    m_server->on("/api/v1/audio/presets", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        handleAudioPresetsList(request);
+    });
+
+    // Audio Preset Save - POST /api/v1/audio/presets
+    m_server->on("/api/v1/audio/presets", HTTP_POST,
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            handleAudioPresetSave(request, data, len);
+        }
+    );
+
+    // Audio Preset get by ID - GET /api/v1/audio/presets/get?id=X
+    m_server->on("/api/v1/audio/presets/get", HTTP_GET,
+        [this](AsyncWebServerRequest* request) {
+            if (!checkRateLimit(request)) return;
+            if (!request->hasParam("id")) {
+                sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                                  ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
+                return;
+            }
+            uint8_t id = request->getParam("id")->value().toInt();
+            handleAudioPresetGet(request, id);
+        }
+    );
+
+    // Audio Preset apply - POST /api/v1/audio/presets/apply?id=X
+    m_server->on("/api/v1/audio/presets/apply", HTTP_POST,
+        [this](AsyncWebServerRequest* request) {
+            if (!checkRateLimit(request)) return;
+            if (!request->hasParam("id")) {
+                sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                                  ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
+                return;
+            }
+            uint8_t id = request->getParam("id")->value().toInt();
+            handleAudioPresetApply(request, id);
+        }
+    );
+
+    // Audio Preset delete - DELETE /api/v1/audio/presets/delete?id=X
+    m_server->on("/api/v1/audio/presets/delete", HTTP_DELETE,
+        [this](AsyncWebServerRequest* request) {
+            if (!checkRateLimit(request)) return;
+            if (!request->hasParam("id")) {
+                sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                                  ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
+                return;
+            }
+            uint8_t id = request->getParam("id")->value().toInt();
+            handleAudioPresetDelete(request, id);
+        }
+    );
+
     // Transition Types - GET /api/v1/transitions/types
     m_server->on("/api/v1/transitions/types", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
@@ -1452,6 +1543,263 @@ void WebServer::handleAudioParametersSet(AsyncWebServerRequest* request, uint8_t
         if (resetState) updated.add("state");
     });
 }
+
+void WebServer::handleAudioControl(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
+    auto* audio = m_actorSystem.getAudio();
+    if (!audio) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
+        return;
+    }
+
+    StaticJsonDocument<512> doc;
+    if (deserializeJson(doc, data, len)) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::INVALID_JSON, "Invalid JSON");
+        return;
+    }
+
+    const char* action = doc["action"] | "";
+    if (strcmp(action, "pause") == 0) {
+        audio->pause();
+        sendSuccessResponse(request, [](JsonObject& d) {
+            d["state"] = "PAUSED";
+            d["action"] = "pause";
+        });
+    } else if (strcmp(action, "resume") == 0) {
+        audio->resume();
+        sendSuccessResponse(request, [](JsonObject& d) {
+            d["state"] = "RUNNING";
+            d["action"] = "resume";
+        });
+    } else {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::INVALID_ACTION, "Use action: pause or resume", "action");
+    }
+}
+
+void WebServer::handleAudioStateGet(AsyncWebServerRequest* request) {
+    auto* audio = m_actorSystem.getAudio();
+    if (!audio) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
+        return;
+    }
+
+    audio::AudioActorState state = audio->getState();
+    const audio::AudioActorStats& stats = audio->getStats();
+
+    const char* stateStr = "UNKNOWN";
+    switch (state) {
+        case audio::AudioActorState::UNINITIALIZED: stateStr = "UNINITIALIZED"; break;
+        case audio::AudioActorState::INITIALIZING:  stateStr = "INITIALIZING"; break;
+        case audio::AudioActorState::RUNNING:       stateStr = "RUNNING"; break;
+        case audio::AudioActorState::PAUSED:        stateStr = "PAUSED"; break;
+        case audio::AudioActorState::ERROR:         stateStr = "ERROR"; break;
+    }
+
+    sendSuccessResponse(request, [stateStr, &stats, audio](JsonObject& d) {
+        d["state"] = stateStr;
+        d["capturing"] = audio->isCapturing();
+        d["hopCount"] = audio->getHopCount();
+        d["sampleIndex"] = (uint32_t)(audio->getSampleIndex() & 0xFFFFFFFF);
+        JsonObject statsObj = d["stats"].to<JsonObject>();
+        statsObj["tickCount"] = stats.tickCount;
+        statsObj["captureSuccess"] = stats.captureSuccessCount;
+        statsObj["captureFail"] = stats.captureFailCount;
+    });
+}
+
+void WebServer::handleAudioPresetsList(AsyncWebServerRequest* request) {
+    using namespace persistence;
+    auto& mgr = AudioTuningManager::instance();
+
+    char names[AudioTuningManager::MAX_PRESETS][AudioTuningPreset::NAME_MAX_LEN];
+    uint8_t ids[AudioTuningManager::MAX_PRESETS];
+    uint8_t count = mgr.listPresets(names, ids);
+
+    sendSuccessResponse(request, [&names, &ids, count](JsonObject& d) {
+        d["count"] = count;
+        JsonArray presets = d["presets"].to<JsonArray>();
+        for (uint8_t i = 0; i < count; i++) {
+            JsonObject p = presets.add<JsonObject>();
+            p["id"] = ids[i];
+            p["name"] = names[i];
+        }
+    });
+}
+
+void WebServer::handleAudioPresetGet(AsyncWebServerRequest* request, uint8_t presetId) {
+    using namespace persistence;
+    auto& mgr = AudioTuningManager::instance();
+
+    if (presetId >= AudioTuningManager::MAX_PRESETS) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::OUT_OF_RANGE, "Preset ID must be 0-9", "presetId");
+        return;
+    }
+
+    audio::AudioPipelineTuning pipeline;
+    audio::AudioContractTuning contract;
+    char name[AudioTuningPreset::NAME_MAX_LEN];
+
+    if (!mgr.loadPreset(presetId, pipeline, contract, name)) {
+        sendErrorResponse(request, HttpStatus::NOT_FOUND,
+                          ErrorCodes::NOT_FOUND, "Preset not found", "presetId");
+        return;
+    }
+
+    sendSuccessResponseLarge(request, [presetId, &name, &pipeline, &contract](JsonObject& d) {
+        d["id"] = presetId;
+        d["name"] = name;
+
+        // Pipeline tuning (DSP parameters)
+        JsonObject p = d["pipeline"].to<JsonObject>();
+        p["dcAlpha"] = pipeline.dcAlpha;
+        p["agcTargetRms"] = pipeline.agcTargetRms;
+        p["agcMinGain"] = pipeline.agcMinGain;
+        p["agcMaxGain"] = pipeline.agcMaxGain;
+        p["agcAttack"] = pipeline.agcAttack;
+        p["agcRelease"] = pipeline.agcRelease;
+        p["agcClipReduce"] = pipeline.agcClipReduce;
+        p["agcIdleReturnRate"] = pipeline.agcIdleReturnRate;
+        p["noiseFloorMin"] = pipeline.noiseFloorMin;
+        p["noiseFloorRise"] = pipeline.noiseFloorRise;
+        p["noiseFloorFall"] = pipeline.noiseFloorFall;
+        p["gateStartFactor"] = pipeline.gateStartFactor;
+        p["gateRangeFactor"] = pipeline.gateRangeFactor;
+        p["gateRangeMin"] = pipeline.gateRangeMin;
+        p["rmsDbFloor"] = pipeline.rmsDbFloor;
+        p["rmsDbCeil"] = pipeline.rmsDbCeil;
+        p["bandDbFloor"] = pipeline.bandDbFloor;
+        p["bandDbCeil"] = pipeline.bandDbCeil;
+        p["chromaDbFloor"] = pipeline.chromaDbFloor;
+        p["chromaDbCeil"] = pipeline.chromaDbCeil;
+        p["fluxScale"] = pipeline.fluxScale;
+        p["controlBusAlphaFast"] = pipeline.controlBusAlphaFast;
+        p["controlBusAlphaSlow"] = pipeline.controlBusAlphaSlow;
+
+        // Contract tuning (tempo/beat parameters)
+        JsonObject c = d["contract"].to<JsonObject>();
+        c["audioStalenessMs"] = contract.audioStalenessMs;
+        c["bpmMin"] = contract.bpmMin;
+        c["bpmMax"] = contract.bpmMax;
+        c["bpmTau"] = contract.bpmTau;
+        c["confidenceTau"] = contract.confidenceTau;
+        c["phaseCorrectionGain"] = contract.phaseCorrectionGain;
+        c["barCorrectionGain"] = contract.barCorrectionGain;
+        c["beatsPerBar"] = contract.beatsPerBar;
+        c["beatUnit"] = contract.beatUnit;
+    }, 2048);
+}
+
+void WebServer::handleAudioPresetSave(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
+    using namespace persistence;
+
+    StaticJsonDocument<512> doc;
+    if (deserializeJson(doc, data, len)) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::INVALID_JSON, "JSON parse error");
+        return;
+    }
+
+    const char* name = doc["name"] | "Unnamed";
+
+    // Get current tuning from AudioActor
+    auto* audioActor = m_actorSystem.getAudio();
+    if (!audioActor) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
+        return;
+    }
+
+    audio::AudioPipelineTuning pipeline = audioActor->getPipelineTuning();
+    audio::AudioContractTuning contract = m_renderer ? m_renderer->getAudioContractTuning()
+                                                      : audio::clampAudioContractTuning(audio::AudioContractTuning{});
+
+    auto& mgr = AudioTuningManager::instance();
+    int8_t slotId = mgr.savePreset(name, pipeline, contract);
+
+    if (slotId < 0) {
+        sendErrorResponse(request, HttpStatus::INSUFFICIENT_STORAGE,
+                          ErrorCodes::STORAGE_FULL, "No free preset slots");
+        return;
+    }
+
+    sendSuccessResponse(request, [slotId, name](JsonObject& d) {
+        d["id"] = (uint8_t)slotId;
+        d["name"] = name;
+        d["message"] = "Preset saved";
+    });
+}
+
+void WebServer::handleAudioPresetApply(AsyncWebServerRequest* request, uint8_t presetId) {
+    using namespace persistence;
+    auto& mgr = AudioTuningManager::instance();
+
+    if (presetId >= AudioTuningManager::MAX_PRESETS) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::OUT_OF_RANGE, "Preset ID must be 0-9", "presetId");
+        return;
+    }
+
+    audio::AudioPipelineTuning pipeline;
+    audio::AudioContractTuning contract;
+    char name[AudioTuningPreset::NAME_MAX_LEN];
+
+    if (!mgr.loadPreset(presetId, pipeline, contract, name)) {
+        sendErrorResponse(request, HttpStatus::NOT_FOUND,
+                          ErrorCodes::NOT_FOUND, "Preset not found", "presetId");
+        return;
+    }
+
+    // Apply to AudioActor
+    auto* audioActor = m_actorSystem.getAudio();
+    if (!audioActor) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
+        return;
+    }
+
+    audioActor->setPipelineTuning(pipeline);
+    if (m_renderer) {
+        m_renderer->setAudioContractTuning(contract);
+    }
+
+    sendSuccessResponse(request, [presetId, name](JsonObject& d) {
+        d["id"] = presetId;
+        d["name"] = name;
+        d["message"] = "Preset applied";
+    });
+}
+
+void WebServer::handleAudioPresetDelete(AsyncWebServerRequest* request, uint8_t presetId) {
+    using namespace persistence;
+    auto& mgr = AudioTuningManager::instance();
+
+    if (presetId >= AudioTuningManager::MAX_PRESETS) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::OUT_OF_RANGE, "Preset ID must be 0-9", "presetId");
+        return;
+    }
+
+    if (!mgr.hasPreset(presetId)) {
+        sendErrorResponse(request, HttpStatus::NOT_FOUND,
+                          ErrorCodes::NOT_FOUND, "Preset not found", "presetId");
+        return;
+    }
+
+    if (!mgr.deletePreset(presetId)) {
+        sendErrorResponse(request, HttpStatus::INTERNAL_ERROR,
+                          ErrorCodes::INTERNAL_ERROR, "Failed to delete preset");
+        return;
+    }
+
+    sendSuccessResponse(request, [presetId](JsonObject& d) {
+        d["id"] = presetId;
+        d["message"] = "Preset deleted";
+    });
+}
 #else
 void WebServer::handleAudioParametersGet(AsyncWebServerRequest* request) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
@@ -1461,6 +1809,48 @@ void WebServer::handleAudioParametersGet(AsyncWebServerRequest* request) {
 void WebServer::handleAudioParametersSet(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
     (void)data;
     (void)len;
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void WebServer::handleAudioControl(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
+    (void)data;
+    (void)len;
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void WebServer::handleAudioStateGet(AsyncWebServerRequest* request) {
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void WebServer::handleAudioPresetsList(AsyncWebServerRequest* request) {
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void WebServer::handleAudioPresetGet(AsyncWebServerRequest* request, uint8_t presetId) {
+    (void)presetId;
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void WebServer::handleAudioPresetSave(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
+    (void)data;
+    (void)len;
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void WebServer::handleAudioPresetApply(AsyncWebServerRequest* request, uint8_t presetId) {
+    (void)presetId;
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void WebServer::handleAudioPresetDelete(AsyncWebServerRequest* request, uint8_t presetId) {
+    (void)presetId;
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
@@ -4360,6 +4750,64 @@ bool WebServer::setLEDStreamSubscription(AsyncWebSocketClient* client, bool subs
 bool WebServer::hasLEDStreamSubscribers() const {
     return m_ledBroadcaster && m_ledBroadcaster->hasSubscribers();
 }
+
+#if FEATURE_AUDIO_SYNC
+// ============================================================================
+// Audio Frame Streaming
+// ============================================================================
+
+void WebServer::broadcastAudioFrame() {
+    if (!m_audioBroadcaster || !m_renderer) return;
+    
+    // Get audio frame from renderer (cross-core safe - returns by-value copy)
+    const audio::ControlBusFrame& frame = m_renderer->getCachedAudioFrame();
+    
+    // Broadcast to subscribed clients (throttling handled internally)
+    m_audioBroadcaster->broadcast(frame);
+}
+
+void WebServer::broadcastBeatEvent() {
+    if (!m_renderer || !m_ws || m_ws->count() == 0) return;
+
+    const auto& grid = m_renderer->getLastMusicalGrid();
+
+    // Only broadcast on actual beat/downbeat (single-frame pulses)
+    if (!grid.beat_tick && !grid.downbeat_tick) return;
+
+    StaticJsonDocument<512> doc;
+    doc["type"] = "beat.event";
+    doc["tick"] = grid.beat_tick;
+    doc["downbeat"] = grid.downbeat_tick;
+    doc["beat_index"] = (uint32_t)(grid.beat_index & 0xFFFFFFFF);
+    doc["bar_index"] = (uint32_t)(grid.bar_index & 0xFFFFFFFF);
+    doc["beat_in_bar"] = grid.beat_in_bar;
+    doc["beat_phase"] = grid.beat_phase01;
+    doc["bpm"] = grid.bpm_smoothed;
+    doc["confidence"] = grid.tempo_confidence;
+
+    String json;
+    serializeJson(doc, json);
+    m_ws->textAll(json);
+}
+
+bool WebServer::setAudioStreamSubscription(AsyncWebSocketClient* client, bool subscribe) {
+    if (!client || !m_audioBroadcaster) return false;
+    uint32_t clientId = client->id();
+    bool success = m_audioBroadcaster->setSubscription(clientId, subscribe);
+    
+    if (subscribe && success) {
+        Serial.printf("[WebServer] Client %u subscribed to audio stream\n", clientId);
+    } else if (!subscribe) {
+        Serial.printf("[WebServer] Client %u unsubscribed from audio stream\n", clientId);
+    }
+    
+    return success;
+}
+
+bool WebServer::hasAudioStreamSubscribers() const {
+    return m_audioBroadcaster && m_audioBroadcaster->hasSubscribers();
+}
+#endif
 
 // ============================================================================
 // Rate Limiting

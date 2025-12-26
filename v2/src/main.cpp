@@ -13,6 +13,9 @@
  */
 
 #include <Arduino.h>
+#ifndef NATIVE_BUILD
+#include <esp_task_wdt.h>
+#endif
 #include "config/features.h"
 #include "core/actors/ActorSystem.h"
 #include "hardware/EncoderManager.h"
@@ -884,10 +887,10 @@ void loop() {
                     }
                 } else {
                     // Normal numeric effect selection (0-5, 7-9)
-                    if (e < renderer->getEffectCount()) {
-                        currentEffect = e;
-                        actors.setEffect(e);
-                        Serial.printf("Effect %d: %s\n", e, renderer->getEffectName(e));
+                if (e < renderer->getEffectCount()) {
+                    currentEffect = e;
+                    actors.setEffect(e);
+                    Serial.printf("Effect %d: %s\n", e, renderer->getEffectName(e));
                     }
                 }
             } else {
@@ -1457,6 +1460,11 @@ void loop() {
     if (webServerInstance) {
         webServerInstance->update();
     }
+#endif
+
+    // Feed watchdog timer (prevents system reset if tasks block)
+#ifndef NATIVE_BUILD
+    esp_task_wdt_reset();
 #endif
 
     // Main loop is mostly idle - actors run in background

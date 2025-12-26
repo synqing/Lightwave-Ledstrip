@@ -665,6 +665,12 @@ void WebServer::setupV1Routes() {
         handleApiDiscovery(request);
     });
 
+    // Health Endpoint - GET /api/v1/health
+    m_server->on("/api/v1/health", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        handleHealth(request);
+    });
+
     // Device Status - GET /api/v1/device/status
     m_server->on("/api/v1/device/status", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
@@ -1120,6 +1126,36 @@ void WebServer::handleLegacyZoneEffect(AsyncWebServerRequest* request, uint8_t* 
 // ============================================================================
 // V1 API Handlers
 // ============================================================================
+
+void WebServer::handleHealth(AsyncWebServerRequest* request) {
+    StaticJsonDocument<512> doc;
+    doc["success"] = true;
+    doc["status"] = "healthy";
+    
+    JsonObject data = doc["data"].to<JsonObject>();
+    data["uptime"] = millis() / 1000;
+    data["freeHeap"] = ESP.getFreeHeap();
+    data["totalHeap"] = ESP.getHeapSize();
+    data["minFreeHeap"] = ESP.getMinFreeHeap();
+    
+    if (m_renderer) {
+        data["rendererRunning"] = m_renderer->isRunning();
+        data["queueUtilization"] = m_renderer->getQueueUtilization();
+        data["queueLength"] = m_renderer->getQueueLength();
+        data["queueCapacity"] = 32;  // RendererActor queue size
+        
+        const RenderStats& stats = m_renderer->getStats();
+        data["fps"] = stats.currentFPS;
+        data["cpuPercent"] = stats.cpuPercent;
+    }
+    
+    data["wsClients"] = m_ws->count();
+    data["wsMaxClients"] = WebServerConfig::MAX_WS_CLIENTS;
+    
+    String output;
+    serializeJson(doc, output);
+    request->send(HttpStatus::OK, "application/json", output);
+}
 
 void WebServer::handleApiDiscovery(AsyncWebServerRequest* request) {
     sendSuccessResponseLarge(request, [this](JsonObject& data) {

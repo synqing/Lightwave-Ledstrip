@@ -43,6 +43,9 @@
 #include "webserver/RateLimiter.h"
 #include "webserver/LedFrameEncoder.h"
 #include "webserver/LedStreamBroadcaster.h"
+#if FEATURE_AUDIO_SYNC
+#include "webserver/AudioStreamBroadcaster.h"
+#endif
 
 // Forward declarations
 class AsyncWebServer;
@@ -183,8 +186,19 @@ public:
 
     /**
      * @brief Broadcast current status to all WebSocket clients
+     * 
+     * Coalesces rapid calls - if called within BROADCAST_COALESCE_MS (50ms),
+     * the broadcast is deferred to the next update() tick.
      */
     void broadcastStatus();
+    
+    /**
+     * @brief Internal: Actually perform the status broadcast
+     * 
+     * Called by broadcastStatus() after coalescing check, or by update()
+     * when flushing a pending broadcast.
+     */
+    void doBroadcastStatus();
 
     /**
      * @brief Broadcast zone state to all WebSocket clients
@@ -217,6 +231,37 @@ public:
      * @brief Check if any clients are subscribed to LED streaming
      */
     bool hasLEDStreamSubscribers() const;
+
+#if FEATURE_AUDIO_SYNC
+    /**
+     * @brief Broadcast audio frame data to subscribed clients
+     *
+     * Sends binary WebSocket frame containing audio metrics.
+     * Throttled to 30 FPS to match audio hop rate.
+     */
+    void broadcastAudioFrame();
+
+    /**
+     * @brief Broadcast beat event to all WebSocket clients
+     *
+     * Sends JSON message when beat_tick or downbeat_tick is true.
+     * Called from update() at render rate, but only sends on actual beats.
+     */
+    void broadcastBeatEvent();
+
+    /**
+     * @brief Subscribe/unsubscribe a WebSocket client to audio stream
+     * @param client WebSocket client pointer
+     * @param subscribe true to subscribe, false to unsubscribe
+     * @return true if the subscription was updated
+     */
+    bool setAudioStreamSubscription(AsyncWebSocketClient* client, bool subscribe);
+
+    /**
+     * @brief Check if any clients are subscribed to audio streaming
+     */
+    bool hasAudioStreamSubscribers() const;
+#endif
 
     /**
      * @brief Notify clients of effect change
@@ -259,10 +304,18 @@ private:
     // ========================================================================
 
     void handleApiDiscovery(AsyncWebServerRequest* request);
+    void handleHealth(AsyncWebServerRequest* request);
     void handleParametersGet(AsyncWebServerRequest* request);
     void handleParametersSet(AsyncWebServerRequest* request, uint8_t* data, size_t len);
     void handleAudioParametersGet(AsyncWebServerRequest* request);
     void handleAudioParametersSet(AsyncWebServerRequest* request, uint8_t* data, size_t len);
+    void handleAudioControl(AsyncWebServerRequest* request, uint8_t* data, size_t len);
+    void handleAudioStateGet(AsyncWebServerRequest* request);
+    void handleAudioPresetsList(AsyncWebServerRequest* request);
+    void handleAudioPresetGet(AsyncWebServerRequest* request, uint8_t presetId);
+    void handleAudioPresetSave(AsyncWebServerRequest* request, uint8_t* data, size_t len);
+    void handleAudioPresetApply(AsyncWebServerRequest* request, uint8_t presetId);
+    void handleAudioPresetDelete(AsyncWebServerRequest* request, uint8_t presetId);
     void handleTransitionTypes(AsyncWebServerRequest* request);
     void handleTransitionTrigger(AsyncWebServerRequest* request, uint8_t* data, size_t len);
     void handleBatch(AsyncWebServerRequest* request, uint8_t* data, size_t len);
@@ -322,9 +375,19 @@ private:
     bool m_mdnsStarted;
     uint32_t m_lastBroadcast;
     uint32_t m_startTime;
+    
+    // Broadcast coalescing (prevent spam from rapid commands)
+    uint32_t m_lastImmediateBroadcast;
+    bool m_broadcastPending;
+    static constexpr uint32_t BROADCAST_COALESCE_MS = 50;
 
     // LED frame streaming (extracted to LedStreamBroadcaster)
     webserver::LedStreamBroadcaster* m_ledBroadcaster;
+
+#if FEATURE_AUDIO_SYNC
+    // Audio frame streaming
+    webserver::AudioStreamBroadcaster* m_audioBroadcaster;
+#endif
 
     // Reference to external components (not owned)
     zones::ZoneComposer* m_zoneComposer;

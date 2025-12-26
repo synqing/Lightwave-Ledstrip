@@ -69,6 +69,8 @@ WebServer::WebServer(ActorSystem& actors, RendererActor* renderer)
     , m_mdnsStarted(false)
     , m_lastBroadcast(0)
     , m_startTime(0)
+    , m_lastImmediateBroadcast(0)
+    , m_broadcastPending(false)
     , m_zoneComposer(nullptr)
     , m_ledBroadcaster(nullptr)
     , m_actorSystem(actors)
@@ -168,6 +170,12 @@ void WebServer::update() {
     if (now - m_lastBroadcast >= WebServerConfig::STATUS_BROADCAST_INTERVAL_MS) {
         m_lastBroadcast = now;
         broadcastStatus();
+    }
+    
+    // Flush pending coalesced broadcast (if enough time has passed)
+    if (m_broadcastPending && (now - m_lastImmediateBroadcast >= BROADCAST_COALESCE_MS)) {
+        m_broadcastPending = false;
+        doBroadcastStatus();  // Actually send the broadcast
     }
 }
 
@@ -4194,6 +4202,25 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
 // ============================================================================
 
 void WebServer::broadcastStatus() {
+    uint32_t now = millis();
+    
+    // Coalesce rapid calls - if called within BROADCAST_COALESCE_MS, defer to next update()
+    if (now - m_lastImmediateBroadcast < BROADCAST_COALESCE_MS) {
+        m_broadcastPending = true;
+        return;
+    }
+    
+    // Enough time has passed, send immediately
+    m_lastImmediateBroadcast = now;
+    m_broadcastPending = false;
+    doBroadcastStatus();
+}
+
+void WebServer::doBroadcastStatus() {
+    if (m_ws->count() == 0) return;
+
+    // Cleanup disconnected clients before broadcasting
+    m_ws->cleanupClients();
     if (m_ws->count() == 0) return;
 
     StaticJsonDocument<512> doc;

@@ -483,7 +483,7 @@ void WebServer::setupLegacyRoutes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
-            JsonDocument doc;
+            StaticJsonDocument<512> doc;
             VALIDATE_LEGACY_OR_RETURN(data, len, doc, RequestSchemas::LegacyZonePreset, request);
 
             // Schema validates preset is 0-4
@@ -555,7 +555,7 @@ void WebServer::setupLegacyRoutes() {
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
             if (!checkRateLimit(request)) return;
 
-            JsonDocument doc;
+            StaticJsonDocument<512> doc;
             VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::NetworkConnect, request);
 
             String ssid = doc["ssid"].as<String>();
@@ -1000,7 +1000,7 @@ void WebServer::handleLegacyStatus(AsyncWebServerRequest* request) {
         return;
     }
 
-    JsonDocument doc;
+    StaticJsonDocument<512> doc;
     RendererActor* renderer = m_renderer;
 
     doc["effect"] = renderer->getCurrentEffect();
@@ -1026,7 +1026,7 @@ void WebServer::handleLegacyStatus(AsyncWebServerRequest* request) {
 }
 
 void WebServer::handleLegacySetEffect(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    JsonDocument doc;
+    StaticJsonDocument<512> doc;
     VALIDATE_LEGACY_OR_RETURN(data, len, doc, RequestSchemas::LegacySetEffect, request);
 
     uint8_t effectId = doc["effect"];
@@ -1041,7 +1041,7 @@ void WebServer::handleLegacySetEffect(AsyncWebServerRequest* request, uint8_t* d
 }
 
 void WebServer::handleLegacySetBrightness(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    JsonDocument doc;
+    StaticJsonDocument<512> doc;
     VALIDATE_LEGACY_OR_RETURN(data, len, doc, RequestSchemas::LegacySetBrightness, request);
 
     uint8_t brightness = doc["brightness"];
@@ -1051,7 +1051,7 @@ void WebServer::handleLegacySetBrightness(AsyncWebServerRequest* request, uint8_
 }
 
 void WebServer::handleLegacySetSpeed(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    JsonDocument doc;
+    StaticJsonDocument<512> doc;
     VALIDATE_LEGACY_OR_RETURN(data, len, doc, RequestSchemas::LegacySetSpeed, request);
 
     // Range is validated by schema (1-50)
@@ -1062,7 +1062,7 @@ void WebServer::handleLegacySetSpeed(AsyncWebServerRequest* request, uint8_t* da
 }
 
 void WebServer::handleLegacySetPalette(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    JsonDocument doc;
+    StaticJsonDocument<512> doc;
     VALIDATE_LEGACY_OR_RETURN(data, len, doc, RequestSchemas::LegacySetPalette, request);
 
     uint8_t paletteId = doc["paletteId"];
@@ -1077,7 +1077,7 @@ void WebServer::handleLegacyZoneCount(AsyncWebServerRequest* request, uint8_t* d
         return;
     }
 
-    JsonDocument doc;
+    StaticJsonDocument<512> doc;
     VALIDATE_LEGACY_OR_RETURN(data, len, doc, RequestSchemas::LegacyZoneCount, request);
 
     // Range validated by schema (1-4)
@@ -1093,7 +1093,7 @@ void WebServer::handleLegacyZoneEffect(AsyncWebServerRequest* request, uint8_t* 
         return;
     }
 
-    JsonDocument doc;
+    StaticJsonDocument<512> doc;
     VALIDATE_LEGACY_OR_RETURN(data, len, doc, RequestSchemas::LegacyZoneEffect, request);
 
     uint8_t zoneId = doc["zoneId"];
@@ -1153,7 +1153,7 @@ void WebServer::handleParametersGet(AsyncWebServerRequest* request) {
 }
 
 void WebServer::handleParametersSet(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    JsonDocument doc;
+    StaticJsonDocument<512> doc;
     // Parse and validate - all fields are optional but must be valid if present
     auto vr = RequestValidator::parseAndValidate(data, len, doc, RequestSchemas::SetParameters);
     if (!vr.valid) {
@@ -1308,7 +1308,7 @@ void WebServer::handleAudioParametersSet(AsyncWebServerRequest* request, uint8_t
         return;
     }
 
-    JsonDocument doc;
+    StaticJsonDocument<512> doc;
     DeserializationError error = deserializeJson(doc, data, len);
     if (error) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
@@ -1437,7 +1437,7 @@ void WebServer::handleTransitionTypes(AsyncWebServerRequest* request) {
 }
 
 void WebServer::handleTransitionTrigger(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    JsonDocument doc;
+    StaticJsonDocument<512> doc;
     VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::TriggerTransition, request);
 
     uint8_t toEffect = doc["toEffect"];
@@ -1466,7 +1466,7 @@ void WebServer::handleTransitionTrigger(AsyncWebServerRequest* request, uint8_t*
 }
 
 void WebServer::handleBatch(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    JsonDocument doc;
+    StaticJsonDocument<512> doc;
     VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::BatchOperations, request);
 
     // Schema validates operations is an array with 1-10 items
@@ -1613,7 +1613,7 @@ void WebServer::handlePalettesList(AsyncWebServerRequest* request) {
     if (endIdx > filteredCount) endIdx = filteredCount;
 
     // Build response - buffer sized for up to 50 palettes per page
-    JsonDocument doc;
+    StaticJsonDocument<512> doc;
     doc["success"] = true;
     doc["timestamp"] = millis();
     doc["version"] = API_VERSION;
@@ -1689,7 +1689,7 @@ void WebServer::handlePalettesCurrent(AsyncWebServerRequest* request) {
 }
 
 void WebServer::handlePalettesSet(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    JsonDocument doc;
+    StaticJsonDocument<512> doc;
     VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::SetPalette, request);
 
     uint8_t paletteId = doc["paletteId"];
@@ -1746,7 +1746,7 @@ void WebServer::handleTransitionConfigGet(AsyncWebServerRequest* request) {
 }
 
 void WebServer::handleTransitionConfigSet(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    JsonDocument doc;
+    StaticJsonDocument<512> doc;
     // Validate - all fields are optional but if present must be valid
     auto vr = RequestValidator::parseAndValidate(data, len, doc, RequestSchemas::TransitionConfig);
     if (!vr.valid) {
@@ -1840,7 +1840,7 @@ void WebServer::handleNarrativeConfigGet(AsyncWebServerRequest* request) {
 
 void WebServer::handleNarrativeConfigSet(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
     using namespace lightwaveos::narrative;
-    JsonDocument doc;
+    StaticJsonDocument<512> doc;
     DeserializationError error = deserializeJson(doc, data, len);
     
     if (error) {
@@ -1926,7 +1926,7 @@ void WebServer::handleNarrativeConfigSet(AsyncWebServerRequest* request, uint8_t
 void WebServer::handleOpenApiSpec(AsyncWebServerRequest* request) {
     // OpenAPI 3.0.3 specification for LightwaveOS API v1
     // Expanded to document all implemented REST endpoints
-    JsonDocument doc;
+    StaticJsonDocument<512> doc;
 
     doc["openapi"] = "3.0.3";
 
@@ -2228,7 +2228,7 @@ void WebServer::handleWsMessage(AsyncWebSocketClient* client, uint8_t* data, siz
         return;
     }
 
-    JsonDocument doc;
+    StaticJsonDocument<512> doc;
     DeserializationError error = deserializeJson(doc, data, len);
 
     if (error) {
@@ -4196,7 +4196,7 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
 void WebServer::broadcastStatus() {
     if (m_ws->count() == 0) return;
 
-    JsonDocument doc;
+    StaticJsonDocument<512> doc;
     doc["type"] = "status";
 
     if (m_renderer) {
@@ -4227,7 +4227,7 @@ void WebServer::broadcastStatus() {
 void WebServer::broadcastZoneState() {
     if (m_ws->count() == 0 || !m_zoneComposer) return;
 
-    JsonDocument doc;
+    StaticJsonDocument<512> doc;
     doc["type"] = "zone.state";
     doc["enabled"] = m_zoneComposer->isEnabled();
     doc["zoneCount"] = m_zoneComposer->getZoneCount();
@@ -4251,7 +4251,7 @@ void WebServer::broadcastZoneState() {
 void WebServer::notifyEffectChange(uint8_t effectId, const char* name) {
     if (m_ws->count() == 0) return;
 
-    JsonDocument doc;
+    StaticJsonDocument<512> doc;
     doc["type"] = "effectChanged";
     doc["effectId"] = effectId;
     doc["name"] = name;

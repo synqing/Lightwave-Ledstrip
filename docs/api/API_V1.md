@@ -15,6 +15,7 @@
 7. [Batch Operations](#batch-operations)
 8. [Effect Metadata](#effect-metadata)
 9. [Examples](#examples)
+10. [Related Documentation](#related-documentation)
 
 ---
 
@@ -1180,6 +1181,15 @@ v1 API endpoints coexist with v0 endpoints:
 
 ---
 
+## Related Documentation
+
+For audio-specific APIs (requires `esp32dev_audio` build):
+
+- [Audio Stream API](../../v2/docs/AUDIO_STREAM_API.md) - Binary audio metrics streaming (30 FPS)
+- [Audio Control API](../../v2/docs/AUDIO_CONTROL_API.md) - Capture control, beat events, tuning presets
+
+---
+
 **Documentation Version:** 1.0.0
-**Last Updated:** 2025-12-16
+**Last Updated:** 2025-12-27
 **API Base:** LightwaveOS v1.0.0

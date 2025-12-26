@@ -36,28 +36,26 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     m_frame.t = now;
     m_frame.hop_seq++;
 
-    // RMS: smooth fast
-    m_rms_s = lerp(m_rms_s, clamp01(raw.rms), m_alpha_fast);
+    m_frame.fast_rms = clamp01(raw.rms);
+    m_rms_s = lerp(m_rms_s, m_frame.fast_rms, m_alpha_fast);
     m_frame.rms = m_rms_s;
 
-    // Flux: smooth slightly slower (stabilizes novelty)
-    m_flux_s = lerp(m_flux_s, clamp01(raw.flux), m_alpha_slow);
+    m_frame.fast_flux = clamp01(raw.flux);
+    m_flux_s = lerp(m_flux_s, m_frame.fast_flux, m_alpha_slow);
     m_frame.flux = m_flux_s;
 
-    // Bands
     for (uint8_t i = 0; i < CONTROLBUS_NUM_BANDS; ++i) {
         m_bands_s[i] = lerp(m_bands_s[i], clamp01(raw.bands[i]), m_alpha_slow);
         m_frame.bands[i] = m_bands_s[i];
+        m_frame.heavy_bands[i] = m_bands_s[i];
     }
 
-    // Chroma (optional Phase 2: can remain zero until Phase 3)
     for (uint8_t i = 0; i < CONTROLBUS_NUM_CHROMA; ++i) {
         m_chroma_s[i] = lerp(m_chroma_s[i], clamp01(raw.chroma[i]), m_alpha_slow);
         m_frame.chroma[i] = m_chroma_s[i];
+        m_frame.heavy_chroma[i] = m_chroma_s[i];
     }
 
-    // Waveform: copy directly (no smoothing - time-domain data should remain sharp)
-    // AudioActor will downsample the hop buffer into this array
     for (uint8_t i = 0; i < CONTROLBUS_WAVEFORM_N; ++i) {
         m_frame.waveform[i] = raw.waveform[i];
     }

@@ -69,26 +69,38 @@ struct AudioContext {
 
     /// Get RMS energy level (0.0-1.0)
     float rms() const { return controlBus.rms; }
+    float fastRms() const { return controlBus.fast_rms; }
 
     /// Get spectral flux (onset detection signal)
     float flux() const { return controlBus.flux; }
+    float fastFlux() const { return controlBus.fast_flux; }
 
     /// Get frequency band energy (0-7: bass to treble)
     float getBand(uint8_t i) const {
         return (i < audio::CONTROLBUS_NUM_BANDS) ? controlBus.bands[i] : 0.0f;
     }
+    float getHeavyBand(uint8_t i) const {
+        return (i < audio::CONTROLBUS_NUM_BANDS) ? controlBus.heavy_bands[i] : 0.0f;
+    }
 
     /// Get bass energy (bands 0-1 averaged)
     float bass() const { return (controlBus.bands[0] + controlBus.bands[1]) * 0.5f; }
+    float heavyBass() const { return (controlBus.heavy_bands[0] + controlBus.heavy_bands[1]) * 0.5f; }
 
     /// Get mid energy (bands 2-4 averaged)
     float mid() const {
         return (controlBus.bands[2] + controlBus.bands[3] + controlBus.bands[4]) / 3.0f;
     }
+    float heavyMid() const {
+        return (controlBus.heavy_bands[2] + controlBus.heavy_bands[3] + controlBus.heavy_bands[4]) / 3.0f;
+    }
 
     /// Get treble energy (bands 5-7 averaged)
     float treble() const {
         return (controlBus.bands[5] + controlBus.bands[6] + controlBus.bands[7]) / 3.0f;
+    }
+    float heavyTreble() const {
+        return (controlBus.heavy_bands[5] + controlBus.heavy_bands[6] + controlBus.heavy_bands[7]) / 3.0f;
     }
 
     /// Get beat phase (0.0-1.0, wraps each beat)

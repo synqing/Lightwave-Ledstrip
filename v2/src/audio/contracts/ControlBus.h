@@ -30,9 +30,13 @@ struct ControlBusFrame {
 
     float rms = 0.0f;
     float flux = 0.0f;
+    float fast_rms = 0.0f;
+    float fast_flux = 0.0f;
 
     float bands[CONTROLBUS_NUM_BANDS] = {0};
     float chroma[CONTROLBUS_NUM_CHROMA] = {0};
+    float heavy_bands[CONTROLBUS_NUM_BANDS] = {0};
+    float heavy_chroma[CONTROLBUS_NUM_CHROMA] = {0};
     int16_t waveform[CONTROLBUS_WAVEFORM_N] = {0};  // Time-domain samples (int16_t range: -32768 to 32767)
 };
 

@@ -105,16 +105,18 @@ void ChevronWavesEffect::render(plugins::EffectContext& ctx) {
 
     float speedScale = 0.5f + 0.8f * m_energyAvgSmooth + 1.2f * m_energyDeltaSmooth;
     if (speedScale > 2.0f) speedScale = 2.0f;  // Hard clamp
-    m_chevronPos += speedNorm * 2.0f * speedScale;
+    m_chevronPos += speedNorm * 240.0f * speedScale * dt;  // dt-corrected: 240/sec at speedNorm=1
 
     fadeToBlackBy(ctx.leds, ctx.ledCount, FADE_AMOUNT);
 
     for (uint16_t i = 0; i < ctx.ledCount && i < STRIP_LENGTH; i++) {
-        float distFromCenter = ctx.getDistanceFromCenter(i) * (float)HALF_LENGTH;
+        // CRITICAL FIX: Use centerPairDistance() like working effects
+        float distFromCenter = (float)centerPairDistance(i);
 
-        // Create V-shape from centre, travelling outward
-        float chevronPhase = distFromCenter * CHEVRON_ANGLE - m_chevronPos;
-        float chevron = sinf(chevronPhase * CHEVRON_COUNT * 0.1f);
+        // CRITICAL FIX: Match reference pattern with moderate spatial frequency
+        // sin(k*dist - phase) produces OUTWARD motion when phase increases
+        const float freqBase = 0.25f;  // Wavelength ~25 LEDs (was ~7 with CHEVRON_COUNT)
+        float chevron = sinf(distFromCenter * freqBase - m_chevronPos);
 
         // Sharp edges
         chevron = tanhf(chevron * (2.0f + 4.0f * m_energyAvgSmooth)) * 0.5f + 0.5f;

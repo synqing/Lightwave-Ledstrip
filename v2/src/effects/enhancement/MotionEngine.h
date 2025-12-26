@@ -343,6 +343,24 @@ private:
     bool m_enabled;
 };
 
+inline float clampDtSeconds(float dt, float maxVal = 0.05f) {
+    if (dt < 0.0f) return 0.0f;
+    return dt > maxVal ? maxVal : dt;
+}
+
+inline float wrapPhaseRadians(float phase) {
+    if (!isfinite(phase)) return 0.0f;
+    phase = fmodf(phase, 6.2831853f);
+    if (phase < 0.0f) phase += 6.2831853f;
+    return phase;
+}
+
+inline float advancePhase(float phase, float speedNorm, float speedScale, float dtSec) {
+    float dt = clampDtSeconds(dtSec);
+    phase += speedNorm * 3.6f * speedScale * dt;
+    return wrapPhaseRadians(phase);
+}
+
 } // namespace enhancement
 } // namespace lightwaveos
 

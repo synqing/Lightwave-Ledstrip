@@ -28,9 +28,8 @@ public:
     const plugins::EffectMetadata& getMetadata() const override;
 
 private:
-    float m_packetRadius1 = 0.0f;
-    float m_packetRadius2 = 0.0f;
-    float m_packetSpeed = 0.0f;
+    // CRITICAL FIX: Single phase accumulator for traveling waves (not radii for standing waves)
+    float m_phase = 0.0f;
     uint32_t m_lastHopSeq = 0;
     static constexpr uint8_t CHROMA_HISTORY = 4;
     float m_chromaEnergyHist[CHROMA_HISTORY] = {0.0f};

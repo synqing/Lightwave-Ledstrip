@@ -47,8 +47,6 @@ private:
     float m_dominantBinSmooth = 0.0f;
     
     // Constants
-    static constexpr float CHEVRON_COUNT = 6.0f;
-    static constexpr float CHEVRON_ANGLE = 1.5f;
     static constexpr uint8_t FADE_AMOUNT = 40;
 };
 

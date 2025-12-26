@@ -5,6 +5,7 @@
 
 #include "LGPStarBurstEffect.h"
 #include "../CoreEffects.h"
+#include "../enhancement/MotionEngine.h"
 #include <FastLED.h>
 #include <cmath>
 
@@ -91,7 +92,7 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
         m_energyDelta = 0.0f;
     }
 
-    float dt = ctx.deltaTimeMs * 0.001f;
+    float dt = enhancement::clampDtSeconds(ctx.deltaTimeMs * 0.001f);
     float riseAvg = dt / (0.20f + dt);
     float fallAvg = dt / (0.50f + dt);
     float riseDelta = dt / (0.08f + dt);
@@ -105,8 +106,12 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
     if (m_dominantBinSmooth > 11.0f) m_dominantBinSmooth = 11.0f;
 
     float speedScale = 0.3f + 1.2f * m_energyAvgSmooth + 2.0f * m_energyDeltaSmooth;
-    m_phase += speedNorm * 0.03f * speedScale;
+    m_phase = enhancement::advancePhase(m_phase, speedNorm, speedScale, dt);
     m_burst += m_energyDeltaSmooth * 0.9f;
+    if (hasAudio) {
+        float fastFlux = ctx.audio.fastFlux();
+        m_burst += fastFlux * 0.4f;
+    }
     if (m_burst > 1.0f) m_burst = 1.0f;
     m_burst *= 0.90f;
 
@@ -114,17 +119,20 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         float distFromCenter = (float)centerPairDistance((uint16_t)i);
-        float normalizedDist = distFromCenter / (float)HALF_LENGTH;
 
-        // Star equation - radially symmetric from centre
-        float star = sinf(distFromCenter * 0.3f - m_phase) * expf(-normalizedDist * 2.0f);
+        // DEFINITIVE FIX: NO decay envelope - match ChevronWaves pattern
+        // sin(k*dist - phase) produces OUTWARD motion when phase increases
+        const float freqBase = 0.3f;
+        float star = sinf(distFromCenter * freqBase - m_phase);
 
-        // Pulsing
-        star *= 0.5f + 0.5f * sinf(m_phase * 3.0f);
+        // Audio modulation (amplitude, not synchronized pulsing)
         star *= (0.4f + 0.6f * m_energyAvgSmooth);
-        star *= (1.0f + 0.8f * m_burst);  // Multiplicative - enhances, doesn't compete
+        star *= (1.0f + 0.8f * m_burst);
 
-        uint8_t brightness = (uint8_t)(128.0f + 127.0f * star * intensityNorm);
+        // CRITICAL: Use tanhf for uniform brightness (like ChevronWaves)
+        star = tanhf(star * 2.0f) * 0.5f + 0.5f;
+
+        uint8_t brightness = (uint8_t)(star * 255.0f * intensityNorm);
         uint8_t paletteIndex = (uint8_t)(distFromCenter + star * 50.0f);
         uint8_t baseHue = (uint8_t)(ctx.gHue + (uint8_t)(m_dominantBinSmooth * (255.0f / 12.0f)));
 

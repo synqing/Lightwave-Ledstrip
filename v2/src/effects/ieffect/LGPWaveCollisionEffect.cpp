@@ -19,9 +19,8 @@ static float smoothValue(float current, float target, float rise, float fall) {
 
 bool LGPWaveCollisionEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
-    m_packetRadius1 = 0.0f;
-    m_packetRadius2 = 0.0f;
-    m_packetSpeed = 0.0f;
+    // CRITICAL FIX: Single phase for traveling waves
+    m_phase = 0.0f;
     m_lastHopSeq = 0;
     m_chromaEnergySum = 0.0f;
     m_chromaHistIdx = 0;
@@ -101,14 +100,9 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
     if (m_collisionBoost > 1.0f) m_collisionBoost = 1.0f;
     m_collisionBoost *= 0.90f;
 
-    // Wave packets expand outward from centre (LEDs 79/80)
+    // CRITICAL FIX: Single phase accumulator for traveling waves
     float speedScale = 0.4f + 1.6f * m_energyAvgSmooth + 2.0f * m_energyDeltaSmooth;
-    m_packetSpeed = speedNorm * 0.5f * speedScale;
-
-    m_packetRadius1 += m_packetSpeed;
-    m_packetRadius2 += m_packetSpeed;
-    if (m_packetRadius1 >= HALF_LENGTH) m_packetRadius1 -= HALF_LENGTH;
-    if (m_packetRadius2 >= HALF_LENGTH) m_packetRadius2 -= HALF_LENGTH;
+    m_phase += speedNorm * 4.0f * speedScale * dt;  // dt-corrected: moderate speed
 
     fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
 
@@ -116,18 +110,21 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
         // CENTRE ORIGIN: Calculate distance from centre pair
         float distFromCenter = (float)centerPairDistance((uint16_t)i);
 
-        // Wave packet 1 (expanding rightward from centre)
-        float dist1 = fabsf(distFromCenter - m_packetRadius1);
-        float packet1 = expf(-dist1 * 0.05f) * (0.5f + 0.5f * cosf(dist1 * 0.5f));
+        // DEFINITIVE FIX: NO decay envelope - match ChevronWaves pattern
+        // sin(k*dist - phase) produces OUTWARD motion when phase increases
+        const float freqBase = 0.2f;
 
-        // Wave packet 2 (expanding leftward from centre, with phase offset)
-        float dist2 = fabsf(distFromCenter - m_packetRadius2);
-        float packet2 = expf(-dist2 * 0.05f) * (0.5f + 0.5f * cosf(dist2 * 0.5f + PI));
+        // Two traveling waves at slightly different frequencies for interference
+        float wave1 = sinf(distFromCenter * freqBase - m_phase);
+        float wave2 = sinf(distFromCenter * (freqBase * 0.7f) - m_phase + PI);
 
-        // Interference
-        float interference = (packet1 + packet2) * (0.3f + 0.7f * m_energyAvgSmooth + 0.5f * m_collisionBoost);
+        // Collision interference pattern with audio modulation
+        float interference = (wave1 + wave2) * (0.3f + 0.7f * m_energyAvgSmooth + 0.5f * m_collisionBoost);
 
-        uint8_t brightness = (uint8_t)(128.0f + 127.0f * interference * intensityNorm);
+        // CRITICAL: Use tanhf for uniform brightness (like ChevronWaves)
+        interference = tanhf(interference * 2.0f) * 0.5f + 0.5f;
+
+        uint8_t brightness = (uint8_t)(interference * 255.0f * intensityNorm);
 
         // CENTRE ORIGIN colour mapping
         uint8_t paletteIndex = (uint8_t)(distFromCenter * 2.0f + interference * 50.0f);

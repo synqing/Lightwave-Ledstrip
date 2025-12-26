@@ -5,6 +5,7 @@
 
 #include "LGPInterferenceScannerEffect.h"
 #include "../CoreEffects.h"
+#include "../enhancement/MotionEngine.h"
 #include <FastLED.h>
 #include <cmath>
 
@@ -86,7 +87,7 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
         m_energyDelta = 0.0f;
     }
 
-    float dt = ctx.deltaTimeMs * 0.001f;
+    float dt = enhancement::clampDtSeconds(ctx.deltaTimeMs * 0.001f);
     float riseAvg = dt / (0.20f + dt);
     float fallAvg = dt / (0.50f + dt);
     float riseDelta = dt / (0.08f + dt);
@@ -100,31 +101,25 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
     if (m_dominantBinSmooth > 11.0f) m_dominantBinSmooth = 11.0f;
 
     float speedScale = 0.4f + 1.2f * m_energyAvgSmooth + 2.0f * m_energyDeltaSmooth;
-    m_scanPhase += speedNorm * 0.05f * speedScale;
+    m_scanPhase = enhancement::advancePhase(m_scanPhase, speedNorm, speedScale, dt);
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         float dist = (float)centerPairDistance((uint16_t)i);
 
-        // Radial scan from centre
-        float ringRadius = fmodf(m_scanPhase * 30.0f, (float)HALF_LENGTH);
-        const float ringWidth = 8.0f + 20.0f * m_energyAvgSmooth;
+        // DEFINITIVE FIX: REMOVE ring pattern - use PURE traveling waves like ChevronWaves
+        // sin(k*dist - phase) produces OUTWARD motion when phase increases
+        const float freqBase = 0.25f;  // Moderate spatial frequency (wavelength ~25 LEDs)
+        float wave1 = sinf(dist * freqBase - m_scanPhase);
+        float wave2 = 0.5f * sinf(dist * (freqBase * 2.0f) - (m_scanPhase * 1.3f));
 
-        float pattern = 0.0f;
-        if (fabsf(ringRadius - dist) < ringWidth) {
-            pattern = cosf((ringRadius - dist) / ringWidth * PI / 2.0f);
-        }
+        // Combine waves with audio modulation
+        float fastFlux = hasAudio ? ctx.audio.fastFlux() : 0.0f;
+        float pattern = (wave1 + wave2) * (0.3f + 0.6f * m_energyAvgSmooth + 0.4f * fastFlux);
 
-        // Add dual sweep interference (centre-to-edge travel)
-        float wavePhase = m_scanPhase * 0.3f;  // Match ring perceptual velocity
-        float wave1 = sinf(dist * 0.1f - wavePhase);
-        float wave2 = sinf(dist * 0.1f - wavePhase + PI/3);  // Fixed offset, same speed
-        pattern += (wave1 + wave2) * (0.15f + 0.6f * m_energyAvgSmooth);
+        // CRITICAL: Use tanhf for uniform brightness (like ChevronWaves)
+        pattern = tanhf(pattern * 2.0f) * 0.5f + 0.5f;
 
-        // Clamp
-        pattern = fmaxf(-1.0f, fminf(1.0f, pattern));
-
-        float audioGain = 0.3f + 0.7f * m_energyAvgSmooth;
-        uint8_t brightness = (uint8_t)((pattern * 0.5f + 0.5f) * 255.0f * intensityNorm * audioGain);
+        uint8_t brightness = (uint8_t)(pattern * 255.0f * intensityNorm);
         uint8_t paletteIndex = (uint8_t)(dist * 2.0f + pattern * 50.0f);
         uint8_t baseHue = (uint8_t)(ctx.gHue + (uint8_t)(m_dominantBinSmooth * (255.0f / 12.0f)));
 

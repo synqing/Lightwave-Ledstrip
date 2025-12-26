@@ -256,7 +256,7 @@ bool isLGPSensitive(uint8_t effectId) {
 bool isStatefulEffect(uint8_t effectId) {
     // Stateful effects read from ctx.leds in previous frame
     // Currently: Confetti (3) and Ripple (8)
-    return (effectId == 3 || effectId == 8);
+    return (effectId == 3 || effectId == 8 || effectId == 24 || effectId == 74);
 }
 
 const lightwaveos::plugins::EffectMetadata* getIEffectMetadata(uint8_t effectId) {

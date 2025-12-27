@@ -13,6 +13,9 @@ namespace audio {
 constexpr float GoertzelAnalyzer::TARGET_FREQS[NUM_BANDS];
 
 GoertzelAnalyzer::GoertzelAnalyzer() {
+    // ========================================================================
+    // Legacy 8-band initialization
+    // ========================================================================
     // Precompute Goertzel coefficients for all target frequencies
     for (uint8_t i = 0; i < NUM_BANDS; ++i) {
         m_coefficients[i] = computeCoefficient(TARGET_FREQS[i], SAMPLE_RATE_HZ, WINDOW_SIZE);
@@ -29,6 +32,64 @@ GoertzelAnalyzer::GoertzelAnalyzer() {
 
     // Initialize accumulation buffer to zero
     std::memset(m_accumBuffer, 0, sizeof(m_accumBuffer));
+
+    // ========================================================================
+    // 64-bin initialization (Sensory Bridge parity)
+    // ========================================================================
+    initHannLUT();
+    initBins();
+
+    // Initialize circular history buffer
+    std::memset(m_sampleHistory, 0, sizeof(m_sampleHistory));
+    m_historyWriteIndex = 0;
+    m_sampleCount = 0;
+
+    // Initialize 64-bin magnitudes to zero
+    std::memset(m_magnitudes64, 0, sizeof(m_magnitudes64));
+}
+
+void GoertzelAnalyzer::initHannLUT() {
+    // Generate 4096-entry Hann window in Q15 fixed-point
+    // Hann(n) = 0.5 * (1 - cos(2π * n / (N-1)))
+    // Q15 range: 0 to 32767
+    for (size_t i = 0; i < HANN_LUT_SIZE; ++i) {
+        float t = static_cast<float>(i) / static_cast<float>(HANN_LUT_SIZE - 1);
+        float hann = 0.5f * (1.0f - std::cos(2.0f * M_PI * t));
+        m_hannLUT[i] = static_cast<int16_t>(hann * 32767.0f);
+    }
+}
+
+void GoertzelAnalyzer::initBins() {
+    // Initialize 64 semitone bins from A2 (110 Hz) to C8 (4186 Hz)
+    // Frequency formula: f = 110 * 2^(bin/12)
+    // This gives us musical semitone spacing
+
+    for (size_t bin = 0; bin < NUM_BINS; ++bin) {
+        float freq = 110.0f * std::pow(2.0f, static_cast<float>(bin) / 12.0f);
+        m_bins[bin].target_freq = freq;
+
+        // Variable window sizing (Sensory Bridge formula)
+        // Lower frequencies need longer windows for better frequency resolution
+        // Block size varies from MAX_BLOCK_SIZE (1500) for bass to MIN_BLOCK_SIZE (64) for treble
+        // Uses quartic root progression for smooth transition
+        float bin_normalized = static_cast<float>(bin) / static_cast<float>(NUM_BINS - 1);
+        float size_factor = std::pow(1.0f - bin_normalized, 0.25f);  // Quartic root
+        float block_size_f = MIN_BLOCK_SIZE + (MAX_BLOCK_SIZE - MIN_BLOCK_SIZE) * size_factor;
+        m_bins[bin].block_size = static_cast<uint16_t>(block_size_f);
+        m_bins[bin].block_size_recip = 1.0f / static_cast<float>(m_bins[bin].block_size);
+
+        // Precompute Goertzel coefficient in Q14 fixed-point
+        // coeff = 2 * cos(2π * freq / sample_rate)
+        float omega = 2.0f * M_PI * freq / static_cast<float>(SAMPLE_RATE_HZ);
+        float coeff = 2.0f * std::cos(omega);
+        m_bins[bin].coeff_q14 = static_cast<int32_t>(coeff * 16384.0f);  // Q14
+
+        // Window multiplier for Hann LUT indexing
+        m_bins[bin].window_mult = static_cast<float>(HANN_LUT_SIZE) / static_cast<float>(m_bins[bin].block_size);
+
+        // Zone assignment (4 zones, 16 bins each)
+        m_bins[bin].zone = static_cast<uint8_t>(bin >> 4);  // bin / 16
+    }
 }
 
 float GoertzelAnalyzer::computeCoefficient(float targetFreq, uint32_t sampleRate, size_t windowSize) {
@@ -43,6 +104,7 @@ float GoertzelAnalyzer::computeCoefficient(float targetFreq, uint32_t sampleRate
 
 void GoertzelAnalyzer::accumulate(const int16_t* samples, size_t count) {
     for (size_t i = 0; i < count; ++i) {
+        // Legacy 8-band accumulation buffer
         m_accumBuffer[m_accumIndex] = samples[i];
         m_accumIndex++;
 
@@ -50,7 +112,99 @@ void GoertzelAnalyzer::accumulate(const int16_t* samples, size_t count) {
             m_accumIndex = 0;
             m_windowFull = true;
         }
+
+        // 64-bin circular history buffer
+        m_sampleHistory[m_historyWriteIndex] = samples[i];
+        m_historyWriteIndex = (m_historyWriteIndex + 1) % SAMPLE_HISTORY_LENGTH;
+        if (m_sampleCount < SAMPLE_HISTORY_LENGTH) {
+            m_sampleCount++;
+        }
     }
+}
+
+int16_t GoertzelAnalyzer::getHistorySample(size_t samplesAgo) const {
+    // Get sample from circular buffer
+    // samplesAgo=0 means most recent sample
+    if (samplesAgo >= m_sampleCount) {
+        return 0;  // Not enough samples accumulated yet
+    }
+
+    // Calculate read index (wrap around for circular buffer)
+    size_t readIndex = (m_historyWriteIndex + SAMPLE_HISTORY_LENGTH - 1 - samplesAgo) % SAMPLE_HISTORY_LENGTH;
+    return m_sampleHistory[readIndex];
+}
+
+float GoertzelAnalyzer::computeGoertzelBin(size_t binIndex) const {
+    if (binIndex >= NUM_BINS) return 0.0f;
+
+    const GoertzelBin& bin = m_bins[binIndex];
+
+    // Check if we have enough samples for this bin's window size
+    if (m_sampleCount < bin.block_size) {
+        return 0.0f;
+    }
+
+    // Goertzel algorithm with Hann windowing
+    // Using Q14 fixed-point coefficient for efficiency
+    float s0 = 0.0f;
+    float s1 = 0.0f;
+    float s2 = 0.0f;
+
+    float coeff = static_cast<float>(bin.coeff_q14) / 16384.0f;  // Q14 to float
+
+    for (size_t n = 0; n < bin.block_size; ++n) {
+        // Get sample from history (oldest first for this window)
+        int16_t raw_sample = getHistorySample(bin.block_size - 1 - n);
+
+        // Apply Hann window from LUT
+        size_t lut_index = static_cast<size_t>(static_cast<float>(n) * bin.window_mult);
+        if (lut_index >= HANN_LUT_SIZE) lut_index = HANN_LUT_SIZE - 1;
+        int16_t window_val = m_hannLUT[lut_index];
+
+        // Apply window (Q15 multiply, result in Q15)
+        int32_t windowed = (static_cast<int32_t>(raw_sample) * window_val) >> 15;
+
+        // Convert to float normalized [-1, 1]
+        float sample = static_cast<float>(windowed) / 32768.0f;
+
+        // Goertzel recursion
+        s0 = sample + coeff * s1 - s2;
+        s2 = s1;
+        s1 = s0;
+    }
+
+    // Compute magnitude
+    float magnitude = std::sqrt(s1 * s1 + s2 * s2 - coeff * s1 * s2);
+
+    // Normalize by block size (larger windows produce larger magnitudes)
+    magnitude *= bin.block_size_recip;
+
+    return magnitude;
+}
+
+bool GoertzelAnalyzer::analyze64(float* binsOut) {
+    // Check if we have enough samples for the largest window
+    if (m_sampleCount < MAX_BLOCK_SIZE) {
+        return false;
+    }
+
+    // Compute all 64 bins
+    for (size_t bin = 0; bin < NUM_BINS; ++bin) {
+        float magnitude = computeGoertzelBin(bin);
+
+        // Apply frequency compensation (higher frequencies tend to have lower energy)
+        // Use a gentle boost for higher bins
+        float bin_normalized = static_cast<float>(bin) / static_cast<float>(NUM_BINS - 1);
+        float compensation = 1.0f + bin_normalized * 0.5f;  // 1.0x to 1.5x
+
+        magnitude *= compensation;
+
+        // Store in internal buffer and output
+        m_magnitudes64[bin] = std::min(1.0f, magnitude * 4.0f);  // Scale and clamp
+        binsOut[bin] = m_magnitudes64[bin];
+    }
+
+    return true;
 }
 
 float GoertzelAnalyzer::computeGoertzel(const int16_t* buffer, size_t N, float coeff) const {
@@ -108,9 +262,16 @@ bool GoertzelAnalyzer::analyzeWindow(const int16_t* window, size_t N, float* ban
 }
 
 void GoertzelAnalyzer::reset() {
+    // Reset legacy 8-band state
     m_accumIndex = 0;
     m_windowFull = false;
     std::memset(m_accumBuffer, 0, sizeof(m_accumBuffer));
+
+    // Reset 64-bin state
+    m_historyWriteIndex = 0;
+    m_sampleCount = 0;
+    std::memset(m_sampleHistory, 0, sizeof(m_sampleHistory));
+    std::memset(m_magnitudes64, 0, sizeof(m_magnitudes64));
 }
 
 } // namespace audio

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0f1219">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>LightwaveOS Simple</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Device Config (shown when not on device) -->
+    <div class="config-bar" id="configBar">
+        <input type="text" id="deviceHost" placeholder="192.168.0.16" value="192.168.0.16">
+        <button class="connect-btn" id="connectBtn">Connect</button>
+    </div>
+
+    <!-- Status Bar -->
+    <header class="status-bar">
+        <div class="connection-status">
+            <span class="status-dot disconnected" id="statusDot"></span>
+            <span class="status-text" id="statusText">Connecting...</span>
+        </div>
+        <div class="current-effect" id="currentEffect">--</div>
+    </header>
+
+    <!-- Main Controls -->
+    <main class="controls-container">
+        <!-- Row 1: Pattern and Palette side-by-side -->
+        <div class="controls-row">
+            <!-- Pattern Card -->
+            <section class="control-card compact">
+                <h2 class="card-header">Pattern</h2>
+                <div class="value-display compact" id="patternName">Loading...</div>
+                <div class="value-secondary compact" id="patternId" style="visibility: hidden;">&nbsp;</div>
+                <div class="button-row">
+                    <button class="control-btn compact" id="patternPrev" aria-label="Previous pattern">◀</button>
+                    <button class="control-btn compact" id="patternNext" aria-label="Next pattern">▶</button>
+                </div>
+            </section>
+
+            <!-- Palette Card -->
+            <section class="control-card compact">
+                <h2 class="card-header">Palette</h2>
+                <div class="value-display compact" id="paletteName">Loading...</div>
+                <div class="value-secondary compact" id="paletteId">--/75</div>
+                <div class="button-row">
+                    <button class="control-btn compact" id="palettePrev" aria-label="Previous palette">◀</button>
+                    <button class="control-btn compact" id="paletteNext" aria-label="Next palette">▶</button>
+                </div>
+            </section>
+        </div>
+
+        <!-- Row 2: Brightness and Speed sliders side-by-side -->
+        <div class="controls-row">
+            <!-- Brightness Slider -->
+            <section class="control-card compact slider-card">
+                <h2 class="card-header">Brightness</h2>
+                <div class="slider-container">
+                    <input type="range" id="brightnessSlider" min="0" max="255" value="128" class="slider" aria-label="Brightness">
+                    <div class="slider-value" id="brightnessValue">128</div>
+                </div>
+            </section>
+
+            <!-- Speed Slider -->
+            <section class="control-card compact slider-card">
+                <h2 class="card-header">Speed</h2>
+                <div class="slider-container">
+                    <input type="range" id="speedSlider" min="1" max="50" value="25" class="slider" aria-label="Speed">
+                    <div class="slider-value" id="speedValue">15</div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Debug Log -->
+    <div id="debugLog" class="debug-log"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>

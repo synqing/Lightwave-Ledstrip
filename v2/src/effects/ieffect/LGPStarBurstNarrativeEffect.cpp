@@ -6,6 +6,7 @@
 
 #include "LGPStarBurstNarrativeEffect.h"
 #include "../CoreEffects.h"      // STRIP_LENGTH, HALF_LENGTH, centerPairDistance(...)
+#include "../../config/features.h"
 #include <FastLED.h>             // fadeToBlackBy
 #include <cmath>                 // sinf, expf, fabsf, fmodf, roundf
 
@@ -101,6 +102,7 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
     const float dt = ctx.deltaTimeMs * 0.001f;         // seconds
 
     const bool hasAudio = ctx.audio.available;
+#if FEATURE_AUDIO_SYNC
     const bool newHop = hasAudio && (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
 
     // -----------------------------------------
@@ -153,7 +155,9 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
         if (m_energyDelta > 0.05f) {
             m_burst = 1.0f;
         }
-    } else if (!hasAudio) {
+    } else
+#endif
+    if (!hasAudio) {
         // No audio: decay toward calm
         m_energyAvg *= 0.98f;
         m_energyDelta = 0.0f;

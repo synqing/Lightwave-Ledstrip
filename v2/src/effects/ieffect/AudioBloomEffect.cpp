@@ -5,6 +5,7 @@
 
 #include "AudioBloomEffect.h"
 #include "../CoreEffects.h"
+#include "../../config/features.h"
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
@@ -32,6 +33,10 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
     // Clear output buffer
     memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
 
+#if !FEATURE_AUDIO_SYNC
+    (void)ctx;
+    return;
+#else
     if (!ctx.audio.available) {
         return;
     }
@@ -126,6 +131,7 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         SET_CENTER_PAIR(ctx, dist, m_radial[dist]);
     }
+#endif  // FEATURE_AUDIO_SYNC
 }
 
 void AudioBloomEffect::distortLogarithmic(CRGB* src, CRGB* dst, uint16_t len) {

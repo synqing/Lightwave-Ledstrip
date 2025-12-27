@@ -6,6 +6,7 @@
 #include "LGPStarBurstEffect.h"
 #include "../CoreEffects.h"
 #include "../enhancement/MotionEngine.h"
+#include "../../config/features.h"
 #include <FastLED.h>
 #include <cmath>
 
@@ -49,6 +50,7 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
     const bool hasAudio = ctx.audio.available;
     bool newHop = false;
 
+#if FEATURE_AUDIO_SYNC
     if (hasAudio) {
         newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
         if (newHop) {
@@ -87,7 +89,9 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
                 m_burst = 1.0f;
             }
         }
-    } else {
+    } else
+#endif
+    {
         m_energyAvg *= 0.98f;
         m_energyDelta = 0.0f;
     }
@@ -108,10 +112,12 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
     float speedScale = 0.3f + 1.2f * m_energyAvgSmooth + 2.0f * m_energyDeltaSmooth;
     m_phase = enhancement::advancePhase(m_phase, speedNorm, speedScale, dt);
     m_burst += m_energyDeltaSmooth * 0.9f;
+#if FEATURE_AUDIO_SYNC
     if (hasAudio) {
         float fastFlux = ctx.audio.fastFlux();
         m_burst += fastFlux * 0.4f;
     }
+#endif
     if (m_burst > 1.0f) m_burst = 1.0f;
     m_burst *= 0.90f;
 

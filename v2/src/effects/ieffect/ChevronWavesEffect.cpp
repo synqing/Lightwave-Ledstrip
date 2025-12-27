@@ -6,6 +6,7 @@
 #include "ChevronWavesEffect.h"
 #include "../CoreEffects.h"
 #include "../utils/FastLEDOptim.h"
+#include "../../config/features.h"
 #include <math.h>
 
 #ifndef PI
@@ -51,6 +52,7 @@ void ChevronWavesEffect::render(plugins::EffectContext& ctx) {
     const bool hasAudio = ctx.audio.available;
     bool newHop = false;
 
+#if FEATURE_AUDIO_SYNC
     if (hasAudio) {
         newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
         if (newHop) {
@@ -85,7 +87,9 @@ void ChevronWavesEffect::render(plugins::EffectContext& ctx) {
             if (m_energyDelta < 0.0f) m_energyDelta = 0.0f;
             m_dominantBin = dominantBin;
         }
-    } else {
+    } else
+#endif
+    {
         m_energyAvg *= 0.98f;
         m_energyDelta = 0.0f;
     }

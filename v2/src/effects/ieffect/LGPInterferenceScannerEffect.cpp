@@ -6,6 +6,7 @@
 #include "LGPInterferenceScannerEffect.h"
 #include "../CoreEffects.h"
 #include "../enhancement/MotionEngine.h"
+#include "../../config/features.h"
 #include <FastLED.h>
 #include <cmath>
 
@@ -48,6 +49,7 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
     const bool hasAudio = ctx.audio.available;
     bool newHop = false;
 
+#if FEATURE_AUDIO_SYNC
     if (hasAudio) {
         newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
         if (newHop) {
@@ -82,7 +84,9 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
             if (m_energyDelta < 0.0f) m_energyDelta = 0.0f;
             m_dominantBin = dominantBin;
         }
-    } else {
+    } else
+#endif
+    {
         m_energyAvg *= 0.98f;
         m_energyDelta = 0.0f;
     }
@@ -113,7 +117,11 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
         float wave2 = 0.5f * sinf(dist * (freqBase * 2.0f) - (m_scanPhase * 1.3f));
 
         // Combine waves with audio modulation
+#if FEATURE_AUDIO_SYNC
         float fastFlux = hasAudio ? ctx.audio.fastFlux() : 0.0f;
+#else
+        float fastFlux = 0.0f;
+#endif
         float pattern = (wave1 + wave2) * (0.3f + 0.6f * m_energyAvgSmooth + 0.4f * fastFlux);
 
         // CRITICAL: Use tanhf for uniform brightness (like ChevronWaves)

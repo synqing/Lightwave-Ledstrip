@@ -5,6 +5,7 @@
 
 #include "AudioWaveformEffect.h"
 #include "../CoreEffects.h"
+#include "../../config/features.h"
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
@@ -36,6 +37,10 @@ void AudioWaveformEffect::render(plugins::EffectContext& ctx) {
     // Clear buffer
     memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
 
+#if !FEATURE_AUDIO_SYNC
+    (void)ctx;
+    return;
+#else
     if (!ctx.audio.available) {
         return;
     }
@@ -196,6 +201,7 @@ void AudioWaveformEffect::render(plugins::EffectContext& ctx) {
         // Render symmetric about centre pair
         SET_CENTER_PAIR(ctx, dist, color);
     }
+#endif  // FEATURE_AUDIO_SYNC
 }
 
 void AudioWaveformEffect::cleanup() {

@@ -5,6 +5,7 @@
 
 #include "RippleEffect.h"
 #include "../CoreEffects.h"
+#include "../../config/features.h"
 #include <FastLED.h>
 #include <cmath>
 
@@ -57,18 +58,21 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
 
     const bool hasAudio = ctx.audio.available;
     bool newHop = false;
+#if FEATURE_AUDIO_SYNC
     if (hasAudio) {
         newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
         if (newHop) {
             m_lastHopSeq = ctx.audio.controlBus.hop_seq;
         }
     }
+#endif
 
     uint8_t spawnChance = 0;
     float energyNorm = 0.0f;
     float energyDelta = 0.0f;
     uint8_t dominantBin = 0;
     float energyAvg = 0.0f;
+#if FEATURE_AUDIO_SYNC
     if (hasAudio && newHop) {
         const float led_share = 255.0f / 12.0f;
         float chromaEnergy = 0.0f;
@@ -102,7 +106,9 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
         float chanceF = energyDelta * 510.0f + energyAvg * 80.0f;
         if (chanceF > 255.0f) chanceF = 255.0f;
         spawnChance = (uint8_t)chanceF;
-    } else if (!hasAudio) {
+    } else
+#endif
+    if (!hasAudio) {
         spawnChance = 10;
     }
 

@@ -1,0 +1,56 @@
+{
+  "snr_db": 45.0,
+  "false_trigger_rate": 2.5,
+  "cpu_load_percent": 35.0,
+  "latency_ms": 8.5,
+  "memory_usage_kb": 128.0,
+  "sample_rate_hz": 44100,
+  "buffer_size": 512,
+  "_metadata": {
+    "description": "Baseline audio benchmark metrics for LightwaveOS v2",
+    "created": "2025-12-27",
+    "platform": "ESP32-S3 @ 240MHz",
+    "test_conditions": {
+      "test_signal": "1kHz sine wave + white noise",
+      "duration_seconds": 10,
+      "test_environment": "PlatformIO native test",
+      "compiler": "gcc/g++",
+      "optimization": "-O2"
+    },
+    "notes": [
+      "These are reference values for regression testing",
+      "Update after verified performance improvements",
+      "SNR measured with 1kHz test tone at -6dB",
+      "False trigger rate measured over 10 second test",
+      "CPU load is average over test duration",
+      "Latency is processing delay from input to output"
+    ]
+  },
+  "_thresholds": {
+    "snr_db": {
+      "warning": "-5%",
+      "failure": "-10%",
+      "direction": "higher_is_better"
+    },
+    "false_trigger_rate": {
+      "warning": "+50%",
+      "failure": "+100%",
+      "direction": "lower_is_better"
+    },
+    "cpu_load_percent": {
+      "warning": "+20%",
+      "failure": "+40%",
+      "direction": "lower_is_better"
+    },
+    "latency_ms": {
+      "warning": "+15%",
+      "failure": "+30%",
+      "direction": "lower_is_better"
+    },
+    "memory_usage_kb": {
+      "warning": "+25%",
+      "failure": "+50%",
+      "direction": "lower_is_better"
+    }
+  }
+}

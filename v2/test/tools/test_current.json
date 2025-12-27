@@ -1,0 +1,9 @@
+{
+  "snr_db": 45.2,
+  "false_trigger_rate": 2.3,
+  "cpu_load_percent": 34.8,
+  "latency_ms": 8.4,
+  "memory_usage_kb": 127.5,
+  "sample_rate_hz": 44100,
+  "buffer_size": 512
+}

@@ -1,0 +1,16 @@
+# Python dependencies for audio benchmark testing tools
+# Install with: pip install -r requirements.txt
+
+# No external dependencies required - uses Python standard library only
+# The scripts use only built-in modules:
+# - json
+# - re
+# - sys
+# - dataclasses
+# - enum
+# - argparse
+# - typing
+
+# Optional: for enhanced output formatting (not required)
+# colorama>=0.4.6  # Cross-platform colored terminal output
+# tabulate>=0.9.0  # Pretty-print tabular data

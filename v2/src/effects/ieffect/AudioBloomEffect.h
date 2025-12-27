@@ -44,6 +44,7 @@ private:
     
     uint32_t m_iter = 0;  // Frame counter for alternate frame logic
     uint32_t m_lastHopSeq = 0;  // Track hop sequence for updates
+    float m_scrollPhase = 0.0f;  // Fractional scroll accumulator
     
     // Helper functions matching Sensory Bridge post-processing
     void distortLogarithmic(CRGB* src, CRGB* dst, uint16_t len);

@@ -341,6 +341,7 @@ private:
     void handleAudioParametersSet(AsyncWebServerRequest* request, uint8_t* data, size_t len);
     void handleAudioControl(AsyncWebServerRequest* request, uint8_t* data, size_t len);
     void handleAudioStateGet(AsyncWebServerRequest* request);
+    void handleAudioTempoGet(AsyncWebServerRequest* request);
     void handleAudioPresetsList(AsyncWebServerRequest* request);
     void handleAudioPresetGet(AsyncWebServerRequest* request, uint8_t presetId);
     void handleAudioPresetSave(AsyncWebServerRequest* request, uint8_t* data, size_t len);
@@ -470,5 +471,32 @@ extern WebServer webServer;
 
 } // namespace network
 } // namespace lightwaveos
+
+// ============================================================================
+// Effect Validation Global Ring Buffer
+// ============================================================================
+
+#if FEATURE_EFFECT_VALIDATION
+#include "../validation/ValidationFrameEncoder.h"
+
+namespace lightwaveos {
+namespace network {
+
+/**
+ * @brief Global validation ring buffer for effect validation streaming
+ *
+ * Effects can push samples to this ring buffer, and the WebServer
+ * will drain and transmit them to subscribed WebSocket clients.
+ */
+extern lightwaveos::validation::EffectValidationRing<128> g_validationRing;
+
+/**
+ * @brief Global validation frame encoder
+ */
+extern lightwaveos::validation::ValidationFrameEncoder g_validationEncoder;
+
+} // namespace network
+} // namespace lightwaveos
+#endif // FEATURE_EFFECT_VALIDATION
 
 #endif // FEATURE_WEB_SERVER

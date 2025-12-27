@@ -16,6 +16,7 @@
 #if FEATURE_AUDIO_SYNC
 
 #include "../../audio/contracts/ControlBus.h"
+#include "../../audio/contracts/MusicalGrid.h"
 #include <stdint.h>
 #include <stddef.h>
 #include <cstring>
@@ -33,14 +34,16 @@ namespace webserver {
 class AudioFrameEncoder {
 public:
     /**
-     * @brief Encode ControlBusFrame into binary format
+     * @brief Encode ControlBusFrame and MusicalGridSnapshot into binary format
      * @param frame Source audio frame
+     * @param grid Source musical grid snapshot
      * @param timestampMs Current timestamp in milliseconds
      * @param outputBuffer Output buffer (must be at least FRAME_SIZE bytes)
      * @param bufferSize Size of output buffer
      * @return Number of bytes written, or 0 on error
      */
     static size_t encode(const audio::ControlBusFrame& frame,
+                         const audio::MusicalGridSnapshot& grid,
                          uint32_t timestampMs,
                          uint8_t* outputBuffer,
                          size_t bufferSize) {
@@ -72,6 +75,18 @@ public:
 
         // Waveform (int16_t[128])
         memcpy(outputBuffer + OFF_WAVEFORM, frame.waveform, WAVEFORM_SIZE * sizeof(int16_t));
+
+        // MusicalGrid data (16 bytes)
+        memcpy(outputBuffer + OFF_BPM_SMOOTHED, &grid.bpm_smoothed, sizeof(float));
+        memcpy(outputBuffer + OFF_TEMPO_CONFIDENCE, &grid.tempo_confidence, sizeof(float));
+        memcpy(outputBuffer + OFF_BEAT_PHASE01, &grid.beat_phase01, sizeof(float));
+
+        // Convert bool to uint8_t for consistent wire format
+        uint8_t beat_tick = grid.beat_tick ? 1 : 0;
+        uint8_t downbeat_tick = grid.downbeat_tick ? 1 : 0;
+        outputBuffer[OFF_BEAT_TICK] = beat_tick;
+        outputBuffer[OFF_DOWNBEAT_TICK] = downbeat_tick;
+        // Reserved bytes already zeroed by memset
 
         return FRAME_SIZE;
     }

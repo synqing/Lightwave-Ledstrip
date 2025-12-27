@@ -27,6 +27,9 @@
 // No-ops when FEATURE_MABUTRACE is disabled
 #include "AudioBenchmarkTrace.h"
 
+// RendererActor for MusicalGrid beat detection wiring
+#include "../core/actors/RendererActor.h"
+
 #ifndef NATIVE_BUILD
 #include <esp_log.h>
 #include <esp_timer.h>
@@ -533,6 +536,16 @@ void AudioActor::processHop()
         // Fresh band data available - Goertzel completed a 512-sample window
         for (int i = 0; i < NUM_BANDS; ++i) {
             float band = mapLevelDb(bandsRaw[i], tuning.bandDbFloor, tuning.bandDbCeil);
+
+            // Phase 2: Per-band gain normalization (boost highs, attenuate bass for LGP balance)
+            band *= tuning.perBandGains[i];
+            if (band > 1.0f) band = 1.0f;
+
+            // Phase 2: Per-band noise floor gate (calibrated for ambient noise sources)
+            if (tuning.usePerBandNoiseFloor && band < tuning.perBandNoiseFloors[i]) {
+                band = 0.0f;
+            }
+
             m_lastBands[i] = band;
             raw.bands[i] = band * activity;
         }
@@ -616,6 +629,20 @@ void AudioActor::processHop()
     std::memcpy(m_prevHopCentered, m_hopBufferCentered, HOP_SIZE * sizeof(int16_t));
     m_prevHopValid = true;
 #endif
+
+    // === Phase: Beat Detection ===
+    // Hybrid detection using flux + bass band energy (expert-validated algorithm)
+    {
+        // Compute bass energy from 60Hz and 120Hz bands
+        float bassEnergy = raw.bands[0] * m_beatTuning.bassWeight60Hz +
+                          raw.bands[1] * m_beatTuning.bassWeight120Hz;
+
+        // Get current time in milliseconds
+        uint32_t nowMs = (uint32_t)(now_us / 1000);
+
+        // Run beat detection
+        detectBeat(fluxMapped, bassEnergy, nowMs);
+    }
 
     // === Phase: ControlBus Update ===
     BENCH_START_PHASE();
@@ -712,6 +739,183 @@ void AudioActor::aggregateBenchmarkStats()
     TRACE_COUNTER("cpu_load", static_cast<int32_t>(m_benchmarkStats.cpuLoadPercent * 100));
 }
 #endif
+
+// ============================================================================
+// Phase 2C: Beat Detection
+// ============================================================================
+
+void AudioActor::updateRollingStats(const float* history, size_t count, float& outMean, float& outStd)
+{
+    if (count == 0) {
+        outMean = 0.0f;
+        outStd = 0.0f;
+        return;
+    }
+
+    // Compute mean
+    float sum = 0.0f;
+    for (size_t i = 0; i < count; ++i) {
+        sum += history[i];
+    }
+    outMean = sum / static_cast<float>(count);
+
+    // Compute standard deviation
+    float sumSqDiff = 0.0f;
+    for (size_t i = 0; i < count; ++i) {
+        float diff = history[i] - outMean;
+        sumSqDiff += diff * diff;
+    }
+    outStd = std::sqrt(sumSqDiff / static_cast<float>(count));
+}
+
+float AudioActor::correctOctaveError(float rawBpm)
+{
+    if (!m_beatTuning.useOctaveCorrection) {
+        return rawBpm;
+    }
+
+    float correctedBpm = rawBpm;
+
+    // Double if too slow (e.g., detecting half-time)
+    while (correctedBpm < m_beatTuning.bpmMinPreferred && correctedBpm > 0.0f) {
+        correctedBpm *= 2.0f;
+    }
+
+    // Halve if too fast (e.g., detecting double-time)
+    while (correctedBpm > m_beatTuning.bpmMaxPreferred) {
+        correctedBpm /= 2.0f;
+    }
+
+    return correctedBpm;
+}
+
+void AudioActor::detectBeat(float currentFlux, float bassEnergy, uint32_t nowMs)
+{
+    // Step 1: Update history buffers (circular buffer pattern)
+    uint8_t historySize = std::min(m_beatTuning.historySize, (uint8_t)BEAT_HISTORY_MAX);
+
+    m_fluxHistory[m_historyIndex] = currentFlux;
+    m_bassHistory[m_historyIndex] = bassEnergy;
+    m_historyIndex = (m_historyIndex + 1) % historySize;
+
+    if (m_historyFilled < historySize) {
+        m_historyFilled++;
+    }
+
+    // Step 2: Update rolling statistics
+    updateRollingStats(m_fluxHistory, m_historyFilled, m_fluxMean, m_fluxStd);
+    if (m_beatTuning.useBassDetection) {
+        updateRollingStats(m_bassHistory, m_historyFilled, m_bassMean, m_bassStd);
+    }
+
+    // Step 3: Compute adaptive thresholds
+    float fluxThreshold = m_fluxMean + m_beatTuning.fluxThresholdMult * m_fluxStd;
+    float bassThreshold = m_bassMean + m_beatTuning.bassThresholdMult * m_bassStd;
+
+    // Apply minimum thresholds (prevent false triggers on silence)
+    if (fluxThreshold < m_beatTuning.minFluxThreshold) {
+        fluxThreshold = m_beatTuning.minFluxThreshold;
+    }
+    if (bassThreshold < m_beatTuning.minBassThreshold) {
+        bassThreshold = m_beatTuning.minBassThreshold;
+    }
+
+    // Step 4: Three-point peak detection (using previous flux, 1-hop lookahead)
+    // We detect a peak at the PREVIOUS hop if: prev > prevPrev AND prev > current
+    bool fluxPeak = (m_prevFlux > m_prevPrevFlux) && (m_prevFlux > currentFlux);
+    bool bassPeak = (m_prevBass > 0.0f) && (bassEnergy < m_prevBass);  // Simple falling edge
+
+    // Step 5: Check if peak exceeds threshold
+    bool fluxTriggered = fluxPeak && (m_prevFlux > fluxThreshold);
+    bool bassTriggered = m_beatTuning.useBassDetection && bassPeak && (m_prevBass > bassThreshold);
+
+    // Step 6: Combined hybrid detection
+    // Beat detected if: flux OR bass triggered, AND cooldown expired
+    bool beatDetected = (fluxTriggered || bassTriggered) && (nowMs >= m_cooldownEndMs);
+
+    // Step 7: Process detected beat
+    if (beatDetected) {
+        // Calculate inter-onset interval (IOI)
+        uint32_t ioi_ms = nowMs - m_lastBeatTimeMs;
+
+        // Only update tempo if IOI is in valid range (30-300 BPM)
+        if (ioi_ms >= 200 && ioi_ms <= 2000) {
+            float rawBpm = 60000.0f / static_cast<float>(ioi_ms);
+            float correctedBpm = correctOctaveError(rawBpm);
+
+            // Smoothly update estimated BPM (simple IIR filter)
+            float bpmAlpha = 0.3f;  // How quickly to adapt to new tempo
+            m_estimatedBpm = m_estimatedBpm + bpmAlpha * (correctedBpm - m_estimatedBpm);
+            m_estimatedBeatIntervalMs = 60000.0f / m_estimatedBpm;
+
+            // Update confidence based on prediction accuracy
+            float expectedNextBeat = m_lastBeatTimeMs + m_estimatedBeatIntervalMs;
+            float predictionError = std::abs(static_cast<float>(nowMs) - expectedNextBeat);
+            float normalizedError = predictionError / m_estimatedBeatIntervalMs;
+
+            if (normalizedError < 0.15f) {
+                // Beat matches prediction - boost confidence
+                m_beatConfidence += m_beatTuning.confidenceBoost;
+                if (m_beatConfidence > 1.0f) m_beatConfidence = 1.0f;
+            } else {
+                // Beat doesn't match prediction - reduce confidence
+                m_beatConfidence *= 0.8f;
+            }
+        }
+
+        // Update beat timing state
+        m_lastBeatTimeMs = nowMs;
+        m_beatCount++;
+
+        // Compute beat strength (normalized)
+        float strength = fluxTriggered ? (m_prevFlux / fluxThreshold) : (m_prevBass / bassThreshold);
+        if (strength > 1.0f) strength = 1.0f;
+        m_lastBeatStrength = strength;
+
+        // Determine if this is a downbeat (every 4th beat, simple heuristic)
+        m_lastBeatWasDownbeat = ((m_beatCount % 4) == 1);
+
+        // Compute adaptive cooldown (60% of estimated beat interval)
+        uint32_t adaptiveCooldown = static_cast<uint32_t>(m_estimatedBeatIntervalMs * m_beatTuning.cooldownRatio);
+        if (adaptiveCooldown < m_beatTuning.minCooldownMs) {
+            adaptiveCooldown = m_beatTuning.minCooldownMs;
+        }
+        if (adaptiveCooldown > m_beatTuning.maxCooldownMs) {
+            adaptiveCooldown = m_beatTuning.maxCooldownMs;
+        }
+        m_cooldownEndMs = nowMs + adaptiveCooldown;
+
+        // Wire to MusicalGrid via RendererActor
+        if (m_rendererActor != nullptr) {
+            // Create AudioTime for the beat observation (16ms delayed for 3-point peak detection)
+            AudioTime beatTime;
+            beatTime.sample_index = m_sampleIndex > HOP_SIZE ? m_sampleIndex - HOP_SIZE : 0;
+            beatTime.monotonic_us = esp_timer_get_time() - (HOP_DURATION_MS * 1000);
+
+            // Push tempo estimate first (MusicalGrid PLL needs it for phase correction)
+            m_rendererActor->onTempoEstimate(beatTime, m_estimatedBpm, m_beatConfidence);
+
+            // Push beat observation (triggers beat_tick in MusicalGrid)
+            m_rendererActor->onBeatObservation(beatTime, strength, m_lastBeatWasDownbeat);
+        }
+
+        // Debug logging (throttled - log once per ~10 beats to avoid spam)
+        if ((m_beatCount % 10) == 1) {
+            ESP_LOGD(TAG, "Beat #%u: BPM=%.1f conf=%.2f str=%.2f ioi=%ums cool=%ums %s",
+                     m_beatCount, m_estimatedBpm, m_beatConfidence, strength, ioi_ms, adaptiveCooldown,
+                     m_lastBeatWasDownbeat ? "DOWNBEAT" : "");
+        }
+    } else {
+        // No beat detected - decay confidence slightly
+        m_beatConfidence *= m_beatTuning.confidenceDecay;
+        if (m_beatConfidence < 0.0f) m_beatConfidence = 0.0f;
+    }
+
+    // Step 8: Update previous values for next iteration (3-point peak detection)
+    m_prevPrevFlux = m_prevFlux;
+    m_prevFlux = currentFlux;
+    m_prevBass = bassEnergy;
+}
 
 } // namespace audio
 } // namespace lightwaveos

@@ -120,6 +120,11 @@ const state = {
     brightness: 128,
     speed: 25,
 
+    // Beat tracking
+    currentBpm: 0,
+    bpmConfidence: 0,
+    lastBeatTime: 0,
+
     // Limits
     PALETTE_COUNT: 75,  // 0-74
     BRIGHTNESS_MIN: 0,
@@ -207,8 +212,14 @@ function connect() {
     };
 
     state.ws.onmessage = (e) => {
-        // Ignore binary messages (LED stream)
-        if (e.data instanceof Blob || e.data instanceof ArrayBuffer) {
+        // Handle binary messages (audio frames)
+        if (e.data instanceof ArrayBuffer) {
+            handleBinaryFrame(e.data);
+            return;
+        }
+        if (e.data instanceof Blob) {
+            // Convert Blob to ArrayBuffer and handle
+            e.data.arrayBuffer().then(buffer => handleBinaryFrame(buffer));
             return;
         }
 
@@ -255,11 +266,93 @@ function scheduleReconnect() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Binary Frame Handler (Audio Data)
+// ─────────────────────────────────────────────────────────────
+
+function handleBinaryFrame(buffer) {
+    // Binary audio frames are structured data from the ESP32
+    // For now we just acknowledge receipt - detailed parsing can be added as needed
+    // The primary audio data comes via JSON beat.event messages
+}
+
+// ─────────────────────────────────────────────────────────────
+// Beat Event Handlers
+// ─────────────────────────────────────────────────────────────
+
+function pulseBeatIndicator(strength) {
+    const indicator = elements.beatIndicator;
+    if (!indicator) return;
+
+    // Scale the pulse based on strength (0.0 - 1.0)
+    const scale = 1 + (strength * 0.5);  // 1.0 to 1.5x scale
+    const opacity = 0.5 + (strength * 0.5);  // 0.5 to 1.0 opacity
+
+    // Apply immediate pulse effect
+    indicator.style.transform = `scale(${scale})`;
+    indicator.style.opacity = opacity;
+
+    // Add the pulse class for animation
+    indicator.classList.add('pulse');
+
+    // Reset after animation
+    setTimeout(() => {
+        indicator.style.transform = 'scale(1)';
+        indicator.style.opacity = '0.6';
+        indicator.classList.remove('pulse');
+    }, 150);
+}
+
+function updateBpmDisplay(bpm, confidence) {
+    state.currentBpm = bpm;
+    state.bpmConfidence = confidence;
+
+    const bpmElement = elements.bpmValue;
+    if (!bpmElement) return;
+
+    // Update the BPM value
+    if (bpm > 0) {
+        bpmElement.textContent = Math.round(bpm);
+    } else {
+        bpmElement.textContent = '--';
+    }
+
+    // Update confidence indicator via opacity
+    const bpmDisplay = elements.bpmDisplay;
+    if (bpmDisplay) {
+        // Confidence affects the glow/visibility
+        const minOpacity = 0.4;
+        const maxOpacity = 1.0;
+        const opacity = minOpacity + (confidence * (maxOpacity - minOpacity));
+        bpmDisplay.style.opacity = opacity;
+    }
+}
+
+function handleBeatEvent(msg) {
+    // Update BPM display
+    if (msg.bpm !== undefined) {
+        updateBpmDisplay(msg.bpm, msg.confidence || 0);
+    }
+
+    // Pulse the beat indicator on tick
+    if (msg.tick) {
+        // Downbeats get stronger pulse
+        const strength = msg.downbeat ? 1.0 : 0.6;
+        pulseBeatIndicator(strength);
+        state.lastBeatTime = Date.now();
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
 // Message Handler
 // ─────────────────────────────────────────────────────────────
 
 function handleMessage(msg) {
-    log('[WS] RECV: ' + msg.type + (msg.effectId !== undefined ? ` (effectId: ${msg.effectId})` : '') + (msg.brightness !== undefined ? ` (brightness: ${msg.brightness})` : ''));
+    // Log with actual data - not just type
+    if (msg.type === 'beat.event') {
+        log(`[BEAT] BPM:${msg.bpm?.toFixed(1)} conf:${(msg.confidence*100)?.toFixed(0)}% phase:${msg.beat_phase?.toFixed(2)} beat#${msg.beat_index} ${msg.downbeat ? 'DOWNBEAT' : ''}`);
+    } else {
+        log('[WS] RECV: ' + msg.type + (msg.effectId !== undefined ? ` (effectId: ${msg.effectId})` : '') + (msg.brightness !== undefined ? ` (brightness: ${msg.brightness})` : ''));
+    }
 
     switch (msg.type) {
         case 'status':
@@ -317,8 +410,15 @@ function handleMessage(msg) {
             updatePaletteUI();
             break;
 
+        case 'beat.event':
+            handleBeatEvent(msg);
+            break;
+
         default:
-            log('[WS] Unknown: ' + msg.type);
+            // Don't log beat events as unknown (they may come with just 'beat.event' type)
+            if (msg.type !== 'beat.event') {
+                log('[WS] Unknown: ' + msg.type);
+            }
             break;
     }
 }
@@ -685,6 +785,50 @@ function updateAllUI() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Auto-Discovery
+// ─────────────────────────────────────────────────────────────
+
+async function discoverDevice() {
+    log('[DISCOVER] Searching for LightwaveOS device...');
+    elements.statusText.textContent = 'Searching...';
+
+    try {
+        const response = await fetch('/api/discover', {
+            method: 'GET',
+            cache: 'no-cache'
+        });
+        const data = await response.json();
+
+        if (data.success && data.ip) {
+            log(`[DISCOVER] Found device at ${data.ip}`);
+            return data.ip;
+        }
+    } catch (e) {
+        log(`[DISCOVER] Server discovery failed: ${e.message}`);
+    }
+
+    // Fallback: try lightwaveos.local directly (works on macOS/iOS)
+    try {
+        log('[DISCOVER] Trying lightwaveos.local directly...');
+        const testUrl = 'http://lightwaveos.local/api/v1/device/info';
+        const response = await fetch(testUrl, {
+            method: 'GET',
+            mode: 'cors',
+            cache: 'no-cache',
+            signal: AbortSignal.timeout(3000)
+        });
+        if (response.ok) {
+            log('[DISCOVER] lightwaveos.local is reachable');
+            return 'lightwaveos.local';
+        }
+    } catch (e) {
+        log(`[DISCOVER] lightwaveos.local not reachable: ${e.message}`);
+    }
+
+    return null;
+}
+
+// ─────────────────────────────────────────────────────────────
 // Initialization
 // ─────────────────────────────────────────────────────────────
 
@@ -703,6 +847,9 @@ function init() {
     elements.configBar = document.getElementById('configBar');
     elements.deviceHost = document.getElementById('deviceHost');
     elements.connectBtn = document.getElementById('connectBtn');
+    elements.beatIndicator = document.getElementById('beatIndicator');
+    elements.bpmDisplay = document.getElementById('bpmDisplay');
+    elements.bpmValue = document.getElementById('bpmValue');
 
     // Bind button events
     document.getElementById('patternPrev').addEventListener('click', prevPattern);
@@ -730,21 +877,21 @@ function init() {
         elements.configBar.classList.add('hidden');
         connect();
     } else {
-        // Running remotely - show config bar, wait for user to connect
-        elements.statusText.textContent = 'Enter device address';
+        // Running remotely - try auto-discovery first
+        elements.statusText.textContent = 'Searching...';
 
-        // Load saved host from localStorage
+        // Load saved host from localStorage as fallback
         const savedHost = localStorage.getItem('lightwaveHost');
         if (savedHost) {
             elements.deviceHost.value = savedHost;
         }
 
         // Connect button handler
-        elements.connectBtn.addEventListener('click', () => {
-            const host = elements.deviceHost.value.trim();
+        const connectWithHost = (host) => {
             if (host) {
                 state.deviceHost = host;
                 localStorage.setItem('lightwaveHost', host);
+                elements.deviceHost.value = host;
                 log('[CONFIG] Device host set to: ' + host);
 
                 // Close existing connection if any
@@ -764,6 +911,10 @@ function init() {
             } else {
                 log('[CONFIG] ERROR: Please enter a device IP or hostname');
             }
+        };
+
+        elements.connectBtn.addEventListener('click', () => {
+            connectWithHost(elements.deviceHost.value.trim());
         });
 
         // Enter key to connect
@@ -772,9 +923,25 @@ function init() {
                 elements.connectBtn.click();
             }
         });
+
+        // Auto-discover device
+        discoverDevice().then(discoveredHost => {
+            if (discoveredHost) {
+                log(`[DISCOVER] Auto-connecting to ${discoveredHost}`);
+                connectWithHost(discoveredHost);
+            } else {
+                // Fall back to saved host or show manual input
+                if (savedHost) {
+                    log(`[DISCOVER] Using saved host: ${savedHost}`);
+                    elements.statusText.textContent = 'Click Connect';
+                } else {
+                    elements.statusText.textContent = 'Enter device IP';
+                }
+            }
+        });
     }
 
-    log('[App] Initialized - enter device IP and click CONNECT');
+    log('[App] Initialized');
 }
 
 // Start when DOM is ready

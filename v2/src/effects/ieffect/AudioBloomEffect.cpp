@@ -7,6 +7,10 @@
 #include "../CoreEffects.h"
 #include "../../config/features.h"
 
+#ifdef FEATURE_EFFECT_VALIDATION
+#include "../../validation/EffectValidationMacros.h"
+#endif
+
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
 #endif
@@ -26,6 +30,7 @@ bool AudioBloomEffect::init(plugins::EffectContext& ctx) {
     memset(m_radialTemp, 0, sizeof(m_radialTemp));
     m_iter = 0;
     m_lastHopSeq = 0;
+    m_scrollPhase = 0.0f;
     return true;
 }
 
@@ -58,7 +63,7 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
 
         for (uint8_t i = 0; i < 12; ++i) {
             float prog = i / 12.0f;
-            float bin = ctx.audio.controlBus.chroma[i];
+            float bin = ctx.audio.controlBus.heavy_chroma[i];
 
             // Apply squaring (SQUARE_ITER, typically 1)
             float bright = bin;
@@ -86,23 +91,24 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
             sum_color = ctx.palette.getColor(ctx.gHue, brightU8);
         }
 
-        // Determine scroll step (fast/slow based on speed)
-        // Map ctx.speed (1-50) to step: low speed = 1, high speed = 2
-        uint8_t step = (ctx.speed > 25) ? 2 : 1;
+        // Fractional scroll accumulator (smooth motion)
+        float scrollRate = 0.3f + (ctx.speed / 50.0f) * 2.2f;  // 0.3-2.5 LEDs/hop
+        m_scrollPhase += scrollRate;
 
-        // Shift radial buffer outward and insert sum_color at start
-        if (step == 2) {
-            // Fast mode: shift 2 LEDs
-            for (uint8_t i = 0; i < HALF_LENGTH - 2; ++i) {
-                m_radialTemp[(HALF_LENGTH - 1) - i] = m_radial[(HALF_LENGTH - 1) - i - 2];
+        uint8_t step = (uint8_t)m_scrollPhase;
+        m_scrollPhase -= step;  // Keep fractional remainder
+
+        if (step > HALF_LENGTH - 1) step = HALF_LENGTH - 1;
+
+        if (step > 0) {
+            for (uint8_t i = 0; i < HALF_LENGTH - step; ++i) {
+                m_radialTemp[(HALF_LENGTH - 1) - i] = m_radial[(HALF_LENGTH - 1) - i - step];
             }
-            m_radialTemp[0] = sum_color;
-            m_radialTemp[1] = sum_color;
+            for (uint8_t i = 0; i < step; ++i) {
+                m_radialTemp[i] = sum_color;
+            }
         } else {
-            // Slow mode: shift 1 LED
-            for (uint8_t i = 0; i < HALF_LENGTH - 1; ++i) {
-                m_radialTemp[(HALF_LENGTH - 1) - i] = m_radial[(HALF_LENGTH - 1) - i - 1];
-            }
+            memcpy(m_radialTemp, m_radial, sizeof(m_radialTemp));
             m_radialTemp[0] = sum_color;
         }
 
@@ -118,7 +124,7 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
         fadeTopHalf(m_radial, HALF_LENGTH);
 
         // 3. Increase saturation
-        increaseSaturation(m_radial, HALF_LENGTH, 32);
+        increaseSaturation(m_radial, HALF_LENGTH, 24);
 
         // Save to aux buffer
         memcpy(m_radialAux, m_radial, sizeof(m_radial));
@@ -126,6 +132,26 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
         // Alternate frames: load from aux buffer
         memcpy(m_radial, m_radialAux, sizeof(m_radial));
     }
+
+    // Compute scroll rate for validation (same as in update block)
+    float scrollRate = 0.3f + (ctx.speed / 50.0f) * 2.2f;  // 0.3-2.5 LEDs/hop
+
+    // Find maxBin and sum from heavy_chroma for validation
+    float maxBin = 0.0f;
+    float sum = 0.0f;
+    for (uint8_t i = 0; i < 12; ++i) {
+        float v = ctx.audio.controlBus.heavy_chroma[i];
+        sum += v;
+        if (v > maxBin) maxBin = v;
+    }
+
+#ifdef FEATURE_EFFECT_VALIDATION
+    VALIDATION_INIT(21);  // Effect ID for AudioBloom
+    VALIDATION_SCROLL(m_scrollPhase);
+    VALIDATION_SPEED(scrollRate, m_scrollPhase);  // Use scroll rate as speed proxy
+    VALIDATION_AUDIO(maxBin, sum, 0.0f);  // maxBin is dominant frequency
+    VALIDATION_SUBMIT(&::lightwaveos::validation::g_validationRing);
+#endif
 
     // Render radial buffer to LEDs (centre-origin)
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {

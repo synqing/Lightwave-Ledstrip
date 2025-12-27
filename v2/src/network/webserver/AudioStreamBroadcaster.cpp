@@ -65,7 +65,7 @@ bool AudioStreamBroadcaster::hasSubscribers() const {
     return has;
 }
 
-size_t AudioStreamBroadcaster::broadcast(const audio::ControlBusFrame& frame) {
+size_t AudioStreamBroadcaster::broadcast(const audio::ControlBusFrame& frame, const audio::MusicalGridSnapshot& grid) {
     if (!hasSubscribers() || !m_ws || m_ws->count() == 0) return 0;
 
     // Throttle to target FPS
@@ -73,8 +73,8 @@ size_t AudioStreamBroadcaster::broadcast(const audio::ControlBusFrame& frame) {
     if (now - m_lastBroadcast < AudioStreamConfig::FRAME_INTERVAL_MS) return 0;
     m_lastBroadcast = now;
 
-    // Encode frame
-    size_t encoded = AudioFrameEncoder::encode(frame, now, m_frameBuffer, sizeof(m_frameBuffer));
+    // Encode frame with musical grid data
+    size_t encoded = AudioFrameEncoder::encode(frame, grid, now, m_frameBuffer, sizeof(m_frameBuffer));
     if (encoded == 0) return 0;
 
     // Get subscriber IDs (copy to avoid holding lock during send)

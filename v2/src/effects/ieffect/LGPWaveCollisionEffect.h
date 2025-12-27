@@ -42,6 +42,12 @@ private:
     float m_energyDeltaSmooth = 0.0f;
     float m_dominantBinSmooth = 0.0f;
     float m_collisionBoost = 0.0f;
+
+    // Speed slew limiting (jog-dial fix)
+    float m_speedScaleSmooth = 1.0f;  // Smoothed speed value
+
+    // Validation instrumentation
+    float m_prevPhaseDelta = 0.0f;    // Previous frame phase delta for reversal detection
 };
 
 } // namespace ieffect

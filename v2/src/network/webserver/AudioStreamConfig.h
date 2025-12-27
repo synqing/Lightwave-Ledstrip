@@ -48,8 +48,16 @@ namespace AudioStreamConfig {
     constexpr size_t OFF_RESERVED = 188;             // 4 bytes padding
     constexpr size_t OFF_WAVEFORM = 192;             // int16_t[128] waveform (256 bytes)
 
+    // MusicalGrid data: 16 bytes (starts at offset 448)
+    constexpr size_t OFF_BPM_SMOOTHED = 448;         // float bpm_smoothed (4 bytes)
+    constexpr size_t OFF_TEMPO_CONFIDENCE = 452;     // float tempo_confidence (4 bytes)
+    constexpr size_t OFF_BEAT_PHASE01 = 456;         // float beat_phase01 (4 bytes)
+    constexpr size_t OFF_BEAT_TICK = 460;            // uint8_t beat_tick (1 byte)
+    constexpr size_t OFF_DOWNBEAT_TICK = 461;        // uint8_t downbeat_tick (1 byte)
+    constexpr size_t OFF_MUSICAL_RESERVED = 462;     // uint8_t[2] reserved padding (2 bytes)
+
     // Total frame size
-    constexpr size_t FRAME_SIZE = 448;
+    constexpr size_t FRAME_SIZE = 464;
 
     // Streaming configuration
     constexpr uint8_t MAX_CLIENTS = 4;               // Max simultaneous subscribers

@@ -58,6 +58,8 @@ public:
     ControlBusFrame GetFrame() const { return m_frame; }
 
     void setSmoothing(float alphaFast, float alphaSlow);
+    void setAttackRelease(float bandAttack, float bandRelease,
+                          float heavyBandAttack, float heavyBandRelease);
     float getAlphaFast() const { return m_alpha_fast; }
     float getAlphaSlow() const { return m_alpha_slow; }
 
@@ -69,10 +71,19 @@ private:
     float m_flux_s = 0.0f;
     float m_bands_s[CONTROLBUS_NUM_BANDS] = {0};
     float m_chroma_s[CONTROLBUS_NUM_CHROMA] = {0};
+    // LGP_SMOOTH: Separate state for heavy (extra-smoothed) bands
+    float m_heavy_bands_s[CONTROLBUS_NUM_BANDS] = {0};
+    float m_heavy_chroma_s[CONTROLBUS_NUM_CHROMA] = {0};
 
     // Tunables (Phase-2 defaults; keep them stable until you port Tab5 constants)
     float m_alpha_fast = 0.35f;  // fast response
     float m_alpha_slow = 0.12f;  // slower response
+
+    // LGP_SMOOTH: Asymmetric attack/release for bands
+    float m_band_attack = 0.15f;       // Fast rise for transients
+    float m_band_release = 0.03f;      // Slow fall for LGP viewing
+    float m_heavy_band_attack = 0.08f; // Extra slow rise
+    float m_heavy_band_release = 0.015f; // Ultra slow fall
 };
 
 } // namespace lightwaveos::audio

@@ -65,9 +65,10 @@ public:
     /**
      * @brief Broadcast audio frame to all subscribers
      * @param frame Audio control bus frame to broadcast
+     * @param grid Musical grid snapshot with tempo/beat data
      * @return Number of clients that received the frame
      */
-    size_t broadcast(const audio::ControlBusFrame& frame);
+    size_t broadcast(const audio::ControlBusFrame& frame, const audio::MusicalGridSnapshot& grid);
 
     /**
      * @brief Clean up disconnected clients

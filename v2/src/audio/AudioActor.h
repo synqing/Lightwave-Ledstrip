@@ -50,6 +50,9 @@
 #include "AudioBenchmarkRing.h"
 #endif
 
+// Forward declaration for cross-actor beat detection wiring
+namespace lightwaveos { namespace actors { class RendererActor; } }
+
 namespace lightwaveos {
 namespace audio {
 
@@ -179,6 +182,17 @@ public:
      * @brief Reset statistics
      */
     void resetStats();
+
+    /**
+     * @brief Set the RendererActor for beat detection callback
+     *
+     * Called by ActorSystem after both actors are created.
+     * AudioActor will call RendererActor's onTempoEstimate() and
+     * onBeatObservation() methods when beats are detected.
+     *
+     * @param renderer Pointer to RendererActor (nullptr to disable)
+     */
+    void setRendererActor(actors::RendererActor* renderer) { m_rendererActor = renderer; }
 
     // ========================================================================
     // Buffer Access (for Phase 2 processing)
@@ -397,6 +411,48 @@ private:
     static constexpr uint32_t GOERTZEL_LOG_INTERVAL = 62;  // ~2 seconds @ 31 Hz
 
     // ========================================================================
+    // Phase 2C: Beat Detection State
+    // ========================================================================
+
+    // Beat detection tuning (runtime adjustable)
+    BeatDetectionTuning m_beatTuning;
+
+    // Rolling history buffers for adaptive threshold (circular buffer pattern)
+    static constexpr size_t BEAT_HISTORY_MAX = 32;
+    float m_fluxHistory[BEAT_HISTORY_MAX] = {0};
+    float m_bassHistory[BEAT_HISTORY_MAX] = {0};
+    uint8_t m_historyIndex = 0;
+    uint8_t m_historyFilled = 0;  // How many samples in history (up to historySize)
+
+    // Rolling statistics for adaptive threshold
+    float m_fluxMean = 0.0f;
+    float m_fluxStd = 0.0f;
+    float m_bassMean = 0.0f;
+    float m_bassStd = 0.0f;
+
+    // Previous values for 3-point peak detection
+    float m_prevFlux = 0.0f;
+    float m_prevPrevFlux = 0.0f;
+    float m_prevBass = 0.0f;
+
+    // Cooldown and timing state
+    uint32_t m_lastBeatTimeMs = 0;
+    uint32_t m_cooldownEndMs = 0;
+    float m_estimatedBeatIntervalMs = 500.0f;  // Default 120 BPM
+    float m_estimatedBpm = 120.0f;
+
+    // Beat counting for downbeat detection
+    uint32_t m_beatCount = 0;
+    float m_beatConfidence = 0.0f;
+
+    // Last detected beat info (for debugging/API)
+    float m_lastBeatStrength = 0.0f;
+    bool m_lastBeatWasDownbeat = false;
+
+    // Renderer actor for MusicalGrid wiring (set by ActorSystem)
+    actors::RendererActor* m_rendererActor = nullptr;
+
+    // ========================================================================
     // Phase 2B: Benchmark Instrumentation
     // ========================================================================
 
@@ -451,6 +507,41 @@ private:
      * @brief Handle capture error
      */
     void handleCaptureError(CaptureResult result);
+
+    /**
+     * @brief Detect beats using hybrid flux + bass detection
+     *
+     * Called after processHop() computes flux and bands.
+     * Uses adaptive threshold (mean + k*std) with 3-point peak detection.
+     *
+     * @param currentFlux Current frame's flux value
+     * @param bassEnergy Weighted sum of 60Hz and 120Hz bands
+     * @param nowMs Current time in milliseconds
+     */
+    void detectBeat(float currentFlux, float bassEnergy, uint32_t nowMs);
+
+    /**
+     * @brief Update rolling statistics for adaptive threshold
+     *
+     * Computes mean and std deviation from history buffer.
+     *
+     * @param history Array of history values
+     * @param count Number of valid samples in history
+     * @param outMean Output: computed mean
+     * @param outStd Output: computed standard deviation
+     */
+    void updateRollingStats(const float* history, size_t count, float& outMean, float& outStd);
+
+    /**
+     * @brief Apply octave-error correction to BPM estimate
+     *
+     * Snaps BPM to preferred range [bpmMinPreferred, bpmMaxPreferred]
+     * by doubling or halving as needed.
+     *
+     * @param rawBpm Raw BPM from inter-onset interval
+     * @return Corrected BPM in preferred range
+     */
+    float correctOctaveError(float rawBpm);
 };
 
 // ============================================================================

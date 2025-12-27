@@ -24,6 +24,7 @@ enum class AudioPreset : uint8_t {
     SENSORY_BRIDGE = 1,     ///< Sensory Bridge style (50:1 AGC ratio, faster attack)
     AGGRESSIVE_AGC = 2,     ///< High compression, very fast response
     CONSERVATIVE_AGC = 3,   ///< Low compression, smooth with minimal pumping
+    LGP_SMOOTH = 4,         ///< Optimized for LGP viewing (slow release, per-band gains)
     CUSTOM = 255            ///< User-defined parameters
 };
 
@@ -70,6 +71,20 @@ struct AudioPipelineTuning {
     float controlBusAlphaFast = 0.35f;
     float controlBusAlphaSlow = 0.12f;
 
+    // Attack/release asymmetry for bands (LGP_SMOOTH: fast attack, slow release)
+    float bandAttack = 0.15f;           ///< Band rise rate (fast transient response)
+    float bandRelease = 0.03f;          ///< Band fall rate (slow decay for LGP viewing)
+    float heavyBandAttack = 0.08f;      ///< Heavy band rise (extra smooth for ambient)
+    float heavyBandRelease = 0.015f;    ///< Heavy band fall (ultra smooth)
+
+    // Per-band normalization gains (boost highs, attenuate bass for visual balance)
+    float perBandGains[8] = {0.8f, 0.85f, 1.0f, 1.2f, 1.5f, 1.8f, 2.0f, 2.2f};
+
+    // Per-band noise floors (calibrated for typical ambient noise sources)
+    float perBandNoiseFloors[8] = {0.0008f, 0.0012f, 0.0006f, 0.0005f,
+                                    0.0008f, 0.0010f, 0.0012f, 0.0006f};
+    bool usePerBandNoiseFloor = false;  ///< Enable per-band noise floor gating
+
     // Silence detection (Sensory Bridge insight: 10-second hysteresis)
     float silenceHysteresisMs = 0.0f;    ///< 0 = disabled, >0 = wait time before standby
     float silenceThreshold = 0.01f;       ///< RMS below this is considered silence
@@ -87,6 +102,50 @@ struct AudioContractTuning {
 
     uint8_t beatsPerBar = 4;
     uint8_t beatUnit = 4;
+};
+
+/**
+ * @brief Beat detection tuning parameters
+ *
+ * Expert-validated parameters for flux + bass-band hybrid beat detection:
+ * - Adaptive threshold with k=2.0 (literature standard)
+ * - 16-sample history for robust statistics (~256ms at 62.5 Hz)
+ * - Adaptive cooldown (60% of beat interval) for 60-300 BPM support
+ * - Bass band weighting for kick drum detection
+ * - 3-point peak detection to prevent early triggers
+ */
+struct BeatDetectionTuning {
+    // Threshold multipliers (how many std deviations above mean)
+    float fluxThresholdMult = 2.0f;     ///< Flux threshold: mean + k*std (literature: 2.0)
+    float bassThresholdMult = 1.8f;     ///< Bass threshold: slightly more sensitive
+
+    // History window size (samples for rolling statistics)
+    uint8_t historySize = 16;           ///< 16 samples = ~256ms at 62.5 Hz hop rate
+
+    // Cooldown parameters (adaptive to estimated BPM)
+    uint32_t minCooldownMs = 100;       ///< Min cooldown = max 300 BPM (200ms/beat)
+    uint32_t maxCooldownMs = 300;       ///< Max cooldown = min 100 BPM (600ms/beat)
+    float cooldownRatio = 0.6f;         ///< Cooldown = 60% of estimated beat interval
+
+    // Bass band weighting (bands[0] = 60Hz, bands[1] = 120Hz)
+    float bassWeight60Hz = 0.6f;        ///< Weight for 60Hz band (sub-bass/kick fundamental)
+    float bassWeight120Hz = 0.4f;       ///< Weight for 120Hz band (kick harmonic)
+
+    // Octave-error correction range
+    float bpmMinPreferred = 80.0f;      ///< Below this, double the BPM estimate
+    float bpmMaxPreferred = 160.0f;     ///< Above this, halve the BPM estimate
+
+    // Minimum thresholds (prevent false triggers on silence)
+    float minFluxThreshold = 0.05f;     ///< Absolute min flux to trigger beat
+    float minBassThreshold = 0.08f;     ///< Absolute min bass to trigger beat
+
+    // Confidence weighting
+    float confidenceDecay = 0.98f;      ///< Per-hop confidence decay when no beat detected
+    float confidenceBoost = 0.15f;      ///< Confidence boost when beat matches prediction
+
+    // Enable/disable hybrid detection
+    bool useBassDetection = true;       ///< Enable bass-band hybrid detection
+    bool useOctaveCorrection = true;    ///< Enable BPM octave-error correction
 };
 
 inline float clampf(float v, float lo, float hi) {
@@ -140,6 +199,18 @@ inline AudioPipelineTuning clampAudioPipelineTuning(const AudioPipelineTuning& i
     out.controlBusAlphaFast = clampf(out.controlBusAlphaFast, 0.0f, 1.0f);
     out.controlBusAlphaSlow = clampf(out.controlBusAlphaSlow, 0.0f, 1.0f);
 
+    // Attack/release asymmetry
+    out.bandAttack = clampf(out.bandAttack, 0.0f, 1.0f);
+    out.bandRelease = clampf(out.bandRelease, 0.0f, 1.0f);
+    out.heavyBandAttack = clampf(out.heavyBandAttack, 0.0f, 1.0f);
+    out.heavyBandRelease = clampf(out.heavyBandRelease, 0.0f, 1.0f);
+
+    // Per-band gains
+    for (int i = 0; i < 8; ++i) {
+        out.perBandGains[i] = clampf(out.perBandGains[i], 0.1f, 10.0f);
+        out.perBandNoiseFloors[i] = clampf(out.perBandNoiseFloors[i], 0.0f, 0.1f);
+    }
+
     out.silenceHysteresisMs = clampf(out.silenceHysteresisMs, 0.0f, 60000.0f);
     out.silenceThreshold = clampf(out.silenceThreshold, 0.0f, 1.0f);
 
@@ -166,6 +237,47 @@ inline AudioContractTuning clampAudioContractTuning(const AudioContractTuning& i
     if (out.beatUnit == 0) out.beatUnit = 4;
     if (out.beatsPerBar > 12) out.beatsPerBar = 12;
     if (out.beatUnit > 16) out.beatUnit = 16;
+
+    return out;
+}
+
+inline BeatDetectionTuning clampBeatDetectionTuning(const BeatDetectionTuning& in) {
+    BeatDetectionTuning out = in;
+
+    // Threshold multipliers
+    out.fluxThresholdMult = clampf(out.fluxThresholdMult, 1.0f, 5.0f);
+    out.bassThresholdMult = clampf(out.bassThresholdMult, 1.0f, 5.0f);
+
+    // History size (4-32 samples reasonable)
+    if (out.historySize < 4) out.historySize = 4;
+    if (out.historySize > 32) out.historySize = 32;
+
+    // Cooldown parameters
+    if (out.minCooldownMs < 50) out.minCooldownMs = 50;     // Max ~600 BPM
+    if (out.maxCooldownMs > 600) out.maxCooldownMs = 600;   // Min ~50 BPM
+    if (out.maxCooldownMs < out.minCooldownMs) {
+        out.maxCooldownMs = out.minCooldownMs;
+    }
+    out.cooldownRatio = clampf(out.cooldownRatio, 0.3f, 0.9f);
+
+    // Bass weights
+    out.bassWeight60Hz = clampf(out.bassWeight60Hz, 0.0f, 1.0f);
+    out.bassWeight120Hz = clampf(out.bassWeight120Hz, 0.0f, 1.0f);
+
+    // BPM preferred range
+    out.bpmMinPreferred = clampf(out.bpmMinPreferred, 40.0f, 120.0f);
+    out.bpmMaxPreferred = clampf(out.bpmMaxPreferred, 100.0f, 200.0f);
+    if (out.bpmMaxPreferred < out.bpmMinPreferred + 20.0f) {
+        out.bpmMaxPreferred = out.bpmMinPreferred + 20.0f;
+    }
+
+    // Minimum thresholds
+    out.minFluxThreshold = clampf(out.minFluxThreshold, 0.01f, 0.5f);
+    out.minBassThreshold = clampf(out.minBassThreshold, 0.01f, 0.5f);
+
+    // Confidence parameters
+    out.confidenceDecay = clampf(out.confidenceDecay, 0.9f, 0.999f);
+    out.confidenceBoost = clampf(out.confidenceBoost, 0.01f, 0.5f);
 
     return out;
 }
@@ -229,6 +341,40 @@ inline AudioPipelineTuning getPreset(AudioPreset preset) {
             tuning.silenceThreshold = 0.02f;
             break;
 
+        case AudioPreset::LGP_SMOOTH:
+            // Optimized for Light Guide Plate viewing
+            // Slow release allows light diffusion to settle, per-band gains balance spectrum
+            tuning.agcAttack = 0.06f;
+            tuning.agcRelease = 0.015f;
+            tuning.controlBusAlphaFast = 0.20f;
+            tuning.controlBusAlphaSlow = 0.06f;
+            // Asymmetric attack/release for smooth LGP response
+            tuning.bandAttack = 0.12f;          // Moderate attack (preserves beats)
+            tuning.bandRelease = 0.025f;        // Very slow release (smooth decay)
+            tuning.heavyBandAttack = 0.06f;     // Extra slow attack
+            tuning.heavyBandRelease = 0.012f;   // Ultra slow release
+            // Per-band gains: attenuate bass, boost treble for visual balance
+            tuning.perBandGains[0] = 0.8f;      // 60Hz - attenuate sub-bass
+            tuning.perBandGains[1] = 0.85f;     // 120Hz - attenuate bass
+            tuning.perBandGains[2] = 1.0f;      // 250Hz - neutral
+            tuning.perBandGains[3] = 1.2f;      // 500Hz - slight boost
+            tuning.perBandGains[4] = 1.5f;      // 1kHz - boost
+            tuning.perBandGains[5] = 1.8f;      // 2kHz - presence boost
+            tuning.perBandGains[6] = 2.0f;      // 4kHz - brilliance boost
+            tuning.perBandGains[7] = 2.2f;      // 7.8kHz - air boost
+            // Enable per-band noise floors
+            tuning.perBandNoiseFloors[0] = 0.0008f;  // 60Hz - power supply hum
+            tuning.perBandNoiseFloors[1] = 0.0012f;  // 120Hz - HVAC fundamental
+            tuning.perBandNoiseFloors[2] = 0.0006f;  // 250Hz - quiet
+            tuning.perBandNoiseFloors[3] = 0.0005f;  // 500Hz - quiet
+            tuning.perBandNoiseFloors[4] = 0.0008f;  // 1kHz - fan harmonics
+            tuning.perBandNoiseFloors[5] = 0.0010f;  // 2kHz - fan noise
+            tuning.perBandNoiseFloors[6] = 0.0012f;  // 4kHz - fan noise peak
+            tuning.perBandNoiseFloors[7] = 0.0006f;  // 7.8kHz - quiet
+            tuning.usePerBandNoiseFloor = true;
+            tuning.silenceHysteresisMs = 8000.0f;   // 8 second standby
+            break;
+
         case AudioPreset::CUSTOM:
         default:
             // Return defaults, caller will customize
@@ -247,6 +393,7 @@ inline const char* getPresetName(AudioPreset preset) {
         case AudioPreset::SENSORY_BRIDGE:  return "Sensory Bridge";
         case AudioPreset::AGGRESSIVE_AGC:  return "Aggressive AGC";
         case AudioPreset::CONSERVATIVE_AGC: return "Conservative AGC";
+        case AudioPreset::LGP_SMOOTH:      return "LGP Smooth";
         case AudioPreset::CUSTOM:          return "Custom";
         default:                           return "Unknown";
     }

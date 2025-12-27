@@ -7,6 +7,10 @@
 #include "../CoreEffects.h"
 #include "../../config/features.h"
 
+#ifdef FEATURE_EFFECT_VALIDATION
+#include "../../validation/EffectValidationMacros.h"
+#endif
+
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
 #endif
@@ -89,8 +93,8 @@ void AudioWaveformEffect::render(plugins::EffectContext& ctx) {
         }
     }
 
-    // Smooth waveform_peak_scaled (0.05/0.95 matching Sensory Bridge)
-    m_waveformPeakScaledLast = m_waveformPeakScaled * 0.05f + m_waveformPeakScaledLast * 0.95f;
+    // Smooth waveform_peak_scaled (0.03/0.97 tuned for LGP)
+    m_waveformPeakScaledLast = m_waveformPeakScaled * 0.03f + m_waveformPeakScaledLast * 0.97f;
 
     // Compute sum_colour from chromagram (matching Sensory Bridge light_mode_waveform)
     float chromaMax = 0.0f;
@@ -134,16 +138,16 @@ void AudioWaveformEffect::render(plugins::EffectContext& ctx) {
         sum_color = ctx.palette.getColor(ctx.gHue, brightU8);
     }
 
-    // Smooth sum_colour (0.05/0.95 matching Sensory Bridge)
+    // Smooth sum_colour (0.04/0.96 tuned for LGP)
     float sum_color_float[3] = {
         (float)sum_color.r,
         (float)sum_color.g,
         (float)sum_color.b
     };
 
-    sum_color_float[0] = sum_color_float[0] * 0.05f + m_sumColorLast[0] * 0.95f;
-    sum_color_float[1] = sum_color_float[1] * 0.05f + m_sumColorLast[1] * 0.95f;
-    sum_color_float[2] = sum_color_float[2] * 0.05f + m_sumColorLast[2] * 0.95f;
+    sum_color_float[0] = sum_color_float[0] * 0.04f + m_sumColorLast[0] * 0.96f;
+    sum_color_float[1] = sum_color_float[1] * 0.04f + m_sumColorLast[1] * 0.96f;
+    sum_color_float[2] = sum_color_float[2] * 0.04f + m_sumColorLast[2] * 0.96f;
 
     m_sumColorLast[0] = sum_color_float[0];
     m_sumColorLast[1] = sum_color_float[1];
@@ -153,11 +157,19 @@ void AudioWaveformEffect::render(plugins::EffectContext& ctx) {
     // Map ctx.speed to smoothing rate (MOOD equivalent)
     // Speed 1-50 maps to smoothing 0.1-1.0 range
     float speedNorm = ctx.speed / 50.0f;  // 0.02 to 1.0
-    float smoothing = (0.1f + speedNorm * 0.9f) * 0.05f;  // 0.005 to 0.05
+    float smoothing = (0.1f + speedNorm * 0.9f) * 0.035f;  // 0.0035 to 0.035 (tuned for LGP)
 
     // Compute peak scaling
     float peak = m_waveformPeakScaledLast * 4.0f;
     if (peak > 1.0f) peak = 1.0f;
+
+#ifdef FEATURE_EFFECT_VALIDATION
+    VALIDATION_INIT(20);  // Effect ID for AudioWaveform
+    VALIDATION_PHASE(0.0f, 0.0f);  // No phase for waveform effect
+    VALIDATION_SPEED(0.0f, 0.0f);  // No speed scaling
+    VALIDATION_AUDIO(0.0f, m_waveformPeakScaledLast, 0.0f);  // Use peakScaled as energy proxy
+    VALIDATION_SUBMIT(&::lightwaveos::validation::g_validationRing);
+#endif
 
     for (uint8_t i = 0; i < WAVEFORM_SIZE; ++i) {
         // Average waveform history (4 frames)

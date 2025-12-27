@@ -91,6 +91,12 @@
 #define FEATURE_AUDIO_BENCHMARK 0
 #endif
 
+// Effect Validation Framework - Enables real-time effect validation streaming
+// Captures phase, speed, audio metrics for debugging jog-dial behavior
+#ifndef FEATURE_EFFECT_VALIDATION
+#define FEATURE_EFFECT_VALIDATION 0
+#endif
+
 // OTA Updates - Enabled by default for development
 // SECURITY: Set a unique token per device in production:
 //   -D OTA_TOKEN=\"your-unique-secret-token\"

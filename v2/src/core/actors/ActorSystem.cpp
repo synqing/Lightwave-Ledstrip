@@ -185,8 +185,10 @@ bool ActorSystem::start()
         // Wire up audio buffer to renderer for cross-core access
         if (m_renderer) {
             m_renderer->setAudioBuffer(&m_audio->getControlBusBuffer());
+            // Wire up renderer to audio for beat detection -> MusicalGrid
+            m_audio->setRendererActor(m_renderer.get());
 #ifndef NATIVE_BUILD
-            ESP_LOGI(TAG, "Audio integration enabled - RendererActor connected to AudioActor");
+            ESP_LOGI(TAG, "Audio integration enabled - bidirectional RendererActor <-> AudioActor");
 #endif
         }
     }
@@ -224,10 +226,11 @@ void ActorSystem::shutdown()
 #if FEATURE_AUDIO_SYNC
     // Stop AudioActor (Phase 2) - must stop before renderer
     if (m_audio) {
-        // Disconnect audio buffer from renderer first
+        // Disconnect cross-actor wiring first
         if (m_renderer) {
             m_renderer->setAudioBuffer(nullptr);
         }
+        m_audio->setRendererActor(nullptr);
         m_audio->stop();
 #ifndef NATIVE_BUILD
         ESP_LOGI(TAG, "AudioActor stopped");

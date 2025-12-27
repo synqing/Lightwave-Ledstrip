@@ -40,6 +40,10 @@
 #include "webserver/BenchmarkStreamBroadcaster.h"
 #include "../audio/AudioBenchmarkMetrics.h"
 #endif
+#if FEATURE_EFFECT_VALIDATION
+#include "../validation/ValidationFrameEncoder.h"
+#include "../validation/EffectValidationMetrics.h"
+#endif
 #include <cstring>
 #include <ESPmDNS.h>
 #include <LittleFS.h>
@@ -61,6 +65,16 @@ namespace network {
 
 // Global instance pointer (initialized in setup)
 WebServer* webServerInstance = nullptr;
+
+#if FEATURE_EFFECT_VALIDATION
+// Global validation ring buffer and encoder for effect validation streaming
+lightwaveos::validation::EffectValidationRing<128> g_validationRing;
+lightwaveos::validation::ValidationFrameEncoder g_validationEncoder;
+
+// Validation subscriber tracking (max 4 clients)
+static AsyncWebSocketClient* s_validationSubscribers[4] = {nullptr, nullptr, nullptr, nullptr};
+static constexpr size_t MAX_VALIDATION_SUBSCRIBERS = 4;
+#endif
 
 // ============================================================================
 // Constructor / Destructor
@@ -125,6 +139,11 @@ bool WebServer::begin() {
 #if FEATURE_AUDIO_BENCHMARK
     // Create benchmark metrics broadcaster
     m_benchmarkBroadcaster = new webserver::BenchmarkStreamBroadcaster(m_ws);
+#endif
+
+#if FEATURE_EFFECT_VALIDATION
+    // Initialize effect validation encoder
+    g_validationEncoder.begin(&g_validationRing);
 #endif
 
     // Initialize WiFi
@@ -197,6 +216,20 @@ void WebServer::update() {
 #if FEATURE_AUDIO_BENCHMARK
     // Benchmark metrics streaming to subscribed clients (10 FPS)
     broadcastBenchmarkStats();
+#endif
+
+#if FEATURE_EFFECT_VALIDATION
+    // Effect validation streaming to subscribed clients
+    if (g_validationEncoder.tick()) {
+        // Send to all subscribed validation clients
+        for (size_t i = 0; i < MAX_VALIDATION_SUBSCRIBERS; ++i) {
+            AsyncWebSocketClient* client = s_validationSubscribers[i];
+            if (client && client->status() == WS_CONNECTED) {
+                client->binary(g_validationEncoder.getFrame(), g_validationEncoder.getFrameSize());
+            }
+        }
+        g_validationEncoder.clearFrame();
+    }
 #endif
 
     // Periodic status broadcast
@@ -926,6 +959,13 @@ void WebServer::setupV1Routes() {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
         handleAudioStateGet(request);
+    });
+
+    // Audio Tempo - GET /api/v1/audio/tempo
+    m_server->on("/api/v1/audio/tempo", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handleAudioTempoGet(request);
     });
 
     // Audio Presets - GET /api/v1/audio/presets
@@ -1861,6 +1901,26 @@ void WebServer::handleAudioStateGet(AsyncWebServerRequest* request) {
     });
 }
 
+void WebServer::handleAudioTempoGet(AsyncWebServerRequest* request) {
+    auto* renderer = m_actorSystem.getRenderer();
+    if (!renderer) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::AUDIO_UNAVAILABLE, "Renderer not available");
+        return;
+    }
+
+    const audio::MusicalGridSnapshot& grid = renderer->getLastMusicalGrid();
+
+    sendSuccessResponse(request, [&grid](JsonObject& d) {
+        d["bpm"] = grid.bpm_smoothed;
+        d["confidence"] = grid.tempo_confidence;
+        d["beat_phase"] = grid.beat_phase01;
+        d["bar_phase"] = grid.bar_phase01;
+        d["beat_in_bar"] = grid.beat_in_bar;
+        d["beats_per_bar"] = grid.beats_per_bar;
+    });
+}
+
 void WebServer::handleAudioPresetsList(AsyncWebServerRequest* request) {
     using namespace persistence;
     auto& mgr = AudioTuningManager::instance();
@@ -2356,6 +2416,11 @@ void WebServer::handleAudioControl(AsyncWebServerRequest* request, uint8_t* data
 }
 
 void WebServer::handleAudioStateGet(AsyncWebServerRequest* request) {
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void WebServer::handleAudioTempoGet(AsyncWebServerRequest* request) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
@@ -3546,6 +3611,54 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             caps["bandCount"] = audio::NUM_BANDS;
             caps["chromaCount"] = audio::CONTROLBUS_NUM_CHROMA;
             caps["waveformPoints"] = audio::CONTROLBUS_WAVEFORM_N;
+        });
+        client->text(response);
+    }
+    // audio.subscribe - Subscribe client to binary audio stream
+    else if (type == "audio.subscribe") {
+        uint32_t clientId = client->id();
+        const char* requestId = doc["requestId"] | "";
+        bool ok = setAudioStreamSubscription(client, true);
+
+        if (ok) {
+            String response = buildWsResponse("audio.subscribed", requestId, [clientId](JsonObject& data) {
+                data["clientId"] = clientId;
+                data["frameSize"] = webserver::AudioStreamConfig::FRAME_SIZE;
+                data["streamVersion"] = webserver::AudioStreamConfig::STREAM_VERSION;
+                data["numBands"] = webserver::AudioStreamConfig::NUM_BANDS;
+                data["numChroma"] = webserver::AudioStreamConfig::NUM_CHROMA;
+                data["waveformSize"] = webserver::AudioStreamConfig::WAVEFORM_SIZE;
+                data["targetFps"] = webserver::AudioStreamConfig::TARGET_FPS;
+                data["status"] = "ok";
+            });
+            client->text(response);
+        } else {
+            // Build rejection response
+            JsonDocument response;
+            response["type"] = "audio.subscribed";
+            if (requestId != nullptr && strlen(requestId) > 0) {
+                response["requestId"] = requestId;
+            }
+            response["success"] = false;
+            JsonObject error = response["error"].to<JsonObject>();
+            error["code"] = "RESOURCE_EXHAUSTED";
+            error["message"] = "Audio subscriber table full or audio system unavailable";
+
+            String output;
+            serializeJson(response, output);
+            client->text(output);
+            Serial.printf("[WebSocket] Client %u audio subscription REJECTED\n", clientId);
+        }
+    }
+    // audio.unsubscribe - Unsubscribe client from binary audio stream
+    else if (type == "audio.unsubscribe") {
+        uint32_t clientId = client->id();
+        const char* requestId = doc["requestId"] | "";
+        setAudioStreamSubscription(client, false);
+
+        String response = buildWsResponse("audio.unsubscribed", requestId, [clientId](JsonObject& data) {
+            data["clientId"] = clientId;
+            data["status"] = "ok";
         });
         client->text(response);
     }
@@ -5354,6 +5467,76 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
     }
 #endif
 
+#if FEATURE_EFFECT_VALIDATION
+    // validation.subscribe - Subscribe to effect validation stream
+    else if (type == "validation.subscribe") {
+        uint32_t clientId = client->id();
+        const char* requestId = doc["requestId"] | "";
+
+        // Find a free slot in the subscriber table
+        bool subscribed = false;
+        for (size_t i = 0; i < MAX_VALIDATION_SUBSCRIBERS; ++i) {
+            if (s_validationSubscribers[i] == nullptr ||
+                s_validationSubscribers[i]->status() != WS_CONNECTED) {
+                s_validationSubscribers[i] = client;
+                subscribed = true;
+                break;
+            }
+            // Already subscribed
+            if (s_validationSubscribers[i] == client) {
+                subscribed = true;
+                break;
+            }
+        }
+
+        if (subscribed) {
+            String response = buildWsResponse("validation.subscribed", requestId, [clientId](JsonObject& data) {
+                data["clientId"] = clientId;
+                data["sampleSize"] = lightwaveos::validation::ValidationStreamConfig::SAMPLE_SIZE;
+                data["maxSamplesPerFrame"] = lightwaveos::validation::ValidationStreamConfig::MAX_SAMPLES_PER_FRAME;
+                data["targetFps"] = lightwaveos::validation::ValidationStreamConfig::DEFAULT_DRAIN_RATE_HZ;
+                data["accepted"] = true;
+            });
+            client->text(response);
+            Serial.printf("[WebSocket] Client %u subscribed to validation stream\n", clientId);
+        } else {
+            // Build rejection response manually
+            JsonDocument response;
+            response["type"] = "validation.rejected";
+            if (requestId != nullptr && strlen(requestId) > 0) {
+                response["requestId"] = requestId;
+            }
+            response["success"] = false;
+            JsonObject error = response["error"].to<JsonObject>();
+            error["code"] = "RESOURCE_EXHAUSTED";
+            error["message"] = "Validation subscriber table full";
+
+            String output;
+            serializeJson(response, output);
+            client->text(output);
+            Serial.printf("[WebSocket] Client %u validation subscription rejected\n", clientId);
+        }
+    }
+    else if (type == "validation.unsubscribe") {
+        uint32_t clientId = client->id();
+        const char* requestId = doc["requestId"] | "";
+
+        // Remove from subscriber table
+        for (size_t i = 0; i < MAX_VALIDATION_SUBSCRIBERS; ++i) {
+            if (s_validationSubscribers[i] == client) {
+                s_validationSubscribers[i] = nullptr;
+                break;
+            }
+        }
+
+        String response = buildWsResponse("validation.unsubscribed", requestId, [clientId](JsonObject& data) {
+            data["clientId"] = clientId;
+        });
+        client->text(response);
+        Serial.printf("[WebSocket] Client %u unsubscribed from validation stream\n", clientId);
+    }
+#endif
+
     // Unknown command
     else {
         const char* requestId = doc["requestId"] | "";
@@ -5496,12 +5679,13 @@ bool WebServer::hasLEDStreamSubscribers() const {
 
 void WebServer::broadcastAudioFrame() {
     if (!m_audioBroadcaster || !m_renderer) return;
-    
+
     // Get audio frame from renderer (cross-core safe - returns by-value copy)
     const audio::ControlBusFrame& frame = m_renderer->getCachedAudioFrame();
-    
+    const audio::MusicalGridSnapshot& grid = m_renderer->getLastMusicalGrid();
+
     // Broadcast to subscribed clients (throttling handled internally)
-    m_audioBroadcaster->broadcast(frame);
+    m_audioBroadcaster->broadcast(frame, grid);
 }
 
 void WebServer::broadcastBeatEvent() {

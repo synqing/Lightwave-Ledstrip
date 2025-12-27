@@ -6,6 +6,7 @@
 #include "LGPWaveCollisionEffect.h"
 #include "../CoreEffects.h"
 #include "../../config/features.h"
+#include "../../validation/EffectValidationMacros.h"
 #include <FastLED.h>
 #include <cmath>
 
@@ -35,6 +36,7 @@ bool LGPWaveCollisionEffect::init(plugins::EffectContext& ctx) {
     m_energyDeltaSmooth = 0.0f;
     m_dominantBinSmooth = 0.0f;
     m_collisionBoost = 0.0f;
+    m_speedScaleSmooth = 1.0f;
     return true;
 }
 
@@ -90,8 +92,9 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
     float dt = ctx.deltaTimeMs * 0.001f;
     float riseAvg = dt / (0.20f + dt);
     float fallAvg = dt / (0.50f + dt);
-    float riseDelta = dt / (0.08f + dt);
-    float fallDelta = dt / (0.25f + dt);
+    // JOG-DIAL FIX: Slower delta response prevents jitter-induced speed changes
+    float riseDelta = dt / (0.25f + dt);   // 250ms rise (was 80ms)
+    float fallDelta = dt / (0.40f + dt);   // 400ms fall (was 250ms)
     float alphaBin = dt / (0.25f + dt);
 
     m_energyAvgSmooth = smoothValue(m_energyAvgSmooth, m_energyAvg, riseAvg, fallAvg);
@@ -104,9 +107,32 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
     if (m_collisionBoost > 1.0f) m_collisionBoost = 1.0f;
     m_collisionBoost *= 0.90f;
 
-    // CRITICAL FIX: Single phase accumulator for traveling waves
-    float speedScale = 0.4f + 1.6f * m_energyAvgSmooth + 2.0f * m_energyDeltaSmooth;
-    m_phase += speedNorm * 4.0f * speedScale * dt;  // dt-corrected: moderate speed
+    // JOG-DIAL FIX: Constant base speed with gentle energy modulation (no energyDelta on speed)
+    float rawSpeedScale = 0.7f + 0.6f * m_energyAvgSmooth;  // Capture raw speed for validation
+    float speedTarget = rawSpeedScale;
+    if (speedTarget > 1.3f) speedTarget = 1.3f;
+
+    // Slew limiter: max 0.25 units/sec change rate
+    const float maxSlewRate = 0.25f;
+    float slewLimit = maxSlewRate * dt;
+    float speedDelta = speedTarget - m_speedScaleSmooth;
+    if (speedDelta > slewLimit) speedDelta = slewLimit;
+    if (speedDelta < -slewLimit) speedDelta = -slewLimit;
+    m_speedScaleSmooth += speedDelta;
+
+    // Capture phase before update for delta calculation
+    float prevPhase = m_phase;
+    m_phase += speedNorm * 4.0f * m_speedScaleSmooth * dt;  // dt-corrected: slew-limited speed
+    float phaseDelta = m_phase - prevPhase;
+
+    // Validation instrumentation
+    VALIDATION_INIT(17);  // Effect ID 17
+    VALIDATION_PHASE(m_phase, phaseDelta);
+    VALIDATION_SPEED(rawSpeedScale, m_speedScaleSmooth);
+    VALIDATION_AUDIO(m_dominantBinSmooth, m_energyAvgSmooth, m_energyDeltaSmooth);
+    VALIDATION_REVERSAL_CHECK(m_prevPhaseDelta, phaseDelta);
+    VALIDATION_SUBMIT(&::lightwaveos::validation::g_validationRing);
+    m_prevPhaseDelta = phaseDelta;
 
     fadeToBlackBy(ctx.leds, ctx.ledCount, 30);
 
@@ -114,16 +140,15 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
         // CENTRE ORIGIN: Calculate distance from centre pair
         float distFromCenter = (float)centerPairDistance((uint16_t)i);
 
-        // DEFINITIVE FIX: NO decay envelope - match ChevronWaves pattern
+        // JOG-DIAL FIX: Single wave for clean propagation (collision visualized through brightness)
         // sin(k*dist - phase) produces OUTWARD motion when phase increases
         const float freqBase = 0.2f;
-
-        // Two traveling waves at slightly different frequencies for interference
         float wave1 = sinf(distFromCenter * freqBase - m_phase);
-        float wave2 = sinf(distFromCenter * (freqBase * 0.7f) - m_phase + PI);
 
-        // Collision interference pattern with audio modulation
-        float interference = (wave1 + wave2) * (0.3f + 0.7f * m_energyAvgSmooth + 0.5f * m_collisionBoost);
+        // JOG-DIAL FIX: Audio modulates BRIGHTNESS, not speed
+        // energyDelta drives "collision flash" brightness rather than speed
+        float audioIntensity = 0.4f + 0.5f * m_energyAvgSmooth + 0.6f * m_collisionBoost + 0.4f * m_energyDeltaSmooth;
+        float interference = wave1 * audioIntensity;
 
         // CRITICAL: Use tanhf for uniform brightness (like ChevronWaves)
         interference = tanhf(interference * 2.0f) * 0.5f + 0.5f;

@@ -150,7 +150,7 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
     VALIDATION_SCROLL(m_scrollPhase);
     VALIDATION_SPEED(scrollRate, m_scrollPhase);  // Use scroll rate as speed proxy
     VALIDATION_AUDIO(maxBin, sum, 0.0f);  // maxBin is dominant frequency
-    VALIDATION_SUBMIT(&::lightwaveos::validation::g_validationRing);
+    VALIDATION_SUBMIT(::lightwaveos::validation::g_validationRing);
 #endif
 
     // Render radial buffer to LEDs (centre-origin)
@@ -203,7 +203,7 @@ void AudioBloomEffect::increaseSaturation(CRGB* buffer, uint16_t len, uint8_t am
     for (uint16_t i = 0; i < len; ++i) {
         CHSV hsv = rgb2hsv_approximate(buffer[i]);
         hsv.s = qadd8(hsv.s, amount);
-        buffer[i] = hsv;
+        hsv2rgb_spectrum(hsv, buffer[i]);
     }
 }
 

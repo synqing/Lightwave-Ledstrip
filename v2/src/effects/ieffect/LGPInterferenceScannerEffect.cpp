@@ -132,7 +132,7 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
     VALIDATION_SPEED(rawSpeedScale, m_speedScaleSmooth);
     VALIDATION_AUDIO(m_dominantBinSmooth, m_energyAvgSmooth, m_energyDeltaSmooth);
     VALIDATION_REVERSAL_CHECK(m_prevPhaseDelta, phaseDelta);
-    VALIDATION_SUBMIT(&::lightwaveos::validation::g_validationRing);
+    VALIDATION_SUBMIT(::lightwaveos::validation::g_validationRing);
     m_prevPhaseDelta = phaseDelta;
 
     for (int i = 0; i < STRIP_LENGTH; i++) {

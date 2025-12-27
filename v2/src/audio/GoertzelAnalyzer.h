@@ -9,100 +9,245 @@ namespace lightwaveos {
 namespace audio {
 
 /**
- * @brief Goertzel frequency analyzer for 8 frequency bands
+ * @brief Goertzel 64-bin frequency analyzer with Sensory Bridge parity
  *
- * Accumulates 512 samples (2 hops at 256 samples each) for bass coherence,
- * then computes magnitude for each target frequency using the Goertzel algorithm.
+ * This analyzer implements a 64-bin Goertzel-based Discrete Fourier Transform (GDFT)
+ * matching the Sensory Bridge audio analysis algorithm. Key features:
  *
- * Target frequencies at 16kHz sample rate:
- * - Band 0: 60 Hz (sub-bass)
- * - Band 1: 120 Hz (bass)
- * - Band 2: 250 Hz (low-mid)
- * - Band 3: 500 Hz (mid)
- * - Band 4: 1000 Hz (high-mid)
- * - Band 5: 2000 Hz (presence)
- * - Band 6: 4000 Hz (brilliance)
- * - Band 7: 8000 Hz (air)
+ * 1. **64 Semitone Bins**: Musical note frequencies from A2 (110 Hz) to C8 (4186 Hz)
+ *    Each bin is one semitone apart: freq = 110 * 2^(bin/12)
+ *
+ * 2. **Variable Window Sizing**: Low frequencies get longer windows (better frequency
+ *    resolution), high frequencies get shorter windows (better temporal resolution).
+ *    - 110 Hz: ~1500 samples = 94ms @ 16kHz
+ *    - 4186 Hz: ~75 samples = 4.7ms @ 16kHz
+ *
+ * 3. **Hann Windowing**: 4096-entry lookup table for smooth spectral leakage reduction
+ *
+ * 4. **Backward Compatible**: Still provides 8-band output for ControlBus integration
+ *
+ * Sample rate: 16 kHz (matching audio_config.h)
+ * Max sample history: 1500 samples for lowest frequency bins
  */
 class GoertzelAnalyzer {
 public:
-    static constexpr size_t WINDOW_SIZE = 512;
-    static constexpr uint8_t NUM_BANDS = 8;
+    // ========================================================================
+    // Constants
+    // ========================================================================
+
+    // Legacy 8-band mode (backward compatible with ControlBus)
+    static constexpr size_t WINDOW_SIZE = 512;      // Legacy fixed window
+    static constexpr uint8_t NUM_BANDS = 8;         // Legacy band count
+
+    // Sensory Bridge parity: 64 semitone bins
+    static constexpr size_t NUM_BINS = 64;          // A2 to C8 (64 semitones)
     static constexpr uint32_t SAMPLE_RATE_HZ = 16000;
 
+    // Variable window sizing (Sensory Bridge formula)
+    static constexpr size_t MAX_BLOCK_SIZE = 1500;  // Max samples for lowest freq
+    static constexpr size_t MIN_BLOCK_SIZE = 64;    // Min samples for highest freq
+
+    // Hann window lookup table size (Q15 fixed-point)
+    static constexpr size_t HANN_LUT_SIZE = 4096;
+
+    // Sample history buffer (circular, holds MAX_BLOCK_SIZE samples)
+    static constexpr size_t SAMPLE_HISTORY_LENGTH = MAX_BLOCK_SIZE;
+
+    // ========================================================================
+    // Per-Bin State Structure
+    // ========================================================================
+
     /**
-     * @brief Constructor - precomputes Goertzel coefficients
+     * @brief Configuration and state for each frequency bin
+     */
+    struct GoertzelBin {
+        float target_freq;          // Target frequency in Hz
+        uint16_t block_size;        // Window size for this bin (samples)
+        float block_size_recip;     // 1.0 / block_size for normalization
+        int32_t coeff_q14;          // Goertzel coeff in Q14 fixed-point: 2*cos(w)*(1<<14)
+        float window_mult;          // HANN_LUT_SIZE / block_size for window indexing
+        uint8_t zone;               // Zone assignment (0-3) for per-zone max tracking
+    };
+
+    // ========================================================================
+    // Public API
+    // ========================================================================
+
+    /**
+     * @brief Constructor - precomputes all coefficients, window LUT, and bin configs
      */
     GoertzelAnalyzer();
 
     /**
-     * @brief Accumulate audio samples into the analysis window
+     * @brief Accumulate audio samples into the circular history buffer
      * @param samples Pointer to int16_t PCM samples
-     * @param count Number of samples to add
+     * @param count Number of samples to add (typically HOP_SIZE = 256)
      *
-     * Samples are added to the rolling window. When 512 samples are accumulated,
-     * the next call to analyze() will compute fresh results.
+     * Samples are added to the rolling history. After each call, analyze64() can
+     * compute fresh results using the most recent MAX_BLOCK_SIZE samples.
      */
     void accumulate(const int16_t* samples, size_t count);
 
     /**
-     * @brief Compute frequency band magnitudes
-     * @param bandsOut Output array of 8 floats for band magnitudes [0,1]
-     * @return true if new results are ready (window is full), false otherwise
+     * @brief Compute all 64 bin magnitudes using variable windows and Hann windowing
+     * @param binsOut Output array of NUM_BINS (64) floats for bin magnitudes [0,1]
+     * @return true if analysis completed, false if not enough samples accumulated
      *
-     * When returning true, bandsOut is filled with normalized magnitudes.
-     * When returning false, bandsOut is unchanged and caller should reuse previous values.
+     * Each bin uses its own window size and applies Hann windowing for reduced
+     * spectral leakage. Results are normalized by block size and frequency-compensated.
+     */
+    bool analyze64(float* binsOut);
+
+    /**
+     * @brief Compute legacy 8-band magnitudes (backward compatible with ControlBus)
+     * @param bandsOut Output array of NUM_BANDS (8) floats for band magnitudes [0,1]
+     * @return true if new results are ready (enough samples), false otherwise
+     *
+     * This folds the 64 bins into 8 bands by averaging semitone groups:
+     * - Band 0: Bins 0-7   (60-100 Hz, sub-bass)
+     * - Band 1: Bins 8-15  (120-200 Hz, bass)
+     * - Band 2: Bins 16-23 (250-400 Hz, low-mid)
+     * - Band 3: Bins 24-31 (500-800 Hz, mid)
+     * - Band 4: Bins 32-39 (1000-1600 Hz, high-mid)
+     * - Band 5: Bins 40-47 (2000-3200 Hz, presence)
+     * - Band 6: Bins 48-55 (4000+ Hz, brilliance)
+     * - Band 7: Bins 56-63 (highest frequencies, air)
      */
     bool analyze(float* bandsOut);
 
     /**
-     * @brief Compute magnitudes on an explicit window buffer
+     * @brief Compute magnitudes on an explicit window buffer (legacy API)
      * @param window Pointer to WINDOW_SIZE samples (contiguous)
-     * @param N Number of samples (must be WINDOW_SIZE)
+     * @param N Number of samples (must be WINDOW_SIZE = 512)
      * @param bandsOut Output array of 8 floats [0,1]
      * @return true if computation succeeded, false otherwise
+     *
+     * NOTE: This uses the legacy 8-band fixed-window mode without Hann windowing.
+     * For new code, prefer using analyze64() with the internal history buffer.
      */
     bool analyzeWindow(const int16_t* window, size_t N, float* bandsOut);
 
     /**
-     * @brief Reset the accumulator to start fresh
+     * @brief Reset the accumulator and history buffer
      */
     void reset();
 
+    // ========================================================================
+    // Accessors for Bin Configuration
+    // ========================================================================
+
+    /**
+     * @brief Get the configuration for a specific bin
+     */
+    const GoertzelBin& getBin(size_t index) const { return m_bins[index]; }
+
+    /**
+     * @brief Get the raw 64-bin magnitudes from the last analyze64() call
+     */
+    const float* getMagnitudes64() const { return m_magnitudes64; }
+
+    /**
+     * @brief Get the target frequency for a specific bin
+     */
+    float getBinFrequency(size_t index) const {
+        return (index < NUM_BINS) ? m_bins[index].target_freq : 0.0f;
+    }
+
+    /**
+     * @brief Check if enough samples have been accumulated for analysis
+     */
+    bool hasEnoughSamples() const { return m_sampleCount >= MAX_BLOCK_SIZE; }
+
 private:
-    // Target frequencies for 8 bands
-    // Note: Band 7 set to 7800Hz to avoid Goertzel instability at Nyquist (8000Hz)
+    // ========================================================================
+    // Legacy 8-Band Configuration (backward compatibility)
+    // ========================================================================
+
+    // Target frequencies for legacy 8 bands
+    // Band 7 set to 7800Hz to avoid Goertzel instability at Nyquist (8000Hz)
     static constexpr float TARGET_FREQS[NUM_BANDS] = {
         60.0f, 120.0f, 250.0f, 500.0f, 1000.0f, 2000.0f, 4000.0f, 7800.0f
     };
 
-    // Accumulation buffer (rolling window)
-    int16_t m_accumBuffer[WINDOW_SIZE];
+    // ========================================================================
+    // Hann Window Lookup Table (Q15 fixed-point)
+    // ========================================================================
+
+    int16_t m_hannLUT[HANN_LUT_SIZE];
+
+    // ========================================================================
+    // 64-Bin Configuration
+    // ========================================================================
+
+    GoertzelBin m_bins[NUM_BINS];
+    float m_magnitudes64[NUM_BINS];  // Last computed 64-bin magnitudes
+
+    // ========================================================================
+    // Sample History Buffer (Circular)
+    // ========================================================================
+
+    int16_t m_sampleHistory[SAMPLE_HISTORY_LENGTH];
+    size_t m_historyWriteIndex = 0;  // Next write position
+    size_t m_sampleCount = 0;        // Total samples accumulated (saturates at SAMPLE_HISTORY_LENGTH)
+
+    // ========================================================================
+    // Legacy Mode State
+    // ========================================================================
+
+    int16_t m_accumBuffer[WINDOW_SIZE];  // Legacy accumulation buffer
     size_t m_accumIndex = 0;
     bool m_windowFull = false;
 
-    // Precomputed Goertzel coefficients (2 * cos(2π * f/Fs))
+    // Precomputed Goertzel coefficients for legacy 8 bands
     float m_coefficients[NUM_BANDS];
 
-    // Normalization factors (to convert magnitudes to [0,1])
+    // Normalization factors for legacy bands
     float m_normFactors[NUM_BANDS];
 
+    // ========================================================================
+    // Private Methods
+    // ========================================================================
+
     /**
-     * @brief Compute Goertzel magnitude for a single frequency
+     * @brief Initialize the Hann window lookup table
+     */
+    void initHannLUT();
+
+    /**
+     * @brief Initialize the 64 frequency bins with Sensory Bridge formula
+     */
+    void initBins();
+
+    /**
+     * @brief Compute Goertzel magnitude for a single bin with Hann windowing
+     * @param binIndex Index of the bin (0-63)
+     * @return Raw magnitude before normalization
+     *
+     * Uses fixed-point arithmetic for the Goertzel iteration (Q14 coefficient)
+     * and applies Hann window from the LUT during iteration.
+     */
+    float computeGoertzelBin(size_t binIndex) const;
+
+    /**
+     * @brief Compute legacy Goertzel magnitude (no windowing, float arithmetic)
      * @param buffer Input samples
      * @param N Number of samples
-     * @param coeff Precomputed Goertzel coefficient
-     * @return Raw magnitude (before normalization)
+     * @param coeff Precomputed Goertzel coefficient (2*cos(w))
+     * @return Raw magnitude before normalization
      */
     float computeGoertzel(const int16_t* buffer, size_t N, float coeff) const;
 
     /**
-     * @brief Precompute Goertzel coefficient for a target frequency
-     * @param targetFreq Frequency in Hz
-     * @param sampleRate Sample rate in Hz
-     * @return Coefficient value (2 * cos(2π * k/N))
+     * @brief Precompute Goertzel coefficient for a target frequency (legacy mode)
      */
     static float computeCoefficient(float targetFreq, uint32_t sampleRate, size_t windowSize);
+
+    /**
+     * @brief Get sample from circular history buffer
+     * @param samplesAgo How many samples back from the most recent (0 = newest)
+     * @return Sample value
+     */
+    int16_t getHistorySample(size_t samplesAgo) const;
 };
 
 } // namespace audio

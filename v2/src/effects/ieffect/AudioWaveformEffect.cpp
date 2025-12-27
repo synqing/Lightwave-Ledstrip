@@ -168,7 +168,7 @@ void AudioWaveformEffect::render(plugins::EffectContext& ctx) {
     VALIDATION_PHASE(0.0f, 0.0f);  // No phase for waveform effect
     VALIDATION_SPEED(0.0f, 0.0f);  // No speed scaling
     VALIDATION_AUDIO(0.0f, m_waveformPeakScaledLast, 0.0f);  // Use peakScaled as energy proxy
-    VALIDATION_SUBMIT(&::lightwaveos::validation::g_validationRing);
+    VALIDATION_SUBMIT(::lightwaveos::validation::g_validationRing);
 #endif
 
     for (uint8_t i = 0; i < WAVEFORM_SIZE; ++i) {

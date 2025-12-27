@@ -26,7 +26,7 @@
  *       VALIDATION_REVERSAL_CHECK(prevDelta, phaseDelta);
  *
  *       // ... at end of render ...
- *       VALIDATION_SUBMIT(&g_validationRing);
+ *       VALIDATION_SUBMIT(g_validationRing);
  *   }
  * @endcode
  */

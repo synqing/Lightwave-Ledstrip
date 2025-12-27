@@ -32,6 +32,10 @@ void ControlBus::Reset() {
     // Reset lookahead buffers
     m_lookahead_bands.init(CONTROLBUS_NUM_BANDS);
     m_lookahead_chroma.init(CONTROLBUS_NUM_CHROMA);
+    // Reset Zone AGC state
+    for (uint8_t z = 0; z < CONTROLBUS_NUM_ZONES; ++z) {
+        m_zones[z].reset();
+    }
     // Waveform array is zero-initialized by ControlBusFrame{} constructor
 }
 
@@ -50,6 +54,20 @@ void ControlBus::setAttackRelease(float bandAttack, float bandRelease,
     m_band_release = clamp01(bandRelease);
     m_heavy_band_attack = clamp01(heavyBandAttack);
     m_heavy_band_release = clamp01(heavyBandRelease);
+}
+
+void ControlBus::setZoneAGCRates(float attack, float release) {
+    for (uint8_t z = 0; z < CONTROLBUS_NUM_ZONES; ++z) {
+        m_zones[z].attack_rate = clamp01(attack);
+        m_zones[z].release_rate = clamp01(release);
+    }
+}
+
+void ControlBus::setZoneMinFloor(float floor) {
+    float clamped = (floor < 0.0001f) ? 0.0001f : floor;  // Prevent division by zero
+    for (uint8_t z = 0; z < CONTROLBUS_NUM_ZONES; ++z) {
+        m_zones[z].min_floor = clamped;
+    }
 }
 
 /**
@@ -152,6 +170,9 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     m_frame.t = now;
     m_frame.hop_seq++;
 
+    // ========================================================================
+    // Stage 1: Clamp raw inputs to 0..1
+    // ========================================================================
     m_frame.fast_rms = clamp01(raw.rms);
     m_rms_s = lerp(m_rms_s, m_frame.fast_rms, m_alpha_fast);
     m_frame.rms = m_rms_s;
@@ -160,9 +181,82 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     m_flux_s = lerp(m_flux_s, m_frame.fast_flux, m_alpha_slow);
     m_frame.flux = m_flux_s;
 
-    // LGP_SMOOTH: Asymmetric attack/release for bands
+    // Temporary buffer for clamped band values
+    float clamped_bands[CONTROLBUS_NUM_BANDS];
     for (uint8_t i = 0; i < CONTROLBUS_NUM_BANDS; ++i) {
-        float target = clamp01(raw.bands[i]);
+        clamped_bands[i] = clamp01(raw.bands[i]);
+    }
+
+    // Temporary buffer for clamped chroma values
+    float clamped_chroma[CONTROLBUS_NUM_CHROMA];
+    for (uint8_t i = 0; i < CONTROLBUS_NUM_CHROMA; ++i) {
+        clamped_chroma[i] = clamp01(raw.chroma[i]);
+    }
+
+    // ========================================================================
+    // Stage 2: Spike detection (lookahead smoothing)
+    // Removes single-frame spikes that cause visual flicker
+    // Output delayed by 2 frames (~32ms at 60fps)
+    // ========================================================================
+    detectAndRemoveSpikes(m_lookahead_bands, clamped_bands, m_bands_despiked, CONTROLBUS_NUM_BANDS);
+    detectAndRemoveSpikes(m_lookahead_chroma, clamped_chroma, m_chroma_despiked, CONTROLBUS_NUM_CHROMA);
+
+    // ========================================================================
+    // Stage 3: Zone AGC (optional)
+    // Normalizes each frequency zone independently to prevent bass dominance
+    // Zone boundaries: 0-1 (sub-bass), 2-3 (low-mid), 4-5 (mid), 6-7 (high)
+    // ========================================================================
+    float normalized_bands[CONTROLBUS_NUM_BANDS];
+    if (m_zone_agc_enabled) {
+        // Update zone max magnitudes
+        for (uint8_t z = 0; z < CONTROLBUS_NUM_ZONES; ++z) {
+            // Find max in this zone (2 bands per zone for 8-band system)
+            uint8_t start_band = z * 2;
+            uint8_t end_band = start_band + 2;
+            float zone_max = 0.0f;
+            for (uint8_t i = start_band; i < end_band && i < CONTROLBUS_NUM_BANDS; ++i) {
+                if (m_bands_despiked[i] > zone_max) {
+                    zone_max = m_bands_despiked[i];
+                }
+            }
+            m_zones[z].max_mag = zone_max;
+
+            // Smoothed follower (Sensory Bridge pattern)
+            if (zone_max > m_zones[z].max_mag_follower) {
+                // Attack: rise toward new maximum
+                float delta = zone_max - m_zones[z].max_mag_follower;
+                m_zones[z].max_mag_follower += delta * m_zones[z].attack_rate;
+            } else {
+                // Release: slowly decay toward new (lower) maximum
+                float delta = m_zones[z].max_mag_follower - zone_max;
+                m_zones[z].max_mag_follower -= delta * m_zones[z].release_rate;
+            }
+
+            // Clamp follower to minimum floor
+            if (m_zones[z].max_mag_follower < m_zones[z].min_floor) {
+                m_zones[z].max_mag_follower = m_zones[z].min_floor;
+            }
+
+            // Normalize bands in this zone
+            float norm_factor = 1.0f / m_zones[z].max_mag_follower;
+            for (uint8_t i = start_band; i < end_band && i < CONTROLBUS_NUM_BANDS; ++i) {
+                float normalized = m_bands_despiked[i] * norm_factor;
+                normalized_bands[i] = clamp01(normalized);  // Clamp to prevent overshoot
+            }
+        }
+    } else {
+        // Zone AGC disabled - use despiked values directly
+        for (uint8_t i = 0; i < CONTROLBUS_NUM_BANDS; ++i) {
+            normalized_bands[i] = m_bands_despiked[i];
+        }
+    }
+
+    // ========================================================================
+    // Stage 4: Asymmetric attack/release smoothing
+    // Fast attack for transients, slow release for LGP viewing
+    // ========================================================================
+    for (uint8_t i = 0; i < CONTROLBUS_NUM_BANDS; ++i) {
+        float target = normalized_bands[i];
         // Fast attack, slow release for normal bands
         float alpha = (target > m_bands_s[i]) ? m_band_attack : m_band_release;
         m_bands_s[i] = lerp(m_bands_s[i], target, alpha);
@@ -174,9 +268,9 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
         m_frame.heavy_bands[i] = m_heavy_bands_s[i];
     }
 
-    // LGP_SMOOTH: Asymmetric attack/release for chroma
+    // Chroma: spike-removed values with asymmetric smoothing (no Zone AGC for chroma)
     for (uint8_t i = 0; i < CONTROLBUS_NUM_CHROMA; ++i) {
-        float target = clamp01(raw.chroma[i]);
+        float target = m_chroma_despiked[i];
         float alpha = (target > m_chroma_s[i]) ? m_band_attack : m_band_release;
         m_chroma_s[i] = lerp(m_chroma_s[i], target, alpha);
         m_frame.chroma[i] = m_chroma_s[i];
@@ -186,6 +280,9 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
         m_frame.heavy_chroma[i] = m_heavy_chroma_s[i];
     }
 
+    // ========================================================================
+    // Stage 5: Copy waveform data (no processing)
+    // ========================================================================
     for (uint8_t i = 0; i < CONTROLBUS_WAVEFORM_N; ++i) {
         m_frame.waveform[i] = raw.waveform[i];
     }

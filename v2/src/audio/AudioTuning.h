@@ -13,6 +13,32 @@
 
 namespace lightwaveos::audio {
 
+/**
+ * @brief Audio pipeline configuration presets for A/B testing
+ *
+ * Each preset represents a different tuning philosophy derived from
+ * comparative analysis of LightwaveOS and Sensory Bridge audio pipelines.
+ */
+enum class AudioPreset : uint8_t {
+    LIGHTWAVE_V2 = 0,       ///< Current LightwaveOS defaults (4:1 AGC ratio)
+    SENSORY_BRIDGE = 1,     ///< Sensory Bridge style (50:1 AGC ratio, faster attack)
+    AGGRESSIVE_AGC = 2,     ///< High compression, very fast response
+    CONSERVATIVE_AGC = 3,   ///< Low compression, smooth with minimal pumping
+    CUSTOM = 255            ///< User-defined parameters
+};
+
+/**
+ * @brief Per-frequency noise floor for band-specific calibration
+ *
+ * Sensory Bridge insight: Different frequency bands have different
+ * ambient noise characteristics (HVAC at 120Hz, fans at 1-4kHz).
+ */
+struct PerBandNoiseFloor {
+    float bands[8] = {0.0004f, 0.0004f, 0.0004f, 0.0004f,
+                      0.0004f, 0.0004f, 0.0004f, 0.0004f};
+    float multiplier = 1.0f;  ///< Applied during playback (Sensory Bridge uses 1.5x)
+};
+
 struct AudioPipelineTuning {
     float dcAlpha = 0.001f;
 
@@ -43,6 +69,10 @@ struct AudioPipelineTuning {
 
     float controlBusAlphaFast = 0.35f;
     float controlBusAlphaSlow = 0.12f;
+
+    // Silence detection (Sensory Bridge insight: 10-second hysteresis)
+    float silenceHysteresisMs = 0.0f;    ///< 0 = disabled, >0 = wait time before standby
+    float silenceThreshold = 0.01f;       ///< RMS below this is considered silence
 };
 
 struct AudioContractTuning {
@@ -110,6 +140,9 @@ inline AudioPipelineTuning clampAudioPipelineTuning(const AudioPipelineTuning& i
     out.controlBusAlphaFast = clampf(out.controlBusAlphaFast, 0.0f, 1.0f);
     out.controlBusAlphaSlow = clampf(out.controlBusAlphaSlow, 0.0f, 1.0f);
 
+    out.silenceHysteresisMs = clampf(out.silenceHysteresisMs, 0.0f, 60000.0f);
+    out.silenceThreshold = clampf(out.silenceThreshold, 0.0f, 1.0f);
+
     return out;
 }
 
@@ -135,6 +168,88 @@ inline AudioContractTuning clampAudioContractTuning(const AudioContractTuning& i
     if (out.beatUnit > 16) out.beatUnit = 16;
 
     return out;
+}
+
+/**
+ * @brief Get a predefined audio pipeline configuration
+ *
+ * Returns tuning parameters for A/B testing different audio pipeline
+ * configurations. Each preset is based on comparative analysis of
+ * LightwaveOS and Sensory Bridge audio implementations.
+ *
+ * @param preset The preset to retrieve
+ * @return AudioPipelineTuning configured for the preset
+ */
+inline AudioPipelineTuning getPreset(AudioPreset preset) {
+    AudioPipelineTuning tuning;
+
+    switch (preset) {
+        case AudioPreset::LIGHTWAVE_V2:
+            // Current LightwaveOS defaults - balanced 4:1 AGC ratio
+            // Good all-around performance, may pump slightly during gaps
+            tuning.agcAttack = 0.08f;
+            tuning.agcRelease = 0.02f;
+            tuning.controlBusAlphaFast = 0.35f;
+            tuning.controlBusAlphaSlow = 0.12f;
+            tuning.silenceHysteresisMs = 0.0f;  // No standby dimming
+            break;
+
+        case AudioPreset::SENSORY_BRIDGE:
+            // Sensory Bridge v4.1.1 style - 50:1 AGC ratio
+            // Fast attack for transients, very slow release prevents pumping
+            tuning.agcAttack = 0.25f;           // 25% per frame (fast)
+            tuning.agcRelease = 0.005f;         // 0.5% per frame (slow)
+            tuning.controlBusAlphaFast = 0.45f; // Slightly faster smoothing
+            tuning.controlBusAlphaSlow = 0.225f; // Matched ratio
+            tuning.silenceHysteresisMs = 10000.0f;  // 10 second standby
+            tuning.silenceThreshold = 0.005f;       // Lower threshold
+            tuning.noiseFloorMin = 0.0006f;         // 1.5x multiplier baked in
+            break;
+
+        case AudioPreset::AGGRESSIVE_AGC:
+            // Maximum compression, fastest response
+            // Good for EDM/electronic with consistent levels
+            tuning.agcAttack = 0.35f;
+            tuning.agcRelease = 0.001f;
+            tuning.agcMaxGain = 200.0f;
+            tuning.controlBusAlphaFast = 0.5f;
+            tuning.controlBusAlphaSlow = 0.3f;
+            tuning.silenceHysteresisMs = 5000.0f;
+            break;
+
+        case AudioPreset::CONSERVATIVE_AGC:
+            // Minimal compression, smooth response
+            // Good for classical/acoustic with wide dynamics
+            tuning.agcAttack = 0.03f;
+            tuning.agcRelease = 0.05f;
+            tuning.agcMaxGain = 50.0f;
+            tuning.controlBusAlphaFast = 0.25f;
+            tuning.controlBusAlphaSlow = 0.08f;
+            tuning.silenceHysteresisMs = 15000.0f;
+            tuning.silenceThreshold = 0.02f;
+            break;
+
+        case AudioPreset::CUSTOM:
+        default:
+            // Return defaults, caller will customize
+            break;
+    }
+
+    return clampAudioPipelineTuning(tuning);
+}
+
+/**
+ * @brief Get the name of an audio preset for display/logging
+ */
+inline const char* getPresetName(AudioPreset preset) {
+    switch (preset) {
+        case AudioPreset::LIGHTWAVE_V2:    return "LightwaveOS v2";
+        case AudioPreset::SENSORY_BRIDGE:  return "Sensory Bridge";
+        case AudioPreset::AGGRESSIVE_AGC:  return "Aggressive AGC";
+        case AudioPreset::CONSERVATIVE_AGC: return "Conservative AGC";
+        case AudioPreset::CUSTOM:          return "Custom";
+        default:                           return "Unknown";
+    }
 }
 
 } // namespace lightwaveos::audio

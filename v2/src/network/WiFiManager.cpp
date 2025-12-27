@@ -414,6 +414,11 @@ bool WiFiManager::connectToAP() {
         WiFi.begin(m_ssid.c_str(), m_password.c_str());
     }
 
+    // WiFi stability settings - must be called AFTER WiFi.begin()
+    WiFi.setSleep(false);           // Disable modem sleep (prevents ASSOC_LEAVE disconnects)
+    WiFi.setAutoReconnect(true);    // Auto-reconnect on disconnect
+    Serial.println("[WiFiManager] WiFi sleep disabled, auto-reconnect enabled");
+
     return true;
 }
 

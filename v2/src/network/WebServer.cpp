@@ -67,13 +67,21 @@ namespace network {
 WebServer* webServerInstance = nullptr;
 
 #if FEATURE_EFFECT_VALIDATION
-// Global validation ring buffer and encoder for effect validation streaming
-lightwaveos::validation::EffectValidationRing<128> g_validationRing;
-lightwaveos::validation::ValidationFrameEncoder g_validationEncoder;
+// Validation encoder (uses g_validationRing from EffectValidationMacros.cpp)
+// Encoder is lazily initialized to avoid stack overflow during static init
+static lightwaveos::validation::ValidationFrameEncoder* s_validationEncoder = nullptr;
 
 // Validation subscriber tracking (max 4 clients)
 static AsyncWebSocketClient* s_validationSubscribers[4] = {nullptr, nullptr, nullptr, nullptr};
 static constexpr size_t MAX_VALIDATION_SUBSCRIBERS = 4;
+
+static void initValidationEncoder() {
+    if (s_validationEncoder == nullptr) {
+        lightwaveos::validation::initValidationRing();
+        s_validationEncoder = new lightwaveos::validation::ValidationFrameEncoder();
+        s_validationEncoder->begin(lightwaveos::validation::g_validationRing);
+    }
+}
 #endif
 
 // ============================================================================
@@ -142,8 +150,8 @@ bool WebServer::begin() {
 #endif
 
 #if FEATURE_EFFECT_VALIDATION
-    // Initialize effect validation encoder
-    g_validationEncoder.begin(&g_validationRing);
+    // Initialize effect validation encoder (lazy init to avoid stack overflow)
+    initValidationEncoder();
 #endif
 
     // Initialize WiFi
@@ -202,6 +210,16 @@ void WebServer::update() {
     // Cleanup disconnected WebSocket clients
     m_ws->cleanupClients();
 
+    // WebSocket keepalive ping - prevents mobile network timeouts
+    static uint32_t lastPingMs = 0;
+    uint32_t nowMs = millis();
+    if (nowMs - lastPingMs >= 30000) {  // Every 30 seconds
+        if (m_ws && m_ws->count() > 0) {
+            m_ws->pingAll();
+        }
+        lastPingMs = nowMs;
+    }
+
     // LED frame streaming to subscribed clients (20 FPS)
     broadcastLEDFrame();
 
@@ -220,15 +238,15 @@ void WebServer::update() {
 
 #if FEATURE_EFFECT_VALIDATION
     // Effect validation streaming to subscribed clients
-    if (g_validationEncoder.tick()) {
+    if (s_validationEncoder && s_validationEncoder->tick()) {
         // Send to all subscribed validation clients
         for (size_t i = 0; i < MAX_VALIDATION_SUBSCRIBERS; ++i) {
             AsyncWebSocketClient* client = s_validationSubscribers[i];
             if (client && client->status() == WS_CONNECTED) {
-                client->binary(g_validationEncoder.getFrame(), g_validationEncoder.getFrameSize());
+                client->binary(s_validationEncoder->getFrame(), s_validationEncoder->getFrameSize());
             }
         }
-        g_validationEncoder.clearFrame();
+        s_validationEncoder->clearFrame();
     }
 #endif
 

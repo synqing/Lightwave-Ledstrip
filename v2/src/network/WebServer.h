@@ -50,6 +50,9 @@
 #if FEATURE_AUDIO_SYNC
 #include "webserver/AudioStreamBroadcaster.h"
 #endif
+#if FEATURE_AUDIO_BENCHMARK
+#include "webserver/BenchmarkStreamBroadcaster.h"
+#endif
 
 // Forward declarations
 class AsyncWebServer;
@@ -267,6 +270,29 @@ public:
     bool hasAudioStreamSubscribers() const;
 #endif
 
+#if FEATURE_AUDIO_BENCHMARK
+    /**
+     * @brief Broadcast benchmark metrics to subscribed clients
+     *
+     * Sends binary WebSocket frame containing audio pipeline timing.
+     * Throttled to 10 Hz for low overhead.
+     */
+    void broadcastBenchmarkStats();
+
+    /**
+     * @brief Subscribe/unsubscribe a WebSocket client to benchmark stream
+     * @param client WebSocket client pointer
+     * @param subscribe true to subscribe, false to unsubscribe
+     * @return true if the subscription was updated
+     */
+    bool setBenchmarkStreamSubscription(AsyncWebSocketClient* client, bool subscribe);
+
+    /**
+     * @brief Check if any clients are subscribed to benchmark streaming
+     */
+    bool hasBenchmarkStreamSubscribers() const;
+#endif
+
     /**
      * @brief Notify clients of effect change
      */
@@ -339,6 +365,14 @@ private:
     void handlePalettesCurrent(AsyncWebServerRequest* request);
     void handlePalettesSet(AsyncWebServerRequest* request, uint8_t* data, size_t len);
 
+#if FEATURE_AUDIO_BENCHMARK
+    // Audio Benchmark API
+    void handleBenchmarkGet(AsyncWebServerRequest* request);
+    void handleBenchmarkStart(AsyncWebServerRequest* request);
+    void handleBenchmarkStop(AsyncWebServerRequest* request);
+    void handleBenchmarkHistory(AsyncWebServerRequest* request);
+#endif
+
 
 
     // Narrative
@@ -409,6 +443,11 @@ private:
 #if FEATURE_AUDIO_SYNC
     // Audio frame streaming
     webserver::AudioStreamBroadcaster* m_audioBroadcaster;
+#endif
+
+#if FEATURE_AUDIO_BENCHMARK
+    // Benchmark metrics streaming
+    webserver::BenchmarkStreamBroadcaster* m_benchmarkBroadcaster;
 #endif
 
 #if FEATURE_API_AUTH

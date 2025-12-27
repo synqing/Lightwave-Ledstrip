@@ -36,6 +36,10 @@
 #include "../config/audio_config.h"
 #include "../core/persistence/AudioTuningManager.h"
 #endif
+#if FEATURE_AUDIO_BENCHMARK
+#include "webserver/BenchmarkStreamBroadcaster.h"
+#include "../audio/AudioBenchmarkMetrics.h"
+#endif
 #include <cstring>
 #include <ESPmDNS.h>
 #include <LittleFS.h>
@@ -81,6 +85,9 @@ WebServer::WebServer(ActorSystem& actors, RendererActor* renderer)
 
 WebServer::~WebServer() {
     stop();
+#if FEATURE_AUDIO_BENCHMARK
+    delete m_benchmarkBroadcaster;
+#endif
 #if FEATURE_AUDIO_SYNC
     delete m_audioBroadcaster;
 #endif
@@ -113,6 +120,11 @@ bool WebServer::begin() {
 #if FEATURE_AUDIO_SYNC
     // Create audio stream broadcaster
     m_audioBroadcaster = new webserver::AudioStreamBroadcaster(m_ws);
+#endif
+
+#if FEATURE_AUDIO_BENCHMARK
+    // Create benchmark metrics broadcaster
+    m_benchmarkBroadcaster = new webserver::BenchmarkStreamBroadcaster(m_ws);
 #endif
 
     // Initialize WiFi
@@ -180,6 +192,11 @@ void WebServer::update() {
 
     // Beat event streaming (fires on beat_tick/downbeat_tick)
     broadcastBeatEvent();
+#endif
+
+#if FEATURE_AUDIO_BENCHMARK
+    // Benchmark metrics streaming to subscribed clients (10 FPS)
+    broadcastBenchmarkStats();
 #endif
 
     // Periodic status broadcast
@@ -1089,6 +1106,40 @@ void WebServer::setupV1Routes() {
         if (!checkAPIKey(request)) return;
         handleAudioMappingsStats(request);
     });
+
+#if FEATURE_AUDIO_BENCHMARK
+    // =========================================================================
+    // Audio Benchmark Routes
+    // =========================================================================
+
+    // Benchmark Get - GET /api/v1/audio/benchmark
+    m_server->on("/api/v1/audio/benchmark", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handleBenchmarkGet(request);
+    });
+
+    // Benchmark Start - POST /api/v1/audio/benchmark/start
+    m_server->on("/api/v1/audio/benchmark/start", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handleBenchmarkStart(request);
+    });
+
+    // Benchmark Stop - POST /api/v1/audio/benchmark/stop
+    m_server->on("/api/v1/audio/benchmark/stop", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handleBenchmarkStop(request);
+    });
+
+    // Benchmark History - GET /api/v1/audio/benchmark/history
+    m_server->on("/api/v1/audio/benchmark/history", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handleBenchmarkHistory(request);
+    });
+#endif
 
     // Transition Types - GET /api/v1/transitions/types
     m_server->on("/api/v1/transitions/types", HTTP_GET, [this](AsyncWebServerRequest* request) {
@@ -5181,6 +5232,128 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
         client->text(response);
     }
 
+#if FEATURE_AUDIO_BENCHMARK
+    // benchmark.subscribe - Subscribe to benchmark metrics stream
+    else if (type == "benchmark.subscribe") {
+        uint32_t clientId = client->id();
+        const char* requestId = doc["requestId"] | "";
+        bool ok = setBenchmarkStreamSubscription(client, true);
+
+        if (ok) {
+            String response = buildWsResponse("benchmark.subscribed", requestId, [clientId](JsonObject& data) {
+                data["clientId"] = clientId;
+                data["frameSize"] = webserver::BenchmarkStreamConfig::COMPACT_FRAME_SIZE;
+                data["targetFps"] = webserver::BenchmarkStreamConfig::TARGET_FPS;
+                data["magicByte"] = (webserver::BenchmarkStreamConfig::MAGIC >> 24) & 0xFF;
+                data["accepted"] = true;
+            });
+            client->text(response);
+            Serial.printf("[WebSocket] Client %u subscribed to benchmark stream\n", clientId);
+        } else {
+            // Build rejection response manually
+            JsonDocument response;
+            response["type"] = "benchmark.rejected";
+            if (requestId != nullptr && strlen(requestId) > 0) {
+                response["requestId"] = requestId;
+            }
+            response["success"] = false;
+            JsonObject error = response["error"].to<JsonObject>();
+            error["code"] = "RESOURCE_EXHAUSTED";
+            error["message"] = "Subscriber table full";
+
+            String output;
+            serializeJson(response, output);
+            client->text(output);
+            Serial.printf("[WebSocket] Client %u benchmark subscription rejected\n", clientId);
+        }
+    }
+    else if (type == "benchmark.unsubscribe") {
+        uint32_t clientId = client->id();
+        setBenchmarkStreamSubscription(client, false);
+        const char* requestId = doc["requestId"] | "";
+        String response = buildWsResponse("benchmark.unsubscribed", requestId, [clientId](JsonObject& data) {
+            data["clientId"] = clientId;
+        });
+        client->text(response);
+        Serial.printf("[WebSocket] Client %u unsubscribed from benchmark stream\n", clientId);
+    }
+    // benchmark.start - Start benchmark collection
+    else if (type == "benchmark.start") {
+        const char* requestId = doc["requestId"] | "";
+        auto* audio = m_actorSystem.getAudio();
+        if (!audio) {
+            client->text(buildWsError(ErrorCodes::SYSTEM_NOT_READY, "Audio system not available", requestId));
+            return;
+        }
+
+        audio->resetBenchmarkStats();
+        if (m_benchmarkBroadcaster) {
+            m_benchmarkBroadcaster->setStreamingActive(true);
+        }
+
+        String response = buildWsResponse("benchmark.started", requestId, [](JsonObject& data) {
+            data["active"] = true;
+        });
+        client->text(response);
+        Serial.println("[WebSocket] Benchmark collection started");
+    }
+    // benchmark.stop - Stop benchmark collection and get results
+    else if (type == "benchmark.stop") {
+        const char* requestId = doc["requestId"] | "";
+        auto* audio = m_actorSystem.getAudio();
+        if (!audio) {
+            client->text(buildWsError(ErrorCodes::SYSTEM_NOT_READY, "Audio system not available", requestId));
+            return;
+        }
+
+        if (m_benchmarkBroadcaster) {
+            m_benchmarkBroadcaster->setStreamingActive(false);
+        }
+
+        const audio::AudioBenchmarkStats& stats = audio->getBenchmarkStats();
+
+        String response = buildWsResponse("benchmark.stopped", requestId, [&stats](JsonObject& data) {
+            data["active"] = false;
+            JsonObject results = data["results"].to<JsonObject>();
+            results["avgTotalUs"] = stats.avgTotalUs;
+            results["avgGoertzelUs"] = stats.avgGoertzelUs;
+            results["cpuLoadPercent"] = stats.cpuLoadPercent;
+            results["hopCount"] = stats.hopCount;
+            results["peakTotalUs"] = stats.peakTotalUs;
+        });
+        client->text(response);
+        Serial.println("[WebSocket] Benchmark collection stopped");
+    }
+    // benchmark.get - Get current benchmark stats
+    else if (type == "benchmark.get") {
+        const char* requestId = doc["requestId"] | "";
+        auto* audio = m_actorSystem.getAudio();
+        if (!audio) {
+            client->text(buildWsError(ErrorCodes::SYSTEM_NOT_READY, "Audio system not available", requestId));
+            return;
+        }
+
+        const audio::AudioBenchmarkStats& stats = audio->getBenchmarkStats();
+        bool streaming = hasBenchmarkStreamSubscribers();
+
+        String response = buildWsResponse("benchmark.stats", requestId, [&stats, streaming](JsonObject& data) {
+            data["streaming"] = streaming;
+
+            JsonObject timing = data["timing"].to<JsonObject>();
+            timing["avgTotalUs"] = stats.avgTotalUs;
+            timing["avgGoertzelUs"] = stats.avgGoertzelUs;
+            timing["avgDcAgcUs"] = stats.avgDcAgcUs;
+            timing["avgChromaUs"] = stats.avgChromaUs;
+            timing["peakTotalUs"] = stats.peakTotalUs;
+
+            JsonObject load = data["load"].to<JsonObject>();
+            load["cpuPercent"] = stats.cpuLoadPercent;
+            load["hopCount"] = stats.hopCount;
+        });
+        client->text(response);
+    }
+#endif
+
     // Unknown command
     else {
         const char* requestId = doc["requestId"] | "";
@@ -5371,6 +5544,172 @@ bool WebServer::setAudioStreamSubscription(AsyncWebSocketClient* client, bool su
 
 bool WebServer::hasAudioStreamSubscribers() const {
     return m_audioBroadcaster && m_audioBroadcaster->hasSubscribers();
+}
+#endif
+
+#if FEATURE_AUDIO_BENCHMARK
+// ============================================================================
+// Benchmark Metrics Streaming
+// ============================================================================
+
+void WebServer::broadcastBenchmarkStats() {
+    if (!m_benchmarkBroadcaster) return;
+
+    // Get AudioActor to retrieve benchmark stats
+    auto* audio = m_actorSystem.getAudio();
+    if (!audio) return;
+
+    // Get stats (returns copy - thread safe)
+    const audio::AudioBenchmarkStats& stats = audio->getBenchmarkStats();
+
+    // Broadcast to subscribed clients (throttling handled internally at 10 Hz)
+    m_benchmarkBroadcaster->broadcastCompact(stats);
+}
+
+bool WebServer::setBenchmarkStreamSubscription(AsyncWebSocketClient* client, bool subscribe) {
+    if (!client || !m_benchmarkBroadcaster) return false;
+    uint32_t clientId = client->id();
+    bool success = m_benchmarkBroadcaster->setSubscription(clientId, subscribe);
+
+    if (subscribe && success) {
+        Serial.printf("[WebServer] Client %u subscribed to benchmark stream\n", clientId);
+    } else if (!subscribe) {
+        Serial.printf("[WebServer] Client %u unsubscribed from benchmark stream\n", clientId);
+    }
+
+    return success;
+}
+
+bool WebServer::hasBenchmarkStreamSubscribers() const {
+    return m_benchmarkBroadcaster && m_benchmarkBroadcaster->hasSubscribers();
+}
+
+// ============================================================================
+// Benchmark REST API Handlers
+// ============================================================================
+
+void WebServer::handleBenchmarkGet(AsyncWebServerRequest* request) {
+    auto* audio = m_actorSystem.getAudio();
+    if (!audio) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
+        return;
+    }
+
+    const audio::AudioBenchmarkStats& stats = audio->getBenchmarkStats();
+    bool hasSubscribers = hasBenchmarkStreamSubscribers();
+
+    sendSuccessResponse(request, [&stats, hasSubscribers](JsonObject& d) {
+        d["streaming"] = hasSubscribers;
+
+        JsonObject timing = d["timing"].to<JsonObject>();
+        timing["avgTotalUs"] = stats.avgTotalUs;
+        timing["avgGoertzelUs"] = stats.avgGoertzelUs;
+        timing["avgDcAgcUs"] = stats.avgDcAgcUs;
+        timing["avgChromaUs"] = stats.avgChromaUs;
+        timing["peakTotalUs"] = stats.peakTotalUs;
+        timing["peakGoertzelUs"] = stats.peakGoertzelUs;
+
+        JsonObject load = d["load"].to<JsonObject>();
+        load["cpuPercent"] = stats.cpuLoadPercent;
+        load["hopCount"] = stats.hopCount;
+        load["goertzelCount"] = stats.goertzelCount;
+
+        JsonArray histogram = d["histogram"].to<JsonArray>();
+        for (int i = 0; i < 8; i++) {
+            histogram.add(stats.histogramBins[i]);
+        }
+    });
+}
+
+void WebServer::handleBenchmarkStart(AsyncWebServerRequest* request) {
+    auto* audio = m_actorSystem.getAudio();
+    if (!audio) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
+        return;
+    }
+
+    // Reset stats to start fresh collection
+    audio->resetBenchmarkStats();
+
+    if (m_benchmarkBroadcaster) {
+        m_benchmarkBroadcaster->setStreamingActive(true);
+    }
+
+    Serial.println("[WebServer] Benchmark collection started");
+
+    sendSuccessResponse(request, [](JsonObject& d) {
+        d["message"] = "Benchmark collection started";
+        d["active"] = true;
+    });
+}
+
+void WebServer::handleBenchmarkStop(AsyncWebServerRequest* request) {
+    auto* audio = m_actorSystem.getAudio();
+    if (!audio) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
+        return;
+    }
+
+    if (m_benchmarkBroadcaster) {
+        m_benchmarkBroadcaster->setStreamingActive(false);
+    }
+
+    // Return final stats
+    const audio::AudioBenchmarkStats& stats = audio->getBenchmarkStats();
+
+    Serial.println("[WebServer] Benchmark collection stopped");
+
+    sendSuccessResponse(request, [&stats](JsonObject& d) {
+        d["message"] = "Benchmark collection stopped";
+        d["active"] = false;
+
+        JsonObject results = d["results"].to<JsonObject>();
+        results["avgTotalUs"] = stats.avgTotalUs;
+        results["avgGoertzelUs"] = stats.avgGoertzelUs;
+        results["cpuLoadPercent"] = stats.cpuLoadPercent;
+        results["hopCount"] = stats.hopCount;
+        results["peakTotalUs"] = stats.peakTotalUs;
+    });
+}
+
+void WebServer::handleBenchmarkHistory(AsyncWebServerRequest* request) {
+    auto* audio = m_actorSystem.getAudio();
+    if (!audio) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
+        return;
+    }
+
+    // Get ring buffer reference (read-only peek, no destructive pop)
+    const auto& ring = audio->getBenchmarkRing();
+    size_t available = ring.available();
+
+    // Limit to last 32 samples to avoid response bloat
+    constexpr size_t MAX_HISTORY = 32;
+    size_t count = (available < MAX_HISTORY) ? available : MAX_HISTORY;
+
+    // Collect samples via peekLast (non-destructive read, most recent first)
+    audio::AudioBenchmarkSample samples[MAX_HISTORY];
+    size_t peekedCount = ring.peekLast(samples, count);
+
+    sendSuccessResponse(request, [available, peekedCount, &samples](JsonObject& d) {
+        d["available"] = available;
+        d["returned"] = peekedCount;
+
+        JsonArray arr = d["samples"].to<JsonArray>();
+
+        for (size_t i = 0; i < peekedCount; i++) {
+            JsonObject s = arr.add<JsonObject>();
+            s["ts"] = samples[i].timestamp_us;
+            s["total"] = samples[i].totalProcessUs;
+            s["goertzel"] = samples[i].goertzelUs;
+            s["dcAgc"] = samples[i].dcAgcLoopUs;
+            s["chroma"] = samples[i].chromaUs;
+        }
+    });
 }
 #endif
 

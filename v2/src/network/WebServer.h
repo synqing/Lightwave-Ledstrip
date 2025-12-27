@@ -34,6 +34,10 @@
 #include <AsyncWebSocket.h>
 #include <ArduinoJson.h>
 
+#if FEATURE_API_AUTH
+#include <set>
+#endif
+
 #if defined(ESP32)
 #include <freertos/FreeRTOS.h>
 #include <freertos/portmacro.h>
@@ -375,6 +379,12 @@ private:
     bool checkWsRateLimit(AsyncWebSocketClient* client);
 
     // ========================================================================
+    // API Key Authentication
+    // ========================================================================
+
+    bool checkAPIKey(AsyncWebServerRequest* request);
+
+    // ========================================================================
     // Member Variables
     // ========================================================================
 
@@ -399,6 +409,11 @@ private:
 #if FEATURE_AUDIO_SYNC
     // Audio frame streaming
     webserver::AudioStreamBroadcaster* m_audioBroadcaster;
+#endif
+
+#if FEATURE_API_AUTH
+    // Authenticated WebSocket clients (by client ID)
+    std::set<uint32_t> m_authenticatedClients;
 #endif
 
     // Reference to external components (not owned)

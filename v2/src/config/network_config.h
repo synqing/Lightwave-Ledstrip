@@ -99,9 +99,25 @@ namespace NetworkConfig {
 
     // ========================================================================
     // OTA Security
+    // Override via build flag: -D OTA_TOKEN=\"your-unique-token\"
     // ========================================================================
 
-    constexpr const char* OTA_UPDATE_TOKEN = "LW-OTA-2024-SecureUpdate";
+#ifdef OTA_TOKEN
+    constexpr const char* OTA_UPDATE_TOKEN = OTA_TOKEN;
+#else
+    constexpr const char* OTA_UPDATE_TOKEN = "LW-OTA-2024-SecureUpdate";  // Default (change in production!)
+#endif
+
+    // ========================================================================
+    // API Key Authentication
+    // Enable: -D FEATURE_API_AUTH=1 -D API_KEY=\"your-secret-key\"
+    // ========================================================================
+
+#ifdef API_KEY
+    constexpr const char* API_KEY_VALUE = API_KEY;
+#else
+    constexpr const char* API_KEY_VALUE = "";  // Empty = auth disabled
+#endif
 
     // ========================================================================
     // WebSocket Settings

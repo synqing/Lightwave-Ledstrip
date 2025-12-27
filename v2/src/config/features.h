@@ -85,9 +85,23 @@
 #define FEATURE_AUDIO_OA_75 0
 #endif
 
-// OTA Updates
+// Audio Pipeline Benchmarking - Enables metrics collection and A/B testing
+// Use with native_test environment for validation framework
+#ifndef FEATURE_AUDIO_BENCHMARK
+#define FEATURE_AUDIO_BENCHMARK 0
+#endif
+
+// OTA Updates - Enabled by default for development
+// SECURITY: Set a unique token per device in production:
+//   -D OTA_TOKEN=\"your-unique-secret-token\"
 #ifndef FEATURE_OTA_UPDATE
-#define FEATURE_OTA_UPDATE 0
+#define FEATURE_OTA_UPDATE 1
+#endif
+
+// API Key Authentication - Requires X-API-Key header on protected endpoints
+// Enable: -D FEATURE_API_AUTH=1 -D API_KEY=\"your-secret-key\"
+#ifndef FEATURE_API_AUTH
+#define FEATURE_API_AUTH 0
 #endif
 
 // ESP-NOW Wireless Encoders

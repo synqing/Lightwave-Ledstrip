@@ -313,6 +313,23 @@ void WebServer::setupRoutes() {
         request->send(HttpStatus::NO_CONTENT);
     });
 
+    // Serve simple webapp files (root level)
+    m_server->on("/app.js", HTTP_GET, [](AsyncWebServerRequest* request) {
+        if (LittleFS.exists("/app.js")) {
+            request->send(LittleFS, "/app.js", "application/javascript");
+            return;
+        }
+        request->send(HttpStatus::NOT_FOUND, "text/plain", "Missing /app.js");
+    });
+
+    m_server->on("/styles.css", HTTP_GET, [](AsyncWebServerRequest* request) {
+        if (LittleFS.exists("/styles.css")) {
+            request->send(LittleFS, "/styles.css", "text/css");
+            return;
+        }
+        request->send(HttpStatus::NOT_FOUND, "text/plain", "Missing /styles.css");
+    });
+
     // Serve the dashboard assets explicitly.
     // We intentionally avoid serveStatic() here because its gzip probing can spam VFS errors
     // on missing *.gz files (ESP-IDF logs these at error level).
@@ -383,6 +400,7 @@ void WebServer::setupLegacyRoutes() {
     // GET /api/status
     m_server->on("/api/status", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
         handleLegacyStatus(request);
     });
 
@@ -392,6 +410,7 @@ void WebServer::setupLegacyRoutes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             handleLegacySetEffect(request, data, len);
         }
     );
@@ -402,6 +421,7 @@ void WebServer::setupLegacyRoutes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             handleLegacySetBrightness(request, data, len);
         }
     );
@@ -412,6 +432,7 @@ void WebServer::setupLegacyRoutes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             handleLegacySetSpeed(request, data, len);
         }
     );
@@ -422,6 +443,7 @@ void WebServer::setupLegacyRoutes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             handleLegacySetPalette(request, data, len);
         }
     );
@@ -432,6 +454,7 @@ void WebServer::setupLegacyRoutes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             handleLegacyZoneCount(request, data, len);
         }
     );
@@ -442,6 +465,7 @@ void WebServer::setupLegacyRoutes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             handleLegacyZoneEffect(request, data, len);
         }
     );
@@ -450,6 +474,7 @@ void WebServer::setupLegacyRoutes() {
     m_server->on("/api/zone/config/save", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             if (!zoneConfigMgr) {
                 sendLegacyError(request, "Config manager not initialized", 500);
                 return;
@@ -481,6 +506,7 @@ void WebServer::setupLegacyRoutes() {
     m_server->on("/api/zone/config/load", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             if (!zoneConfigMgr) {
                 sendLegacyError(request, "Config manager not initialized", 500);
                 return;
@@ -508,6 +534,7 @@ void WebServer::setupLegacyRoutes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             StaticJsonDocument<512> doc;
             VALIDATE_LEGACY_OR_RETURN(data, len, doc, RequestSchemas::LegacyZonePreset, request);
 
@@ -530,6 +557,7 @@ void WebServer::setupLegacyRoutes() {
     // Network Status - GET /api/network/status
     m_server->on("/api/network/status", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
 
         sendSuccessResponse(request, [](JsonObject& data) {
             data["state"] = WIFI_MANAGER.getStateString();
@@ -551,6 +579,7 @@ void WebServer::setupLegacyRoutes() {
     // Scan Networks - GET /api/network/scan
     m_server->on("/api/network/scan", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
 
         // Trigger async scan (results cached by WiFiManager)
         WIFI_MANAGER.scanNetworks();
@@ -579,6 +608,7 @@ void WebServer::setupLegacyRoutes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
 
             StaticJsonDocument<512> doc;
             VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::NetworkConnect, request);
@@ -600,6 +630,7 @@ void WebServer::setupLegacyRoutes() {
     // Disconnect - POST /api/network/disconnect
     m_server->on("/api/network/disconnect", HTTP_POST, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
 
         WIFI_MANAGER.disconnect();
 
@@ -636,15 +667,20 @@ void WebServer::setupLegacyRoutes() {
                uint8_t* data, size_t len, bool final) {
             // Validate token on first chunk
             if (index == 0) {
+                // Rate limit OTA attempts to prevent brute-force
+                if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+
+                String clientIP = request->client()->remoteIP().toString();
                 String token = request->header("X-OTA-Token");
                 if (token != config::NetworkConfig::OTA_UPDATE_TOKEN) {
-                    Serial.println("[OTA] Invalid or missing token!");
+                    Serial.printf("[OTA] SECURITY: Failed auth attempt from %s\n", clientIP.c_str());
                     request->send(401, "application/json",
                         "{\"success\":false,\"error\":\"Invalid OTA token\"}");
                     return;
                 }
 
-                Serial.printf("[OTA] Starting update: %s\n", filename.c_str());
+                Serial.printf("[OTA] Authorized update from %s: %s\n", clientIP.c_str(), filename.c_str());
 
                 // Begin update
                 if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
@@ -677,12 +713,14 @@ void WebServer::setupLegacyRoutes() {
 
 void WebServer::setupV1Routes() {
     // API Discovery - GET /api/v1/
+    // Public endpoint - no auth required (API discovery)
     m_server->on("/api/v1/", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         handleApiDiscovery(request);
     });
 
     // Health Endpoint - GET /api/v1/health
+    // Public endpoint - no auth required (health check for monitoring)
     m_server->on("/api/v1/health", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         handleHealth(request);
@@ -691,12 +729,14 @@ void WebServer::setupV1Routes() {
     // Device Status - GET /api/v1/device/status
     m_server->on("/api/v1/device/status", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
         webserver::handlers::DeviceHandlers::handleStatus(request, m_actorSystem, m_renderer, m_startTime, m_apMode, m_ws->count());
     });
 
     // Device Info - GET /api/v1/device/info
     m_server->on("/api/v1/device/info", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
         webserver::handlers::DeviceHandlers::handleInfo(request, m_actorSystem, m_renderer);
     });
 
@@ -704,6 +744,7 @@ void WebServer::setupV1Routes() {
     // Sync Status - GET /api/v1/sync/status
     m_server->on("/api/v1/sync/status", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
         // Simple status response - full implementation requires SyncManagerActor reference
         char buffer[256];
         size_t len = snprintf(buffer, sizeof(buffer),
@@ -718,12 +759,14 @@ void WebServer::setupV1Routes() {
     // Effect Metadata - GET /api/v1/effects/metadata?id=N
     m_server->on("/api/v1/effects/metadata", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
         webserver::handlers::EffectHandlers::handleMetadata(request, m_renderer);
     });
 
     // Effect Parameters - GET /api/v1/effects/parameters?id=N
     m_server->on("/api/v1/effects/parameters", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
         webserver::handlers::EffectHandlers::handleParametersGet(request, m_renderer);
     });
 
@@ -733,6 +776,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             webserver::handlers::EffectHandlers::handleParametersSet(request, data, len, m_renderer);
         }
     );
@@ -743,6 +787,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             webserver::handlers::EffectHandlers::handleParametersSet(request, data, len, m_renderer);
         }
     );
@@ -750,18 +795,21 @@ void WebServer::setupV1Routes() {
     // Effect Families - GET /api/v1/effects/families
     m_server->on("/api/v1/effects/families", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
         webserver::handlers::EffectHandlers::handleFamilies(request);
     });
 
     // Effects List - GET /api/v1/effects
     m_server->on("/api/v1/effects", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
         webserver::handlers::EffectHandlers::handleList(request, m_renderer);
     });
 
     // Current Effect - GET /api/v1/effects/current
     m_server->on("/api/v1/effects/current", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
         webserver::handlers::EffectHandlers::handleCurrent(request, m_renderer);
     });
 
@@ -771,6 +819,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             webserver::handlers::EffectHandlers::handleSet(request, data, len, m_actorSystem, m_renderer, [this](){ broadcastStatus(); });
         }
     );
@@ -781,6 +830,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             webserver::handlers::EffectHandlers::handleSet(request, data, len, m_actorSystem, m_renderer, [this](){ broadcastStatus(); });
         }
     );
@@ -788,6 +838,7 @@ void WebServer::setupV1Routes() {
     // Get Parameters - GET /api/v1/parameters
     m_server->on("/api/v1/parameters", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
         handleParametersGet(request);
     });
 
@@ -797,6 +848,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             handleParametersSet(request, data, len);
         }
     );
@@ -807,6 +859,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             handleParametersSet(request, data, len);
         }
     );
@@ -814,6 +867,7 @@ void WebServer::setupV1Routes() {
     // Get Audio Parameters - GET /api/v1/audio/parameters
     m_server->on("/api/v1/audio/parameters", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
         handleAudioParametersGet(request);
     });
 
@@ -823,6 +877,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             handleAudioParametersSet(request, data, len);
         }
     );
@@ -833,6 +888,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             handleAudioParametersSet(request, data, len);
         }
     );
@@ -843,6 +899,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             handleAudioControl(request, data, len);
         }
     );
@@ -850,12 +907,14 @@ void WebServer::setupV1Routes() {
     // Audio State - GET /api/v1/audio/state
     m_server->on("/api/v1/audio/state", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
         handleAudioStateGet(request);
     });
 
     // Audio Presets - GET /api/v1/audio/presets
     m_server->on("/api/v1/audio/presets", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
         handleAudioPresetsList(request);
     });
 
@@ -865,6 +924,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             handleAudioPresetSave(request, data, len);
         }
     );
@@ -873,6 +933,7 @@ void WebServer::setupV1Routes() {
     m_server->on("/api/v1/audio/presets/get", HTTP_GET,
         [this](AsyncWebServerRequest* request) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             if (!request->hasParam("id")) {
                 sendErrorResponse(request, HttpStatus::BAD_REQUEST,
                                   ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
@@ -887,6 +948,7 @@ void WebServer::setupV1Routes() {
     m_server->on("/api/v1/audio/presets/apply", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             if (!request->hasParam("id")) {
                 sendErrorResponse(request, HttpStatus::BAD_REQUEST,
                                   ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
@@ -901,6 +963,7 @@ void WebServer::setupV1Routes() {
     m_server->on("/api/v1/audio/presets/delete", HTTP_DELETE,
         [this](AsyncWebServerRequest* request) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             if (!request->hasParam("id")) {
                 sendErrorResponse(request, HttpStatus::BAD_REQUEST,
                                   ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
@@ -918,24 +981,28 @@ void WebServer::setupV1Routes() {
     // List audio sources - GET /api/v1/audio/mappings/sources
     m_server->on("/api/v1/audio/mappings/sources", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
         handleAudioMappingsListSources(request);
     });
 
     // List visual targets - GET /api/v1/audio/mappings/targets
     m_server->on("/api/v1/audio/mappings/targets", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
         handleAudioMappingsListTargets(request);
     });
 
     // List curve types - GET /api/v1/audio/mappings/curves
     m_server->on("/api/v1/audio/mappings/curves", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
         handleAudioMappingsListCurves(request);
     });
 
     // List all effects with mapping status - GET /api/v1/audio/mappings
     m_server->on("/api/v1/audio/mappings", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
         handleAudioMappingsList(request);
     });
 
@@ -943,6 +1010,7 @@ void WebServer::setupV1Routes() {
     m_server->on("/api/v1/audio/mappings/effect", HTTP_GET,
         [this](AsyncWebServerRequest* request) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             if (!request->hasParam("id")) {
                 sendErrorResponse(request, HttpStatus::BAD_REQUEST,
                                   ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
@@ -959,6 +1027,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             if (!request->hasParam("id")) {
                 sendErrorResponse(request, HttpStatus::BAD_REQUEST,
                                   ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
@@ -973,6 +1042,7 @@ void WebServer::setupV1Routes() {
     m_server->on("/api/v1/audio/mappings/effect", HTTP_DELETE,
         [this](AsyncWebServerRequest* request) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             if (!request->hasParam("id")) {
                 sendErrorResponse(request, HttpStatus::BAD_REQUEST,
                                   ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
@@ -987,6 +1057,7 @@ void WebServer::setupV1Routes() {
     m_server->on("/api/v1/audio/mappings/enable", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             if (!request->hasParam("id")) {
                 sendErrorResponse(request, HttpStatus::BAD_REQUEST,
                                   ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
@@ -1001,6 +1072,7 @@ void WebServer::setupV1Routes() {
     m_server->on("/api/v1/audio/mappings/disable", HTTP_POST,
         [this](AsyncWebServerRequest* request) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             if (!request->hasParam("id")) {
                 sendErrorResponse(request, HttpStatus::BAD_REQUEST,
                                   ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
@@ -1014,12 +1086,14 @@ void WebServer::setupV1Routes() {
     // Mapping stats - GET /api/v1/audio/mappings/stats
     m_server->on("/api/v1/audio/mappings/stats", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
         handleAudioMappingsStats(request);
     });
 
     // Transition Types - GET /api/v1/transitions/types
     m_server->on("/api/v1/transitions/types", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
         handleTransitionTypes(request);
     });
 
@@ -1029,6 +1103,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             handleTransitionTrigger(request, data, len);
         }
     );
@@ -1039,6 +1114,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             handleBatch(request, data, len);
         }
     );
@@ -1046,12 +1122,14 @@ void WebServer::setupV1Routes() {
     // Palettes List - GET /api/v1/palettes
     m_server->on("/api/v1/palettes", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
         handlePalettesList(request);
     });
 
     // Current Palette - GET /api/v1/palettes/current
     m_server->on("/api/v1/palettes/current", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
         handlePalettesCurrent(request);
     });
 
@@ -1061,6 +1139,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             handlePalettesSet(request, data, len);
         }
     );
@@ -1070,6 +1149,7 @@ void WebServer::setupV1Routes() {
     // Transition Config - GET /api/v1/transitions/config
     m_server->on("/api/v1/transitions/config", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
         handleTransitionConfigGet(request);
     });
 
@@ -1079,6 +1159,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             handleTransitionConfigSet(request, data, len);
         }
     );
@@ -1088,12 +1169,14 @@ void WebServer::setupV1Routes() {
     // Narrative Status - GET /api/v1/narrative/status
     m_server->on("/api/v1/narrative/status", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
         handleNarrativeStatus(request);
     });
 
     // Narrative Config - GET /api/v1/narrative/config
     m_server->on("/api/v1/narrative/config", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
         handleNarrativeConfigGet(request);
     });
 
@@ -1103,6 +1186,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             handleNarrativeConfigSet(request, data, len);
         }
     );
@@ -1110,6 +1194,7 @@ void WebServer::setupV1Routes() {
     // ========== OpenAPI Specification ==========
 
     // OpenAPI - GET /api/v1/openapi.json
+    // Public endpoint - no auth required (API documentation)
     m_server->on("/api/v1/openapi.json", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         handleOpenApiSpec(request);
@@ -1120,6 +1205,7 @@ void WebServer::setupV1Routes() {
     // List all zones - GET /api/v1/zones
     m_server->on("/api/v1/zones", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
         webserver::handlers::ZoneHandlers::handleList(request, m_actorSystem, m_renderer, m_zoneComposer);
     });
 
@@ -1129,6 +1215,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             webserver::handlers::ZoneHandlers::handleLayout(request, data, len, m_zoneComposer, [this](){ broadcastZoneState(); });
         }
     );
@@ -1137,6 +1224,7 @@ void WebServer::setupV1Routes() {
     // Using regex-style path with parameter
     m_server->on("^\\/api\\/v1\\/zones\\/([0-3])$", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
         webserver::handlers::ZoneHandlers::handleGet(request, m_actorSystem, m_renderer, m_zoneComposer);
     });
 
@@ -1146,6 +1234,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             webserver::handlers::ZoneHandlers::handleSetEffect(request, data, len, m_actorSystem, m_renderer, m_zoneComposer, [this](){ broadcastZoneState(); });
         }
     );
@@ -1156,6 +1245,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             webserver::handlers::ZoneHandlers::handleSetBrightness(request, data, len, m_zoneComposer, [this](){ broadcastZoneState(); });
         }
     );
@@ -1166,6 +1256,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             webserver::handlers::ZoneHandlers::handleSetSpeed(request, data, len, m_zoneComposer, [this](){ broadcastZoneState(); });
         }
     );
@@ -1176,6 +1267,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             webserver::handlers::ZoneHandlers::handleSetPalette(request, data, len, m_zoneComposer, [this](){ broadcastZoneState(); });
         }
     );
@@ -1186,6 +1278,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             webserver::handlers::ZoneHandlers::handleSetBlend(request, data, len, m_zoneComposer, [this](){ broadcastZoneState(); });
         }
     );
@@ -1196,6 +1289,7 @@ void WebServer::setupV1Routes() {
         nullptr,
         [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
             webserver::handlers::ZoneHandlers::handleSetEnabled(request, data, len, m_zoneComposer, [this](){ broadcastZoneState(); });
         }
     );
@@ -3086,6 +3180,11 @@ void WebServer::handleWsDisconnect(AsyncWebSocketClient* client) {
 
     // Cleanup LED stream subscription
     setLEDStreamSubscription(client, false);
+
+#if FEATURE_API_AUTH
+    // Cleanup authenticated client tracking
+    m_authenticatedClients.erase(clientId);
+#endif
 }
 
 void WebServer::handleWsMessage(AsyncWebSocketClient* client, uint8_t* data, size_t len) {
@@ -3111,6 +3210,30 @@ void WebServer::handleWsMessage(AsyncWebSocketClient* client, uint8_t* data, siz
         client->text(buildWsError(ErrorCodes::INVALID_JSON, "Parse error"));
         return;
     }
+
+#if FEATURE_API_AUTH
+    // WebSocket authentication check
+    const char* key = config::NetworkConfig::API_KEY_VALUE;
+    if (key != nullptr && key[0] != '\0') {
+        // Auth is enabled - check if client is authenticated
+        if (m_authenticatedClients.find(client->id()) == m_authenticatedClients.end()) {
+            // Client not authenticated - only allow "auth" command
+            const char* msgType = doc["type"] | "";
+            if (strcmp(msgType, "auth") == 0) {
+                const char* providedKey = doc["apiKey"] | "";
+                if (strcmp(providedKey, key) == 0) {
+                    m_authenticatedClients.insert(client->id());
+                    client->text("{\"type\":\"auth\",\"success\":true}");
+                } else {
+                    client->text(buildWsError(ErrorCodes::UNAUTHORIZED, "Invalid API key").c_str());
+                }
+            } else {
+                client->text("{\"type\":\"error\",\"error\":{\"code\":\"UNAUTHORIZED\",\"message\":\"Authentication required. Send {\\\"type\\\":\\\"auth\\\",\\\"apiKey\\\":\\\"...\\\"}\"}}\n");
+            }
+            return;
+        }
+    }
+#endif
 
     processWsCommand(client, doc);
 }
@@ -5269,6 +5392,29 @@ bool WebServer::checkRateLimit(AsyncWebServerRequest* request) {
 bool WebServer::checkWsRateLimit(AsyncWebSocketClient* client) {
     IPAddress clientIP = client->remoteIP();
     return m_rateLimiter.checkWebSocket(clientIP);
+}
+
+bool WebServer::checkAPIKey(AsyncWebServerRequest* request) {
+#if FEATURE_API_AUTH
+    const char* key = config::NetworkConfig::API_KEY_VALUE;
+    // If no API key configured, auth is disabled
+    if (key == nullptr || key[0] == '\0') {
+        return true;
+    }
+
+    if (!request->hasHeader("X-API-Key")) {
+        sendErrorResponse(request, HttpStatus::UNAUTHORIZED,
+                          ErrorCodes::UNAUTHORIZED, "Missing X-API-Key header");
+        return false;
+    }
+
+    if (request->header("X-API-Key") != key) {
+        sendErrorResponse(request, HttpStatus::UNAUTHORIZED,
+                          ErrorCodes::UNAUTHORIZED, "Invalid API key");
+        return false;
+    }
+#endif
+    return true;
 }
 
 } // namespace network

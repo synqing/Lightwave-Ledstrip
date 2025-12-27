@@ -911,6 +911,112 @@ void WebServer::setupV1Routes() {
         }
     );
 
+    // =========================================================================
+    // Audio-Effect Mapping Routes (Phase 4)
+    // =========================================================================
+
+    // List audio sources - GET /api/v1/audio/mappings/sources
+    m_server->on("/api/v1/audio/mappings/sources", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        handleAudioMappingsListSources(request);
+    });
+
+    // List visual targets - GET /api/v1/audio/mappings/targets
+    m_server->on("/api/v1/audio/mappings/targets", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        handleAudioMappingsListTargets(request);
+    });
+
+    // List curve types - GET /api/v1/audio/mappings/curves
+    m_server->on("/api/v1/audio/mappings/curves", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        handleAudioMappingsListCurves(request);
+    });
+
+    // List all effects with mapping status - GET /api/v1/audio/mappings
+    m_server->on("/api/v1/audio/mappings", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        handleAudioMappingsList(request);
+    });
+
+    // Get mapping for effect - GET /api/v1/audio/mappings/effect?id=X
+    m_server->on("/api/v1/audio/mappings/effect", HTTP_GET,
+        [this](AsyncWebServerRequest* request) {
+            if (!checkRateLimit(request)) return;
+            if (!request->hasParam("id")) {
+                sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                                  ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
+                return;
+            }
+            uint8_t id = request->getParam("id")->value().toInt();
+            handleAudioMappingsGet(request, id);
+        }
+    );
+
+    // Set mapping for effect - POST /api/v1/audio/mappings/effect?id=X
+    m_server->on("/api/v1/audio/mappings/effect", HTTP_POST,
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!request->hasParam("id")) {
+                sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                                  ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
+                return;
+            }
+            uint8_t id = request->getParam("id")->value().toInt();
+            handleAudioMappingsSet(request, id, data, len);
+        }
+    );
+
+    // Delete mapping for effect - DELETE /api/v1/audio/mappings/effect?id=X
+    m_server->on("/api/v1/audio/mappings/effect", HTTP_DELETE,
+        [this](AsyncWebServerRequest* request) {
+            if (!checkRateLimit(request)) return;
+            if (!request->hasParam("id")) {
+                sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                                  ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
+                return;
+            }
+            uint8_t id = request->getParam("id")->value().toInt();
+            handleAudioMappingsDelete(request, id);
+        }
+    );
+
+    // Enable mapping - POST /api/v1/audio/mappings/enable?id=X
+    m_server->on("/api/v1/audio/mappings/enable", HTTP_POST,
+        [this](AsyncWebServerRequest* request) {
+            if (!checkRateLimit(request)) return;
+            if (!request->hasParam("id")) {
+                sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                                  ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
+                return;
+            }
+            uint8_t id = request->getParam("id")->value().toInt();
+            handleAudioMappingsEnable(request, id, true);
+        }
+    );
+
+    // Disable mapping - POST /api/v1/audio/mappings/disable?id=X
+    m_server->on("/api/v1/audio/mappings/disable", HTTP_POST,
+        [this](AsyncWebServerRequest* request) {
+            if (!checkRateLimit(request)) return;
+            if (!request->hasParam("id")) {
+                sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                                  ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
+                return;
+            }
+            uint8_t id = request->getParam("id")->value().toInt();
+            handleAudioMappingsEnable(request, id, false);
+        }
+    );
+
+    // Mapping stats - GET /api/v1/audio/mappings/stats
+    m_server->on("/api/v1/audio/mappings/stats", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        handleAudioMappingsStats(request);
+    });
+
     // Transition Types - GET /api/v1/transitions/types
     m_server->on("/api/v1/transitions/types", HTTP_GET, [this](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
@@ -1800,6 +1906,290 @@ void WebServer::handleAudioPresetDelete(AsyncWebServerRequest* request, uint8_t 
         d["message"] = "Preset deleted";
     });
 }
+
+// =============================================================================
+// Audio-Effect Mapping Handlers (Phase 4)
+// =============================================================================
+
+void WebServer::handleAudioMappingsListSources(AsyncWebServerRequest* request) {
+    using namespace audio;
+
+    sendSuccessResponseLarge(request, [](JsonObject& data) {
+        JsonArray sources = data["sources"].to<JsonArray>();
+
+        // Energy metrics
+        auto addSource = [&](const char* name, uint8_t id, const char* category,
+                             const char* desc, float min, float max) {
+            JsonObject s = sources.add<JsonObject>();
+            s["name"] = name;
+            s["id"] = id;
+            s["category"] = category;
+            s["description"] = desc;
+            s["rangeMin"] = min;
+            s["rangeMax"] = max;
+        };
+
+        addSource("RMS", 0, "energy", "Smoothed RMS level", 0.0f, 1.0f);
+        addSource("FAST_RMS", 1, "energy", "Fast-attack RMS", 0.0f, 1.0f);
+        addSource("FLUX", 2, "energy", "Spectral flux (onset)", 0.0f, 1.0f);
+        addSource("FAST_FLUX", 3, "energy", "Fast-attack flux", 0.0f, 1.0f);
+
+        addSource("BAND_0", 4, "frequency", "60 Hz - Sub-bass", 0.0f, 1.0f);
+        addSource("BAND_1", 5, "frequency", "120 Hz - Bass", 0.0f, 1.0f);
+        addSource("BAND_2", 6, "frequency", "250 Hz - Low-mid", 0.0f, 1.0f);
+        addSource("BAND_3", 7, "frequency", "500 Hz - Mid", 0.0f, 1.0f);
+        addSource("BAND_4", 8, "frequency", "1000 Hz - High-mid", 0.0f, 1.0f);
+        addSource("BAND_5", 9, "frequency", "2000 Hz - Presence", 0.0f, 1.0f);
+        addSource("BAND_6", 10, "frequency", "4000 Hz - Brilliance", 0.0f, 1.0f);
+        addSource("BAND_7", 11, "frequency", "7800 Hz - Air", 0.0f, 1.0f);
+
+        addSource("BASS", 12, "aggregate", "(band0 + band1) / 2", 0.0f, 1.0f);
+        addSource("MID", 13, "aggregate", "(band2 + band3 + band4) / 3", 0.0f, 1.0f);
+        addSource("TREBLE", 14, "aggregate", "(band5 + band6 + band7) / 3", 0.0f, 1.0f);
+        addSource("HEAVY_BASS", 15, "aggregate", "Squared bass response", 0.0f, 1.0f);
+
+        addSource("BEAT_PHASE", 16, "timing", "Beat phase [0,1)", 0.0f, 1.0f);
+        addSource("BPM", 17, "timing", "Tempo in BPM", 30.0f, 300.0f);
+        addSource("TEMPO_CONFIDENCE", 18, "timing", "Beat detection confidence", 0.0f, 1.0f);
+    }, 2048);
+}
+
+void WebServer::handleAudioMappingsListTargets(AsyncWebServerRequest* request) {
+    sendSuccessResponse(request, [](JsonObject& data) {
+        JsonArray targets = data["targets"].to<JsonArray>();
+
+        auto addTarget = [&](const char* name, uint8_t id, uint8_t min, uint8_t max,
+                             uint8_t defVal, const char* desc) {
+            JsonObject t = targets.add<JsonObject>();
+            t["name"] = name;
+            t["id"] = id;
+            t["rangeMin"] = min;
+            t["rangeMax"] = max;
+            t["default"] = defVal;
+            t["description"] = desc;
+        };
+
+        addTarget("BRIGHTNESS", 0, 0, 160, 96, "Master LED intensity");
+        addTarget("SPEED", 1, 1, 50, 10, "Animation rate");
+        addTarget("INTENSITY", 2, 0, 255, 128, "Effect amplitude");
+        addTarget("SATURATION", 3, 0, 255, 255, "Color saturation");
+        addTarget("COMPLEXITY", 4, 0, 255, 128, "Pattern detail");
+        addTarget("VARIATION", 5, 0, 255, 0, "Mode selection");
+        addTarget("HUE", 6, 0, 255, 0, "Color rotation");
+    });
+}
+
+void WebServer::handleAudioMappingsListCurves(AsyncWebServerRequest* request) {
+    sendSuccessResponse(request, [](JsonObject& data) {
+        JsonArray curves = data["curves"].to<JsonArray>();
+
+        auto addCurve = [&](const char* name, uint8_t id, const char* formula, const char* desc) {
+            JsonObject c = curves.add<JsonObject>();
+            c["name"] = name;
+            c["id"] = id;
+            c["formula"] = formula;
+            c["description"] = desc;
+        };
+
+        addCurve("LINEAR", 0, "y = x", "Direct proportional");
+        addCurve("SQUARED", 1, "y = x²", "Gentle start, aggressive end");
+        addCurve("SQRT", 2, "y = √x", "Aggressive start, gentle end");
+        addCurve("LOG", 3, "y = log(x+1)/log(2)", "Logarithmic compression");
+        addCurve("EXP", 4, "y = (eˣ-1)/(e-1)", "Exponential expansion");
+        addCurve("INVERTED", 5, "y = 1 - x", "Inverse");
+    });
+}
+
+void WebServer::handleAudioMappingsList(AsyncWebServerRequest* request) {
+    using namespace audio;
+    auto& registry = AudioMappingRegistry::instance();
+
+    sendSuccessResponseLarge(request, [this, &registry](JsonObject& data) {
+        data["activeEffects"] = registry.getActiveEffectCount();
+        data["totalMappings"] = registry.getTotalMappingCount();
+
+        JsonArray effects = data["effects"].to<JsonArray>();
+
+        uint8_t effectCount = m_renderer->getEffectCount();
+        for (uint8_t i = 0; i < effectCount && i < AudioMappingRegistry::MAX_EFFECTS; i++) {
+            const EffectAudioMapping* mapping = registry.getMapping(i);
+            if (mapping && mapping->globalEnabled && mapping->mappingCount > 0) {
+                JsonObject e = effects.add<JsonObject>();
+                e["id"] = i;
+                e["name"] = m_renderer->getEffectName(i);
+                e["mappingCount"] = mapping->mappingCount;
+                e["enabled"] = mapping->globalEnabled;
+            }
+        }
+    }, 2048);
+}
+
+void WebServer::handleAudioMappingsGet(AsyncWebServerRequest* request, uint8_t effectId) {
+    using namespace audio;
+    auto& registry = AudioMappingRegistry::instance();
+
+    if (effectId >= AudioMappingRegistry::MAX_EFFECTS ||
+        effectId >= m_renderer->getEffectCount()) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "id");
+        return;
+    }
+
+    const EffectAudioMapping* config = registry.getMapping(effectId);
+    if (!config) {
+        sendErrorResponse(request, HttpStatus::INTERNAL_ERROR,
+                          ErrorCodes::INTERNAL_ERROR, "Failed to get mapping");
+        return;
+    }
+
+    sendSuccessResponseLarge(request, [this, effectId, config](JsonObject& data) {
+        data["effectId"] = effectId;
+        data["effectName"] = m_renderer->getEffectName(effectId);
+        data["globalEnabled"] = config->globalEnabled;
+        data["mappingCount"] = config->mappingCount;
+
+        JsonArray mappings = data["mappings"].to<JsonArray>();
+
+        for (uint8_t i = 0; i < config->mappingCount; i++) {
+            const AudioParameterMapping& m = config->mappings[i];
+            JsonObject mapping = mappings.add<JsonObject>();
+
+            mapping["source"] = AudioMappingRegistry::getSourceName(m.source);
+            mapping["target"] = AudioMappingRegistry::getTargetName(m.target);
+            mapping["curve"] = AudioMappingRegistry::getCurveName(m.curve);
+            mapping["inputMin"] = m.inputMin;
+            mapping["inputMax"] = m.inputMax;
+            mapping["outputMin"] = m.outputMin;
+            mapping["outputMax"] = m.outputMax;
+            mapping["smoothingAlpha"] = m.smoothingAlpha;
+            mapping["gain"] = m.gain;
+            mapping["enabled"] = m.enabled;
+            mapping["additive"] = m.additive;
+        }
+    }, 2048);
+}
+
+void WebServer::handleAudioMappingsSet(AsyncWebServerRequest* request, uint8_t effectId, uint8_t* data, size_t len) {
+    using namespace audio;
+    auto& registry = AudioMappingRegistry::instance();
+
+    if (effectId >= AudioMappingRegistry::MAX_EFFECTS ||
+        effectId >= m_renderer->getEffectCount()) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "id");
+        return;
+    }
+
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, data, len);
+    if (err) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::INVALID_JSON, err.c_str());
+        return;
+    }
+
+    EffectAudioMapping newConfig;
+    newConfig.effectId = effectId;
+    newConfig.globalEnabled = doc["globalEnabled"] | true;
+    newConfig.mappingCount = 0;
+
+    if (doc["mappings"].is<JsonArray>()) {
+        JsonArray mappingsArr = doc["mappings"];
+
+        for (JsonVariant m : mappingsArr) {
+            if (newConfig.mappingCount >= EffectAudioMapping::MAX_MAPPINGS_PER_EFFECT) {
+                break;
+            }
+
+            AudioParameterMapping mapping;
+            mapping.source = AudioMappingRegistry::parseSource(m["source"] | "NONE");
+            mapping.target = AudioMappingRegistry::parseTarget(m["target"] | "NONE");
+            mapping.curve = AudioMappingRegistry::parseCurve(m["curve"] | "LINEAR");
+            mapping.inputMin = m["inputMin"] | 0.0f;
+            mapping.inputMax = m["inputMax"] | 1.0f;
+            mapping.outputMin = m["outputMin"] | 0.0f;
+            mapping.outputMax = m["outputMax"] | 255.0f;
+            mapping.smoothingAlpha = m["smoothingAlpha"] | 0.3f;
+            mapping.gain = m["gain"] | 1.0f;
+            mapping.enabled = m["enabled"] | true;
+            mapping.additive = m["additive"] | false;
+
+            // Validate
+            if (mapping.source == AudioSource::NONE || mapping.target == VisualTarget::NONE) {
+                continue;  // Skip invalid mappings
+            }
+
+            newConfig.mappings[newConfig.mappingCount++] = mapping;
+        }
+    }
+
+    if (!registry.setMapping(effectId, newConfig)) {
+        sendErrorResponse(request, HttpStatus::INTERNAL_ERROR,
+                          ErrorCodes::INTERNAL_ERROR, "Failed to set mapping");
+        return;
+    }
+
+    sendSuccessResponse(request, [effectId, &newConfig](JsonObject& respData) {
+        respData["effectId"] = effectId;
+        respData["mappingCount"] = newConfig.mappingCount;
+        respData["enabled"] = newConfig.globalEnabled;
+        respData["message"] = "Mapping updated";
+    });
+}
+
+void WebServer::handleAudioMappingsDelete(AsyncWebServerRequest* request, uint8_t effectId) {
+    using namespace audio;
+    auto& registry = AudioMappingRegistry::instance();
+
+    if (effectId >= AudioMappingRegistry::MAX_EFFECTS) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "id");
+        return;
+    }
+
+    EffectAudioMapping* config = registry.getMapping(effectId);
+    if (config) {
+        config->clearMappings();
+        config->globalEnabled = false;
+    }
+
+    sendSuccessResponse(request, [effectId](JsonObject& d) {
+        d["effectId"] = effectId;
+        d["message"] = "Mapping cleared";
+    });
+}
+
+void WebServer::handleAudioMappingsEnable(AsyncWebServerRequest* request, uint8_t effectId, bool enable) {
+    using namespace audio;
+    auto& registry = AudioMappingRegistry::instance();
+
+    if (effectId >= AudioMappingRegistry::MAX_EFFECTS) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "id");
+        return;
+    }
+
+    registry.setEffectMappingEnabled(effectId, enable);
+
+    sendSuccessResponse(request, [effectId, enable](JsonObject& d) {
+        d["effectId"] = effectId;
+        d["enabled"] = enable;
+    });
+}
+
+void WebServer::handleAudioMappingsStats(AsyncWebServerRequest* request) {
+    using namespace audio;
+    auto& registry = AudioMappingRegistry::instance();
+
+    sendSuccessResponse(request, [&registry](JsonObject& data) {
+        data["applyCount"] = registry.getApplyCount();
+        data["lastApplyMicros"] = registry.getLastApplyMicros();
+        data["maxApplyMicros"] = registry.getMaxApplyMicros();
+        data["activeEffectsWithMappings"] = registry.getActiveEffectCount();
+        data["totalMappingsConfigured"] = registry.getTotalMappingCount();
+    });
+}
+
 #else
 void WebServer::handleAudioParametersGet(AsyncWebServerRequest* request) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
@@ -1851,6 +2241,58 @@ void WebServer::handleAudioPresetApply(AsyncWebServerRequest* request, uint8_t p
 
 void WebServer::handleAudioPresetDelete(AsyncWebServerRequest* request, uint8_t presetId) {
     (void)presetId;
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void WebServer::handleAudioMappingsListSources(AsyncWebServerRequest* request) {
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void WebServer::handleAudioMappingsListTargets(AsyncWebServerRequest* request) {
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void WebServer::handleAudioMappingsListCurves(AsyncWebServerRequest* request) {
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void WebServer::handleAudioMappingsList(AsyncWebServerRequest* request) {
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void WebServer::handleAudioMappingsGet(AsyncWebServerRequest* request, uint8_t effectId) {
+    (void)effectId;
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void WebServer::handleAudioMappingsSet(AsyncWebServerRequest* request, uint8_t effectId, uint8_t* data, size_t len) {
+    (void)effectId;
+    (void)data;
+    (void)len;
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void WebServer::handleAudioMappingsDelete(AsyncWebServerRequest* request, uint8_t effectId) {
+    (void)effectId;
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void WebServer::handleAudioMappingsEnable(AsyncWebServerRequest* request, uint8_t effectId, bool enable) {
+    (void)effectId;
+    (void)enable;
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void WebServer::handleAudioMappingsStats(AsyncWebServerRequest* request) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }

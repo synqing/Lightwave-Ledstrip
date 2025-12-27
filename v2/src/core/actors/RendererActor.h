@@ -46,6 +46,7 @@
 #include "../../audio/contracts/ControlBus.h"
 #include "../../audio/contracts/MusicalGrid.h"
 #include "../../audio/contracts/SnapshotBuffer.h"
+#include "../../audio/contracts/AudioEffectMapping.h"
 #endif
 
 // Forward declarations

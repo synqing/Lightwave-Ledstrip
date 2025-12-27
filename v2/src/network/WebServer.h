@@ -316,6 +316,18 @@ private:
     void handleAudioPresetSave(AsyncWebServerRequest* request, uint8_t* data, size_t len);
     void handleAudioPresetApply(AsyncWebServerRequest* request, uint8_t presetId);
     void handleAudioPresetDelete(AsyncWebServerRequest* request, uint8_t presetId);
+
+    // Audio-Effect Mapping (Phase 4)
+    void handleAudioMappingsListSources(AsyncWebServerRequest* request);
+    void handleAudioMappingsListTargets(AsyncWebServerRequest* request);
+    void handleAudioMappingsListCurves(AsyncWebServerRequest* request);
+    void handleAudioMappingsList(AsyncWebServerRequest* request);
+    void handleAudioMappingsGet(AsyncWebServerRequest* request, uint8_t effectId);
+    void handleAudioMappingsSet(AsyncWebServerRequest* request, uint8_t effectId, uint8_t* data, size_t len);
+    void handleAudioMappingsDelete(AsyncWebServerRequest* request, uint8_t effectId);
+    void handleAudioMappingsEnable(AsyncWebServerRequest* request, uint8_t effectId, bool enable);
+    void handleAudioMappingsStats(AsyncWebServerRequest* request);
+
     void handleTransitionTypes(AsyncWebServerRequest* request);
     void handleTransitionTrigger(AsyncWebServerRequest* request, uint8_t* data, size_t len);
     void handleBatch(AsyncWebServerRequest* request, uint8_t* data, size_t len);

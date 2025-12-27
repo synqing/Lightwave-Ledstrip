@@ -755,6 +755,46 @@ void RendererActor::renderFrame()
         ctx.audio.available = false;
 #endif
 
+        // =====================================================================
+        // Phase 4: Audio-Effect Parameter Mapping
+        // Apply configured audio→visual mappings BEFORE effect->render()
+        // =====================================================================
+#if FEATURE_AUDIO_SYNC
+        if (audio::AudioMappingRegistry::instance().hasActiveMappings(m_currentEffect)) {
+            // Extract current parameters as local copies for mapping
+            uint8_t mappedBrightness = ctx.brightness;
+            uint8_t mappedSpeed = ctx.speed;
+            uint8_t mappedIntensity = ctx.intensity;
+            uint8_t mappedSaturation = ctx.saturation;
+            uint8_t mappedComplexity = ctx.complexity;
+            uint8_t mappedVariation = ctx.variation;
+            uint8_t mappedHue = ctx.gHue;
+
+            audio::AudioMappingRegistry::instance().applyMappings(
+                m_currentEffect,
+                m_lastControlBus,
+                m_lastMusicalGrid,
+                ctx.audio.available,
+                mappedBrightness,
+                mappedSpeed,
+                mappedIntensity,
+                mappedSaturation,
+                mappedComplexity,
+                mappedVariation,
+                mappedHue
+            );
+
+            // Write mapped values back to context
+            ctx.brightness = mappedBrightness;
+            ctx.speed = mappedSpeed;
+            ctx.intensity = mappedIntensity;
+            ctx.saturation = mappedSaturation;
+            ctx.complexity = mappedComplexity;
+            ctx.variation = mappedVariation;
+            ctx.gHue = mappedHue;
+        }
+#endif
+
         m_effects[m_currentEffect].effect->render(ctx);
     }
 

@@ -20,6 +20,13 @@
 #include <cmath>
 #include <algorithm>
 
+// Always include macros - they define no-ops when FEATURE_AUDIO_BENCHMARK is disabled
+#include "AudioBenchmarkMacros.h"
+
+// MabuTrace integration for Perfetto timeline visualization
+// No-ops when FEATURE_MABUTRACE is disabled
+#include "AudioBenchmarkTrace.h"
+
 #ifndef NATIVE_BUILD
 #include <esp_log.h>
 #include <esp_timer.h>
@@ -279,6 +286,13 @@ void AudioActor::captureHop()
 
 void AudioActor::processHop()
 {
+    // MabuTrace: Wrap entire pipeline for Perfetto timeline visualization
+    TRACE_SCOPE("audio_pipeline");
+
+    // Phase 2B: Benchmark instrumentation - zero overhead when disabled
+    BENCH_DECL_TIMING();
+    BENCH_START_FRAME();
+
     auto clamp01 = [](float x) -> float {
         if (x < 0.0f) return 0.0f;
         if (x > 1.0f) return 1.0f;
@@ -340,6 +354,9 @@ void AudioActor::processHop()
     const float gateStartFactor = tuning.gateStartFactor;
     const float gateRangeFactor = tuning.gateRangeFactor;
     const float gateRangeMin = tuning.gateRangeMin;
+
+    // === Phase: DC/AGC Loop ===
+    BENCH_START_PHASE();
 
     int32_t minC = 32767;
     int32_t maxC = -32768;
@@ -414,6 +431,11 @@ void AudioActor::processHop()
     if (m_agcGain > agcMaxGain) m_agcGain = agcMaxGain;
     m_lastAgcGain = m_agcGain;
 
+    BENCH_END_PHASE(dcAgcLoopUs);
+
+    // === Phase: RMS Compute ===
+    BENCH_START_PHASE();
+
     float rmsRaw = computeRMS(m_hopBufferCentered, HOP_SIZE);
     float rmsMapped = mapLevelDb(rmsRaw, tuning.rmsDbFloor, tuning.rmsDbCeil);
     rmsMapped *= activity;
@@ -425,6 +447,8 @@ void AudioActor::processHop()
     if (fluxMapped > 1.0f) fluxMapped = 1.0f;
     m_prevRMS = rmsMapped;
     m_lastFluxMapped = fluxMapped;
+
+    BENCH_END_PHASE(rmsComputeUs);
 
     {
         AudioDspState state;
@@ -491,13 +515,20 @@ void AudioActor::processHop()
         }
     }
 
+    // === Phase: Goertzel Analysis ===
+    BENCH_START_PHASE();
+    TRACE_BEGIN("goertzel_analyze");
+    bool goertzelTriggered = false;
+
     // 6. Get band energies
     float bandsRaw[NUM_BANDS] = {0};
 #if FEATURE_AUDIO_OA
     if (oaReady ? m_analyzer.analyzeWindow(window512, GoertzelAnalyzer::WINDOW_SIZE, bandsRaw)
                 : m_analyzer.analyze(bandsRaw)) {
+        goertzelTriggered = true;
 #else
     if (m_analyzer.analyze(bandsRaw)) {
+        goertzelTriggered = true;
 #endif
         // Fresh band data available - Goertzel completed a 512-sample window
         for (int i = 0; i < NUM_BANDS; ++i) {
@@ -530,14 +561,38 @@ void AudioActor::processHop()
         }
     }
 
+    TRACE_END();
+    BENCH_END_PHASE(goertzelUs);
+    BENCH_SET_FLAG(goertzelTriggered, goertzelTriggered ? 1 : 0);
+
+    // MabuTrace: Detect false trigger - activity gated but no significant band energy
+    // This helps identify noise floor calibration issues
+    if (goertzelTriggered && activity > 0.1f) {
+        float totalBandEnergy = 0.0f;
+        for (int i = 0; i < NUM_BANDS; ++i) {
+            totalBandEnergy += raw.bands[i];
+        }
+        // If activity says "signal present" but bands show nothing, it's a false trigger
+        if (totalBandEnergy < 0.05f) {
+            TRACE_INSTANT("FALSE_TRIGGER");
+        }
+    }
+
+    // === Phase: Chroma Analysis ===
+    BENCH_START_PHASE();
+    TRACE_BEGIN("chroma_analyze");
+    bool chromaTriggered = false;
+
     // 6.5. Get chromagram
     float chromaRaw[12] = {0};
     static float lastChroma[12] = {0};
 #if FEATURE_AUDIO_OA
     if (oaReady ? m_chromaAnalyzer.analyzeWindow(window512, ChromaAnalyzer::WINDOW_SIZE, chromaRaw)
                 : m_chromaAnalyzer.analyze(chromaRaw)) {
+        chromaTriggered = true;
 #else
     if (m_chromaAnalyzer.analyze(chromaRaw)) {
+        chromaTriggered = true;
 #endif
         // Fresh chroma data available
         for (int i = 0; i < 12; ++i) {
@@ -552,18 +607,43 @@ void AudioActor::processHop()
         }
     }
 
+    TRACE_END();
+    BENCH_END_PHASE(chromaUs);
+    BENCH_SET_FLAG(chromaTriggered, chromaTriggered ? 1 : 0);
+
 #if FEATURE_AUDIO_OA
     // Update previous hop buffer for next window
     std::memcpy(m_prevHopCentered, m_hopBufferCentered, HOP_SIZE * sizeof(int16_t));
     m_prevHopValid = true;
 #endif
 
+    // === Phase: ControlBus Update ===
+    BENCH_START_PHASE();
+
     // 7. Update ControlBus with attack/release smoothing
     m_controlBus.setSmoothing(tuning.controlBusAlphaFast, tuning.controlBusAlphaSlow);
     m_controlBus.UpdateFromHop(now, raw);
 
+    BENCH_END_PHASE(controlBusUs);
+
+    // === Phase: Publish ===
+    BENCH_START_PHASE();
+
     // 8. Publish frame to renderer via lock-free SnapshotBuffer
     m_controlBusBuffer.Publish(m_controlBus.GetFrame());
+
+    BENCH_END_PHASE(publishUs);
+
+    // === End Frame: Push sample to ring buffer ===
+    BENCH_END_FRAME(&m_benchmarkRing);
+
+#if FEATURE_AUDIO_BENCHMARK
+    // Aggregate stats periodically (~1 second)
+    if (++m_benchmarkAggregateCounter >= BENCHMARK_AGGREGATE_INTERVAL) {
+        aggregateBenchmarkStats();
+        m_benchmarkAggregateCounter = 0;
+    }
+#endif
 }
 
 float AudioActor::computeRMS(const int16_t* samples, size_t count)
@@ -614,6 +694,24 @@ void AudioActor::handleCaptureError(CaptureResult result)
     // If too many consecutive failures, consider recovery
     // For now, just log - Phase 2 may add auto-recovery logic
 }
+
+// ============================================================================
+// Phase 2B: Benchmark Aggregation
+// ============================================================================
+
+#if FEATURE_AUDIO_BENCHMARK
+void AudioActor::aggregateBenchmarkStats()
+{
+    // Pop all available samples and update stats
+    AudioBenchmarkSample sample;
+    while (m_benchmarkRing.pop(sample)) {
+        m_benchmarkStats.updateFromSample(sample);
+    }
+
+    // MabuTrace: Record CPU load as a counter for Perfetto visualization
+    TRACE_COUNTER("cpu_load", static_cast<int32_t>(m_benchmarkStats.cpuLoadPercent * 100));
+}
+#endif
 
 } // namespace audio
 } // namespace lightwaveos

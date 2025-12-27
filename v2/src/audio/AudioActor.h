@@ -45,6 +45,11 @@
 #include "contracts/ControlBus.h"
 #include "contracts/SnapshotBuffer.h"
 
+#if FEATURE_AUDIO_BENCHMARK
+#include "AudioBenchmarkMetrics.h"
+#include "AudioBenchmarkRing.h"
+#endif
+
 namespace lightwaveos {
 namespace audio {
 
@@ -244,6 +249,40 @@ public:
      */
     AudioDspState getDspState() const;
 
+    // ========================================================================
+    // Phase 2B: Benchmark Access
+    // ========================================================================
+
+#if FEATURE_AUDIO_BENCHMARK
+    /**
+     * @brief Get aggregated benchmark statistics
+     *
+     * Returns stats computed from the ring buffer samples.
+     * Updated every ~1 second (62 hops).
+     *
+     * @return Reference to the benchmark stats struct
+     */
+    const AudioBenchmarkStats& getBenchmarkStats() const { return m_benchmarkStats; }
+
+    /**
+     * @brief Get the raw timing sample ring buffer
+     *
+     * For WebSocket streaming or detailed analysis. Contains
+     * last ~1 second of per-hop timing data.
+     *
+     * @return Reference to the ring buffer
+     */
+    const AudioBenchmarkRing& getBenchmarkRing() const { return m_benchmarkRing; }
+
+    /**
+     * @brief Reset benchmark statistics
+     *
+     * Clears aggregated stats and peaks. Ring buffer continues
+     * to receive new samples.
+     */
+    void resetBenchmarkStats() { m_benchmarkStats.reset(); }
+#endif
+
 protected:
     // ========================================================================
     // Actor Overrides
@@ -356,6 +395,27 @@ private:
     // Throttle for Goertzel debug logging (log once per ~2 seconds)
     uint32_t m_goertzelLogCounter = 0;
     static constexpr uint32_t GOERTZEL_LOG_INTERVAL = 62;  // ~2 seconds @ 31 Hz
+
+    // ========================================================================
+    // Phase 2B: Benchmark Instrumentation
+    // ========================================================================
+
+#if FEATURE_AUDIO_BENCHMARK
+    /// Ring buffer for per-hop timing samples (2KB, ~1 second history)
+    AudioBenchmarkRing m_benchmarkRing;
+
+    /// Aggregated statistics (updated every ~1 second)
+    AudioBenchmarkStats m_benchmarkStats;
+
+    /// Counter for stats aggregation interval
+    uint32_t m_benchmarkAggregateCounter = 0;
+
+    /// Aggregate stats every ~1 second (62 hops at 62.5 Hz)
+    static constexpr uint32_t BENCHMARK_AGGREGATE_INTERVAL = 62;
+
+    /// Aggregate samples from ring buffer into stats
+    void aggregateBenchmarkStats();
+#endif
 
     // ========================================================================
     // Internal Methods

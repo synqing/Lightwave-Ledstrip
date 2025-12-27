@@ -156,3 +156,11 @@
 #ifndef FEATURE_EFFECT_PROFILER
 #define FEATURE_EFFECT_PROFILER 0
 #endif
+
+// MabuTrace Integration - Perfetto timeline visualization for audio pipeline
+// Enables detailed trace events viewable in Perfetto UI (ui.perfetto.dev)
+// Build: pio run -e esp32dev_audio_trace
+// See: docs/debugging/MABUTRACE_GUIDE.md
+#ifndef FEATURE_MABUTRACE
+#define FEATURE_MABUTRACE 0
+#endif

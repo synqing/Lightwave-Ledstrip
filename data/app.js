@@ -1,1793 +1,785 @@
-// K1-Lightwave Controller Web App
-// Vanilla JavaScript - WebSocket + REST API
+/**
+ * LightwaveOS Simple Controller
+ * Minimal WebSocket-based control interface
+ */
 
-// ========== Configuration ==========
-const CONFIG = {
-    WS_URL: `ws://${window.location.hostname}/ws`,
-    API_BASE: '/api',
-    RECONNECT_INTERVAL: 3000,
-    DEBOUNCE_SLIDER: 150,
-    DEBOUNCE_PIPELINE: 250,
-};
-
-// ========== Utility Functions ==========
-function debounce(fn, delay) {
-    let timer = null;
-    return function(...args) {
-        clearTimeout(timer);
-        timer = setTimeout(() => fn.apply(this, args), delay);
-    };
+// Debug logging - shows on page AND console
+function log(msg) {
+    console.log(msg);
+    const el = document.getElementById('debugLog');
+    if (el) {
+        el.innerHTML += msg + '<br>';
+        el.scrollTop = el.scrollHeight;
+    }
 }
 
-// ========== State ==========
+log('[SCRIPT] app.js loaded at ' + new Date().toLocaleTimeString());
+
+// ─────────────────────────────────────────────────────────────
+// Hardcoded Palette Names (from firmware Palettes_MasterData.cpp)
+// ─────────────────────────────────────────────────────────────
+const PALETTE_NAMES = [
+    // CPT-City Palettes (Artistic) - IDs 0-32
+    "Sunset Real",           // 0
+    "Rivendell",             // 1
+    "Ocean Breeze 036",      // 2
+    "RGI 15",                // 3
+    "Retro 2",               // 4
+    "Analogous 1",           // 5
+    "Pink Splash 08",        // 6
+    "Coral Reef",            // 7
+    "Ocean Breeze 068",      // 8
+    "Pink Splash 07",        // 9
+    "Vintage 01",            // 10
+    "Departure",             // 11
+    "Landscape 64",          // 12
+    "Landscape 33",          // 13
+    "Rainbow Sherbet",       // 14
+    "GR65 Hult",             // 15
+    "GR64 Hult",             // 16
+    "GMT Dry Wet",           // 17
+    "IB Jul01",              // 18
+    "Vintage 57",            // 19
+    "IB15",                  // 20
+    "Fuschia 7",             // 21
+    "Emerald Dragon",        // 22
+    "Lava",                  // 23
+    "Fire",                  // 24
+    "Colorful",              // 25
+    "Magenta Evening",       // 26
+    "Pink Purple",           // 27
+    "Autumn 19",             // 28
+    "Blue Magenta White",    // 29
+    "Black Magenta Red",     // 30
+    "Red Magenta Yellow",    // 31
+    "Blue Cyan Yellow",      // 32
+    // Crameri Palettes (Scientific) - IDs 33-56
+    "Vik",                   // 33
+    "Tokyo",                 // 34
+    "Roma",                  // 35
+    "Oleron",                // 36
+    "Lisbon",                // 37
+    "La Jolla",              // 38
+    "Hawaii",                // 39
+    "Devon",                 // 40
+    "Cork",                  // 41
+    "Broc",                  // 42
+    "Berlin",                // 43
+    "Bamako",                // 44
+    "Acton",                 // 45
+    "Batlow",                // 46
+    "Bilbao",                // 47
+    "Buda",                  // 48
+    "Davos",                 // 49
+    "GrayC",                 // 50
+    "Imola",                 // 51
+    "La Paz",                // 52
+    "Nuuk",                  // 53
+    "Oslo",                  // 54
+    "Tofino",                // 55
+    "Turku",                 // 56
+    // R Colorspace Palettes (LGP-Optimized) - IDs 57-74
+    "Viridis",               // 57
+    "Plasma",                // 58
+    "Inferno",               // 59
+    "Magma",                 // 60
+    "Cubhelix",              // 61
+    "Abyss",                 // 62
+    "Bathy",                 // 63
+    "Ocean",                 // 64
+    "Nighttime",             // 65
+    "Seafloor",              // 66
+    "IBCSO",                 // 67
+    "Copper",                // 68
+    "Hot",                   // 69
+    "Cool",                  // 70
+    "Earth",                 // 71
+    "Sealand",               // 72
+    "Split",                 // 73
+    "Red2Green"              // 74
+];
+
+// Application State
 const state = {
     ws: null,
     connected: false,
     reconnectTimer: null,
-    zoneCount: 3,
-    selectedZone: 1,
-    zones: [
-        { id: 1, effectId: 0, enabled: true, brightness: 255, speed: 25, paletteId: 0 },
-        { id: 2, effectId: 0, enabled: true, brightness: 255, speed: 25, paletteId: 0 },
-        { id: 3, effectId: 0, enabled: true, brightness: 255, speed: 25, paletteId: 0 },
-        { id: 4, effectId: 0, enabled: true, brightness: 255, speed: 25, paletteId: 0 },
-    ],
+    deviceHost: null,  // Custom host (null = use page host)
+
+    // Pending change flags (ignore stale server updates during user interactions)
+    pendingPaletteChange: null,    // Timer ID when palette change is pending
+    pendingEffectChange: null,     // Timer ID when effect change is pending
+    pendingBrightnessChange: null, // Timer ID when brightness change is pending
+    pendingSpeedChange: null,      // Timer ID when speed change is pending
+
+    // Current values (synced from server)
+    effectId: 0,
+    effectName: '',
     paletteId: 0,
-    transitions: false,
-    effects: [],
-    palettes: [],
-    fps: 0,
-    memoryFree: 0,
-    // Shows state
-    shows: [],
-    showPlaying: false,
-    showPaused: false,
-    currentShowId: -1,
-    showProgress: 0,
-    showElapsed: 0,
-    showChapter: '',
-    showName: '',
+    paletteName: '',
+    brightness: 128,
+    speed: 25,
+
+    // Limits
+    PALETTE_COUNT: 75,  // 0-74
+    BRIGHTNESS_MIN: 0,
+    BRIGHTNESS_MAX: 255,
+    BRIGHTNESS_STEP: 10,
+    SPEED_MIN: 1,
+    SPEED_MAX: 50,
+    SPEED_STEP: 1,
+
+    // Reconnect interval
+    RECONNECT_MS: 3000
 };
 
-// Zone display configuration
-const zoneConfig = {
-    1: { color: 'accent-zone1', text: 'LEDs 65-94', visIds: ['vis-z1'] },
-    2: { color: 'accent-zone2', text: 'LEDs 20-64 | 95-139', visIds: ['vis-z2-l', 'vis-z2-r'] },
-    3: { color: 'accent-zone3', text: 'LEDs 0-19 | 140-159', visIds: ['vis-z3-l', 'vis-z3-r'] },
-    4: { color: 'accent-zone3', text: 'LEDs (Zone 4 range)', visIds: ['vis-z3-l', 'vis-z3-r'] },
-};
+// DOM Element References (cached on init)
+const elements = {};
 
-// ========== API Client ==========
-const API = {
-    async request(endpoint, options = {}) {
-        try {
-            const res = await fetch(`${CONFIG.API_BASE}${endpoint}`, {
-                ...options,
-                headers: { 'Content-Type': 'application/json', ...options.headers },
-            });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            return await res.json();
-        } catch (e) {
-            console.error(`API [${endpoint}]:`, e);
-            return null;
-        }
-    },
-    setBrightness: (v) => API.request('/brightness', { method: 'POST', body: JSON.stringify({ brightness: v }) }),
-    setSpeed: (v) => API.request('/speed', { method: 'POST', body: JSON.stringify({ speed: v }) }),
-    setPalette: (id) => API.request('/palette', { method: 'POST', body: JSON.stringify({ paletteId: id }) }),
-    setPipeline: (i, s, c, v) => API.request('/pipeline', { method: 'POST', body: JSON.stringify({ intensity: i, saturation: s, complexity: c, variation: v }) }),
-    toggleTransitions: (e) => API.request('/transitions', { method: 'POST', body: JSON.stringify({ enabled: e }) }),
-    setZoneCount: (c) => API.request('/zone/count', { method: 'POST', body: JSON.stringify({ count: c }) }),
-    setZoneEffect: (z, e) => API.request('/zone/config', { method: 'POST', body: JSON.stringify({ zoneId: z, effectId: e, enabled: true }) }),
-    setZoneEnabled: (z, e) => API.request('/zone/config', { method: 'POST', body: JSON.stringify({ zoneId: z, enabled: e }) }),
-    setZoneBrightness: (z, b) => API.request('/zone/brightness', { method: 'POST', body: JSON.stringify({ zoneId: z, brightness: b }) }),
-    setZoneSpeed: (z, s) => API.request('/zone/speed', { method: 'POST', body: JSON.stringify({ zoneId: z, speed: s }) }),
-    setZonePalette: (z, p) => API.request('/zone/palette', { method: 'POST', body: JSON.stringify({ zoneId: z, paletteId: p }) }),
-    loadPreset: (id) => API.request('/zone/preset/load', { method: 'POST', body: JSON.stringify({ presetId: id }) }),
-    saveConfig: () => API.request('/zone/config/save', { method: 'POST' }),
-    getStatus: () => API.request('/status'),
+// ─────────────────────────────────────────────────────────────
+// WebSocket Connection
+// ─────────────────────────────────────────────────────────────
 
-    // User Preset APIs (Phase C.1)
-    getUserPresets: () => API.request('/api/v1/presets/user'),
-    saveUserPreset: (slot, name) => API.request('/api/v1/presets/user', { method: 'POST', body: JSON.stringify({ slot, name }) }),
-    loadUserPreset: (slot) => API.request('/api/v1/presets/load', { method: 'POST', body: JSON.stringify({ type: 'user', slot }) }),
-    deleteUserPreset: (slot) => API.request('/api/v1/presets/user', { method: 'DELETE', body: JSON.stringify({ slot }) }),
-
-    // Effect Metadata API (Phase C.2)
-    getEffectMetadata: (id) => API.request(`/api/v1/effects/metadata?id=${id}`),
-
-    // Enhancement Engine APIs
-    setColorBlend: (enabled) => API.request('/enhancement/color/blend', { method: 'POST', body: JSON.stringify({ enabled }) }),
-    setColorDiffusion: (amount) => API.request('/enhancement/color/diffusion', { method: 'POST', body: JSON.stringify({ amount }) }),
-    setColorRotation: (speed) => API.request('/enhancement/color/rotation', { method: 'POST', body: JSON.stringify({ speed }) }),
-    setMotionPhase: (offset) => API.request('/enhancement/motion/phase', { method: 'POST', body: JSON.stringify({ offset }) }),
-    setMotionAutoRotate: (enabled, speed) => API.request('/enhancement/motion/auto-rotate', { method: 'POST', body: JSON.stringify({ enabled, speed }) }),
-    getEnhancementStatus: () => API.request('/enhancement/status'),
-
-    // Shows API (Phase 5)
-    getShows: () => API.request('/v1/shows'),
-    startShow: (showId) => API.request('/v1/shows/start', { method: 'POST', body: JSON.stringify({ showId }) }),
-    stopShow: () => API.request('/v1/shows/stop', { method: 'POST' }),
-    pauseShow: () => API.request('/v1/shows/pause', { method: 'POST' }),
-    seekShow: (timeMs) => API.request('/v1/shows/seek', { method: 'POST', body: JSON.stringify({ timeMs }) }),
-    getShowStatus: () => API.request('/v1/shows/status'),
-};
-
-// ========== WebSocket ==========
-const WS = {
-    connect() {
-        if (state.ws) state.ws.close();
-        console.log('WS connecting:', CONFIG.WS_URL);
-        state.ws = new WebSocket(CONFIG.WS_URL);
-
-        state.ws.onopen = () => {
-            console.log('WS connected');
-            state.connected = true;
-            updateConnectionStatus();
-            clearTimeout(state.reconnectTimer);
-            WS.send({ type: 'getState' });
-        };
-
-        state.ws.onmessage = (e) => {
-            try { WS.handleMessage(JSON.parse(e.data)); }
-            catch (err) { console.error('WS parse:', err); }
-        };
-
-        state.ws.onerror = (e) => console.error('WS error:', e);
-
-        state.ws.onclose = () => {
-            console.log('WS disconnected');
-            state.connected = false;
-            updateConnectionStatus();
-            state.reconnectTimer = setTimeout(() => WS.connect(), CONFIG.RECONNECT_INTERVAL);
-        };
-    },
-
-    send(msg) {
-        if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-            state.ws.send(JSON.stringify(msg));
-        }
-    },
-
-    handleMessage(msg) {
-        console.log('WS <-', msg);
-        switch (msg.type) {
-            case 'status':
-            case 'performance':
-                updatePerformance(msg.fps, msg.freeHeap || msg.memoryFree);
-                break;
-            case 'effectChange':
-                updateCurrentEffect(msg.effectId, msg.name);
-                break;
-            case 'paletteChange':
-                state.paletteId = msg.paletteId;
-                document.getElementById('palette-select').value = msg.paletteId;
-                break;
-            case 'zone.state':
-                syncZoneState(msg);
-                break;
-            case 'zone.paramChanged':
-                handleParamChanged(msg);
-                break;
-            case 'zone.paletteChanged':
-                // Handle zone palette change confirmation from server
-                if (msg.zoneId !== undefined && msg.paletteId !== undefined) {
-                    const zoneIdx = msg.zoneId;
-                    if (state.zones[zoneIdx]) {
-                        state.zones[zoneIdx].paletteId = msg.paletteId;
-                        // Update UI if this is the selected zone
-                        if (zoneIdx === state.selectedZone - 1) {
-                            const paletteSelect = document.getElementById('zone-palette-select');
-                            // Convert palette ID to dropdown value (0 = global, 1+ = palette ID + 1)
-                            if (paletteSelect) paletteSelect.value = msg.paletteId === 0 ? 0 : msg.paletteId + 1;
-                        }
-                    }
-                }
-                break;
-            case 'effects.params':
-                // Handle WebSocket response for effect params
-                if (msg.effectId !== undefined && msg.zoneId !== undefined) {
-                    const params = getParameterLabels(msg.effectId, msg);
-                    renderEffectParameters(params, msg.values || {}, msg.zoneId);
-                }
-                break;
-            case 'error':
-                console.error('Server:', msg.message);
-                break;
-            // Shows events
-            case 'show.progress':
-                updateShowProgress(msg);
-                break;
-            case 'show.started':
-                handleShowStarted(msg);
-                break;
-            case 'show.stopped':
-                handleShowStopped();
-                break;
-            case 'show.paused':
-                handleShowPaused(msg.paused);
-                break;
-        }
-    }
-};
-
-// ========== UI Updates ==========
-function updateConnectionStatus() {
-    const txt = document.getElementById('status-text');
-    const dot = document.getElementById('status-dot');
-    if (state.connected) {
-        txt.textContent = 'ONLINE';
-        dot.className = 'w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,221,136,0.6)] animate-pulse';
-    } else {
-        txt.textContent = 'OFFLINE';
-        dot.className = 'w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(255,85,85,0.6)]';
-    }
-}
-
-function updatePerformance(fps, mem) {
-    if (fps !== undefined) document.getElementById('status-fps').textContent = fps;
-    if (mem !== undefined) document.getElementById('status-mem').textContent = `${Math.round(mem / 1024)}KB`;
-}
-
-function updateCurrentEffect(id, name) {
-    document.getElementById('status-fx').textContent = name || `Effect ${id}`;
-}
-
-// Sync zone state from server broadcast
-function syncZoneState(msg) {
-    // Update zone count if changed
-    if (msg.zoneCount !== undefined && msg.zoneCount !== state.zoneCount) {
-        state.zoneCount = msg.zoneCount;
-        for (let i = 1; i <= 4; i++) {
-            const btn = document.getElementById(`zc-${i}`);
-            if (btn) {
-                btn.className = i === msg.zoneCount
-                    ? 'w-6 h-6 text-xs text-black bg-accent-cyan font-semibold rounded'
-                    : 'w-6 h-6 text-xs text-text-secondary hover:text-white rounded transition-colors';
-            }
-        }
-        updateZoneTabs(msg.zoneCount);
-        updateMixerChannels(msg.zoneCount);
-    }
-
-    // Sync each zone's state
-    if (msg.zones && Array.isArray(msg.zones)) {
-        msg.zones.forEach((zoneData) => {
-            const idx = zoneData.id;
-            if (state.zones[idx]) {
-                state.zones[idx].enabled = zoneData.enabled;
-                state.zones[idx].effectId = zoneData.effectId;
-                state.zones[idx].brightness = zoneData.brightness;
-                state.zones[idx].speed = zoneData.speed;
-                state.zones[idx].paletteId = zoneData.paletteId !== undefined ? zoneData.paletteId : 0;
-
-                // Update mixer UI sliders and labels
-                const bLabel = document.getElementById(`mixer-b-label-${idx}`);
-                const sLabel = document.getElementById(`mixer-s-label-${idx}`);
-                const bSlider = document.getElementById(`mixer-b-${idx}`);
-                const sSlider = document.getElementById(`mixer-s-${idx}`);
-
-                if (bLabel) bLabel.textContent = zoneData.brightness;
-                if (sLabel) sLabel.textContent = zoneData.speed;
-                if (bSlider) { bSlider.value = zoneData.brightness; updateSliderTrack(bSlider); }
-                if (sSlider) { sSlider.value = zoneData.speed; updateSliderTrack(sSlider); }
-            }
-        });
-
-        // Update zone card if selected zone was affected
-        const zone = state.zones[state.selectedZone - 1];
-        if (zone) {
-            const bSlider = document.getElementById('zone-brightness-slider');
-            const bLabel = document.getElementById('zone-brightness-label');
-            const sSlider = document.getElementById('zone-speed-slider');
-            const sLabel = document.getElementById('zone-speed-label');
-            const effectSelect = document.getElementById('effect-select');
-            const paletteSelect = document.getElementById('zone-palette-select');
-
-            if (bSlider) { bSlider.value = zone.brightness; updateSliderTrack(bSlider); }
-            if (bLabel) bLabel.textContent = zone.brightness;
-            if (sSlider) { sSlider.value = zone.speed; updateSliderTrack(sSlider); }
-            if (sLabel) sLabel.textContent = zone.speed;
-            if (effectSelect) effectSelect.value = zone.effectId;
-            // Convert palette ID to dropdown value (0 = global, 1+ = palette ID + 1)
-            if (paletteSelect) paletteSelect.value = zone.paletteId === 0 ? 0 : zone.paletteId + 1;
-
-            // Fetch metadata and parameters for the selected zone's effect
-            if (idx === state.selectedZone - 1) {
-                fetchEffectMetadata(zone.effectId);
-                fetchEffectParameters(zone.effectId, idx);
-            }
-        }
-    }
-
-    updateZoneVisualization();
-    console.log('Zone state synced from server');
-}
-
-function updateSliderTrack(input) {
-    const min = parseFloat(input.min) || 0;
-    const max = parseFloat(input.max) || 100;
-    const val = parseFloat(input.value);
-    const pct = ((val - min) / (max - min)) * 100;
-    input.style.background = `linear-gradient(to right, #00d4ff ${pct}%, #2f3849 ${pct}%)`;
-}
-
-// ========== Zone Logic ==========
-function setZoneCount(count) {
-    state.zoneCount = count;
-
-    // Update zone count buttons
-    for (let i = 1; i <= 4; i++) {
-        const btn = document.getElementById(`zc-${i}`);
-        if (btn) {
-            btn.className = i === count
-                ? 'w-6 h-6 text-xs text-black bg-accent-cyan font-semibold rounded'
-                : 'w-6 h-6 text-xs text-text-secondary hover:text-white rounded transition-colors';
-        }
-    }
-
-    // Update zone tabs visibility
-    updateZoneTabs(count);
-
-    // Update mixer channels
-    updateMixerChannels(count);
-
-    // If selected zone is now hidden, select zone 1
-    if (state.selectedZone > count) {
-        selectZone(1);
-    }
-
-    API.setZoneCount(count);
-}
-
-function updateZoneTabs(count) {
-    const tab4 = document.getElementById('tab-z4');
-    const tab3 = document.getElementById('tab-z3');
-
-    if (tab4) tab4.classList.toggle('hidden', count < 4);
-    if (tab3) tab3.classList.toggle('hidden', count < 3);
-}
-
-function updateMixerChannels(count) {
-    // Zone 4 channel
-    const z4 = document.getElementById('mixer-zone-4');
-    if (z4) {
-        if (count >= 4) {
-            z4.classList.remove('opacity-30', 'pointer-events-none');
-            z4.querySelectorAll('input').forEach(i => i.disabled = false);
-        } else {
-            z4.classList.add('opacity-30', 'pointer-events-none');
-            z4.querySelectorAll('input').forEach(i => i.disabled = true);
-        }
-    }
-
-    // Zone 3 channel
-    const z3 = document.getElementById('mixer-zone-3');
-    if (z3) {
-        if (count >= 3) {
-            z3.classList.remove('opacity-30', 'pointer-events-none');
-            z3.querySelectorAll('input').forEach(i => i.disabled = false);
-        } else {
-            z3.classList.add('opacity-30', 'pointer-events-none');
-            z3.querySelectorAll('input').forEach(i => i.disabled = true);
-        }
-    }
-}
-
-function selectZone(id) {
-    state.selectedZone = id;
-    const cfg = zoneConfig[id];
-
-    // Update tabs
-    for (let z = 1; z <= 4; z++) {
-        const tab = document.getElementById(`tab-z${z}`);
-        if (tab) {
-            const zCfg = zoneConfig[z];
-            if (z === id) {
-                tab.className = `flex-1 pb-2 text-sm font-semibold text-text-primary flex justify-center items-center gap-1.5 border-b-2 border-${zCfg.color}`;
-                tab.setAttribute('aria-selected', 'true');
-            } else {
-                tab.className = `flex-1 pb-2 text-sm text-text-secondary hover:text-text-primary transition-colors flex justify-center items-center gap-1.5 border-b-2 border-transparent${z > state.zoneCount ? ' hidden' : ''}`;
-                tab.setAttribute('aria-selected', 'false');
-            }
-        }
-    }
-
-    // Update LED range badge
-    const badge = document.getElementById('range-badge');
-    if (badge) {
-        badge.className = `w-full py-2 px-3 rounded text-xs font-mono font-medium text-center border bg-${cfg.color}/10 text-${cfg.color} border-${cfg.color}/20`;
-        badge.textContent = cfg.text;
-    }
-
-    // Update visualization overlays
-    document.querySelectorAll('.zone-overlay').forEach(el => el.style.opacity = '0');
-    cfg.visIds.forEach(visId => {
-        const el = document.getElementById(visId);
-        if (el) el.style.opacity = '0.5';
-    });
-
-    // Load zone-specific values into sliders
-    const zone = state.zones[id - 1];
-    if (zone) {
-        const bSlider = document.getElementById('zone-brightness-slider');
-        const bLabel = document.getElementById('zone-brightness-label');
-        const sSlider = document.getElementById('zone-speed-slider');
-        const sLabel = document.getElementById('zone-speed-label');
-        const pSelect = document.getElementById('zone-palette-select');
-        const effectSelect = document.getElementById('effect-select');
-
-        if (bSlider) { bSlider.value = zone.brightness; updateSliderTrack(bSlider); }
-        if (bLabel) bLabel.textContent = zone.brightness;
-        if (sSlider) { sSlider.value = zone.speed; updateSliderTrack(sSlider); }
-        if (sLabel) sLabel.textContent = zone.speed;
-        // Convert palette ID to dropdown value (0 = global, 1+ = palette ID + 1)
-        if (pSelect) pSelect.value = zone.paletteId === 0 ? 0 : zone.paletteId + 1;
-        if (effectSelect) effectSelect.value = zone.effectId;
-
-        // Fetch effect parameters for this zone
-        fetchEffectParameters(zone.effectId, id - 1);
-    }
-}
-
-// ========== Zone Controls ==========
-let zoneBrightnessTimeout, zoneSpeedTimeout, zonePaletteTimeout;
-
-function setZoneBrightness(value) {
-    const zoneId = state.selectedZone - 1;
-    const brightness = parseInt(value);
-
-    if (state.zones[zoneId]) state.zones[zoneId].brightness = brightness;
-
-    document.getElementById('zone-brightness-label').textContent = brightness;
-    updateSliderTrack(document.getElementById('zone-brightness-slider'));
-
-    // Sync mixer
-    const mixerLabel = document.getElementById(`mixer-b-label-${zoneId}`);
-    const mixerSlider = document.getElementById(`mixer-b-${zoneId}`);
-    if (mixerLabel) mixerLabel.textContent = brightness;
-    if (mixerSlider) mixerSlider.value = brightness;
-
-    updateZoneVisualization();
-
-    clearTimeout(zoneBrightnessTimeout);
-    zoneBrightnessTimeout = setTimeout(() => API.setZoneBrightness(zoneId, brightness), CONFIG.DEBOUNCE_SLIDER);
-}
-
-function setZoneSpeed(value) {
-    const zoneId = state.selectedZone - 1;
-    const speed = parseInt(value);
-
-    if (state.zones[zoneId]) state.zones[zoneId].speed = speed;
-
-    document.getElementById('zone-speed-label').textContent = speed;
-    updateSliderTrack(document.getElementById('zone-speed-slider'));
-
-    // Sync mixer
-    const mixerLabel = document.getElementById(`mixer-s-label-${zoneId}`);
-    const mixerSlider = document.getElementById(`mixer-s-${zoneId}`);
-    if (mixerLabel) mixerLabel.textContent = speed;
-    if (mixerSlider) mixerSlider.value = speed;
-
-    clearTimeout(zoneSpeedTimeout);
-    zoneSpeedTimeout = setTimeout(() => API.setZoneSpeed(zoneId, speed), CONFIG.DEBOUNCE_SLIDER);
-}
-
-function setZonePalette(value) {
-    const zoneId = state.selectedZone - 1;
-    const dropdownValue = parseInt(value);
+function connect() {
+    // Use custom host if set, otherwise use page host
+    let host = state.deviceHost || window.location.hostname || 'lightwaveos.local';
     
-    // Convert dropdown value to actual palette ID (0 = global, 1+ = palette ID offset by 1)
-    const paletteId = dropdownValue === 0 ? 0 : dropdownValue - 1;
+    // Remove http:// or https:// if present
+    host = host.replace(/^https?:\/\//, '');
+    // Remove trailing slash
+    host = host.replace(/\/$/, '');
+    
+    const wsUrl = `ws://${host}/ws`;
 
-    if (state.zones[zoneId]) state.zones[zoneId].paletteId = paletteId;
+    log('[WS] Connecting to: ' + wsUrl);
 
-    // Update UI dropdown immediately for better UX
-    const paletteSelect = document.getElementById('zone-palette-select');
-    if (paletteSelect) paletteSelect.value = dropdownValue;
-
-    // Send via WebSocket for faster response
-    WS.send({ type: 'zone.setPalette', zoneId, paletteId });
-}
-
-function updateZoneVisualization() {
-    for (let i = 0; i < state.zones.length; i++) {
-        const zone = state.zones[i];
-        const cfg = zoneConfig[i + 1];
-        if (cfg && cfg.visIds) {
-            const opacity = zone.enabled ? zone.brightness / 255 : 0;
-            cfg.visIds.forEach(id => {
-                const el = document.getElementById(id);
-                if (el && i + 1 === state.selectedZone) el.style.opacity = opacity;
-            });
-        }
-    }
-}
-
-// ========== Mixer Controls ==========
-const mixerTimeouts = { b: {}, s: {} };
-
-function setMixerBrightness(zoneId, value) {
-    const brightness = parseInt(value);
-
-    if (state.zones[zoneId]) state.zones[zoneId].brightness = brightness;
-
-    document.getElementById(`mixer-b-label-${zoneId}`).textContent = brightness;
-
-    // Sync zone card if this zone is selected
-    if (zoneId === state.selectedZone - 1) {
-        document.getElementById('zone-brightness-label').textContent = brightness;
-        const slider = document.getElementById('zone-brightness-slider');
-        if (slider) { slider.value = brightness; updateSliderTrack(slider); }
-    }
-
-    updateZoneVisualization();
-
-    clearTimeout(mixerTimeouts.b[zoneId]);
-    mixerTimeouts.b[zoneId] = setTimeout(() => API.setZoneBrightness(zoneId, brightness), CONFIG.DEBOUNCE_SLIDER);
-}
-
-function setMixerSpeed(zoneId, value) {
-    const speed = parseInt(value);
-
-    if (state.zones[zoneId]) state.zones[zoneId].speed = speed;
-
-    document.getElementById(`mixer-s-label-${zoneId}`).textContent = speed;
-
-    // Sync zone card if this zone is selected
-    if (zoneId === state.selectedZone - 1) {
-        document.getElementById('zone-speed-label').textContent = speed;
-        const slider = document.getElementById('zone-speed-slider');
-        if (slider) { slider.value = speed; updateSliderTrack(slider); }
-    }
-
-    clearTimeout(mixerTimeouts.s[zoneId]);
-    mixerTimeouts.s[zoneId] = setTimeout(() => API.setZoneSpeed(zoneId, speed), CONFIG.DEBOUNCE_SLIDER);
-}
-
-// ========== Effect Navigation ==========
-function prevEffect() {
-    const sel = document.getElementById('effect-select');
-    if (sel && sel.selectedIndex > 0) {
-        sel.selectedIndex--;
-        setZoneEffect();
-    }
-}
-
-function nextEffect() {
-    const sel = document.getElementById('effect-select');
-    if (sel && sel.selectedIndex < sel.options.length - 1) {
-        sel.selectedIndex++;
-        setZoneEffect();
-    }
-}
-
-function setZoneEffect() {
-    const sel = document.getElementById('effect-select');
-    if (!sel) return;
-    const effectId = parseInt(sel.value);
-    const zoneId = state.selectedZone - 1;
-    API.setZoneEffect(zoneId, effectId);
-    fetchEffectMetadata(effectId);
-    fetchEffectParameters(effectId, zoneId);
-}
-
-// ========== Effect Info (Phase C.2) ==========
-let effectInfoExpanded = false;
-
-function toggleEffectInfo() {
-    effectInfoExpanded = !effectInfoExpanded;
-    const content = document.getElementById('effect-info-content');
-    const chevron = document.getElementById('effect-info-chevron');
-    if (content) content.classList.toggle('hidden', !effectInfoExpanded);
-    if (chevron) chevron.style.transform = effectInfoExpanded ? 'rotate(180deg)' : '';
-}
-
-// ========== Effect Parameters (Phase C.4.8) ==========
-let effectParamsExpanded = false;
-const effectParamsCache = new Map();  // Cache: effectId -> parameter definitions
-const effectParamTimeouts = {};  // Debounce timers per parameter key
-
-// Universal fallback labels
-const UNIVERSAL_PARAMS = [
-    { name: 'Intensity', key: 'intensity', min: 0, max: 255, default: 128, description: 'overall brightness/strength' },
-    { name: 'Saturation', key: 'saturation', min: 0, max: 255, default: 200, description: 'color vividness' },
-    { name: 'Complexity', key: 'complexity', min: 0, max: 255, default: 128, description: 'pattern detail level' },
-    { name: 'Variation', key: 'variation', min: 0, max: 255, default: 128, description: 'random variation amount' }
-];
-
-function toggleEffectParams() {
-    effectParamsExpanded = !effectParamsExpanded;
-    const content = document.getElementById('effect-params-content');
-    const chevron = document.getElementById('effect-params-chevron');
-    if (content) content.classList.toggle('hidden', !effectParamsExpanded);
-    if (chevron) chevron.style.transform = effectParamsExpanded ? 'rotate(180deg)' : '';
-}
-
-// Get parameter labels with 3-tier fallback logic
-function getParameterLabels(effectId, metadata) {
-    // Tier 1: Effect has custom params (paramCount > 0)
-    if (metadata && metadata.paramCount > 0 && metadata.parameters) {
-        return metadata.parameters;
-    }
-
-    // Tier 2: Category defaults (could be added here in future)
-
-    // Tier 3: Universal labels
-    return UNIVERSAL_PARAMS;
-}
-
-// Fetch effect parameters from API
-async function fetchEffectParameters(effectId, zoneId) {
-    // Check cache first
-    const cacheKey = `${effectId}`;
-    if (effectParamsCache.has(cacheKey)) {
-        const cached = effectParamsCache.get(cacheKey);
-        renderEffectParameters(cached.params, cached.values, zoneId);
+    try {
+        state.ws = new WebSocket(wsUrl);
+    } catch (e) {
+        console.error('[WS] Failed to create WebSocket:', e);
+        scheduleReconnect();
         return;
     }
 
-    try {
-        const res = await fetch(`${CONFIG.API_BASE}/v1/effects/parameters?id=${effectId}&zoneId=${zoneId}`);
-        if (!res.ok) {
-            // API not available, use universal fallback
-            renderEffectParameters(UNIVERSAL_PARAMS, {}, zoneId);
+    state.ws.onopen = () => {
+        log('[WS] Connected! Ready to send commands.');
+        state.connected = true;
+        updateConnectionUI();
+
+        // Reset pending flags on reconnect (prevent stale state)
+        if (state.pendingEffectChange) {
+            clearTimeout(state.pendingEffectChange);
+            state.pendingEffectChange = null;
+        }
+        if (state.pendingPaletteChange) {
+            clearTimeout(state.pendingPaletteChange);
+            state.pendingPaletteChange = null;
+        }
+        if (state.pendingBrightnessChange) {
+            clearTimeout(state.pendingBrightnessChange);
+            state.pendingBrightnessChange = null;
+        }
+        if (state.pendingSpeedChange) {
+            clearTimeout(state.pendingSpeedChange);
+            state.pendingSpeedChange = null;
+        }
+
+        // Request initial state (re-fetch all state on reconnect)
+        setTimeout(() => {
+            send({ type: 'getStatus' });
+            // Fetch current parameters (includes paletteId, uses hardcoded lookup for name)
+            fetchCurrentParameters();
+        }, 100);
+    };
+
+    state.ws.onclose = (e) => {
+        log(`[WS] Disconnected: code ${e.code}${e.reason ? ', reason: ' + e.reason : ''}`);
+        state.connected = false;
+        updateConnectionUI();
+        if (e.code !== 1000) {  // Only reconnect if not a normal close
+            scheduleReconnect();
+        }
+    };
+
+    state.ws.onerror = (e) => {
+        log('[WS] Connection error - check device IP and ensure WebSocket is enabled');
+        console.error('[WS] Error:', e);
+    };
+
+    state.ws.onmessage = (e) => {
+        // Ignore binary messages (LED stream)
+        if (e.data instanceof Blob || e.data instanceof ArrayBuffer) {
             return;
         }
 
-        const data = await res.json();
-        if (data.success && data.data) {
-            const params = getParameterLabels(effectId, data.data);
-            const values = data.data.values || {};
-
-            // Cache the result
-            effectParamsCache.set(cacheKey, { params, values });
-
-            renderEffectParameters(params, values, zoneId);
-        } else {
-            renderEffectParameters(UNIVERSAL_PARAMS, {}, zoneId);
+        try {
+            const msg = JSON.parse(e.data);
+            handleMessage(msg);
+        } catch (err) {
+            console.error('[WS] Parse error:', err, e.data);
         }
-    } catch (e) {
-        console.warn('Effect params fetch failed, using fallback:', e);
-        renderEffectParameters(UNIVERSAL_PARAMS, {}, zoneId);
-    }
-}
-
-// Render parameter sliders
-function renderEffectParameters(params, values, zoneId) {
-    const container = document.getElementById('effect-params-sliders');
-    const titleEl = document.getElementById('effect-params-title');
-    if (!container) return;
-
-    // Update title with effect name if available
-    const effectSelect = document.getElementById('effect-select');
-    const effectName = effectSelect ? effectSelect.options[effectSelect.selectedIndex]?.text : 'Effect';
-    if (titleEl) titleEl.textContent = `${effectName} Parameters`;
-
-    if (!params || params.length === 0) {
-        container.innerHTML = '<div class="text-xs text-text-tertiary text-center py-2">No parameters available</div>';
-        return;
-    }
-
-    container.innerHTML = params.map(param => {
-        const currentValue = values[param.key] !== undefined ? values[param.key] : (param.default || 128);
-        const min = param.min !== undefined ? param.min : 0;
-        const max = param.max !== undefined ? param.max : 255;
-        const desc = param.description || param.key;
-
-        return `
-            <div class="flex flex-col gap-1">
-                <div class="flex justify-between items-center">
-                    <label class="text-xs font-medium text-text-secondary">${param.name}</label>
-                    <span class="font-mono text-xs font-semibold text-accent-cyan" id="param-val-${param.key}">${currentValue}</span>
-                </div>
-                <input type="range" min="${min}" max="${max}" value="${currentValue}"
-                    class="slider-input"
-                    id="param-slider-${param.key}"
-                    data-param-key="${param.key}"
-                    data-zone-id="${zoneId}"
-                    oninput="updateEffectParam('${param.key}', this.value, ${zoneId})">
-                <span class="text-[10px] text-text-tertiary pl-1">${desc}</span>
-            </div>
-        `;
-    }).join('');
-
-    // Initialize slider tracks
-    params.forEach(param => {
-        const slider = document.getElementById(`param-slider-${param.key}`);
-        if (slider) updateSliderTrack(slider);
-    });
-}
-
-// Update effect parameter (debounced)
-function updateEffectParam(key, value, zoneId) {
-    const val = parseInt(value);
-    const labelEl = document.getElementById(`param-val-${key}`);
-    const sliderEl = document.getElementById(`param-slider-${key}`);
-
-    if (labelEl) labelEl.textContent = val;
-    if (sliderEl) updateSliderTrack(sliderEl);
-
-    // Debounce the API call
-    clearTimeout(effectParamTimeouts[key]);
-    effectParamTimeouts[key] = setTimeout(() => {
-        sendEffectParam(key, val, zoneId);
-    }, CONFIG.DEBOUNCE_SLIDER);
-}
-
-// Send parameter update via WebSocket
-function sendEffectParam(key, value, zoneId) {
-    WS.send({
-        type: 'zone.setParam',
-        zoneId: zoneId,
-        param: key,
-        value: value
-    });
-}
-
-// Handle parameter change broadcasts from server
-function handleParamChanged(msg) {
-    // msg: { type: 'zone.paramChanged', zoneId, param, value }
-    if (msg.zoneId === state.selectedZone - 1) {
-        const labelEl = document.getElementById(`param-val-${msg.param}`);
-        const sliderEl = document.getElementById(`param-slider-${msg.param}`);
-
-        if (labelEl) labelEl.textContent = msg.value;
-        if (sliderEl) {
-            sliderEl.value = msg.value;
-            updateSliderTrack(sliderEl);
-        }
-    }
-}
-
-function fetchEffectMetadata(effectId) {
-    API.getEffectMetadata(effectId).then(r => {
-        if (r.success && r.data) {
-            displayEffectMetadata(r.data);
-        }
-    }).catch(() => {
-        // Silently fail - metadata is optional
-    });
-}
-
-function displayEffectMetadata(meta) {
-    const categoryEl = document.getElementById('effect-category');
-    const descEl = document.getElementById('effect-description');
-    const featuresEl = document.getElementById('effect-features');
-
-    if (categoryEl) categoryEl.textContent = meta.category || '-';
-    if (descEl) descEl.textContent = meta.description || '-';
-
-    if (featuresEl && meta.features) {
-        const badges = [];
-        if (meta.features.centerOrigin) badges.push({ label: 'CENTER ORIGIN', color: 'bg-green-500/20 text-green-400' });
-        if (meta.features.usesPalette) badges.push({ label: 'PALETTE', color: 'bg-purple-500/20 text-purple-400' });
-        if (meta.features.usesSpeed) badges.push({ label: 'SPEED', color: 'bg-blue-500/20 text-blue-400' });
-        if (meta.features.zoneAware) badges.push({ label: 'ZONE AWARE', color: 'bg-amber-500/20 text-amber-400' });
-        if (meta.features.physicsBased) badges.push({ label: 'PHYSICS', color: 'bg-pink-500/20 text-pink-400' });
-        if (meta.features.dualStrip) badges.push({ label: 'DUAL STRIP', color: 'bg-cyan-500/20 text-cyan-400' });
-
-        featuresEl.innerHTML = badges.map(b =>
-            `<span class="px-2 py-0.5 rounded text-[10px] font-medium ${b.color}">${b.label}</span>`
-        ).join('');
-    }
-}
-
-function enableZone() {
-    const zoneId = state.selectedZone - 1;
-    if (state.zones[zoneId]) state.zones[zoneId].enabled = true;
-    updateZoneVisualization();
-    API.setZoneEnabled(zoneId, true);
-}
-
-function disableZone() {
-    const zoneId = state.selectedZone - 1;
-    if (state.zones[zoneId]) state.zones[zoneId].enabled = false;
-    updateZoneVisualization();
-    API.setZoneEnabled(zoneId, false);
-}
-
-// ========== Global Settings ==========
-function setPalette() {
-    const sel = document.getElementById('palette-select');
-    if (sel) {
-        state.paletteId = parseInt(sel.value);
-        API.setPalette(state.paletteId);
-    }
-}
-
-function toggleTransitions() {
-    const toggle = document.getElementById('toggle-transitions');
-    if (toggle) {
-        state.transitions = toggle.checked;
-        API.toggleTransitions(state.transitions);
-    }
-}
-
-// ========== Pipeline ==========
-let pipelineTimeout;
-
-function updatePipeline(input, labelId) {
-    document.getElementById(labelId).textContent = input.value;
-    updateSliderTrack(input);
-
-    clearTimeout(pipelineTimeout);
-    pipelineTimeout = setTimeout(() => {
-        const i = parseInt(document.getElementById('slider-intensity').value);
-        const s = parseInt(document.getElementById('slider-saturation').value);
-        const c = parseInt(document.getElementById('slider-complexity').value);
-        const v = parseInt(document.getElementById('slider-variation').value);
-        API.setPipeline(i, s, c, v);
-    }, CONFIG.DEBOUNCE_PIPELINE);
-}
-
-function togglePipeline() {
-    const content = document.getElementById('pipeline-content');
-    const chevron = document.getElementById('pipeline-chevron');
-    if (!content) return;
-
-    if (content.style.maxHeight && content.style.maxHeight !== '0px') {
-        content.style.maxHeight = '0px';
-        if (chevron) chevron.style.transform = 'rotate(0deg)';
-    } else {
-        content.style.maxHeight = content.scrollHeight + 'px';
-        if (chevron) chevron.style.transform = 'rotate(180deg)';
-    }
-}
-
-// ========== Enhancement Engines ==========
-function toggleEnhancements() {
-    const content = document.getElementById('enhancements-content');
-    const chevron = document.getElementById('enhancements-chevron');
-    if (!content) return;
-
-    if (content.style.maxHeight && content.style.maxHeight !== '0px') {
-        content.style.maxHeight = '0px';
-        if (chevron) chevron.style.transform = 'rotate(0deg)';
-    } else {
-        content.style.maxHeight = content.scrollHeight + 'px';
-        if (chevron) chevron.style.transform = 'rotate(180deg)';
-    }
-}
-
-let diffusionTimeout, rotationTimeout, phaseTimeout, autoRotateSpeedTimeout;
-
-function toggleCrossBlend() {
-    const toggle = document.getElementById('toggle-blend');
-    if (toggle) {
-        API.setColorBlend(toggle.checked);
-    }
-}
-
-function updateDiffusion(input) {
-    const value = parseInt(input.value);
-    document.getElementById('val-diffusion').textContent = value;
-    updateSliderTrack(input);
-
-    clearTimeout(diffusionTimeout);
-    diffusionTimeout = setTimeout(() => API.setColorDiffusion(value), CONFIG.DEBOUNCE_SLIDER);
-}
-
-function updateRotation(input) {
-    const value = parseInt(input.value);
-    const speed = value / 10.0; // Convert to float (0.0-10.0 degrees/frame)
-    document.getElementById('val-rotation').textContent = speed.toFixed(1);
-    updateSliderTrack(input);
-
-    clearTimeout(rotationTimeout);
-    rotationTimeout = setTimeout(() => API.setColorRotation(speed), CONFIG.DEBOUNCE_SLIDER);
-}
-
-function updatePhase(input) {
-    const value = parseInt(input.value);
-    document.getElementById('val-phase').textContent = value;
-    updateSliderTrack(input);
-
-    clearTimeout(phaseTimeout);
-    phaseTimeout = setTimeout(() => API.setMotionPhase(value), CONFIG.DEBOUNCE_SLIDER);
-}
-
-function toggleAutoRotate() {
-    const toggle = document.getElementById('toggle-autorotate');
-    const speedContainer = document.getElementById('autorotate-speed-container');
-    const speedSlider = document.getElementById('slider-autorotate-speed');
-
-    if (toggle && speedContainer) {
-        const enabled = toggle.checked;
-        speedContainer.style.display = enabled ? 'flex' : 'none';
-
-        // Recalculate max-height when showing/hiding auto-rotate speed
-        const content = document.getElementById('enhancements-content');
-        if (content && content.style.maxHeight !== '0px') {
-            content.style.maxHeight = content.scrollHeight + 'px';
-        }
-
-        const speed = speedSlider ? parseFloat(speedSlider.value) : 10.0;
-        API.setMotionAutoRotate(enabled, speed);
-    }
-}
-
-function updateAutoRotateSpeed(input) {
-    const value = parseFloat(input.value);
-    document.getElementById('val-autorotate-speed').textContent = value;
-    updateSliderTrack(input);
-
-    clearTimeout(autoRotateSpeedTimeout);
-    autoRotateSpeedTimeout = setTimeout(() => {
-        const enabled = document.getElementById('toggle-autorotate')?.checked || false;
-        API.setMotionAutoRotate(enabled, value);
-    }, CONFIG.DEBOUNCE_SLIDER);
-}
-
-// ========== Presets ==========
-// User preset state
-let userPresets = [];
-
-function loadPreset(id) { API.loadPreset(id); }
-
-function loadUserPreset(slot) {
-    API.loadUserPreset(slot).then(r => {
-        if (r.success) {
-            console.log('Loaded user preset', slot);
-        }
-    });
-}
-
-function savePreset() {
-    // Show save modal
-    document.getElementById('preset-modal').classList.remove('hidden');
-    document.getElementById('preset-name-input').value = '';
-    document.getElementById('preset-name-input').focus();
-}
-
-function closePresetModal() {
-    document.getElementById('preset-modal').classList.add('hidden');
-}
-
-function confirmSavePreset() {
-    const name = document.getElementById('preset-name-input').value.trim();
-    if (!name) {
-        alert('Please enter a preset name');
-        return;
-    }
-
-    // Find first empty slot, or use slot 0
-    let slot = userPresets.findIndex(p => !p.saved);
-    if (slot === -1) slot = 0;
-
-    API.saveUserPreset(slot, name).then(r => {
-        if (r.success) {
-            closePresetModal();
-            refreshUserPresets();
-        } else {
-            alert('Failed to save preset: ' + (r.error?.message || 'Unknown error'));
-        }
-    });
-}
-
-function deleteUserPreset(slot, event) {
-    event.stopPropagation();
-    if (!confirm('Delete this preset?')) return;
-
-    API.deleteUserPreset(slot).then(r => {
-        if (r.success) {
-            refreshUserPresets();
-        }
-    });
-}
-
-function refreshUserPresets() {
-    API.getUserPresets().then(r => {
-        if (r.success && r.data.presets) {
-            userPresets = r.data.presets;
-            updateUserPresetButtons();
-        }
-    });
-}
-
-function updateUserPresetButtons() {
-    const container = document.getElementById('user-presets-container');
-    if (!container) return;
-
-    container.innerHTML = userPresets.map((p, i) => {
-        if (p.saved) {
-            return `<button onclick="loadUserPreset(${i})" class="group relative px-3 py-1.5 rounded-lg bg-accent-cyan/10 border border-accent-cyan/30 text-xs font-medium text-accent-cyan hover:bg-accent-cyan/20 transition-all whitespace-nowrap">
-                <span>${p.name.substring(0, 8)}</span>
-                <span onclick="deleteUserPreset(${i}, event)" class="absolute -top-1 -right-1 hidden group-hover:flex w-4 h-4 items-center justify-center rounded-full bg-red-500 text-white text-[10px]">&times;</span>
-            </button>`;
-        } else {
-            return `<button onclick="saveToSlot(${i})" class="px-3 py-1.5 rounded-lg bg-elevated border border-dashed border-border-subtle text-xs font-medium text-text-muted hover:border-accent-cyan/50 transition-all whitespace-nowrap opacity-50">
-                +
-            </button>`;
-        }
-    }).join('');
-}
-
-function saveToSlot(slot) {
-    const name = prompt('Enter preset name:');
-    if (!name || !name.trim()) return;
-
-    API.saveUserPreset(slot, name.trim()).then(r => {
-        if (r.success) {
-            refreshUserPresets();
-        } else {
-            alert('Failed to save: ' + (r.error?.message || 'Unknown error'));
-        }
-    });
-}
-
-function resetToDefaults() { setZoneCount(3); }
-
-// ========== Preset Sharing (Phase C.3) ==========
-
-function exportPresetToUrl() {
-    // Build minimal preset object from current state
-    const preset = {
-        v: 1,  // Version for future compatibility
-        zc: state.zoneCount,
-        z: state.zones.slice(0, state.zoneCount).map(z => ({
-            e: z.effectId,
-            b: z.brightness,
-            s: z.speed,
-            p: z.paletteId,
-            on: z.enabled
-        }))
     };
-
-    // Encode to base64
-    const json = JSON.stringify(preset);
-    const base64 = btoa(json);
-    return `${window.location.origin}${window.location.pathname}#preset=${base64}`;
 }
 
-function importPresetFromUrl() {
-    const hash = window.location.hash;
-    if (!hash.startsWith('#preset=')) return false;
-
-    try {
-        const base64 = hash.substring(8);  // Remove '#preset='
-        const json = atob(base64);
-        const preset = JSON.parse(json);
-
-        // Validate version
-        if (preset.v !== 1) {
-            console.warn('Unknown preset version:', preset.v);
+function send(msg) {
+    if (!state.ws) {
+        log('[WS] ERROR: WebSocket not initialized. Click CONNECT first.');
+        return false;
+    }
+    
+    if (state.ws.readyState === WebSocket.OPEN) {
+        const jsonMsg = JSON.stringify(msg);
+        log('[WS] SEND: ' + jsonMsg);
+        try {
+            state.ws.send(jsonMsg);
+            return true;
+        } catch (e) {
+            log('[WS] ERROR: Failed to send message: ' + e.message);
             return false;
         }
-
-        // Apply preset
-        if (preset.zc && preset.zc >= 1 && preset.zc <= 4) {
-            setZoneCount(preset.zc);
-        }
-
-        if (preset.z && Array.isArray(preset.z)) {
-            preset.z.forEach((z, idx) => {
-                if (idx < 4) {
-                    if (z.e !== undefined) API.setZoneEffect(idx, z.e);
-                    if (z.b !== undefined) API.setZoneBrightness(idx, z.b);
-                    if (z.s !== undefined) API.setZoneSpeed(idx, z.s);
-                    if (z.p !== undefined) API.setZonePalette(idx, z.p);
-                    if (z.on !== undefined) API.setZoneEnabled(idx, z.on);
-                }
-            });
-        }
-
-        // Clear hash to prevent re-import on refresh
-        history.replaceState(null, '', window.location.pathname);
-        console.log('Preset imported from URL');
-        return true;
-    } catch (e) {
-        console.error('Failed to import preset:', e);
+    } else {
+        const states = ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'];
+        log(`[WS] ERROR: Not connected! State: ${states[state.ws.readyState]}. Click CONNECT first.`);
         return false;
     }
 }
 
-function showShareModal() {
-    const url = exportPresetToUrl();
-    document.getElementById('share-url').value = url;
-    document.getElementById('share-modal').classList.remove('hidden');
+function scheduleReconnect() {
+    if (state.reconnectTimer) return;
 
-    // Generate QR code if library available
-    generateQRCode(url);
+    console.log(`[WS] Reconnecting in ${state.RECONNECT_MS}ms...`);
+    state.reconnectTimer = setTimeout(() => {
+        state.reconnectTimer = null;
+        connect();
+    }, state.RECONNECT_MS);
 }
 
-function closeShareModal() {
-    document.getElementById('share-modal').classList.add('hidden');
-}
+// ─────────────────────────────────────────────────────────────
+// Message Handler
+// ─────────────────────────────────────────────────────────────
 
-function copyShareUrl() {
-    const urlInput = document.getElementById('share-url');
-    urlInput.select();
-    navigator.clipboard.writeText(urlInput.value).then(() => {
-        const btn = document.getElementById('copy-btn');
-        const originalText = btn.textContent;
-        btn.textContent = 'Copied!';
-        setTimeout(() => btn.textContent = originalText, 2000);
-    }).catch(() => {
-        // Fallback for older browsers
-        document.execCommand('copy');
-    });
-}
+function handleMessage(msg) {
+    log('[WS] RECV: ' + msg.type + (msg.effectId !== undefined ? ` (effectId: ${msg.effectId})` : '') + (msg.brightness !== undefined ? ` (brightness: ${msg.brightness})` : ''));
 
-function generateQRCode(url) {
-    const container = document.getElementById('qr-code');
-    if (!container) return;
-
-    // Check if QRCode library is loaded
-    if (typeof QRCode === 'undefined') {
-        container.innerHTML = '<span class="text-text-muted text-xs">QR library not loaded</span>';
-        return;
-    }
-
-    container.innerHTML = '';
-    new QRCode(container, {
-        text: url,
-        width: 128,
-        height: 128,
-        colorDark: '#00d4ff',
-        colorLight: '#0a0f14',
-        correctLevel: QRCode.CorrectLevel.L
-    });
-}
-
-function downloadPresetJson() {
-    const preset = {
-        version: 1,
-        name: 'My Preset',
-        created: new Date().toISOString(),
-        zoneCount: state.zoneCount,
-        zones: state.zones.slice(0, state.zoneCount).map(z => ({
-            effectId: z.effectId,
-            brightness: z.brightness,
-            speed: z.speed,
-            paletteId: z.paletteId,
-            enabled: z.enabled
-        }))
-    };
-
-    const json = JSON.stringify(preset, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'lightwave-preset.json';
-    a.click();
-    URL.revokeObjectURL(url);
-}
-
-// ========== Shows ==========
-function toggleShows() {
-    const content = document.getElementById('shows-content');
-    const chevron = document.getElementById('shows-chevron');
-    if (!content) return;
-
-    if (content.style.maxHeight && content.style.maxHeight !== '0px') {
-        content.style.maxHeight = '0px';
-        if (chevron) chevron.style.transform = 'rotate(0deg)';
-    } else {
-        content.style.maxHeight = content.scrollHeight + 'px';
-        if (chevron) chevron.style.transform = 'rotate(180deg)';
-    }
-}
-
-// Show duration icons based on length
-const showIcons = {
-    short: 'solar:clock-circle-bold-duotone',      // < 3 min
-    medium: 'solar:clock-square-bold-duotone',     // 3-5 min
-    long: 'solar:alarm-bold-duotone',              // > 5 min
-    loop: 'solar:repeat-bold-duotone'              // looping shows
-};
-
-function getShowIcon(show) {
-    if (show.looping) return showIcons.loop;
-    const mins = show.duration / 60000;
-    if (mins < 3) return showIcons.short;
-    if (mins <= 5) return showIcons.medium;
-    return showIcons.long;
-}
-
-function formatShowDuration(ms) {
-    const totalSeconds = Math.floor(ms / 1000);
-    const mins = Math.floor(totalSeconds / 60);
-    const secs = totalSeconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
-
-async function loadShows() {
-    try {
-        const res = await API.getShows();
-        if (res && res.success && res.data && res.data.shows) {
-            state.shows = res.data.shows;
-            renderShowGrid();
-        } else {
-            // Fallback: try direct endpoint
-            const fallbackRes = await fetch(`${CONFIG.API_BASE}/v1/shows`);
-            if (fallbackRes.ok) {
-                const data = await fallbackRes.json();
-                if (data.success && data.data && data.data.shows) {
-                    state.shows = data.data.shows;
-                    renderShowGrid();
+    switch (msg.type) {
+        case 'status':
+            // Full state sync - server uses effectId/paletteId
+            // Skip effect updates if user just changed it (prevents flicker from stale server state)
+            if (msg.effectId !== undefined && !state.pendingEffectChange) {
+                const oldId = state.effectId;
+                if (msg.effectId !== state.effectId) {
+                    state.effectId = msg.effectId;
+                    log(`[UI] Effect changed: ${oldId} -> ${state.effectId}`);
                 }
             }
-        }
-    } catch (e) {
-        console.error('Failed to load shows:', e);
-        document.getElementById('show-grid').innerHTML =
-            '<div class="col-span-full text-center py-4 text-text-tertiary text-sm">Shows not available</div>';
-    }
-}
-
-function renderShowGrid() {
-    const grid = document.getElementById('show-grid');
-    if (!grid) return;
-
-    if (!state.shows || state.shows.length === 0) {
-        grid.innerHTML = '<div class="col-span-full text-center py-4 text-text-tertiary text-sm">No shows available</div>';
-        return;
-    }
-
-    grid.innerHTML = state.shows.map(show => `
-        <button onclick="startShow(${show.id})" class="group p-3 rounded-xl bg-canvas border border-border-subtle hover:border-accent-cyan/50 transition-all text-left ${state.currentShowId === show.id ? 'ring-2 ring-accent-cyan' : ''}">
-            <div class="flex items-center gap-2 mb-2">
-                <span class="iconify text-accent-cyan" data-icon="${getShowIcon(show)}" data-width="16"></span>
-                <span class="text-xs font-semibold text-white truncate">${show.name}</span>
-            </div>
-            <div class="flex items-center justify-between text-[10px] text-text-tertiary">
-                <span>${formatShowDuration(show.duration)}</span>
-                ${show.looping ? '<span class="text-accent-zone2">Loop</span>' : ''}
-            </div>
-        </button>
-    `).join('');
-}
-
-function startShow(showId) {
-    console.log('Starting show:', showId);
-    WS.send({ type: 'show.start', showId });
-}
-
-function stopShow() {
-    console.log('Stopping show');
-    WS.send({ type: 'show.stop' });
-}
-
-function pauseShow() {
-    console.log('Toggle pause show');
-    WS.send({ type: 'show.pause' });
-}
-
-function handleShowStarted(msg) {
-    state.showPlaying = true;
-    state.showPaused = false;
-    state.currentShowId = msg.showId !== undefined ? msg.showId : -1;
-    state.showName = msg.showName || 'Unknown Show';
-    state.showChapter = msg.chapterName || 'Starting...';
-
-    updateShowPlayingUI();
-    renderShowGrid(); // Update selection highlight
-}
-
-function handleShowStopped() {
-    state.showPlaying = false;
-    state.showPaused = false;
-    state.currentShowId = -1;
-    state.showProgress = 0;
-    state.showElapsed = 0;
-    state.showChapter = '';
-    state.showName = '';
-
-    updateShowPlayingUI();
-    renderShowGrid();
-}
-
-function handleShowPaused(paused) {
-    state.showPaused = paused;
-    updatePauseButton();
-}
-
-function updateShowProgress(msg) {
-    // msg: { showId, showName, elapsed, remaining, progress, chapter, chapterName, playing, paused, tension }
-    state.showPlaying = msg.playing;
-    state.showPaused = msg.paused;
-    state.currentShowId = msg.showId !== undefined ? msg.showId : state.currentShowId;
-    state.showName = msg.showName || state.showName;
-    state.showChapter = msg.chapterName || '';
-    state.showProgress = msg.progress || 0;
-    state.showElapsed = msg.elapsed || 0;
-
-    // Update UI elements
-    const nameEl = document.getElementById('show-now-playing-name');
-    const chapterEl = document.getElementById('show-now-playing-chapter');
-    const progressBar = document.getElementById('show-progress-bar');
-    const elapsedEl = document.getElementById('show-elapsed');
-    const remainingEl = document.getElementById('show-remaining');
-
-    if (nameEl) nameEl.textContent = state.showName;
-    if (chapterEl) chapterEl.textContent = `Chapter: ${state.showChapter || '--'}`;
-    if (progressBar) progressBar.style.width = `${state.showProgress * 100}%`;
-    if (elapsedEl) elapsedEl.textContent = formatShowDuration(msg.elapsed || 0);
-    if (remainingEl) remainingEl.textContent = `-${formatShowDuration(msg.remaining || 0)}`;
-
-    updateShowPlayingUI();
-    updatePauseButton();
-}
-
-function updateShowPlayingUI() {
-    const nowPlaying = document.getElementById('show-now-playing');
-    const statusBadge = document.getElementById('show-status-badge');
-
-    if (nowPlaying) {
-        nowPlaying.classList.toggle('hidden', !state.showPlaying);
-    }
-
-    if (statusBadge) {
-        if (state.showPlaying) {
-            statusBadge.classList.remove('hidden');
-            statusBadge.textContent = state.showPaused ? 'PAUSED' : 'PLAYING';
-            statusBadge.className = state.showPaused
-                ? 'px-2 py-0.5 rounded-full text-[10px] font-semibold bg-yellow-500/20 text-yellow-400'
-                : 'px-2 py-0.5 rounded-full text-[10px] font-semibold bg-green-500/20 text-green-400 animate-pulse';
-        } else {
-            statusBadge.classList.add('hidden');
-        }
-    }
-
-    // Recalculate panel height if open
-    const content = document.getElementById('shows-content');
-    if (content && content.style.maxHeight !== '0px') {
-        content.style.maxHeight = content.scrollHeight + 'px';
-    }
-}
-
-function updatePauseButton() {
-    const pauseBtn = document.getElementById('show-pause-btn');
-    if (pauseBtn) {
-        const icon = pauseBtn.querySelector('.iconify');
-        if (icon) {
-            icon.setAttribute('data-icon', state.showPaused ? 'solar:play-bold' : 'solar:pause-bold');
-        }
-    }
-}
-
-// Poll for show status periodically when a show is playing
-let showStatusInterval = null;
-
-function startShowStatusPolling() {
-    if (showStatusInterval) return;
-    showStatusInterval = setInterval(() => {
-        if (state.showPlaying && state.connected) {
-            WS.send({ type: 'show.status' });
-        }
-    }, 1000); // Poll every second for smooth progress updates
-}
-
-function stopShowStatusPolling() {
-    if (showStatusInterval) {
-        clearInterval(showStatusInterval);
-        showStatusInterval = null;
-    }
-}
-
-// ========== Firmware Update ==========
-function toggleFirmware() {
-    const content = document.getElementById('firmware-content');
-    const chevron = document.getElementById('firmware-chevron');
-    if (!content) return;
-
-    if (content.style.maxHeight && content.style.maxHeight !== '0px') {
-        content.style.maxHeight = '0px';
-        if (chevron) chevron.style.transform = 'rotate(0deg)';
-    } else {
-        content.style.maxHeight = content.scrollHeight + 'px';
-        if (chevron) chevron.style.transform = 'rotate(180deg)';
-    }
-}
-
-function formatFileSize(bytes) {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
-}
-
-function showFirmwareStatus(message, type) {
-    const statusEl = document.getElementById('firmware-status');
-    if (!statusEl) return;
-
-    statusEl.classList.remove('hidden', 'bg-green-500/20', 'text-green-400', 'bg-red-500/20', 'text-red-400', 'bg-yellow-500/20', 'text-yellow-400', 'bg-accent-cyan/20', 'text-accent-cyan');
-
-    if (type === 'success') {
-        statusEl.classList.add('bg-green-500/20', 'text-green-400');
-    } else if (type === 'error') {
-        statusEl.classList.add('bg-red-500/20', 'text-red-400');
-    } else if (type === 'warning') {
-        statusEl.classList.add('bg-yellow-500/20', 'text-yellow-400');
-    } else {
-        statusEl.classList.add('bg-accent-cyan/20', 'text-accent-cyan');
-    }
-
-    statusEl.textContent = message;
-}
-
-function updateFirmwareProgress(percent) {
-    const bar = document.getElementById('firmware-progress-bar');
-    const label = document.getElementById('firmware-progress-label');
-    if (bar) bar.style.width = percent + '%';
-    if (label) label.textContent = Math.round(percent) + '%';
-}
-
-function uploadFirmware() {
-    const fileInput = document.getElementById('firmware-file');
-    const uploadBtn = document.getElementById('firmware-upload-btn');
-    const progressContainer = document.getElementById('firmware-progress-container');
-
-    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
-        showFirmwareStatus('Please select a firmware file', 'error');
-        return;
-    }
-
-    const file = fileInput.files[0];
-
-    // Validate file size (ESP32 has ~3.2MB per OTA slot)
-    if (file.size > 3200 * 1024) {
-        showFirmwareStatus('File too large (max 3.2 MB)', 'error');
-        return;
-    }
-
-    // Disable upload button during upload
-    if (uploadBtn) uploadBtn.disabled = true;
-    if (progressContainer) progressContainer.classList.remove('hidden');
-
-    showFirmwareStatus('Uploading firmware...', 'info');
-    updateFirmwareProgress(0);
-
-    // Create FormData and upload with XMLHttpRequest for progress
-    const formData = new FormData();
-    formData.append('update', file);
-
-    const xhr = new XMLHttpRequest();
-
-    xhr.upload.addEventListener('progress', (e) => {
-        if (e.lengthComputable) {
-            const percent = (e.loaded / e.total) * 100;
-            updateFirmwareProgress(percent);
-        }
-    });
-
-    xhr.addEventListener('load', () => {
-        if (xhr.status === 200) {
-            updateFirmwareProgress(100);
-            showFirmwareStatus('Update successful! Rebooting...', 'success');
-
-            // Device will reboot, show reconnecting message after delay
-            setTimeout(() => {
-                showFirmwareStatus('Device rebooting. Please wait...', 'warning');
-            }, 2000);
-
-            // Try to reconnect after device reboots
-            setTimeout(() => {
-                window.location.reload();
-            }, 10000);
-        } else {
-            showFirmwareStatus(`Upload failed: ${xhr.statusText || 'Unknown error'}`, 'error');
-            if (uploadBtn) uploadBtn.disabled = false;
-        }
-    });
-
-    xhr.addEventListener('error', () => {
-        showFirmwareStatus('Upload failed: Network error', 'error');
-        if (uploadBtn) uploadBtn.disabled = false;
-    });
-
-    xhr.addEventListener('abort', () => {
-        showFirmwareStatus('Upload cancelled', 'warning');
-        if (uploadBtn) uploadBtn.disabled = false;
-    });
-
-    xhr.open('POST', '/update');
-    xhr.send(formData);
-}
-
-// ========== Data Loading ==========
-async function loadEffects() {
-    try {
-        const res = await fetch(`${CONFIG.API_BASE}/effects?start=0&count=100`);
-        if (!res.ok) return;
-        const data = await res.json();
-        state.effects = data.effects || [];
-
-        const sel = document.getElementById('effect-select');
-        if (sel) {
-            sel.innerHTML = '';
-            state.effects.forEach(fx => {
-                const opt = document.createElement('option');
-                opt.value = fx.id;
-                opt.textContent = fx.name;
-                sel.appendChild(opt);
-            });
-        }
-        console.log(`Loaded ${state.effects.length} effects`);
-    } catch (e) {
-        console.error('Load effects:', e);
-    }
-}
-
-async function loadPalettes() {
-    try {
-        const res = await fetch(`${CONFIG.API_BASE}/palettes`);
-        if (!res.ok) return;
-        const data = await res.json();
-        state.palettes = data.palettes || [];
-
-        // Populate global palette dropdown
-        const sel = document.getElementById('palette-select');
-        if (sel) {
-            sel.innerHTML = '';
-            state.palettes.forEach(p => {
-                const opt = document.createElement('option');
-                opt.value = p.id;
-                opt.textContent = p.name;
-                sel.appendChild(opt);
-            });
-        }
-
-        // Populate zone palette dropdown (0 = global, 1+ = specific palette)
-        const zoneSel = document.getElementById('zone-palette-select');
-        if (zoneSel) {
-            zoneSel.innerHTML = '<option value="0">Use Global Palette</option>';
-            state.palettes.forEach(p => {
-                const opt = document.createElement('option');
-                opt.value = p.id + 1;  // Offset by 1 (0 = global)
-                opt.textContent = p.name;
-                zoneSel.appendChild(opt);
-            });
-        }
-
-        console.log(`Loaded ${state.palettes.length} palettes`);
-    } catch (e) {
-        console.error('Load palettes:', e);
-    }
-}
-
-// ========== Initialization ==========
-document.addEventListener('DOMContentLoaded', async () => {
-    console.log('K1-Lightwave initializing...');
-
-    // Initialize slider tracks
-    document.querySelectorAll('.slider-input').forEach(updateSliderTrack);
-
-    // Load data
-    await loadEffects();
-    await loadPalettes();
-    await loadShows();  // Load available shows
-    refreshUserPresets();  // Load user presets for preset bar
-
-    // Connect WebSocket
-    WS.connect();
-
-    // Set initial states
-    updateZoneTabs(state.zoneCount);
-    updateMixerChannels(state.zoneCount);
-    selectZone(1);
-    updateConnectionStatus();
-
-    // Fetch initial effect parameters for zone 1
-    const zone = state.zones[0];
-    if (zone) {
-        fetchEffectParameters(zone.effectId, 0);
-    }
-
-    // Check for shared preset in URL (Phase C.3)
-    setTimeout(() => importPresetFromUrl(), 500);  // Delay to allow WS to sync first
-
-    // Start show status polling (for progress updates)
-    startShowStatusPolling();
-
-    // Initialize firmware file input handler
-    const firmwareFileInput = document.getElementById('firmware-file');
-    if (firmwareFileInput) {
-        firmwareFileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            const infoEl = document.getElementById('firmware-info');
-            const filenameEl = document.getElementById('firmware-filename');
-            const filesizeEl = document.getElementById('firmware-filesize');
-            const uploadBtn = document.getElementById('firmware-upload-btn');
-            const statusEl = document.getElementById('firmware-status');
-            const progressContainer = document.getElementById('firmware-progress-container');
-
-            if (file) {
-                // Show file info
-                if (infoEl) infoEl.classList.remove('hidden');
-                if (filenameEl) filenameEl.textContent = file.name;
-                if (filesizeEl) filesizeEl.textContent = formatFileSize(file.size);
-                if (uploadBtn) uploadBtn.disabled = false;
-
-                // Reset status and progress
-                if (statusEl) statusEl.classList.add('hidden');
-                if (progressContainer) progressContainer.classList.add('hidden');
-
-                // Validate file extension
-                if (!file.name.toLowerCase().endsWith('.bin')) {
-                    showFirmwareStatus('Please select a .bin file', 'warning');
-                    if (uploadBtn) uploadBtn.disabled = true;
+            if (msg.effectName !== undefined && !state.pendingEffectChange) state.effectName = msg.effectName;
+            // Skip brightness/speed updates if user is dragging the slider
+            if (msg.brightness !== undefined && !state.pendingBrightnessChange) {
+                if (msg.brightness !== state.brightness) {
+                    state.brightness = msg.brightness;
                 }
+            }
+            if (msg.speed !== undefined && !state.pendingSpeedChange) {
+                if (msg.speed !== state.speed) {
+                    state.speed = msg.speed;
+                }
+            }
+            // Skip palette updates if user just changed it (prevents flicker from stale server state)
+            if (msg.paletteId !== undefined && !state.pendingPaletteChange) {
+                const newPaletteId = parseInt(msg.paletteId);
+                if (!isNaN(newPaletteId) && newPaletteId !== state.paletteId) {
+                    state.paletteId = newPaletteId;
+                    // Use hardcoded lookup for name (instant, no API call)
+                    state.paletteName = getPaletteName(newPaletteId);
+                }
+            }
+            if (msg.paletteName !== undefined && msg.paletteName && !state.pendingPaletteChange) {
+                state.paletteName = msg.paletteName;
+            }
+            updateAllUI();
+            break;
+
+        case 'effectChange':
+            if (msg.effectId !== undefined) state.effectId = msg.effectId;
+            if (msg.name !== undefined) state.effectName = msg.name;
+            updatePatternUI();
+            break;
+
+        case 'paletteChange':
+            if (msg.paletteId !== undefined) {
+                state.paletteId = parseInt(msg.paletteId);
+                // Use hardcoded lookup for name (instant, no API call)
+                state.paletteName = getPaletteName(state.paletteId);
+            }
+            if (msg.name !== undefined) {
+                state.paletteName = msg.name;
+            }
+            updatePaletteUI();
+            break;
+
+        default:
+            log('[WS] Unknown: ' + msg.type);
+            break;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Button Throttling
+// ─────────────────────────────────────────────────────────────
+
+let lastButtonTime = 0;
+const BUTTON_THROTTLE_MS = 150;
+
+// ─────────────────────────────────────────────────────────────
+// Retry Logic with Exponential Backoff
+// ─────────────────────────────────────────────────────────────
+
+async function fetchWithRetry(url, options, maxRetries = 3) {
+    const delays = [500, 1000, 2000]; // Exponential backoff delays in ms
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            const response = await fetch(url, options);
+            if (response.ok) {
+                return await response.json();
+            }
+            // If not OK but not a network error, return the error response
+            if (attempt < maxRetries) {
+                log(`[RETRY] Request failed (${response.status}), retrying in ${delays[attempt]}ms... (attempt ${attempt + 1}/${maxRetries})`);
+                await new Promise(resolve => setTimeout(resolve, delays[attempt]));
+                continue;
+            }
+            return await response.json(); // Return error response on final attempt
+        } catch (error) {
+            if (attempt < maxRetries) {
+                log(`[RETRY] Network error: ${error.message}, retrying in ${delays[attempt]}ms... (attempt ${attempt + 1}/${maxRetries})`);
+                await new Promise(resolve => setTimeout(resolve, delays[attempt]));
+                continue;
+            }
+            throw error; // Re-throw on final attempt
+        }
+    }
+}
+
+function throttledAction(action, actionName) {
+    const now = Date.now();
+    if (now - lastButtonTime < BUTTON_THROTTLE_MS) {
+        log(`[THROTTLE] Ignoring rapid ${actionName} click (${now - lastButtonTime}ms since last)`);
+        return false;
+    }
+    lastButtonTime = now;
+    action();
+    return true;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Control Handlers
+// ─────────────────────────────────────────────────────────────
+
+// Pattern navigation - using REST API only (removed duplicate WebSocket)
+function nextPattern() {
+    if (!throttledAction(() => {
+        log('[BTN] Next Pattern');
+        
+        // Use current effect ID from state, or default to 0
+        const currentId = state.effectId || 0;
+        const nextId = (currentId + 1) % 75;
+        
+        // Set pending flag to ignore stale server updates (clear after 1 second)
+        if (state.pendingEffectChange) clearTimeout(state.pendingEffectChange);
+        state.pendingEffectChange = setTimeout(() => { state.pendingEffectChange = null; }, 1000);
+        
+        // REST API only - removed duplicate WebSocket send
+        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/effects/set`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ effectId: nextId })
+        })
+        .then(data => {
+            if (data.success) {
+                state.effectId = data.data.effectId;
+                state.effectName = data.data.name;
+                updatePatternUI();
+                log(`[REST] ✅ Effect changed to: ${data.data.name} (${data.data.effectId})`);
             } else {
-                if (infoEl) infoEl.classList.add('hidden');
-                if (uploadBtn) uploadBtn.disabled = true;
+                log(`[REST] ❌ Failed: ${JSON.stringify(data)}`);
+            }
+        })
+        .catch(e => log('[REST] ❌ Error after retries: ' + e.message));
+    }, 'nextPattern')) {
+        return;
+    }
+}
+
+function prevPattern() {
+    if (!throttledAction(() => {
+        log('[BTN] Prev Pattern');
+        
+        // Use current effect ID from state, or default to 0
+        const currentId = state.effectId || 0;
+        const prevId = (currentId - 1 + 75) % 75;
+        
+        // Set pending flag to ignore stale server updates (clear after 1 second)
+        if (state.pendingEffectChange) clearTimeout(state.pendingEffectChange);
+        state.pendingEffectChange = setTimeout(() => { state.pendingEffectChange = null; }, 1000);
+        
+        // REST API only - removed duplicate WebSocket send
+        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/effects/set`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ effectId: prevId })
+        })
+        .then(data => {
+            if (data.success) {
+                state.effectId = data.data.effectId;
+                state.effectName = data.data.name;
+                updatePatternUI();
+                log(`[REST] ✅ Effect changed to: ${data.data.name} (${data.data.effectId})`);
+            } else {
+                log(`[REST] ❌ Failed: ${JSON.stringify(data)}`);
+            }
+        })
+        .catch(e => log('[REST] ❌ Error after retries: ' + e.message));
+    }, 'prevPattern')) {
+        return;
+    }
+}
+
+// Palette navigation - using REST API only (removed duplicate WebSocket)
+function nextPalette() {
+    if (!throttledAction(() => {
+        log('[BTN] Next Palette');
+        state.paletteId = (state.paletteId + 1) % state.PALETTE_COUNT;
+        // Use hardcoded lookup for name (instant, no API call)
+        state.paletteName = getPaletteName(state.paletteId);
+        updatePaletteUI();
+        
+        // Set pending flag to ignore stale server updates (clear after 1 second)
+        if (state.pendingPaletteChange) clearTimeout(state.pendingPaletteChange);
+        state.pendingPaletteChange = setTimeout(() => { state.pendingPaletteChange = null; }, 1000);
+        
+        // REST API only - removed duplicate WebSocket send
+        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/palettes/set`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ paletteId: state.paletteId })
+        })
+        .then(data => {
+            if (data.success) {
+                log(`[REST] ✅ Palette set to: ${state.paletteName} (${state.paletteId})`);
+            }
+        })
+        .catch(e => log('[REST] Error after retries: ' + e.message));
+    }, 'nextPalette')) {
+        return;
+    }
+}
+
+function prevPalette() {
+    if (!throttledAction(() => {
+        log('[BTN] Prev Palette');
+        state.paletteId = (state.paletteId - 1 + state.PALETTE_COUNT) % state.PALETTE_COUNT;
+        // Use hardcoded lookup for name (instant, no API call)
+        state.paletteName = getPaletteName(state.paletteId);
+        updatePaletteUI();
+        
+        // Set pending flag to ignore stale server updates (clear after 1 second)
+        if (state.pendingPaletteChange) clearTimeout(state.pendingPaletteChange);
+        state.pendingPaletteChange = setTimeout(() => { state.pendingPaletteChange = null; }, 1000);
+        
+        // REST API only - removed duplicate WebSocket send
+        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/palettes/set`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ paletteId: state.paletteId })
+        })
+        .then(data => {
+            if (data.success) {
+                log(`[REST] ✅ Palette set to: ${state.paletteName} (${state.paletteId})`);
+            }
+        })
+        .catch(e => log('[REST] Error after retries: ' + e.message));
+    }, 'prevPalette')) {
+        return;
+    }
+}
+
+// Brightness control - slider handler
+let brightnessUpdateTimer = null;
+function onBrightnessChange() {
+    const newVal = parseInt(elements.brightnessSlider.value);
+    if (newVal !== state.brightness) {
+        state.brightness = newVal;
+        updateBrightnessUI();
+        
+        // Set pending flag to ignore stale server updates while dragging
+        if (state.pendingBrightnessChange) clearTimeout(state.pendingBrightnessChange);
+        state.pendingBrightnessChange = setTimeout(() => { state.pendingBrightnessChange = null; }, 1000);
+        
+        // Debounce API calls while dragging
+        if (brightnessUpdateTimer) {
+            clearTimeout(brightnessUpdateTimer);
+        }
+        
+        brightnessUpdateTimer = setTimeout(() => {
+            // Try WebSocket
+            if (state.connected && state.ws && state.ws.readyState === WebSocket.OPEN) {
+                send({ type: 'setBrightness', value: newVal });
+            }
+            
+            // REST API backup
+            fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/parameters`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ brightness: newVal })
+            })
+            .then(data => {
+                if (data.success) {
+                    log(`[REST] Brightness set to: ${newVal}`);
+                }
+            })
+            .catch(e => log('[REST] Error after retries: ' + e.message));
+        }, 150);
+    }
+}
+
+// Speed control - slider handler
+let speedUpdateTimer = null;
+function onSpeedChange() {
+    const newVal = parseInt(elements.speedSlider.value);
+    if (newVal !== state.speed) {
+        state.speed = newVal;
+        updateSpeedUI();
+        
+        // Set pending flag to ignore stale server updates while dragging
+        if (state.pendingSpeedChange) clearTimeout(state.pendingSpeedChange);
+        state.pendingSpeedChange = setTimeout(() => { state.pendingSpeedChange = null; }, 1000);
+        
+        // Debounce API calls while dragging
+        if (speedUpdateTimer) {
+            clearTimeout(speedUpdateTimer);
+        }
+        
+        speedUpdateTimer = setTimeout(() => {
+            // Try WebSocket
+            if (state.connected && state.ws && state.ws.readyState === WebSocket.OPEN) {
+                send({ type: 'setSpeed', value: newVal });
+            }
+            
+            // REST API backup
+            fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/parameters`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ speed: newVal })
+            })
+            .then(data => {
+                if (data.success) {
+                    log(`[REST] Speed set to: ${newVal}`);
+                }
+            })
+            .catch(e => log('[REST] Error after retries: ' + e.message));
+        }, 150);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// UI Update Functions
+// ─────────────────────────────────────────────────────────────
+
+function updateConnectionUI() {
+    const dot = elements.statusDot;
+    const text = elements.statusText;
+
+    if (state.connected) {
+        dot.classList.add('connected');
+        dot.classList.remove('disconnected');
+        text.textContent = 'Connected';
+    } else {
+        dot.classList.remove('connected');
+        dot.classList.add('disconnected');
+        text.textContent = 'Disconnected';
+    }
+}
+
+function updatePatternUI() {
+    const name = state.effectName || `Effect ${state.effectId}`;
+    elements.patternName.textContent = name;
+    elements.currentEffect.textContent = name;
+}
+
+// Get palette name from hardcoded lookup (instant, no API call)
+function getPaletteName(paletteId) {
+    if (paletteId >= 0 && paletteId < PALETTE_NAMES.length) {
+        return PALETTE_NAMES[paletteId];
+    }
+    return `Palette ${paletteId}`;
+}
+
+// Fetch current parameters (including paletteId) from API
+function fetchCurrentParameters() {
+    const url = `http://${state.deviceHost || '192.168.0.16'}/api/v1/parameters`;
+    fetchWithRetry(url)
+        .then(data => {
+            if (data && data.success && data.data) {
+                // Update state with all parameters
+                if (data.data.brightness !== undefined) {
+                    state.brightness = data.data.brightness;
+                    updateBrightnessUI();
+                }
+                if (data.data.speed !== undefined) {
+                    state.speed = data.data.speed;
+                    updateSpeedUI();
+                }
+                if (data.data.paletteId !== undefined) {
+                    const paletteId = parseInt(data.data.paletteId);
+                    if (!isNaN(paletteId)) {
+                        state.paletteId = paletteId;
+                        // Use hardcoded lookup for name
+                        state.paletteName = getPaletteName(paletteId);
+                        updatePaletteUI();
+                        log(`[REST] ✅ Palette: ${state.paletteName} (${paletteId})`);
+                    }
+                }
+            }
+        })
+        .catch(e => {
+            log(`[REST] ❌ Error fetching parameters after retries: ${e.message}`);
+        });
+}
+
+function updatePaletteUI() {
+    // Ensure paletteId is a valid number
+    const paletteId = (typeof state.paletteId === 'number' && !isNaN(state.paletteId)) ? state.paletteId : 0;
+    
+    // Get palette name from hardcoded lookup (instant, never fails)
+    const paletteName = getPaletteName(paletteId);
+    
+    elements.paletteName.textContent = paletteName;
+    elements.paletteId.textContent = `${paletteId + 1}/${state.PALETTE_COUNT}`;
+}
+
+function updateBrightnessUI() {
+    if (elements.brightnessSlider) {
+        elements.brightnessSlider.value = state.brightness;
+    }
+    if (elements.brightnessValue) {
+        elements.brightnessValue.textContent = state.brightness;
+    }
+}
+
+function updateSpeedUI() {
+    if (elements.speedSlider) {
+        elements.speedSlider.value = state.speed;
+    }
+    if (elements.speedValue) {
+        elements.speedValue.textContent = state.speed;
+    }
+}
+
+function updateAllUI() {
+    updateConnectionUI();
+    updatePatternUI();
+    updatePaletteUI();
+    updateBrightnessUI();
+    updateSpeedUI();
+}
+
+// ─────────────────────────────────────────────────────────────
+// Initialization
+// ─────────────────────────────────────────────────────────────
+
+function init() {
+    // Cache DOM elements
+    elements.statusDot = document.getElementById('statusDot');
+    elements.statusText = document.getElementById('statusText');
+    elements.currentEffect = document.getElementById('currentEffect');
+    elements.patternName = document.getElementById('patternName');
+    elements.paletteName = document.getElementById('paletteName');
+    elements.paletteId = document.getElementById('paletteId');
+    elements.brightnessSlider = document.getElementById('brightnessSlider');
+    elements.brightnessValue = document.getElementById('brightnessValue');
+    elements.speedSlider = document.getElementById('speedSlider');
+    elements.speedValue = document.getElementById('speedValue');
+    elements.configBar = document.getElementById('configBar');
+    elements.deviceHost = document.getElementById('deviceHost');
+    elements.connectBtn = document.getElementById('connectBtn');
+
+    // Bind button events
+    document.getElementById('patternPrev').addEventListener('click', prevPattern);
+    document.getElementById('patternNext').addEventListener('click', nextPattern);
+    document.getElementById('palettePrev').addEventListener('click', prevPalette);
+    document.getElementById('paletteNext').addEventListener('click', nextPalette);
+    
+    // Bind slider events
+    if (elements.brightnessSlider) {
+        elements.brightnessSlider.addEventListener('input', onBrightnessChange);
+        elements.brightnessSlider.addEventListener('change', onBrightnessChange);
+    }
+    if (elements.speedSlider) {
+        elements.speedSlider.addEventListener('input', onSpeedChange);
+        elements.speedSlider.addEventListener('change', onSpeedChange);
+    }
+
+    // Check if we're running on the device or remotely
+    // Only hide config bar if we're actually ON the device (192.168.0.16 or lightwaveos.local)
+    const isOnDevice = window.location.hostname === 'lightwaveos.local' ||
+                       window.location.hostname === '192.168.0.16';
+
+    if (isOnDevice) {
+        // Running on device - hide config bar, auto-connect
+        elements.configBar.classList.add('hidden');
+        connect();
+    } else {
+        // Running remotely - show config bar, wait for user to connect
+        elements.statusText.textContent = 'Enter device address';
+
+        // Load saved host from localStorage
+        const savedHost = localStorage.getItem('lightwaveHost');
+        if (savedHost) {
+            elements.deviceHost.value = savedHost;
+        }
+
+        // Connect button handler
+        elements.connectBtn.addEventListener('click', () => {
+            const host = elements.deviceHost.value.trim();
+            if (host) {
+                state.deviceHost = host;
+                localStorage.setItem('lightwaveHost', host);
+                log('[CONFIG] Device host set to: ' + host);
+
+                // Close existing connection if any
+                if (state.ws) {
+                    state.ws.close();
+                    state.ws = null;
+                }
+                if (state.reconnectTimer) {
+                    clearTimeout(state.reconnectTimer);
+                    state.reconnectTimer = null;
+                }
+
+                // Small delay to ensure cleanup
+                setTimeout(() => {
+                    connect();
+                }, 100);
+            } else {
+                log('[CONFIG] ERROR: Please enter a device IP or hostname');
+            }
+        });
+
+        // Enter key to connect
+        elements.deviceHost.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                elements.connectBtn.click();
             }
         });
     }
 
-    // Sync mixer to initial state
-    for (let i = 0; i < 4; i++) {
-        const zone = state.zones[i];
-        const bLabel = document.getElementById(`mixer-b-label-${i}`);
-        const sLabel = document.getElementById(`mixer-s-label-${i}`);
-        const bSlider = document.getElementById(`mixer-b-${i}`);
-        const sSlider = document.getElementById(`mixer-s-${i}`);
+    log('[App] Initialized - enter device IP and click CONNECT');
+}
 
-        if (bLabel) bLabel.textContent = zone.brightness;
-        if (sLabel) sLabel.textContent = zone.speed;
-        if (bSlider) bSlider.value = zone.brightness;
-        if (sSlider) sSlider.value = zone.speed;
-    }
-
-    // ========== V3 UI Compatibility Layer ==========
-
-    // Populate effect list for V3 UI
-    function populateEffectList() {
-        const effectList = document.getElementById('effect-list');
-        if (!effectList || !state.effects.length) return;
-
-        effectList.innerHTML = '';
-        state.effects.forEach(fx => {
-            const item = document.createElement('div');
-            item.className = 'effect-item flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all';
-            item.dataset.effectId = fx.id;
-            item.dataset.category = fx.category || 'classic';
-            item.innerHTML = `
-                <span class="iconify" style="color: var(--text-secondary);" data-icon="lucide:sparkles" data-width="14"></span>
-                <span class="text-sm font-medium">${fx.name}</span>
-            `;
-            item.style.cssText = 'background: var(--bg-overlay); border: 1px solid transparent;';
-
-            item.addEventListener('click', () => {
-                // Deselect all
-                effectList.querySelectorAll('.effect-item').forEach(el => {
-                    el.style.background = 'var(--bg-overlay)';
-                    el.style.borderColor = 'transparent';
-                });
-                // Select this one
-                item.style.background = 'var(--gold-glow)';
-                item.style.borderColor = 'var(--gold)';
-
-                // Set the effect
-                const effectId = parseInt(item.dataset.effectId);
-                API.setZoneEffect(state.selectedZone, effectId);
-                updateCurrentEffect(effectId, fx.name);
-            });
-
-            effectList.appendChild(item);
-        });
-    }
-
-    // Category chip filtering
-    document.querySelectorAll('#category-chips .chip').forEach(chip => {
-        chip.addEventListener('click', () => {
-            const category = chip.dataset.category;
-            const effectList = document.getElementById('effect-list');
-            if (!effectList) return;
-
-            effectList.querySelectorAll('.effect-item').forEach(item => {
-                if (category === 'all' || item.dataset.category === category) {
-                    item.style.display = 'flex';
-                } else {
-                    item.style.display = 'none';
-                }
-            });
-        });
-    });
-
-    // Effects tab category chips
-    document.querySelectorAll('#effects-category-chips .chip').forEach(chip => {
-        chip.addEventListener('click', () => {
-            const category = chip.dataset.category;
-            const grid = document.getElementById('effects-grid');
-            if (!grid) return;
-
-            grid.querySelectorAll('.effect-item').forEach(item => {
-                if (category === 'all' || item.dataset.category === category) {
-                    item.style.display = 'block';
-                } else {
-                    item.style.display = 'none';
-                }
-            });
-        });
-    });
-
-    // V3 Brightness slider
-    const v3BrightnessSlider = document.getElementById('brightness-slider');
-    const v3BrightnessValue = document.getElementById('brightness-value');
-    if (v3BrightnessSlider) {
-        v3BrightnessSlider.addEventListener('input', debounce(() => {
-            const val = parseInt(v3BrightnessSlider.value);
-            if (v3BrightnessValue) v3BrightnessValue.textContent = val;
-            API.setBrightness(val);
-        }, CONFIG.DEBOUNCE_SLIDER));
-    }
-
-    // V3 Speed slider
-    const v3SpeedSlider = document.getElementById('speed-slider');
-    const v3SpeedValue = document.getElementById('speed-value');
-    if (v3SpeedSlider) {
-        v3SpeedSlider.addEventListener('input', debounce(() => {
-            const val = parseInt(v3SpeedSlider.value);
-            if (v3SpeedValue) v3SpeedValue.textContent = val;
-            API.setSpeed(val);
-        }, CONFIG.DEBOUNCE_SLIDER));
-    }
-
-    // V3 Visual Pipeline sliders
-    const pipelineSliders = {
-        'slider-intensity': 'val-int',
-        'slider-saturation': 'val-sat',
-        'slider-complexity': 'val-com',
-        'slider-variation': 'val-var'
-    };
-
-    function updatePipeline() {
-        const i = parseInt(document.getElementById('slider-intensity')?.value || 128);
-        const s = parseInt(document.getElementById('slider-saturation')?.value || 200);
-        const c = parseInt(document.getElementById('slider-complexity')?.value || 128);
-        const v = parseInt(document.getElementById('slider-variation')?.value || 128);
-        API.setPipeline(i, s, c, v);
-    }
-
-    Object.entries(pipelineSliders).forEach(([sliderId, labelId]) => {
-        const slider = document.getElementById(sliderId);
-        const label = document.getElementById(labelId);
-        if (slider) {
-            slider.addEventListener('input', () => {
-                if (label) label.textContent = slider.value;
-            });
-            slider.addEventListener('change', debounce(updatePipeline, CONFIG.DEBOUNCE_PIPELINE));
-        }
-    });
-
-    // Update zone bars based on state
-    function updateZoneBars() {
-        document.querySelectorAll('.zone-bar').forEach(bar => {
-            const zoneIdx = parseInt(bar.dataset.zone);
-            const zone = state.zones[zoneIdx];
-            if (zone) {
-                const heightPercent = (zone.brightness / 255) * 100;
-                bar.style.height = `${heightPercent}%`;
-            }
-        });
-    }
-
-    // Populate effect list after effects are loaded
-    populateEffectList();
-    updateZoneBars();
-
-    // Override updateCurrentEffect to also update V3 UI
-    const originalUpdateCurrentEffect = updateCurrentEffect;
-    window.updateCurrentEffect = function(id, name) {
-        originalUpdateCurrentEffect(id, name);
-
-        // Also update V3 effect list selection
-        const effectList = document.getElementById('effect-list');
-        if (effectList) {
-            effectList.querySelectorAll('.effect-item').forEach(item => {
-                if (parseInt(item.dataset.effectId) === id) {
-                    item.style.background = 'var(--gold-glow)';
-                    item.style.borderColor = 'var(--gold)';
-                } else {
-                    item.style.background = 'var(--bg-overlay)';
-                    item.style.borderColor = 'transparent';
-                }
-            });
-        }
-    };
-
-    console.log('K1-Lightwave initialized (V3 UI enabled)');
-});
+// Start when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
+}

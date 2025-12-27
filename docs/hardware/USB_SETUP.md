@@ -18,7 +18,7 @@ The project is configured with USB CDC (Communications Device Class) enabled:
 ### Upload Firmware
 ```bash
 # Using the script
-./upload.sh
+./scripts/upload.sh
 
 # Or manually
 pio run -t upload
@@ -27,7 +27,7 @@ pio run -t upload
 ### Monitor Serial Output
 ```bash
 # Using the script
-./monitor.sh
+./scripts/monitor.sh
 
 # Or manually
 pio device monitor

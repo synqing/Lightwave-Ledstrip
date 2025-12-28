@@ -375,6 +375,14 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     }
 
     // ========================================================================
+    // Stage 4b: Chord detection from chromagram (Priority 6)
+    // Detects Major/Minor/Diminished/Augmented triads from pitch-class energy
+    // ========================================================================
+    if (m_chord_detection_enabled) {
+        detectChord(m_frame.chroma);
+    }
+
+    // ========================================================================
     // Stage 5: Copy waveform data (no processing)
     // ========================================================================
     for (uint8_t i = 0; i < CONTROLBUS_WAVEFORM_N; ++i) {
@@ -385,6 +393,80 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     // Stage 6: Update spike detection telemetry frame counter
     // ========================================================================
     m_spikeStats.totalFrames++;
+}
+
+/**
+ * @brief Detect chord type from 12-bin chromagram.
+ *
+ * Algorithm (music theory based):
+ * 1. Find dominant pitch class (root) as max energy bin
+ * 2. Check intervals for third (+3 minor, +4 major) and fifth (+6 dim, +7 perfect, +8 aug)
+ * 3. Classify as Major/Minor/Diminished/Augmented based on interval strengths
+ * 4. Compute confidence as triad energy ratio of total chromagram energy
+ *
+ * @param chroma Pointer to 12-element chromagram array (C, C#, D, ..., B)
+ */
+void ControlBus::detectChord(const float* chroma) {
+    ChordState& cs = m_frame.chordState;
+
+    // 1. Find dominant pitch class (root candidate)
+    uint8_t rootIdx = 0;
+    float rootVal = chroma[0];
+    float totalEnergy = chroma[0];
+    for (uint8_t i = 1; i < CONTROLBUS_NUM_CHROMA; ++i) {
+        totalEnergy += chroma[i];
+        if (chroma[i] > rootVal) {
+            rootVal = chroma[i];
+            rootIdx = i;
+        }
+    }
+    cs.rootNote = rootIdx;
+    cs.rootStrength = rootVal;
+
+    // 2. Check intervals (using modulo 12 for circular pitch space)
+    uint8_t minorThirdIdx = (rootIdx + 3) % 12;
+    uint8_t majorThirdIdx = (rootIdx + 4) % 12;
+    uint8_t perfectFifthIdx = (rootIdx + 7) % 12;
+    uint8_t dimFifthIdx = (rootIdx + 6) % 12;  // Tritone
+    uint8_t augFifthIdx = (rootIdx + 8) % 12;
+
+    float minorThird = chroma[minorThirdIdx];
+    float majorThird = chroma[majorThirdIdx];
+    float perfectFifth = chroma[perfectFifthIdx];
+    float dimFifth = chroma[dimFifthIdx];
+    float augFifth = chroma[augFifthIdx];
+
+    // 3. Determine chord type based on strongest intervals
+    bool hasMinorThird = minorThird > majorThird;
+    cs.thirdStrength = hasMinorThird ? minorThird : majorThird;
+
+    // Check which fifth is strongest
+    if (perfectFifth >= dimFifth && perfectFifth >= augFifth) {
+        cs.fifthStrength = perfectFifth;
+        cs.type = hasMinorThird ? ChordType::MINOR : ChordType::MAJOR;
+    } else if (dimFifth > perfectFifth && dimFifth > augFifth) {
+        cs.fifthStrength = dimFifth;
+        cs.type = ChordType::DIMINISHED;  // Diminished always has minor third
+    } else {
+        cs.fifthStrength = augFifth;
+        cs.type = ChordType::AUGMENTED;   // Augmented always has major third
+    }
+
+    // 4. Compute confidence (triad energy / total energy)
+    // A clean triad should have ~25% of total energy (3/12 bins)
+    // Normalize so that a "perfect" triad ratio of 0.4 maps to 1.0
+    float triadEnergy = cs.rootStrength + cs.thirdStrength + cs.fifthStrength;
+    if (totalEnergy > 0.01f) {
+        cs.confidence = clamp01((triadEnergy / totalEnergy) / 0.4f);
+    } else {
+        cs.confidence = 0.0f;
+        cs.type = ChordType::NONE;
+    }
+
+    // If confidence is too low, classify as NONE
+    if (cs.confidence < 0.3f) {
+        cs.type = ChordType::NONE;
+    }
 }
 
 } // namespace lightwaveos::audio

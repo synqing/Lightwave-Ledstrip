@@ -18,6 +18,32 @@ static constexpr size_t LOOKAHEAD_MAX_BANDS = 64;  // Support future 64-bin expa
 static constexpr uint8_t CONTROLBUS_NUM_ZONES = 4;
 
 /**
+ * @brief Chord type enumeration for triad classification.
+ */
+enum class ChordType : uint8_t {
+    NONE = 0,       ///< No chord detected / insufficient confidence
+    MAJOR = 1,      ///< Major triad (root + major 3rd + perfect 5th)
+    MINOR = 2,      ///< Minor triad (root + minor 3rd + perfect 5th)
+    DIMINISHED = 3, ///< Diminished triad (root + minor 3rd + diminished 5th)
+    AUGMENTED = 4   ///< Augmented triad (root + major 3rd + augmented 5th)
+};
+
+/**
+ * @brief Chord detection state published per frame.
+ *
+ * Detects triads from chromagram by finding dominant pitch class (root)
+ * and checking intervals for third (+3 or +4 semitones) and fifth (+6, +7, or +8).
+ */
+struct ChordState {
+    uint8_t rootNote = 0;           ///< 0-11 (C=0, C#=1, D=2, ..., B=11)
+    ChordType type = ChordType::NONE;
+    float confidence = 0.0f;        ///< 0.0-1.0 triad energy ratio
+    float rootStrength = 0.0f;      ///< Energy at root pitch class
+    float thirdStrength = 0.0f;     ///< Energy at third interval
+    float fifthStrength = 0.0f;     ///< Energy at fifth interval
+};
+
+/**
  * @brief Raw (unsmoothed) per-hop measurements produced by the audio thread.
  */
 struct ControlBusRawInput {
@@ -46,6 +72,8 @@ struct ControlBusFrame {
     float heavy_bands[CONTROLBUS_NUM_BANDS] = {0};
     float heavy_chroma[CONTROLBUS_NUM_CHROMA] = {0};
     int16_t waveform[CONTROLBUS_WAVEFORM_N] = {0};  // Time-domain samples (int16_t range: -32768 to 32767)
+
+    ChordState chordState;  // Chord detection results (root, type, confidence)
 };
 
 /**
@@ -198,6 +226,11 @@ public:
     const SpikeDetectionStats& getSpikeStats() const { return m_spikeStats; }
     void resetSpikeStats() { m_spikeStats.reset(); }
 
+    // Chord detection control (Priority 6: Musical intelligence from chromagram)
+    void setChordDetectionEnabled(bool enabled) { m_chord_detection_enabled = enabled; }
+    bool getChordDetectionEnabled() const { return m_chord_detection_enabled; }
+    const ChordState& getChordState() const { return m_frame.chordState; }
+
 private:
     ControlBusFrame m_frame{};
 
@@ -243,12 +276,18 @@ private:
     // Spike detection telemetry
     SpikeDetectionStats m_spikeStats;
 
+    // Chord detection state (Priority 6)
+    bool m_chord_detection_enabled = true;  // Enabled by default
+
     // Private methods for spike detection
     void detectAndRemoveSpikes(LookaheadBuffer& buffer,
                                const float* input,
                                float* output,
                                size_t num_bands,
                                bool isBands);
+
+    // Private method for chord detection
+    void detectChord(const float* chroma);
 };
 
 } // namespace lightwaveos::audio

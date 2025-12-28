@@ -32,9 +32,10 @@ void ControlBus::Reset() {
     // Reset lookahead buffers
     m_lookahead_bands.init(CONTROLBUS_NUM_BANDS);
     m_lookahead_chroma.init(CONTROLBUS_NUM_CHROMA);
-    // Reset Zone AGC state
+    // Reset Zone AGC state (both bands and chroma)
     for (uint8_t z = 0; z < CONTROLBUS_NUM_ZONES; ++z) {
         m_zones[z].reset();
+        m_chroma_zones[z].reset();
     }
     // Reset spike detection telemetry
     m_spikeStats.reset();
@@ -69,6 +70,14 @@ void ControlBus::setZoneMinFloor(float floor) {
     float clamped = (floor < 0.0001f) ? 0.0001f : floor;  // Prevent division by zero
     for (uint8_t z = 0; z < CONTROLBUS_NUM_ZONES; ++z) {
         m_zones[z].min_floor = clamped;
+        m_chroma_zones[z].min_floor = clamped;  // Apply to chroma zones too
+    }
+}
+
+void ControlBus::setChromaZoneAGCRates(float attack, float release) {
+    for (uint8_t z = 0; z < CONTROLBUS_NUM_ZONES; ++z) {
+        m_chroma_zones[z].attack_rate = clamp01(attack);
+        m_chroma_zones[z].release_rate = clamp01(release);
     }
 }
 
@@ -303,9 +312,59 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
         m_frame.heavy_bands[i] = m_heavy_bands_s[i];
     }
 
-    // Chroma: spike-removed values with asymmetric smoothing (no Zone AGC for chroma)
+    // ========================================================================
+    // Stage 3b: Chroma Zone AGC (optional)
+    // Normalizes each chroma zone independently (3 chroma bins per zone)
+    // Zone 0: C,C#,D (0-2) | Zone 1: D#,E,F (3-5) | Zone 2: F#,G,G# (6-8) | Zone 3: A,A#,B (9-11)
+    // ========================================================================
+    float normalized_chroma[CONTROLBUS_NUM_CHROMA];
+    if (m_chroma_zone_agc_enabled) {
+        // Update chroma zone max magnitudes
+        for (uint8_t z = 0; z < CONTROLBUS_NUM_ZONES; ++z) {
+            // Find max in this zone (3 chroma bins per zone for 12-bin system)
+            uint8_t start_bin = z * 3;
+            uint8_t end_bin = start_bin + 3;
+            float zone_max = 0.0f;
+            for (uint8_t i = start_bin; i < end_bin && i < CONTROLBUS_NUM_CHROMA; ++i) {
+                if (m_chroma_despiked[i] > zone_max) {
+                    zone_max = m_chroma_despiked[i];
+                }
+            }
+            m_chroma_zones[z].max_mag = zone_max;
+
+            // Smoothed follower (same attack/release pattern as band Zone AGC)
+            if (zone_max > m_chroma_zones[z].max_mag_follower) {
+                // Attack: rise toward new maximum
+                float delta = zone_max - m_chroma_zones[z].max_mag_follower;
+                m_chroma_zones[z].max_mag_follower += delta * m_chroma_zones[z].attack_rate;
+            } else {
+                // Release: slowly decay toward new (lower) maximum
+                float delta = m_chroma_zones[z].max_mag_follower - zone_max;
+                m_chroma_zones[z].max_mag_follower -= delta * m_chroma_zones[z].release_rate;
+            }
+
+            // Clamp follower to minimum floor
+            if (m_chroma_zones[z].max_mag_follower < m_chroma_zones[z].min_floor) {
+                m_chroma_zones[z].max_mag_follower = m_chroma_zones[z].min_floor;
+            }
+
+            // Normalize chroma bins in this zone
+            float norm_factor = 1.0f / m_chroma_zones[z].max_mag_follower;
+            for (uint8_t i = start_bin; i < end_bin && i < CONTROLBUS_NUM_CHROMA; ++i) {
+                float normalized = m_chroma_despiked[i] * norm_factor;
+                normalized_chroma[i] = clamp01(normalized);  // Clamp to prevent overshoot
+            }
+        }
+    } else {
+        // Chroma Zone AGC disabled - use despiked values directly
+        for (uint8_t i = 0; i < CONTROLBUS_NUM_CHROMA; ++i) {
+            normalized_chroma[i] = m_chroma_despiked[i];
+        }
+    }
+
+    // Chroma: Zone AGC normalized values with asymmetric smoothing
     for (uint8_t i = 0; i < CONTROLBUS_NUM_CHROMA; ++i) {
-        float target = m_chroma_despiked[i];
+        float target = normalized_chroma[i];
         float alpha = (target > m_chroma_s[i]) ? m_band_attack : m_band_release;
         m_chroma_s[i] = lerp(m_chroma_s[i], target, alpha);
         m_frame.chroma[i] = m_chroma_s[i];

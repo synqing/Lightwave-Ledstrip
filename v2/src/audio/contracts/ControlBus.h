@@ -175,12 +175,23 @@ public:
     void setZoneAGCRates(float attack, float release);
     void setZoneMinFloor(float floor);
 
+    // Chroma Zone AGC control (3 chroma bins per zone: C-D, D#-F, F#-G#, A-B)
+    void setChromaZoneAGCEnabled(bool enabled) { m_chroma_zone_agc_enabled = enabled; }
+    bool getChromaZoneAGCEnabled() const { return m_chroma_zone_agc_enabled; }
+    void setChromaZoneAGCRates(float attack, float release);
+
     // Access zone state for debugging/visualization
     float getZoneFollower(uint8_t zone) const {
         return (zone < CONTROLBUS_NUM_ZONES) ? m_zones[zone].max_mag_follower : 1.0f;
     }
     float getZoneMaxMag(uint8_t zone) const {
         return (zone < CONTROLBUS_NUM_ZONES) ? m_zones[zone].max_mag : 0.0f;
+    }
+    float getChromaZoneFollower(uint8_t zone) const {
+        return (zone < CONTROLBUS_NUM_ZONES) ? m_chroma_zones[zone].max_mag_follower : 1.0f;
+    }
+    float getChromaZoneMaxMag(uint8_t zone) const {
+        return (zone < CONTROLBUS_NUM_ZONES) ? m_chroma_zones[zone].max_mag : 0.0f;
     }
 
     // Spike detection telemetry
@@ -220,6 +231,14 @@ private:
     // Zone AGC state (Sensory Bridge pattern: 4 zones)
     bool m_zone_agc_enabled = true;  // Enabled by default for balanced frequency response
     ZoneAGC m_zones[CONTROLBUS_NUM_ZONES];
+
+    // Chroma Zone AGC state (4 zones, 3 chroma bins per zone)
+    // Zone 0: C, C#, D (0-2)   - low notes
+    // Zone 1: D#, E, F (3-5)   - mid-low
+    // Zone 2: F#, G, G# (6-8)  - mid-high
+    // Zone 3: A, A#, B (9-11)  - high notes
+    bool m_chroma_zone_agc_enabled = true;  // Enabled by default
+    ZoneAGC m_chroma_zones[CONTROLBUS_NUM_ZONES];
 
     // Spike detection telemetry
     SpikeDetectionStats m_spikeStats;

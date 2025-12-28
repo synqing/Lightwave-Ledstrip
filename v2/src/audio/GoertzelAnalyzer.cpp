@@ -188,19 +188,50 @@ bool GoertzelAnalyzer::analyze64(float* binsOut) {
         return false;
     }
 
-    // Compute all 64 bins
+    if (m_interlacedEnabled) {
+        // ====================================================================
+        // Interlaced Processing (SensoryBridge pattern)
+        // Only compute odd or even bins each frame, halving CPU load
+        // Previously computed bins retain their values (2-frame latency for full spectrum)
+        // ====================================================================
+        size_t startBin = m_processOddBins ? 1 : 0;
+
+        for (size_t bin = startBin; bin < NUM_BINS; bin += 2) {
+            float magnitude = computeGoertzelBin(bin);
+
+            // Apply frequency compensation (higher frequencies tend to have lower energy)
+            float bin_normalized = static_cast<float>(bin) / static_cast<float>(NUM_BINS - 1);
+            float compensation = 1.0f + bin_normalized * 0.5f;  // 1.0x to 1.5x
+
+            magnitude *= compensation;
+
+            // Store in internal buffer (scaled and clamped)
+            m_magnitudes64[bin] = std::min(1.0f, magnitude * 4.0f);
+        }
+
+        // Toggle parity for next frame
+        m_processOddBins = !m_processOddBins;
+    } else {
+        // ====================================================================
+        // Full Processing (original behavior)
+        // Compute all 64 bins every frame
+        // ====================================================================
+        for (size_t bin = 0; bin < NUM_BINS; ++bin) {
+            float magnitude = computeGoertzelBin(bin);
+
+            // Apply frequency compensation
+            float bin_normalized = static_cast<float>(bin) / static_cast<float>(NUM_BINS - 1);
+            float compensation = 1.0f + bin_normalized * 0.5f;
+
+            magnitude *= compensation;
+
+            // Store in internal buffer
+            m_magnitudes64[bin] = std::min(1.0f, magnitude * 4.0f);
+        }
+    }
+
+    // Copy all 64 bins to output (including previously computed ones for interlaced mode)
     for (size_t bin = 0; bin < NUM_BINS; ++bin) {
-        float magnitude = computeGoertzelBin(bin);
-
-        // Apply frequency compensation (higher frequencies tend to have lower energy)
-        // Use a gentle boost for higher bins
-        float bin_normalized = static_cast<float>(bin) / static_cast<float>(NUM_BINS - 1);
-        float compensation = 1.0f + bin_normalized * 0.5f;  // 1.0x to 1.5x
-
-        magnitude *= compensation;
-
-        // Store in internal buffer and output
-        m_magnitudes64[bin] = std::min(1.0f, magnitude * 4.0f);  // Scale and clamp
         binsOut[bin] = m_magnitudes64[bin];
     }
 
@@ -272,6 +303,9 @@ void GoertzelAnalyzer::reset() {
     m_sampleCount = 0;
     std::memset(m_sampleHistory, 0, sizeof(m_sampleHistory));
     std::memset(m_magnitudes64, 0, sizeof(m_magnitudes64));
+
+    // Reset interlaced processing state
+    m_processOddBins = false;
 }
 
 } // namespace audio

@@ -158,6 +158,27 @@ public:
      */
     bool hasEnoughSamples() const { return m_sampleCount >= MAX_BLOCK_SIZE; }
 
+    // ========================================================================
+    // Interlaced Processing Control (SensoryBridge pattern)
+    // ========================================================================
+
+    /**
+     * @brief Enable/disable interlaced 64-bin processing
+     * @param enabled When true, only odd or even bins are processed each frame
+     *
+     * Trade-off:
+     * - Enabled: ~50% CPU reduction, 2-frame latency for full spectrum
+     * - Disabled: Full spectrum every frame, higher CPU load
+     */
+    void setInterlacedProcessing(bool enabled) { m_interlacedEnabled = enabled; }
+    bool getInterlacedProcessing() const { return m_interlacedEnabled; }
+
+    /**
+     * @brief Get which bin parity was processed last (for debugging)
+     * @return true if odd bins were processed, false if even bins
+     */
+    bool getLastProcessedParity() const { return m_processOddBins; }
+
 private:
     // ========================================================================
     // Legacy 8-Band Configuration (backward compatibility)
@@ -197,6 +218,12 @@ private:
     int16_t m_accumBuffer[WINDOW_SIZE];  // Legacy accumulation buffer
     size_t m_accumIndex = 0;
     bool m_windowFull = false;
+
+    // ========================================================================
+    // Interlaced Processing State (SensoryBridge pattern)
+    // ========================================================================
+    bool m_interlacedEnabled = true;   // Enable by default for CPU efficiency
+    bool m_processOddBins = false;     // Alternates each frame: false=even(0,2,4...), true=odd(1,3,5...)
 
     // Precomputed Goertzel coefficients for legacy 8 bands
     float m_coefficients[NUM_BANDS];

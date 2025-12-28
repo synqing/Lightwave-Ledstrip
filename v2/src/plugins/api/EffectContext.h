@@ -146,6 +146,71 @@ struct AudioContext {
         }
         return 0.0f;
     }
+
+    // ========================================================================
+    // Chord Detection Accessors (Priority 6: Musical intelligence)
+    // ========================================================================
+
+    /// Get full chord state struct
+    const audio::ChordState& chordState() const { return controlBus.chordState; }
+
+    /// Get detected chord type (NONE, MAJOR, MINOR, DIMINISHED, AUGMENTED)
+    audio::ChordType chordType() const { return controlBus.chordState.type; }
+
+    /// Get root note (0-11: C=0, C#=1, D=2, ..., B=11)
+    uint8_t rootNote() const { return controlBus.chordState.rootNote; }
+
+    /// Get chord detection confidence (0.0-1.0)
+    float chordConfidence() const { return controlBus.chordState.confidence; }
+
+    /// Check if detected chord is major
+    bool isMajor() const { return controlBus.chordState.type == audio::ChordType::MAJOR; }
+
+    /// Check if detected chord is minor
+    bool isMinor() const { return controlBus.chordState.type == audio::ChordType::MINOR; }
+
+    /// Check if detected chord is diminished
+    bool isDiminished() const { return controlBus.chordState.type == audio::ChordType::DIMINISHED; }
+
+    /// Check if detected chord is augmented
+    bool isAugmented() const { return controlBus.chordState.type == audio::ChordType::AUGMENTED; }
+
+    /// Check if any chord is detected (not NONE)
+    bool hasChord() const { return controlBus.chordState.type != audio::ChordType::NONE; }
+
+    // ========================================================================
+    // Multi-band Onset Detection Accessors (Phase 1.2: Percussive elements)
+    // ========================================================================
+
+    /// Get snare frequency band energy (150-300 Hz, 0.0-1.0)
+    float snare() const { return controlBus.snareEnergy; }
+
+    /// Get hi-hat frequency band energy (6-12 kHz, 0.0-1.0)
+    float hihat() const { return controlBus.hihatEnergy; }
+
+    /// Check if snare onset detected this frame (single-frame pulse)
+    bool isSnareHit() const { return controlBus.snareTrigger; }
+
+    /// Check if hi-hat onset detected this frame (single-frame pulse)
+    bool isHihatHit() const { return controlBus.hihatTrigger; }
+
+    // ========================================================================
+    // 64-bin FFT Accessors (Phase 2: Detailed frequency analysis)
+    // ========================================================================
+
+    /// Get number of FFT bins available
+    static constexpr uint8_t bins64Count() { return audio::ControlBusFrame::BINS_64_COUNT; }
+
+    /// Get single bin value from 64-bin FFT (0.0-1.0)
+    float bin(uint8_t index) const {
+        if (index < audio::ControlBusFrame::BINS_64_COUNT) {
+            return controlBus.bins64[index];
+        }
+        return 0.0f;
+    }
+
+    /// Get pointer to full 64-bin array (for efficient iteration)
+    const float* bins64() const { return controlBus.bins64; }
 };
 
 #else
@@ -159,20 +224,56 @@ struct AudioContext {
     bool available = false;
 
     float rms() const { return 0.0f; }
+    float fastRms() const { return 0.0f; }
     float flux() const { return 0.0f; }
+    float fastFlux() const { return 0.0f; }
     float getBand(uint8_t) const { return 0.0f; }
+    float getHeavyBand(uint8_t) const { return 0.0f; }
     float bass() const { return 0.0f; }
+    float heavyBass() const { return 0.0f; }
     float mid() const { return 0.0f; }
+    float heavyMid() const { return 0.0f; }
     float treble() const { return 0.0f; }
+    float heavyTreble() const { return 0.0f; }
     float beatPhase() const { return 0.0f; }
     bool isOnBeat() const { return false; }
     bool isOnDownbeat() const { return false; }
     float bpm() const { return 120.0f; }
     float tempoConfidence() const { return 0.0f; }
-    uint8_t waveformSize() const { return 32; }
+    uint8_t waveformSize() const { return 128; }
     int16_t getWaveformSample(uint8_t) const { return 0; }
     float getWaveformAmplitude(uint8_t) const { return 0.0f; }
     float getWaveformNormalized(uint8_t) const { return 0.0f; }
+
+    // Chord detection stubs (always return "no chord")
+    struct StubChordState {
+        uint8_t rootNote = 0;
+        uint8_t type = 0;  // NONE
+        float confidence = 0.0f;
+        float rootStrength = 0.0f;
+        float thirdStrength = 0.0f;
+        float fifthStrength = 0.0f;
+    };
+    StubChordState chordState() const { return StubChordState{}; }
+    uint8_t chordType() const { return 0; }  // NONE
+    uint8_t rootNote() const { return 0; }
+    float chordConfidence() const { return 0.0f; }
+    bool isMajor() const { return false; }
+    bool isMinor() const { return false; }
+    bool isDiminished() const { return false; }
+    bool isAugmented() const { return false; }
+    bool hasChord() const { return false; }
+
+    // Multi-band onset stubs (always return 0/false)
+    float snare() const { return 0.0f; }
+    float hihat() const { return 0.0f; }
+    bool isSnareHit() const { return false; }
+    bool isHihatHit() const { return false; }
+
+    // 64-bin FFT stubs
+    static constexpr uint8_t bins64Count() { return 64; }
+    float bin(uint8_t) const { return 0.0f; }
+    const float* bins64() const { return nullptr; }
 };
 #endif
 

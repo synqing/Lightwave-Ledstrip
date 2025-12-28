@@ -92,6 +92,7 @@
 #include "ieffect/AudioWaveformEffect.h"
 #include "ieffect/AudioBloomEffect.h"
 #include "ieffect/LGPStarBurstNarrativeEffect.h"
+#include "ieffect/LGPChordGlowEffect.h"
 #include "utils/FastLEDOptim.h"
 #include "../core/narrative/NarrativeEngine.h"
 #include <FastLED.h>
@@ -772,9 +773,15 @@ uint8_t registerAllEffects(RendererActor* renderer) {
         total++;
     }
 
+    // LGP Chord Glow (ID 75) - Full chord detection showcase effect
+    static ieffect::LGPChordGlowEffect chordGlowInstance;
+    if (renderer->registerEffect(total, &chordGlowInstance)) {
+        total++;
+    }
+
     // =============== EFFECT COUNT PARITY VALIDATION ===============
     // Runtime validation: ensure registered count matches expected
-    constexpr uint8_t EXPECTED_EFFECT_COUNT = 75;  // 68 core + 6 audio + 1 narrative
+    constexpr uint8_t EXPECTED_EFFECT_COUNT = 76;  // 68 core + 6 audio + 1 narrative + 1 chord glow
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

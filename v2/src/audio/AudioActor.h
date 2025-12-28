@@ -451,6 +451,9 @@ private:
     // Previous RMS for flux calculation
     float m_prevRMS = 0.0f;
 
+    // Priority 5: Per-band history for spectral flux
+    float m_prevBands[8] = {0};
+
     // Last valid frequency bands (persisted between Goertzel updates)
     float m_lastBands[8] = {0};
     float m_lastBands64[8] = {0};  // 64-bin analysis folded to 8 bands
@@ -511,6 +514,16 @@ private:
     float m_prevFlux = 0.0f;
     float m_prevPrevFlux = 0.0f;
     float m_prevBass = 0.0f;
+
+    // Priority 4: Multi-band onset state for snare/hihat detection
+    float m_snareHistory[BEAT_HISTORY_MAX] = {0};
+    float m_hihatHistory[BEAT_HISTORY_MAX] = {0};
+    float m_snareMean = 0.0f;
+    float m_snareStd = 0.0f;
+    float m_hihatMean = 0.0f;
+    float m_hihatStd = 0.0f;
+    float m_prevSnare = 0.0f;
+    float m_prevHihat = 0.0f;
 
     // Cooldown and timing state
     uint32_t m_lastBeatTimeMs = 0;
@@ -593,7 +606,7 @@ private:
     void handleCaptureError(CaptureResult result);
 
     /**
-     * @brief Detect beats using hybrid flux + bass detection
+     * @brief Detect beats using hybrid flux + bass + multi-band onset detection
      *
      * Called after processHop() computes flux and bands.
      * Uses adaptive threshold (mean + k*std) with 3-point peak detection.
@@ -601,8 +614,11 @@ private:
      * @param currentFlux Current frame's flux value
      * @param bassEnergy Weighted sum of 60Hz and 120Hz bands
      * @param nowMs Current time in milliseconds
+     * @param snareEnergy Weighted sum of bands 2-5 for snare detection (Priority 4)
+     * @param hihatEnergy Weighted sum of bands 6-7 for hihat detection (Priority 4)
      */
-    void detectBeat(float currentFlux, float bassEnergy, uint32_t nowMs);
+    void detectBeat(float currentFlux, float bassEnergy, uint32_t nowMs,
+                    float snareEnergy = 0.0f, float hihatEnergy = 0.0f);
 
     /**
      * @brief Update rolling statistics for adaptive threshold

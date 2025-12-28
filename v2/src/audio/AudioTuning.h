@@ -203,6 +203,18 @@ struct BeatDetectionTuning {
     // Enable/disable hybrid detection
     bool useBassDetection = true;       ///< Enable bass-band hybrid detection
     bool useOctaveCorrection = true;    ///< Enable BPM octave-error correction
+
+    // Priority 4: Multi-band onset weights for snare/hihat detection
+    float snareWeights[4] = {0.3f, 0.4f, 0.2f, 0.1f};  ///< Weights for bands 2-5 (250Hz-2kHz)
+    float hihatWeights[2] = {0.6f, 0.4f};               ///< Weights for bands 6-7 (4kHz-7.8kHz)
+    bool useSnareDetection = true;      ///< Enable snare-band onset detection
+    bool useHihatDetection = true;      ///< Enable hihat-band onset detection
+    float snareThresholdK = 1.5f;       ///< Std deviations above mean for snare
+    float hihatThresholdK = 1.8f;       ///< Std deviations above mean for hihat
+
+    // Priority 5: Spectral flux configuration
+    bool useSpectralFlux = true;        ///< Use per-band flux instead of RMS-based
+    float spectralFluxScale = 2.0f;     ///< Scaling factor for spectral flux
 };
 
 inline float clampf(float v, float lo, float hi) {
@@ -335,6 +347,19 @@ inline BeatDetectionTuning clampBeatDetectionTuning(const BeatDetectionTuning& i
     // Confidence parameters
     out.confidenceDecay = clampf(out.confidenceDecay, 0.9f, 0.999f);
     out.confidenceBoost = clampf(out.confidenceBoost, 0.01f, 0.5f);
+
+    // Priority 4: Multi-band onset weights
+    for (int i = 0; i < 4; ++i) {
+        out.snareWeights[i] = clampf(out.snareWeights[i], 0.0f, 1.0f);
+    }
+    for (int i = 0; i < 2; ++i) {
+        out.hihatWeights[i] = clampf(out.hihatWeights[i], 0.0f, 1.0f);
+    }
+    out.snareThresholdK = clampf(out.snareThresholdK, 0.5f, 5.0f);
+    out.hihatThresholdK = clampf(out.hihatThresholdK, 0.5f, 5.0f);
+
+    // Priority 5: Spectral flux config
+    out.spectralFluxScale = clampf(out.spectralFluxScale, 0.1f, 10.0f);
 
     return out;
 }

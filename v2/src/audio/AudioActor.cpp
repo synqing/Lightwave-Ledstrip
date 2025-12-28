@@ -328,6 +328,17 @@ void AudioActor::processHop()
         m_agcGain = 1.0f;
         m_noiseFloor = tuning.noiseFloorMin;
         m_prevRMS = 0.0f;
+        // Priority 5: Reset per-band history for spectral flux
+        for (int i = 0; i < 8; ++i) {
+            m_prevBands[i] = 0.0f;
+        }
+        // Priority 4: Reset snare/hihat onset state
+        m_prevSnare = 0.0f;
+        m_prevHihat = 0.0f;
+        m_snareMean = 0.0f;
+        m_snareStd = 0.0f;
+        m_hihatMean = 0.0f;
+        m_hihatStd = 0.0f;
         m_analyzer.reset();
         m_chromaAnalyzer.reset();
         m_controlBus.Reset();
@@ -454,11 +465,15 @@ void AudioActor::processHop()
     m_lastRmsRaw = rmsRaw;
     m_lastRmsMapped = rmsMapped;
 
-    // 3. Compute spectral flux (half-wave rectified RMS derivative)
-    float fluxMapped = std::max(0.0f, rmsMapped - m_prevRMS) * tuning.fluxScale;
-    if (fluxMapped > 1.0f) fluxMapped = 1.0f;
-    m_prevRMS = rmsMapped;
-    m_lastFluxMapped = fluxMapped;
+    // Flux placeholder - will be computed after Goertzel if useSpectralFlux is enabled
+    float fluxMapped = 0.0f;
+    if (!m_beatTuning.useSpectralFlux) {
+        // Legacy RMS-based flux (computed here since it only needs RMS)
+        float spectralFlux = std::max(0.0f, rmsMapped - m_prevRMS);
+        m_prevRMS = rmsMapped;
+        fluxMapped = std::min(1.0f, spectralFlux * tuning.fluxScale);
+        m_lastFluxMapped = fluxMapped;
+    }
 
     BENCH_END_PHASE(rmsComputeUs);
 
@@ -587,6 +602,20 @@ void AudioActor::processHop()
     BENCH_END_PHASE(goertzelUs);
     BENCH_SET_FLAG(goertzelTriggered, goertzelTriggered ? 1 : 0);
 
+    // Priority 5: Full spectral flux (computed after Goertzel populates raw.bands)
+    if (m_beatTuning.useSpectralFlux) {
+        float spectralFlux = 0.0f;
+        for (int i = 0; i < NUM_BANDS; ++i) {
+            float delta = raw.bands[i] - m_prevBands[i];
+            if (delta > 0.0f) spectralFlux += delta;
+            m_prevBands[i] = raw.bands[i];
+        }
+        spectralFlux *= m_beatTuning.spectralFluxScale;
+        fluxMapped = std::min(1.0f, spectralFlux * tuning.fluxScale);
+        m_lastFluxMapped = fluxMapped;
+        raw.flux = fluxMapped;  // Update raw.flux with spectral flux value
+    }
+
     // ========================================================================
     // 64-bin Goertzel Analysis (Sensory Bridge parity)
     // Runs less frequently - needs 1500 samples (~94ms to accumulate)
@@ -685,11 +714,28 @@ void AudioActor::processHop()
         float bassEnergy = raw.bands[0] * m_beatTuning.bassWeight60Hz +
                           raw.bands[1] * m_beatTuning.bassWeight120Hz;
 
+        // Priority 4: Multi-band onset detection for snare/hihat
+        float snareEnergy = 0.0f;
+        if (m_beatTuning.useSnareDetection) {
+            // Bands 2-5 (250Hz-2kHz) weighted for snare detection
+            for (int i = 0; i < 4; ++i) {
+                snareEnergy += raw.bands[i + 2] * m_beatTuning.snareWeights[i];
+            }
+        }
+
+        float hihatEnergy = 0.0f;
+        if (m_beatTuning.useHihatDetection) {
+            // Bands 6-7 (4kHz-7.8kHz) weighted for hihat detection
+            for (int i = 0; i < 2; ++i) {
+                hihatEnergy += raw.bands[i + 6] * m_beatTuning.hihatWeights[i];
+            }
+        }
+
         // Get current time in milliseconds
         uint32_t nowMs = (uint32_t)(now_us / 1000);
 
-        // Run beat detection
-        detectBeat(fluxMapped, bassEnergy, nowMs);
+        // Run beat detection with multi-band onset info
+        detectBeat(fluxMapped, bassEnergy, nowMs, snareEnergy, hihatEnergy);
     }
 
     // === Phase: ControlBus Update ===
@@ -837,13 +883,19 @@ float AudioActor::correctOctaveError(float rawBpm)
     return correctedBpm;
 }
 
-void AudioActor::detectBeat(float currentFlux, float bassEnergy, uint32_t nowMs)
+void AudioActor::detectBeat(float currentFlux, float bassEnergy, uint32_t nowMs,
+                            float snareEnergy, float hihatEnergy)
 {
     // Step 1: Update history buffers (circular buffer pattern)
     uint8_t historySize = std::min(m_beatTuning.historySize, (uint8_t)BEAT_HISTORY_MAX);
 
     m_fluxHistory[m_historyIndex] = currentFlux;
     m_bassHistory[m_historyIndex] = bassEnergy;
+
+    // Priority 4: Update snare/hihat history buffers
+    m_snareHistory[m_historyIndex] = snareEnergy;
+    m_hihatHistory[m_historyIndex] = hihatEnergy;
+
     m_historyIndex = (m_historyIndex + 1) % historySize;
 
     if (m_historyFilled < historySize) {
@@ -856,9 +908,21 @@ void AudioActor::detectBeat(float currentFlux, float bassEnergy, uint32_t nowMs)
         updateRollingStats(m_bassHistory, m_historyFilled, m_bassMean, m_bassStd);
     }
 
+    // Priority 4: Update snare/hihat rolling statistics
+    if (m_beatTuning.useSnareDetection) {
+        updateRollingStats(m_snareHistory, m_historyFilled, m_snareMean, m_snareStd);
+    }
+    if (m_beatTuning.useHihatDetection) {
+        updateRollingStats(m_hihatHistory, m_historyFilled, m_hihatMean, m_hihatStd);
+    }
+
     // Step 3: Compute adaptive thresholds
     float fluxThreshold = m_fluxMean + m_beatTuning.fluxThresholdMult * m_fluxStd;
     float bassThreshold = m_bassMean + m_beatTuning.bassThresholdMult * m_bassStd;
+
+    // Priority 4: Compute snare/hihat adaptive thresholds
+    float snareThreshold = m_snareMean + m_beatTuning.snareThresholdK * m_snareStd;
+    float hihatThreshold = m_hihatMean + m_beatTuning.hihatThresholdK * m_hihatStd;
 
     // Apply minimum thresholds (prevent false triggers on silence)
     if (fluxThreshold < m_beatTuning.minFluxThreshold) {
@@ -867,19 +931,35 @@ void AudioActor::detectBeat(float currentFlux, float bassEnergy, uint32_t nowMs)
     if (bassThreshold < m_beatTuning.minBassThreshold) {
         bassThreshold = m_beatTuning.minBassThreshold;
     }
+    // Apply minimum thresholds to snare/hihat (reuse bass min threshold as reasonable default)
+    if (snareThreshold < m_beatTuning.minBassThreshold) {
+        snareThreshold = m_beatTuning.minBassThreshold;
+    }
+    if (hihatThreshold < m_beatTuning.minBassThreshold) {
+        hihatThreshold = m_beatTuning.minBassThreshold;
+    }
 
     // Step 4: Three-point peak detection (using previous flux, 1-hop lookahead)
     // We detect a peak at the PREVIOUS hop if: prev > prevPrev AND prev > current
     bool fluxPeak = (m_prevFlux > m_prevPrevFlux) && (m_prevFlux > currentFlux);
     bool bassPeak = (m_prevBass > 0.0f) && (bassEnergy < m_prevBass);  // Simple falling edge
 
+    // Priority 4: Peak detection for snare/hihat (simple falling edge like bass)
+    bool snarePeak = (m_prevSnare > 0.0f) && (snareEnergy < m_prevSnare);
+    bool hihatPeak = (m_prevHihat > 0.0f) && (hihatEnergy < m_prevHihat);
+
     // Step 5: Check if peak exceeds threshold
     bool fluxTriggered = fluxPeak && (m_prevFlux > fluxThreshold);
     bool bassTriggered = m_beatTuning.useBassDetection && bassPeak && (m_prevBass > bassThreshold);
 
-    // Step 6: Combined hybrid detection
-    // Beat detected if: flux OR bass triggered, AND cooldown expired
-    bool beatDetected = (fluxTriggered || bassTriggered) && (nowMs >= m_cooldownEndMs);
+    // Priority 4: Check snare/hihat threshold crossings
+    bool snareTriggered = m_beatTuning.useSnareDetection && snarePeak && (m_prevSnare > snareThreshold);
+    bool hihatTriggered = m_beatTuning.useHihatDetection && hihatPeak && (m_prevHihat > hihatThreshold);
+
+    // Step 6: Combined hybrid detection with multi-band onsets
+    // Beat detected if: flux OR bass OR snare OR hihat triggered, AND cooldown expired
+    bool beatDetected = (fluxTriggered || bassTriggered || snareTriggered || hihatTriggered) &&
+                        (nowMs >= m_cooldownEndMs);
 
     // Step 7: Process detected beat
     if (beatDetected) {
@@ -963,6 +1043,10 @@ void AudioActor::detectBeat(float currentFlux, float bassEnergy, uint32_t nowMs)
     m_prevPrevFlux = m_prevFlux;
     m_prevFlux = currentFlux;
     m_prevBass = bassEnergy;
+
+    // Priority 4: Update previous snare/hihat values
+    m_prevSnare = snareEnergy;
+    m_prevHihat = hihatEnergy;
 }
 
 // ============================================================================

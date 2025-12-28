@@ -63,6 +63,7 @@ bool LGPStarBurstNarrativeEffect::init(plugins::EffectContext& ctx) {
     m_storyTimeS   = 0.0f;
     m_quietTimeS   = 0.0f;
     m_phraseHoldS  = 10.0f; // allow immediate first commit
+    m_chordChangePulse = 0.0f;
 
     // Reset key/palette gating
     m_candidateRootBin = 0;
@@ -130,13 +131,16 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
         }
         chromaEnergyMean *= (1.0f / 12.0f); // mean
 
-        // Candidate tonal center follows dominant bin, but we do NOT immediately commit it.
-        const uint8_t minorThirdBin = (uint8_t)((dominantBin + 3) % 12);
-        const uint8_t majorThirdBin = (uint8_t)((dominantBin + 4) % 12);
-        const float minorThird = ctx.audio.controlBus.chroma[minorThirdBin];
-        const float majorThird = ctx.audio.controlBus.chroma[majorThirdBin];
-        m_candidateRootBin = dominantBin;
-        m_candidateMinor = (minorThird > majorThird);
+        // Candidate tonal center from ChordState API (uses proper triad detection)
+        // Falls back to dominant bin when chord confidence is low
+        if (ctx.audio.chordConfidence() > 0.4f) {
+            m_candidateRootBin = ctx.audio.rootNote();
+            m_candidateMinor = ctx.audio.isMinor();
+        } else {
+            // Low confidence: use dominant chroma bin as fallback
+            m_candidateRootBin = dominantBin;
+            // No reliable third detection at low confidence
+        }
 
         // 4-hop moving baseline to compute novelty (energyDelta)
         m_chromaEnergySum -= m_chromaEnergyHist[m_chromaHistIdx];
@@ -188,6 +192,23 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
     const bool quietNow = (m_energyAvgSmooth < 0.08f) && (m_energyDeltaSmooth < 0.015f);
     if (quietNow) m_quietTimeS += dt;
     else          m_quietTimeS = 0.0f;
+
+    // Decay chord change pulse (snare-driven visual accent)
+    m_chordChangePulse = expDecay(m_chordChangePulse, dt, 0.15f);
+
+#if FEATURE_AUDIO_SYNC
+    // Snare-driven story phase transitions
+    if (hasAudio && ctx.audio.isSnareHit()) {
+        if (m_storyPhase == StoryPhase::REST) {
+            // Wake up on snare hit
+            m_storyPhase = StoryPhase::BUILD;
+            m_storyTimeS = 0.0f;
+        } else if (m_storyPhase == StoryPhase::HOLD) {
+            // Trigger chord change pulse on snare during HOLD
+            m_chordChangePulse = 1.0f;
+        }
+    }
+#endif
 
     // REST -> BUILD: wake up (quiet->active) => commit palette/key (phrase gate)
     // BUILD -> HOLD: sustained energy
@@ -360,6 +381,13 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
             c += ctx.palette.getColor((uint8_t)(hueRoot + 128 + paletteIndex), accentB);
         }
 
+        // Snare-driven chord change pulse: bright center flash
+        if (m_chordChangePulse > 0.15f) {
+            const float pulseFade = expf(-normalizedDist * 4.5f);  // Tight center focus
+            const uint8_t pulseB = clampU8((int)roundf(brightness * m_chordChangePulse * pulseFade * 0.7f));
+            c += ctx.palette.getColor((uint8_t)(hueFifth + 64 + paletteIndex), pulseB);
+        }
+
         ctx.leds[i] += c;
 
         if (i + STRIP_LENGTH < ctx.ledCount) {
@@ -373,6 +401,13 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
             if (m_burst > 0.20f && env > 0.25f) {
                 const uint8_t accentB = clampU8((int)roundf(brightness * m_burst * 0.55f));
                 c2 += ctx.palette.getColor((uint8_t)(hueRoot + harmonyShift + 128 + paletteIndex), accentB);
+            }
+
+            // Snare-driven chord change pulse for Strip 2
+            if (m_chordChangePulse > 0.15f) {
+                const float pulseFade = expf(-normalizedDist * 4.5f);
+                const uint8_t pulseB = clampU8((int)roundf(brightness * m_chordChangePulse * pulseFade * 0.7f));
+                c2 += ctx.palette.getColor((uint8_t)(hueFifth + harmonyShift + 64 + paletteIndex), pulseB);
             }
 
             ctx.leds[i + STRIP_LENGTH] += c2;

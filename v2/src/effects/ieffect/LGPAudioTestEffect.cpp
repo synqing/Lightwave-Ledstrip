@@ -135,17 +135,20 @@ void LGPAudioTestEffect::render(plugins::EffectContext& ctx) {
 
     // ========================================================================
     // Beat indicator: bright flash at center on beat
+    // Uses palette color with boosted brightness (scales toward BLACK)
+    // instead of additive white (which washes colors toward WHITE)
     // ========================================================================
 
     if (m_beatDecay > 0.5f) {
-        CRGB beatColor = CRGB::White;
-        beatColor.nscale8((uint8_t)(m_beatDecay * 200.0f));
+        // Boost brightness based on beat decay (0.7 base + 0.3 from decay)
+        uint8_t beatBright = (uint8_t)((0.7f + m_beatDecay * 0.3f) * ctx.brightness);
+        CRGB beatColor = ctx.palette.getColor(ctx.gHue, beatBright);
 
-        // Center pair flash (just the center 4 LEDs)
-        ctx.leds[CENTER_LEFT] += beatColor;
-        ctx.leds[CENTER_RIGHT] += beatColor;
-        ctx.leds[STRIP_LENGTH + CENTER_LEFT] += beatColor;
-        ctx.leds[STRIP_LENGTH + CENTER_RIGHT] += beatColor;
+        // Center pair flash (just the center 4 LEDs) - assignment preserves saturation
+        ctx.leds[CENTER_LEFT] = beatColor;
+        ctx.leds[CENTER_RIGHT] = beatColor;
+        ctx.leds[STRIP_LENGTH + CENTER_LEFT] = beatColor;
+        ctx.leds[STRIP_LENGTH + CENTER_RIGHT] = beatColor;
     }
 }
 

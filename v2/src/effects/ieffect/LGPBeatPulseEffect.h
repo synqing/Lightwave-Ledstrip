@@ -3,11 +3,12 @@
  * @brief Beat-synchronized radial pulse from CENTER ORIGIN
  *
  * Pulse expands outward on each beat, intensity modulated by bass.
+ * Secondary pulse on snare hits, shimmer overlay on hi-hat.
  * Falls back to 120 BPM when audio unavailable.
  *
  * Effect ID: 69 (audio demo)
  * Family: AUDIO_REACTIVE
- * Tags: CENTER_ORIGIN | AUDIO_SYNC | BEAT
+ * Tags: CENTER_ORIGIN | AUDIO_SYNC | BEAT | SNARE | HIHAT
  */
 
 #pragma once
@@ -30,10 +31,20 @@ public:
     const plugins::EffectMetadata& getMetadata() const override;
 
 private:
+    // Primary kick/beat pulse
     float m_pulsePosition = 0.0f;   // Current pulse distance from center (0-1)
     float m_pulseIntensity = 0.0f;  // Decaying pulse brightness
     float m_fallbackPhase = 0.0f;   // For non-audio fallback
     float m_lastBeatPhase = 0.0f;   // For detecting beat crossings
+
+    // Snare detection and secondary pulse
+    float m_lastMidEnergy = 0.0f;   // Previous frame mid energy for spike detection
+    float m_snarePulsePos = 0.0f;   // Secondary pulse position (0-1)
+    float m_snarePulseInt = 0.0f;   // Secondary pulse intensity
+
+    // Hi-hat detection and shimmer overlay
+    float m_lastTrebleEnergy = 0.0f; // Previous frame treble energy
+    float m_hihatShimmer = 0.0f;     // Hi-hat shimmer intensity (decays fast)
 };
 
 } // namespace ieffect

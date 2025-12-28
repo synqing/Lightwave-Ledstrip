@@ -33,6 +33,7 @@ private:
     float m_storyTimeS = 0.0f;
     float m_quietTimeS = 0.0f;
     float m_phraseHoldS = 0.0f;
+    float m_chordChangePulse = 0.0f;  // Snare-driven pulse event in HOLD phase
 
     // Key/palette gating
     uint8_t m_candidateRootBin = 0;

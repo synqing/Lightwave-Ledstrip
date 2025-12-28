@@ -6,6 +6,7 @@
 #include "AudioBloomEffect.h"
 #include "../CoreEffects.h"
 #include "../../config/features.h"
+#include "../../audio/contracts/ControlBus.h"
 
 #ifdef FEATURE_EFFECT_VALIDATION
 #include "../../validation/EffectValidationMacros.h"
@@ -21,6 +22,78 @@
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
+
+namespace {
+
+/**
+ * @brief Compute palette warmth offset from chord type.
+ *
+ * Maps chord qualities to hue offsets for emotional color mapping:
+ *   MAJOR     -> +32 (warm/orange shift)
+ *   MINOR     -> -24 (cool/blue shift)
+ *   DIMINISHED-> -32 (darker/cooler)
+ *   AUGMENTED -> +40 (bright/ethereal)
+ *   NONE      -> 0   (neutral)
+ *
+ * @param type Detected chord type
+ * @param confidence Chord detection confidence (0.0-1.0)
+ * @return int8_t Signed hue offset (-40 to +40)
+ */
+int8_t computeChordWarmthOffset(lightwaveos::audio::ChordType type, float confidence) {
+    // Base warmth values per chord type
+    int8_t baseOffset = 0;
+    switch (type) {
+        case lightwaveos::audio::ChordType::MAJOR:
+            baseOffset = 32;   // Warm/orange
+            break;
+        case lightwaveos::audio::ChordType::MINOR:
+            baseOffset = -24;  // Cool/blue
+            break;
+        case lightwaveos::audio::ChordType::DIMINISHED:
+            baseOffset = -32;  // Dark/cold
+            break;
+        case lightwaveos::audio::ChordType::AUGMENTED:
+            baseOffset = 40;   // Bright/ethereal
+            break;
+        case lightwaveos::audio::ChordType::NONE:
+        default:
+            return 0;  // No shift when no chord detected
+    }
+
+    // Scale offset by confidence (0.0-1.0) for smooth transitions
+    // Minimum confidence threshold of 0.3 before applying any shift
+    if (confidence < 0.3f) {
+        return 0;
+    }
+
+    // Scale linearly from 0.3-1.0 confidence
+    float scaledConfidence = (confidence - 0.3f) / 0.7f;
+    return (int8_t)(baseOffset * scaledConfidence);
+}
+
+/**
+ * @brief Compute hue offset from chord root note.
+ *
+ * Maps root note (0-11) to a hue rotation that complements
+ * the palette. Each semitone shifts by 21 hue units (252/12).
+ *
+ * @param rootNote Root note 0-11 (C=0, C#=1, ..., B=11)
+ * @param confidence Chord detection confidence
+ * @return uint8_t Hue rotation offset (0-252)
+ */
+uint8_t computeRootNoteHueShift(uint8_t rootNote, float confidence) {
+    if (confidence < 0.3f) {
+        return 0;  // No shift below confidence threshold
+    }
+
+    // 21 hue units per semitone (252 / 12 = 21)
+    // Scale by confidence for smooth transitions
+    float scaledConfidence = (confidence - 0.3f) / 0.7f;
+    uint8_t baseShift = rootNote * 21;
+    return (uint8_t)(baseShift * scaledConfidence * 0.5f);  // 50% intensity to avoid over-rotation
+}
+
+} // anonymous namespace
 
 bool AudioBloomEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
@@ -61,6 +134,19 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
         float brightness_sum = 0.0f;
         const bool chromaticMode = (ctx.saturation >= 128);
 
+        // Chord-driven palette warmth adjustment
+        // Maps chord type to hue offset for emotional color response
+        const auto& chordState = ctx.audio.controlBus.chordState;
+        int8_t warmthOffset = computeChordWarmthOffset(chordState.type, chordState.confidence);
+        uint8_t rootHueShift = computeRootNoteHueShift(chordState.rootNote, chordState.confidence);
+
+        // Combined hue adjustment: base gHue + warmth + root note influence
+        // Cast to int16_t to handle signed arithmetic, then wrap to 0-255
+        int16_t adjustedHue = (int16_t)ctx.gHue + warmthOffset + rootHueShift;
+        if (adjustedHue < 0) adjustedHue += 256;
+        if (adjustedHue > 255) adjustedHue -= 256;
+        uint8_t chordAdjustedHue = (uint8_t)adjustedHue;
+
         for (uint8_t i = 0; i < 12; ++i) {
             float prog = i / 12.0f;
             float bin = ctx.audio.controlBus.heavy_chroma[i];
@@ -74,8 +160,9 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
             bright *= led_share;
 
             if (chromaticMode) {
-                // Use palette for colour (no hue wheel)
-                uint8_t paletteIdx = (uint8_t)(prog * 255.0f + ctx.gHue);
+                // Use palette for colour with chord-adjusted hue base
+                // Palette index includes chord warmth for emotional color response
+                uint8_t paletteIdx = (uint8_t)(prog * 255.0f + chordAdjustedHue);
                 uint8_t brightU8 = (uint8_t)bright;
                 brightU8 = (uint8_t)((brightU8 * ctx.brightness) / 255);
                 CRGB out_col = ctx.palette.getColor(paletteIdx, brightU8);
@@ -86,9 +173,10 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
         }
 
         if (!chromaticMode) {
+            // Non-chromatic mode: single color from palette with chord warmth
             uint8_t brightU8 = (uint8_t)brightness_sum;
             brightU8 = (uint8_t)((brightU8 * ctx.brightness) / 255);
-            sum_color = ctx.palette.getColor(ctx.gHue, brightU8);
+            sum_color = ctx.palette.getColor(chordAdjustedHue, brightU8);
         }
 
         // Fractional scroll accumulator (smooth motion)

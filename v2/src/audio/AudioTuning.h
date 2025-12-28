@@ -40,6 +40,63 @@ struct PerBandNoiseFloor {
     float multiplier = 1.0f;  ///< Applied during playback (Sensory Bridge uses 1.5x)
 };
 
+/**
+ * @brief Noise calibration state machine (SensoryBridge pattern)
+ *
+ * Implements automatic noise floor calibration via a silent measurement period.
+ * The calibration procedure:
+ * 1. User triggers calibration via API (state -> REQUESTED)
+ * 2. System waits for audio to stabilize (state -> MEASURING)
+ * 3. During MEASURING, accumulates RMS energy per band
+ * 4. After durationMs, computes average and applies multiplier (state -> COMPLETE)
+ * 5. Results can be applied to AudioPipelineTuning or saved to NVS
+ */
+enum class CalibrationState : uint8_t {
+    IDLE = 0,       ///< No calibration in progress
+    REQUESTED,      ///< User requested, waiting to start
+    MEASURING,      ///< Actively measuring silence (accumulating samples)
+    COMPLETE,       ///< Measurement complete, results ready
+    FAILED          ///< Calibration failed (e.g., too much noise detected)
+};
+
+struct NoiseCalibrationResult {
+    float bandFloors[8] = {0};      ///< Measured noise floor per band
+    float chromaFloors[12] = {0};   ///< Measured noise floor per chroma bin
+    float overallRms = 0.0f;        ///< Overall RMS during calibration
+    float peakRms = 0.0f;           ///< Peak RMS seen (to detect non-silence)
+    uint32_t sampleCount = 0;       ///< Number of hop samples accumulated
+    bool valid = false;             ///< True if calibration succeeded
+};
+
+struct NoiseCalibrationState {
+    CalibrationState state = CalibrationState::IDLE;
+    uint32_t startTimeMs = 0;           ///< When calibration started (millis())
+    uint32_t durationMs = 3000;         ///< How long to measure (default 3 seconds)
+    float safetyMultiplier = 1.2f;      ///< Multiply measured floor by this (SensoryBridge uses 1.2-1.5x)
+    float maxAllowedRms = 0.15f;        ///< Abort if RMS exceeds this (not silence)
+
+    // Accumulation buffers (running sums)
+    float bandSum[8] = {0};
+    float chromaSum[12] = {0};
+    float rmsSum = 0.0f;
+    float peakRms = 0.0f;
+    uint32_t sampleCount = 0;
+
+    // Result (populated when state == COMPLETE)
+    NoiseCalibrationResult result;
+
+    void reset() {
+        state = CalibrationState::IDLE;
+        startTimeMs = 0;
+        for (int i = 0; i < 8; ++i) bandSum[i] = 0;
+        for (int i = 0; i < 12; ++i) chromaSum[i] = 0;
+        rmsSum = 0.0f;
+        peakRms = 0.0f;
+        sampleCount = 0;
+        result = NoiseCalibrationResult{};
+    }
+};
+
 struct AudioPipelineTuning {
     float dcAlpha = 0.001f;
 

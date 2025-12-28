@@ -367,6 +367,12 @@ private:
     void handleAudioSpikeDetectionGet(AsyncWebServerRequest* request);
     void handleAudioSpikeDetectionReset(AsyncWebServerRequest* request);
 
+    // Noise calibration endpoints (SensoryBridge pattern)
+    void handleAudioCalibrateStatus(AsyncWebServerRequest* request);
+    void handleAudioCalibrateStart(AsyncWebServerRequest* request, uint8_t* data, size_t len);
+    void handleAudioCalibrateCancel(AsyncWebServerRequest* request);
+    void handleAudioCalibrateApply(AsyncWebServerRequest* request);
+
     void handleTransitionTypes(AsyncWebServerRequest* request);
     void handleTransitionTrigger(AsyncWebServerRequest* request, uint8_t* data, size_t len);
     void handleBatch(AsyncWebServerRequest* request, uint8_t* data, size_t len);

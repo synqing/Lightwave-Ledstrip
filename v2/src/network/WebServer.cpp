@@ -1223,6 +1223,42 @@ void WebServer::setupV1Routes() {
         handleAudioSpikeDetectionReset(request);
     });
 
+    // =========================================================================
+    // Noise Calibration Routes (SensoryBridge pattern)
+    // =========================================================================
+
+    // Calibration Status - GET /api/v1/audio/calibrate
+    m_server->on("/api/v1/audio/calibrate", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handleAudioCalibrateStatus(request);
+    });
+
+    // Calibration Start - POST /api/v1/audio/calibrate/start
+    m_server->on("/api/v1/audio/calibrate/start", HTTP_POST,
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handleAudioCalibrateStart(request, data, len);
+        }
+    );
+
+    // Calibration Cancel - POST /api/v1/audio/calibrate/cancel
+    m_server->on("/api/v1/audio/calibrate/cancel", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handleAudioCalibrateCancel(request);
+    });
+
+    // Calibration Apply - POST /api/v1/audio/calibrate/apply
+    m_server->on("/api/v1/audio/calibrate/apply", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handleAudioCalibrateApply(request);
+    });
+
 #if FEATURE_AUDIO_BENCHMARK
     // =========================================================================
     // Audio Benchmark Routes
@@ -2585,6 +2621,158 @@ void WebServer::handleAudioSpikeDetectionReset(AsyncWebServerRequest* request) {
     sendSuccessResponse(request);
 }
 
+// ============================================================================
+// Noise Calibration Handlers (SensoryBridge pattern)
+// ============================================================================
+
+void WebServer::handleAudioCalibrateStatus(AsyncWebServerRequest* request) {
+    auto* audio = m_actorSystem.getAudio();
+    if (!audio) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
+        return;
+    }
+
+    const auto& calState = audio->getNoiseCalibrationState();
+    const auto& result = audio->getCalibrationResult();
+
+    // Capture values for lambda
+    uint32_t elapsed = 0;
+    if (calState.state == audio::CalibrationState::MEASURING) {
+        elapsed = millis() - calState.startTimeMs;
+    }
+
+    sendSuccessResponse(request, [&calState, &result, elapsed](JsonObject& data) {
+        // Map state enum to string
+        const char* stateStr = "unknown";
+        switch (calState.state) {
+            case audio::CalibrationState::IDLE:      stateStr = "idle"; break;
+            case audio::CalibrationState::REQUESTED: stateStr = "requested"; break;
+            case audio::CalibrationState::MEASURING: stateStr = "measuring"; break;
+            case audio::CalibrationState::COMPLETE:  stateStr = "complete"; break;
+            case audio::CalibrationState::FAILED:    stateStr = "failed"; break;
+        }
+        data["state"] = stateStr;
+        data["durationMs"] = calState.durationMs;
+        data["safetyMultiplier"] = calState.safetyMultiplier;
+        data["maxAllowedRms"] = calState.maxAllowedRms;
+
+        // Progress info when measuring
+        if (calState.state == audio::CalibrationState::MEASURING) {
+            float progress = (float)elapsed / (float)calState.durationMs;
+            if (progress > 1.0f) progress = 1.0f;
+            data["progress"] = progress;
+            data["samplesCollected"] = calState.sampleCount;
+            if (calState.sampleCount > 0) {
+                data["currentAvgRms"] = calState.rmsSum / calState.sampleCount;
+            }
+        }
+
+        // Result info when complete
+        if (calState.state == audio::CalibrationState::COMPLETE && result.valid) {
+            JsonObject resultObj = data["result"].to<JsonObject>();
+            resultObj["overallRms"] = result.overallRms;
+            resultObj["peakRms"] = result.peakRms;
+            resultObj["sampleCount"] = result.sampleCount;
+
+            JsonArray bands = resultObj["bandFloors"].to<JsonArray>();
+            for (int i = 0; i < 8; ++i) {
+                bands.add(result.bandFloors[i]);
+            }
+
+            JsonArray chroma = resultObj["chromaFloors"].to<JsonArray>();
+            for (int i = 0; i < 12; ++i) {
+                chroma.add(result.chromaFloors[i]);
+            }
+        }
+    });
+}
+
+void WebServer::handleAudioCalibrateStart(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
+    auto* audio = m_actorSystem.getAudio();
+    if (!audio) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
+        return;
+    }
+
+    // Parse optional parameters
+    uint32_t durationMs = 3000;
+    float safetyMultiplier = 1.2f;
+
+    if (len > 0) {
+        JsonDocument doc;
+        DeserializationError err = deserializeJson(doc, data, len);
+        if (!err) {
+            if (doc.containsKey("durationMs")) {
+                durationMs = doc["durationMs"].as<uint32_t>();
+                // Clamp to reasonable range
+                if (durationMs < 1000) durationMs = 1000;
+                if (durationMs > 10000) durationMs = 10000;
+            }
+            if (doc.containsKey("safetyMultiplier")) {
+                safetyMultiplier = doc["safetyMultiplier"].as<float>();
+                // Clamp to reasonable range
+                if (safetyMultiplier < 1.0f) safetyMultiplier = 1.0f;
+                if (safetyMultiplier > 3.0f) safetyMultiplier = 3.0f;
+            }
+        }
+    }
+
+    bool started = audio->startNoiseCalibration(durationMs, safetyMultiplier);
+    if (started) {
+        sendSuccessResponse(request, [durationMs, safetyMultiplier](JsonObject& data) {
+            data["message"] = "Calibration started - please remain silent";
+            data["durationMs"] = durationMs;
+            data["safetyMultiplier"] = safetyMultiplier;
+        });
+    } else {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::BUSY, "Calibration already in progress");
+    }
+}
+
+void WebServer::handleAudioCalibrateCancel(AsyncWebServerRequest* request) {
+    auto* audio = m_actorSystem.getAudio();
+    if (!audio) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
+        return;
+    }
+
+    audio->cancelNoiseCalibration();
+    sendSuccessResponse(request);
+}
+
+void WebServer::handleAudioCalibrateApply(AsyncWebServerRequest* request) {
+    auto* audio = m_actorSystem.getAudio();
+    if (!audio) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
+        return;
+    }
+
+    bool applied = audio->applyCalibrationResults();
+    if (applied) {
+        const auto& result = audio->getCalibrationResult();
+        const auto& calState = audio->getNoiseCalibrationState();
+        float noiseFloorMin = result.overallRms * calState.safetyMultiplier;
+
+        sendSuccessResponse(request, [&result, noiseFloorMin](JsonObject& data) {
+            data["message"] = "Calibration applied successfully";
+            data["noiseFloorMin"] = noiseFloorMin;
+
+            JsonArray bands = data["perBandNoiseFloors"].to<JsonArray>();
+            for (int i = 0; i < 8; ++i) {
+                bands.add(result.bandFloors[i]);
+            }
+        });
+    } else {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::INVALID_VALUE, "No valid calibration results to apply");
+    }
+}
+
 #else
 void WebServer::handleAudioParametersGet(AsyncWebServerRequest* request) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
@@ -2715,6 +2903,28 @@ void WebServer::handleAudioSpikeDetectionGet(AsyncWebServerRequest* request) {
 }
 
 void WebServer::handleAudioSpikeDetectionReset(AsyncWebServerRequest* request) {
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void WebServer::handleAudioCalibrateStatus(AsyncWebServerRequest* request) {
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void WebServer::handleAudioCalibrateStart(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
+    (void)data;
+    (void)len;
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void WebServer::handleAudioCalibrateCancel(AsyncWebServerRequest* request) {
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void WebServer::handleAudioCalibrateApply(AsyncWebServerRequest* request) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }

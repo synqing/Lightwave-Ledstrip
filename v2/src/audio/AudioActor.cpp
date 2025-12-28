@@ -671,6 +671,13 @@ void AudioActor::processHop()
     m_prevHopValid = true;
 #endif
 
+    // === Phase: Noise Calibration ===
+    // Process noise calibration state machine if active
+    {
+        uint32_t nowMs = (uint32_t)(now_us / 1000);
+        processNoiseCalibration(rmsMapped, raw.bands, raw.chroma, nowMs);
+    }
+
     // === Phase: Beat Detection ===
     // Hybrid detection using flux + bass band energy (expert-validated algorithm)
     {
@@ -956,6 +963,158 @@ void AudioActor::detectBeat(float currentFlux, float bassEnergy, uint32_t nowMs)
     m_prevPrevFlux = m_prevFlux;
     m_prevFlux = currentFlux;
     m_prevBass = bassEnergy;
+}
+
+// ============================================================================
+// Noise Calibration (SensoryBridge pattern)
+// ============================================================================
+
+bool AudioActor::startNoiseCalibration(uint32_t durationMs, float safetyMultiplier)
+{
+    // Only start if not already running
+    if (m_noiseCalibration.state == CalibrationState::MEASURING ||
+        m_noiseCalibration.state == CalibrationState::REQUESTED) {
+        ESP_LOGW(TAG, "Calibration already in progress");
+        return false;
+    }
+
+    // Reset and configure
+    m_noiseCalibration.reset();
+    m_noiseCalibration.durationMs = durationMs;
+    m_noiseCalibration.safetyMultiplier = safetyMultiplier;
+    m_noiseCalibration.state = CalibrationState::REQUESTED;
+
+    ESP_LOGI(TAG, "Noise calibration requested: %ums, multiplier=%.2f",
+             durationMs, safetyMultiplier);
+    return true;
+}
+
+void AudioActor::cancelNoiseCalibration()
+{
+    if (m_noiseCalibration.state != CalibrationState::IDLE) {
+        ESP_LOGI(TAG, "Calibration cancelled");
+        m_noiseCalibration.reset();
+    }
+}
+
+bool AudioActor::applyCalibrationResults()
+{
+    if (!m_noiseCalibration.result.valid) {
+        ESP_LOGW(TAG, "Cannot apply: no valid calibration results");
+        return false;
+    }
+
+    // Copy results to pipeline tuning
+    AudioPipelineTuning tuning = getPipelineTuning();
+    for (int i = 0; i < 8; ++i) {
+        tuning.perBandNoiseFloors[i] = m_noiseCalibration.result.bandFloors[i];
+    }
+    tuning.usePerBandNoiseFloor = true;
+
+    // Also update the global noise floor minimum based on measured RMS
+    tuning.noiseFloorMin = m_noiseCalibration.result.overallRms * m_noiseCalibration.safetyMultiplier;
+
+    setPipelineTuning(tuning);
+
+    ESP_LOGI(TAG, "Applied calibration: noiseFloorMin=%.6f, perBand enabled",
+             tuning.noiseFloorMin);
+    return true;
+}
+
+void AudioActor::processNoiseCalibration(float rms, const float* bands, const float* chroma, uint32_t nowMs)
+{
+    switch (m_noiseCalibration.state) {
+        case CalibrationState::IDLE:
+        case CalibrationState::COMPLETE:
+        case CalibrationState::FAILED:
+            // Nothing to do
+            return;
+
+        case CalibrationState::REQUESTED:
+            // Transition to measuring - start the timer
+            m_noiseCalibration.startTimeMs = nowMs;
+            m_noiseCalibration.state = CalibrationState::MEASURING;
+            ESP_LOGI(TAG, "Calibration started: measuring for %ums", m_noiseCalibration.durationMs);
+            // Fall through to MEASURING
+            [[fallthrough]];
+
+        case CalibrationState::MEASURING: {
+            // Check for timeout
+            uint32_t elapsed = nowMs - m_noiseCalibration.startTimeMs;
+            if (elapsed >= m_noiseCalibration.durationMs) {
+                // Calibration complete - compute results
+                if (m_noiseCalibration.sampleCount > 0) {
+                    float invCount = 1.0f / static_cast<float>(m_noiseCalibration.sampleCount);
+
+                    m_noiseCalibration.result.overallRms = m_noiseCalibration.rmsSum * invCount;
+                    m_noiseCalibration.result.peakRms = m_noiseCalibration.peakRms;
+                    m_noiseCalibration.result.sampleCount = m_noiseCalibration.sampleCount;
+
+                    // Compute per-band floors with safety multiplier
+                    for (int i = 0; i < 8; ++i) {
+                        float avg = m_noiseCalibration.bandSum[i] * invCount;
+                        m_noiseCalibration.result.bandFloors[i] = avg * m_noiseCalibration.safetyMultiplier;
+                    }
+                    for (int i = 0; i < 12; ++i) {
+                        float avg = m_noiseCalibration.chromaSum[i] * invCount;
+                        m_noiseCalibration.result.chromaFloors[i] = avg * m_noiseCalibration.safetyMultiplier;
+                    }
+
+                    m_noiseCalibration.result.valid = true;
+                    m_noiseCalibration.state = CalibrationState::COMPLETE;
+
+                    ESP_LOGI(TAG, "Calibration complete: avgRMS=%.6f, peak=%.6f, samples=%u",
+                             m_noiseCalibration.result.overallRms,
+                             m_noiseCalibration.result.peakRms,
+                             m_noiseCalibration.result.sampleCount);
+                    ESP_LOGI(TAG, "  Bands: [%.5f %.5f %.5f %.5f %.5f %.5f %.5f %.5f]",
+                             m_noiseCalibration.result.bandFloors[0],
+                             m_noiseCalibration.result.bandFloors[1],
+                             m_noiseCalibration.result.bandFloors[2],
+                             m_noiseCalibration.result.bandFloors[3],
+                             m_noiseCalibration.result.bandFloors[4],
+                             m_noiseCalibration.result.bandFloors[5],
+                             m_noiseCalibration.result.bandFloors[6],
+                             m_noiseCalibration.result.bandFloors[7]);
+                } else {
+                    ESP_LOGE(TAG, "Calibration failed: no samples collected");
+                    m_noiseCalibration.state = CalibrationState::FAILED;
+                }
+                return;
+            }
+
+            // Check for too much noise (abort if not silence)
+            if (rms > m_noiseCalibration.maxAllowedRms) {
+                ESP_LOGW(TAG, "Calibration aborted: RMS %.4f exceeds max %.4f (not silent)",
+                         rms, m_noiseCalibration.maxAllowedRms);
+                m_noiseCalibration.state = CalibrationState::FAILED;
+                return;
+            }
+
+            // Accumulate samples
+            m_noiseCalibration.rmsSum += rms;
+            if (rms > m_noiseCalibration.peakRms) {
+                m_noiseCalibration.peakRms = rms;
+            }
+
+            for (int i = 0; i < 8; ++i) {
+                m_noiseCalibration.bandSum[i] += bands[i];
+            }
+            for (int i = 0; i < 12; ++i) {
+                m_noiseCalibration.chromaSum[i] += chroma[i];
+            }
+            m_noiseCalibration.sampleCount++;
+
+            // Progress logging (~once per second)
+            if ((m_noiseCalibration.sampleCount % 62) == 0) {
+                float progress = (float)elapsed / (float)m_noiseCalibration.durationMs * 100.0f;
+                ESP_LOGD(TAG, "Calibrating: %.0f%% (%u samples, avgRMS=%.5f)",
+                         progress, m_noiseCalibration.sampleCount,
+                         m_noiseCalibration.rmsSum / m_noiseCalibration.sampleCount);
+            }
+            break;
+        }
+    }
 }
 
 } // namespace audio

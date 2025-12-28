@@ -288,6 +288,53 @@ public:
     ControlBus& getControlBusMut() { return m_controlBus; }
 
     // ========================================================================
+    // Phase 2C: Noise Calibration (SensoryBridge pattern)
+    // ========================================================================
+
+    /**
+     * @brief Start noise calibration procedure
+     *
+     * Begins a 3-second (configurable) silent measurement period.
+     * During this time, the system accumulates RMS and band energies
+     * to establish a per-band noise floor.
+     *
+     * @param durationMs How long to measure (default 3000ms)
+     * @param safetyMultiplier Multiply measured floor by this (default 1.2x)
+     * @return true if calibration started, false if already running
+     */
+    bool startNoiseCalibration(uint32_t durationMs = 3000, float safetyMultiplier = 1.2f);
+
+    /**
+     * @brief Cancel an in-progress calibration
+     */
+    void cancelNoiseCalibration();
+
+    /**
+     * @brief Get current calibration state
+     */
+    CalibrationState getCalibrationState() const { return m_noiseCalibration.state; }
+
+    /**
+     * @brief Get calibration result (valid only when state == COMPLETE)
+     */
+    const NoiseCalibrationResult& getCalibrationResult() const { return m_noiseCalibration.result; }
+
+    /**
+     * @brief Get full calibration state for detailed status
+     */
+    const NoiseCalibrationState& getNoiseCalibrationState() const { return m_noiseCalibration; }
+
+    /**
+     * @brief Apply calibration results to current tuning
+     *
+     * Copies measured noise floors to perBandNoiseFloors and enables them.
+     * Call this after calibration completes successfully.
+     *
+     * @return true if results were applied, false if no valid calibration
+     */
+    bool applyCalibrationResults();
+
+    // ========================================================================
     // Phase 2B: Benchmark Access
     // ========================================================================
 
@@ -483,6 +530,13 @@ private:
     actors::RendererActor* m_rendererActor = nullptr;
 
     // ========================================================================
+    // Phase 2C: Noise Calibration State
+    // ========================================================================
+
+    /// Noise calibration state machine (SensoryBridge pattern)
+    NoiseCalibrationState m_noiseCalibration;
+
+    // ========================================================================
     // Phase 2B: Benchmark Instrumentation
     // ========================================================================
 
@@ -572,6 +626,19 @@ private:
      * @return Corrected BPM in preferred range
      */
     float correctOctaveError(float rawBpm);
+
+    /**
+     * @brief Process noise calibration state machine during hop
+     *
+     * Called by processHop() to accumulate samples during calibration.
+     * Handles state transitions and result computation.
+     *
+     * @param rms Current hop RMS
+     * @param bands Current hop band energies (8 bands)
+     * @param chroma Current hop chroma values (12 bins)
+     * @param nowMs Current time in milliseconds
+     */
+    void processNoiseCalibration(float rms, const float* bands, const float* chroma, uint32_t nowMs);
 };
 
 // ============================================================================

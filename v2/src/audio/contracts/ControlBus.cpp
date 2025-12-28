@@ -36,6 +36,8 @@ void ControlBus::Reset() {
     for (uint8_t z = 0; z < CONTROLBUS_NUM_ZONES; ++z) {
         m_zones[z].reset();
     }
+    // Reset spike detection telemetry
+    m_spikeStats.reset();
     // Waveform array is zero-initialized by ControlBusFrame{} constructor
 }
 
@@ -82,11 +84,13 @@ void ControlBus::setZoneMinFloor(float floor) {
  * @param input    Current frame's raw values (clamped 0..1)
  * @param output   Despiked output values (2 frames delayed)
  * @param num_bands Number of bands to process
+ * @param isBands  True if processing bands, false if processing chroma (for telemetry)
  */
 void ControlBus::detectAndRemoveSpikes(LookaheadBuffer& buffer,
                                         const float* input,
                                         float* output,
-                                        size_t num_bands) {
+                                        size_t num_bands,
+                                        bool isBands) {
     // Handle disabled state - passthrough with no delay
     if (!buffer.enabled) {
         memcpy(output, input, num_bands * sizeof(float));
@@ -116,6 +120,11 @@ void ControlBus::detectAndRemoveSpikes(LookaheadBuffer& buffer,
         return;
     }
 
+    // Telemetry counters for this frame
+    uint32_t frameSpikesDetected = 0;
+    uint32_t frameSpikesCorrected = 0;
+    float frameEnergyRemoved = 0.0f;
+
     // Spike detection: check if middle frame is a spike relative to neighbors
     // A spike occurs when middle has opposite direction from both transitions
     for (size_t i = 0; i < num_bands; ++i) {
@@ -135,6 +144,9 @@ void ControlBus::detectAndRemoveSpikes(LookaheadBuffer& buffer,
         const bool is_direction_change = (rising_into_middle != rising_out_of_middle);
 
         if (is_direction_change) {
+            // Track spike detection
+            frameSpikesDetected++;
+
             // Calculate expected value (average of neighbors)
             const float expected = (oldest_val + newest_val) * 0.5f;
 
@@ -151,8 +163,31 @@ void ControlBus::detectAndRemoveSpikes(LookaheadBuffer& buffer,
             if (deviation > threshold) {
                 // Replace spike with average of neighbors
                 buffer.history[middle][i] = expected;
+
+                // Track correction telemetry
+                frameSpikesCorrected++;
+                frameEnergyRemoved += deviation;
             }
         }
+    }
+
+    // Update telemetry stats
+    if (isBands) {
+        m_spikeStats.spikesDetectedBands += frameSpikesDetected;
+    } else {
+        m_spikeStats.spikesDetectedChroma += frameSpikesDetected;
+    }
+    m_spikeStats.spikesCorrected += frameSpikesCorrected;
+    m_spikeStats.totalEnergyRemoved += frameEnergyRemoved;
+
+    // Rolling averages (EMA alpha=0.02)
+    const float alpha = 0.02f;
+    m_spikeStats.avgSpikesPerFrame = lerp(m_spikeStats.avgSpikesPerFrame,
+                                           (float)frameSpikesDetected, alpha);
+    if (frameSpikesCorrected > 0) {
+        float avgMag = frameEnergyRemoved / (float)frameSpikesCorrected;
+        m_spikeStats.avgCorrectionMagnitude = lerp(m_spikeStats.avgCorrectionMagnitude,
+                                                    avgMag, alpha);
     }
 
     // Output the oldest frame (2-frame delay) after any spike corrections propagate
@@ -198,8 +233,8 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     // Removes single-frame spikes that cause visual flicker
     // Output delayed by 2 frames (~32ms at 60fps)
     // ========================================================================
-    detectAndRemoveSpikes(m_lookahead_bands, clamped_bands, m_bands_despiked, CONTROLBUS_NUM_BANDS);
-    detectAndRemoveSpikes(m_lookahead_chroma, clamped_chroma, m_chroma_despiked, CONTROLBUS_NUM_CHROMA);
+    detectAndRemoveSpikes(m_lookahead_bands, clamped_bands, m_bands_despiked, CONTROLBUS_NUM_BANDS, true);
+    detectAndRemoveSpikes(m_lookahead_chroma, clamped_chroma, m_chroma_despiked, CONTROLBUS_NUM_CHROMA, false);
 
     // ========================================================================
     // Stage 3: Zone AGC (optional)
@@ -286,6 +321,11 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     for (uint8_t i = 0; i < CONTROLBUS_WAVEFORM_N; ++i) {
         m_frame.waveform[i] = raw.waveform[i];
     }
+
+    // ========================================================================
+    // Stage 6: Update spike detection telemetry frame counter
+    // ========================================================================
+    m_spikeStats.totalFrames++;
 }
 
 } // namespace lightwaveos::audio

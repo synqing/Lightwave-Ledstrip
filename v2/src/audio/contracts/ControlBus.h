@@ -113,6 +113,30 @@ struct ZoneAGC {
 };
 
 /**
+ * @brief Statistics for spike detection effectiveness tracking.
+ * Enables before/after comparison to verify spike removal is helping.
+ */
+struct SpikeDetectionStats {
+    uint32_t totalFrames = 0;          // Frames processed
+    uint32_t spikesDetectedBands = 0;  // Direction changes detected in bands
+    uint32_t spikesDetectedChroma = 0; // Direction changes detected in chroma
+    uint32_t spikesCorrected = 0;      // Corrections applied (above threshold)
+    float totalEnergyRemoved = 0.0f;   // Cumulative correction magnitude
+    float avgSpikesPerFrame = 0.0f;    // Rolling average
+    float avgCorrectionMagnitude = 0.0f; // Rolling average
+
+    void reset() {
+        totalFrames = 0;
+        spikesDetectedBands = 0;
+        spikesDetectedChroma = 0;
+        spikesCorrected = 0;
+        totalEnergyRemoved = 0.0f;
+        avgSpikesPerFrame = 0.0f;
+        avgCorrectionMagnitude = 0.0f;
+    }
+};
+
+/**
  * @brief Smoothed DSP control signals at hop cadence.
  *
  * Audio thread owns a ControlBus instance; each hop:
@@ -159,6 +183,10 @@ public:
         return (zone < CONTROLBUS_NUM_ZONES) ? m_zones[zone].max_mag : 0.0f;
     }
 
+    // Spike detection telemetry
+    const SpikeDetectionStats& getSpikeStats() const { return m_spikeStats; }
+    void resetSpikeStats() { m_spikeStats.reset(); }
+
 private:
     ControlBusFrame m_frame{};
 
@@ -190,14 +218,18 @@ private:
     float m_heavy_band_release = 0.015f; // Ultra slow fall
 
     // Zone AGC state (Sensory Bridge pattern: 4 zones)
-    bool m_zone_agc_enabled = false;   // Disabled by default for backward compat
+    bool m_zone_agc_enabled = true;  // Enabled by default for balanced frequency response
     ZoneAGC m_zones[CONTROLBUS_NUM_ZONES];
+
+    // Spike detection telemetry
+    SpikeDetectionStats m_spikeStats;
 
     // Private methods for spike detection
     void detectAndRemoveSpikes(LookaheadBuffer& buffer,
                                const float* input,
                                float* output,
-                               size_t num_bands);
+                               size_t num_bands,
+                               bool isBands);
 };
 
 } // namespace lightwaveos::audio

@@ -359,6 +359,14 @@ private:
     void handleAudioMappingsEnable(AsyncWebServerRequest* request, uint8_t effectId, bool enable);
     void handleAudioMappingsStats(AsyncWebServerRequest* request);
 
+    // Zone AGC endpoints
+    void handleAudioZoneAGCGet(AsyncWebServerRequest* request);
+    void handleAudioZoneAGCSet(AsyncWebServerRequest* request, uint8_t* data, size_t len);
+
+    // Spike detection endpoints
+    void handleAudioSpikeDetectionGet(AsyncWebServerRequest* request);
+    void handleAudioSpikeDetectionReset(AsyncWebServerRequest* request);
+
     void handleTransitionTypes(AsyncWebServerRequest* request);
     void handleTransitionTrigger(AsyncWebServerRequest* request, uint8_t* data, size_t len);
     void handleBatch(AsyncWebServerRequest* request, uint8_t* data, size_t len);

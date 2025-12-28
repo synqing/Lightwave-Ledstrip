@@ -264,6 +264,30 @@ public:
     AudioDspState getDspState() const;
 
     // ========================================================================
+    // Phase 2A: ControlBus Access for API
+    // ========================================================================
+
+    /**
+     * @brief Get const reference to ControlBus for reading state
+     *
+     * Used by WebServer API handlers to access Zone AGC and spike detection
+     * telemetry. Thread-safe for reading from Core 0.
+     *
+     * @return Const reference to ControlBus
+     */
+    const ControlBus& getControlBusRef() const { return m_controlBus; }
+
+    /**
+     * @brief Get mutable reference to ControlBus for configuration
+     *
+     * Used by WebServer API handlers to configure Zone AGC parameters
+     * and reset spike detection stats. Should only be called from Core 0.
+     *
+     * @return Mutable reference to ControlBus
+     */
+    ControlBus& getControlBusMut() { return m_controlBus; }
+
+    // ========================================================================
     // Phase 2B: Benchmark Access
     // ========================================================================
 
@@ -382,6 +406,8 @@ private:
 
     // Last valid frequency bands (persisted between Goertzel updates)
     float m_lastBands[8] = {0};
+    float m_lastBands64[8] = {0};  // 64-bin analysis folded to 8 bands
+    bool m_analyze64Ready = false;  // True when 64-bin analysis has triggered at least once
 
     float m_lastRmsRaw = 0.0f;
     float m_lastRmsMapped = 0.0f;
@@ -409,6 +435,10 @@ private:
     // Throttle for Goertzel debug logging (log once per ~2 seconds)
     uint32_t m_goertzelLogCounter = 0;
     static constexpr uint32_t GOERTZEL_LOG_INTERVAL = 62;  // ~2 seconds @ 31 Hz
+
+    // Throttle for 64-bin Goertzel logging (log once per ~1 second)
+    uint32_t m_goertzel64LogCounter = 0;
+    static constexpr uint32_t GOERTZEL64_LOG_INTERVAL = 31;  // ~1 second @ 31 Hz
 
     // ========================================================================
     // Phase 2C: Beat Detection State

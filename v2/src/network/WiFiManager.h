@@ -374,6 +374,11 @@ private:
 
     WiFiState m_currentState = STATE_WIFI_INIT;
 
+    // State handler flags (reset on state entry to avoid persistence bugs)
+    bool m_scanStarted = false;           ///< Reset when entering SCANNING
+    bool m_connectStarted = false;        ///< Reset when entering CONNECTING
+    uint32_t m_connectStartTime = 0;      ///< Reset when entering CONNECTING
+
     // ========================================================================
     // Connection Parameters
     // ========================================================================

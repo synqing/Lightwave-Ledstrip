@@ -94,7 +94,7 @@ bool AudioCapture::init()
     ESP_LOGI(TAG, "  Sample rate: %d Hz", SAMPLE_RATE);
     ESP_LOGI(TAG, "  Hop size: %d samples (%.1f ms)", HOP_SIZE, HOP_DURATION_MS);
     ESP_LOGI(TAG, "  Pins: BCLK=%d WS=%d DIN=%d", I2S_BCLK_PIN, I2S_LRCL_PIN, I2S_DOUT_PIN);
-    ESP_LOGI(TAG, "  Channel: RIGHT");
+    ESP_LOGI(TAG, "  Channel: RIGHT slot (ESP32-S3 reads SEL=GND as RIGHT)");
 
     return true;
 }
@@ -263,12 +263,12 @@ CaptureResult AudioCapture::captureHop(int16_t* buffer)
 bool AudioCapture::configureI2S()
 {
     // I2S driver configuration for SPH0645
-    // ALIGNED WITH K1.LIGHTWAVE: Use LEFT channel and specific register hacks
+    // ESP32-S3 quirk: SPH0645 SEL=GND outputs LEFT per I2S spec, but ESP32-S3 reads it as RIGHT
     i2s_config_t i2sConfig = {
         .mode = static_cast<i2s_mode_t>(I2S_MODE_MASTER | I2S_MODE_RX),
         .sample_rate = SAMPLE_RATE,
         .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,  // 32-bit slots for SPH0645
-        .channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT,   // SPH0645: RIGHT slot on ESP32-S3
+        .channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT,   // ESP32-S3: RIGHT slot for SEL=GND mic
         .communication_format = I2S_COMM_FORMAT_STAND_I2S,  // Standard I2S format
         .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
         .dma_buf_count = static_cast<int>(DMA_BUFFER_COUNT),
@@ -300,7 +300,7 @@ bool AudioCapture::configureI2S()
     REG_SET_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_MSB_SHIFT);
     REG_SET_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_WS_IDLE_POL);
     
-    ESP_LOGI(TAG, "I2S driver installed (RIGHT channel, WS inverted, MSB shift, timing delay for SPH0645)");
+    ESP_LOGI(TAG, "I2S driver installed (RIGHT slot, WS inverted, MSB shift, timing delay for SPH0645)");
     return true;
 }
 

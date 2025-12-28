@@ -56,8 +56,9 @@ bool WiFiManager::begin() {
     // Register WiFi event handler
     WiFi.onEvent(onWiFiEvent);
 
-    // Set WiFi mode to STA+AP for maximum flexibility
-    WiFi.mode(WIFI_MODE_APSTA);
+    // Set WiFi mode to STA only - AP mode is fallback only
+    // (Exclusive modes: STA for normal operation, AP when connection fails)
+    WiFi.mode(WIFI_MODE_STA);
 
     // Create WiFi management task on Core 0
     BaseType_t result = xTaskCreatePinnedToCore(
@@ -191,12 +192,12 @@ void WiFiManager::handleStateInit() {
 }
 
 void WiFiManager::handleStateScanning() {
-    static bool scanStarted = false;
+    // m_scanStarted is reset in setState() on entry
 
-    if (!scanStarted) {
+    if (!m_scanStarted) {
         Serial.println("[WiFiManager] STATE: SCANNING");
         performAsyncScan();
-        scanStarted = true;
+        m_scanStarted = true;
     }
 
     // Wait for scan complete event
@@ -209,7 +210,7 @@ void WiFiManager::handleStateScanning() {
     );
 
     if (bits & EVENT_SCAN_COMPLETE) {
-        scanStarted = false;
+        m_scanStarted = false;
         updateBestChannel();
 
         if (m_bestChannel > 0) {
@@ -224,15 +225,14 @@ void WiFiManager::handleStateScanning() {
 }
 
 void WiFiManager::handleStateConnecting() {
-    static uint32_t connectStartTime = 0;
-    static bool connectStarted = false;
+    // m_connectStarted and m_connectStartTime are reset in setState() on entry
 
-    if (!connectStarted) {
+    if (!m_connectStarted) {
         Serial.println("[WiFiManager] STATE: CONNECTING");
-        connectStartTime = millis();
-        connectStarted = connectToAP();
+        m_connectStartTime = millis();
+        m_connectStarted = connectToAP();
 
-        if (!connectStarted) {
+        if (!m_connectStarted) {
             Serial.println("[WiFiManager] Failed to initiate connection");
             setState(STATE_WIFI_FAILED);
             return;
@@ -249,7 +249,7 @@ void WiFiManager::handleStateConnecting() {
     );
 
     if (bits & EVENT_GOT_IP) {
-        connectStarted = false;
+        m_connectStarted = false;
         m_successfulConnections++;
         m_lastConnectionTime = millis();
         m_reconnectDelay = RECONNECT_DELAY_MS;  // Reset backoff
@@ -259,8 +259,8 @@ void WiFiManager::handleStateConnecting() {
                       WiFi.localIP().toString().c_str(), WiFi.RSSI());
         setState(STATE_WIFI_CONNECTED);
     } else if ((bits & EVENT_CONNECTION_FAILED) ||
-               (millis() - connectStartTime > CONNECT_TIMEOUT_MS)) {
-        connectStarted = false;
+               (millis() - m_connectStartTime > CONNECT_TIMEOUT_MS)) {
+        m_connectStarted = false;
         m_connectionAttempts++;
 
         Serial.printf("[WiFiManager] Connection failed (attempt %d)\n",
@@ -349,6 +349,8 @@ void WiFiManager::handleStateAPMode() {
         if (millis() - lastRetryTime > 60000) {
             lastRetryTime = millis();
             Serial.println("[WiFiManager] Retrying WiFi connection from AP mode...");
+            // Switch back to STA mode before attempting connection
+            WiFi.mode(WIFI_MODE_STA);
             setState(STATE_WIFI_INIT);
         }
     }
@@ -426,6 +428,9 @@ void WiFiManager::startSoftAP() {
     Serial.printf("[WiFiManager] Starting Soft-AP: '%s' (channel %d)\n",
                   m_apSSID.c_str(), m_apChannel);
 
+    // Switch to AP-only mode (exclusive modes architecture)
+    WiFi.mode(WIFI_MODE_AP);
+
     // Configure and start AP
     if (WiFi.softAP(m_apSSID.c_str(), m_apPassword.c_str(), m_apChannel)) {
         Serial.printf("[WiFiManager] AP started - IP: %s\n",
@@ -476,6 +481,15 @@ void WiFiManager::updateBestChannel() {
 
 void WiFiManager::setState(WiFiState newState) {
     if (xSemaphoreTake(m_stateMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        // Reset state-specific flags on entry to avoid persistence bugs
+        // (previously used static variables that persisted across state exits)
+        if (newState == STATE_WIFI_SCANNING) {
+            m_scanStarted = false;
+        } else if (newState == STATE_WIFI_CONNECTING) {
+            m_connectStarted = false;
+            m_connectStartTime = 0;
+        }
+
         m_currentState = newState;
         xSemaphoreGive(m_stateMutex);
     }
@@ -659,7 +673,12 @@ void WiFiManager::onWiFiEvent(WiFiEvent_t event) {
 #endif
             Serial.println("[WiFiManager] Event: Disconnected from AP");
             if (manager.m_wifiEventGroup) {
-                xEventGroupSetBits(manager.m_wifiEventGroup, EVENT_DISCONNECTED);
+                // Set both events so the appropriate state handler can respond:
+                // - CONNECTING state waits for EVENT_CONNECTION_FAILED
+                // - CONNECTED state waits for EVENT_DISCONNECTED
+                // This avoids 10-second timeout delays on failed connections
+                xEventGroupSetBits(manager.m_wifiEventGroup,
+                    EVENT_DISCONNECTED | EVENT_CONNECTION_FAILED);
             }
             break;
 

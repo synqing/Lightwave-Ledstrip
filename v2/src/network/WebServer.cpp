@@ -189,7 +189,13 @@ bool WebServer::begin() {
     if (m_apMode) {
         Serial.printf("[WebServer] AP Mode - IP: %s\n", WiFi.softAPIP().toString().c_str());
     } else {
-        Serial.printf("[WebServer] Connected - IP: %s\n", WiFi.localIP().toString().c_str());
+        // Verify IP is valid before logging (defensive check)
+        IPAddress ip = WiFi.localIP();
+        if (ip != INADDR_NONE && ip != IPAddress(0, 0, 0, 0)) {
+            Serial.printf("[WebServer] Connected - IP: %s\n", ip.toString().c_str());
+        } else {
+            Serial.println("[WebServer] WARNING: IP not yet assigned, check WiFiManager status");
+        }
     }
 
     return true;
@@ -269,49 +275,61 @@ void WebServer::update() {
 // ============================================================================
 
 bool WebServer::initWiFi() {
-    // Check if WiFi credentials are configured
-    // For v2, we'll use WiFi.begin() with stored credentials
-    // or environment-defined credentials
+    // WiFiManager handles all WiFi mode switching and connections.
+    // WebServer just checks the current state - no WiFi.mode() calls here!
+    // This avoids mode conflicts (APSTA vs STA vs AP) between components.
 
-    WiFi.mode(WIFI_STA);
-    WiFi.begin();  // Use stored credentials
-
-    Serial.println("[WebServer] Connecting to WiFi...");
-
-    uint32_t startTime = millis();
-    while (WiFi.status() != WL_CONNECTED) {
-        if (millis() - startTime > WebServerConfig::WIFI_CONNECT_TIMEOUT_MS) {
-            Serial.println("[WebServer] WiFi connection timeout");
-            return false;
-        }
-        delay(500);
-        Serial.print(".");
+    // Check if WiFiManager has already connected
+    if (WIFI_MANAGER.isConnected()) {
+        Serial.println("[WebServer] WiFi already connected via WiFiManager");
+        m_apMode = false;
+        return true;
     }
 
-    Serial.println();
-    Serial.printf("[WebServer] Connected to WiFi, IP: %s\n", WiFi.localIP().toString().c_str());
-    m_apMode = false;
+    // Check if WiFiManager is in AP mode
+    if (WIFI_MANAGER.isAPMode()) {
+        Serial.println("[WebServer] WiFi in AP mode via WiFiManager");
+        m_apMode = true;
+        return true;
+    }
+
+    // If WiFiManager isn't connected yet, wait briefly for it
+    Serial.println("[WebServer] Waiting for WiFiManager connection...");
+    uint32_t startTime = millis();
+    while (!WIFI_MANAGER.isConnected() && !WIFI_MANAGER.isAPMode()) {
+        if (millis() - startTime > WebServerConfig::WIFI_CONNECT_TIMEOUT_MS) {
+            Serial.println("[WebServer] WiFiManager connection timeout");
+            return false;
+        }
+        delay(100);
+    }
+
+    m_apMode = WIFI_MANAGER.isAPMode();
+    if (m_apMode) {
+        Serial.println("[WebServer] WiFi in AP mode via WiFiManager");
+    } else {
+        Serial.printf("[WebServer] Connected via WiFiManager, IP: %s\n",
+                      WiFi.localIP().toString().c_str());
+    }
     return true;
 }
 
 bool WebServer::startAPMode() {
-    // Generate unique AP name using MAC address
-    uint8_t mac[6];
-    WiFi.macAddress(mac);
-    char apName[32];
-    snprintf(apName, sizeof(apName), "%s%02X%02X",
-             WebServerConfig::AP_SSID_PREFIX, mac[4], mac[5]);
+    // WiFiManager handles AP mode - this method is kept for compatibility.
+    // WebServer should never directly call WiFi.mode() or WiFi.softAP().
+    // If we reach here, WiFiManager should already be in AP mode.
 
-    WiFi.mode(WIFI_AP);
-    if (!WiFi.softAP(apName, WebServerConfig::AP_PASSWORD)) {
-        Serial.println("[WebServer] Failed to start AP");
-        return false;
+    if (WIFI_MANAGER.isAPMode()) {
+        Serial.println("[WebServer] AP Mode active via WiFiManager");
+        Serial.printf("[WebServer] AP IP: %s\n", WiFi.softAPIP().toString().c_str());
+        m_apMode = true;
+        return true;
     }
 
-    Serial.printf("[WebServer] AP Mode started: %s\n", apName);
-    Serial.printf("[WebServer] AP IP: %s\n", WiFi.softAPIP().toString().c_str());
-    m_apMode = true;
-    return true;
+    // If WiFiManager isn't in AP mode, something went wrong in the flow
+    Serial.println("[WebServer] ERROR: startAPMode called but WiFiManager not in AP mode");
+    Serial.println("[WebServer] WiFi should be managed by WiFiManager, not WebServer");
+    return false;
 }
 
 void WebServer::setupCORS() {
@@ -1163,6 +1181,46 @@ void WebServer::setupV1Routes() {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
         handleAudioMappingsStats(request);
+    });
+
+    // =========================================================================
+    // Zone AGC Routes
+    // =========================================================================
+
+    // Zone AGC - GET status
+    m_server->on("/api/v1/audio/zone-agc", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handleAudioZoneAGCGet(request);
+    });
+
+    // Zone AGC - POST control
+    m_server->on("/api/v1/audio/zone-agc", HTTP_POST,
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handleAudioZoneAGCSet(request, data, len);
+        }
+    );
+
+    // =========================================================================
+    // Spike Detection Routes
+    // =========================================================================
+
+    // Spike Detection - GET stats
+    m_server->on("/api/v1/audio/spike-detection", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handleAudioSpikeDetectionGet(request);
+    });
+
+    // Spike Detection - POST reset
+    m_server->on("/api/v1/audio/spike-detection/reset", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handleAudioSpikeDetectionReset(request);
     });
 
 #if FEATURE_AUDIO_BENCHMARK
@@ -2413,6 +2471,120 @@ void WebServer::handleAudioMappingsStats(AsyncWebServerRequest* request) {
     });
 }
 
+// ============================================================================
+// Zone AGC Handlers
+// ============================================================================
+
+void WebServer::handleAudioZoneAGCGet(AsyncWebServerRequest* request) {
+    auto* audio = m_actorSystem.getAudio();
+    if (!audio) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
+        return;
+    }
+
+    const audio::ControlBus& controlBus = audio->getControlBusRef();
+
+    sendSuccessResponse(request, [&controlBus](JsonObject& data) {
+        data["enabled"] = controlBus.getZoneAGCEnabled();
+        data["lookaheadEnabled"] = controlBus.getLookaheadEnabled();
+
+        JsonArray zones = data["zones"].to<JsonArray>();
+        for (uint8_t z = 0; z < audio::CONTROLBUS_NUM_ZONES; ++z) {
+            JsonObject zone = zones.add<JsonObject>();
+            zone["index"] = z;
+            zone["follower"] = controlBus.getZoneFollower(z);
+            zone["maxMag"] = controlBus.getZoneMaxMag(z);
+        }
+    });
+}
+
+void WebServer::handleAudioZoneAGCSet(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
+    auto* audio = m_actorSystem.getAudio();
+    if (!audio) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
+        return;
+    }
+
+    StaticJsonDocument<256> doc;
+    if (deserializeJson(doc, data, len)) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::INVALID_JSON, "Invalid JSON payload");
+        return;
+    }
+
+    audio::ControlBus& controlBus = audio->getControlBusMut();
+    bool updated = false;
+
+    if (doc.containsKey("enabled")) {
+        controlBus.setZoneAGCEnabled(doc["enabled"].as<bool>());
+        updated = true;
+    }
+
+    if (doc.containsKey("lookaheadEnabled")) {
+        controlBus.setLookaheadEnabled(doc["lookaheadEnabled"].as<bool>());
+        updated = true;
+    }
+
+    if (doc.containsKey("attackRate") || doc.containsKey("releaseRate")) {
+        float attack = doc["attackRate"] | 0.05f;
+        float release = doc["releaseRate"] | 0.05f;
+        controlBus.setZoneAGCRates(attack, release);
+        updated = true;
+    }
+
+    if (doc.containsKey("minFloor")) {
+        controlBus.setZoneMinFloor(doc["minFloor"].as<float>());
+        updated = true;
+    }
+
+    sendSuccessResponse(request, [updated](JsonObject& resp) {
+        resp["updated"] = updated;
+    });
+}
+
+// ============================================================================
+// Spike Detection Handlers
+// ============================================================================
+
+void WebServer::handleAudioSpikeDetectionGet(AsyncWebServerRequest* request) {
+    auto* audio = m_actorSystem.getAudio();
+    if (!audio) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
+        return;
+    }
+
+    const audio::ControlBus& controlBus = audio->getControlBusRef();
+    const audio::SpikeDetectionStats& stats = controlBus.getSpikeStats();
+
+    sendSuccessResponse(request, [&controlBus, &stats](JsonObject& data) {
+        data["enabled"] = controlBus.getLookaheadEnabled();
+
+        JsonObject statsObj = data["stats"].to<JsonObject>();
+        statsObj["totalFrames"] = stats.totalFrames;
+        statsObj["spikesDetectedBands"] = stats.spikesDetectedBands;
+        statsObj["spikesDetectedChroma"] = stats.spikesDetectedChroma;
+        statsObj["spikesCorrected"] = stats.spikesCorrected;
+        statsObj["totalEnergyRemoved"] = stats.totalEnergyRemoved;
+        statsObj["avgSpikesPerFrame"] = stats.avgSpikesPerFrame;
+        statsObj["avgCorrectionMagnitude"] = stats.avgCorrectionMagnitude;
+    });
+}
+
+void WebServer::handleAudioSpikeDetectionReset(AsyncWebServerRequest* request) {
+    auto* audio = m_actorSystem.getAudio();
+    if (!audio) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
+        return;
+    }
+
+    audio->getControlBusMut().resetSpikeStats();
+    sendSuccessResponse(request);
+}
+
 #else
 void WebServer::handleAudioParametersGet(AsyncWebServerRequest* request) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
@@ -2521,6 +2693,28 @@ void WebServer::handleAudioMappingsEnable(AsyncWebServerRequest* request, uint8_
 }
 
 void WebServer::handleAudioMappingsStats(AsyncWebServerRequest* request) {
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void WebServer::handleAudioZoneAGCGet(AsyncWebServerRequest* request) {
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void WebServer::handleAudioZoneAGCSet(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
+    (void)data;
+    (void)len;
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void WebServer::handleAudioSpikeDetectionGet(AsyncWebServerRequest* request) {
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void WebServer::handleAudioSpikeDetectionReset(AsyncWebServerRequest* request) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
@@ -3678,6 +3872,98 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             data["clientId"] = clientId;
             data["status"] = "ok";
         });
+        client->text(response);
+    }
+    // audio.zone-agc.get - Get Zone AGC state
+    else if (type == "audio.zone-agc.get") {
+        const char* requestId = doc["requestId"] | "";
+        auto* audio = m_actorSystem.getAudio();
+        if (!audio) {
+            client->text(buildWsError(ErrorCodes::AUDIO_UNAVAILABLE, "Audio unavailable", requestId));
+            return;
+        }
+        const audio::ControlBus& controlBus = audio->getControlBusRef();
+        String response = buildWsResponse("audio.zone-agc.state", requestId,
+            [&controlBus](JsonObject& data) {
+                data["enabled"] = controlBus.getZoneAGCEnabled();
+                data["lookaheadEnabled"] = controlBus.getLookaheadEnabled();
+                JsonArray zones = data["zones"].to<JsonArray>();
+                for (uint8_t z = 0; z < audio::CONTROLBUS_NUM_ZONES; ++z) {
+                    JsonObject zone = zones.add<JsonObject>();
+                    zone["index"] = z;
+                    zone["follower"] = controlBus.getZoneFollower(z);
+                    zone["maxMag"] = controlBus.getZoneMaxMag(z);
+                }
+            });
+        client->text(response);
+    }
+    // audio.zone-agc.set - Set Zone AGC settings
+    else if (type == "audio.zone-agc.set") {
+        const char* requestId = doc["requestId"] | "";
+        auto* audio = m_actorSystem.getAudio();
+        if (!audio) {
+            client->text(buildWsError(ErrorCodes::AUDIO_UNAVAILABLE, "Audio unavailable", requestId));
+            return;
+        }
+        audio::ControlBus& controlBus = audio->getControlBusMut();
+        bool updated = false;
+        if (doc.containsKey("enabled")) {
+            controlBus.setZoneAGCEnabled(doc["enabled"].as<bool>());
+            updated = true;
+        }
+        if (doc.containsKey("lookaheadEnabled")) {
+            controlBus.setLookaheadEnabled(doc["lookaheadEnabled"].as<bool>());
+            updated = true;
+        }
+        if (doc.containsKey("attackRate") || doc.containsKey("releaseRate")) {
+            float attack = doc["attackRate"] | 0.05f;
+            float release = doc["releaseRate"] | 0.05f;
+            controlBus.setZoneAGCRates(attack, release);
+            updated = true;
+        }
+        if (doc.containsKey("minFloor")) {
+            controlBus.setZoneMinFloor(doc["minFloor"].as<float>());
+            updated = true;
+        }
+        String response = buildWsResponse("audio.zone-agc.updated", requestId,
+            [updated](JsonObject& data) { data["updated"] = updated; });
+        client->text(response);
+    }
+    // audio.spike-detection.get - Get spike detection stats
+    else if (type == "audio.spike-detection.get") {
+        const char* requestId = doc["requestId"] | "";
+        auto* audio = m_actorSystem.getAudio();
+        if (!audio) {
+            client->text(buildWsError(ErrorCodes::AUDIO_UNAVAILABLE, "Audio unavailable", requestId));
+            return;
+        }
+        const audio::ControlBus& controlBus = audio->getControlBusRef();
+        const audio::SpikeDetectionStats& stats = controlBus.getSpikeStats();
+        String response = buildWsResponse("audio.spike-detection.state", requestId,
+            [&controlBus, &stats](JsonObject& data) {
+                data["enabled"] = controlBus.getLookaheadEnabled();
+                JsonObject statsObj = data["stats"].to<JsonObject>();
+                statsObj["totalFrames"] = stats.totalFrames;
+                statsObj["spikesDetectedBands"] = stats.spikesDetectedBands;
+                statsObj["spikesDetectedChroma"] = stats.spikesDetectedChroma;
+                statsObj["spikesCorrected"] = stats.spikesCorrected;
+                statsObj["totalEnergyRemoved"] = stats.totalEnergyRemoved;
+                statsObj["avgSpikesPerFrame"] = stats.avgSpikesPerFrame;
+                statsObj["avgCorrectionMagnitude"] = stats.avgCorrectionMagnitude;
+            });
+        client->text(response);
+    }
+    // audio.spike-detection.reset - Reset spike detection stats
+    else if (type == "audio.spike-detection.reset") {
+        const char* requestId = doc["requestId"] | "";
+        auto* audio = m_actorSystem.getAudio();
+        if (!audio) {
+            client->text(buildWsError(ErrorCodes::AUDIO_UNAVAILABLE, "Audio unavailable", requestId));
+            return;
+        }
+        audio->getControlBusMut().resetSpikeStats();
+        String response = buildWsResponse("audio.spike-detection.reset", requestId,
+            [](JsonObject& data) { data["reset"] = true; });
         client->text(response);
     }
 #endif

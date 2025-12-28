@@ -237,6 +237,15 @@ void AudioActor::onTick()
                  cstats.hopsCapured, cstats.peakSample, m_lastPeakCentered, m_lastRmsRaw, frame.rms,
                  m_lastRmsPreGain, m_lastAgcGain, m_lastDcEstimate, (unsigned)m_lastClipCount, m_lastFluxMapped,
                  m_lastMinSample, m_lastMaxSample, m_lastMeanSample);
+
+        // Log spike detection stats (get from ControlBus)
+        auto spikeStats = m_controlBus.getSpikeStats();
+        ESP_LOGI(TAG, "Spike stats: frames=%lu detected=%lu corrected=%lu avg/frame=%.3f removed=%.2f",
+                 spikeStats.totalFrames,
+                 spikeStats.spikesDetectedBands + spikeStats.spikesDetectedChroma,
+                 spikeStats.spikesCorrected,
+                 spikeStats.avgSpikesPerFrame,
+                 spikeStats.totalEnergyRemoved);
     }
 }
 
@@ -478,16 +487,16 @@ void AudioActor::processHop()
     // Build 512-sample window from previous + current hop for per-hop analysis
     int16_t window512[GoertzelAnalyzer::WINDOW_SIZE];
     bool oaReady = false;
+    // Always accumulate samples for 64-bin Goertzel (needs 1500 samples)
+    m_analyzer.accumulate(m_hopBufferCentered, HOP_SIZE);
+    m_chromaAnalyzer.accumulate(m_hopBufferCentered, HOP_SIZE);
+
 #if FEATURE_AUDIO_OA
     if (m_prevHopValid) {
         std::memcpy(window512, m_prevHopCentered, HOP_SIZE * sizeof(int16_t));
         std::memcpy(window512 + HOP_SIZE, m_hopBufferCentered, HOP_SIZE * sizeof(int16_t));
         oaReady = true;
     }
-#else
-    // Fallback to original accumulation for 32ms cadence
-    m_analyzer.accumulate(m_hopBufferCentered, HOP_SIZE);
-    m_chromaAnalyzer.accumulate(m_hopBufferCentered, HOP_SIZE);
 #endif
 
     // 5. Build ControlBusRawInput
@@ -577,6 +586,38 @@ void AudioActor::processHop()
     TRACE_END();
     BENCH_END_PHASE(goertzelUs);
     BENCH_SET_FLAG(goertzelTriggered, goertzelTriggered ? 1 : 0);
+
+    // ========================================================================
+    // 64-bin Goertzel Analysis (Sensory Bridge parity)
+    // Runs less frequently - needs 1500 samples (~94ms to accumulate)
+    // ========================================================================
+    float bins64Raw[GoertzelAnalyzer::NUM_BINS] = {0};
+    if (m_analyzer.analyze64(bins64Raw)) {
+        TRACE_BEGIN("goertzel64_fold");
+
+        // Fold 64 bins -> 8 bands (8 bins per band, take max)
+        float bands64Folded[8] = {0};
+        for (size_t bin = 0; bin < GoertzelAnalyzer::NUM_BINS; ++bin) {
+            size_t bandIdx = bin >> 3;  // bin / 8
+            bands64Folded[bandIdx] = std::max(bands64Folded[bandIdx], bins64Raw[bin]);
+        }
+
+        // Store for logging comparison
+        for (int i = 0; i < 8; ++i) {
+            m_lastBands64[i] = bands64Folded[i];
+        }
+        m_analyze64Ready = true;
+
+        // Throttled logging (~1/second)
+        if (++m_goertzel64LogCounter >= GOERTZEL64_LOG_INTERVAL) {
+            m_goertzel64LogCounter = 0;
+            ESP_LOGI(TAG, "\033[36m64-bin Goertzel:\033[0m [%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f]",
+                     bands64Folded[0], bands64Folded[1], bands64Folded[2], bands64Folded[3],
+                     bands64Folded[4], bands64Folded[5], bands64Folded[6], bands64Folded[7]);
+        }
+
+        TRACE_END();
+    }
 
     // MabuTrace: Detect false trigger - activity gated but no significant band energy
     // This helps identify noise floor calibration issues

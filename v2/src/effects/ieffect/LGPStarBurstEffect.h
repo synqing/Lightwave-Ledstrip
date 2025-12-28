@@ -44,6 +44,7 @@ private:
     float m_energyAvgSmooth = 0.0f;
     float m_energyDeltaSmooth = 0.0f;
     float m_dominantBinSmooth = 0.0f;
+    float m_hihatFlash = 0.0f;  // Hi-hat brightness overlay
 };
 
 } // namespace ieffect

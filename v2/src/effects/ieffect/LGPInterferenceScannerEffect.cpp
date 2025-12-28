@@ -57,24 +57,23 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
         if (newHop) {
             m_lastHopSeq = ctx.audio.controlBus.hop_seq;
 
-            const float led_share = 255.0f / 12.0f;
-            float chromaEnergy = 0.0f;
+            // LGP-SMOOTH: Use heavy_bands mid-frequency for smoother energy signal
+            // This replaces raw chroma processing which is prone to spikes
+            float heavyMid = ctx.audio.heavyMid();  // Accessor: (heavy_bands[2-4]) / 3.0f
+            float energyNorm = heavyMid;
+            if (energyNorm < 0.0f) energyNorm = 0.0f;
+            if (energyNorm > 1.0f) energyNorm = 1.0f;
+
+            // Still track dominant chroma bin for color mapping
             float maxBinVal = 0.0f;
             uint8_t dominantBin = 0;
             for (uint8_t i = 0; i < 12; ++i) {
-                float bin = ctx.audio.controlBus.chroma[i];
-                float bright = bin * bin;
-                bright *= 1.5f;
-                if (bright > 1.0f) bright = 1.0f;
-                if (bright > maxBinVal) {
-                    maxBinVal = bright;
+                float bin = ctx.audio.controlBus.heavy_chroma[i];  // Use heavy_chroma for stability
+                if (bin > maxBinVal) {
+                    maxBinVal = bin;
                     dominantBin = i;
                 }
-                chromaEnergy += bright * led_share;
             }
-            float energyNorm = chromaEnergy / 255.0f;
-            if (energyNorm < 0.0f) energyNorm = 0.0f;
-            if (energyNorm > 1.0f) energyNorm = 1.0f;
 
             m_chromaEnergySum -= m_chromaEnergyHist[m_chromaHistIdx];
             m_chromaEnergyHist[m_chromaHistIdx] = energyNorm;
@@ -150,6 +149,15 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
         float fastFlux = 0.0f;
 #endif
         float audioGain = 0.4f + 0.5f * m_energyAvgSmooth + 0.5f * m_energyDeltaSmooth + 0.3f * fastFlux;
+
+        // PERCUSSION BOOST: Add amplitude spike on snare hit for visual punch
+#if FEATURE_AUDIO_SYNC
+        if (hasAudio && ctx.audio.isSnareHit()) {
+            audioGain += 0.8f;  // Burst on snare
+        }
+#endif
+        audioGain = fminf(audioGain, 2.0f);  // Clamp max to prevent oversaturation
+
         float pattern = wave1 * audioGain;
 
         // CRITICAL: Use tanhf for uniform brightness (like ChevronWaves)

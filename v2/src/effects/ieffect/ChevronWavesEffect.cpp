@@ -41,6 +41,7 @@ bool ChevronWavesEffect::init(plugins::EffectContext& ctx) {
     m_energyAvgSmooth = 0.0f;
     m_energyDeltaSmooth = 0.0f;
     m_dominantBinSmooth = 0.0f;
+    m_speedSmooth = 1.0f;
     return true;
 }
 
@@ -107,7 +108,24 @@ void ChevronWavesEffect::render(plugins::EffectContext& ctx) {
     if (m_dominantBinSmooth < 0.0f) m_dominantBinSmooth = 0.0f;
     if (m_dominantBinSmooth > 11.0f) m_dominantBinSmooth = 11.0f;
 
-    float speedScale = 0.5f + 0.8f * m_energyAvgSmooth + 1.2f * m_energyDeltaSmooth;
+    // Use heavy_bands instead of raw chroma/energyAvg to eliminate jitter
+    float heavyEnergy = 0.0f;
+#if FEATURE_AUDIO_SYNC
+    if (hasAudio) {
+        heavyEnergy = (ctx.audio.controlBus.heavy_bands[1] +
+                       ctx.audio.controlBus.heavy_bands[2]) / 2.0f;
+    }
+#endif
+    float targetSpeed = 0.6f + 1.2f * heavyEnergy;  // Reduced range for stability
+
+    // Slew limiting (0.25/sec max change rate) to prevent jog-dial jitter
+    float maxDelta = 0.25f * dt;
+    float speedDelta = targetSpeed - m_speedSmooth;
+    if (fabsf(speedDelta) > maxDelta) {
+        speedDelta = (speedDelta > 0) ? maxDelta : -maxDelta;
+    }
+    m_speedSmooth += speedDelta;
+    float speedScale = m_speedSmooth;
     if (speedScale > 2.0f) speedScale = 2.0f;  // Hard clamp
     m_chevronPos += speedNorm * 240.0f * speedScale * dt;  // dt-corrected: 240/sec at speedNorm=1
 
@@ -122,8 +140,14 @@ void ChevronWavesEffect::render(plugins::EffectContext& ctx) {
         const float freqBase = 0.25f;  // Wavelength ~25 LEDs (was ~7 with CHEVRON_COUNT)
         float chevron = sinf(distFromCenter * freqBase - m_chevronPos);
 
-        // Sharp edges
-        chevron = tanhf(chevron * (2.0f + 4.0f * m_energyAvgSmooth)) * 0.5f + 0.5f;
+        // Sharp edges with snare-triggered crispness
+        float tanhScale = 2.0f;  // Base sharpness
+#if FEATURE_AUDIO_SYNC
+        if (hasAudio && ctx.audio.isSnareHit()) {
+            tanhScale = 5.0f;  // Sharp, crisp chevrons on snare
+        }
+#endif
+        chevron = tanhf(chevron * (tanhScale + 4.0f * m_energyAvgSmooth)) * 0.5f + 0.5f;
 
         float audioGain = 0.2f + 0.8f * m_energyAvgSmooth;
         uint8_t brightness = (uint8_t)(chevron * 255.0f * intensityNorm * audioGain);

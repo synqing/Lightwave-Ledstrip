@@ -121,6 +121,36 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
         spawnChance = 0;
     }
 
+    // Calculate chord-based hue shift (palette INDEX offset, not HSV rotation)
+    int8_t chordHueShift = 0;
+#if FEATURE_AUDIO_SYNC
+    if (hasAudio && ctx.audio.chordConfidence() > 0.3f) {
+        if (ctx.audio.isMajor()) {
+            chordHueShift = 25;   // Warm shift for major chords
+        } else if (ctx.audio.isMinor()) {
+            chordHueShift = -25;  // Cool shift for minor chords
+        }
+    }
+#endif
+
+    // Force ripple spawn on snare hit (percussion trigger)
+#if FEATURE_AUDIO_SYNC
+    if (hasAudio && ctx.audio.isSnareHit()) {
+        for (uint8_t r = 0; r < MAX_RIPPLES; ++r) {
+            if (!m_ripples[r].active) {
+                m_ripples[r].radius = 0.0f;      // Reset at center
+                m_ripples[r].intensity = 255;    // Max intensity for snare burst
+                m_ripples[r].speed = 3.5f;       // Fast propagation
+                // Use chord root note for hue (0-11 mapped to palette index range)
+                m_ripples[r].hue = (uint8_t)((ctx.audio.rootNote() * 21) + chordHueShift);
+                m_ripples[r].active = true;
+                m_spawnCooldown = 1;             // Brief cooldown
+                break;
+            }
+        }
+    }
+#endif
+
     if (spawnChance > 0 && m_spawnCooldown == 0 && random8() < spawnChance) {
         for (int i = 0; i < MAX_RIPPLES; i++) {
             if (!m_ripples[i].active) {
@@ -139,8 +169,9 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
                 m_ripples[i].speed = speedBase * speedBoost;
                 if (m_ripples[i].speed > 4.0f) m_ripples[i].speed = 4.0f;
                 if (hasAudio) {
+                    // Apply chord warmth shift to chroma-based hue
                     float hueBase = (dominantBin * (255.0f / 12.0f)) + ctx.gHue;
-                    m_ripples[i].hue = (uint8_t)hueBase;
+                    m_ripples[i].hue = (uint8_t)(hueBase + chordHueShift);
                 } else {
                     m_ripples[i].hue = random8();
                 }

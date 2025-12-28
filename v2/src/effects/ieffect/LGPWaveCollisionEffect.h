@@ -46,6 +46,9 @@ private:
     // Speed slew limiting (jog-dial fix)
     float m_speedScaleSmooth = 1.0f;  // Smoothed speed value
 
+    // Percussion-driven animation
+    float m_speedTarget = 1.0f;       // Hi-hat speed boost target (decays to 1.0)
+
     // Validation instrumentation
     float m_prevPhaseDelta = 0.0f;    // Previous frame phase delta for reversal detection
 };

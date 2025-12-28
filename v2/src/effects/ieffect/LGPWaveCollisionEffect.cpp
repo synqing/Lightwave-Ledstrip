@@ -37,6 +37,7 @@ bool LGPWaveCollisionEffect::init(plugins::EffectContext& ctx) {
     m_dominantBinSmooth = 0.0f;
     m_collisionBoost = 0.0f;
     m_speedScaleSmooth = 1.0f;
+    m_speedTarget = 1.0f;
     return true;
 }
 
@@ -103,19 +104,44 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
     if (m_dominantBinSmooth < 0.0f) m_dominantBinSmooth = 0.0f;
     if (m_dominantBinSmooth > 11.0f) m_dominantBinSmooth = 11.0f;
 
-    m_collisionBoost += m_energyDeltaSmooth * 0.6f;
+    // Percussion-driven collision boost (snare = collision event!)
+#if FEATURE_AUDIO_SYNC
+    if (hasAudio && ctx.audio.isSnareHit()) {
+        m_collisionBoost = 1.0f;  // Force max brightness on snare hit
+    } else {
+        // Fallback: energy delta still contributes, but weaker
+        m_collisionBoost += m_energyDeltaSmooth * 0.4f;
+    }
     if (m_collisionBoost > 1.0f) m_collisionBoost = 1.0f;
-    m_collisionBoost *= 0.90f;
+    m_collisionBoost *= 0.88f;  // Slightly faster decay for snappier response
+
+    // Hi-hat driven speed burst
+    if (hasAudio && ctx.audio.isHihatHit()) {
+        m_speedTarget = 1.6f;  // Temporary speed boost on hi-hat
+    }
+    // Decay speed target back to normal (exponential smoothing)
+    m_speedTarget = m_speedTarget * 0.95f + 1.0f * 0.05f;
+
+    // Use heavy_bands for smoother bass energy (replaces raw chroma energy)
+    float bassEnergy = ctx.audio.heavyBass();  // Already averages heavy_bands[0] + [1]
+#else
+    m_collisionBoost += m_energyDeltaSmooth * 0.4f;
+    if (m_collisionBoost > 1.0f) m_collisionBoost = 1.0f;
+    m_collisionBoost *= 0.88f;
+    m_speedTarget = m_speedTarget * 0.95f + 1.0f * 0.05f;
+    float bassEnergy = m_energyAvgSmooth;
+#endif
 
     // JOG-DIAL FIX: Constant base speed with gentle energy modulation (no energyDelta on speed)
-    float rawSpeedScale = 0.7f + 0.6f * m_energyAvgSmooth;  // Capture raw speed for validation
-    float speedTarget = rawSpeedScale;
-    if (speedTarget > 1.3f) speedTarget = 1.3f;
+    // Now modulated by bassEnergy (from heavy_bands) and speedTarget (from hi-hat)
+    float rawSpeedScale = (0.7f + 0.6f * bassEnergy) * m_speedTarget;  // Capture raw speed for validation
+    float speedTargetClamped = rawSpeedScale;
+    if (speedTargetClamped > 1.6f) speedTargetClamped = 1.6f;  // Allow higher speed with hi-hat boost
 
     // Slew limiter: max 0.25 units/sec change rate
     const float maxSlewRate = 0.25f;
     float slewLimit = maxSlewRate * dt;
-    float speedDelta = speedTarget - m_speedScaleSmooth;
+    float speedDelta = speedTargetClamped - m_speedScaleSmooth;
     if (speedDelta > slewLimit) speedDelta = slewLimit;
     if (speedDelta < -slewLimit) speedDelta = -slewLimit;
     m_speedScaleSmooth += speedDelta;

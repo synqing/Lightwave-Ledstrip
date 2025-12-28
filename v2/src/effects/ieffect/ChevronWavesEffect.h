@@ -45,7 +45,8 @@ private:
     float m_energyAvgSmooth = 0.0f;
     float m_energyDeltaSmooth = 0.0f;
     float m_dominantBinSmooth = 0.0f;
-    
+    float m_speedSmooth = 1.0f;  // Slew-limited speed to prevent jitter
+
     // Constants
     static constexpr uint8_t FADE_AMOUNT = 40;
 };

@@ -40,6 +40,7 @@ bool LGPStarBurstEffect::init(plugins::EffectContext& ctx) {
     m_energyAvgSmooth = 0.0f;
     m_energyDeltaSmooth = 0.0f;
     m_dominantBinSmooth = 0.0f;
+    m_hihatFlash = 0.0f;
     return true;
 }
 
@@ -88,6 +89,16 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
             if (m_energyDelta > 0.05f) {
                 m_burst = 1.0f;
             }
+
+            // Force max burst on snare hit
+            if (ctx.audio.isSnareHit()) {
+                m_burst = 1.0f;
+            }
+
+            // Hi-hat triggers brightness overlay
+            if (ctx.audio.isHihatHit()) {
+                m_hihatFlash = 0.5f;
+            }
         }
     } else
 #endif
@@ -95,6 +106,9 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
         m_energyAvg *= 0.98f;
         m_energyDelta = 0.0f;
     }
+
+    // Hi-hat flash decay (runs every frame for smooth decay)
+    m_hihatFlash *= 0.85f;
 
     float dt = enhancement::clampDtSeconds(ctx.deltaTimeMs * 0.001f);
     float riseAvg = dt / (0.20f + dt);
@@ -138,9 +152,32 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
         // CRITICAL: Use tanhf for uniform brightness (like ChevronWaves)
         star = tanhf(star * 2.0f) * 0.5f + 0.5f;
 
-        uint8_t brightness = (uint8_t)(star * 255.0f * intensityNorm);
+        // Apply hi-hat flash overlay to brightness
+        float brightnessWithFlash = star * intensityNorm * (1.0f + m_hihatFlash);
+        if (brightnessWithFlash > 1.0f) brightnessWithFlash = 1.0f;
+        uint8_t brightness = (uint8_t)(brightnessWithFlash * 255.0f);
+
         uint8_t paletteIndex = (uint8_t)(distFromCenter + star * 50.0f);
-        uint8_t baseHue = (uint8_t)(ctx.gHue + (uint8_t)(m_dominantBinSmooth * (255.0f / 12.0f)));
+
+        // Use chord detection for hue when confidence is sufficient
+        uint8_t baseHue;
+#if FEATURE_AUDIO_SYNC
+        if (hasAudio && ctx.audio.chordConfidence() > 0.3f) {
+            // Root note (0-11) mapped to hue range (0-255)
+            uint8_t rootHue = ctx.audio.rootNote() * 21;  // 12 notes -> 256 hue range
+            // Apply chord mood shift (palette-relative offset)
+            if (ctx.audio.isMajor()) {
+                rootHue += 30;       // Warm shift for major chords
+            } else if (ctx.audio.isMinor()) {
+                rootHue -= 20;       // Cool shift for minor chords
+            }
+            baseHue = ctx.gHue + rootHue;
+        } else
+#endif
+        {
+            // Fallback to smoothed dominant bin when no chord detected
+            baseHue = (uint8_t)(ctx.gHue + (uint8_t)(m_dominantBinSmooth * (255.0f / 12.0f)));
+        }
 
         ctx.leds[i] += ctx.palette.getColor((uint8_t)(baseHue + paletteIndex), brightness);
         if (i + STRIP_LENGTH < ctx.ledCount) {

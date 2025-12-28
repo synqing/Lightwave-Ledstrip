@@ -578,11 +578,14 @@ void AudioActor::processHop()
         m_goertzelLogCounter++;
         if (m_goertzelLogCounter >= GOERTZEL_LOG_INTERVAL) {
             m_goertzelLogCounter = 0;
-            // Use ANSI color codes (bright green) for visual distinction from DMA dbg
+            // Calculate TRUE mic level in dB from pre-gain RMS (0dB = full scale, silence floor at -60dB)
+            float micLevelDb = (m_lastRmsPreGain > 0.0001f) ? (20.0f * log10f(m_lastRmsPreGain)) : -80.0f;
+            // Bold cyan title, bold yellow for mic dB level, rest uncolored
             ESP_LOGD(TAG,
-                     "\033[1;32mGoertzel: raw=[%.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f] "
+                     "\033[1;36mGoertzel:\033[0m \033[1;33m%.1fdB\033[0m raw=[%.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f] "
                      "map=[%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f] "
-                     "rms=%.4f->%.3f pre=%.4f g=%.2f dc=%.1f clip=%u pk=%d pkC=%d min=%d max=%d mean=%.1f\033[0m",
+                     "rms=%.4f->%.3f pre=%.4f g=%.2f dc=%.1f clip=%u pk=%d pkC=%d min=%d max=%d mean=%.1f",
+                     micLevelDb,
                      bandsRaw[0], bandsRaw[1], bandsRaw[2], bandsRaw[3], bandsRaw[4], bandsRaw[5], bandsRaw[6], bandsRaw[7],
                      raw.bands[0], raw.bands[1], raw.bands[2], raw.bands[3], raw.bands[4], raw.bands[5], raw.bands[6], raw.bands[7],
                      rmsRaw, rmsMapped, m_lastRmsPreGain, m_lastAgcGain, m_lastDcEstimate, (unsigned)m_lastClipCount,
@@ -637,9 +640,16 @@ void AudioActor::processHop()
         }
         m_analyze64Ready = true;
 
+        // Phase 1.3: Publish full 64-bin spectrum to ControlBusRawInput
+        // Apply activity gating and store in raw.bins64 for ControlBus passthrough
+        for (size_t i = 0; i < GoertzelAnalyzer::NUM_BINS; ++i) {
+            raw.bins64[i] = bins64Raw[i] * activity;
+        }
+
         // Throttled logging (~1/second)
         if (++m_goertzel64LogCounter >= GOERTZEL64_LOG_INTERVAL) {
             m_goertzel64LogCounter = 0;
+            // Cyan for 64-bin spectral analysis (title-only coloring)
             ESP_LOGI(TAG, "\033[36m64-bin Goertzel:\033[0m [%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f]",
                      bands64Folded[0], bands64Folded[1], bands64Folded[2], bands64Folded[3],
                      bands64Folded[4], bands64Folded[5], bands64Folded[6], bands64Folded[7]);
@@ -736,6 +746,17 @@ void AudioActor::processHop()
 
         // Run beat detection with multi-band onset info
         detectBeat(fluxMapped, bassEnergy, nowMs, snareEnergy, hihatEnergy);
+
+        // Phase 1.3: Publish snare/hihat energy and trigger state to ControlBusRawInput
+        // Energy values are always published; triggers are pulse flags set by detectBeat()
+        raw.snareEnergy = snareEnergy;
+        raw.hihatEnergy = hihatEnergy;
+        raw.snareTrigger = m_lastSnareTriggered;
+        raw.hihatTrigger = m_lastHihatTriggered;
+
+        // Clear trigger flags after reading (one-shot pulse behavior)
+        m_lastSnareTriggered = false;
+        m_lastHihatTriggered = false;
     }
 
     // === Phase: ControlBus Update ===
@@ -955,6 +976,11 @@ void AudioActor::detectBeat(float currentFlux, float bassEnergy, uint32_t nowMs,
     // Priority 4: Check snare/hihat threshold crossings
     bool snareTriggered = m_beatTuning.useSnareDetection && snarePeak && (m_prevSnare > snareThreshold);
     bool hihatTriggered = m_beatTuning.useHihatDetection && hihatPeak && (m_prevHihat > hihatThreshold);
+
+    // Phase 1.3: Store trigger states for ControlBus publishing
+    // These flags are read by processHop() after detectBeat() returns
+    m_lastSnareTriggered = snareTriggered;
+    m_lastHihatTriggered = hihatTriggered;
 
     // Step 6: Combined hybrid detection with multi-band onsets
     // Beat detected if: flux OR bass OR snare OR hihat triggered, AND cooldown expired

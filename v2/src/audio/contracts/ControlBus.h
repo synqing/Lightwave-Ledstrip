@@ -53,6 +53,16 @@ struct ControlBusRawInput {
     float bands[CONTROLBUS_NUM_BANDS] = {0};     // 0..1
     float chroma[CONTROLBUS_NUM_CHROMA] = {0};   // 0..1 (optional in Phase 2)
     int16_t waveform[CONTROLBUS_WAVEFORM_N] = {0};  // Time-domain samples (int16_t range: -32768 to 32767)
+
+    // Phase 1.2: Onset detection for percussive elements
+    float snareEnergy = 0.0f;       // 0..1 snare band energy (150-300 Hz)
+    float hihatEnergy = 0.0f;       // 0..1 hi-hat band energy (6-12 kHz)
+    bool snareTrigger = false;      // True on snare onset frame
+    bool hihatTrigger = false;      // True on hi-hat onset frame
+
+    // Phase 2: Full 64-bin Goertzel spectrum (110 Hz - 4186 Hz)
+    static constexpr uint8_t BINS_64_COUNT = 64;
+    float bins64[BINS_64_COUNT] = {0};  // 0..1 normalized magnitudes
 };
 
 /**
@@ -74,6 +84,16 @@ struct ControlBusFrame {
     int16_t waveform[CONTROLBUS_WAVEFORM_N] = {0};  // Time-domain samples (int16_t range: -32768 to 32767)
 
     ChordState chordState;  // Chord detection results (root, type, confidence)
+
+    // Phase 1.2: Onset detection for percussive elements (passthrough from raw)
+    float snareEnergy = 0.0f;       // 0..1 snare band energy (150-300 Hz)
+    float hihatEnergy = 0.0f;       // 0..1 hi-hat band energy (6-12 kHz)
+    bool snareTrigger = false;      // True on snare onset frame
+    bool hihatTrigger = false;      // True on hi-hat onset frame
+
+    // Phase 2: Full 64-bin Goertzel spectrum (110 Hz - 4186 Hz)
+    static constexpr uint8_t BINS_64_COUNT = 64;
+    float bins64[BINS_64_COUNT] = {0};  // 0..1 normalized magnitudes
 };
 
 /**

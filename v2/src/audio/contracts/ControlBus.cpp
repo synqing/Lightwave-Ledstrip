@@ -390,6 +390,23 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     }
 
     // ========================================================================
+    // Stage 5b: Copy onset detection fields (Phase 1.2 - passthrough)
+    // Snare/hi-hat detection performed upstream in GoertzelAnalyzer
+    // ========================================================================
+    m_frame.snareEnergy = clamp01(raw.snareEnergy);
+    m_frame.hihatEnergy = clamp01(raw.hihatEnergy);
+    m_frame.snareTrigger = raw.snareTrigger;
+    m_frame.hihatTrigger = raw.hihatTrigger;
+
+    // ========================================================================
+    // Stage 5c: Copy 64-bin Goertzel spectrum (Phase 2 - passthrough)
+    // Full spectrum available for visualizer effects
+    // ========================================================================
+    for (uint8_t i = 0; i < ControlBusRawInput::BINS_64_COUNT; ++i) {
+        m_frame.bins64[i] = clamp01(raw.bins64[i]);
+    }
+
+    // ========================================================================
     // Stage 6: Update spike detection telemetry frame counter
     // ========================================================================
     m_spikeStats.totalFrames++;

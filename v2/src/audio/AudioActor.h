@@ -525,6 +525,10 @@ private:
     float m_prevSnare = 0.0f;
     float m_prevHihat = 0.0f;
 
+    // Phase 1.3: Last trigger states for ControlBus publishing
+    bool m_lastSnareTriggered = false;
+    bool m_lastHihatTriggered = false;
+
     // Cooldown and timing state
     uint32_t m_lastBeatTimeMs = 0;
     uint32_t m_cooldownEndMs = 0;

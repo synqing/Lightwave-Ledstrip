@@ -925,7 +925,7 @@ void RendererActor::handleSetEffect(uint8_t effectId)
         }
 
 #ifndef NATIVE_BUILD
-        ESP_LOGI(TAG, "Effect changed: %d (%s) -> %d (%s)",
+        ESP_LOGI(TAG, "Effect changed: %d (%s) -> %d (\033[1;32m%s\033[0m)",
                  oldEffect, getEffectName(oldEffect),
                  effectId, getEffectName(effectId));
 #endif

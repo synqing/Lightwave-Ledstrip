@@ -209,10 +209,11 @@ CaptureResult AudioCapture::captureHop(int16_t* buffer)
         bool msbShiftEnabled = (REG_GET_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_MSB_SHIFT) != 0);
         const char* channelFmt = "RIGHT";  // Current config uses RIGHT channel
 
-        // Use ESP_LOGI (same level as "Audio alive") with ANSI color codes (bright cyan)
+        // Use ESP_LOGI with ANSI color codes (bold yellow for hardware layer)
+        // Title-only coloring: color resets before values for readability at 62.5Hz
         ESP_LOGI(TAG,
-                 "\033[1;36mDMA dbg: hop=%lu ch=%s msb_shift=%s raw0=%08X raw1=%08X min=%ld max=%ld "
-                 "pk>>8=%ld pk>>10=%ld pk>>12=%ld pk>>14=%ld pk>>16=%ld\033[0m",
+                 "\033[1;33mDMA dbg:\033[0m hop=%lu ch=%s msb_shift=%s raw0=%08X raw1=%08X min=%ld max=%ld "
+                 "pk>>8=%ld pk>>10=%ld pk>>12=%ld pk>>14=%ld pk>>16=%ld",
                  (unsigned long)s_dbgHop, channelFmt, msbShiftEnabled ? "ON" : "OFF",
                  (uint32_t)m_dmaBuffer[0], (uint32_t)m_dmaBuffer[1],
                  (long)rawMin, (long)rawMax,

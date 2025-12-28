@@ -441,7 +441,7 @@ void loop() {
                 } else {
                     currentEffect = (uint8_t)effectId;
                     actors.setEffect((uint8_t)effectId);
-                    Serial.printf("Effect %d: %s\n", effectId, renderer->getEffectName(effectId));
+                    Serial.printf("Effect %d: \033[1;32m%s\033[0m\n", effectId, renderer->getEffectName(effectId));
                 }
             }
         }
@@ -880,7 +880,7 @@ void loop() {
                     if (audioEffectId < renderer->getEffectCount()) {
                         currentEffect = audioEffectId;
                         actors.setEffect(audioEffectId);
-                        Serial.printf("Audio Effect %d: %s\n", audioEffectId, renderer->getEffectName(audioEffectId));
+                        Serial.printf("Audio Effect %d: \033[1;32m%s\033[0m\n", audioEffectId, renderer->getEffectName(audioEffectId));
                     } else {
                         Serial.printf("ERROR: Audio effect %d not available (effect count: %d)\n", 
                                      audioEffectId, renderer->getEffectCount());
@@ -890,7 +890,7 @@ void loop() {
                 if (e < renderer->getEffectCount()) {
                     currentEffect = e;
                     actors.setEffect(e);
-                    Serial.printf("Effect %d: %s\n", e, renderer->getEffectName(e));
+                    Serial.printf("Effect %d: \033[1;32m%s\033[0m\n", e, renderer->getEffectName(e));
                     }
                 }
             } else {
@@ -903,7 +903,7 @@ void loop() {
                     if (e < renderer->getEffectCount()) {
                         currentEffect = e;
                         actors.setEffect(e);
-                        Serial.printf("Effect %d: %s\n", e, renderer->getEffectName(e));
+                        Serial.printf("Effect %d: \033[1;32m%s\033[0m\n", e, renderer->getEffectName(e));
                         isEffectKey = true;
                     }
                 }
@@ -954,7 +954,7 @@ void loop() {
                         uint8_t effectCount = renderer->getEffectCount();
                         currentEffect = (currentEffect + 1) % effectCount;
                         actors.setEffect(currentEffect);
-                        Serial.printf("Effect %d: %s\n", currentEffect, renderer->getEffectName(currentEffect));
+                        Serial.printf("Effect %d: \033[1;32m%s\033[0m\n", currentEffect, renderer->getEffectName(currentEffect));
                     }
                     break;
 
@@ -963,7 +963,7 @@ void loop() {
                         uint8_t effectCount = renderer->getEffectCount();
                         currentEffect = (currentEffect + effectCount - 1) % effectCount;
                         actors.setEffect(currentEffect);
-                        Serial.printf("Effect %d: %s\n", currentEffect, renderer->getEffectName(currentEffect));
+                        Serial.printf("Effect %d: \033[1;32m%s\033[0m\n", currentEffect, renderer->getEffectName(currentEffect));
                     }
                     break;
 

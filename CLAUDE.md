@@ -1,5 +1,9 @@
 # CLAUDE.md
 
+**Protocol Version:** 2.0.0  
+**Last Updated:** 2025-01-XX  
+**Status:** Active
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## What Is This Project?
@@ -15,9 +19,103 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## First Steps for New Agents
 
 1. Read this entire file
-2. Check `.claude/skills/` for relevant skills before coding
+2. **MANDATORY:** Complete Pre-Task Agent Selection Protocol (see below)
 3. Build: `pio run -e esp32dev_wifi -t upload`
 4. Access web UI at `http://lightwaveos.local`
+
+---
+
+## MANDATORY: Pre-Task Agent Selection Protocol
+
+**⚠️ CRITICAL REQUIREMENT:** Before initiating ANY research, debugging, troubleshooting, or implementation task, you MUST complete this protocol.
+
+### Step 1: Review Complete Agent Inventory
+
+**MANDATORY ACTION:** Read `.claude/agents/README.md` to review the complete inventory of available specialist agents.
+
+**Required Information:**
+- List of all available agents (currently 10 specialist agents)
+- Domain expertise of each agent
+- Capability matrix and selection guidance
+
+**Verification:** You must be able to name all available agents and their primary domains before proceeding.
+
+### Step 2: Analyze Domain Expertise
+
+**MANDATORY ACTION:** For each available agent, analyze:
+- Primary domain expertise
+- Secondary domain capabilities
+- Complexity level (High/Medium/Low)
+- When to select this agent
+
+**Reference:** Use `.claude/agents/README.md` as the authoritative source for agent capabilities.
+
+### Step 3: Strategically Select Optimal Agent Combination
+
+**MANDATORY ACTION:** Based on your task analysis:
+
+1. **Identify task domain(s):**
+   - Hardware/firmware → `embedded-system-engineer`
+   - Visual effects → `visual-fx-architect`
+   - Network/API → `network-api-engineer`
+   - Serial interface → `serial-interface-engineer`
+   - Color/palettes → `palette-specialist`
+   - Web development → `agent-nextjs`, `agent-lvgl-uiux`
+   - Backend → `agent-convex`, `agent-vercel`, `agent-clerk`
+
+2. **Determine if multiple agents are needed:**
+   - Single domain task → One primary agent
+   - Multi-domain task → Multiple agents (see coordination patterns)
+   - Complex integration → Sequential or hybrid coordination
+
+3. **Select agent combination:**
+   - Use `.claude/agents/README.md` decision matrix
+   - Consider parallel execution potential (see Step 4)
+   - Document your selection rationale
+
+### Step 4: Evaluate Parallel Execution Potential
+
+**MANDATORY ACTION:** For complex tasks, evaluate if parallel execution is beneficial:
+
+**Parallel Execution Criteria:**
+- ✅ Task can be divided into independent components
+- ✅ Multiple agents can work on different subsystems simultaneously
+- ✅ No shared state conflicts
+- ✅ Different file sets or test files
+
+**If parallel execution is possible:**
+- **MUST** use `.claude/skills/dispatching-parallel-agents/` skill
+- **MUST** divide task into parallelizable components
+- **MUST** deploy multiple agents simultaneously
+
+**If sequential execution is required:**
+- Tasks are tightly coupled
+- Shared state dependencies exist
+- Ordered execution is necessary
+
+### Step 5: Review Available Skills
+
+**MANDATORY ACTION:** Check `.claude/skills/` directory for relevant skills:
+- `dispatching-parallel-agents` - For parallel execution
+- `subagent-driven-development` - For implementation plans
+- `test-driven-development` - For TDD workflows
+- `software-architecture` - For architectural decisions
+- Plus 24+ additional specialized skills
+
+**Reference:** `.claude/skills/` contains 28+ specialized skills for specific tasks.
+
+### Protocol Compliance
+
+**This protocol applies to ALL task types:**
+- ✅ Research tasks
+- ✅ Debugging tasks
+- ✅ Troubleshooting tasks
+- ✅ Code changes
+- ✅ Feature development
+- ✅ System modifications
+- ✅ Architectural updates
+
+**Non-compliance is not acceptable.** Skipping this protocol leads to suboptimal agent selection and reduced efficiency.
 
 ---
 
@@ -25,14 +123,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Skills, Agents, and Plans
 - **`.claude/skills/`** - 28 specialized skills for specific tasks
-  - Check for relevant skills before implementing features
-  - Key skills: `test-driven-development`, `software-architecture`, `brainstorming`, `finishing-a-development-branch`
+  - **MANDATORY:** Check for relevant skills before implementing features
+  - Key skills: `test-driven-development`, `software-architecture`, `brainstorming`, `finishing-a-development-branch`, `dispatching-parallel-agents`, `subagent-driven-development`
 - **`.claude/agents/`** - Custom agent personas
-  - Invoke agents using Task tool when their expertise matches
+  - **MANDATORY:** Review `.claude/agents/README.md` for complete inventory
+  - **MANDATORY:** Invoke agents using Task tool when their expertise matches
+  - **MANDATORY:** Use strategic selection based on domain expertise analysis
 - **`.claude/plans/`** - Implementation blueprints
   - Reference existing plans when starting features
 
-**IMPORTANT**: Always check these directories when starting a new feature or task.
+**CRITICAL:** The Pre-Task Agent Selection Protocol above is MANDATORY for all tasks. Always complete Steps 1-5 before starting work.
 
 ### Best Practices
 - **Modular Code**: Write focused, reusable code to optimize token usage

@@ -1,13 +1,20 @@
 ---
 name: subagent-driven-development
-description: Use when executing implementation plans with independent tasks in the current session or facing 3+ independent issues that can be investigated without shared state or dependencies - dispatches fresh subagent for each task with code review between tasks, enabling fast iteration with quality gates
+version: 2.0.0
+description: MANDATORY protocol for executing implementation plans with independent tasks - dispatches fresh subagent for each task with code review between tasks, enabling fast iteration with quality gates. MANDATORY parallel execution for independent tasks.
 ---
 
 # Subagent-Driven Development
 
+**Protocol Version:** 2.0.0  
+**Status:** MANDATORY  
+**Last Updated:** 2025-01-XX
+
 Create and execute plan by dispatching fresh subagent per task or issue, with code and output review after each or batch of tasks.
 
 **Core principle:** Fresh subagent per task + review between or after tasks = high quality, fast iteration.
+
+**MANDATORY REQUIREMENT:** You MUST use parallel execution when tasks are independent and can be executed concurrently.
 
 Executing Plans through agents:
 
@@ -29,16 +36,24 @@ Dispatch one agent per task or issue. Let it work sequentially. Review the outpu
 - Tasks are tightly coupled
 - Tasks should be executed in order
 
-### Parallel Execution
+### Parallel Execution (MANDATORY)
 
-When you have multiple unrelated tasks or issues (different files, different subsystems, different bugs), investigatin or modifying them sequentially wastes time. Each task or investigation is independent and can happen in parallel.
+**MANDATORY PROTOCOL:** When you have multiple unrelated tasks or issues (different files, different subsystems, different bugs), investigating or modifying them sequentially wastes time. Each task or investigation is independent and can happen in parallel.
 
-Dispatch one agent per independent problem domain. Let them work concurrently.
+**MANDATORY ACTION:** Dispatch one agent per independent problem domain. Let them work concurrently.
 
-**When to use:**
+**MANDATORY - You MUST use parallel execution when:**
 
 - Tasks are mostly independent
-- Overral review can be done after all tasks are completed
+- Overall review can be done after all tasks are completed
+- No shared state conflicts exist
+- Different file sets or subsystems are involved
+- 3+ independent tasks exist
+
+**MANDATORY - Task Decomposition:**
+- You MUST divide complex tasks into parallelizable components
+- Each component must be independent and self-contained
+- Components must have clear, specific goals
 
 ## Sequential Execution Process
 
@@ -178,13 +193,19 @@ Done!
 - Dispatch fix subagent with specific instructions
 - Don't try to fix manually (context pollution)
 
-## Parallel Execution Process
+## Parallel Execution Process (MANDATORY)
 
-Load plan, review critically, execute tasks in batches, report for review between batches.
+**MANDATORY PROTOCOL:** Load plan, review critically, execute tasks in batches with parallel execution where applicable, report for review between batches.
 
-**Core principle:** Batch execution with checkpoints for architect review.
+**Core principle:** Batch execution with parallel agent dispatch and checkpoints for architect review.
 
-**Announce at start:** "I'm using the executing-plans skill to implement this plan."
+**MANDATORY - Announce at start:** "I'm using the subagent-driven-development skill to implement this plan with parallel execution."
+
+**MANDATORY - Task Decomposition:**
+1. **Identify independent task groups** - Group tasks by subsystem, file set, or domain
+2. **Divide complex tasks** - Break down large tasks into parallelizable components
+3. **Verify independence** - Ensure no shared state or dependencies
+4. **Plan parallel dispatch** - Determine which tasks can run concurrently
 
 ### Step 1: Load and Review Plan
 
@@ -193,16 +214,32 @@ Load plan, review critically, execute tasks in batches, report for review betwee
 3. If concerns: Raise them with your human partner before starting
 4. If no concerns: Create TodoWrite and proceed
 
-### Step 2: Execute Batch
+### Step 2: Execute Batch (MANDATORY - Parallel Execution)
 
-**Default: First 3 tasks**
+**MANDATORY ACTION:** Execute independent tasks in parallel using the dispatching-parallel-agents skill.
 
-For each task:
+**Default: First 3 independent tasks in parallel**
 
-1. Mark as in_progress
-2. Follow each step exactly (plan has bite-sized steps)
-3. Run verifications as specified
-4. Mark as completed
+**MANDATORY - Parallel Execution Pattern:**
+
+1. **Identify independent tasks** in the batch
+2. **Dispatch agents in parallel:**
+   ```typescript
+   // Dispatch multiple agents concurrently
+   Task("Implement Task 1: [description]")
+   Task("Implement Task 2: [description]")
+   Task("Implement Task 3: [description]")
+   // All three run concurrently
+   ```
+3. **For each task:**
+   - Mark as in_progress
+   - Follow each step exactly (plan has bite-sized steps)
+   - Run verifications as specified
+   - Mark as completed
+4. **Wait for all parallel tasks to complete**
+5. **Review all results together**
+
+**MANDATORY:** If tasks are independent, you MUST execute them in parallel, not sequentially.
 
 ### Step 3: Report
 

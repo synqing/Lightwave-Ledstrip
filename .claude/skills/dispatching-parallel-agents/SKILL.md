@@ -1,9 +1,14 @@
 ---
 name: dispatching-parallel-agents
-description: Use when facing 3+ independent failures that can be investigated without shared state or dependencies - dispatches multiple Claude agents to investigate and fix independent problems concurrently
+version: 2.0.0
+description: MANDATORY protocol for parallel agent execution when facing 3+ independent failures or tasks that can be investigated without shared state or dependencies - dispatches multiple Claude agents to investigate and fix independent problems concurrently
 ---
 
 # Dispatching Parallel Agents
+
+**Protocol Version:** 2.0.0  
+**Status:** MANDATORY  
+**Last Updated:** 2025-01-XX
 
 ## Overview
 
@@ -11,7 +16,13 @@ When you have multiple unrelated failures (different test files, different subsy
 
 **Core principle:** Dispatch one agent per independent problem domain. Let them work concurrently.
 
-## When to Use
+**MANDATORY REQUIREMENT:** You MUST use parallel execution when:
+- 3+ independent failures exist
+- Tasks can be divided into independent components
+- No shared state conflicts
+- Different subsystems or file sets are involved
+
+## When to Use (MANDATORY)
 
 ```dot
 digraph when_to_use {
@@ -21,47 +32,67 @@ digraph when_to_use {
     "One agent per problem domain" [shape=box];
     "Can they work in parallel?" [shape=diamond];
     "Sequential agents" [shape=box];
-    "Parallel dispatch" [shape=box];
+    "Parallel dispatch [MANDATORY]" [shape=box, style="bold"];
 
     "Multiple failures?" -> "Are they independent?" [label="yes"];
     "Are they independent?" -> "Single agent investigates all" [label="no - related"];
     "Are they independent?" -> "Can they work in parallel?" [label="yes"];
-    "Can they work in parallel?" -> "Parallel dispatch" [label="yes"];
+    "Can they work in parallel?" -> "Parallel dispatch [MANDATORY]" [label="yes"];
     "Can they work in parallel?" -> "Sequential agents" [label="no - shared state"];
 }
 ```
 
-**Use when:**
+**MANDATORY - You MUST use parallel execution when:**
 - 3+ test files failing with different root causes
 - Multiple subsystems broken independently
 - Each problem can be understood without context from others
 - No shared state between investigations
+- Complex tasks can be divided into independent components
+- Different file sets or subsystems are involved
 
-**Don't use when:**
+**Exception - Sequential execution required when:**
 - Failures are related (fix one might fix others)
 - Need to understand full system state
 - Agents would interfere with each other
+- Shared state dependencies exist
 
-## The Pattern
+## The Pattern (MANDATORY)
 
-### 1. Identify Independent Domains
+### 1. Identify Independent Domains (MANDATORY)
 
-Group failures by what's broken:
+**MANDATORY ACTION:** Group failures or tasks by what's broken or what needs to be done:
 - File A tests: Tool approval flow
 - File B tests: Batch completion behavior
 - File C tests: Abort functionality
+- Subsystem X: Network configuration
+- Subsystem Y: Visual effects rendering
 
 Each domain is independent - fixing tool approval doesn't affect abort tests.
 
-### 2. Create Focused Agent Tasks
+**MANDATORY:** You MUST identify all independent domains before proceeding.
 
-Each agent gets:
-- **Specific scope:** One test file or subsystem
-- **Clear goal:** Make these tests pass
+### 2. Divide Complex Tasks into Parallelizable Components (MANDATORY)
+
+**MANDATORY ACTION:** For complex tasks, you MUST decompose them into parallelizable components:
+
+- **Component 1:** Independent subsystem A
+- **Component 2:** Independent subsystem B
+- **Component 3:** Independent test file C
+
+**Each component must be:**
+- Independent (no shared state)
+- Self-contained (all context provided)
+- Clearly scoped (specific goal)
+
+### 3. Create Focused Agent Tasks (MANDATORY)
+
+**MANDATORY ACTION:** Each agent gets:
+- **Specific scope:** One test file, subsystem, or component
+- **Clear goal:** Make these tests pass / implement this component
 - **Constraints:** Don't change other code
 - **Expected output:** Summary of what you found and fixed
 
-### 3. Dispatch in Parallel
+### 4. Dispatch in Parallel (MANDATORY)
 
 ```typescript
 // In Claude Code / AI environment

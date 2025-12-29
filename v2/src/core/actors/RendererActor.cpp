@@ -45,10 +45,11 @@ namespace lightwaveos { namespace actors {
 
 #ifndef NATIVE_BUILD
 #include <Arduino.h>
-#include <esp_log.h>
-
-static const char* TAG = "Renderer";
 #endif
+
+// Unified logging system (preserves colored output conventions)
+#define LW_LOG_TAG "Renderer"
+#include "utils/Log.h"
 
 namespace lightwaveos {
 namespace actors {
@@ -189,9 +190,7 @@ bool RendererActor::registerEffect(uint8_t id, const char* name, EffectRenderFn 
         m_effectCount = id + 1;
     }
 
-#ifndef NATIVE_BUILD
-    ESP_LOGD(TAG, "Registered effect %d: %s (legacy -> IEffect adapter)", id, name);
-#endif
+    LW_LOGD("Registered effect %d: %s (legacy -> IEffect adapter)", id, name);
 
     return true;
 }
@@ -220,9 +219,7 @@ bool RendererActor::registerEffect(uint8_t id, plugins::IEffect* effect)
         m_effectCount = id + 1;
     }
 
-#ifndef NATIVE_BUILD
-    ESP_LOGD(TAG, "Registered effect %d: %s (IEffect native)", id, meta.name);
-#endif
+    LW_LOGD("Registered effect %d: %s (IEffect native)", id, meta.name);
 
     return true;
 }
@@ -259,9 +256,7 @@ plugins::IEffect* RendererActor::getEffectInstance(uint8_t id) const
 
 void RendererActor::onStart()
 {
-#ifndef NATIVE_BUILD
-    ESP_LOGI(TAG, "Initializing LEDs on Core %d", xPortGetCoreID());
-#endif
+    LW_LOGI("Initializing LEDs on Core %d", xPortGetCoreID());
 
     initLeds();
 
@@ -271,10 +266,8 @@ void RendererActor::onStart()
     // Record start time
     m_lastFrameTime = micros();
 
-#ifndef NATIVE_BUILD
-    ESP_LOGI(TAG, "Ready - %d effects, brightness=%d, target=%d FPS",
+    LW_LOGI("Ready - %d effects, brightness=%d, target=%d FPS",
              m_effectCount, m_brightness, LedConfig::TARGET_FPS);
-#endif
 }
 
 void RendererActor::onMessage(const Message& msg)
@@ -408,10 +401,8 @@ void RendererActor::onTick()
 
 void RendererActor::onStop()
 {
-#ifndef NATIVE_BUILD
-    ESP_LOGI(TAG, "Stopping - rendered %lu frames, %lu drops",
+    LW_LOGI("Stopping - rendered %lu frames, %lu drops",
              m_stats.framesRendered, m_stats.frameDrops);
-#endif
 
     // Unsubscribe from events
     bus::MessageBus::instance().unsubscribeAll(this);
@@ -435,7 +426,7 @@ void RendererActor::setCaptureMode(bool enabled, uint8_t tapMask) {
         m_captureTapCValid = false;
     }
     
-    ESP_LOGI("Renderer", "Capture mode %s (tapMask=0x%02X)", 
+    LW_LOGI("Capture mode %s (tapMask=0x%02X)",
              enabled ? "enabled" : "disabled", m_captureTapMask);
 }
 
@@ -658,7 +649,7 @@ void RendererActor::initLeds()
     // Start with all LEDs off
     FastLED.clear(true);
 
-    ESP_LOGI(TAG, "FastLED initialized: 2x%d LEDs on pins %d/%d",
+    LW_LOGI("FastLED initialized: 2x%d LEDs on pins %d/%d",
              LedConfig::LEDS_PER_STRIP, LedConfig::STRIP1_PIN, LedConfig::STRIP2_PIN);
 #endif
 }
@@ -892,30 +883,24 @@ void RendererActor::updateStats(uint32_t frameTimeUs)
 void RendererActor::handleSetEffect(uint8_t effectId)
 {
     if (effectId >= MAX_EFFECTS || !m_effects[effectId].active) {
-#ifndef NATIVE_BUILD
-        ESP_LOGW(TAG, "Invalid effect ID: %d", effectId);
-#endif
+        LW_LOGW("Invalid effect ID: %d", effectId);
         return;
     }
 
     if (m_currentEffect != effectId) {
         uint8_t oldEffect = m_currentEffect;
-        
+
         // Cleanup old effect
         if (m_effects[oldEffect].effect != nullptr) {
-#ifndef NATIVE_BUILD
-            ESP_LOGI(TAG, "IEffect cleanup: %s (ID %d)", m_effects[oldEffect].name, oldEffect);
-#endif
+            LW_LOGI("IEffect cleanup: %s (ID %d)", m_effects[oldEffect].name, oldEffect);
             m_effects[oldEffect].effect->cleanup();
         }
-        
+
         m_currentEffect = effectId;
-        
+
         // Initialize new effect
         if (m_effects[effectId].effect != nullptr) {
-#ifndef NATIVE_BUILD
-            ESP_LOGI(TAG, "IEffect init: %s (ID %d)", m_effects[effectId].name, effectId);
-#endif
+            LW_LOGI("IEffect init: %s (ID %d)", m_effects[effectId].name, effectId);
             plugins::EffectContext initCtx;
             initCtx.leds = m_leds;
             initCtx.ledCount = LedConfig::TOTAL_LEDS;
@@ -938,21 +923,15 @@ void RendererActor::handleSetEffect(uint8_t effectId)
             if (!m_effects[effectId].effect->init(initCtx)) {
                 // Initialization failed - revert to previous effect
                 m_currentEffect = oldEffect;
-#ifndef NATIVE_BUILD
-                ESP_LOGW(TAG, "IEffect %d init failed, reverting to %d", effectId, oldEffect);
-#endif
+                LW_LOGW("IEffect %d init failed, reverting to %d", effectId, oldEffect);
                 return;
             }
-#ifndef NATIVE_BUILD
-            ESP_LOGI(TAG, "IEffect init: SUCCESS");
-#endif
+            LW_LOGI("IEffect init: SUCCESS");
         }
 
-#ifndef NATIVE_BUILD
-        ESP_LOGI(TAG, "Effect changed: %d (%s) -> %d (\033[1;32m%s\033[0m)",
+        LW_LOGI("Effect changed: %d (%s) -> %d (" LW_CLR_GREEN "%s" LW_ANSI_RESET ")",
                  oldEffect, getEffectName(oldEffect),
                  effectId, getEffectName(effectId));
-#endif
 
         // Publish EFFECT_CHANGED event
         Message evt(MessageType::EFFECT_CHANGED);
@@ -974,8 +953,8 @@ void RendererActor::handleSetBrightness(uint8_t brightness)
 
 #ifndef NATIVE_BUILD
         FastLED.setBrightness(m_brightness);
-        ESP_LOGD(TAG, "Brightness: %d", m_brightness);
 #endif
+        LW_LOGD("Brightness: %d", m_brightness);
     }
 }
 
@@ -990,9 +969,7 @@ void RendererActor::handleSetSpeed(uint8_t speed)
     if (m_speed != speed) {
         m_speed = speed;
 
-#ifndef NATIVE_BUILD
-        ESP_LOGD(TAG, "Speed: %d", m_speed);
-#endif
+        LW_LOGD("Speed: %d", m_speed);
     }
 }
 
@@ -1013,9 +990,7 @@ void RendererActor::handleSetPalette(uint8_t paletteIndex)
         uint8_t flags = master_palette_flags[paletteIndex];
         enhancement::ColorCorrectionEngine::getInstance().correctPalette(m_currentPalette, flags);
 
-#ifndef NATIVE_BUILD
-        ESP_LOGD(TAG, "Palette: %d (%s)", m_paletteIndex, getPaletteName(m_paletteIndex));
-#endif
+        LW_LOGD("Palette: %d (%s)", m_paletteIndex, getPaletteName(m_paletteIndex));
 
         // Publish PALETTE_CHANGED event (for other actors)
         Message evt(MessageType::PALETTE_CHANGED);
@@ -1028,9 +1003,7 @@ void RendererActor::handleSetIntensity(uint8_t intensity)
 {
     if (m_intensity != intensity) {
         m_intensity = intensity;
-#ifndef NATIVE_BUILD
-        ESP_LOGD(TAG, "Intensity: %d", m_intensity);
-#endif
+        LW_LOGD("Intensity: %d", m_intensity);
     }
 }
 
@@ -1038,9 +1011,7 @@ void RendererActor::handleSetSaturation(uint8_t saturation)
 {
     if (m_saturation != saturation) {
         m_saturation = saturation;
-#ifndef NATIVE_BUILD
-        ESP_LOGD(TAG, "Saturation: %d", m_saturation);
-#endif
+        LW_LOGD("Saturation: %d", m_saturation);
     }
 }
 
@@ -1048,9 +1019,7 @@ void RendererActor::handleSetComplexity(uint8_t complexity)
 {
     if (m_complexity != complexity) {
         m_complexity = complexity;
-#ifndef NATIVE_BUILD
-        ESP_LOGD(TAG, "Complexity: %d", m_complexity);
-#endif
+        LW_LOGD("Complexity: %d", m_complexity);
     }
 }
 
@@ -1058,9 +1027,7 @@ void RendererActor::handleSetVariation(uint8_t variation)
 {
     if (m_variation != variation) {
         m_variation = variation;
-#ifndef NATIVE_BUILD
-        ESP_LOGD(TAG, "Variation: %d", m_variation);
-#endif
+        LW_LOGD("Variation: %d", m_variation);
     }
 }
 
@@ -1068,9 +1035,7 @@ void RendererActor::handleSetHue(uint8_t hue)
 {
     if (m_hue != hue) {
         m_hue = hue;
-#ifndef NATIVE_BUILD
-        ESP_LOGD(TAG, "Hue: %d", m_hue);
-#endif
+        LW_LOGD("Hue: %d", m_hue);
     }
 }
 
@@ -1104,12 +1069,10 @@ void RendererActor::startTransition(uint8_t newEffectId, uint8_t transitionType)
         type
     );
 
-#ifndef NATIVE_BUILD
-    ESP_LOGI(TAG, "Transition started: %s -> %s (%s)",
+    LW_LOGI("Transition started: %s -> %s (%s)",
              getEffectName(m_currentEffect),
              getEffectName(newEffectId),
              getTransitionName(type));
-#endif
 }
 
 void RendererActor::startRandomTransition(uint8_t newEffectId)

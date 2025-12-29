@@ -73,15 +73,31 @@ void HeartbeatEffect::render(plugins::EffectContext& ctx) {
                 uint16_t left1 = CENTER_LEFT - dist;
                 uint16_t right1 = CENTER_RIGHT + dist;
 
-                if (left1 < STRIP_LENGTH) ctx.leds[left1] += color;
-                if (right1 < STRIP_LENGTH) ctx.leds[right1] += color;
+                if (left1 < STRIP_LENGTH) {
+                    ctx.leds[left1].r = qadd8(ctx.leds[left1].r, color.r);
+                    ctx.leds[left1].g = qadd8(ctx.leds[left1].g, color.g);
+                    ctx.leds[left1].b = qadd8(ctx.leds[left1].b, color.b);
+                }
+                if (right1 < STRIP_LENGTH) {
+                    ctx.leds[right1].r = qadd8(ctx.leds[right1].r, color.r);
+                    ctx.leds[right1].g = qadd8(ctx.leds[right1].g, color.g);
+                    ctx.leds[right1].b = qadd8(ctx.leds[right1].b, color.b);
+                }
 
                 // Strip 2: center pair
                 uint16_t left2 = STRIP_LENGTH + CENTER_LEFT - dist;
                 uint16_t right2 = STRIP_LENGTH + CENTER_RIGHT + dist;
 
-                if (left2 < ctx.ledCount) ctx.leds[left2] += color;
-                if (right2 < ctx.ledCount) ctx.leds[right2] += color;
+                if (left2 < ctx.ledCount) {
+                    ctx.leds[left2].r = qadd8(ctx.leds[left2].r, color.r);
+                    ctx.leds[left2].g = qadd8(ctx.leds[left2].g, color.g);
+                    ctx.leds[left2].b = qadd8(ctx.leds[left2].b, color.b);
+                }
+                if (right2 < ctx.ledCount) {
+                    ctx.leds[right2].r = qadd8(ctx.leds[right2].r, color.r);
+                    ctx.leds[right2].g = qadd8(ctx.leds[right2].g, color.g);
+                    ctx.leds[right2].b = qadd8(ctx.leds[right2].b, color.b);
+                }
             }
         }
 

@@ -148,7 +148,10 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
 
     // Capture phase before update for delta calculation
     float prevPhase = m_phase;
-    m_phase += speedNorm * 4.0f * m_speedScaleSmooth * dt;  // dt-corrected: slew-limited speed
+    // FIX: Use 240.0f multiplier like ChevronWaves (was 4.0f - 60x slower!)
+    // Fast phase accumulation makes forward motion perceptually dominant
+    m_phase += speedNorm * 240.0f * m_speedScaleSmooth * dt;
+    if (m_phase > 628.3f) m_phase -= 628.3f;  // Wrap at 100*2π to prevent float overflow
     float phaseDelta = m_phase - prevPhase;
 
     // Validation instrumentation
@@ -166,15 +169,18 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
         // CENTRE ORIGIN: Calculate distance from centre pair
         float distFromCenter = (float)centerPairDistance((uint16_t)i);
 
-        // JOG-DIAL FIX: Single wave for clean propagation (collision visualized through brightness)
+        // DIFFERENTIATED WAVE COLLISION: Longer wavelength than Interference Scanner
         // sin(k*dist - phase) produces OUTWARD motion when phase increases
-        const float freqBase = 0.2f;
+        const float freqBase = 0.15f;  // ~42 LED wavelength (vs Scanner's ~25-31)
         float wave1 = sinf(distFromCenter * freqBase - m_phase);
 
-        // JOG-DIAL FIX: Audio modulates BRIGHTNESS, not speed
-        // energyDelta drives "collision flash" brightness rather than speed
-        float audioIntensity = 0.4f + 0.5f * m_energyAvgSmooth + 0.6f * m_collisionBoost + 0.4f * m_energyDeltaSmooth;
-        float interference = wave1 * audioIntensity;
+        // COLLISION FLASH: Center-focused explosion on snare hits
+        // collisionBoost decays from 1.0 (snare hit) with spatial falloff from center
+        float collisionFlash = m_collisionBoost * expf(-distFromCenter * 0.12f);  // Bright at center, fades out
+
+        // Base audio intensity (without uniform collision boost - moved to spatial flash)
+        float audioIntensity = 0.4f + 0.5f * m_energyAvgSmooth + 0.4f * m_energyDeltaSmooth;
+        float interference = wave1 * audioIntensity + collisionFlash * 0.8f;  // Collision adds separate layer
 
         // CRITICAL: Use tanhf for uniform brightness (like ChevronWaves)
         interference = tanhf(interference * 2.0f) * 0.5f + 0.5f;
@@ -187,7 +193,8 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
 
         ctx.leds[i] = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex), brightness);
         if (i + STRIP_LENGTH < ctx.ledCount) {
-            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex + 128), brightness);
+            // FIX: Hue offset +90 matches ChevronWaves pattern (was +128)
+            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex + 90), brightness);
         }
     }
 }

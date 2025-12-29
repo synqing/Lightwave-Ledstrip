@@ -45,6 +45,9 @@ private:
     float m_energyDeltaSmooth = 0.0f;
     float m_dominantBinSmooth = 0.0f;
     float m_hihatFlash = 0.0f;  // Hi-hat brightness overlay
+
+    // Slew-limited speed (prevents jog-dial jitter - ChevronWaves golden pattern)
+    float m_speedSmooth = 1.0f;
 };
 
 } // namespace ieffect

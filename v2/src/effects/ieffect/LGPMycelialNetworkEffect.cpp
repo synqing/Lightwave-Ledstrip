@@ -129,9 +129,9 @@ void LGPMycelialNetworkEffect::render(plugins::EffectContext& ctx) {
             brightness2 = fminf(255.0f, brightness2 * 1.3f);
         }
 
-        ctx.leds[i] = CHSV(hue1, 200, (uint8_t)constrain(brightness1, 0.0f, 255.0f));
+        ctx.leds[i] = CHSV(hue1, ctx.saturation, (uint8_t)constrain(brightness1, 0.0f, 255.0f));
         if (i + STRIP_LENGTH < ctx.ledCount) {
-            ctx.leds[i + STRIP_LENGTH] = CHSV(hue2, 200, (uint8_t)constrain(brightness2, 0.0f, 255.0f));
+            ctx.leds[i + STRIP_LENGTH] = CHSV(hue2, ctx.saturation, (uint8_t)constrain(brightness2, 0.0f, 255.0f));
         }
     }
 }

@@ -68,9 +68,9 @@ void LGPGrinCloakEffect::render(plugins::EffectContext& ctx) {
         uint8_t brightness = (uint8_t)constrain(brightnessF, 0.0f, 255.0f);
         uint8_t hue = (uint8_t)(ctx.gHue + (uint8_t)(sample * 1.5f));
 
-        ctx.leds[i] = CHSV(hue, 200, brightness);
+        ctx.leds[i] = CHSV(hue, ctx.saturation, brightness);
         if (i + STRIP_LENGTH < ctx.ledCount) {
-            ctx.leds[i + STRIP_LENGTH] = CHSV((uint8_t)(hue + 128), 200, brightness);
+            ctx.leds[i + STRIP_LENGTH] = CHSV((uint8_t)(hue + 128), ctx.saturation, brightness);
         }
     }
 }

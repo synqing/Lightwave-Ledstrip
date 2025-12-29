@@ -52,7 +52,7 @@ enum class CorrectionMode : uint8_t {
  */
 struct ColorCorrectionConfig {
     // === Mode Selection ===
-    CorrectionMode mode = CorrectionMode::RGB;  ///< Default: RGB mode (LC-style)
+    CorrectionMode mode = CorrectionMode::BOTH;  ///< Default: BOTH modes (HSV + RGB)
 
     // === HSV Mode Parameters ===
     uint8_t hsvMinSaturation = 120;  ///< 0-255, colors below this get boosted

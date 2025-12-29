@@ -34,6 +34,9 @@ bool LGPNeuralNetworkEffect::init(plugins::EffectContext& ctx) {
 }
 
 void LGPNeuralNetworkEffect::render(plugins::EffectContext& ctx) {
+    // Fade to prevent color accumulation from additive blending
+    fadeToBlackBy(ctx.leds, ctx.ledCount, 25);
+
     // Synaptic firing patterns with signal propagation
     m_time = (uint16_t)(m_time + (ctx.speed >> 2));
 
@@ -95,9 +98,13 @@ void LGPNeuralNetworkEffect::render(plugins::EffectContext& ctx) {
                 int16_t dendPos = (int16_t)pos + d;
                 if (dendPos >= 0 && dendPos < STRIP_LENGTH) {
                     uint8_t dendIntensity = (uint8_t)(intensity >> (1 + abs(d)));
-                    ctx.leds[dendPos] += CRGB(dendIntensity >> 2, 0, dendIntensity >> 3);
+                    // Use qadd8 to prevent overflow accumulation
+                    ctx.leds[dendPos].r = qadd8(ctx.leds[dendPos].r, dendIntensity >> 2);
+                    ctx.leds[dendPos].b = qadd8(ctx.leds[dendPos].b, dendIntensity >> 3);
                     if (dendPos + STRIP_LENGTH < ctx.ledCount) {
-                        ctx.leds[dendPos + STRIP_LENGTH] += CRGB(dendIntensity >> 3, 0, dendIntensity >> 2);
+                        uint16_t idx = dendPos + STRIP_LENGTH;
+                        ctx.leds[idx].r = qadd8(ctx.leds[idx].r, dendIntensity >> 3);
+                        ctx.leds[idx].b = qadd8(ctx.leds[idx].b, dendIntensity >> 2);
                     }
                 }
             }
@@ -112,11 +119,20 @@ void LGPNeuralNetworkEffect::render(plugins::EffectContext& ctx) {
 
             if (m_signalPos[s] >= 0 && m_signalPos[s] < STRIP_LENGTH) {
                 uint8_t sigIntensity = scale8(m_signalStrength[s], ctx.brightness);
-                CRGB sigColor = CRGB(sigIntensity >> 1, sigIntensity >> 2, sigIntensity);
+                uint8_t sigR = sigIntensity >> 1;
+                uint8_t sigG = sigIntensity >> 2;
+                uint8_t sigB = sigIntensity;
 
-                ctx.leds[m_signalPos[s]] += sigColor;
-                if (m_signalPos[s] + STRIP_LENGTH < ctx.ledCount) {
-                    ctx.leds[m_signalPos[s] + STRIP_LENGTH] += sigColor;
+                // Use qadd8 to prevent overflow accumulation
+                uint16_t pos = m_signalPos[s];
+                ctx.leds[pos].r = qadd8(ctx.leds[pos].r, sigR);
+                ctx.leds[pos].g = qadd8(ctx.leds[pos].g, sigG);
+                ctx.leds[pos].b = qadd8(ctx.leds[pos].b, sigB);
+                if (pos + STRIP_LENGTH < ctx.ledCount) {
+                    uint16_t idx = pos + STRIP_LENGTH;
+                    ctx.leds[idx].r = qadd8(ctx.leds[idx].r, sigR);
+                    ctx.leds[idx].g = qadd8(ctx.leds[idx].g, sigG);
+                    ctx.leds[idx].b = qadd8(ctx.leds[idx].b, sigB);
                 }
             }
         }

@@ -154,11 +154,16 @@ void ChevronWavesEffect::render(plugins::EffectContext& ctx) {
         uint8_t baseHue = (uint8_t)(ctx.gHue + (uint8_t)(m_dominantBinSmooth * (255.0f / 12.0f)));
         uint8_t hue = baseHue + (uint8_t)(distFromCenter * 2.0f) + (uint8_t)(m_chevronPos * 0.5f);
 
-        CRGB color = ctx.palette.getColor(hue, brightness);
-        ctx.leds[i] += color;
-        
+        CRGB c1 = ctx.palette.getColor(hue, brightness);
+        ctx.leds[i].r = qadd8(ctx.leds[i].r, c1.r);
+        ctx.leds[i].g = qadd8(ctx.leds[i].g, c1.g);
+        ctx.leds[i].b = qadd8(ctx.leds[i].b, c1.b);
+
         if (i + STRIP_LENGTH < ctx.ledCount) {
-            ctx.leds[i + STRIP_LENGTH] += ctx.palette.getColor(hue + 90, brightness);
+            CRGB c2 = ctx.palette.getColor(hue + 90, brightness);
+            ctx.leds[i + STRIP_LENGTH].r = qadd8(ctx.leds[i + STRIP_LENGTH].r, c2.r);
+            ctx.leds[i + STRIP_LENGTH].g = qadd8(ctx.leds[i + STRIP_LENGTH].g, c2.g);
+            ctx.leds[i + STRIP_LENGTH].b = qadd8(ctx.leds[i + STRIP_LENGTH].b, c2.b);
         }
     }
 }

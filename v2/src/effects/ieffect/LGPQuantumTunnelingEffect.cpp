@@ -121,9 +121,15 @@ void LGPQuantumTunnelingEffect::render(plugins::EffectContext& ctx) {
                     uint8_t waveBright = (uint8_t)(m_particleEnergy[p] * expf(-abs(w) * 0.2f));
                     uint8_t hue = (uint8_t)(ctx.gHue + p * 25);
 
-                    ctx.leds[wavePos] += CHSV(hue, 255, waveBright);
+                    CRGB waveColor = CHSV(hue, 255, waveBright);
+                    ctx.leds[wavePos].r = qadd8(ctx.leds[wavePos].r, waveColor.r);
+                    ctx.leds[wavePos].g = qadd8(ctx.leds[wavePos].g, waveColor.g);
+                    ctx.leds[wavePos].b = qadd8(ctx.leds[wavePos].b, waveColor.b);
                     if (wavePos + STRIP_LENGTH < ctx.ledCount) {
-                        ctx.leds[wavePos + STRIP_LENGTH] += CHSV((uint8_t)(hue + 128), 255, waveBright);
+                        CRGB waveColor2 = CHSV((uint8_t)(hue + 128), 255, waveBright);
+                        ctx.leds[wavePos + STRIP_LENGTH].r = qadd8(ctx.leds[wavePos + STRIP_LENGTH].r, waveColor2.r);
+                        ctx.leds[wavePos + STRIP_LENGTH].g = qadd8(ctx.leds[wavePos + STRIP_LENGTH].g, waveColor2.g);
+                        ctx.leds[wavePos + STRIP_LENGTH].b = qadd8(ctx.leds[wavePos + STRIP_LENGTH].b, waveColor2.b);
                     }
                 }
             }

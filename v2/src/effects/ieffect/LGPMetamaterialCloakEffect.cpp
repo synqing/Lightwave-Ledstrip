@@ -60,9 +60,9 @@ void LGPMetamaterialCloakEffect::render(plugins::EffectContext& ctx) {
             }
         }
 
-        ctx.leds[i] = CHSV(hue, 200, wave);
+        ctx.leds[i] = CHSV(hue, ctx.saturation, wave);
         if (i + STRIP_LENGTH < ctx.ledCount) {
-            ctx.leds[i + STRIP_LENGTH] = CHSV((uint8_t)(hue + 128), 200, wave);
+            ctx.leds[i + STRIP_LENGTH] = CHSV((uint8_t)(hue + 128), ctx.saturation, wave);
         }
     }
 }

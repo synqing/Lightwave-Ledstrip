@@ -49,9 +49,9 @@ void LGPCausticFanEffect::render(plugins::EffectContext& ctx) {
         uint8_t brightness = (uint8_t)brightnessF;
         uint8_t hue = (uint8_t)(ctx.gHue + (uint8_t)(x * 1.5f) + (m_time >> 4));
 
-        ctx.leds[i] = CHSV(hue, 200, brightness);
+        ctx.leds[i] = CHSV(hue, ctx.saturation, brightness);
         if (i + STRIP_LENGTH < ctx.ledCount) {
-            ctx.leds[i + STRIP_LENGTH] = CHSV((uint8_t)(hue + 96), 200, brightness);
+            ctx.leds[i + STRIP_LENGTH] = CHSV((uint8_t)(hue + 96), ctx.saturation, brightness);
         }
     }
 }

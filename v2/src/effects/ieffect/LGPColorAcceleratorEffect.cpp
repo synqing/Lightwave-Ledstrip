@@ -73,10 +73,16 @@ void LGPColorAcceleratorEffect::render(plugins::EffectContext& ctx) {
                 uint8_t debrisHue = random8();
                 uint8_t debrisBright = (uint8_t)(255.0f * (1.0f - distFromCenter / m_debrisRadius) * intensity);
 
+                // Use saturating add to prevent color overflow
+                CRGB debrisColor = CHSV(debrisHue, 255, debrisBright);
                 if (random8(2) == 0) {
-                    ctx.leds[i] += CHSV(debrisHue, 255, debrisBright);
+                    ctx.leds[i].r = qadd8(ctx.leds[i].r, debrisColor.r);
+                    ctx.leds[i].g = qadd8(ctx.leds[i].g, debrisColor.g);
+                    ctx.leds[i].b = qadd8(ctx.leds[i].b, debrisColor.b);
                 } else if (i + STRIP_LENGTH < ctx.ledCount) {
-                    ctx.leds[i + STRIP_LENGTH] += CHSV(debrisHue, 255, debrisBright);
+                    ctx.leds[i + STRIP_LENGTH].r = qadd8(ctx.leds[i + STRIP_LENGTH].r, debrisColor.r);
+                    ctx.leds[i + STRIP_LENGTH].g = qadd8(ctx.leds[i + STRIP_LENGTH].g, debrisColor.g);
+                    ctx.leds[i + STRIP_LENGTH].b = qadd8(ctx.leds[i + STRIP_LENGTH].b, debrisColor.b);
                 }
             }
         }

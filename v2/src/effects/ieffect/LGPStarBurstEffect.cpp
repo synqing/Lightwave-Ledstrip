@@ -41,6 +41,7 @@ bool LGPStarBurstEffect::init(plugins::EffectContext& ctx) {
     m_energyDeltaSmooth = 0.0f;
     m_dominantBinSmooth = 0.0f;
     m_hihatFlash = 0.0f;
+    m_speedSmooth = 1.0f;
     return true;
 }
 
@@ -123,8 +124,27 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
     if (m_dominantBinSmooth < 0.0f) m_dominantBinSmooth = 0.0f;
     if (m_dominantBinSmooth > 11.0f) m_dominantBinSmooth = 11.0f;
 
-    float speedScale = 0.3f + 1.2f * m_energyAvgSmooth + 2.0f * m_energyDeltaSmooth;
-    m_phase = enhancement::advancePhase(m_phase, speedNorm, speedScale, dt);
+    // JOG-DIAL FIX: Use heavy_bands and slew limiting (ChevronWaves golden pattern)
+    float heavyEnergy = 0.0f;
+#if FEATURE_AUDIO_SYNC
+    if (hasAudio) {
+        heavyEnergy = (ctx.audio.controlBus.heavy_bands[1] +
+                       ctx.audio.controlBus.heavy_bands[2]) / 2.0f;
+    }
+#endif
+    // NARROW speed range (0.6 to 1.8) instead of 0.3-3.5+
+    float targetSpeed = 0.6f + 1.2f * heavyEnergy;
+
+    // SLEW LIMITING (0.25/sec max change rate) to prevent abrupt speed changes
+    float maxDelta = 0.25f * dt;
+    float speedDelta = targetSpeed - m_speedSmooth;
+    if (fabsf(speedDelta) > maxDelta) {
+        speedDelta = (speedDelta > 0) ? maxDelta : -maxDelta;
+    }
+    m_speedSmooth += speedDelta;
+    if (m_speedSmooth > 2.0f) m_speedSmooth = 2.0f;
+
+    m_phase = enhancement::advancePhase(m_phase, speedNorm, m_speedSmooth, dt);
     m_burst += m_energyDeltaSmooth * 0.9f;
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
@@ -179,9 +199,15 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
             baseHue = (uint8_t)(ctx.gHue + (uint8_t)(m_dominantBinSmooth * (255.0f / 12.0f)));
         }
 
-        ctx.leds[i] += ctx.palette.getColor((uint8_t)(baseHue + paletteIndex), brightness);
+        CRGB c1 = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex), brightness);
+        ctx.leds[i].r = qadd8(ctx.leds[i].r, c1.r);
+        ctx.leds[i].g = qadd8(ctx.leds[i].g, c1.g);
+        ctx.leds[i].b = qadd8(ctx.leds[i].b, c1.b);
         if (i + STRIP_LENGTH < ctx.ledCount) {
-            ctx.leds[i + STRIP_LENGTH] += ctx.palette.getColor((uint8_t)(baseHue + paletteIndex + 85), brightness);
+            CRGB c2 = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex + 85), brightness);
+            ctx.leds[i + STRIP_LENGTH].r = qadd8(ctx.leds[i + STRIP_LENGTH].r, c2.r);
+            ctx.leds[i + STRIP_LENGTH].g = qadd8(ctx.leds[i + STRIP_LENGTH].g, c2.g);
+            ctx.leds[i + STRIP_LENGTH].b = qadd8(ctx.leds[i + STRIP_LENGTH].b, c2.b);
         }
     }
 }

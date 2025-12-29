@@ -2,6 +2,12 @@
 /**
  * @file LGPStarBurstNarrativeEffect.cpp
  * @brief LGP Star Burst effect implementation (narrative conductor + coherent color/motion)
+ *
+ * MIS Phase 2 Integration:
+ * - Uses BehaviorSelection to adapt rendering based on music style
+ * - StyleTiming adjusts state machine for different music types
+ * - PaletteStrategy controls when/how palette changes occur
+ * - SaliencyEmphasis weights visual dimensions based on what's salient
  */
 
 #include "LGPStarBurstNarrativeEffect.h"
@@ -50,6 +56,11 @@ static inline float expDecay(float value, float dt, float tauSeconds) {
     return value * expf(-dt / tauSeconds);
 }
 
+// Linear interpolation
+static inline float lerp(float a, float b, float t) {
+    return a + (b - a) * clamp01(t);
+}
+
 LGPStarBurstNarrativeEffect::LGPStarBurstNarrativeEffect()
     : m_phase(0.0f)
 {
@@ -91,6 +102,17 @@ bool LGPStarBurstNarrativeEffect::init(plugins::EffectContext& ctx) {
     m_energyDeltaSmooth = 0.0f;
     m_dominantBinSmooth = 0.0f;
 
+    // -----------------------------------------
+    // MIS Phase 2: Initialize behavior selection
+    // -----------------------------------------
+    m_currentBehavior = plugins::VisualBehavior::DRIFT_WITH_HARMONY;
+    m_paletteStrategy = plugins::PaletteStrategy::HARMONIC_COMMIT;
+    m_styleTiming = plugins::StyleTiming::forStyle(audio::MusicStyle::UNKNOWN);
+    m_saliencyEmphasis = plugins::SaliencyEmphasis::neutral();
+    m_shimmerPhase = 0.0f;
+    m_styleBlend = 0.0f;
+    m_prevStyle = audio::MusicStyle::UNKNOWN;
+
     return true;
 }
 
@@ -103,8 +125,53 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
     const float dt = ctx.deltaTimeMs * 0.001f;         // seconds
 
     const bool hasAudio = ctx.audio.available;
+
 #if FEATURE_AUDIO_SYNC
     const bool newHop = hasAudio && (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+
+    // -----------------------------------------
+    // MIS Phase 2: BEHAVIOR SELECTION UPDATE
+    // -----------------------------------------
+    if (hasAudio) {
+        // Get behavior recommendation from style + saliency
+        plugins::BehaviorContext behaviorCtx = plugins::selectBehavior(
+            ctx.audio.musicStyle(),
+            ctx.audio.saliencyFrame(),
+            ctx.audio.styleConfidence()
+        );
+
+        // Update current behavior and strategy
+        m_currentBehavior = behaviorCtx.recommendedPrimary;
+        m_paletteStrategy = plugins::selectPaletteStrategy(ctx.audio.musicStyle());
+
+        // Update saliency emphasis
+        m_saliencyEmphasis = plugins::SaliencyEmphasis::fromSaliency(ctx.audio.saliencyFrame());
+
+        // Smooth style transitions to prevent jarring switches
+        audio::MusicStyle currentStyle = ctx.audio.musicStyle();
+        if (currentStyle != m_prevStyle) {
+            // Style changed: start blending to new timing
+            m_styleBlend = 0.0f;
+            m_prevStyle = currentStyle;
+        }
+
+        // Blend toward current style's timing over ~2 seconds
+        m_styleBlend = clamp01(m_styleBlend + dt * 0.5f);
+
+        // Get target timing for current style
+        plugins::StyleTiming targetTiming = plugins::StyleTiming::forStyle(currentStyle);
+
+        // Interpolate timing parameters based on blend
+        m_styleTiming.phraseGateDuration = lerp(m_styleTiming.phraseGateDuration, targetTiming.phraseGateDuration, m_styleBlend * dt * 2.0f);
+        m_styleTiming.buildThreshold = lerp(m_styleTiming.buildThreshold, targetTiming.buildThreshold, m_styleBlend * dt * 2.0f);
+        m_styleTiming.holdDuration = lerp(m_styleTiming.holdDuration, targetTiming.holdDuration, m_styleBlend * dt * 2.0f);
+        m_styleTiming.releaseSpeed = lerp(m_styleTiming.releaseSpeed, targetTiming.releaseSpeed, m_styleBlend * dt * 2.0f);
+        m_styleTiming.quietThreshold = lerp(m_styleTiming.quietThreshold, targetTiming.quietThreshold, m_styleBlend * dt * 2.0f);
+        m_styleTiming.colorTransitionSpeed = lerp(m_styleTiming.colorTransitionSpeed, targetTiming.colorTransitionSpeed, m_styleBlend * dt * 2.0f);
+        m_styleTiming.motionTransitionSpeed = lerp(m_styleTiming.motionTransitionSpeed, targetTiming.motionTransitionSpeed, m_styleBlend * dt * 2.0f);
+        m_styleTiming.attackMultiplier = lerp(m_styleTiming.attackMultiplier, targetTiming.attackMultiplier, m_styleBlend * dt * 2.0f);
+        m_styleTiming.decayMultiplier = lerp(m_styleTiming.decayMultiplier, targetTiming.decayMultiplier, m_styleBlend * dt * 2.0f);
+    }
 
     // -----------------------------------------
     // AUDIO FEATURE UPDATE (hop-gated)
@@ -155,9 +222,65 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
 
         m_dominantBin = dominantBin;
 
-        // Impact trigger: novelty spike => "story beat"
-        if (m_energyDelta > 0.05f) {
+        // -----------------------------------------
+        // BEHAVIOR-ADAPTIVE IMPACT TRIGGERS
+        // -----------------------------------------
+        // Different behaviors have different trigger thresholds and responses
+        const float impactThreshold =
+            (m_currentBehavior == plugins::VisualBehavior::PULSE_ON_BEAT) ? 0.03f :  // Lower threshold for rhythmic
+            (m_currentBehavior == plugins::VisualBehavior::TEXTURE_FLOW) ? 0.08f :   // Higher threshold for texture
+            0.05f;  // Default
+
+        if (m_energyDelta > impactThreshold) {
             m_burst = 1.0f;
+        }
+
+        // -----------------------------------------
+        // PALETTE STRATEGY: When to commit palette changes
+        // -----------------------------------------
+        switch (m_paletteStrategy) {
+            case plugins::PaletteStrategy::RHYTHMIC_SNAP:
+                // Commit on beat during HOLD phase
+                if (ctx.audio.isOnBeat() && m_storyPhase == StoryPhase::HOLD) {
+                    m_keyRootBin = m_candidateRootBin;
+                    m_keyMinor = m_candidateMinor;
+                    m_phraseHoldS = 0.0f;
+                }
+                break;
+
+            case plugins::PaletteStrategy::HARMONIC_COMMIT:
+                // Original behavior: commit when phrase gate allows
+                // (handled in state machine below)
+                break;
+
+            case plugins::PaletteStrategy::MELODIC_DRIFT:
+                // Continuous slow drift toward candidate
+                if (m_storyPhase != StoryPhase::REST) {
+                    // Drift root toward candidate slowly
+                    float driftRate = dt * 0.3f;
+                    float targetRoot = (float)m_candidateRootBin;
+                    m_keyRootBinSmooth += (targetRoot - m_keyRootBinSmooth) * driftRate;
+                    m_keyMinor = m_candidateMinor;  // Follow chord quality
+                }
+                break;
+
+            case plugins::PaletteStrategy::TEXTURE_EVOLVE:
+                // Very slow evolution, based on flux
+                if (ctx.audio.flux() > 0.3f && m_phraseHoldS > m_styleTiming.phraseGateDuration) {
+                    m_keyRootBin = m_candidateRootBin;
+                    m_keyMinor = m_candidateMinor;
+                    m_phraseHoldS = 0.0f;
+                }
+                break;
+
+            case plugins::PaletteStrategy::DYNAMIC_WARMTH:
+                // Commit on dynamic peaks
+                if (ctx.audio.rms() > 0.6f && m_phraseHoldS > m_styleTiming.phraseGateDuration * 0.5f) {
+                    m_keyRootBin = m_candidateRootBin;
+                    m_keyMinor = m_candidateMinor;
+                    m_phraseHoldS = 0.0f;
+                }
+                break;
         }
     } else
 #endif
@@ -210,14 +333,30 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
     }
 #endif
 
+    // -----------------------------------------
+    // STYLE-ADAPTIVE STATE MACHINE
+    // -----------------------------------------
+    // Timing constants now come from m_styleTiming which adapts to music style
+    // - RHYTHMIC: shorter states, snappier transitions
+    // - HARMONIC: longer build phases, smoother palette transitions
+    // - TEXTURE: very long phrase gates, organic motion
+    const float phraseGate = m_styleTiming.phraseGateDuration;
+    const float buildThreshold = m_styleTiming.buildThreshold;
+    const float holdDur = m_styleTiming.holdDuration;
+    const float releaseMultiplier = m_styleTiming.releaseSpeed;
+    const float quietThresh = m_styleTiming.quietThreshold;
+
     // REST -> BUILD: wake up (quiet->active) => commit palette/key (phrase gate)
     // BUILD -> HOLD: sustained energy
     // HOLD -> RELEASE: energy drops or quiet persists
     // RELEASE -> REST: quiet persists
     switch (m_storyPhase) {
         case StoryPhase::REST:
+            // Style-adaptive entry threshold
             if (!quietNow && m_phraseHoldS > 0.6f) {
-                if (m_phraseHoldS > 2.0f) {
+                // Commit palette on phrase gate (HARMONIC_COMMIT strategy default)
+                if (m_paletteStrategy == plugins::PaletteStrategy::HARMONIC_COMMIT &&
+                    m_phraseHoldS > phraseGate) {
                     m_keyRootBin = m_candidateRootBin;
                     m_keyMinor   = m_candidateMinor;
                     m_phraseHoldS = 0.0f;
@@ -228,72 +367,152 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
             break;
 
         case StoryPhase::BUILD:
-            if (m_quietTimeS > 0.5f) {
+            // Style-adaptive quiet detection
+            if (m_quietTimeS > quietThresh * 0.8f) {
                 m_storyPhase = StoryPhase::REST;
                 m_storyTimeS = 0.0f;
                 break;
             }
-            if (m_storyTimeS > 1.2f && m_energyAvgSmooth > 0.20f) {
+            // Style-adaptive energy threshold for HOLD entry
+            if (m_storyTimeS > (1.2f / releaseMultiplier) && m_energyAvgSmooth > buildThreshold) {
                 m_storyPhase = StoryPhase::HOLD;
                 m_storyTimeS = 0.0f;
             }
             break;
 
         case StoryPhase::HOLD:
-            if (m_quietTimeS > 0.6f) {
+            // Style-adaptive quiet threshold
+            if (m_quietTimeS > quietThresh) {
                 m_storyPhase = StoryPhase::RELEASE;
                 m_storyTimeS = 0.0f;
                 break;
             }
-            if (m_storyTimeS > 3.0f && m_energyAvgSmooth < 0.18f) {
+            // Style-adaptive hold duration and exit threshold
+            if (m_storyTimeS > holdDur && m_energyAvgSmooth < (buildThreshold * 0.9f)) {
                 m_storyPhase = StoryPhase::RELEASE;
                 m_storyTimeS = 0.0f;
             }
             break;
 
         case StoryPhase::RELEASE:
-            if (m_quietTimeS > 0.8f) {
+            if (m_quietTimeS > quietThresh * 1.3f) {
                 m_storyPhase = StoryPhase::REST;
                 m_storyTimeS = 0.0f;
                 break;
             }
-            if (m_storyTimeS > 1.0f && !quietNow) {
+            // Style-adaptive release speed
+            if (m_storyTimeS > (1.0f / releaseMultiplier) && !quietNow) {
                 m_storyPhase = StoryPhase::BUILD;
                 m_storyTimeS = 0.0f;
             }
             break;
     }
 
-    // Smooth committed root bin so hue drift feels intentional (still phrase-gated)
-    m_keyRootBinSmooth += ((float)m_keyRootBin - m_keyRootBinSmooth) * (dt / (0.35f + dt));
+    // Smooth committed root bin - rate adapts to style
+    // RHYTHMIC: faster color changes (colorTransitionSpeed = 0.8)
+    // HARMONIC: slower, more intentional (colorTransitionSpeed = 0.3)
+    const float colorSmoothTau = 0.35f / m_styleTiming.colorTransitionSpeed;
+    m_keyRootBinSmooth += ((float)m_keyRootBin - m_keyRootBinSmooth) * (dt / (colorSmoothTau + dt));
     if (m_keyRootBinSmooth < 0.0f) m_keyRootBinSmooth = 0.0f;
     if (m_keyRootBinSmooth > 11.0f) m_keyRootBinSmooth = 11.0f;
 
-    // Story envelope 0..1
+    // Story envelope 0..1 - durations adapt to style
+    const float buildDur = 1.2f / m_styleTiming.releaseSpeed;
+    const float releaseDur = 1.0f * m_styleTiming.decayMultiplier;
+
     float env = 0.0f;
     if (m_storyPhase == StoryPhase::REST) {
         env = 0.0f;
     } else if (m_storyPhase == StoryPhase::BUILD) {
-        env = smoothstepDur(m_storyTimeS, 1.2f);
+        env = smoothstepDur(m_storyTimeS, buildDur);
     } else if (m_storyPhase == StoryPhase::HOLD) {
         env = 1.0f;
     } else { // RELEASE
-        env = 1.0f - smoothstepDur(m_storyTimeS, 1.0f);
+        env = 1.0f - smoothstepDur(m_storyTimeS, releaseDur);
     }
     env = clamp01(env);
 
     // -----------------------------------------
-    // PHASE + IMPACT DYNAMICS (dt-correct)
+    // PHASE + IMPACT DYNAMICS (ChevronWaves golden pattern)
     // -----------------------------------------
-    const float speedScale =
-        (0.45f + 1.10f * m_energyAvgSmooth + 2.20f * m_energyDeltaSmooth) * (0.25f + 0.75f * env);
+    // FIX: Use heavy_bands (pre-smoothed) and slew limiting to prevent jog-dial jitter
+    // This replaces the over-complex multi-factor speed modulation that caused motion chaos
 
-    m_phase += (speedNorm * 2.2f) * speedScale * dt; // radians
-    if (m_phase > 100000.0f) m_phase = fmodf(m_phase, 6.2831853f);
+    // Use heavy_bands instead of raw energy - already smoothed by audio pipeline
+    float heavyEnergy = 0.0f;
+#if FEATURE_AUDIO_SYNC
+    if (hasAudio) {
+        heavyEnergy = (ctx.audio.controlBus.heavy_bands[1] +
+                       ctx.audio.controlBus.heavy_bands[2]) / 2.0f;
+    }
+#endif
+    // NARROW speed range (0.6 to 1.8) instead of 0.11-9.97
+    float targetSpeed = 0.6f + 1.2f * heavyEnergy;
 
-    m_burst += m_energyDeltaSmooth * 0.85f;
+    // SLEW LIMITING (0.25/sec max change rate) to prevent abrupt speed changes
+    float maxDelta = 0.25f * dt;
+    float speedDelta = targetSpeed - m_speedSmooth;
+    if (fabsf(speedDelta) > maxDelta) {
+        speedDelta = (speedDelta > 0) ? maxDelta : -maxDelta;
+    }
+    m_speedSmooth += speedDelta;
+    // FIX: Both lower and upper bounds to prevent stuttering near zero
+    if (m_speedSmooth < 0.3f) m_speedSmooth = 0.3f;  // Minimum prevents stalls
+    if (m_speedSmooth > 2.0f) m_speedSmooth = 2.0f;  // Maximum prevents chaos
+
+    // Phase accumulation: monotonic, dt-corrected
+    // FIX: Wrap EVERY frame to prevent discontinuity at wrap point
+    m_phase += speedNorm * 240.0f * m_speedSmooth * dt;
+    m_phase = fmodf(m_phase, 6.2831853f);
+
+    // Shimmer phase for SHIMMER_WITH_MELODY behavior
+    // FIX: Wrap every frame
+    m_shimmerPhase += dt * 15.0f;  // Fast shimmer
+    m_shimmerPhase = fmodf(m_shimmerPhase, 6.2831853f);
+
+    // -----------------------------------------
+    // BEHAVIOR-ADAPTIVE BURST RESPONSE
+    // -----------------------------------------
+    // Attack/decay multipliers adapt burst to music style
+    const float attackMult = m_styleTiming.attackMultiplier;
+    const float decayMult = m_styleTiming.decayMultiplier;
+
+    // Burst accumulation - sharper for RHYTHMIC, softer for HARMONIC
+    m_burst += m_energyDeltaSmooth * 0.85f * attackMult;
     if (m_burst > 1.0f) m_burst = 1.0f;
-    m_burst = expDecay(m_burst, dt, 0.18f); // ~180ms impact tail
+
+    // Burst decay - shorter for RHYTHMIC (punchy), longer for HARMONIC (sustained)
+    const float burstTau = 0.18f * decayMult;
+    m_burst = expDecay(m_burst, dt, burstTau);
+
+    // -----------------------------------------
+    // BEHAVIOR-SPECIFIC ADDITIONAL TRIGGERS
+    // -----------------------------------------
+#if FEATURE_AUDIO_SYNC
+    if (hasAudio) {
+        switch (m_currentBehavior) {
+            case plugins::VisualBehavior::PULSE_ON_BEAT:
+                // Trigger burst on beat tick for snappy rhythmic response
+                if (ctx.audio.isOnBeat()) {
+                    m_burst = clamp01(m_burst + 0.6f * attackMult);
+                }
+                break;
+
+            case plugins::VisualBehavior::BREATHE_WITH_DYNAMICS:
+                // Modulate burst with RMS for organic breathing
+                m_burst = lerp(m_burst, ctx.audio.rms() * 0.7f, dt * 2.0f);
+                break;
+
+            case plugins::VisualBehavior::TEXTURE_FLOW:
+                // Modulate with flux for organic texture
+                m_burst = lerp(m_burst, ctx.audio.flux() * 0.5f, dt * 0.5f);
+                break;
+
+            default:
+                break;
+        }
+    }
+#endif
 
     // -----------------------------------------
     // TRAILS (dt-correct)
@@ -302,8 +521,18 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
     fadeToBlackBy(ctx.leds, ctx.ledCount, clampU8(fadeAmt));
 
     // -----------------------------------------
-    // RENDER (center-origin, coherent color + motion)
+    // RENDER (center-origin, saliency-weighted emphasis)
     // -----------------------------------------
+    // Saliency emphasis weights visual dimensions:
+    // - colorEmphasis: boost color changes when harmonic saliency dominates
+    // - motionEmphasis: boost pulses when rhythmic saliency dominates
+    // - textureEmphasis: boost shimmer when timbral saliency dominates
+    // - intensityEmphasis: boost brightness when dynamic saliency dominates
+    const float colorWeight = m_saliencyEmphasis.colorEmphasis;
+    const float motionWeight = m_saliencyEmphasis.motionEmphasis;
+    const float textureWeight = m_saliencyEmphasis.textureEmphasis;
+    const float intensityWeight = m_saliencyEmphasis.intensityEmphasis;
+
     const uint8_t rootBin  = (uint8_t)roundf(m_keyRootBinSmooth);
     const uint8_t thirdBin = (uint8_t)((rootBin + (m_keyMinor ? 3 : 4)) % 12);
     const uint8_t fifthBin = (uint8_t)((rootBin + 7) % 12);
@@ -313,9 +542,10 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
     const uint8_t hueThird = (uint8_t)(ctx.gHue + thirdBin * binStep);
     const uint8_t hueFifth = (uint8_t)(ctx.gHue + fifthBin * binStep);
 
-    const float freqBase   = 0.18f + 0.30f * env;
+    // Motion-weighted frequency and falloff
+    const float freqBase   = 0.18f + 0.30f * env * (0.5f + 0.5f * motionWeight);
     const float falloff    = 3.2f  - 1.6f  * env;
-    const float pulseRate  = 0.8f  + 2.4f  * env;
+    const float pulseRate  = (0.8f  + 2.4f  * env) * (0.7f + 0.6f * motionWeight);
 
     const uint8_t motionIdx = (uint8_t)(((uint32_t)(m_phase * 40.0f)) & 0xFF);
 
@@ -335,8 +565,9 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
         field *= spatial;
         field *= pulse;
 
+        // Motion-weighted burst contribution
         if (env > 0.02f) {
-            field += m_burst * env * expf(-normalizedDist * (falloff + 0.6f));
+            field += m_burst * env * (0.5f + 0.5f * motionWeight) * expf(-normalizedDist * (falloff + 0.6f));
         }
 
         field = clamp01(field);
@@ -349,16 +580,22 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
             brightF *= (0.35f + 0.65f * env);
         }
 
+        // Intensity-weighted brightness boost
+        brightF *= (0.8f + 0.4f * intensityWeight);
+
         const uint8_t brightness = clampU8((int)roundf(brightF * intensityNorm * 255.0f));
 
-        const int baseIdx = (int)(distFromCenter * 2.0f) + (int)motionIdx;
+        // Color-weighted palette index spread (more variation when harmonic salient)
+        const int colorSpread = (int)(distFromCenter * (1.5f + 1.5f * colorWeight));
+        const int baseIdx = colorSpread + (int)motionIdx;
         const uint8_t paletteIndex = clampU8(baseIdx);
 
         const float t = clamp01(normalizedDist);
 
+        // Color-weighted triad balance (more third when harmonic salient)
         float wRoot  = clamp01(1.15f - 1.65f * t);
         float wFifth = clamp01(0.35f + 0.95f * t);
-        float wThird = env * clamp01(1.0f - fabsf(t - 0.35f) * 3.0f);
+        float wThird = env * clamp01(1.0f - fabsf(t - 0.35f) * 3.0f) * (0.8f + 0.4f * colorWeight);
 
         const float wSum = (wRoot + wThird + wFifth);
         if (wSum > 0.0001f) {
@@ -376,9 +613,23 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
         if (bThird) c += ctx.palette.getColor((uint8_t)(hueThird + paletteIndex), bThird);
         if (bFifth) c += ctx.palette.getColor((uint8_t)(hueFifth + paletteIndex), bFifth);
 
+        // Motion-weighted burst accent
         if (m_burst > 0.20f && env > 0.25f) {
-            const uint8_t accentB = clampU8((int)roundf(brightness * m_burst * 0.55f));
+            const uint8_t accentB = clampU8((int)roundf(brightness * m_burst * 0.55f * (0.7f + 0.6f * motionWeight)));
             c += ctx.palette.getColor((uint8_t)(hueRoot + 128 + paletteIndex), accentB);
+        }
+
+        // -----------------------------------------
+        // BEHAVIOR-SPECIFIC: SHIMMER_WITH_MELODY sparkle layer
+        // -----------------------------------------
+        if (m_currentBehavior == plugins::VisualBehavior::SHIMMER_WITH_MELODY) {
+            // Texture-weighted shimmer overlay
+            const float shimmer = 0.5f + 0.5f * sinf(m_shimmerPhase + distFromCenter * 0.8f);
+            const float shimmerIntensity = shimmer * textureWeight * env * 0.4f;
+            if (shimmerIntensity > 0.1f) {
+                const uint8_t shimmerB = clampU8((int)roundf(brightness * shimmerIntensity));
+                c += ctx.palette.getColor((uint8_t)(hueFifth + 32 + paletteIndex), shimmerB);
+            }
         }
 
         // Snare-driven chord change pulse: bright center flash
@@ -388,10 +639,14 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
             c += ctx.palette.getColor((uint8_t)(hueFifth + 64 + paletteIndex), pulseB);
         }
 
-        ctx.leds[i] += c;
+        // FIX: Use qadd8() saturating addition to prevent white saturation
+        ctx.leds[i].r = qadd8(ctx.leds[i].r, c.r);
+        ctx.leds[i].g = qadd8(ctx.leds[i].g, c.g);
+        ctx.leds[i].b = qadd8(ctx.leds[i].b, c.b);
 
         if (i + STRIP_LENGTH < ctx.ledCount) {
-            const uint8_t harmonyShift = 85;
+            // FIX: Changed from 85 to 90 to match ChevronWaves pattern
+            const uint8_t harmonyShift = 90;
 
             CRGB c2 = CRGB::Black;
             if (bRoot)  c2 += ctx.palette.getColor((uint8_t)(hueRoot  + harmonyShift + paletteIndex), bRoot);
@@ -399,9 +654,12 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
             if (bFifth) c2 += ctx.palette.getColor((uint8_t)(hueFifth + harmonyShift + paletteIndex), bFifth);
 
             if (m_burst > 0.20f && env > 0.25f) {
-                const uint8_t accentB = clampU8((int)roundf(brightness * m_burst * 0.55f));
+                const uint8_t accentB = clampU8((int)roundf(brightness * m_burst * 0.55f * (0.7f + 0.6f * motionWeight)));
                 c2 += ctx.palette.getColor((uint8_t)(hueRoot + harmonyShift + 128 + paletteIndex), accentB);
             }
+
+            // FIX: Removed shimmer layer that was ONLY on Strip 2 - caused visual incoherence
+            // Shimmer created asymmetric motion between strips
 
             // Snare-driven chord change pulse for Strip 2
             if (m_chordChangePulse > 0.15f) {
@@ -410,7 +668,10 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
                 c2 += ctx.palette.getColor((uint8_t)(hueFifth + harmonyShift + 64 + paletteIndex), pulseB);
             }
 
-            ctx.leds[i + STRIP_LENGTH] += c2;
+            // FIX: Use qadd8() saturating addition to prevent white saturation
+            ctx.leds[i + STRIP_LENGTH].r = qadd8(ctx.leds[i + STRIP_LENGTH].r, c2.r);
+            ctx.leds[i + STRIP_LENGTH].g = qadd8(ctx.leds[i + STRIP_LENGTH].g, c2.g);
+            ctx.leds[i + STRIP_LENGTH].b = qadd8(ctx.leds[i + STRIP_LENGTH].b, c2.b);
         }
     }
 }
@@ -422,7 +683,7 @@ void LGPStarBurstNarrativeEffect::cleanup() {
 const plugins::EffectMetadata& LGPStarBurstNarrativeEffect::getMetadata() const {
     static plugins::EffectMetadata meta{
         "LGP Star Burst (Narrative)",
-        "Center-origin starburst with story conductor + chord-based color",
+        "Center-origin starburst with adaptive style response (MIS Phase 2)",
         plugins::EffectCategory::GEOMETRIC,
         1
     };

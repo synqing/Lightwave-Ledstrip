@@ -57,9 +57,9 @@ void LGPEvanescentSkinEffect::render(plugins::EffectContext& ctx) {
         brightnessF = constrain(brightnessF, 0.0f, 255.0f);
         uint8_t brightness = (uint8_t)brightnessF;
 
-        ctx.leds[i] = CHSV((uint8_t)hue, 200, brightness);
+        ctx.leds[i] = CHSV((uint8_t)hue, ctx.saturation, brightness);
         if (i + STRIP_LENGTH < ctx.ledCount) {
-            ctx.leds[i + STRIP_LENGTH] = CHSV((uint8_t)hue + 128, 200, brightness);
+            ctx.leds[i + STRIP_LENGTH] = CHSV((uint8_t)hue + 128, ctx.saturation, brightness);
         }
     }
 }

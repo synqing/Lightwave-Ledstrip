@@ -109,7 +109,7 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
     } else
 #endif
     if (!hasAudio) {
-        spawnChance = 10;
+        spawnChance = 0;  // No ripples without audio - was 10, causing animation without audio
     }
 
     if (m_spawnCooldown > 0) {
@@ -207,7 +207,9 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
                 CRGB color = ctx.palette.getColor(
                     m_ripples[r].hue + (uint8_t)dist,
                     brightness);
-                m_radial[dist] += color;
+                m_radial[dist].r = qadd8(m_radial[dist].r, color.r);
+                m_radial[dist].g = qadd8(m_radial[dist].g, color.g);
+                m_radial[dist].b = qadd8(m_radial[dist].b, color.b);
             }
         }
     }

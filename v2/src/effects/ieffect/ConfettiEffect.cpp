@@ -36,9 +36,14 @@ void ConfettiEffect::render(plugins::EffectContext& ctx) {
         int centerPos = CENTER_LEFT + random8(2);  // 79 or 80
         CRGB color = ctx.palette.getColor(ctx.gHue + random8(64), 255);
 
-        ctx.leds[centerPos] += color;
+        ctx.leds[centerPos].r = qadd8(ctx.leds[centerPos].r, color.r);
+        ctx.leds[centerPos].g = qadd8(ctx.leds[centerPos].g, color.g);
+        ctx.leds[centerPos].b = qadd8(ctx.leds[centerPos].b, color.b);
         if (centerPos + STRIP_LENGTH < ctx.ledCount) {
-            ctx.leds[centerPos + STRIP_LENGTH] += color;
+            int mirrorPos = centerPos + STRIP_LENGTH;
+            ctx.leds[mirrorPos].r = qadd8(ctx.leds[mirrorPos].r, color.r);
+            ctx.leds[mirrorPos].g = qadd8(ctx.leds[mirrorPos].g, color.g);
+            ctx.leds[mirrorPos].b = qadd8(ctx.leds[mirrorPos].b, color.b);
         }
     }
 

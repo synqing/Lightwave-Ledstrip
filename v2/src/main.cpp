@@ -895,9 +895,10 @@ void loop() {
                 }
             } else {
                 // Check if this is an effect selection key (a-k = effects 10-20, excludes command letters)
-                // Command letters: n, l, p, s, t, z are handled in switch below
+                // Command letters: c, e, g, n, l, p, s, t, z are handled in switch below
                 bool isEffectKey = false;
                 if (!inZoneMode && cmd >= 'a' && cmd <= 'k' &&
+                    cmd != 'c' && cmd != 'e' && cmd != 'g' &&
                     cmd != 'n' && cmd != 'l' && cmd != 'p' && cmd != 's' && cmd != 't' && cmd != 'z') {
                     uint8_t e = 10 + (cmd - 'a');
                     if (e < renderer->getEffectCount()) {

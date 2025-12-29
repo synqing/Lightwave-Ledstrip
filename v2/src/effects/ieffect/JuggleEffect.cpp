@@ -34,18 +34,28 @@ void JuggleEffect::render(plugins::EffectContext& ctx) {
         int pos1 = CENTER_RIGHT + distFromCenter;
         int pos2 = CENTER_LEFT - distFromCenter;
 
-        CRGB color = CHSV(dothue, 200, 255);
+        CRGB color = CHSV(dothue, ctx.saturation, 255);
 
         if (pos1 < STRIP_LENGTH) {
-            ctx.leds[pos1] |= color;
+            ctx.leds[pos1].r = qadd8(ctx.leds[pos1].r, color.r);
+            ctx.leds[pos1].g = qadd8(ctx.leds[pos1].g, color.g);
+            ctx.leds[pos1].b = qadd8(ctx.leds[pos1].b, color.b);
             if (pos1 + STRIP_LENGTH < ctx.ledCount) {
-                ctx.leds[pos1 + STRIP_LENGTH] |= color;
+                int mirrorPos1 = pos1 + STRIP_LENGTH;
+                ctx.leds[mirrorPos1].r = qadd8(ctx.leds[mirrorPos1].r, color.r);
+                ctx.leds[mirrorPos1].g = qadd8(ctx.leds[mirrorPos1].g, color.g);
+                ctx.leds[mirrorPos1].b = qadd8(ctx.leds[mirrorPos1].b, color.b);
             }
         }
         if (pos2 >= 0) {
-            ctx.leds[pos2] |= color;
+            ctx.leds[pos2].r = qadd8(ctx.leds[pos2].r, color.r);
+            ctx.leds[pos2].g = qadd8(ctx.leds[pos2].g, color.g);
+            ctx.leds[pos2].b = qadd8(ctx.leds[pos2].b, color.b);
             if (pos2 + STRIP_LENGTH < ctx.ledCount) {
-                ctx.leds[pos2 + STRIP_LENGTH] |= color;
+                int mirrorPos2 = pos2 + STRIP_LENGTH;
+                ctx.leds[mirrorPos2].r = qadd8(ctx.leds[mirrorPos2].r, color.r);
+                ctx.leds[mirrorPos2].g = qadd8(ctx.leds[mirrorPos2].g, color.g);
+                ctx.leds[mirrorPos2].b = qadd8(ctx.leds[mirrorPos2].b, color.b);
             }
         }
 

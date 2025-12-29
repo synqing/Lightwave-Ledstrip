@@ -51,9 +51,9 @@ void LGPBirefringentShearEffect::render(plugins::EffectContext& ctx) {
         uint8_t hue1 = (uint8_t)(ctx.gHue + (uint8_t)(idx) + (m_time >> 4));
         uint8_t hue2 = (uint8_t)(hue1 + 128);
 
-        ctx.leds[i] = CHSV(hue1, 200, brightness);
+        ctx.leds[i] = CHSV(hue1, ctx.saturation, brightness);
         if (i + STRIP_LENGTH < ctx.ledCount) {
-            ctx.leds[i + STRIP_LENGTH] = CHSV(hue2, 200, brightness);
+            ctx.leds[i + STRIP_LENGTH] = CHSV(hue2, ctx.saturation, brightness);
         }
     }
 }

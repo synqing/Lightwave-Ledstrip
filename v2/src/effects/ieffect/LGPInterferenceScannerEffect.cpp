@@ -122,7 +122,10 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
 
     // Capture phase before update for delta calculation
     float prevPhase = m_scanPhase;
-    m_scanPhase = enhancement::advancePhase(m_scanPhase, speedNorm, m_speedScaleSmooth, dt);
+    // FIX: Use 240.0f multiplier like ChevronWaves (was 3.6f via advancePhase - 67x slower!)
+    // Fast phase accumulation makes forward motion perceptually dominant
+    m_scanPhase += speedNorm * 240.0f * m_speedScaleSmooth * dt;
+    if (m_scanPhase > 628.3f) m_scanPhase -= 628.3f;  // Wrap at 100*2π to prevent float overflow
     float phaseDelta = m_scanPhase - prevPhase;
 
     // Validation instrumentation
@@ -137,10 +140,13 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
     for (int i = 0; i < STRIP_LENGTH; i++) {
         float dist = (float)centerPairDistance((uint16_t)i);
 
-        // JOG-DIAL FIX: Single wave for clean propagation (beat patterns cause jog-dial effect)
+        // INTERFERENCE PATTERN: Two wavelengths create moiré beating patterns
         // sin(k*dist - phase) produces OUTWARD motion when phase increases
-        const float freqBase = 0.25f;  // Moderate spatial frequency (wavelength ~25 LEDs)
-        float wave1 = sinf(dist * freqBase - m_scanPhase);
+        const float freqBase1 = 0.20f;  // Wavelength ~31 LEDs
+        const float freqBase2 = 0.35f;  // Wavelength ~18 LEDs (creates beating/moiré)
+        float wave1 = sinf(dist * freqBase1 - m_scanPhase);
+        float wave2 = sinf(dist * freqBase2 - m_scanPhase * 1.2f);  // Slight phase offset
+        float interference = wave1 + wave2 * 0.6f;  // Combine with weight for moiré
 
         // JOG-DIAL FIX: Audio modulates BRIGHTNESS, not speed - energyDelta drives intensity bursts
 #if FEATURE_AUDIO_SYNC
@@ -158,7 +164,7 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
 #endif
         audioGain = fminf(audioGain, 2.0f);  // Clamp max to prevent oversaturation
 
-        float pattern = wave1 * audioGain;
+        float pattern = interference * audioGain;
 
         // CRITICAL: Use tanhf for uniform brightness (like ChevronWaves)
         pattern = tanhf(pattern * 2.0f) * 0.5f + 0.5f;
@@ -169,8 +175,10 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
 
         ctx.leds[i] = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex), brightness);
         if (i + STRIP_LENGTH < ctx.ledCount) {
-            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex + 128),
-                                                             (uint8_t)(255 - brightness));
+            // FIX: Use SAME brightness for both strips (was inverted, causing visual backward motion)
+            // Hue offset +90 matches ChevronWaves pattern (was +128)
+            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex + 90),
+                                                             brightness);
         }
     }
 }

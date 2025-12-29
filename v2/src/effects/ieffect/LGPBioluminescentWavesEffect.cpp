@@ -28,6 +28,9 @@ bool LGPBioluminescentWavesEffect::init(plugins::EffectContext& ctx) {
 }
 
 void LGPBioluminescentWavesEffect::render(plugins::EffectContext& ctx) {
+    // Fade to prevent color accumulation from additive blending
+    fadeToBlackBy(ctx.leds, ctx.ledCount, 20);
+
     // Ocean waves with glowing plankton effect
     m_wavePhase = (uint16_t)(m_wavePhase + ctx.speed);
 
@@ -73,9 +76,13 @@ void LGPBioluminescentWavesEffect::render(plugins::EffectContext& ctx) {
                 int16_t p = (int16_t)pos + spread;
                 if (p >= 0 && p < STRIP_LENGTH) {
                     uint8_t spreadIntensity = scale8(intensity, (uint8_t)(255 - abs(spread) * 60));
-                    ctx.leds[p] += CRGB(0, spreadIntensity >> 1, spreadIntensity);
+                    // Use qadd8 to prevent overflow accumulation
+                    ctx.leds[p].g = qadd8(ctx.leds[p].g, spreadIntensity >> 1);
+                    ctx.leds[p].b = qadd8(ctx.leds[p].b, spreadIntensity);
                     if (p + STRIP_LENGTH < ctx.ledCount) {
-                        ctx.leds[p + STRIP_LENGTH] += CRGB(0, spreadIntensity >> 2, spreadIntensity);
+                        uint16_t idx = p + STRIP_LENGTH;
+                        ctx.leds[idx].g = qadd8(ctx.leds[idx].g, spreadIntensity >> 2);
+                        ctx.leds[idx].b = qadd8(ctx.leds[idx].b, spreadIntensity);
                     }
                 }
             }

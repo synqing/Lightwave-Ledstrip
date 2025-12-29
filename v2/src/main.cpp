@@ -16,6 +16,10 @@
 #ifndef NATIVE_BUILD
 #include <esp_task_wdt.h>
 #endif
+
+#define LW_LOG_TAG "Main"
+#include "utils/Log.h"
+
 #include "config/features.h"
 #include "core/actors/ActorSystem.h"
 #include "hardware/EncoderManager.h"
@@ -30,6 +34,14 @@
 #include "core/actors/ShowDirectorActor.h"
 #include "core/shows/BuiltinShows.h"
 #include "plugins/api/IEffect.h"
+
+#if FEATURE_K1_DEBUG
+#include "audio/k1/K1DebugCli.h"
+#endif
+
+#if FEATURE_AUDIO_SYNC
+#include "audio/AudioDebugConfig.h"
+#endif
 
 #if FEATURE_WEB_SERVER
 #include "network/WiFiManager.h"
@@ -72,36 +84,36 @@ void setup() {
     Serial.begin(115200);
     delay(1000);
 
-    Serial.println("\n\n==========================================");
-    Serial.println("LightwaveOS v2 - Actor System + Zones");
-    Serial.println("==========================================\n");
+    LW_LOGI("==========================================");
+    LW_LOGI("LightwaveOS v2 - Actor System + Zones");
+    LW_LOGI("==========================================");
 
     // Initialize Actor System (creates RendererActor)
-    Serial.println("Initializing Actor System...");
+    LW_LOGI("Initializing Actor System...");
     if (!actors.init()) {
-        Serial.println("ERROR: Actor System init failed!");
+        LW_LOGE("Actor System init failed!");
         while(1) delay(1000);  // Halt
     }
     renderer = actors.getRenderer();
-    Serial.println("  Actor System: INITIALIZED\n");
+    LW_LOGI("Actor System: INITIALIZED");
 
     // Register ALL effects (core + LGP) BEFORE starting actors
-    Serial.println("Registering effects...");
+    LW_LOGI("Registering effects...");
     uint8_t effectCount = registerAllEffects(renderer);
-    Serial.printf("  Effects registered: %d\n\n", effectCount);
+    LW_LOGI("Effects registered: %d", effectCount);
 
     // Initialize NVS (must be before Zone Composer to load saved config)
-    Serial.println("Initializing NVS...");
+    LW_LOGI("Initializing NVS...");
     if (!NVS_MANAGER.init()) {
-        Serial.println("WARNING: NVS init failed - settings won't persist!");
+        LW_LOGW("NVS init failed - settings won't persist!");
     } else {
-        Serial.println("  NVS: INITIALIZED\n");
+        LW_LOGI("NVS: INITIALIZED");
     }
 
     // Initialize Zone Composer
-    Serial.println("Initializing Zone Composer...");
+    LW_LOGI("Initializing Zone Composer...");
     if (!zoneComposer.init(renderer)) {
-        Serial.println("ERROR: Zone Composer init failed!");
+        LW_LOGE("Zone Composer init failed!");
     } else {
         // Attach zone composer to renderer
         renderer->setZoneComposer(&zoneComposer);
@@ -111,48 +123,46 @@ void setup() {
 
         // Try to load saved zone configuration
         if (zoneConfigMgr->loadFromNVS()) {
-            Serial.println("  Zone Composer: INITIALIZED (restored from NVS)");
+            LW_LOGI("Zone Composer: INITIALIZED (restored from NVS)");
         } else {
             // First boot - load default preset
             zoneComposer.loadPreset(2);
-            Serial.println("  Zone Composer: INITIALIZED");
-            Serial.println("  Preset: Triple Rings (default)");
+            LW_LOGI("Zone Composer: INITIALIZED");
+            LW_LOGI("Preset: Triple Rings (default)");
         }
-        Serial.println();
     }
 
     // Start all actors (RendererActor runs on Core 1 at 120 FPS)
-    Serial.println("Starting Actor System...");
+    LW_LOGI("Starting Actor System...");
     if (!actors.start()) {
-        Serial.println("ERROR: Actor System start failed!");
+        LW_LOGE("Actor System start failed!");
         while(1) delay(1000);  // Halt
     }
-    Serial.println("  Actor System: RUNNING\n");
+    LW_LOGI("Actor System: RUNNING");
 
     // Load or set initial state
-    Serial.println("Loading system state...");
+    LW_LOGI("Loading system state...");
     uint8_t savedEffect, savedBrightness, savedSpeed, savedPalette;
     if (zoneConfigMgr && zoneConfigMgr->loadSystemState(savedEffect, savedBrightness, savedSpeed, savedPalette)) {
         actors.setEffect(savedEffect);
         actors.setBrightness(savedBrightness);
         actors.setSpeed(savedSpeed);
         actors.setPalette(savedPalette);
-        Serial.printf("  Restored: Effect=%d, Brightness=%d, Speed=%d, Palette=%d\n",
-                      savedEffect, savedBrightness, savedSpeed, savedPalette);
+        LW_LOGI("Restored: Effect=%d, Brightness=%d, Speed=%d, Palette=%d",
+                savedEffect, savedBrightness, savedSpeed, savedPalette);
     } else {
         // First boot defaults
         actors.setEffect(0);       // Fire
         actors.setBrightness(128); // 50% brightness
         actors.setSpeed(15);       // Medium speed
         actors.setPalette(0);      // Party colors
-        Serial.println("  Using defaults (first boot)");
+        LW_LOGI("Using defaults (first boot)");
     }
-    Serial.println();
 
     // Initialize Network (if enabled)
 #if FEATURE_WEB_SERVER
     // Start WiFiManager BEFORE WebServer
-    Serial.println("Initializing WiFiManager...");
+    LW_LOGI("Initializing WiFiManager...");
     WIFI_MANAGER.setCredentials(
         NetworkConfig::WIFI_SSID_VALUE,
         NetworkConfig::WIFI_PASSWORD_VALUE
@@ -160,50 +170,49 @@ void setup() {
     WIFI_MANAGER.enableSoftAP("LightwaveOS-Setup", "lightwave123");
 
     if (!WIFI_MANAGER.begin()) {
-        Serial.println("ERROR: WiFiManager failed to start!");
+        LW_LOGE("WiFiManager failed to start!");
     } else {
-        Serial.println("  WiFiManager: STARTED");
+        LW_LOGI("WiFiManager: STARTED");
 
         // Wait for connection or AP mode (with timeout)
-        Serial.println("  Connecting to WiFi...");
+        LW_LOGI("Connecting to WiFi...");
         uint32_t waitStart = millis();
         while (!WIFI_MANAGER.isConnected() && !WIFI_MANAGER.isAPMode()) {
             if (millis() - waitStart > 30000) {
-                Serial.println("  WiFi connection timeout, continuing...");
+                LW_LOGW("WiFi connection timeout, continuing...");
                 break;
             }
             delay(100);
         }
 
         if (WIFI_MANAGER.isConnected()) {
-            Serial.printf("  WiFi: CONNECTED to %s\n", NetworkConfig::WIFI_SSID_VALUE);
-            Serial.printf("  IP: %s\n", WiFi.localIP().toString().c_str());
+            LW_LOGI("WiFi: CONNECTED to %s", NetworkConfig::WIFI_SSID_VALUE);
+            LW_LOGI("IP: %s", WiFi.localIP().toString().c_str());
         } else if (WIFI_MANAGER.isAPMode()) {
-            Serial.println("  WiFi: AP MODE (connect to LightwaveOS-Setup)");
-            Serial.printf("  IP: %s\n", WiFi.softAPIP().toString().c_str());
+            LW_LOGI("WiFi: AP MODE (connect to LightwaveOS-Setup)");
+            LW_LOGI("IP: %s", WiFi.softAPIP().toString().c_str());
         }
     }
-    Serial.println();
 
     // Start WebServer
-    Serial.println("Starting Web Server...");
-    
+    LW_LOGI("Starting Web Server...");
+
     // Instantiate WebServer with dependencies
     webServerInstance = new WebServer(actors, renderer);
-    
+
     if (!webServerInstance->begin()) {
-        Serial.println("WARNING: Web Server failed to start!");
+        LW_LOGW("Web Server failed to start!");
     } else {
-        Serial.println("  Web Server: RUNNING");
-        Serial.printf("  REST API: http://lightwaveos.local/api/v1/\n");
-        Serial.printf("  WebSocket: ws://lightwaveos.local/ws\n\n");
+        LW_LOGI("Web Server: RUNNING");
+        LW_LOGI("REST API: http://lightwaveos.local/api/v1/");
+        LW_LOGI("WebSocket: ws://lightwaveos.local/ws");
     }
 #endif
 
-    Serial.println("==========================================");
-    Serial.println("ACTOR SYSTEM: OPERATIONAL");
-    Serial.println("==========================================\n");
-    Serial.println("Commands:");
+    LW_LOGI("==========================================");
+    LW_LOGI("ACTOR SYSTEM: OPERATIONAL");
+    LW_LOGI("==========================================");
+    Serial.println("\nCommands:");
     Serial.println("  SPACE   - Next effect (quick tap)");
     Serial.println("  0-9/a-k - Select effect by key");
     Serial.println("  n/N     - Next/Prev effect");
@@ -246,6 +255,21 @@ void setup() {
     Serial.println("  brown   - Show brown guardrail status");
     Serial.println("  brown 0/1 - Disable/enable brown guardrail (accepts 'brown0' or 'brown 0')");
     Serial.println("  Csave   - Save color settings to NVS");
+#if FEATURE_K1_DEBUG
+    Serial.println("\nK1 Beat Tracker Debug:");
+    Serial.println("  k1      - Show BPM, confidence, phase, lock, top-3 candidates");
+    Serial.println("  k1s     - Full stats summary");
+    Serial.println("  k1spec  - ASCII resonator spectrum (121 bins)");
+    Serial.println("  k1nov   - Recent novelty z-scores");
+    Serial.println("  k1reset - Reset K1 pipeline");
+    Serial.println("  k1c     - Compact output (for continuous monitoring)");
+#endif
+#if FEATURE_AUDIO_SYNC
+    Serial.println("\nAudio Debug Verbosity:");
+    Serial.println("  adbg         - Show current level and intervals");
+    Serial.println("  adbg <0-5>   - Set level (0=off, 2=status, 4=medium, 5=verbose)");
+    Serial.println("  adbg interval <N> - Set base interval in frames");
+#endif
 #if FEATURE_WEB_SERVER
     Serial.println("\nWeb API:");
     Serial.println("  GET  /api/v1/effects - List effects");
@@ -441,13 +465,15 @@ void loop() {
                 } else {
                     currentEffect = (uint8_t)effectId;
                     actors.setEffect((uint8_t)effectId);
-                    Serial.printf("Effect %d: \033[1;32m%s\033[0m\n", effectId, renderer->getEffectName(effectId));
+                    Serial.printf("Effect %d: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n", effectId, renderer->getEffectName(effectId));
                 }
             }
         }
         else if (peekChar == 'a' && Serial.available() > 1) {
             String input = Serial.readStringUntil('\n');
             input.trim();
+            String inputLower = input;
+            inputLower.toLowerCase();
 
             if (input.startsWith("ae")) {
                 handledMulti = true;
@@ -482,6 +508,45 @@ void loop() {
                     }
                 }
             }
+#if FEATURE_AUDIO_SYNC
+            // Audio Debug Verbosity: adbg, adbg <0-5>, adbg interval <N>
+            else if (inputLower.startsWith("adbg")) {
+                handledMulti = true;
+                auto& dbgCfg = lightwaveos::audio::getAudioDebugConfig();
+
+                if (inputLower == "adbg") {
+                    // Show current settings
+                    Serial.printf("Audio debug: level=%d interval=%d (8band=%d, 64bin=%d, dma=%d)\n",
+                                  dbgCfg.verbosity, dbgCfg.baseInterval,
+                                  dbgCfg.interval8Band(), dbgCfg.interval64Bin(), dbgCfg.intervalDMA());
+                    Serial.println("Levels: 0=off, 1=errors, 2=status(10s), 3=+DMA, 4=+64bin, 5=+8band");
+                } else if (inputLower.startsWith("adbg interval ")) {
+                    int val = inputLower.substring(14).toInt();
+                    if (val > 0 && val < 1000) {
+                        dbgCfg.baseInterval = val;
+                        Serial.printf("Base interval set to %d frames (~%.1fs)\n", val, val / 62.5f);
+                    } else {
+                        Serial.println("Invalid interval (1-999)");
+                    }
+                } else {
+                    // Parse level: adbg0, adbg1, ..., adbg5 or adbg 0, adbg 1, etc.
+                    int level = -1;
+                    if (inputLower.length() == 5 && inputLower[4] >= '0' && inputLower[4] <= '5') {
+                        level = inputLower[4] - '0';
+                    } else if (inputLower.length() > 5) {
+                        level = inputLower.substring(5).toInt();
+                        if (inputLower.substring(4, 5) != " " && inputLower[4] < '0') level = -1;
+                    }
+                    if (level >= 0 && level <= 5) {
+                        dbgCfg.verbosity = level;
+                        const char* names[] = {"off", "errors", "status", "low(+DMA)", "medium(+64bin)", "high(+8band)"};
+                        Serial.printf("Audio debug level: %d (%s)\n", level, names[level]);
+                    } else {
+                        Serial.println("Usage: adbg [0-5] | adbg interval <frames>");
+                    }
+                }
+            }
+#endif
         }
         else if (peekChar == 'g') {
             String input = Serial.readStringUntil('\n');
@@ -849,6 +914,36 @@ void loop() {
             }
         }
 
+        // -----------------------------------------------------------------
+        // K1 Beat Tracker Debug Commands: k1, k1s, k1spec, k1nov, k1reset
+        // -----------------------------------------------------------------
+#if FEATURE_K1_DEBUG
+        else if (peekChar == 'k' && Serial.available() > 1) {
+            String input = Serial.readStringUntil('\n');
+            input.trim();
+            String inputLower = input;
+            inputLower.toLowerCase();
+
+            if (inputLower.startsWith("k1")) {
+                handledMulti = true;
+
+                // Get K1 pipeline from AudioActor
+                auto* audio = actors.getAudio();
+                if (audio && audio->isK1Enabled()) {
+                    auto& pipeline = const_cast<lightwaveos::audio::k1::K1Pipeline&>(
+                        audio->getK1Pipeline()
+                    );
+
+                    if (!lightwaveos::audio::k1::k1_handle_command(inputLower, pipeline)) {
+                        Serial.println("Unknown k1 command. Try: k1, k1s, k1spec, k1nov, k1reset, k1c");
+                    }
+                } else {
+                    Serial.println("K1 beat tracker not available (audio not enabled)");
+                }
+            }
+        }
+#endif
+
         if (handledMulti) {
             // Do not process single-character commands after consuming a full-line command
         } else {
@@ -880,7 +975,7 @@ void loop() {
                     if (audioEffectId < renderer->getEffectCount()) {
                         currentEffect = audioEffectId;
                         actors.setEffect(audioEffectId);
-                        Serial.printf("Audio Effect %d: \033[1;32m%s\033[0m\n", audioEffectId, renderer->getEffectName(audioEffectId));
+                        Serial.printf("Audio Effect %d: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n", audioEffectId, renderer->getEffectName(audioEffectId));
                     } else {
                         Serial.printf("ERROR: Audio effect %d not available (effect count: %d)\n", 
                                      audioEffectId, renderer->getEffectCount());
@@ -890,7 +985,7 @@ void loop() {
                 if (e < renderer->getEffectCount()) {
                     currentEffect = e;
                     actors.setEffect(e);
-                    Serial.printf("Effect %d: \033[1;32m%s\033[0m\n", e, renderer->getEffectName(e));
+                    Serial.printf("Effect %d: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n", e, renderer->getEffectName(e));
                     }
                 }
             } else {
@@ -904,7 +999,7 @@ void loop() {
                     if (e < renderer->getEffectCount()) {
                         currentEffect = e;
                         actors.setEffect(e);
-                        Serial.printf("Effect %d: \033[1;32m%s\033[0m\n", e, renderer->getEffectName(e));
+                        Serial.printf("Effect %d: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n", e, renderer->getEffectName(e));
                         isEffectKey = true;
                     }
                 }
@@ -955,7 +1050,7 @@ void loop() {
                         uint8_t effectCount = renderer->getEffectCount();
                         currentEffect = (currentEffect + 1) % effectCount;
                         actors.setEffect(currentEffect);
-                        Serial.printf("Effect %d: \033[1;32m%s\033[0m\n", currentEffect, renderer->getEffectName(currentEffect));
+                        Serial.printf("Effect %d: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n", currentEffect, renderer->getEffectName(currentEffect));
                     }
                     break;
 
@@ -964,7 +1059,7 @@ void loop() {
                         uint8_t effectCount = renderer->getEffectCount();
                         currentEffect = (currentEffect + effectCount - 1) % effectCount;
                         actors.setEffect(currentEffect);
-                        Serial.printf("Effect %d: \033[1;32m%s\033[0m\n", currentEffect, renderer->getEffectName(currentEffect));
+                        Serial.printf("Effect %d: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n", currentEffect, renderer->getEffectName(currentEffect));
                     }
                     break;
 

@@ -41,6 +41,7 @@
 #include "AudioTuning.h"
 #include "GoertzelAnalyzer.h"
 #include "ChromaAnalyzer.h"
+#include "StyleDetector.h"
 #include "contracts/AudioTime.h"
 #include "contracts/ControlBus.h"
 #include "contracts/SnapshotBuffer.h"
@@ -435,6 +436,12 @@ private:
 
     // Chromagram analyzer (12 pitch classes, 512-sample window)
     ChromaAnalyzer m_chromaAnalyzer;
+
+    // Style detector (MIS Phase 2: adaptive visual response)
+    StyleDetector m_styleDetector;
+
+    // Previous chord root for chord change detection (StyleDetector input)
+    uint8_t m_prevChordRoot = 0;
 
     // ControlBus state machine (smoothing, attack/release)
     ControlBus m_controlBus;

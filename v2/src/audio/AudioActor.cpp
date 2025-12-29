@@ -246,6 +246,26 @@ void AudioActor::onTick()
                  spikeStats.spikesCorrected,
                  spikeStats.avgSpikesPerFrame,
                  spikeStats.totalEnergyRemoved);
+
+        // Log saliency detection metrics
+        ESP_LOGI(TAG, "Saliency: overall=%.3f dom=%u H=%.3f R=%.3f T=%.3f D=%.3f",
+                 frame.saliency.overallSaliency,
+                 frame.saliency.dominantType,
+                 frame.saliency.harmonicNoveltySmooth,
+                 frame.saliency.rhythmicNoveltySmooth,
+                 frame.saliency.timbralNoveltySmooth,
+                 frame.saliency.dynamicNoveltySmooth);
+
+        // Log style detection metrics (MIS Phase 2)
+        const StyleClassification& styleClass = m_styleDetector.getClassification();
+        ESP_LOGI(TAG, "Style: %u conf=%.2f [R=%.2f H=%.2f M=%.2f T=%.2f D=%.2f]",
+                 static_cast<uint8_t>(m_styleDetector.getStyle()),
+                 m_styleDetector.getConfidence(),
+                 styleClass.styleWeights[0],
+                 styleClass.styleWeights[1],
+                 styleClass.styleWeights[2],
+                 styleClass.styleWeights[3],
+                 styleClass.styleWeights[4]);
     }
 }
 
@@ -341,6 +361,8 @@ void AudioActor::processHop()
         m_hihatStd = 0.0f;
         m_analyzer.reset();
         m_chromaAnalyzer.reset();
+        m_styleDetector.reset();
+        m_prevChordRoot = 0;
         m_controlBus.Reset();
     }
 
@@ -768,11 +790,31 @@ void AudioActor::processHop()
 
     BENCH_END_PHASE(controlBusUs);
 
+    // === Phase: Style Detection ===
+    // Update style detector with current hop features (after ControlBus has chord state)
+    {
+        bool chordChanged = (m_controlBus.GetFrame().chordState.rootNote != m_prevChordRoot);
+        m_prevChordRoot = m_controlBus.GetFrame().chordState.rootNote;
+        m_styleDetector.update(
+            rmsMapped,
+            fluxMapped,
+            raw.bands,
+            m_beatConfidence,
+            chordChanged
+        );
+    }
+
     // === Phase: Publish ===
     BENCH_START_PHASE();
 
     // 8. Publish frame to renderer via lock-free SnapshotBuffer
-    m_controlBusBuffer.Publish(m_controlBus.GetFrame());
+    // Copy style detection results to frame before publishing
+    {
+        ControlBusFrame frameToPublish = m_controlBus.GetFrame();
+        frameToPublish.currentStyle = m_styleDetector.getStyle();
+        frameToPublish.styleConfidence = m_styleDetector.getConfidence();
+        m_controlBusBuffer.Publish(frameToPublish);
+    }
 
     BENCH_END_PHASE(publishUs);
 

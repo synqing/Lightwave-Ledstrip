@@ -148,6 +148,14 @@
 // Debug Features
 // ============================================================================
 
+// Unified Logging System - Consistent colored output with timestamps
+// Enables LW_LOGI, LW_LOGW, LW_LOGE, LW_LOGD macros from utils/Log.h
+// Log levels: 0=None, 1=Error, 2=Warn, 3=Info, 4=Debug
+// Set level via: -D LW_LOG_LEVEL=3
+#ifndef FEATURE_UNIFIED_LOGGING
+#define FEATURE_UNIFIED_LOGGING 1
+#endif
+
 // Debug Mode
 #ifndef DEBUG
 #define DEBUG 0
@@ -169,4 +177,11 @@
 // See: docs/debugging/MABUTRACE_GUIDE.md
 #ifndef FEATURE_MABUTRACE
 #define FEATURE_MABUTRACE 0
+#endif
+
+// K1 Beat Tracker Debug CLI - Serial commands and ASCII visualizations
+// Enables k1, k1spec, k1nov, k1reset commands for beat tracker debugging
+// Automatically enabled when FEATURE_AUDIO_SYNC is enabled
+#ifndef FEATURE_K1_DEBUG
+#define FEATURE_K1_DEBUG FEATURE_AUDIO_SYNC
 #endif

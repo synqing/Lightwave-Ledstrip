@@ -14,20 +14,25 @@ namespace audio {
  * This analyzer implements a 64-bin Goertzel-based Discrete Fourier Transform (GDFT)
  * matching the Sensory Bridge audio analysis algorithm. Key features:
  *
- * 1. **64 Semitone Bins**: Musical note frequencies from A2 (110 Hz) to C8 (4186 Hz)
- *    Each bin is one semitone apart: freq = 110 * 2^(bin/12)
+ * 1. **64 Semitone Bins**: Musical note frequencies from A1 (55 Hz) to A8 (8372 Hz)
+ *    Each bin is one semitone apart: freq = 55 * 2^(bin/12)
+ *    This matches the original Sensory Bridge frequency range.
  *
- * 2. **Variable Window Sizing**: Low frequencies get longer windows (better frequency
- *    resolution), high frequencies get shorter windows (better temporal resolution).
- *    - 110 Hz: ~1500 samples = 94ms @ 16kHz
- *    - 4186 Hz: ~75 samples = 4.7ms @ 16kHz
+ * 2. **Adaptive Window Sizing** (v4.1.0 algorithm): Block size calculated based on
+ *    neighbor frequency distance to maximize frequency resolution per bin.
+ *    - 55 Hz: 2000 samples (capped) = 125ms @ 16kHz
+ *    - 8372 Hz: ~64 samples (min) = 4ms @ 16kHz
  *
  * 3. **Hann Windowing**: 4096-entry lookup table for smooth spectral leakage reduction
+ *    (retained from v3.1.0 for cleaner LED visualization)
  *
- * 4. **Backward Compatible**: Still provides 8-band output for ControlBus integration
+ * 4. **Discrete k Coefficient** (v4.1.0 formula): k = round(block_size * freq / sample_rate)
+ *    ensures Goertzel targets exact DFT bin boundaries.
  *
- * Sample rate: 16 kHz (matching audio_config.h)
- * Max sample history: 1500 samples for lowest frequency bins
+ * 5. **Backward Compatible**: Still provides 8-band output for ControlBus integration
+ *
+ * Sample rate: 16 kHz (required for Nyquist coverage of A8 at 8372 Hz)
+ * Max sample history: 2000 samples for lowest frequency bins
  */
 class GoertzelAnalyzer {
 public:
@@ -40,11 +45,11 @@ public:
     static constexpr uint8_t NUM_BANDS = 8;         // Legacy band count
 
     // Sensory Bridge parity: 64 semitone bins
-    static constexpr size_t NUM_BINS = 64;          // A2 to C8 (64 semitones)
+    static constexpr size_t NUM_BINS = 64;          // A1 (55 Hz) to ~G6 (1568 Hz) = 5.25 octaves
     static constexpr uint32_t SAMPLE_RATE_HZ = 16000;
 
-    // Variable window sizing (Sensory Bridge formula)
-    static constexpr size_t MAX_BLOCK_SIZE = 1500;  // Max samples for lowest freq
+    // Adaptive window sizing (Sensory Bridge v4.1.0 algorithm)
+    static constexpr size_t MAX_BLOCK_SIZE = 2000;  // Max samples for lowest freq (capped)
     static constexpr size_t MIN_BLOCK_SIZE = 64;    // Min samples for highest freq
 
     // Hann window lookup table size (Q15 fixed-point)

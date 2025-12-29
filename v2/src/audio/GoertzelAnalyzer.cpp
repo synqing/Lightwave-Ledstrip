@@ -60,32 +60,58 @@ void GoertzelAnalyzer::initHannLUT() {
 }
 
 void GoertzelAnalyzer::initBins() {
-    // Initialize 64 semitone bins from A2 (110 Hz) to C8 (4186 Hz)
-    // Frequency formula: f = 110 * 2^(bin/12)
-    // This gives us musical semitone spacing
+    // Initialize 64 semitone bins from A1 (55 Hz) upward
+    // Frequency formula: f = 55 * 2^(bin/12)
+    // This matches Sensory Bridge's frequency range starting at A1
 
+    // First pass: compute all target frequencies (needed for adaptive block sizing)
+    float notes[NUM_BINS];
     for (size_t bin = 0; bin < NUM_BINS; ++bin) {
-        float freq = 110.0f * std::pow(2.0f, static_cast<float>(bin) / 12.0f);
-        m_bins[bin].target_freq = freq;
+        notes[bin] = 55.0f * std::pow(2.0f, static_cast<float>(bin) / 12.0f);
+        m_bins[bin].target_freq = notes[bin];
+    }
 
-        // Variable window sizing (Sensory Bridge formula)
-        // Lower frequencies need longer windows for better frequency resolution
-        // Block size varies from MAX_BLOCK_SIZE (1500) for bass to MIN_BLOCK_SIZE (64) for treble
-        // Uses quartic root progression for smooth transition
-        float bin_normalized = static_cast<float>(bin) / static_cast<float>(NUM_BINS - 1);
-        float size_factor = std::pow(1.0f - bin_normalized, 0.25f);  // Quartic root
-        float block_size_f = MIN_BLOCK_SIZE + (MAX_BLOCK_SIZE - MIN_BLOCK_SIZE) * size_factor;
+    // Second pass: compute adaptive block sizes and coefficients
+    for (size_t bin = 0; bin < NUM_BINS; ++bin) {
+        float freq = notes[bin];
+
+        // ====================================================================
+        // Adaptive Block Sizing (Sensory Bridge v4.1.0 algorithm)
+        // Block size based on neighbor frequency distance for optimal resolution
+        // ====================================================================
+        float left_dist = (bin > 0) ? (freq - notes[bin - 1]) : (freq * 0.0595f);  // semitone ~5.95%
+        float right_dist = (bin < NUM_BINS - 1) ? (notes[bin + 1] - freq) : (freq * 0.0595f);
+        float max_neighbor_dist = std::fmax(left_dist, right_dist);
+
+        // Block size = sample_rate / (max_neighbor_distance * 2)
+        // This ensures the frequency bin width is smaller than the neighbor distance
+        float block_size_f = static_cast<float>(SAMPLE_RATE_HZ) / (max_neighbor_dist * 2.0f);
+
+        // Clamp to valid range
+        if (block_size_f > static_cast<float>(MAX_BLOCK_SIZE)) {
+            block_size_f = static_cast<float>(MAX_BLOCK_SIZE);
+        }
+        if (block_size_f < static_cast<float>(MIN_BLOCK_SIZE)) {
+            block_size_f = static_cast<float>(MIN_BLOCK_SIZE);
+        }
+
         m_bins[bin].block_size = static_cast<uint16_t>(block_size_f);
         m_bins[bin].block_size_recip = 1.0f / static_cast<float>(m_bins[bin].block_size);
 
-        // Precompute Goertzel coefficient in Q14 fixed-point
-        // coeff = 2 * cos(2π * freq / sample_rate)
-        float omega = 2.0f * M_PI * freq / static_cast<float>(SAMPLE_RATE_HZ);
+        // ====================================================================
+        // Discrete k Coefficient (Sensory Bridge v4.1.0 formula)
+        // k = round(block_size * freq / sample_rate) ensures DFT bin alignment
+        // coeff = 2 * cos(2π * k / block_size)
+        // ====================================================================
+        float k = std::round((static_cast<float>(m_bins[bin].block_size) * freq) /
+                             static_cast<float>(SAMPLE_RATE_HZ));
+        float omega = (2.0f * M_PI * k) / static_cast<float>(m_bins[bin].block_size);
         float coeff = 2.0f * std::cos(omega);
         m_bins[bin].coeff_q14 = static_cast<int32_t>(coeff * 16384.0f);  // Q14
 
         // Window multiplier for Hann LUT indexing
-        m_bins[bin].window_mult = static_cast<float>(HANN_LUT_SIZE) / static_cast<float>(m_bins[bin].block_size);
+        m_bins[bin].window_mult = static_cast<float>(HANN_LUT_SIZE) /
+                                   static_cast<float>(m_bins[bin].block_size);
 
         // Zone assignment (4 zones, 16 bins each)
         m_bins[bin].zone = static_cast<uint8_t>(bin >> 4);  // bin / 16
@@ -176,8 +202,9 @@ float GoertzelAnalyzer::computeGoertzelBin(size_t binIndex) const {
     // Compute magnitude
     float magnitude = std::sqrt(s1 * s1 + s2 * s2 - coeff * s1 * s2);
 
-    // Normalize by block size (larger windows produce larger magnitudes)
-    magnitude *= bin.block_size_recip;
+    // Normalize by 2/block_size (Sensory Bridge v4.1.0 formula)
+    // This produces consistent magnitude scaling regardless of block size
+    magnitude *= (2.0f * bin.block_size_recip);
 
     return magnitude;
 }
@@ -199,14 +226,9 @@ bool GoertzelAnalyzer::analyze64(float* binsOut) {
         for (size_t bin = startBin; bin < NUM_BINS; bin += 2) {
             float magnitude = computeGoertzelBin(bin);
 
-            // Apply frequency compensation (higher frequencies tend to have lower energy)
-            float bin_normalized = static_cast<float>(bin) / static_cast<float>(NUM_BINS - 1);
-            float compensation = 1.0f + bin_normalized * 0.5f;  // 1.0x to 1.5x
-
-            magnitude *= compensation;
-
-            // Store in internal buffer (scaled and clamped)
-            m_magnitudes64[bin] = std::min(1.0f, magnitude * 4.0f);
+            // Store in internal buffer (clamped to [0,1])
+            // With v4.1.0's 2/N normalization, magnitudes are already properly scaled
+            m_magnitudes64[bin] = std::min(1.0f, magnitude);
         }
 
         // Toggle parity for next frame
@@ -219,14 +241,8 @@ bool GoertzelAnalyzer::analyze64(float* binsOut) {
         for (size_t bin = 0; bin < NUM_BINS; ++bin) {
             float magnitude = computeGoertzelBin(bin);
 
-            // Apply frequency compensation
-            float bin_normalized = static_cast<float>(bin) / static_cast<float>(NUM_BINS - 1);
-            float compensation = 1.0f + bin_normalized * 0.5f;
-
-            magnitude *= compensation;
-
-            // Store in internal buffer
-            m_magnitudes64[bin] = std::min(1.0f, magnitude * 4.0f);
+            // Store in internal buffer (clamped to [0,1])
+            m_magnitudes64[bin] = std::min(1.0f, magnitude);
         }
     }
 

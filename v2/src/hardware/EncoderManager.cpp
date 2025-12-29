@@ -14,6 +14,9 @@
 
 #if FEATURE_ROTATE8_ENCODER
 
+#define LW_LOG_TAG "Encoder"
+#include "utils/Log.h"
+
 #include "../core/actors/ActorSystem.h"
 
 namespace lightwaveos {
@@ -76,19 +79,17 @@ void EncoderMetrics::printReport() {
 
     // Only show report if there are issues
     if (dropped_events > 0 || queue_full_count > 0 || connection_losses > 0) {
-        Serial.println("\n[EncoderManager] Performance Alert");
-
         float event_success_rate = total_events > 0 ?
             (100.0f * successful_events / total_events) : 100.0f;
 
-        Serial.printf("  Events: %u total, %.1f%% delivered, %u dropped\n",
-                     total_events, event_success_rate, dropped_events);
-        Serial.printf("  Queue: %u overflows, max depth %u/%u\n",
-                     queue_full_count, max_queue_depth, EncoderConfig::EVENT_QUEUE_SIZE);
+        LW_LOGW("Performance Alert - Events: %u total, %.1f%% delivered, %u dropped",
+                total_events, event_success_rate, dropped_events);
+        LW_LOGW("Queue: %u overflows, max depth %u/%u",
+                queue_full_count, max_queue_depth, EncoderConfig::EVENT_QUEUE_SIZE);
 
         if (connection_losses > 0) {
-            Serial.printf("  Connection: %u losses, %u reconnects\n",
-                         connection_losses, successful_reconnects);
+            LW_LOGW("Connection: %u losses, %u reconnects",
+                    connection_losses, successful_reconnects);
         }
     }
 
@@ -211,31 +212,31 @@ EncoderManager::~EncoderManager() {
 bool EncoderManager::begin() {
     // Prevent double initialization
     if (m_taskHandle != nullptr) {
-        Serial.println("[EncoderManager] WARNING: Already initialized");
+        LW_LOGW("Already initialized");
         return true;
     }
 
-    Serial.println("[EncoderManager] Initializing encoder system...");
+    LW_LOGI("Initializing encoder system...");
 
     // Verify I2C mutex exists
     if (i2cMutex == nullptr) {
-        Serial.println("[EncoderManager] ERROR: I2C mutex not created");
-        Serial.println("[EncoderManager] Create i2cMutex in main.cpp setup() before calling begin()");
+        LW_LOGE("I2C mutex not created");
+        LW_LOGE("Create i2cMutex in main.cpp setup() before calling begin()");
         return false;
     }
 
     // Create encoder event queue
     m_eventQueue = xQueueCreate(EncoderConfig::EVENT_QUEUE_SIZE, sizeof(EncoderEvent));
     if (m_eventQueue == nullptr) {
-        Serial.println("[EncoderManager] ERROR: Failed to create event queue");
+        LW_LOGE("Failed to create event queue");
         return false;
     }
 
-    Serial.println("[EncoderManager] Event queue created");
+    LW_LOGI("Event queue created");
 
     // Attempt initial connection to M5ROTATE8
     if (!initializeM5Rotate8()) {
-        Serial.println("[EncoderManager] M5ROTATE8 not found - task will retry");
+        LW_LOGW("M5ROTATE8 not found - task will retry");
         m_encoderAvailable = false;
     }
 
@@ -251,16 +252,15 @@ bool EncoderManager::begin() {
     );
 
     if (result != pdPASS || m_taskHandle == nullptr) {
-        Serial.println("[EncoderManager] ERROR: Failed to create task");
+        LW_LOGE("Failed to create task");
         vQueueDelete(m_eventQueue);
         m_eventQueue = nullptr;
         return false;
     }
 
-    Serial.println("[EncoderManager] I2C task created on Core 0");
-    Serial.println("[EncoderManager] Encoder mapping:");
-    Serial.println("  0: Effect    1: Brightness  2: Palette  3: Speed");
-    Serial.println("  4: Intensity 5: Saturation  6: Complexity 7: Variation");
+    LW_LOGI("I2C task created on Core 0");
+    LW_LOGI("Encoder mapping: 0=Effect, 1=Brightness, 2=Palette, 3=Speed");
+    LW_LOGI("Encoder mapping: 4=Intensity, 5=Saturation, 6=Complexity, 7=Variation");
 
     return true;
 }
@@ -271,7 +271,7 @@ void EncoderManager::taskWrapper(void* parameter) {
 }
 
 void EncoderManager::encoderTask() {
-    Serial.println("[EncoderManager] Task started on Core 0");
+    LW_LOGI("Task started on Core 0");
 
     while (true) {
         uint32_t now = millis();
@@ -316,8 +316,8 @@ void EncoderManager::encoderTask() {
 }
 
 bool EncoderManager::initializeM5Rotate8() {
-    Serial.printf("[EncoderManager] Scanning I2C on GPIO %d/%d...\n",
-                  EncoderConfig::I2C_SDA, EncoderConfig::I2C_SCL);
+    LW_LOGI("Scanning I2C on GPIO %d/%d...",
+            EncoderConfig::I2C_SDA, EncoderConfig::I2C_SCL);
 
     if (m_encoder) {
         delete m_encoder;
@@ -328,8 +328,7 @@ bool EncoderManager::initializeM5Rotate8() {
     if (xSemaphoreTake(i2cMutex, portMAX_DELAY) == pdTRUE) {
         bool success = m_encoder->begin();
         if (success && m_encoder->isConnected()) {
-            Serial.printf("[EncoderManager] M5ROTATE8 connected, firmware V%d\n",
-                         m_encoder->getVersion());
+            LW_LOGI("M5ROTATE8 connected, firmware V%d", m_encoder->getVersion());
 
             // Set all LEDs to dim blue idle state
             m_encoder->setAll(0, 0, 16);
@@ -342,22 +341,21 @@ bool EncoderManager::initializeM5Rotate8() {
         xSemaphoreGive(i2cMutex);
         delete m_encoder;
         m_encoder = nullptr;
-        Serial.println("[EncoderManager] M5ROTATE8 not found");
+        LW_LOGW("M5ROTATE8 not found");
     }
 
     return false;
 }
 
 bool EncoderManager::attemptReconnection() {
-    Serial.printf("[EncoderManager] Reconnection attempt (backoff: %dms)\n",
-                  m_reconnectBackoffMs);
+    LW_LOGD("Reconnection attempt (backoff: %dms)", m_reconnectBackoffMs);
 
     bool success = initializeM5Rotate8();
 
     if (success) {
         m_failCount = 0;
         m_reconnectBackoffMs = EncoderConfig::INITIAL_BACKOFF_MS;
-        Serial.println("[EncoderManager] Reconnected successfully");
+        LW_LOGI("Reconnected successfully");
         m_metrics.recordReconnect();
     } else {
         m_failCount++;
@@ -367,7 +365,7 @@ bool EncoderManager::attemptReconnection() {
             (uint32_t)(EncoderConfig::INITIAL_BACKOFF_MS * (1 << maxShift)),
             EncoderConfig::MAX_BACKOFF_MS
         );
-        Serial.printf("[EncoderManager] Reconnection failed (%d attempts)\n", m_failCount);
+        LW_LOGW("Reconnection failed (%d attempts)", m_failCount);
     }
 
     return success;
@@ -427,7 +425,7 @@ void EncoderManager::processEncoderEvents() {
                     uint32_t now = millis();
                     if (now - lastLog > 500) {
                         lastLog = now;
-                        Serial.printf("[EncoderManager] Encoder %d delta %+d\n", i, delta);
+                        LW_LOGD("Encoder %d delta %+d", i, delta);
                     }
                 }
             }
@@ -493,7 +491,7 @@ void EncoderManager::rateLimitedSerial(const char* message) {
 }
 
 void EncoderManager::performI2CBusRecovery(uint8_t sda, uint8_t scl) {
-    Serial.println("[EncoderManager] I2C Bus Recovery Sequence:");
+    LW_LOGI("I2C Bus Recovery Sequence started");
 
     // Configure pins as GPIO outputs
     pinMode(sda, OUTPUT);
@@ -511,16 +509,16 @@ void EncoderManager::performI2CBusRecovery(uint8_t sda, uint8_t scl) {
     bool sclStuck = !digitalRead(scl);
 
     if (sdaStuck || sclStuck) {
-        Serial.printf("[EncoderManager] Stuck lines - SDA: %s, SCL: %s\n",
-                     sdaStuck ? "LOW" : "OK",
-                     sclStuck ? "LOW" : "OK");
+        LW_LOGW("Stuck lines - SDA: %s, SCL: %s",
+                sdaStuck ? "LOW" : "OK",
+                sclStuck ? "LOW" : "OK");
     }
 
     // Perform clock pulsing to release stuck devices
     pinMode(scl, OUTPUT);
     pinMode(sda, INPUT_PULLUP);
 
-    Serial.println("[EncoderManager] Sending 9 clock pulses...");
+    LW_LOGD("Sending 9 clock pulses...");
     for (int i = 0; i < 9; i++) {
         digitalWrite(scl, LOW);
         delayMicroseconds(5);
@@ -528,7 +526,7 @@ void EncoderManager::performI2CBusRecovery(uint8_t sda, uint8_t scl) {
         delayMicroseconds(5);
 
         if (digitalRead(sda)) {
-            Serial.printf("[EncoderManager] SDA released after %d pulses\n", i + 1);
+            LW_LOGD("SDA released after %d pulses", i + 1);
             break;
         }
     }
@@ -549,15 +547,15 @@ void EncoderManager::performI2CBusRecovery(uint8_t sda, uint8_t scl) {
 
     bool sdaFinal = digitalRead(sda);
     bool sclFinal = digitalRead(scl);
-    Serial.printf("[EncoderManager] Final state - SDA: %s, SCL: %s\n",
-                 sdaFinal ? "HIGH" : "LOW",
-                 sclFinal ? "HIGH" : "LOW");
+    LW_LOGI("Final state - SDA: %s, SCL: %s",
+            sdaFinal ? "HIGH" : "LOW",
+            sclFinal ? "HIGH" : "LOW");
 
     if (!sdaFinal || !sclFinal) {
-        Serial.println("[EncoderManager] WARNING: I2C lines still stuck!");
-        Serial.println("  Check for: shorts, missing pull-ups, wiring, power");
+        LW_LOGE("I2C lines still stuck!");
+        LW_LOGE("Check for: shorts, missing pull-ups, wiring, power");
     } else {
-        Serial.println("[EncoderManager] I2C bus recovery complete");
+        LW_LOGI("I2C bus recovery complete");
     }
 
     delay(50);

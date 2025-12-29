@@ -9,6 +9,9 @@
 #include <Arduino.h>
 #include <esp_timer.h>
 
+#define LW_LOG_TAG "PERF"
+#include "utils/Log.h"
+
 // ESP32 heap functions
 extern "C" {
     size_t esp_get_free_heap_size(void);
@@ -39,7 +42,7 @@ void PerformanceMonitor::begin(uint16_t targetFPS) {
     m_avgMetrics = TimingMetrics();
     m_peakMetrics = TimingMetrics();
 
-    Serial.println(F("[PERF] Performance Monitor initialized"));
+    LW_LOGI("Performance Monitor initialized");
 }
 
 void PerformanceMonitor::startFrame() {
@@ -281,119 +284,93 @@ void PerformanceMonitor::getTimingPercentages(float& effectPct, float& ledPct,
 // ========== Serial Output ==========
 
 void PerformanceMonitor::printStatus() const {
-    Serial.print(F("[PERF] FPS: "));
-    Serial.print(getFPS(), 1);
-    Serial.print(F(" | CPU: "));
-    Serial.print(m_cpuUsagePercent, 1);
-    Serial.print(F("% | Effect: "));
-    Serial.print(m_avgMetrics.effectProcessing);
-    Serial.print(F("us | LED: "));
-    Serial.print(m_avgMetrics.fastLEDShow);
-    Serial.print(F("us | Heap: "));
-    Serial.print(m_memoryMetrics.freeHeap);
-    Serial.print(F(" | Frag: "));
-    Serial.print(m_memoryMetrics.fragmentationPercent);
-    Serial.print(F("%"));
-
-    // Alert on high fragmentation
+    // Select log level based on fragmentation status
     if (isFragmentationCritical()) {
-        Serial.print(F(" [CRITICAL]"));
+        LW_LOGE("FPS: %.1f | CPU: %.1f%% | Effect: %luus | LED: %luus | Heap: %u | Frag: %u%% [CRITICAL]",
+                getFPS(), m_cpuUsagePercent,
+                (unsigned long)m_avgMetrics.effectProcessing,
+                (unsigned long)m_avgMetrics.fastLEDShow,
+                m_memoryMetrics.freeHeap,
+                m_memoryMetrics.fragmentationPercent);
     } else if (isFragmentationWarning()) {
-        Serial.print(F(" [WARN]"));
+        LW_LOGW("FPS: %.1f | CPU: %.1f%% | Effect: %luus | LED: %luus | Heap: %u | Frag: %u%% [WARN]",
+                getFPS(), m_cpuUsagePercent,
+                (unsigned long)m_avgMetrics.effectProcessing,
+                (unsigned long)m_avgMetrics.fastLEDShow,
+                m_memoryMetrics.freeHeap,
+                m_memoryMetrics.fragmentationPercent);
+    } else {
+        LW_LOGI("FPS: %.1f | CPU: %.1f%% | Effect: %luus | LED: %luus | Heap: %u | Frag: %u%%",
+                getFPS(), m_cpuUsagePercent,
+                (unsigned long)m_avgMetrics.effectProcessing,
+                (unsigned long)m_avgMetrics.fastLEDShow,
+                m_memoryMetrics.freeHeap,
+                m_memoryMetrics.fragmentationPercent);
     }
-    Serial.println();
 }
 
 void PerformanceMonitor::printDetailedReport() const {
-    Serial.println(F("\n=== PERFORMANCE REPORT ==="));
+    LW_LOGI("=== PERFORMANCE REPORT ===");
 
     // Frame timing breakdown
-    Serial.println(F("Frame Timing (avg/peak us):"));
-    Serial.print(F("  Effect Processing: "));
-    Serial.print(m_avgMetrics.effectProcessing);
-    Serial.print(F(" / "));
-    Serial.println(m_peakMetrics.effectProcessing);
-
-    Serial.print(F("  FastLED.show():    "));
-    Serial.print(m_avgMetrics.fastLEDShow);
-    Serial.print(F(" / "));
-    Serial.println(m_peakMetrics.fastLEDShow);
-
-    Serial.print(F("  Serial Processing: "));
-    Serial.print(m_avgMetrics.serialProcessing);
-    Serial.print(F(" / "));
-    Serial.println(m_peakMetrics.serialProcessing);
-
-    Serial.print(F("  Network Processing:"));
-    Serial.print(m_avgMetrics.networkProcessing);
-    Serial.print(F(" / "));
-    Serial.println(m_peakMetrics.networkProcessing);
-
-    Serial.print(F("  Total Frame Time:  "));
-    Serial.print(m_avgMetrics.totalFrame);
-    Serial.print(F(" / "));
-    Serial.println(m_peakMetrics.totalFrame);
-
-    Serial.print(F("  Idle Time:         "));
-    Serial.print(m_avgMetrics.idle);
-    Serial.println(F(" us"));
+    LW_LOGI("Frame Timing (avg/peak us):");
+    LW_LOGI("  Effect Processing: %lu / %lu",
+            (unsigned long)m_avgMetrics.effectProcessing,
+            (unsigned long)m_peakMetrics.effectProcessing);
+    LW_LOGI("  FastLED.show():    %lu / %lu",
+            (unsigned long)m_avgMetrics.fastLEDShow,
+            (unsigned long)m_peakMetrics.fastLEDShow);
+    LW_LOGI("  Serial Processing: %lu / %lu",
+            (unsigned long)m_avgMetrics.serialProcessing,
+            (unsigned long)m_peakMetrics.serialProcessing);
+    LW_LOGI("  Network Processing:%lu / %lu",
+            (unsigned long)m_avgMetrics.networkProcessing,
+            (unsigned long)m_peakMetrics.networkProcessing);
+    LW_LOGI("  Total Frame Time:  %lu / %lu",
+            (unsigned long)m_avgMetrics.totalFrame,
+            (unsigned long)m_peakMetrics.totalFrame);
+    LW_LOGI("  Idle Time:         %lu us",
+            (unsigned long)m_avgMetrics.idle);
 
     // Performance metrics
-    Serial.println(F("\nPerformance Metrics:"));
-    Serial.print(F("  Current FPS:       "));
-    Serial.println(getFPS(), 1);
+    LW_LOGI("Performance Metrics:");
+    LW_LOGI("  Current FPS:       %.1f", getFPS());
+    LW_LOGI("  Target FPS:        %.1f",
+            1000000.0f / static_cast<float>(m_targetFrameTime));
+    LW_LOGI("  CPU Usage:         %.1f%%", m_cpuUsagePercent);
 
-    Serial.print(F("  Target FPS:        "));
-    Serial.println(1000000.0f / static_cast<float>(m_targetFrameTime), 1);
-
-    Serial.print(F("  CPU Usage:         "));
-    Serial.print(m_cpuUsagePercent, 1);
-    Serial.println(F("%"));
-
-    Serial.print(F("  Dropped Frames:    "));
-    Serial.print(m_droppedFrames);
     if (m_frameCount > 0) {
-        Serial.print(F(" ("));
-        Serial.print(static_cast<float>(m_droppedFrames) /
-                     static_cast<float>(m_frameCount) * 100.0f, 2);
-        Serial.println(F("%)"));
+        LW_LOGI("  Dropped Frames:    %lu (%.2f%%)",
+                (unsigned long)m_droppedFrames,
+                static_cast<float>(m_droppedFrames) /
+                static_cast<float>(m_frameCount) * 100.0f);
     } else {
-        Serial.println();
+        LW_LOGI("  Dropped Frames:    %lu", (unsigned long)m_droppedFrames);
     }
-
-    Serial.print(F("  Total Frames:      "));
-    Serial.println(m_frameCount);
+    LW_LOGI("  Total Frames:      %lu", (unsigned long)m_frameCount);
 
     // Memory metrics
-    Serial.println(F("\nMemory Metrics:"));
-    Serial.print(F("  Free Heap:         "));
-    Serial.print(m_memoryMetrics.freeHeap);
-    Serial.println(F(" bytes"));
+    LW_LOGI("Memory Metrics:");
+    LW_LOGI("  Free Heap:         %u bytes", m_memoryMetrics.freeHeap);
+    LW_LOGI("  Min Free Heap:     %u bytes", m_memoryMetrics.minFreeHeap);
+    LW_LOGI("  Max Alloc Block:   %u bytes", m_memoryMetrics.maxAllocBlock);
 
-    Serial.print(F("  Min Free Heap:     "));
-    Serial.print(m_memoryMetrics.minFreeHeap);
-    Serial.println(F(" bytes"));
-
-    Serial.print(F("  Max Alloc Block:   "));
-    Serial.print(m_memoryMetrics.maxAllocBlock);
-    Serial.println(F(" bytes"));
-
-    Serial.print(F("  Fragmentation:     "));
-    Serial.print(m_memoryMetrics.fragmentationPercent);
-    Serial.print(F("%"));
     if (isFragmentationCritical()) {
-        Serial.println(F(" [CRITICAL]"));
+        LW_LOGE("  Fragmentation:     %u%% [CRITICAL]",
+                m_memoryMetrics.fragmentationPercent);
     } else if (isFragmentationWarning()) {
-        Serial.println(F(" [WARNING]"));
+        LW_LOGW("  Fragmentation:     %u%% [WARNING]",
+                m_memoryMetrics.fragmentationPercent);
     } else {
-        Serial.println(F(" [OK]"));
+        LW_LOGI("  Fragmentation:     %u%% [OK]",
+                m_memoryMetrics.fragmentationPercent);
     }
 
-    Serial.println(F("========================\n"));
+    LW_LOGI("========================");
 }
 
 void PerformanceMonitor::drawPerformanceGraph() const {
-    Serial.println(F("\nFPS History (last 60 samples):"));
+    LW_LOGI("FPS History (last 60 samples):");
 
     // Find max value for scaling
     uint8_t maxFPS = 0;
@@ -404,11 +381,11 @@ void PerformanceMonitor::drawPerformanceGraph() const {
     }
 
     if (maxFPS == 0) {
-        Serial.println(F("  (No data yet)"));
+        LW_LOGI("  (No data yet)");
         return;
     }
 
-    // Draw graph (10 rows)
+    // Draw graph (10 rows) - using Serial for character-by-character graph rendering
     for (int8_t row = 9; row >= 0; row--) {
         Serial.print(F("|"));
         for (uint8_t col = 0; col < HISTORY_SIZE; col++) {
@@ -426,9 +403,7 @@ void PerformanceMonitor::drawPerformanceGraph() const {
     }
     Serial.println(F("+"));
 
-    Serial.print(F("0 FPS                                                    "));
-    Serial.print(maxFPS);
-    Serial.println(F(" FPS"));
+    LW_LOGI("0 FPS                                                    %u FPS", maxFPS);
 }
 
 // ========== Control ==========
@@ -439,7 +414,7 @@ void PerformanceMonitor::resetPeaks() {
     m_memoryMetrics.minFreeHeap = esp_get_free_heap_size();
     m_totalCPUTime = 0;
     m_activeCPUTime = 0;
-    Serial.println(F("[PERF] Peak metrics reset"));
+    LW_LOGI("Peak metrics reset");
 }
 
 } // namespace hardware

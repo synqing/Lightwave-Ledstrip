@@ -36,7 +36,11 @@
 #if FEATURE_AUDIO_SYNC
 #include "../../audio/contracts/ControlBus.h"
 #include "../../audio/contracts/MusicalGrid.h"
+#include "../../audio/contracts/StyleDetector.h"
 #endif
+
+// Behavior selection (Phase 3)
+#include "BehaviorSelection.h"
 
 namespace lightwaveos {
 namespace plugins {
@@ -211,6 +215,107 @@ struct AudioContext {
 
     /// Get pointer to full 64-bin array (for efficient iteration)
     const float* bins64() const { return controlBus.bins64; }
+
+    // ========================================================================
+    // Musical Saliency Accessors (MIS Phase 1: Adaptive audio-visual intelligence)
+    // ========================================================================
+
+    /// Get full saliency frame struct
+    const audio::MusicalSaliencyFrame& saliencyFrame() const { return controlBus.saliency; }
+
+    /// Get overall saliency score (0.0-1.0, weighted combination of all novelty types)
+    float overallSaliency() const { return controlBus.saliency.overallSaliency; }
+
+    /// Check if harmonic saliency is currently dominant (chord/key changes)
+    bool isHarmonicDominant() const {
+        return controlBus.saliency.getDominantType() == audio::SaliencyType::HARMONIC;
+    }
+
+    /// Check if rhythmic saliency is currently dominant (beat/tempo changes)
+    bool isRhythmicDominant() const {
+        return controlBus.saliency.getDominantType() == audio::SaliencyType::RHYTHMIC;
+    }
+
+    /// Check if timbral saliency is currently dominant (spectral/texture changes)
+    bool isTimbralDominant() const {
+        return controlBus.saliency.getDominantType() == audio::SaliencyType::TIMBRAL;
+    }
+
+    /// Check if dynamic saliency is currently dominant (loudness/energy changes)
+    bool isDynamicDominant() const {
+        return controlBus.saliency.getDominantType() == audio::SaliencyType::DYNAMIC;
+    }
+
+    /// Get harmonic saliency (smoothed, 0.0-1.0) - chord/key changes
+    float harmonicSaliency() const { return controlBus.saliency.harmonicNoveltySmooth; }
+
+    /// Get rhythmic saliency (smoothed, 0.0-1.0) - beat pattern changes
+    float rhythmicSaliency() const { return controlBus.saliency.rhythmicNoveltySmooth; }
+
+    /// Get timbral saliency (smoothed, 0.0-1.0) - spectral character changes
+    float timbralSaliency() const { return controlBus.saliency.timbralNoveltySmooth; }
+
+    /// Get dynamic saliency (smoothed, 0.0-1.0) - loudness envelope changes
+    float dynamicSaliency() const { return controlBus.saliency.dynamicNoveltySmooth; }
+
+    // ========================================================================
+    // Music Style Accessors (MIS Phase 2: Adaptive style detection)
+    // ========================================================================
+
+    /// Get detected music style
+    audio::MusicStyle musicStyle() const { return controlBus.currentStyle; }
+
+    /// Get style detection confidence (0.0-1.0)
+    float styleConfidence() const { return controlBus.styleConfidence; }
+
+    /// Check if music is rhythm-driven (EDM, hip-hop)
+    bool isRhythmicMusic() const { return controlBus.currentStyle == audio::MusicStyle::RHYTHMIC_DRIVEN; }
+
+    /// Check if music is harmony-driven (jazz, classical)
+    bool isHarmonicMusic() const { return controlBus.currentStyle == audio::MusicStyle::HARMONIC_DRIVEN; }
+
+    /// Check if music is melody-driven (vocal pop)
+    bool isMelodicMusic() const { return controlBus.currentStyle == audio::MusicStyle::MELODIC_DRIVEN; }
+
+    /// Check if music is texture-driven (ambient, drone)
+    bool isTextureMusic() const { return controlBus.currentStyle == audio::MusicStyle::TEXTURE_DRIVEN; }
+
+    /// Check if music is dynamics-driven (orchestral)
+    bool isDynamicMusic() const { return controlBus.currentStyle == audio::MusicStyle::DYNAMIC_DRIVEN; }
+
+    // ========================================================================
+    // Behavior Context Accessors (MIS Phase 3: Adaptive behavior selection)
+    // ========================================================================
+
+    BehaviorContext behaviorContext{};  ///< Behavior selection context (populated from AudioActor)
+
+    /// Get the recommended primary visual behavior
+    VisualBehavior recommendedBehavior() const { return behaviorContext.recommendedPrimary; }
+
+    /// Check if effect should pulse on beat (rhythmic music or high rhythmic saliency)
+    bool shouldPulseOnBeat() const {
+        return behaviorContext.recommendedPrimary == VisualBehavior::PULSE_ON_BEAT;
+    }
+
+    /// Check if effect should drift with harmony (harmonic music or chord changes)
+    bool shouldDriftWithHarmony() const {
+        return behaviorContext.recommendedPrimary == VisualBehavior::DRIFT_WITH_HARMONY;
+    }
+
+    /// Check if effect should shimmer with melody (melodic music or treble emphasis)
+    bool shouldShimmerWithMelody() const {
+        return behaviorContext.recommendedPrimary == VisualBehavior::SHIMMER_WITH_MELODY;
+    }
+
+    /// Check if effect should breathe with dynamics (dynamic music or RMS-driven)
+    bool shouldBreatheWithDynamics() const {
+        return behaviorContext.recommendedPrimary == VisualBehavior::BREATHE_WITH_DYNAMICS;
+    }
+
+    /// Check if effect should use texture flow (ambient/textural music)
+    bool shouldTextureFlow() const {
+        return behaviorContext.recommendedPrimary == VisualBehavior::TEXTURE_FLOW;
+    }
 };
 
 #else
@@ -274,6 +379,44 @@ struct AudioContext {
     static constexpr uint8_t bins64Count() { return 64; }
     float bin(uint8_t) const { return 0.0f; }
     const float* bins64() const { return nullptr; }
+
+    // Musical saliency stubs (always return "not salient")
+    struct StubSaliencyFrame {
+        float overallSaliency = 0.0f;
+        float harmonicNoveltySmooth = 0.0f;
+        float rhythmicNoveltySmooth = 0.0f;
+        float timbralNoveltySmooth = 0.0f;
+        float dynamicNoveltySmooth = 0.0f;
+        uint8_t dominantType = 3;  // DYNAMIC default
+    };
+    StubSaliencyFrame saliencyFrame() const { return StubSaliencyFrame{}; }
+    float overallSaliency() const { return 0.0f; }
+    bool isHarmonicDominant() const { return false; }
+    bool isRhythmicDominant() const { return false; }
+    bool isTimbralDominant() const { return false; }
+    bool isDynamicDominant() const { return false; }
+    float harmonicSaliency() const { return 0.0f; }
+    float rhythmicSaliency() const { return 0.0f; }
+    float timbralSaliency() const { return 0.0f; }
+    float dynamicSaliency() const { return 0.0f; }
+
+    // Music style stubs
+    uint8_t musicStyle() const { return 0; }  // UNKNOWN
+    float styleConfidence() const { return 0.0f; }
+    bool isRhythmicMusic() const { return false; }
+    bool isHarmonicMusic() const { return false; }
+    bool isMelodicMusic() const { return false; }
+    bool isTextureMusic() const { return false; }
+    bool isDynamicMusic() const { return false; }
+
+    // Behavior context stubs (always return default behavior)
+    BehaviorContext behaviorContext{};  ///< Default behavior context
+    VisualBehavior recommendedBehavior() const { return VisualBehavior::BREATHE_WITH_DYNAMICS; }
+    bool shouldPulseOnBeat() const { return false; }
+    bool shouldDriftWithHarmony() const { return false; }
+    bool shouldShimmerWithMelody() const { return false; }
+    bool shouldBreatheWithDynamics() const { return true; }  // Default behavior
+    bool shouldTextureFlow() const { return false; }
 };
 #endif
 

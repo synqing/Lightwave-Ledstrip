@@ -75,6 +75,7 @@ export interface V2DeviceOverview {
 export interface V2Parameters {
   brightness: number;
   speed: number;
+  mood: number;
   paletteId: number;
   intensity: number;
   saturation: number;

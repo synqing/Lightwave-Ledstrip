@@ -355,17 +355,27 @@ const DashboardShell: React.FC = () => {
                     disabled={!canControl}
                   />
                   
-                  <SliderControl 
-                    label="Speed" 
-                    value={speed} 
-                    min={1} 
-                    max={50} 
+                  <SliderControl
+                    label="Speed"
+                    value={speed}
+                    min={1}
+                    max={200}
                     onChange={(v) => actions.setParameters({ speed: v })}
                     fillColor="from-primary to-primary-dark"
                     disabled={!canControl}
                   />
 
-                  <SliderControl 
+                  <SliderControl
+                    label="Mood"
+                    value={state.parameters?.mood ?? 50}
+                    min={0}
+                    max={100}
+                    onChange={(v) => actions.setParameters({ mood: v })}
+                    fillColor="from-accent-purple to-primary"
+                    disabled={!canControl}
+                  />
+
+                  <SliderControl
                     label="Blur" 
                     value={blur} 
                     min={0} 

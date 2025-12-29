@@ -27,20 +27,20 @@
 // No-ops when FEATURE_MABUTRACE is disabled
 #include "AudioBenchmarkTrace.h"
 
+// Unified logging system (preserves colored output conventions)
+#define LW_LOG_TAG "Audio"
+#include "utils/Log.h"
+
+// Runtime-configurable audio debug verbosity
+#include "AudioDebugConfig.h"
+
 #ifndef NATIVE_BUILD
-#include <esp_log.h>
 #include <esp_timer.h>
 #else
 // Native build stubs for ESP-IDF APIs
-#define ESP_LOGI(tag, fmt, ...)
-#define ESP_LOGD(tag, fmt, ...)
-#define ESP_LOGE(tag, fmt, ...)
-#define ESP_LOGW(tag, fmt, ...)
 inline uint64_t esp_timer_get_time() { return 0; }
 inline uint32_t esp_log_timestamp() { return 0; }
 #endif
-
-static const char* TAG = "AudioActor";
 
 namespace lightwaveos {
 namespace audio {
@@ -72,7 +72,7 @@ AudioActor::~AudioActor()
 void AudioActor::pause()
 {
     if (m_state == AudioActorState::RUNNING) {
-        ESP_LOGI(TAG, "Pausing audio capture");
+        LW_LOGI("Pausing audio capture");
         m_state = AudioActorState::PAUSED;
     }
 }
@@ -80,7 +80,7 @@ void AudioActor::pause()
 void AudioActor::resume()
 {
     if (m_state == AudioActorState::PAUSED) {
-        ESP_LOGI(TAG, "Resuming audio capture");
+        LW_LOGI("Resuming audio capture");
         m_state = AudioActorState::RUNNING;
     }
 }
@@ -160,14 +160,14 @@ bool AudioActor::hasNewHop()
 
 void AudioActor::onStart()
 {
-    ESP_LOGI(TAG, "AudioActor starting on Core %d", xPortGetCoreID());
+    LW_LOGI("AudioActor starting on Core %d", xPortGetCoreID());
 
     m_state = AudioActorState::INITIALIZING;
     m_stats.state = m_state;
 
     // Initialize I2S audio capture
     if (!m_capture.init()) {
-        ESP_LOGE(TAG, "Failed to initialize audio capture");
+        LW_LOGE("Failed to initialize audio capture");
         m_state = AudioActorState::ERROR;
         m_stats.state = m_state;
         return;
@@ -179,9 +179,14 @@ void AudioActor::onStart()
     // Initialize K1-Lightwave beat tracker pipeline
     uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
     m_k1Pipeline.begin(now_ms);
-    ESP_LOGI(TAG, "K1-Lightwave pipeline initialized");
+#if FEATURE_K1_DEBUG
+    m_k1Pipeline.setDebugRing(&m_k1DebugRing);
+    LW_LOGI("K1-Lightwave pipeline initialized (debug ring enabled)");
+#else
+    LW_LOGI("K1-Lightwave pipeline initialized");
+#endif
 
-    ESP_LOGI(TAG, "AudioActor started (tick=%dms, hop=%d, rate=%.1fHz)",
+    LW_LOGI("AudioActor started (tick=%dms, hop=%d, rate=%.1fHz)",
              AUDIO_ACTOR_TICK_MS, HOP_SIZE, HOP_RATE_HZ);
 }
 
@@ -189,12 +194,12 @@ void AudioActor::onMessage(const actors::Message& msg)
 {
     switch (msg.type) {
         case actors::MessageType::SHUTDOWN:
-            ESP_LOGI(TAG, "Received SHUTDOWN message");
+            LW_LOGI("Received SHUTDOWN message");
             // Will be handled by base class
             break;
 
         case actors::MessageType::HEALTH_CHECK:
-            ESP_LOGD(TAG, "Health check: state=%d, captures=%lu",
+            LW_LOGD("Health check: state=%d, captures=%lu",
                      static_cast<int>(m_state), m_stats.captureSuccessCount);
             // TODO: Send HEALTH_STATUS response when MessageBus is integrated
             break;
@@ -202,12 +207,12 @@ void AudioActor::onMessage(const actors::Message& msg)
         case actors::MessageType::PING:
             // Respond with PONG for latency testing
             // TODO: Send PONG via MessageBus
-            ESP_LOGD(TAG, "PING received");
+            LW_LOGD("PING received");
             break;
 
         default:
             // Ignore unknown messages
-            ESP_LOGD(TAG, "Ignoring message type 0x%02X",
+            LW_LOGD("Ignoring message type 0x%02X",
                      static_cast<uint8_t>(msg.type));
             break;
     }
@@ -231,18 +236,21 @@ void AudioActor::onTick()
     // Record tick time
     m_stats.lastTickTimeUs = esp_timer_get_time() - tickStart;
 
-    // Log periodically (every 620 ticks = ~10 seconds) - just enough to confirm alive
-    if ((m_stats.tickCount % 620) == 0) {
+    // Log periodically (every 620 ticks = ~10 seconds) - gated by verbosity >= 2
+    auto& dbgCfg = getAudioDebugConfig();
+    if (dbgCfg.verbosity >= 2 && (m_stats.tickCount % 620) == 0) {
         const CaptureStats& cstats = m_capture.getStats();
         const ControlBusFrame& frame = m_controlBus.GetFrame();
-        ESP_LOGI(TAG, "Audio alive: cap=%lu pk=%d pkC=%d rms=%.4f->%.3f pre=%.4f g=%.2f dc=%.1f clip=%u flux=%.3f min=%d max=%d mean=%.1f",
-                 cstats.hopsCapured, cstats.peakSample, m_lastPeakCentered, m_lastRmsRaw, frame.rms,
+        // Calculate mic level in dB from pre-gain RMS
+        float micLevelDb = (m_lastRmsPreGain > 0.0001f) ? (20.0f * log10f(m_lastRmsPreGain)) : -80.0f;
+        LW_LOGI("Audio alive: " LW_CLR_YELLOW "mic=%.1fdB" LW_ANSI_RESET " cap=%lu pk=%d pkC=%d rms=%.4f->%.3f pre=%.4f g=%.2f dc=%.1f clip=%u flux=%.3f min=%d max=%d mean=%.1f",
+                 micLevelDb, cstats.hopsCapured, cstats.peakSample, m_lastPeakCentered, m_lastRmsRaw, frame.rms,
                  m_lastRmsPreGain, m_lastAgcGain, m_lastDcEstimate, (unsigned)m_lastClipCount, m_lastFluxMapped,
                  m_lastMinSample, m_lastMaxSample, m_lastMeanSample);
 
         // Log spike detection stats (get from ControlBus)
         auto spikeStats = m_controlBus.getSpikeStats();
-        ESP_LOGI(TAG, "Spike stats: frames=%lu detected=%lu corrected=%lu avg/frame=%.3f removed=%.2f",
+        LW_LOGI("Spike stats: frames=%lu detected=%lu corrected=%lu avg/frame=%.3f removed=%.2f",
                  spikeStats.totalFrames,
                  spikeStats.spikesDetectedBands + spikeStats.spikesDetectedChroma,
                  spikeStats.spikesCorrected,
@@ -250,7 +258,7 @@ void AudioActor::onTick()
                  spikeStats.totalEnergyRemoved);
 
         // Log saliency detection metrics
-        ESP_LOGI(TAG, "Saliency: overall=%.3f dom=%u H=%.3f R=%.3f T=%.3f D=%.3f",
+        LW_LOGI("Saliency: overall=%.3f dom=%u H=%.3f R=%.3f T=%.3f D=%.3f",
                  frame.saliency.overallSaliency,
                  frame.saliency.dominantType,
                  frame.saliency.harmonicNoveltySmooth,
@@ -260,7 +268,7 @@ void AudioActor::onTick()
 
         // Log style detection metrics (MIS Phase 2)
         const StyleClassification& styleClass = m_styleDetector.getClassification();
-        ESP_LOGI(TAG, "Style: %u conf=%.2f [R=%.2f H=%.2f M=%.2f T=%.2f D=%.2f]",
+        LW_LOGI("Style: %u conf=%.2f [R=%.2f H=%.2f M=%.2f T=%.2f D=%.2f]",
                  static_cast<uint8_t>(m_styleDetector.getStyle()),
                  m_styleDetector.getConfidence(),
                  styleClass.styleWeights[0],
@@ -273,7 +281,7 @@ void AudioActor::onTick()
 
 void AudioActor::onStop()
 {
-    ESP_LOGI(TAG, "AudioActor stopping");
+    LW_LOGI("AudioActor stopping");
 
     // Deinitialize audio capture
     m_capture.deinit();
@@ -282,15 +290,15 @@ void AudioActor::onStop()
     m_stats.state = m_state;
 
     // Log final statistics
-    ESP_LOGI(TAG, "Final stats:");
-    ESP_LOGI(TAG, "  Total ticks: %lu", m_stats.tickCount);
-    ESP_LOGI(TAG, "  Successful captures: %lu", m_stats.captureSuccessCount);
-    ESP_LOGI(TAG, "  Failed captures: %lu", m_stats.captureFailCount);
+    LW_LOGI("Final stats:");
+    LW_LOGI("  Total ticks: %lu", m_stats.tickCount);
+    LW_LOGI("  Successful captures: %lu", m_stats.captureSuccessCount);
+    LW_LOGI("  Failed captures: %lu", m_stats.captureFailCount);
 
     const CaptureStats& cstats = m_capture.getStats();
-    ESP_LOGI(TAG, "  DMA timeouts: %lu", cstats.dmaTimeouts);
-    ESP_LOGI(TAG, "  Read errors: %lu", cstats.readErrors);
-    ESP_LOGI(TAG, "  Max read time: %lu us", cstats.maxReadTimeUs);
+    LW_LOGI("  DMA timeouts: %lu", cstats.dmaTimeouts);
+    LW_LOGI("  Read errors: %lu", cstats.readErrors);
+    LW_LOGI("  Max read time: %lu us", cstats.maxReadTimeUs);
 }
 
 // ============================================================================
@@ -594,15 +602,14 @@ void AudioActor::processHop()
             raw.bands[i] = band * activity;
         }
 
-        // Throttle Goertzel debug logging to once per ~2 seconds (prevents serial spam)
-        m_goertzelLogCounter++;
-        if (m_goertzelLogCounter >= GOERTZEL_LOG_INTERVAL) {
+        // Throttle 8-band Goertzel debug logging - gated by verbosity >= 5
+        auto& dbgCfg8 = getAudioDebugConfig();
+        if (dbgCfg8.verbosity >= 5 && ++m_goertzelLogCounter >= dbgCfg8.interval8Band()) {
             m_goertzelLogCounter = 0;
             // Calculate TRUE mic level in dB from pre-gain RMS (0dB = full scale, silence floor at -60dB)
             float micLevelDb = (m_lastRmsPreGain > 0.0001f) ? (20.0f * log10f(m_lastRmsPreGain)) : -80.0f;
             // Bold cyan title, bold yellow for mic dB level, rest uncolored
-            ESP_LOGD(TAG,
-                     "\033[1;36mGoertzel:\033[0m \033[1;33m%.1fdB\033[0m raw=[%.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f] "
+            LW_LOGD(LW_CLR_CYAN "Goertzel:" LW_ANSI_RESET " " LW_CLR_YELLOW "%.1fdB" LW_ANSI_RESET " raw=[%.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f] "
                      "map=[%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f] "
                      "rms=%.4f->%.3f pre=%.4f g=%.2f dc=%.1f clip=%u pk=%d pkC=%d min=%d max=%d mean=%.1f",
                      micLevelDb,
@@ -711,11 +718,12 @@ void AudioActor::processHop()
             raw.bins64[i] = bins64Raw[i] * activity;
         }
 
-        // Throttled logging (~1/second)
-        if (++m_goertzel64LogCounter >= GOERTZEL64_LOG_INTERVAL) {
+        // Throttled 64-bin logging - gated by verbosity >= 4
+        auto& dbgCfg64 = getAudioDebugConfig();
+        if (dbgCfg64.verbosity >= 4 && ++m_goertzel64LogCounter >= dbgCfg64.interval64Bin()) {
             m_goertzel64LogCounter = 0;
             // Cyan for 64-bin spectral analysis (title-only coloring)
-            ESP_LOGI(TAG, "\033[36m64-bin Goertzel:\033[0m [%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f]",
+            LW_LOGI(LW_CLR_CYAN_DIM "64-bin Goertzel:" LW_ANSI_RESET " [%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f]",
                      bands64Folded[0], bands64Folded[1], bands64Folded[2], bands64Folded[3],
                      bands64Folded[4], bands64Folded[5], bands64Folded[6], bands64Folded[7]);
         }
@@ -856,26 +864,26 @@ void AudioActor::handleCaptureError(CaptureResult result)
     // Log error based on type
     switch (result) {
         case CaptureResult::NOT_INITIALIZED:
-            ESP_LOGE(TAG, "Capture error: not initialized");
+            LW_LOGE("Capture error: not initialized");
             m_state = AudioActorState::ERROR;
             m_stats.state = m_state;
             break;
 
         case CaptureResult::DMA_TIMEOUT:
             // DMA timeouts can be transient - don't change state
-            ESP_LOGW(TAG, "Capture: DMA timeout");
+            LW_LOGW("Capture: DMA timeout");
             break;
 
         case CaptureResult::READ_ERROR:
-            ESP_LOGW(TAG, "Capture: read error");
+            LW_LOGW("Capture: read error");
             break;
 
         case CaptureResult::BUFFER_OVERFLOW:
-            ESP_LOGW(TAG, "Capture: buffer overflow");
+            LW_LOGW("Capture: buffer overflow");
             break;
 
         default:
-            ESP_LOGW(TAG, "Capture: unknown error %d", static_cast<int>(result));
+            LW_LOGW("Capture: unknown error %d", static_cast<int>(result));
             break;
     }
 
@@ -911,7 +919,7 @@ bool AudioActor::startNoiseCalibration(uint32_t durationMs, float safetyMultipli
     // Only start if not already running
     if (m_noiseCalibration.state == CalibrationState::MEASURING ||
         m_noiseCalibration.state == CalibrationState::REQUESTED) {
-        ESP_LOGW(TAG, "Calibration already in progress");
+        LW_LOGW("Calibration already in progress");
         return false;
     }
 
@@ -921,7 +929,7 @@ bool AudioActor::startNoiseCalibration(uint32_t durationMs, float safetyMultipli
     m_noiseCalibration.safetyMultiplier = safetyMultiplier;
     m_noiseCalibration.state = CalibrationState::REQUESTED;
 
-    ESP_LOGI(TAG, "Noise calibration requested: %ums, multiplier=%.2f",
+    LW_LOGI("Noise calibration requested: %ums, multiplier=%.2f",
              durationMs, safetyMultiplier);
     return true;
 }
@@ -929,7 +937,7 @@ bool AudioActor::startNoiseCalibration(uint32_t durationMs, float safetyMultipli
 void AudioActor::cancelNoiseCalibration()
 {
     if (m_noiseCalibration.state != CalibrationState::IDLE) {
-        ESP_LOGI(TAG, "Calibration cancelled");
+        LW_LOGI("Calibration cancelled");
         m_noiseCalibration.reset();
     }
 }
@@ -937,7 +945,7 @@ void AudioActor::cancelNoiseCalibration()
 bool AudioActor::applyCalibrationResults()
 {
     if (!m_noiseCalibration.result.valid) {
-        ESP_LOGW(TAG, "Cannot apply: no valid calibration results");
+        LW_LOGW("Cannot apply: no valid calibration results");
         return false;
     }
 
@@ -953,7 +961,7 @@ bool AudioActor::applyCalibrationResults()
 
     setPipelineTuning(tuning);
 
-    ESP_LOGI(TAG, "Applied calibration: noiseFloorMin=%.6f, perBand enabled",
+    LW_LOGI("Applied calibration: noiseFloorMin=%.6f, perBand enabled",
              tuning.noiseFloorMin);
     return true;
 }
@@ -971,7 +979,7 @@ void AudioActor::processNoiseCalibration(float rms, const float* bands, const fl
             // Transition to measuring - start the timer
             m_noiseCalibration.startTimeMs = nowMs;
             m_noiseCalibration.state = CalibrationState::MEASURING;
-            ESP_LOGI(TAG, "Calibration started: measuring for %ums", m_noiseCalibration.durationMs);
+            LW_LOGI("Calibration started: measuring for %ums", m_noiseCalibration.durationMs);
             // Fall through to MEASURING
             [[fallthrough]];
 
@@ -1000,11 +1008,11 @@ void AudioActor::processNoiseCalibration(float rms, const float* bands, const fl
                     m_noiseCalibration.result.valid = true;
                     m_noiseCalibration.state = CalibrationState::COMPLETE;
 
-                    ESP_LOGI(TAG, "Calibration complete: avgRMS=%.6f, peak=%.6f, samples=%u",
+                    LW_LOGI("Calibration complete: avgRMS=%.6f, peak=%.6f, samples=%u",
                              m_noiseCalibration.result.overallRms,
                              m_noiseCalibration.result.peakRms,
                              m_noiseCalibration.result.sampleCount);
-                    ESP_LOGI(TAG, "  Bands: [%.5f %.5f %.5f %.5f %.5f %.5f %.5f %.5f]",
+                    LW_LOGI("  Bands: [%.5f %.5f %.5f %.5f %.5f %.5f %.5f %.5f]",
                              m_noiseCalibration.result.bandFloors[0],
                              m_noiseCalibration.result.bandFloors[1],
                              m_noiseCalibration.result.bandFloors[2],
@@ -1014,7 +1022,7 @@ void AudioActor::processNoiseCalibration(float rms, const float* bands, const fl
                              m_noiseCalibration.result.bandFloors[6],
                              m_noiseCalibration.result.bandFloors[7]);
                 } else {
-                    ESP_LOGE(TAG, "Calibration failed: no samples collected");
+                    LW_LOGE("Calibration failed: no samples collected");
                     m_noiseCalibration.state = CalibrationState::FAILED;
                 }
                 return;
@@ -1022,7 +1030,7 @@ void AudioActor::processNoiseCalibration(float rms, const float* bands, const fl
 
             // Check for too much noise (abort if not silence)
             if (rms > m_noiseCalibration.maxAllowedRms) {
-                ESP_LOGW(TAG, "Calibration aborted: RMS %.4f exceeds max %.4f (not silent)",
+                LW_LOGW("Calibration aborted: RMS %.4f exceeds max %.4f (not silent)",
                          rms, m_noiseCalibration.maxAllowedRms);
                 m_noiseCalibration.state = CalibrationState::FAILED;
                 return;
@@ -1045,7 +1053,7 @@ void AudioActor::processNoiseCalibration(float rms, const float* bands, const fl
             // Progress logging (~once per second)
             if ((m_noiseCalibration.sampleCount % 62) == 0) {
                 float progress = (float)elapsed / (float)m_noiseCalibration.durationMs * 100.0f;
-                ESP_LOGD(TAG, "Calibrating: %.0f%% (%u samples, avgRMS=%.5f)",
+                LW_LOGD("Calibrating: %.0f%% (%u samples, avgRMS=%.5f)",
                          progress, m_noiseCalibration.sampleCount,
                          m_noiseCalibration.rmsSum / m_noiseCalibration.sampleCount);
             }

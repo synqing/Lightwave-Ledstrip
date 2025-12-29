@@ -51,6 +51,10 @@
 #include "k1/K1Messages.h"
 #include "../utils/LockFreeQueue.h"
 
+#if FEATURE_K1_DEBUG
+#include "k1/K1DebugRing.h"
+#endif
+
 #if FEATURE_AUDIO_BENCHMARK
 #include "AudioBenchmarkMetrics.h"
 #include "AudioBenchmarkRing.h"
@@ -358,6 +362,17 @@ public:
      */
     const k1::K1Pipeline& getK1Pipeline() const { return m_k1Pipeline; }
 
+#if FEATURE_K1_DEBUG
+    /**
+     * @brief Get const reference to K1 debug ring buffer
+     *
+     * RendererActor or WebSocket can drain this for debug telemetry.
+     * Consumer must call pop() to read samples.
+     */
+    k1::K1DebugRing& getK1DebugRing() { return m_k1DebugRing; }
+    const k1::K1DebugRing& getK1DebugRing() const { return m_k1DebugRing; }
+#endif
+
     // ========================================================================
     // Phase 2B: Benchmark Access
     // ========================================================================
@@ -543,6 +558,11 @@ private:
 
     /// Beat-in-bar counter for K1BeatEvent (wraps at 4 for 4/4 time)
     uint8_t m_k1BeatInBar = 0;
+
+#if FEATURE_K1_DEBUG
+    /// K1 debug ring buffer for cross-core telemetry (2KB)
+    k1::K1DebugRing m_k1DebugRing;
+#endif
 
     // ========================================================================
     // Phase 2C: Noise Calibration State

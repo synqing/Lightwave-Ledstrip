@@ -150,6 +150,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - OR propagate INWARD from edges (0/159) to center (79/80)
 - NO linear left-to-right or right-to-left patterns
 
+**AUDIO-REACTIVE EFFECTS: Mandatory Protocol**
+
+Before adding ANY audio-reactive features, agents MUST read:
+**[docs/audio-visual/AUDIO_VISUAL_SEMANTIC_MAPPING.md](docs/audio-visual/AUDIO_VISUAL_SEMANTIC_MAPPING.md)**
+
+Key requirements:
+1. **Complete Layer Audit Protocol** - understand ALL layers of the effect
+2. **NO rigid frequency→visual bindings** - "bass→expansion" is a TRAP
+3. **Musical saliency analysis** - respond to what's IMPORTANT, not all signals
+4. **Style-adaptive response** - EDM/vocal/ambient need different strategies
+5. **Temporal context** - use history, not just instantaneous values
+
+**Frequency spectrum isolation is AMATEUR DSP. Musical intelligence has evolved past it.**
+
 ## Design Philosophy
 
 - **CENTER ORIGIN**: Effects radiate from LED 79/80 because the LGP creates interference patterns - edge-originating effects look wrong on this hardware

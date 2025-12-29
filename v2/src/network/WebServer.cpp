@@ -10,6 +10,9 @@
 
 #if FEATURE_WEB_SERVER
 
+#define LW_LOG_TAG "WebServer"
+#include "utils/Log.h"
+
 #include "ApiResponse.h"
 #include "RequestValidator.h"
 #include "WiFiManager.h"
@@ -123,13 +126,13 @@ WebServer::~WebServer() {
 // ============================================================================
 
 bool WebServer::begin() {
-    Serial.println("[WebServer] Starting v2 WebServer...");
+    LW_LOGI("Starting v2 WebServer...");
 
     // Initialize LittleFS for static file serving
     if (!LittleFS.begin(true)) {
-        Serial.println("[WebServer] WARNING: LittleFS mount failed!");
+        LW_LOGW("LittleFS mount failed!");
     } else {
-        Serial.println("[WebServer] LittleFS mounted");
+        LW_LOGI("LittleFS mounted");
     }
 
     // Create server instances
@@ -156,9 +159,9 @@ bool WebServer::begin() {
 
     // Initialize WiFi
     if (!initWiFi()) {
-        Serial.println("[WebServer] WiFi init failed, starting AP mode...");
+        LW_LOGW("WiFi init failed, starting AP mode...");
         if (!startAPMode()) {
-            Serial.println("[WebServer] AP mode failed!");
+            LW_LOGE("AP mode failed!");
             return false;
         }
     }
@@ -185,16 +188,16 @@ bool WebServer::begin() {
         m_zoneComposer = m_renderer->getZoneComposer();
     }
 
-    Serial.printf("[WebServer] Server running on port %d\n", WebServerConfig::HTTP_PORT);
+    LW_LOGI("Server running on port %d", WebServerConfig::HTTP_PORT);
     if (m_apMode) {
-        Serial.printf("[WebServer] AP Mode - IP: %s\n", WiFi.softAPIP().toString().c_str());
+        LW_LOGI("AP Mode - IP: %s", WiFi.softAPIP().toString().c_str());
     } else {
         // Verify IP is valid before logging (defensive check)
         IPAddress ip = WiFi.localIP();
         if (ip != INADDR_NONE && ip != IPAddress(0, 0, 0, 0)) {
-            Serial.printf("[WebServer] Connected - IP: %s\n", ip.toString().c_str());
+            LW_LOGI("Connected - IP: %s", ip.toString().c_str());
         } else {
-            Serial.println("[WebServer] WARNING: IP not yet assigned, check WiFiManager status");
+            LW_LOGW("IP not yet assigned, check WiFiManager status");
         }
     }
 
@@ -206,7 +209,7 @@ void WebServer::stop() {
         m_ws->closeAll();
         m_server->end();
         m_running = false;
-        Serial.println("[WebServer] Server stopped");
+        LW_LOGI("Server stopped");
     }
 }
 
@@ -281,24 +284,24 @@ bool WebServer::initWiFi() {
 
     // Check if WiFiManager has already connected
     if (WIFI_MANAGER.isConnected()) {
-        Serial.println("[WebServer] WiFi already connected via WiFiManager");
+        LW_LOGI("WiFi already connected via WiFiManager");
         m_apMode = false;
         return true;
     }
 
     // Check if WiFiManager is in AP mode
     if (WIFI_MANAGER.isAPMode()) {
-        Serial.println("[WebServer] WiFi in AP mode via WiFiManager");
+        LW_LOGI("WiFi in AP mode via WiFiManager");
         m_apMode = true;
         return true;
     }
 
     // If WiFiManager isn't connected yet, wait briefly for it
-    Serial.println("[WebServer] Waiting for WiFiManager connection...");
+    LW_LOGI("Waiting for WiFiManager connection...");
     uint32_t startTime = millis();
     while (!WIFI_MANAGER.isConnected() && !WIFI_MANAGER.isAPMode()) {
         if (millis() - startTime > WebServerConfig::WIFI_CONNECT_TIMEOUT_MS) {
-            Serial.println("[WebServer] WiFiManager connection timeout");
+            LW_LOGW("WiFiManager connection timeout");
             return false;
         }
         delay(100);
@@ -306,10 +309,9 @@ bool WebServer::initWiFi() {
 
     m_apMode = WIFI_MANAGER.isAPMode();
     if (m_apMode) {
-        Serial.println("[WebServer] WiFi in AP mode via WiFiManager");
+        LW_LOGI("WiFi in AP mode via WiFiManager");
     } else {
-        Serial.printf("[WebServer] Connected via WiFiManager, IP: %s\n",
-                      WiFi.localIP().toString().c_str());
+        LW_LOGI("Connected via WiFiManager, IP: %s", WiFi.localIP().toString().c_str());
     }
     return true;
 }
@@ -320,15 +322,15 @@ bool WebServer::startAPMode() {
     // If we reach here, WiFiManager should already be in AP mode.
 
     if (WIFI_MANAGER.isAPMode()) {
-        Serial.println("[WebServer] AP Mode active via WiFiManager");
-        Serial.printf("[WebServer] AP IP: %s\n", WiFi.softAPIP().toString().c_str());
+        LW_LOGI("AP Mode active via WiFiManager");
+        LW_LOGI("AP IP: %s", WiFi.softAPIP().toString().c_str());
         m_apMode = true;
         return true;
     }
 
     // If WiFiManager isn't in AP mode, something went wrong in the flow
-    Serial.println("[WebServer] ERROR: startAPMode called but WiFiManager not in AP mode");
-    Serial.println("[WebServer] WiFi should be managed by WiFiManager, not WebServer");
+    LW_LOGE("startAPMode called but WiFiManager not in AP mode");
+    LW_LOGE("WiFi should be managed by WiFiManager, not WebServer");
     return false;
 }
 
@@ -352,14 +354,13 @@ void WebServer::startMDNS() {
         MDNS.addServiceTxt("ws", "tcp", "board", "ESP32-S3");
         MDNS.addServiceTxt("ws", "tcp", "uuid", DEVICE_UUID.toString());
         MDNS.addServiceTxt("ws", "tcp", "syncver", "1");
-        Serial.printf("[WebServer] Sync UUID: %s\n", DEVICE_UUID.toString());
+        LW_LOGI("Sync UUID: %s", DEVICE_UUID.toString());
 #endif
 
         m_mdnsStarted = true;
-        Serial.printf("[WebServer] mDNS started: http://%s.local\n",
-                      WebServerConfig::MDNS_HOSTNAME);
+        LW_LOGI("mDNS started: http://%s.local", WebServerConfig::MDNS_HOSTNAME);
     } else {
-        Serial.println("[WebServer] mDNS failed to start");
+        LW_LOGE("mDNS failed to start");
     }
 }
 
@@ -760,33 +761,33 @@ void WebServer::setupLegacyRoutes() {
                 String clientIP = request->client()->remoteIP().toString();
                 String token = request->header("X-OTA-Token");
                 if (token != config::NetworkConfig::OTA_UPDATE_TOKEN) {
-                    Serial.printf("[OTA] SECURITY: Failed auth attempt from %s\n", clientIP.c_str());
+                    LW_LOGW("OTA SECURITY: Failed auth attempt from %s", clientIP.c_str());
                     request->send(401, "application/json",
                         "{\"success\":false,\"error\":\"Invalid OTA token\"}");
                     return;
                 }
 
-                Serial.printf("[OTA] Authorized update from %s: %s\n", clientIP.c_str(), filename.c_str());
+                LW_LOGI("OTA: Authorized update from %s: %s", clientIP.c_str(), filename.c_str());
 
                 // Begin update
                 if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
-                    Serial.printf("[OTA] Begin failed: %s\n", Update.errorString());
+                    LW_LOGE("OTA: Begin failed: %s", Update.errorString());
                     return;
                 }
             }
 
             // Write chunk
             if (Update.write(data, len) != len) {
-                Serial.printf("[OTA] Write failed: %s\n", Update.errorString());
+                LW_LOGE("OTA: Write failed: %s", Update.errorString());
                 return;
             }
 
             // Finalize on last chunk
             if (final) {
                 if (Update.end(true)) {
-                    Serial.printf("[OTA] Success! Total size: %u bytes\n", index + len);
+                    LW_LOGI("OTA: Success! Total size: %u bytes", index + len);
                 } else {
-                    Serial.printf("[OTA] End failed: %s\n", Update.errorString());
+                    LW_LOGE("OTA: End failed: %s", Update.errorString());
                 }
             }
         }
@@ -3686,7 +3687,7 @@ void WebServer::onWsEvent(AsyncWebSocket* server, AsyncWebSocketClient* client,
             break;
 
         case WS_EVT_ERROR:
-            Serial.printf("[WebSocket] Error from client %u\n", client->id());
+            LW_LOGW("WS: Error from client %u", client->id());
             break;
 
         case WS_EVT_PONG:
@@ -3699,13 +3700,12 @@ void WebServer::handleWsConnect(AsyncWebSocketClient* client) {
     // Ensure stale client entries are purged before applying connection limits.
     m_ws->cleanupClients();
     if (m_ws->count() > WebServerConfig::MAX_WS_CLIENTS) {
-        Serial.printf("[WebSocket] Max clients reached, rejecting %u\n", client->id());
+        LW_LOGW("WS: Max clients reached, rejecting %u", client->id());
         client->close(1008, "Connection limit");
         return;
     }
 
-    Serial.printf("[WebSocket] Client %u connected from %s\n",
-                  client->id(), client->remoteIP().toString().c_str());
+    LW_LOGI("WS: Client %u connected from %s", client->id(), client->remoteIP().toString().c_str());
 
     // Send initial state
     broadcastStatus();
@@ -3714,7 +3714,7 @@ void WebServer::handleWsConnect(AsyncWebSocketClient* client) {
 
 void WebServer::handleWsDisconnect(AsyncWebSocketClient* client) {
     uint32_t clientId = client->id();
-    Serial.printf("[WebSocket] Client %u disconnected\n", clientId);
+    LW_LOGI("WS: Client %u disconnected", clientId);
 
     // Cleanup LED stream subscription
     setLEDStreamSubscription(client, false);
@@ -3896,8 +3896,8 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
                 data["accepted"] = true;
             });
             client->text(response);
-            Serial.printf("[WebSocket] Client %u subscribed to LED stream (v%d, %d bytes)\n", 
-                         clientId, webserver::LedStreamConfig::FRAME_VERSION, webserver::LedStreamConfig::FRAME_SIZE);
+            LW_LOGD("WS: Client %u subscribed to LED stream (v%d, %d bytes)",
+                    clientId, webserver::LedStreamConfig::FRAME_VERSION, webserver::LedStreamConfig::FRAME_SIZE);
         } else {
             // Manually build rejection response to set success=false
             JsonDocument response;
@@ -3909,11 +3909,11 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             JsonObject error = response["error"].to<JsonObject>();
             error["code"] = "RESOURCE_EXHAUSTED";
             error["message"] = "Subscriber table full";
-            
+
             String output;
             serializeJson(response, output);
             client->text(output);
-            Serial.printf("[WebSocket] Client %u subscribed to LED stream (REJECTED)\n", clientId);
+            LW_LOGW("WS: Client %u LED stream subscription REJECTED", clientId);
         }
     }
     else if (type == "ledStream.unsubscribe") {
@@ -3924,7 +3924,7 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             data["clientId"] = clientId;
         });
         client->text(response);
-        Serial.printf("[WebSocket] Client %u unsubscribed from LED stream\n", clientId);
+        LW_LOGD("WS: Client %u unsubscribed from LED stream", clientId);
     }
 
     // Request-response pattern with requestId
@@ -4069,7 +4069,7 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             String output;
             serializeJson(response, output);
             client->text(output);
-            Serial.printf("[WebSocket] Client %u audio subscription REJECTED\n", clientId);
+            LW_LOGW("WS: Client %u audio subscription REJECTED", clientId);
         }
     }
     // audio.unsubscribe - Unsubscribe client from binary audio stream
@@ -5875,7 +5875,7 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
                 data["accepted"] = true;
             });
             client->text(response);
-            Serial.printf("[WebSocket] Client %u subscribed to benchmark stream\n", clientId);
+            LW_LOGD("WS: Client %u subscribed to benchmark stream", clientId);
         } else {
             // Build rejection response manually
             JsonDocument response;
@@ -5891,7 +5891,7 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             String output;
             serializeJson(response, output);
             client->text(output);
-            Serial.printf("[WebSocket] Client %u benchmark subscription rejected\n", clientId);
+            LW_LOGW("WS: Client %u benchmark subscription rejected", clientId);
         }
     }
     else if (type == "benchmark.unsubscribe") {
@@ -5902,7 +5902,7 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             data["clientId"] = clientId;
         });
         client->text(response);
-        Serial.printf("[WebSocket] Client %u unsubscribed from benchmark stream\n", clientId);
+        LW_LOGD("WS: Client %u unsubscribed from benchmark stream", clientId);
     }
     // benchmark.start - Start benchmark collection
     else if (type == "benchmark.start") {
@@ -5922,7 +5922,7 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             data["active"] = true;
         });
         client->text(response);
-        Serial.println("[WebSocket] Benchmark collection started");
+        LW_LOGI("WS: Benchmark collection started");
     }
     // benchmark.stop - Stop benchmark collection and get results
     else if (type == "benchmark.stop") {
@@ -5949,7 +5949,7 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             results["peakTotalUs"] = stats.peakTotalUs;
         });
         client->text(response);
-        Serial.println("[WebSocket] Benchmark collection stopped");
+        LW_LOGI("WS: Benchmark collection stopped");
     }
     // benchmark.get - Get current benchmark stats
     else if (type == "benchmark.get") {
@@ -6012,7 +6012,7 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
                 data["accepted"] = true;
             });
             client->text(response);
-            Serial.printf("[WebSocket] Client %u subscribed to validation stream\n", clientId);
+            LW_LOGD("WS: Client %u subscribed to validation stream", clientId);
         } else {
             // Build rejection response manually
             JsonDocument response;
@@ -6028,7 +6028,7 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             String output;
             serializeJson(response, output);
             client->text(output);
-            Serial.printf("[WebSocket] Client %u validation subscription rejected\n", clientId);
+            LW_LOGW("WS: Client %u validation subscription rejected", clientId);
         }
     }
     else if (type == "validation.unsubscribe") {
@@ -6047,7 +6047,7 @@ void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc
             data["clientId"] = clientId;
         });
         client->text(response);
-        Serial.printf("[WebSocket] Client %u unsubscribed from validation stream\n", clientId);
+        LW_LOGD("WS: Client %u unsubscribed from validation stream", clientId);
     }
 #endif
 
@@ -6172,13 +6172,13 @@ bool WebServer::setLEDStreamSubscription(AsyncWebSocketClient* client, bool subs
     if (!client || !m_ledBroadcaster) return false;
     uint32_t clientId = client->id();
     bool success = m_ledBroadcaster->setSubscription(clientId, subscribe);
-    
+
     if (subscribe && success) {
-        Serial.printf("[WebServer] Client %u subscribed to LED stream\n", clientId);
+        LW_LOGD("Client %u subscribed to LED stream", clientId);
     } else if (!subscribe) {
-        Serial.printf("[WebServer] Client %u unsubscribed from LED stream\n", clientId);
+        LW_LOGD("Client %u unsubscribed from LED stream", clientId);
     }
-    
+
     return success;
 }
 
@@ -6230,13 +6230,13 @@ bool WebServer::setAudioStreamSubscription(AsyncWebSocketClient* client, bool su
     if (!client || !m_audioBroadcaster) return false;
     uint32_t clientId = client->id();
     bool success = m_audioBroadcaster->setSubscription(clientId, subscribe);
-    
+
     if (subscribe && success) {
-        Serial.printf("[WebServer] Client %u subscribed to audio stream\n", clientId);
+        LW_LOGD("Client %u subscribed to audio stream", clientId);
     } else if (!subscribe) {
-        Serial.printf("[WebServer] Client %u unsubscribed from audio stream\n", clientId);
+        LW_LOGD("Client %u unsubscribed from audio stream", clientId);
     }
-    
+
     return success;
 }
 
@@ -6270,9 +6270,9 @@ bool WebServer::setBenchmarkStreamSubscription(AsyncWebSocketClient* client, boo
     bool success = m_benchmarkBroadcaster->setSubscription(clientId, subscribe);
 
     if (subscribe && success) {
-        Serial.printf("[WebServer] Client %u subscribed to benchmark stream\n", clientId);
+        LW_LOGD("Client %u subscribed to benchmark stream", clientId);
     } else if (!subscribe) {
-        Serial.printf("[WebServer] Client %u unsubscribed from benchmark stream\n", clientId);
+        LW_LOGD("Client %u unsubscribed from benchmark stream", clientId);
     }
 
     return success;
@@ -6335,7 +6335,7 @@ void WebServer::handleBenchmarkStart(AsyncWebServerRequest* request) {
         m_benchmarkBroadcaster->setStreamingActive(true);
     }
 
-    Serial.println("[WebServer] Benchmark collection started");
+    LW_LOGI("Benchmark collection started");
 
     sendSuccessResponse(request, [](JsonObject& d) {
         d["message"] = "Benchmark collection started";
@@ -6358,7 +6358,7 @@ void WebServer::handleBenchmarkStop(AsyncWebServerRequest* request) {
     // Return final stats
     const audio::AudioBenchmarkStats& stats = audio->getBenchmarkStats();
 
-    Serial.println("[WebServer] Benchmark collection stopped");
+    LW_LOGI("Benchmark collection stopped");
 
     sendSuccessResponse(request, [&stats](JsonObject& d) {
         d["message"] = "Benchmark collection stopped";

@@ -162,57 +162,12 @@ struct AudioContractTuning {
 };
 
 /**
- * @brief Beat detection tuning parameters
+ * @brief Goertzel novelty tuning parameters
  *
- * Expert-validated parameters for flux + bass-band hybrid beat detection:
- * - Adaptive threshold with k=2.0 (literature standard)
- * - 16-sample history for robust statistics (~256ms at 62.5 Hz)
- * - Adaptive cooldown (60% of beat interval) for 60-300 BPM support
- * - Bass band weighting for kick drum detection
- * - 3-point peak detection to prevent early triggers
+ * Minimal configuration for spectral flux novelty computation.
+ * Beat detection will be replaced by K1-Lightwave integration.
  */
-struct BeatDetectionTuning {
-    // Threshold multipliers (how many std deviations above mean)
-    float fluxThresholdMult = 2.0f;     ///< Flux threshold: mean + k*std (literature: 2.0)
-    float bassThresholdMult = 1.8f;     ///< Bass threshold: slightly more sensitive
-
-    // History window size (samples for rolling statistics)
-    uint8_t historySize = 16;           ///< 16 samples = ~256ms at 62.5 Hz hop rate
-
-    // Cooldown parameters (adaptive to estimated BPM)
-    uint32_t minCooldownMs = 100;       ///< Min cooldown = max 300 BPM (200ms/beat)
-    uint32_t maxCooldownMs = 300;       ///< Max cooldown = min 100 BPM (600ms/beat)
-    float cooldownRatio = 0.6f;         ///< Cooldown = 60% of estimated beat interval
-
-    // Bass band weighting (bands[0] = 60Hz, bands[1] = 120Hz)
-    float bassWeight60Hz = 0.6f;        ///< Weight for 60Hz band (sub-bass/kick fundamental)
-    float bassWeight120Hz = 0.4f;       ///< Weight for 120Hz band (kick harmonic)
-
-    // Octave-error correction range
-    float bpmMinPreferred = 80.0f;      ///< Below this, double the BPM estimate
-    float bpmMaxPreferred = 160.0f;     ///< Above this, halve the BPM estimate
-
-    // Minimum thresholds (prevent false triggers on silence)
-    float minFluxThreshold = 0.05f;     ///< Absolute min flux to trigger beat
-    float minBassThreshold = 0.08f;     ///< Absolute min bass to trigger beat
-
-    // Confidence weighting
-    float confidenceDecay = 0.98f;      ///< Per-hop confidence decay when no beat detected
-    float confidenceBoost = 0.15f;      ///< Confidence boost when beat matches prediction
-
-    // Enable/disable hybrid detection
-    bool useBassDetection = true;       ///< Enable bass-band hybrid detection
-    bool useOctaveCorrection = true;    ///< Enable BPM octave-error correction
-
-    // Priority 4: Multi-band onset weights for snare/hihat detection
-    float snareWeights[4] = {0.3f, 0.4f, 0.2f, 0.1f};  ///< Weights for bands 2-5 (250Hz-2kHz)
-    float hihatWeights[2] = {0.6f, 0.4f};               ///< Weights for bands 6-7 (4kHz-7.8kHz)
-    bool useSnareDetection = true;      ///< Enable snare-band onset detection
-    bool useHihatDetection = true;      ///< Enable hihat-band onset detection
-    float snareThresholdK = 1.5f;       ///< Std deviations above mean for snare
-    float hihatThresholdK = 1.8f;       ///< Std deviations above mean for hihat
-
-    // Priority 5: Spectral flux configuration
+struct GoertzelNoveltyTuning {
     bool useSpectralFlux = true;        ///< Use per-band flux instead of RMS-based
     float spectralFluxScale = 2.0f;     ///< Scaling factor for spectral flux
 };
@@ -310,57 +265,9 @@ inline AudioContractTuning clampAudioContractTuning(const AudioContractTuning& i
     return out;
 }
 
-inline BeatDetectionTuning clampBeatDetectionTuning(const BeatDetectionTuning& in) {
-    BeatDetectionTuning out = in;
-
-    // Threshold multipliers
-    out.fluxThresholdMult = clampf(out.fluxThresholdMult, 1.0f, 5.0f);
-    out.bassThresholdMult = clampf(out.bassThresholdMult, 1.0f, 5.0f);
-
-    // History size (4-32 samples reasonable)
-    if (out.historySize < 4) out.historySize = 4;
-    if (out.historySize > 32) out.historySize = 32;
-
-    // Cooldown parameters
-    if (out.minCooldownMs < 50) out.minCooldownMs = 50;     // Max ~600 BPM
-    if (out.maxCooldownMs > 600) out.maxCooldownMs = 600;   // Min ~50 BPM
-    if (out.maxCooldownMs < out.minCooldownMs) {
-        out.maxCooldownMs = out.minCooldownMs;
-    }
-    out.cooldownRatio = clampf(out.cooldownRatio, 0.3f, 0.9f);
-
-    // Bass weights
-    out.bassWeight60Hz = clampf(out.bassWeight60Hz, 0.0f, 1.0f);
-    out.bassWeight120Hz = clampf(out.bassWeight120Hz, 0.0f, 1.0f);
-
-    // BPM preferred range
-    out.bpmMinPreferred = clampf(out.bpmMinPreferred, 40.0f, 120.0f);
-    out.bpmMaxPreferred = clampf(out.bpmMaxPreferred, 100.0f, 200.0f);
-    if (out.bpmMaxPreferred < out.bpmMinPreferred + 20.0f) {
-        out.bpmMaxPreferred = out.bpmMinPreferred + 20.0f;
-    }
-
-    // Minimum thresholds
-    out.minFluxThreshold = clampf(out.minFluxThreshold, 0.01f, 0.5f);
-    out.minBassThreshold = clampf(out.minBassThreshold, 0.01f, 0.5f);
-
-    // Confidence parameters
-    out.confidenceDecay = clampf(out.confidenceDecay, 0.9f, 0.999f);
-    out.confidenceBoost = clampf(out.confidenceBoost, 0.01f, 0.5f);
-
-    // Priority 4: Multi-band onset weights
-    for (int i = 0; i < 4; ++i) {
-        out.snareWeights[i] = clampf(out.snareWeights[i], 0.0f, 1.0f);
-    }
-    for (int i = 0; i < 2; ++i) {
-        out.hihatWeights[i] = clampf(out.hihatWeights[i], 0.0f, 1.0f);
-    }
-    out.snareThresholdK = clampf(out.snareThresholdK, 0.5f, 5.0f);
-    out.hihatThresholdK = clampf(out.hihatThresholdK, 0.5f, 5.0f);
-
-    // Priority 5: Spectral flux config
+inline GoertzelNoveltyTuning clampGoertzelNoveltyTuning(const GoertzelNoveltyTuning& in) {
+    GoertzelNoveltyTuning out = in;
     out.spectralFluxScale = clampf(out.spectralFluxScale, 0.1f, 10.0f);
-
     return out;
 }
 

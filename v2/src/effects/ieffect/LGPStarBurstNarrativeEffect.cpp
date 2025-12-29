@@ -43,6 +43,32 @@ static float smoothValue(float current, float target, float rise, float fall) {
     return current + (target - current) * alpha;
 }
 
+// -----------------------------------------
+// Enhancement 2: Behavior blend helpers
+// -----------------------------------------
+
+// Get behavior-specific burst multiplier for blending
+static float getBehaviorBurstMultiplier(plugins::VisualBehavior behavior) {
+    switch (behavior) {
+        case plugins::VisualBehavior::PULSE_ON_BEAT: return 1.5f;      // Strong bursts
+        case plugins::VisualBehavior::BREATHE_WITH_DYNAMICS: return 0.8f;  // Moderate
+        case plugins::VisualBehavior::TEXTURE_FLOW: return 0.4f;       // Subtle
+        case plugins::VisualBehavior::DRIFT_WITH_HARMONY: return 0.6f; // Medium
+        case plugins::VisualBehavior::SHIMMER_WITH_MELODY: return 0.7f; // Medium-light
+        default: return 1.0f;
+    }
+}
+
+// Get behavior-specific shimmer intensity for blending
+static float getBehaviorShimmerIntensity(plugins::VisualBehavior behavior) {
+    switch (behavior) {
+        case plugins::VisualBehavior::SHIMMER_WITH_MELODY: return 1.0f; // Full shimmer
+        case plugins::VisualBehavior::TEXTURE_FLOW: return 0.6f;        // Some shimmer
+        case plugins::VisualBehavior::DRIFT_WITH_HARMONY: return 0.3f;  // Subtle
+        default: return 0.0f;  // No shimmer
+    }
+}
+
 // 0..1 smoothstep with explicit duration
 static inline float smoothstepDur(float t, float duration) {
     if (duration <= 0.0f) return 1.0f;
@@ -113,6 +139,24 @@ bool LGPStarBurstNarrativeEffect::init(plugins::EffectContext& ctx) {
     m_styleBlend = 0.0f;
     m_prevStyle = audio::MusicStyle::UNKNOWN;
 
+    // -----------------------------------------
+    // Enhancement 1: Dynamic Color Warmth
+    // -----------------------------------------
+    m_warmthOffset = 0.0f;
+
+    // -----------------------------------------
+    // Enhancement 2: Behavior Transition Blending
+    // -----------------------------------------
+    m_prevBehavior = plugins::VisualBehavior::DRIFT_WITH_HARMONY;
+    m_behaviorBlend = 1.0f;  // Start fully blended to current
+
+    // -----------------------------------------
+    // Enhancement 3: Texture Layer
+    // -----------------------------------------
+    m_texturePhase = 0.0f;
+    m_textureIntensity = 0.0f;
+    m_fluxSmooth = 0.0f;
+
     return true;
 }
 
@@ -140,12 +184,43 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
             ctx.audio.styleConfidence()
         );
 
-        // Update current behavior and strategy
-        m_currentBehavior = behaviorCtx.recommendedPrimary;
+        // -----------------------------------------
+        // Enhancement 2: BEHAVIOR TRANSITION BLENDING
+        // -----------------------------------------
+        plugins::VisualBehavior newBehavior = behaviorCtx.recommendedPrimary;
+        if (newBehavior != m_currentBehavior) {
+            // Behavior changed: start blending from old to new
+            m_prevBehavior = m_currentBehavior;
+            m_currentBehavior = newBehavior;
+            m_behaviorBlend = 0.0f;  // Start at old behavior
+        }
+
+        // Blend toward new behavior - rate varies by target
+        float blendRate = (m_currentBehavior == plugins::VisualBehavior::PULSE_ON_BEAT) ? 2.0f :
+                          (m_currentBehavior == plugins::VisualBehavior::TEXTURE_FLOW) ? 0.8f : 1.3f;
+        m_behaviorBlend = clamp01(m_behaviorBlend + dt * blendRate);
+
         m_paletteStrategy = plugins::selectPaletteStrategy(ctx.audio.musicStyle());
 
         // Update saliency emphasis
         m_saliencyEmphasis = plugins::SaliencyEmphasis::fromSaliency(ctx.audio.saliencyFrame());
+
+        // -----------------------------------------
+        // Enhancement 1: DYNAMIC COLOR WARMTH
+        // -----------------------------------------
+        float rmsNorm = ctx.audio.rms();
+        float targetWarmth = (rmsNorm - 0.5f) * 60.0f;  // Map 0-1 to -30..+30
+
+        // Style-aware scaling: strongest for DYNAMIC, subtle for RHYTHMIC
+        float warmthScale = (ctx.audio.musicStyle() == audio::MusicStyle::DYNAMIC_DRIVEN) ? 1.5f :
+                            (ctx.audio.musicStyle() == audio::MusicStyle::RHYTHMIC_DRIVEN) ? 0.4f :
+                            (ctx.audio.musicStyle() == audio::MusicStyle::TEXTURE_DRIVEN) ? 0.8f : 0.6f;
+        targetWarmth *= warmthScale;
+
+        // Asymmetric smoothing: fast rise on crescendos, slow fall on decrescendos
+        const float warmthRise = dt / (0.15f + dt);  // ~150ms rise
+        const float warmthFall = dt / (0.60f + dt);  // ~600ms fall
+        m_warmthOffset = smoothValue(m_warmthOffset, targetWarmth, warmthRise, warmthFall);
 
         // Smooth style transitions to prevent jarring switches
         audio::MusicStyle currentStyle = ctx.audio.musicStyle();
@@ -471,6 +546,26 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
     m_shimmerPhase = fmodf(m_shimmerPhase, 6.2831853f);
 
     // -----------------------------------------
+    // Enhancement 3: TEXTURE FLOW LAYER
+    // -----------------------------------------
+#if FEATURE_AUDIO_SYNC
+    const float rawFlux = hasAudio ? ctx.audio.flux() : 0.0f;
+#else
+    const float rawFlux = 0.0f;
+#endif
+    m_fluxSmooth = smoothValue(m_fluxSmooth, rawFlux, dt / (0.25f + dt), dt / (0.80f + dt));
+
+    // Texture phase accumulator - rate modulated by flux
+    const float textureRate = 3.0f * (0.5f + m_fluxSmooth);
+    m_texturePhase += dt * textureRate * 6.2831853f;
+    m_texturePhase = fmodf(m_texturePhase, 6.2831853f);
+
+    // Texture intensity - active only for TEXTURE_FLOW behavior
+    const float targetTextureIntensity = (m_currentBehavior == plugins::VisualBehavior::TEXTURE_FLOW)
+        ? (0.8f + 0.2f * m_fluxSmooth) : 0.0f;
+    m_textureIntensity = lerp(m_textureIntensity, targetTextureIntensity, dt * 2.0f);
+
+    // -----------------------------------------
     // BEHAVIOR-ADAPTIVE BURST RESPONSE
     // -----------------------------------------
     // Attack/decay multipliers adapt burst to music style
@@ -478,7 +573,10 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
     const float decayMult = m_styleTiming.decayMultiplier;
 
     // Burst accumulation - sharper for RHYTHMIC, softer for HARMONIC
-    m_burst += m_energyDeltaSmooth * 0.85f * attackMult;
+    // Enhancement 2: Use blended burst multiplier for smooth behavior transitions
+    const float blendedBurstMult = lerp(getBehaviorBurstMultiplier(m_prevBehavior),
+                                        getBehaviorBurstMultiplier(m_currentBehavior), m_behaviorBlend);
+    m_burst += m_energyDeltaSmooth * 0.85f * attackMult * blendedBurstMult;
     if (m_burst > 1.0f) m_burst = 1.0f;
 
     // Burst decay - shorter for RHYTHMIC (punchy), longer for HARMONIC (sustained)
@@ -538,9 +636,11 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
     const uint8_t fifthBin = (uint8_t)((rootBin + 7) % 12);
 
     const uint8_t binStep  = (uint8_t)(255.0f / 12.0f);
-    const uint8_t hueRoot  = (uint8_t)(ctx.gHue + rootBin  * binStep);
-    const uint8_t hueThird = (uint8_t)(ctx.gHue + thirdBin * binStep);
-    const uint8_t hueFifth = (uint8_t)(ctx.gHue + fifthBin * binStep);
+    // Enhancement 1: Apply dynamic color warmth offset to all hues
+    const int8_t warmthInt = (int8_t)roundf(m_warmthOffset);
+    const uint8_t hueRoot  = (uint8_t)((int16_t)ctx.gHue + rootBin  * binStep + warmthInt);
+    const uint8_t hueThird = (uint8_t)((int16_t)ctx.gHue + thirdBin * binStep + warmthInt);
+    const uint8_t hueFifth = (uint8_t)((int16_t)ctx.gHue + fifthBin * binStep + warmthInt);
 
     // Motion-weighted frequency and falloff
     const float freqBase   = 0.18f + 0.30f * env * (0.5f + 0.5f * motionWeight);
@@ -632,6 +732,23 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
             }
         }
 
+        // -----------------------------------------
+        // Enhancement 3: TEXTURE FLOW LAYER (Strip 1)
+        // -----------------------------------------
+        // Organic wave overlay for TEXTURE_DRIVEN music
+        if (m_textureIntensity > 0.05f && env > 0.1f) {
+            const float wave1 = sinf(m_texturePhase + normalizedDist * 2.5f);
+            const float wave2 = 0.5f * sinf(m_texturePhase * 0.7f - normalizedDist * 1.8f);
+            const float textureFalloff = expf(-normalizedDist * 2.0f);
+            const float textureField = (0.5f + 0.5f * (wave1 + wave2)) * textureFalloff;
+            const float textureAmount = textureField * m_textureIntensity * env * textureWeight;
+
+            if (textureAmount > 0.08f) {
+                const uint8_t texB = clampU8((int)roundf(brightness * textureAmount * 0.35f));
+                c += ctx.palette.getColor((uint8_t)(hueFifth + 48 + paletteIndex), texB);
+            }
+        }
+
         // Snare-driven chord change pulse: bright center flash
         if (m_chordChangePulse > 0.15f) {
             const float pulseFade = expf(-normalizedDist * 4.5f);  // Tight center focus
@@ -660,6 +777,23 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
 
             // FIX: Removed shimmer layer that was ONLY on Strip 2 - caused visual incoherence
             // Shimmer created asymmetric motion between strips
+
+            // -----------------------------------------
+            // Enhancement 3: TEXTURE FLOW LAYER (Strip 2)
+            // -----------------------------------------
+            // Symmetric texture layer for visual coherence
+            if (m_textureIntensity > 0.05f && env > 0.1f) {
+                const float wave1 = sinf(m_texturePhase + normalizedDist * 2.5f);
+                const float wave2 = 0.5f * sinf(m_texturePhase * 0.7f - normalizedDist * 1.8f);
+                const float textureFalloff = expf(-normalizedDist * 2.0f);
+                const float textureField = (0.5f + 0.5f * (wave1 + wave2)) * textureFalloff;
+                const float textureAmount = textureField * m_textureIntensity * env * textureWeight;
+
+                if (textureAmount > 0.08f) {
+                    const uint8_t texB = clampU8((int)roundf(brightness * textureAmount * 0.35f));
+                    c2 += ctx.palette.getColor((uint8_t)(hueFifth + harmonyShift + 48 + paletteIndex), texB);
+                }
+            }
 
             // Snare-driven chord change pulse for Strip 2
             if (m_chordChangePulse > 0.15f) {

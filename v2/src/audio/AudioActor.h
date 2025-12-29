@@ -46,13 +46,15 @@
 #include "contracts/ControlBus.h"
 #include "contracts/SnapshotBuffer.h"
 
+// K1-Lightwave beat tracker integration (Phase 3)
+#include "k1/K1Pipeline.h"
+#include "k1/K1Messages.h"
+#include "../utils/LockFreeQueue.h"
+
 #if FEATURE_AUDIO_BENCHMARK
 #include "AudioBenchmarkMetrics.h"
 #include "AudioBenchmarkRing.h"
 #endif
-
-// Forward declaration for cross-actor beat detection wiring
-namespace lightwaveos { namespace actors { class RendererActor; } }
 
 namespace lightwaveos {
 namespace audio {
@@ -184,16 +186,6 @@ public:
      */
     void resetStats();
 
-    /**
-     * @brief Set the RendererActor for beat detection callback
-     *
-     * Called by ActorSystem after both actors are created.
-     * AudioActor will call RendererActor's onTempoEstimate() and
-     * onBeatObservation() methods when beats are detected.
-     *
-     * @param renderer Pointer to RendererActor (nullptr to disable)
-     */
-    void setRendererActor(actors::RendererActor* renderer) { m_rendererActor = renderer; }
 
     // ========================================================================
     // Buffer Access (for Phase 2 processing)
@@ -334,6 +326,37 @@ public:
      * @return true if results were applied, false if no valid calibration
      */
     bool applyCalibrationResults();
+
+    // ========================================================================
+    // K1-Lightwave Integration (Phase 3)
+    // ========================================================================
+
+    /**
+     * @brief Set K1 output queues for cross-core communication
+     *
+     * Called during system initialization to connect AudioActor's K1Pipeline
+     * to RendererActor's lock-free queues.
+     *
+     * @param tempoQueue Pointer to RendererActor's tempo queue
+     * @param beatQueue Pointer to RendererActor's beat queue
+     */
+    void setK1Queues(
+        utils::LockFreeQueue<k1::K1TempoUpdate, 8>* tempoQueue,
+        utils::LockFreeQueue<k1::K1BeatEvent, 16>* beatQueue
+    ) {
+        m_k1TempoQueue = tempoQueue;
+        m_k1BeatQueue = beatQueue;
+    }
+
+    /**
+     * @brief Check if K1 integration is active
+     */
+    bool isK1Enabled() const { return m_k1TempoQueue != nullptr && m_k1BeatQueue != nullptr; }
+
+    /**
+     * @brief Get const reference to K1Pipeline for diagnostics
+     */
+    const k1::K1Pipeline& getK1Pipeline() const { return m_k1Pipeline; }
 
     // ========================================================================
     // Phase 2B: Benchmark Access
@@ -498,60 +521,28 @@ private:
     static constexpr uint32_t GOERTZEL64_LOG_INTERVAL = 31;  // ~1 second @ 31 Hz
 
     // ========================================================================
-    // Phase 2C: Beat Detection State
+    // Phase 2C: Goertzel Novelty Tuning
     // ========================================================================
 
-    // Beat detection tuning (runtime adjustable)
-    BeatDetectionTuning m_beatTuning;
+    // Goertzel novelty tuning (runtime adjustable)
+    GoertzelNoveltyTuning m_noveltyTuning;
 
-    // Rolling history buffers for adaptive threshold (circular buffer pattern)
-    static constexpr size_t BEAT_HISTORY_MAX = 32;
-    float m_fluxHistory[BEAT_HISTORY_MAX] = {0};
-    float m_bassHistory[BEAT_HISTORY_MAX] = {0};
-    uint8_t m_historyIndex = 0;
-    uint8_t m_historyFilled = 0;  // How many samples in history (up to historySize)
+    // ========================================================================
+    // K1-Lightwave Beat Tracker (Phase 3)
+    // ========================================================================
 
-    // Rolling statistics for adaptive threshold
-    float m_fluxMean = 0.0f;
-    float m_fluxStd = 0.0f;
-    float m_bassMean = 0.0f;
-    float m_bassStd = 0.0f;
+    /// K1 beat tracker pipeline (Stages 2-4)
+    k1::K1Pipeline m_k1Pipeline;
 
-    // Previous values for 3-point peak detection
-    float m_prevFlux = 0.0f;
-    float m_prevPrevFlux = 0.0f;
-    float m_prevBass = 0.0f;
+    /// Last K1 output for change detection
+    k1::K1PipelineOutput m_lastK1Output;
 
-    // Priority 4: Multi-band onset state for snare/hihat detection
-    float m_snareHistory[BEAT_HISTORY_MAX] = {0};
-    float m_hihatHistory[BEAT_HISTORY_MAX] = {0};
-    float m_snareMean = 0.0f;
-    float m_snareStd = 0.0f;
-    float m_hihatMean = 0.0f;
-    float m_hihatStd = 0.0f;
-    float m_prevSnare = 0.0f;
-    float m_prevHihat = 0.0f;
+    /// Pointers to RendererActor's lock-free queues (set via setK1Queues)
+    utils::LockFreeQueue<k1::K1TempoUpdate, 8>* m_k1TempoQueue = nullptr;
+    utils::LockFreeQueue<k1::K1BeatEvent, 16>* m_k1BeatQueue = nullptr;
 
-    // Phase 1.3: Last trigger states for ControlBus publishing
-    bool m_lastSnareTriggered = false;
-    bool m_lastHihatTriggered = false;
-
-    // Cooldown and timing state
-    uint32_t m_lastBeatTimeMs = 0;
-    uint32_t m_cooldownEndMs = 0;
-    float m_estimatedBeatIntervalMs = 500.0f;  // Default 120 BPM
-    float m_estimatedBpm = 120.0f;
-
-    // Beat counting for downbeat detection
-    uint32_t m_beatCount = 0;
-    float m_beatConfidence = 0.0f;
-
-    // Last detected beat info (for debugging/API)
-    float m_lastBeatStrength = 0.0f;
-    bool m_lastBeatWasDownbeat = false;
-
-    // Renderer actor for MusicalGrid wiring (set by ActorSystem)
-    actors::RendererActor* m_rendererActor = nullptr;
+    /// Beat-in-bar counter for K1BeatEvent (wraps at 4 for 4/4 time)
+    uint8_t m_k1BeatInBar = 0;
 
     // ========================================================================
     // Phase 2C: Noise Calibration State
@@ -615,44 +606,6 @@ private:
      * @brief Handle capture error
      */
     void handleCaptureError(CaptureResult result);
-
-    /**
-     * @brief Detect beats using hybrid flux + bass + multi-band onset detection
-     *
-     * Called after processHop() computes flux and bands.
-     * Uses adaptive threshold (mean + k*std) with 3-point peak detection.
-     *
-     * @param currentFlux Current frame's flux value
-     * @param bassEnergy Weighted sum of 60Hz and 120Hz bands
-     * @param nowMs Current time in milliseconds
-     * @param snareEnergy Weighted sum of bands 2-5 for snare detection (Priority 4)
-     * @param hihatEnergy Weighted sum of bands 6-7 for hihat detection (Priority 4)
-     */
-    void detectBeat(float currentFlux, float bassEnergy, uint32_t nowMs,
-                    float snareEnergy = 0.0f, float hihatEnergy = 0.0f);
-
-    /**
-     * @brief Update rolling statistics for adaptive threshold
-     *
-     * Computes mean and std deviation from history buffer.
-     *
-     * @param history Array of history values
-     * @param count Number of valid samples in history
-     * @param outMean Output: computed mean
-     * @param outStd Output: computed standard deviation
-     */
-    void updateRollingStats(const float* history, size_t count, float& outMean, float& outStd);
-
-    /**
-     * @brief Apply octave-error correction to BPM estimate
-     *
-     * Snaps BPM to preferred range [bpmMinPreferred, bpmMaxPreferred]
-     * by doubling or halving as needed.
-     *
-     * @param rawBpm Raw BPM from inter-onset interval
-     * @return Corrected BPM in preferred range
-     */
-    float correctOctaveError(float rawBpm);
 
     /**
      * @brief Process noise calibration state machine during hop

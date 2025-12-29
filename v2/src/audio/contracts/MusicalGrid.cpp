@@ -79,6 +79,58 @@ void MusicalGrid::OnBeatObservation(const AudioTime& t, float strength01, bool i
     if (m_pending_strength > m_conf) m_conf = m_pending_strength;
 }
 
+// ============================================================================
+// K1-Lightwave Integration (Phase 3)
+// ============================================================================
+
+void MusicalGrid::updateFromK1(float bpm, float confidence, bool is_locked) {
+    // K1 provides tempo estimates from its Goertzel resonator bank.
+    // Feed directly into target BPM for PLL tracking.
+
+    // Clamp BPM to configured range
+    if (bpm < m_tuning.bpmMin) bpm = m_tuning.bpmMin;
+    if (bpm > m_tuning.bpmMax) bpm = m_tuning.bpmMax;
+
+    m_bpm_target = bpm;
+
+    // K1 confidence drives how strongly we trust the tempo
+    confidence = clamp01(confidence);
+
+    // When K1 is locked, boost confidence slightly for stability
+    if (is_locked && confidence > 0.5f) {
+        confidence = confidence * 0.9f + 0.1f; // Slight boost toward 1.0
+    }
+
+    // Only update confidence upward (decay handled in Tick)
+    if (confidence > m_conf) {
+        m_conf = confidence;
+    }
+}
+
+void MusicalGrid::onK1Beat(int beat_in_bar, bool is_downbeat, float strength) {
+    // K1 beat events are already time-aligned by the PLL.
+    // Create a synthetic AudioTime for "now" and trigger observation.
+
+    // Use current state to estimate AudioTime
+    // Note: In production, K1 would provide precise timestamp
+    AudioTime now;
+    now.sample_index = m_last_tick_t.sample_index;
+    now.sample_rate_hz = m_last_tick_t.sample_rate_hz;
+    now.monotonic_us = m_last_tick_t.monotonic_us;
+
+    m_pending_beat = true;
+    m_pending_beat_t = now;
+    m_pending_strength = clamp01(strength);
+    m_pending_is_downbeat = is_downbeat;
+
+    // Beat observation bumps confidence
+    if (strength > m_conf) {
+        m_conf = strength;
+    }
+
+    (void)beat_in_bar; // Reserved for future bar-level phase correction
+}
+
 void MusicalGrid::Tick(const AudioTime& render_now) {
     MusicalGridSnapshot s;
     s.t = render_now;

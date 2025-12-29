@@ -105,6 +105,19 @@ void GoertzelAnalyzer::initBins() {
         // ====================================================================
         float k = std::round((static_cast<float>(m_bins[bin].block_size) * freq) /
                              static_cast<float>(SAMPLE_RATE_HZ));
+
+        // ====================================================================
+        // Stability Guard: Prevent coefficient from reaching ±2.0 exactly
+        // When k = 0 (DC) or k = N/2 (Nyquist), coeff = ±2.0 causes instability.
+        // Nudge k by 0.5 to move away from these boundaries.
+        // ====================================================================
+        float half_block = static_cast<float>(m_bins[bin].block_size) * 0.5f;
+        if (k < 1.0f) {
+            k = 1.0f;  // Avoid DC (k=0 gives coeff=+2.0)
+        } else if (k >= half_block - 0.5f) {
+            k = half_block - 1.0f;  // Avoid Nyquist (k=N/2 gives coeff=-2.0)
+        }
+
         float omega = (2.0f * M_PI * k) / static_cast<float>(m_bins[bin].block_size);
         float coeff = 2.0f * std::cos(omega);
         m_bins[bin].coeff_q14 = static_cast<int32_t>(coeff * 16384.0f);  // Q14

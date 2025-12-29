@@ -27,9 +27,6 @@
 // No-ops when FEATURE_MABUTRACE is disabled
 #include "AudioBenchmarkTrace.h"
 
-// RendererActor for MusicalGrid beat detection wiring
-#include "../core/actors/RendererActor.h"
-
 #ifndef NATIVE_BUILD
 #include <esp_log.h>
 #include <esp_timer.h>
@@ -178,6 +175,11 @@ void AudioActor::onStart()
 
     m_state = AudioActorState::RUNNING;
     m_stats.state = m_state;
+
+    // Initialize K1-Lightwave beat tracker pipeline
+    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
+    m_k1Pipeline.begin(now_ms);
+    ESP_LOGI(TAG, "K1-Lightwave pipeline initialized");
 
     ESP_LOGI(TAG, "AudioActor started (tick=%dms, hop=%d, rate=%.1fHz)",
              AUDIO_ACTOR_TICK_MS, HOP_SIZE, HOP_RATE_HZ);
@@ -352,18 +354,14 @@ void AudioActor::processHop()
         for (int i = 0; i < 8; ++i) {
             m_prevBands[i] = 0.0f;
         }
-        // Priority 4: Reset snare/hihat onset state
-        m_prevSnare = 0.0f;
-        m_prevHihat = 0.0f;
-        m_snareMean = 0.0f;
-        m_snareStd = 0.0f;
-        m_hihatMean = 0.0f;
-        m_hihatStd = 0.0f;
         m_analyzer.reset();
         m_chromaAnalyzer.reset();
         m_styleDetector.reset();
         m_prevChordRoot = 0;
         m_controlBus.Reset();
+        // K1-Lightwave reset
+        m_k1Pipeline.reset();
+        m_k1BeatInBar = 0;
     }
 
     // 1. Build AudioTime for this hop
@@ -489,7 +487,7 @@ void AudioActor::processHop()
 
     // Flux placeholder - will be computed after Goertzel if useSpectralFlux is enabled
     float fluxMapped = 0.0f;
-    if (!m_beatTuning.useSpectralFlux) {
+    if (!m_noveltyTuning.useSpectralFlux) {
         // Legacy RMS-based flux (computed here since it only needs RMS)
         float spectralFlux = std::max(0.0f, rmsMapped - m_prevRMS);
         m_prevRMS = rmsMapped;
@@ -628,17 +626,62 @@ void AudioActor::processHop()
     BENCH_SET_FLAG(goertzelTriggered, goertzelTriggered ? 1 : 0);
 
     // Priority 5: Full spectral flux (computed after Goertzel populates raw.bands)
-    if (m_beatTuning.useSpectralFlux) {
+    if (m_noveltyTuning.useSpectralFlux) {
         float spectralFlux = 0.0f;
         for (int i = 0; i < NUM_BANDS; ++i) {
             float delta = raw.bands[i] - m_prevBands[i];
             if (delta > 0.0f) spectralFlux += delta;
             m_prevBands[i] = raw.bands[i];
         }
-        spectralFlux *= m_beatTuning.spectralFluxScale;
+        spectralFlux *= m_noveltyTuning.spectralFluxScale;
         fluxMapped = std::min(1.0f, spectralFlux * tuning.fluxScale);
         m_lastFluxMapped = fluxMapped;
         raw.flux = fluxMapped;  // Update raw.flux with spectral flux value
+    }
+
+    // ========================================================================
+    // K1-Lightwave Beat Tracker Processing (Phase 3)
+    // ========================================================================
+    {
+        uint32_t k1_now_ms = (uint32_t)(now_us / 1000);
+        k1::K1PipelineOutput k1Out;
+
+        // Feed spectral flux to K1 pipeline
+        // K1 converts [0,1] flux to z-score [-6,+6] internally
+        bool lockChanged = m_k1Pipeline.processNovelty(fluxMapped, k1_now_ms, k1Out);
+
+        // Push tempo update if lock state changed or confidence changed significantly
+        if (m_k1TempoQueue != nullptr) {
+            bool shouldPushTempo = lockChanged ||
+                (k1Out.locked && std::abs(k1Out.bpm - m_lastK1Output.bpm) > 0.5f) ||
+                (k1Out.locked != m_lastK1Output.locked);
+
+            if (shouldPushTempo) {
+                k1::K1TempoUpdate tempoMsg;
+                tempoMsg.timestamp_ms = k1_now_ms;
+                tempoMsg.bpm = k1Out.bpm;
+                tempoMsg.confidence = k1Out.confidence;
+                tempoMsg.is_locked = k1Out.locked;
+                m_k1TempoQueue->push(tempoMsg);
+            }
+        }
+
+        // Push beat event if beat tick occurred
+        if (m_k1BeatQueue != nullptr && k1Out.beat_tick && k1Out.locked) {
+            k1::K1BeatEvent beatMsg;
+            beatMsg.timestamp_ms = k1_now_ms;
+            beatMsg.phase01 = k1Out.phase01;
+            beatMsg.beat_in_bar = m_k1BeatInBar;
+            beatMsg.is_downbeat = (m_k1BeatInBar == 0);
+            beatMsg.strength = k1Out.confidence;  // Use confidence as strength
+            m_k1BeatQueue->push(beatMsg);
+
+            // Advance beat-in-bar counter (4/4 time)
+            m_k1BeatInBar = (m_k1BeatInBar + 1) % 4;
+        }
+
+        // Store for change detection
+        m_lastK1Output = k1Out;
     }
 
     // ========================================================================
@@ -739,47 +782,6 @@ void AudioActor::processHop()
         processNoiseCalibration(rmsMapped, raw.bands, raw.chroma, nowMs);
     }
 
-    // === Phase: Beat Detection ===
-    // Hybrid detection using flux + bass band energy (expert-validated algorithm)
-    {
-        // Compute bass energy from 60Hz and 120Hz bands
-        float bassEnergy = raw.bands[0] * m_beatTuning.bassWeight60Hz +
-                          raw.bands[1] * m_beatTuning.bassWeight120Hz;
-
-        // Priority 4: Multi-band onset detection for snare/hihat
-        float snareEnergy = 0.0f;
-        if (m_beatTuning.useSnareDetection) {
-            // Bands 2-5 (250Hz-2kHz) weighted for snare detection
-            for (int i = 0; i < 4; ++i) {
-                snareEnergy += raw.bands[i + 2] * m_beatTuning.snareWeights[i];
-            }
-        }
-
-        float hihatEnergy = 0.0f;
-        if (m_beatTuning.useHihatDetection) {
-            // Bands 6-7 (4kHz-7.8kHz) weighted for hihat detection
-            for (int i = 0; i < 2; ++i) {
-                hihatEnergy += raw.bands[i + 6] * m_beatTuning.hihatWeights[i];
-            }
-        }
-
-        // Get current time in milliseconds
-        uint32_t nowMs = (uint32_t)(now_us / 1000);
-
-        // Run beat detection with multi-band onset info
-        detectBeat(fluxMapped, bassEnergy, nowMs, snareEnergy, hihatEnergy);
-
-        // Phase 1.3: Publish snare/hihat energy and trigger state to ControlBusRawInput
-        // Energy values are always published; triggers are pulse flags set by detectBeat()
-        raw.snareEnergy = snareEnergy;
-        raw.hihatEnergy = hihatEnergy;
-        raw.snareTrigger = m_lastSnareTriggered;
-        raw.hihatTrigger = m_lastHihatTriggered;
-
-        // Clear trigger flags after reading (one-shot pulse behavior)
-        m_lastSnareTriggered = false;
-        m_lastHihatTriggered = false;
-    }
 
     // === Phase: ControlBus Update ===
     BENCH_START_PHASE();
@@ -795,11 +797,13 @@ void AudioActor::processHop()
     {
         bool chordChanged = (m_controlBus.GetFrame().chordState.rootNote != m_prevChordRoot);
         m_prevChordRoot = m_controlBus.GetFrame().chordState.rootNote;
+        // Use K1 beat tracker confidence for style detection
+        float beatConfidence = m_lastK1Output.locked ? m_lastK1Output.confidence : 0.0f;
         m_styleDetector.update(
             rmsMapped,
             fluxMapped,
             raw.bands,
-            m_beatConfidence,
+            beatConfidence,
             chordChanged
         );
     }
@@ -897,225 +901,6 @@ void AudioActor::aggregateBenchmarkStats()
 }
 #endif
 
-// ============================================================================
-// Phase 2C: Beat Detection
-// ============================================================================
-
-void AudioActor::updateRollingStats(const float* history, size_t count, float& outMean, float& outStd)
-{
-    if (count == 0) {
-        outMean = 0.0f;
-        outStd = 0.0f;
-        return;
-    }
-
-    // Compute mean
-    float sum = 0.0f;
-    for (size_t i = 0; i < count; ++i) {
-        sum += history[i];
-    }
-    outMean = sum / static_cast<float>(count);
-
-    // Compute standard deviation
-    float sumSqDiff = 0.0f;
-    for (size_t i = 0; i < count; ++i) {
-        float diff = history[i] - outMean;
-        sumSqDiff += diff * diff;
-    }
-    outStd = std::sqrt(sumSqDiff / static_cast<float>(count));
-}
-
-float AudioActor::correctOctaveError(float rawBpm)
-{
-    if (!m_beatTuning.useOctaveCorrection) {
-        return rawBpm;
-    }
-
-    float correctedBpm = rawBpm;
-
-    // Double if too slow (e.g., detecting half-time)
-    while (correctedBpm < m_beatTuning.bpmMinPreferred && correctedBpm > 0.0f) {
-        correctedBpm *= 2.0f;
-    }
-
-    // Halve if too fast (e.g., detecting double-time)
-    while (correctedBpm > m_beatTuning.bpmMaxPreferred) {
-        correctedBpm /= 2.0f;
-    }
-
-    return correctedBpm;
-}
-
-void AudioActor::detectBeat(float currentFlux, float bassEnergy, uint32_t nowMs,
-                            float snareEnergy, float hihatEnergy)
-{
-    // Step 1: Update history buffers (circular buffer pattern)
-    uint8_t historySize = std::min(m_beatTuning.historySize, (uint8_t)BEAT_HISTORY_MAX);
-
-    m_fluxHistory[m_historyIndex] = currentFlux;
-    m_bassHistory[m_historyIndex] = bassEnergy;
-
-    // Priority 4: Update snare/hihat history buffers
-    m_snareHistory[m_historyIndex] = snareEnergy;
-    m_hihatHistory[m_historyIndex] = hihatEnergy;
-
-    m_historyIndex = (m_historyIndex + 1) % historySize;
-
-    if (m_historyFilled < historySize) {
-        m_historyFilled++;
-    }
-
-    // Step 2: Update rolling statistics
-    updateRollingStats(m_fluxHistory, m_historyFilled, m_fluxMean, m_fluxStd);
-    if (m_beatTuning.useBassDetection) {
-        updateRollingStats(m_bassHistory, m_historyFilled, m_bassMean, m_bassStd);
-    }
-
-    // Priority 4: Update snare/hihat rolling statistics
-    if (m_beatTuning.useSnareDetection) {
-        updateRollingStats(m_snareHistory, m_historyFilled, m_snareMean, m_snareStd);
-    }
-    if (m_beatTuning.useHihatDetection) {
-        updateRollingStats(m_hihatHistory, m_historyFilled, m_hihatMean, m_hihatStd);
-    }
-
-    // Step 3: Compute adaptive thresholds
-    float fluxThreshold = m_fluxMean + m_beatTuning.fluxThresholdMult * m_fluxStd;
-    float bassThreshold = m_bassMean + m_beatTuning.bassThresholdMult * m_bassStd;
-
-    // Priority 4: Compute snare/hihat adaptive thresholds
-    float snareThreshold = m_snareMean + m_beatTuning.snareThresholdK * m_snareStd;
-    float hihatThreshold = m_hihatMean + m_beatTuning.hihatThresholdK * m_hihatStd;
-
-    // Apply minimum thresholds (prevent false triggers on silence)
-    if (fluxThreshold < m_beatTuning.minFluxThreshold) {
-        fluxThreshold = m_beatTuning.minFluxThreshold;
-    }
-    if (bassThreshold < m_beatTuning.minBassThreshold) {
-        bassThreshold = m_beatTuning.minBassThreshold;
-    }
-    // Apply minimum thresholds to snare/hihat (reuse bass min threshold as reasonable default)
-    if (snareThreshold < m_beatTuning.minBassThreshold) {
-        snareThreshold = m_beatTuning.minBassThreshold;
-    }
-    if (hihatThreshold < m_beatTuning.minBassThreshold) {
-        hihatThreshold = m_beatTuning.minBassThreshold;
-    }
-
-    // Step 4: Three-point peak detection (using previous flux, 1-hop lookahead)
-    // We detect a peak at the PREVIOUS hop if: prev > prevPrev AND prev > current
-    bool fluxPeak = (m_prevFlux > m_prevPrevFlux) && (m_prevFlux > currentFlux);
-    bool bassPeak = (m_prevBass > 0.0f) && (bassEnergy < m_prevBass);  // Simple falling edge
-
-    // Priority 4: Peak detection for snare/hihat (simple falling edge like bass)
-    bool snarePeak = (m_prevSnare > 0.0f) && (snareEnergy < m_prevSnare);
-    bool hihatPeak = (m_prevHihat > 0.0f) && (hihatEnergy < m_prevHihat);
-
-    // Step 5: Check if peak exceeds threshold
-    bool fluxTriggered = fluxPeak && (m_prevFlux > fluxThreshold);
-    bool bassTriggered = m_beatTuning.useBassDetection && bassPeak && (m_prevBass > bassThreshold);
-
-    // Priority 4: Check snare/hihat threshold crossings
-    bool snareTriggered = m_beatTuning.useSnareDetection && snarePeak && (m_prevSnare > snareThreshold);
-    bool hihatTriggered = m_beatTuning.useHihatDetection && hihatPeak && (m_prevHihat > hihatThreshold);
-
-    // Phase 1.3: Store trigger states for ControlBus publishing
-    // These flags are read by processHop() after detectBeat() returns
-    m_lastSnareTriggered = snareTriggered;
-    m_lastHihatTriggered = hihatTriggered;
-
-    // Step 6: Combined hybrid detection with multi-band onsets
-    // Beat detected if: flux OR bass OR snare OR hihat triggered, AND cooldown expired
-    bool beatDetected = (fluxTriggered || bassTriggered || snareTriggered || hihatTriggered) &&
-                        (nowMs >= m_cooldownEndMs);
-
-    // Step 7: Process detected beat
-    if (beatDetected) {
-        // Calculate inter-onset interval (IOI)
-        uint32_t ioi_ms = nowMs - m_lastBeatTimeMs;
-
-        // Only update tempo if IOI is in valid range (30-300 BPM)
-        if (ioi_ms >= 200 && ioi_ms <= 2000) {
-            float rawBpm = 60000.0f / static_cast<float>(ioi_ms);
-            float correctedBpm = correctOctaveError(rawBpm);
-
-            // Smoothly update estimated BPM (simple IIR filter)
-            float bpmAlpha = 0.3f;  // How quickly to adapt to new tempo
-            m_estimatedBpm = m_estimatedBpm + bpmAlpha * (correctedBpm - m_estimatedBpm);
-            m_estimatedBeatIntervalMs = 60000.0f / m_estimatedBpm;
-
-            // Update confidence based on prediction accuracy
-            float expectedNextBeat = m_lastBeatTimeMs + m_estimatedBeatIntervalMs;
-            float predictionError = std::abs(static_cast<float>(nowMs) - expectedNextBeat);
-            float normalizedError = predictionError / m_estimatedBeatIntervalMs;
-
-            if (normalizedError < 0.15f) {
-                // Beat matches prediction - boost confidence
-                m_beatConfidence += m_beatTuning.confidenceBoost;
-                if (m_beatConfidence > 1.0f) m_beatConfidence = 1.0f;
-            } else {
-                // Beat doesn't match prediction - reduce confidence
-                m_beatConfidence *= 0.8f;
-            }
-        }
-
-        // Update beat timing state
-        m_lastBeatTimeMs = nowMs;
-        m_beatCount++;
-
-        // Compute beat strength (normalized)
-        float strength = fluxTriggered ? (m_prevFlux / fluxThreshold) : (m_prevBass / bassThreshold);
-        if (strength > 1.0f) strength = 1.0f;
-        m_lastBeatStrength = strength;
-
-        // Determine if this is a downbeat (every 4th beat, simple heuristic)
-        m_lastBeatWasDownbeat = ((m_beatCount % 4) == 1);
-
-        // Compute adaptive cooldown (60% of estimated beat interval)
-        uint32_t adaptiveCooldown = static_cast<uint32_t>(m_estimatedBeatIntervalMs * m_beatTuning.cooldownRatio);
-        if (adaptiveCooldown < m_beatTuning.minCooldownMs) {
-            adaptiveCooldown = m_beatTuning.minCooldownMs;
-        }
-        if (adaptiveCooldown > m_beatTuning.maxCooldownMs) {
-            adaptiveCooldown = m_beatTuning.maxCooldownMs;
-        }
-        m_cooldownEndMs = nowMs + adaptiveCooldown;
-
-        // Wire to MusicalGrid via RendererActor
-        if (m_rendererActor != nullptr) {
-            // Create AudioTime for the beat observation (16ms delayed for 3-point peak detection)
-            AudioTime beatTime;
-            beatTime.sample_index = m_sampleIndex > HOP_SIZE ? m_sampleIndex - HOP_SIZE : 0;
-            beatTime.monotonic_us = esp_timer_get_time() - (HOP_DURATION_MS * 1000);
-
-            // Push tempo estimate first (MusicalGrid PLL needs it for phase correction)
-            m_rendererActor->onTempoEstimate(beatTime, m_estimatedBpm, m_beatConfidence);
-
-            // Push beat observation (triggers beat_tick in MusicalGrid)
-            m_rendererActor->onBeatObservation(beatTime, strength, m_lastBeatWasDownbeat);
-        }
-
-        // Debug logging (throttled - log once per ~10 beats to avoid spam)
-        if ((m_beatCount % 10) == 1) {
-            ESP_LOGD(TAG, "Beat #%u: BPM=%.1f conf=%.2f str=%.2f ioi=%ums cool=%ums %s",
-                     m_beatCount, m_estimatedBpm, m_beatConfidence, strength, ioi_ms, adaptiveCooldown,
-                     m_lastBeatWasDownbeat ? "DOWNBEAT" : "");
-        }
-    } else {
-        // No beat detected - decay confidence slightly
-        m_beatConfidence *= m_beatTuning.confidenceDecay;
-        if (m_beatConfidence < 0.0f) m_beatConfidence = 0.0f;
-    }
-
-    // Step 8: Update previous values for next iteration (3-point peak detection)
-    m_prevPrevFlux = m_prevFlux;
-    m_prevFlux = currentFlux;
-    m_prevBass = bassEnergy;
-
-    // Priority 4: Update previous snare/hihat values
-    m_prevSnare = snareEnergy;
-    m_prevHihat = hihatEnergy;
-}
 
 // ============================================================================
 // Noise Calibration (SensoryBridge pattern)

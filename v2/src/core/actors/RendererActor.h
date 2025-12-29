@@ -47,6 +47,9 @@
 #include "../../audio/contracts/MusicalGrid.h"
 #include "../../audio/contracts/SnapshotBuffer.h"
 #include "../../audio/contracts/AudioEffectMapping.h"
+// K1-Lightwave integration (Phase 3)
+#include "../../audio/k1/K1Messages.h"
+#include "../../utils/LockFreeQueue.h"
 #endif
 
 // Forward declarations
@@ -322,24 +325,6 @@ public:
      */
     bool isAudioEnabled() const { return m_controlBusBuffer != nullptr; }
 
-    /**
-     * @brief Feed tempo estimate to MusicalGrid (from AudioActor)
-     *
-     * Called directly by AudioActor when beat tracker updates tempo.
-     */
-    void onTempoEstimate(const audio::AudioTime& t, float bpm, float confidence) {
-        m_musicalGrid.OnTempoEstimate(t, bpm, confidence);
-    }
-
-    /**
-     * @brief Feed beat observation to MusicalGrid (from AudioActor)
-     *
-     * Called directly by AudioActor when beat tracker detects a beat.
-     */
-    void onBeatObservation(const audio::AudioTime& t, float strength, bool is_downbeat) {
-        m_musicalGrid.OnBeatObservation(t, strength, is_downbeat);
-    }
-
     audio::AudioContractTuning getAudioContractTuning() const;
     void setAudioContractTuning(const audio::AudioContractTuning& tuning);
 
@@ -358,6 +343,30 @@ public:
      * Safe to call from WebServer thread - returns a copy stored by value.
      */
     const audio::MusicalGridSnapshot& getLastMusicalGrid() const { return m_lastMusicalGrid; }
+
+    // ========================================================================
+    // K1-Lightwave Integration (Phase 3 - Public Interface)
+    // ========================================================================
+
+    /**
+     * @brief Get tempo queue for K1Pipeline to push updates
+     *
+     * Called by K1Pipeline (Core 1) to enqueue tempo changes.
+     * Thread-safe: lock-free SPSC queue.
+     */
+    utils::LockFreeQueue<audio::k1::K1TempoUpdate, 8>& getK1TempoQueue() {
+        return m_k1TempoQueue;
+    }
+
+    /**
+     * @brief Get beat queue for K1Pipeline to push beat events
+     *
+     * Called by K1Pipeline (Core 1) to enqueue beat ticks.
+     * Thread-safe: lock-free SPSC queue.
+     */
+    utils::LockFreeQueue<audio::k1::K1BeatEvent, 16>& getK1BeatQueue() {
+        return m_k1BeatQueue;
+    }
 #endif
 
     // ========================================================================
@@ -610,6 +619,27 @@ private:
      * Set to nullptr if AudioActor isn't running.
      */
     const audio::SnapshotBuffer<audio::ControlBusFrame>* m_controlBusBuffer = nullptr;
+
+    // ========================================================================
+    // K1-Lightwave Integration (Phase 3)
+    // ========================================================================
+
+    /**
+     * Lock-free queues for K1 -> Renderer communication
+     *
+     * K1Pipeline (Core 1) pushes tempo updates and beat events.
+     * RendererActor::onTick() (Core 0) drains these queues.
+     */
+    utils::LockFreeQueue<audio::k1::K1TempoUpdate, 8> m_k1TempoQueue;
+    utils::LockFreeQueue<audio::k1::K1BeatEvent, 16> m_k1BeatQueue;
+
+    /**
+     * @brief Process pending K1 updates from lock-free queues
+     *
+     * Called from onTick() to drain tempo and beat event queues.
+     * Updates MusicalGrid and triggers beat-reactive effects.
+     */
+    void processK1Updates();
 #endif
 
     /**

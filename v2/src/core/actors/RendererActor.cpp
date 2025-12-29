@@ -28,6 +28,8 @@
 // Audio integration (Phase 2)
 #if FEATURE_AUDIO_SYNC
 #include "../../audio/AudioActor.h"
+// K1-Lightwave integration (Phase 3)
+#include "../../audio/k1/K1Utils.h"
 #endif
 
 using namespace lightwaveos::transitions;
@@ -506,6 +508,26 @@ void RendererActor::applyPendingAudioContractTuning() {
     m_musicalGrid.setTuning(toMusicalGridTuning(m_audioContractTuning));
     m_musicalGrid.SetTimeSignature(m_audioContractTuning.beatsPerBar, m_audioContractTuning.beatUnit);
 }
+
+// ============================================================================
+// K1-Lightwave Integration (Phase 3)
+// ============================================================================
+
+void RendererActor::processK1Updates() {
+    // Drain tempo updates from K1 pipeline
+    audio::k1::K1TempoUpdate tempoUpdate;
+    while (m_k1TempoQueue.pop(tempoUpdate)) {
+        // Update MusicalGrid with tempo from K1
+        m_musicalGrid.updateFromK1(tempoUpdate.bpm, tempoUpdate.confidence, tempoUpdate.is_locked);
+    }
+
+    // Drain beat events from K1 pipeline
+    audio::k1::K1BeatEvent beatEvent;
+    while (m_k1BeatQueue.pop(beatEvent)) {
+        // Trigger beat-reactive effects via MusicalGrid
+        m_musicalGrid.onK1Beat(beatEvent.beat_in_bar, beatEvent.is_downbeat, beatEvent.strength);
+    }
+}
 #endif
 
 bool RendererActor::enqueueEffectParameterUpdate(uint8_t effectId, const char* name, float value) {
@@ -645,6 +667,8 @@ void RendererActor::renderFrame()
 {
 #if FEATURE_AUDIO_SYNC
     applyPendingAudioContractTuning();
+    // Drain K1 tempo/beat events from lock-free queues
+    processK1Updates();
 #endif
     applyPendingEffectParameterUpdates();
 

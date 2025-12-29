@@ -66,6 +66,34 @@ public:
     void OnTempoEstimate(const AudioTime& t, float bpm, float confidence01);
     void OnBeatObservation(const AudioTime& t, float strength01, bool is_downbeat);
 
+    // ========================================================================
+    // K1-Lightwave Integration (Phase 3)
+    // ========================================================================
+
+    /**
+     * @brief Update tempo from K1 beat tracker
+     *
+     * Called from RendererActor::processK1Updates() after draining K1TempoUpdate queue.
+     * Feeds K1's tempo estimate directly into the MusicalGrid PLL.
+     *
+     * @param bpm BPM estimate from K1 Stage 3 (60-180)
+     * @param confidence Confidence [0,1] from K1 tactus resolver
+     * @param is_locked True if K1 tracker is in LOCKED state
+     */
+    void updateFromK1(float bpm, float confidence, bool is_locked);
+
+    /**
+     * @brief Handle beat event from K1 beat tracker
+     *
+     * Called from RendererActor::processK1Updates() after draining K1BeatEvent queue.
+     * Triggers beat observation in the MusicalGrid PLL for phase correction.
+     *
+     * @param beat_in_bar Position in bar (0-3 for 4/4)
+     * @param is_downbeat True if beat_in_bar == 0
+     * @param strength Beat strength [0,1] from K1 novelty
+     */
+    void onK1Beat(int beat_in_bar, bool is_downbeat, float strength);
+
     // Render-domain update (120 FPS)
     void Tick(const AudioTime& render_now);
 

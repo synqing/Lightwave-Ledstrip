@@ -99,6 +99,24 @@ private:
     // Smooth style transition (prevent abrupt style switching)
     float m_styleBlend = 0.0f;  // 0=old style, 1=new style
     audio::MusicStyle m_prevStyle = audio::MusicStyle::UNKNOWN;
+
+    // -----------------------------------------
+    // Enhancement 1: Dynamic Color Warmth
+    // -----------------------------------------
+    float m_warmthOffset = 0.0f;        // Hue offset (-30 to +30)
+
+    // -----------------------------------------
+    // Enhancement 2: Behavior Transition Blending
+    // -----------------------------------------
+    plugins::VisualBehavior m_prevBehavior = plugins::VisualBehavior::DRIFT_WITH_HARMONY;
+    float m_behaviorBlend = 1.0f;       // 0=old behavior, 1=new behavior
+
+    // -----------------------------------------
+    // Enhancement 3: Texture Layer State
+    // -----------------------------------------
+    float m_texturePhase = 0.0f;        // Wave phase accumulator
+    float m_textureIntensity = 0.0f;    // Layer intensity (0-1)
+    float m_fluxSmooth = 0.0f;          // Smoothed spectral flux
 };
 
 } // namespace ieffect

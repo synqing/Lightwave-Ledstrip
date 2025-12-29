@@ -21,14 +21,18 @@
 
 #include <cstring>
 #include <cmath>
-#include <esp_log.h>
 #include <esp_timer.h>
+
+// Unified logging system (preserves colored output conventions)
+#define LW_LOG_TAG "AudioCapture"
+#include "utils/Log.h"
+
+// Runtime-configurable audio debug verbosity
+#include "AudioDebugConfig.h"
 
 // ESP32-S3 register access for WS polarity fix (SPH0645 requirement)
 // The legacy I2S driver doesn't expose WS polarity, so we set the register directly
 #include "soc/i2s_reg.h"
-
-static const char* TAG = "AudioCapture";
 
 namespace lightwaveos {
 namespace audio {
@@ -62,21 +66,21 @@ AudioCapture::~AudioCapture()
 bool AudioCapture::init()
 {
     if (m_initialized) {
-        ESP_LOGW(TAG, "Already initialized");
+        LW_LOGW("Already initialized");
         return true;
     }
 
-    ESP_LOGI(TAG, "Initializing I2S for SPH0645 (RIGHT channel, Emotiscope conversion)");
+    LW_LOGI("Initializing I2S for SPH0645 (RIGHT channel, Emotiscope conversion)");
 
     // Configure I2S driver
     if (!configureI2S()) {
-        ESP_LOGE(TAG, "Failed to configure I2S driver");
+        LW_LOGE("Failed to configure I2S driver");
         return false;
     }
 
     // Set pin configuration
     if (!configurePins()) {
-        ESP_LOGE(TAG, "Failed to configure I2S pins");
+        LW_LOGE("Failed to configure I2S pins");
         i2s_driver_uninstall(I2S_PORT);
         return false;
     }
@@ -84,17 +88,17 @@ bool AudioCapture::init()
     // Start I2S
     esp_err_t err = i2s_start(I2S_PORT);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to start I2S: %s", esp_err_to_name(err));
+        LW_LOGE("Failed to start I2S: %s", esp_err_to_name(err));
         i2s_driver_uninstall(I2S_PORT);
         return false;
     }
 
     m_initialized = true;
-    ESP_LOGI(TAG, "I2S initialized successfully");
-    ESP_LOGI(TAG, "  Sample rate: %d Hz", SAMPLE_RATE);
-    ESP_LOGI(TAG, "  Hop size: %d samples (%.1f ms)", HOP_SIZE, HOP_DURATION_MS);
-    ESP_LOGI(TAG, "  Pins: BCLK=%d WS=%d DIN=%d", I2S_BCLK_PIN, I2S_LRCL_PIN, I2S_DOUT_PIN);
-    ESP_LOGI(TAG, "  Channel: RIGHT slot (ESP32-S3 reads SEL=GND as RIGHT)");
+    LW_LOGI("I2S initialized successfully");
+    LW_LOGI("  Sample rate: %d Hz", SAMPLE_RATE);
+    LW_LOGI("  Hop size: %d samples (%.1f ms)", HOP_SIZE, HOP_DURATION_MS);
+    LW_LOGI("  Pins: BCLK=%d WS=%d DIN=%d", I2S_BCLK_PIN, I2S_LRCL_PIN, I2S_DOUT_PIN);
+    LW_LOGI("  Channel: RIGHT slot (ESP32-S3 reads SEL=GND as RIGHT)");
 
     return true;
 }
@@ -105,22 +109,22 @@ void AudioCapture::deinit()
         return;
     }
 
-    ESP_LOGI(TAG, "Deinitializing I2S");
+    LW_LOGI("Deinitializing I2S");
 
     // Stop I2S
     esp_err_t err = i2s_stop(I2S_PORT);
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "Failed to stop I2S: %s", esp_err_to_name(err));
+        LW_LOGW("Failed to stop I2S: %s", esp_err_to_name(err));
     }
 
     // Uninstall driver
     err = i2s_driver_uninstall(I2S_PORT);
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "Failed to uninstall I2S driver: %s", esp_err_to_name(err));
+        LW_LOGW("Failed to uninstall I2S driver: %s", esp_err_to_name(err));
     }
 
     m_initialized = false;
-    ESP_LOGI(TAG, "I2S deinitialized");
+    LW_LOGI("I2S deinitialized");
 }
 
 // ============================================================================
@@ -163,29 +167,30 @@ CaptureResult AudioCapture::captureHop(int16_t* buffer)
     // Handle errors
     if (err == ESP_ERR_TIMEOUT) {
         m_stats.dmaTimeouts++;
-        ESP_LOGD(TAG, "DMA timeout after %lu us", (unsigned long)readTimeUs);
+        LW_LOGD("DMA timeout after %lu us", (unsigned long)readTimeUs);
         return CaptureResult::DMA_TIMEOUT;
     }
 
     if (err != ESP_OK) {
         m_stats.readErrors++;
-        ESP_LOGE(TAG, "I2S read error: %s", esp_err_to_name(err));
+        LW_LOGE("I2S read error: %s", esp_err_to_name(err));
         return CaptureResult::READ_ERROR;
     }
 
     // Verify we got the expected amount
     const size_t samplesRead = bytesRead / sizeof(int32_t);
     if (samplesRead < HOP_SIZE) {
-        ESP_LOGW(TAG, "Partial read: %zu/%d samples", samplesRead, HOP_SIZE);
+        LW_LOGW("Partial read: %zu/%d samples", samplesRead, HOP_SIZE);
         memset(&buffer[samplesRead], 0, (HOP_SIZE - samplesRead) * sizeof(int16_t));
     }
 
     static uint32_t s_dbgHop = 0;
     static bool s_firstPrint = true;
     s_dbgHop++;
-    
-    // Print first time immediately, then every 50 hops (~0.8 seconds) for visibility
-    if (s_firstPrint || (s_dbgHop % 50) == 0) {
+
+    // DMA debug log - gated by verbosity >= 3, configurable interval
+    auto& dbgCfgDMA = getAudioDebugConfig();
+    if (dbgCfgDMA.verbosity >= 3 && (s_firstPrint || (s_dbgHop % dbgCfgDMA.intervalDMA()) == 0)) {
         s_firstPrint = false;
         int32_t rawMin = INT32_MAX;
         int32_t rawMax = INT32_MIN;
@@ -209,15 +214,13 @@ CaptureResult AudioCapture::captureHop(int16_t* buffer)
         bool msbShiftEnabled = (REG_GET_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_MSB_SHIFT) != 0);
         const char* channelFmt = "RIGHT";  // Current config uses RIGHT channel
 
-        // Use ESP_LOGI with ANSI color codes (bold yellow for hardware layer)
         // Title-only coloring: color resets before values for readability at 62.5Hz
-        ESP_LOGI(TAG,
-                 "\033[1;33mDMA dbg:\033[0m hop=%lu ch=%s msb_shift=%s raw0=%08X raw1=%08X min=%ld max=%ld "
+        LW_LOGI(LW_CLR_YELLOW "DMA dbg:" LW_ANSI_RESET " hop=%lu ch=%s msb_shift=%s raw0=%08X raw1=%08X min=%ld max=%ld "
                  "pk>>8=%ld pk>>10=%ld pk>>12=%ld pk>>14=%ld pk>>16=%ld",
                  (unsigned long)s_dbgHop, channelFmt, msbShiftEnabled ? "ON" : "OFF",
                  (uint32_t)m_dmaBuffer[0], (uint32_t)m_dmaBuffer[1],
                  (long)rawMin, (long)rawMax,
-                 (long)peakShift(8), (long)peakShift(10), (long)peakShift(12), 
+                 (long)peakShift(8), (long)peakShift(10), (long)peakShift(12),
                  (long)peakShift(14), (long)peakShift(16));
     }
 
@@ -283,7 +286,7 @@ bool AudioCapture::configureI2S()
 
     esp_err_t err = i2s_driver_install(I2S_PORT, &i2sConfig, 0, nullptr);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to install I2S driver: %s", esp_err_to_name(err));
+        LW_LOGE("Failed to install I2S driver: %s", esp_err_to_name(err));
         return false;
     }
 
@@ -295,13 +298,13 @@ bool AudioCapture::configureI2S()
     // 2. REG_SET_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_MSB_SHIFT); -> Enable MSB shift
     //    (SPH0645 outputs MSB-first with 1 BCLK delay after WS, MSB shift aligns data)
     // =========================================================================
-    
+
     // ESP32-S3 Specific Fixes for SPH0645
     REG_SET_BIT(I2S_RX_TIMING_REG(I2S_PORT), BIT(9));
     REG_SET_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_MSB_SHIFT);
     REG_SET_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_WS_IDLE_POL);
-    
-    ESP_LOGI(TAG, "I2S driver installed (RIGHT slot, WS inverted, MSB shift, timing delay for SPH0645)");
+
+    LW_LOGI("I2S driver installed (RIGHT slot, WS inverted, MSB shift, timing delay for SPH0645)");
     return true;
 }
 
@@ -317,11 +320,11 @@ bool AudioCapture::configurePins()
 
     esp_err_t err = i2s_set_pin(I2S_PORT, &pinConfig);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to set I2S pins: %s", esp_err_to_name(err));
+        LW_LOGE("Failed to set I2S pins: %s", esp_err_to_name(err));
         return false;
     }
 
-    ESP_LOGI(TAG, "I2S pins: BCLK=%d WS=%d DIN=%d",
+    LW_LOGI("I2S pins: BCLK=%d WS=%d DIN=%d",
              I2S_BCLK_PIN, I2S_LRCL_PIN, I2S_DOUT_PIN);
 
     return true;

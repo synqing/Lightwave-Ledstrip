@@ -383,6 +383,12 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     }
 
     // ========================================================================
+    // Stage 4c: Musical saliency computation (Musical Intelligence System Phase 1)
+    // Computes what's "perceptually important" across harmonic/rhythmic/timbral/dynamic
+    // ========================================================================
+    computeSaliency();
+
+    // ========================================================================
     // Stage 5: Copy waveform data (no processing)
     // ========================================================================
     for (uint8_t i = 0; i < CONTROLBUS_WAVEFORM_N; ++i) {
@@ -483,6 +489,121 @@ void ControlBus::detectChord(const float* chroma) {
     // If confidence is too low, classify as NONE
     if (cs.confidence < 0.3f) {
         cs.type = ChordType::NONE;
+    }
+}
+
+/**
+ * @brief Compute musical saliency metrics from current frame state.
+ *
+ * Musical saliency indicates "what's perceptually important RIGHT NOW"
+ * across four dimensions:
+ * - Harmonic: Chord/key changes (slow, emotional)
+ * - Rhythmic: Beat pattern changes (fast, structural)
+ * - Timbral: Spectral character changes (texture)
+ * - Dynamic: Loudness envelope changes (energy)
+ *
+ * Effects should respond primarily to the DOMINANT saliency type,
+ * not blindly to all audio signals equally.
+ */
+void ControlBus::computeSaliency() {
+    MusicalSaliencyFrame& sal = m_frame.saliency;
+    const ChordState& chord = m_frame.chordState;
+
+    // ========================================================================
+    // Harmonic Novelty: Chord root or type changes
+    // High when chord progression happens, decays slowly for sustained mood
+    // ========================================================================
+    float harmonicRaw = 0.0f;
+    if (chord.confidence > 0.3f) {
+        // Chord root change is most significant
+        if (chord.rootNote != sal.prevChordRoot) {
+            harmonicRaw = 1.0f;
+            sal.prevChordRoot = chord.rootNote;
+        }
+        // Chord type change (major/minor) is also significant
+        else if (static_cast<uint8_t>(chord.type) != sal.prevChordType) {
+            harmonicRaw = 0.7f;
+        }
+        sal.prevChordType = static_cast<uint8_t>(chord.type);
+    }
+    sal.harmonicNovelty = harmonicRaw;
+
+    // ========================================================================
+    // Timbral Novelty: Spectral flux derivative
+    // High when spectral character changes (instrument changes, frequency shifts)
+    // ========================================================================
+    float fluxDelta = m_frame.flux - sal.prevFlux;
+    if (fluxDelta < 0.0f) fluxDelta = -fluxDelta;  // abs
+    sal.timbralNovelty = clamp01(fluxDelta / m_saliencyTuning.fluxDerivativeThreshold);
+    sal.prevFlux = m_frame.flux;
+
+    // ========================================================================
+    // Dynamic Novelty: RMS envelope derivative
+    // High when loudness changes (crescendo, decrescendo, transients)
+    // ========================================================================
+    float rmsDelta = m_frame.rms - sal.prevRms;
+    if (rmsDelta < 0.0f) rmsDelta = -rmsDelta;  // abs
+    sal.dynamicNovelty = clamp01(rmsDelta / m_saliencyTuning.rmsDerivativeThreshold);
+    sal.prevRms = m_frame.rms;
+
+    // ========================================================================
+    // Rhythmic Novelty: Beat interval variance (proxy: flux derivative)
+    // In Phase 1, use flux derivative as proxy for beat activity
+    // Phase 2 will integrate actual beat detection from AudioActor
+    // ========================================================================
+    // For now, use fast_flux as rhythmic indicator (captures transients)
+    sal.rhythmicNovelty = clamp01(m_frame.fast_flux * 1.5f);
+
+    // ========================================================================
+    // Asymmetric Smoothing: Fast rise, slow fall (organic envelopes)
+    // ========================================================================
+    auto asymmetricSmooth = [](float current, float target, float riseAlpha, float fallAlpha) -> float {
+        float alpha = (target > current) ? riseAlpha : fallAlpha;
+        return current + (target - current) * alpha;
+    };
+
+    sal.harmonicNoveltySmooth = asymmetricSmooth(
+        sal.harmonicNoveltySmooth, sal.harmonicNovelty,
+        m_saliencyTuning.harmonicRiseTime, m_saliencyTuning.harmonicFallTime);
+
+    sal.rhythmicNoveltySmooth = asymmetricSmooth(
+        sal.rhythmicNoveltySmooth, sal.rhythmicNovelty,
+        m_saliencyTuning.rhythmicRiseTime, m_saliencyTuning.rhythmicFallTime);
+
+    sal.timbralNoveltySmooth = asymmetricSmooth(
+        sal.timbralNoveltySmooth, sal.timbralNovelty,
+        m_saliencyTuning.timbralRiseTime, m_saliencyTuning.timbralFallTime);
+
+    sal.dynamicNoveltySmooth = asymmetricSmooth(
+        sal.dynamicNoveltySmooth, sal.dynamicNovelty,
+        m_saliencyTuning.dynamicRiseTime, m_saliencyTuning.dynamicFallTime);
+
+    // ========================================================================
+    // Overall Saliency: Weighted combination
+    // ========================================================================
+    sal.overallSaliency = clamp01(
+        sal.harmonicNoveltySmooth * m_saliencyTuning.harmonicWeight +
+        sal.rhythmicNoveltySmooth * m_saliencyTuning.rhythmicWeight +
+        sal.timbralNoveltySmooth * m_saliencyTuning.timbralWeight +
+        sal.dynamicNoveltySmooth * m_saliencyTuning.dynamicWeight
+    );
+
+    // ========================================================================
+    // Dominant Type: Which saliency type is currently most salient
+    // ========================================================================
+    float maxSaliency = sal.harmonicNoveltySmooth;
+    sal.dominantType = static_cast<uint8_t>(SaliencyType::HARMONIC);
+
+    if (sal.rhythmicNoveltySmooth > maxSaliency) {
+        maxSaliency = sal.rhythmicNoveltySmooth;
+        sal.dominantType = static_cast<uint8_t>(SaliencyType::RHYTHMIC);
+    }
+    if (sal.timbralNoveltySmooth > maxSaliency) {
+        maxSaliency = sal.timbralNoveltySmooth;
+        sal.dominantType = static_cast<uint8_t>(SaliencyType::TIMBRAL);
+    }
+    if (sal.dynamicNoveltySmooth > maxSaliency) {
+        sal.dominantType = static_cast<uint8_t>(SaliencyType::DYNAMIC);
     }
 }
 

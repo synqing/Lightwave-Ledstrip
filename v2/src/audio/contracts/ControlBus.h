@@ -2,6 +2,8 @@
 #include <stdint.h>
 #include <math.h>
 #include "AudioTime.h"
+#include "MusicalSaliency.h"
+#include "StyleDetector.h"
 
 namespace lightwaveos::audio {
 
@@ -84,6 +86,12 @@ struct ControlBusFrame {
     int16_t waveform[CONTROLBUS_WAVEFORM_N] = {0};  // Time-domain samples (int16_t range: -32768 to 32767)
 
     ChordState chordState;  // Chord detection results (root, type, confidence)
+
+    MusicalSaliencyFrame saliency;  // Musical saliency metrics (harmonic, rhythmic, timbral, dynamic novelty)
+
+    // MIS Phase 2: Adaptive style detection
+    MusicStyle currentStyle = MusicStyle::UNKNOWN;  ///< Detected music style classification
+    float styleConfidence = 0.0f;                   ///< Style detection confidence (0.0-1.0)
 
     // Phase 1.2: Onset detection for percussive elements (passthrough from raw)
     float snareEnergy = 0.0f;       // 0..1 snare band energy (150-300 Hz)
@@ -299,6 +307,9 @@ private:
     // Chord detection state (Priority 6)
     bool m_chord_detection_enabled = true;  // Enabled by default
 
+    // Musical saliency tuning parameters
+    SaliencyTuning m_saliencyTuning{};
+
     // Private methods for spike detection
     void detectAndRemoveSpikes(LookaheadBuffer& buffer,
                                const float* input,
@@ -308,6 +319,9 @@ private:
 
     // Private method for chord detection
     void detectChord(const float* chroma);
+
+    // Private method for saliency computation (Musical Intelligence System Phase 1)
+    void computeSaliency();
 };
 
 } // namespace lightwaveos::audio

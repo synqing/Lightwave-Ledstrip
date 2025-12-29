@@ -20,6 +20,12 @@
 #include "K1TactusResolver.h"
 #include "K1BeatClock.h"
 
+// Debug infrastructure (conditionally included)
+#include "../../config/features.h"
+#if FEATURE_K1_DEBUG
+#include "K1DebugRing.h"
+#endif
+
 namespace lightwaveos {
 namespace audio {
 namespace k1 {
@@ -88,6 +94,17 @@ public:
     const K1TactusResolver& tactus() const { return tactus_; }
     const K1BeatClock& beatClock() const { return beat_clock_; }
 
+    // Debug frame access (for spectrum display)
+    const K1ResonatorFrame& lastResonatorFrame() const { return last_resonator_frame_; }
+    const K1TactusFrame& lastTactusFrame() const { return last_tactus_frame_; }
+
+#if FEATURE_K1_DEBUG
+    // Debug ring buffer for cross-core capture
+    void setDebugRing(K1DebugRing* ring) { debug_ring_ = ring; }
+    K1DebugRing* debugRing() const { return debug_ring_; }
+    uint32_t updateCount() const { return update_count_; }
+#endif
+
 private:
     /**
      * @brief Scale Lightwave flux [0,1] to K1 z-score [-6, +6]
@@ -107,6 +124,12 @@ private:
     // Timing
     uint32_t last_t_ms_ = 0;
     bool first_frame_ = true;
+
+#if FEATURE_K1_DEBUG
+    // Debug infrastructure
+    K1DebugRing* debug_ring_ = nullptr;
+    uint32_t update_count_ = 0;
+#endif
 };
 
 } // namespace k1

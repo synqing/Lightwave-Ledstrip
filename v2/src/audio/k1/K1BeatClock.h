@@ -44,6 +44,10 @@ public:
     bool locked() const { return locked_; }
     float confidence() const { return confidence_; }
 
+    // Debug accessors (for K1DebugCli)
+    float phaseError() const { return phase_error_; }
+    float freqError() const { return freq_error_; }
+
 private:
     float wrapPhase(float p) const;
     float resonatorPhaseToPhase01(float rp) const;

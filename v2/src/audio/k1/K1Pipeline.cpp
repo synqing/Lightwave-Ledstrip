@@ -4,6 +4,7 @@
  */
 
 #include "K1Pipeline.h"
+#include "K1DebugMacros.h"
 
 namespace lightwaveos {
 namespace audio {
@@ -33,10 +34,14 @@ void K1Pipeline::reset() {
 }
 
 bool K1Pipeline::processNovelty(float flux, uint32_t t_ms, K1PipelineOutput& out) {
+    K1_DEBUG_DECL();
+    K1_DEBUG_START(t_ms);
+
     bool lock_changed = false;
 
     // Scale flux to z-score
     float novelty_z = fluxToZScore(flux);
+    K1_DEBUG_NOVELTY(novelty_z);
 
     // Compute delta time for beat clock tick
     float delta_sec = 0.016f;  // Default 16ms
@@ -54,6 +59,7 @@ bool K1Pipeline::processNovelty(float flux, uint32_t t_ms, K1PipelineOutput& out
     // Stage 3 & 4: Only update when resonators produce output
     if (resonator_updated) {
         last_resonator_frame_ = resonator_out;
+        K1_DEBUG_CAPTURE_RESONATORS(last_resonator_frame_);
 
         // Stage 3: Tactus Resolver
         K1TactusFrame tactus_out;
@@ -62,8 +68,10 @@ bool K1Pipeline::processNovelty(float flux, uint32_t t_ms, K1PipelineOutput& out
         // Check for lock change
         if (tactus_out.locked != last_tactus_frame_.locked) {
             lock_changed = true;
+            K1_DEBUG_FLAG_LOCK_CHANGED();
         }
         last_tactus_frame_ = tactus_out;
+        K1_DEBUG_CAPTURE_TACTUS(last_tactus_frame_);
 
         // Stage 4: Beat Clock PLL update
         beat_clock_.updateFromTactus(tactus_out, t_ms, last_beat_clock_);
@@ -71,6 +79,7 @@ bool K1Pipeline::processNovelty(float flux, uint32_t t_ms, K1PipelineOutput& out
 
     // Always tick the beat clock to advance phase
     beat_clock_.tick(t_ms, delta_sec, last_beat_clock_);
+    K1_DEBUG_CAPTURE_CLOCK(last_beat_clock_);
 
     // Fill output
     out.t_ms = t_ms;
@@ -79,6 +88,11 @@ bool K1Pipeline::processNovelty(float flux, uint32_t t_ms, K1PipelineOutput& out
     out.bpm = last_beat_clock_.bpm;
     out.confidence = last_beat_clock_.confidence;
     out.locked = last_beat_clock_.locked;
+
+#if FEATURE_K1_DEBUG
+    update_count_++;
+    K1_DEBUG_END(debug_ring_, update_count_);
+#endif
 
     return lock_changed;
 }

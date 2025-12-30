@@ -160,7 +160,7 @@ struct ZoneAGC {
     float max_mag_follower = 1.0f;  ///< Smoothed maximum for normalization (starts at 1.0 to avoid initial spike)
     float attack_rate = 0.05f;      ///< How fast to increase follower (Sensory Bridge default)
     float release_rate = 0.05f;     ///< How fast to decrease follower (Sensory Bridge default)
-    float min_floor = 0.001f;       ///< Prevent division by zero
+    float min_floor = 0.01f;        ///< Minimum follower value (caps max gain at 100x, was 0.001f/1000x)
 
     void reset() {
         max_mag = 0.0f;

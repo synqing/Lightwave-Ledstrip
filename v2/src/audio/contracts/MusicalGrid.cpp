@@ -75,6 +75,9 @@ void MusicalGrid::OnBeatObservation(const AudioTime& t, float strength01, bool i
     m_pending_strength = clamp01(strength01);
     m_pending_is_downbeat = is_downbeat;
 
+    // Store beat strength for effects (instant update, decays in Tick)
+    m_lastBeatStrength = m_pending_strength;
+
     // Seeing a beat is strong evidence we're alive.
     if (m_pending_strength > m_conf) m_conf = m_pending_strength;
 }
@@ -122,6 +125,9 @@ void MusicalGrid::onK1Beat(int beat_in_bar, bool is_downbeat, float strength) {
     m_pending_beat_t = now;
     m_pending_strength = clamp01(strength);
     m_pending_is_downbeat = is_downbeat;
+
+    // Store beat strength for effects (instant update, decays in Tick)
+    m_lastBeatStrength = m_pending_strength;
 
     // Beat observation bumps confidence
     if (strength > m_conf) {
@@ -179,6 +185,12 @@ void MusicalGrid::Tick(const AudioTime& render_now) {
     const float conf_tau = m_tuning.confidenceTau;
     const float conf_decay = (conf_tau > 0.0f) ? expf(-dt_s / conf_tau) : 0.0f;
     m_conf *= conf_decay;
+
+    // Beat strength decays faster (~150ms) for visual punch
+    // tau = 0.15s means 63% decay in 150ms, full fade in ~500ms
+    const float beat_tau = 0.15f;
+    const float beat_decay = expf(-dt_s / beat_tau);
+    m_lastBeatStrength *= beat_decay;
 
     // Integrate continuous beat counter (PLL freewheel)
     m_beat_float += (double)dt_s * ((double)m_bpm_smoothed / 60.0);
@@ -246,6 +258,7 @@ void MusicalGrid::Tick(const AudioTime& render_now) {
 
     s.beat_phase01 = beat_phase01;
     s.bar_phase01 = bar_phase01;
+    s.beat_strength = m_lastBeatStrength;
 
     // Commit timebase
     m_last_tick_t = render_now;

@@ -29,6 +29,8 @@ struct MusicalGridSnapshot {
     uint8_t beats_per_bar = 4; // e.g. 4/4
     uint8_t beat_unit     = 4;
     uint8_t beat_in_bar   = 0; // 0..beats_per_bar-1
+
+    float beat_strength = 0.0f;   ///< Strength of last detected beat (0.0-1.0), decays over time
 };
 
 /**
@@ -122,6 +124,9 @@ private:
     AudioTime m_pending_beat_t{};
     float m_pending_strength = 0.0f;
     bool m_pending_is_downbeat = false;
+
+    // Beat strength tracking (for effects to modulate intensity)
+    float m_lastBeatStrength = 0.0f;  ///< Last beat strength, decays over time
 
     MusicalGridTuning m_tuning;
 

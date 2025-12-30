@@ -104,6 +104,7 @@ bool AudioBloomEffect::init(plugins::EffectContext& ctx) {
     m_iter = 0;
     m_lastHopSeq = 0;
     m_scrollPhase = 0.0f;
+    m_subBassPulse = 0.0f;
     return true;
 }
 
@@ -124,6 +125,24 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
     if (newHop) {
         m_lastHopSeq = ctx.audio.controlBus.hop_seq;
         m_iter++;
+
+        // =====================================================================
+        // 64-bin Sub-Bass Processing (bins 0-5 = 110-155 Hz for deep bass punch)
+        // Uses fine-grained frequency data for sub-bass detail the 8-band
+        // analyzer misses. This gives the effect more punch on bass drops.
+        // =====================================================================
+        float subBassSum = 0.0f;
+        for (uint8_t i = 0; i < 6; ++i) {
+            subBassSum += ctx.audio.bin(i);  // bins64[0..5]
+        }
+        float subBassAvg = subBassSum / 6.0f;
+
+        // Fast attack, slow release for punchy bass response
+        if (subBassAvg > m_subBassPulse) {
+            m_subBassPulse = subBassAvg;  // Instant attack
+        } else {
+            m_subBassPulse *= 0.85f;  // ~100ms decay at 60fps
+        }
     }
 
     // Update on even iterations (matching Sensory Bridge's bitRead(iter, 0) == 0)
@@ -244,6 +263,39 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
     // Render radial buffer to LEDs (centre-origin)
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         SET_CENTER_PAIR(ctx, dist, m_radial[dist]);
+    }
+
+    // =========================================================================
+    // 64-bin Sub-Bass Center Pulse
+    // Adds a brightness boost to center LEDs on bass hits using fine-grained
+    // sub-bass data from the 64-bin analyzer. Creates punchy bass response.
+    // =========================================================================
+    if (m_subBassPulse > 0.1f) {
+        // Pulse radius scales with sub-bass intensity (max ~20 LEDs from center)
+        uint16_t pulseRadius = (uint16_t)(m_subBassPulse * 20.0f);
+        if (pulseRadius > HALF_LENGTH / 4) pulseRadius = HALF_LENGTH / 4;
+
+        // Boost factor: subtle at low levels, strong on drops
+        uint8_t boost = (uint8_t)(m_subBassPulse * 80.0f);  // 0-80 brightness add
+
+        for (uint16_t dist = 0; dist < pulseRadius; ++dist) {
+            // Fade boost toward edge of pulse
+            float fadeIn = 1.0f - ((float)dist / (float)pulseRadius);
+            uint8_t fadedBoost = (uint8_t)(boost * fadeIn);
+
+            // Apply to center pair
+            uint16_t leftIdx = ctx.centerPoint - 1 - dist;
+            uint16_t rightIdx = ctx.centerPoint + dist;
+
+            if (leftIdx < ctx.ledCount) {
+                ctx.leds[leftIdx].r = qadd8(ctx.leds[leftIdx].r, fadedBoost);
+                ctx.leds[leftIdx].g = qadd8(ctx.leds[leftIdx].g, fadedBoost >> 2);  // Slight warm tint
+            }
+            if (rightIdx < ctx.ledCount) {
+                ctx.leds[rightIdx].r = qadd8(ctx.leds[rightIdx].r, fadedBoost);
+                ctx.leds[rightIdx].g = qadd8(ctx.leds[rightIdx].g, fadedBoost >> 2);
+            }
+        }
     }
 #endif  // FEATURE_AUDIO_SYNC
 }

@@ -122,6 +122,11 @@ struct AudioContext {
     /// Get tempo tracking confidence (0.0-1.0)
     float tempoConfidence() const { return musicalGrid.tempo_confidence; }
 
+    /// Get beat strength (0.0-1.0), peaks on beat detection then decays
+    /// Use this to scale visual intensity by beat confidence
+    /// Example: brightness *= 0.5f + 0.5f * ctx.audio.beatStrength();
+    float beatStrength() const { return musicalGrid.beat_strength; }
+
     /// Get waveform sample count
     uint8_t waveformSize() const { return audio::CONTROLBUS_WAVEFORM_N; }
 
@@ -345,6 +350,7 @@ struct AudioContext {
     bool isOnDownbeat() const { return false; }
     float bpm() const { return 120.0f; }
     float tempoConfidence() const { return 0.0f; }
+    float beatStrength() const { return 0.0f; }
     uint8_t waveformSize() const { return 128; }
     int16_t getWaveformSample(uint8_t) const { return 0; }
     float getWaveformAmplitude(uint8_t) const { return 0.0f; }

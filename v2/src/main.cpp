@@ -296,18 +296,77 @@ void loop() {
     }
 #endif
 
-    // Handle serial commands
-    if (Serial.available()) {
+    // Handle serial commands with proper line buffering
+    // This fixes the issue where typing "adbg 2" character-by-character
+    // would trigger effect selection for '2' instead of the adbg command
+    static String serialCmdBuffer = "";
+
+    while (Serial.available()) {
+        char c = Serial.read();
+
+        // Immediate single-char commands (no Enter needed, no buffering)
+        // These work even mid-buffer - they're "hotkeys"
+        if (serialCmdBuffer.length() == 0) {
+            bool isImmediate = false;
+            switch (c) {
+                case ' ':   // Next effect
+                case '+': case '=':  // Brightness up
+                case '-': case '_':  // Brightness down
+                case '[': case ']':  // Speed
+                case ',': case '.':  // Palette
+                case '<': case '>':  // Show navigation
+                case '{': case '}':  // Seek
+                    isImmediate = true;
+                    break;
+            }
+            if (isImmediate) {
+                // Process immediately without buffering
+                serialCmdBuffer = String(c);
+                break; // Exit while loop to process
+            }
+        }
+
+        if (c == '\n' || c == '\r') {
+            // End of line - process buffered command
+            break;
+        } else if (c == 0x7F || c == 0x08) {
+            // Backspace - remove last char
+            if (serialCmdBuffer.length() > 0) {
+                serialCmdBuffer.remove(serialCmdBuffer.length() - 1);
+            }
+        } else if (c >= 32 && c < 127) {
+            // Printable ASCII - add to buffer
+            serialCmdBuffer += c;
+        }
+    }
+
+    // Process buffered command if we have one
+    if (serialCmdBuffer.length() == 0) {
+        // No command to process
+    } else {
+        String input = serialCmdBuffer;
+        char firstChar = input[0]; // Save before trim (for space, etc.)
+        serialCmdBuffer = ""; // Clear for next command
+        input.trim();
+
+        // Use firstChar for single immediate commands, trimmed input for multi-char
+        if (input.length() == 0 && firstChar != ' ' && firstChar != '+' && firstChar != '-' &&
+            firstChar != '=' && firstChar != '[' && firstChar != ']' &&
+            firstChar != ',' && firstChar != '.' && firstChar != '<' && firstChar != '>' &&
+            firstChar != '{' && firstChar != '}') {
+            // Empty after trim and not an immediate command - ignore
+        } else {
+        // Restore single-char immediate commands that got trimmed
+        if (input.length() == 0) {
+            input = String(firstChar);
+        }
+        String inputLower = input;
+        inputLower.toLowerCase();
         bool handledMulti = false;
-        int peekChar = Serial.peek();
+        int peekChar = input[0];
 
         // Color correction commands (cc, ae, gamma, brown) and capture commands
-        if (peekChar == 'c' && Serial.available() > 1) {
-            // Peek ahead to check for 'cc' command
-            String input = Serial.readStringUntil('\n');
-            input.trim();
-            String inputLower = input;
-            inputLower.toLowerCase();
+        if (peekChar == 'c' && input.length() > 1) {
 
             // -----------------------------------------------------------------
             // Capture commands: capture on/off/status/dump
@@ -449,12 +508,7 @@ void loop() {
         // -----------------------------------------------------------------
         // Effect selection command (multi-digit safe): "effect <id>"
         // -----------------------------------------------------------------
-        else if (peekChar == 'e' && Serial.available() > 1) {
-            String input = Serial.readStringUntil('\n');
-            input.trim();
-            String inputLower = input;
-            inputLower.toLowerCase();
-
+        else if (peekChar == 'e' && input.length() > 1) {
             if (inputLower.startsWith("effect ")) {
                 handledMulti = true;
 
@@ -469,12 +523,7 @@ void loop() {
                 }
             }
         }
-        else if (peekChar == 'a' && Serial.available() > 1) {
-            String input = Serial.readStringUntil('\n');
-            input.trim();
-            String inputLower = input;
-            inputLower.toLowerCase();
-
+        else if (peekChar == 'a' && input.length() > 1) {
             if (input.startsWith("ae")) {
                 handledMulti = true;
                 auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
@@ -548,10 +597,7 @@ void loop() {
             }
 #endif
         }
-        else if (peekChar == 'g') {
-            String input = Serial.readStringUntil('\n');
-            input.trim();
-
+        else if (peekChar == 'g' && input.length() > 1) {
             if (input.startsWith("gamma")) {
                 handledMulti = true;
                 auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
@@ -583,10 +629,7 @@ void loop() {
                 }
             }
         }
-        else if (peekChar == 'b' && Serial.available() > 1) {
-            String input = Serial.readStringUntil('\n');
-            input.trim();
-
+        else if (peekChar == 'b' && input.length() > 1) {
             if (input.startsWith("brown")) {
                 handledMulti = true;
                 auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
@@ -616,22 +659,14 @@ void loop() {
                 }
             }
         }
-        else if (peekChar == 'C' && Serial.available() > 1) {
-            String input = Serial.readStringUntil('\n');
-            input.trim();
-
+        else if (peekChar == 'C' && input.length() > 1) {
             if (input == "Csave") {
                 handledMulti = true;
                 lightwaveos::enhancement::ColorCorrectionEngine::getInstance().saveToNVS();
                 Serial.println("Color correction settings saved to NVS");
             }
         }
-        else if (peekChar == 'v' || peekChar == 'V') {
-            String input = Serial.readStringUntil('\n');
-            input.trim();
-            String inputLower = input;
-            inputLower.toLowerCase();
-
+        else if ((peekChar == 'v' || peekChar == 'V') && input.length() > 1) {
             if (inputLower.startsWith("validate ")) {
                 handledMulti = true;
 
@@ -813,12 +848,7 @@ void loop() {
                 Serial.println("Unknown command. Use: validate <effect_id>");
             }
         }
-        else if (peekChar == 'c' && Serial.available() > 1) {
-            String input = Serial.readStringUntil('\n');
-            input.trim();
-            String inputLower = input;
-            inputLower.toLowerCase();
-
+        else if (peekChar == 'c' && input.length() > 1) {
             if (inputLower.startsWith("capture ")) {
                 handledMulti = true;
                 String subcmd = inputLower.substring(8);
@@ -918,12 +948,7 @@ void loop() {
         // K1 Beat Tracker Debug Commands: k1, k1s, k1spec, k1nov, k1reset
         // -----------------------------------------------------------------
 #if FEATURE_K1_DEBUG
-        else if (peekChar == 'k' && Serial.available() > 1) {
-            String input = Serial.readStringUntil('\n');
-            input.trim();
-            String inputLower = input;
-            inputLower.toLowerCase();
-
+        else if (peekChar == 'k' && input.length() > 1) {
             if (inputLower.startsWith("k1")) {
                 handledMulti = true;
 
@@ -945,10 +970,10 @@ void loop() {
 #endif
 
         if (handledMulti) {
-            // Do not process single-character commands after consuming a full-line command
-        } else {
-            // Single character commands
-            char cmd = Serial.read();
+            // Do not process single-character commands after consuming a multi-char command
+        } else if (input.length() == 1) {
+            // Single character commands (input is already in 'input' from line buffering)
+            char cmd = input[0];
 
             // Check if in zone mode for special handling
             bool inZoneMode = zoneComposer.isEnabled();
@@ -1526,6 +1551,7 @@ void loop() {
                     }
                     break;
             }
+                }
         }
         }
     }

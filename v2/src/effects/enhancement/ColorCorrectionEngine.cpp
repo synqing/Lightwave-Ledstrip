@@ -178,14 +178,26 @@ void ColorCorrectionEngine::applyRGBWhiteCuration(CRGBPalette16& palette,
 // ============================================================================
 
 void ColorCorrectionEngine::processBuffer(CRGB* buffer, uint16_t count) {
-    // Pipeline order from LC_SelfContained:
+    // Pipeline order (updated for white accumulation prevention):
     // 1. Auto-Exposure (if enabled)
-    // 2. White Guardrail (if mode != OFF)
-    // 3. Brown Guardrail (if enabled)
-    // 4. Gamma Correction (if enabled)
+    // 2. V-Clamping (NEW - prevents white accumulation from qadd8)
+    // 3. Saturation Boost (NEW - restores chromaticity after V-clamp)
+    // 4. White Guardrail (if mode != OFF)
+    // 5. Brown Guardrail (if enabled)
+    // 6. Gamma Correction (if enabled)
 
     if (m_config.autoExposureEnabled) {
         applyAutoExposure(buffer, count);
+    }
+
+    // V-Clamping: Cap brightness to prevent white saturation
+    if (m_config.vClampEnabled) {
+        applyBrightnessClamp(buffer, count, m_config.maxBrightness);
+    }
+
+    // Saturation Boost: Restore chromaticity after V-clamping
+    if (m_config.vClampEnabled && m_config.saturationBoostAmount > 0) {
+        applySaturationBoost(buffer, count, m_config.saturationBoostAmount);
     }
 
     if (m_config.mode != CorrectionMode::OFF) {
@@ -209,11 +221,16 @@ void ColorCorrectionEngine::applyAutoExposure(CRGB* buffer, uint16_t count) {
     if (!m_config.autoExposureEnabled || count == 0) return;
 
     // Calculate average perceptual luminance using BT.601 coefficients
+    // Optimization: Sample every 4th LED to save 75% iteration overhead
+    // Visual difference is imperceptible since we're computing an average
+    constexpr uint16_t SAMPLE_STRIDE = 4;
     uint32_t sumLuma = 0;
-    for (uint16_t i = 0; i < count; i++) {
+    uint16_t sampleCount = 0;
+    for (uint16_t i = 0; i < count; i += SAMPLE_STRIDE) {
         sumLuma += calculateLuma(buffer[i]);
+        sampleCount++;
     }
-    uint8_t avgLuma = sumLuma / count;
+    uint8_t avgLuma = (sampleCount > 0) ? (sumLuma / sampleCount) : 0;
 
     // Only downscale if above target (never boost to prevent blown-out frames)
     if (avgLuma > m_config.autoExposureTarget && avgLuma > 0) {
@@ -296,6 +313,54 @@ void ColorCorrectionEngine::applyGamma(CRGB* buffer, uint16_t count) {
 }
 
 // ============================================================================
+// BRIGHTNESS V-CLAMPING (White Accumulation Prevention)
+// ============================================================================
+
+void ColorCorrectionEngine::applyBrightnessClamp(CRGB* buffer, uint16_t count, uint8_t maxV) {
+    if (maxV >= 255) return;  // No clamping needed
+
+    for (uint16_t i = 0; i < count; i++) {
+        CRGB& c = buffer[i];
+
+        // Find maximum channel (brightness proxy)
+        uint8_t maxChannel = max(c.r, max(c.g, c.b));
+
+        // Only clamp if above threshold
+        if (maxChannel > maxV) {
+            // Hue-preserving proportional scaling
+            // Scale factor: (maxV * 256) / maxChannel (fixed-point 8.8)
+            uint16_t scaleFactor = ((uint16_t)maxV << 8) / maxChannel;
+
+            // Apply proportional scaling to all channels (preserves hue ratio)
+            c.r = (uint8_t)(((uint16_t)c.r * scaleFactor) >> 8);
+            c.g = (uint8_t)(((uint16_t)c.g * scaleFactor) >> 8);
+            c.b = (uint8_t)(((uint16_t)c.b * scaleFactor) >> 8);
+        }
+    }
+}
+
+// ============================================================================
+// POST-CLAMP SATURATION BOOST (Maintains Chromaticity)
+// ============================================================================
+
+void ColorCorrectionEngine::applySaturationBoost(CRGB* buffer, uint16_t count, uint8_t boostAmount) {
+    if (boostAmount == 0) return;
+
+    for (uint16_t i = 0; i < count; i++) {
+        CRGB& c = buffer[i];
+
+        // Skip very dark pixels (avoid divide-by-zero in rgb2hsv_approximate)
+        uint8_t maxChannel = max(c.r, max(c.g, c.b));
+        if (maxChannel < 16) continue;
+
+        // Convert to HSV, boost saturation, convert back
+        CHSV hsv = rgb2hsv_approximate(c);
+        hsv.s = qadd8(hsv.s, boostAmount);  // Saturating add prevents overflow
+        hsv2rgb_spectrum(hsv, c);
+    }
+}
+
+// ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
 
@@ -336,6 +401,10 @@ void ColorCorrectionEngine::saveToNVS() {
         prefs.putBool("brownEn", m_config.brownGuardrailEnabled);
         prefs.putUChar("brownG", m_config.maxGreenPercentOfRed);
         prefs.putUChar("brownB", m_config.maxBluePercentOfRed);
+        // V-Clamping settings (white accumulation prevention)
+        prefs.putBool("vClampEn", m_config.vClampEnabled);
+        prefs.putUChar("maxBright", m_config.maxBrightness);
+        prefs.putUChar("satBoost", m_config.saturationBoostAmount);
         prefs.end();
         ESP_LOGI(TAG, "Settings saved to NVS");
     } else {
@@ -357,8 +426,13 @@ void ColorCorrectionEngine::loadFromNVS() {
         m_config.brownGuardrailEnabled = prefs.getBool("brownEn", false);
         m_config.maxGreenPercentOfRed = prefs.getUChar("brownG", 28);
         m_config.maxBluePercentOfRed = prefs.getUChar("brownB", 8);
+        // V-Clamping settings (white accumulation prevention)
+        m_config.vClampEnabled = prefs.getBool("vClampEn", true);
+        m_config.maxBrightness = prefs.getUChar("maxBright", 200);
+        m_config.saturationBoostAmount = prefs.getUChar("satBoost", 25);
         prefs.end();
-        ESP_LOGI(TAG, "Settings loaded from NVS (mode=%d)", (int)m_config.mode);
+        ESP_LOGI(TAG, "Settings loaded from NVS (mode=%d, vClamp=%d)",
+                 (int)m_config.mode, m_config.vClampEnabled);
     } else {
         ESP_LOGW(TAG, "NVS not found, using defaults");
     }

@@ -73,6 +73,11 @@ struct ColorCorrectionConfig {
     bool brownGuardrailEnabled = false;
     uint8_t maxGreenPercentOfRed = 28;  ///< Max G as % of R for browns
     uint8_t maxBluePercentOfRed = 8;    ///< Max B as % of R for browns
+
+    // === V-Clamping (White Accumulation Prevention) ===
+    bool vClampEnabled = true;          ///< Enable brightness V-clamping
+    uint8_t maxBrightness = 200;        ///< Max brightness (0-255, conservative 200)
+    uint8_t saturationBoostAmount = 25; ///< Saturation boost after V-clamp (0-255)
 };
 
 /**
@@ -185,6 +190,30 @@ public:
      * @brief Apply gamma correction using LUT
      */
     void applyGamma(CRGB* buffer, uint16_t count);
+
+    /**
+     * @brief Apply brightness V-clamping to prevent white saturation
+     *
+     * Clamps max(R,G,B) to maxV using hue-preserving proportional scaling.
+     * Applied BEFORE white guardrail in pipeline.
+     *
+     * @param buffer LED buffer to process
+     * @param count Number of LEDs
+     * @param maxV Maximum brightness value (200 recommended)
+     */
+    void applyBrightnessClamp(CRGB* buffer, uint16_t count, uint8_t maxV);
+
+    /**
+     * @brief Apply saturation boost to maintain chromaticity after V-clamping
+     *
+     * Boosts saturation by fixed amount using rgb2hsv_approximate().
+     * Applied AFTER V-clamping to restore color intensity.
+     *
+     * @param buffer LED buffer to process
+     * @param count Number of LEDs
+     * @param boostAmount Saturation increase (0-255)
+     */
+    void applySaturationBoost(CRGB* buffer, uint16_t count, uint8_t boostAmount);
 
     // ========================================================================
     // STATIC PALETTE CORRECTION METHODS

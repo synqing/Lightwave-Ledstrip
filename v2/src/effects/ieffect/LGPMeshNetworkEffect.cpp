@@ -32,7 +32,7 @@ void LGPMeshNetworkEffect::render(plugins::EffectContext& ctx) {
 
     const int nodeCount = 12;
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 50);
+    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
     for (int n = 0; n < nodeCount; n++) {
         float nodePos = (float)n / (float)nodeCount * (float)HALF_LENGTH;
@@ -54,16 +54,11 @@ void LGPMeshNetworkEffect::render(plugins::EffectContext& ctx) {
                 connection *= expf(-distToNode * 0.1f);
 
                 uint8_t connBright = (uint8_t)(fabsf(connection) * 128.0f * intensityNorm);
-                // Use saturating add to prevent color overflow
                 CRGB connColor = ctx.palette.getColor((uint8_t)(ctx.gHue + (n * 20)), connBright);
-                ctx.leds[i].r = qadd8(ctx.leds[i].r, connColor.r);
-                ctx.leds[i].g = qadd8(ctx.leds[i].g, connColor.g);
-                ctx.leds[i].b = qadd8(ctx.leds[i].b, connColor.b);
+                ctx.leds[i] = connColor;
                 if (i + STRIP_LENGTH < ctx.ledCount) {
                     CRGB connColor2 = ctx.palette.getColor((uint8_t)(ctx.gHue + (n * 20) + 128), connBright);
-                    ctx.leds[i + STRIP_LENGTH].r = qadd8(ctx.leds[i + STRIP_LENGTH].r, connColor2.r);
-                    ctx.leds[i + STRIP_LENGTH].g = qadd8(ctx.leds[i + STRIP_LENGTH].g, connColor2.g);
-                    ctx.leds[i + STRIP_LENGTH].b = qadd8(ctx.leds[i + STRIP_LENGTH].b, connColor2.b);
+                    ctx.leds[i + STRIP_LENGTH] = connColor2;
                 }
             }
         }

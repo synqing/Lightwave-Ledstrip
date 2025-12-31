@@ -48,7 +48,7 @@ void LGPSolitonWavesEffect::render(plugins::EffectContext& ctx) {
     const uint8_t solitonCount = 4;
     const float damping = 0.996f;
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 20);
+    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
     for (uint8_t s = 0; s < solitonCount; s++) {
         m_pos[s] += m_vel[s] * speedNorm;
@@ -90,16 +90,11 @@ void LGPSolitonWavesEffect::render(plugins::EffectContext& ctx) {
                 uint8_t brightness = (uint8_t)(m_amp[s] * profile);
                 uint8_t hue = (uint8_t)(m_hue[s] + ctx.gHue);
 
-                // Use saturating add to prevent color overflow
                 CRGB solitonColor = CHSV(hue, 255, brightness);
-                ctx.leds[pos].r = qadd8(ctx.leds[pos].r, solitonColor.r);
-                ctx.leds[pos].g = qadd8(ctx.leds[pos].g, solitonColor.g);
-                ctx.leds[pos].b = qadd8(ctx.leds[pos].b, solitonColor.b);
+                ctx.leds[pos] = solitonColor;
                 if (pos + STRIP_LENGTH < ctx.ledCount) {
                     CRGB strip2Color = CHSV((uint8_t)(hue + 30), 255, scale8(brightness, 200));
-                    ctx.leds[pos + STRIP_LENGTH].r = qadd8(ctx.leds[pos + STRIP_LENGTH].r, strip2Color.r);
-                    ctx.leds[pos + STRIP_LENGTH].g = qadd8(ctx.leds[pos + STRIP_LENGTH].g, strip2Color.g);
-                    ctx.leds[pos + STRIP_LENGTH].b = qadd8(ctx.leds[pos + STRIP_LENGTH].b, strip2Color.b);
+                    ctx.leds[pos + STRIP_LENGTH] = strip2Color;
                 }
             }
         }

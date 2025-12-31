@@ -34,7 +34,7 @@ void LGPBoxWaveEffect::render(plugins::EffectContext& ctx) {
 
     m_boxMotionPhase += speedNorm * 0.05f;
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 20);
+    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         float distFromCenter = (float)centerPairDistance((uint16_t)i);

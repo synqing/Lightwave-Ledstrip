@@ -67,7 +67,7 @@ void LGPGravitationalWaveChirpEffect::render(plugins::EffectContext& ctx) {
         }
     }
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 25);
+    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         float distFromCenter = (float)centerPairDistance((uint16_t)i);

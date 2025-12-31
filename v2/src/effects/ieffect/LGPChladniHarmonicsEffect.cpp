@@ -35,7 +35,7 @@ void LGPChladniHarmonicsEffect::render(plugins::EffectContext& ctx) {
     m_vibrationPhase += speed * 0.08f;
     m_mixPhase += speed * 0.05f;
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 15);
+    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         float distFromCenter = (float)centerPairDistance(i);

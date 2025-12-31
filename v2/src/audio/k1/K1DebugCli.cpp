@@ -7,6 +7,7 @@
  */
 
 #include "K1DebugCli.h"
+#include <cmath>
 
 #if FEATURE_K1_DEBUG
 
@@ -23,6 +24,8 @@ void k1_print_compact(Print& out, const K1Pipeline& pipeline) {
     out.print(pipeline.bpm(), 1);
     out.print(" | Conf: ");
     out.print(pipeline.confidence(), 2);
+    out.print(" | DConf: ");
+    out.print(pipeline.lastTactusFrame().density_conf, 2);
     out.print(" | Phase: ");
     out.print(pipeline.phase01(), 2);
     out.print(" | ");
@@ -35,23 +38,34 @@ void k1_print_compact(Print& out, const K1Pipeline& pipeline) {
 
 void k1_print_full(Print& out, const K1Pipeline& pipeline) {
     const K1ResonatorFrame& rf = pipeline.lastResonatorFrame();
+    const K1TactusFrame& tf = pipeline.lastTactusFrame();
 
-    out.print("BPM: ");
+    // Stage-3 Tactus winner (the actual decision)
+    out.print("Tactus: ");
+    out.print(tf.bpm, 1);
+    out.print(" (score=");
+    out.print(tf.family_score, 2);
+    out.print(", dconf=");
+    out.print(tf.density_conf, 2);
+    out.print(")");
+
+    // Stage-4 Beat Clock (what effects see)
+    out.print(" | Clock: ");
     out.print(pipeline.bpm(), 1);
-    out.print(" | Conf: ");
-    out.print(pipeline.confidence(), 2);
-    out.print(" | Phase: ");
+    out.print(" phase=");
     out.print(pipeline.phase01(), 2);
-    out.print(" | ");
+    out.print(" ");
     out.print(pipeline.locked() ? "LOCKED" : "UNLOCKED");
 
-    // Top-3 candidates
+    // Stage-2 Top-3 candidates with raw magnitudes
     out.print(" | Top3: ");
     int k = (rf.k > 3) ? 3 : rf.k;
     for (int i = 0; i < k; i++) {
         out.print(rf.candidates[i].bpm, 0);
-        out.print("(");
+        out.print("(mag=");
         out.print(rf.candidates[i].magnitude, 2);
+        out.print(",raw=");
+        out.print(rf.candidates[i].raw_mag, 2);
         out.print(") ");
     }
     out.println();
@@ -94,6 +108,74 @@ void k1_print_spectrum(Print& out, const K1ResonatorFrame& rf) {
         out.println();
     }
     out.println();
+}
+
+// ============================================================================
+// Focused Bin View (diagnostic for specific BPM)
+// ============================================================================
+
+void k1_print_bins(Print& out, const K1ResonatorFrame& rf, int center_bpm) {
+    out.print("\n=== Goertzel Bins Near ");
+    out.print(center_bpm);
+    out.println(" BPM ===");
+
+    // Find max for normalization
+    float max_val = 0.0001f;
+    for (int i = 0; i < ST2_BPM_BINS; ++i) {
+        if (rf.spectrum[i] > max_val) max_val = rf.spectrum[i];
+    }
+
+    // Find which BPMs are in top-K candidates for marking
+    int in_topk[ST2_BPM_BINS] = {0};
+    for (int i = 0; i < rf.k; ++i) {
+        int bin = (int)lroundf(rf.candidates[i].bpm) - ST2_BPM_MIN;
+        if (bin >= 0 && bin < ST2_BPM_BINS) {
+            in_topk[bin] = i + 1;  // 1-indexed rank
+        }
+    }
+
+    // Print ±10 BPM around center
+    int start_bpm = center_bpm - 10;
+    int end_bpm = center_bpm + 10;
+    if (start_bpm < ST2_BPM_MIN) start_bpm = ST2_BPM_MIN;
+    if (end_bpm > ST2_BPM_MAX) end_bpm = ST2_BPM_MAX;
+
+    for (int bpm = start_bpm; bpm <= end_bpm; ++bpm) {
+        int bin = bpm - ST2_BPM_MIN;
+        float mag = rf.spectrum[bin];
+        float norm = mag / max_val;
+
+        char buf[48];
+        const char* marker = (bpm == center_bpm) ? " <<" :
+                             (in_topk[bin] > 0) ? " *" : "";
+        snprintf(buf, sizeof(buf), "%3d BPM: %.4f ", bpm, mag);
+        out.print(buf);
+
+        // Bar graph (30 chars max)
+        int bar = (int)(norm * 30);
+        for (int j = 0; j < bar; ++j) out.print('#');
+
+        // Top-K marker
+        if (in_topk[bin] > 0) {
+            out.print(" [TOP-");
+            out.print(in_topk[bin]);
+            out.print("]");
+        }
+        if (bpm == center_bpm) out.print(" <<TARGET");
+        out.println();
+    }
+
+    out.print("\nMax magnitude: ");
+    out.print(max_val, 4);
+    out.print(" | Target bin mag: ");
+    int target_bin = center_bpm - ST2_BPM_MIN;
+    if (target_bin >= 0 && target_bin < ST2_BPM_BINS) {
+        out.print(rf.spectrum[target_bin], 4);
+        out.print(" (");
+        out.print(rf.spectrum[target_bin] / max_val * 100.0f, 1);
+        out.print("% of max)");
+    }
+    out.println("\n");
 }
 
 // ============================================================================
@@ -211,6 +293,21 @@ bool k1_handle_command(const String& cmd, K1Pipeline& pipeline) {
     else if (cmd == "k1c") {
         // Compact output for continuous monitoring
         k1_print_compact(Serial, pipeline);
+        return true;
+    }
+    else if (cmd.startsWith("k1bins")) {
+        // Parse optional BPM parameter: "k1bins" or "k1bins 128"
+        int center_bpm = 128;  // Default
+        if (cmd.length() > 6) {
+            String arg = cmd.substring(6);
+            arg.trim();
+            if (arg.length() > 0) {
+                center_bpm = arg.toInt();
+                if (center_bpm < ST2_BPM_MIN) center_bpm = ST2_BPM_MIN;
+                if (center_bpm > ST2_BPM_MAX) center_bpm = ST2_BPM_MAX;
+            }
+        }
+        k1_print_bins(Serial, pipeline.lastResonatorFrame(), center_bpm);
         return true;
     }
 

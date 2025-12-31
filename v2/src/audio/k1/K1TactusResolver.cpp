@@ -7,6 +7,9 @@
 
 #include "K1TactusResolver.h"
 #include <cmath>
+#if K1_DEBUG_TACTUS_SCORES
+#include <Arduino.h>
+#endif
 
 namespace lightwaveos {
 namespace audio {
@@ -24,6 +27,12 @@ void K1TactusResolver::reset() {
     locked_confidence_ = 0.0f;
     locked_ = false;
     locked_bin_ = -1;
+
+    lock_state_ = LockState::UNLOCKED;
+    lock_pending_start_ms_ = 0;
+    pending_competitor_bpm_ = 0.0f;
+    pending_competitor_score_ = 0.0f;
+    pending_competitor_frames_ = 0;
 
     challenger_bpm_ = 0.0f;
     challenger_frames_ = 0;
@@ -128,6 +137,50 @@ int K1TactusResolver::findFamilyMember(const K1ResonatorFrame& in,
     return best_idx;
 }
 
+// ============================================================================
+// Grouped Density Confidence (ported from Tab5.DSP stage3_tactus.cpp:341-399)
+// ============================================================================
+float K1TactusResolver::computeGroupedDensityConf_(
+    const float scores[],
+    const K1ResonatorFrame& in,
+    int best_idx) const
+{
+    if (best_idx < 0 || best_idx >= in.k) return 0.0f;
+
+    float best_bpm = in.candidates[best_idx].bpm;
+    float group_score = 0.0f;
+
+    // Sum all scores within GROUP_TOLERANCE of winner
+    // These are "the same tempo" with slightly different estimates
+    for (int i = 0; i < in.k; ++i) {
+        float dist = fabsf(in.candidates[i].bpm - best_bpm);
+        if (dist <= GROUP_TOLERANCE) {
+            group_score += scores[i];
+        }
+    }
+
+    // Find best DISTANT runner-up (must be far away to be a genuine competitor)
+    float distant_runner = 0.0f;
+    for (int i = 0; i < in.k; ++i) {
+        float dist = fabsf(in.candidates[i].bpm - best_bpm);
+        if (dist >= DISTANT_MIN && scores[i] > distant_runner) {
+            distant_runner = scores[i];
+        }
+    }
+
+    // If no distant competitor, unanimous agreement = high confidence
+    // This is the key insight: 64, 65, 66 BPM all agreeing means HIGH confidence
+    // not competition between similar estimates
+    if (distant_runner < 0.01f) {
+        return 1.0f;
+    }
+
+    // Symmetric margin: group vs distant
+    float denom = group_score + distant_runner;
+    if (denom <= 0.0f) return 0.0f;
+    return k1_clamp01((group_score - distant_runner) / denom);
+}
+
 float K1TactusResolver::scoreFamily(const K1ResonatorFrame& in, int candidate_idx) const {
     if (candidate_idx < 0 || candidate_idx >= in.k) return 0.0f;
 
@@ -168,8 +221,8 @@ float K1TactusResolver::scoreFamily(const K1ResonatorFrame& in, int candidate_id
     score *= (1.0f + 0.80f * dn);
 #endif
 
-    // Stability bonus if near current lock
-    if (locked_ && locked_bpm_ > 0.0f) {
+    // Stability bonus if near current lock (only in VERIFIED state)
+    if (locked_ && lock_state_ == LockState::VERIFIED && locked_bpm_ > 0.0f) {
         float dist_to_lock = fabsf(primary_bpm - locked_bpm_);
         if (dist_to_lock < ST3_STABILITY_WINDOW) {
             score += ST3_STABILITY_BONUS;
@@ -204,22 +257,65 @@ void K1TactusResolver::updateFromResonators(const K1ResonatorFrame& in, K1Tactus
         }
     }
 
-    // Compute density_conf
-    float runner_up = 0.0f;
-    for (int i = 0; i < in.k; ++i) {
-        if (i != best_idx && scores[i] > runner_up) {
-            runner_up = scores[i];
+    // ========================================================================
+    // Octave Doubling Override (half-time detection)
+    // If best is suspiciously low (< 80 BPM), check if double is more likely
+    // ========================================================================
+    if (best_idx >= 0) {
+        float best_bpm_check = in.candidates[best_idx].bpm;
+        if (best_bpm_check < 80.0f) {
+            float double_bpm = best_bpm_check * 2.0f;
+            if (double_bpm >= 60.0f && double_bpm <= 180.0f) {
+                // Find candidate near double
+                int double_idx = findFamilyMember(in, double_bpm, 4.0f);
+                if (double_idx >= 0) {
+                    float double_prior = tactusPrior(double_bpm);
+                    float half_prior = tactusPrior(best_bpm_check);
+
+                    // If double has much better prior (closer to 120 BPM), prefer it
+                    // Threshold: double's prior must be at least 2x better
+                    if (double_prior > half_prior * 2.0f) {
+                        float double_score = scores[double_idx];
+                        // Double must have reasonable score (at least 30% of best)
+                        if (double_score > best_score * 0.3f) {
+                            best_idx = double_idx;
+                            best_score = double_score;
+                        }
+                    }
+                }
+            }
         }
     }
-    float density_conf = (runner_up > 0.01f && best_score > 0.01f)
-        ? k1_clamp01((best_score - runner_up) / best_score)
-        : (best_score > 0.01f ? 1.0f : 0.0f);
+
+    // Compute density_conf using grouped algorithm (ported from Tab5.DSP)
+    // Groups nearby candidates as consensus rather than competition
+    float density_conf = computeGroupedDensityConf_(scores, in, best_idx);
+
+#if K1_DEBUG_TACTUS_SCORES
+    // Diagnostic: Show top 5 candidates with scores
+    Serial.printf("[K1] Candidates: ");
+    int show_count = (in.k < 5) ? in.k : 5;
+    for (int i = 0; i < show_count; ++i) {
+        float raw_mag = in.candidates[i].magnitude;
+        float prior = tactusPrior(in.candidates[i].bpm);
+        float score = scores[i];
+        Serial.printf("%.1f(m=%.2f,p=%.2f,s=%.2f) ",
+            in.candidates[i].bpm, raw_mag, prior, score);
+    }
+    Serial.println();
+    if (locked_) {
+        Serial.printf("[K1] Lock: %.1f StabBonus: %s\n",
+            locked_bpm_,
+            (best_idx >= 0 && fabsf(in.candidates[best_idx].bpm - locked_bpm_) < ST3_STABILITY_WINDOW) ? "YES" : "NO");
+    }
+#endif
 
     // No valid candidate
     if (best_idx < 0 || best_score < ST3_MIN_CONFIDENCE) {
         out.t_ms = in.t_ms;
         out.bpm = locked_bpm_;
-        out.confidence = best_score;
+        // Confidence derived from density_conf (grouped consensus), not clamped family_score
+        out.confidence = density_conf * (1.0f - 0.2f * (1.0f - density_conf));  // Slight boost for high agreement
         out.density_conf = density_conf;
         out.phase_hint = locked_phase_;
         out.locked = locked_;
@@ -232,13 +328,19 @@ void K1TactusResolver::updateFromResonators(const K1ResonatorFrame& in, K1Tactus
     float best_bpm = in.candidates[best_idx].bpm;
     float best_phase = in.candidates[best_idx].phase;
 
-    // First lock: take immediately
-    if (!locked_) {
+    // First lock: enter PENDING state instead of immediate commit
+    if (lock_state_ == LockState::UNLOCKED) {
         locked_bpm_ = best_bpm;
         locked_phase_ = best_phase;
-        locked_confidence_ = best_score;
+        // Confidence derived from density_conf, not clamped family_score
+        locked_confidence_ = density_conf * (1.0f - 0.2f * (1.0f - density_conf));
         locked_ = true;
         locked_bin_ = best_idx;
+        lock_state_ = LockState::PENDING;
+        lock_pending_start_ms_ = in.t_ms;
+        pending_competitor_bpm_ = 0.0f;
+        pending_competitor_score_ = 0.0f;
+        pending_competitor_frames_ = 0;
 
         challenger_bpm_ = 0.0f;
         challenger_frames_ = 0;
@@ -252,20 +354,59 @@ void K1TactusResolver::updateFromResonators(const K1ResonatorFrame& in, K1Tactus
         out.winning_bin = best_idx;
         out.challenger_frames = 0;
         out.family_score = best_score;
-        return;
+        // Don't return - continue to check if best matches lock or handle verification
     }
 
-    // Check if best is same as current lock
+    // In PENDING state: track strongest competitor and verify
+    if (lock_state_ == LockState::PENDING) {
+        uint32_t elapsed = in.t_ms - lock_pending_start_ms_;
+
+        // Check for strong competitor (>5 BPM away with >10% advantage)
+        if (fabsf(best_bpm - locked_bpm_) > 5.0f &&
+            best_score > locked_confidence_ * COMPETITOR_THRESHOLD) {
+            if (fabsf(best_bpm - pending_competitor_bpm_) < 3.0f) {
+                pending_competitor_frames_++;
+                pending_competitor_score_ = best_score;
+            } else {
+                pending_competitor_bpm_ = best_bpm;
+                pending_competitor_frames_ = 1;
+                pending_competitor_score_ = best_score;
+            }
+
+            // If competitor sustains for 1.5s during verification (15 frames at 10 Hz), switch
+            if (pending_competitor_frames_ >= 15) {
+                locked_bpm_ = pending_competitor_bpm_;
+                locked_phase_ = best_phase;
+                locked_confidence_ = density_conf * (1.0f - 0.2f * (1.0f - density_conf));
+                locked_bin_ = best_idx;
+                pending_competitor_frames_ = 0;
+                // Reset verification period
+                lock_pending_start_ms_ = in.t_ms;
+            }
+        } else {
+            pending_competitor_frames_ = 0;
+        }
+
+        // After verification period, commit to VERIFIED state
+        if (elapsed >= LOCK_VERIFY_MS) {
+            lock_state_ = LockState::VERIFIED;
+        }
+    }
+
+    // Check if best is same as current lock (applies to both PENDING and VERIFIED)
     float dist_to_lock = fabsf(best_bpm - locked_bpm_);
     if (dist_to_lock < ST3_STABILITY_WINDOW) {
-        // Slow tracking
+        // Slow tracking - update lock smoothly
         locked_bpm_ = 0.99f * locked_bpm_ + 0.01f * best_bpm;
         locked_phase_ = best_phase;
-        locked_confidence_ = best_score;
+        // Confidence derived from density_conf, not clamped family_score
+        locked_confidence_ = density_conf * (1.0f - 0.2f * (1.0f - density_conf));
         locked_bin_ = best_idx;
 
         challenger_bpm_ = 0.0f;
         challenger_frames_ = 0;
+        // Reset competitor tracking if we're back to the locked tempo
+        pending_competitor_frames_ = 0;
 
         out.t_ms = in.t_ms;
         out.bpm = locked_bpm_;
@@ -308,7 +449,8 @@ void K1TactusResolver::updateFromResonators(const K1ResonatorFrame& in, K1Tactus
         if (challenger_frames_ >= ST3_SWITCH_FRAMES) {
             locked_bpm_ = best_bpm;
             locked_phase_ = best_phase;
-            locked_confidence_ = best_score;
+            // Confidence derived from density_conf, not clamped family_score
+            locked_confidence_ = density_conf * (1.0f - 0.2f * (1.0f - density_conf));
             locked_bin_ = best_idx;
 
             challenger_bpm_ = 0.0f;
@@ -321,6 +463,7 @@ void K1TactusResolver::updateFromResonators(const K1ResonatorFrame& in, K1Tactus
 
     out.t_ms = in.t_ms;
     out.bpm = locked_bpm_;
+    // Confidence already derived from density_conf, just clamp to [0,1]
     out.confidence = k1_clamp01(locked_confidence_);
     out.density_conf = density_conf;
     out.phase_hint = locked_phase_;

@@ -34,6 +34,9 @@
 // Runtime-configurable audio debug verbosity
 #include "AudioDebugConfig.h"
 
+// K1 beat tracker configuration (for perceptual band weights)
+#include "k1/K1Config.h"
+
 #ifndef NATIVE_BUILD
 #include <esp_timer.h>
 #else
@@ -258,6 +261,7 @@ void AudioActor::onTick()
                  spikeStats.totalEnergyRemoved);
 
         // Log saliency detection metrics
+#if FEATURE_MUSICAL_SALIENCY
         LW_LOGI("Saliency: overall=%.3f dom=%u H=%.3f R=%.3f T=%.3f D=%.3f",
                  frame.saliency.overallSaliency,
                  frame.saliency.dominantType,
@@ -265,8 +269,10 @@ void AudioActor::onTick()
                  frame.saliency.rhythmicNoveltySmooth,
                  frame.saliency.timbralNoveltySmooth,
                  frame.saliency.dynamicNoveltySmooth);
+#endif
 
         // Log style detection metrics (MIS Phase 2)
+#if FEATURE_STYLE_DETECTION
         const StyleClassification& styleClass = m_styleDetector.getClassification();
         LW_LOGI("Style: %u conf=%.2f [R=%.2f H=%.2f M=%.2f T=%.2f D=%.2f]",
                  static_cast<uint8_t>(m_styleDetector.getStyle()),
@@ -276,6 +282,12 @@ void AudioActor::onTick()
                  styleClass.styleWeights[2],
                  styleClass.styleWeights[3],
                  styleClass.styleWeights[4]);
+#endif
+
+        // Log K1 beat tracking metrics
+        LW_LOGI(LW_CLR_MAGENTA "Beat:" LW_ANSI_RESET " BPM=%.1f conf=%.2f phase=%.2f lock=%s",
+                 m_lastK1Output.bpm, m_lastK1Output.confidence,
+                 m_lastK1Output.phase01, m_lastK1Output.locked ? "YES" : "no");
     }
 }
 
@@ -364,7 +376,9 @@ void AudioActor::processHop()
         }
         m_analyzer.reset();
         m_chromaAnalyzer.reset();
+#if FEATURE_STYLE_DETECTION
         m_styleDetector.reset();
+#endif
         m_prevChordRoot = 0;
         m_controlBus.Reset();
         // K1-Lightwave reset
@@ -632,18 +646,33 @@ void AudioActor::processHop()
     BENCH_END_PHASE(goertzelUs);
     BENCH_SET_FLAG(goertzelTriggered, goertzelTriggered ? 1 : 0);
 
-    // Priority 5: Full spectral flux (computed after Goertzel populates raw.bands)
+    // Priority 5: Perceptually-Weighted Spectral Flux
+    // K1 RELIABILITY FIX: Weight bass bands higher to improve kick detection
+    // and reduce false triggers from hi-hats and treble transients.
+    // See: docs/K1_RECOMMENDED_FIXES.md (Priority 1)
+    float unclippedFlux = 0.0f;
     if (m_noveltyTuning.useSpectralFlux) {
         float spectralFlux = 0.0f;
         for (int i = 0; i < NUM_BANDS; ++i) {
             float delta = raw.bands[i] - m_prevBands[i];
-            if (delta > 0.0f) spectralFlux += delta;
+            // Perceptual weighting: bass (bands 0-1) weighted highest,
+            // treble (bands 6-7) weighted lowest. K1_BAND_WEIGHTS from K1Config.h
+            float weight = k1::K1_BAND_WEIGHTS[i];
+            // Half-wave rectification: only positive changes (onsets) contribute
+            // Negative deltas (decay) suppressed at 0.6x to handle AGC oscillation
+            float weightedDelta = (delta > 0.0f) ? (delta * weight) : (-delta * 0.6f * weight);
+            spectralFlux += weightedDelta;
             m_prevBands[i] = raw.bands[i];
         }
+        // Normalize by weight sum for consistent scaling across all band configurations
+        spectralFlux /= k1::K1_BAND_WEIGHT_SUM;
         spectralFlux *= m_noveltyTuning.spectralFluxScale;
-        fluxMapped = std::min(1.0f, spectralFlux * tuning.fluxScale);
+        unclippedFlux = spectralFlux * tuning.fluxScale;
+        fluxMapped = std::min(1.0f, unclippedFlux);  // Hard clamp for UI/effects
         m_lastFluxMapped = fluxMapped;
-        raw.flux = fluxMapped;  // Update raw.flux with spectral flux value
+        raw.flux = fluxMapped;  // Update raw.flux with clamped value
+    } else {
+        unclippedFlux = fluxMapped;
     }
 
     // ========================================================================
@@ -654,8 +683,17 @@ void AudioActor::processHop()
         k1::K1PipelineOutput k1Out;
 
         // Feed spectral flux to K1 pipeline
-        // K1 converts [0,1] flux to z-score [-6,+6] internally
-        bool lockChanged = m_k1Pipeline.processNovelty(fluxMapped, k1_now_ms, k1Out);
+        // Use soft-clipped flux for K1 to preserve dynamic range (instead of hard clamp)
+        float fluxForK1 = unclippedFlux;
+        // Soft-clip: compress extreme values instead of hard clamp
+        // This preserves more dynamic range while preventing extreme values
+        if (fluxForK1 > 1.0f) {
+            fluxForK1 = 1.0f + (fluxForK1 - 1.0f) * 0.3f;  // Compress beyond 1.0
+        } else if (fluxForK1 < 0.0f) {
+            fluxForK1 = fluxForK1 * 0.3f;  // Compress negative values
+        }
+        // K1 converts [0,1] flux to z-score [-6,+6] internally (now with running-stat normaliser)
+        bool lockChanged = m_k1Pipeline.processNovelty(fluxForK1, k1_now_ms, k1Out);
 
         // Push tempo update if lock state changed or confidence changed significantly
         if (m_k1TempoQueue != nullptr) {
@@ -723,7 +761,7 @@ void AudioActor::processHop()
         if (dbgCfg64.verbosity >= 4 && ++m_goertzel64LogCounter >= dbgCfg64.interval64Bin()) {
             m_goertzel64LogCounter = 0;
             // Cyan for 64-bin spectral analysis (title-only coloring)
-            LW_LOGI(LW_CLR_CYAN_DIM "64-bin Goertzel:" LW_ANSI_RESET " [%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f]",
+            LW_LOGD(LW_CLR_CYAN_DIM "64-bin Goertzel:" LW_ANSI_RESET " [%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f]",
                      bands64Folded[0], bands64Folded[1], bands64Folded[2], bands64Folded[3],
                      bands64Folded[4], bands64Folded[5], bands64Folded[6], bands64Folded[7]);
         }
@@ -794,14 +832,21 @@ void AudioActor::processHop()
     // === Phase: ControlBus Update ===
     BENCH_START_PHASE();
 
+    // 7a. Populate K1 beat tracker state for rhythmic saliency
+    raw.k1Locked = m_lastK1Output.locked;
+    raw.k1Confidence = m_lastK1Output.confidence;
+    raw.k1BeatTick = m_lastK1Output.beat_tick && m_lastK1Output.locked;
+
     // 7. Update ControlBus with attack/release smoothing
     m_controlBus.setSmoothing(tuning.controlBusAlphaFast, tuning.controlBusAlphaSlow);
+    m_controlBus.setSilenceParameters(tuning.silenceThreshold, tuning.silenceHysteresisMs);
     m_controlBus.UpdateFromHop(now, raw);
 
     BENCH_END_PHASE(controlBusUs);
 
     // === Phase: Style Detection ===
     // Update style detector with current hop features (after ControlBus has chord state)
+#if FEATURE_STYLE_DETECTION
     {
         bool chordChanged = (m_controlBus.GetFrame().chordState.rootNote != m_prevChordRoot);
         m_prevChordRoot = m_controlBus.GetFrame().chordState.rootNote;
@@ -815,6 +860,7 @@ void AudioActor::processHop()
             chordChanged
         );
     }
+#endif
 
     // === Phase: Publish ===
     BENCH_START_PHASE();
@@ -823,8 +869,13 @@ void AudioActor::processHop()
     // Copy style detection results to frame before publishing
     {
         ControlBusFrame frameToPublish = m_controlBus.GetFrame();
+#if FEATURE_STYLE_DETECTION
         frameToPublish.currentStyle = m_styleDetector.getStyle();
         frameToPublish.styleConfidence = m_styleDetector.getConfidence();
+#else
+        frameToPublish.currentStyle = MusicStyle::UNKNOWN;
+        frameToPublish.styleConfidence = 0.0f;
+#endif
         m_controlBusBuffer.Publish(frameToPublish);
     }
 

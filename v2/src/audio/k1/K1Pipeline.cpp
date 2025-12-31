@@ -5,15 +5,45 @@
 
 #include "K1Pipeline.h"
 #include "K1DebugMacros.h"
+#include <cmath>
 
 namespace lightwaveos {
 namespace audio {
 namespace k1 {
 
-float K1Pipeline::fluxToZScore(float flux) {
-    // Scale Lightwave flux [0,1] to K1 z-score [-6, +6]
-    // flux=0 → z=-6, flux=0.5 → z=0, flux=1 → z=+6
-    return (flux * 12.0f) - 6.0f;
+float K1Pipeline::fluxToZScore(float flux, float delta_sec) {
+    // Running-stat normaliser: adaptively center and scale flux to produce z-score
+    // This reduces sensitivity to AGC/gating baseline shifts
+    
+    if (!novelty_initialized_) {
+        // First frame: initialize to reasonable defaults
+        novelty_mean_ = 0.5f;
+        novelty_variance_ = 0.1f;
+        novelty_initialized_ = true;
+    }
+    
+    // Update running mean (EWMA)
+    float mean_alpha = (delta_sec > 0.0f) ? (1.0f - expf(-delta_sec / NOVELTY_MEAN_TAU)) : 0.01f;
+    novelty_mean_ = novelty_mean_ + (flux - novelty_mean_) * mean_alpha;
+    
+    // Update running variance (EWMA of squared deviation)
+    float deviation = flux - novelty_mean_;
+    float variance_alpha = (delta_sec > 0.0f) ? (1.0f - expf(-delta_sec / NOVELTY_VAR_TAU)) : 0.01f;
+    float variance_target = deviation * deviation;
+    novelty_variance_ = novelty_variance_ + (variance_target - novelty_variance_) * variance_alpha;
+    
+    // Prevent division by zero
+    float stddev = sqrtf(novelty_variance_);
+    if (stddev < 0.001f) stddev = 0.001f;
+    
+    // Compute z-score
+    float z_score = deviation / stddev;
+    
+    // Clamp to safe range
+    if (z_score > NOVELTY_CLIP) z_score = NOVELTY_CLIP;
+    if (z_score < -NOVELTY_CLIP) z_score = -NOVELTY_CLIP;
+    
+    return z_score;
 }
 
 void K1Pipeline::begin(uint32_t now_ms) {
@@ -31,6 +61,10 @@ void K1Pipeline::reset() {
     tactus_.reset();
     beat_clock_.begin(now);
     first_frame_ = true;
+    // Reset normaliser state
+    novelty_mean_ = 0.5f;
+    novelty_variance_ = 0.1f;
+    novelty_initialized_ = false;
 }
 
 bool K1Pipeline::processNovelty(float flux, uint32_t t_ms, K1PipelineOutput& out) {
@@ -39,11 +73,7 @@ bool K1Pipeline::processNovelty(float flux, uint32_t t_ms, K1PipelineOutput& out
 
     bool lock_changed = false;
 
-    // Scale flux to z-score
-    float novelty_z = fluxToZScore(flux);
-    K1_DEBUG_NOVELTY(novelty_z);
-
-    // Compute delta time for beat clock tick
+    // Compute delta time for beat clock tick (needed for normaliser)
     float delta_sec = 0.016f;  // Default 16ms
     if (!first_frame_ && t_ms > last_t_ms_) {
         delta_sec = (float)(t_ms - last_t_ms_) / 1000.0f;
@@ -51,6 +81,10 @@ bool K1Pipeline::processNovelty(float flux, uint32_t t_ms, K1PipelineOutput& out
     }
     first_frame_ = false;
     last_t_ms_ = t_ms;
+
+    // Scale flux to z-score using running-stat normaliser
+    float novelty_z = fluxToZScore(flux, delta_sec);
+    K1_DEBUG_NOVELTY(novelty_z);
 
     // Stage 2: Resonator Bank (runs at ~10 Hz internally)
     K1ResonatorFrame resonator_out;

@@ -107,14 +107,25 @@ public:
 
 private:
     /**
-     * @brief Scale Lightwave flux [0,1] to K1 z-score [-6, +6]
+     * @brief Scale Lightwave flux [0,1] to K1 z-score using running-stat normaliser
+     * 
+     * Replaces linear mapping with adaptive normalisation that tracks mean/variance
+     * to produce a true z-score-like signal, reducing sensitivity to AGC/gating shifts.
      */
-    static float fluxToZScore(float flux);
+    float fluxToZScore(float flux, float delta_sec);
 
 private:
     K1ResonatorBank resonators_;
     K1TactusResolver tactus_;
     K1BeatClock beat_clock_;
+
+    // Running-stat normaliser for novelty (Phase 2)
+    float novelty_mean_ = 0.5f;      // Initialized to 0.5 (midpoint of [0,1])
+    float novelty_variance_ = 0.1f;  // Initialized to 0.1 (reasonable spread)
+    static constexpr float NOVELTY_MEAN_TAU = 2.0f;  // seconds
+    static constexpr float NOVELTY_VAR_TAU = 2.0f;   // seconds
+    static constexpr float NOVELTY_CLIP = 4.0f;      // ±4 sigma max
+    bool novelty_initialized_ = false;
 
     // Last outputs for delta computation
     K1ResonatorFrame last_resonator_frame_;

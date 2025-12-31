@@ -56,6 +56,13 @@ void k1_print_beat_tick(Print& out, const K1Pipeline& pipeline);
 void k1_print_spectrum(Print& out, const K1ResonatorFrame& rf);
 
 /**
+ * @brief Print detailed Goertzel bins around a target BPM
+ * Shows ±10 BPM of the target with magnitudes and markers for top candidates
+ * @param center_bpm The BPM to center the view on (default: 128)
+ */
+void k1_print_bins(Print& out, const K1ResonatorFrame& rf, int center_bpm = 128);
+
+/**
  * @brief Print recent novelty z-scores with visual bars
  * @param count Number of recent frames to show (default: 20)
  */

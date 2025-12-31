@@ -28,6 +28,7 @@
 #include "core/persistence/ZoneConfigManager.h"
 #include "effects/CoreEffects.h"
 #include "effects/zones/ZoneComposer.h"
+#include "effects/PatternRegistry.h"
 #include "effects/transitions/TransitionEngine.h"
 #include "effects/transitions/TransitionTypes.h"
 #include "core/narrative/NarrativeEngine.h"
@@ -222,6 +223,10 @@ void setup() {
     Serial.println("  l       - List effects");
     Serial.println("  P       - List palettes");
     Serial.println("  s       - Print status");
+    Serial.println("\nEffect Registers:");
+    Serial.println("  r       - Reactive effects only (audio-responsive)");
+    Serial.println("  m       - Ambient effects only (time-based)");
+    Serial.println("  *       - All effects (default)");
     Serial.println("\nZone Commands:");
     Serial.println("  z       - Toggle zone mode");
     Serial.println("  Z       - Print zone status");
@@ -285,6 +290,25 @@ void loop() {
     static uint32_t lastStatus = 0;
     static uint8_t currentEffect = 0;
     static uint8_t lastAudioEffectIndex = 0;  // Track which audio effect (0=Waveform, 1=Bloom)
+
+    // Effect register state (for filtered effect cycling)
+    static EffectRegister currentRegister = EffectRegister::ALL;
+    static uint8_t reactiveRegisterIndex = 0;   // Index within reactive effects
+    static uint8_t ambientRegisterIndex = 0;    // Index within ambient effects
+    static uint8_t ambientEffectIds[80];        // Cached ambient effect IDs
+    static uint8_t ambientEffectCount = 0;      // Number of ambient effects
+    static bool registersInitialized = false;
+
+    // One-time initialization of effect registers
+    if (!registersInitialized && renderer) {
+        uint8_t effectCount = renderer->getEffectCount();
+        ambientEffectCount = PatternRegistry::buildAmbientEffectArray(
+            ambientEffectIds, sizeof(ambientEffectIds), effectCount);
+        registersInitialized = true;
+        LW_LOGI("Effect registers: %d reactive, %d ambient, %d total",
+                PatternRegistry::getReactiveEffectCount(), ambientEffectCount, effectCount);
+    }
+
     uint32_t now = millis();
 
 #if FEATURE_ROTATE8_ENCODER
@@ -1073,27 +1097,128 @@ void loop() {
                 case 'n':
                     if (!inZoneMode) {
                         uint8_t effectCount = renderer->getEffectCount();
-                        currentEffect = (currentEffect + 1) % effectCount;
-                        actors.setEffect(currentEffect);
-                        Serial.printf("Effect %d: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n", currentEffect, renderer->getEffectName(currentEffect));
+                        uint8_t newEffectId = currentEffect;
+
+                        switch (currentRegister) {
+                            case EffectRegister::ALL:
+                                currentEffect = (currentEffect + 1) % effectCount;
+                                newEffectId = currentEffect;
+                                break;
+
+                            case EffectRegister::REACTIVE:
+                                if (PatternRegistry::getReactiveEffectCount() > 0) {
+                                    reactiveRegisterIndex = (reactiveRegisterIndex + 1) %
+                                                            PatternRegistry::getReactiveEffectCount();
+                                    newEffectId = PatternRegistry::getReactiveEffectId(reactiveRegisterIndex);
+                                }
+                                break;
+
+                            case EffectRegister::AMBIENT:
+                                if (ambientEffectCount > 0) {
+                                    ambientRegisterIndex = (ambientRegisterIndex + 1) % ambientEffectCount;
+                                    newEffectId = ambientEffectIds[ambientRegisterIndex];
+                                }
+                                break;
+                        }
+
+                        if (newEffectId != 0xFF && newEffectId < effectCount) {
+                            currentEffect = newEffectId;
+                            actors.setEffect(currentEffect);
+                            const char* suffix = (currentRegister == EffectRegister::REACTIVE) ? "[R]" :
+                                                 (currentRegister == EffectRegister::AMBIENT) ? "[M]" : "";
+                            Serial.printf("Effect %d%s: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n",
+                                          currentEffect, suffix, renderer->getEffectName(currentEffect));
+                        }
                     }
                     break;
 
                 case 'N':
                     if (!inZoneMode) {
                         uint8_t effectCount = renderer->getEffectCount();
-                        currentEffect = (currentEffect + effectCount - 1) % effectCount;
-                        actors.setEffect(currentEffect);
-                        Serial.printf("Effect %d: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n", currentEffect, renderer->getEffectName(currentEffect));
+                        uint8_t newEffectId = currentEffect;
+
+                        switch (currentRegister) {
+                            case EffectRegister::ALL:
+                                currentEffect = (currentEffect + effectCount - 1) % effectCount;
+                                newEffectId = currentEffect;
+                                break;
+
+                            case EffectRegister::REACTIVE: {
+                                uint8_t count = PatternRegistry::getReactiveEffectCount();
+                                if (count > 0) {
+                                    reactiveRegisterIndex = (reactiveRegisterIndex + count - 1) % count;
+                                    newEffectId = PatternRegistry::getReactiveEffectId(reactiveRegisterIndex);
+                                }
+                                break;
+                            }
+
+                            case EffectRegister::AMBIENT:
+                                if (ambientEffectCount > 0) {
+                                    ambientRegisterIndex = (ambientRegisterIndex + ambientEffectCount - 1) %
+                                                           ambientEffectCount;
+                                    newEffectId = ambientEffectIds[ambientRegisterIndex];
+                                }
+                                break;
+                        }
+
+                        if (newEffectId != 0xFF && newEffectId < effectCount) {
+                            currentEffect = newEffectId;
+                            actors.setEffect(currentEffect);
+                            const char* suffix = (currentRegister == EffectRegister::REACTIVE) ? "[R]" :
+                                                 (currentRegister == EffectRegister::AMBIENT) ? "[M]" : "";
+                            Serial.printf("Effect %d%s: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n",
+                                          currentEffect, suffix, renderer->getEffectName(currentEffect));
+                        }
                     }
+                    break;
+
+                case 'r':  // Switch to Reactive register (audio-reactive effects)
+                    currentRegister = EffectRegister::REACTIVE;
+                    Serial.println("Switched to " LW_CLR_CYAN "Reactive" LW_ANSI_RESET " register");
+                    Serial.printf("  %d audio-reactive effects available\n",
+                                  PatternRegistry::getReactiveEffectCount());
+                    // Switch to current reactive effect
+                    if (PatternRegistry::getReactiveEffectCount() > 0) {
+                        uint8_t reactiveId = PatternRegistry::getReactiveEffectId(reactiveRegisterIndex);
+                        if (reactiveId != 0xFF && reactiveId < renderer->getEffectCount()) {
+                            currentEffect = reactiveId;
+                            actors.setEffect(reactiveId);
+                            Serial.printf("  Current: %s (ID %d)\n",
+                                          renderer->getEffectName(reactiveId), reactiveId);
+                        }
+                    }
+                    break;
+
+                case 'm':  // Switch to aMbient register (time-based effects)
+                    currentRegister = EffectRegister::AMBIENT;
+                    Serial.println("Switched to " LW_CLR_MAGENTA "Ambient" LW_ANSI_RESET " register");
+                    Serial.printf("  %d ambient effects available\n", ambientEffectCount);
+                    // Switch to current ambient effect
+                    if (ambientEffectCount > 0 && ambientRegisterIndex < ambientEffectCount) {
+                        uint8_t ambientId = ambientEffectIds[ambientRegisterIndex];
+                        if (ambientId < renderer->getEffectCount()) {
+                            currentEffect = ambientId;
+                            actors.setEffect(ambientId);
+                            Serial.printf("  Current: %s (ID %d)\n",
+                                          renderer->getEffectName(ambientId), ambientId);
+                        }
+                    }
+                    break;
+
+                case '*':  // Switch back to All effects register (default)
+                    currentRegister = EffectRegister::ALL;
+                    Serial.println("Switched to " LW_CLR_GREEN "All Effects" LW_ANSI_RESET " register");
+                    Serial.printf("  %d effects available\n", renderer->getEffectCount());
+                    Serial.printf("  Current: %s (ID %d)\n",
+                                  renderer->getEffectName(currentEffect), currentEffect);
                     break;
 
                 case '+':
                 case '=':
                     {
                         uint8_t b = renderer->getBrightness();
-                        if (b < 160) {
-                            b = min((int)b + 16, 160);
+                        if (b < 250) {
+                            b = min((int)b + 16, 250);
                             actors.setBrightness(b);
                             Serial.printf("Brightness: %d\n", b);
                         }
@@ -1125,8 +1250,8 @@ void loop() {
                 case ']':
                     {
                         uint8_t s = renderer->getSpeed();
-                        if (s < 50) {
-                            s = min((int)s + 5, 50);
+                        if (s < 100) {
+                            s = min((int)s + 5, 100);
                             actors.setSpeed(s);
                             Serial.printf("Speed: %d\n", s);
                         }

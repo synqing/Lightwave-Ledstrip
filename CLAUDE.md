@@ -307,6 +307,21 @@ Set in `platformio.ini` or `src/config/features.h`:
 | `FEATURE_INTERFERENCE_CALC` | Wave physics calculations |
 | `FEATURE_PHYSICS_SIMULATION` | Physics-based effects |
 
+### Musical Intelligence Feature Flags (v2 Only)
+
+These features compute musical context for audio-reactive effects. They default to matching `FEATURE_AUDIO_SYNC`.
+
+| Flag | Default | CPU Cost | Purpose |
+|------|---------|----------|---------|
+| `FEATURE_MUSICAL_SALIENCY` | `FEATURE_AUDIO_SYNC` | ~80 µs/hop | Computes harmonic/rhythmic/timbral/dynamic novelty |
+| `FEATURE_STYLE_DETECTION` | `FEATURE_AUDIO_SYNC` | ~60 µs/hop | Classifies music as rhythmic/harmonic/melodic/texture/dynamic |
+
+**To disable:** Set to 0 in `v2/src/config/features.h` or via `-D` flag in platformio.ini.
+
+**When to disable:** If no effects use `ctx.audio.harmonicSaliency()`, `ctx.audio.musicStyle()`, etc.
+
+**Effects using these features:** BreathingEffect, LGPPhotonicCrystalEffect, LGPStarBurstNarrativeEffect (3 of 76 effects)
+
 ## Web API
 
 ### API v1 (Recommended)

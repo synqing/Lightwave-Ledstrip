@@ -75,6 +75,20 @@
 #define FEATURE_AUDIO_SYNC 0
 #endif
 
+// Musical Saliency Analysis - Computes harmonic/rhythmic/timbral/dynamic novelty
+// CPU cost: ~80 µs per hop. Only 3/76 effects currently use this.
+// Disable if no effects use ctx.audio.harmonicSaliency(), rhythmicSaliency(), etc.
+#ifndef FEATURE_MUSICAL_SALIENCY
+#define FEATURE_MUSICAL_SALIENCY FEATURE_AUDIO_SYNC
+#endif
+
+// Music Style Detection - Classifies as rhythmic/harmonic/melodic/texture/dynamic
+// CPU cost: ~60 µs per hop (amortized over 4-second windows). Only 2/76 effects use this.
+// Disable if no effects use ctx.audio.musicStyle(), isRhythmicMusic(), etc.
+#ifndef FEATURE_STYLE_DETECTION
+#define FEATURE_STYLE_DETECTION FEATURE_AUDIO_SYNC
+#endif
+
 // Audio Overlap-Add sliding window for bands/chroma
 #ifndef FEATURE_AUDIO_OA
 #define FEATURE_AUDIO_OA 1

@@ -82,6 +82,8 @@ RendererActor::RendererActor()
     , m_saturation(255)
     , m_complexity(128)
     , m_variation(0)
+    , m_mood(128)  // Default: balanced reactive/smooth
+    , m_fadeAmount(20)
     , m_effectCount(0)
     , m_lastFrameTime(0)
     , m_frameCount(0)
@@ -309,6 +311,14 @@ void RendererActor::onMessage(const Message& msg)
             handleSetHue(msg.param1);
             break;
 
+        case MessageType::SET_MOOD:
+            handleSetMood(msg.param1);
+            break;
+
+        case MessageType::SET_FADE_AMOUNT:
+            handleSetFadeAmount(msg.param1);
+            break;
+
         case MessageType::HEALTH_CHECK:
             // Respond with health status
             {
@@ -353,13 +363,10 @@ void RendererActor::onTick()
         captureFrame(CaptureTap::TAP_A_PRE_CORRECTION, m_leds);
     }
 
-    // Post-render color correction pipeline (skip for LGP-sensitive and stateful effects)
-    // LGP-sensitive effects rely on precise amplitude relationships for interference patterns
-    // Stateful effects read previous frame state, and correction mutates buffer in-place
-    bool isLGPSensitive = ::PatternRegistry::isLGPSensitive(m_currentEffect);
-    bool isStateful = ::PatternRegistry::isStatefulEffect(m_currentEffect);
-    
-    if (!isLGPSensitive && !isStateful) {
+    // Post-render color correction pipeline (skip for sensitive effects)
+    // Includes: LGP-sensitive, stateful, PHYSICS_BASED, MATHEMATICAL families
+    // See PatternRegistry::shouldSkipColorCorrection() for full list
+    if (!::PatternRegistry::shouldSkipColorCorrection(m_currentEffect)) {
         enhancement::ColorCorrectionEngine::getInstance().processBuffer(m_leds, LedConfig::TOTAL_LEDS);
         m_correctionApplyCount++;
     } else {
@@ -711,6 +718,8 @@ void RendererActor::renderFrame()
         ctx.saturation = m_saturation;
         ctx.complexity = m_complexity;
         ctx.variation = m_variation;
+        ctx.mood = m_mood;
+        ctx.fadeAmount = m_fadeAmount;
         ctx.frameNumber = m_frameCount;
         // Use frame count as proxy for total time (millis() not always available)
         ctx.totalTimeMs = m_frameCount * 8;  // ~8ms per frame at 120 FPS
@@ -753,9 +762,15 @@ void RendererActor::renderFrame()
             m_musicalGrid.ReadLatest(m_lastMusicalGrid);
 
             // 5. Compute staleness for ctx.audio.available
+            // FIXED: More robust freshness detection combining sequence-based and age-based checks
+            // - Allow small negative ages (-0.01s tolerance) to account for extrapolation timing precision
+            // - If sequence changed, data is definitely fresh (new audio frame arrived)
+            // - Otherwise, check if age is within staleness threshold
             float age_s = audio::AudioTime_SecondsBetween(m_lastControlBus.t, render_now);
             float staleness_s = m_audioContractTuning.audioStalenessMs / 1000.0f;
-            bool is_fresh = (age_s >= 0.0f && age_s < staleness_s);
+            bool sequence_changed = (seq != m_lastControlBusSeq);
+            bool age_within_tolerance = (age_s >= -0.01f && age_s < staleness_s);
+            bool is_fresh = sequence_changed || age_within_tolerance;
 
             // 6. Populate AudioContext (by-value copies for thread safety)
             ctx.audio.controlBus = m_lastControlBus;
@@ -773,9 +788,10 @@ void RendererActor::renderFrame()
         // =====================================================================
         // Phase 4: Audio-Effect Parameter Mapping
         // Apply configured audio→visual mappings BEFORE effect->render()
+        // Uses cached m_effectHasAudioMappings (updated on effect change only)
         // =====================================================================
 #if FEATURE_AUDIO_SYNC
-        if (audio::AudioMappingRegistry::instance().hasActiveMappings(m_currentEffect)) {
+        if (m_effectHasAudioMappings) {
             // Extract current parameters as local copies for mapping
             uint8_t mappedBrightness = ctx.brightness;
             uint8_t mappedSpeed = ctx.speed;
@@ -824,6 +840,20 @@ void RendererActor::showLeds()
     memcpy(m_strip1, &m_leds[0], sizeof(CRGB) * LedConfig::LEDS_PER_STRIP);
     memcpy(m_strip2, &m_leds[LedConfig::LEDS_PER_STRIP],
            sizeof(CRGB) * LedConfig::LEDS_PER_STRIP);
+
+    // =========================================================================
+    // Silence-based brightness gate (Sensory Bridge silent_scale pattern)
+    // Fades ALL output to black after sustained silence
+    // =========================================================================
+#if FEATURE_AUDIO_SYNC
+    if (m_controlBusBuffer != nullptr && m_lastControlBus.silentScale < 0.999f) {
+        uint8_t scale = static_cast<uint8_t>(m_lastControlBus.silentScale * 255.0f);
+        for (uint16_t i = 0; i < LedConfig::LEDS_PER_STRIP; ++i) {
+            m_strip1[i].nscale8(scale);
+            m_strip2[i].nscale8(scale);
+        }
+    }
+#endif
 
     // TAP C: Capture pre-WS2812 (after strip split, before FastLED.show)
     if (m_captureEnabled && (m_captureTapMask & 0x04)) {
@@ -933,6 +963,11 @@ void RendererActor::handleSetEffect(uint8_t effectId)
                  oldEffect, getEffectName(oldEffect),
                  effectId, getEffectName(effectId));
 
+#if FEATURE_AUDIO_SYNC
+        // Cache audio mapping check - avoids registry lookup every frame
+        m_effectHasAudioMappings = audio::AudioMappingRegistry::instance().hasActiveMappings(effectId);
+#endif
+
         // Publish EFFECT_CHANGED event
         Message evt(MessageType::EFFECT_CHANGED);
         evt.param1 = effectId;
@@ -1036,6 +1071,22 @@ void RendererActor::handleSetHue(uint8_t hue)
     if (m_hue != hue) {
         m_hue = hue;
         LW_LOGD("Hue: %d", m_hue);
+    }
+}
+
+void RendererActor::handleSetMood(uint8_t mood)
+{
+    if (m_mood != mood) {
+        m_mood = mood;
+        LW_LOGD("Mood: %d (%.1f%% smooth)", m_mood, m_mood * 100.0f / 255.0f);
+    }
+}
+
+void RendererActor::handleSetFadeAmount(uint8_t fadeAmount)
+{
+    if (m_fadeAmount != fadeAmount) {
+        m_fadeAmount = fadeAmount;
+        LW_LOGD("FadeAmount: %d", m_fadeAmount);
     }
 }
 

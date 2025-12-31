@@ -503,8 +503,9 @@ struct EffectContext {
     //--------------------------------------------------------------------------
 
     uint8_t brightness;         ///< Master brightness (0-255)
-    uint8_t speed;              ///< Animation speed (1-50)
+    uint8_t speed;              ///< Animation speed (1-100)
     uint8_t gHue;               ///< Auto-incrementing hue (0-255)
+    uint8_t mood;               ///< Sensory Bridge mood (0-255): low=reactive, high=smooth
 
     //--------------------------------------------------------------------------
     // Visual Enhancement Parameters (from v1 ColorEngine)
@@ -514,6 +515,7 @@ struct EffectContext {
     uint8_t saturation;         ///< Color saturation (0-255)
     uint8_t complexity;         ///< Pattern complexity (0-255)
     uint8_t variation;          ///< Random variation (0-255)
+    uint8_t fadeAmount;         ///< Trail fade (0-255): 0=no fade, higher=faster
 
     //--------------------------------------------------------------------------
     // Timing
@@ -633,6 +635,62 @@ struct EffectContext {
         return zoneId != 0xFF;
     }
 
+    /**
+     * @brief Get normalized mood value (Sensory Bridge pattern)
+     * @return 0.0 (reactive) to 1.0 (smooth)
+     *
+     * Effects can use this to adjust their smoothing behavior:
+     * - Low values: More responsive to transients, faster attack/decay
+     * - High values: More sustained, slower smoothing, dreamier feel
+     *
+     * Example (asymmetric smoothing):
+     * @code
+     * float moodNorm = ctx.getMoodNormalized();
+     * float riseAlpha = 0.3f + 0.4f * moodNorm;  // 0.3-0.7
+     * float fallAlpha = 0.5f + 0.3f * moodNorm;  // 0.5-0.8
+     * @endcode
+     */
+    float getMoodNormalized() const {
+        return static_cast<float>(mood) / 255.0f;
+    }
+
+    /**
+     * @brief Get smoothing follower coefficients (Sensory Bridge pattern)
+     * @param riseOut Output: rise/attack coefficient (0.0-1.0)
+     * @param fallOut Output: fall/decay coefficient (0.0-1.0)
+     *
+     * Implements the Sensory Bridge MOOD knob smoothing_follower behavior:
+     * - Low mood: Fast rise (0.3), faster fall (0.5) - reactive
+     * - High mood: Slow rise (0.7), slower fall (0.8) - smooth
+     */
+    void getMoodSmoothing(float& riseOut, float& fallOut) const {
+        float moodNorm = getMoodNormalized();
+        riseOut = 0.3f + 0.4f * moodNorm;   // 0.3 (reactive) to 0.7 (smooth)
+        fallOut = 0.5f + 0.3f * moodNorm;   // 0.5 (reactive) to 0.8 (smooth)
+    }
+
+    /**
+     * @brief Get safe delta time in seconds (clamped for physics stability)
+     * @return Delta time in seconds, clamped to [0.001, 0.05]
+     *
+     * This prevents physics explosion on frame drops (>50ms) and ensures
+     * a minimum timestep for stability (1ms). Essential for true exponential
+     * smoothing formulas: alpha = 1 - exp(-lambda * dt)
+     *
+     * Example:
+     * @code
+     * float dt = ctx.getSafeDeltaSeconds();
+     * float alpha = 1.0f - expf(-5.0f * dt);  // True exponential decay
+     * value += (target - value) * alpha;
+     * @endcode
+     */
+    float getSafeDeltaSeconds() const {
+        float dt = static_cast<float>(deltaTimeMs) * 0.001f;
+        if (dt < 0.001f) dt = 0.001f;   // Minimum 1ms (1000 FPS cap)
+        if (dt > 0.05f) dt = 0.05f;     // Maximum 50ms (20 FPS floor)
+        return dt;
+    }
+
     //--------------------------------------------------------------------------
     // Constructor
     //--------------------------------------------------------------------------
@@ -645,10 +703,12 @@ struct EffectContext {
         , brightness(255)
         , speed(15)
         , gHue(0)
+        , mood(128)  // Default 0.5 normalized: balanced reactive/smooth
         , intensity(128)
         , saturation(255)
         , complexity(128)
         , variation(64)
+        , fadeAmount(20)
         , deltaTimeMs(8)
         , frameNumber(0)
         , totalTimeMs(0)

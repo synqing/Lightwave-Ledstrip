@@ -84,7 +84,7 @@ struct LedConfig {
     static constexpr uint8_t DEFAULT_BRIGHTNESS = 96;
     static constexpr uint8_t MAX_BRIGHTNESS = 160;
     static constexpr uint8_t DEFAULT_SPEED = 10;
-    static constexpr uint8_t MAX_SPEED = 50;
+    static constexpr uint8_t MAX_SPEED = 100;  // Extended range (was 50)
 
     // Center origin point for effects
     static constexpr uint8_t CENTER_POINT = 79;  // LED 79/80 split
@@ -185,6 +185,8 @@ public:
     uint8_t getSaturation() const { return m_saturation; }
     uint8_t getComplexity() const { return m_complexity; }
     uint8_t getVariation() const { return m_variation; }
+    uint8_t getMood() const { return m_mood; }
+    uint8_t getFadeAmount() const { return m_fadeAmount; }
     const RenderStats& getStats() const { return m_stats; }
 
     /**
@@ -493,6 +495,8 @@ private:
     void handleSetComplexity(uint8_t complexity);
     void handleSetVariation(uint8_t variation);
     void handleSetHue(uint8_t hue);
+    void handleSetMood(uint8_t mood);
+    void handleSetFadeAmount(uint8_t fadeAmount);
 
     // ========================================================================
     // State
@@ -513,6 +517,8 @@ private:
     uint8_t m_saturation;
     uint8_t m_complexity;
     uint8_t m_variation;
+    uint8_t m_mood;
+    uint8_t m_fadeAmount;
 
     // Palette
     CRGBPalette16 m_currentPalette;
@@ -619,6 +625,9 @@ private:
      * Set to nullptr if AudioActor isn't running.
      */
     const audio::SnapshotBuffer<audio::ControlBusFrame>* m_controlBusBuffer = nullptr;
+
+    /// Cached result of hasActiveMappings() - updated on effect change only
+    bool m_effectHasAudioMappings = false;
 
     // ========================================================================
     // K1-Lightwave Integration (Phase 3)

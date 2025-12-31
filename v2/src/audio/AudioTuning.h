@@ -102,9 +102,9 @@ struct AudioPipelineTuning {
 
     float agcTargetRms = 0.25f;
     float agcMinGain = 1.0f;
-    float agcMaxGain = 100.0f;
-    float agcAttack = 0.08f;
-    float agcRelease = 0.02f;
+    float agcMaxGain = 40.0f;      // Was 100.0 - cap to prevent runaway amplification
+    float agcAttack = 0.03f;       // Was 0.08 - gentler approach (3% per hop)
+    float agcRelease = 0.015f;     // Was 0.02 - slightly faster decay (2:1 ratio)
     float agcClipReduce = 0.90f;
     float agcIdleReturnRate = 0.01f;
 
@@ -142,8 +142,8 @@ struct AudioPipelineTuning {
                                     0.0008f, 0.0010f, 0.0012f, 0.0006f};
     bool usePerBandNoiseFloor = false;  ///< Enable per-band noise floor gating
 
-    // Silence detection (Sensory Bridge insight: 10-second hysteresis)
-    float silenceHysteresisMs = 0.0f;    ///< 0 = disabled, >0 = wait time before standby
+    // Silence detection (fade to black after sustained silence)
+    float silenceHysteresisMs = 5000.0f;  ///< 5s default (user-approved), 0 = disabled
     float silenceThreshold = 0.01f;       ///< RMS below this is considered silence
 };
 
@@ -169,7 +169,7 @@ struct AudioContractTuning {
  */
 struct GoertzelNoveltyTuning {
     bool useSpectralFlux = true;        ///< Use per-band flux instead of RMS-based
-    float spectralFluxScale = 2.0f;     ///< Scaling factor for spectral flux
+    float spectralFluxScale = 1.0f;     ///< Was 2.0 - reduced to prevent saturation
 };
 
 inline float clampf(float v, float lo, float hi) {
@@ -292,7 +292,7 @@ inline AudioPipelineTuning getPreset(AudioPreset preset) {
             tuning.agcRelease = 0.02f;
             tuning.controlBusAlphaFast = 0.35f;
             tuning.controlBusAlphaSlow = 0.12f;
-            tuning.silenceHysteresisMs = 0.0f;  // No standby dimming
+            tuning.silenceHysteresisMs = 10000.0f;  // 10s standby (Sensory Bridge pattern)
             break;
 
         case AudioPreset::SENSORY_BRIDGE:

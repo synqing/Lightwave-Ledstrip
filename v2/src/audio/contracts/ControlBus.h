@@ -65,6 +65,11 @@ struct ControlBusRawInput {
     // Phase 2: Full 64-bin Goertzel spectrum (110 Hz - 4186 Hz)
     static constexpr uint8_t BINS_64_COUNT = 64;
     float bins64[BINS_64_COUNT] = {0};  // 0..1 normalized magnitudes
+
+    // Phase 2: K1 Beat Tracker Output (for rhythmic saliency)
+    bool k1Locked = false;          // True if K1 beat tracker is phase-locked
+    float k1Confidence = 0.0f;      // K1 confidence (0-1), high = strong beat lock
+    bool k1BeatTick = false;        // True on beat frame (when k1Locked)
 };
 
 /**
@@ -102,6 +107,16 @@ struct ControlBusFrame {
     // Phase 2: Full 64-bin Goertzel spectrum (110 Hz - 4186 Hz)
     static constexpr uint8_t BINS_64_COUNT = 64;
     float bins64[BINS_64_COUNT] = {0};  // 0..1 normalized magnitudes
+
+    // Phase 2: K1 Beat Tracker Output (stored for saliency computation)
+    bool k1Locked = false;          // True if K1 beat tracker is phase-locked
+    float k1Confidence = 0.0f;      // K1 confidence (0-1), high = strong beat lock
+    bool k1BeatTick = false;        // True on beat frame (when k1Locked)
+
+    // Silence detection (Sensory Bridge pattern)
+    // silentScale fades from 1.0 to 0.0 after silenceHysteresisMs of silence
+    float silentScale = 1.0f;       ///< 0.0=silent, 1.0=active (multiply with brightness)
+    bool isSilent = false;          ///< True when silence threshold exceeded duration
 };
 
 /**
@@ -221,6 +236,23 @@ public:
     float getAlphaFast() const { return m_alpha_fast; }
     float getAlphaSlow() const { return m_alpha_slow; }
 
+    /**
+     * @brief Set all smoothing parameters from mood value (Sensory Bridge pattern)
+     * @param mood 0-255: 0=reactive (fast attack/slow decay), 255=smooth (slow attack/fast decay)
+     *
+     * Maps mood to both follower smoothing (attack/release) and exponential averaging.
+     * Implements the Sensory Bridge MOOD knob behavior:
+     * - Low mood: More responsive to transients, faster attack, slower decay
+     * - High mood: More sustained, dreamier feel, slower attack, faster decay
+     *
+     * Affects:
+     * - m_alpha_fast/slow: RMS/flux smoothing
+     * - m_band_attack/release: Band energy smoothing
+     * - m_heavy_band_attack/release: Extra-smooth band smoothing
+     */
+    void setMoodSmoothing(uint8_t mood);
+    uint8_t getMood() const { return m_mood; }
+
     // Lookahead spike smoothing control
     void setLookaheadEnabled(bool enabled) { m_lookahead_bands.enabled = enabled; }
     bool getLookaheadEnabled() const { return m_lookahead_bands.enabled; }
@@ -258,6 +290,15 @@ public:
     void setChordDetectionEnabled(bool enabled) { m_chord_detection_enabled = enabled; }
     bool getChordDetectionEnabled() const { return m_chord_detection_enabled; }
     const ChordState& getChordState() const { return m_frame.chordState; }
+
+    // Silence detection control (Sensory Bridge silent_scale pattern)
+    void setSilenceParameters(float threshold, float hysteresisMs) {
+        m_silence_threshold = threshold;
+        m_silence_hysteresis_ms = hysteresisMs;
+    }
+    float getSilenceThreshold() const { return m_silence_threshold; }
+    float getSilenceHysteresisMs() const { return m_silence_hysteresis_ms; }
+    bool isSilenceEnabled() const { return m_silence_hysteresis_ms > 0.0f; }
 
 private:
     ControlBusFrame m_frame{};
@@ -309,6 +350,16 @@ private:
 
     // Musical saliency tuning parameters
     SaliencyTuning m_saliencyTuning{};
+
+    // Mood smoothing control (Sensory Bridge MOOD knob)
+    uint8_t m_mood = 128;  // Default: balanced (0.5 normalized)
+
+    // Silence detection state machine (Sensory Bridge silent_scale pattern)
+    float m_silent_scale_smoothed = 1.0f;   ///< Smoothed output value
+    uint32_t m_silence_start_ms = 0;        ///< When silence began (for hysteresis)
+    bool m_silence_triggered = false;       ///< True when hysteresis exceeded
+    float m_silence_threshold = 0.01f;      ///< RMS below this = silence
+    float m_silence_hysteresis_ms = 0.0f;   ///< Time before fade begins (0 = disabled)
 
     // Private methods for spike detection
     void detectAndRemoveSpikes(LookaheadBuffer& buffer,

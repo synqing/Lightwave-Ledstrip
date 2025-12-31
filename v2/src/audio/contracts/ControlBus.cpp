@@ -1,4 +1,5 @@
 #include "ControlBus.h"
+#include "../../config/features.h"  // FEATURE_MUSICAL_SALIENCY
 #include <cstring>  // for memcpy
 
 namespace lightwaveos::audio {
@@ -79,6 +80,35 @@ void ControlBus::setChromaZoneAGCRates(float attack, float release) {
         m_chroma_zones[z].attack_rate = clamp01(attack);
         m_chroma_zones[z].release_rate = clamp01(release);
     }
+}
+
+void ControlBus::setMoodSmoothing(uint8_t mood) {
+    m_mood = mood;
+    float moodNorm = static_cast<float>(mood) / 255.0f;
+
+    // ========================================================================
+    // Sensory Bridge MOOD Knob Implementation
+    // Maps mood (0-255) to smoothing parameters:
+    //   Low mood (0):    Reactive - fast attack, slow decay, low alpha
+    //   High mood (255): Smooth - slow attack, fast decay, high alpha
+    // ========================================================================
+
+    // RMS/Flux alpha smoothing
+    // Low mood: fast=0.25, slow=0.08 (more reactive)
+    // High mood: fast=0.45, slow=0.18 (more smoothed)
+    m_alpha_fast = 0.25f + 0.20f * moodNorm;  // 0.25-0.45
+    m_alpha_slow = 0.08f + 0.10f * moodNorm;  // 0.08-0.18
+
+    // Band attack/release (asymmetric follower)
+    // Low mood: fast attack (0.25), very slow release (0.02) - punchy transients
+    // High mood: slow attack (0.08), faster release (0.06) - sustained, dreamy
+    m_band_attack = 0.25f - 0.17f * moodNorm;        // 0.25-0.08 (inverted)
+    m_band_release = 0.02f + 0.04f * moodNorm;       // 0.02-0.06
+
+    // Heavy band attack/release (extra-smoothed for ambient effects)
+    // Same pattern but with more extreme smoothing
+    m_heavy_band_attack = 0.12f - 0.08f * moodNorm;  // 0.12-0.04 (inverted)
+    m_heavy_band_release = 0.01f + 0.02f * moodNorm; // 0.01-0.03
 }
 
 /**
@@ -383,10 +413,22 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     }
 
     // ========================================================================
-    // Stage 4c: Musical saliency computation (Musical Intelligence System Phase 1)
+    // Stage 4c: Store K1 beat tracker state for saliency computation
+    // ========================================================================
+    m_frame.k1Locked = raw.k1Locked;
+    m_frame.k1Confidence = raw.k1Confidence;
+    m_frame.k1BeatTick = raw.k1BeatTick;
+
+    // ========================================================================
+    // Stage 4d: Musical saliency computation (Musical Intelligence System Phase 1)
     // Computes what's "perceptually important" across harmonic/rhythmic/timbral/dynamic
     // ========================================================================
+#if FEATURE_MUSICAL_SALIENCY
     computeSaliency();
+#else
+    // Zero out saliency when disabled - effects will see all zeros
+    m_frame.saliency = MusicalSaliencyFrame{};
+#endif
 
     // ========================================================================
     // Stage 5: Copy waveform data (no processing)
@@ -416,6 +458,41 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     // Stage 6: Update spike detection telemetry frame counter
     // ========================================================================
     m_spikeStats.totalFrames++;
+
+    // ========================================================================
+    // Stage 7: Silence detection (Sensory Bridge silent_scale pattern)
+    // Fades all output to black after sustained silence (default 10s)
+    // ========================================================================
+    if (m_silence_hysteresis_ms <= 0.0f) {
+        // Disabled - always active
+        m_frame.silentScale = 1.0f;
+        m_frame.isSilent = false;
+    } else {
+        uint32_t now_ms = now.monotonic_us / 1000;  // Convert AudioTime to milliseconds
+        bool currently_silent = (m_frame.fast_rms < m_silence_threshold);
+
+        if (currently_silent && !m_silence_triggered) {
+            // Start silence timer if not already started
+            if (m_silence_start_ms == 0) {
+                m_silence_start_ms = now_ms;
+            }
+            // Check if hysteresis exceeded
+            if ((now_ms - m_silence_start_ms) >= static_cast<uint32_t>(m_silence_hysteresis_ms)) {
+                m_silence_triggered = true;
+            }
+        } else if (!currently_silent) {
+            // Audio detected - reset silence state
+            m_silence_start_ms = 0;
+            m_silence_triggered = false;
+        }
+
+        // Smooth transition (90% hysteresis = ~400ms fade at 60fps)
+        float target = m_silence_triggered ? 0.0f : 1.0f;
+        m_silent_scale_smoothed = target * 0.1f + m_silent_scale_smoothed * 0.9f;
+
+        m_frame.silentScale = m_silent_scale_smoothed;
+        m_frame.isSilent = m_silence_triggered;
+    }
 }
 
 /**
@@ -512,8 +589,9 @@ void ControlBus::computeSaliency() {
     // ========================================================================
     // Harmonic Novelty: Chord root or type changes
     // High when chord progression happens, decays slowly for sustained mood
+    // Fix: Add base component proportional to confidence (even without changes)
     // ========================================================================
-    float harmonicRaw = 0.0f;
+    float harmonicRaw = chord.confidence * 0.3f;  // Base: proportional to chord strength
     if (chord.confidence > 0.3f) {
         // Chord root change is most significant
         if (chord.rootNote != sal.prevChordRoot) {
@@ -521,8 +599,10 @@ void ControlBus::computeSaliency() {
             sal.prevChordRoot = chord.rootNote;
         }
         // Chord type change (major/minor) is also significant
-        else if (static_cast<uint8_t>(chord.type) != sal.prevChordType) {
-            harmonicRaw = 0.7f;
+        // Only count if new type is valid (not NONE)
+        else if (static_cast<uint8_t>(chord.type) != sal.prevChordType &&
+                 chord.type != ChordType::NONE) {
+            harmonicRaw = fmaxf(harmonicRaw, 0.6f);  // At least 0.6 for quality change
         }
         sal.prevChordType = static_cast<uint8_t>(chord.type);
     }
@@ -547,12 +627,22 @@ void ControlBus::computeSaliency() {
     sal.prevRms = m_frame.rms;
 
     // ========================================================================
-    // Rhythmic Novelty: Beat interval variance (proxy: flux derivative)
-    // In Phase 1, use flux derivative as proxy for beat activity
-    // Phase 2 will integrate actual beat detection from AudioActor
+    // Rhythmic Novelty: K1 Beat Tracker Integration (Phase 2)
+    // Use K1 confidence when locked, fall back to flux when unlocked
     // ========================================================================
-    // For now, use fast_flux as rhythmic indicator (captures transients)
-    sal.rhythmicNovelty = clamp01(m_frame.fast_flux * 1.5f);
+    if (m_frame.k1Locked) {
+        // K1 is phase-locked: use confidence directly (stronger beat = higher novelty)
+        // Add spike on beat_tick for transient response
+        float baseRhythmic = m_frame.k1Confidence * 0.8f;  // 80% from confidence
+        if (m_frame.k1BeatTick) {
+            sal.rhythmicNovelty = clamp01(baseRhythmic + 0.5f);  // Spike on beat
+        } else {
+            sal.rhythmicNovelty = baseRhythmic;
+        }
+    } else {
+        // K1 not locked: fall back to flux proxy (reduced weight)
+        sal.rhythmicNovelty = clamp01(m_frame.fast_flux * 0.5f);
+    }
 
     // ========================================================================
     // Asymmetric Smoothing: Fast rise, slow fall (organic envelopes)

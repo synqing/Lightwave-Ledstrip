@@ -210,8 +210,8 @@ struct SaliencyTuning {
 
     // Thresholds for novelty detection
     float harmonicChangeThreshold = 0.5f;  // Chord must change significantly
-    float fluxDerivativeThreshold = 0.1f;  // Minimum flux change
-    float rmsDerivativeThreshold = 0.05f;  // Minimum RMS change
+    float fluxDerivativeThreshold = 0.05f; // Was 0.1 - lowered for timbral sensitivity
+    float rmsDerivativeThreshold = 0.02f;  // Was 0.05 - lowered for dynamic sensitivity
     float beatVarianceThreshold = 0.15f;   // Beat interval variance threshold
 
     // Weights for overall saliency computation

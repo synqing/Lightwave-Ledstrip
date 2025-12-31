@@ -504,13 +504,14 @@ namespace RequestSchemas {
      */
     constexpr FieldSchema SetParameters[] = {
         {"brightness", FieldType::UINT8, false, 0, 255},
-        {"speed",      FieldType::UINT8, false, 1, 50},
+        {"speed",      FieldType::UINT8, false, 1, 100},  // Extended range
         {"paletteId",  FieldType::UINT8, false, 0, 255},
         {"intensity",  FieldType::UINT8, false, 0, 255},
         {"saturation", FieldType::UINT8, false, 0, 255},
         {"complexity", FieldType::UINT8, false, 0, 255},
         {"variation",  FieldType::UINT8, false, 0, 255},
-        {"hue",        FieldType::UINT8, false, 0, 255}
+        {"hue",        FieldType::UINT8, false, 0, 255},
+        {"mood",       FieldType::UINT8, false, 0, 255}   // Sensory Bridge mood
     };
     constexpr size_t SetParametersSize = sizeof(SetParameters) / sizeof(FieldSchema);
 
@@ -574,10 +575,10 @@ namespace RequestSchemas {
 
     /**
      * @brief POST /api/v1/zones/:id/speed
-     * Required: speed (1-50)
+     * Required: speed (1-100)
      */
     constexpr FieldSchema ZoneSpeed[] = {
-        {"speed", FieldType::UINT8, true, 1, 50}
+        {"speed", FieldType::UINT8, true, 1, 100}  // Extended range
     };
     constexpr size_t ZoneSpeedSize = sizeof(ZoneSpeed) / sizeof(FieldSchema);
 
@@ -673,7 +674,7 @@ namespace RequestSchemas {
      * @brief POST /api/speed (legacy)
      */
     constexpr FieldSchema LegacySetSpeed[] = {
-        {"speed", FieldType::UINT8, true, 1, 50}
+        {"speed", FieldType::UINT8, true, 1, 100}  // Extended range
     };
     constexpr size_t LegacySetSpeedSize = sizeof(LegacySetSpeed) / sizeof(FieldSchema);
 

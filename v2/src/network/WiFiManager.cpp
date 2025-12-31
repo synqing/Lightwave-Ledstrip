@@ -120,10 +120,9 @@ void WiFiManager::wifiTask(void* parameter) {
 
     LW_LOGI("Task started");
 
-    // Start Soft-AP immediately if enabled
-    if (manager->m_apEnabled) {
-        manager->startSoftAP();
-    }
+    // NOTE: AP is NOT started immediately - it's a FALLBACK only
+    // AP mode is entered via handleStateFailed() when all STA connection attempts
+    // are exhausted. This enforces STA-first architecture.
 
     // Main state machine loop
     while (true) {
@@ -271,6 +270,16 @@ void WiFiManager::handleStateConnecting() {
 
 void WiFiManager::handleStateConnected() {
     static uint32_t lastStatusPrint = 0;
+    static bool sleepSettingsApplied = false;
+
+    // Apply sleep settings once on entry to connected state (defensive)
+    // This handles edge cases where ESP32 WiFi stack resets settings
+    if (!sleepSettingsApplied) {
+        WiFi.setSleep(false);
+        WiFi.setAutoReconnect(true);
+        sleepSettingsApplied = true;
+        LW_LOGD("Applied WiFi stability settings in connected state");
+    }
 
     // Print status periodically (every 30 seconds)
     if (millis() - lastStatusPrint > 30000) {
@@ -416,6 +425,8 @@ bool WiFiManager::connectToAP() {
     }
 
     // WiFi stability settings - must be called AFTER WiFi.begin()
+    // NOTE: These may be reset during connection handshake, so we also
+    // apply them in the GOT_IP event handler to ensure they persist
     WiFi.setSleep(false);           // Disable modem sleep (prevents ASSOC_LEAVE disconnects)
     WiFi.setAutoReconnect(true);    // Auto-reconnect on disconnect
     LW_LOGD("WiFi sleep disabled, auto-reconnect enabled");
@@ -656,6 +667,13 @@ void WiFiManager::onWiFiEvent(WiFiEvent_t event) {
         case SYSTEM_EVENT_STA_GOT_IP:
 #endif
             LW_LOGI("Event: Got IP - %s", WiFi.localIP().toString().c_str());
+            
+            // CRITICAL: Disable WiFi sleep AFTER connection is fully established
+            // This prevents ASSOC_LEAVE disconnects that occur when modem enters sleep
+            WiFi.setSleep(false);
+            WiFi.setAutoReconnect(true);
+            LW_LOGD("WiFi sleep disabled after GOT_IP (prevents ASSOC_LEAVE)");
+            
             if (manager.m_wifiEventGroup) {
                 xEventGroupSetBits(manager.m_wifiEventGroup, EVENT_GOT_IP);
             }

@@ -1688,6 +1688,8 @@ void WebServer::handleParametersGet(AsyncWebServerRequest* request) {
         data["saturation"] = m_renderer->getSaturation();
         data["complexity"] = m_renderer->getComplexity();
         data["variation"] = m_renderer->getVariation();
+        data["mood"] = m_renderer->getMood();  // Sensory Bridge mood (0-255)
+        data["fadeAmount"] = m_renderer->getFadeAmount();
     });
 }
 
@@ -1711,7 +1713,7 @@ void WebServer::handleParametersSet(AsyncWebServerRequest* request, uint8_t* dat
 
     if (doc.containsKey("speed")) {
         uint8_t val = doc["speed"];
-        // Range already validated by schema (1-50)
+        // Range already validated by schema (1-100)
         m_actorSystem.setSpeed(val);
         updated = true;
     }
@@ -1749,6 +1751,18 @@ void WebServer::handleParametersSet(AsyncWebServerRequest* request, uint8_t* dat
     if (doc.containsKey("hue")) {
         uint8_t val = doc["hue"];
         m_actorSystem.setHue(val);
+        updated = true;
+    }
+
+    if (doc.containsKey("mood")) {
+        uint8_t val = doc["mood"];
+        m_actorSystem.setMood(val);  // Sensory Bridge: 0=reactive, 255=smooth
+        updated = true;
+    }
+
+    if (doc.containsKey("fadeAmount")) {
+        uint8_t val = doc["fadeAmount"];
+        m_actorSystem.setFadeAmount(val);
         updated = true;
     }
 

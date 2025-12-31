@@ -212,7 +212,87 @@ const lightwaveos::plugins::EffectMetadata* getIEffectMetadata(uint8_t effectId)
  */
 bool hasIEffectMetadata(uint8_t effectId);
 
+/**
+ * Check if an effect should skip ColorCorrectionEngine processing
+ * @param effectId Effect ID to check
+ * @return true if effect should skip color correction
+ *
+ * Consolidates all color correction skip logic:
+ * - LGP-sensitive effects (INTERFERENCE, ADVANCED_OPTICAL families)
+ * - Stateful effects (Confetti, Ripple - read previous frame buffer)
+ * - PHYSICS_BASED family (precise amplitude for physics simulations)
+ * - MATHEMATICAL family (exact RGB values for mathematical mappings)
+ *
+ * Performance: Skipping saves ~1,500µs per frame for eligible effects
+ */
+bool shouldSkipColorCorrection(uint8_t effectId);
+
+// ============================================================================
+// Effect Register Functions (for filtered effect cycling)
+// ============================================================================
+
+/**
+ * @brief Check if an effect is audio-reactive
+ * @param effectId Effect ID to check (0-76)
+ * @return true if effect actively uses ctx.audio features
+ *
+ * Audio-reactive effects respond to real-time audio input via:
+ * - Beat tracking (beatPhase, isOnBeat, bpm)
+ * - Energy metrics (rms, flux, bass, mid, treble)
+ * - Spectrum analysis (getBand, bins64)
+ * - Chord detection (chordType, rootNote)
+ */
+bool isAudioReactive(uint8_t effectId);
+
+/**
+ * @brief Get the number of audio-reactive effects
+ * @return Count of effects in REACTIVE_EFFECT_IDS array
+ */
+uint8_t getReactiveEffectCount();
+
+/**
+ * @brief Get reactive effect ID by index
+ * @param index Index within reactive effects array (0 to getReactiveEffectCount()-1)
+ * @return Effect ID, or 0xFF if index out of bounds
+ */
+uint8_t getReactiveEffectId(uint8_t index);
+
+/**
+ * @brief Build ambient effect ID array (call once at startup)
+ * @param outputArray Array to populate with ambient effect IDs
+ * @param maxOutput Maximum size of output array
+ * @param effectCount Total number of registered effects
+ * @return Number of ambient effects found
+ *
+ * Ambient effects are all effects NOT in the audio-reactive list.
+ * They use time-based animation or user parameters only.
+ */
+uint8_t buildAmbientEffectArray(uint8_t* outputArray, uint8_t maxOutput, uint8_t effectCount);
+
 } // namespace PatternRegistry
+
+// ============================================================================
+// Effect Register Enum (for filtered effect cycling hotkeys)
+// ============================================================================
+
+/**
+ * @brief Effect register mode for filtering effect cycling
+ *
+ * Controls which effects are cycled through when pressing spacebar/n/N:
+ * - ALL: Default behavior, cycles through all registered effects
+ * - REACTIVE: Audio-reactive effects only (~19 effects that use ctx.audio)
+ * - AMBIENT: Time-based effects only (~58 effects without audio coupling)
+ *
+ * Hotkeys:
+ * - 'r' = Switch to REACTIVE register
+ * - 'm' = Switch to AMBIENT register
+ * - 'A' = Switch back to ALL (default)
+ */
+enum class EffectRegister : uint8_t {
+    ALL = 0,      // All effects (default, current behavior)
+    REACTIVE = 1, // Audio-reactive effects only
+    AMBIENT = 2   // Time-based/ambient effects only
+};
 
 // ============================================================================
 // Pattern Metadata Registry (defined in PatternRegistry.cpp)

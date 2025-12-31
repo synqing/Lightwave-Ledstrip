@@ -111,7 +111,9 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
     {PM_STR("Bass Breath"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Organic breathing driven by bass energy"), PM_STR("Bass band tracking, breathing simulation"), PM_STR("")},
     {PM_STR("Audio Waveform"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("True time-domain waveform visualization mirrored from centre"), PM_STR("Waveform samples, time-domain display"), PM_STR("")},
     {PM_STR("Audio Bloom"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Centre bloom pulses triggered by audio transients"), PM_STR("Flux detection, pulse generation, radial decay"), PM_STR("")},
-    {PM_STR("LGP Star Burst (Narrative)"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN, PM_STR("Story-driven starburst with phrase-gated chord coloring"), PM_STR("Narrative conductor, chord harmonics, phrase timing"), PM_STR("LGP Star Burst")}
+    {PM_STR("LGP Star Burst (Narrative)"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN, PM_STR("Story-driven starburst with phrase-gated chord coloring"), PM_STR("Narrative conductor, chord harmonics, phrase timing"), PM_STR("LGP Star Burst")},
+    {PM_STR("Chord Glow"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Full chord detection showcase with harmonic color mapping"), PM_STR("Chord detection, root note color, quality modulation"), PM_STR("")},
+    {PM_STR("Wave Reactive"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Energy-accumulating wave with audio-driven motion"), PM_STR("Beat accumulation, frequency-driven velocity, kaleidoscope integration"), PM_STR("Wave")}
 };
 
 const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(PatternMetadata);
@@ -121,7 +123,7 @@ const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(Pattern
 // ============================================================================
 
 // Expected number of implemented effects (must match registerAllEffects() return value)
-constexpr uint8_t EXPECTED_EFFECT_COUNT = 75;  // 68 core + 6 audio + 1 narrative
+constexpr uint8_t EXPECTED_EFFECT_COUNT = 77;  // 68 core + 6 audio + 1 narrative + 1 chord glow + 1 wave reactive
 
 // Compile-time assertion: metadata must have at least as many entries as implemented effects
 // This ensures we can always map effect IDs to metadata (allows for future effects in metadata)
@@ -281,6 +283,82 @@ const lightwaveos::plugins::EffectMetadata* getIEffectMetadata(uint8_t effectId)
 
 bool hasIEffectMetadata(uint8_t effectId) {
     return getIEffectMetadata(effectId) != nullptr;
+}
+
+bool shouldSkipColorCorrection(uint8_t effectId) {
+    // Fast path: known sensitive effects
+    if (isLGPSensitive(effectId) || isStatefulEffect(effectId)) {
+        return true;
+    }
+
+    // Check family-based skip logic
+    const PatternMetadata* meta = getPatternMetadata(effectId);
+    if (meta) {
+        // PHYSICS_BASED effects need precise amplitude for physics simulations
+        // MATHEMATICAL effects need exact RGB values for mathematical mappings
+        if (meta->family == PatternFamily::PHYSICS_BASED ||
+            meta->family == PatternFamily::MATHEMATICAL) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// ============================================================================
+// Effect Register Functions (for filtered effect cycling)
+// ============================================================================
+
+// Audio-reactive effect IDs (effects that actively use ctx.audio)
+// Determined by grep analysis of ctx.audio usage patterns in ieffect/*.cpp
+static const uint8_t REACTIVE_EFFECT_IDS[] PROGMEM = {
+    6,   // BPM - beat-synced pulsing
+    7,   // Wave Ambient - RMS amplitude modulation
+    8,   // Ripple - kick/treble triggered, chroma-driven
+    11,  // Breathing - RMS breathing, beat-gated pulses
+    16,  // Interference Scanner - heavyMid energy, snare boost
+    17,  // Wave Collision - heavyBass, snare/hihat triggers
+    22,  // Chevron Waves - chroma, snare sharpness
+    24,  // Star Burst - full audio pipeline, snare bursts
+    33,  // Photonic Crystal - tempo breathing, saliency
+    68,  // Audio Test - demo effect
+    69,  // Beat Pulse - beat-synced radial pulse
+    70,  // Spectrum Bars - 8-band analyzer
+    71,  // Bass Breath - bass-driven breathing
+    72,  // Audio Waveform - time-domain visualization
+    73,  // Audio Bloom - transient-triggered blooms
+    74,  // Star Burst Narrative - full musical intelligence
+    75,  // Chord Glow - chord detection showcase
+    76   // Wave Reactive - energy accumulation
+};
+static constexpr uint8_t REACTIVE_EFFECT_COUNT = sizeof(REACTIVE_EFFECT_IDS);
+
+bool isAudioReactive(uint8_t effectId) {
+    for (uint8_t i = 0; i < REACTIVE_EFFECT_COUNT; i++) {
+        if (pgm_read_byte(&REACTIVE_EFFECT_IDS[i]) == effectId) {
+            return true;
+        }
+    }
+    return false;
+}
+
+uint8_t getReactiveEffectCount() {
+    return REACTIVE_EFFECT_COUNT;
+}
+
+uint8_t getReactiveEffectId(uint8_t index) {
+    if (index >= REACTIVE_EFFECT_COUNT) return 0xFF;
+    return pgm_read_byte(&REACTIVE_EFFECT_IDS[index]);
+}
+
+uint8_t buildAmbientEffectArray(uint8_t* outputArray, uint8_t maxOutput, uint8_t effectCount) {
+    uint8_t count = 0;
+    for (uint8_t id = 0; id < effectCount && count < maxOutput; id++) {
+        if (!isAudioReactive(id)) {
+            outputArray[count++] = id;
+        }
+    }
+    return count;
 }
 
 } // namespace PatternRegistry

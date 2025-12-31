@@ -28,6 +28,8 @@
 #include "ieffect/JuggleEffect.h"
 #include "ieffect/BPMEffect.h"
 #include "ieffect/WaveEffect.h"
+#include "ieffect/WaveAmbientEffect.h"
+#include "ieffect/WaveReactiveEffect.h"
 #include "ieffect/RippleEffect.h"
 #include "ieffect/HeartbeatEffect.h"
 #include "ieffect/InterferenceEffect.h"
@@ -324,9 +326,10 @@ uint8_t registerAllEffects(RendererActor* renderer) {
         // Effect already counted in registerCoreEffects (count++), just register it
     }
     
-    // Pilot: Wave (ID 7) - IEffect native
-    static ieffect::WaveEffect waveInstance;
-    if (renderer->registerEffect(coreStart + 7, &waveInstance)) {
+    // Pilot: Wave Ambient (ID 7) - IEffect native (replaces WaveEffect)
+    // Uses time-driven motion with audio amplitude modulation (AMBIENT pattern)
+    static ieffect::WaveAmbientEffect waveAmbientInstance;
+    if (renderer->registerEffect(coreStart + 7, &waveAmbientInstance)) {
         // Effect already counted in registerCoreEffects (count++), just register it
     }
     
@@ -779,9 +782,16 @@ uint8_t registerAllEffects(RendererActor* renderer) {
         total++;
     }
 
+    // Wave Reactive (ID 76) - Energy-accumulating wave with audio-driven motion
+    // Uses Kaleidoscope-style energy accumulation (REACTIVE pattern)
+    static ieffect::WaveReactiveEffect waveReactiveInstance;
+    if (renderer->registerEffect(total, &waveReactiveInstance)) {
+        total++;
+    }
+
     // =============== EFFECT COUNT PARITY VALIDATION ===============
     // Runtime validation: ensure registered count matches expected
-    constexpr uint8_t EXPECTED_EFFECT_COUNT = 76;  // 68 core + 6 audio + 1 narrative + 1 chord glow
+    constexpr uint8_t EXPECTED_EFFECT_COUNT = 77;  // 68 core + 6 audio + 1 narrative + 1 chord glow + 1 wave reactive
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

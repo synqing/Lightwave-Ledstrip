@@ -29,21 +29,17 @@ void ConfettiEffect::render(plugins::EffectContext& ctx) {
     // LED buffer state, making it a stateful effect. Identified in PatternRegistry::isStatefulEffect().
 
     // Fade all LEDs
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 10);
+    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
     // Spawn new confetti at CENTER PAIR
     if (random8() < 80) {
         int centerPos = CENTER_LEFT + random8(2);  // 79 or 80
         CRGB color = ctx.palette.getColor(ctx.gHue + random8(64), 255);
 
-        ctx.leds[centerPos].r = qadd8(ctx.leds[centerPos].r, color.r);
-        ctx.leds[centerPos].g = qadd8(ctx.leds[centerPos].g, color.g);
-        ctx.leds[centerPos].b = qadd8(ctx.leds[centerPos].b, color.b);
+        ctx.leds[centerPos] = color;
         if (centerPos + STRIP_LENGTH < ctx.ledCount) {
             int mirrorPos = centerPos + STRIP_LENGTH;
-            ctx.leds[mirrorPos].r = qadd8(ctx.leds[mirrorPos].r, color.r);
-            ctx.leds[mirrorPos].g = qadd8(ctx.leds[mirrorPos].g, color.g);
-            ctx.leds[mirrorPos].b = qadd8(ctx.leds[mirrorPos].b, color.b);
+            ctx.leds[mirrorPos] = color;
         }
     }
 

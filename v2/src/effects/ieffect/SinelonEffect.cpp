@@ -23,7 +23,7 @@ bool SinelonEffect::init(plugins::EffectContext& ctx) {
 void SinelonEffect::render(plugins::EffectContext& ctx) {
     // CENTER ORIGIN SINELON - Oscillates outward from center
     using namespace utils;
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 20);
+    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
     // Oscillate from center outward using utility function
     int distFromCenter = fastled_beatsin16(13, 0, HALF_LENGTH);
@@ -36,25 +36,17 @@ void SinelonEffect::render(plugins::EffectContext& ctx) {
     CRGB color2 = ctx.palette.getColor(ctx.gHue + 128, 192);
 
     if (pos1 < STRIP_LENGTH) {
-        ctx.leds[pos1].r = qadd8(ctx.leds[pos1].r, color1.r);
-        ctx.leds[pos1].g = qadd8(ctx.leds[pos1].g, color1.g);
-        ctx.leds[pos1].b = qadd8(ctx.leds[pos1].b, color1.b);
+        ctx.leds[pos1] = color1;
         if (pos1 + STRIP_LENGTH < ctx.ledCount) {
             int mirrorPos1 = pos1 + STRIP_LENGTH;
-            ctx.leds[mirrorPos1].r = qadd8(ctx.leds[mirrorPos1].r, color1.r);
-            ctx.leds[mirrorPos1].g = qadd8(ctx.leds[mirrorPos1].g, color1.g);
-            ctx.leds[mirrorPos1].b = qadd8(ctx.leds[mirrorPos1].b, color1.b);
+            ctx.leds[mirrorPos1] = color1;
         }
     }
     if (pos2 >= 0) {
-        ctx.leds[pos2].r = qadd8(ctx.leds[pos2].r, color2.r);
-        ctx.leds[pos2].g = qadd8(ctx.leds[pos2].g, color2.g);
-        ctx.leds[pos2].b = qadd8(ctx.leds[pos2].b, color2.b);
+        ctx.leds[pos2] = color2;
         if (pos2 + STRIP_LENGTH < ctx.ledCount) {
             int mirrorPos2 = pos2 + STRIP_LENGTH;
-            ctx.leds[mirrorPos2].r = qadd8(ctx.leds[mirrorPos2].r, color2.r);
-            ctx.leds[mirrorPos2].g = qadd8(ctx.leds[mirrorPos2].g, color2.g);
-            ctx.leds[mirrorPos2].b = qadd8(ctx.leds[mirrorPos2].b, color2.b);
+            ctx.leds[mirrorPos2] = color2;
         }
     }
 }

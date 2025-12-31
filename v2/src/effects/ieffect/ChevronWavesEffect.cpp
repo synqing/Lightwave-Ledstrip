@@ -17,17 +17,13 @@ namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
-static float smoothValue(float current, float target, float rise, float fall) {
-    float alpha = (target > current) ? rise : fall;
-    return current + (target - current) * alpha;
-}
-
 ChevronWavesEffect::ChevronWavesEffect()
     : m_chevronPos(0.0f)
 {
 }
 
 bool ChevronWavesEffect::init(plugins::EffectContext& ctx) {
+    (void)ctx;
     m_chevronPos = 0.0f;
     m_lastHopSeq = 0;
     m_chromaEnergySum = 0.0f;
@@ -38,10 +34,14 @@ bool ChevronWavesEffect::init(plugins::EffectContext& ctx) {
     m_energyAvg = 0.0f;
     m_energyDelta = 0.0f;
     m_dominantBin = 0;
-    m_energyAvgSmooth = 0.0f;
-    m_energyDeltaSmooth = 0.0f;
     m_dominantBinSmooth = 0.0f;
-    m_speedSmooth = 1.0f;
+
+    // Initialize enhancement utilities
+    m_phaseSpeedSpring.init(50.0f, 1.0f);  // stiffness=50, mass=1 (critically damped)
+    m_phaseSpeedSpring.reset(1.0f);        // Start at base speed
+    m_energyAvgFollower.reset(0.0f);
+    m_energyDeltaFollower.reset(0.0f);
+
     return true;
 }
 
@@ -95,15 +95,15 @@ void ChevronWavesEffect::render(plugins::EffectContext& ctx) {
         m_energyDelta = 0.0f;
     }
 
-    float dt = ctx.deltaTimeMs * 0.001f;
-    float riseAvg = dt / (0.20f + dt);
-    float fallAvg = dt / (0.50f + dt);
-    float riseDelta = dt / (0.18f + dt);   // 180ms rise (was 80ms)
-    float fallDelta = dt / (0.25f + dt);
-    float alphaBin = dt / (0.25f + dt);
+    float dt = enhancement::getSafeDeltaSeconds(ctx.deltaTimeMs);
 
-    m_energyAvgSmooth = smoothValue(m_energyAvgSmooth, m_energyAvg, riseAvg, fallAvg);
-    m_energyDeltaSmooth = smoothValue(m_energyDeltaSmooth, m_energyDelta, riseDelta, fallDelta);
+    // True exponential smoothing with AsymmetricFollower (frame-rate independent)
+    float moodNorm = ctx.mood / 255.0f;  // 0=reactive, 1=smooth
+    float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, dt, moodNorm);
+    float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, dt, moodNorm);
+
+    // Dominant bin smoothing
+    float alphaBin = 1.0f - expf(-dt / 0.25f);  // True exponential, 250ms time constant
     m_dominantBinSmooth += (m_dominantBin - m_dominantBinSmooth) * alphaBin;
     if (m_dominantBinSmooth < 0.0f) m_dominantBinSmooth = 0.0f;
     if (m_dominantBinSmooth > 11.0f) m_dominantBinSmooth = 11.0f;
@@ -118,16 +118,11 @@ void ChevronWavesEffect::render(plugins::EffectContext& ctx) {
 #endif
     float targetSpeed = 0.6f + 1.2f * heavyEnergy;  // Reduced range for stability
 
-    // Slew limiting (0.25/sec max change rate) to prevent jog-dial jitter
-    float maxDelta = 0.25f * dt;
-    float speedDelta = targetSpeed - m_speedSmooth;
-    if (fabsf(speedDelta) > maxDelta) {
-        speedDelta = (speedDelta > 0) ? maxDelta : -maxDelta;
-    }
-    m_speedSmooth += speedDelta;
-    float speedScale = m_speedSmooth;
-    if (speedScale > 2.0f) speedScale = 2.0f;  // Hard clamp
-    m_chevronPos += speedNorm * 240.0f * speedScale * dt;  // dt-corrected: 240/sec at speedNorm=1
+    // Spring physics for speed modulation (natural momentum, no jitter)
+    float smoothedSpeed = m_phaseSpeedSpring.update(targetSpeed, dt);
+    if (smoothedSpeed > 2.0f) smoothedSpeed = 2.0f;  // Hard clamp
+    if (smoothedSpeed < 0.3f) smoothedSpeed = 0.3f;  // Prevent stalling
+    m_chevronPos += speedNorm * 240.0f * smoothedSpeed * dt;  // dt-corrected: 240/sec at speedNorm=1
 
     fadeToBlackBy(ctx.leds, ctx.ledCount, FADE_AMOUNT);
 
@@ -147,23 +142,23 @@ void ChevronWavesEffect::render(plugins::EffectContext& ctx) {
             tanhScale = 5.0f;  // Sharp, crisp chevrons on snare
         }
 #endif
-        chevron = tanhf(chevron * (tanhScale + 4.0f * m_energyAvgSmooth)) * 0.5f + 0.5f;
+        chevron = tanhf(chevron * (tanhScale + 4.0f * energyAvgSmooth)) * 0.5f + 0.5f;
 
-        float audioGain = 0.2f + 0.8f * m_energyAvgSmooth;
+        float audioGain = 0.2f + 0.8f * energyAvgSmooth;
         uint8_t brightness = (uint8_t)(chevron * 255.0f * intensityNorm * audioGain);
-        uint8_t baseHue = (uint8_t)(ctx.gHue + (uint8_t)(m_dominantBinSmooth * (255.0f / 12.0f)));
-        uint8_t hue = baseHue + (uint8_t)(distFromCenter * 2.0f) + (uint8_t)(m_chevronPos * 0.5f);
+        // Calculate hue with proper modular arithmetic (avoids UB from large float→uint8_t cast)
+        // m_chevronPos grows unbounded; fmodf ensures values stay in [0, 256) before casting
+        float rawHue = (float)ctx.gHue
+                     + m_dominantBinSmooth * (255.0f / 12.0f)
+                     + distFromCenter * 2.0f
+                     + fmodf(m_chevronPos * 0.5f, 256.0f);
+        uint8_t hue = (uint8_t)fmodf(rawHue, 256.0f);
 
-        CRGB c1 = ctx.palette.getColor(hue, brightness);
-        ctx.leds[i].r = qadd8(ctx.leds[i].r, c1.r);
-        ctx.leds[i].g = qadd8(ctx.leds[i].g, c1.g);
-        ctx.leds[i].b = qadd8(ctx.leds[i].b, c1.b);
+        // Direct assignment - fadeToBlackBy clears buffer each frame
+        ctx.leds[i] = ctx.palette.getColor(hue, brightness);
 
         if (i + STRIP_LENGTH < ctx.ledCount) {
-            CRGB c2 = ctx.palette.getColor(hue + 90, brightness);
-            ctx.leds[i + STRIP_LENGTH].r = qadd8(ctx.leds[i + STRIP_LENGTH].r, c2.r);
-            ctx.leds[i + STRIP_LENGTH].g = qadd8(ctx.leds[i + STRIP_LENGTH].g, c2.g);
-            ctx.leds[i + STRIP_LENGTH].b = qadd8(ctx.leds[i + STRIP_LENGTH].b, c2.b);
+            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor(hue + 90, brightness);
         }
     }
 }

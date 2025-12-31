@@ -283,17 +283,17 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
             float fadeIn = 1.0f - ((float)dist / (float)pulseRadius);
             uint8_t fadedBoost = (uint8_t)(boost * fadeIn);
 
-            // Apply to center pair
+            // Apply warm-tinted boost to center pair
             uint16_t leftIdx = ctx.centerPoint - 1 - dist;
             uint16_t rightIdx = ctx.centerPoint + dist;
 
+            // Warm tint: more red, some green, minimal blue
+            CRGB warmBoost = CRGB(fadedBoost, fadedBoost >> 2, fadedBoost >> 4);
             if (leftIdx < ctx.ledCount) {
-                ctx.leds[leftIdx].r = qadd8(ctx.leds[leftIdx].r, fadedBoost);
-                ctx.leds[leftIdx].g = qadd8(ctx.leds[leftIdx].g, fadedBoost >> 2);  // Slight warm tint
+                ctx.leds[leftIdx] += warmBoost;
             }
             if (rightIdx < ctx.ledCount) {
-                ctx.leds[rightIdx].r = qadd8(ctx.leds[rightIdx].r, fadedBoost);
-                ctx.leds[rightIdx].g = qadd8(ctx.leds[rightIdx].g, fadedBoost >> 2);
+                ctx.leds[rightIdx] += warmBoost;
             }
         }
     }

@@ -24,7 +24,7 @@ void JuggleEffect::render(plugins::EffectContext& ctx) {
     //
     // NOTE: dothue += 32 per dot (8 dots × 32 = 256 wrap) creates different colors per dot,
     // not rainbow cycling. Each dot uses a fixed hue per frame, not cycling through the wheel.
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 20);
+    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
     uint8_t dothue = ctx.gHue;
     for (int i = 0; i < 8; i++) {
@@ -37,25 +37,17 @@ void JuggleEffect::render(plugins::EffectContext& ctx) {
         CRGB color = CHSV(dothue, ctx.saturation, 255);
 
         if (pos1 < STRIP_LENGTH) {
-            ctx.leds[pos1].r = qadd8(ctx.leds[pos1].r, color.r);
-            ctx.leds[pos1].g = qadd8(ctx.leds[pos1].g, color.g);
-            ctx.leds[pos1].b = qadd8(ctx.leds[pos1].b, color.b);
+            ctx.leds[pos1] = color;
             if (pos1 + STRIP_LENGTH < ctx.ledCount) {
                 int mirrorPos1 = pos1 + STRIP_LENGTH;
-                ctx.leds[mirrorPos1].r = qadd8(ctx.leds[mirrorPos1].r, color.r);
-                ctx.leds[mirrorPos1].g = qadd8(ctx.leds[mirrorPos1].g, color.g);
-                ctx.leds[mirrorPos1].b = qadd8(ctx.leds[mirrorPos1].b, color.b);
+                ctx.leds[mirrorPos1] = color;
             }
         }
         if (pos2 >= 0) {
-            ctx.leds[pos2].r = qadd8(ctx.leds[pos2].r, color.r);
-            ctx.leds[pos2].g = qadd8(ctx.leds[pos2].g, color.g);
-            ctx.leds[pos2].b = qadd8(ctx.leds[pos2].b, color.b);
+            ctx.leds[pos2] = color;
             if (pos2 + STRIP_LENGTH < ctx.ledCount) {
                 int mirrorPos2 = pos2 + STRIP_LENGTH;
-                ctx.leds[mirrorPos2].r = qadd8(ctx.leds[mirrorPos2].r, color.r);
-                ctx.leds[mirrorPos2].g = qadd8(ctx.leds[mirrorPos2].g, color.g);
-                ctx.leds[mirrorPos2].b = qadd8(ctx.leds[mirrorPos2].b, color.b);
+                ctx.leds[mirrorPos2] = color;
             }
         }
 

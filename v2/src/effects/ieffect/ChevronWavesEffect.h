@@ -14,6 +14,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../enhancement/SmoothingEngine.h"
 #include <FastLED.h>
 
 namespace lightwaveos {
@@ -32,20 +33,26 @@ public:
     const plugins::EffectMetadata& getMetadata() const override;
 
 private:
-    // Instance state (was: static float chevronPos)
+    // Instance state
     float m_chevronPos;
     uint32_t m_lastHopSeq = 0;
+
+    // Chroma history for energy baseline
     static constexpr uint8_t CHROMA_HISTORY = 4;
     float m_chromaEnergyHist[CHROMA_HISTORY] = {0.0f};
     float m_chromaEnergySum = 0.0f;
     uint8_t m_chromaHistIdx = 0;
+
+    // Raw energy values (updated per hop)
     float m_energyAvg = 0.0f;
     float m_energyDelta = 0.0f;
     uint8_t m_dominantBin = 0;
-    float m_energyAvgSmooth = 0.0f;
-    float m_energyDeltaSmooth = 0.0f;
     float m_dominantBinSmooth = 0.0f;
-    float m_speedSmooth = 1.0f;  // Slew-limited speed to prevent jitter
+
+    // Enhancement utilities (Spring + AsymmetricFollower)
+    enhancement::Spring m_phaseSpeedSpring;                              // Natural momentum for speed
+    enhancement::AsymmetricFollower m_energyAvgFollower{0.0f, 0.20f, 0.50f};   // 200ms rise, 500ms fall
+    enhancement::AsymmetricFollower m_energyDeltaFollower{0.0f, 0.25f, 0.40f}; // 250ms rise, 400ms fall
 
     // Constants
     static constexpr uint8_t FADE_AMOUNT = 40;

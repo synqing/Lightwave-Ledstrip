@@ -1,10 +1,16 @@
 /**
  * @file BPMEffect.h
- * @brief BPM - Beat-synced pulsing sawtooth waves
- * 
+ * @brief BPM - Syncs to detected tempo with musical color and energy response
+ *
  * Effect ID: 6
  * Family: GEOMETRIC
- * Tags: CENTER_ORIGIN | TRAVELING
+ * Tags: CENTER_ORIGIN | TRAVELING | AUDIO_REACTIVE
+ *
+ * Audio Integration (Sensory Bridge pattern):
+ * - Chromagram → Color: Musical pitch content drives visual color
+ * - RMS Energy → Brightness: Overall audio energy modulates brightness
+ * - Beat Phase → Motion: Smooth phase-locked pulsing (no jitter)
+ * - BPM-Adaptive Decay: Beat pulse decay matches musical tempo
  */
 
 #pragma once
@@ -29,10 +35,10 @@ public:
     const plugins::EffectMetadata& getMetadata() const override;
 
 private:
-    // No instance state needed - uses beatsin8 which is deterministic
+    float m_beatPulse;  // Decaying pulse on beat detection
+    bool m_tempoLocked = false;  // Tempo lock state with hysteresis
 };
 
 } // namespace ieffect
 } // namespace effects
 } // namespace lightwaveos
-

@@ -59,13 +59,17 @@ inline CRGB blendPixels(const CRGB& base, const CRGB& blend, BlendMode mode) {
         case BlendMode::OVERWRITE:
             return blend;
 
-        case BlendMode::ADDITIVE:
-            // Saturating add (won't overflow past 255)
+        case BlendMode::ADDITIVE: {
+            // PRE-SCALE both inputs to prevent white saturation when blending
+            // Two full-bright pixels would saturate all channels to 255 (white)
+            // Scale by ~70% (180/255) to leave headroom for accumulation
+            constexpr uint8_t ADDITIVE_SCALE = 180;
             return CRGB(
-                qadd8(base.r, blend.r),
-                qadd8(base.g, blend.g),
-                qadd8(base.b, blend.b)
+                qadd8(scale8(base.r, ADDITIVE_SCALE), scale8(blend.r, ADDITIVE_SCALE)),
+                qadd8(scale8(base.g, ADDITIVE_SCALE), scale8(blend.g, ADDITIVE_SCALE)),
+                qadd8(scale8(base.b, ADDITIVE_SCALE), scale8(blend.b, ADDITIVE_SCALE))
             );
+        }
 
         case BlendMode::MULTIPLY:
             return CRGB(

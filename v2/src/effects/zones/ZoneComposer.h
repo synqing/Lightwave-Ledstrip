@@ -37,7 +37,7 @@ using EffectFunc = EffectRenderFn;
 struct ZoneState {
     uint8_t effectId;           // Effect to render (0-12 for core effects)
     uint8_t brightness;         // Zone brightness (0-255)
-    uint8_t speed;              // Zone speed (1-50)
+    uint8_t speed;              // Zone speed (1-100)
     uint8_t paletteId;          // Palette ID (0 = use global)
     BlendMode blendMode;        // Compositing mode
     bool enabled;               // Zone enabled flag

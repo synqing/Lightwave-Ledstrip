@@ -111,8 +111,8 @@ static const uint8_t NUM_PRESETS = sizeof(PRESETS) / sizeof(PRESETS[0]);
 ZoneComposer::ZoneComposer()
     : m_enabled(false)
     , m_initialized(false)
-    , m_layout(ZoneLayout::TRIPLE)
-    , m_zoneCount(3)
+    , m_layout(ZoneLayout::TRIPLE)     // Default layout (use SINGLE for single-zone perf)
+    , m_zoneCount(3)                    // Matches TRIPLE layout
     , m_zoneConfig(ZONE_3_CONFIG)
     , m_renderer(nullptr)
 {
@@ -156,8 +156,20 @@ void ZoneComposer::render(CRGB* leds, uint16_t numLeds, CRGBPalette16* palette,
         return;
     }
 
-    // Clear output buffer
-    memset(m_outputBuffer, 0, sizeof(m_outputBuffer));
+    // Optimization: Skip buffer clear if first enabled zone uses OVERWRITE blend mode
+    // (it will completely overwrite the buffer anyway)
+    bool needsClear = true;
+    for (uint8_t z = 0; z < m_zoneCount; z++) {
+        if (m_zones[z].enabled) {
+            if (m_zones[z].blendMode == BlendMode::OVERWRITE) {
+                needsClear = false;
+            }
+            break;  // Only check first enabled zone
+        }
+    }
+    if (needsClear) {
+        memset(m_outputBuffer, 0, sizeof(m_outputBuffer));
+    }
 
     // Render each enabled zone
     for (uint8_t z = 0; z < m_zoneCount; z++) {
@@ -177,13 +189,22 @@ void ZoneComposer::renderZone(uint8_t zoneId, CRGB* leds, uint16_t numLeds,
     const ZoneState& zone = m_zones[zoneId];
     const ZoneSegment& seg = m_zoneConfig[zoneId];
 
-    // Clear temp buffer
-    memset(m_tempBuffer, 0, sizeof(m_tempBuffer));
-
     // Get the IEffect instance
     plugins::IEffect* effect = m_renderer->getEffectInstance(zone.effectId);
     if (!effect) {
         return;
+    }
+
+    // Optimization: Only clear zone regions in temp buffer (not full 320 LEDs)
+    // This saves ~1.9KB memset per zone for non-overlapping zones
+    uint16_t s1ClearStart = min(seg.s1LeftStart, seg.s1RightStart);
+    uint16_t s1ClearEnd = max(seg.s1LeftEnd, seg.s1RightEnd);
+    memset(&m_tempBuffer[s1ClearStart], 0, (s1ClearEnd - s1ClearStart + 1) * sizeof(CRGB));
+    // Strip 2 mirror region
+    uint16_t s2ClearStart = s1ClearStart + STRIP_LENGTH;
+    uint16_t s2ClearEnd = s1ClearEnd + STRIP_LENGTH;
+    if (s2ClearEnd < TOTAL_LEDS) {
+        memset(&m_tempBuffer[s2ClearStart], 0, (s2ClearEnd - s2ClearStart + 1) * sizeof(CRGB));
     }
 
     // Create EffectContext for this zone's effect
@@ -207,8 +228,9 @@ void ZoneComposer::renderZone(uint8_t zoneId, CRGB* leds, uint16_t numLeds,
     ctx.totalTimeMs = frameCount * 8;  // ~8ms per frame at 120 FPS
     ctx.deltaTimeMs = 8;  // ~120 FPS
     ctx.zoneId = zoneId;  // Zone ID for zone-aware effects
-    ctx.zoneStart = 0;
-    ctx.zoneLength = numLeds;
+    // Provide actual zone boundaries for zone-aware effects (forward compatible)
+    ctx.zoneStart = seg.s1LeftStart;
+    ctx.zoneLength = seg.totalLeds;
 
     // Render effect to temp buffer
     effect->render(ctx);
@@ -276,7 +298,7 @@ void ZoneComposer::setZoneBrightness(uint8_t zone, uint8_t brightness) {
 
 void ZoneComposer::setZoneSpeed(uint8_t zone, uint8_t speed) {
     if (zone < MAX_ZONES) {
-        m_zones[zone].speed = constrain(speed, 1, 50);
+        m_zones[zone].speed = constrain(speed, 1, 100);
     }
 }
 

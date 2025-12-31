@@ -157,6 +157,12 @@ bool LGPStarBurstNarrativeEffect::init(plugins::EffectContext& ctx) {
     m_textureIntensity = 0.0f;
     m_fluxSmooth = 0.0f;
 
+    // -----------------------------------------
+    // 64-bin Spectrum Enhancement
+    // -----------------------------------------
+    m_kickBurst = 0.0f;
+    m_trebleShimmerIntensity = 0.0f;
+
     return true;
 }
 
@@ -296,6 +302,38 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
         if (m_energyDelta < 0.0f) m_energyDelta = 0.0f;
 
         m_dominantBin = dominantBin;
+
+        // =====================================================================
+        // 64-bin KICK BURST (bins 0-5 = 110-155 Hz)
+        // BYPASSES story conductor for immediate sub-bass response.
+        // Deep kick drums trigger instant starburst expansion regardless of
+        // what phase the story conductor is in. This gives punchy response.
+        // =====================================================================
+        float kickSum = 0.0f;
+        for (uint8_t i = 0; i < 6; ++i) {
+            kickSum += ctx.audio.bin(i);
+        }
+        float kickAvg = kickSum / 6.0f;
+        if (kickAvg > m_kickBurst) {
+            m_kickBurst = kickAvg;  // Instant attack
+        } else {
+            m_kickBurst *= 0.75f;   // Fast decay (~60ms) for punchy response
+        }
+
+        // Direct burst injection when kick is strong (bypasses story conductor)
+        if (m_kickBurst > 0.4f) {
+            m_burst = fmaxf(m_burst, m_kickBurst * 0.8f);
+        }
+
+        // =====================================================================
+        // 64-bin TREBLE SHIMMER (bins 48-63 = 1.3-4.2 kHz)
+        // Hi-hat and cymbal energy for enhanced shimmer layer intensity.
+        // =====================================================================
+        float trebleSum = 0.0f;
+        for (uint8_t i = 48; i < 64; ++i) {
+            trebleSum += ctx.audio.bin(i);
+        }
+        m_trebleShimmerIntensity = trebleSum / 16.0f;
 
         // -----------------------------------------
         // BEHAVIOR-ADAPTIVE IMPACT TRIGGERS
@@ -521,19 +559,24 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
                        ctx.audio.controlBus.heavy_bands[2]) / 2.0f;
     }
 #endif
-    // NARROW speed range (0.6 to 1.8) instead of 0.11-9.97
-    float targetSpeed = 0.6f + 1.2f * heavyEnergy;
+    // =========================================================================
+    // SPEED CONTROL FIX: Match LGPInterferenceScannerEffect golden pattern
+    // Audio modulates speed in [0.6, 1.4] range, user slider (speedNorm) is
+    // multiplicative on top. Slew limiting prevents jog-dial jitter.
+    // =========================================================================
+    // Target range: [0.6, 1.4] based on audio energy (narrower than before)
+    float targetSpeed = 0.6f + 0.8f * heavyEnergy;
+    if (targetSpeed > 1.4f) targetSpeed = 1.4f;  // Upper clamp only
 
-    // SLEW LIMITING (0.25/sec max change rate) to prevent abrupt speed changes
-    float maxDelta = 0.25f * dt;
+    // SLEW LIMITING (0.3/sec max change rate) - matches LGPInterferenceScannerEffect
+    const float maxSlewRate = 0.3f;
+    float slewLimit = maxSlewRate * dt;
     float speedDelta = targetSpeed - m_speedSmooth;
-    if (fabsf(speedDelta) > maxDelta) {
-        speedDelta = (speedDelta > 0) ? maxDelta : -maxDelta;
-    }
+    if (speedDelta > slewLimit) speedDelta = slewLimit;
+    if (speedDelta < -slewLimit) speedDelta = -slewLimit;
     m_speedSmooth += speedDelta;
-    // FIX: Both lower and upper bounds to prevent stuttering near zero
-    if (m_speedSmooth < 0.3f) m_speedSmooth = 0.3f;  // Minimum prevents stalls
-    if (m_speedSmooth > 2.0f) m_speedSmooth = 2.0f;  // Maximum prevents chaos
+    // No lower clamp - allow speed to go low when audio is quiet
+    // User slider (speedNorm) provides full control range
 
     // Phase accumulation: monotonic, dt-corrected
     // FIX: Wrap EVERY frame to prevent discontinuity at wrap point
@@ -725,7 +768,12 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
         if (m_currentBehavior == plugins::VisualBehavior::SHIMMER_WITH_MELODY) {
             // Texture-weighted shimmer overlay
             const float shimmer = 0.5f + 0.5f * sinf(m_shimmerPhase + distFromCenter * 0.8f);
-            const float shimmerIntensity = shimmer * textureWeight * env * 0.4f;
+            // =====================================================================
+            // 64-bin TREBLE BOOST: Hi-hat energy (bins 48-63) enhances shimmer
+            // When cymbal/hi-hat is active, the sparkle layer intensifies.
+            // =====================================================================
+            const float trebleBoost = 1.0f + m_trebleShimmerIntensity * 0.5f;  // 1.0 to 1.5x
+            const float shimmerIntensity = shimmer * textureWeight * env * 0.4f * trebleBoost;
             if (shimmerIntensity > 0.1f) {
                 const uint8_t shimmerB = clampU8((int)roundf(brightness * shimmerIntensity));
                 c += ctx.palette.getColor((uint8_t)(hueFifth + 32 + paletteIndex), shimmerB);
@@ -756,10 +804,7 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
             c += ctx.palette.getColor((uint8_t)(hueFifth + 64 + paletteIndex), pulseB);
         }
 
-        // FIX: Use qadd8() saturating addition to prevent white saturation
-        ctx.leds[i].r = qadd8(ctx.leds[i].r, c.r);
-        ctx.leds[i].g = qadd8(ctx.leds[i].g, c.g);
-        ctx.leds[i].b = qadd8(ctx.leds[i].b, c.b);
+        ctx.leds[i] = c;
 
         if (i + STRIP_LENGTH < ctx.ledCount) {
             // FIX: Changed from 85 to 90 to match ChevronWaves pattern
@@ -802,10 +847,7 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
                 c2 += ctx.palette.getColor((uint8_t)(hueFifth + harmonyShift + 64 + paletteIndex), pulseB);
             }
 
-            // FIX: Use qadd8() saturating addition to prevent white saturation
-            ctx.leds[i + STRIP_LENGTH].r = qadd8(ctx.leds[i + STRIP_LENGTH].r, c2.r);
-            ctx.leds[i + STRIP_LENGTH].g = qadd8(ctx.leds[i + STRIP_LENGTH].g, c2.g);
-            ctx.leds[i + STRIP_LENGTH].b = qadd8(ctx.leds[i + STRIP_LENGTH].b, c2.b);
+            ctx.leds[i + STRIP_LENGTH] = c2;
         }
     }
 }

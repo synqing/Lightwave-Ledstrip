@@ -11,6 +11,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../enhancement/SmoothingEngine.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -38,13 +39,13 @@ private:
     float m_energyAvg = 0.0f;
     float m_energyDelta = 0.0f;
     uint8_t m_dominantBin = 0;
-    float m_energyAvgSmooth = 0.0f;
-    float m_energyDeltaSmooth = 0.0f;
     float m_dominantBinSmooth = 0.0f;
     float m_collisionBoost = 0.0f;
 
-    // Speed slew limiting (jog-dial fix)
-    float m_speedScaleSmooth = 1.0f;  // Smoothed speed value
+    // Enhancement utilities (Spring + AsymmetricFollower)
+    enhancement::Spring m_speedSpring;                                        // Natural momentum for speed
+    enhancement::AsymmetricFollower m_energyAvgFollower{0.0f, 0.20f, 0.50f};  // 200ms rise, 500ms fall
+    enhancement::AsymmetricFollower m_energyDeltaFollower{0.0f, 0.25f, 0.40f}; // 250ms rise, 400ms fall
 
     // Percussion-driven animation
     float m_speedTarget = 1.0f;       // Hi-hat speed boost target (decays to 1.0)

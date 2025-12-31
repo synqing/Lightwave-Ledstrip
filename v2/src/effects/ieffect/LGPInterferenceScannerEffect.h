@@ -14,6 +14,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../enhancement/SmoothingEngine.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -40,15 +41,19 @@ private:
     float m_energyAvg = 0.0f;
     float m_energyDelta = 0.0f;
     uint8_t m_dominantBin = 0;
-    float m_energyAvgSmooth = 0.0f;
-    float m_energyDeltaSmooth = 0.0f;
     float m_dominantBinSmooth = 0.0f;
 
-    // Speed slew limiting (jog-dial fix)
-    float m_speedScaleSmooth = 1.0f;  // Smoothed speed value
+    // Enhancement utilities (Spring + AsymmetricFollower)
+    enhancement::Spring m_speedSpring;                                        // Natural momentum for speed
+    enhancement::AsymmetricFollower m_energyAvgFollower{0.0f, 0.20f, 0.50f};  // 200ms rise, 500ms fall
+    enhancement::AsymmetricFollower m_energyDeltaFollower{0.0f, 0.25f, 0.40f}; // 250ms rise, 400ms fall
 
     // Validation instrumentation
     float m_prevPhaseDelta = 0.0f;    // Previous frame phase delta for reversal detection
+
+    // 64-bin spectrum tracking for enhanced audio response
+    float m_bassWavelength = 0.0f;    ///< Sub-bass energy (bins 0-5) modulates pattern width
+    float m_trebleOverlay = 0.0f;     ///< Treble energy (bins 48-63) adds sparkle overlay
 };
 
 } // namespace ieffect

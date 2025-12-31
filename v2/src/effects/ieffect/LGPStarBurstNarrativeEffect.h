@@ -117,6 +117,13 @@ private:
     float m_texturePhase = 0.0f;        // Wave phase accumulator
     float m_textureIntensity = 0.0f;    // Layer intensity (0-1)
     float m_fluxSmooth = 0.0f;          // Smoothed spectral flux
+
+    // -----------------------------------------
+    // 64-bin Spectrum Enhancement
+    // BYPASSES story conductor for immediate kick/treble response
+    // -----------------------------------------
+    float m_kickBurst = 0.0f;           ///< Sub-bass energy (bins 0-5) for instant burst
+    float m_trebleShimmerIntensity = 0.0f;  ///< Treble energy (bins 48-63) for shimmer boost
 };
 
 } // namespace ieffect

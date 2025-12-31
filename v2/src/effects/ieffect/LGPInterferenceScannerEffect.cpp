@@ -15,11 +15,6 @@ namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
-static float smoothValue(float current, float target, float rise, float fall) {
-    float alpha = (target > current) ? rise : fall;
-    return current + (target - current) * alpha;
-}
-
 LGPInterferenceScannerEffect::LGPInterferenceScannerEffect()
     : m_scanPhase(0.0f)
 {
@@ -37,10 +32,15 @@ bool LGPInterferenceScannerEffect::init(plugins::EffectContext& ctx) {
     m_energyAvg = 0.0f;
     m_energyDelta = 0.0f;
     m_dominantBin = 0;
-    m_energyAvgSmooth = 0.0f;
-    m_energyDeltaSmooth = 0.0f;
     m_dominantBinSmooth = 0.0f;
-    m_speedScaleSmooth = 1.0f;
+    m_bassWavelength = 0.0f;
+    m_trebleOverlay = 0.0f;
+
+    // Initialize enhancement utilities
+    m_speedSpring.init(50.0f, 1.0f);  // stiffness=50, mass=1 (critically damped)
+    m_speedSpring.reset(1.0f);         // Start at base speed
+    m_energyAvgFollower.reset(0.0f);
+    m_energyDeltaFollower.reset(0.0f);
     return true;
 }
 
@@ -75,6 +75,34 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
                 }
             }
 
+            // =================================================================
+            // 64-bin Sub-Bass Wavelength Modulation (bins 0-5 = 110-155 Hz)
+            // Deep bass widens the interference pattern - kick drums create
+            // slow, majestic wave expansion instead of tight fringes.
+            // =================================================================
+            float bassSum = 0.0f;
+            for (uint8_t i = 0; i < 6; ++i) {
+                bassSum += ctx.audio.bin(i);
+            }
+            float bassNorm = bassSum / 6.0f;
+            // Smooth with fast attack, slower decay for punchy response
+            if (bassNorm > m_bassWavelength) {
+                m_bassWavelength = bassNorm;  // Instant attack
+            } else {
+                m_bassWavelength *= 0.85f;    // ~100ms decay
+            }
+
+            // =================================================================
+            // 64-bin Treble Overlay (bins 48-63 = 1.3-4.2 kHz)
+            // Hi-hat and cymbal energy adds high-frequency sparkle on top
+            // of the interference pattern.
+            // =================================================================
+            float trebleSum = 0.0f;
+            for (uint8_t i = 48; i < 64; ++i) {
+                trebleSum += ctx.audio.bin(i);
+            }
+            m_trebleOverlay = trebleSum / 16.0f;
+
             m_chromaEnergySum -= m_chromaEnergyHist[m_chromaHistIdx];
             m_chromaEnergyHist[m_chromaHistIdx] = energyNorm;
             m_chromaEnergySum += energyNorm;
@@ -92,47 +120,43 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
         m_energyDelta = 0.0f;
     }
 
-    float dt = enhancement::clampDtSeconds(ctx.deltaTimeMs * 0.001f);
-    float riseAvg = dt / (0.20f + dt);
-    float fallAvg = dt / (0.50f + dt);
-    // JOG-DIAL FIX: Slower delta response prevents jitter-induced speed changes
-    float riseDelta = dt / (0.25f + dt);   // 250ms rise (was 80ms)
-    float fallDelta = dt / (0.40f + dt);   // 400ms fall (was 250ms)
-    float alphaBin = dt / (0.25f + dt);
+    float dt = enhancement::getSafeDeltaSeconds(ctx.deltaTimeMs);
 
-    m_energyAvgSmooth = smoothValue(m_energyAvgSmooth, m_energyAvg, riseAvg, fallAvg);
-    m_energyDeltaSmooth = smoothValue(m_energyDeltaSmooth, m_energyDelta, riseDelta, fallDelta);
+    // True exponential smoothing with AsymmetricFollower (frame-rate independent)
+    float moodNorm = ctx.mood / 255.0f;  // 0=reactive, 1=smooth
+    float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, dt, moodNorm);
+    float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, dt, moodNorm);
+
+    // Dominant bin smoothing
+    float alphaBin = 1.0f - expf(-dt / 0.25f);  // True exponential, 250ms time constant
     m_dominantBinSmooth += (m_dominantBin - m_dominantBinSmooth) * alphaBin;
     if (m_dominantBinSmooth < 0.0f) m_dominantBinSmooth = 0.0f;
     if (m_dominantBinSmooth > 11.0f) m_dominantBinSmooth = 11.0f;
 
-    // JOG-DIAL FIX: Decouple speed from transients - use base speed + gentle energy modulation
+    // Speed modulation with Spring physics (natural momentum, no jitter)
     // Target range: 0.6 to 1.4 (2.3x variation max, not 10x)
-    float rawSpeedScale = 0.6f + 0.8f * m_energyAvgSmooth;  // Capture raw speed for validation
+    float rawSpeedScale = 0.6f + 0.8f * energyAvgSmooth;  // Capture raw speed for validation
     float speedTarget = rawSpeedScale;
     if (speedTarget > 1.4f) speedTarget = 1.4f;
 
-    // Slew limiter: max 0.3 units/sec change rate
-    const float maxSlewRate = 0.3f;
-    float slewLimit = maxSlewRate * dt;
-    float speedDelta = speedTarget - m_speedScaleSmooth;
-    if (speedDelta > slewLimit) speedDelta = slewLimit;
-    if (speedDelta < -slewLimit) speedDelta = -slewLimit;
-    m_speedScaleSmooth += speedDelta;
+    // Spring physics for speed modulation (replaces linear slew limiting)
+    float smoothedSpeed = m_speedSpring.update(speedTarget, dt);
+    if (smoothedSpeed > 1.4f) smoothedSpeed = 1.4f;  // Hard clamp
+    if (smoothedSpeed < 0.3f) smoothedSpeed = 0.3f;  // Prevent stalling
 
     // Capture phase before update for delta calculation
     float prevPhase = m_scanPhase;
     // FIX: Use 240.0f multiplier like ChevronWaves (was 3.6f via advancePhase - 67x slower!)
     // Fast phase accumulation makes forward motion perceptually dominant
-    m_scanPhase += speedNorm * 240.0f * m_speedScaleSmooth * dt;
+    m_scanPhase += speedNorm * 240.0f * smoothedSpeed * dt;
     if (m_scanPhase > 628.3f) m_scanPhase -= 628.3f;  // Wrap at 100*2π to prevent float overflow
     float phaseDelta = m_scanPhase - prevPhase;
 
     // Validation instrumentation
     VALIDATION_INIT(16);  // Effect ID 16
     VALIDATION_PHASE(m_scanPhase, phaseDelta);
-    VALIDATION_SPEED(rawSpeedScale, m_speedScaleSmooth);
-    VALIDATION_AUDIO(m_dominantBinSmooth, m_energyAvgSmooth, m_energyDeltaSmooth);
+    VALIDATION_SPEED(rawSpeedScale, smoothedSpeed);
+    VALIDATION_AUDIO(m_dominantBinSmooth, energyAvgSmooth, energyDeltaSmooth);
     VALIDATION_REVERSAL_CHECK(m_prevPhaseDelta, phaseDelta);
     VALIDATION_SUBMIT(::lightwaveos::validation::g_validationRing);
     m_prevPhaseDelta = phaseDelta;
@@ -142,10 +166,16 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
 
         // INTERFERENCE PATTERN: Two wavelengths create moiré beating patterns
         // sin(k*dist - phase) produces OUTWARD motion when phase increases
-        const float freqBase1 = 0.20f;  // Wavelength ~31 LEDs
-        const float freqBase2 = 0.35f;  // Wavelength ~18 LEDs (creates beating/moiré)
-        float wave1 = sinf(dist * freqBase1 - m_scanPhase);
-        float wave2 = sinf(dist * freqBase2 - m_scanPhase * 1.2f);  // Slight phase offset
+        //
+        // =====================================================================
+        // 64-bin BASS WAVELENGTH MODULATION: Sub-bass (bins 0-5) widens pattern
+        // On kick drum hits, the interference fringes expand majestically.
+        // Bass energy reduces frequency → larger wavelength → wider pattern.
+        // =====================================================================
+        float freq1 = 0.20f - 0.05f * m_bassWavelength;  // 0.20→0.15 (wider on bass)
+        float freq2 = 0.35f - 0.08f * m_bassWavelength;  // 0.35→0.27 (wider on bass)
+        float wave1 = sinf(dist * freq1 - m_scanPhase);
+        float wave2 = sinf(dist * freq2 - m_scanPhase * 1.2f);  // Slight phase offset
         float interference = wave1 + wave2 * 0.6f;  // Combine with weight for moiré
 
         // JOG-DIAL FIX: Audio modulates BRIGHTNESS, not speed - energyDelta drives intensity bursts
@@ -154,7 +184,16 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
 #else
         float fastFlux = 0.0f;
 #endif
-        float audioGain = 0.4f + 0.5f * m_energyAvgSmooth + 0.5f * m_energyDeltaSmooth + 0.3f * fastFlux;
+        float audioGain = 0.4f + 0.5f * energyAvgSmooth + 0.5f * energyDeltaSmooth + 0.3f * fastFlux;
+
+        // =====================================================================
+        // 64-bin TREBLE SHIMMER: High frequencies (bins 48-63) add sparkle
+        // Hi-hat and cymbal energy creates high-frequency brightness overlay.
+        // =====================================================================
+        if (m_trebleOverlay > 0.1f) {
+            float shimmer = m_trebleOverlay * sinf(dist * 1.5f + m_scanPhase * 4.0f);
+            audioGain += shimmer * 0.35f;
+        }
 
         // PERCUSSION BOOST: Add amplitude spike on snare hit for visual punch
 #if FEATURE_AUDIO_SYNC

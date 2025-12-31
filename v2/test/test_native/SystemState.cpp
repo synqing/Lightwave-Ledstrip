@@ -54,9 +54,9 @@ SystemState SystemState::withPalette(uint8_t paletteId) const {
 
 SystemState SystemState::withSpeed(uint8_t value) const {
     SystemState newState = *this;
-    // Clamp speed to valid range (1-50)
+    // Clamp speed to valid range (1-100)
     newState.speed = std::max(static_cast<uint8_t>(1),
-                              std::min(value, static_cast<uint8_t>(50)));
+                              std::min(value, static_cast<uint8_t>(100)));
     newState.version++;
     return newState;
 }
@@ -111,9 +111,9 @@ SystemState SystemState::withZoneSpeed(uint8_t zoneId, uint8_t speed) const {
     }
 
     SystemState newState = *this;
-    // Clamp speed to valid range (1-50)
+    // Clamp speed to valid range (1-100)
     newState.zones[zoneId].speed = std::max(static_cast<uint8_t>(1),
-                                             std::min(speed, static_cast<uint8_t>(50)));
+                                             std::min(speed, static_cast<uint8_t>(100)));
     newState.version++;
     return newState;
 }

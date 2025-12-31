@@ -19,7 +19,7 @@ struct ZoneState {
     uint8_t effectId;       // Current effect ID for this zone
     uint8_t paletteId;      // Current palette ID for this zone
     uint8_t brightness;     // Zone-specific brightness (0-255)
-    uint8_t speed;          // Zone-specific animation speed (1-50)
+    uint8_t speed;          // Zone-specific animation speed (1-100)
     bool enabled;           // Whether this zone is active
 
     // Default constructor with safe initial values
@@ -57,7 +57,7 @@ struct SystemState {
     uint8_t currentEffectId;     // Active effect (0-63)
     uint8_t currentPaletteId;    // Active palette (0-63)
     uint8_t brightness;          // Global brightness (0-255)
-    uint8_t speed;               // Global animation speed (1-50)
+    uint8_t speed;               // Global animation speed (1-100)
     uint8_t gHue;                // Auto-incrementing hue (0-255)
 
     // ==================== Visual Parameters ====================
@@ -123,7 +123,7 @@ struct SystemState {
 
     /**
      * Create modified copy with new speed
-     * @param value New speed (1-50)
+     * @param value New speed (1-100)
      * @return New state with updated speed
      */
     SystemState withSpeed(uint8_t value) const;
@@ -163,7 +163,7 @@ struct SystemState {
     /**
      * Create modified copy with zone speed changed
      * @param zoneId Zone index (0-3)
-     * @param speed New speed for zone (1-50)
+     * @param speed New speed for zone (1-100)
      * @return New state with updated zone speed
      */
     SystemState withZoneSpeed(uint8_t zoneId, uint8_t speed) const;

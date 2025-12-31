@@ -230,6 +230,18 @@ public:
      */
     bool setHue(uint8_t hue);
 
+    /**
+     * @brief Set audio mood (Sensory Bridge pattern)
+     * @param mood 0-255: 0=reactive, 255=smooth
+     */
+    bool setMood(uint8_t mood);
+
+    /**
+     * @brief Set fade amount (trail effect)
+     * @param fadeAmount 0-255: 0=no fade, higher=faster fade
+     */
+    bool setFadeAmount(uint8_t fadeAmount);
+
     // ========================================================================
     // Diagnostics
     // ========================================================================

@@ -58,6 +58,8 @@ enum class MessageType : uint8_t {
     SET_COMPLEXITY      = 0x06,
     SET_VARIATION       = 0x07,
     SET_HUE             = 0x08,
+    SET_MOOD            = 0x09,  // Sensory Bridge mood (0-255): reactive to smooth
+    SET_FADE_AMOUNT     = 0x0A,  // Trail fade speed (0-255): 0=no fade, higher=faster
 
     // Zone commands (0x20-0x3F)
     ZONE_ENABLE         = 0x20,

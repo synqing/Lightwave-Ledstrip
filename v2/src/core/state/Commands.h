@@ -101,7 +101,7 @@ public:
 
     bool validate(const SystemState& current) const override {
         (void)current;
-        return m_speed >= 1 && m_speed <= 50;
+        return m_speed >= 1 && m_speed <= 100;
     }
 
 private:
@@ -232,7 +232,7 @@ public:
 
     bool validate(const SystemState& current) const override {
         (void)current;
-        return m_zoneId < MAX_ZONES && m_speed >= 1 && m_speed <= 50;
+        return m_zoneId < MAX_ZONES && m_speed >= 1 && m_speed <= 100;
     }
 
 private:

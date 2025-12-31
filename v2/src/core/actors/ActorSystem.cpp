@@ -400,6 +400,26 @@ bool ActorSystem::setHue(uint8_t hue)
     return m_renderer->send(msg, pdMS_TO_TICKS(10));
 }
 
+bool ActorSystem::setMood(uint8_t mood)
+{
+    if (!m_renderer || !m_renderer->isRunning()) {
+        return false;
+    }
+
+    Message msg(MessageType::SET_MOOD, mood);
+    return m_renderer->send(msg, pdMS_TO_TICKS(10));
+}
+
+bool ActorSystem::setFadeAmount(uint8_t fadeAmount)
+{
+    if (!m_renderer || !m_renderer->isRunning()) {
+        return false;
+    }
+
+    Message msg(MessageType::SET_FADE_AMOUNT, fadeAmount);
+    return m_renderer->send(msg, pdMS_TO_TICKS(10));
+}
+
 // ============================================================================
 // Diagnostics
 // ============================================================================

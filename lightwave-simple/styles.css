@@ -390,6 +390,39 @@ body {
     align-items: center;
 }
 
+/* Slider with labels (Reactive/Smooth for mood) */
+.slider-container.with-labels {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--space-sm);
+}
+
+.slider-container.with-labels .slider {
+    flex: 1;
+    min-width: 60%;
+}
+
+.slider-label-left,
+.slider-label-right {
+    font-family: var(--font-display);
+    font-size: 0.625rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+}
+
+.slider-container.with-labels .slider-value {
+    width: 100%;
+    text-align: center;
+}
+
+/* Full-width card variant */
+.control-card.full-width {
+    flex: 1 0 100%;
+}
+
 .slider {
     width: 100%;
     height: 6px;

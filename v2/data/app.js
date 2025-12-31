@@ -111,6 +111,8 @@ const state = {
     pendingEffectChange: null,     // Timer ID when effect change is pending
     pendingBrightnessChange: null, // Timer ID when brightness change is pending
     pendingSpeedChange: null,      // Timer ID when speed change is pending
+    pendingMoodChange: null,       // Timer ID when mood change is pending
+    pendingFadeChange: null,       // Timer ID when fade change is pending
 
     // Current values (synced from server)
     effectId: 0,
@@ -119,6 +121,8 @@ const state = {
     paletteName: '',
     brightness: 128,
     speed: 25,
+    mood: 128,  // Sensory Bridge: 0=reactive, 255=smooth
+    fadeAmount: 20,  // Trail fade amount
 
     // Beat tracking
     currentBpm: 0,
@@ -131,8 +135,13 @@ const state = {
     BRIGHTNESS_MAX: 255,
     BRIGHTNESS_STEP: 10,
     SPEED_MIN: 1,
-    SPEED_MAX: 50,
+    SPEED_MAX: 100,  // Extended range
     SPEED_STEP: 1,
+    MOOD_MIN: 0,
+    MOOD_MAX: 255,
+    MOOD_STEP: 1,
+    FADE_MIN: 0,
+    FADE_MAX: 255,
 
     // Reconnect interval
     RECONNECT_MS: 3000
@@ -682,6 +691,79 @@ function onSpeedChange() {
     }
 }
 
+// Mood control - slider handler (Sensory Bridge: 0=reactive, 255=smooth)
+let moodUpdateTimer = null;
+function onMoodChange() {
+    const newVal = parseInt(elements.moodSlider.value);
+    if (newVal !== state.mood) {
+        state.mood = newVal;
+        updateMoodUI();
+
+        // Set pending flag to ignore stale server updates while dragging
+        if (state.pendingMoodChange) clearTimeout(state.pendingMoodChange);
+        state.pendingMoodChange = setTimeout(() => { state.pendingMoodChange = null; }, 1000);
+
+        // Debounce API calls while dragging
+        if (moodUpdateTimer) {
+            clearTimeout(moodUpdateTimer);
+        }
+
+        moodUpdateTimer = setTimeout(() => {
+            // Try WebSocket
+            if (state.connected && state.ws && state.ws.readyState === WebSocket.OPEN) {
+                send({ type: 'setMood', value: newVal });
+            }
+
+            // REST API backup
+            fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/parameters`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mood: newVal })
+            })
+            .then(data => {
+                if (data.success) {
+                    log(`[REST] Mood set to: ${newVal}`);
+                }
+            })
+            .catch(e => log('[REST] Error after retries: ' + e.message));
+        }, 150);
+    }
+}
+
+// Fade control - slider handler
+let fadeUpdateTimer = null;
+function onFadeChange() {
+    const newVal = parseInt(elements.fadeSlider.value);
+    if (newVal !== state.fadeAmount) {
+        state.fadeAmount = newVal;
+        updateFadeUI();
+
+        // Set pending flag to ignore stale server updates while dragging
+        if (state.pendingFadeChange) clearTimeout(state.pendingFadeChange);
+        state.pendingFadeChange = setTimeout(() => { state.pendingFadeChange = null; }, 1000);
+
+        // Debounce API calls while dragging
+        if (fadeUpdateTimer) {
+            clearTimeout(fadeUpdateTimer);
+        }
+
+        fadeUpdateTimer = setTimeout(() => {
+            // REST API
+            fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/parameters`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fadeAmount: newVal })
+            })
+            .then(data => {
+                if (data.success) {
+                    log(`[REST] Fade set to: ${newVal}`);
+                }
+            })
+            .catch(e => log('[REST] Error after retries: ' + e.message));
+        }, 150);
+    }
+}
+
 // ─────────────────────────────────────────────────────────────
 // UI Update Functions
 // ─────────────────────────────────────────────────────────────
@@ -740,6 +822,14 @@ function fetchCurrentParameters() {
                         log(`[REST] ✅ Palette: ${state.paletteName} (${paletteId})`);
                     }
                 }
+                if (data.data.mood !== undefined) {
+                    state.mood = data.data.mood;
+                    updateMoodUI();
+                }
+                if (data.data.fadeAmount !== undefined) {
+                    state.fadeAmount = data.data.fadeAmount;
+                    updateFadeUI();
+                }
             }
         })
         .catch(e => {
@@ -776,12 +866,32 @@ function updateSpeedUI() {
     }
 }
 
+function updateMoodUI() {
+    if (elements.moodSlider) {
+        elements.moodSlider.value = state.mood;
+    }
+    if (elements.moodValue) {
+        elements.moodValue.textContent = state.mood;
+    }
+}
+
+function updateFadeUI() {
+    if (elements.fadeSlider) {
+        elements.fadeSlider.value = state.fadeAmount;
+    }
+    if (elements.fadeValue) {
+        elements.fadeValue.textContent = state.fadeAmount;
+    }
+}
+
 function updateAllUI() {
     updateConnectionUI();
     updatePatternUI();
     updatePaletteUI();
     updateBrightnessUI();
     updateSpeedUI();
+    updateMoodUI();
+    updateFadeUI();
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -844,6 +954,10 @@ function init() {
     elements.brightnessValue = document.getElementById('brightnessValue');
     elements.speedSlider = document.getElementById('speedSlider');
     elements.speedValue = document.getElementById('speedValue');
+    elements.moodSlider = document.getElementById('moodSlider');
+    elements.moodValue = document.getElementById('moodValue');
+    elements.fadeSlider = document.getElementById('fadeSlider');
+    elements.fadeValue = document.getElementById('fadeValue');
     elements.configBar = document.getElementById('configBar');
     elements.deviceHost = document.getElementById('deviceHost');
     elements.connectBtn = document.getElementById('connectBtn');
@@ -865,6 +979,14 @@ function init() {
     if (elements.speedSlider) {
         elements.speedSlider.addEventListener('input', onSpeedChange);
         elements.speedSlider.addEventListener('change', onSpeedChange);
+    }
+    if (elements.moodSlider) {
+        elements.moodSlider.addEventListener('input', onMoodChange);
+        elements.moodSlider.addEventListener('change', onMoodChange);
+    }
+    if (elements.fadeSlider) {
+        elements.fadeSlider.addEventListener('input', onFadeChange);
+        elements.fadeSlider.addEventListener('change', onFadeChange);
     }
 
     // Check if we're running on the device or remotely

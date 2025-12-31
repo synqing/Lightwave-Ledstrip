@@ -433,6 +433,44 @@ body {
     text-align: center;
 }
 
+/* Slider with labels (e.g., Mood: Reactive <--> Smooth) */
+.slider-container {
+    position: relative;
+}
+
+.slider-label-left,
+.slider-label-right {
+    font-family: var(--font-display);
+    font-size: 0.625rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+}
+
+.slider-label-left {
+    position: absolute;
+    left: 0;
+    top: -1.25rem;
+}
+
+.slider-label-right {
+    position: absolute;
+    right: 0;
+    top: -1.25rem;
+}
+
+/* Full-width card (spans entire row) */
+.control-card.full-width {
+    flex: 1 0 100%;
+}
+
+/* Adjust mood slider container for labels */
+.slider-card.full-width .slider-container {
+    padding-top: 1.5rem;
+}
+
 /* Mobile Responsive (iPhone 13 and smaller) */
 @media (max-width: 480px) {
     .controls-container {

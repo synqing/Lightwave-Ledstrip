@@ -111,6 +111,7 @@ const state = {
     pendingEffectChange: null,     // Timer ID when effect change is pending
     pendingBrightnessChange: null, // Timer ID when brightness change is pending
     pendingSpeedChange: null,      // Timer ID when speed change is pending
+    pendingMoodChange: null,       // Timer ID when mood change is pending
 
     // Current values (synced from server)
     effectId: 0,
@@ -119,6 +120,7 @@ const state = {
     paletteName: '',
     brightness: 128,
     speed: 25,
+    mood: 128,  // Sensory Bridge mood: 0=reactive, 255=smooth
 
     // Beat tracking
     currentBpm: 0,
@@ -131,8 +133,10 @@ const state = {
     BRIGHTNESS_MAX: 255,
     BRIGHTNESS_STEP: 10,
     SPEED_MIN: 1,
-    SPEED_MAX: 50,
+    SPEED_MAX: 100,  // Extended range (was 50)
     SPEED_STEP: 1,
+    MOOD_MIN: 0,
+    MOOD_MAX: 255,
 
     // Reconnect interval
     RECONNECT_MS: 3000
@@ -650,22 +654,22 @@ function onSpeedChange() {
     if (newVal !== state.speed) {
         state.speed = newVal;
         updateSpeedUI();
-        
+
         // Set pending flag to ignore stale server updates while dragging
         if (state.pendingSpeedChange) clearTimeout(state.pendingSpeedChange);
         state.pendingSpeedChange = setTimeout(() => { state.pendingSpeedChange = null; }, 1000);
-        
+
         // Debounce API calls while dragging
         if (speedUpdateTimer) {
             clearTimeout(speedUpdateTimer);
         }
-        
+
         speedUpdateTimer = setTimeout(() => {
             // Try WebSocket
             if (state.connected && state.ws && state.ws.readyState === WebSocket.OPEN) {
                 send({ type: 'setSpeed', value: newVal });
             }
-            
+
             // REST API backup
             fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/parameters`, {
                 method: 'POST',
@@ -675,6 +679,45 @@ function onSpeedChange() {
             .then(data => {
                 if (data.success) {
                     log(`[REST] Speed set to: ${newVal}`);
+                }
+            })
+            .catch(e => log('[REST] Error after retries: ' + e.message));
+        }, 150);
+    }
+}
+
+// Mood control - slider handler (Sensory Bridge: 0=reactive, 255=smooth)
+let moodUpdateTimer = null;
+function onMoodChange() {
+    const newVal = parseInt(elements.moodSlider.value);
+    if (newVal !== state.mood) {
+        state.mood = newVal;
+        updateMoodUI();
+
+        // Set pending flag to ignore stale server updates while dragging
+        if (state.pendingMoodChange) clearTimeout(state.pendingMoodChange);
+        state.pendingMoodChange = setTimeout(() => { state.pendingMoodChange = null; }, 1000);
+
+        // Debounce API calls while dragging
+        if (moodUpdateTimer) {
+            clearTimeout(moodUpdateTimer);
+        }
+
+        moodUpdateTimer = setTimeout(() => {
+            // Try WebSocket
+            if (state.connected && state.ws && state.ws.readyState === WebSocket.OPEN) {
+                send({ type: 'setMood', value: newVal });
+            }
+
+            // REST API backup
+            fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/parameters`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mood: newVal })
+            })
+            .then(data => {
+                if (data.success) {
+                    log(`[REST] Mood set to: ${newVal}`);
                 }
             })
             .catch(e => log('[REST] Error after retries: ' + e.message));
@@ -715,7 +758,7 @@ function getPaletteName(paletteId) {
     return `Palette ${paletteId}`;
 }
 
-// Fetch current parameters (including paletteId) from API
+// Fetch current parameters (including paletteId, mood) from API
 function fetchCurrentParameters() {
     const url = `http://${state.deviceHost || '192.168.0.16'}/api/v1/parameters`;
     fetchWithRetry(url)
@@ -729,6 +772,11 @@ function fetchCurrentParameters() {
                 if (data.data.speed !== undefined) {
                     state.speed = data.data.speed;
                     updateSpeedUI();
+                }
+                if (data.data.mood !== undefined) {
+                    state.mood = data.data.mood;
+                    updateMoodUI();
+                    log(`[REST] ✅ Mood: ${state.mood}`);
                 }
                 if (data.data.paletteId !== undefined) {
                     const paletteId = parseInt(data.data.paletteId);
@@ -776,12 +824,22 @@ function updateSpeedUI() {
     }
 }
 
+function updateMoodUI() {
+    if (elements.moodSlider) {
+        elements.moodSlider.value = state.mood;
+    }
+    if (elements.moodValue) {
+        elements.moodValue.textContent = state.mood;
+    }
+}
+
 function updateAllUI() {
     updateConnectionUI();
     updatePatternUI();
     updatePaletteUI();
     updateBrightnessUI();
     updateSpeedUI();
+    updateMoodUI();
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -844,6 +902,8 @@ function init() {
     elements.brightnessValue = document.getElementById('brightnessValue');
     elements.speedSlider = document.getElementById('speedSlider');
     elements.speedValue = document.getElementById('speedValue');
+    elements.moodSlider = document.getElementById('moodSlider');
+    elements.moodValue = document.getElementById('moodValue');
     elements.configBar = document.getElementById('configBar');
     elements.deviceHost = document.getElementById('deviceHost');
     elements.connectBtn = document.getElementById('connectBtn');
@@ -865,6 +925,10 @@ function init() {
     if (elements.speedSlider) {
         elements.speedSlider.addEventListener('input', onSpeedChange);
         elements.speedSlider.addEventListener('change', onSpeedChange);
+    }
+    if (elements.moodSlider) {
+        elements.moodSlider.addEventListener('input', onMoodChange);
+        elements.moodSlider.addEventListener('change', onMoodChange);
     }
 
     // Check if we're running on the device or remotely

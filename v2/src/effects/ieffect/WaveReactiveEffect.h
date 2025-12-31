@@ -1,20 +1,22 @@
 /**
- * @file WaveEffect.h
- * @brief Wave - Audio-reactive sine wave propagation
+ * @file WaveReactiveEffect.h
+ * @brief Wave Reactive - Energy-accumulating wave with smooth audio-driven motion
  *
- * Effect ID: 7
+ * Effect ID: TBD (new effect)
  * Family: FLUID_PLASMA
  * Tags: CENTER_ORIGIN | TRAVELING | AUDIO_REACTIVE
  *
- * Audio Integration:
- * - RMS → wave amplitude (louder = taller waves)
- * - Beat phase → wave speed (synced to tempo when confident)
+ * Pattern: REACTIVE (Sensory Bridge Kaleidoscope-style)
+ * - Motion: Energy ACCUMULATION (pos += energy, not speed = metric)
+ * - Audio: RMS → accumulated energy → wave speed boost
  * - Flux → brightness boost on transients
- * - Graceful fallback when beat tracking unreliable
+ *
+ * Key insight: Audio-driven motion is VALID when using accumulation
+ * rather than directly setting speed from noisy metrics.
  *
  * Instance State:
  * - m_waveOffset: Wave phase accumulator
- * - m_fallbackPhase: For tempo fallback
+ * - m_energyAccum: Audio energy accumulator (Kaleidoscope pattern)
  * - m_lastFlux, m_fluxBoost: Transient detection
  */
 
@@ -28,10 +30,10 @@ namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
-class WaveEffect : public plugins::IEffect {
+class WaveReactiveEffect : public plugins::IEffect {
 public:
-    WaveEffect();
-    ~WaveEffect() override = default;
+    WaveReactiveEffect();
+    ~WaveReactiveEffect() override = default;
 
     // IEffect interface
     bool init(plugins::EffectContext& ctx) override;
@@ -43,8 +45,10 @@ private:
     // Wave state
     uint32_t m_waveOffset;      // Wave phase accumulator
 
-    // Audio fallback state
-    float m_fallbackPhase;      // Free-running phase when tempo confidence low
+    // Reactive pattern state (Kaleidoscope-style)
+    float m_energyAccum;        // Energy accumulator - smooths audio input
+
+    // Transient state
     float m_lastFlux;           // Previous flux for transient detection
     float m_fluxBoost;          // Brightness boost from flux transients
 };

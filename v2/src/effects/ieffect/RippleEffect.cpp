@@ -44,6 +44,8 @@ bool RippleEffect::init(plugins::EffectContext& ctx) {
     }
     memset(m_radial, 0, sizeof(m_radial));
     memset(m_radialAux, 0, sizeof(m_radialAux));
+    m_kickPulse = 0.0f;
+    m_trebleShimmer = 0.0f;
     return true;
 }
 
@@ -53,8 +55,10 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
     // STATEFUL EFFECT: This effect maintains ripple state (position, speed, hue) across frames
     // in the m_ripples[] array. Ripples spawn at center and expand outward. Identified
     // in PatternRegistry::isStatefulEffect().
-    
-    fadeToBlackBy(m_radial, HALF_LENGTH, 20);
+
+    // INCREASED DECAY: Faster fade (20→45) prevents white accumulation from
+    // overlapping ripples with WHITE_HEAVY palettes. ~2.25x faster decay.
+    fadeToBlackBy(m_radial, HALF_LENGTH, 45);
 
     const bool hasAudio = ctx.audio.available;
     bool newHop = false;
@@ -63,6 +67,32 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
         newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
         if (newHop) {
             m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+
+            // =====================================================================
+            // 64-bin Sub-Bass Kick Detection (bins 0-5 = 110-155 Hz)
+            // Deep kick drums that the 12-bin chromagram misses entirely.
+            // Gives powerful punch on bass drops - instant attack, fast decay.
+            // =====================================================================
+            float kickSum = 0.0f;
+            for (uint8_t i = 0; i < 6; ++i) {
+                kickSum += ctx.audio.bin(i);
+            }
+            float kickAvg = kickSum / 6.0f;
+            if (kickAvg > m_kickPulse) {
+                m_kickPulse = kickAvg;  // Instant attack
+            } else {
+                m_kickPulse *= 0.80f;   // ~80ms decay at 60fps for punchy response
+            }
+
+            // =====================================================================
+            // 64-bin Treble Shimmer (bins 48-63 = 1.3-4.2 kHz)
+            // Hi-hat and cymbal energy for wavefront sparkle enhancement.
+            // =====================================================================
+            float trebleSum = 0.0f;
+            for (uint8_t i = 48; i < 64; ++i) {
+                trebleSum += ctx.audio.bin(i);
+            }
+            m_trebleShimmer = trebleSum / 16.0f;
         }
     }
 #endif
@@ -133,6 +163,34 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
     }
 #endif
 
+    // =========================================================================
+    // UNIFIED SPEED SCALING - all ripple types use ctx.speed
+    // Range: 1.0 (slow) to 3.0 (fast) based on speed slider
+    // =========================================================================
+    const float speedScale = 1.0f + 2.0f * (ctx.speed / 50.0f);
+
+    // =========================================================================
+    // 64-bin KICK-TRIGGERED RIPPLE (sub-bass bins 0-5)
+    // Most powerful ripple spawn - deep bass drops that chromagram misses.
+    // Bypasses normal spawn chance for immediate punchy response.
+    // =========================================================================
+#if FEATURE_AUDIO_SYNC
+    if (hasAudio && m_kickPulse > 0.5f && m_spawnCooldown == 0) {
+        for (uint8_t r = 0; r < MAX_RIPPLES; ++r) {
+            if (!m_ripples[r].active) {
+                m_ripples[r].radius = 0.0f;      // Start at center
+                m_ripples[r].intensity = 255;    // Max intensity for bass punch
+                m_ripples[r].speed = speedScale; // Uses unified speed from slider
+                // Bass-driven warm hue (palette index based on kick intensity)
+                m_ripples[r].hue = ctx.gHue + (uint8_t)(m_kickPulse * 30.0f) + chordHueShift;
+                m_ripples[r].active = true;
+                m_spawnCooldown = 2;             // Prevent overlapping bass ripples
+                break;
+            }
+        }
+    }
+#endif
+
     // Force ripple spawn on snare hit (percussion trigger)
 #if FEATURE_AUDIO_SYNC
     if (hasAudio && ctx.audio.isSnareHit()) {
@@ -140,7 +198,7 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
             if (!m_ripples[r].active) {
                 m_ripples[r].radius = 0.0f;      // Reset at center
                 m_ripples[r].intensity = 255;    // Max intensity for snare burst
-                m_ripples[r].speed = 3.5f;       // Fast propagation
+                m_ripples[r].speed = speedScale; // Uses unified speed from slider
                 // Use chord root note for hue (0-11 mapped to palette index range)
                 m_ripples[r].hue = (uint8_t)((ctx.audio.rootNote() * 21) + chordHueShift);
                 m_ripples[r].active = true;
@@ -154,20 +212,21 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
     if (spawnChance > 0 && m_spawnCooldown == 0 && random8() < spawnChance) {
         for (int i = 0; i < MAX_RIPPLES; i++) {
             if (!m_ripples[i].active) {
-                float speedBase = 0.5f + (random8() / 255.0f) * 2.0f;
-                float speedBoost = 1.0f;
+                // Random variation around speedScale (0.5 to 1.5x speedScale)
+                float speedVariation = 0.5f + (random8() / 255.0f);
                 uint8_t intensity = 180;
                 if (hasAudio) {
                     float energy = energyAvg;
-                    speedBoost += energy * 1.5f + energyDelta * 1.5f;
+                    // Energy boost adds 0 to 0.5x variation
+                    speedVariation += (energy * 0.3f + energyDelta * 0.2f);
                     float intensityF = 100.0f + energy * 155.0f + energyDelta * 100.0f;
                     if (intensityF > 255.0f) intensityF = 255.0f;
                     intensity = (uint8_t)intensityF;
                 }
 
                 m_ripples[i].radius = 0;
-                m_ripples[i].speed = speedBase * speedBoost;
-                if (m_ripples[i].speed > 4.0f) m_ripples[i].speed = 4.0f;
+                m_ripples[i].speed = speedScale * speedVariation;
+                if (m_ripples[i].speed > speedScale * 1.5f) m_ripples[i].speed = speedScale * 1.5f;
                 if (hasAudio) {
                     // Apply chord warmth shift to chroma-based hue
                     float hueBase = (dominantBin * (255.0f / 12.0f)) + ctx.gHue;
@@ -203,6 +262,17 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
                 uint8_t edgeFade = (uint8_t)((HALF_LENGTH - m_ripples[r].radius) * 255.0f / HALF_LENGTH);
                 brightness = scale8(brightness, edgeFade);
                 brightness = scale8(brightness, m_ripples[r].intensity);
+
+                // =========================================================
+                // 64-bin TREBLE SHIMMER on wavefront (bins 48-63)
+                // Hi-hat/cymbal energy adds sparkle to the leading edge.
+                // Stronger at wavefront (waveAbs~0), fades toward trailing edge.
+                // =========================================================
+                if (m_trebleShimmer > 0.1f) {
+                    float shimmerFade = 1.0f - (waveAbs / 3.0f);  // 1.0 at front, 0.0 at back
+                    uint8_t shimmerBoost = (uint8_t)(m_trebleShimmer * shimmerFade * 60.0f);
+                    brightness = qadd8(brightness, shimmerBoost);
+                }
 
                 CRGB color = ctx.palette.getColor(
                     m_ripples[r].hue + (uint8_t)dist,

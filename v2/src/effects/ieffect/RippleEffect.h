@@ -54,6 +54,10 @@ private:
     // Radial LED history buffer (centre-out)
     CRGB m_radial[HALF_LENGTH];
     CRGB m_radialAux[HALF_LENGTH];
+
+    // 64-bin spectrum tracking for enhanced audio response
+    float m_kickPulse = 0.0f;       ///< Sub-bass energy (bins 0-5) for kick-triggered ripples
+    float m_trebleShimmer = 0.0f;   ///< Treble energy (bins 48-63) for wavefront sparkle
 };
 
 } // namespace ieffect

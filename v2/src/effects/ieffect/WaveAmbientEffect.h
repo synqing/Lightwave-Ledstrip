@@ -1,20 +1,18 @@
 /**
- * @file WaveEffect.h
- * @brief Wave - Audio-reactive sine wave propagation
+ * @file WaveAmbientEffect.h
+ * @brief Wave Ambient - Time-driven sine wave with audio amplitude modulation
  *
  * Effect ID: 7
  * Family: FLUID_PLASMA
- * Tags: CENTER_ORIGIN | TRAVELING | AUDIO_REACTIVE
+ * Tags: CENTER_ORIGIN | TRAVELING | AUDIO_BRIGHTNESS
  *
- * Audio Integration:
- * - RMS → wave amplitude (louder = taller waves)
- * - Beat phase → wave speed (synced to tempo when confident)
- * - Flux → brightness boost on transients
- * - Graceful fallback when beat tracking unreliable
+ * Pattern: AMBIENT (Sensory Bridge Bloom-style)
+ * - Motion: TIME-BASED (user speed parameter only)
+ * - Audio: RMS → amplitude, Flux → brightness boost
+ * - NO audio→speed coupling (prevents jitter)
  *
  * Instance State:
  * - m_waveOffset: Wave phase accumulator
- * - m_fallbackPhase: For tempo fallback
  * - m_lastFlux, m_fluxBoost: Transient detection
  */
 
@@ -28,10 +26,10 @@ namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
-class WaveEffect : public plugins::IEffect {
+class WaveAmbientEffect : public plugins::IEffect {
 public:
-    WaveEffect();
-    ~WaveEffect() override = default;
+    WaveAmbientEffect();
+    ~WaveAmbientEffect() override = default;
 
     // IEffect interface
     bool init(plugins::EffectContext& ctx) override;
@@ -43,8 +41,7 @@ private:
     // Wave state
     uint32_t m_waveOffset;      // Wave phase accumulator
 
-    // Audio fallback state
-    float m_fallbackPhase;      // Free-running phase when tempo confidence low
+    // Audio state (brightness only, NOT speed)
     float m_lastFlux;           // Previous flux for transient detection
     float m_fluxBoost;          // Brightness boost from flux transients
 };

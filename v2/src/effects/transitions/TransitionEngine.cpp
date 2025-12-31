@@ -746,11 +746,12 @@ void TransitionEngine::applyNuclear() {
             );
 
             // Add radiation glow (white/yellow flash)
+            // PRE-SCALE: Reduce intensity by 65% to prevent white accumulation
             if (radiation > 0.01f) {
-                uint8_t radByte = (uint8_t)(radiation * 200.0f);
+                uint8_t radByte = (uint8_t)(radiation * 200.0f * 0.65f);
                 color.r = qadd8(color.r, radByte);
-                color.g = qadd8(color.g, (uint8_t)(radByte * 0.9f));
-                color.b = qadd8(color.b, (uint8_t)(radByte * 0.3f));
+                color.g = qadd8(color.g, scale8(radByte, 230));  // 0.9 * 255
+                color.b = qadd8(color.b, scale8(radByte, 77));   // 0.3 * 255
             }
 
             m_outputBuffer[offset + i] = color;
@@ -832,10 +833,11 @@ void TransitionEngine::applyStargate() {
             );
 
             // Add portal glow (blue/white)
+            // PRE-SCALE: Reduce intensity by 70% to prevent white accumulation
             if (portalGlow > 0.01f) {
-                uint8_t glowByte = (uint8_t)(portalGlow * 180.0f);
-                color.r = qadd8(color.r, (uint8_t)(glowByte * 0.4f));
-                color.g = qadd8(color.g, (uint8_t)(glowByte * 0.7f));
+                uint8_t glowByte = (uint8_t)(portalGlow * 180.0f * 0.70f);
+                color.r = qadd8(color.r, scale8(glowByte, 102));  // 0.4 * 255
+                color.g = qadd8(color.g, scale8(glowByte, 179));  // 0.7 * 255
                 color.b = qadd8(color.b, glowByte);
             }
 

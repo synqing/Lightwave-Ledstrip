@@ -164,6 +164,59 @@ Key requirements:
 
 **Frequency spectrum isolation is AMATEUR DSP. Musical intelligence has evolved past it.**
 
+---
+
+## Protected Files - CRITICAL CODE
+
+**⚠️ STOP: These files contain critical infrastructure that has caused recurring bugs when modified carelessly.**
+
+Before modifying ANY protected file, agents MUST:
+1. **Read the ENTIRE file** and understand the state machine/architecture
+2. **Read `.claude/harness/PROTECTED_FILES.md`** for known landmines and required tests
+3. **Run all related unit tests** before AND after changes
+4. **Understand FreeRTOS synchronization** if the file uses mutexes/semaphores/event groups
+
+### WiFiManager (v2/src/network/WiFiManager.*)
+
+**CRITICALITY: 🔴 CRITICAL**
+
+**LANDMINE WARNING:** FreeRTOS EventGroup bits **persist across interrupted connections**. This has caused the "Connected! IP: 0.0.0.0" bug MULTIPLE TIMES.
+
+**MANDATORY RULES:**
+- `setState()` **MUST** call `xEventGroupClearBits()` when entering `STATE_WIFI_CONNECTING`
+- Clear bits: `EVENT_CONNECTED | EVENT_GOT_IP | EVENT_CONNECTION_FAILED`
+- All state transitions **MUST** be mutex-protected via `m_stateMutex`
+- Never assume EventGroup bits are clean - they persist!
+
+**The Fix (lines 499-505 in WiFiManager.cpp) is LOAD-BEARING:**
+```cpp
+if (newState == STATE_WIFI_CONNECTING) {
+    // CRITICAL FIX: Clear stale event bits
+    if (m_wifiEventGroup) {
+        xEventGroupClearBits(m_wifiEventGroup,
+            EVENT_CONNECTED | EVENT_GOT_IP | EVENT_CONNECTION_FAILED);
+    }
+}
+```
+
+**Required Test Before Commit:**
+```bash
+pio run -e esp32dev_wifi -t upload
+# Then verify: WiFi connects WITHOUT "IP: 0.0.0.0" appearing first
+```
+
+**Why This Matters:** Stale EventGroup bits cause false-positive "Connected" states that waste HOURS of debugging. This bug has resurfaced 3+ times.
+
+### WebServer (v2/src/network/WebServer.*)
+
+**CRITICALITY: 🟠 HIGH**
+
+- Rate limiting state must be thread-safe
+- WebSocket handlers run on different task than HTTP handlers
+- AsyncWebServer callbacks are NOT synchronized - use mutexes
+
+---
+
 ## Design Philosophy
 
 - **CENTER ORIGIN**: Effects radiate from LED 79/80 because the LGP creates interference patterns - edge-originating effects look wrong on this hardware

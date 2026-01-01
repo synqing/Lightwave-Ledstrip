@@ -171,15 +171,23 @@ Get zone system status.
 ```json
 {
   "enabled": true,
-  "zoneCount": 4,
+  "zoneCount": 3,
+  "segments": [
+    {
+      "zoneId": 0,
+      "s1LeftStart": 65,
+      "s1LeftEnd": 79,
+      "s1RightStart": 80,
+      "s1RightEnd": 94,
+      "totalLeds": 30
+    }
+  ],
   "zones": [
     {
       "id": 0,
       "enabled": true,
       "effectId": 5,
       "effectName": "Fire",
-      "startLed": 0,
-      "endLed": 39,
       "brightness": 200,
       "speed": 25
     }
@@ -197,17 +205,25 @@ Enable or disable zone system.
 }
 ```
 
-#### POST /api/zone/count
-Set number of active zones.
+#### POST /api/v1/zones/layout
+Set zone layout using custom segment definitions. **Note**: This replaces the deprecated `/api/zone/count` endpoint.
 
 **Request Body**:
 ```json
 {
-  "count": 4
+  "zones": [
+    {
+      "zoneId": 0,
+      "s1LeftStart": 65,
+      "s1LeftEnd": 79,
+      "s1RightStart": 80,
+      "s1RightEnd": 94
+    }
+  ]
 }
 ```
 
-**Range**: 1-4
+**See**: [API_V1.md](API_V1.md) for full documentation of zone layout endpoints and validation rules.
 
 #### POST /api/zone/config
 Configure a specific zone.

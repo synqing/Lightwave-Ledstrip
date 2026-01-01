@@ -589,6 +589,426 @@ curl -X POST http://lightwaveos.local/api/v1/transitions/trigger \
 
 ---
 
+### Zones Endpoints
+
+#### `GET /api/v1/zones`
+
+Get all zone configurations.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "enabled": true,
+    "zoneCount": 3,
+    "segments": [
+      {
+        "zoneId": 0,
+        "s1LeftStart": 65,
+        "s1LeftEnd": 79,
+        "s1RightStart": 80,
+        "s1RightEnd": 94,
+        "totalLeds": 30
+      },
+      {
+        "zoneId": 1,
+        "s1LeftStart": 20,
+        "s1LeftEnd": 64,
+        "s1RightStart": 95,
+        "s1RightEnd": 139,
+        "totalLeds": 90
+      },
+      {
+        "zoneId": 2,
+        "s1LeftStart": 0,
+        "s1LeftEnd": 19,
+        "s1RightStart": 140,
+        "s1RightEnd": 159,
+        "totalLeds": 40
+      }
+    ],
+    "zones": [
+      {
+        "id": 0,
+        "enabled": true,
+        "effectId": 5,
+        "effectName": "Shockwave",
+        "brightness": 200,
+        "speed": 20,
+        "paletteId": 0,
+        "blendMode": 0,
+        "blendModeName": "Overwrite"
+      }
+    ],
+    "presets": [
+      {"id": 0, "name": "Unified"},
+      {"id": 1, "name": "Dual Split"},
+      {"id": 2, "name": "Triple Rings"},
+      {"id": 3, "name": "Quad Active"},
+      {"id": 4, "name": "Heartbeat Focus"}
+    ]
+  },
+  "timestamp": 123456789,
+  "version": "1.0.0"
+}
+```
+
+**cURL Example:**
+```bash
+curl http://lightwaveos.local/api/v1/zones
+```
+
+---
+
+#### `POST /api/v1/zones/layout`
+
+Set zone layout using custom segment definitions. This allows full runtime control over zone boundaries.
+
+**Request Body:**
+```json
+{
+  "zones": [
+    {
+      "zoneId": 0,
+      "s1LeftStart": 65,
+      "s1LeftEnd": 79,
+      "s1RightStart": 80,
+      "s1RightEnd": 94
+    },
+    {
+      "zoneId": 1,
+      "s1LeftStart": 20,
+      "s1LeftEnd": 64,
+      "s1RightStart": 95,
+      "s1RightEnd": 139
+    },
+    {
+      "zoneId": 2,
+      "s1LeftStart": 0,
+      "s1LeftEnd": 19,
+      "s1RightStart": 140,
+      "s1RightEnd": 159
+    }
+  ]
+}
+```
+
+**Segment Field Definitions:**
+
+| Field | Type | Range | Description |
+|-------|------|-------|-------------|
+| `zoneId` | uint8 | 0-3 | Zone identifier (must be sequential, starting from 0) |
+| `s1LeftStart` | uint8 | 0-79 | Left segment start LED (toward LED 0) |
+| `s1LeftEnd` | uint8 | 0-79 | Left segment end LED (inclusive, must be ≥ start) |
+| `s1RightStart` | uint8 | 80-159 | Right segment start LED (toward LED 159) |
+| `s1RightEnd` | uint8 | 80-159 | Right segment end LED (inclusive, must be ≥ start) |
+
+**Validation Rules:**
+
+1. **Centre-Origin Symmetry**: Left and right segments must be symmetric around the centre pair (LEDs 79/80):
+   - Segment sizes must match: `(s1LeftEnd - s1LeftStart) == (s1RightEnd - s1RightStart)`
+   - Distance from centre must match: `(79 - s1LeftEnd) == (s1RightStart - 80)`
+
+2. **No Overlaps**: Zone segments must not overlap with each other.
+
+3. **Complete Coverage**: All LEDs from 0-159 (per strip) must be assigned to exactly one zone.
+
+4. **Centre-Outward Ordering**: Zones must be ordered from centre outward:
+   - Zone 0 = innermost (closest to centre pair)
+   - Zone N-1 = outermost (at edges)
+
+5. **Minimum Zone Size**: At least 1 LED per segment (left and right), minimum 2 LEDs total per zone.
+
+6. **Centre Pair Inclusion**: At least one zone must include LED 79 or 80.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "zoneCount": 3
+  },
+  "timestamp": 123456789,
+  "version": "1.0.0"
+}
+```
+
+**Error Response (Validation Failed):**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_VALUE",
+    "message": "Layout validation failed"
+  },
+  "timestamp": 123456789,
+  "version": "1.0.0"
+}
+```
+
+**cURL Example:**
+```bash
+curl -X POST http://lightwaveos.local/api/v1/zones/layout \
+  -H "Content-Type: application/json" \
+  -d '{
+    "zones": [
+      {"zoneId": 0, "s1LeftStart": 65, "s1LeftEnd": 79, "s1RightStart": 80, "s1RightEnd": 94},
+      {"zoneId": 1, "s1LeftStart": 20, "s1LeftEnd": 64, "s1RightStart": 95, "s1RightEnd": 139},
+      {"zoneId": 2, "s1LeftStart": 0, "s1LeftEnd": 19, "s1RightStart": 140, "s1RightEnd": 159}
+    ]
+  }'
+```
+
+---
+
+#### `GET /api/v1/zones/{id}`
+
+Get configuration for a specific zone.
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | uint8 | Zone ID (0-3) |
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 0,
+    "enabled": true,
+    "effectId": 5,
+    "effectName": "Shockwave",
+    "brightness": 200,
+    "speed": 20,
+    "paletteId": 0,
+    "blendMode": 0,
+    "blendModeName": "OVERWRITE"
+  },
+  "timestamp": 123456789,
+  "version": "1.0.0"
+}
+```
+
+**cURL Example:**
+```bash
+curl http://lightwaveos.local/api/v1/zones/0
+```
+
+---
+
+#### `POST /api/v1/zones/{id}/effect`
+
+Set the effect for a specific zone.
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | uint8 | Zone ID (0-3) |
+
+**Request Body:**
+```json
+{
+  "effectId": 12
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "zoneId": 0,
+    "effectId": 12,
+    "effectName": "Dual Wave Collision"
+  },
+  "timestamp": 123456789,
+  "version": "1.0.0"
+}
+```
+
+**cURL Example:**
+```bash
+curl -X POST http://lightwaveos.local/api/v1/zones/0/effect \
+  -H "Content-Type: application/json" \
+  -d '{"effectId": 12}'
+```
+
+---
+
+#### `POST /api/v1/zones/{id}/brightness`
+
+Set brightness for a specific zone.
+
+**Request Body:**
+```json
+{
+  "brightness": 220
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "zoneId": 0,
+    "brightness": 220
+  },
+  "timestamp": 123456789,
+  "version": "1.0.0"
+}
+```
+
+---
+
+#### `POST /api/v1/zones/{id}/speed`
+
+Set speed for a specific zone.
+
+**Request Body:**
+```json
+{
+  "speed": 25
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "zoneId": 0,
+    "speed": 25
+  },
+  "timestamp": 123456789,
+  "version": "1.0.0"
+}
+```
+
+---
+
+#### `POST /api/v1/zones/{id}/palette`
+
+Set palette for a specific zone.
+
+**Request Body:**
+```json
+{
+  "paletteId": 5
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "zoneId": 0,
+    "paletteId": 5,
+    "paletteName": "Sunset"
+  },
+  "timestamp": 123456789,
+  "version": "1.0.0"
+}
+```
+
+---
+
+#### `POST /api/v1/zones/{id}/blend`
+
+Set blend mode for a specific zone.
+
+**Request Body:**
+```json
+{
+  "blendMode": 1
+}
+```
+
+**Blend Modes:**
+
+| ID | Name | Description |
+|----|------|-------------|
+| 0 | Overwrite | Replace pixels in zone |
+| 1 | Additive | Add to existing pixels (light accumulation) |
+| 2 | Multiply | Multiply with existing pixels |
+| 3 | Screen | Screen blend mode (lighten) |
+| 4 | Overlay | Overlay blend (multiply if dark, screen if light) |
+| 5 | Alpha | 50/50 blend |
+| 6 | Lighten | Take brighter pixel |
+| 7 | Darken | Take darker pixel |
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "zoneId": 0,
+    "blendMode": 1,
+    "blendModeName": "Additive"
+  },
+  "timestamp": 123456789,
+  "version": "1.0.0"
+}
+```
+
+---
+
+#### `POST /api/v1/zones/{id}/enabled`
+
+Enable or disable a specific zone.
+
+**Request Body:**
+```json
+{
+  "enabled": true
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "zoneId": 0,
+    "enabled": true
+  },
+  "timestamp": 123456789,
+  "version": "1.0.0"
+}
+```
+
+---
+
+#### `POST /api/v1/zones/enabled`
+
+Enable or disable the entire zone system.
+
+**Request Body:**
+```json
+{
+  "enabled": true
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "enabled": true
+  },
+  "timestamp": 123456789,
+  "version": "1.0.0"
+}
+```
+
+---
+
 ### Batch Operations
 
 #### `POST /api/v1/batch`
@@ -943,6 +1363,300 @@ Get all current parameters.
 ```javascript
 ws.send(JSON.stringify({
   type: "parameters.get"
+}));
+```
+
+---
+
+### Command: `zones.list`
+
+Get all zone configurations over WebSocket.
+
+**Send:**
+```json
+{
+  "type": "zones.list"
+}
+```
+
+**Receive:**
+```json
+{
+  "type": "zones.list",
+  "success": true,
+  "enabled": true,
+  "zoneCount": 3,
+  "segments": [
+    {
+      "zoneId": 0,
+      "s1LeftStart": 65,
+      "s1LeftEnd": 79,
+      "s1RightStart": 80,
+      "s1RightEnd": 94,
+      "totalLeds": 30
+    }
+  ],
+  "zones": [
+    {
+      "id": 0,
+      "enabled": true,
+      "effectId": 5,
+      "effectName": "Shockwave",
+      "brightness": 200,
+      "speed": 20,
+      "paletteId": 0,
+      "blendMode": 0,
+      "blendModeName": "OVERWRITE"
+    }
+  ],
+  "presets": [
+    {"id": 0, "name": "Unified"},
+    {"id": 1, "name": "Dual Split"}
+  ]
+}
+```
+
+**JavaScript Example:**
+```javascript
+ws.send(JSON.stringify({
+  type: "zones.list"
+}));
+```
+
+---
+
+### Command: `zones.update`
+
+Update zone configuration over WebSocket. Supports updating multiple fields in a single request.
+
+**Send:**
+```json
+{
+  "type": "zones.update",
+  "zoneId": 0,
+  "brightness": 220,
+  "speed": 25,
+  "paletteId": 5,
+  "blendMode": 1
+}
+```
+
+**Supported Fields:**
+
+| Field | Type | Range | Description |
+|-------|------|-------|-------------|
+| `effectId` | uint8 | 0-255 | Effect to render in this zone |
+| `brightness` | uint8 | 0-255 | Zone brightness level |
+| `speed` | uint8 | 1-100 | Zone animation speed |
+| `paletteId` | uint8 | 0-74 | Palette ID (0 = use global palette) |
+| `blendMode` | uint8 | 0-7 | Blend mode for compositing (see blend modes table) |
+
+**Receive:**
+Broadcast to all clients:
+```json
+{
+  "type": "zones.changed",
+  "zoneId": 0,
+  "updated": ["brightness", "speed", "paletteId", "blendMode"],
+  "current": {
+    "effectId": 5,
+    "brightness": 220,
+    "speed": 25,
+    "paletteId": 5,
+    "blendMode": 1,
+    "blendModeName": "Additive"
+  },
+  "timestamp": 123456789
+}
+```
+
+**JavaScript Example:**
+```javascript
+ws.send(JSON.stringify({
+  type: "zones.update",
+  zoneId: 0,
+  brightness: 220,
+  speed: 25,
+  paletteId: 5,
+  blendMode: 1
+}));
+```
+
+---
+
+### Command: `zones.setLayout`
+
+Set zone layout using custom segment definitions.
+
+**Send:**
+```json
+{
+  "type": "zones.setLayout",
+  "zones": [
+    {
+      "zoneId": 0,
+      "s1LeftStart": 65,
+      "s1LeftEnd": 79,
+      "s1RightStart": 80,
+      "s1RightEnd": 94
+    }
+  ]
+}
+```
+
+**Receive:**
+```json
+{
+  "type": "zones.layoutChanged",
+  "success": true,
+  "zoneCount": 3
+}
+```
+
+**JavaScript Example:**
+```javascript
+ws.send(JSON.stringify({
+  type: "zones.setLayout",
+  zones: [
+    {zoneId: 0, s1LeftStart: 65, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 94},
+    {zoneId: 1, s1LeftStart: 20, s1LeftEnd: 64, s1RightStart: 95, s1RightEnd: 139}
+  ]
+}));
+```
+
+---
+
+### Command: `zone.setPalette`
+
+Set palette for a specific zone. Palette ID 0 uses the global palette.
+
+**Send:**
+```json
+{
+  "type": "zone.setPalette",
+  "zoneId": 0,
+  "paletteId": 5
+}
+```
+
+**Receive:**
+```json
+{
+  "type": "zone.paletteChanged",
+  "zoneId": 0,
+  "current": {
+    "effectId": 5,
+    "effectName": "Shockwave",
+    "brightness": 200,
+    "speed": 20,
+    "paletteId": 5,
+    "blendMode": 0,
+    "blendModeName": "Overwrite"
+  }
+}
+```
+
+**JavaScript Example:**
+```javascript
+ws.send(JSON.stringify({
+  type: "zone.setPalette",
+  zoneId: 0,
+  paletteId: 5
+}));
+```
+
+---
+
+### Command: `zone.setEffect`
+
+Set effect for a specific zone.
+
+**Send:**
+```json
+{
+  "type": "zone.setEffect",
+  "zoneId": 0,
+  "effectId": 9
+}
+```
+
+**Receive:**
+```json
+{
+  "type": "zone.effectChanged",
+  "zoneId": 0,
+  "current": {
+    "effectId": 9,
+    "effectName": "Holographic Interference",
+    "brightness": 200,
+    "speed": 20,
+    "paletteId": 0,
+    "blendMode": 0,
+    "blendModeName": "Overwrite"
+  }
+}
+```
+
+**JavaScript Example:**
+```javascript
+ws.send(JSON.stringify({
+  type: "zone.setEffect",
+  zoneId: 0,
+  effectId: 9
+}));
+```
+
+---
+
+### Command: `zone.setBlend`
+
+Set blend mode for a specific zone.
+
+**Send:**
+```json
+{
+  "type": "zone.setBlend",
+  "zoneId": 0,
+  "blendMode": 1
+}
+```
+
+**Blend Modes:**
+
+| ID | Name | Description |
+|----|------|-------------|
+| 0 | Overwrite | Replace pixels in zone |
+| 1 | Additive | Add to existing pixels (light accumulation) |
+| 2 | Multiply | Multiply with existing pixels |
+| 3 | Screen | Screen blend mode (lighten) |
+| 4 | Overlay | Overlay blend (multiply if dark, screen if light) |
+| 5 | Alpha | 50/50 blend |
+| 6 | Lighten | Take brighter pixel |
+| 7 | Darken | Take darker pixel |
+
+**Receive:**
+```json
+{
+  "type": "zone.blendChanged",
+  "zoneId": 0,
+  "current": {
+    "effectId": 5,
+    "effectName": "Shockwave",
+    "brightness": 200,
+    "speed": 20,
+    "paletteId": 0,
+    "blendMode": 1,
+    "blendModeName": "Additive"
+  }
+}
+```
+
+**JavaScript Example:**
+```javascript
+ws.send(JSON.stringify({
+  type: "zone.setBlend",
+  zoneId: 0,
+  blendMode: 1
 }));
 ```
 

@@ -98,6 +98,17 @@ docs/templates/
 COMMIT_PLAN.md
 OTHER_FILES_ANALYSIS.md
 execute_commit_plan.sh
+execute_commits.sh
+
+# Session analysis files (temporary development artifacts)
+AUDIT_*.md
+COMMIT_*.md
+COMMIT_STRATEGY_*.md
+CONTRIBUTOR_GUIDE.md
+IMPLEMENTATION_SUMMARY.md
+LESSONS_LEARNED.md
+STRATEGY_VALIDATION.md
+z.md
 
 # Development dashboard (separate build project)
 # lightwave-dashboard/ -> Now tracked

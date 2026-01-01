@@ -957,7 +957,33 @@ Get all zone configurations.
   "success": true,
   "data": {
     "enabled": true,
-    "zoneCount": 4,
+    "zoneCount": 3,
+    "segments": [
+      {
+        "zoneId": 0,
+        "s1LeftStart": 65,
+        "s1LeftEnd": 79,
+        "s1RightStart": 80,
+        "s1RightEnd": 94,
+        "totalLeds": 30
+      },
+      {
+        "zoneId": 1,
+        "s1LeftStart": 20,
+        "s1LeftEnd": 64,
+        "s1RightStart": 95,
+        "s1RightEnd": 139,
+        "totalLeds": 90
+      },
+      {
+        "zoneId": 2,
+        "s1LeftStart": 0,
+        "s1LeftEnd": 19,
+        "s1RightStart": 140,
+        "s1RightEnd": 159,
+        "totalLeds": 40
+      }
+    ],
     "zones": [
       {
         "id": 0,
@@ -967,19 +993,16 @@ Get all zone configurations.
         "brightness": 200,
         "speed": 20,
         "paletteId": 0,
-        "blendMode": "NORMAL",
-        "visualParams": {
-          "intensity": 128,
-          "saturation": 255,
-          "complexity": 64,
-          "variation": 32
-        },
-        "definition": {
-          "startLed": 0,
-          "endLed": 39,
-          "symmetric": true
-        }
+        "blendMode": 0,
+        "blendModeName": "OVERWRITE"
       }
+    ],
+    "presets": [
+      {"id": 0, "name": "Unified"},
+      {"id": 1, "name": "Dual Split"},
+      {"id": 2, "name": "Triple Rings"},
+      {"id": 3, "name": "Quad Active"},
+      {"id": 4, "name": "Heartbeat Focus"}
     ]
   },
   "timestamp": 123456789,
@@ -996,13 +1019,12 @@ curl http://lightwaveos.local/api/v2/zones
 
 #### `POST /api/v2/zones`
 
-Create or update zone system configuration.
+Enable or disable the zone system.
 
 **Request Body:**
 ```json
 {
-  "enabled": true,
-  "zoneCount": 4
+  "enabled": true
 }
 ```
 
@@ -1011,9 +1033,7 @@ Create or update zone system configuration.
 {
   "success": true,
   "data": {
-    "enabled": true,
-    "zoneCount": 4,
-    "message": "Zone system enabled with 4 zones"
+    "enabled": true
   },
   "timestamp": 123456789,
   "version": "2.0.0"
@@ -1024,7 +1044,108 @@ Create or update zone system configuration.
 ```bash
 curl -X POST http://lightwaveos.local/api/v2/zones \
   -H "Content-Type: application/json" \
-  -d '{"enabled": true, "zoneCount": 4}'
+  -d '{"enabled": true}'
+```
+
+---
+
+#### `POST /api/v2/zones/layout`
+
+Set zone layout using custom segment definitions. This allows full runtime control over zone boundaries.
+
+**Request Body:**
+```json
+{
+  "zones": [
+    {
+      "zoneId": 0,
+      "s1LeftStart": 65,
+      "s1LeftEnd": 79,
+      "s1RightStart": 80,
+      "s1RightEnd": 94
+    },
+    {
+      "zoneId": 1,
+      "s1LeftStart": 20,
+      "s1LeftEnd": 64,
+      "s1RightStart": 95,
+      "s1RightEnd": 139
+    },
+    {
+      "zoneId": 2,
+      "s1LeftStart": 0,
+      "s1LeftEnd": 19,
+      "s1RightStart": 140,
+      "s1RightEnd": 159
+    }
+  ]
+}
+```
+
+**Segment Field Definitions:**
+
+| Field | Type | Range | Description |
+|-------|------|-------|-------------|
+| `zoneId` | uint8 | 0-3 | Zone identifier (must be sequential, starting from 0) |
+| `s1LeftStart` | uint8 | 0-79 | Left segment start LED (toward LED 0) |
+| `s1LeftEnd` | uint8 | 0-79 | Left segment end LED (inclusive, must be ≥ start) |
+| `s1RightStart` | uint8 | 80-159 | Right segment start LED (toward LED 159) |
+| `s1RightEnd` | uint8 | 80-159 | Right segment end LED (inclusive, must be ≥ start) |
+
+**Validation Rules:**
+
+1. **Centre-Origin Symmetry**: Left and right segments must be symmetric around the centre pair (LEDs 79/80):
+   - Segment sizes must match: `(s1LeftEnd - s1LeftStart) == (s1RightEnd - s1RightStart)`
+   - Distance from centre must match: `(79 - s1LeftEnd) == (s1RightStart - 80)`
+
+2. **No Overlaps**: Zone segments must not overlap with each other.
+
+3. **Complete Coverage**: All LEDs from 0-159 (per strip) must be assigned to exactly one zone.
+
+4. **Centre-Outward Ordering**: Zones must be ordered from centre outward:
+   - Zone 0 = innermost (closest to centre pair)
+   - Zone N-1 = outermost (at edges)
+
+5. **Minimum Zone Size**: At least 1 LED per segment (left and right), minimum 2 LEDs total per zone.
+
+6. **Centre Pair Inclusion**: At least one zone must include LED 79 or 80.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "zoneCount": 3
+  },
+  "timestamp": 123456789,
+  "version": "2.0.0"
+}
+```
+
+**Error Response (Validation Failed):**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "INVALID_VALUE",
+    "message": "Layout validation failed"
+  },
+  "timestamp": 123456789,
+  "version": "2.0.0"
+}
+```
+
+**cURL Example:**
+```bash
+curl -X POST http://lightwaveos.local/api/v2/zones/layout \
+  -H "Content-Type: application/json" \
+  -d '{
+    "zones": [
+      {"zoneId": 0, "s1LeftStart": 65, "s1LeftEnd": 79, "s1RightStart": 80, "s1RightEnd": 94},
+      {"zoneId": 1, "s1LeftStart": 20, "s1LeftEnd": 64, "s1RightStart": 95, "s1RightEnd": 139},
+      {"zoneId": 2, "s1LeftStart": 0, "s1LeftEnd": 19, "s1RightStart": 140, "s1RightEnd": 159}
+    ]
+  }'
 ```
 
 ---
@@ -1051,18 +1172,8 @@ Get configuration for a specific zone.
     "brightness": 200,
     "speed": 20,
     "paletteId": 0,
-    "blendMode": "NORMAL",
-    "visualParams": {
-      "intensity": 128,
-      "saturation": 255,
-      "complexity": 64,
-      "variation": 32
-    },
-    "definition": {
-      "startLed": 0,
-      "endLed": 39,
-      "symmetric": true
-    }
+    "blendMode": 0,
+    "blendModeName": "OVERWRITE"
   },
   "timestamp": 123456789,
   "version": "2.0.0"
@@ -1291,20 +1402,12 @@ Get available zone presets (built-in + user).
 {
   "success": true,
   "data": {
-    "builtIn": [
-      {"id": 0, "name": "Single Zone", "zoneCount": 1},
-      {"id": 1, "name": "Dual Zone", "zoneCount": 2},
-      {"id": 2, "name": "Triple Zone", "zoneCount": 3},
-      {"id": 3, "name": "Quad Zone", "zoneCount": 4},
-      {"id": 4, "name": "Alternating", "zoneCount": 4}
-    ],
-    "user": [
-      {
-        "slot": 0,
-        "name": "My Custom Setup",
-        "zoneCount": 4,
-        "created": 1640000000
-      }
+    "presets": [
+      {"id": 0, "name": "Unified"},
+      {"id": 1, "name": "Dual Split"},
+      {"id": 2, "name": "Triple Rings"},
+      {"id": 3, "name": "Quad Active"},
+      {"id": 4, "name": "Heartbeat Focus"}
     ]
   },
   "timestamp": 123456789,
@@ -1341,7 +1444,7 @@ Load a zone preset (built-in or user).
   "success": true,
   "data": {
     "presetId": 3,
-    "presetName": "Quad Zone",
+    "presetName": "Quad Active",
     "zoneCount": 4,
     "message": "Preset loaded successfully"
   },
@@ -1555,9 +1658,64 @@ curl http://lightwaveos.local/api/v2/enhancements
 
 ---
 
-#### `GET /api/v2/palettes`
+#### `GET /api/v1/palettes`
 
 Get list of all available color palettes.
+
+**Query Parameters:**
+- `offset` (optional): Starting offset (default: 0)
+- `limit` (optional): Number of palettes to return (default: 20, max: 100)
+- `category` (optional): Filter by category (`artistic`, `scientific`, `lgpOptimized`)
+- `warm` (optional): Filter warm palettes (`true`/`false`)
+- `cool` (optional): Filter cool palettes (`true`/`false`)
+- `calm` (optional): Filter calm palettes (`true`/`false`)
+- `vivid` (optional): Filter vivid palettes (`true`/`false`)
+- `cvd` (optional): Filter CVD-friendly palettes (`true`/`false`)
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "total": 75,
+    "offset": 0,
+    "limit": 100,
+    "count": 75,
+    "palettes": [
+      {
+        "id": 0,
+        "name": "Sunset Real",
+        "category": "artistic",
+        "flags": {
+          "warm": true,
+          "cool": false,
+          "calm": false,
+          "vivid": true,
+          "cvdFriendly": false,
+          "whiteHeavy": false
+        },
+        "avgBrightness": 128,
+        "maxBrightness": 255
+      }
+    ],
+    "categories": {
+      "artistic": 25,
+      "scientific": 30,
+      "lgpOptimized": 20
+    },
+    "pagination": {
+      "page": 1,
+      "limit": 100,
+      "total": 75,
+      "pages": 1
+    }
+  },
+  "timestamp": 123456789,
+  "version": "2.0"
+}
+```
+
+**Note:** The response includes both flat pagination fields (`total`, `offset`, `limit`, `count`) for V2 API compatibility and a nested `pagination` object for backward compatibility.
 
 **Response:**
 ```json
@@ -2098,13 +2256,52 @@ Get all zones over WebSocket.
 {
   "type": "zones.list",
   "success": true,
-  "data": {
-    "enabled": true,
-    "zoneCount": 4,
-    "zones": [ /* ... */ ]
-  },
-  "timestamp": 123456789,
-  "version": "2.0.0"
+  "enabled": true,
+  "zoneCount": 3,
+  "segments": [
+    {
+      "zoneId": 0,
+      "s1LeftStart": 65,
+      "s1LeftEnd": 79,
+      "s1RightStart": 80,
+      "s1RightEnd": 94,
+      "totalLeds": 30
+    },
+    {
+      "zoneId": 1,
+      "s1LeftStart": 20,
+      "s1LeftEnd": 64,
+      "s1RightStart": 95,
+      "s1RightEnd": 139,
+      "totalLeds": 90
+    },
+    {
+      "zoneId": 2,
+      "s1LeftStart": 0,
+      "s1LeftEnd": 19,
+      "s1RightStart": 140,
+      "s1RightEnd": 159,
+      "totalLeds": 40
+    }
+  ],
+  "zones": [
+    {
+      "id": 0,
+      "enabled": true,
+      "effectId": 5,
+      "effectName": "Shockwave",
+      "brightness": 200,
+      "speed": 20,
+      "paletteId": 0,
+      "blendMode": 0,
+      "blendModeName": "OVERWRITE"
+    }
+  ],
+  "presets": [
+    {"id": 0, "name": "Unified"},
+    {"id": 1, "name": "Dual Split"}
+  ],
+  "timestamp": 123456789
 }
 ```
 
@@ -2141,7 +2338,7 @@ Get specific zone over WebSocket.
 
 ### Command: `zones.update`
 
-Update zone configuration over WebSocket.
+Update zone configuration over WebSocket. Supports updating multiple fields in a single request.
 
 **Send:**
 ```json
@@ -2149,9 +2346,21 @@ Update zone configuration over WebSocket.
   "type": "zones.update",
   "zoneId": 0,
   "brightness": 220,
-  "speed": 25
+  "speed": 25,
+  "paletteId": 5,
+  "blendMode": 1
 }
 ```
+
+**Supported Fields:**
+
+| Field | Type | Range | Description |
+|-------|------|-------|-------------|
+| `effectId` | uint8 | 0-255 | Effect to render in this zone |
+| `brightness` | uint8 | 0-255 | Zone brightness level |
+| `speed` | uint8 | 1-100 | Zone animation speed |
+| `paletteId` | uint8 | 0-74 | Palette ID (0 = use global palette) |
+| `blendMode` | uint8 | 0-7 | Blend mode for compositing (see blend modes table) |
 
 **Receive:**
 Broadcast to all clients:
@@ -2159,7 +2368,15 @@ Broadcast to all clients:
 {
   "type": "zones.changed",
   "zoneId": 0,
-  "updated": ["brightness", "speed"],
+  "updated": ["brightness", "speed", "paletteId", "blendMode"],
+  "current": {
+    "effectId": 5,
+    "brightness": 220,
+    "speed": 25,
+    "paletteId": 5,
+    "blendMode": 1,
+    "blendModeName": "Additive"
+  },
   "timestamp": 123456789
 }
 ```
@@ -2190,6 +2407,76 @@ Broadcast to all clients:
   "timestamp": 123456789
 }
 ```
+
+---
+
+### Command: `zones.setLayout`
+
+Set zone layout using custom segment definitions over WebSocket.
+
+**Send:**
+```json
+{
+  "type": "zones.setLayout",
+  "zones": [
+    {
+      "zoneId": 0,
+      "s1LeftStart": 65,
+      "s1LeftEnd": 79,
+      "s1RightStart": 80,
+      "s1RightEnd": 94
+    },
+    {
+      "zoneId": 1,
+      "s1LeftStart": 20,
+      "s1LeftEnd": 64,
+      "s1RightStart": 95,
+      "s1RightEnd": 139
+    },
+    {
+      "zoneId": 2,
+      "s1LeftStart": 0,
+      "s1LeftEnd": 19,
+      "s1RightStart": 140,
+      "s1RightEnd": 159
+    }
+  ]
+}
+```
+
+**Receive:**
+```json
+{
+  "type": "zones.layoutChanged",
+  "success": true,
+  "zoneCount": 3,
+  "timestamp": 123456789
+}
+```
+
+**Error Response (Validation Failed):**
+```json
+{
+  "type": "error",
+  "success": false,
+  "code": "INVALID_VALUE",
+  "message": "Layout validation failed",
+  "timestamp": 123456789
+}
+```
+
+**JavaScript Example:**
+```javascript
+ws.send(JSON.stringify({
+  type: "zones.setLayout",
+  zones: [
+    {zoneId: 0, s1LeftStart: 65, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 94},
+    {zoneId: 1, s1LeftStart: 20, s1LeftEnd: 64, s1RightStart: 95, s1RightEnd: 139}
+  ]
+}));
+```
+
+**Validation Rules:** Same as REST API endpoint (see `POST /api/v2/zones/layout`).
 
 ---
 
@@ -2504,7 +2791,8 @@ Get specific palette details over WebSocket.
 ```json
 {
   "type": "palettes.get",
-  "id": 0
+  "requestId": "req-123",
+  "paletteId": 0
 }
 ```
 
@@ -2512,21 +2800,62 @@ Get specific palette details over WebSocket.
 ```json
 {
   "type": "palettes.get",
+  "requestId": "req-123",
   "success": true,
   "data": {
-    "id": 0,
-    "name": "Sunset Real",
-    "colors": [
-      {"r": 120, "g": 0, "b": 0},
-      {"r": 166, "g": 21, "b": 17},
-      {"r": 54, "g": 0, "b": 118},
-      {"r": 112, "g": 0, "b": 10}
-    ]
+    "palette": {
+      "id": 0,
+      "name": "Sunset Real",
+      "category": "artistic",
+      "flags": {
+        "warm": true,
+        "cool": false,
+        "calm": false,
+        "vivid": true,
+        "cvdFriendly": false,
+        "whiteHeavy": false
+      },
+      "avgBrightness": 128,
+      "maxBrightness": 255
+    }
   },
   "timestamp": 123456789,
-  "version": "2.0.0"
+  "version": "2.0"
 }
 ```
+
+---
+
+### Command: `palettes.set`
+
+Set the current color palette over WebSocket.
+
+**Send:**
+```json
+{
+  "type": "palettes.set",
+  "requestId": "req-124",
+  "paletteId": 5
+}
+```
+
+**Receive:**
+```json
+{
+  "type": "palettes.set",
+  "requestId": "req-124",
+  "success": true,
+  "data": {
+    "paletteId": 5,
+    "name": "Ocean",
+    "category": "artistic"
+  },
+  "timestamp": 123456789,
+  "version": "2.0"
+}
+```
+
+**Note:** The legacy `setPalette` command is still supported for backward compatibility but `palettes.set` is the preferred command.
 
 ---
 
@@ -2568,7 +2897,7 @@ Configure 4-zone setup with different effects:
 # Enable zone system
 curl -X POST http://lightwaveos.local/api/v2/zones \
   -H "Content-Type: application/json" \
-  -d '{"enabled": true, "zoneCount": 4}'
+  -d '{"enabled": true}'
 
 # Configure each zone
 curl -X PUT http://lightwaveos.local/api/v2/zones/0/effect \

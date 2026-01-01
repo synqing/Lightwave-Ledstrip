@@ -750,8 +750,9 @@ Only Serial.println() used (lost on reboot).
 ### 3.2 Memory Safety
 
 #### FINDING XC-002: Stack Overflow Risk in FreeRTOS Tasks
-**Severity:** MEDIUM
+**Severity:** MEDIUM → PARTIALLY ADDRESSED
 **Principle Violated:** Resource Limits
+**Status:** Bounds checking implemented, stack overflow detection pending
 
 **Description:**
 FreeRTOS tasks created with fixed stack sizes:
@@ -761,12 +762,24 @@ FreeRTOS tasks created with fixed stack sizes:
 
 No runtime stack overflow detection. Deep call chains or large local variables can overflow.
 
+**Implementation Status:**
+✅ **COMPLETE**: Defensive bounds checking implemented across all array accesses
+- All array indices validated before access
+- Validation functions follow consistent pattern
+- Safe defaults returned for corrupted indices
+- See `v2/docs/architecture/DEFENSIVE_BOUNDS_CHECKING.md` for details
+
+⏳ **PENDING**: Stack overflow detection and monitoring
+- FreeRTOS stack overflow checking not yet enabled
+- Stack usage monitoring not yet implemented
+
 **Recommended Architectural Changes:**
-1. **Enable FreeRTOS stack overflow checking** (Method 2)
-2. **Profile actual stack usage** per task (uxTaskGetStackHighWaterMark)
-3. **Increase stack sizes** with 50% safety margin
-4. **Add stack usage monitoring** - log high water marks
-5. **Avoid large stack allocations** - use heap for large buffers
+1. ✅ **Defensive bounds checking** - IMPLEMENTED (all array accesses validated)
+2. ⏳ **Enable FreeRTOS stack overflow checking** (Method 2) - PENDING
+3. ⏳ **Profile actual stack usage** per task (uxTaskGetStackHighWaterMark) - PENDING
+4. ⏳ **Increase stack sizes** with 50% safety margin - PENDING
+5. ⏳ **Add stack usage monitoring** - log high water marks - PENDING
+6. ✅ **Avoid large stack allocations** - use heap for large buffers - VERIFIED
 
 ---
 

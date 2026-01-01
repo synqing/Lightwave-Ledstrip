@@ -27,7 +27,7 @@
 | `GET /api/v1/transitions/types` | ✅ | ✅ | Transition types |
 | `POST /api/v1/transitions/trigger` | ✅ | ✅ | Trigger transition |
 | `POST /api/v1/batch` | ✅ | ✅ | Batch operations |
-| `GET /api/v1/palettes` | ✅ | ✅ | Palettes list |
+| `GET /api/v1/palettes` | ✅ | ✅ | Palettes list (with flat pagination fields) |
 | `GET /api/v1/palettes/current` | ✅ | ✅ | Current palette |
 | `POST /api/v1/palettes/set` | ✅ | ✅ | Set palette |
 | `GET /api/v1/zones` | ✅ | ✅ | Zones list |
@@ -41,7 +41,7 @@
 
 | Endpoint | v1 | v2 | Impact |
 |----------|----|----|--------|
-| `GET /api/v1/effects/metadata?id=N` | ✅ | ⚠️ | **CRITICAL** - Effect metadata by ID |
+| `GET /api/v1/effects/metadata?id=N` | ✅ | ✅ | Effect metadata by ID (validated) |
 | `GET /api/v1/transitions/config` | ✅ | ✅ | Transition config GET |
 | `POST /api/v1/transitions/config` | ✅ | ✅ | Transition config SET |
 | `POST /api/v1/zones/layout` | ✅ | ✅ | Set zone layout |
@@ -80,7 +80,10 @@
 | `prevEffect` | ✅ | ✅ | Previous effect |
 | `setBrightness` | ✅ | ✅ | Set brightness |
 | `setSpeed` | ✅ | ✅ | Set speed |
-| `setPalette` | ✅ | ✅ | Set palette |
+| `setPalette` | ✅ | ✅ | Set palette (legacy, use `palettes.set`) |
+| `palettes.list` | ✅ | ✅ | List palettes via WebSocket |
+| `palettes.get` | ✅ | ✅ | Get palette details via WebSocket |
+| `palettes.set` | ❌ | ✅ | **NEW** - Set palette via WebSocket (preferred) |
 | `transition.trigger` | ✅ | ✅ | Trigger transition |
 | `getStatus` | ✅ | ✅ | Get status |
 | `effects.getCurrent` | ✅ | ✅ | Get current effect |
@@ -90,7 +93,7 @@
 
 | Command | v1 | v2 | Impact |
 |---------|----|----|--------|
-| `effects.getMetadata` | ✅ | ❌ | **CRITICAL** - Effect metadata |
+| `effects.getMetadata` | ✅ | ✅ | Effect metadata (via REST `/api/v1/effects/metadata`) |
 | `effects.getCategories` | ✅ | ❌ | **HIGH** - Effect categories |
 | `device.getStatus` | ✅ | ❌ | **HIGH** - Device status via WS |
 | `transition.getTypes` | ✅ | ❌ | **MEDIUM** - Transition types via WS |

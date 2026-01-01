@@ -1,0 +1,30 @@
+{
+  "baseline_date": "2025-01-XX",
+  "description": "Pre-refactor WebServer performance baseline",
+  "benchmarks": {
+    "ws_routing": {
+      "iterations": 10000,
+      "p50_us": 0.0,
+      "p95_us": 0.0,
+      "p99_us": 0.0,
+      "avg_us": 0.0,
+      "ops_per_sec": 0,
+      "note": "Placeholder - actual baseline to be captured before refactor"
+    },
+    "broadcast_fanout": {
+      "clients": [1, 4, 8],
+      "time_ms": [0.0, 0.0, 0.0],
+      "note": "Placeholder - actual baseline to be captured"
+    },
+    "route_registration": {
+      "time_ms": 0.0,
+      "route_count": 0,
+      "note": "Placeholder - actual baseline to be captured"
+    }
+  },
+  "memory": {
+    "webserver_ram_bytes": 0,
+    "note": "Placeholder - actual baseline to be captured"
+  }
+}
+

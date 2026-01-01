@@ -49,6 +49,26 @@ static CRGB buffer[160];  // Static allocation
 CRGB* buffer = new CRGB[160];  // Dynamic in render loop
 ```
 
+### 4. DEFENSIVE BOUNDS CHECKING
+All array accesses MUST be validated before use to prevent LoadProhibited crashes.
+
+**Valid:**
+```cpp
+uint8_t safeId = validateEffectId(effectId);  // Validate first
+m_effects[safeId].active = true;               // Then use
+```
+
+**Invalid:**
+```cpp
+m_effects[effectId].active = true;  // BAD: No validation!
+```
+
+**Why:** Memory corruption, race conditions, or invalid input can cause indices to be out of bounds, leading to system crashes.
+
+**Pattern:** All validation functions follow `validateXxx()` naming and return safe defaults (typically 0 for indices).
+
+See `v2/docs/architecture/DEFENSIVE_BOUNDS_CHECKING.md` for full documentation.
+
 ---
 
 ## Hardware Pinout
@@ -160,6 +180,31 @@ void effectFunction() {
 
 ---
 
+## Common Pitfalls
+
+### Array Access Without Validation
+**Problem:** Direct array access without bounds checking can cause LoadProhibited crashes.
+
+**Solution:** Always validate indices before array access:
+```cpp
+uint8_t safeId = validateEffectId(effectId);
+m_effects[safeId].active = true;
+```
+
+See `v2/docs/architecture/DEFENSIVE_BOUNDS_CHECKING.md` for the validation pattern.
+
+### Palette Staleness
+**Problem:** Caching palette pointers across frames can lead to stale data.
+
+**Solution:** Fetch palette reference per frame, don't cache pointers.
+
+### Centre Mapping Errors
+**Problem:** Centre is between LEDs 79 and 80, not at LED 80.
+
+**Solution:** Use `CENTER_LEFT` (79) and `CENTER_RIGHT` (80) constants from `CoreEffects.h`.
+
+---
+
 ## For Full Architecture Details
 
 See: `docs/architecture/00_LIGHTWAVEOS_INFRASTRUCTURE_COMPREHENSIVE.md`
@@ -170,3 +215,11 @@ This document has:
 - Memory architecture
 - Network stack details
 - Performance optimization techniques
+
+## Defensive Programming
+
+LightwaveOS v2 implements comprehensive defensive bounds checking to prevent memory access violations. All array accesses must be validated before use.
+
+**Key Documents:**
+- `v2/docs/architecture/DEFENSIVE_BOUNDS_CHECKING.md` - Validation pattern guide
+- `v2/docs/performance/VALIDATION_OVERHEAD.md` - Performance impact analysis

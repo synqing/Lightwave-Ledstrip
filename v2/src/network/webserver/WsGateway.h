@@ -86,6 +86,37 @@ private:
     std::function<void(AsyncWebSocketClient*)> m_onDisconnect;
     std::function<void(AsyncWebSocketClient*, JsonDocument&)> m_fallbackHandler;
 
+    // ------------------------------------------------------------------------
+    // Connection thrash guard (allocation-free)
+    //
+    // Some clients (e.g. misconfigured embedded encoders) can rapidly reconnect,
+    // causing AsyncTCP accept failures and widespread WS timeouts. We apply a
+    // small per-IP cooldown to reduce churn.
+    // ------------------------------------------------------------------------
+    static constexpr uint8_t CONNECT_GUARD_SLOTS = 8;
+    static constexpr uint32_t CONNECT_COOLDOWN_MS = 2000;
+    struct ConnectGuardEntry {
+        uint32_t ipKey;      // Packed IPv4 (0 = empty)
+        uint32_t lastMs;     // Last connect attempt time (millis)
+        uint8_t active;      // Active WS connections from this IP (best-effort)
+        uint8_t _pad[3];
+    };
+    ConnectGuardEntry m_connectGuard[CONNECT_GUARD_SLOTS] = {};
+
+    // ------------------------------------------------------------------------
+    // Client ID → IP mapping (for disconnect cleanup)
+    //
+    // When a client disconnects, client->remoteIP() may return 0.0.0.0,
+    // preventing cleanup of the connect guard. We track clientId → ipKey
+    // during connect so we can clean up properly on disconnect.
+    // ------------------------------------------------------------------------
+    static constexpr uint8_t CLIENT_IP_MAP_SLOTS = 16;
+    struct ClientIpMapEntry {
+        uint32_t clientId;    // AsyncWebSocketClient ID (0 = empty)
+        uint32_t ipKey;       // Packed IPv4 from connect time
+    };
+    ClientIpMapEntry m_clientIpMap[CLIENT_IP_MAP_SLOTS] = {};
+
     // Static instance pointer for event handler
     static WsGateway* s_instance;
 };

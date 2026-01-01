@@ -5,9 +5,11 @@
 
 #include "WsGateway.h"
 #include "WsCommandRouter.h"
+#include "../WebServer.h"
 #include "../ApiResponse.h"
 #include "../../utils/Log.h"
 #include <cstring>
+#include <Arduino.h>
 
 #undef LW_LOG_TAG
 #define LW_LOG_TAG "WsGateway"
@@ -67,16 +69,140 @@ void WsGateway::onEvent(AsyncWebSocket* server, AsyncWebSocketClient* client,
 }
 
 void WsGateway::handleConnect(AsyncWebSocketClient* client) {
+    // Log that upgrade request was received and processed
+    LW_LOGI("WS: Upgrade request received from %s (client ID: %u)", 
+            client->remoteIP().toString().c_str(), client->id());
+    
     // Ensure stale client entries are purged before applying connection limits.
     m_ws->cleanupClients();
-    constexpr uint8_t MAX_WS_CLIENTS = 8;  // From WebServerConfig::MAX_WS_CLIENTS
-    if (m_ws->count() > MAX_WS_CLIENTS) {
+
+    const uint32_t nowMs = millis();
+    const IPAddress ip = client->remoteIP();
+    const uint32_t ipKey =
+        (static_cast<uint32_t>(ip[0]) << 24) |
+        (static_cast<uint32_t>(ip[1]) << 16) |
+        (static_cast<uint32_t>(ip[2]) << 8)  |
+        (static_cast<uint32_t>(ip[3]) << 0);
+
+    // #region agent log
+    {
+        // Hws1: Confirm connect thrash + measure reject causes (max clients vs cooldown).
+        char buf[320];
+        const int n = snprintf(
+            buf, sizeof(buf),
+            "{\"sessionId\":\"debug-session\",\"runId\":\"ws-guard-pre\",\"hypothesisId\":\"Hws1\",\"location\":\"v2/src/network/webserver/WsGateway.cpp:handleConnect\",\"message\":\"ws.connect.enter\",\"data\":{\"clientId\":%lu,\"wsCount\":%u,\"wsMax\":%u,\"ip\":\"%s\"},\"timestamp\":%lu}",
+            static_cast<unsigned long>(client->id()),
+            static_cast<unsigned>(m_ws->count()),
+            static_cast<unsigned>(lightwaveos::network::WebServerConfig::MAX_WS_CLIENTS),
+            ip.toString().c_str(),
+            static_cast<unsigned long>(nowMs)
+        );
+        if (n > 0) Serial.println(buf);
+    }
+    // #endregion
+
+    // Per-IP connection cooldown + single-session guard (reduces reconnect storms / overlap)
+    if (ipKey != 0) {
+        uint8_t slot = 0xFF;
+        for (uint8_t i = 0; i < CONNECT_GUARD_SLOTS; i++) {
+            if (m_connectGuard[i].ipKey == ipKey) {
+                slot = i;
+                break;
+            }
+            if (slot == 0xFF && m_connectGuard[i].ipKey == 0) {
+                slot = i;  // first empty slot
+            }
+        }
+        if (slot != 0xFF) {
+            const uint32_t last = m_connectGuard[slot].lastMs;
+            const bool tooSoon = (last != 0) && (nowMs - last < CONNECT_COOLDOWN_MS);
+            m_connectGuard[slot].ipKey = ipKey;
+            m_connectGuard[slot].lastMs = nowMs;
+            if (tooSoon) {
+                // #region agent log
+                {
+                    char buf[320];
+                    const int n = snprintf(
+                        buf, sizeof(buf),
+                        "{\"sessionId\":\"debug-session\",\"runId\":\"ws-guard-pre\",\"hypothesisId\":\"Hws1\",\"location\":\"v2/src/network/webserver/WsGateway.cpp:handleConnect\",\"message\":\"ws.connect.reject.cooldown\",\"data\":{\"clientId\":%lu,\"ip\":\"%s\",\"cooldownMs\":%lu},\"timestamp\":%lu}",
+                        static_cast<unsigned long>(client->id()),
+                        ip.toString().c_str(),
+                        static_cast<unsigned long>(CONNECT_COOLDOWN_MS),
+                        static_cast<unsigned long>(nowMs)
+                    );
+                    if (n > 0) Serial.println(buf);
+                }
+                // #endregion
+                client->close(1013, "Reconnect too fast");
+                return;
+            }
+
+            // Reject overlapping WS sessions from the same IP.
+            // This protects the device from clients that repeatedly call connect() without
+            // closing the previous connection or without servicing the socket.
+            if (m_connectGuard[slot].active >= 1) {
+                // #region agent log
+                {
+                    char buf[320];
+                    const int n = snprintf(
+                        buf, sizeof(buf),
+                        "{\"sessionId\":\"debug-session\",\"runId\":\"ws-guard-pre\",\"hypothesisId\":\"Hws2\",\"location\":\"v2/src/network/webserver/WsGateway.cpp:handleConnect\",\"message\":\"ws.connect.reject.overlap\",\"data\":{\"clientId\":%lu,\"ip\":\"%s\",\"active\":%u},\"timestamp\":%lu}",
+                        static_cast<unsigned long>(client->id()),
+                        ip.toString().c_str(),
+                        static_cast<unsigned>(m_connectGuard[slot].active),
+                        static_cast<unsigned long>(nowMs)
+                    );
+                    if (n > 0) Serial.println(buf);
+                }
+                // #endregion
+                client->close(1008, "Only one session per device");
+                return;
+            }
+        }
+    }
+
+    // Hard cap on connected WS clients (>=, not >)
+    if (m_ws->count() >= lightwaveos::network::WebServerConfig::MAX_WS_CLIENTS) {
         LW_LOGW("WS: Max clients reached, rejecting %u", client->id());
         client->close(1008, "Connection limit");
         return;
     }
 
     LW_LOGI("WS: Client %u connected from %s", client->id(), client->remoteIP().toString().c_str());
+
+    // Mark active for this IP (best-effort)
+    if (ipKey != 0) {
+        for (uint8_t i = 0; i < CONNECT_GUARD_SLOTS; i++) {
+            if (m_connectGuard[i].ipKey == ipKey) {
+                if (m_connectGuard[i].active < 255) m_connectGuard[i].active++;
+                break;
+            }
+        }
+    }
+
+    // Store client ID → IP mapping for disconnect cleanup
+    // (remoteIP() may return 0.0.0.0 after disconnect)
+    if (ipKey != 0) {
+        uint32_t clientId = client->id();
+        // Find empty slot or existing entry for this client
+        uint8_t mapSlot = 0xFF;
+        for (uint8_t i = 0; i < CLIENT_IP_MAP_SLOTS; i++) {
+            if (m_clientIpMap[i].clientId == clientId) {
+                // Update existing entry
+                m_clientIpMap[i].ipKey = ipKey;
+                mapSlot = i;
+                break;
+            }
+            if (mapSlot == 0xFF && m_clientIpMap[i].clientId == 0) {
+                mapSlot = i;  // first empty slot
+            }
+        }
+        if (mapSlot != 0xFF && m_clientIpMap[mapSlot].clientId == 0) {
+            // Store new mapping
+            m_clientIpMap[mapSlot].clientId = clientId;
+            m_clientIpMap[mapSlot].ipKey = ipKey;
+        }
+    }
 
     // Call connection callback (for status broadcasts, etc.)
     if (m_onConnect) {
@@ -87,6 +213,65 @@ void WsGateway::handleConnect(AsyncWebSocketClient* client) {
 void WsGateway::handleDisconnect(AsyncWebSocketClient* client) {
     uint32_t clientId = client->id();
     LW_LOGI("WS: Client %u disconnected", clientId);
+
+    const uint32_t nowMs = millis();
+    const IPAddress ip = client->remoteIP();
+    uint32_t ipKey =
+        (static_cast<uint32_t>(ip[0]) << 24) |
+        (static_cast<uint32_t>(ip[1]) << 16) |
+        (static_cast<uint32_t>(ip[2]) << 8)  |
+        (static_cast<uint32_t>(ip[3]) << 0);
+
+    // If remoteIP() returned 0.0.0.0 (common after disconnect), lookup stored IP
+    if (ipKey == 0) {
+        for (uint8_t i = 0; i < CLIENT_IP_MAP_SLOTS; i++) {
+            if (m_clientIpMap[i].clientId == clientId) {
+                ipKey = m_clientIpMap[i].ipKey;
+                // Clear the mapping entry (will be removed after cleanup)
+                m_clientIpMap[i].clientId = 0;
+                m_clientIpMap[i].ipKey = 0;
+                break;
+            }
+        }
+        if (ipKey == 0) {
+            LW_LOGW("WS: Client %u disconnected but no IP mapping found", clientId);
+        }
+    } else {
+        // Remove mapping entry if IP was valid (cleanup)
+        for (uint8_t i = 0; i < CLIENT_IP_MAP_SLOTS; i++) {
+            if (m_clientIpMap[i].clientId == clientId) {
+                m_clientIpMap[i].clientId = 0;
+                m_clientIpMap[i].ipKey = 0;
+                break;
+            }
+        }
+    }
+
+    // Mark inactive for this IP (best-effort)
+    if (ipKey != 0) {
+        for (uint8_t i = 0; i < CONNECT_GUARD_SLOTS; i++) {
+            if (m_connectGuard[i].ipKey == ipKey) {
+                if (m_connectGuard[i].active > 0) m_connectGuard[i].active--;
+                break;
+            }
+        }
+    }
+
+    // #region agent log
+    {
+        // Hws3: Confirm whether disconnects correlate with zero messages received.
+        char buf[320];
+        const int n = snprintf(
+            buf, sizeof(buf),
+            "{\"sessionId\":\"debug-session\",\"runId\":\"ws-guard-pre\",\"hypothesisId\":\"Hws3\",\"location\":\"v2/src/network/webserver/WsGateway.cpp:handleDisconnect\",\"message\":\"ws.disconnect\",\"data\":{\"clientId\":%lu,\"ip\":\"%s\",\"ipKey\":%lu},\"timestamp\":%lu}",
+            static_cast<unsigned long>(clientId),
+            ip.toString().c_str(),
+            static_cast<unsigned long>(ipKey),
+            static_cast<unsigned long>(nowMs)
+        );
+        if (n > 0) Serial.println(buf);
+    }
+    // #endregion
 
     // Call disconnection callback (for cleanup)
     if (m_onDisconnect) {
@@ -106,10 +291,40 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
         return;
     }
 
+    // #region agent log
+    {
+        // Hws3: Prove whether the encoder ever sends WS data before ack timeouts.
+        char buf[320];
+        const int n = snprintf(
+            buf, sizeof(buf),
+            "{\"sessionId\":\"debug-session\",\"runId\":\"ws-guard-pre\",\"hypothesisId\":\"Hws3\",\"location\":\"v2/src/network/webserver/WsGateway.cpp:handleMessage\",\"message\":\"ws.message.recv\",\"data\":{\"clientId\":%lu,\"len\":%u,\"ip\":\"%s\"},\"timestamp\":%lu}",
+            static_cast<unsigned long>(client->id()),
+            static_cast<unsigned>(len),
+            client->remoteIP().toString().c_str(),
+            static_cast<unsigned long>(millis())
+        );
+        if (n > 0) Serial.println(buf);
+    }
+    // #endregion
+
     StaticJsonDocument<512> doc;
     DeserializationError error = deserializeJson(doc, data, len);
 
     if (error) {
+        // #region agent log
+        {
+            // Hwse2: Prove whether disconnects follow parse errors (invalid JSON / partial frames).
+            char buf[360];
+            const int n = snprintf(
+                buf, sizeof(buf),
+                "{\"sessionId\":\"debug-session\",\"runId\":\"ws-drop-pre\",\"hypothesisId\":\"Hwse2\",\"location\":\"v2/src/network/webserver/WsGateway.cpp:handleMessage\",\"message\":\"ws.json.parse_error\",\"data\":{\"clientId\":%lu,\"len\":%u},\"timestamp\":%lu}",
+                static_cast<unsigned long>(client->id()),
+                static_cast<unsigned>(len),
+                static_cast<unsigned long>(millis())
+            );
+            if (n > 0) Serial.println(buf);
+        }
+        // #endregion
         client->text(buildWsError(ErrorCodes::INVALID_JSON, "Parse error"));
         return;
     }
@@ -120,7 +335,24 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
     }
 
     // Route command via WsCommandRouter
+    const char* typeStr = doc["type"] | "";
     bool handled = WsCommandRouter::route(client, doc, m_ctx);
+
+    // #region agent log
+    {
+        // Hwse1: Determine whether encoder sends unknown command types that trigger errors/closures.
+        char buf[380];
+        const int n = snprintf(
+            buf, sizeof(buf),
+            "{\"sessionId\":\"debug-session\",\"runId\":\"ws-drop-pre\",\"hypothesisId\":\"Hwse1\",\"location\":\"v2/src/network/webserver/WsGateway.cpp:handleMessage\",\"message\":\"ws.route.result\",\"data\":{\"clientId\":%lu,\"type\":\"%s\",\"handled\":%s},\"timestamp\":%lu}",
+            static_cast<unsigned long>(client->id()),
+            typeStr,
+            handled ? "true" : "false",
+            static_cast<unsigned long>(millis())
+        );
+        if (n > 0) Serial.println(buf);
+    }
+    // #endregion
     
     // If not handled by router, send error (all commands should be registered)
     if (!handled) {

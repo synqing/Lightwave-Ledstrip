@@ -599,6 +599,7 @@ void WebServer::setupWebSocket() {
     // Register WebSocket event handler
     m_ws->onEvent(webserver::WsGateway::onEvent);
     m_server->addHandler(m_ws);
+    LW_LOGI("WebSocket handler registered at /ws (max clients: %u)", WebServerConfig::MAX_WS_CLIENTS);
 
     // Register WS command handlers (Phase 2: modular command registration)
     webserver::ws::registerWsDeviceCommands(ctx);

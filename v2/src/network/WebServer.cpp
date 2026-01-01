@@ -44,6 +44,7 @@
 #include "webserver/ws/WsBatchCommands.h"
 #if FEATURE_AUDIO_SYNC
 #include "webserver/ws/WsAudioCommands.h"
+#include "webserver/ws/WsDebugCommands.h"
 #endif
 #include "webserver/ws/WsStreamCommands.h"
 #include "../config/network_config.h"
@@ -76,6 +77,7 @@
 #include <cstring>
 #include <ESPmDNS.h>
 #include <LittleFS.h>
+#include <Arduino.h>
 
 #if FEATURE_MULTI_DEVICE
 #include "../sync/DeviceUUID.h"
@@ -481,6 +483,8 @@ void WebServer::setupRoutes() {
     // Create route registry wrapper
     webserver::HttpRouteRegistry registry(m_server);
 
+
+
     // Create WebServer context (m_startTime set later in begin(), use millis() for now)
     webserver::WebServerContext ctx(
         m_actorSystem,
@@ -608,6 +612,7 @@ void WebServer::setupWebSocket() {
     webserver::ws::registerWsBatchCommands(ctx);
 #if FEATURE_AUDIO_SYNC
     webserver::ws::registerWsAudioCommands(ctx);
+    webserver::ws::registerWsDebugCommands(ctx);
 #endif
     webserver::ws::registerWsStreamCommands(ctx);
 }

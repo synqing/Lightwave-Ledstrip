@@ -6,6 +6,9 @@
 #include "StaticAssetRoutes.h"
 #include "../ApiResponse.h"
 #include <LittleFS.h>
+#include <Arduino.h>
+#define LW_LOG_TAG "StaticRoutes"
+#include "../../utils/Log.h"
 
 namespace lightwaveos {
 namespace network {

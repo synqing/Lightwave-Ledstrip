@@ -20,7 +20,12 @@
 #include "handlers/SystemHandlers.h"
 #include "handlers/BatchHandlers.h"
 #include "handlers/AudioHandlers.h"
+#include "handlers/DebugHandlers.h"
 #include <ESPAsyncWebServer.h>
+#include <Arduino.h>
+
+#define LW_LOG_TAG "V1Api"
+#include "../../utils/Log.h"
 
 #if FEATURE_MULTI_DEVICE
 #include "../../sync/DeviceUUID.h"
@@ -39,6 +44,13 @@ void V1ApiRoutes::registerRoutes(
     std::function<void()> broadcastStatus,
     std::function<void()> broadcastZoneState
 ) {
+    LW_LOGI("V1ApiRoutes::registerRoutes() called");
+
+    // Simple test route - registered before /api/v1/ to ensure route matching order
+    registry.onGet("/api/v1/ping", [](AsyncWebServerRequest* request) {
+        request->send(200, "application/json", "{\"pong\":true}");
+    });
+
     // API Discovery - GET /api/v1/ (public)
     registry.onGet("/api/v1/", [checkRateLimit](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
@@ -470,6 +482,30 @@ void V1ApiRoutes::registerRoutes(
         handlers::AudioHandlers::handleBenchmarkHistory(request, ctx.actorSystem);
     });
 #endif
+
+    // Debug routes - Audio debug verbosity control (always available with FEATURE_AUDIO_SYNC)
+    registry.onGet("/api/v1/debug/audio", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+#if FEATURE_AUDIO_SYNC
+        handlers::DebugHandlers::handleAudioDebugGet(request);
+#else
+        sendSuccessResponse(request, [](JsonObject& data) {
+            data["verbosity"] = 0;
+            data["message"] = "Audio sync not enabled";
+        });
+#endif
+    });
+
+    registry.onPost("/api/v1/debug/audio",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::DebugHandlers::handleAudioDebugSet(request, data, len);
+        }
+    );
 
     // Transition routes
     registry.onGet("/api/v1/transitions/types", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {

@@ -361,6 +361,16 @@ private:
     float m_silence_threshold = 0.01f;      ///< RMS below this = silence
     float m_silence_hysteresis_ms = 0.0f;   ///< Time before fade begins (0 = disabled)
 
+    // ========================================================================
+    // Stack Reduction: Temporary buffers moved from stack to class members
+    // ========================================================================
+    
+    /// Temporary buffer for clamped band values (moved from stack to reduce stack usage)
+    float m_clamped_bands[CONTROLBUS_NUM_BANDS] = {0};
+    
+    /// Temporary buffer for clamped chroma values (moved from stack to reduce stack usage)
+    float m_clamped_chroma[CONTROLBUS_NUM_CHROMA] = {0};
+
     // Private methods for spike detection
     void detectAndRemoveSpikes(LookaheadBuffer& buffer,
                                const float* input,

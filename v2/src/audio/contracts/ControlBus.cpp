@@ -138,9 +138,19 @@ void ControlBus::detectAndRemoveSpikes(LookaheadBuffer& buffer,
 
     // Ring buffer indices (Sensory Bridge naming: past_index, look_ahead_1, look_ahead_2)
     // We write to 'newest' and output from 'oldest' (2-frame delay)
-    const size_t newest = buffer.current_frame;
-    const size_t middle = (buffer.current_frame + LOOKAHEAD_FRAMES - 1) % LOOKAHEAD_FRAMES;
-    const size_t oldest = (buffer.current_frame + LOOKAHEAD_FRAMES - 2) % LOOKAHEAD_FRAMES;
+    // 
+    // DEFENSIVE CHECK: Validate current_frame to prevent out-of-bounds access
+    // If buffer.current_frame is corrupted (>= LOOKAHEAD_FRAMES), accessing
+    // buffer.history[current_frame] would cause out-of-bounds access and crash.
+    // This validation ensures we always access valid ring buffer indices.
+    size_t safe_frame = buffer.current_frame;
+    if (safe_frame >= LOOKAHEAD_FRAMES) {
+        safe_frame = 0;  // Reset to safe default if corrupted
+        buffer.current_frame = 0;
+    }
+    const size_t newest = safe_frame;
+    const size_t middle = (safe_frame + LOOKAHEAD_FRAMES - 1) % LOOKAHEAD_FRAMES;
+    const size_t oldest = (safe_frame + LOOKAHEAD_FRAMES - 2) % LOOKAHEAD_FRAMES;
 
     // Store current frame into newest slot
     for (size_t i = 0; i < num_bands; ++i) {
@@ -154,8 +164,12 @@ void ControlBus::detectAndRemoveSpikes(LookaheadBuffer& buffer,
         for (size_t i = 0; i < num_bands; ++i) {
             output[i] = 0.0f;
         }
-        // Advance ring buffer
-        buffer.current_frame = (buffer.current_frame + 1) % LOOKAHEAD_FRAMES;
+        // Advance ring buffer (validate before modulo to ensure safety)
+        size_t next_frame = buffer.current_frame;
+        if (next_frame >= LOOKAHEAD_FRAMES) {
+            next_frame = 0;  // Reset if corrupted
+        }
+        buffer.current_frame = (next_frame + 1) % LOOKAHEAD_FRAMES;
         return;
     }
 
@@ -236,8 +250,12 @@ void ControlBus::detectAndRemoveSpikes(LookaheadBuffer& buffer,
         output[i] = buffer.history[oldest][i];
     }
 
-    // Advance ring buffer index
-    buffer.current_frame = (buffer.current_frame + 1) % LOOKAHEAD_FRAMES;
+    // Advance ring buffer index (validate before modulo to ensure safety)
+    size_t next_frame = buffer.current_frame;
+    if (next_frame >= LOOKAHEAD_FRAMES) {
+        next_frame = 0;  // Reset if corrupted
+    }
+    buffer.current_frame = (next_frame + 1) % LOOKAHEAD_FRAMES;
 }
 
 void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& raw) {
@@ -255,16 +273,14 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     m_flux_s = lerp(m_flux_s, m_frame.fast_flux, m_alpha_slow);
     m_frame.flux = m_flux_s;
 
-    // Temporary buffer for clamped band values
-    float clamped_bands[CONTROLBUS_NUM_BANDS];
+    // STACK REDUCTION: Use class member buffers instead of stack-allocated arrays
+    // This saves ~80 bytes of stack space per call (8 floats + 12 floats)
     for (uint8_t i = 0; i < CONTROLBUS_NUM_BANDS; ++i) {
-        clamped_bands[i] = clamp01(raw.bands[i]);
+        m_clamped_bands[i] = clamp01(raw.bands[i]);
     }
 
-    // Temporary buffer for clamped chroma values
-    float clamped_chroma[CONTROLBUS_NUM_CHROMA];
     for (uint8_t i = 0; i < CONTROLBUS_NUM_CHROMA; ++i) {
-        clamped_chroma[i] = clamp01(raw.chroma[i]);
+        m_clamped_chroma[i] = clamp01(raw.chroma[i]);
     }
 
     // ========================================================================
@@ -272,8 +288,8 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     // Removes single-frame spikes that cause visual flicker
     // Output delayed by 2 frames (~32ms at 60fps)
     // ========================================================================
-    detectAndRemoveSpikes(m_lookahead_bands, clamped_bands, m_bands_despiked, CONTROLBUS_NUM_BANDS, true);
-    detectAndRemoveSpikes(m_lookahead_chroma, clamped_chroma, m_chroma_despiked, CONTROLBUS_NUM_CHROMA, false);
+    detectAndRemoveSpikes(m_lookahead_bands, m_clamped_bands, m_bands_despiked, CONTROLBUS_NUM_BANDS, true);
+    detectAndRemoveSpikes(m_lookahead_chroma, m_clamped_chroma, m_chroma_despiked, CONTROLBUS_NUM_CHROMA, false);
 
     // ========================================================================
     // Stage 3: Zone AGC (optional)

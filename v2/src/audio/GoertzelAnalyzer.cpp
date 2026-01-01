@@ -142,8 +142,19 @@ float GoertzelAnalyzer::computeCoefficient(float targetFreq, uint32_t sampleRate
 }
 
 void GoertzelAnalyzer::accumulate(const int16_t* samples, size_t count) {
+    // DEFENSIVE CHECK: Validate count parameter to prevent excessive iteration
+    // Typical count is HOP_SIZE (256), but clamp to reasonable maximum
+    constexpr size_t MAX_ACCUMULATE_COUNT = 512;  // 2x HOP_SIZE as safety limit
+    if (count > MAX_ACCUMULATE_COUNT) {
+        count = MAX_ACCUMULATE_COUNT;  // Clamp to safe maximum
+    }
+    
     for (size_t i = 0; i < count; ++i) {
         // Legacy 8-band accumulation buffer
+        // DEFENSIVE CHECK: Validate m_accumIndex before array access
+        if (m_accumIndex >= WINDOW_SIZE) {
+            m_accumIndex = 0;  // Reset if corrupted
+        }
         m_accumBuffer[m_accumIndex] = samples[i];
         m_accumIndex++;
 
@@ -153,6 +164,10 @@ void GoertzelAnalyzer::accumulate(const int16_t* samples, size_t count) {
         }
 
         // 64-bin circular history buffer
+        // DEFENSIVE CHECK: Validate m_historyWriteIndex before array access (already done in getHistorySample, but also here for safety)
+        if (m_historyWriteIndex >= SAMPLE_HISTORY_LENGTH) {
+            m_historyWriteIndex = 0;  // Reset if corrupted
+        }
         m_sampleHistory[m_historyWriteIndex] = samples[i];
         m_historyWriteIndex = (m_historyWriteIndex + 1) % SAMPLE_HISTORY_LENGTH;
         if (m_sampleCount < SAMPLE_HISTORY_LENGTH) {
@@ -168,8 +183,23 @@ int16_t GoertzelAnalyzer::getHistorySample(size_t samplesAgo) const {
         return 0;  // Not enough samples accumulated yet
     }
 
+    // DEFENSIVE CHECK: Validate m_historyWriteIndex to prevent out-of-bounds access
+    // If m_historyWriteIndex is corrupted (>= SAMPLE_HISTORY_LENGTH), the modulo
+    // calculation might not protect against all cases. This validation ensures
+    // we always use a valid index for circular buffer access.
+    size_t safe_write_index = m_historyWriteIndex;
+    if (safe_write_index >= SAMPLE_HISTORY_LENGTH) {
+        safe_write_index = 0;  // Reset if corrupted
+    }
+
     // Calculate read index (wrap around for circular buffer)
-    size_t readIndex = (m_historyWriteIndex + SAMPLE_HISTORY_LENGTH - 1 - samplesAgo) % SAMPLE_HISTORY_LENGTH;
+    size_t readIndex = (safe_write_index + SAMPLE_HISTORY_LENGTH - 1 - samplesAgo) % SAMPLE_HISTORY_LENGTH;
+    
+    // DEFENSIVE CHECK: Ensure readIndex is valid (should always be after modulo, but protects against edge cases)
+    if (readIndex >= SAMPLE_HISTORY_LENGTH) {
+        return 0;  // Safety fallback
+    }
+    
     return m_sampleHistory[readIndex];
 }
 
@@ -223,6 +253,11 @@ float GoertzelAnalyzer::computeGoertzelBin(size_t binIndex) const {
 }
 
 bool GoertzelAnalyzer::analyze64(float* binsOut) {
+    // DEFENSIVE: Validate output pointer is not null
+    if (binsOut == nullptr) {
+        return false;
+    }
+    
     // Check if we have enough samples for the largest window
     if (m_sampleCount < MAX_BLOCK_SIZE) {
         return false;
@@ -259,9 +294,12 @@ bool GoertzelAnalyzer::analyze64(float* binsOut) {
         }
     }
 
-    // Copy all 64 bins to output (including previously computed ones for interlaced mode)
-    for (size_t bin = 0; bin < NUM_BINS; ++bin) {
-        binsOut[bin] = m_magnitudes64[bin];
+    // DEFENSIVE: Copy all 64 bins to output (including previously computed ones for interlaced mode)
+    // Additional null check before array access (redundant but safe)
+    if (binsOut != nullptr) {
+        for (size_t bin = 0; bin < NUM_BINS; ++bin) {
+            binsOut[bin] = m_magnitudes64[bin];
+        }
     }
 
     return true;

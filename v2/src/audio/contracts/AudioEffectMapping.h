@@ -236,7 +236,8 @@ struct EffectAudioMapping {
  */
 class AudioMappingRegistry {
 public:
-    static constexpr uint8_t MAX_EFFECTS = 80;
+    // Keep in sync with RendererActor::MAX_EFFECTS (upper bound for effect IDs)
+    static constexpr uint8_t MAX_EFFECTS = 96;
 
     /**
      * @brief Get singleton instance

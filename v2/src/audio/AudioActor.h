@@ -41,19 +41,15 @@
 #include "AudioTuning.h"
 #include "GoertzelAnalyzer.h"
 #include "ChromaAnalyzer.h"
+#if FEATURE_STYLE_DETECTION
 #include "StyleDetector.h"
+#endif
 #include "contracts/AudioTime.h"
 #include "contracts/ControlBus.h"
 #include "contracts/SnapshotBuffer.h"
 
-// K1-Lightwave beat tracker integration (Phase 3)
-#include "k1/K1Pipeline.h"
-#include "k1/K1Messages.h"
-#include "../utils/LockFreeQueue.h"
-
-#if FEATURE_K1_DEBUG
-#include "k1/K1DebugRing.h"
-#endif
+// Tempo tracker
+#include "tempo/TempoTracker.h"
 
 #if FEATURE_AUDIO_BENCHMARK
 #include "AudioBenchmarkMetrics.h"
@@ -332,46 +328,26 @@ public:
     bool applyCalibrationResults();
 
     // ========================================================================
-    // K1-Lightwave Integration (Phase 3)
+    // TempoTracker Integration (replaces K1 Pipeline)
     // ========================================================================
 
     /**
-     * @brief Set K1 output queues for cross-core communication
-     *
-     * Called during system initialization to connect AudioActor's K1Pipeline
-     * to RendererActor's lock-free queues.
-     *
-     * @param tempoQueue Pointer to RendererActor's tempo queue
-     * @param beatQueue Pointer to RendererActor's beat queue
+     * @brief Get const reference to TempoTracker for diagnostics
      */
-    void setK1Queues(
-        utils::LockFreeQueue<k1::K1TempoUpdate, 8>* tempoQueue,
-        utils::LockFreeQueue<k1::K1BeatEvent, 16>* beatQueue
-    ) {
-        m_k1TempoQueue = tempoQueue;
-        m_k1BeatQueue = beatQueue;
-    }
+    const TempoTracker& getTempo() const { return m_tempo; }
 
     /**
-     * @brief Check if K1 integration is active
-     */
-    bool isK1Enabled() const { return m_k1TempoQueue != nullptr && m_k1BeatQueue != nullptr; }
-
-    /**
-     * @brief Get const reference to K1Pipeline for diagnostics
-     */
-    const k1::K1Pipeline& getK1Pipeline() const { return m_k1Pipeline; }
-
-#if FEATURE_K1_DEBUG
-    /**
-     * @brief Get const reference to K1 debug ring buffer
+     * @brief Get mutable reference to TempoTracker for phase advancement
      *
-     * RendererActor or WebSocket can drain this for debug telemetry.
-     * Consumer must call pop() to read samples.
+     * Called by ActorSystem to give RendererActor access to advancePhase().
+     * RendererActor calls advancePhase() at 120 FPS in the render loop.
      */
-    k1::K1DebugRing& getK1DebugRing() { return m_k1DebugRing; }
-    const k1::K1DebugRing& getK1DebugRing() const { return m_k1DebugRing; }
-#endif
+    TempoTracker& getTempoMut() { return m_tempo; }
+
+    /**
+     * @brief Check if tempo tracking is initialized
+     */
+    bool isTempoEnabled() const { return true; }  // Always enabled when audio is running
 
     // ========================================================================
     // Phase 2B: Benchmark Access
@@ -476,9 +452,11 @@ private:
     ChromaAnalyzer m_chromaAnalyzer;
 
     // Style detector (MIS Phase 2: adaptive visual response)
+#if FEATURE_STYLE_DETECTION
     StyleDetector m_styleDetector;
+#endif
 
-    // Previous chord root for chord change detection (StyleDetector input)
+    // Previous chord root for chord change detection (StyleDetector/saliency input)
     uint8_t m_prevChordRoot = 0;
 
     // ControlBus state machine (smoothing, attack/release)
@@ -531,9 +509,9 @@ private:
     uint32_t m_goertzelLogCounter = 0;
     static constexpr uint32_t GOERTZEL_LOG_INTERVAL = 62;  // ~2 seconds @ 31 Hz
 
-    // Throttle for 64-bin Goertzel logging (log once per ~1 second)
+    // Throttle for 64-bin Goertzel logging (log once per ~2 seconds)
     uint32_t m_goertzel64LogCounter = 0;
-    static constexpr uint32_t GOERTZEL64_LOG_INTERVAL = 31;  // ~1 second @ 31 Hz
+    static constexpr uint32_t GOERTZEL64_LOG_INTERVAL = 62;  // ~2 seconds @ 31 Hz
 
     // ========================================================================
     // Phase 2C: Goertzel Novelty Tuning
@@ -543,26 +521,28 @@ private:
     GoertzelNoveltyTuning m_noveltyTuning;
 
     // ========================================================================
-    // K1-Lightwave Beat Tracker (Phase 3)
+    // TempoTracker Beat Tracker
     // ========================================================================
 
-    /// K1 beat tracker pipeline (Stages 2-4)
-    k1::K1Pipeline m_k1Pipeline;
+    /// Tempo tracker
+    TempoTracker m_tempo;
 
-    /// Last K1 output for change detection
-    k1::K1PipelineOutput m_lastK1Output;
+    /// Last tempo output for diagnostics
+    TempoOutput m_lastTempoOutput;
 
-    /// Pointers to RendererActor's lock-free queues (set via setK1Queues)
-    utils::LockFreeQueue<k1::K1TempoUpdate, 8>* m_k1TempoQueue = nullptr;
-    utils::LockFreeQueue<k1::K1BeatEvent, 16>* m_k1BeatQueue = nullptr;
+    /// Cached 64-bin spectrum for tempo tracker novelty input
+    /// Updated every ~94ms when 64-bin analysis completes, used every hop
+    float m_bins64Cached[64] = {0};
 
-    /// Beat-in-bar counter for K1BeatEvent (wraps at 4 for 4/4 time)
-    uint8_t m_k1BeatInBar = 0;
-
-#if FEATURE_K1_DEBUG
-    /// K1 debug ring buffer for cross-core telemetry (2KB)
-    k1::K1DebugRing m_k1DebugRing;
-#endif
+    // ========================================================================
+    // Stack Reduction: Large arrays moved from stack to class members
+    // ========================================================================
+    
+    /// Temporary buffer for 64-bin Goertzel analysis (moved from stack to reduce stack usage)
+    float m_bins64Raw[GoertzelAnalyzer::NUM_BINS] = {0};
+    
+    /// Temporary buffer for folded 64-bin bands (moved from stack to reduce stack usage)
+    float m_bands64Folded[8] = {0};
 
     // ========================================================================
     // Phase 2C: Noise Calibration State

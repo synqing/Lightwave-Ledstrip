@@ -37,7 +37,7 @@
 namespace lightwaveos {
 namespace audio {
 
-// Emotiscope-proven sample conversion constants
+// Proven sample conversion constants
 static constexpr int32_t DC_BIAS_ADD = 7000;       // Pre-clip bias adjustment
 static constexpr int32_t DC_BIAS_SUB = 360;        // Post-clip DC removal
 static constexpr int32_t CLIP_MAX = 131071;        // 18-bit max value (2^17 - 1)
@@ -70,7 +70,7 @@ bool AudioCapture::init()
         return true;
     }
 
-    LW_LOGI("Initializing I2S for SPH0645 (RIGHT channel, Emotiscope conversion)");
+    LW_LOGI("Initializing I2S for SPH0645 (RIGHT channel)");
 
     // Configure I2S driver
     if (!configureI2S()) {
@@ -178,10 +178,18 @@ CaptureResult AudioCapture::captureHop(int16_t* buffer)
     }
 
     // Verify we got the expected amount
+    // DEFENSIVE CHECK: Validate samplesRead doesn't exceed HOP_SIZE before array access
     const size_t samplesRead = bytesRead / sizeof(int32_t);
     if (samplesRead < HOP_SIZE) {
         LW_LOGW("Partial read: %zu/%d samples", samplesRead, HOP_SIZE);
-        memset(&buffer[samplesRead], 0, (HOP_SIZE - samplesRead) * sizeof(int16_t));
+        // DEFENSIVE CHECK: Ensure samplesRead is within bounds before memset
+        if (samplesRead < HOP_SIZE) {
+            memset(&buffer[samplesRead], 0, (HOP_SIZE - samplesRead) * sizeof(int16_t));
+        }
+    } else if (samplesRead > HOP_SIZE) {
+        // DEFENSIVE CHECK: Clamp samplesRead to HOP_SIZE if corrupted
+        LW_LOGW("Oversized read: %zu/%d samples, clamping", samplesRead, HOP_SIZE);
+        // Process only HOP_SIZE samples
     }
 
     static uint32_t s_dbgHop = 0;

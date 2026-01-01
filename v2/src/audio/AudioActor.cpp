@@ -20,6 +20,11 @@
 #include <cmath>
 #include <algorithm>
 
+#ifndef NATIVE_BUILD
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#endif
+
 // Always include macros - they define no-ops when FEATURE_AUDIO_BENCHMARK is disabled
 #include "AudioBenchmarkMacros.h"
 
@@ -34,8 +39,25 @@
 // Runtime-configurable audio debug verbosity
 #include "AudioDebugConfig.h"
 
-// K1 beat tracker configuration (for perceptual band weights)
-#include "k1/K1Config.h"
+// TempoTracker integration
+#include "tempo/TempoTracker.h"
+
+// Perceptual band weights for spectral flux calculation (derived from K1 research)
+// Bass bands weighted higher for better kick detection
+namespace {
+    constexpr float PERCEPTUAL_BAND_WEIGHTS[8] = {
+        1.4f,   // Band 0: Sub-bass (20-40Hz) - critical for kick drums
+        1.3f,   // Band 1: Bass (40-80Hz) - fundamental bass notes
+        1.0f,   // Band 2: Low-mid (80-160Hz) - bass harmonics
+        0.9f,   // Band 3: Mid (160-320Hz) - lower vocals, snare body
+        0.8f,   // Band 4: Upper-mid (320-640Hz) - vocals, instruments
+        0.6f,   // Band 5: Presence (640-1280Hz) - clarity frequencies
+        0.4f,   // Band 6: Brilliance (1280-2560Hz) - sibilance, hi-hats
+        0.3f    // Band 7: Air (2560-5120Hz) - sparkle, treble transients
+    };
+    constexpr float PERCEPTUAL_BAND_WEIGHT_SUM =
+        1.4f + 1.3f + 1.0f + 0.9f + 0.8f + 0.6f + 0.4f + 0.3f;  // 6.7f
+}
 
 #ifndef NATIVE_BUILD
 #include <esp_timer.h>
@@ -179,15 +201,11 @@ void AudioActor::onStart()
     m_state = AudioActorState::RUNNING;
     m_stats.state = m_state;
 
-    // Initialize K1-Lightwave beat tracker pipeline
-    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
-    m_k1Pipeline.begin(now_ms);
-#if FEATURE_K1_DEBUG
-    m_k1Pipeline.setDebugRing(&m_k1DebugRing);
-    LW_LOGI("K1-Lightwave pipeline initialized (debug ring enabled)");
-#else
-    LW_LOGI("K1-Lightwave pipeline initialized");
-#endif
+    // Initialize TempoTracker beat tracker
+    m_tempo.init();
+    // Initialize last output state
+    m_lastTempoOutput = m_tempo.getOutput();
+    LW_LOGI("TempoTracker initialized");
 
     LW_LOGI("AudioActor started (tick=%dms, hop=%d, rate=%.1fHz)",
              AUDIO_ACTOR_TICK_MS, HOP_SIZE, HOP_RATE_HZ);
@@ -284,10 +302,10 @@ void AudioActor::onTick()
                  styleClass.styleWeights[4]);
 #endif
 
-        // Log K1 beat tracking metrics
+        // Log TempoTracker beat tracking metrics
         LW_LOGI(LW_CLR_MAGENTA "Beat:" LW_ANSI_RESET " BPM=%.1f conf=%.2f phase=%.2f lock=%s",
-                 m_lastK1Output.bpm, m_lastK1Output.confidence,
-                 m_lastK1Output.phase01, m_lastK1Output.locked ? "YES" : "no");
+                 m_lastTempoOutput.bpm, m_lastTempoOutput.confidence,
+                 m_lastTempoOutput.phase01, m_lastTempoOutput.locked ? "YES" : "no");
     }
 }
 
@@ -381,9 +399,9 @@ void AudioActor::processHop()
 #endif
         m_prevChordRoot = 0;
         m_controlBus.Reset();
-        // K1-Lightwave reset
-        m_k1Pipeline.reset();
-        m_k1BeatInBar = 0;
+        // TempoTracker reset
+        m_tempo.init();
+        m_lastTempoOutput = m_tempo.getOutput();
     }
 
     // 1. Build AudioTime for this hop
@@ -556,6 +574,15 @@ void AudioActor::processHop()
     }
 #endif
 
+    // STACK MONITORING: Check stack high water mark before large allocations
+#ifndef NATIVE_BUILD
+    UBaseType_t stackHighWater = uxTaskGetStackHighWaterMark(nullptr);
+    if (stackHighWater < 512) {  // Less than 2KB remaining (512 words * 4 bytes)
+        LW_LOGW("AudioActor stack low! High water mark: %u words (%.1f KB remaining)",
+                stackHighWater, stackHighWater * 4.0f / 1024.0f);
+    }
+#endif
+
     // 5. Build ControlBusRawInput
     ControlBusRawInput raw;
     raw.rms = rmsMapped;
@@ -646,18 +673,17 @@ void AudioActor::processHop()
     BENCH_END_PHASE(goertzelUs);
     BENCH_SET_FLAG(goertzelTriggered, goertzelTriggered ? 1 : 0);
 
-    // Priority 5: Perceptually-Weighted Spectral Flux
-    // K1 RELIABILITY FIX: Weight bass bands higher to improve kick detection
-    // and reduce false triggers from hi-hats and treble transients.
-    // See: docs/K1_RECOMMENDED_FIXES.md (Priority 1)
+    // Perceptually-Weighted Spectral Flux
+    // Bass bands weighted higher to improve kick detection and reduce
+    // false triggers from hi-hats and treble transients.
     float unclippedFlux = 0.0f;
     if (m_noveltyTuning.useSpectralFlux) {
         float spectralFlux = 0.0f;
         for (int i = 0; i < NUM_BANDS; ++i) {
             float delta = raw.bands[i] - m_prevBands[i];
             // Perceptual weighting: bass (bands 0-1) weighted highest,
-            // treble (bands 6-7) weighted lowest. K1_BAND_WEIGHTS from K1Config.h
-            float weight = k1::K1_BAND_WEIGHTS[i];
+            // treble (bands 6-7) weighted lowest
+            float weight = PERCEPTUAL_BAND_WEIGHTS[i];
             // Half-wave rectification: only positive changes (onsets) contribute
             // Negative deltas (decay) suppressed at 0.6x to handle AGC oscillation
             float weightedDelta = (delta > 0.0f) ? (delta * weight) : (-delta * 0.6f * weight);
@@ -665,7 +691,7 @@ void AudioActor::processHop()
             m_prevBands[i] = raw.bands[i];
         }
         // Normalize by weight sum for consistent scaling across all band configurations
-        spectralFlux /= k1::K1_BAND_WEIGHT_SUM;
+        spectralFlux /= PERCEPTUAL_BAND_WEIGHT_SUM;
         spectralFlux *= m_noveltyTuning.spectralFluxScale;
         unclippedFlux = spectralFlux * tuning.fluxScale;
         fluxMapped = std::min(1.0f, unclippedFlux);  // Hard clamp for UI/effects
@@ -676,94 +702,81 @@ void AudioActor::processHop()
     }
 
     // ========================================================================
-    // K1-Lightwave Beat Tracker Processing (Phase 3)
+    // TempoTracker Beat Tracker Processing
     // ========================================================================
-    {
-        uint32_t k1_now_ms = (uint32_t)(now_us / 1000);
-        k1::K1PipelineOutput k1Out;
+    // Dual-rate novelty input:
+    // - Spectral flux from 8-band Goertzel when ready (31.25 Hz)
+    // - VU derivative from RMS every hop (62.5 Hz)
+    // goertzelTriggered fires when 8-band analysis completes (every 512 samples)
+    m_tempo.updateNovelty(
+        goertzelTriggered ? raw.bands : nullptr,  // 8-band magnitudes or nullptr
+        8,                                         // num_bands
+        rmsRaw,                                    // RMS for VU calculation
+        goertzelTriggered                          // bands_ready flag
+    );
 
-        // Feed spectral flux to K1 pipeline
-        // Use soft-clipped flux for K1 to preserve dynamic range (instead of hard clamp)
-        float fluxForK1 = unclippedFlux;
-        // Soft-clip: compress extreme values instead of hard clamp
-        // This preserves more dynamic range while preventing extreme values
-        if (fluxForK1 > 1.0f) {
-            fluxForK1 = 1.0f + (fluxForK1 - 1.0f) * 0.3f;  // Compress beyond 1.0
-        } else if (fluxForK1 < 0.0f) {
-            fluxForK1 = fluxForK1 * 0.3f;  // Compress negative values
-        }
-        // K1 converts [0,1] flux to z-score [-6,+6] internally (now with running-stat normaliser)
-        bool lockChanged = m_k1Pipeline.processNovelty(fluxForK1, k1_now_ms, k1Out);
+    // Update tempo detection (interleaved Goertzel computation)
+    float delta_sec = 0.016f;  // ~16ms per hop
+    m_tempo.updateTempo(delta_sec);
 
-        // Push tempo update if lock state changed or confidence changed significantly
-        if (m_k1TempoQueue != nullptr) {
-            bool shouldPushTempo = lockChanged ||
-                (k1Out.locked && std::abs(k1Out.bpm - m_lastK1Output.bpm) > 0.5f) ||
-                (k1Out.locked != m_lastK1Output.locked);
+    // Store for change detection (used by getTempo() diagnostics)
+    m_lastTempoOutput = m_tempo.getOutput();
 
-            if (shouldPushTempo) {
-                k1::K1TempoUpdate tempoMsg;
-                tempoMsg.timestamp_ms = k1_now_ms;
-                tempoMsg.bpm = k1Out.bpm;
-                tempoMsg.confidence = k1Out.confidence;
-                tempoMsg.is_locked = k1Out.locked;
-                m_k1TempoQueue->push(tempoMsg);
-            }
-        }
-
-        // Push beat event if beat tick occurred
-        if (m_k1BeatQueue != nullptr && k1Out.beat_tick && k1Out.locked) {
-            k1::K1BeatEvent beatMsg;
-            beatMsg.timestamp_ms = k1_now_ms;
-            beatMsg.phase01 = k1Out.phase01;
-            beatMsg.beat_in_bar = m_k1BeatInBar;
-            beatMsg.is_downbeat = (m_k1BeatInBar == 0);
-            beatMsg.strength = k1Out.confidence;  // Use confidence as strength
-            m_k1BeatQueue->push(beatMsg);
-
-            // Advance beat-in-bar counter (4/4 time)
-            m_k1BeatInBar = (m_k1BeatInBar + 1) % 4;
-        }
-
-        // Store for change detection
-        m_lastK1Output = k1Out;
-    }
+    // Note: advancePhase() is called by RendererActor at 120 FPS
+    // This separation allows smooth beat tracking at render rate
+    // while novelty and tempo updates happen at audio rate (~62.5 Hz)
 
     // ========================================================================
     // 64-bin Goertzel Analysis (Sensory Bridge parity)
     // Runs less frequently - needs 1500 samples (~94ms to accumulate)
     // ========================================================================
-    float bins64Raw[GoertzelAnalyzer::NUM_BINS] = {0};
-    if (m_analyzer.analyze64(bins64Raw)) {
+    // DEFENSIVE: Clear buffers before use (moved from stack to class members to reduce stack usage)
+    memset(m_bins64Raw, 0, sizeof(m_bins64Raw));
+    memset(m_bands64Folded, 0, sizeof(m_bands64Folded));
+    
+    if (m_analyzer.analyze64(m_bins64Raw)) {
         TRACE_BEGIN("goertzel64_fold");
 
         // Fold 64 bins -> 8 bands (8 bins per band, take max)
-        float bands64Folded[8] = {0};
         for (size_t bin = 0; bin < GoertzelAnalyzer::NUM_BINS; ++bin) {
             size_t bandIdx = bin >> 3;  // bin / 8
-            bands64Folded[bandIdx] = std::max(bands64Folded[bandIdx], bins64Raw[bin]);
+            // DEFENSIVE: Bounds check to prevent out-of-bounds access
+            if (bandIdx < 8) {
+                m_bands64Folded[bandIdx] = std::max(m_bands64Folded[bandIdx], m_bins64Raw[bin]);
+            }
         }
 
         // Store for logging comparison
         for (int i = 0; i < 8; ++i) {
-            m_lastBands64[i] = bands64Folded[i];
+            m_lastBands64[i] = m_bands64Folded[i];
         }
         m_analyze64Ready = true;
+
+        // Cache 64-bin spectrum for TempoTracker novelty input
+        // This is used every hop for tempo detection (stale data better than coarse 8-band)
+        memcpy(m_bins64Cached, m_bins64Raw, sizeof(m_bins64Cached));
 
         // Phase 1.3: Publish full 64-bin spectrum to ControlBusRawInput
         // Apply activity gating and store in raw.bins64 for ControlBus passthrough
         for (size_t i = 0; i < GoertzelAnalyzer::NUM_BINS; ++i) {
-            raw.bins64[i] = bins64Raw[i] * activity;
+            raw.bins64[i] = m_bins64Raw[i] * activity;
         }
 
         // Throttled 64-bin logging - gated by verbosity >= 4
         auto& dbgCfg64 = getAudioDebugConfig();
-        if (dbgCfg64.verbosity >= 4 && ++m_goertzel64LogCounter >= dbgCfg64.interval64Bin()) {
+        // DEFENSIVE: Validate interval to prevent division by zero or invalid access
+        uint16_t interval = dbgCfg64.interval64Bin();
+        if (interval == 0) {
+            interval = 1;  // Safety fallback: prevent division by zero
+        }
+        
+        if (dbgCfg64.verbosity >= 4 && ++m_goertzel64LogCounter >= interval) {
             m_goertzel64LogCounter = 0;
+            // DEFENSIVE: Validate array bounds before logging
             // Cyan for 64-bin spectral analysis (title-only coloring)
             LW_LOGD(LW_CLR_CYAN_DIM "64-bin Goertzel:" LW_ANSI_RESET " [%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f]",
-                     bands64Folded[0], bands64Folded[1], bands64Folded[2], bands64Folded[3],
-                     bands64Folded[4], bands64Folded[5], bands64Folded[6], bands64Folded[7]);
+                     m_bands64Folded[0], m_bands64Folded[1], m_bands64Folded[2], m_bands64Folded[3],
+                     m_bands64Folded[4], m_bands64Folded[5], m_bands64Folded[6], m_bands64Folded[7]);
         }
 
         TRACE_END();
@@ -832,10 +845,11 @@ void AudioActor::processHop()
     // === Phase: ControlBus Update ===
     BENCH_START_PHASE();
 
-    // 7a. Populate K1 beat tracker state for rhythmic saliency
-    raw.k1Locked = m_lastK1Output.locked;
-    raw.k1Confidence = m_lastK1Output.confidence;
-    raw.k1BeatTick = m_lastK1Output.beat_tick && m_lastK1Output.locked;
+        // 7a. Populate beat tracker state for rhythmic saliency (using TempoTracker output)
+    // Field names kept as k1* for backward compatibility with effects
+    raw.k1Locked = m_lastTempoOutput.locked;
+    raw.k1Confidence = m_lastTempoOutput.confidence;
+    raw.k1BeatTick = m_lastTempoOutput.beat_tick && m_lastTempoOutput.locked;
 
     // 7. Update ControlBus with attack/release smoothing
     m_controlBus.setSmoothing(tuning.controlBusAlphaFast, tuning.controlBusAlphaSlow);
@@ -850,8 +864,8 @@ void AudioActor::processHop()
     {
         bool chordChanged = (m_controlBus.GetFrame().chordState.rootNote != m_prevChordRoot);
         m_prevChordRoot = m_controlBus.GetFrame().chordState.rootNote;
-        // Use K1 beat tracker confidence for style detection
-        float beatConfidence = m_lastK1Output.locked ? m_lastK1Output.confidence : 0.0f;
+        // Use TempoTracker beat tracker confidence for style detection
+        float beatConfidence = m_lastTempoOutput.locked ? m_lastTempoOutput.confidence : 0.0f;
         m_styleDetector.update(
             rmsMapped,
             fluxMapped,

@@ -3,7 +3,7 @@
  * @brief I2S audio capture driver for SPH0645 MEMS microphone
  *
  * This module provides low-level I2S audio capture using the ESP-IDF legacy
- * I2S driver with Emotiscope-derived configuration corrections.
+ * I2S driver with configuration corrections.
  *
  * Key features:
  * - Uses ESP-IDF legacy driver (driver/i2s.h) for Arduino compatibility

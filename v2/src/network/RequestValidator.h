@@ -471,7 +471,153 @@ private:
         }
         return ValidationResult::success();
     }
+
+    // ========================================================================
+    // Input Sanitization Functions
+    // ========================================================================
+
+    /**
+     * @brief Sanitize a string input
+     * 
+     * Removes control characters, limits length, and validates encoding.
+     * 
+     * @param input Input string to sanitize
+     * @param maxLen Maximum allowed length (default 256)
+     * @return Sanitized string
+     */
+    static String sanitizeString(const String& input, size_t maxLen = 256) {
+        String output;
+        output.reserve(maxLen);
+        
+        for (size_t i = 0; i < input.length() && output.length() < maxLen; i++) {
+            char c = input[i];
+            
+            // Allow printable ASCII (32-126) and common UTF-8 continuation bytes
+            // Filter out control characters (0-31, 127)
+            if (c >= 32 && c < 127) {
+                output += c;
+            } else if (c == '\n' || c == '\r' || c == '\t') {
+                // Allow common whitespace
+                output += c;
+            }
+            // All other characters are filtered out
+        }
+        
+        return output;
+    }
+
+    /**
+     * @brief Sanitize an integer value
+     * 
+     * Clamps value to safe range [min, max].
+     * 
+     * @param value Value to sanitize
+     * @param min Minimum allowed value
+     * @param max Maximum allowed value
+     * @return Clamped value
+     */
+    static int32_t sanitizeInt(int32_t value, int32_t min, int32_t max) {
+        if (value < min) {
+            return min;
+        }
+        if (value > max) {
+            return max;
+        }
+        return value;
+    }
+
+    /**
+     * @brief Validate JSON document depth
+     * 
+     * Prevents deeply nested JSON structures that could cause stack overflow.
+     * 
+     * @param doc JSON document to validate
+     * @param maxDepth Maximum allowed nesting depth (default 10)
+     * @return true if depth is valid, false if too deep
+     */
+    static bool validateJsonDepth(const JsonDocument& doc, uint8_t maxDepth = 10) {
+        // Simple depth check: count opening braces
+        // This is a conservative estimate
+        String jsonStr;
+        serializeJson(doc, jsonStr);
+        
+        uint8_t depth = 0;
+        uint8_t maxObservedDepth = 0;
+        
+        for (size_t i = 0; i < jsonStr.length(); i++) {
+            char c = jsonStr[i];
+            if (c == '{' || c == '[') {
+                depth++;
+                if (depth > maxObservedDepth) {
+                    maxObservedDepth = depth;
+                }
+            } else if (c == '}' || c == ']') {
+                if (depth > 0) {
+                    depth--;
+                }
+            }
+            
+            // Early exit if depth exceeds limit
+            if (maxObservedDepth > maxDepth) {
+                return false;
+            }
+        }
+        
+        return maxObservedDepth <= maxDepth;
+    }
 };
+
+// ============================================================================
+// Request Validation Helpers
+// ============================================================================
+
+/**
+ * @brief Validate and clamp effect ID to safe range [0, MAX_EFFECTS-1]
+ * 
+ * DEFENSIVE CHECK: Prevents LoadProhibited crashes from corrupted effect ID in requests.
+ * 
+ * @param effectId Effect ID from request
+ * @return Valid effect ID, defaults to 0 if out of bounds
+ */
+inline uint8_t validateEffectIdInRequest(uint8_t effectId) {
+    constexpr uint8_t MAX_EFFECTS = 96;  // Keep in sync with RendererActor::MAX_EFFECTS
+    if (effectId >= MAX_EFFECTS) {
+        return 0;  // Return safe default (effect 0)
+    }
+    return effectId;
+}
+
+/**
+ * @brief Validate and clamp palette ID to safe range [0, MASTER_PALETTE_COUNT-1]
+ * 
+ * DEFENSIVE CHECK: Prevents LoadProhibited crashes from corrupted palette ID in requests.
+ * 
+ * @param paletteId Palette ID from request
+ * @return Valid palette ID, defaults to 0 if out of bounds
+ */
+inline uint8_t validatePaletteIdInRequest(uint8_t paletteId) {
+    constexpr uint8_t MASTER_PALETTE_COUNT = 75;  // From Palettes_Master.h
+    if (paletteId >= MASTER_PALETTE_COUNT) {
+        return 0;  // Return safe default (palette 0)
+    }
+    return paletteId;
+}
+
+/**
+ * @brief Validate and clamp zone ID to safe range [0, MAX_ZONES-1]
+ * 
+ * DEFENSIVE CHECK: Prevents LoadProhibited crashes from corrupted zone ID in requests.
+ * 
+ * @param zoneId Zone ID from request
+ * @return Valid zone ID, defaults to 0 if out of bounds
+ */
+inline uint8_t validateZoneIdInRequest(uint8_t zoneId) {
+    constexpr uint8_t MAX_ZONES = 4;  // From ZoneDefinition.h
+    if (zoneId >= MAX_ZONES) {
+        return 0;  // Return safe default (zone 0)
+    }
+    return zoneId;
+}
 
 // ============================================================================
 // Common Request Schemas
@@ -548,10 +694,11 @@ namespace RequestSchemas {
 
     /**
      * @brief POST /api/v1/zones/layout
-     * Required: zoneCount (3 or 4)
+     * Required: zones (array of zone segment definitions)
+     * Each zone object: zoneId, s1LeftStart, s1LeftEnd, s1RightStart, s1RightEnd
      */
     constexpr FieldSchema ZoneLayout[] = {
-        {"zoneCount", FieldType::UINT8, true, 3, 4}
+        {"zones", FieldType::ARRAY, true}
     };
     constexpr size_t ZoneLayoutSize = sizeof(ZoneLayout) / sizeof(FieldSchema);
 
@@ -650,66 +797,7 @@ namespace RequestSchemas {
     };
     constexpr size_t NetworkConnectSize = sizeof(NetworkConnect) / sizeof(FieldSchema);
 
-    // ========================================================================
-    // Legacy API Schemas
-    // ========================================================================
-
-    /**
-     * @brief POST /api/effect (legacy)
-     */
-    constexpr FieldSchema LegacySetEffect[] = {
-        {"effect", FieldType::UINT8, true, 0, 255}
-    };
-    constexpr size_t LegacySetEffectSize = sizeof(LegacySetEffect) / sizeof(FieldSchema);
-
-    /**
-     * @brief POST /api/brightness (legacy)
-     */
-    constexpr FieldSchema LegacySetBrightness[] = {
-        {"brightness", FieldType::UINT8, true, 0, 255}
-    };
-    constexpr size_t LegacySetBrightnessSize = sizeof(LegacySetBrightness) / sizeof(FieldSchema);
-
-    /**
-     * @brief POST /api/speed (legacy)
-     */
-    constexpr FieldSchema LegacySetSpeed[] = {
-        {"speed", FieldType::UINT8, true, 1, 100}  // Extended range
-    };
-    constexpr size_t LegacySetSpeedSize = sizeof(LegacySetSpeed) / sizeof(FieldSchema);
-
-    /**
-     * @brief POST /api/palette (legacy)
-     */
-    constexpr FieldSchema LegacySetPalette[] = {
-        {"paletteId", FieldType::UINT8, true, 0, 255}
-    };
-    constexpr size_t LegacySetPaletteSize = sizeof(LegacySetPalette) / sizeof(FieldSchema);
-
-    /**
-     * @brief POST /api/zone/count (legacy)
-     */
-    constexpr FieldSchema LegacyZoneCount[] = {
-        {"count", FieldType::UINT8, true, 1, 4}
-    };
-    constexpr size_t LegacyZoneCountSize = sizeof(LegacyZoneCount) / sizeof(FieldSchema);
-
-    /**
-     * @brief POST /api/zone/effect (legacy)
-     */
-    constexpr FieldSchema LegacyZoneEffect[] = {
-        {"zoneId",   FieldType::UINT8, true, 0, 3},
-        {"effectId", FieldType::UINT8, true, 0, 255}
-    };
-    constexpr size_t LegacyZoneEffectSize = sizeof(LegacyZoneEffect) / sizeof(FieldSchema);
-
-    /**
-     * @brief POST /api/zone/preset/load (legacy)
-     */
-    constexpr FieldSchema LegacyZonePreset[] = {
-        {"preset", FieldType::UINT8, true, 0, 4}
-    };
-    constexpr size_t LegacyZonePresetSize = sizeof(LegacyZonePreset) / sizeof(FieldSchema);
+    // Legacy API schemas removed - all endpoints migrated to V1 API
 
 }  // namespace RequestSchemas
 
@@ -737,26 +825,7 @@ namespace RequestSchemas {
         } \
     } while(0)
 
-/**
- * @brief Validate request and return on error (legacy API format)
- *
- * Uses sendLegacyError instead of sendErrorResponse for backward compatibility.
- *
- * Usage:
- * @code
- * JsonDocument doc;
- * VALIDATE_LEGACY_OR_RETURN(data, len, doc, RequestSchemas::LegacySetEffect, request);
- * // Request is valid, doc contains parsed JSON
- * @endcode
- */
-#define VALIDATE_LEGACY_OR_RETURN(data, len, doc, schema, request) \
-    do { \
-        auto vr = RequestValidator::parseAndValidate(data, len, doc, schema); \
-        if (!vr.valid) { \
-            sendLegacyError(request, vr.errorMessage); \
-            return; \
-        } \
-    } while(0)
+// VALIDATE_LEGACY_OR_RETURN macro removed - legacy API deprecated
 
 }  // namespace network
 }  // namespace lightwaveos

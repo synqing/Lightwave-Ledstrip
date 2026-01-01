@@ -18,12 +18,12 @@ namespace network {
 namespace webserver {
 
 // Forward declarations
-class WebServer;  // Forward declare to avoid circular dependency
+struct WebServerContext;  // Forward declare to avoid circular dependency
 
 /**
  * @brief WebSocket command handler function type
  */
-using WsCommandHandler = std::function<void(AsyncWebSocketClient*, JsonDocument&, WebServer*)>;
+using WsCommandHandler = std::function<void(AsyncWebSocketClient*, JsonDocument&, const WebServerContext&)>;
 
 /**
  * @brief Command entry in lookup table
@@ -54,10 +54,10 @@ public:
      * @brief Route a command to appropriate handler
      * @param client WebSocket client
      * @param doc Parsed JSON document
-     * @param server WebServer instance (for accessing state)
+     * @param ctx WebServer context (for accessing state)
      * @return true if command was handled, false if unknown
      */
-    static bool route(AsyncWebSocketClient* client, JsonDocument& doc, WebServer* server);
+    static bool route(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx);
     
     /**
      * @brief Get handler count (for testing/debugging)

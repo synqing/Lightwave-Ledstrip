@@ -173,50 +173,6 @@ inline void sendRateLimitError(AsyncWebServerRequest* request, uint32_t retryAft
     request->send(resp);
 }
 
-// ============================================================================
-// Legacy Response Helpers (backward compatibility)
-// ============================================================================
-
-/**
- * @brief Send a legacy-format success response
- * Returns: {"status": "ok"}
- */
-inline void sendLegacySuccess(AsyncWebServerRequest* request) {
-    request->send(HttpStatus::OK, "application/json", "{\"status\":\"ok\"}");
-}
-
-/**
- * @brief Send a legacy-format error response
- * Returns: {"error": "message"}
- */
-inline void sendLegacyError(AsyncWebServerRequest* request,
-                             const char* message,
-                             uint16_t httpCode = HttpStatus::BAD_REQUEST) {
-    JsonDocument doc;
-    doc["error"] = message;
-    String output;
-    serializeJson(doc, output);
-    request->send(httpCode, "application/json", output);
-}
-
-/**
- * @brief Send a legacy-format rate limit error response with Retry-After header
- * Returns: {"error": "Rate limit exceeded", "retryAfter": N}
- */
-inline void sendLegacyRateLimitError(AsyncWebServerRequest* request, uint32_t retryAfterSeconds) {
-    JsonDocument doc;
-    doc["error"] = "Rate limit exceeded";
-    doc["retryAfter"] = retryAfterSeconds;
-    String output;
-    serializeJson(doc, output);
-
-    AsyncWebServerResponse* resp = request->beginResponse(HttpStatus::TOO_MANY_REQUESTS,
-                                                           "application/json", output);
-    char retryHeader[16];
-    snprintf(retryHeader, sizeof(retryHeader), "%lu", (unsigned long)retryAfterSeconds);
-    resp->addHeader("Retry-After", retryHeader);
-    request->send(resp);
-}
 
 // ============================================================================
 // WebSocket Response Helpers

@@ -4,7 +4,7 @@
  */
 
 #include "WsCommandRouter.h"
-#include "../WebServer.h"
+#include "WebServerContext.h"
 #include "../ApiResponse.h"
 #include <cstring>
 
@@ -29,7 +29,7 @@ void WsCommandRouter::registerCommand(const char* type, WsCommandHandler handler
     entry.handler = handler;
 }
 
-bool WsCommandRouter::route(AsyncWebSocketClient* client, JsonDocument& doc, WebServer* server) {
+bool WsCommandRouter::route(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     if (!doc.containsKey("type")) {
         client->text(buildWsError(ErrorCodes::MISSING_FIELD, "Missing 'type' field"));
         return false;
@@ -40,8 +40,18 @@ bool WsCommandRouter::route(AsyncWebSocketClient* client, JsonDocument& doc, Web
     uint8_t typeLen = typeStr.length();
     char firstChar = type[0];
     
+    // DEFENSIVE CHECK: Validate handler count before array access
+    size_t safe_handler_count = s_handlerCount;
+    if (safe_handler_count > MAX_HANDLERS) {
+        safe_handler_count = MAX_HANDLERS;  // Clamp to safe maximum
+    }
+    
     // Fast lookup: filter by first char and length, then exact match
-    for (size_t i = 0; i < s_handlerCount; i++) {
+    for (size_t i = 0; i < safe_handler_count; i++) {
+        // DEFENSIVE CHECK: Validate array index before access
+        if (i >= MAX_HANDLERS) {
+            break;  // Safety: should never happen, but protects against corruption
+        }
         const WsCommandEntry& entry = s_handlers[i];
         
         // Quick pre-filter: first char and length must match
@@ -51,7 +61,7 @@ bool WsCommandRouter::route(AsyncWebSocketClient* client, JsonDocument& doc, Web
         
         // Exact string match
         if (matchesCommand(type, entry)) {
-            entry.handler(client, doc, server);
+            entry.handler(client, doc, ctx);
             return true;
         }
     }

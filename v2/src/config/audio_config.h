@@ -8,7 +8,7 @@
  * Critical constraints:
  * - Hop size = 256 (Tab5 parity for beat tracker)
  * - ESP-IDF 5.x new I2S driver (driver/i2s_std.h)
- * - Emotiscope-proven sample conversion (see AudioCapture.cpp)
+ * - Proven sample conversion (see AudioCapture.cpp)
  */
 
 #pragma once

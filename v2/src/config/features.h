@@ -193,9 +193,5 @@
 #define FEATURE_MABUTRACE 0
 #endif
 
-// K1 Beat Tracker Debug CLI - Serial commands and ASCII visualizations
-// Enables k1, k1spec, k1nov, k1reset commands for beat tracker debugging
-// Automatically enabled when FEATURE_AUDIO_SYNC is enabled
-#ifndef FEATURE_K1_DEBUG
-#define FEATURE_K1_DEBUG FEATURE_AUDIO_SYNC
-#endif
+// Note: K1 beat tracker has been replaced by TempoTracker
+// Use 'tempo' serial command for tempo debugging

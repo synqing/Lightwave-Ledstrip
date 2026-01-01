@@ -20,6 +20,10 @@
 #include "ZoneDefinition.h"
 #include "BlendMode.h"
 #include "../../core/actors/RendererActor.h"
+#include "../../plugins/api/EffectContext.h"
+
+// Forward declaration for audio context
+namespace lightwaveos { namespace plugins { struct AudioContext; } }
 
 namespace lightwaveos {
 namespace zones {
@@ -74,11 +78,14 @@ public:
      * @param palette Current global palette
      * @param hue Global hue value
      * @param frameCount Current frame number
+     * @param deltaTimeMs Time since last frame (ms) - for smooth frame-rate independent animation
+     * @param audioCtx Audio context for audio-reactive effects (optional)
      *
      * This is called by RendererActor instead of a single effect.
      */
     void render(CRGB* leds, uint16_t numLeds, CRGBPalette16* palette,
-                uint8_t hue, uint32_t frameCount);
+                uint8_t hue, uint32_t frameCount, uint32_t deltaTimeMs,
+                const plugins::AudioContext* audioCtx = nullptr);
 
     // ==================== Zone Control ====================
 
@@ -90,12 +97,20 @@ public:
     bool isEnabled() const { return m_enabled; }
 
     /**
-     * @brief Set the zone layout (3 or 4 zones)
-     * @param layout Zone layout type
+     * @brief Set the zone layout from segment definitions
+     * @param segments Array of zone segment definitions
+     * @param count Number of zones (must be <= MAX_ZONES)
+     * @return true if layout was set successfully, false if validation failed
      */
-    void setLayout(ZoneLayout layout);
-    ZoneLayout getLayout() const { return m_layout; }
+    bool setLayout(const ZoneSegment* segments, uint8_t count);
+    
     uint8_t getZoneCount() const { return m_zoneCount; }
+    
+    /**
+     * @brief Get the current zone segment configuration
+     * @return Pointer to zone segment array
+     */
+    const ZoneSegment* getZoneConfig() const { return m_zoneConfig; }
 
     // ==================== Per-Zone Settings ====================
 
@@ -135,27 +150,52 @@ private:
     // ==================== Rendering Helpers ====================
 
     void renderZone(uint8_t zoneId, CRGB* leds, uint16_t numLeds,
-                    CRGBPalette16* palette, uint8_t hue, uint32_t frameCount);
+                    uint8_t hue, uint32_t frameCount);
 
     void extractZoneSegment(uint8_t zoneId, const CRGB* source, CRGB* dest);
 
     void compositeZone(uint8_t zoneId, const CRGB* zoneBuffer);
+    
+    /**
+     * @brief Validate a zone layout configuration
+     * @param segments Array of zone segment definitions
+     * @param count Number of zones
+     * @return true if layout is valid, false otherwise
+     */
+    bool validateLayout(const ZoneSegment* segments, uint8_t count) const;
+
+    /**
+     * @brief Validate and clamp zone ID to safe range [0, MAX_ZONES-1]
+     * @param zoneId Zone ID to validate
+     * @return Valid zone ID, defaults to 0 if out of bounds
+     */
+    uint8_t validateZoneId(uint8_t zoneId) const;
 
     // ==================== Member Variables ====================
 
     bool m_enabled;                     // Zone system enabled
     bool m_initialized;                 // Init complete flag
-    ZoneLayout m_layout;                // Current layout (3 or 4 zones)
     uint8_t m_zoneCount;                // Active zone count
-    const ZoneSegment* m_zoneConfig;    // Pointer to active zone definitions
+    ZoneSegment m_zoneConfig[MAX_ZONES]; // Runtime storage for zone segment definitions
 
     ZoneState m_zones[MAX_ZONES];       // Per-zone state
 
     RendererActor* m_renderer;          // Renderer for effect access
 
-    // Temp buffers for zone rendering
-    CRGB m_tempBuffer[TOTAL_LEDS];      // Full temp buffer for effect render
+    // Persistent per-zone render buffers (preserve temporal smoothing/trails)
+    // Each zone effect renders into its own full buffer, preventing cross-zone
+    // contamination and eliminating strobing caused by buffer resets.
+    CRGB m_zoneBuffers[MAX_ZONES][TOTAL_LEDS];
+
     CRGB m_outputBuffer[TOTAL_LEDS];    // Composited output buffer
+
+    // Reusable per-frame buffers (avoid stack allocations in renderZone)
+    CRGBPalette16 m_zonePalette;           // Global palette (used when zone.paletteId == 0)
+    CRGBPalette16 m_zonePalettes[MAX_ZONES]; // Per-zone palette storage (for zone-specific palettes)
+    plugins::EffectContext m_zoneContext;  // Reused for all zones
+
+    // Monotonic time accumulator for stable getPhase()/time-based animations.
+    uint32_t m_totalTimeMs = 0;
 };
 
 } // namespace zones

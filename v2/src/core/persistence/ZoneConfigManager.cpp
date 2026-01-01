@@ -7,9 +7,28 @@
 
 #include "ZoneConfigManager.h"
 #include <Arduino.h>
+#include <cstring>
+#include "../../effects/zones/ZoneDefinition.h"
+
+using namespace lightwaveos::zones;
 
 namespace lightwaveos {
 namespace persistence {
+
+// ==================== Version 1 Migration Structure ====================
+
+struct ZoneConfigDataV1 {
+    uint8_t version;
+    ZoneLayout layout;
+    bool systemEnabled;
+    uint8_t zoneEffects[MAX_ZONES];
+    bool zoneEnabled[MAX_ZONES];
+    uint8_t zoneBrightness[MAX_ZONES];
+    uint8_t zoneSpeed[MAX_ZONES];
+    uint8_t zonePalette[MAX_ZONES];
+    uint8_t zoneBlendMode[MAX_ZONES];
+    uint32_t checksum;
+};
 
 // ==================== ZoneConfigData Implementation ====================
 
@@ -46,8 +65,9 @@ const ZonePreset ZONE_PRESETS[ZONE_PRESET_COUNT] = {
     {
         "Unified",
         {
-            .version = 1,
-            .layout = ZoneLayout::SINGLE,
+            .version = 2,
+            .segments = {},  // Will be set in loadPreset
+            .zoneCount = 3,
             .systemEnabled = false,  // User must enable manually
             .zoneEffects = {0, 0, 0, 0},  // Fire
             .zoneEnabled = {true, false, false, false},
@@ -63,8 +83,9 @@ const ZonePreset ZONE_PRESETS[ZONE_PRESET_COUNT] = {
     {
         "Dual Split",
         {
-            .version = 1,
-            .layout = ZoneLayout::TRIPLE,  // Use 3-zone layout, but only enable 2
+            .version = 2,
+            .segments = {},
+            .zoneCount = 3,  // Use 3-zone layout, but only enable 2
             .systemEnabled = false,
             .zoneEffects = {0, 5, 0, 0},  // Fire + Juggle
             .zoneEnabled = {true, true, false, false},
@@ -80,8 +101,9 @@ const ZonePreset ZONE_PRESETS[ZONE_PRESET_COUNT] = {
     {
         "Triple Rings",
         {
-            .version = 1,
-            .layout = ZoneLayout::TRIPLE,
+            .version = 2,
+            .segments = {},
+            .zoneCount = 3,
             .systemEnabled = false,
             .zoneEffects = {2, 8, 10, 0},  // Plasma, Ripple, Interference
             .zoneEnabled = {true, true, true, false},
@@ -97,8 +119,9 @@ const ZonePreset ZONE_PRESETS[ZONE_PRESET_COUNT] = {
     {
         "Quad Active",
         {
-            .version = 1,
-            .layout = ZoneLayout::QUAD,
+            .version = 2,
+            .segments = {},
+            .zoneCount = 4,
             .systemEnabled = false,
             .zoneEffects = {0, 4, 8, 12},  // Fire, Sinelon, Ripple, Pulse
             .zoneEnabled = {true, true, true, true},
@@ -114,8 +137,9 @@ const ZonePreset ZONE_PRESETS[ZONE_PRESET_COUNT] = {
     {
         "LGP Showcase",
         {
-            .version = 1,
-            .layout = ZoneLayout::QUAD,
+            .version = 2,
+            .segments = {},
+            .zoneCount = 4,
             .systemEnabled = false,
             .zoneEffects = {10, 2, 8, 0},  // Interference, Plasma, Ripple, Fire
             .zoneEnabled = {true, true, true, true},
@@ -216,15 +240,45 @@ bool ZoneConfigManager::loadFromNVS() {
         return false;
     }
 
-    // Check version compatibility
-    if (config.version != CONFIG_VERSION) {
-        Serial.printf("[ZoneConfig] WARNING: Config version mismatch (saved: %d, current: %d)\n",
+    // Check version compatibility and migrate if needed
+    if (config.version == 1) {
+        Serial.println("[ZoneConfig] Migrating from version 1 to version 2");
+        // Load as V1 struct
+        ZoneConfigDataV1 v1Config;
+        memcpy(&v1Config, &config, sizeof(ZoneConfigDataV1));
+        
+        // Convert to V2 format
+        ZoneConfigData v2Config;
+        v2Config.version = CONFIG_VERSION;
+        v2Config.systemEnabled = v1Config.systemEnabled;
+        v2Config.zoneCount = (v1Config.layout == ZoneLayout::QUAD) ? 4 : 3;
+        
+        // Convert layout enum to segments
+        if (v1Config.layout == ZoneLayout::QUAD) {
+            memcpy(v2Config.segments, ZONE_4_CONFIG, sizeof(ZONE_4_CONFIG));
+        } else {
+            memcpy(v2Config.segments, ZONE_3_CONFIG, sizeof(ZONE_3_CONFIG));
+        }
+        
+        // Copy zone settings
+        memcpy(v2Config.zoneEffects, v1Config.zoneEffects, sizeof(v1Config.zoneEffects));
+        memcpy(v2Config.zoneEnabled, v1Config.zoneEnabled, sizeof(v1Config.zoneEnabled));
+        memcpy(v2Config.zoneBrightness, v1Config.zoneBrightness, sizeof(v1Config.zoneBrightness));
+        memcpy(v2Config.zoneSpeed, v1Config.zoneSpeed, sizeof(v1Config.zoneSpeed));
+        memcpy(v2Config.zonePalette, v1Config.zonePalette, sizeof(v1Config.zonePalette));
+        memcpy(v2Config.zoneBlendMode, v1Config.zoneBlendMode, sizeof(v1Config.zoneBlendMode));
+        
+        // Apply migrated configuration
+        importConfig(v2Config);
+    } else if (config.version == CONFIG_VERSION) {
+        // Apply configuration
+        importConfig(config);
+    } else {
+        Serial.printf("[ZoneConfig] ERROR: Unsupported config version %d (current: %d)\n",
                       config.version, CONFIG_VERSION);
-        // For now, still try to load - future versions may need migration
+        m_lastError = NVSResult::CHECKSUM_ERROR;
+        return false;
     }
-
-    // Apply configuration
-    importConfig(config);
     Serial.println("[ZoneConfig] Zone configuration loaded from NVS");
     return true;
 }
@@ -312,15 +366,25 @@ bool ZoneConfigManager::loadPreset(uint8_t presetId) {
     }
 
     const ZonePreset& preset = ZONE_PRESETS[presetId];
+    
+    // Create a config with segments filled in
+    ZoneConfigData config = preset.config;
+    
+    // Set segments based on zoneCount
+    if (config.zoneCount == 4) {
+        memcpy(config.segments, ZONE_4_CONFIG, sizeof(ZONE_4_CONFIG));
+    } else {
+        memcpy(config.segments, ZONE_3_CONFIG, sizeof(ZONE_3_CONFIG));
+    }
 
     // Validate preset config
-    if (!validateConfig(preset.config)) {
+    if (!validateConfig(config)) {
         Serial.printf("[ZoneConfig] ERROR: Preset %d contains invalid values\n", presetId);
         return false;
     }
 
     // Apply preset
-    importConfig(preset.config);
+    importConfig(config);
     Serial.printf("[ZoneConfig] Loaded preset %d: %s\n", presetId, preset.name);
     return true;
 }
@@ -338,8 +402,12 @@ void ZoneConfigManager::exportConfig(ZoneConfigData& config) {
     if (!m_composer) return;
 
     config.version = CONFIG_VERSION;
-    config.layout = m_composer->getLayout();
     config.systemEnabled = m_composer->isEnabled();
+    config.zoneCount = m_composer->getZoneCount();
+    
+    // Copy zone segments
+    const ZoneSegment* segments = m_composer->getZoneConfig();
+    memcpy(config.segments, segments, config.zoneCount * sizeof(ZoneSegment));
 
     for (uint8_t i = 0; i < MAX_ZONES; i++) {
         config.zoneEffects[i] = m_composer->getZoneEffect(i);
@@ -354,8 +422,11 @@ void ZoneConfigManager::exportConfig(ZoneConfigData& config) {
 void ZoneConfigManager::importConfig(const ZoneConfigData& config) {
     if (!m_composer) return;
 
-    // Set layout first (affects zone count)
-    m_composer->setLayout(config.layout);
+    // Set layout first (affects zone count) - use segments array
+    if (!m_composer->setLayout(config.segments, config.zoneCount)) {
+        Serial.println("[ZoneConfig] ERROR: Failed to set layout from config");
+        return;
+    }
 
     // Apply per-zone settings
     for (uint8_t i = 0; i < MAX_ZONES; i++) {
@@ -374,11 +445,20 @@ void ZoneConfigManager::importConfig(const ZoneConfigData& config) {
 // ==================== Validation ====================
 
 bool ZoneConfigManager::validateConfig(const ZoneConfigData& config) const {
-    // Validate layout
-    if (config.layout != ZoneLayout::SINGLE &&
-        config.layout != ZoneLayout::TRIPLE &&
-        config.layout != ZoneLayout::QUAD) {
+    // Validate zone count
+    if (config.zoneCount == 0 || config.zoneCount > MAX_ZONES) {
         return false;
+    }
+    
+    // Validate segments (basic check - full validation done by ZoneComposer)
+    for (uint8_t i = 0; i < config.zoneCount; i++) {
+        const ZoneSegment& seg = config.segments[i];
+        if (seg.s1LeftStart > seg.s1LeftEnd || seg.s1RightStart > seg.s1RightEnd) {
+            return false;
+        }
+        if (seg.s1LeftEnd >= 80 || seg.s1RightStart < 80) {
+            return false;
+        }
     }
 
     // Validate per-zone settings

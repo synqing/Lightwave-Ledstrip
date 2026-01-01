@@ -39,11 +39,12 @@ using namespace lightwaveos::zones;
  */
 struct ZoneConfigData {
     // Header for version compatibility
-    uint8_t version;                    // Config format version (currently 1)
+    uint8_t version;                    // Config format version (2 for segment-based)
 
     // Zone system state
-    ZoneLayout layout;                  // Zone layout (SINGLE, TRIPLE, QUAD)
-    bool systemEnabled;                 // Global zone system enable
+    ZoneSegment segments[MAX_ZONES];    // Zone segment definitions
+    uint8_t zoneCount;                   // Number of active zones
+    bool systemEnabled;                  // Global zone system enable
 
     // Per-zone settings (4 zones max)
     uint8_t zoneEffects[MAX_ZONES];     // Effect ID per zone
@@ -223,10 +224,10 @@ private:
     static constexpr const char* NVS_KEY_STATE = "state";
 
     // Config version for future compatibility
-    static constexpr uint8_t CONFIG_VERSION = 1;
+    static constexpr uint8_t CONFIG_VERSION = 2;
 
-    // Effect limits (should match RendererActor)
-    static constexpr uint8_t MAX_EFFECT_ID = 50;
+    // Effect limits (should match RendererActor upper bound)
+    static constexpr uint8_t MAX_EFFECT_ID = 96;
     static constexpr uint8_t MIN_SPEED = 1;
     static constexpr uint8_t MAX_SPEED = 50;
     static constexpr uint8_t MAX_PALETTE_ID = 36;

@@ -136,6 +136,30 @@ inline bool isColorspacePalette(uint8_t paletteIndex) {
 }
 
 // Get palette name (safe, returns "Unknown" if out of range)
+/**
+ * @brief Validate and clamp palette ID to safe range [0, MASTER_PALETTE_COUNT-1]
+ * 
+ * DEFENSIVE CHECK: Prevents LoadProhibited crashes from corrupted palette ID.
+ * 
+ * Master palette system uses gMasterPalettes[MASTER_PALETTE_COUNT] array where
+ * MASTER_PALETTE_COUNT = 75. If paletteId is corrupted (e.g., by memory corruption,
+ * invalid input, or uninitialized state), accessing gMasterPalettes[paletteId]
+ * or related arrays (master_palette_flags, MasterPaletteNames) would cause
+ * out-of-bounds access and crash.
+ * 
+ * This validation ensures we always access valid array indices, returning safe
+ * default (palette 0) if corruption is detected.
+ * 
+ * @param paletteId Palette ID to validate
+ * @return Valid palette ID in [0, MASTER_PALETTE_COUNT-1], defaults to 0 if out of bounds
+ */
+inline uint8_t validatePaletteId(uint8_t paletteId) {
+    if (paletteId >= MASTER_PALETTE_COUNT) {
+        return 0;  // Return safe default (palette 0)
+    }
+    return paletteId;
+}
+
 inline const char* getPaletteName(uint8_t paletteIndex) {
     if (paletteIndex >= MASTER_PALETTE_COUNT) return "Unknown";
     return MasterPaletteNames[paletteIndex];

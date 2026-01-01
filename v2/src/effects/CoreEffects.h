@@ -36,27 +36,49 @@ constexpr float centerPairSignedPosition(uint16_t index) {
 // ==================== Helper Macros ====================
 
 // Set LED with bounds checking for strip 1 (0-159)
+// DEFENSIVE CHECK: Validates index against both STRIP_LENGTH and ctx.ledCount
 #define SET_STRIP1(ctx, idx, color) \
-    if ((idx) < STRIP_LENGTH) { (ctx).leds[(idx)] = (color); }
+    do { \
+        uint16_t _idx = (idx); \
+        if (_idx < STRIP_LENGTH && _idx < (ctx).ledCount) { \
+            (ctx).leds[_idx] = (color); \
+        } \
+    } while(0)
 
 // Set LED with bounds checking for strip 2 (160-319)
+// DEFENSIVE CHECK: Validates index against both 320 and ctx.ledCount
 #define SET_STRIP2(ctx, idx, color) \
-    if ((idx) >= STRIP_LENGTH && (idx) < 320) { (ctx).leds[(idx)] = (color); }
+    do { \
+        uint16_t _idx = (idx); \
+        if (_idx >= STRIP_LENGTH && _idx < 320 && _idx < (ctx).ledCount) { \
+            (ctx).leds[_idx] = (color); \
+        } \
+    } while(0)
 
 // Set Strip 2 LED with safe bounds checking (defensive programming)
+// DEFENSIVE CHECK: Validates index + STRIP_LENGTH against ctx.ledCount
 // Standard pattern for setting Strip 2 LEDs with explicit bounds check
 #define SET_STRIP2_SAFE(ctx, idx, color) \
-    if ((idx) + STRIP_LENGTH < (ctx).numLeds) { \
-        (ctx).leds[(idx) + STRIP_LENGTH] = (color); \
-    }
+    do { \
+        uint16_t _idx = (idx); \
+        uint16_t _s2Idx = _idx + STRIP_LENGTH; \
+        if (_s2Idx < (ctx).ledCount) { \
+            (ctx).leds[_s2Idx] = (color); \
+        } \
+    } while(0)
 
 // Set symmetric LEDs from center (both strips)
+// DEFENSIVE CHECK: Validates all indices against ctx.ledCount before access
 #define SET_CENTER_PAIR(ctx, dist, color) do { \
-    uint16_t left1 = CENTER_LEFT - (dist); \
-    uint16_t right1 = CENTER_RIGHT + (dist); \
-    uint16_t left2 = 160 + CENTER_LEFT - (dist); \
-    uint16_t right2 = 160 + CENTER_RIGHT + (dist); \
-    SET_STRIP1(ctx, left1, color); \
+    uint16_t _dist = (dist); \
+    uint16_t left1 = CENTER_LEFT - _dist; \
+    uint16_t right1 = CENTER_RIGHT + _dist; \
+    uint16_t left2 = 160 + CENTER_LEFT - _dist; \
+    uint16_t right2 = 160 + CENTER_RIGHT + _dist; \
+    if (left1 < (ctx).ledCount) { (ctx).leds[left1] = (color); } \
+    if (right1 < (ctx).ledCount) { (ctx).leds[right1] = (color); } \
+    if (left2 < (ctx).ledCount) { (ctx).leds[left2] = (color); } \
+    if (right2 < (ctx).ledCount) { (ctx).leds[right2] = (color); } \
     SET_STRIP1(ctx, right1, color); \
     SET_STRIP2(ctx, left2, color); \
     SET_STRIP2(ctx, right2, color); \

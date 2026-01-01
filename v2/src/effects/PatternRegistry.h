@@ -199,6 +199,13 @@ bool isLGPSensitive(uint8_t effectId);
 bool isStatefulEffect(uint8_t effectId);
 
 /**
+ * Validate and clamp effect ID to safe range
+ * @param effectId Effect ID to validate
+ * @return Valid effect ID, defaults to 0 if out of bounds
+ */
+uint8_t validateEffectId(uint8_t effectId);
+
+/**
  * Get IEffect metadata for an effect (if available)
  * @param effectId Effect ID to query
  * @return Pointer to EffectMetadata, or nullptr if not available or not an IEffect
@@ -233,7 +240,7 @@ bool shouldSkipColorCorrection(uint8_t effectId);
 
 /**
  * @brief Check if an effect is audio-reactive
- * @param effectId Effect ID to check (0-76)
+ * @param effectId Effect ID to check (effect ID space; see RendererActor::MAX_EFFECTS)
  * @return true if effect actively uses ctx.audio features
  *
  * Audio-reactive effects respond to real-time audio input via:

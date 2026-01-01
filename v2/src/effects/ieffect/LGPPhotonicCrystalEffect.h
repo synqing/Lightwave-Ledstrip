@@ -1,24 +1,26 @@
 /**
  * @file LGPPhotonicCrystalEffect.h
- * @brief LGP Photonic Crystal - Audio-reactive bandgap structure simulation
+ * @brief LGP Photonic Crystal - Bandgap structure simulation with audio layering
  *
  * Effect ID: 33
  * Family: ADVANCED_OPTICAL
  * Tags: CENTER_ORIGIN, AUDIO_REACTIVE
  *
- * v6: PURE DSP - No Saliency/Narrative/Style/Chord Detection
- * All "musical intelligence" APIs were outputting corrupted, unusable data.
- * This version uses ONLY direct DSP signals from Goertzel analyzer and K1.
+ * v7: RESTORED V1 ALGORITHM + PROPER AUDIO LAYERING
  *
- * Direct DSP signals used:
- * - heavyBass() → Lattice breathing
- * - heavyMid() → Bandgap modulation
- * - heavyTreble() → Shimmer intensity
- * - flux() → Speed modulation + hue variation
- * - rms() → Brightness baseline
- * - isSnareHit()/isHihatHit() → Onset pulses + speed bursts
- * - beatPhase()/isOnBeat()/beatStrength() → Beat-locked brightness
- * - tempoConfidence() → Gating unreliable K1 beats
+ * The base algorithm is the ORIGINAL v1 photonic crystal pattern:
+ * - Lattice size from ctx.complexity (4-10 LEDs per cell)
+ * - Defect probability from ctx.variation
+ * - Bandgap test: cellPosition < (latticeSize >> 1)
+ * - Wave patterns: sin8((distFromCenter << 2) - (phase >> 7))
+ *
+ * Audio reactivity is LAYERED ON TOP (not baked in):
+ * - Speed modulation: spring-smoothed bass energy
+ * - Brightness modulation: 0.4 + 0.5 * energyAvg + 0.4 * energyDelta
+ * - Collision flash: snare-triggered, spatial decay from center
+ * - Color offset: chroma dominant bin (smoothed over 250ms)
+ *
+ * This follows the proven pattern from WaveCollision/Chevron/StarBurst effects.
  */
 
 #pragma once
@@ -43,85 +45,49 @@ public:
     const plugins::EffectMetadata& getMetadata() const override;
 
 private:
-    // Phase accumulator (float for smooth motion)
-    float m_phase;
-
-    // v6: PURE DSP - New state variables
-    float m_speedBurst = 1.0f;   // Hi-hat triggered speed burst (decays to 1.0)
-    float m_beatPulse = 0.0f;    // K1 beat-locked brightness pulse
+    // =========================================================================
+    // PHASE ACCUMULATOR (float for dt-based advancement)
+    // =========================================================================
+    float m_phase = 0.0f;
 
     // =========================================================================
-    // TRUE EXPONENTIAL SMOOTHING (SmoothingEngine primitives)
-    // Uses: alpha = 1.0f - expf(-dt / tau) - Frame-rate INDEPENDENT
+    // AUDIO SAMPLING (per-hop only, NOT per-frame)
     // =========================================================================
-
-    // Structural parameters (slow, dreamier smoothing for visual stability)
-    // riseTau=0.15s (fast attack), fallTau=0.40s (slow release)
-    enhancement::AsymmetricFollower m_latticeFollower{8.0f, 0.15f, 0.40f};
-    enhancement::AsymmetricFollower m_bandgapFollower{0.5f, 0.15f, 0.40f};
-
-    // Brightness (faster response for beat reactivity)
-    // riseTau=0.05s (very fast attack), fallTau=0.20s (medium release)
-    enhancement::AsymmetricFollower m_brightnessFollower{0.8f, 0.05f, 0.20f};
-
-    // Beat pulse uses exponential decay toward zero
-    // lambda=12 means ~83ms to reach 63% of target (fast decay)
-    enhancement::ExpDecay m_beatPulseDecay{0.0f, 12.0f};
-
-    // Hue split (medium speed for smooth color transitions)
-    enhancement::AsymmetricFollower m_hueSplitFollower{48.0f, 0.10f, 0.25f};
-
-    // Phase speed smoothing (prevents lurching on narrative changes)
-    // Uses spring physics for natural momentum
-    enhancement::Spring m_phaseSpeedSpring;
-
-    // v6: Treble energy smoothing for shimmer (was timbralSaliency - CORRUPTED)
-    enhancement::AsymmetricFollower m_trebleFollower{0.0f, 0.08f, 0.15f};
-
-    // Tempo breathing smoothing
-    enhancement::AsymmetricFollower m_breathingFollower{0.0f, 0.12f, 0.06f};
-
-    // =========================================================================
-    // HISTORY BUFFERS for spike filtering (4-frame rolling average)
-    // =========================================================================
-    static constexpr uint8_t HISTORY_SIZE = 4;
-    float m_latticeTargetHist[HISTORY_SIZE] = {0};
-    float m_bandgapTargetHist[HISTORY_SIZE] = {0};
-    float m_latticeTargetSum = 0.0f;
-    float m_bandgapTargetSum = 0.0f;
-    uint8_t m_histIdx = 0;
-
-    // Hop sequence tracking for MOOD coefficient updates
     uint32_t m_lastHopSeq = 0;
 
     // =========================================================================
-    // WAVE COLLISION PATTERN: Relative Energy Detection
-    // Uses 4-hop rolling average to detect energy ABOVE baseline
+    // ENERGY HISTORY (4-hop rolling average - proven pattern)
     // =========================================================================
     static constexpr uint8_t ENERGY_HISTORY = 4;
     float m_energyHist[ENERGY_HISTORY] = {0};
     float m_energySum = 0.0f;
     uint8_t m_energyHistIdx = 0;
-
-    // Raw energy values (updated per hop)
     float m_energyAvg = 0.0f;      // Rolling average of recent energy
     float m_energyDelta = 0.0f;    // Current energy ABOVE average (positive only)
 
-    // Smoothed energy values (updated per frame, asymmetric rise/fall)
-    float m_energyAvgSmooth = 0.0f;
-    float m_energyDeltaSmooth = 0.0f;
+    // =========================================================================
+    // ASYMMETRIC FOLLOWERS (frame-rate independent smoothing)
+    // riseTau = fast attack, fallTau = slow decay
+    // =========================================================================
+    enhancement::AsymmetricFollower m_energyAvgFollower{0.5f, 0.08f, 0.20f};
+    enhancement::AsymmetricFollower m_energyDeltaFollower{0.0f, 0.05f, 0.15f};
 
     // =========================================================================
-    // WAVE COLLISION PATTERN: Slew-Limited Speed
-    // Prevents jitter from rapid audio changes or jog-dial adjustments
+    // SPRING PHYSICS FOR SPEED (stiffness=50, critically damped)
+    // Prevents lurching from rapid audio changes
     // =========================================================================
-    float m_speedScaleSmooth = 1.0f;  // Slew-limited speed multiplier
+    enhancement::Spring m_speedSpring;
 
     // =========================================================================
-    // ONSET DETECTION (percussion-triggered, spatial decay)
+    // COLLISION FLASH (snare-triggered, spatial decay from center)
     // =========================================================================
-    float m_onsetPulse = 0.0f;    // Onset pulse with exponential decay
+    float m_collisionBoost = 0.0f;
 
+    // =========================================================================
+    // CHROMA DOMINANT BIN (smoothed over 250ms for color offset)
+    // =========================================================================
+    uint8_t m_dominantBin = 0;
+    float m_dominantBinSmooth = 0.0f;
 };
 
 } // namespace ieffect

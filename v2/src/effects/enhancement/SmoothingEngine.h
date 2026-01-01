@@ -2,7 +2,7 @@
  * @file SmoothingEngine.h
  * @brief Centralized smoothing primitives for ultra-smooth audio-reactive rendering
  *
- * ## Architecture (based on Sensory Bridge 4.1.0 & Emotiscope 2.0)
+ * ## Architecture (based on Sensory Bridge 4.1.0)
  *
  * This module provides mathematically correct smoothing that is:
  * - Frame-rate INDEPENDENT (uses true exponential decay, not approximation)
@@ -199,7 +199,7 @@ struct AsymmetricFollower {
 };
 
 // ============================================================================
-// SubpixelRenderer - Emotiscope Pattern
+// SubpixelRenderer Pattern
 // ============================================================================
 // Renders points at fractional LED positions by distributing brightness
 // between adjacent LEDs. Essential for smooth motion at low speeds.

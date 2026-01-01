@@ -95,6 +95,17 @@
 #include "ieffect/AudioBloomEffect.h"
 #include "ieffect/LGPStarBurstNarrativeEffect.h"
 #include "ieffect/LGPChordGlowEffect.h"
+#include "ieffect/LGPPerlinVeilEffect.h"
+#include "ieffect/LGPPerlinShocklinesEffect.h"
+#include "ieffect/LGPPerlinCausticsEffect.h"
+#include "ieffect/LGPPerlinInterferenceWeaveEffect.h"
+#include "ieffect/LGPPerlinBackendFastLEDEffect.h"
+#include "ieffect/LGPPerlinBackendEmotiscopeFullEffect.h"
+#include "ieffect/LGPPerlinBackendEmotiscopeQuarterEffect.h"
+#include "ieffect/LGPPerlinVeilAmbientEffect.h"
+#include "ieffect/LGPPerlinShocklinesAmbientEffect.h"
+#include "ieffect/LGPPerlinCausticsAmbientEffect.h"
+#include "ieffect/LGPPerlinInterferenceWeaveAmbientEffect.h"
 #include "utils/FastLEDOptim.h"
 #include "../core/narrative/NarrativeEngine.h"
 #include <FastLED.h>
@@ -789,9 +800,78 @@ uint8_t registerAllEffects(RendererActor* renderer) {
         total++;
     }
 
+    // Perlin-based LGP effects (IDs 77-80) - Audio-reactive noise field patterns
+    // LGP Perlin Veil (ID 77) - Slow drifting curtains from centre, audio-driven advection
+    static ieffect::LGPPerlinVeilEffect perlinVeilInstance;
+    if (renderer->registerEffect(total, &perlinVeilInstance)) {
+        total++;
+    }
+
+    // LGP Perlin Shocklines (ID 78) - Beat-driven travelling ridges
+    static ieffect::LGPPerlinShocklinesEffect perlinShocklinesInstance;
+    if (renderer->registerEffect(total, &perlinShocklinesInstance)) {
+        total++;
+    }
+
+    // LGP Perlin Caustics (ID 79) - Sparkling caustic lobes, treble→sparkle, bass→scale
+    static ieffect::LGPPerlinCausticsEffect perlinCausticsInstance;
+    if (renderer->registerEffect(total, &perlinCausticsInstance)) {
+        total++;
+    }
+
+    // LGP Perlin Interference Weave (ID 80) - Dual-strip moiré interference
+    static ieffect::LGPPerlinInterferenceWeaveEffect perlinInterferenceWeaveInstance;
+    if (renderer->registerEffect(total, &perlinInterferenceWeaveInstance)) {
+        total++;
+    }
+
+    // Perlin-based LGP effects (IDs 81-84) - Ambient (time-driven) variants
+    // LGP Perlin Veil Ambient (ID 81) - Time-driven drifting curtains
+    static ieffect::LGPPerlinVeilAmbientEffect perlinVeilAmbientInstance;
+    if (renderer->registerEffect(total, &perlinVeilAmbientInstance)) {
+        total++;
+    }
+
+    // LGP Perlin Shocklines Ambient (ID 82) - Time-driven travelling ridges
+    static ieffect::LGPPerlinShocklinesAmbientEffect perlinShocklinesAmbientInstance;
+    if (renderer->registerEffect(total, &perlinShocklinesAmbientInstance)) {
+        total++;
+    }
+
+    // LGP Perlin Caustics Ambient (ID 83) - Time-driven caustic lobes
+    static ieffect::LGPPerlinCausticsAmbientEffect perlinCausticsAmbientInstance;
+    if (renderer->registerEffect(total, &perlinCausticsAmbientInstance)) {
+        total++;
+    }
+
+    // LGP Perlin Interference Weave Ambient (ID 84) - Time-driven moiré
+    static ieffect::LGPPerlinInterferenceWeaveAmbientEffect perlinInterferenceWeaveAmbientInstance;
+    if (renderer->registerEffect(total, &perlinInterferenceWeaveAmbientInstance)) {
+        total++;
+    }
+
+    // Perlin Backend Test Effects (IDs 85-87) - A/B/C comparison harness
+    // Perlin Backend Test A (ID 85) - FastLED inoise8 baseline
+    static ieffect::LGPPerlinBackendFastLEDEffect perlinBackendFastLEDInstance;
+    if (renderer->registerEffect(total, &perlinBackendFastLEDInstance)) {
+        total++;
+    }
+
+    // Perlin Backend Test B (ID 86) - Emotiscope 2.0 Perlin full-res
+    static ieffect::LGPPerlinBackendEmotiscopeFullEffect perlinBackendEmotiscopeFullInstance;
+    if (renderer->registerEffect(total, &perlinBackendEmotiscopeFullInstance)) {
+        total++;
+    }
+
+    // Perlin Backend Test C (ID 87) - Emotiscope 2.0 Perlin quarter-res + interpolation
+    static ieffect::LGPPerlinBackendEmotiscopeQuarterEffect perlinBackendEmotiscopeQuarterInstance;
+    if (renderer->registerEffect(total, &perlinBackendEmotiscopeQuarterInstance)) {
+        total++;
+    }
+
     // =============== EFFECT COUNT PARITY VALIDATION ===============
     // Runtime validation: ensure registered count matches expected
-    constexpr uint8_t EXPECTED_EFFECT_COUNT = 77;  // 68 core + 6 audio + 1 narrative + 1 chord glow + 1 wave reactive
+    constexpr uint8_t EXPECTED_EFFECT_COUNT = 88;  // 85 base + 3 Perlin backend tests
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

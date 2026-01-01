@@ -113,7 +113,24 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
     {PM_STR("Audio Bloom"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Centre bloom pulses triggered by audio transients"), PM_STR("Flux detection, pulse generation, radial decay"), PM_STR("")},
     {PM_STR("LGP Star Burst (Narrative)"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN, PM_STR("Story-driven starburst with phrase-gated chord coloring"), PM_STR("Narrative conductor, chord harmonics, phrase timing"), PM_STR("LGP Star Burst")},
     {PM_STR("Chord Glow"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Full chord detection showcase with harmonic color mapping"), PM_STR("Chord detection, root note color, quality modulation"), PM_STR("")},
-    {PM_STR("Wave Reactive"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Energy-accumulating wave with audio-driven motion"), PM_STR("Beat accumulation, frequency-driven velocity, kaleidoscope integration"), PM_STR("Wave")}
+    {PM_STR("Wave Reactive"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Energy-accumulating wave with audio-driven motion"), PM_STR("Beat accumulation, frequency-driven velocity, kaleidoscope integration"), PM_STR("Wave")},
+
+    // --- Perlin-based LGP Effects (77-80) - Audio-reactive noise field patterns ---
+    {PM_STR("LGP Perlin Veil"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Slow drifting noise curtains from centre, audio-driven advection"), PM_STR("Perlin noise fields, flux/beat advection, RMS contrast"), PM_STR("")},
+    {PM_STR("LGP Perlin Shocklines"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Beat-driven travelling ridges propagating from centre"), PM_STR("Perlin noise, shockwave propagation, treble sharpness"), PM_STR("")},
+    {PM_STR("LGP Perlin Caustics"), PatternFamily::ADVANCED_OPTICAL, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Sparkling caustic lobes, treble→sparkle, bass→scale"), PM_STR("Multi-octave Perlin noise, caustic focus, spectral modulation"), PM_STR("")},
+    {PM_STR("LGP Perlin Interference Weave"), PatternFamily::ADVANCED_OPTICAL, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::MOIRE, PM_STR("Dual-strip moiré interference, beat→phase, chroma→colour"), PM_STR("Phase-offset Perlin noise, interference patterns, chroma mapping"), PM_STR("")},
+
+    // --- Perlin-based LGP Effects Ambient (81-84) - Time-driven variants ---
+    {PM_STR("LGP Perlin Veil Ambient"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Slow drifting noise curtains from centre, time-driven"), PM_STR("Perlin noise fields, slow drift, breathing contrast"), PM_STR("LGP Perlin Veil")},
+    {PM_STR("LGP Perlin Shocklines Ambient"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Time-driven travelling ridges propagating from centre"), PM_STR("Perlin noise, periodic shockwaves, time-based propagation"), PM_STR("LGP Perlin Shocklines")},
+    {PM_STR("LGP Perlin Caustics Ambient"), PatternFamily::ADVANCED_OPTICAL, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Sparkling caustic lobes, time-driven modulation"), PM_STR("Multi-octave Perlin noise, caustic focus, slow parameter drift"), PM_STR("LGP Perlin Caustics")},
+    {PM_STR("LGP Perlin Interference Weave Ambient"), PatternFamily::ADVANCED_OPTICAL, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::MOIRE, PM_STR("Dual-strip moiré interference, time-driven phase"), PM_STR("Phase-offset Perlin noise, interference patterns, slow phase modulation"), PM_STR("LGP Perlin Interference Weave")},
+
+    // --- Perlin Backend Test Effects (85-87) - A/B/C comparison harness ---
+    {PM_STR("Perlin Test: FastLED"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("FastLED inoise8 baseline test (TEST)"), PM_STR("FastLED noise, centre-origin mapping, seed + advection"), PM_STR("")},
+    {PM_STR("Perlin Test: Emotiscope2 Full"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Emotiscope 2.0 Perlin full-res per-frame test (TEST)"), PM_STR("Seedable Perlin noise, hash-based gradients, octaves, full resolution"), PM_STR("")},
+    {PM_STR("Perlin Test: Emotiscope2 Quarter"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Emotiscope 2.0 Perlin quarter-res + interpolation test (TEST)"), PM_STR("Seedable Perlin noise, quarter resolution, periodic refresh, linear interpolation"), PM_STR("")}
 };
 
 const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(PatternMetadata);
@@ -123,7 +140,7 @@ const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(Pattern
 // ============================================================================
 
 // Expected number of implemented effects (must match registerAllEffects() return value)
-constexpr uint8_t EXPECTED_EFFECT_COUNT = 77;  // 68 core + 6 audio + 1 narrative + 1 chord glow + 1 wave reactive
+constexpr uint8_t EXPECTED_EFFECT_COUNT = 88;  // 85 base + 3 Perlin backend tests
 
 // Compile-time assertion: metadata must have at least as many entries as implemented effects
 // This ensures we can always map effect IDs to metadata (allows for future effects in metadata)
@@ -148,14 +165,40 @@ const PatternMetadata* getPatternMetadata(const char* name) {
     return nullptr;
 }
 
+/**
+ * @brief Validate and clamp effectId to safe range [0, PATTERN_METADATA_COUNT-1]
+ * 
+ * DEFENSIVE CHECK: Prevents LoadProhibited crashes from corrupted effect ID.
+ * 
+ * PatternRegistry uses PATTERN_METADATA array for metadata lookup. If effectId
+ * is corrupted (e.g., by memory corruption, invalid input, or uninitialized state),
+ * accessing PATTERN_METADATA[effectId] would cause out-of-bounds access and crash.
+ * 
+ * This validation ensures we always access valid array indices, returning safe
+ * default (effect 0) if corruption is detected.
+ * 
+ * @param effectId Effect ID to validate
+ * @return Valid effect ID, defaults to 0 if out of bounds
+ */
+uint8_t validateEffectId(uint8_t effectId) {
+    // Validate effectId is within bounds [0, PATTERN_METADATA_COUNT-1]
+    // Use actual array size for safety (static_assert ensures PATTERN_METADATA_COUNT >= EXPECTED_EFFECT_COUNT)
+    if (effectId >= PATTERN_METADATA_COUNT) {
+        return 0;  // Return safe default (effect 0)
+    }
+    return effectId;
+}
+
 const PatternMetadata* getPatternMetadata(uint8_t index) {
     // Map effect ID to metadata index (stable ID mapping)
     // Effect IDs match v1/v2 registration order exactly
     // Phase 2 parity enforcement: only expose metadata for implemented effects
-    if (index >= EXPECTED_EFFECT_COUNT) {
+    // Validate index before access
+    uint8_t safe_index = validateEffectId(index);
+    if (safe_index >= EXPECTED_EFFECT_COUNT) {
         return nullptr;
     }
-    return &PATTERN_METADATA[index];
+    return &PATTERN_METADATA[safe_index];
 }
 
 uint8_t getPatternsByFamily(PatternFamily family, uint8_t* output, uint8_t maxOutput) {
@@ -216,7 +259,9 @@ uint8_t getFamilyCount(PatternFamily family) {
 }
 
 bool isLGPSensitive(uint8_t effectId) {
-    if (effectId >= EXPECTED_EFFECT_COUNT) {
+    // Validate effectId before access
+    uint8_t safe_id = validateEffectId(effectId);
+    if (safe_id >= EXPECTED_EFFECT_COUNT) {
         return false;
     }
     
@@ -262,7 +307,9 @@ bool isStatefulEffect(uint8_t effectId) {
 }
 
 const lightwaveos::plugins::EffectMetadata* getIEffectMetadata(uint8_t effectId) {
-    if (effectId >= EXPECTED_EFFECT_COUNT) {
+    // Validate effectId before access
+    uint8_t safe_id = validateEffectId(effectId);
+    if (safe_id >= EXPECTED_EFFECT_COUNT) {
         return nullptr;
     }
     
@@ -291,8 +338,9 @@ bool shouldSkipColorCorrection(uint8_t effectId) {
         return true;
     }
 
-    // Check family-based skip logic
-    const PatternMetadata* meta = getPatternMetadata(effectId);
+    // Check family-based skip logic (getPatternMetadata already validates)
+    uint8_t safe_id = validateEffectId(effectId);
+    const PatternMetadata* meta = getPatternMetadata(safe_id);
     if (meta) {
         // PHYSICS_BASED effects need precise amplitude for physics simulations
         // MATHEMATICAL effects need exact RGB values for mathematical mappings
@@ -329,7 +377,11 @@ static const uint8_t REACTIVE_EFFECT_IDS[] PROGMEM = {
     73,  // Audio Bloom - transient-triggered blooms
     74,  // Star Burst Narrative - full musical intelligence
     75,  // Chord Glow - chord detection showcase
-    76   // Wave Reactive - energy accumulation
+    76,  // Wave Reactive - energy accumulation
+    77,  // Perlin Veil - audio-driven advection
+    78,  // Perlin Shocklines - beat-driven ridges
+    79,  // Perlin Caustics - treble/bass modulation
+    80   // Perlin Interference Weave - dual-strip moiré
 };
 static constexpr uint8_t REACTIVE_EFFECT_COUNT = sizeof(REACTIVE_EFFECT_IDS);
 

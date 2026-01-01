@@ -1,35 +1,35 @@
 /**
  * @file LGPPhotonicCrystalEffect.cpp
- * @brief Audio-reactive LGP Photonic Crystal effect implementation
+ * @brief LGP Photonic Crystal effect - v8 CORRECT audio-reactive motion
  *
- * v6: PURE DSP - No Saliency/Narrative/Style/Chord Detection
- * All "musical intelligence" APIs were outputting corrupted, unusable data.
+ * v8: FIXED SPEED SMOOTHING ARCHITECTURE
  *
- * Audio-visual mapping (Direct DSP only):
- * - Lattice size ↔ heavyBass() breathing (6-14 range)
- * - Bandgap ratio ↔ heavyMid() modulation (inverse - more mid = tighter gap)
- * - Motion speed ↔ flux() + hi-hat burst (slew-limited)
- * - Brightness ↔ rms() + K1 beat-locked pulse (gated by tempoConfidence)
- * - Shimmer ↔ heavyTreble() (was timbralSaliency - CORRUPTED)
- * - Hue split ↔ flux() modulation (was chord type - CORRUPTED)
- * - Onset pulse ↔ snare/hihat (percussion triggers only)
+ * ROOT CAUSE of v7 jitter: Too many smoothing layers for speed
+ *   v7 WRONG: heavyBass() → rolling avg → AsymmetricFollower → Spring (~630ms)
+ *   v8 CORRECT: heavy_bands (pre-smoothed) → Spring ONLY (~200ms)
+ *
+ * The base algorithm is UNCHANGED from the original v1 lgpPhotonicCrystal():
+ * - latticeSize = 4 + (complexity >> 6)  → 4-10 LEDs per cell
+ * - defectProbability = variation        → random impurities
+ * - inBandgap = cellPosition < (latticeSize >> 1)
+ * - Allowed modes: sin8((distFromCenter << 2) - (phase >> 7))
+ * - Forbidden decay: scale8(sin8(...), 255 - cellPosition * 50)
+ *
+ * Audio reactivity architecture (matches ChevronWaves/WaveCollision):
+ * - Speed: heavy_bands[1]+[2] → Spring ONLY (0.6-1.4x, ~200ms response)
+ * - Brightness: rolling avg + AsymmetricFollower (fine for visual intensity)
+ * - Collision flash: snare-triggered, spatial decay from center
+ * - Color offset: chroma dominant bin (smoothed over 250ms)
  */
 
 #include "LGPPhotonicCrystalEffect.h"
 #include "../CoreEffects.h"
-#include "../enhancement/MotionEngine.h"
 #include <FastLED.h>
 #include <cmath>
 
 namespace lightwaveos {
 namespace effects {
 namespace ieffect {
-
-// Beat pulse parameters
-static constexpr float BEAT_PULSE_STRENGTH = 0.35f;  // 35% brightness boost on beat
-
-// Treble shimmer strength
-static constexpr float TIMBRAL_SHIMMER_STRENGTH = 60.0f;
 
 LGPPhotonicCrystalEffect::LGPPhotonicCrystalEffect()
     : m_phase(0.0f)
@@ -42,37 +42,10 @@ bool LGPPhotonicCrystalEffect::init(plugins::EffectContext& ctx) {
     // Initialize phase
     m_phase = 0.0f;
 
-    // Reset smoothing followers to initial values
-    m_latticeFollower.reset(8.0f);
-    m_bandgapFollower.reset(0.5f);
-    m_brightnessFollower.reset(0.8f);
-    m_beatPulseDecay.reset(0.0f);
-    m_hueSplitFollower.reset(48.0f);
-    m_trebleFollower.reset(0.0f);  // v6: Renamed from timbralFollower
-    m_breathingFollower.reset(0.0f);
-
-    // v6: Initialize new state variables
-    m_speedBurst = 1.0f;
-    m_beatPulse = 0.0f;
-
-    // Initialize spring for phase speed with critical damping
-    // stiffness=50 gives responsive but smooth following
-    m_phaseSpeedSpring.init(50.0f, 1.0f);
-    m_phaseSpeedSpring.reset(1.0f);
-
-    // Initialize history buffers (spike filtering)
-    for (uint8_t i = 0; i < HISTORY_SIZE; ++i) {
-        m_latticeTargetHist[i] = 8.0f;
-        m_bandgapTargetHist[i] = 0.5f;
-    }
-    m_latticeTargetSum = 8.0f * HISTORY_SIZE;
-    m_bandgapTargetSum = 0.5f * HISTORY_SIZE;
-    m_histIdx = 0;
-
-    // Hop tracking
+    // Audio hop tracking
     m_lastHopSeq = 0;
 
-    // WAVE COLLISION PATTERN: Initialize energy history buffers
+    // Energy history (4-hop rolling average)
     for (uint8_t i = 0; i < ENERGY_HISTORY; ++i) {
         m_energyHist[i] = 0.0f;
     }
@@ -80,293 +53,181 @@ bool LGPPhotonicCrystalEffect::init(plugins::EffectContext& ctx) {
     m_energyHistIdx = 0;
     m_energyAvg = 0.0f;
     m_energyDelta = 0.0f;
-    m_energyAvgSmooth = 0.0f;
-    m_energyDeltaSmooth = 0.0f;
 
-    // Slew-limited speed
-    m_speedScaleSmooth = 1.0f;
+    // Reset asymmetric followers
+    m_energyAvgFollower.reset(0.5f);
+    m_energyDeltaFollower.reset(0.0f);
 
-    // Onset pulse
-    m_onsetPulse = 0.0f;
+    // Initialize spring with stiffness=50, critically damped
+    m_speedSpring.init(50.0f, 1.0f);
+    m_speedSpring.reset(1.0f);
 
-    // v6: AudioBehaviorSelector REMOVED - narrative phase detection was CORRUPTED
+    // Collision flash
+    m_collisionBoost = 0.0f;
+
+    // Chroma tracking
+    m_dominantBin = 0;
+    m_dominantBinSmooth = 0.0f;
 
     return true;
 }
 
 void LGPPhotonicCrystalEffect::render(plugins::EffectContext& ctx) {
     // ========================================================================
-    // CRITICAL: Use safe delta time (clamped for physics stability)
+    // SAFE DELTA TIME (clamped for physics stability)
     // ========================================================================
     float dt = ctx.getSafeDeltaSeconds();
     float moodNorm = ctx.getMoodNormalized();
 
     // ========================================================================
-    // v6: PURE DSP - Base parameters (no narrative phase - was CORRUPTED)
-    // All parameter targets computed from DIRECT DSP signals only
+    // ORIGINAL V1 PARAMETERS (from ctx, NOT from audio)
+    // These MUST stay as the original algorithm intended
     // ========================================================================
-    float targetLattice = 8.0f;       // Will be modulated by heavyBass()
-    float targetBandgap = 0.5f;       // Will be modulated by heavyMid()
-    float targetBrightness = 0.8f;    // Will be modulated by rms() + beat pulse
-    float phaseSpeedMult = 1.0f;      // Will be modulated by flux() + hi-hat burst
-    float energyBrightnessScale = 1.0f;
-    float targetHueSplit = 48.0f;     // Will be modulated by flux()
+    uint8_t latticeSize = 4 + (ctx.complexity >> 6);  // 4-10 LEDs per cell
+    uint8_t defectProbability = ctx.variation;         // Random impurities
+
+    // Audio modulation values (defaults for no-audio mode)
+    float speedMult = 1.0f;
+    float brightnessGain = 1.0f;
+    uint8_t chromaOffset = 0;
 
 #if FEATURE_AUDIO_SYNC
     if (ctx.audio.available) {
         // ================================================================
-        // MOOD ADJUSTMENT - Adjust time constants per hop
+        // v8 FIX: SPEED uses heavy_bands DIRECTLY → Spring (NO extra smoothing!)
+        // This matches ChevronWaves/WaveCollision/InterferenceScanner
+        // heavy_bands are PRE-SMOOTHED by ControlBus (80ms rise / 15ms fall)
+        // ================================================================
+        float heavyEnergy = (ctx.audio.controlBus.heavy_bands[1] +
+                             ctx.audio.controlBus.heavy_bands[2]) / 2.0f;
+        float targetSpeed = 0.6f + 0.8f * heavyEnergy;  // 0.6-1.4x range
+        speedMult = m_speedSpring.update(targetSpeed, dt);
+        if (speedMult > 1.6f) speedMult = 1.6f;
+        if (speedMult < 0.3f) speedMult = 0.3f;
+
+        // ================================================================
+        // BRIGHTNESS: Per-hop sampling for energy baseline (separate from speed)
+        // Rolling avg + AsymmetricFollower is fine for visual intensity
         // ================================================================
         bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
         if (newHop) {
             m_lastHopSeq = ctx.audio.controlBus.hop_seq;
 
-            // Mood 0 = reactive: fast attack, fast decay
-            // Mood 255 = smooth: slow attack, slow decay
-            // Adjust follower time constants based on mood
-            float riseMult = 1.0f + moodNorm * 0.5f;   // 1.0x to 1.5x slower rise
-            float fallMult = 0.6f + moodNorm * 0.8f;   // 0.6x to 1.4x fall adjustment
+            float currentEnergy = ctx.audio.heavyBass();
 
-            m_latticeFollower.riseTau = 0.15f * riseMult;
-            m_latticeFollower.fallTau = 0.40f * fallMult;
-            m_bandgapFollower.riseTau = 0.15f * riseMult;
-            m_bandgapFollower.fallTau = 0.40f * fallMult;
+            // Rolling 4-hop average (for brightness baseline only)
+            m_energySum -= m_energyHist[m_energyHistIdx];
+            m_energyHist[m_energyHistIdx] = currentEnergy;
+            m_energySum += currentEnergy;
+            m_energyHistIdx = (m_energyHistIdx + 1) % ENERGY_HISTORY;
+            m_energyAvg = m_energySum / ENERGY_HISTORY;
 
-            // Beat pulse decay: slower at higher mood for dreamier feel
-            // lambda = 12 at mood 0, lambda = 6 at mood 255
-            m_beatPulseDecay.lambda = 12.0f - 6.0f * moodNorm;
-        }
+            // Delta = energy ABOVE average (positive only)
+            m_energyDelta = currentEnergy - m_energyAvg;
+            if (m_energyDelta < 0.0f) m_energyDelta = 0.0f;
 
-        // ================================================================
-        // v6: STYLE DETECTION REMOVED - was outputting CORRUPTED data
-        // ================================================================
-
-        // ================================================================
-        // v6: PURE DSP - Lattice Size from heavyBass()
-        // Direct bass energy → lattice breathing (range: 6-14)
-        // ================================================================
-        float bassEnergy = ctx.audio.heavyBass();
-        targetLattice = 6.0f + bassEnergy * 8.0f;
-
-        // ================================================================
-        // v6: PURE DSP - Bandgap from heavyMid() (INVERTED)
-        // More mid-frequency energy = tighter bandgap = more complex texture
-        // ================================================================
-        float midEnergy = ctx.audio.heavyMid();
-        targetBandgap = 0.6f - midEnergy * 0.3f;  // Range: 0.3-0.6
-
-        // ================================================================
-        // v6: PURE DSP - Speed from flux() + hi-hat burst
-        // dynamicSaliency REMOVED - was outputting CORRUPTED data
-        // ================================================================
-        float flux = ctx.audio.flux();
-
-        // Base speed from flux (range: 0.5 to 1.5)
-        float rawSpeedTarget = 0.5f + flux * 1.0f;
-
-        // Hi-hat speed burst (Wave Collision pattern)
-        if (ctx.audio.isHihatHit()) {
-            m_speedBurst = 1.6f;  // Temporary boost
-        }
-        // Decay toward baseline (0.95 decay per frame + 0.05 toward 1.0)
-        m_speedBurst = m_speedBurst * 0.95f + 1.0f * 0.05f;
-        rawSpeedTarget *= m_speedBurst;
-
-        // Slew limit to 0.25 units/sec max change rate
-        const float maxSlewRate = 0.25f;
-        float slewLimit = maxSlewRate * dt;
-        float speedDelta = rawSpeedTarget - m_speedScaleSmooth;
-        if (speedDelta > slewLimit) speedDelta = slewLimit;
-        if (speedDelta < -slewLimit) speedDelta = -slewLimit;
-        m_speedScaleSmooth += speedDelta;
-
-        // Use slew-limited speed for subsequent processing
-        phaseSpeedMult = m_speedScaleSmooth;
-
-        // ================================================================
-        // WAVE COLLISION PATTERN: Onset Detection via Relative Energy
-        // Uses energy delta (above-average) instead of flux (too sensitive)
-        // Spatial decay applied in render loop for center-focused flash
-        // ================================================================
-        constexpr float DELTA_THRESHOLD = 0.15f;  // Above-average threshold
-
-        // Trigger on significant energy spike OR percussive hit
-        bool energySpike = m_energyDelta > DELTA_THRESHOLD;
-        bool percussiveHit = ctx.audio.isSnareHit() || ctx.audio.isHihatHit();
-
-        if (energySpike || percussiveHit) {
-            // Percussion gets full strength, energy spike scales with delta
-            float onsetStrength = percussiveHit ? 1.0f : fminf(m_energyDelta / 0.3f, 1.0f);
-            if (onsetStrength > m_onsetPulse) {
-                m_onsetPulse = onsetStrength;
+            // Dominant chroma bin detection (for color offset)
+            float maxChroma = 0.0f;
+            for (uint8_t bin = 0; bin < 12; ++bin) {
+                if (ctx.audio.controlBus.chroma[bin] > maxChroma) {
+                    maxChroma = ctx.audio.controlBus.chroma[bin];
+                    m_dominantBin = bin;
+                }
             }
         }
 
-        // Exponential decay (0.88 per frame = ~85ms half-life at 60fps)
-        m_onsetPulse *= 0.88f;
+        // Asymmetric followers for BRIGHTNESS (not speed!)
+        float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, dt, moodNorm);
+        float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, dt, moodNorm);
 
-        // Transfer to existing decay system for rendering
-        m_beatPulseDecay.value = m_onsetPulse;
+        // Brightness modulation
+        brightnessGain = 0.4f + 0.5f * energyAvgSmooth + 0.4f * energyDeltaSmooth;
+        if (brightnessGain > 1.5f) brightnessGain = 1.5f;
+        if (brightnessGain < 0.3f) brightnessGain = 0.3f;
 
-        // ================================================================
-        // v6: PURE DSP - Brightness from rms() + K1 beat-locked pulse
-        // ================================================================
-        float rmsEnergy = ctx.audio.rms();
-        float baseIntensity = 0.4f + 0.5f * rmsEnergy;
-
-        // K1 beat-locked pulse (gated by tempo confidence)
-        if (ctx.audio.tempoConfidence() > 0.5f && ctx.audio.isOnBeat()) {
-            m_beatPulse = ctx.audio.beatStrength();
+        // Collision flash (snare-triggered)
+        if (ctx.audio.isSnareHit()) {
+            m_collisionBoost = 1.0f;
         }
-        m_beatPulse *= 0.88f;  // Decay per frame
+        m_collisionBoost *= 0.88f;
 
-        energyBrightnessScale = baseIntensity + 0.3f * m_beatPulse;
-
-        // ================================================================
-        // v6: PURE DSP - Shimmer from heavyTreble()
-        // timbralSaliency REMOVED - was outputting CORRUPTED data
-        // ================================================================
-        float trebleEnergy = ctx.audio.heavyTreble();
-        m_trebleFollower.update(trebleEnergy, dt);
-
-        // ================================================================
-        // v6: PURE DSP - Hue Split from flux()
-        // Chord detection REMOVED - was outputting CORRUPTED data
-        // ================================================================
-        targetHueSplit = 48.0f + flux * 32.0f;  // Range: 48-80
+        // Chroma color offset (250ms smooth)
+        float alphaBin = 1.0f - expf(-dt / 0.25f);
+        m_dominantBinSmooth += ((float)m_dominantBin - m_dominantBinSmooth) * alphaBin;
+        chromaOffset = (uint8_t)(m_dominantBinSmooth * (255.0f / 12.0f));
     }
 #endif
 
-    // Clamp targets
-    if (targetLattice < 4.0f) targetLattice = 4.0f;
-    if (targetLattice > 16.0f) targetLattice = 16.0f;
-    if (targetBandgap < 0.25f) targetBandgap = 0.25f;
-    if (targetBandgap > 0.75f) targetBandgap = 0.75f;
-    if (targetBrightness < 0.4f) targetBrightness = 0.4f;
-    if (targetBrightness > 1.0f) targetBrightness = 1.0f;
-
     // ========================================================================
-    // ROLLING AVERAGE - Filter single-frame audio spikes
+    // PHASE ADVANCEMENT (proven formula from working effects)
+    // m_phase += speedNorm * 240.0f * speedMult * dt
     // ========================================================================
-    m_latticeTargetSum -= m_latticeTargetHist[m_histIdx];
-    m_latticeTargetHist[m_histIdx] = targetLattice;
-    m_latticeTargetSum += targetLattice;
-    float avgLatticeTarget = m_latticeTargetSum / HISTORY_SIZE;
-
-    m_bandgapTargetSum -= m_bandgapTargetHist[m_histIdx];
-    m_bandgapTargetHist[m_histIdx] = targetBandgap;
-    m_bandgapTargetSum += targetBandgap;
-    float avgBandgapTarget = m_bandgapTargetSum / HISTORY_SIZE;
-
-    m_histIdx = (m_histIdx + 1) % HISTORY_SIZE;
-
-    // ========================================================================
-    // TRUE EXPONENTIAL SMOOTHING via SmoothingEngine
-    // Formula: alpha = 1.0f - expf(-dt / tau) - Frame-rate INDEPENDENT
-    // ========================================================================
-
-    // Structure smoothing with mood adjustment
-    float latticeSize = m_latticeFollower.updateWithMood(avgLatticeTarget, dt, moodNorm);
-    float bandgapRatio = m_bandgapFollower.updateWithMood(avgBandgapTarget, dt, moodNorm);
-
-    // Brightness smoothing (fast response for beat reactivity)
-    float brightnessMod = m_brightnessFollower.update(targetBrightness, dt);
-
-    // Beat pulse: TRUE exponential decay toward zero
-    float beatPulse = m_beatPulseDecay.update(0.0f, dt);
-
-    // Hue split smoothing
-    float hueSplit = m_hueSplitFollower.update(targetHueSplit, dt);
-
-    // Phase speed: SPRING PHYSICS for natural momentum (no lurching)
-    float smoothedPhaseSpeed = m_phaseSpeedSpring.update(phaseSpeedMult, dt);
-
-    // v6: Compute final brightness with energy scaling + onset pulse
-    float finalBrightness = brightnessMod * energyBrightnessScale + BEAT_PULSE_STRENGTH * beatPulse;
-    if (finalBrightness > 1.0f) finalBrightness = 1.0f;
-    if (finalBrightness < 0.15f) finalBrightness = 0.15f;  // Never fully dark
-
-    // Integer lattice size for rendering
-    uint8_t latticeSizeInt = (uint8_t)(latticeSize + 0.5f);
-    if (latticeSizeInt < 4) latticeSizeInt = 4;
-    if (latticeSizeInt > 16) latticeSizeInt = 16;
-
-    // Bandgap threshold
-    uint8_t bandgapThreshold = (uint8_t)(latticeSizeInt * bandgapRatio);
-    if (bandgapThreshold < 1) bandgapThreshold = 1;
-
-    // Phase advancement with smoothed speed
     float speedNorm = ctx.speed / 50.0f;
-    m_phase = lightwaveos::enhancement::advancePhase(m_phase, speedNorm, smoothedPhaseSpeed, dt);
+    m_phase += speedNorm * 240.0f * speedMult * dt;
+    if (m_phase > 628.3f) m_phase -= 628.3f;  // Wrap at ~2*PI*100
 
-    uint16_t phaseInt = (uint16_t)(m_phase * 256.0f);
-
-    // Integer hue split
-    uint8_t hueSplitInt = (uint8_t)(hueSplit + 0.5f);
-
-    // v6: Get smoothed treble value for shimmer (was timbralSaliency - CORRUPTED)
-    float trebleSmooth = m_trebleFollower.value;
+    // Convert to integer phase for sin8 compatibility
+    uint16_t phaseInt = (uint16_t)(m_phase * 0.408f);  // Scale to 0-256
 
     // ========================================================================
-    // RENDER the photonic crystal pattern
+    // RENDER LOOP: ORIGINAL V1 ALGORITHM with audio layering
     // ========================================================================
     for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
-        // CENTER ORIGIN: distance from center
+        // CENTER ORIGIN: distance from center (79/80)
         uint16_t distFromCenter = centerPairDistance(i);
 
-        // Periodic structure with audio-modulated lattice size
-        uint8_t cellPosition = (uint8_t)(distFromCenter % latticeSizeInt);
-        bool inBandgap = cellPosition < bandgapThreshold;
+        // ================================================================
+        // ORIGINAL V1: Periodic structure - bandgap simulation
+        // ================================================================
+        uint8_t cellPosition = distFromCenter % latticeSize;
+        bool inBandgap = cellPosition < (latticeSize >> 1);
 
-        // Photonic band structure
+        // ================================================================
+        // ORIGINAL V1: Random defects (photonic impurities)
+        // ================================================================
+        if (random8() < defectProbability) {
+            inBandgap = !inBandgap;
+        }
+
+        // ================================================================
+        // ORIGINAL V1: Photonic band structure
+        // ================================================================
         uint8_t brightness = 0;
         if (inBandgap) {
             // Allowed modes - outward from center
             brightness = sin8((distFromCenter << 2) - (phaseInt >> 7));
-
-#if FEATURE_AUDIO_SYNC
-            // v6: Treble shimmer (was timbralSaliency - now heavyTreble)
-            if (ctx.audio.available) {
-                float distMod = 1.0f - (float)distFromCenter / HALF_LENGTH;
-                brightness = qadd8(brightness, (uint8_t)(trebleSmooth * distMod * TIMBRAL_SHIMMER_STRENGTH));
-            }
-#endif
         } else {
             // Forbidden gap - evanescent decay
-            uint8_t decayFactor = (latticeSizeInt > bandgapThreshold)
-                ? (cellPosition - bandgapThreshold) * (200 / (latticeSizeInt - bandgapThreshold))
-                : 0;
-            uint8_t decay = (decayFactor < 255) ? (255 - decayFactor) : 0;
+            uint8_t decay = 255 - (cellPosition * 50);
             brightness = scale8(sin8((distFromCenter << 1) - (phaseInt >> 8)), decay);
         }
 
-        // Apply brightness modulation
-        brightness = scale8(brightness, (uint8_t)(ctx.brightness * finalBrightness));
+        // ================================================================
+        // AUDIO LAYER: Apply brightness gain
+        // ================================================================
+        brightness = scale8(brightness, (uint8_t)(ctx.brightness * brightnessGain));
 
+        // ================================================================
+        // AUDIO LAYER: Collision flash (spatial decay from center)
+        // exp(-dist * 0.12f) creates natural falloff
+        // ================================================================
 #if FEATURE_AUDIO_SYNC
-        // ================================================================
-        // WAVE COLLISION PATTERN: Spatial Decay on Onset Pulse
-        // Center-focused explosion that fades toward edges
-        // exp(-dist * 0.12f) creates natural falloff from center
-        // ================================================================
-        if (ctx.audio.available && m_onsetPulse > 0.01f) {
-            float collisionFlash = m_onsetPulse * expf(-(float)distFromCenter * 0.12f);
-            brightness = qadd8(brightness, (uint8_t)(collisionFlash * 60.0f));
+        if (ctx.audio.available && m_collisionBoost > 0.01f) {
+            float flash = m_collisionBoost * expf(-(float)distFromCenter * 0.12f);
+            brightness = qadd8(brightness, (uint8_t)(flash * 60.0f));
         }
 #endif
 
-        // Spatial gradient for palette (no rainbows)
-        uint8_t palettePos = (distFromCenter * 3);
+        // ================================================================
+        // ORIGINAL V1: Color based on band structure
+        // Allowed zones get gHue, forbidden zones get gHue + 128
+        // AUDIO LAYER: Add chroma offset for pitch-based color variation
+        // ================================================================
+        uint8_t baseHue = inBandgap ? ctx.gHue : (uint8_t)(ctx.gHue + 128);
+        baseHue += chromaOffset;
+        uint8_t palettePos = baseHue + distFromCenter / 4;
 
-        // Hue split for forbidden zones
-        if (!inBandgap) {
-            palettePos += hueSplitInt;
-        }
-
-        // Slow gHue drift
-        palettePos += (ctx.gHue >> 2);
-
-        // Render to both strips
+        // Render to both strips (Strip 2 offset by 64 for complementary color)
         ctx.leds[i] = ctx.palette.getColor(palettePos, brightness);
         if (i + STRIP_LENGTH < ctx.ledCount) {
             ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor(
@@ -384,7 +245,7 @@ void LGPPhotonicCrystalEffect::cleanup() {
 const plugins::EffectMetadata& LGPPhotonicCrystalEffect::getMetadata() const {
     static plugins::EffectMetadata meta{
         "LGP Photonic Crystal",
-        "v6: Pure DSP - heavyBass/Mid/Treble, flux speed, K1 beat pulse, no saliency",
+        "v8: Fixed speed smoothing - heavy_bands direct to Spring (matches working effects)",
         plugins::EffectCategory::QUANTUM,
         1
     };

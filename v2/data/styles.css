@@ -1,5 +1,16 @@
 /* LightwaveOS Simple Controller - Design System */
 
+/* Prevent iOS Safari from autosising text unexpectedly */
+html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+body {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
 :root {
     /* Primary accent */
     --gold: #FFB84D;
@@ -230,6 +241,7 @@ body {
     margin: 0 auto;
 }
 
+
 /* Controls Row - for side-by-side layout */
 .controls-row {
     display: flex;
@@ -339,8 +351,9 @@ body {
 
 .control-btn.compact {
     min-height: 32px;
-    padding: var(--space-xs) var(--space-sm);
-    font-size: 0.875rem;
+    padding: 6px var(--space-sm);
+    font-size: 0.75rem;
+    line-height: 1.4;
     border-radius: 8px;
     text-transform: none;
     letter-spacing: 0;
@@ -370,6 +383,66 @@ body {
     opacity: 0.4;
     cursor: not-allowed;
     transform: none;
+}
+
+/* Select element styling (for zone preset selector) */
+select.control-btn {
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23FFB84D' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right var(--space-sm) center;
+    background-size: 12px;
+    padding-right: calc(var(--space-lg) + 12px);
+}
+
+select.control-btn:focus {
+    outline: 2px solid var(--gold);
+}
+
+/* Dropdown select for pattern and palette */
+.dropdown-select {
+    width: 100%;
+    padding: 6px var(--space-sm);
+    padding-right: calc(var(--space-lg) + 12px);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    font-size: 0.75rem;
+    line-height: 1.4;
+    min-height: 32px;
+    margin-bottom: var(--space-sm);
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23FFB84D' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right var(--space-sm) center;
+    background-size: 12px;
+}
+
+.dropdown-select:focus {
+    outline: 2px solid var(--gold);
+    outline-offset: 2px;
+    border-color: var(--gold);
+}
+
+.dropdown-select:hover {
+    border-color: var(--border-default);
+    background-color: var(--bg-elevated-hover);
+}
+
+/* Filter toggle states */
+.filter-reactive {
+    background: var(--gold);
+    color: var(--bg-base);
+}
+
+.filter-ambient {
+    background: var(--bg-elevated);
+    border-color: var(--gold);
 }
 
 /* Large increment/decrement buttons */
@@ -463,7 +536,8 @@ body {
 
 /* Full-width card (spans entire row) */
 .control-card.full-width {
-    flex: 1 0 100%;
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 /* Adjust mood slider container for labels */
@@ -585,6 +659,17 @@ body {
         font-size: 0.75rem;
         padding: 0 var(--space-md);
     }
+
+    /* LED Strip Visualization - Mobile Responsive */
+    #ledStripContainer {
+        height: 60px !important; /* Reduced from 100px */
+        padding: 0 var(--space-xs) !important;
+    }
+
+    #leftLedStrip, #rightLedStrip {
+        gap: 0.5px !important; /* Reduced gap on mobile */
+        height: 40px !important; /* Reduced from 48px */
+    }
 }
 
 /* Responsive Enhancements (larger screens) */
@@ -596,6 +681,11 @@ body {
 
     .control-card {
         padding: var(--space-xl);
+        flex: 0 1 auto; /* Don't stretch, size to content */
+    }
+
+    .control-card.full-width {
+        flex: 0 1 auto; /* Don't stretch, size to content */
     }
 
     .value-display {
@@ -610,6 +700,7 @@ body {
         min-height: 52px;
     }
 }
+
 
 /* Reduced Motion Support */
 @media (prefers-reduced-motion: reduce) {

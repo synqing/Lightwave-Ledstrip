@@ -113,6 +113,8 @@ const state = {
     pendingSpeedChange: null,      // Timer ID when speed change is pending
     pendingMoodChange: null,       // Timer ID when mood change is pending
     pendingFadeChange: null,       // Timer ID when fade change is pending
+    pendingZoneSpeedChange: {},    // Object: { [zoneId]: timerId } for per-zone debouncing
+    pendingZoneModeToggle: null,   // Timer ID when zone mode toggle is pending (prevents rapid toggles)
 
     // Current values (synced from server)
     effectId: 0,
@@ -123,6 +125,18 @@ const state = {
     speed: 25,
     mood: 128,  // Sensory Bridge: 0=reactive, 255=smooth
     fadeAmount: 20,  // Trail fade amount
+
+    // Zone state (null if zones not available/disabled)
+    zones: null,  // { enabled: boolean, zoneCount: number, zones: Array<{id, speed, ...}>, segments: Array<{zoneId, s1LeftStart, ...}> }
+    
+    // Zone editor state
+    zoneEditorSegments: [],  // Current editing segments
+    zoneEditorPreset: null,  // Selected preset ID or null for custom
+    
+    // Palette and effect lists (cached for dropdowns)
+    palettesList: [],  // Array of {id, name, category, ...}
+    effectsList: [],   // Array of {id, name, category, ...}
+    patternFilter: 'all',  // 'all', 'reactive', 'ambient'
 
     // Beat tracking
     currentBpm: 0,
@@ -197,12 +211,21 @@ function connect() {
             clearTimeout(state.pendingSpeedChange);
             state.pendingSpeedChange = null;
         }
+        if (state.pendingZoneModeToggle) {
+            clearTimeout(state.pendingZoneModeToggle);
+            state.pendingZoneModeToggle = null;
+        }
 
         // Request initial state (re-fetch all state on reconnect)
         setTimeout(() => {
             send({ type: 'getStatus' });
             // Fetch current parameters (includes paletteId, uses hardcoded lookup for name)
             fetchCurrentParameters();
+            // Fetch zones state
+            fetchZonesState();
+            // Fetch palettes and effects lists for dropdowns
+            fetchPalettesList();
+            fetchEffectsList();
         }, 100);
     };
 
@@ -356,77 +379,267 @@ function handleBeatEvent(msg) {
 // ─────────────────────────────────────────────────────────────
 
 function handleMessage(msg) {
-    // Log with actual data - not just type
-    if (msg.type === 'beat.event') {
-        log(`[BEAT] BPM:${msg.bpm?.toFixed(1)} conf:${(msg.confidence*100)?.toFixed(0)}% phase:${msg.beat_phase?.toFixed(2)} beat#${msg.beat_index} ${msg.downbeat ? 'DOWNBEAT' : ''}`);
-    } else {
-        log('[WS] RECV: ' + msg.type + (msg.effectId !== undefined ? ` (effectId: ${msg.effectId})` : '') + (msg.brightness !== undefined ? ` (brightness: ${msg.brightness})` : ''));
+    // Handle WebSocket error envelopes
+    if (msg.type === 'error' && msg.error) {
+        const errorCode = msg.error.code || 'UNKNOWN';
+        const errorMsg = msg.error.message || 'Unknown error';
+        log(`[WS] ERROR: ${errorCode} - ${errorMsg}`);
+        return;
     }
 
-    switch (msg.type) {
+    // Unwrap standard WebSocket response envelope: {type, success, data:{...}}
+    // The firmware's buildWsResponse() wraps payload fields under "data"
+    let msgFlat = msg;
+    if (msg.success === true && msg.data && typeof msg.data === 'object') {
+        // Create flattened view: merge data fields into top level
+        msgFlat = {
+            type: msg.type,
+            requestId: msg.requestId,
+            success: msg.success,
+            ...msg.data
+        };
+        log(`[WS] Unwrapped envelope for type: ${msg.type}`);
+    }
+
+    // Log with actual data - not just type
+    if (msgFlat.type === 'beat.event') {
+        log(`[BEAT] BPM:${msgFlat.bpm?.toFixed(1)} conf:${(msgFlat.confidence*100)?.toFixed(0)}% phase:${msgFlat.beat_phase?.toFixed(2)} beat#${msgFlat.beat_index} ${msgFlat.downbeat ? 'DOWNBEAT' : ''}`);
+    } else {
+        log('[WS] RECV: ' + msgFlat.type + (msgFlat.effectId !== undefined ? ` (effectId: ${msgFlat.effectId})` : '') + (msgFlat.brightness !== undefined ? ` (brightness: ${msgFlat.brightness})` : ''));
+    }
+
+    switch (msgFlat.type) {
         case 'status':
             // Full state sync - server uses effectId/paletteId
             // Skip effect updates if user just changed it (prevents flicker from stale server state)
-            if (msg.effectId !== undefined && !state.pendingEffectChange) {
+            if (msgFlat.effectId !== undefined && !state.pendingEffectChange) {
                 const oldId = state.effectId;
-                if (msg.effectId !== state.effectId) {
-                    state.effectId = msg.effectId;
+                if (msgFlat.effectId !== state.effectId) {
+                    state.effectId = msgFlat.effectId;
                     log(`[UI] Effect changed: ${oldId} -> ${state.effectId}`);
                 }
             }
-            if (msg.effectName !== undefined && !state.pendingEffectChange) state.effectName = msg.effectName;
+            if (msgFlat.effectName !== undefined && !state.pendingEffectChange) state.effectName = msgFlat.effectName;
             // Skip brightness/speed updates if user is dragging the slider
-            if (msg.brightness !== undefined && !state.pendingBrightnessChange) {
-                if (msg.brightness !== state.brightness) {
-                    state.brightness = msg.brightness;
+            if (msgFlat.brightness !== undefined && !state.pendingBrightnessChange) {
+                if (msgFlat.brightness !== state.brightness) {
+                    state.brightness = msgFlat.brightness;
                 }
             }
-            if (msg.speed !== undefined && !state.pendingSpeedChange) {
-                if (msg.speed !== state.speed) {
-                    state.speed = msg.speed;
+            if (msgFlat.speed !== undefined && !state.pendingSpeedChange) {
+                if (msgFlat.speed !== state.speed) {
+                    state.speed = msgFlat.speed;
                 }
             }
             // Skip palette updates if user just changed it (prevents flicker from stale server state)
-            if (msg.paletteId !== undefined && !state.pendingPaletteChange) {
-                const newPaletteId = parseInt(msg.paletteId);
+            if (msgFlat.paletteId !== undefined && !state.pendingPaletteChange) {
+                const newPaletteId = parseInt(msgFlat.paletteId);
                 if (!isNaN(newPaletteId) && newPaletteId !== state.paletteId) {
                     state.paletteId = newPaletteId;
                     // Use hardcoded lookup for name (instant, no API call)
                     state.paletteName = getPaletteName(newPaletteId);
                 }
             }
-            if (msg.paletteName !== undefined && msg.paletteName && !state.pendingPaletteChange) {
-                state.paletteName = msg.paletteName;
+            if (msgFlat.paletteName !== undefined && msgFlat.paletteName && !state.pendingPaletteChange) {
+                state.paletteName = msgFlat.paletteName;
             }
             updateAllUI();
             break;
 
         case 'effectChange':
-            if (msg.effectId !== undefined) state.effectId = msg.effectId;
-            if (msg.name !== undefined) state.effectName = msg.name;
+            if (msgFlat.effectId !== undefined) state.effectId = msgFlat.effectId;
+            if (msgFlat.name !== undefined) state.effectName = msgFlat.name;
             updatePatternUI();
             break;
 
         case 'paletteChange':
-            if (msg.paletteId !== undefined) {
-                state.paletteId = parseInt(msg.paletteId);
+            if (msgFlat.paletteId !== undefined) {
+                state.paletteId = parseInt(msgFlat.paletteId);
                 // Use hardcoded lookup for name (instant, no API call)
                 state.paletteName = getPaletteName(state.paletteId);
             }
-            if (msg.name !== undefined) {
-                state.paletteName = msg.name;
+            if (msgFlat.name !== undefined) {
+                state.paletteName = msgFlat.name;
             }
             updatePaletteUI();
             break;
 
+        case 'zones.list':
+            // Zones list response from WebSocket
+            if (msgFlat.enabled !== undefined) {
+                const wasEnabled = state.zones ? state.zones.enabled : false;
+                state.zones = {
+                    enabled: msgFlat.enabled,
+                    zoneCount: msgFlat.zoneCount || (msgFlat.zones ? msgFlat.zones.length : 0),
+                    zones: msgFlat.zones || [],
+                    segments: msgFlat.segments || []  // Parse segments array
+                };
+                log(`[ZONES] List received: ${state.zones.zoneCount} zones, enabled=${state.zones.enabled}`);
+                
+                // If zone mode just changed, log it
+                if (wasEnabled !== state.zones.enabled) {
+                    log(`[ZONES] Zone mode changed: ${wasEnabled} -> ${state.zones.enabled}`);
+                }
+                
+                // Update zone editor if segments are available
+                if (state.zones.segments && state.zones.segments.length > 0) {
+                    state.zoneEditorSegments = JSON.parse(JSON.stringify(state.zones.segments));
+                    state.zoneEditorPreset = null;
+                }
+                
+                updateZonesUI();
+                updateZoneModeUI();
+                updateZoneEditorUI();
+            }
+            break;
+
+        case 'zones.changed':
+            // Zone configuration changed (from zones.update)
+            if (msgFlat.zoneId !== undefined && state.zones && state.zones.zones) {
+                const zoneId = msgFlat.zoneId;
+                if (state.zones.zones[zoneId]) {
+                    // Update zone from msgFlat.current
+                    if (msgFlat.current) {
+                        if (msgFlat.current.speed !== undefined && !state.pendingZoneSpeedChange[zoneId]) {
+                            state.zones.zones[zoneId].speed = msgFlat.current.speed;
+                        }
+                        // Update other fields if present
+                        if (msgFlat.current.brightness !== undefined) {
+                            state.zones.zones[zoneId].brightness = msgFlat.current.brightness;
+                        }
+                        if (msgFlat.current.effectId !== undefined) {
+                            state.zones.zones[zoneId].effectId = msgFlat.current.effectId;
+                        }
+                    }
+                    log(`[ZONES] Zone ${zoneId} updated: speed=${state.zones.zones[zoneId].speed}`);
+                    updateZonesUI();
+                }
+            }
+            break;
+
+        case 'zone.enabledChanged':
+            // Global zone mode enable/disable event
+            if (msgFlat.enabled !== undefined && state.zones) {
+                const wasEnabled = state.zones.enabled;
+                state.zones.enabled = msgFlat.enabled;
+                log(`[ZONE] Zone mode changed via event: ${wasEnabled} -> ${msgFlat.enabled}`);
+                updateZonesUI();
+                updateZoneModeUI();
+            }
+            break;
+
+        case 'zones.effectChanged':
+            // Zone effect changed event
+            if (msgFlat.zoneId !== undefined && state.zones && state.zones.zones) {
+                const zoneId = msgFlat.zoneId;
+                if (state.zones.zones[zoneId]) {
+                    // Update zone from msgFlat.current if present, otherwise use direct fields
+                    if (msgFlat.current) {
+                        if (msgFlat.current.effectId !== undefined) {
+                            state.zones.zones[zoneId].effectId = msgFlat.current.effectId;
+                        }
+                        if (msgFlat.current.effectName !== undefined) {
+                            // Store effectName if available
+                        }
+                        // Update other fields if present
+                        if (msgFlat.current.brightness !== undefined) {
+                            state.zones.zones[zoneId].brightness = msgFlat.current.brightness;
+                        }
+                        if (msgFlat.current.speed !== undefined) {
+                            state.zones.zones[zoneId].speed = msgFlat.current.speed;
+                        }
+                        if (msgFlat.current.paletteId !== undefined) {
+                            state.zones.zones[zoneId].paletteId = msgFlat.current.paletteId;
+                        }
+                    } else {
+                        // Fallback: use direct fields if current object not present
+                        if (msgFlat.effectId !== undefined) {
+                            state.zones.zones[zoneId].effectId = msgFlat.effectId;
+                        }
+                    }
+                    log(`[ZONES] Zone ${zoneId} effect changed: effectId=${state.zones.zones[zoneId].effectId}`);
+                    updateZonesUI();
+                }
+            }
+            break;
+
+        case 'zone.paletteChanged':
+            // Zone palette changed event
+            if (msgFlat.zoneId !== undefined && state.zones && state.zones.zones) {
+                const zoneId = msgFlat.zoneId;
+                if (state.zones.zones[zoneId]) {
+                    // Update zone from msgFlat.current if present, otherwise use direct fields
+                    if (msgFlat.current) {
+                        if (msgFlat.current.paletteId !== undefined) {
+                            state.zones.zones[zoneId].paletteId = msgFlat.current.paletteId;
+                        }
+                        // Update other fields if present
+                        if (msgFlat.current.effectId !== undefined) {
+                            state.zones.zones[zoneId].effectId = msgFlat.current.effectId;
+                        }
+                        if (msgFlat.current.brightness !== undefined) {
+                            state.zones.zones[zoneId].brightness = msgFlat.current.brightness;
+                        }
+                        if (msgFlat.current.speed !== undefined) {
+                            state.zones.zones[zoneId].speed = msgFlat.current.speed;
+                        }
+                    } else {
+                        // Fallback: use direct fields if current object not present
+                        if (msgFlat.paletteId !== undefined) {
+                            state.zones.zones[zoneId].paletteId = msgFlat.paletteId;
+                        }
+                    }
+                    log(`[ZONES] Zone ${zoneId} palette changed: paletteId=${state.zones.zones[zoneId].paletteId}`);
+                    updateZonesUI();
+                }
+            }
+            break;
+
+        case 'zone.state':
+            // Fallback: treat zone.state same as zones.list
+            if (msgFlat.enabled !== undefined) {
+                const wasEnabled = state.zones ? state.zones.enabled : false;
+                state.zones = {
+                    enabled: msgFlat.enabled,
+                    zoneCount: msgFlat.zoneCount || (msgFlat.zones ? msgFlat.zones.length : 0),
+                    zones: msgFlat.zones || [],
+                    segments: msgFlat.segments || []  // Parse segments array
+                };
+                log(`[ZONES] zone.state received: ${state.zones.zoneCount} zones, enabled=${state.zones.enabled}`);
+                if (wasEnabled !== state.zones.enabled) {
+                    log(`[ZONES] Zone mode changed: ${wasEnabled} -> ${state.zones.enabled}`);
+                }
+                
+                // Update zone editor if segments are available
+                if (state.zones.segments && state.zones.segments.length > 0) {
+                    state.zoneEditorSegments = JSON.parse(JSON.stringify(state.zones.segments));
+                    state.zoneEditorPreset = null;
+                }
+                
+                updateZonesUI();
+                updateZoneModeUI();
+                updateZoneEditorUI();
+            }
+            break;
+
+        case 'zones.layoutChanged':
+            // Zone layout changed event (from zones.setLayout)
+            if (msgFlat.success && msgFlat.zoneCount !== undefined) {
+                log(`[ZONES] Layout changed: ${msgFlat.zoneCount} zones`);
+                // Refresh zones state to get updated segments
+                fetchZonesState();
+            }
+            break;
+            break;
+
         case 'beat.event':
-            handleBeatEvent(msg);
+            handleBeatEvent(msgFlat);
             break;
 
         default:
             // Don't log beat events as unknown (they may come with just 'beat.event' type)
-            if (msg.type !== 'beat.event') {
-                log('[WS] Unknown: ' + msg.type);
+            if (msgFlat.type !== 'beat.event') {
+                log('[WS] Unknown: ' + msgFlat.type);
             }
             break;
     }
@@ -438,6 +651,7 @@ function handleMessage(msg) {
 
 let lastButtonTime = 0;
 const BUTTON_THROTTLE_MS = 150;
+const ZONE_MODE_TOGGLE_THROTTLE_MS = 500; // Longer throttle for zone mode toggle to prevent flooding
 
 // ─────────────────────────────────────────────────────────────
 // Retry Logic with Exponential Backoff
@@ -485,14 +699,90 @@ function throttledAction(action, actionName) {
 // Control Handlers
 // ─────────────────────────────────────────────────────────────
 
+// Set effect by ID
+function setEffect(effectId) {
+    if (!throttledAction(() => {
+        log(`[BTN] Set Effect: ${effectId}`);
+        
+        // Set pending flag to ignore stale server updates (clear after 1 second)
+        if (state.pendingEffectChange) clearTimeout(state.pendingEffectChange);
+        state.pendingEffectChange = setTimeout(() => { state.pendingEffectChange = null; }, 1000);
+        
+        // REST API
+        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/effects/set`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ effectId: effectId })
+        })
+        .then(data => {
+            if (data.success) {
+                state.effectId = data.data.effectId;
+                state.effectName = data.data.name;
+                updatePatternUI();
+                log(`[REST] ✅ Effect changed to: ${data.data.name} (${data.data.effectId})`);
+            } else {
+                log(`[REST] ❌ Failed: ${JSON.stringify(data)}`);
+            }
+        })
+        .catch(e => log('[REST] ❌ Error after retries: ' + e.message));
+    }, 'setEffect')) {
+        return;
+    }
+}
+
+// Set palette by ID
+function setPalette(paletteId) {
+    if (!throttledAction(() => {
+        log(`[BTN] Set Palette: ${paletteId}`);
+        
+        state.paletteId = paletteId;
+        // Use hardcoded lookup for name (instant, no API call)
+        state.paletteName = getPaletteName(paletteId);
+        updatePaletteUI();
+        
+        // Set pending flag to ignore stale server updates (clear after 1 second)
+        if (state.pendingPaletteChange) clearTimeout(state.pendingPaletteChange);
+        state.pendingPaletteChange = setTimeout(() => { state.pendingPaletteChange = null; }, 1000);
+        
+        // REST API
+        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/palettes/set`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ paletteId: paletteId })
+        })
+        .then(data => {
+            if (data.success) {
+                log(`[REST] ✅ Palette set to: ${state.paletteName} (${state.paletteId})`);
+            }
+        })
+        .catch(e => log('[REST] Error after retries: ' + e.message));
+    }, 'setPalette')) {
+        return;
+    }
+}
+
 // Pattern navigation - using REST API only (removed duplicate WebSocket)
 function nextPattern() {
     if (!throttledAction(() => {
         log('[BTN] Next Pattern');
         
-        // Use current effect ID from state, or default to 0
-        const currentId = state.effectId || 0;
-        const nextId = (currentId + 1) % 75;
+        // Get filtered effects list
+        let filteredEffects = state.effectsList;
+        if (state.patternFilter === 'reactive') {
+            filteredEffects = state.effectsList.filter(eff => eff.isAudioReactive === true);
+        } else if (state.patternFilter === 'ambient') {
+            filteredEffects = state.effectsList.filter(eff => eff.isAudioReactive !== true);
+        }
+        
+        if (filteredEffects.length === 0) {
+            log('[BTN] No effects in current filter');
+            return;
+        }
+        
+        // Find current effect index in filtered list
+        const currentIndex = filteredEffects.findIndex(eff => eff.id === state.effectId);
+        const nextIndex = (currentIndex + 1) % filteredEffects.length;
+        const nextId = filteredEffects[nextIndex].id;
         
         // Set pending flag to ignore stale server updates (clear after 1 second)
         if (state.pendingEffectChange) clearTimeout(state.pendingEffectChange);
@@ -524,9 +814,23 @@ function prevPattern() {
     if (!throttledAction(() => {
         log('[BTN] Prev Pattern');
         
-        // Use current effect ID from state, or default to 0
-        const currentId = state.effectId || 0;
-        const prevId = (currentId - 1 + 75) % 75;
+        // Get filtered effects list
+        let filteredEffects = state.effectsList;
+        if (state.patternFilter === 'reactive') {
+            filteredEffects = state.effectsList.filter(eff => eff.isAudioReactive === true);
+        } else if (state.patternFilter === 'ambient') {
+            filteredEffects = state.effectsList.filter(eff => eff.isAudioReactive !== true);
+        }
+        
+        if (filteredEffects.length === 0) {
+            log('[BTN] No effects in current filter');
+            return;
+        }
+        
+        // Find current effect index in filtered list
+        const currentIndex = filteredEffects.findIndex(eff => eff.id === state.effectId);
+        const prevIndex = (currentIndex - 1 + filteredEffects.length) % filteredEffects.length;
+        const prevId = filteredEffects[prevIndex].id;
         
         // Set pending flag to ignore stale server updates (clear after 1 second)
         if (state.pendingEffectChange) clearTimeout(state.pendingEffectChange);
@@ -764,6 +1068,145 @@ function onFadeChange() {
     }
 }
 
+// Zone mode toggle handler - with aggressive throttling to prevent flooding
+function toggleZoneMode() {
+    // Prevent rapid toggling - check if already pending
+    if (state.pendingZoneModeToggle) {
+        log('[ZONE] Toggle already pending, ignoring rapid click');
+        return;
+    }
+
+    // Use throttledAction for button-level throttling (150ms)
+    if (!throttledAction(() => {
+        const currentEnabled = state.zones ? state.zones.enabled : false;
+        const newEnabled = !currentEnabled;
+        
+        log(`[ZONE] Toggling zone mode: ${currentEnabled} -> ${newEnabled}`);
+        
+        // Set pending flag to prevent rapid toggles (500ms cooldown)
+        state.pendingZoneModeToggle = setTimeout(() => {
+            state.pendingZoneModeToggle = null;
+        }, 500);
+        
+        // Try WebSocket first
+        if (state.connected && state.ws && state.ws.readyState === WebSocket.OPEN) {
+            send({ type: 'zone.enable', enable: newEnabled });
+            
+            // Request updated zones state after a short delay
+            setTimeout(() => {
+                send({ type: 'zones.list' });
+                fetchZonesState();
+            }, 300);
+        } else {
+            log('[ZONE] WebSocket not connected, using REST API fallback');
+            // REST API fallback
+            fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zones/enabled`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: newEnabled })
+            })
+            .then(data => {
+                if (data.success) {
+                    log(`[REST] Zone mode set to: ${newEnabled}`);
+                    // Refresh zones state after a short delay
+                    setTimeout(() => {
+                        fetchZonesState();
+                    }, 300);
+                } else {
+                    log(`[REST] Error setting zone mode: ${data.error || 'Unknown error'}`);
+                    // Clear pending flag on error
+                    if (state.pendingZoneModeToggle) {
+                        clearTimeout(state.pendingZoneModeToggle);
+                        state.pendingZoneModeToggle = null;
+                    }
+                }
+            })
+            .catch(e => {
+                log(`[REST] Error setting zone mode: ${e.message}`);
+                // Clear pending flag on error
+                if (state.pendingZoneModeToggle) {
+                    clearTimeout(state.pendingZoneModeToggle);
+                    state.pendingZoneModeToggle = null;
+                }
+            });
+        }
+        
+        // Optimistically update UI (will be corrected by server response)
+        if (state.zones) {
+            state.zones.enabled = newEnabled;
+            updateZoneModeUI();
+            updateZonesUI();
+        } else {
+            // If zones state doesn't exist, fetch it
+            fetchZonesState();
+        }
+    }, 'toggleZoneMode')) {
+        return;
+    }
+}
+
+// Zone speed control handlers (per-zone)
+const zoneSpeedUpdateTimers = {};
+
+function onZoneSpeedChange(zoneId) {
+    const slider = elements[`zone${zoneId}SpeedSlider`];
+    if (!slider) return;
+
+    const newVal = parseInt(slider.value);
+    if (!state.zones || !state.zones.zones || !state.zones.zones[zoneId]) return;
+
+    const currentSpeed = state.zones.zones[zoneId].speed;
+    if (newVal !== currentSpeed) {
+        state.zones.zones[zoneId].speed = newVal;
+        const valueEl = elements[`zone${zoneId}SpeedValue`];
+        if (valueEl) valueEl.textContent = newVal;
+
+        // Set pending flag to ignore stale server updates while dragging
+        if (state.pendingZoneSpeedChange[zoneId]) {
+            clearTimeout(state.pendingZoneSpeedChange[zoneId]);
+        }
+        state.pendingZoneSpeedChange[zoneId] = setTimeout(() => {
+            state.pendingZoneSpeedChange[zoneId] = null;
+        }, 1000);
+
+        // Debounce API calls while dragging
+        if (zoneSpeedUpdateTimers[zoneId]) {
+            clearTimeout(zoneSpeedUpdateTimers[zoneId]);
+        }
+
+        zoneSpeedUpdateTimers[zoneId] = setTimeout(() => {
+            // Only send if zones are enabled (prevents flooding when disabled)
+            if (!state.zones || !state.zones.enabled) {
+                log(`[ZONE] Zone mode is disabled, not sending speed change for zone ${zoneId}`);
+                return;
+            }
+
+            // Try WebSocket
+            if (state.connected && state.ws && state.ws.readyState === WebSocket.OPEN) {
+                send({ type: 'zones.update', zoneId: zoneId, speed: newVal });
+            }
+
+            // REST API backup (only if zones are enabled)
+            fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zones/${zoneId}/speed`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ speed: newVal })
+            })
+            .then(data => {
+                if (data.success) {
+                    log(`[REST] Zone ${zoneId} speed set to: ${newVal}`);
+                }
+            })
+            .catch(e => {
+                // 404 is OK if zones aren't fully initialized yet
+                if (e.message && !e.message.includes('404')) {
+                    log(`[REST] Error setting zone ${zoneId} speed: ${e.message}`);
+                }
+            });
+        }, 300); // Increased from 150ms to 300ms to reduce flooding
+    }
+}
+
 // ─────────────────────────────────────────────────────────────
 // UI Update Functions
 // ─────────────────────────────────────────────────────────────
@@ -787,6 +1230,12 @@ function updatePatternUI() {
     const name = state.effectName || `Effect ${state.effectId}`;
     elements.patternName.textContent = name;
     elements.currentEffect.textContent = name;
+    
+    // Sync dropdown selection
+    const select = document.getElementById('patternSelect');
+    if (select && state.effectId !== undefined && state.effectId !== null) {
+        select.value = state.effectId;
+    }
 }
 
 // Get palette name from hardcoded lookup (instant, no API call)
@@ -798,6 +1247,45 @@ function getPaletteName(paletteId) {
 }
 
 // Fetch current parameters (including paletteId) from API
+function fetchZonesState() {
+    // Try WebSocket first
+    if (state.connected && state.ws && state.ws.readyState === WebSocket.OPEN) {
+        send({ type: 'zones.list' });
+    }
+
+    // REST API backup
+    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zones`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(data => {
+        if (data.success && data.data) {
+            const zonesData = data.data;
+            state.zones = {
+                enabled: zonesData.enabled || false,
+                zoneCount: zonesData.zoneCount || 0,
+                zones: zonesData.zones || [],
+                segments: zonesData.segments || []  // Parse segments array
+            };
+            log(`[REST] Zones state: ${zonesData.zoneCount} zones, enabled=${zonesData.enabled}`);
+            
+            // Update zone editor if segments are available
+            if (state.zones.segments && state.zones.segments.length > 0) {
+                state.zoneEditorSegments = JSON.parse(JSON.stringify(state.zones.segments));
+                state.zoneEditorPreset = null;
+            }
+            
+            updateZonesUI();
+            updateZoneModeUI();
+            updateZoneEditorUI();
+        }
+    })
+    .catch(e => {
+        // Zones may not be available - this is OK, just log and continue
+        log(`[REST] Zones not available: ${e.message}`);
+    });
+}
+
 function fetchCurrentParameters() {
     const url = `http://${state.deviceHost || '192.168.0.16'}/api/v1/parameters`;
     fetchWithRetry(url)
@@ -846,6 +1334,31 @@ function updatePaletteUI() {
     
     elements.paletteName.textContent = paletteName;
     elements.paletteId.textContent = `${paletteId + 1}/${state.PALETTE_COUNT}`;
+    
+    // Sync dropdown selection
+    const select = document.getElementById('paletteSelect');
+    if (select && paletteId !== undefined && paletteId !== null) {
+        select.value = paletteId;
+    }
+}
+
+function updatePatternFilterUI() {
+    const label = document.getElementById('patternFilterLabel');
+    if (!label) return;
+    
+    const labels = {
+        'all': 'All',
+        'reactive': 'Audio',
+        'ambient': 'Ambient'
+    };
+    label.textContent = labels[state.patternFilter] || 'All';
+    
+    // Optional: Add visual indicator (class for styling)
+    const toggle = document.getElementById('patternFilterToggle');
+    if (toggle) {
+        toggle.classList.remove('filter-all', 'filter-reactive', 'filter-ambient');
+        toggle.classList.add(`filter-${state.patternFilter}`);
+    }
 }
 
 function updateBrightnessUI() {
@@ -884,6 +1397,724 @@ function updateFadeUI() {
     }
 }
 
+function updateZoneModeUI() {
+    if (!elements.zoneModeStatus || !elements.zoneModeInfo) return;
+
+    if (state.zones) {
+        elements.zoneModeStatus.textContent = state.zones.enabled ? 'ON' : 'OFF';
+        elements.zoneModeInfo.textContent = state.zones.enabled 
+            ? `${state.zones.zoneCount} zones` 
+            : 'Disabled';
+        
+        // Update button state
+        if (elements.zoneModeToggle) {
+            elements.zoneModeToggle.disabled = false;
+            elements.zoneModeToggle.textContent = state.zones.enabled ? 'Disable' : 'Enable';
+        }
+    } else {
+        elements.zoneModeStatus.textContent = '--';
+        elements.zoneModeInfo.textContent = 'Unknown';
+        if (elements.zoneModeToggle) {
+            elements.zoneModeToggle.disabled = true;
+            elements.zoneModeToggle.textContent = 'Toggle';
+        }
+    }
+}
+
+function updateZonesUI() {
+    const zoneRow = document.getElementById('zoneControlsRow');
+    if (!zoneRow) return;
+
+    // Show/hide zone controls based on state
+    if (state.zones && state.zones.enabled && state.zones.zones && state.zones.zones.length > 0) {
+        zoneRow.style.display = 'flex';
+        
+        // Update each zone slider (up to 3 zones)
+        for (let i = 0; i < Math.min(3, state.zones.zones.length); i++) {
+            const zone = state.zones.zones[i];
+            if (!zone) continue;
+
+            const slider = elements[`zone${i}SpeedSlider`];
+            const value = elements[`zone${i}SpeedValue`];
+            
+            if (slider && zone.speed !== undefined) {
+                // Only update if not pending (user is not dragging)
+                if (!state.pendingZoneSpeedChange[i]) {
+                    slider.value = zone.speed;
+                }
+            }
+            if (value && zone.speed !== undefined) {
+                value.textContent = zone.speed;
+            }
+        }
+    } else {
+        zoneRow.style.display = 'none';
+    }
+    
+    // Update zone mode UI
+    updateZoneModeUI();
+}
+
+// ─────────────────────────────────────────────────────────────
+// Zone Editor Functions
+// ─────────────────────────────────────────────────────────────
+
+// Zone colour mapping
+const ZONE_COLORS = ['#06b6d4', '#22c55e', '#a855f7', '#3b82f6'];  // cyan, green, purple, blue
+const CENTER_LEFT = 79;
+const CENTER_RIGHT = 80;
+const MAX_LED = 159;
+
+// Preset segment definitions (matching firmware ZoneDefinition.h)
+const ZONE_PRESETS = {
+    0: [ // Unified - uses 3-zone config
+        { zoneId: 0, s1LeftStart: 65, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 94, totalLeds: 30 },
+        { zoneId: 1, s1LeftStart: 20, s1LeftEnd: 64, s1RightStart: 95, s1RightEnd: 139, totalLeds: 90 },
+        { zoneId: 2, s1LeftStart: 0, s1LeftEnd: 19, s1RightStart: 140, s1RightEnd: 159, totalLeds: 40 }
+    ],
+    1: [ // Dual Split - uses 3-zone config
+        { zoneId: 0, s1LeftStart: 65, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 94, totalLeds: 30 },
+        { zoneId: 1, s1LeftStart: 20, s1LeftEnd: 64, s1RightStart: 95, s1RightEnd: 139, totalLeds: 90 },
+        { zoneId: 2, s1LeftStart: 0, s1LeftEnd: 19, s1RightStart: 140, s1RightEnd: 159, totalLeds: 40 }
+    ],
+    2: [ // Triple Rings - uses 3-zone config
+        { zoneId: 0, s1LeftStart: 65, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 94, totalLeds: 30 },
+        { zoneId: 1, s1LeftStart: 20, s1LeftEnd: 64, s1RightStart: 95, s1RightEnd: 139, totalLeds: 90 },
+        { zoneId: 2, s1LeftStart: 0, s1LeftEnd: 19, s1RightStart: 140, s1RightEnd: 159, totalLeds: 40 }
+    ],
+    3: [ // Quad Active - uses 4-zone config
+        { zoneId: 0, s1LeftStart: 60, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 99, totalLeds: 40 },
+        { zoneId: 1, s1LeftStart: 40, s1LeftEnd: 59, s1RightStart: 100, s1RightEnd: 119, totalLeds: 40 },
+        { zoneId: 2, s1LeftStart: 20, s1LeftEnd: 39, s1RightStart: 120, s1RightEnd: 139, totalLeds: 40 },
+        { zoneId: 3, s1LeftStart: 0, s1LeftEnd: 19, s1RightStart: 140, s1RightEnd: 159, totalLeds: 40 }
+    ],
+    4: [ // Heartbeat Focus - uses 3-zone config
+        { zoneId: 0, s1LeftStart: 65, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 94, totalLeds: 30 },
+        { zoneId: 1, s1LeftStart: 20, s1LeftEnd: 64, s1RightStart: 95, s1RightEnd: 139, totalLeds: 90 },
+        { zoneId: 2, s1LeftStart: 0, s1LeftEnd: 19, s1RightStart: 140, s1RightEnd: 159, totalLeds: 40 }
+    ]
+};
+
+// Get zone ID for a given LED
+function getZoneForLed(ledIndex, isRight) {
+    for (const seg of state.zoneEditorSegments) {
+        if (isRight) {
+            if (ledIndex >= seg.s1RightStart && ledIndex <= seg.s1RightEnd) {
+                return seg.zoneId;
+            }
+        } else {
+            if (ledIndex >= seg.s1LeftStart && ledIndex <= seg.s1LeftEnd) {
+                return seg.zoneId;
+            }
+        }
+    }
+    return -1;
+}
+
+// Render LED strips with proper mirroring
+function renderLedStrips() {
+    const leftStrip = document.getElementById('leftLedStrip');
+    const rightStrip = document.getElementById('rightLedStrip');
+    if (!leftStrip || !rightStrip) return;
+
+    leftStrip.innerHTML = '';
+    rightStrip.innerHTML = '';
+
+    // Left strip: 0-79, displayed REVERSED (79 at right edge meeting centre, 0 at left edge)
+    // Add LEDs in reverse order (79 down to 0) so 79 appears at right edge after flex-row-reverse
+    for (let i = 79; i >= 0; i--) {
+        const led = document.createElement('div');
+        const zoneId = getZoneForLed(i, false);
+        const isCenter = i === CENTER_LEFT;
+        
+        led.style.flex = '1';
+        led.style.minWidth = '2px';
+        led.style.height = '100%';
+        led.style.borderRadius = '1px';
+        led.style.border = '1px solid';
+        
+        if (zoneId >= 0) {
+            led.style.background = ZONE_COLORS[zoneId % ZONE_COLORS.length];
+            led.style.borderColor = ZONE_COLORS[zoneId % ZONE_COLORS.length];
+            led.style.opacity = '0.8';
+        } else {
+            led.style.background = 'var(--bg-elevated)';
+            led.style.borderColor = 'var(--border-subtle)';
+        }
+        
+        // Center LED indicator handled by divider line, no box-shadow needed
+        led.title = `LED ${i}${isCenter ? ' (Centre)' : ''}`;
+        leftStrip.appendChild(led);
+    }
+
+    // Right strip: 80-159, displayed normally (80 at left edge, 159 at right edge)
+    for (let i = 80; i <= 159; i++) {
+        const led = document.createElement('div');
+        const zoneId = getZoneForLed(i, true);
+        const isCenter = i === CENTER_RIGHT;
+        
+        led.style.flex = '1';
+        led.style.minWidth = '2px';
+        led.style.height = '100%';
+        led.style.borderRadius = '1px';
+        led.style.border = '1px solid';
+        
+        if (zoneId >= 0) {
+            led.style.background = ZONE_COLORS[zoneId % ZONE_COLORS.length];
+            led.style.borderColor = ZONE_COLORS[zoneId % ZONE_COLORS.length];
+            led.style.opacity = '0.8';
+        } else {
+            led.style.background = 'var(--bg-elevated)';
+            led.style.borderColor = 'var(--border-subtle)';
+        }
+        
+        // Center LED indicator handled by divider line, no box-shadow needed
+        led.title = `LED ${i}${isCenter ? ' (Centre)' : ''}`;
+        rightStrip.appendChild(led);
+    }
+}
+
+// Validate zone layout
+function validateZoneLayout(segments) {
+    const errors = [];
+    
+    if (!segments || segments.length === 0) {
+        errors.push('At least one zone is required');
+        return errors;
+    }
+    
+    if (segments.length > 4) {
+        errors.push('Maximum 4 zones allowed');
+        return errors;
+    }
+    
+    // Check each segment
+    for (let i = 0; i < segments.length; i++) {
+        const seg = segments[i];
+        
+        // Check zoneId matches index
+        if (seg.zoneId !== i) {
+            errors.push(`Zone ${i}: Zone ID must be ${i}`);
+        }
+        
+        // Check bounds
+        if (seg.s1LeftStart < 0 || seg.s1LeftStart > CENTER_LEFT) {
+            errors.push(`Zone ${i}: Left start must be 0-${CENTER_LEFT}`);
+        }
+        if (seg.s1LeftEnd < seg.s1LeftStart || seg.s1LeftEnd > CENTER_LEFT) {
+            errors.push(`Zone ${i}: Left end must be >= start and <= ${CENTER_LEFT}`);
+        }
+        if (seg.s1RightStart < CENTER_RIGHT || seg.s1RightStart > MAX_LED) {
+            errors.push(`Zone ${i}: Right start must be ${CENTER_RIGHT}-${MAX_LED}`);
+        }
+        if (seg.s1RightEnd < seg.s1RightStart || seg.s1RightEnd > MAX_LED) {
+            errors.push(`Zone ${i}: Right end must be >= start and <= ${MAX_LED}`);
+        }
+        
+        // Check centre-origin symmetry
+        const leftSize = seg.s1LeftEnd - seg.s1LeftStart + 1;
+        const rightSize = seg.s1RightEnd - seg.s1RightStart + 1;
+        if (leftSize !== rightSize) {
+            errors.push(`Zone ${i}: Left and right segments must have equal size`);
+        }
+        const leftDistance = CENTER_LEFT - seg.s1LeftEnd;
+        const rightDistance = seg.s1RightStart - CENTER_RIGHT;
+        if (leftDistance !== rightDistance) {
+            errors.push(`Zone ${i}: Segments must be symmetric around centre pair (79/80)`);
+        }
+        
+        // Check minimum size
+        if (leftSize < 1 || rightSize < 1) {
+            errors.push(`Zone ${i}: Each segment must have at least 1 LED`);
+        }
+    }
+    
+    // Check for overlaps and coverage
+    const leftCoverage = new Set();
+    const rightCoverage = new Set();
+    
+    for (let i = 0; i < segments.length; i++) {
+        const seg = segments[i];
+        
+        for (let led = seg.s1LeftStart; led <= seg.s1LeftEnd; led++) {
+            if (leftCoverage.has(led)) {
+                errors.push(`LED ${led} on left strip is assigned to multiple zones`);
+            }
+            leftCoverage.add(led);
+        }
+        
+        for (let led = seg.s1RightStart; led <= seg.s1RightEnd; led++) {
+            if (rightCoverage.has(led)) {
+                errors.push(`LED ${led} on right strip is assigned to multiple zones`);
+            }
+            rightCoverage.add(led);
+        }
+    }
+    
+    // Check complete coverage
+    for (let led = 0; led <= CENTER_LEFT; led++) {
+        if (!leftCoverage.has(led)) {
+            errors.push(`LED ${led} on left strip is not assigned to any zone`);
+        }
+    }
+    for (let led = CENTER_RIGHT; led <= MAX_LED; led++) {
+        if (!rightCoverage.has(led)) {
+            errors.push(`LED ${led} on right strip is not assigned to any zone`);
+        }
+    }
+    
+    // Check centre pair inclusion
+    let includesCentre = false;
+    for (const seg of segments) {
+        if (seg.s1LeftEnd >= CENTER_LEFT || seg.s1RightStart <= CENTER_RIGHT) {
+            includesCentre = true;
+            break;
+        }
+    }
+    if (!includesCentre) {
+        errors.push('At least one zone must include the centre pair (LEDs 79/80)');
+    }
+    
+    return errors;
+}
+
+// Calculate mirrored right segment values from left segment values
+function calculateMirroredRightSegment(seg) {
+    // Validate left segment values
+    if (seg.s1LeftStart > seg.s1LeftEnd || seg.s1LeftStart < 0 || seg.s1LeftEnd > CENTER_LEFT) {
+        return seg; // Return unchanged if invalid
+    }
+    
+    const leftSize = seg.s1LeftEnd - seg.s1LeftStart + 1;
+    const distanceFromCenter = CENTER_LEFT - seg.s1LeftEnd;
+    const s1RightStart = CENTER_RIGHT + distanceFromCenter;
+    const s1RightEnd = s1RightStart + leftSize - 1;
+    
+    return {
+        ...seg,
+        s1RightStart: Math.max(CENTER_RIGHT, Math.min(MAX_LED, s1RightStart)),
+        s1RightEnd: Math.max(s1RightStart, Math.min(MAX_LED, s1RightEnd))
+    };
+}
+
+// Zone control functions (palette, effect, blend)
+function setZonePalette(zoneId, paletteId) {
+    if (state.connected && state.ws) {
+        // WebSocket preferred
+        send({ type: 'zone.setPalette', zoneId, paletteId });
+        log(`[WS] Zone ${zoneId} palette: ${paletteId}`);
+    } else {
+        // REST fallback
+        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zones/${zoneId}/palette`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ paletteId })
+        })
+        .then(data => {
+            if (data.success) {
+                log(`[REST] Zone ${zoneId} palette: ${paletteId}`);
+                fetchZonesState(); // Refresh zones state
+            }
+        })
+        .catch(e => {
+            log(`[REST] ❌ Error setting zone ${zoneId} palette: ${e.message}`);
+        });
+    }
+}
+
+function setZoneEffect(zoneId, effectId) {
+    if (state.connected && state.ws) {
+        // WebSocket preferred
+        send({ type: 'zone.setEffect', zoneId, effectId });
+        log(`[WS] Zone ${zoneId} effect: ${effectId}`);
+    } else {
+        // REST fallback
+        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zones/${zoneId}/effect`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ effectId })
+        })
+        .then(data => {
+            if (data.success) {
+                log(`[REST] Zone ${zoneId} effect: ${effectId}`);
+                fetchZonesState(); // Refresh zones state
+            }
+        })
+        .catch(e => {
+            log(`[REST] ❌ Error setting zone ${zoneId} effect: ${e.message}`);
+        });
+    }
+}
+
+function setZoneBlend(zoneId, blendMode) {
+    if (state.connected && state.ws) {
+        // WebSocket preferred (will be implemented in next todo)
+        send({ type: 'zone.setBlend', zoneId, blendMode });
+        log(`[WS] Zone ${zoneId} blend: ${blendMode}`);
+    } else {
+        // REST fallback
+        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zones/${zoneId}/blend`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ blendMode })
+        })
+        .then(data => {
+            if (data.success) {
+                log(`[REST] Zone ${zoneId} blend: ${blendMode}`);
+                fetchZonesState(); // Refresh zones state
+            }
+        })
+        .catch(e => {
+            log(`[REST] ❌ Error setting zone ${zoneId} blend: ${e.message}`);
+        });
+    }
+}
+
+// Render zone segment editors
+function renderZoneSegments() {
+    const container = document.getElementById('zoneSegmentsList');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    state.zoneEditorSegments.forEach((seg, index) => {
+        const zoneDiv = document.createElement('div');
+        zoneDiv.style.background = 'var(--bg-elevated)';
+        zoneDiv.style.border = `1px solid ${ZONE_COLORS[seg.zoneId % ZONE_COLORS.length]}`;
+        zoneDiv.style.borderRadius = '8px';
+        zoneDiv.style.padding = 'var(--space-sm)';
+        
+        // Get current zone data (if available)
+        const zoneData = state.zones && state.zones.zones && state.zones.zones[seg.zoneId] ? state.zones.zones[seg.zoneId] : null;
+        const currentPaletteId = zoneData ? (zoneData.paletteId !== undefined ? zoneData.paletteId : 0) : 0;
+        const currentEffectId = zoneData ? (zoneData.effectId !== undefined ? zoneData.effectId : 0) : 0;
+        const currentBlendMode = zoneData ? (zoneData.blendMode !== undefined ? zoneData.blendMode : 0) : 0;
+        
+        // Build palette dropdown options
+        let paletteOptions = '<option value="0">Global</option>';
+        if (state.palettesList && state.palettesList.length > 0) {
+            state.palettesList.forEach(pal => {
+                paletteOptions += `<option value="${pal.id}" ${pal.id === currentPaletteId ? 'selected' : ''}>${pal.name}</option>`;
+            });
+        }
+        
+        // Build effect dropdown options
+        let effectOptions = '';
+        if (state.effectsList && state.effectsList.length > 0) {
+            state.effectsList.forEach(eff => {
+                effectOptions += `<option value="${eff.id}" ${eff.id === currentEffectId ? 'selected' : ''}>${eff.name || `Effect ${eff.id}`}</option>`;
+            });
+        } else {
+            effectOptions = `<option value="${currentEffectId}">Effect ${currentEffectId}</option>`;
+        }
+        
+        // Blend mode options (hardcoded from BlendMode.h)
+        const blendModes = [
+            { value: 0, name: 'Overwrite' },
+            { value: 1, name: 'Additive' },
+            { value: 2, name: 'Multiply' },
+            { value: 3, name: 'Screen' },
+            { value: 4, name: 'Overlay' },
+            { value: 5, name: 'Alpha' },
+            { value: 6, name: 'Lighten' },
+            { value: 7, name: 'Darken' }
+        ];
+        let blendOptions = '';
+        blendModes.forEach(mode => {
+            blendOptions += `<option value="${mode.value}" ${mode.value === currentBlendMode ? 'selected' : ''}>${mode.name}</option>`;
+        });
+        
+        zoneDiv.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-xs);">
+                <div class="value-display compact" style="font-size: 0.75rem;">Zone ${seg.zoneId}</div>
+                <div class="value-secondary compact" style="font-size: 0.5625rem;">${seg.totalLeds} LEDs</div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-sm); margin-bottom: var(--space-sm);">
+                <div>
+                    <div class="value-secondary compact" style="font-size: 0.5625rem; margin-bottom: 2px;">Left Segment</div>
+                    <div style="display: flex; gap: var(--space-xs);">
+                        <div style="flex: 1;">
+                            <div class="value-secondary compact" style="font-size: 0.5rem; margin-bottom: 2px;">Start</div>
+                            <input type="number" min="0" max="${CENTER_LEFT}" value="${seg.s1LeftStart}" 
+                                   data-zone="${index}" data-field="s1LeftStart" 
+                                   style="width: 100%; padding: 4px 6px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 4px; color: var(--text-primary); font-size: 0.75rem;">
+                        </div>
+                        <div style="flex: 1;">
+                            <div class="value-secondary compact" style="font-size: 0.5rem; margin-bottom: 2px;">End</div>
+                            <input type="number" min="${seg.s1LeftStart}" max="${CENTER_LEFT}" value="${seg.s1LeftEnd}" 
+                                   data-zone="${index}" data-field="s1LeftEnd" 
+                                   style="width: 100%; padding: 4px 6px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 4px; color: var(--text-primary); font-size: 0.75rem;">
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <div class="value-secondary compact" style="font-size: 0.5625rem; margin-bottom: 2px;">Right Segment</div>
+                    <div style="display: flex; gap: var(--space-xs);">
+                        <div style="flex: 1;">
+                            <div class="value-secondary compact" style="font-size: 0.5rem; margin-bottom: 2px;">Start</div>
+                            <input type="number" min="${CENTER_RIGHT}" max="${MAX_LED}" value="${seg.s1RightStart}" 
+                                   data-zone="${index}" data-field="s1RightStart" 
+                                   style="width: 100%; padding: 4px 6px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 4px; color: var(--text-primary); font-size: 0.75rem;">
+                        </div>
+                        <div style="flex: 1;">
+                            <div class="value-secondary compact" style="font-size: 0.5rem; margin-bottom: 2px;">End</div>
+                            <input type="number" min="${seg.s1RightStart}" max="${MAX_LED}" value="${seg.s1RightEnd}" 
+                                   data-zone="${index}" data-field="s1RightEnd" 
+                                   style="width: 100%; padding: 4px 6px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 4px; color: var(--text-primary); font-size: 0.75rem;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--space-sm);">
+                <div>
+                    <div class="value-secondary compact" style="font-size: 0.5625rem; margin-bottom: 2px;">Palette</div>
+                    <select data-zone="${seg.zoneId}" data-type="palette" 
+                            style="width: 100%; padding: 4px 6px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 4px; color: var(--text-primary); font-size: 0.75rem;">
+                        ${paletteOptions}
+                    </select>
+                </div>
+                <div>
+                    <div class="value-secondary compact" style="font-size: 0.5625rem; margin-bottom: 2px;">Effect</div>
+                    <select data-zone="${seg.zoneId}" data-type="effect" 
+                            style="width: 100%; padding: 4px 6px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 4px; color: var(--text-primary); font-size: 0.75rem;">
+                        ${effectOptions}
+                    </select>
+                </div>
+                <div>
+                    <div class="value-secondary compact" style="font-size: 0.5625rem; margin-bottom: 2px;">Blend Mode</div>
+                    <select data-zone="${seg.zoneId}" data-type="blend" 
+                            style="width: 100%; padding: 4px 6px; background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 4px; color: var(--text-primary); font-size: 0.75rem;">
+                        ${blendOptions}
+                    </select>
+                </div>
+            </div>
+        `;
+        
+        container.appendChild(zoneDiv);
+    });
+    
+    // Attach input handlers
+    container.querySelectorAll('input').forEach(input => {
+        input.addEventListener('input', (e) => {
+            const zoneIndex = parseInt(e.target.dataset.zone);
+            const field = e.target.dataset.field;
+            const value = parseInt(e.target.value) || 0;
+            
+            state.zoneEditorSegments[zoneIndex][field] = value;
+            state.zoneEditorPreset = null;  // Clear preset selection
+            
+            // Recalculate totalLeds
+            const seg = state.zoneEditorSegments[zoneIndex];
+            const leftSize = seg.s1LeftEnd - seg.s1LeftStart + 1;
+            const rightSize = seg.s1RightEnd - seg.s1RightStart + 1;
+            seg.totalLeds = leftSize + rightSize; // Per-strip count (strip 2 mirrors strip 1)
+            
+            // Update UI
+            renderLedStrips();
+            renderZoneSegments();
+            updateZoneEditorValidation();
+        });
+    });
+    
+    // Attach dropdown handlers for palette, effect, and blend
+    container.querySelectorAll('select[data-type]').forEach(select => {
+        select.addEventListener('change', (e) => {
+            const zoneId = parseInt(e.target.dataset.zone);
+            const type = e.target.dataset.type;
+            const value = parseInt(e.target.value);
+            
+            if (type === 'palette') {
+                setZonePalette(zoneId, value);
+            } else if (type === 'effect') {
+                setZoneEffect(zoneId, value);
+            } else if (type === 'blend') {
+                setZoneBlend(zoneId, value);
+            }
+        });
+    });
+}
+
+// Update zone editor validation
+function updateZoneEditorValidation() {
+    const errors = validateZoneLayout(state.zoneEditorSegments);
+    const errorDiv = document.getElementById('zoneValidationErrors');
+    const errorList = document.getElementById('zoneValidationErrorsList');
+    const applyBtn = document.getElementById('zoneApplyButton');
+    
+    if (!errorDiv || !errorList || !applyBtn) return;
+    
+    if (errors.length > 0) {
+        errorDiv.style.display = 'block';
+        errorList.innerHTML = '';
+        errors.forEach(err => {
+            const li = document.createElement('li');
+            li.className = 'value-secondary compact';
+            li.style.fontSize = '0.5625rem';
+            li.style.color = 'var(--error)';
+            li.textContent = err;
+            errorList.appendChild(li);
+        });
+        applyBtn.disabled = true;
+    } else {
+        errorDiv.style.display = 'none';
+        applyBtn.disabled = false;
+    }
+}
+
+// Update zone editor UI
+function updateZoneEditorUI() {
+    const editorRow = document.getElementById('zoneEditorRow');
+    if (!editorRow) return;
+    
+    // Show/hide based on zones enabled
+    if (state.zones && state.zones.enabled && state.zoneEditorSegments.length > 0) {
+        editorRow.style.display = 'flex';
+        renderLedStrips();
+        renderZoneSegments();
+        updateZoneEditorValidation();
+        
+        // Update zone count selector
+        const zoneCountSelect = document.getElementById('zoneCountSelect');
+        if (zoneCountSelect && state.zoneEditorSegments.length > 0) {
+            zoneCountSelect.value = state.zoneEditorSegments.length;
+        }
+        
+        // Update preset selector
+        const presetSelect = document.getElementById('zonePresetSelect');
+        if (presetSelect) {
+            presetSelect.value = state.zoneEditorPreset !== null ? state.zoneEditorPreset : -1;
+        }
+    } else {
+        editorRow.style.display = 'none';
+    }
+}
+
+// Handle preset selection
+// Generate valid segments for a given zone count (1-4)
+function generateZoneSegments(zoneCount) {
+    if (zoneCount < 1 || zoneCount > 4) {
+        log(`[ZONE EDITOR] Invalid zone count: ${zoneCount}`);
+        return null;
+    }
+    
+    const segments = [];
+    const LEDsPerSide = 80; // 0-79 left, 80-159 right
+    const centerLeft = 79;
+    const centerRight = 80;
+    
+    // Distribute LEDs evenly across zones, centre-out
+    // Each zone gets approximately LEDsPerSide / zoneCount LEDs per side
+    const ledsPerZone = Math.floor(LEDsPerSide / zoneCount);
+    const remainder = LEDsPerSide % zoneCount;
+    
+    // Build zones from centre outward
+    let leftEnd = centerLeft;
+    let rightStart = centerRight;
+    
+    for (let i = 0; i < zoneCount; i++) {
+        // Calculate zone size (give remainder to outermost zones)
+        const zoneSize = ledsPerZone + (i >= zoneCount - remainder ? 1 : 0);
+        
+        // Left segment (descending from centre)
+        const leftStart = leftEnd - zoneSize + 1;
+        
+        // Right segment (ascending from centre)
+        const rightEnd = rightStart + zoneSize - 1;
+        
+        segments.push({
+            zoneId: i,
+            s1LeftStart: leftStart,
+            s1LeftEnd: leftEnd,
+            s1RightStart: rightStart,
+            s1RightEnd: rightEnd,
+            totalLeds: zoneSize * 2 // Both sides
+        });
+        
+        // Move outward for next zone
+        leftEnd = leftStart - 1;
+        rightStart = rightEnd + 1;
+    }
+    
+    // Reverse to get centre-out order (zone 0 = innermost)
+    segments.reverse();
+    
+    // Re-assign zone IDs to match order
+    segments.forEach((seg, idx) => {
+        seg.zoneId = idx;
+    });
+    
+    return segments;
+}
+
+function handleZoneCountSelect(zoneCount) {
+    const segments = generateZoneSegments(zoneCount);
+    if (segments) {
+        state.zoneEditorSegments = segments;
+        state.zoneEditorPreset = null; // Clear preset when using custom count
+        renderLedStrips();
+        renderZoneSegments();
+        updateZoneEditorValidation();
+        log(`[ZONE EDITOR] Generated ${zoneCount} zones`);
+    }
+}
+
+function handleZonePresetSelect(presetId) {
+    if (presetId === -1) {
+        state.zoneEditorPreset = null;
+        return;
+    }
+    
+    const preset = ZONE_PRESETS[presetId];
+    if (preset) {
+        state.zoneEditorSegments = JSON.parse(JSON.stringify(preset));
+        state.zoneEditorPreset = presetId;
+        // Update zone count selector to match preset
+        const zoneCountSelect = document.getElementById('zoneCountSelect');
+        if (zoneCountSelect && preset.length > 0) {
+            zoneCountSelect.value = preset.length;
+        }
+        renderLedStrips();
+        renderZoneSegments();
+        updateZoneEditorValidation();
+    }
+}
+
+// Apply zone layout
+function applyZoneLayout() {
+    const errors = validateZoneLayout(state.zoneEditorSegments);
+    if (errors.length > 0) {
+        log(`[ZONE EDITOR] Validation failed: ${errors.join(', ')}`);
+        return;
+    }
+    
+    log(`[ZONE EDITOR] Applying layout with ${state.zoneEditorSegments.length} zones`);
+    
+    // Try WebSocket first
+    if (state.connected && state.ws && state.ws.readyState === WebSocket.OPEN) {
+        send({ type: 'zones.setLayout', zones: state.zoneEditorSegments });
+        log(`[ZONE EDITOR] Sent via WebSocket`);
+    } else {
+        // REST API fallback
+        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zones/layout`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ zones: state.zoneEditorSegments })
+        })
+        .then(data => {
+            if (data.success) {
+                log(`[ZONE EDITOR] ✅ Layout applied via REST`);
+                // Refresh zones state
+                fetchZonesState();
+            } else {
+                log(`[ZONE EDITOR] ❌ Failed: ${JSON.stringify(data)}`);
+            }
+        })
+        .catch(e => {
+            log(`[ZONE EDITOR] ❌ Error: ${e.message}`);
+        });
+    }
+}
+
 function updateAllUI() {
     updateConnectionUI();
     updatePatternUI();
@@ -892,6 +2123,9 @@ function updateAllUI() {
     updateSpeedUI();
     updateMoodUI();
     updateFadeUI();
+    updateZonesUI();
+    updateZoneModeUI();
+    updateZoneEditorUI();
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -939,6 +2173,87 @@ async function discoverDevice() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Palette and Effect Lists (for dropdowns)
+// ─────────────────────────────────────────────────────────────
+
+function fetchPalettesList() {
+    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/palettes?limit=75`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(data => {
+        if (data.success && data.data && data.data.palettes) {
+            state.palettesList = data.data.palettes;
+            log(`[REST] ✅ Loaded ${state.palettesList.length} palettes`);
+            populatePalettesDropdown();
+        }
+    })
+    .catch(e => {
+        log(`[REST] ❌ Error fetching palettes: ${e.message}`);
+    });
+}
+
+function fetchEffectsList() {
+    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/effects`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(data => {
+        if (data.success && data.data && data.data.effects) {
+            state.effectsList = data.data.effects;
+            log(`[REST] ✅ Loaded ${state.effectsList.length} effects`);
+            updatePatternFilterUI();
+            populateEffectsDropdown();
+        }
+    })
+    .catch(e => {
+        log(`[REST] ❌ Error fetching effects: ${e.message}`);
+    });
+}
+
+function populateEffectsDropdown() {
+    const select = document.getElementById('patternSelect');
+    if (!select || !state.effectsList || state.effectsList.length === 0) return;
+    
+    // Filter effects based on current filter mode
+    let filteredEffects = state.effectsList;
+    if (state.patternFilter === 'reactive') {
+        filteredEffects = state.effectsList.filter(eff => eff.isAudioReactive === true);
+    } else if (state.patternFilter === 'ambient') {
+        filteredEffects = state.effectsList.filter(eff => eff.isAudioReactive !== true);
+    }
+    
+    select.innerHTML = filteredEffects.map(eff => 
+        `<option value="${eff.id}">${eff.name || `Effect ${eff.id}`}</option>`
+    ).join('');
+    
+    // Set current selection if effectId is known and is in filtered list
+    if (state.effectId !== undefined && state.effectId !== null) {
+        const currentInFilter = filteredEffects.some(eff => eff.id === state.effectId);
+        if (currentInFilter) {
+            select.value = state.effectId;
+        } else if (filteredEffects.length > 0) {
+            // If current effect not in filter, select first in filtered list
+            select.value = filteredEffects[0].id;
+        }
+    }
+}
+
+function populatePalettesDropdown() {
+    const select = document.getElementById('paletteSelect');
+    if (!select || !state.palettesList || state.palettesList.length === 0) return;
+    
+    select.innerHTML = state.palettesList.map(pal => 
+        `<option value="${pal.id}">${pal.name || `Palette ${pal.id}`}</option>`
+    ).join('');
+    
+    // Set current selection if paletteId is known
+    if (state.paletteId !== undefined && state.paletteId !== null) {
+        select.value = state.paletteId;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
 // Initialization
 // ─────────────────────────────────────────────────────────────
 
@@ -964,12 +2279,66 @@ function init() {
     elements.beatIndicator = document.getElementById('beatIndicator');
     elements.bpmDisplay = document.getElementById('bpmDisplay');
     elements.bpmValue = document.getElementById('bpmValue');
+    
+    // Zone mode controls
+    elements.zoneModeStatus = document.getElementById('zoneModeStatus');
+    elements.zoneModeInfo = document.getElementById('zoneModeInfo');
+    elements.zoneModeToggle = document.getElementById('zoneModeToggle');
+    
+    // Zone speed sliders
+    elements.zone0SpeedSlider = document.getElementById('zone0SpeedSlider');
+    elements.zone0SpeedValue = document.getElementById('zone0SpeedValue');
+    elements.zone1SpeedSlider = document.getElementById('zone1SpeedSlider');
+    elements.zone1SpeedValue = document.getElementById('zone1SpeedValue');
+    elements.zone2SpeedSlider = document.getElementById('zone2SpeedSlider');
+    elements.zone2SpeedValue = document.getElementById('zone2SpeedValue');
 
     // Bind button events
     document.getElementById('patternPrev').addEventListener('click', prevPattern);
     document.getElementById('patternNext').addEventListener('click', nextPattern);
     document.getElementById('palettePrev').addEventListener('click', prevPalette);
     document.getElementById('paletteNext').addEventListener('click', nextPalette);
+    
+    // Bind filter toggle event
+    const patternFilterToggle = document.getElementById('patternFilterToggle');
+    if (patternFilterToggle) {
+        patternFilterToggle.addEventListener('click', () => {
+            // Cycle: all -> reactive -> ambient -> all
+            if (state.patternFilter === 'all') {
+                state.patternFilter = 'reactive';
+            } else if (state.patternFilter === 'reactive') {
+                state.patternFilter = 'ambient';
+            } else {
+                state.patternFilter = 'all';
+            }
+            updatePatternFilterUI();
+            populateEffectsDropdown();
+        });
+    }
+    
+    // Bind dropdown change events
+    const patternSelect = document.getElementById('patternSelect');
+    if (patternSelect) {
+        patternSelect.addEventListener('change', (e) => {
+            const effectId = parseInt(e.target.value);
+            if (!isNaN(effectId)) {
+                setEffect(effectId);
+            }
+        });
+    }
+    
+    const paletteSelect = document.getElementById('paletteSelect');
+    if (paletteSelect) {
+        paletteSelect.addEventListener('change', (e) => {
+            const paletteId = parseInt(e.target.value);
+            if (!isNaN(paletteId)) {
+                setPalette(paletteId);
+            }
+        });
+    }
+    if (elements.zoneModeToggle) {
+        elements.zoneModeToggle.addEventListener('click', toggleZoneMode);
+    }
     
     // Bind slider events
     if (elements.brightnessSlider) {
@@ -987,6 +2356,35 @@ function init() {
     if (elements.fadeSlider) {
         elements.fadeSlider.addEventListener('input', onFadeChange);
         elements.fadeSlider.addEventListener('change', onFadeChange);
+    }
+    
+    // Bind zone speed slider events
+    if (elements.zone0SpeedSlider) {
+        elements.zone0SpeedSlider.addEventListener('input', () => onZoneSpeedChange(0));
+    }
+    if (elements.zone1SpeedSlider) {
+        elements.zone1SpeedSlider.addEventListener('input', () => onZoneSpeedChange(1));
+    }
+    if (elements.zone2SpeedSlider) {
+        elements.zone2SpeedSlider.addEventListener('input', () => onZoneSpeedChange(2));
+    }
+    
+    // Bind zone editor events
+    const zoneCountSelect = document.getElementById('zoneCountSelect');
+    const zonePresetSelect = document.getElementById('zonePresetSelect');
+    const zoneApplyButton = document.getElementById('zoneApplyButton');
+    if (zoneCountSelect) {
+        zoneCountSelect.addEventListener('change', (e) => {
+            handleZoneCountSelect(parseInt(e.target.value));
+        });
+    }
+    if (zonePresetSelect) {
+        zonePresetSelect.addEventListener('change', (e) => {
+            handleZonePresetSelect(parseInt(e.target.value));
+        });
+    }
+    if (zoneApplyButton) {
+        zoneApplyButton.addEventListener('click', applyZoneLayout);
     }
 
     // Check if we're running on the device or remotely

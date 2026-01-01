@@ -14,6 +14,7 @@ import { Listbox } from './ui/Listbox';
 import { ShowsTab } from './tabs/ShowsTab';
 import { EffectsTab } from './tabs/EffectsTab';
 import { SystemTab } from './tabs/SystemTab';
+import { ZoneEditor } from './ZoneEditor';
 import { useV2 } from '../state/v2';
 import { useLedStream } from '../hooks/useLedStream';
 import { SkipLinks } from './SkipLinks';
@@ -403,21 +404,40 @@ const DashboardShell: React.FC = () => {
                   <div className="mb-4">
                     <Listbox
                       label="Palette"
-                      options={[
-                        { value: 'aurora', label: 'Aurora Glass' },
-                        { value: 'ocean', label: 'Ocean Wave' },
-                        { value: 'fire', label: 'Fire Glow' },
-                        { value: 'ice', label: 'Ice Crystal' },
-                        { value: 'sunset', label: 'Sunset Gradient' },
-                      ]}
-                      value={null}
-                      onChange={(value) => {
-                        // TODO: Integrate with palette selection API
-                        console.log('Palette selected:', value);
+                      options={
+                        state.palettesList?.palettes?.map(p => ({
+                          value: String(p.id),
+                          label: p.name,
+                        })) ?? []
+                      }
+                      value={
+                        state.currentPalette?.paletteId !== undefined
+                          ? String(state.currentPalette.paletteId)
+                          : state.parameters?.paletteId !== undefined
+                          ? String(state.parameters.paletteId)
+                          : null
+                      }
+                      onChange={async (value) => {
+                        if (value && !isNaN(Number(value))) {
+                          try {
+                            await actions.setPalette(Number(value));
+                          } catch (err) {
+                            console.error('Failed to set palette:', err);
+                          }
+                        }
                       }}
-                      placeholder="Select palette"
-                      disabled={!isConnected}
+                      placeholder={
+                        state.loading.palettes
+                          ? 'Loading palettes...'
+                          : state.palettesList?.palettes?.length === 0
+                          ? 'No palettes available'
+                          : 'Select palette'
+                      }
+                      disabled={!isConnected || state.loading.palettes}
                     />
+                    {state.errors.palettes && (
+                      <div className="mt-1 text-[10px] text-accent-red">{state.errors.palettes}</div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
@@ -441,6 +461,47 @@ const DashboardShell: React.FC = () => {
                     </button>
                   </div>
                 </div>
+
+                {/* Zone Editor */}
+                {state.zones && state.zones.enabled && (
+                  <ZoneEditor />
+                )}
+
+                {/* Zone Speed Controls */}
+                {state.zones && state.zones.enabled && state.zones.zones.length > 0 && (
+                  <div 
+                    className="card-hover rounded-xl p-4 sm:p-5"
+                    style={{
+                      background: 'rgba(37,45,63,0.95)',
+                      border: '1px solid rgba(255,255,255,0.10)',
+                      boxShadow: '0 1px 0 rgba(255,255,255,0.08) inset, 0 12px 32px rgba(0,0,0,0.25)'
+                    }}
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <span className="uppercase tracking-tight font-display text-[0.9375rem]" style={{ letterSpacing: '0.02em' }}>Zone Speed</span>
+                      <span className="rounded-lg px-2 py-1 text-[0.5625rem] text-text-secondary" style={{ background: 'rgba(47,56,73,0.65)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                        {state.zones.zoneCount} Zones
+                      </span>
+                    </div>
+
+                    {state.zones.zones.slice(0, 3).map((zone) => (
+                      <SliderControl
+                        key={zone.id}
+                        label={`Zone ${zone.id}`}
+                        value={zone.speed}
+                        min={1}
+                        max={50}
+                        step={1}
+                        onChange={(value) => {
+                          actions.setZoneSpeed(zone.id, Math.round(value));
+                        }}
+                        format={(v) => Math.round(v).toString()}
+                        fillColor={`from-accent-${zone.id === 0 ? 'cyan' : zone.id === 1 ? 'green' : 'purple'}/80 to-accent-${zone.id === 0 ? 'cyan' : zone.id === 1 ? 'green' : 'purple'}`}
+                        disabled={!canControl}
+                      />
+                    ))}
+                  </div>
+                )}
 
                 {/* Presets - Keeping simplified for now but matching style */}
                 <div 

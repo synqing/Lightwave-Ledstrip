@@ -4,7 +4,7 @@ import { V2Client } from '../services/v2/client';
 import { v2Api } from '../services/v2/api';
 import type { V2AuthMode } from '../services/v2/config';
 import { buildV2BaseUrl, buildV2WsUrl, loadV2Settings, saveV2Settings } from '../services/v2/config';
-import type { V2DeviceInfo, V2DeviceStatus, V2EffectCategories, V2EffectCurrent, V2EffectsList, V2Parameters } from '../services/v2/types';
+import type { V2DeviceInfo, V2DeviceStatus, V2EffectCategories, V2EffectCurrent, V2EffectsList, V2PaletteCurrent, V2PalettesList, V2Parameters, V2ZonesState } from '../services/v2/types';
 import { V2ApiError } from '../services/v2/types';
 import { V2WsClient, type WsStatus } from '../services/v2/ws';
 
@@ -24,8 +24,11 @@ export interface V2State {
   currentEffect?: V2EffectCurrent;
   effectsList?: V2EffectsList;
   effectCategories?: V2EffectCategories;
-  loading: { bootstrap: boolean; parameters: boolean; effects: boolean; system: boolean };
-  errors: { bootstrap?: string; parameters?: string; effects?: string; system?: string };
+  palettesList?: V2PalettesList;
+  currentPalette?: V2PaletteCurrent;
+  zones?: V2ZonesState;
+  loading: { bootstrap: boolean; parameters: boolean; effects: boolean; system: boolean; zones: boolean; palettes: boolean };
+  errors: { bootstrap?: string; parameters?: string; effects?: string; system?: string; zones?: string; palettes?: string };
   metrics: ApiMetrics;
 }
 
@@ -35,8 +38,13 @@ export interface V2Actions {
   refreshStatus: () => Promise<void>;
   refreshParameters: () => Promise<void>;
   refreshEffects: () => Promise<void>;
+  refreshPalettes: () => Promise<void>;
+  refreshZones: () => Promise<void>;
   setParameters: (partial: Partial<V2Parameters>, opts?: { debounceMs?: number }) => void;
   setCurrentEffect: (effectId: number) => Promise<void>;
+  setPalette: (paletteId: number) => Promise<void>;
+  setZoneSpeed: (zoneId: number, speed: number) => Promise<void>;
+  setZoneLayout: (zones: import('../services/v2/types').V2ZoneSegment[]) => Promise<void>;
   reconnectWs: () => void;
   getWsClient: () => V2WsClient | null;
 }
@@ -62,8 +70,11 @@ export const V2Provider: React.FC<React.PropsWithChildren<{ autoConnect?: boolea
   const [currentEffect, setCurrentEffectState] = useState<V2EffectCurrent | undefined>(undefined);
   const [effectsList, setEffectsList] = useState<V2EffectsList | undefined>(undefined);
   const [effectCategories, setEffectCategories] = useState<V2EffectCategories | undefined>(undefined);
-  const [loading, setLoading] = useState({ bootstrap: false, parameters: false, effects: false, system: false });
-  const [errors, setErrors] = useState<{ bootstrap?: string; parameters?: string; effects?: string; system?: string }>({});
+  const [palettesList, setPalettesList] = useState<V2PalettesList | undefined>(undefined);
+  const [currentPalette, setCurrentPalette] = useState<V2PaletteCurrent | undefined>(undefined);
+  const [zones, setZones] = useState<V2ZonesState | undefined>(undefined);
+  const [loading, setLoading] = useState({ bootstrap: false, parameters: false, effects: false, system: false, zones: false, palettes: false });
+  const [errors, setErrors] = useState<{ bootstrap?: string; parameters?: string; effects?: string; system?: string; zones?: string; palettes?: string }>({});
 
   const patchTimer = useRef<number | null>(null);
   const pendingPatch = useRef<Partial<V2Parameters>>({});
@@ -89,12 +100,44 @@ export const V2Provider: React.FC<React.PropsWithChildren<{ autoConnect?: boolea
       wsRef.current.onEvent((ev) => {
         if (ev.type === 'parameters.changed') {
           const paramEv = ev as { type: 'parameters.changed'; current: V2Parameters };
-          setParametersState(paramEv.current);
+          setParametersState(prev => {
+            // If paletteId changed, trigger a refresh to get full palette details
+            if (prev && paramEv.current.paletteId !== undefined && paramEv.current.paletteId !== prev.paletteId) {
+              // Use setTimeout to avoid calling refreshPalettes during render
+              setTimeout(() => {
+                const api = v2Api(getClient());
+                api.palettesCurrent().then(pal => setCurrentPalette(pal)).catch(() => {});
+              }, 0);
+            }
+            return paramEv.current;
+          });
           setConnection(prev => ({ ...prev, lastOkAt: Date.now() }));
         }
         if (ev.type === 'effects.changed') {
           const effectEv = ev as { type: 'effects.changed'; effectId: number; name: string };
           setCurrentEffectState(prev => prev ? { ...prev, effectId: effectEv.effectId, name: effectEv.name } : prev);
+          setConnection(prev => ({ ...prev, lastOkAt: Date.now() }));
+        }
+        if (ev.type === 'zones.changed') {
+          const zoneEv = ev as { type: 'zones.changed'; zoneId: number; current: Partial<import('../services/v2/types').V2Zone> };
+          setZones(prev => {
+            if (!prev) return prev;
+            const updatedZones = [...prev.zones];
+            if (updatedZones[zoneEv.zoneId]) {
+              updatedZones[zoneEv.zoneId] = { ...updatedZones[zoneEv.zoneId], ...zoneEv.current };
+            }
+            return { ...prev, zones: updatedZones };
+          });
+          setConnection(prev => ({ ...prev, lastOkAt: Date.now() }));
+        }
+        if (ev.type === 'zones.list') {
+          const zoneListEv = ev as { type: 'zones.list'; enabled: boolean; zoneCount: number; segments?: import('../services/v2/types').V2ZoneSegment[]; zones: import('../services/v2/types').V2Zone[] };
+          setZones({
+            enabled: zoneListEv.enabled,
+            zoneCount: zoneListEv.zoneCount,
+            segments: zoneListEv.segments,
+            zones: zoneListEv.zones,
+          });
           setConnection(prev => ({ ...prev, lastOkAt: Date.now() }));
         }
       });
@@ -119,13 +162,16 @@ export const V2Provider: React.FC<React.PropsWithChildren<{ autoConnect?: boolea
 
     const api = v2Api(getClient());
     try {
-      const [status, info, params, current, categories, list] = await Promise.all([
+      const [status, info, params, current, categories, list, palettes, currentPal, zonesData] = await Promise.all([
         api.deviceStatus(),
         api.deviceInfo(),
         api.parametersGet(),
         api.effectsCurrent(),
         api.effectsCategories(),
-        api.effectsList({ offset: 0, limit: 50 }),
+        api.effectsList({ offset: 0, limit: 100 }),
+        api.palettesList({ offset: 0, limit: 100 }).catch(() => null), // Palettes may not be available, don't fail bootstrap
+        api.palettesCurrent().catch(() => null), // Current palette may not be available, don't fail bootstrap
+        api.zonesList().catch(() => null), // Zones may not be available, don't fail bootstrap
       ]);
       setDeviceStatus(status);
       setDeviceInfo(info);
@@ -133,6 +179,11 @@ export const V2Provider: React.FC<React.PropsWithChildren<{ autoConnect?: boolea
       setCurrentEffectState(current);
       setEffectCategories(categories);
       setEffectsList(list);
+      if (palettes) setPalettesList(palettes);
+      if (currentPal) setCurrentPalette(currentPal);
+      if (zonesData) {
+        setZones(zonesData);
+      }
       setConnection(prev => ({ ...prev, httpOk: true, lastOkAt: Date.now(), lastError: undefined }));
     } catch (err) {
       const msg = formatErr(err);
@@ -183,7 +234,7 @@ export const V2Provider: React.FC<React.PropsWithChildren<{ autoConnect?: boolea
     const api = v2Api(getClient());
     try {
       const [list, categories, current] = await Promise.all([
-        api.effectsList({ offset: 0, limit: 50 }),
+        api.effectsList({ offset: 0, limit: 100 }),
         api.effectsCategories(),
         api.effectsCurrent(),
       ]);
@@ -245,6 +296,65 @@ export const V2Provider: React.FC<React.PropsWithChildren<{ autoConnect?: boolea
     }
   }, [getClient, getWs]);
 
+  const refreshZones = useCallback(async () => {
+    setLoading(prev => ({ ...prev, zones: true }));
+    setErrors(prev => ({ ...prev, zones: undefined }));
+    const api = v2Api(getClient());
+    try {
+      const zonesData = await api.zonesList();
+      setZones(zonesData);
+      setConnection(prev => ({ ...prev, httpOk: true, lastOkAt: Date.now(), lastError: undefined }));
+    } catch (err) {
+      const msg = formatErr(err);
+      setErrors(prev => ({ ...prev, zones: msg }));
+      setConnection(prev => ({ ...prev, httpOk: false, lastError: msg }));
+    } finally {
+      setLoading(prev => ({ ...prev, zones: false }));
+    }
+  }, [getClient]);
+
+  const setZoneSpeed = useCallback(async (zoneId: number, speed: number) => {
+    setErrors(prev => ({ ...prev, zones: undefined }));
+    const ws = getWs();
+    // Prefer WebSocket for low latency, fallback to REST
+    if (ws.getStatus() === 'connected') {
+      ws.send({ type: 'zones.update', zoneId, speed });
+    } else {
+      const api = v2Api(getClient());
+      try {
+        await api.zoneSetSpeed(zoneId, speed);
+        // Refresh zones to get updated state
+        await refreshZones();
+        setConnection(prev => ({ ...prev, httpOk: true, lastOkAt: Date.now(), lastError: undefined }));
+      } catch (err) {
+        const msg = formatErr(err);
+        setErrors(prev => ({ ...prev, zones: msg }));
+        setConnection(prev => ({ ...prev, httpOk: false, lastError: msg }));
+      }
+    }
+  }, [getClient, getWs, refreshZones]);
+
+  const setZoneLayout = useCallback(async (zones: import('../services/v2/types').V2ZoneSegment[]) => {
+    setErrors(prev => ({ ...prev, zones: undefined }));
+    const ws = getWs();
+    // Prefer WebSocket for low latency, fallback to REST
+    if (ws.getStatus() === 'connected') {
+      ws.send({ type: 'zones.setLayout', zones });
+    } else {
+      const api = v2Api(getClient());
+      try {
+        await api.zonesSetLayout(zones);
+        // Refresh zones to get updated state
+        await refreshZones();
+        setConnection(prev => ({ ...prev, httpOk: true, lastOkAt: Date.now(), lastError: undefined }));
+      } catch (err) {
+        const msg = formatErr(err);
+        setErrors(prev => ({ ...prev, zones: msg }));
+        setConnection(prev => ({ ...prev, httpOk: false, lastError: msg }));
+      }
+    }
+  }, [getClient, getWs, refreshZones]);
+
   const reconnectWs = useCallback(() => {
     const ws = getWs();
     ws.disconnect();
@@ -283,11 +393,14 @@ export const V2Provider: React.FC<React.PropsWithChildren<{ autoConnect?: boolea
       currentEffect,
       effectsList,
       effectCategories,
+      palettesList,
+      currentPalette,
+      zones,
       loading,
       errors,
       metrics,
     }),
-    [connection, currentEffect, deviceInfo, deviceStatus, effectCategories, effectsList, errors, loading, metrics, parameters, settings]
+    [connection, currentEffect, currentPalette, deviceInfo, deviceStatus, effectCategories, effectsList, errors, loading, metrics, parameters, palettesList, settings, zones]
   );
 
   const actions: V2Actions = useMemo(
@@ -297,12 +410,17 @@ export const V2Provider: React.FC<React.PropsWithChildren<{ autoConnect?: boolea
       refreshStatus,
       refreshParameters,
       refreshEffects,
+      refreshPalettes,
+      refreshZones,
       setParameters,
       setCurrentEffect,
+      setPalette,
+      setZoneSpeed,
+      setZoneLayout,
       reconnectWs,
       getWsClient,
     }),
-    [bootstrap, getWsClient, reconnectWs, refreshEffects, refreshParameters, refreshStatus, setCurrentEffect, setParameters, updateSettings]
+    [bootstrap, getWsClient, reconnectWs, refreshEffects, refreshParameters, refreshStatus, refreshZones, setCurrentEffect, setParameters, setZoneSpeed, setZoneLayout, updateSettings]
   );
 
   return <V2Context.Provider value={{ state, actions }}>{children}</V2Context.Provider>;

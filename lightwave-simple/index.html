@@ -41,10 +41,18 @@
         <!-- Row 1: Pattern and Palette side-by-side -->
         <div class="controls-row">
             <!-- Pattern Card -->
-            <section class="control-card compact">
+            <section class="control-card full-width">
                 <h2 class="card-header">Pattern</h2>
-                <div class="value-display compact" id="patternName">Loading...</div>
+                <select id="patternSelect" class="dropdown-select">
+                    <option value="">Loading...</option>
+                </select>
+                <div class="value-display compact" id="patternName" style="display: none;">Loading...</div>
                 <div class="value-secondary compact" id="patternId" style="visibility: hidden;">&nbsp;</div>
+                <div class="button-row">
+                    <button class="control-btn compact" id="patternFilterToggle" aria-label="Toggle audio-reactive filter">
+                        <span id="patternFilterLabel">All</span>
+                    </button>
+                </div>
                 <div class="button-row">
                     <button class="control-btn compact" id="patternPrev" aria-label="Previous pattern">◀</button>
                     <button class="control-btn compact" id="patternNext" aria-label="Next pattern">▶</button>
@@ -52,13 +60,26 @@
             </section>
 
             <!-- Palette Card -->
-            <section class="control-card compact">
+            <section class="control-card full-width">
                 <h2 class="card-header">Palette</h2>
-                <div class="value-display compact" id="paletteName">Loading...</div>
+                <select id="paletteSelect" class="dropdown-select">
+                    <option value="">Loading...</option>
+                </select>
+                <div class="value-display compact" id="paletteName" style="display: none;">Loading...</div>
                 <div class="value-secondary compact" id="paletteId">--/75</div>
                 <div class="button-row">
                     <button class="control-btn compact" id="palettePrev" aria-label="Previous palette">◀</button>
                     <button class="control-btn compact" id="paletteNext" aria-label="Next palette">▶</button>
+                </div>
+            </section>
+
+            <!-- Zone Mode Toggle -->
+            <section class="control-card full-width">
+                <h2 class="card-header">Zone Mode</h2>
+                <div class="value-display compact" id="zoneModeStatus">OFF</div>
+                <div class="value-secondary compact" id="zoneModeInfo">--</div>
+                <div class="button-row">
+                    <button class="control-btn compact" id="zoneModeToggle" aria-label="Toggle zone mode">Toggle</button>
                 </div>
             </section>
         </div>
@@ -66,7 +87,7 @@
         <!-- Row 2: Brightness and Speed sliders side-by-side -->
         <div class="controls-row">
             <!-- Brightness Slider -->
-            <section class="control-card compact slider-card">
+            <section class="control-card full-width slider-card">
                 <h2 class="card-header">Brightness</h2>
                 <div class="slider-container">
                     <input type="range" id="brightnessSlider" min="0" max="255" value="128" class="slider" aria-label="Brightness">
@@ -75,25 +96,128 @@
             </section>
 
             <!-- Speed Slider -->
-            <section class="control-card compact slider-card">
+            <section class="control-card full-width slider-card">
                 <h2 class="card-header">Speed</h2>
                 <div class="slider-container">
                     <input type="range" id="speedSlider" min="1" max="100" value="25" class="slider" aria-label="Speed">
-                    <div class="slider-value" id="speedValue">25</div>
+                    <div class="slider-value" id="speedValue">15</div>
                 </div>
             </section>
         </div>
 
-        <!-- Row 3: Mood slider full width -->
+        <!-- Row 3: Mood and Trail Fade sliders side-by-side -->
         <div class="controls-row">
-            <section class="control-card compact slider-card full-width">
+            <!-- Mood Slider -->
+            <section class="control-card full-width slider-card">
                 <h2 class="card-header">Mood</h2>
-                <div class="slider-container with-labels">
-                    <span class="slider-label-left">Reactive</span>
+                <div class="slider-container">
                     <input type="range" id="moodSlider" min="0" max="255" value="128" class="slider" aria-label="Mood">
-                    <span class="slider-label-right">Smooth</span>
                     <div class="slider-value" id="moodValue">128</div>
                 </div>
+            </section>
+
+            <!-- Trail Fade Slider -->
+            <section class="control-card full-width slider-card">
+                <h2 class="card-header">Trail Fade</h2>
+                <div class="slider-container">
+                    <input type="range" id="fadeSlider" min="0" max="255" value="20" class="slider" aria-label="Trail Fade">
+                    <div class="slider-value" id="fadeValue">20</div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Row 4: Zone Speed Controls (only shown when zones enabled) -->
+        <div class="controls-row" id="zoneControlsRow" style="display: none;">
+            <!-- Zone 0 Speed -->
+            <section class="control-card full-width slider-card">
+                <h2 class="card-header">Zone 0 Speed</h2>
+                <div class="slider-container">
+                    <input type="range" id="zone0SpeedSlider" min="1" max="50" value="15" class="slider" aria-label="Zone 0 Speed">
+                    <div class="slider-value" id="zone0SpeedValue">15</div>
+                </div>
+            </section>
+            <!-- Zone 1 Speed -->
+            <section class="control-card full-width slider-card">
+                <h2 class="card-header">Zone 1 Speed</h2>
+                <div class="slider-container">
+                    <input type="range" id="zone1SpeedSlider" min="1" max="50" value="15" class="slider" aria-label="Zone 1 Speed">
+                    <div class="slider-value" id="zone1SpeedValue">15</div>
+                </div>
+            </section>
+            <!-- Zone 2 Speed -->
+            <section class="control-card full-width slider-card">
+                <h2 class="card-header">Zone 2 Speed</h2>
+                <div class="slider-container">
+                    <input type="range" id="zone2SpeedSlider" min="1" max="50" value="15" class="slider" aria-label="Zone 2 Speed">
+                    <div class="slider-value" id="zone2SpeedValue">15</div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Row 5: Zone Layout Editor (only shown when zones enabled) -->
+        <div class="controls-row" id="zoneEditorRow" style="display: none;">
+            <section class="control-card full-width" id="zoneEditorCard">
+                <h2 class="card-header">Zone Layout Editor</h2>
+                
+                <!-- Zone Count and Preset Selectors -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-sm); margin-bottom: var(--space-md);">
+                    <div>
+                        <label class="card-header" style="text-align: left; margin-bottom: var(--space-xs);">Zones</label>
+                        <select id="zoneCountSelect" class="control-btn compact" style="width: 100%; padding: var(--space-xs) var(--space-sm);">
+                            <option value="1">1 Zone</option>
+                            <option value="2">2 Zones</option>
+                            <option value="3" selected>3 Zones</option>
+                            <option value="4">4 Zones</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="card-header" style="text-align: left; margin-bottom: var(--space-xs);">Preset</label>
+                        <select id="zonePresetSelect" class="control-btn compact" style="width: 100%; padding: var(--space-xs) var(--space-sm);">
+                            <option value="-1">Custom</option>
+                            <option value="0">Unified</option>
+                            <option value="1">Dual Split</option>
+                            <option value="2">Triple Rings</option>
+                            <option value="3">Quad Active</option>
+                            <option value="4">Heartbeat Focus</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- LED Strip Visualization -->
+                <div style="margin-bottom: var(--space-md);">
+                    <div class="card-header" style="text-align: left; margin-bottom: var(--space-xs);">LED Strip Visualization</div>
+                    <div id="ledStripContainer" style="display: flex; align-items: center; width: 100%; max-width: 100%; overflow-x: hidden; padding: 0 var(--space-xs); margin-bottom: var(--space-xs);">
+                        <!-- Left Strip Container -->
+                        <div style="flex: 1; display: flex; flex-direction: column; min-width: 0;">
+                            <div class="value-secondary compact" style="font-size: 0.5rem; margin-bottom: 2px;">Left (0-79)</div>
+                            <div style="display: flex; justify-content: flex-end;">
+                                <div id="leftLedStrip" style="display: flex; flex-direction: row-reverse; gap: 1px; height: 48px;"></div>
+                            </div>
+                        </div>
+                        <!-- Centre Divider -->
+                        <div style="width: 2px; height: 100%; background: var(--gold); opacity: 0.4; flex-shrink: 0; margin: 0 2px;"></div>
+                        <!-- Right Strip Container -->
+                        <div style="flex: 1; display: flex; flex-direction: column; min-width: 0;">
+                            <div class="value-secondary compact" style="font-size: 0.5rem; margin-bottom: 2px; text-align: right;">Right (80-159)</div>
+                            <div style="display: flex; justify-content: flex-start;">
+                                <div id="rightLedStrip" style="display: flex; gap: 1px; height: 48px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="value-secondary compact" style="text-align: center; font-size: 0.5rem;">Centre pair: LEDs 79 (left) / 80 (right)</div>
+                </div>
+
+                <!-- Zone Segment Editors -->
+                <div id="zoneSegmentsList" style="display: flex; flex-direction: column; gap: var(--space-sm);"></div>
+
+                <!-- Validation Errors -->
+                <div id="zoneValidationErrors" style="display: none; margin-top: var(--space-md); padding: var(--space-sm); background: rgba(255, 77, 77, 0.1); border: 1px solid rgba(255, 77, 77, 0.3); border-radius: 8px;">
+                    <div class="card-header" style="color: var(--error); text-align: left; margin-bottom: var(--space-xs);">Validation Errors</div>
+                    <ul id="zoneValidationErrorsList" style="list-style: none; padding: 0; margin: 0;"></ul>
+                </div>
+
+                <!-- Apply Button -->
+                <button id="zoneApplyButton" class="control-btn compact" style="width: 100%; margin-top: var(--space-md); background: var(--gold); color: var(--bg-base);" disabled>Apply Zone Layout</button>
             </section>
         </div>
     </main>

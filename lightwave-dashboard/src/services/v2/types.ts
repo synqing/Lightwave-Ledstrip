@@ -189,6 +189,88 @@ export interface V2NarrativeConfig {
   durationVariance: number;
 }
 
+export interface V2Zone {
+  id: number;
+  enabled: boolean;
+  effectId: number;
+  effectName?: string;
+  brightness: number;
+  speed: number;
+  paletteId: number;
+  blendMode?: number;
+  blendModeName?: string;
+}
+
+export interface V2ZoneSegment {
+  zoneId: number;
+  s1LeftStart: number;
+  s1LeftEnd: number;
+  s1RightStart: number;
+  s1RightEnd: number;
+  totalLeds: number;
+}
+
+export interface V2ZonesState {
+  enabled: boolean;
+  zoneCount: number;
+  segments?: V2ZoneSegment[];
+  zones: V2Zone[];
+  presets?: Array<{ id: number; name: string }>;
+}
+
+export interface V2PaletteFlags {
+  warm?: boolean;
+  cool?: boolean;
+  calm?: boolean;
+  vivid?: boolean;
+  cvdFriendly?: boolean;
+  whiteHeavy?: boolean;
+}
+
+export interface V2PaletteListItem {
+  id: number;
+  name: string;
+  category: string;
+  flags?: V2PaletteFlags;
+  avgBrightness?: number;
+  maxBrightness?: number;
+}
+
+export interface V2PalettesList {
+  total: number;
+  offset: number;
+  limit: number;
+  count: number;
+  palettes: V2PaletteListItem[];
+  categories?: {
+    artistic?: number;
+    scientific?: number;
+    lgpOptimized?: number;
+  };
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+  };
+  _links?: Record<string, string>;
+}
+
+export interface V2PaletteCurrent {
+  paletteId: number;
+  name: string;
+  category: string;
+  flags?: V2PaletteFlags;
+  avgBrightness?: number;
+  maxBrightness?: number;
+}
+
+export interface V2PaletteSetResponse {
+  paletteId: number;
+  name: string;
+  category: string;
+}
+
 export type V2WsRequest = {
   requestId?: string;
 } & (
@@ -210,6 +292,9 @@ export type V2WsRequest = {
       snapAmount?: number;
       durationVariance?: number;
     }
+  | { type: 'zones.list' }
+  | { type: 'zones.update'; zoneId: number; effectId?: number; brightness?: number; speed?: number; paletteId?: number }
+  | { type: 'zones.setLayout'; zones: V2ZoneSegment[] }
   | { type: 'ledStream.subscribe' }
   | { type: 'ledStream.unsubscribe' }
 );
@@ -218,6 +303,9 @@ export type V2WsEvent =
   | { type: 'effects.changed'; effectId: number; name: string; timestamp: number }
   | { type: 'parameters.changed'; updated: string[]; current: V2Parameters; timestamp: number }
   | { type: 'transition.started'; fromEffect: number; toEffect: number; transitionType: number; duration: number; timestamp: number }
+  | { type: 'zones.list'; enabled: boolean; zoneCount: number; segments?: V2ZoneSegment[]; zones: V2Zone[]; timestamp: number }
+  | { type: 'zones.changed'; zoneId: number; updated: string[]; current: Partial<V2Zone>; timestamp: number }
+  | { type: 'zones.layoutChanged'; success: boolean; zoneCount: number; timestamp: number }
   | ({ type: string } & Record<string, unknown>);
 
 export class V2ApiError extends Error {

@@ -185,10 +185,10 @@ bool ActorSystem::start()
         // Wire up audio buffer to renderer for cross-core access
         if (m_renderer) {
             m_renderer->setAudioBuffer(&m_audio->getControlBusBuffer());
-            // Wire up K1-Lightwave beat tracker queues for cross-core communication
-            m_audio->setK1Queues(&m_renderer->getK1TempoQueue(), &m_renderer->getK1BeatQueue());
+            // Wire up TempoTracker for phase advancement at 120 FPS
+            m_renderer->setTempo(&m_audio->getTempoMut());
 #ifndef NATIVE_BUILD
-            ESP_LOGI(TAG, "Audio integration enabled - ControlBus + K1 beat tracker");
+            ESP_LOGI(TAG, "Audio integration enabled - ControlBus + TempoTracker");
 #endif
         }
     }
@@ -418,6 +418,35 @@ bool ActorSystem::setFadeAmount(uint8_t fadeAmount)
 
     Message msg(MessageType::SET_FADE_AMOUNT, fadeAmount);
     return m_renderer->send(msg, pdMS_TO_TICKS(10));
+}
+
+bool ActorSystem::startTransition(uint8_t effectId, uint8_t transitionType)
+{
+    if (!m_renderer || !m_renderer->isRunning()) {
+        return false;
+    }
+
+    // Queue backpressure: reject if queue > 90% full
+    uint8_t utilization = m_renderer->getQueueUtilization();
+    if (utilization >= 90) {
+#ifndef NATIVE_BUILD
+        ESP_LOGW(TAG, "startTransition(%d, %d) rejected - queue saturated (utilization: %d%%)",
+                 effectId, transitionType, utilization);
+#endif
+        return false;
+    }
+
+    Message msg(MessageType::START_TRANSITION);
+    msg.param1 = effectId;
+    msg.param2 = transitionType;
+    bool success = m_renderer->send(msg, pdMS_TO_TICKS(10));
+    if (!success) {
+#ifndef NATIVE_BUILD
+        ESP_LOGW(TAG, "startTransition(%d, %d) failed - queue may be full (utilization: %d%%)",
+                 effectId, transitionType, m_renderer->getQueueUtilization());
+#endif
+    }
+    return success;
 }
 
 // ============================================================================

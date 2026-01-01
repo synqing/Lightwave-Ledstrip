@@ -9,7 +9,9 @@ namespace state {
 // Maximum configuration constants
 constexpr uint8_t MAX_ZONES = 4;
 constexpr uint8_t MAX_PALETTE_COUNT = 64;
-constexpr uint8_t MAX_EFFECT_COUNT = 64;
+// Maximum effect ID allowed by CQRS/state commands.
+// Keep in sync with RendererActor::MAX_EFFECTS (upper bound for effect IDs).
+constexpr uint8_t MAX_EFFECT_COUNT = 96;
 
 /**
  * Zone configuration state
@@ -54,7 +56,7 @@ struct SystemState {
 
     // ==================== Global Settings ====================
 
-    uint8_t currentEffectId;     // Active effect (0-63)
+    uint8_t currentEffectId;     // Active effect (0-(MAX_EFFECT_COUNT-1))
     uint8_t currentPaletteId;    // Active palette (0-63)
     uint8_t brightness;          // Global brightness (0-255)
     uint8_t speed;               // Global animation speed (1-100)
@@ -102,7 +104,7 @@ struct SystemState {
 
     /**
      * Create modified copy with new effect ID
-     * @param effectId New effect ID (0-63)
+     * @param effectId New effect ID (0-(MAX_EFFECT_COUNT-1))
      * @return New state with updated effect
      */
     SystemState withEffect(uint8_t effectId) const;

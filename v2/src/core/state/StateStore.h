@@ -273,6 +273,13 @@ private:
      * This makes the newly written state visible to readers.
      */
     void swapActiveIndex();
+
+    /**
+     * Validate and clamp active index to safe range [0, 1]
+     *
+     * @return Valid index (0 or 1), defaults to 0 if corrupted
+     */
+    uint8_t validateActiveIndex() const;
 };
 
 } // namespace state

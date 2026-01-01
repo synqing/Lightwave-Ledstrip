@@ -37,8 +37,9 @@ StateStore::~StateStore() {
 
 const SystemState& StateStore::getState() const {
     // Lock-free read of active state
-    // Safe because m_activeIndex is atomic and states are immutable
-    return m_states[m_activeIndex];
+    // Validate index to prevent out-of-bounds access if corrupted
+    uint8_t safeIndex = validateActiveIndex();
+    return m_states[safeIndex];
 }
 
 uint32_t StateStore::getVersion() const {
@@ -98,8 +99,9 @@ bool StateStore::dispatch(const ICommand& command) {
 
     bool success = false;
 
-    // Get current active state
-    const SystemState& currentState = m_states[m_activeIndex];
+    // Get current active state (validate index to prevent corruption issues)
+    uint8_t safeIndex = validateActiveIndex();
+    const SystemState& currentState = m_states[safeIndex];
 
     // Validate command
     if (command.validate(currentState)) {
@@ -113,8 +115,9 @@ bool StateStore::dispatch(const ICommand& command) {
         // This makes the new state visible to readers
         swapActiveIndex();
 
-        // Notify subscribers with new state
-        notifySubscribers(m_states[m_activeIndex]);
+        // Notify subscribers with new state (use validated index)
+        uint8_t activeIdx = validateActiveIndex();
+        notifySubscribers(m_states[activeIdx]);
 
         // Update statistics
         m_commandCount++;
@@ -146,8 +149,9 @@ bool StateStore::dispatchBatch(const ICommand* const* commands, uint8_t count) {
 
     bool success = true;
 
-    // Get current active state
-    const SystemState* currentState = &m_states[m_activeIndex];
+    // Get current active state (validate index to prevent corruption issues)
+    uint8_t safeIndex = validateActiveIndex();
+    const SystemState* currentState = &m_states[safeIndex];
 
     // Validate all commands first
     for (uint8_t i = 0; i < count; i++) {
@@ -173,8 +177,9 @@ bool StateStore::dispatchBatch(const ICommand* const* commands, uint8_t count) {
         // Atomically swap active index
         swapActiveIndex();
 
-        // Notify subscribers with new state
-        notifySubscribers(m_states[m_activeIndex]);
+        // Notify subscribers with new state (use validated index)
+        uint8_t activeIdx = validateActiveIndex();
+        notifySubscribers(m_states[activeIdx]);
 
         // Update statistics
         m_commandCount += count;
@@ -284,16 +289,54 @@ void StateStore::notifySubscribers(const SystemState& newState) {
 }
 
 uint8_t StateStore::getInactiveIndex() const {
-    return 1 - m_activeIndex;
+    // DEFENSIVE CHECK: Validate active index first to ensure calculation is safe
+    // Prevents accessing m_states[2] with invalid index if m_activeIndex is corrupted
+    uint8_t active = validateActiveIndex();
+    uint8_t inactive = 1 - active;
+    // Ensure result is 0 or 1 (defensive check - should never be >1, but protects against corruption)
+    if (inactive > 1) {
+        inactive = 0;
+    }
+    return inactive;
 }
 
 void StateStore::swapActiveIndex() {
     // Atomic swap using volatile member
-    m_activeIndex = getInactiveIndex();
+    // DEFENSIVE CHECK: Validate before swap to ensure we're swapping to a valid index
+    // This prevents corrupted m_activeIndex from causing out-of-bounds access to m_states[2]
+    uint8_t newIndex = getInactiveIndex();
+    m_activeIndex = newIndex;
 
     // Memory barrier to ensure writes complete before readers see new index
     // On ESP32, this is handled by the volatile keyword, but we can be explicit
     __asm__ __volatile__ ("" ::: "memory");
+}
+
+/**
+ * @brief Validate and clamp m_activeIndex to safe range [0, 1]
+ * 
+ * DEFENSIVE CHECK: Prevents LoadProhibited crashes from corrupted double-buffer index.
+ * 
+ * StateStore uses double-buffering with m_states[2] array. m_activeIndex must be
+ * 0 or 1 to access valid array elements. If corrupted (e.g., by memory corruption
+ * or race condition), accessing m_states[m_activeIndex] would cause out-of-bounds
+ * access and crash.
+ * 
+ * This validation ensures we always access valid array indices, returning safe
+ * default (0) if corruption is detected.
+ * 
+ * @return Valid index (0 or 1), defaults to 0 if corrupted
+ */
+uint8_t StateStore::validateActiveIndex() const {
+    // Validate m_activeIndex is 0 or 1 (only valid values for double buffer)
+    if (m_activeIndex > 1) {
+        // Corrupted - return safe default (0)
+        // Note: We can't modify m_activeIndex here (const method), but we can
+        // return a safe value for reading. The corruption should be fixed at
+        // the source (swapActiveIndex, constructor, etc.)
+        return 0;
+    }
+    return m_activeIndex;
 }
 
 } // namespace state

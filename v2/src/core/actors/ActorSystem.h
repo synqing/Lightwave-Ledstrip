@@ -183,6 +183,17 @@ public:
     bool setEffect(uint8_t effectId);
 
     /**
+     * @brief Start a transition to a new effect (thread-safe)
+     *
+     * Sends a START_TRANSITION message to the RendererActor.
+     *
+     * @param effectId Target effect ID
+     * @param transitionType Transition type (0-11)
+     * @return true if message was sent
+     */
+    bool startTransition(uint8_t effectId, uint8_t transitionType);
+
+    /**
      * @brief Set brightness
      * @param brightness Brightness level (0-255)
      */

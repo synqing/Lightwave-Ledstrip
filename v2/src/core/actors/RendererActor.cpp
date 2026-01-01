@@ -24,12 +24,15 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../../plugins/runtime/LegacyEffectAdapter.h"
+#if FEATURE_VALIDATION_PROFILING
+#include "../../core/system/ValidationProfiler.h"
+#endif
 
 // Audio integration (Phase 2)
 #if FEATURE_AUDIO_SYNC
 #include "../../audio/AudioActor.h"
-// K1-Lightwave integration (Phase 3)
-#include "../../audio/k1/K1Utils.h"
+// TempoTracker integration (replaces K1)
+#include "../../audio/tempo/TempoTracker.h"
 #endif
 
 using namespace lightwaveos::transitions;
@@ -252,6 +255,53 @@ plugins::IEffect* RendererActor::getEffectInstance(uint8_t id) const
     return nullptr;
 }
 
+/**
+ * @brief Validate and clamp effectId to safe range [0, MAX_EFFECTS-1]
+ * 
+ * DEFENSIVE CHECK: Prevents LoadProhibited crashes from corrupted effect ID.
+ * 
+ * RendererActor uses m_effects[MAX_EFFECTS] array where MAX_EFFECTS = 96. If
+ * effectId is corrupted (e.g., by memory corruption, invalid input, or race
+ * condition), accessing m_effects[effectId] would cause out-of-bounds access
+ * and crash.
+ * 
+ * This validation ensures we always access valid array indices, returning safe
+ * default (effect 0) if corruption is detected.
+ * 
+ * @param effectId Effect ID to validate
+ * @return Valid effect ID in [0, MAX_EFFECTS-1], defaults to 0 if out of bounds
+ */
+uint8_t RendererActor::validateEffectId(uint8_t effectId) const {
+#if FEATURE_VALIDATION_PROFILING
+#ifndef NATIVE_BUILD
+    int64_t start = esp_timer_get_time();
+#else
+    int64_t start = 0;
+#endif
+#endif
+    // Validate effectId is within bounds [0, MAX_EFFECTS-1]
+    if (effectId >= MAX_EFFECTS) {
+#if FEATURE_VALIDATION_PROFILING
+#ifndef NATIVE_BUILD
+        lightwaveos::core::system::ValidationProfiler::recordCall("validateEffectId", 
+                                                                    esp_timer_get_time() - start);
+#else
+        lightwaveos::core::system::ValidationProfiler::recordCall("validateEffectId", 0);
+#endif
+#endif
+        return 0;  // Return safe default (effect 0)
+    }
+#if FEATURE_VALIDATION_PROFILING
+#ifndef NATIVE_BUILD
+    lightwaveos::core::system::ValidationProfiler::recordCall("validateEffectId", 
+                                                                esp_timer_get_time() - start);
+#else
+    lightwaveos::core::system::ValidationProfiler::recordCall("validateEffectId", 0);
+#endif
+#endif
+    return effectId;
+}
+
 // ============================================================================
 // Actor Lifecycle
 // ============================================================================
@@ -317,6 +367,10 @@ void RendererActor::onMessage(const Message& msg)
 
         case MessageType::SET_FADE_AMOUNT:
             handleSetFadeAmount(msg.param1);
+            break;
+
+        case MessageType::START_TRANSITION:
+            handleStartTransition(msg.param1, msg.param2);
             break;
 
         case MessageType::HEALTH_CHECK:
@@ -507,25 +561,6 @@ void RendererActor::applyPendingAudioContractTuning() {
     m_musicalGrid.SetTimeSignature(m_audioContractTuning.beatsPerBar, m_audioContractTuning.beatUnit);
 }
 
-// ============================================================================
-// K1-Lightwave Integration (Phase 3)
-// ============================================================================
-
-void RendererActor::processK1Updates() {
-    // Drain tempo updates from K1 pipeline
-    audio::k1::K1TempoUpdate tempoUpdate;
-    while (m_k1TempoQueue.pop(tempoUpdate)) {
-        // Update MusicalGrid with tempo from K1
-        m_musicalGrid.updateFromK1(tempoUpdate.bpm, tempoUpdate.confidence, tempoUpdate.is_locked);
-    }
-
-    // Drain beat events from K1 pipeline
-    audio::k1::K1BeatEvent beatEvent;
-    while (m_k1BeatQueue.pop(beatEvent)) {
-        // Trigger beat-reactive effects via MusicalGrid
-        m_musicalGrid.onK1Beat(beatEvent.beat_in_bar, beatEvent.is_downbeat, beatEvent.strength);
-    }
-}
 #endif
 
 bool RendererActor::enqueueEffectParameterUpdate(uint8_t effectId, const char* name, float value) {
@@ -556,7 +591,9 @@ void RendererActor::applyPendingEffectParameterUpdates() {
     while (tail != head) {
         const EffectParamUpdate& update = m_paramQueue[tail];
         if (update.effectId < m_effectCount) {
-            plugins::IEffect* effect = m_effects[update.effectId].effect;
+            // Validate effectId before access
+            uint8_t safeEffectId = validateEffectId(update.effectId);
+            plugins::IEffect* effect = m_effects[safeEffectId].effect;
             if (effect) {
                 effect->setParameter(update.name, update.value);
             }
@@ -665,8 +702,41 @@ void RendererActor::renderFrame()
 {
 #if FEATURE_AUDIO_SYNC
     applyPendingAudioContractTuning();
-    // Drain K1 tempo/beat events from lock-free queues
-    processK1Updates();
+
+    // Advance TempoTracker phase at 120 FPS
+    // This must happen every frame for smooth beat tracking
+    if (m_tempo != nullptr) {
+        // Calculate delta time in seconds (from micros)
+        uint32_t now = micros();
+        uint32_t deltaMicros;
+        if (now >= m_lastFrameTime) {
+            deltaMicros = now - m_lastFrameTime;
+        } else {
+            deltaMicros = (UINT32_MAX - m_lastFrameTime) + now;
+        }
+        float deltaSec = static_cast<float>(deltaMicros) / 1000000.0f;
+
+        // Advance tempo phase - this detects beat ticks
+        m_tempo->advancePhase(deltaSec);
+
+        // Get tempo output to update MusicalGrid
+        lightwaveos::audio::TempoOutput tempoOut = m_tempo->getOutput();
+        if (tempoOut.locked) {
+            // Feed tempo to MusicalGrid for effects to use
+            m_musicalGrid.OnTempoEstimate(
+                m_lastAudioTime,
+                tempoOut.bpm,
+                tempoOut.confidence
+            );
+            if (tempoOut.beat_tick) {
+                m_musicalGrid.OnBeatObservation(
+                    m_lastAudioTime,
+                    tempoOut.beat_strength,
+                    false  // is_downbeat - not tracked by TempoTracker
+                );
+            }
+        }
+    }
 #endif
     applyPendingEffectParameterUpdates();
 
@@ -678,24 +748,61 @@ void RendererActor::renderFrame()
         return;  // Skip all effect rendering
     }
 
-    // Check if zone composer is enabled
-    if (m_zoneComposer != nullptr && m_zoneComposer->isEnabled()) {
-        // Use ZoneComposer for multi-zone rendering
-        m_zoneComposer->render(m_leds, LedConfig::TOTAL_LEDS,
-                               &m_currentPalette, m_hue, m_frameCount);
-        m_hue += 1;
-        return;
-    }
+    // =========================================================================
+    // Audio Context Preparation (used by both zone mode and single-effect mode)
+    // =========================================================================
+#if FEATURE_AUDIO_SYNC
+    // NOTE: Keep AudioContext off the task stack. It is large (contains control bus,
+    // waveform, bins, etc.) and combined with deep effect call stacks it can trigger
+    // FreeRTOS stack overflow in the Renderer task.
+    bool audioAvailable = false;
+    if (m_controlBusBuffer != nullptr) {
+        // 1. Read latest ControlBusFrame BY VALUE (thread-safe)
+        uint32_t seq = m_controlBusBuffer->ReadLatest(m_lastControlBus);
 
-    // Single-effect mode
-    // Check if we have a valid effect
-    if (m_currentEffect >= MAX_EFFECTS || !m_effects[m_currentEffect].active) {
-        // No effect - clear buffer
-        memset(m_leds, 0, sizeof(m_leds));
-        return;
-    }
+        // Store previous sequence BEFORE updating (for availability gate)
+        uint32_t prevSeq = m_lastControlBusSeq;
 
-    // Calculate delta time (in ms)
+        // 2. Extrapolate AudioTime from audio snapshot
+        uint64_t now_us = micros();
+        if (seq != m_lastControlBusSeq) {
+            // New audio frame arrived - resync extrapolation base
+            m_lastAudioTime = m_lastControlBus.t;
+            m_lastAudioMicros = now_us;
+            m_lastControlBusSeq = seq;
+        }
+
+        // 3. Build extrapolated render-time AudioTime
+        uint64_t dt_us = now_us - m_lastAudioMicros;
+        uint64_t extrapolated_samples = m_lastAudioTime.sample_index +
+            (dt_us * m_lastAudioTime.sample_rate_hz / 1000000);
+        audio::AudioTime render_now(
+            extrapolated_samples,
+            m_lastAudioTime.sample_rate_hz,
+            now_us
+        );
+
+        // 4. Tick MusicalGrid at 120 FPS
+        m_musicalGrid.Tick(render_now);
+        m_musicalGrid.ReadLatest(m_lastMusicalGrid);
+
+        // 5. Compute freshness
+        float age_s = audio::AudioTime_SecondsBetween(m_lastControlBus.t, render_now);
+        float staleness_s = m_audioContractTuning.audioStalenessMs / 1000.0f;
+        bool sequence_changed = (seq != prevSeq);
+        bool age_within_tolerance = (age_s >= -0.01f && age_s < staleness_s);
+        audioAvailable = sequence_changed || age_within_tolerance;
+
+        // 6. Populate shared AudioContext (member, reused across zone + single-effect mode)
+        m_sharedAudioCtx.controlBus = m_lastControlBus;
+        m_sharedAudioCtx.musicalGrid = m_lastMusicalGrid;
+        m_sharedAudioCtx.available = audioAvailable;
+    } else {
+        m_sharedAudioCtx.available = false;
+    }
+#endif
+
+    // Calculate delta time (in ms) - needed for both zone mode and single-effect mode
     uint32_t now = micros();
     uint32_t deltaTimeMs;
     if (now >= m_lastFrameTime) {
@@ -704,9 +811,32 @@ void RendererActor::renderFrame()
         deltaTimeMs = ((UINT32_MAX - m_lastFrameTime) + now) / 1000;
     }
 
+    // Check if zone composer is enabled
+    if (m_zoneComposer != nullptr && m_zoneComposer->isEnabled()) {
+        // Use ZoneComposer for multi-zone rendering
+#if FEATURE_AUDIO_SYNC
+        m_zoneComposer->render(m_leds, LedConfig::TOTAL_LEDS,
+                               &m_currentPalette, m_hue, m_frameCount, deltaTimeMs, &m_sharedAudioCtx);
+#else
+        m_zoneComposer->render(m_leds, LedConfig::TOTAL_LEDS,
+                               &m_currentPalette, m_hue, m_frameCount, deltaTimeMs, nullptr);
+#endif
+        m_hue += 1;
+        return;
+    }
+
+    // Single-effect mode
+    // Validate current effect ID before access
+    uint8_t safeEffect = validateEffectId(m_currentEffect);
+    if (safeEffect >= MAX_EFFECTS || !m_effects[safeEffect].active) {
+        // No effect - clear buffer
+        memset(m_leds, 0, sizeof(m_leds));
+        return;
+    }
+
     // IEffect-only path (all effects are IEffect instances)
-    if (m_effects[m_currentEffect].effect != nullptr) {
-        plugins::EffectContext ctx;
+    if (m_effects[safeEffect].effect != nullptr) {
+        plugins::EffectContext& ctx = m_effectContext;
         ctx.leds = m_leds;
         ctx.ledCount = LedConfig::TOTAL_LEDS;
         ctx.centerPoint = LedConfig::CENTER_POINT;
@@ -730,58 +860,11 @@ void RendererActor::renderFrame()
 
         // =====================================================================
         // Phase 2: Audio Context Integration
+        // Reuse shared audio context prepared before zone composer check
         // =====================================================================
 #if FEATURE_AUDIO_SYNC
-        if (m_controlBusBuffer != nullptr) {
-            // 1. Read latest ControlBusFrame BY VALUE (thread-safe)
-            uint32_t seq = m_controlBusBuffer->ReadLatest(m_lastControlBus);
-
-            // 2. Extrapolate AudioTime from audio snapshot
-            uint64_t now_us = micros();
-            if (seq != m_lastControlBusSeq) {
-                // New audio frame arrived - resync extrapolation base
-                m_lastAudioTime = m_lastControlBus.t;
-                m_lastAudioMicros = now_us;
-                m_lastControlBusSeq = seq;
-            }
-
-            // 3. Build extrapolated render-time AudioTime
-            //    Render runs at 120 FPS, audio at 62.5 Hz - extrapolate samples
-            uint64_t dt_us = now_us - m_lastAudioMicros;
-            uint64_t extrapolated_samples = m_lastAudioTime.sample_index +
-                (dt_us * m_lastAudioTime.sample_rate_hz / 1000000);
-            audio::AudioTime render_now(
-                extrapolated_samples,
-                m_lastAudioTime.sample_rate_hz,
-                now_us
-            );
-
-            // 4. Tick MusicalGrid at 120 FPS (PLL freewheel pattern)
-            //    This keeps beat phase smooth even if audio stalls
-            m_musicalGrid.Tick(render_now);
-            m_musicalGrid.ReadLatest(m_lastMusicalGrid);
-
-            // 5. Compute staleness for ctx.audio.available
-            // FIXED: More robust freshness detection combining sequence-based and age-based checks
-            // - Allow small negative ages (-0.01s tolerance) to account for extrapolation timing precision
-            // - If sequence changed, data is definitely fresh (new audio frame arrived)
-            // - Otherwise, check if age is within staleness threshold
-            float age_s = audio::AudioTime_SecondsBetween(m_lastControlBus.t, render_now);
-            float staleness_s = m_audioContractTuning.audioStalenessMs / 1000.0f;
-            bool sequence_changed = (seq != m_lastControlBusSeq);
-            bool age_within_tolerance = (age_s >= -0.01f && age_s < staleness_s);
-            bool is_fresh = sequence_changed || age_within_tolerance;
-
-            // 6. Populate AudioContext (by-value copies for thread safety)
-            ctx.audio.controlBus = m_lastControlBus;
-            ctx.audio.musicalGrid = m_lastMusicalGrid;
-            ctx.audio.available = is_fresh;
-        } else {
-            // AudioActor not connected - effects should fall back to time-based
-            ctx.audio.available = false;
-        }
+        ctx.audio = m_sharedAudioCtx;
 #else
-        // Audio sync disabled at compile time
         ctx.audio.available = false;
 #endif
 
@@ -868,6 +951,11 @@ void RendererActor::showLeds()
     // Push to hardware
     FastLED.show();
 #endif
+
+#if FEATURE_VALIDATION_PROFILING
+    // Update validation profiling frame statistics
+    lightwaveos::core::system::ValidationProfiler::updateFrame();
+#endif
 }
 
 void RendererActor::updateStats(uint32_t frameTimeUs)
@@ -918,10 +1006,11 @@ void RendererActor::handleSetEffect(uint8_t effectId)
     }
 
     if (m_currentEffect != effectId) {
-        uint8_t oldEffect = m_currentEffect;
+        // Validate oldEffect before accessing array
+        uint8_t oldEffect = validateEffectId(m_currentEffect);
 
-        // Cleanup old effect
-        if (m_effects[oldEffect].effect != nullptr) {
+        // Cleanup old effect (only if valid and active)
+        if (oldEffect < MAX_EFFECTS && m_effects[oldEffect].active && m_effects[oldEffect].effect != nullptr) {
             LW_LOGI("IEffect cleanup: %s (ID %d)", m_effects[oldEffect].name, oldEffect);
             m_effects[oldEffect].effect->cleanup();
         }
@@ -1010,19 +1099,17 @@ void RendererActor::handleSetSpeed(uint8_t speed)
 
 void RendererActor::handleSetPalette(uint8_t paletteIndex)
 {
-    // Clamp to valid palette range
-    if (paletteIndex >= MASTER_PALETTE_COUNT) {
-        paletteIndex = paletteIndex % MASTER_PALETTE_COUNT;
-    }
+    // Validate palette ID before access
+    uint8_t safe_palette = lightwaveos::palettes::validatePaletteId(paletteIndex);
 
-    if (m_paletteIndex != paletteIndex) {
-        m_paletteIndex = paletteIndex;
+    if (m_paletteIndex != safe_palette) {
+        m_paletteIndex = safe_palette;
 
         // Load palette from master palette array (75 palettes)
-        m_currentPalette = gMasterPalettes[paletteIndex];
+        m_currentPalette = gMasterPalettes[safe_palette];
 
         // Apply color correction for WHITE_HEAVY palettes
-        uint8_t flags = master_palette_flags[paletteIndex];
+        uint8_t flags = master_palette_flags[safe_palette];
         enhancement::ColorCorrectionEngine::getInstance().correctPalette(m_currentPalette, flags);
 
         LW_LOGD("Palette: %d (%s)", m_paletteIndex, getPaletteName(m_paletteIndex));
@@ -1094,10 +1181,13 @@ void RendererActor::handleSetFadeAmount(uint8_t fadeAmount)
 // Transition Methods
 // ============================================================================
 
-void RendererActor::startTransition(uint8_t newEffectId, uint8_t transitionType)
+void RendererActor::handleStartTransition(uint8_t newEffectId, uint8_t transitionType)
 {
+    // Thread-safe handler called from message queue (Core 1)
     if (!m_transitionEngine) return;
-    if (newEffectId >= MAX_EFFECTS || !m_effects[newEffectId].active) return;
+    // Validate effectId before access
+    uint8_t safeEffectId = validateEffectId(newEffectId);
+    if (safeEffectId >= MAX_EFFECTS || !m_effects[safeEffectId].active) return;
     if (transitionType >= static_cast<uint8_t>(TransitionType::TYPE_COUNT)) {
         transitionType = 0;  // Default to FADE
     }
@@ -1124,6 +1214,13 @@ void RendererActor::startTransition(uint8_t newEffectId, uint8_t transitionType)
              getEffectName(m_currentEffect),
              getEffectName(newEffectId),
              getTransitionName(type));
+}
+
+void RendererActor::startTransition(uint8_t newEffectId, uint8_t transitionType)
+{
+    // DEPRECATED: Direct call - unsafe from Core 0. Use ActorSystem::startTransition() instead.
+    // This method is kept for internal use (ShowDirectorActor on Core 1) but should not be called from request handlers.
+    handleStartTransition(newEffectId, transitionType);
 }
 
 void RendererActor::startRandomTransition(uint8_t newEffectId)

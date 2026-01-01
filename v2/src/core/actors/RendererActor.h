@@ -32,6 +32,7 @@
 #include "../bus/MessageBus.h"
 #include "../../effects/enhancement/ColorCorrectionEngine.h"
 #include "../../config/features.h"
+#include "../../plugins/api/EffectContext.h"
 
 #include <atomic>
 
@@ -47,8 +48,8 @@
 #include "../../audio/contracts/MusicalGrid.h"
 #include "../../audio/contracts/SnapshotBuffer.h"
 #include "../../audio/contracts/AudioEffectMapping.h"
-// K1-Lightwave integration (Phase 3)
-#include "../../audio/k1/K1Messages.h"
+// TempoTracker integration (replaces K1)
+#include "../../audio/tempo/TempoTracker.h"
 #include "../../utils/LockFreeQueue.h"
 #endif
 
@@ -242,6 +243,13 @@ public:
     plugins::IEffect* getEffectInstance(uint8_t id) const;
 
     /**
+     * @brief Validate and clamp effect ID to safe range [0, MAX_EFFECTS-1]
+     * @param effectId Effect ID to validate
+     * @return Valid effect ID, defaults to 0 if out of bounds
+     */
+    uint8_t validateEffectId(uint8_t effectId) const;
+
+    /**
      * @brief Get pointer to current palette
      */
     CRGBPalette16* getPalette() { return &m_currentPalette; }
@@ -347,27 +355,36 @@ public:
     const audio::MusicalGridSnapshot& getLastMusicalGrid() const { return m_lastMusicalGrid; }
 
     // ========================================================================
-    // K1-Lightwave Integration (Phase 3 - Public Interface)
+    // TempoTracker Integration (replaces K1)
     // ========================================================================
 
     /**
-     * @brief Get tempo queue for K1Pipeline to push updates
+     * @brief Set the TempoTracker reference for phase advancement
      *
-     * Called by K1Pipeline (Core 1) to enqueue tempo changes.
-     * Thread-safe: lock-free SPSC queue.
+     * Called by ActorSystem during initialization to connect the renderer
+     * to AudioActor's TempoTracker instance. The renderer calls
+     * advancePhase() at 120 FPS for smooth beat tracking.
+     *
+     * @param tempo Pointer to AudioActor's TempoTracker (nullptr to disable)
      */
-    utils::LockFreeQueue<audio::k1::K1TempoUpdate, 8>& getK1TempoQueue() {
-        return m_k1TempoQueue;
+    void setTempo(lightwaveos::audio::TempoTracker* tempo) {
+        m_tempo = tempo;
     }
 
     /**
-     * @brief Get beat queue for K1Pipeline to push beat events
-     *
-     * Called by K1Pipeline (Core 1) to enqueue beat ticks.
-     * Thread-safe: lock-free SPSC queue.
+     * @brief Check if tempo integration is active
      */
-    utils::LockFreeQueue<audio::k1::K1BeatEvent, 16>& getK1BeatQueue() {
-        return m_k1BeatQueue;
+    bool isTempoEnabled() const { return m_tempo != nullptr; }
+
+    /**
+     * @brief Get current tempo output (read-only access for diagnostics)
+     * @return TempoOutput with BPM, phase, confidence, beat_tick
+     */
+    lightwaveos::audio::TempoOutput getTempoOutput() const {
+        if (m_tempo) {
+            return m_tempo->getOutput();
+        }
+        return lightwaveos::audio::TempoOutput{};
     }
 #endif
 
@@ -477,6 +494,11 @@ private:
     void handleSetEffect(uint8_t effectId);
 
     /**
+     * @brief Handle START_TRANSITION message (thread-safe)
+     */
+    void handleStartTransition(uint8_t effectId, uint8_t transitionType);
+
+    /**
      * @brief Handle SET_BRIGHTNESS message
      */
     void handleSetBrightness(uint8_t brightness);
@@ -524,7 +546,11 @@ private:
     CRGBPalette16 m_currentPalette;
 
     // Effect registry - IEffect-only
-    static constexpr uint8_t MAX_EFFECTS = 80;
+    //
+    // IMPORTANT: This value must be >= the number of registered effects.
+    // It is referenced (sometimes duplicated) across networking/state/persistence.
+    // If you add effects beyond this limit, registration and/or selection will fail.
+    static constexpr uint8_t MAX_EFFECTS = 96;
     struct EffectEntry {
         const char* name;
         plugins::IEffect* effect;   // All effects are IEffect instances (native or adapter)
@@ -560,6 +586,18 @@ private:
 
     // Zone system
     zones::ZoneComposer* m_zoneComposer;
+
+    // Reusable EffectContext to avoid large per-frame stack allocations.
+    // This is especially important when FEATURE_AUDIO_SYNC is enabled, because
+    // EffectContext contains an AudioContext by value.
+    plugins::EffectContext m_effectContext;
+
+#if FEATURE_AUDIO_SYNC
+    // Shared audio context built once per frame and reused by both zone mode and
+    // single-effect mode. Keeping this as a member avoids large stack usage in
+    // renderFrame() that can trigger FreeRTOS stack overflow in the Renderer task.
+    plugins::AudioContext m_sharedAudioCtx;
+#endif
 
     // Transition system
     transitions::TransitionEngine* m_transitionEngine;
@@ -606,6 +644,9 @@ private:
     /// Sequence number from last SnapshotBuffer read (for change detection)
     uint32_t m_lastControlBusSeq = 0;
 
+    // Audio availability latch (hysteresis) removed: keep simple gate based on
+    // sequence_changed || age_within_tolerance for predictability.
+
     /// AudioTime from last ControlBus read (for extrapolation)
     audio::AudioTime m_lastAudioTime;
 
@@ -630,25 +671,17 @@ private:
     bool m_effectHasAudioMappings = false;
 
     // ========================================================================
-    // K1-Lightwave Integration (Phase 3)
+    // TempoTracker Integration (replaces K1)
     // ========================================================================
 
     /**
-     * Lock-free queues for K1 -> Renderer communication
+     * Pointer to AudioActor's TempoTracker (set during init)
      *
-     * K1Pipeline (Core 1) pushes tempo updates and beat events.
-     * RendererActor::onTick() (Core 0) drains these queues.
+     * The renderer calls advancePhase() at 120 FPS for smooth beat tracking.
+     * AudioActor calls updateNovelty() and updateTempo() per audio hop.
+     * Set to nullptr if AudioActor isn't running.
      */
-    utils::LockFreeQueue<audio::k1::K1TempoUpdate, 8> m_k1TempoQueue;
-    utils::LockFreeQueue<audio::k1::K1BeatEvent, 16> m_k1BeatQueue;
-
-    /**
-     * @brief Process pending K1 updates from lock-free queues
-     *
-     * Called from onTick() to drain tempo and beat event queues.
-     * Updates MusicalGrid and triggers beat-reactive effects.
-     */
-    void processK1Updates();
+    lightwaveos::audio::TempoTracker* m_tempo = nullptr;
 #endif
 
     /**

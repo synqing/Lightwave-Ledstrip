@@ -12,24 +12,35 @@ namespace network {
 namespace webserver {
 namespace handlers {
 
-void ZoneHandlers::handleList(AsyncWebServerRequest* request, lightwaveos::actors::ActorSystem& actors, lightwaveos::actors::RendererActor* renderer, lightwaveos::zones::ZoneComposer* composer) {
+void ZoneHandlers::handleList(AsyncWebServerRequest* request, lightwaveos::actors::ActorSystem& actors, const lightwaveos::network::WebServer::CachedRendererState& cachedState, lightwaveos::zones::ZoneComposer* composer) {
     if (!composer) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::FEATURE_DISABLED, "Zone system not available");
         return;
     }
 
-    if (!actors.isRunning() || renderer == nullptr) {
+    if (!actors.isRunning()) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::SYSTEM_NOT_READY, "System not ready");
         return;
     }
 
-    sendSuccessResponseLarge(request, [composer, renderer](JsonObject& data) {
+    sendSuccessResponseLarge(request, [composer, &cachedState](JsonObject& data) {
         data["enabled"] = composer->isEnabled();
-        data["layout"] = static_cast<uint8_t>(composer->getLayout());
-        data["layoutName"] = composer->getLayout() == lightwaveos::zones::ZoneLayout::QUAD ? "QUAD" : "TRIPLE";
         data["zoneCount"] = composer->getZoneCount();
+
+        // Include segment definitions
+        JsonArray segmentsArray = data["segments"].to<JsonArray>();
+        const lightwaveos::zones::ZoneSegment* segments = composer->getZoneConfig();
+        for (uint8_t i = 0; i < composer->getZoneCount(); i++) {
+            JsonObject seg = segmentsArray.add<JsonObject>();
+            seg["zoneId"] = segments[i].zoneId;
+            seg["s1LeftStart"] = segments[i].s1LeftStart;
+            seg["s1LeftEnd"] = segments[i].s1LeftEnd;
+            seg["s1RightStart"] = segments[i].s1RightStart;
+            seg["s1RightEnd"] = segments[i].s1RightEnd;
+            seg["totalLeds"] = segments[i].totalLeds;
+        }
 
         JsonArray zones = data["zones"].to<JsonArray>();
         for (uint8_t i = 0; i < composer->getZoneCount(); i++) {
@@ -37,7 +48,11 @@ void ZoneHandlers::handleList(AsyncWebServerRequest* request, lightwaveos::actor
             zone["id"] = i;
             zone["enabled"] = composer->isZoneEnabled(i);
             zone["effectId"] = composer->getZoneEffect(i);
-            zone["effectName"] = renderer->getEffectName(composer->getZoneEffect(i));
+            // SAFE: Uses cached state (no cross-core access)
+            uint8_t effectId = composer->getZoneEffect(i);
+            if (effectId < cachedState.effectCount && cachedState.effectNames[effectId]) {
+                zone["effectName"] = cachedState.effectNames[effectId];
+            }
             zone["brightness"] = composer->getZoneBrightness(i);
             zone["speed"] = composer->getZoneSpeed(i);
             zone["paletteId"] = composer->getZonePalette(i);
@@ -65,29 +80,92 @@ void ZoneHandlers::handleLayout(AsyncWebServerRequest* request, uint8_t* data, s
     JsonDocument doc;
     VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::ZoneLayout, request);
 
-    // Schema validates zoneCount is 3 or 4
-    uint8_t zoneCount = doc["zoneCount"];
+    // Parse zones array
+    JsonArray zonesArray = doc["zones"];
+    if (!zonesArray || zonesArray.size() == 0 || zonesArray.size() > lightwaveos::zones::MAX_ZONES) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::INVALID_VALUE, "Invalid zones array");
+        return;
+    }
 
-    lightwaveos::zones::ZoneLayout layout = (zoneCount == 4) ? lightwaveos::zones::ZoneLayout::QUAD : lightwaveos::zones::ZoneLayout::TRIPLE;
-    composer->setLayout(layout);
+    // Convert JSON array to ZoneSegment array
+    lightwaveos::zones::ZoneSegment segments[lightwaveos::zones::MAX_ZONES];
+    uint8_t zoneCount = zonesArray.size();
+    
+    // DEFENSIVE CHECK: Validate zoneCount doesn't exceed array bounds
+    if (zoneCount > lightwaveos::zones::MAX_ZONES) {
+        zoneCount = lightwaveos::zones::MAX_ZONES;  // Clamp to safe maximum
+    }
+    
+    for (uint8_t i = 0; i < zoneCount; i++) {
+        // DEFENSIVE CHECK: Validate array index before access
+        if (i >= lightwaveos::zones::MAX_ZONES) {
+            break;  // Safety: should never happen, but protects against corruption
+        }
+        
+        JsonObject zoneObj = zonesArray[i];
+        if (!zoneObj.containsKey("zoneId") || !zoneObj.containsKey("s1LeftStart") ||
+            !zoneObj.containsKey("s1LeftEnd") || !zoneObj.containsKey("s1RightStart") ||
+            !zoneObj.containsKey("s1RightEnd")) {
+            sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                              ErrorCodes::INVALID_VALUE, "Zone segment missing required fields");
+            return;
+        }
+        
+        // DEFENSIVE CHECK: Validate zoneId before using as array index
+        uint8_t rawZoneId = zoneObj["zoneId"];
+        segments[i].zoneId = lightwaveos::network::validateZoneIdInRequest(rawZoneId);
+        
+        // DEFENSIVE CHECK: Validate LED indices against STRIP_LENGTH
+        uint8_t s1LeftStart = zoneObj["s1LeftStart"];
+        uint8_t s1LeftEnd = zoneObj["s1LeftEnd"];
+        uint8_t s1RightStart = zoneObj["s1RightStart"];
+        uint8_t s1RightEnd = zoneObj["s1RightEnd"];
+        
+        // Clamp to valid range [0, STRIP_LENGTH-1]
+        constexpr uint16_t STRIP_LENGTH = 160;
+        if (s1LeftStart >= STRIP_LENGTH) s1LeftStart = 0;
+        if (s1LeftEnd >= STRIP_LENGTH) s1LeftEnd = STRIP_LENGTH - 1;
+        if (s1RightStart >= STRIP_LENGTH) s1RightStart = 0;
+        if (s1RightEnd >= STRIP_LENGTH) s1RightEnd = STRIP_LENGTH - 1;
+        
+        // Ensure start <= end
+        if (s1LeftStart > s1LeftEnd) s1LeftEnd = s1LeftStart;
+        if (s1RightStart > s1RightEnd) s1RightEnd = s1RightStart;
+        
+        segments[i].s1LeftStart = s1LeftStart;
+        segments[i].s1LeftEnd = s1LeftEnd;
+        segments[i].s1RightStart = s1RightStart;
+        segments[i].s1RightEnd = s1RightEnd;
+        
+        // Calculate totalLeds (with overflow protection)
+        uint8_t leftSize = (s1LeftEnd >= s1LeftStart) ? (s1LeftEnd - s1LeftStart + 1) : 1;
+        uint8_t rightSize = (s1RightEnd >= s1RightStart) ? (s1RightEnd - s1RightStart + 1) : 1;
+        segments[i].totalLeds = leftSize + rightSize; // Per-strip count (strip 2 mirrors strip 1)
+    }
 
-    sendSuccessResponse(request, [zoneCount, layout](JsonObject& respData) {
+    // Set layout with validation
+    if (!composer->setLayout(segments, zoneCount)) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::INVALID_VALUE, "Layout validation failed");
+        return;
+    }
+
+    sendSuccessResponse(request, [zoneCount](JsonObject& respData) {
         respData["zoneCount"] = zoneCount;
-        respData["layout"] = static_cast<uint8_t>(layout);
-        respData["layoutName"] = (layout == lightwaveos::zones::ZoneLayout::QUAD) ? "QUAD" : "TRIPLE";
     });
 
     if (broadcastZoneState) broadcastZoneState();
 }
 
-void ZoneHandlers::handleGet(AsyncWebServerRequest* request, lightwaveos::actors::ActorSystem& actors, lightwaveos::actors::RendererActor* renderer, lightwaveos::zones::ZoneComposer* composer) {
+void ZoneHandlers::handleGet(AsyncWebServerRequest* request, lightwaveos::actors::ActorSystem& actors, const lightwaveos::network::WebServer::CachedRendererState& cachedState, lightwaveos::zones::ZoneComposer* composer) {
     if (!composer) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::FEATURE_DISABLED, "Zone system not available");
         return;
     }
 
-    if (!actors.isRunning() || renderer == nullptr) {
+    if (!actors.isRunning()) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::SYSTEM_NOT_READY, "System not ready");
         return;
@@ -101,11 +179,15 @@ void ZoneHandlers::handleGet(AsyncWebServerRequest* request, lightwaveos::actors
         return;
     }
 
-    sendSuccessResponse(request, [composer, zoneId, renderer](JsonObject& data) {
+    sendSuccessResponse(request, [composer, zoneId, &cachedState](JsonObject& data) {
         data["id"] = zoneId;
         data["enabled"] = composer->isZoneEnabled(zoneId);
-        data["effectId"] = composer->getZoneEffect(zoneId);
-        data["effectName"] = renderer->getEffectName(composer->getZoneEffect(zoneId));
+        uint8_t effectId = composer->getZoneEffect(zoneId);
+        data["effectId"] = effectId;
+        // SAFE: Uses cached state (no cross-core access)
+        if (effectId < cachedState.effectCount && cachedState.effectNames[effectId]) {
+            data["effectName"] = cachedState.effectNames[effectId];
+        }
         data["brightness"] = composer->getZoneBrightness(zoneId);
         data["speed"] = composer->getZoneSpeed(zoneId);
         data["paletteId"] = composer->getZonePalette(zoneId);
@@ -114,14 +196,14 @@ void ZoneHandlers::handleGet(AsyncWebServerRequest* request, lightwaveos::actors
     });
 }
 
-void ZoneHandlers::handleSetEffect(AsyncWebServerRequest* request, uint8_t* data, size_t len, lightwaveos::actors::ActorSystem& actors, lightwaveos::actors::RendererActor* renderer, lightwaveos::zones::ZoneComposer* composer, std::function<void()> broadcastZoneState) {
+void ZoneHandlers::handleSetEffect(AsyncWebServerRequest* request, uint8_t* data, size_t len, lightwaveos::actors::ActorSystem& actors, const lightwaveos::network::WebServer::CachedRendererState& cachedState, lightwaveos::zones::ZoneComposer* composer, std::function<void()> broadcastZoneState) {
     if (!composer) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::FEATURE_DISABLED, "Zone system not available");
         return;
     }
 
-    if (!actors.isRunning() || renderer == nullptr) {
+    if (!actors.isRunning()) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::SYSTEM_NOT_READY, "System not ready");
         return;
@@ -138,7 +220,8 @@ void ZoneHandlers::handleSetEffect(AsyncWebServerRequest* request, uint8_t* data
     VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::ZoneEffect, request);
 
     uint8_t effectId = doc["effectId"];
-    if (effectId >= renderer->getEffectCount()) {
+    // SAFE: Uses cached state (no cross-core access)
+    if (effectId >= cachedState.effectCount) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
                           ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "effectId");
         return;
@@ -146,10 +229,13 @@ void ZoneHandlers::handleSetEffect(AsyncWebServerRequest* request, uint8_t* data
 
     composer->setZoneEffect(zoneId, effectId);
 
-    sendSuccessResponse(request, [zoneId, effectId, renderer](JsonObject& respData) {
+    sendSuccessResponse(request, [zoneId, effectId, &cachedState](JsonObject& respData) {
         respData["zoneId"] = zoneId;
         respData["effectId"] = effectId;
-        respData["effectName"] = renderer->getEffectName(effectId);
+        // SAFE: Uses cached state (no cross-core access)
+        if (effectId < cachedState.effectCount && cachedState.effectNames[effectId]) {
+            respData["effectName"] = cachedState.effectNames[effectId];
+        }
     });
 
     if (broadcastZoneState) broadcastZoneState();
@@ -236,12 +322,14 @@ void ZoneHandlers::handleSetPalette(AsyncWebServerRequest* request, uint8_t* dat
         return;
     }
 
-    composer->setZonePalette(zoneId, paletteId);
+    // Validate palette ID before access (defensive check)
+    uint8_t safe_palette = lightwaveos::palettes::validatePaletteId(paletteId);
+    composer->setZonePalette(zoneId, safe_palette);
 
-    sendSuccessResponse(request, [zoneId, paletteId](JsonObject& respData) {
+    sendSuccessResponse(request, [zoneId, safe_palette](JsonObject& respData) {
         respData["zoneId"] = zoneId;
-        respData["paletteId"] = paletteId;
-        respData["paletteName"] = MasterPaletteNames[paletteId];
+        respData["paletteId"] = safe_palette;
+        respData["paletteName"] = MasterPaletteNames[safe_palette];
     });
 
     if (broadcastZoneState) broadcastZoneState();

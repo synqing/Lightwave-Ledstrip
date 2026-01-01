@@ -5,10 +5,12 @@
 #include "../../../plugins/api/IEffect.h"
 #include "../../RequestValidator.h"
 #include "../../ApiResponse.h"
+#include "../../WebServer.h"  // For CachedRendererState
 #include <cstring>
 
 using namespace lightwaveos::actors;
 using namespace lightwaveos::effects;
+using lightwaveos::network::WebServer;
 
 namespace lightwaveos {
 namespace network {
@@ -47,7 +49,7 @@ void EffectHandlers::handleList(AsyncWebServerRequest* request, RendererActor* r
     if (request->hasParam("limit")) {
         limit = request->getParam("limit")->value().toInt();
         if (limit < 1) limit = 1;
-        if (limit > 50) limit = 50;
+        if (limit > 100) limit = 100;
         if (request->hasParam("offset") && !request->hasParam("page")) {
             int offset = request->getParam("offset")->value().toInt();
             if (offset < 0) offset = 0;
@@ -69,6 +71,9 @@ void EffectHandlers::handleList(AsyncWebServerRequest* request, RendererActor* r
     int startIdx = (page - 1) * limit;
     int endIdx = startIdx + limit;
     if (endIdx > total) endIdx = total;
+    
+    // Calculate offset (for V2 API compatibility) - use startIdx as the actual offset
+    int offset = startIdx;
 
     // Capture values for lambda
     const int capturedPage = page;
@@ -77,13 +82,20 @@ void EffectHandlers::handleList(AsyncWebServerRequest* request, RendererActor* r
     const int capturedPages = pages;
     const int capturedStartIdx = startIdx;
     const int capturedEndIdx = endIdx;
+    const int capturedOffset = offset;
     const int capturedCategoryFilter = categoryFilter;
     const bool capturedDetails = details;
 
     sendSuccessResponseLarge(request, [capturedPage, capturedLimit, capturedTotal,
                                        capturedPages, capturedStartIdx, capturedEndIdx,
-                                       capturedCategoryFilter, capturedDetails, renderer](JsonObject& data) {
-        // Add pagination object
+                                       capturedOffset, capturedCategoryFilter, capturedDetails, renderer](JsonObject& data) {
+        // Add flat pagination fields for V2 API compatibility (matching V2EffectsList type)
+        data["total"] = capturedTotal;
+        data["offset"] = capturedOffset;
+        data["limit"] = capturedLimit;
+        // count will be set after effects array is built
+        
+        // Add pagination object (for backward compatibility)
         JsonObject pagination = data["pagination"].to<JsonObject>();
         pagination["page"] = capturedPage;
         pagination["limit"] = capturedLimit;
@@ -144,6 +156,7 @@ void EffectHandlers::handleList(AsyncWebServerRequest* request, RendererActor* r
                 int categoryId = getCategoryId(i);
                 effect["category"] = getCategoryName(categoryId);
                 effect["categoryId"] = categoryId;
+                effect["isAudioReactive"] = PatternRegistry::isAudioReactive(i);
 
                 // Query IEffect metadata if available
                 plugins::IEffect* ieffect = renderer->getEffectInstance(i);
@@ -186,6 +199,9 @@ void EffectHandlers::handleList(AsyncWebServerRequest* request, RendererActor* r
             cat["id"] = i;
             cat["name"] = categoryNames[i];
         }
+        
+        // Set count field (number of effects in this response)
+        data["count"] = effects.size();
     }, 4096);
 }
 
@@ -291,6 +307,8 @@ void EffectHandlers::handleParametersSet(AsyncWebServerRequest* request, uint8_t
     }
 
     uint8_t effectId = doc["effectId"];
+    // DEFENSIVE CHECK: Validate effectId before array access
+    effectId = lightwaveos::network::validateEffectIdInRequest(effectId);
     if (effectId >= renderer->getEffectCount()) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
                           ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "effectId");
@@ -344,12 +362,16 @@ void EffectHandlers::handleParametersSet(AsyncWebServerRequest* request, uint8_t
     });
 }
 
-void EffectHandlers::handleSet(AsyncWebServerRequest* request, uint8_t* data, size_t len, ActorSystem& actors, RendererActor* renderer, std::function<void()> broadcastStatus) {
+void EffectHandlers::handleSet(AsyncWebServerRequest* request, uint8_t* data, size_t len, ActorSystem& actors, const WebServer::CachedRendererState& cachedState, std::function<void()> broadcastStatus) {
     JsonDocument doc;
     VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::SetEffect, request);
 
     uint8_t effectId = doc["effectId"];
-    if (effectId >= renderer->getEffectCount()) {
+    // DEFENSIVE CHECK: Validate effectId before array access
+    effectId = lightwaveos::network::validateEffectIdInRequest(effectId);
+    
+    // SAFE: Uses cached state (no cross-core access)
+    if (effectId >= cachedState.effectCount) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
                           ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "effectId");
         return;
@@ -358,15 +380,19 @@ void EffectHandlers::handleSet(AsyncWebServerRequest* request, uint8_t* data, si
     bool useTransition = doc["transition"] | false;
     uint8_t transitionType = doc["transitionType"] | 0;
 
+    // SAFE: All state changes go through ActorSystem message queue (thread-safe)
     if (useTransition) {
-        renderer->startTransition(effectId, transitionType);
+        actors.startTransition(effectId, transitionType);
     } else {
         actors.setEffect(effectId);
     }
 
-    sendSuccessResponse(request, [effectId, renderer](JsonObject& respData) {
+    sendSuccessResponse(request, [effectId, &cachedState](JsonObject& respData) {
         respData["effectId"] = effectId;
-        respData["name"] = renderer->getEffectName(effectId);
+        // SAFE: Uses cached state (no cross-core access)
+        if (effectId < cachedState.effectCount && cachedState.effectNames[effectId]) {
+            respData["name"] = cachedState.effectNames[effectId];
+        }
     });
 
     if (broadcastStatus) {
@@ -388,6 +414,8 @@ void EffectHandlers::handleMetadata(AsyncWebServerRequest* request, RendererActo
     }
 
     uint8_t effectId = request->getParam("id")->value().toInt();
+    // DEFENSIVE CHECK: Validate effectId before use
+    effectId = lightwaveos::network::validateEffectIdInRequest(effectId);
     uint8_t effectCount = renderer->getEffectCount();
 
     if (effectId >= effectCount) {

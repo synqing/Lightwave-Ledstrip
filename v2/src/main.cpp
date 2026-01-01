@@ -35,10 +35,12 @@
 #include "core/actors/ShowDirectorActor.h"
 #include "core/shows/BuiltinShows.h"
 #include "plugins/api/IEffect.h"
+#include "core/system/StackMonitor.h"
+#include "core/system/HeapMonitor.h"
+#include "core/system/MemoryLeakDetector.h"
+#include "core/system/ValidationProfiler.h"
 
-#if FEATURE_K1_DEBUG
-#include "audio/k1/K1DebugCli.h"
-#endif
+// TempoTracker debug included via AudioActor.h
 
 #if FEATURE_AUDIO_SYNC
 #include "audio/AudioDebugConfig.h"
@@ -90,6 +92,27 @@ void setup() {
     LW_LOGI("==========================================");
 
     // Initialize Actor System (creates RendererActor)
+    // Initialize system monitoring (must be before actors start)
+    lightwaveos::core::system::StackMonitor::init();
+    LW_LOGI("Stack Monitor: INITIALIZED");
+    
+    // Start stack profiling
+    lightwaveos::core::system::StackMonitor::startProfiling();
+    LW_LOGI("Stack Profiling: STARTED");
+    
+    lightwaveos::core::system::HeapMonitor::init();
+    LW_LOGI("Heap Monitor: INITIALIZED");
+    
+    lightwaveos::core::system::MemoryLeakDetector::init();
+    LW_LOGI("Memory Leak Detector: INITIALIZED");
+    
+    lightwaveos::core::system::ValidationProfiler::init();
+    LW_LOGI("Validation Profiler: INITIALIZED");
+    
+    // Reset baseline after all initialization
+    delay(1000);  // Wait for system to stabilize
+    lightwaveos::core::system::MemoryLeakDetector::resetBaseline();
+
     LW_LOGI("Initializing Actor System...");
     if (!actors.init()) {
         LW_LOGE("Actor System init failed!");
@@ -168,7 +191,8 @@ void setup() {
         NetworkConfig::WIFI_SSID_VALUE,
         NetworkConfig::WIFI_PASSWORD_VALUE
     );
-    WIFI_MANAGER.enableSoftAP("LightwaveOS-Setup", "lightwave123");
+    // STA-only: do not enable SoftAP fallback here.
+    // If you want AP provisioning, explicitly re-enable this call.
 
     if (!WIFI_MANAGER.begin()) {
         LW_LOGE("WiFiManager failed to start!");
@@ -230,6 +254,7 @@ void setup() {
     Serial.println("\nZone Commands:");
     Serial.println("  z       - Toggle zone mode");
     Serial.println("  Z       - Print zone status");
+    Serial.println("  zs      - Set zone speed: zs <zoneId> <speed> OR zs <speed0> <speed1> <speed2>");
     Serial.println("  1-5     - Load zone preset (in zone mode)");
     Serial.println("  S       - Save all settings to NVS");
     Serial.println("\nTransition Commands:");
@@ -260,14 +285,9 @@ void setup() {
     Serial.println("  brown   - Show brown guardrail status");
     Serial.println("  brown 0/1 - Disable/enable brown guardrail (accepts 'brown0' or 'brown 0')");
     Serial.println("  Csave   - Save color settings to NVS");
-#if FEATURE_K1_DEBUG
-    Serial.println("\nK1 Beat Tracker Debug:");
-    Serial.println("  k1      - Show BPM, confidence, phase, lock, top-3 candidates");
-    Serial.println("  k1s     - Full stats summary");
-    Serial.println("  k1spec  - ASCII resonator spectrum (121 bins)");
-    Serial.println("  k1nov   - Recent novelty z-scores");
-    Serial.println("  k1reset - Reset K1 pipeline");
-    Serial.println("  k1c     - Compact output (for continuous monitoring)");
+#if FEATURE_AUDIO_SYNC
+    Serial.println("\nTempoTracker Debug:");
+    Serial.println("  tempo   - Show BPM, confidence, phase, lock state");
 #endif
 #if FEATURE_AUDIO_SYNC
     Serial.println("\nAudio Debug Verbosity:");
@@ -548,7 +568,13 @@ void loop() {
             }
         }
         else if (peekChar == 'a' && input.length() > 1) {
-            if (input.startsWith("ae")) {
+            if (inputLower.startsWith("validation_stats") || inputLower == "val_stats") {
+                lightwaveos::core::system::ValidationProfiler::generateReport();
+                handledMulti = true;
+            } else if (inputLower.startsWith("stack_usage") || inputLower == "stack_profile") {
+                lightwaveos::core::system::StackMonitor::generateProfileReport();
+                handledMulti = true;
+            } else if (input.startsWith("ae")) {
                 handledMulti = true;
                 auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
                 auto& cfg = engine.getConfig();
@@ -969,29 +995,102 @@ void loop() {
         }
 
         // -----------------------------------------------------------------
-        // K1 Beat Tracker Debug Commands: k1, k1s, k1spec, k1nov, k1reset
+        // Tempo Debug Commands: tempo
         // -----------------------------------------------------------------
-#if FEATURE_K1_DEBUG
-        else if (peekChar == 'k' && input.length() > 1) {
-            if (inputLower.startsWith("k1")) {
-                handledMulti = true;
+#if FEATURE_AUDIO_SYNC
+        else if (inputLower.startsWith("tempo")) {
+            handledMulti = true;
 
-                // Get K1 pipeline from AudioActor
-                auto* audio = actors.getAudio();
-                if (audio && audio->isK1Enabled()) {
-                    auto& pipeline = const_cast<lightwaveos::audio::k1::K1Pipeline&>(
-                        audio->getK1Pipeline()
-                    );
-
-                    if (!lightwaveos::audio::k1::k1_handle_command(inputLower, pipeline)) {
-                        Serial.println("Unknown k1 command. Try: k1, k1s, k1spec, k1nov, k1reset, k1c");
-                    }
-                } else {
-                    Serial.println("K1 beat tracker not available (audio not enabled)");
-                }
+            // Get TempoTracker from AudioActor
+            auto* audio = actors.getAudio();
+            if (audio) {
+                const auto& tempo = audio->getTempo();
+                auto output = tempo.getOutput();
+                Serial.println("=== TempoTracker Status ===");
+                Serial.printf("  BPM: %.1f\n", output.bpm);
+                Serial.printf("  Phase: %.3f\n", output.phase01);
+                Serial.printf("  Confidence: %.2f\n", output.confidence);
+                Serial.printf("  Locked: %s\n", output.locked ? "YES" : "NO");
+                Serial.printf("  Beat Strength: %.2f\n", output.beat_strength);
+                Serial.printf("  Winner Bin: %u\n", tempo.getWinnerBin());
+            } else {
+                Serial.println("TempoTracker not available (audio not enabled)");
             }
         }
 #endif
+
+        // -----------------------------------------------------------------
+        // Zone Speed Commands: zs
+        // -----------------------------------------------------------------
+        else if (inputLower.startsWith("zs ")) {
+            handledMulti = true;
+
+            if (!zoneComposer.isEnabled()) {
+                Serial.println("ERROR: Zone mode not enabled. Press 'z' to enable.");
+            } else {
+                // Parse: "zs <zoneId> <speed>" or "zs <speed0> <speed1> <speed2>"
+                String args = input.substring(3); // After "zs "
+                args.trim();
+
+                int zoneId = -1;
+                int speed0 = -1, speed1 = -1, speed2 = -1;
+
+                // Try parsing as "zs <zoneId> <speed>"
+                int firstSpace = args.indexOf(' ');
+                if (firstSpace > 0) {
+                    String first = args.substring(0, firstSpace);
+                    String rest = args.substring(firstSpace + 1);
+                    rest.trim();
+
+                    int parsedZone = first.toInt();
+                    int parsedSpeed = rest.toInt();
+
+                    if (parsedZone >= 0 && parsedZone < zoneComposer.getZoneCount() &&
+                        parsedSpeed >= 1 && parsedSpeed <= 50) {
+                        zoneId = parsedZone;
+                        zoneComposer.setZoneSpeed(zoneId, parsedSpeed);
+                        Serial.printf("Zone %d speed set to %d\n", zoneId, parsedSpeed);
+                    } else {
+                        Serial.println("ERROR: Usage: zs <zoneId> <speed> (zoneId: 0-2, speed: 1-50)");
+                    }
+                } else {
+                    // Try parsing as "zs <speed0> <speed1> <speed2>"
+                    int space1 = args.indexOf(' ');
+                    if (space1 > 0) {
+                        String s0 = args.substring(0, space1);
+                        String rest1 = args.substring(space1 + 1);
+                        rest1.trim();
+                        int space2 = rest1.indexOf(' ');
+                        if (space2 > 0) {
+                            String s1 = rest1.substring(0, space2);
+                            String s2 = rest1.substring(space2 + 1);
+                            s2.trim();
+
+                            speed0 = s0.toInt();
+                            speed1 = s1.toInt();
+                            speed2 = s2.toInt();
+
+                            if (speed0 >= 1 && speed0 <= 50 &&
+                                speed1 >= 1 && speed1 <= 50 &&
+                                speed2 >= 1 && speed2 <= 50 &&
+                                zoneComposer.getZoneCount() >= 3) {
+                                zoneComposer.setZoneSpeed(0, speed0);
+                                zoneComposer.setZoneSpeed(1, speed1);
+                                zoneComposer.setZoneSpeed(2, speed2);
+                                Serial.printf("Zone speeds set: Zone 0=%d, Zone 1=%d, Zone 2=%d\n",
+                                            speed0, speed1, speed2);
+                            } else {
+                                Serial.println("ERROR: Usage: zs <speed0> <speed1> <speed2> (speeds: 1-50)");
+                            }
+                        } else {
+                            Serial.println("ERROR: Usage: zs <zoneId> <speed> OR zs <speed0> <speed1> <speed2>");
+                        }
+                    } else {
+                        Serial.println("ERROR: Usage: zs <zoneId> <speed> OR zs <speed0> <speed1> <speed2>");
+                    }
+                }
+            }
+        }
 
         if (handledMulti) {
             // Do not process single-character commands after consuming a multi-char command
@@ -1240,7 +1339,7 @@ void loop() {
                     {
                         uint8_t s = renderer->getSpeed();
                         if (s > 1) {
-                            s = max((int)s - 5, 1);
+                            s = max((int)s - 1, 1);
                             actors.setSpeed(s);
                             Serial.printf("Speed: %d\n", s);
                         }
@@ -1251,7 +1350,7 @@ void loop() {
                     {
                         uint8_t s = renderer->getSpeed();
                         if (s < 100) {
-                            s = min((int)s + 5, 100);
+                            s = min((int)s + 1, 100);
                             actors.setSpeed(s);
                             Serial.printf("Speed: %d\n", s);
                         }
@@ -1698,6 +1797,18 @@ void loop() {
                           stats.cpuPercent,
                           renderer->getEffectName(currentEffect));
         }
+        
+        // Periodic system health checks
+        lightwaveos::core::system::StackMonitor::checkAllTasks();
+        lightwaveos::core::system::HeapMonitor::checkHeapIntegrity();
+        
+        // Scan for memory leaks (every 10 seconds)
+        static uint32_t lastLeakScan = 0;
+        if (now - lastLeakScan > 10000) {
+            lightwaveos::core::system::MemoryLeakDetector::scanForLeaks();
+            lastLeakScan = now;
+        }
+        
         lastStatus = now;
     }
 

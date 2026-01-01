@@ -21,8 +21,34 @@
 #include "webserver/handlers/DeviceHandlers.h"
 #include "webserver/handlers/EffectHandlers.h"
 #include "webserver/handlers/ZoneHandlers.h"
+#include "webserver/handlers/SystemHandlers.h"
+#include "webserver/handlers/BatchHandlers.h"
+#include "webserver/handlers/ParameterHandlers.h"
+#include "webserver/handlers/PaletteHandlers.h"
+#include "webserver/handlers/TransitionHandlers.h"
+#include "webserver/handlers/NarrativeHandlers.h"
+#include "webserver/handlers/AudioHandlers.h"
+#include "webserver/WebServerContext.h"
+#include "webserver/HttpRouteRegistry.h"
+#include "webserver/StaticAssetRoutes.h"
+#include "webserver/V1ApiRoutes.h"
+#include "webserver/WsGateway.h"
+#include "webserver/ws/WsDeviceCommands.h"
+#include "webserver/ws/WsEffectsCommands.h"
+#include "webserver/ws/WsZonesCommands.h"
+#include "webserver/ws/WsTransitionCommands.h"
+#include "webserver/ws/WsNarrativeCommands.h"
+#include "webserver/ws/WsMotionCommands.h"
+#include "webserver/ws/WsColorCommands.h"
+#include "webserver/ws/WsPaletteCommands.h"
+#include "webserver/ws/WsBatchCommands.h"
+#if FEATURE_AUDIO_SYNC
+#include "webserver/ws/WsAudioCommands.h"
+#endif
+#include "webserver/ws/WsStreamCommands.h"
 #include "../config/network_config.h"
 #include "../core/actors/ActorSystem.h"
+#include "../effects/zones/ZoneDefinition.h"
 #include <Update.h>
 #include "../core/actors/RendererActor.h"
 #include "../core/persistence/ZoneConfigManager.h"
@@ -102,7 +128,9 @@ WebServer::WebServer(ActorSystem& actors, RendererActor* renderer)
     , m_lastImmediateBroadcast(0)
     , m_broadcastPending(false)
     , m_zoneComposer(nullptr)
+    , m_lastStateCacheUpdate(0)
     , m_ledBroadcaster(nullptr)
+    , m_wsGateway(nullptr)
     , m_actorSystem(actors)
     , m_renderer(renderer)
 {
@@ -110,7 +138,8 @@ WebServer::WebServer(ActorSystem& actors, RendererActor* renderer)
 
 WebServer::~WebServer() {
     stop();
-#if FEATURE_AUDIO_BENCHMARK
+    delete m_wsGateway;
+#if FEATURE_AUDIO_BENCHCHMARK
     delete m_benchmarkBroadcaster;
 #endif
 #if FEATURE_AUDIO_SYNC
@@ -157,23 +186,31 @@ bool WebServer::begin() {
     initValidationEncoder();
 #endif
 
-    // Initialize WiFi
+    // Initialise WiFi (STA-only: WebServer must never attempt AP fallback)
+    // WiFiManager owns all WiFi mode decisions.
     if (!initWiFi()) {
-        LW_LOGW("WiFi init failed, starting AP mode...");
-        if (!startAPMode()) {
-            LW_LOGE("AP mode failed!");
-            return false;
-        }
+        LW_LOGW("WiFi init failed (STA-only). Continuing without forcing AP mode.");
+        // Keep running: routes that require WiFi will naturally be unavailable until connected.
+        m_apMode = false;
+    }
+
+    // Acquire ZoneComposer before creating any WebServerContext (routes/WS depend on it).
+    // This prevents FEATURE_DISABLED responses for zones when the compositor is available.
+    if (m_renderer) {
+        m_zoneComposer = m_renderer->getZoneComposer();
     }
 
     // Setup CORS headers
     setupCORS();
 
-    // Setup WebSocket
-    setupWebSocket();
-
-    // Setup HTTP routes
+    // Setup HTTP routes (before WebSocket, as routes may depend on server state)
     setupRoutes();
+
+    // Set start time before creating gateway (gateway context needs it)
+    m_startTime = millis();
+
+    // Setup WebSocket gateway (after routes and startTime, as gateway needs context)
+    setupWebSocket();
 
     // Start mDNS
     startMDNS();
@@ -181,7 +218,6 @@ bool WebServer::begin() {
     // Start the server
     m_server->begin();
     m_running = true;
-    m_startTime = millis();
 
     // Get zone composer reference if available
     if (m_renderer) {
@@ -189,9 +225,7 @@ bool WebServer::begin() {
     }
 
     LW_LOGI("Server running on port %d", WebServerConfig::HTTP_PORT);
-    if (m_apMode) {
-        LW_LOGI("AP Mode - IP: %s", WiFi.softAPIP().toString().c_str());
-    } else {
+    if (!m_apMode) {
         // Verify IP is valid before logging (defensive check)
         IPAddress ip = WiFi.localIP();
         if (ip != INADDR_NONE && ip != IPAddress(0, 0, 0, 0)) {
@@ -199,6 +233,9 @@ bool WebServer::begin() {
         } else {
             LW_LOGW("IP not yet assigned, check WiFiManager status");
         }
+    } else {
+        // STA-only build: AP mode should not be entered via WebServer.
+        LW_LOGW("AP mode reported active; STA-only build expects WiFiManager to manage this.");
     }
 
     return true;
@@ -263,14 +300,96 @@ void WebServer::update() {
     uint32_t now = millis();
     if (now - m_lastBroadcast >= WebServerConfig::STATUS_BROADCAST_INTERVAL_MS) {
         m_lastBroadcast = now;
-        broadcastStatus();
+        m_broadcastPending = true;  // Defer to safe context
     }
     
-    // Flush pending coalesced broadcast (if enough time has passed)
-    if (m_broadcastPending && (now - m_lastImmediateBroadcast >= BROADCAST_COALESCE_MS)) {
-        m_broadcastPending = false;
-        doBroadcastStatus();  // Actually send the broadcast
+    // Process deferred broadcasts (safe context - not in AsyncTCP callback)
+    // Coalesce: only send if enough time has passed since last broadcast
+    // QUEUE PROTECTION: Additional check - skip if we've sent too many broadcasts recently
+    if (m_broadcastPending) {
+        if (now - m_lastImmediateBroadcast >= BROADCAST_COALESCE_MS) {
+            // Additional queue protection: check if we can safely send
+            // (AsyncWebSocket doesn't expose queue size, so we use time-based throttling)
+            m_lastImmediateBroadcast = now;
+            m_broadcastPending = false;
+            doBroadcastStatus();  // Actually send the broadcast in safe context
+        }
     }
+    
+    // Update cached renderer state (safe context - not in AsyncTCP callback)
+    updateCachedRendererState();
+}
+
+// ============================================================================
+// Cached Renderer State
+// ============================================================================
+
+void WebServer::updateCachedRendererState() {
+    // SAFETY: This method is called from update() which runs in a safe context (not in AsyncTCP callback)
+    // It's safe to access m_renderer here because we're on the same core or in a controlled context
+    
+    if (!m_renderer) {
+        // Clear cache if renderer is not available
+        memset(&m_cachedRendererState, 0, sizeof(m_cachedRendererState));
+        return;
+    }
+    
+    uint32_t now = millis();
+    // Update cache if TTL expired
+    if (now - m_lastStateCacheUpdate < STATE_CACHE_TTL_MS) {
+        return;  // Cache still fresh
+    }
+    
+    m_lastStateCacheUpdate = now;
+    
+    // Cache all const getter values (safe to call from update context)
+    m_cachedRendererState.effectCount = m_renderer->getEffectCount();
+    m_cachedRendererState.currentEffect = m_renderer->getCurrentEffect();
+    m_cachedRendererState.brightness = m_renderer->getBrightness();
+    m_cachedRendererState.speed = m_renderer->getSpeed();
+    m_cachedRendererState.paletteIndex = m_renderer->getPaletteIndex();
+    m_cachedRendererState.hue = m_renderer->getHue();
+    m_cachedRendererState.intensity = m_renderer->getIntensity();
+    m_cachedRendererState.saturation = m_renderer->getSaturation();
+    m_cachedRendererState.complexity = m_renderer->getComplexity();
+    m_cachedRendererState.variation = m_renderer->getVariation();
+    m_cachedRendererState.mood = m_renderer->getMood();
+    m_cachedRendererState.fadeAmount = m_renderer->getFadeAmount();
+    m_cachedRendererState.isRunning = m_renderer->isRunning();
+    m_cachedRendererState.queueUtilization = m_renderer->getQueueUtilization();
+    m_cachedRendererState.queueLength = m_renderer->getQueueLength();
+    // Copy stats struct (field-by-field to avoid include dependency)
+    const RenderStats& srcStats = m_renderer->getStats();
+    m_cachedRendererState.stats.currentFPS = srcStats.currentFPS;
+    m_cachedRendererState.stats.cpuPercent = srcStats.cpuPercent;
+    m_cachedRendererState.stats.framesRendered = srcStats.framesRendered;
+    
+    // Cache effect names (pointers to stable strings in RendererActor)
+    uint8_t count = m_cachedRendererState.effectCount;
+    if (count > 96) count = 96;  // Safety: MAX_EFFECTS
+    for (uint8_t i = 0; i < count; ++i) {
+        m_cachedRendererState.effectNames[i] = m_renderer->getEffectName(i);
+    }
+    // Clear remaining slots
+    for (uint8_t i = count; i < 96; ++i) {
+        m_cachedRendererState.effectNames[i] = nullptr;
+    }
+    
+#if FEATURE_AUDIO_SYNC
+    // Cache audio tuning (field-by-field to avoid include dependency)
+    const audio::AudioContractTuning& srcTuning = m_renderer->getAudioContractTuning();
+    m_cachedRendererState.audioTuning.audioStalenessMs = srcTuning.audioStalenessMs;
+    m_cachedRendererState.audioTuning.bpmMin = srcTuning.bpmMin;
+    m_cachedRendererState.audioTuning.bpmMax = srcTuning.bpmMax;
+    m_cachedRendererState.audioTuning.bpmTau = srcTuning.bpmTau;
+    m_cachedRendererState.audioTuning.confidenceTau = srcTuning.confidenceTau;
+    m_cachedRendererState.audioTuning.phaseCorrectionGain = srcTuning.phaseCorrectionGain;
+    m_cachedRendererState.audioTuning.barCorrectionGain = srcTuning.barCorrectionGain;
+    m_cachedRendererState.audioTuning.beatsPerBar = srcTuning.beatsPerBar;
+    m_cachedRendererState.audioTuning.beatUnit = srcTuning.beatUnit;
+    // getLastMusicalGrid() returns a const reference to internal data - safe to cache pointer
+    m_cachedRendererState.lastMusicalGrid = &m_renderer->getLastMusicalGrid();
+#endif
 }
 
 // ============================================================================
@@ -317,20 +436,10 @@ bool WebServer::initWiFi() {
 }
 
 bool WebServer::startAPMode() {
-    // WiFiManager handles AP mode - this method is kept for compatibility.
-    // WebServer should never directly call WiFi.mode() or WiFi.softAP().
-    // If we reach here, WiFiManager should already be in AP mode.
-
-    if (WIFI_MANAGER.isAPMode()) {
-        LW_LOGI("AP Mode active via WiFiManager");
-        LW_LOGI("AP IP: %s", WiFi.softAPIP().toString().c_str());
-        m_apMode = true;
-        return true;
-    }
-
-    // If WiFiManager isn't in AP mode, something went wrong in the flow
-    LW_LOGE("startAPMode called but WiFiManager not in AP mode");
-    LW_LOGE("WiFi should be managed by WiFiManager, not WebServer");
+    // STA-only: WebServer must never try to start or rely on AP mode.
+    // Kept only for legacy callers; return false to surface misuse.
+    LW_LOGE("startAPMode is disabled (STA-only). WiFi must be managed by WiFiManager.");
+    m_apMode = false;
     return false;
 }
 
@@ -369,2651 +478,157 @@ void WebServer::startMDNS() {
 // ============================================================================
 
 void WebServer::setupRoutes() {
-    // Setup v1 API routes first (higher priority)
-    setupV1Routes();
+    // Create route registry wrapper
+    webserver::HttpRouteRegistry registry(m_server);
 
-    // Setup legacy routes for backward compatibility
-    setupLegacyRoutes();
+    // Create WebServer context (m_startTime set later in begin(), use millis() for now)
+    webserver::WebServerContext ctx(
+        m_actorSystem,
+        m_renderer,
+        m_zoneComposer,
+        m_rateLimiter,
+        m_ledBroadcaster
+#if FEATURE_AUDIO_SYNC
+        , m_audioBroadcaster
+#endif
+#if FEATURE_AUDIO_BENCHMARK
+        , m_benchmarkBroadcaster
+#endif
+        , millis()  // Will be updated to m_startTime after server starts
+        , m_apMode
+    );
 
-    m_server->on("/", HTTP_GET, [](AsyncWebServerRequest* request) {
-        if (LittleFS.exists("/index.html")) {
-            request->send(LittleFS, "/index.html", "text/html");
-            return;
-        }
+    // Register routes using modular registrars
+    // Order: V1 first (higher priority), then legacy, then static assets
+    webserver::V1ApiRoutes::registerRoutes(
+        registry, ctx, this,
+        [this](AsyncWebServerRequest* req) { return checkRateLimit(req); },
+        [this](AsyncWebServerRequest* req) { return checkAPIKey(req); },
+        [this]() { broadcastStatus(); },
+        [this]() { broadcastZoneState(); }
+    );
 
-        const char* html =
-            "<!doctype html><html><head><meta charset=\"utf-8\"/>"
-            "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"/>"
-            "<title>LightwaveOS</title></head><body>"
-            "<h1>LightwaveOS Web UI not installed</h1>"
-            "<p>The device web server is running, but no UI files were found on LittleFS.</p>"
-            "<p>API is available at <a href=\"/api/v1/\">/api/v1/</a>.</p>"
-            "</body></html>";
-        request->send(200, "text/html", html);
-    });
+    // Legacy API routes removed - all endpoints migrated to V1 API
 
-    m_server->on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest* request) {
-        if (LittleFS.exists("/favicon.ico")) {
-            request->send(LittleFS, "/favicon.ico", "image/x-icon");
-            return;
-        }
-        request->send(HttpStatus::NO_CONTENT);
-    });
-
-    // Serve simple webapp files (root level)
-    m_server->on("/app.js", HTTP_GET, [](AsyncWebServerRequest* request) {
-        if (LittleFS.exists("/app.js")) {
-            request->send(LittleFS, "/app.js", "application/javascript");
-            return;
-        }
-        request->send(HttpStatus::NOT_FOUND, "text/plain", "Missing /app.js");
-    });
-
-    m_server->on("/styles.css", HTTP_GET, [](AsyncWebServerRequest* request) {
-        if (LittleFS.exists("/styles.css")) {
-            request->send(LittleFS, "/styles.css", "text/css");
-            return;
-        }
-        request->send(HttpStatus::NOT_FOUND, "text/plain", "Missing /styles.css");
-    });
-
-    // Serve the dashboard assets explicitly.
-    // We intentionally avoid serveStatic() here because its gzip probing can spam VFS errors
-    // on missing *.gz files (ESP-IDF logs these at error level).
-    m_server->on("/assets/app.js", HTTP_GET, [](AsyncWebServerRequest* request) {
-        if (LittleFS.exists("/assets/app.js")) {
-            request->send(LittleFS, "/assets/app.js", "application/javascript");
-            return;
-        }
-        request->send(HttpStatus::NOT_FOUND, "text/plain", "Missing /assets/app.js");
-    });
-
-    m_server->on("/assets/styles.css", HTTP_GET, [](AsyncWebServerRequest* request) {
-        if (LittleFS.exists("/assets/styles.css")) {
-            request->send(LittleFS, "/assets/styles.css", "text/css");
-            return;
-        }
-        request->send(HttpStatus::NOT_FOUND, "text/plain", "Missing /assets/styles.css");
-    });
-
-    m_server->on("/vite.svg", HTTP_GET, [](AsyncWebServerRequest* request) {
-        if (LittleFS.exists("/vite.svg")) {
-            request->send(LittleFS, "/vite.svg", "image/svg+xml");
-            return;
-        }
-        request->send(HttpStatus::NOT_FOUND, "text/plain", "Missing /vite.svg");
-    });
-
-    // Handle CORS preflight and 404
-    m_server->onNotFound([](AsyncWebServerRequest* request) {
-        if (request->method() == HTTP_OPTIONS) {
-            request->send(HttpStatus::NO_CONTENT);
-            return;
-        }
-
-        String url = request->url();
-        if (!url.startsWith("/api") && !url.startsWith("/ws")) {
-            if (LittleFS.exists("/index.html")) {
-                int slash = url.lastIndexOf('/');
-                int dot = url.lastIndexOf('.');
-                bool hasExtension = (dot > slash);
-                if (!hasExtension) {
-                    request->send(LittleFS, "/index.html", "text/html");
-                    return;
-                }
-            }
-            request->send(HttpStatus::NOT_FOUND, "text/plain", "Not found");
-            return;
-        }
-
-        sendErrorResponse(request, HttpStatus::NOT_FOUND,
-                          ErrorCodes::NOT_FOUND, "Endpoint not found");
-    });
+    webserver::StaticAssetRoutes::registerRoutes(registry);
 }
 
 void WebServer::setupWebSocket() {
-    m_ws->onEvent([this](AsyncWebSocket* server, AsyncWebSocketClient* client,
-                         AwsEventType type, void* arg, uint8_t* data, size_t len) {
-        WebServer::onWsEvent(server, client, type, arg, data, len);
-    });
-    m_server->addHandler(m_ws);
-}
-
-// ============================================================================
-// Legacy API Routes (/api/*)
-// ============================================================================
-
-void WebServer::setupLegacyRoutes() {
-    // GET /api/status
-    m_server->on("/api/status", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        handleLegacyStatus(request);
-    });
-
-    // POST /api/effect
-    m_server->on("/api/effect", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            handleLegacySetEffect(request, data, len);
-        }
-    );
-
-    // POST /api/brightness
-    m_server->on("/api/brightness", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            handleLegacySetBrightness(request, data, len);
-        }
-    );
-
-    // POST /api/speed
-    m_server->on("/api/speed", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            handleLegacySetSpeed(request, data, len);
-        }
-    );
-
-    // POST /api/palette
-    m_server->on("/api/palette", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            handleLegacySetPalette(request, data, len);
-        }
-    );
-
-    // POST /api/zone/count
-    m_server->on("/api/zone/count", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            handleLegacyZoneCount(request, data, len);
-        }
-    );
-
-    // POST /api/zone/effect
-    m_server->on("/api/zone/effect", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            handleLegacyZoneEffect(request, data, len);
-        }
-    );
-
-    // POST /api/zone/config/save - Save zone config to NVS
-    m_server->on("/api/zone/config/save", HTTP_POST,
-        [this](AsyncWebServerRequest* request) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            if (!zoneConfigMgr) {
-                sendLegacyError(request, "Config manager not initialized", 500);
-                return;
-            }
-            bool zoneOk = zoneConfigMgr->saveToNVS();
-            bool sysOk = zoneConfigMgr->saveSystemState(
-                m_renderer->getCurrentEffect(),
-                m_renderer->getBrightness(),
-                m_renderer->getSpeed(),
-                m_renderer->getPaletteIndex()
-            );
-            if (zoneOk && sysOk) {
-                sendSuccessResponse(request, [](JsonObject& data) {
-                    data["message"] = "Configuration saved";
-                    data["zones"] = true;
-                    data["system"] = true;
-                });
-            } else {
-                sendSuccessResponse(request, [zoneOk, sysOk](JsonObject& data) {
-                    data["message"] = "Partial save";
-                    data["zones"] = zoneOk;
-                    data["system"] = sysOk;
-                });
-            }
-        }
-    );
-
-    // POST /api/zone/config/load - Load zone config from NVS
-    m_server->on("/api/zone/config/load", HTTP_POST,
-        [this](AsyncWebServerRequest* request) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            if (!zoneConfigMgr) {
-                sendLegacyError(request, "Config manager not initialized", 500);
-                return;
-            }
-            bool zoneOk = zoneConfigMgr->loadFromNVS();
-            uint8_t effectId, brightness, speed, paletteId;
-            bool sysOk = zoneConfigMgr->loadSystemState(effectId, brightness, speed, paletteId);
-            if (sysOk) {
-                m_actorSystem.setEffect(effectId);
-                m_actorSystem.setBrightness(brightness);
-                m_actorSystem.setSpeed(speed);
-                m_actorSystem.setPalette(paletteId);
-            }
-            sendSuccessResponse(request, [zoneOk, sysOk](JsonObject& data) {
-                data["message"] = zoneOk || sysOk ? "Configuration loaded" : "No saved configuration";
-                data["zones"] = zoneOk;
-                data["system"] = sysOk;
-            });
-        }
-    );
-
-    // POST /api/zone/preset/load - Load a zone preset
-    m_server->on("/api/zone/preset/load", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            StaticJsonDocument<512> doc;
-            VALIDATE_LEGACY_OR_RETURN(data, len, doc, RequestSchemas::LegacyZonePreset, request);
-
-            // Schema validates preset is 0-4
-            uint8_t presetId = doc["preset"];
-            if (m_zoneComposer) {
-                m_zoneComposer->loadPreset(presetId);
-                sendSuccessResponse(request, [presetId](JsonObject& data) {
-                    data["preset"] = presetId;
-                    data["name"] = ZoneComposer::getPresetName(presetId);
-                });
-            } else {
-                sendLegacyError(request, "Zone composer not initialized", 500);
-            }
-        }
-    );
-
-    // ========== Network API Endpoints ==========
-
-    // Network Status - GET /api/network/status
-    m_server->on("/api/network/status", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-
-        sendSuccessResponse(request, [](JsonObject& data) {
-            data["state"] = WIFI_MANAGER.getStateString();
-            data["connected"] = WIFI_MANAGER.isConnected();
-            data["apMode"] = WIFI_MANAGER.isAPMode();
-            data["ssid"] = WIFI_MANAGER.getSSID();
-            data["rssi"] = WIFI_MANAGER.getRSSI();
-            data["ip"] = WIFI_MANAGER.isConnected() ?
-                         WIFI_MANAGER.getLocalIP().toString() :
-                         WIFI_MANAGER.getAPIP().toString();
-            data["mac"] = WiFi.macAddress();
-            data["channel"] = WIFI_MANAGER.getChannel();
-            data["connectionAttempts"] = WIFI_MANAGER.getConnectionAttempts();
-            data["successfulConnections"] = WIFI_MANAGER.getSuccessfulConnections();
-            data["uptimeSeconds"] = WIFI_MANAGER.getUptimeSeconds();
-        });
-    });
-
-    // Scan Networks - GET /api/network/scan
-    m_server->on("/api/network/scan", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-
-        // Trigger async scan (results cached by WiFiManager)
-        WIFI_MANAGER.scanNetworks();
-
-        // Return cached results immediately
-        const auto& scanResults = WIFI_MANAGER.getScanResults();
-        size_t resultCount = scanResults.size();
-
-        sendSuccessResponse(request, [&scanResults, resultCount](JsonObject& data) {
-            data["scanning"] = (resultCount == 0); // If empty, scan in progress
-            data["lastScanTime"] = WIFI_MANAGER.getLastScanTime();
-            JsonArray list = data["networks"].to<JsonArray>();
-            for (const auto& net : scanResults) {
-                JsonObject entry = list.add<JsonObject>();
-                entry["ssid"] = net.ssid;
-                entry["rssi"] = net.rssi;
-                entry["encryption"] = net.encryption;
-                entry["channel"] = net.channel;
-            }
-            data["count"] = resultCount;
-        });
-    });
-
-    // Connect to Network - POST /api/network/connect
-    m_server->on("/api/network/connect", HTTP_POST, [](AsyncWebServerRequest* request){},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-
-            StaticJsonDocument<512> doc;
-            VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::NetworkConnect, request);
-
-            String ssid = doc["ssid"].as<String>();
-            String password = doc["password"].as<String>(); // Optional, empty for open networks
-
-            WIFI_MANAGER.setCredentials(ssid, password);
-            WIFI_MANAGER.reconnect();
-
-            sendSuccessResponse(request, [&ssid](JsonObject& data) {
-                data["action"] = "connecting";
-                data["ssid"] = ssid;
-                data["message"] = "Connection initiated. Poll /api/network/status for result.";
-            });
-        }
-    );
-
-    // Disconnect - POST /api/network/disconnect
-    m_server->on("/api/network/disconnect", HTTP_POST, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-
-        WIFI_MANAGER.disconnect();
-
-        sendSuccessResponse(request, [](JsonObject& data) {
-            data["action"] = "disconnected";
-        });
-    });
-
-    // ========== OTA Update Endpoint ==========
-
-    // OTA Update - POST /update
-    // Requires X-OTA-Token header for authentication
-    m_server->on("/update", HTTP_POST,
-        // Response handler (called after upload completes)
-        [this](AsyncWebServerRequest* request) {
-            bool success = !Update.hasError();
-            AsyncWebServerResponse* response = request->beginResponse(
-                success ? 200 : 500,
-                "application/json",
-                success ?
-                    "{\"success\":true,\"message\":\"Update successful. Rebooting...\"}" :
-                    "{\"success\":false,\"error\":\"Update failed\"}"
-            );
-            response->addHeader("Connection", "close");
-            request->send(response);
-
-            if (success) {
-                delay(500);
-                ESP.restart();
-            }
-        },
-        // Upload handler (called for each chunk)
-        [this](AsyncWebServerRequest* request, String filename, size_t index,
-               uint8_t* data, size_t len, bool final) {
-            // Validate token on first chunk
-            if (index == 0) {
-                // Rate limit OTA attempts to prevent brute-force
-                if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-
-                String clientIP = request->client()->remoteIP().toString();
-                String token = request->header("X-OTA-Token");
-                if (token != config::NetworkConfig::OTA_UPDATE_TOKEN) {
-                    LW_LOGW("OTA SECURITY: Failed auth attempt from %s", clientIP.c_str());
-                    request->send(401, "application/json",
-                        "{\"success\":false,\"error\":\"Invalid OTA token\"}");
-                    return;
-                }
-
-                LW_LOGI("OTA: Authorized update from %s: %s", clientIP.c_str(), filename.c_str());
-
-                // Begin update
-                if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
-                    LW_LOGE("OTA: Begin failed: %s", Update.errorString());
-                    return;
-                }
-            }
-
-            // Write chunk
-            if (Update.write(data, len) != len) {
-                LW_LOGE("OTA: Write failed: %s", Update.errorString());
-                return;
-            }
-
-            // Finalize on last chunk
-            if (final) {
-                if (Update.end(true)) {
-                    LW_LOGI("OTA: Success! Total size: %u bytes", index + len);
-                } else {
-                    LW_LOGE("OTA: End failed: %s", Update.errorString());
-                }
-            }
-        }
-    );
-}
-
-// ============================================================================
-// V1 API Routes (/api/v1/*)
-// ============================================================================
-
-void WebServer::setupV1Routes() {
-    // API Discovery - GET /api/v1/
-    // Public endpoint - no auth required (API discovery)
-    m_server->on("/api/v1/", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        handleApiDiscovery(request);
-    });
-
-    // Health Endpoint - GET /api/v1/health
-    // Public endpoint - no auth required (health check for monitoring)
-    m_server->on("/api/v1/health", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        handleHealth(request);
-    });
-
-    // Device Status - GET /api/v1/device/status
-    m_server->on("/api/v1/device/status", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        webserver::handlers::DeviceHandlers::handleStatus(request, m_actorSystem, m_renderer, m_startTime, m_apMode, m_ws->count());
-    });
-
-    // Device Info - GET /api/v1/device/info
-    m_server->on("/api/v1/device/info", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        webserver::handlers::DeviceHandlers::handleInfo(request, m_actorSystem, m_renderer);
-    });
-
-#if FEATURE_MULTI_DEVICE
-    // Sync Status - GET /api/v1/sync/status
-    m_server->on("/api/v1/sync/status", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        // Simple status response - full implementation requires SyncManagerActor reference
-        char buffer[256];
-        size_t len = snprintf(buffer, sizeof(buffer),
-            "{\"success\":true,\"data\":{\"enabled\":true,\"uuid\":\"%s\"},\"version\":\"1.0\"}",
-            DEVICE_UUID.toString()
-        );
-        request->send(200, "application/json", buffer);
-    });
-#endif
-
-    // ========== Effect Metadata Endpoint (MUST BE BEFORE /api/v1/effects) ==========
-    // Effect Metadata - GET /api/v1/effects/metadata?id=N
-    m_server->on("/api/v1/effects/metadata", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        webserver::handlers::EffectHandlers::handleMetadata(request, m_renderer);
-    });
-
-    // Effect Parameters - GET /api/v1/effects/parameters?id=N
-    m_server->on("/api/v1/effects/parameters", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        webserver::handlers::EffectHandlers::handleParametersGet(request, m_renderer);
-    });
-
-    // Effect Parameters - POST /api/v1/effects/parameters
-    m_server->on("/api/v1/effects/parameters", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            webserver::handlers::EffectHandlers::handleParametersSet(request, data, len, m_renderer);
-        }
-    );
-
-    // Effect Parameters - PATCH /api/v1/effects/parameters (compat)
-    m_server->on("/api/v1/effects/parameters", HTTP_PATCH,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            webserver::handlers::EffectHandlers::handleParametersSet(request, data, len, m_renderer);
-        }
-    );
-
-    // Effect Families - GET /api/v1/effects/families
-    m_server->on("/api/v1/effects/families", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        webserver::handlers::EffectHandlers::handleFamilies(request);
-    });
-
-    // Effects List - GET /api/v1/effects
-    m_server->on("/api/v1/effects", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        webserver::handlers::EffectHandlers::handleList(request, m_renderer);
-    });
-
-    // Current Effect - GET /api/v1/effects/current
-    m_server->on("/api/v1/effects/current", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        webserver::handlers::EffectHandlers::handleCurrent(request, m_renderer);
-    });
-
-    // Set Effect - POST /api/v1/effects/set
-    m_server->on("/api/v1/effects/set", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            webserver::handlers::EffectHandlers::handleSet(request, data, len, m_actorSystem, m_renderer, [this](){ broadcastStatus(); });
-        }
-    );
-
-    // Set Effect - PUT /api/v1/effects/current (V2 API compatibility)
-    m_server->on("/api/v1/effects/current", HTTP_PUT,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            webserver::handlers::EffectHandlers::handleSet(request, data, len, m_actorSystem, m_renderer, [this](){ broadcastStatus(); });
-        }
-    );
-
-    // Get Parameters - GET /api/v1/parameters
-    m_server->on("/api/v1/parameters", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        handleParametersGet(request);
-    });
-
-    // Set Parameters - POST /api/v1/parameters
-    m_server->on("/api/v1/parameters", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            handleParametersSet(request, data, len);
-        }
-    );
-
-    // Set Parameters - PATCH /api/v1/parameters (V2 API compatibility)
-    m_server->on("/api/v1/parameters", HTTP_PATCH,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            handleParametersSet(request, data, len);
-        }
-    );
-
-    // Get Audio Parameters - GET /api/v1/audio/parameters
-    m_server->on("/api/v1/audio/parameters", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        handleAudioParametersGet(request);
-    });
-
-    // Set Audio Parameters - POST /api/v1/audio/parameters
-    m_server->on("/api/v1/audio/parameters", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            handleAudioParametersSet(request, data, len);
-        }
-    );
-
-    // Set Audio Parameters - PATCH /api/v1/audio/parameters (V2 API compatibility)
-    m_server->on("/api/v1/audio/parameters", HTTP_PATCH,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            handleAudioParametersSet(request, data, len);
-        }
-    );
-
-    // Audio Control - POST /api/v1/audio/control (pause/resume)
-    m_server->on("/api/v1/audio/control", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            handleAudioControl(request, data, len);
-        }
-    );
-
-    // Audio State - GET /api/v1/audio/state
-    m_server->on("/api/v1/audio/state", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        handleAudioStateGet(request);
-    });
-
-    // Audio Tempo - GET /api/v1/audio/tempo
-    m_server->on("/api/v1/audio/tempo", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        handleAudioTempoGet(request);
-    });
-
-    // Audio Presets - GET /api/v1/audio/presets
-    m_server->on("/api/v1/audio/presets", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        handleAudioPresetsList(request);
-    });
-
-    // Audio Preset Save - POST /api/v1/audio/presets
-    m_server->on("/api/v1/audio/presets", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            handleAudioPresetSave(request, data, len);
-        }
-    );
-
-    // Audio Preset get by ID - GET /api/v1/audio/presets/get?id=X
-    m_server->on("/api/v1/audio/presets/get", HTTP_GET,
-        [this](AsyncWebServerRequest* request) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            if (!request->hasParam("id")) {
-                sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                                  ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
-                return;
-            }
-            uint8_t id = request->getParam("id")->value().toInt();
-            handleAudioPresetGet(request, id);
-        }
-    );
-
-    // Audio Preset apply - POST /api/v1/audio/presets/apply?id=X
-    m_server->on("/api/v1/audio/presets/apply", HTTP_POST,
-        [this](AsyncWebServerRequest* request) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            if (!request->hasParam("id")) {
-                sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                                  ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
-                return;
-            }
-            uint8_t id = request->getParam("id")->value().toInt();
-            handleAudioPresetApply(request, id);
-        }
-    );
-
-    // Audio Preset delete - DELETE /api/v1/audio/presets/delete?id=X
-    m_server->on("/api/v1/audio/presets/delete", HTTP_DELETE,
-        [this](AsyncWebServerRequest* request) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            if (!request->hasParam("id")) {
-                sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                                  ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
-                return;
-            }
-            uint8_t id = request->getParam("id")->value().toInt();
-            handleAudioPresetDelete(request, id);
-        }
-    );
-
-    // =========================================================================
-    // Audio-Effect Mapping Routes (Phase 4)
-    // =========================================================================
-
-    // List audio sources - GET /api/v1/audio/mappings/sources
-    m_server->on("/api/v1/audio/mappings/sources", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        handleAudioMappingsListSources(request);
-    });
-
-    // List visual targets - GET /api/v1/audio/mappings/targets
-    m_server->on("/api/v1/audio/mappings/targets", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        handleAudioMappingsListTargets(request);
-    });
-
-    // List curve types - GET /api/v1/audio/mappings/curves
-    m_server->on("/api/v1/audio/mappings/curves", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        handleAudioMappingsListCurves(request);
-    });
-
-    // List all effects with mapping status - GET /api/v1/audio/mappings
-    m_server->on("/api/v1/audio/mappings", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        handleAudioMappingsList(request);
-    });
-
-    // Get mapping for effect - GET /api/v1/audio/mappings/effect?id=X
-    m_server->on("/api/v1/audio/mappings/effect", HTTP_GET,
-        [this](AsyncWebServerRequest* request) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            if (!request->hasParam("id")) {
-                sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                                  ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
-                return;
-            }
-            uint8_t id = request->getParam("id")->value().toInt();
-            handleAudioMappingsGet(request, id);
-        }
-    );
-
-    // Set mapping for effect - POST /api/v1/audio/mappings/effect?id=X
-    m_server->on("/api/v1/audio/mappings/effect", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            if (!request->hasParam("id")) {
-                sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                                  ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
-                return;
-            }
-            uint8_t id = request->getParam("id")->value().toInt();
-            handleAudioMappingsSet(request, id, data, len);
-        }
-    );
-
-    // Delete mapping for effect - DELETE /api/v1/audio/mappings/effect?id=X
-    m_server->on("/api/v1/audio/mappings/effect", HTTP_DELETE,
-        [this](AsyncWebServerRequest* request) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            if (!request->hasParam("id")) {
-                sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                                  ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
-                return;
-            }
-            uint8_t id = request->getParam("id")->value().toInt();
-            handleAudioMappingsDelete(request, id);
-        }
-    );
-
-    // Enable mapping - POST /api/v1/audio/mappings/enable?id=X
-    m_server->on("/api/v1/audio/mappings/enable", HTTP_POST,
-        [this](AsyncWebServerRequest* request) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            if (!request->hasParam("id")) {
-                sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                                  ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
-                return;
-            }
-            uint8_t id = request->getParam("id")->value().toInt();
-            handleAudioMappingsEnable(request, id, true);
-        }
-    );
-
-    // Disable mapping - POST /api/v1/audio/mappings/disable?id=X
-    m_server->on("/api/v1/audio/mappings/disable", HTTP_POST,
-        [this](AsyncWebServerRequest* request) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            if (!request->hasParam("id")) {
-                sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                                  ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
-                return;
-            }
-            uint8_t id = request->getParam("id")->value().toInt();
-            handleAudioMappingsEnable(request, id, false);
-        }
-    );
-
-    // Mapping stats - GET /api/v1/audio/mappings/stats
-    m_server->on("/api/v1/audio/mappings/stats", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        handleAudioMappingsStats(request);
-    });
-
-    // =========================================================================
-    // Zone AGC Routes
-    // =========================================================================
-
-    // Zone AGC - GET status
-    m_server->on("/api/v1/audio/zone-agc", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        handleAudioZoneAGCGet(request);
-    });
-
-    // Zone AGC - POST control
-    m_server->on("/api/v1/audio/zone-agc", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-            if (!checkAPIKey(request)) return;
-            handleAudioZoneAGCSet(request, data, len);
-        }
-    );
-
-    // =========================================================================
-    // Spike Detection Routes
-    // =========================================================================
-
-    // Spike Detection - GET stats
-    m_server->on("/api/v1/audio/spike-detection", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        handleAudioSpikeDetectionGet(request);
-    });
-
-    // Spike Detection - POST reset
-    m_server->on("/api/v1/audio/spike-detection/reset", HTTP_POST, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        handleAudioSpikeDetectionReset(request);
-    });
-
-    // =========================================================================
-    // Noise Calibration Routes (SensoryBridge pattern)
-    // =========================================================================
-
-    // Calibration Status - GET /api/v1/audio/calibrate
-    m_server->on("/api/v1/audio/calibrate", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        handleAudioCalibrateStatus(request);
-    });
-
-    // Calibration Start - POST /api/v1/audio/calibrate/start
-    m_server->on("/api/v1/audio/calibrate/start", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-            if (!checkAPIKey(request)) return;
-            handleAudioCalibrateStart(request, data, len);
-        }
-    );
-
-    // Calibration Cancel - POST /api/v1/audio/calibrate/cancel
-    m_server->on("/api/v1/audio/calibrate/cancel", HTTP_POST, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        handleAudioCalibrateCancel(request);
-    });
-
-    // Calibration Apply - POST /api/v1/audio/calibrate/apply
-    m_server->on("/api/v1/audio/calibrate/apply", HTTP_POST, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        handleAudioCalibrateApply(request);
-    });
-
-#if FEATURE_AUDIO_BENCHMARK
-    // =========================================================================
-    // Audio Benchmark Routes
-    // =========================================================================
-
-    // Benchmark Get - GET /api/v1/audio/benchmark
-    m_server->on("/api/v1/audio/benchmark", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        handleBenchmarkGet(request);
-    });
-
-    // Benchmark Start - POST /api/v1/audio/benchmark/start
-    m_server->on("/api/v1/audio/benchmark/start", HTTP_POST, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        handleBenchmarkStart(request);
-    });
-
-    // Benchmark Stop - POST /api/v1/audio/benchmark/stop
-    m_server->on("/api/v1/audio/benchmark/stop", HTTP_POST, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        handleBenchmarkStop(request);
-    });
-
-    // Benchmark History - GET /api/v1/audio/benchmark/history
-    m_server->on("/api/v1/audio/benchmark/history", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        handleBenchmarkHistory(request);
-    });
-#endif
-
-    // Transition Types - GET /api/v1/transitions/types
-    m_server->on("/api/v1/transitions/types", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        handleTransitionTypes(request);
-    });
-
-    // Trigger Transition - POST /api/v1/transitions/trigger
-    m_server->on("/api/v1/transitions/trigger", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            handleTransitionTrigger(request, data, len);
-        }
-    );
-
-    // Batch Operations - POST /api/v1/batch
-    m_server->on("/api/v1/batch", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            handleBatch(request, data, len);
-        }
-    );
-
-    // Palettes List - GET /api/v1/palettes
-    m_server->on("/api/v1/palettes", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        handlePalettesList(request);
-    });
-
-    // Current Palette - GET /api/v1/palettes/current
-    m_server->on("/api/v1/palettes/current", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        handlePalettesCurrent(request);
-    });
-
-    // Set Palette - POST /api/v1/palettes/set
-    m_server->on("/api/v1/palettes/set", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            handlePalettesSet(request, data, len);
-        }
-    );
-
-    // ========== Transition Config Endpoints ==========
-
-    // Transition Config - GET /api/v1/transitions/config
-    m_server->on("/api/v1/transitions/config", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        handleTransitionConfigGet(request);
-    });
-
-    // Transition Config - POST /api/v1/transitions/config
-    m_server->on("/api/v1/transitions/config", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            handleTransitionConfigSet(request, data, len);
-        }
-    );
-
-    // ========== Narrative Endpoints ==========
-
-    // Narrative Status - GET /api/v1/narrative/status
-    m_server->on("/api/v1/narrative/status", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        handleNarrativeStatus(request);
-    });
-
-    // Narrative Config - GET /api/v1/narrative/config
-    m_server->on("/api/v1/narrative/config", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        handleNarrativeConfigGet(request);
-    });
-
-    // Narrative Config - POST /api/v1/narrative/config
-    m_server->on("/api/v1/narrative/config", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            handleNarrativeConfigSet(request, data, len);
-        }
-    );
-
-    // ========== OpenAPI Specification ==========
-
-    // OpenAPI - GET /api/v1/openapi.json
-    // Public endpoint - no auth required (API documentation)
-    m_server->on("/api/v1/openapi.json", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        handleOpenApiSpec(request);
-    });
-
-    // ========== Zone v1 REST Endpoints ==========
-
-    // List all zones - GET /api/v1/zones
-    m_server->on("/api/v1/zones", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        webserver::handlers::ZoneHandlers::handleList(request, m_actorSystem, m_renderer, m_zoneComposer);
-    });
-
-    // Set zone layout - POST /api/v1/zones/layout
-    m_server->on("/api/v1/zones/layout", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            webserver::handlers::ZoneHandlers::handleLayout(request, data, len, m_zoneComposer, [this](){ broadcastZoneState(); });
-        }
-    );
-
-    // Get single zone - GET /api/v1/zones/0, /api/v1/zones/1, etc.
-    // Using regex-style path with parameter
-    m_server->on("^\\/api\\/v1\\/zones\\/([0-3])$", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-        webserver::handlers::ZoneHandlers::handleGet(request, m_actorSystem, m_renderer, m_zoneComposer);
-    });
-
-    // Set zone effect - POST /api/v1/zones/:id/effect
-    m_server->on("^\\/api\\/v1\\/zones\\/([0-3])\\/effect$", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            webserver::handlers::ZoneHandlers::handleSetEffect(request, data, len, m_actorSystem, m_renderer, m_zoneComposer, [this](){ broadcastZoneState(); });
-        }
-    );
-
-    // Set zone brightness - POST /api/v1/zones/:id/brightness
-    m_server->on("^\\/api\\/v1\\/zones\\/([0-3])\\/brightness$", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            webserver::handlers::ZoneHandlers::handleSetBrightness(request, data, len, m_zoneComposer, [this](){ broadcastZoneState(); });
-        }
-    );
-
-    // Set zone speed - POST /api/v1/zones/:id/speed
-    m_server->on("^\\/api\\/v1\\/zones\\/([0-3])\\/speed$", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            webserver::handlers::ZoneHandlers::handleSetSpeed(request, data, len, m_zoneComposer, [this](){ broadcastZoneState(); });
-        }
-    );
-
-    // Set zone palette - POST /api/v1/zones/:id/palette
-    m_server->on("^\\/api\\/v1\\/zones\\/([0-3])\\/palette$", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            webserver::handlers::ZoneHandlers::handleSetPalette(request, data, len, m_zoneComposer, [this](){ broadcastZoneState(); });
-        }
-    );
-
-    // Set zone blend mode - POST /api/v1/zones/:id/blend
-    m_server->on("^\\/api\\/v1\\/zones\\/([0-3])\\/blend$", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            webserver::handlers::ZoneHandlers::handleSetBlend(request, data, len, m_zoneComposer, [this](){ broadcastZoneState(); });
-        }
-    );
-
-    // Set zone enabled - POST /api/v1/zones/:id/enabled
-    m_server->on("^\\/api\\/v1\\/zones\\/([0-3])\\/enabled$", HTTP_POST,
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-        if (!checkAPIKey(request)) return;
-            webserver::handlers::ZoneHandlers::handleSetEnabled(request, data, len, m_zoneComposer, [this](){ broadcastZoneState(); });
-        }
-    );
-}
-
-// ============================================================================
-// Legacy API Handlers
-// ============================================================================
-
-void WebServer::handleLegacyStatus(AsyncWebServerRequest* request) {
-    if (!m_actorSystem.isRunning()) {
-        sendLegacyError(request, "System not ready", HttpStatus::SERVICE_UNAVAILABLE);
-        return;
-    }
-
-    StaticJsonDocument<512> doc;
-    RendererActor* renderer = m_renderer;
-
-    doc["effect"] = renderer->getCurrentEffect();
-    doc["brightness"] = renderer->getBrightness();
-    doc["speed"] = renderer->getSpeed();
-    doc["palette"] = renderer->getPaletteIndex();
-    doc["freeHeap"] = ESP.getFreeHeap();
-
-    // Network info
-    JsonObject network = doc["network"].to<JsonObject>();
-    network["connected"] = WiFi.status() == WL_CONNECTED;
-    network["ap_mode"] = m_apMode;
-    if (WiFi.status() == WL_CONNECTED) {
-        network["ip"] = WiFi.localIP().toString();
-        network["rssi"] = WiFi.RSSI();
-    } else if (m_apMode) {
-        network["ap_ip"] = WiFi.softAPIP().toString();
-    }
-
-    String output;
-    serializeJson(doc, output);
-    request->send(HttpStatus::OK, "application/json", output);
-}
-
-void WebServer::handleLegacySetEffect(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    StaticJsonDocument<512> doc;
-    VALIDATE_LEGACY_OR_RETURN(data, len, doc, RequestSchemas::LegacySetEffect, request);
-
-    uint8_t effectId = doc["effect"];
-    if (effectId >= m_renderer->getEffectCount()) {
-        sendLegacyError(request, "Invalid effect ID");
-        return;
-    }
-
-    m_actorSystem.setEffect(effectId);
-    sendLegacySuccess(request);
-    broadcastStatus();
-}
-
-void WebServer::handleLegacySetBrightness(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    StaticJsonDocument<512> doc;
-    VALIDATE_LEGACY_OR_RETURN(data, len, doc, RequestSchemas::LegacySetBrightness, request);
-
-    uint8_t brightness = doc["brightness"];
-    m_actorSystem.setBrightness(brightness);
-    sendLegacySuccess(request);
-    broadcastStatus();
-}
-
-void WebServer::handleLegacySetSpeed(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    StaticJsonDocument<512> doc;
-    VALIDATE_LEGACY_OR_RETURN(data, len, doc, RequestSchemas::LegacySetSpeed, request);
-
-    // Range is validated by schema (1-50)
-    uint8_t speed = doc["speed"];
-    m_actorSystem.setSpeed(speed);
-    sendLegacySuccess(request);
-    broadcastStatus();
-}
-
-void WebServer::handleLegacySetPalette(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    StaticJsonDocument<512> doc;
-    VALIDATE_LEGACY_OR_RETURN(data, len, doc, RequestSchemas::LegacySetPalette, request);
-
-    uint8_t paletteId = doc["paletteId"];
-    m_actorSystem.setPalette(paletteId);
-    sendLegacySuccess(request);
-    broadcastStatus();
-}
-
-void WebServer::handleLegacyZoneCount(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    if (!m_zoneComposer) {
-        sendLegacyError(request, "Zone system not available");
-        return;
-    }
-
-    StaticJsonDocument<512> doc;
-    VALIDATE_LEGACY_OR_RETURN(data, len, doc, RequestSchemas::LegacyZoneCount, request);
-
-    // Range validated by schema (1-4)
-    uint8_t count = doc["count"];
-    m_zoneComposer->setLayout(count == 4 ? ZoneLayout::QUAD : ZoneLayout::TRIPLE);
-    sendLegacySuccess(request);
-    broadcastZoneState();
-}
-
-void WebServer::handleLegacyZoneEffect(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    if (!m_zoneComposer) {
-        sendLegacyError(request, "Zone system not available");
-        return;
-    }
-
-    StaticJsonDocument<512> doc;
-    VALIDATE_LEGACY_OR_RETURN(data, len, doc, RequestSchemas::LegacyZoneEffect, request);
-
-    uint8_t zoneId = doc["zoneId"];
-    uint8_t effectId = doc["effectId"];
-
-    if (zoneId >= m_zoneComposer->getZoneCount()) {
-        sendLegacyError(request, "Invalid zone ID");
-        return;
-    }
-
-    m_zoneComposer->setZoneEffect(zoneId, effectId);
-    sendLegacySuccess(request);
-    broadcastZoneState();
-}
-
-// ============================================================================
-// V1 API Handlers
-// ============================================================================
-
-void WebServer::handleHealth(AsyncWebServerRequest* request) {
-    StaticJsonDocument<512> doc;
-    doc["success"] = true;
-    doc["status"] = "healthy";
-    
-    JsonObject data = doc["data"].to<JsonObject>();
-    data["uptime"] = millis() / 1000;
-    data["freeHeap"] = ESP.getFreeHeap();
-    data["totalHeap"] = ESP.getHeapSize();
-    data["minFreeHeap"] = ESP.getMinFreeHeap();
-    
-    if (m_renderer) {
-        data["rendererRunning"] = m_renderer->isRunning();
-        data["queueUtilization"] = m_renderer->getQueueUtilization();
-        data["queueLength"] = m_renderer->getQueueLength();
-        data["queueCapacity"] = 32;  // RendererActor queue size
-        
-        const RenderStats& stats = m_renderer->getStats();
-        data["fps"] = stats.currentFPS;
-        data["cpuPercent"] = stats.cpuPercent;
-    }
-    
-    data["wsClients"] = m_ws->count();
-    data["wsMaxClients"] = WebServerConfig::MAX_WS_CLIENTS;
-    
-    String output;
-    serializeJson(doc, output);
-    request->send(HttpStatus::OK, "application/json", output);
-}
-
-void WebServer::handleApiDiscovery(AsyncWebServerRequest* request) {
-    sendSuccessResponseLarge(request, [this](JsonObject& data) {
-        data["name"] = "LightwaveOS";
-        data["apiVersion"] = API_VERSION;
-        data["description"] = "ESP32-S3 LED Control System v2";
-
-        // Hardware info
-        JsonObject hw = data["hardware"].to<JsonObject>();
-        hw["ledsTotal"] = LedConfig::TOTAL_LEDS;
-        hw["strips"] = LedConfig::NUM_STRIPS;
-        hw["centerPoint"] = LedConfig::CENTER_POINT;
-        hw["maxZones"] = 4;
-
-        // HATEOAS links
-        JsonObject links = data["_links"].to<JsonObject>();
-        links["self"] = "/api/v1/";
-        links["device"] = "/api/v1/device/status";
-        links["effects"] = "/api/v1/effects";
-        links["parameters"] = "/api/v1/parameters";
-        links["audioParameters"] = "/api/v1/audio/parameters";
-        links["transitions"] = "/api/v1/transitions/types";
-        links["batch"] = "/api/v1/batch";
-        links["websocket"] = "ws://lightwaveos.local/ws";
-    }, 1024);
-}
-
-void WebServer::handleParametersGet(AsyncWebServerRequest* request) {
-    sendSuccessResponse(request, [this](JsonObject& data) {
-        data["brightness"] = m_renderer->getBrightness();
-        data["speed"] = m_renderer->getSpeed();
-        data["paletteId"] = m_renderer->getPaletteIndex();
-        data["hue"] = m_renderer->getHue();
-        data["intensity"] = m_renderer->getIntensity();
-        data["saturation"] = m_renderer->getSaturation();
-        data["complexity"] = m_renderer->getComplexity();
-        data["variation"] = m_renderer->getVariation();
-        data["mood"] = m_renderer->getMood();  // Sensory Bridge mood (0-255)
-        data["fadeAmount"] = m_renderer->getFadeAmount();
-    });
-}
-
-void WebServer::handleParametersSet(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    StaticJsonDocument<512> doc;
-    // Parse and validate - all fields are optional but must be valid if present
-    auto vr = RequestValidator::parseAndValidate(data, len, doc, RequestSchemas::SetParameters);
-    if (!vr.valid) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          vr.errorCode, vr.errorMessage, vr.fieldName);
-        return;
-    }
-
-    bool updated = false;
-
-    if (doc.containsKey("brightness")) {
-        uint8_t val = doc["brightness"];
-        m_actorSystem.setBrightness(val);
-        updated = true;
-    }
-
-    if (doc.containsKey("speed")) {
-        uint8_t val = doc["speed"];
-        // Range already validated by schema (1-100)
-        m_actorSystem.setSpeed(val);
-        updated = true;
-    }
-
-    if (doc.containsKey("paletteId")) {
-        uint8_t val = doc["paletteId"];
-        m_actorSystem.setPalette(val);
-        updated = true;
-    }
-
-    if (doc.containsKey("intensity")) {
-        uint8_t val = doc["intensity"];
-        m_actorSystem.setIntensity(val);
-        updated = true;
-    }
-
-    if (doc.containsKey("saturation")) {
-        uint8_t val = doc["saturation"];
-        m_actorSystem.setSaturation(val);
-        updated = true;
-    }
-
-    if (doc.containsKey("complexity")) {
-        uint8_t val = doc["complexity"];
-        m_actorSystem.setComplexity(val);
-        updated = true;
-    }
-
-    if (doc.containsKey("variation")) {
-        uint8_t val = doc["variation"];
-        m_actorSystem.setVariation(val);
-        updated = true;
-    }
-
-    if (doc.containsKey("hue")) {
-        uint8_t val = doc["hue"];
-        m_actorSystem.setHue(val);
-        updated = true;
-    }
-
-    if (doc.containsKey("mood")) {
-        uint8_t val = doc["mood"];
-        m_actorSystem.setMood(val);  // Sensory Bridge: 0=reactive, 255=smooth
-        updated = true;
-    }
-
-    if (doc.containsKey("fadeAmount")) {
-        uint8_t val = doc["fadeAmount"];
-        m_actorSystem.setFadeAmount(val);
-        updated = true;
-    }
-
-    if (updated) {
-        sendSuccessResponse(request);
-        broadcastStatus();
-    } else {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::MISSING_FIELD, "No valid parameters provided");
-    }
-}
-
+    // Create WebServer context for gateway
+    webserver::WebServerContext ctx(
+        m_actorSystem,
+        m_renderer,
+        m_zoneComposer,
+        m_rateLimiter,
+        m_ledBroadcaster
 #if FEATURE_AUDIO_SYNC
-void WebServer::handleAudioParametersGet(AsyncWebServerRequest* request) {
-    auto* audio = m_actorSystem.getAudio();
-    if (!audio) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::SYSTEM_NOT_READY, "Audio system not available");
-        return;
-    }
-
-    audio::AudioPipelineTuning pipeline = audio->getPipelineTuning();
-    audio::AudioDspState state = audio->getDspState();
-    audio::AudioContractTuning contract = m_renderer ? m_renderer->getAudioContractTuning()
-                                                     : audio::clampAudioContractTuning(audio::AudioContractTuning{});
-
-    sendSuccessResponse(request, [&](JsonObject& data) {
-        JsonObject pipelineObj = data["pipeline"].to<JsonObject>();
-        pipelineObj["dcAlpha"] = pipeline.dcAlpha;
-        pipelineObj["agcTargetRms"] = pipeline.agcTargetRms;
-        pipelineObj["agcMinGain"] = pipeline.agcMinGain;
-        pipelineObj["agcMaxGain"] = pipeline.agcMaxGain;
-        pipelineObj["agcAttack"] = pipeline.agcAttack;
-        pipelineObj["agcRelease"] = pipeline.agcRelease;
-        pipelineObj["agcClipReduce"] = pipeline.agcClipReduce;
-        pipelineObj["agcIdleReturnRate"] = pipeline.agcIdleReturnRate;
-        pipelineObj["noiseFloorMin"] = pipeline.noiseFloorMin;
-        pipelineObj["noiseFloorRise"] = pipeline.noiseFloorRise;
-        pipelineObj["noiseFloorFall"] = pipeline.noiseFloorFall;
-        pipelineObj["gateStartFactor"] = pipeline.gateStartFactor;
-        pipelineObj["gateRangeFactor"] = pipeline.gateRangeFactor;
-        pipelineObj["gateRangeMin"] = pipeline.gateRangeMin;
-        pipelineObj["rmsDbFloor"] = pipeline.rmsDbFloor;
-        pipelineObj["rmsDbCeil"] = pipeline.rmsDbCeil;
-        pipelineObj["bandDbFloor"] = pipeline.bandDbFloor;
-        pipelineObj["bandDbCeil"] = pipeline.bandDbCeil;
-        pipelineObj["chromaDbFloor"] = pipeline.chromaDbFloor;
-        pipelineObj["chromaDbCeil"] = pipeline.chromaDbCeil;
-        pipelineObj["fluxScale"] = pipeline.fluxScale;
-
-        JsonObject controlBus = data["controlBus"].to<JsonObject>();
-        controlBus["alphaFast"] = pipeline.controlBusAlphaFast;
-        controlBus["alphaSlow"] = pipeline.controlBusAlphaSlow;
-
-        JsonObject contractObj = data["contract"].to<JsonObject>();
-        contractObj["audioStalenessMs"] = contract.audioStalenessMs;
-        contractObj["bpmMin"] = contract.bpmMin;
-        contractObj["bpmMax"] = contract.bpmMax;
-        contractObj["bpmTau"] = contract.bpmTau;
-        contractObj["confidenceTau"] = contract.confidenceTau;
-        contractObj["phaseCorrectionGain"] = contract.phaseCorrectionGain;
-        contractObj["barCorrectionGain"] = contract.barCorrectionGain;
-        contractObj["beatsPerBar"] = contract.beatsPerBar;
-        contractObj["beatUnit"] = contract.beatUnit;
-
-        JsonObject stateObj = data["state"].to<JsonObject>();
-        stateObj["rmsRaw"] = state.rmsRaw;
-        stateObj["rmsMapped"] = state.rmsMapped;
-        stateObj["rmsPreGain"] = state.rmsPreGain;
-        stateObj["fluxMapped"] = state.fluxMapped;
-        stateObj["agcGain"] = state.agcGain;
-        stateObj["dcEstimate"] = state.dcEstimate;
-        stateObj["noiseFloor"] = state.noiseFloor;
-        stateObj["minSample"] = state.minSample;
-        stateObj["maxSample"] = state.maxSample;
-        stateObj["peakCentered"] = state.peakCentered;
-        stateObj["meanSample"] = state.meanSample;
-        stateObj["clipCount"] = state.clipCount;
-
-        JsonObject caps = data["capabilities"].to<JsonObject>();
-        caps["sampleRate"] = audio::SAMPLE_RATE;
-        caps["hopSize"] = audio::HOP_SIZE;
-        caps["fftSize"] = audio::FFT_SIZE;
-        caps["goertzelWindow"] = audio::GOERTZEL_WINDOW;
-        caps["bandCount"] = audio::NUM_BANDS;
-        caps["chromaCount"] = audio::CONTROLBUS_NUM_CHROMA;
-        caps["waveformPoints"] = audio::CONTROLBUS_WAVEFORM_N;
-    });
-}
-
-void WebServer::handleAudioParametersSet(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    auto* audio = m_actorSystem.getAudio();
-    if (!audio) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::SYSTEM_NOT_READY, "Audio system not available");
-        return;
-    }
-
-    StaticJsonDocument<512> doc;
-    DeserializationError error = deserializeJson(doc, data, len);
-    if (error) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::INVALID_JSON, "Invalid JSON payload");
-        return;
-    }
-
-    bool updatedPipeline = false;
-    bool updatedContract = false;
-    bool resetState = false;
-
-    audio::AudioPipelineTuning pipeline = audio->getPipelineTuning();
-    audio::AudioContractTuning contract = m_renderer ? m_renderer->getAudioContractTuning()
-                                                     : audio::clampAudioContractTuning(audio::AudioContractTuning{});
-
-    auto applyFloat = [](JsonVariant source, const char* key, float& target, bool& updated) {
-        if (!source.is<JsonObject>()) return;
-        if (source.containsKey(key)) {
-            target = source[key].as<float>();
-            updated = true;
-        }
-    };
-
-    auto applyUint8 = [](JsonVariant source, const char* key, uint8_t& target, bool& updated) {
-        if (!source.is<JsonObject>()) return;
-        if (source.containsKey(key)) {
-            target = source[key].as<uint8_t>();
-            updated = true;
-        }
-    };
-
-    JsonVariant pipelineSrc = doc.as<JsonVariant>();
-    if (doc.containsKey("pipeline")) {
-        pipelineSrc = doc["pipeline"];
-    }
-    applyFloat(pipelineSrc, "dcAlpha", pipeline.dcAlpha, updatedPipeline);
-    applyFloat(pipelineSrc, "agcTargetRms", pipeline.agcTargetRms, updatedPipeline);
-    applyFloat(pipelineSrc, "agcMinGain", pipeline.agcMinGain, updatedPipeline);
-    applyFloat(pipelineSrc, "agcMaxGain", pipeline.agcMaxGain, updatedPipeline);
-    applyFloat(pipelineSrc, "agcAttack", pipeline.agcAttack, updatedPipeline);
-    applyFloat(pipelineSrc, "agcRelease", pipeline.agcRelease, updatedPipeline);
-    applyFloat(pipelineSrc, "agcClipReduce", pipeline.agcClipReduce, updatedPipeline);
-    applyFloat(pipelineSrc, "agcIdleReturnRate", pipeline.agcIdleReturnRate, updatedPipeline);
-    applyFloat(pipelineSrc, "noiseFloorMin", pipeline.noiseFloorMin, updatedPipeline);
-    applyFloat(pipelineSrc, "noiseFloorRise", pipeline.noiseFloorRise, updatedPipeline);
-    applyFloat(pipelineSrc, "noiseFloorFall", pipeline.noiseFloorFall, updatedPipeline);
-    applyFloat(pipelineSrc, "gateStartFactor", pipeline.gateStartFactor, updatedPipeline);
-    applyFloat(pipelineSrc, "gateRangeFactor", pipeline.gateRangeFactor, updatedPipeline);
-    applyFloat(pipelineSrc, "gateRangeMin", pipeline.gateRangeMin, updatedPipeline);
-    applyFloat(pipelineSrc, "rmsDbFloor", pipeline.rmsDbFloor, updatedPipeline);
-    applyFloat(pipelineSrc, "rmsDbCeil", pipeline.rmsDbCeil, updatedPipeline);
-    applyFloat(pipelineSrc, "bandDbFloor", pipeline.bandDbFloor, updatedPipeline);
-    applyFloat(pipelineSrc, "bandDbCeil", pipeline.bandDbCeil, updatedPipeline);
-    applyFloat(pipelineSrc, "chromaDbFloor", pipeline.chromaDbFloor, updatedPipeline);
-    applyFloat(pipelineSrc, "chromaDbCeil", pipeline.chromaDbCeil, updatedPipeline);
-    applyFloat(pipelineSrc, "fluxScale", pipeline.fluxScale, updatedPipeline);
-
-    JsonVariant controlBusSrc = doc.as<JsonVariant>();
-    if (doc.containsKey("controlBus")) {
-        controlBusSrc = doc["controlBus"];
-    }
-    applyFloat(controlBusSrc, "alphaFast", pipeline.controlBusAlphaFast, updatedPipeline);
-    applyFloat(controlBusSrc, "alphaSlow", pipeline.controlBusAlphaSlow, updatedPipeline);
-
-    JsonVariant contractSrc = doc.as<JsonVariant>();
-    if (doc.containsKey("contract")) {
-        contractSrc = doc["contract"];
-    }
-    applyFloat(contractSrc, "audioStalenessMs", contract.audioStalenessMs, updatedContract);
-    applyFloat(contractSrc, "bpmMin", contract.bpmMin, updatedContract);
-    applyFloat(contractSrc, "bpmMax", contract.bpmMax, updatedContract);
-    applyFloat(contractSrc, "bpmTau", contract.bpmTau, updatedContract);
-    applyFloat(contractSrc, "confidenceTau", contract.confidenceTau, updatedContract);
-    applyFloat(contractSrc, "phaseCorrectionGain", contract.phaseCorrectionGain, updatedContract);
-    applyFloat(contractSrc, "barCorrectionGain", contract.barCorrectionGain, updatedContract);
-    applyUint8(contractSrc, "beatsPerBar", contract.beatsPerBar, updatedContract);
-    applyUint8(contractSrc, "beatUnit", contract.beatUnit, updatedContract);
-
-    if (doc.containsKey("resetState")) {
-        resetState = doc["resetState"] | false;
-    }
-
-    if (updatedPipeline) {
-        audio->setPipelineTuning(pipeline);
-    }
-    if (updatedContract && m_renderer) {
-        m_renderer->setAudioContractTuning(contract);
-    }
-    if (resetState) {
-        audio->resetDspState();
-    }
-
-    sendSuccessResponse(request, [updatedPipeline, updatedContract, resetState](JsonObject& resp) {
-        JsonArray updated = resp["updated"].to<JsonArray>();
-        if (updatedPipeline) updated.add("pipeline");
-        if (updatedContract) updated.add("contract");
-        if (resetState) updated.add("state");
-    });
-}
-
-void WebServer::handleAudioControl(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    auto* audio = m_actorSystem.getAudio();
-    if (!audio) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
-        return;
-    }
-
-    StaticJsonDocument<512> doc;
-    if (deserializeJson(doc, data, len)) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::INVALID_JSON, "Invalid JSON");
-        return;
-    }
-
-    const char* action = doc["action"] | "";
-    if (strcmp(action, "pause") == 0) {
-        audio->pause();
-        sendSuccessResponse(request, [](JsonObject& d) {
-            d["state"] = "PAUSED";
-            d["action"] = "pause";
-        });
-    } else if (strcmp(action, "resume") == 0) {
-        audio->resume();
-        sendSuccessResponse(request, [](JsonObject& d) {
-            d["state"] = "RUNNING";
-            d["action"] = "resume";
-        });
-    } else {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::INVALID_ACTION, "Use action: pause or resume", "action");
-    }
-}
-
-void WebServer::handleAudioStateGet(AsyncWebServerRequest* request) {
-    auto* audio = m_actorSystem.getAudio();
-    if (!audio) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
-        return;
-    }
-
-    audio::AudioActorState state = audio->getState();
-    const audio::AudioActorStats& stats = audio->getStats();
-
-    const char* stateStr = "UNKNOWN";
-    switch (state) {
-        case audio::AudioActorState::UNINITIALIZED: stateStr = "UNINITIALIZED"; break;
-        case audio::AudioActorState::INITIALIZING:  stateStr = "INITIALIZING"; break;
-        case audio::AudioActorState::RUNNING:       stateStr = "RUNNING"; break;
-        case audio::AudioActorState::PAUSED:        stateStr = "PAUSED"; break;
-        case audio::AudioActorState::ERROR:         stateStr = "ERROR"; break;
-    }
-
-    sendSuccessResponse(request, [stateStr, &stats, audio](JsonObject& d) {
-        d["state"] = stateStr;
-        d["capturing"] = audio->isCapturing();
-        d["hopCount"] = audio->getHopCount();
-        d["sampleIndex"] = (uint32_t)(audio->getSampleIndex() & 0xFFFFFFFF);
-        JsonObject statsObj = d["stats"].to<JsonObject>();
-        statsObj["tickCount"] = stats.tickCount;
-        statsObj["captureSuccess"] = stats.captureSuccessCount;
-        statsObj["captureFail"] = stats.captureFailCount;
-    });
-}
-
-void WebServer::handleAudioTempoGet(AsyncWebServerRequest* request) {
-    auto* renderer = m_actorSystem.getRenderer();
-    if (!renderer) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::AUDIO_UNAVAILABLE, "Renderer not available");
-        return;
-    }
-
-    const audio::MusicalGridSnapshot& grid = renderer->getLastMusicalGrid();
-
-    sendSuccessResponse(request, [&grid](JsonObject& d) {
-        d["bpm"] = grid.bpm_smoothed;
-        d["confidence"] = grid.tempo_confidence;
-        d["beat_phase"] = grid.beat_phase01;
-        d["bar_phase"] = grid.bar_phase01;
-        d["beat_in_bar"] = grid.beat_in_bar;
-        d["beats_per_bar"] = grid.beats_per_bar;
-    });
-}
-
-void WebServer::handleAudioPresetsList(AsyncWebServerRequest* request) {
-    using namespace persistence;
-    auto& mgr = AudioTuningManager::instance();
-
-    char names[AudioTuningManager::MAX_PRESETS][AudioTuningPreset::NAME_MAX_LEN];
-    uint8_t ids[AudioTuningManager::MAX_PRESETS];
-    uint8_t count = mgr.listPresets(names, ids);
-
-    sendSuccessResponse(request, [&names, &ids, count](JsonObject& d) {
-        d["count"] = count;
-        JsonArray presets = d["presets"].to<JsonArray>();
-        for (uint8_t i = 0; i < count; i++) {
-            JsonObject p = presets.add<JsonObject>();
-            p["id"] = ids[i];
-            p["name"] = names[i];
-        }
-    });
-}
-
-void WebServer::handleAudioPresetGet(AsyncWebServerRequest* request, uint8_t presetId) {
-    using namespace persistence;
-    auto& mgr = AudioTuningManager::instance();
-
-    if (presetId >= AudioTuningManager::MAX_PRESETS) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Preset ID must be 0-9", "presetId");
-        return;
-    }
-
-    audio::AudioPipelineTuning pipeline;
-    audio::AudioContractTuning contract;
-    char name[AudioTuningPreset::NAME_MAX_LEN];
-
-    if (!mgr.loadPreset(presetId, pipeline, contract, name)) {
-        sendErrorResponse(request, HttpStatus::NOT_FOUND,
-                          ErrorCodes::NOT_FOUND, "Preset not found", "presetId");
-        return;
-    }
-
-    sendSuccessResponseLarge(request, [presetId, &name, &pipeline, &contract](JsonObject& d) {
-        d["id"] = presetId;
-        d["name"] = name;
-
-        // Pipeline tuning (DSP parameters)
-        JsonObject p = d["pipeline"].to<JsonObject>();
-        p["dcAlpha"] = pipeline.dcAlpha;
-        p["agcTargetRms"] = pipeline.agcTargetRms;
-        p["agcMinGain"] = pipeline.agcMinGain;
-        p["agcMaxGain"] = pipeline.agcMaxGain;
-        p["agcAttack"] = pipeline.agcAttack;
-        p["agcRelease"] = pipeline.agcRelease;
-        p["agcClipReduce"] = pipeline.agcClipReduce;
-        p["agcIdleReturnRate"] = pipeline.agcIdleReturnRate;
-        p["noiseFloorMin"] = pipeline.noiseFloorMin;
-        p["noiseFloorRise"] = pipeline.noiseFloorRise;
-        p["noiseFloorFall"] = pipeline.noiseFloorFall;
-        p["gateStartFactor"] = pipeline.gateStartFactor;
-        p["gateRangeFactor"] = pipeline.gateRangeFactor;
-        p["gateRangeMin"] = pipeline.gateRangeMin;
-        p["rmsDbFloor"] = pipeline.rmsDbFloor;
-        p["rmsDbCeil"] = pipeline.rmsDbCeil;
-        p["bandDbFloor"] = pipeline.bandDbFloor;
-        p["bandDbCeil"] = pipeline.bandDbCeil;
-        p["chromaDbFloor"] = pipeline.chromaDbFloor;
-        p["chromaDbCeil"] = pipeline.chromaDbCeil;
-        p["fluxScale"] = pipeline.fluxScale;
-        p["controlBusAlphaFast"] = pipeline.controlBusAlphaFast;
-        p["controlBusAlphaSlow"] = pipeline.controlBusAlphaSlow;
-
-        // Contract tuning (tempo/beat parameters)
-        JsonObject c = d["contract"].to<JsonObject>();
-        c["audioStalenessMs"] = contract.audioStalenessMs;
-        c["bpmMin"] = contract.bpmMin;
-        c["bpmMax"] = contract.bpmMax;
-        c["bpmTau"] = contract.bpmTau;
-        c["confidenceTau"] = contract.confidenceTau;
-        c["phaseCorrectionGain"] = contract.phaseCorrectionGain;
-        c["barCorrectionGain"] = contract.barCorrectionGain;
-        c["beatsPerBar"] = contract.beatsPerBar;
-        c["beatUnit"] = contract.beatUnit;
-    }, 2048);
-}
-
-void WebServer::handleAudioPresetSave(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    using namespace persistence;
-
-    StaticJsonDocument<512> doc;
-    if (deserializeJson(doc, data, len)) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::INVALID_JSON, "JSON parse error");
-        return;
-    }
-
-    const char* name = doc["name"] | "Unnamed";
-
-    // Get current tuning from AudioActor
-    auto* audioActor = m_actorSystem.getAudio();
-    if (!audioActor) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
-        return;
-    }
-
-    audio::AudioPipelineTuning pipeline = audioActor->getPipelineTuning();
-    audio::AudioContractTuning contract = m_renderer ? m_renderer->getAudioContractTuning()
-                                                      : audio::clampAudioContractTuning(audio::AudioContractTuning{});
-
-    auto& mgr = AudioTuningManager::instance();
-    int8_t slotId = mgr.savePreset(name, pipeline, contract);
-
-    if (slotId < 0) {
-        sendErrorResponse(request, HttpStatus::INSUFFICIENT_STORAGE,
-                          ErrorCodes::STORAGE_FULL, "No free preset slots");
-        return;
-    }
-
-    sendSuccessResponse(request, [slotId, name](JsonObject& d) {
-        d["id"] = (uint8_t)slotId;
-        d["name"] = name;
-        d["message"] = "Preset saved";
-    });
-}
-
-void WebServer::handleAudioPresetApply(AsyncWebServerRequest* request, uint8_t presetId) {
-    using namespace persistence;
-    auto& mgr = AudioTuningManager::instance();
-
-    if (presetId >= AudioTuningManager::MAX_PRESETS) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Preset ID must be 0-9", "presetId");
-        return;
-    }
-
-    audio::AudioPipelineTuning pipeline;
-    audio::AudioContractTuning contract;
-    char name[AudioTuningPreset::NAME_MAX_LEN];
-
-    if (!mgr.loadPreset(presetId, pipeline, contract, name)) {
-        sendErrorResponse(request, HttpStatus::NOT_FOUND,
-                          ErrorCodes::NOT_FOUND, "Preset not found", "presetId");
-        return;
-    }
-
-    // Apply to AudioActor
-    auto* audioActor = m_actorSystem.getAudio();
-    if (!audioActor) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
-        return;
-    }
-
-    audioActor->setPipelineTuning(pipeline);
-    if (m_renderer) {
-        m_renderer->setAudioContractTuning(contract);
-    }
-
-    sendSuccessResponse(request, [presetId, name](JsonObject& d) {
-        d["id"] = presetId;
-        d["name"] = name;
-        d["message"] = "Preset applied";
-    });
-}
-
-void WebServer::handleAudioPresetDelete(AsyncWebServerRequest* request, uint8_t presetId) {
-    using namespace persistence;
-    auto& mgr = AudioTuningManager::instance();
-
-    if (presetId >= AudioTuningManager::MAX_PRESETS) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Preset ID must be 0-9", "presetId");
-        return;
-    }
-
-    if (!mgr.hasPreset(presetId)) {
-        sendErrorResponse(request, HttpStatus::NOT_FOUND,
-                          ErrorCodes::NOT_FOUND, "Preset not found", "presetId");
-        return;
-    }
-
-    if (!mgr.deletePreset(presetId)) {
-        sendErrorResponse(request, HttpStatus::INTERNAL_ERROR,
-                          ErrorCodes::INTERNAL_ERROR, "Failed to delete preset");
-        return;
-    }
-
-    sendSuccessResponse(request, [presetId](JsonObject& d) {
-        d["id"] = presetId;
-        d["message"] = "Preset deleted";
-    });
-}
-
-// =============================================================================
-// Audio-Effect Mapping Handlers (Phase 4)
-// =============================================================================
-
-void WebServer::handleAudioMappingsListSources(AsyncWebServerRequest* request) {
-    using namespace audio;
-
-    sendSuccessResponseLarge(request, [](JsonObject& data) {
-        JsonArray sources = data["sources"].to<JsonArray>();
-
-        // Energy metrics
-        auto addSource = [&](const char* name, uint8_t id, const char* category,
-                             const char* desc, float min, float max) {
-            JsonObject s = sources.add<JsonObject>();
-            s["name"] = name;
-            s["id"] = id;
-            s["category"] = category;
-            s["description"] = desc;
-            s["rangeMin"] = min;
-            s["rangeMax"] = max;
-        };
-
-        addSource("RMS", 0, "energy", "Smoothed RMS level", 0.0f, 1.0f);
-        addSource("FAST_RMS", 1, "energy", "Fast-attack RMS", 0.0f, 1.0f);
-        addSource("FLUX", 2, "energy", "Spectral flux (onset)", 0.0f, 1.0f);
-        addSource("FAST_FLUX", 3, "energy", "Fast-attack flux", 0.0f, 1.0f);
-
-        addSource("BAND_0", 4, "frequency", "60 Hz - Sub-bass", 0.0f, 1.0f);
-        addSource("BAND_1", 5, "frequency", "120 Hz - Bass", 0.0f, 1.0f);
-        addSource("BAND_2", 6, "frequency", "250 Hz - Low-mid", 0.0f, 1.0f);
-        addSource("BAND_3", 7, "frequency", "500 Hz - Mid", 0.0f, 1.0f);
-        addSource("BAND_4", 8, "frequency", "1000 Hz - High-mid", 0.0f, 1.0f);
-        addSource("BAND_5", 9, "frequency", "2000 Hz - Presence", 0.0f, 1.0f);
-        addSource("BAND_6", 10, "frequency", "4000 Hz - Brilliance", 0.0f, 1.0f);
-        addSource("BAND_7", 11, "frequency", "7800 Hz - Air", 0.0f, 1.0f);
-
-        addSource("BASS", 12, "aggregate", "(band0 + band1) / 2", 0.0f, 1.0f);
-        addSource("MID", 13, "aggregate", "(band2 + band3 + band4) / 3", 0.0f, 1.0f);
-        addSource("TREBLE", 14, "aggregate", "(band5 + band6 + band7) / 3", 0.0f, 1.0f);
-        addSource("HEAVY_BASS", 15, "aggregate", "Squared bass response", 0.0f, 1.0f);
-
-        addSource("BEAT_PHASE", 16, "timing", "Beat phase [0,1)", 0.0f, 1.0f);
-        addSource("BPM", 17, "timing", "Tempo in BPM", 30.0f, 300.0f);
-        addSource("TEMPO_CONFIDENCE", 18, "timing", "Beat detection confidence", 0.0f, 1.0f);
-    }, 2048);
-}
-
-void WebServer::handleAudioMappingsListTargets(AsyncWebServerRequest* request) {
-    sendSuccessResponse(request, [](JsonObject& data) {
-        JsonArray targets = data["targets"].to<JsonArray>();
-
-        auto addTarget = [&](const char* name, uint8_t id, uint8_t min, uint8_t max,
-                             uint8_t defVal, const char* desc) {
-            JsonObject t = targets.add<JsonObject>();
-            t["name"] = name;
-            t["id"] = id;
-            t["rangeMin"] = min;
-            t["rangeMax"] = max;
-            t["default"] = defVal;
-            t["description"] = desc;
-        };
-
-        addTarget("BRIGHTNESS", 0, 0, 160, 96, "Master LED intensity");
-        addTarget("SPEED", 1, 1, 50, 10, "Animation rate");
-        addTarget("INTENSITY", 2, 0, 255, 128, "Effect amplitude");
-        addTarget("SATURATION", 3, 0, 255, 255, "Color saturation");
-        addTarget("COMPLEXITY", 4, 0, 255, 128, "Pattern detail");
-        addTarget("VARIATION", 5, 0, 255, 0, "Mode selection");
-        addTarget("HUE", 6, 0, 255, 0, "Color rotation");
-    });
-}
-
-void WebServer::handleAudioMappingsListCurves(AsyncWebServerRequest* request) {
-    sendSuccessResponse(request, [](JsonObject& data) {
-        JsonArray curves = data["curves"].to<JsonArray>();
-
-        auto addCurve = [&](const char* name, uint8_t id, const char* formula, const char* desc) {
-            JsonObject c = curves.add<JsonObject>();
-            c["name"] = name;
-            c["id"] = id;
-            c["formula"] = formula;
-            c["description"] = desc;
-        };
-
-        addCurve("LINEAR", 0, "y = x", "Direct proportional");
-        addCurve("SQUARED", 1, "y = x²", "Gentle start, aggressive end");
-        addCurve("SQRT", 2, "y = √x", "Aggressive start, gentle end");
-        addCurve("LOG", 3, "y = log(x+1)/log(2)", "Logarithmic compression");
-        addCurve("EXP", 4, "y = (eˣ-1)/(e-1)", "Exponential expansion");
-        addCurve("INVERTED", 5, "y = 1 - x", "Inverse");
-    });
-}
-
-void WebServer::handleAudioMappingsList(AsyncWebServerRequest* request) {
-    using namespace audio;
-    auto& registry = AudioMappingRegistry::instance();
-
-    sendSuccessResponseLarge(request, [this, &registry](JsonObject& data) {
-        data["activeEffects"] = registry.getActiveEffectCount();
-        data["totalMappings"] = registry.getTotalMappingCount();
-
-        JsonArray effects = data["effects"].to<JsonArray>();
-
-        uint8_t effectCount = m_renderer->getEffectCount();
-        for (uint8_t i = 0; i < effectCount && i < AudioMappingRegistry::MAX_EFFECTS; i++) {
-            const EffectAudioMapping* mapping = registry.getMapping(i);
-            if (mapping && mapping->globalEnabled && mapping->mappingCount > 0) {
-                JsonObject e = effects.add<JsonObject>();
-                e["id"] = i;
-                e["name"] = m_renderer->getEffectName(i);
-                e["mappingCount"] = mapping->mappingCount;
-                e["enabled"] = mapping->globalEnabled;
-            }
-        }
-    }, 2048);
-}
-
-void WebServer::handleAudioMappingsGet(AsyncWebServerRequest* request, uint8_t effectId) {
-    using namespace audio;
-    auto& registry = AudioMappingRegistry::instance();
-
-    if (effectId >= AudioMappingRegistry::MAX_EFFECTS ||
-        effectId >= m_renderer->getEffectCount()) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "id");
-        return;
-    }
-
-    const EffectAudioMapping* config = registry.getMapping(effectId);
-    if (!config) {
-        sendErrorResponse(request, HttpStatus::INTERNAL_ERROR,
-                          ErrorCodes::INTERNAL_ERROR, "Failed to get mapping");
-        return;
-    }
-
-    sendSuccessResponseLarge(request, [this, effectId, config](JsonObject& data) {
-        data["effectId"] = effectId;
-        data["effectName"] = m_renderer->getEffectName(effectId);
-        data["globalEnabled"] = config->globalEnabled;
-        data["mappingCount"] = config->mappingCount;
-
-        JsonArray mappings = data["mappings"].to<JsonArray>();
-
-        for (uint8_t i = 0; i < config->mappingCount; i++) {
-            const AudioParameterMapping& m = config->mappings[i];
-            JsonObject mapping = mappings.add<JsonObject>();
-
-            mapping["source"] = AudioMappingRegistry::getSourceName(m.source);
-            mapping["target"] = AudioMappingRegistry::getTargetName(m.target);
-            mapping["curve"] = AudioMappingRegistry::getCurveName(m.curve);
-            mapping["inputMin"] = m.inputMin;
-            mapping["inputMax"] = m.inputMax;
-            mapping["outputMin"] = m.outputMin;
-            mapping["outputMax"] = m.outputMax;
-            mapping["smoothingAlpha"] = m.smoothingAlpha;
-            mapping["gain"] = m.gain;
-            mapping["enabled"] = m.enabled;
-            mapping["additive"] = m.additive;
-        }
-    }, 2048);
-}
-
-void WebServer::handleAudioMappingsSet(AsyncWebServerRequest* request, uint8_t effectId, uint8_t* data, size_t len) {
-    using namespace audio;
-    auto& registry = AudioMappingRegistry::instance();
-
-    if (effectId >= AudioMappingRegistry::MAX_EFFECTS ||
-        effectId >= m_renderer->getEffectCount()) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "id");
-        return;
-    }
-
-    JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, data, len);
-    if (err) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::INVALID_JSON, err.c_str());
-        return;
-    }
-
-    EffectAudioMapping newConfig;
-    newConfig.effectId = effectId;
-    newConfig.globalEnabled = doc["globalEnabled"] | true;
-    newConfig.mappingCount = 0;
-
-    if (doc["mappings"].is<JsonArray>()) {
-        JsonArray mappingsArr = doc["mappings"];
-
-        for (JsonVariant m : mappingsArr) {
-            if (newConfig.mappingCount >= EffectAudioMapping::MAX_MAPPINGS_PER_EFFECT) {
-                break;
-            }
-
-            AudioParameterMapping mapping;
-            mapping.source = AudioMappingRegistry::parseSource(m["source"] | "NONE");
-            mapping.target = AudioMappingRegistry::parseTarget(m["target"] | "NONE");
-            mapping.curve = AudioMappingRegistry::parseCurve(m["curve"] | "LINEAR");
-            mapping.inputMin = m["inputMin"] | 0.0f;
-            mapping.inputMax = m["inputMax"] | 1.0f;
-            mapping.outputMin = m["outputMin"] | 0.0f;
-            mapping.outputMax = m["outputMax"] | 255.0f;
-            mapping.smoothingAlpha = m["smoothingAlpha"] | 0.3f;
-            mapping.gain = m["gain"] | 1.0f;
-            mapping.enabled = m["enabled"] | true;
-            mapping.additive = m["additive"] | false;
-
-            // Validate
-            if (mapping.source == AudioSource::NONE || mapping.target == VisualTarget::NONE) {
-                continue;  // Skip invalid mappings
-            }
-
-            newConfig.mappings[newConfig.mappingCount++] = mapping;
-        }
-    }
-
-    if (!registry.setMapping(effectId, newConfig)) {
-        sendErrorResponse(request, HttpStatus::INTERNAL_ERROR,
-                          ErrorCodes::INTERNAL_ERROR, "Failed to set mapping");
-        return;
-    }
-
-    sendSuccessResponse(request, [effectId, &newConfig](JsonObject& respData) {
-        respData["effectId"] = effectId;
-        respData["mappingCount"] = newConfig.mappingCount;
-        respData["enabled"] = newConfig.globalEnabled;
-        respData["message"] = "Mapping updated";
-    });
-}
-
-void WebServer::handleAudioMappingsDelete(AsyncWebServerRequest* request, uint8_t effectId) {
-    using namespace audio;
-    auto& registry = AudioMappingRegistry::instance();
-
-    if (effectId >= AudioMappingRegistry::MAX_EFFECTS) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "id");
-        return;
-    }
-
-    EffectAudioMapping* config = registry.getMapping(effectId);
-    if (config) {
-        config->clearMappings();
-        config->globalEnabled = false;
-    }
-
-    sendSuccessResponse(request, [effectId](JsonObject& d) {
-        d["effectId"] = effectId;
-        d["message"] = "Mapping cleared";
-    });
-}
-
-void WebServer::handleAudioMappingsEnable(AsyncWebServerRequest* request, uint8_t effectId, bool enable) {
-    using namespace audio;
-    auto& registry = AudioMappingRegistry::instance();
-
-    if (effectId >= AudioMappingRegistry::MAX_EFFECTS) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "id");
-        return;
-    }
-
-    registry.setEffectMappingEnabled(effectId, enable);
-
-    sendSuccessResponse(request, [effectId, enable](JsonObject& d) {
-        d["effectId"] = effectId;
-        d["enabled"] = enable;
-    });
-}
-
-void WebServer::handleAudioMappingsStats(AsyncWebServerRequest* request) {
-    using namespace audio;
-    auto& registry = AudioMappingRegistry::instance();
-
-    sendSuccessResponse(request, [&registry](JsonObject& data) {
-        data["applyCount"] = registry.getApplyCount();
-        data["lastApplyMicros"] = registry.getLastApplyMicros();
-        data["maxApplyMicros"] = registry.getMaxApplyMicros();
-        data["activeEffectsWithMappings"] = registry.getActiveEffectCount();
-        data["totalMappingsConfigured"] = registry.getTotalMappingCount();
-    });
-}
-
-// ============================================================================
-// Zone AGC Handlers
-// ============================================================================
-
-void WebServer::handleAudioZoneAGCGet(AsyncWebServerRequest* request) {
-    auto* audio = m_actorSystem.getAudio();
-    if (!audio) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
-        return;
-    }
-
-    const audio::ControlBus& controlBus = audio->getControlBusRef();
-
-    sendSuccessResponse(request, [&controlBus](JsonObject& data) {
-        data["enabled"] = controlBus.getZoneAGCEnabled();
-        data["lookaheadEnabled"] = controlBus.getLookaheadEnabled();
-
-        JsonArray zones = data["zones"].to<JsonArray>();
-        for (uint8_t z = 0; z < audio::CONTROLBUS_NUM_ZONES; ++z) {
-            JsonObject zone = zones.add<JsonObject>();
-            zone["index"] = z;
-            zone["follower"] = controlBus.getZoneFollower(z);
-            zone["maxMag"] = controlBus.getZoneMaxMag(z);
-        }
-    });
-}
-
-void WebServer::handleAudioZoneAGCSet(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    auto* audio = m_actorSystem.getAudio();
-    if (!audio) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
-        return;
-    }
-
-    StaticJsonDocument<256> doc;
-    if (deserializeJson(doc, data, len)) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::INVALID_JSON, "Invalid JSON payload");
-        return;
-    }
-
-    audio::ControlBus& controlBus = audio->getControlBusMut();
-    bool updated = false;
-
-    if (doc.containsKey("enabled")) {
-        controlBus.setZoneAGCEnabled(doc["enabled"].as<bool>());
-        updated = true;
-    }
-
-    if (doc.containsKey("lookaheadEnabled")) {
-        controlBus.setLookaheadEnabled(doc["lookaheadEnabled"].as<bool>());
-        updated = true;
-    }
-
-    if (doc.containsKey("attackRate") || doc.containsKey("releaseRate")) {
-        float attack = doc["attackRate"] | 0.05f;
-        float release = doc["releaseRate"] | 0.05f;
-        controlBus.setZoneAGCRates(attack, release);
-        updated = true;
-    }
-
-    if (doc.containsKey("minFloor")) {
-        controlBus.setZoneMinFloor(doc["minFloor"].as<float>());
-        updated = true;
-    }
-
-    sendSuccessResponse(request, [updated](JsonObject& resp) {
-        resp["updated"] = updated;
-    });
-}
-
-// ============================================================================
-// Spike Detection Handlers
-// ============================================================================
-
-void WebServer::handleAudioSpikeDetectionGet(AsyncWebServerRequest* request) {
-    auto* audio = m_actorSystem.getAudio();
-    if (!audio) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
-        return;
-    }
-
-    const audio::ControlBus& controlBus = audio->getControlBusRef();
-    const audio::SpikeDetectionStats& stats = controlBus.getSpikeStats();
-
-    sendSuccessResponse(request, [&controlBus, &stats](JsonObject& data) {
-        data["enabled"] = controlBus.getLookaheadEnabled();
-
-        JsonObject statsObj = data["stats"].to<JsonObject>();
-        statsObj["totalFrames"] = stats.totalFrames;
-        statsObj["spikesDetectedBands"] = stats.spikesDetectedBands;
-        statsObj["spikesDetectedChroma"] = stats.spikesDetectedChroma;
-        statsObj["spikesCorrected"] = stats.spikesCorrected;
-        statsObj["totalEnergyRemoved"] = stats.totalEnergyRemoved;
-        statsObj["avgSpikesPerFrame"] = stats.avgSpikesPerFrame;
-        statsObj["avgCorrectionMagnitude"] = stats.avgCorrectionMagnitude;
-    });
-}
-
-void WebServer::handleAudioSpikeDetectionReset(AsyncWebServerRequest* request) {
-    auto* audio = m_actorSystem.getAudio();
-    if (!audio) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
-        return;
-    }
-
-    audio->getControlBusMut().resetSpikeStats();
-    sendSuccessResponse(request);
-}
-
-// ============================================================================
-// Noise Calibration Handlers (SensoryBridge pattern)
-// ============================================================================
-
-void WebServer::handleAudioCalibrateStatus(AsyncWebServerRequest* request) {
-    auto* audio = m_actorSystem.getAudio();
-    if (!audio) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
-        return;
-    }
-
-    const auto& calState = audio->getNoiseCalibrationState();
-    const auto& result = audio->getCalibrationResult();
-
-    // Capture values for lambda
-    uint32_t elapsed = 0;
-    if (calState.state == audio::CalibrationState::MEASURING) {
-        elapsed = millis() - calState.startTimeMs;
-    }
-
-    sendSuccessResponse(request, [&calState, &result, elapsed](JsonObject& data) {
-        // Map state enum to string
-        const char* stateStr = "unknown";
-        switch (calState.state) {
-            case audio::CalibrationState::IDLE:      stateStr = "idle"; break;
-            case audio::CalibrationState::REQUESTED: stateStr = "requested"; break;
-            case audio::CalibrationState::MEASURING: stateStr = "measuring"; break;
-            case audio::CalibrationState::COMPLETE:  stateStr = "complete"; break;
-            case audio::CalibrationState::FAILED:    stateStr = "failed"; break;
-        }
-        data["state"] = stateStr;
-        data["durationMs"] = calState.durationMs;
-        data["safetyMultiplier"] = calState.safetyMultiplier;
-        data["maxAllowedRms"] = calState.maxAllowedRms;
-
-        // Progress info when measuring
-        if (calState.state == audio::CalibrationState::MEASURING) {
-            float progress = (float)elapsed / (float)calState.durationMs;
-            if (progress > 1.0f) progress = 1.0f;
-            data["progress"] = progress;
-            data["samplesCollected"] = calState.sampleCount;
-            if (calState.sampleCount > 0) {
-                data["currentAvgRms"] = calState.rmsSum / calState.sampleCount;
-            }
-        }
-
-        // Result info when complete
-        if (calState.state == audio::CalibrationState::COMPLETE && result.valid) {
-            JsonObject resultObj = data["result"].to<JsonObject>();
-            resultObj["overallRms"] = result.overallRms;
-            resultObj["peakRms"] = result.peakRms;
-            resultObj["sampleCount"] = result.sampleCount;
-
-            JsonArray bands = resultObj["bandFloors"].to<JsonArray>();
-            for (int i = 0; i < 8; ++i) {
-                bands.add(result.bandFloors[i]);
-            }
-
-            JsonArray chroma = resultObj["chromaFloors"].to<JsonArray>();
-            for (int i = 0; i < 12; ++i) {
-                chroma.add(result.chromaFloors[i]);
-            }
-        }
-    });
-}
-
-void WebServer::handleAudioCalibrateStart(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    auto* audio = m_actorSystem.getAudio();
-    if (!audio) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
-        return;
-    }
-
-    // Parse optional parameters
-    uint32_t durationMs = 3000;
-    float safetyMultiplier = 1.2f;
-
-    if (len > 0) {
-        JsonDocument doc;
-        DeserializationError err = deserializeJson(doc, data, len);
-        if (!err) {
-            if (doc.containsKey("durationMs")) {
-                durationMs = doc["durationMs"].as<uint32_t>();
-                // Clamp to reasonable range
-                if (durationMs < 1000) durationMs = 1000;
-                if (durationMs > 10000) durationMs = 10000;
-            }
-            if (doc.containsKey("safetyMultiplier")) {
-                safetyMultiplier = doc["safetyMultiplier"].as<float>();
-                // Clamp to reasonable range
-                if (safetyMultiplier < 1.0f) safetyMultiplier = 1.0f;
-                if (safetyMultiplier > 3.0f) safetyMultiplier = 3.0f;
-            }
-        }
-    }
-
-    bool started = audio->startNoiseCalibration(durationMs, safetyMultiplier);
-    if (started) {
-        sendSuccessResponse(request, [durationMs, safetyMultiplier](JsonObject& data) {
-            data["message"] = "Calibration started - please remain silent";
-            data["durationMs"] = durationMs;
-            data["safetyMultiplier"] = safetyMultiplier;
-        });
-    } else {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::BUSY, "Calibration already in progress");
-    }
-}
-
-void WebServer::handleAudioCalibrateCancel(AsyncWebServerRequest* request) {
-    auto* audio = m_actorSystem.getAudio();
-    if (!audio) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
-        return;
-    }
-
-    audio->cancelNoiseCalibration();
-    sendSuccessResponse(request);
-}
-
-void WebServer::handleAudioCalibrateApply(AsyncWebServerRequest* request) {
-    auto* audio = m_actorSystem.getAudio();
-    if (!audio) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
-        return;
-    }
-
-    bool applied = audio->applyCalibrationResults();
-    if (applied) {
-        const auto& result = audio->getCalibrationResult();
-        const auto& calState = audio->getNoiseCalibrationState();
-        float noiseFloorMin = result.overallRms * calState.safetyMultiplier;
-
-        sendSuccessResponse(request, [&result, noiseFloorMin](JsonObject& data) {
-            data["message"] = "Calibration applied successfully";
-            data["noiseFloorMin"] = noiseFloorMin;
-
-            JsonArray bands = data["perBandNoiseFloors"].to<JsonArray>();
-            for (int i = 0; i < 8; ++i) {
-                bands.add(result.bandFloors[i]);
-            }
-        });
-    } else {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::INVALID_VALUE, "No valid calibration results to apply");
-    }
-}
-
-#else
-void WebServer::handleAudioParametersGet(AsyncWebServerRequest* request) {
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
-}
-
-void WebServer::handleAudioParametersSet(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    (void)data;
-    (void)len;
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
-}
-
-void WebServer::handleAudioControl(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    (void)data;
-    (void)len;
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
-}
-
-void WebServer::handleAudioStateGet(AsyncWebServerRequest* request) {
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
-}
-
-void WebServer::handleAudioTempoGet(AsyncWebServerRequest* request) {
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
-}
-
-void WebServer::handleAudioPresetsList(AsyncWebServerRequest* request) {
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
-}
-
-void WebServer::handleAudioPresetGet(AsyncWebServerRequest* request, uint8_t presetId) {
-    (void)presetId;
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
-}
-
-void WebServer::handleAudioPresetSave(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    (void)data;
-    (void)len;
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
-}
-
-void WebServer::handleAudioPresetApply(AsyncWebServerRequest* request, uint8_t presetId) {
-    (void)presetId;
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
-}
-
-void WebServer::handleAudioPresetDelete(AsyncWebServerRequest* request, uint8_t presetId) {
-    (void)presetId;
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
-}
-
-void WebServer::handleAudioMappingsListSources(AsyncWebServerRequest* request) {
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
-}
-
-void WebServer::handleAudioMappingsListTargets(AsyncWebServerRequest* request) {
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
-}
-
-void WebServer::handleAudioMappingsListCurves(AsyncWebServerRequest* request) {
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
-}
-
-void WebServer::handleAudioMappingsList(AsyncWebServerRequest* request) {
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
-}
-
-void WebServer::handleAudioMappingsGet(AsyncWebServerRequest* request, uint8_t effectId) {
-    (void)effectId;
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
-}
-
-void WebServer::handleAudioMappingsSet(AsyncWebServerRequest* request, uint8_t effectId, uint8_t* data, size_t len) {
-    (void)effectId;
-    (void)data;
-    (void)len;
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
-}
-
-void WebServer::handleAudioMappingsDelete(AsyncWebServerRequest* request, uint8_t effectId) {
-    (void)effectId;
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
-}
-
-void WebServer::handleAudioMappingsEnable(AsyncWebServerRequest* request, uint8_t effectId, bool enable) {
-    (void)effectId;
-    (void)enable;
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
-}
-
-void WebServer::handleAudioMappingsStats(AsyncWebServerRequest* request) {
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
-}
-
-void WebServer::handleAudioZoneAGCGet(AsyncWebServerRequest* request) {
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
-}
-
-void WebServer::handleAudioZoneAGCSet(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    (void)data;
-    (void)len;
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
-}
-
-void WebServer::handleAudioSpikeDetectionGet(AsyncWebServerRequest* request) {
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
-}
-
-void WebServer::handleAudioSpikeDetectionReset(AsyncWebServerRequest* request) {
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
-}
-
-void WebServer::handleAudioCalibrateStatus(AsyncWebServerRequest* request) {
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
-}
-
-void WebServer::handleAudioCalibrateStart(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    (void)data;
-    (void)len;
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
-}
-
-void WebServer::handleAudioCalibrateCancel(AsyncWebServerRequest* request) {
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
-}
-
-void WebServer::handleAudioCalibrateApply(AsyncWebServerRequest* request) {
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
-}
+        , m_audioBroadcaster
 #endif
+#if FEATURE_AUDIO_BENCHMARK
+        , m_benchmarkBroadcaster
+#endif
+        , m_startTime
+        , m_apMode
+        , [this]() { broadcastStatus(); }
+        , [this]() { broadcastZoneState(); }
+        , m_ws
+        , [this](AsyncWebSocketClient* client, bool subscribe) { return setLEDStreamSubscription(client, subscribe); }
+#if FEATURE_AUDIO_SYNC
+        , [this](AsyncWebSocketClient* client, bool subscribe) { return setAudioStreamSubscription(client, subscribe); }
+#endif
+#if FEATURE_EFFECT_VALIDATION
+        , [this](AsyncWebSocketClient* client, bool subscribe) { return setValidationStreamSubscription(client, subscribe); }
+#endif
+#if FEATURE_AUDIO_BENCHMARK
+        , [this](AsyncWebSocketClient* client, bool subscribe) { return setBenchmarkStreamSubscription(client, subscribe); }
+#endif
+        , [this](const String& action, JsonVariant params) { return executeBatchAction(action, params); }
+    );
 
-void WebServer::handleTransitionTypes(AsyncWebServerRequest* request) {
-    sendSuccessResponseLarge(request, [](JsonObject& data) {
-        JsonArray types = data["types"].to<JsonArray>();
+    // Create WebSocket gateway
+    m_wsGateway = new webserver::WsGateway(
+        m_ws,
+        ctx,
+        [this](AsyncWebSocketClient* client) {
+            IPAddress clientIP = client->remoteIP();
+            if (!m_rateLimiter.checkWebSocket(clientIP)) {
+                uint32_t retryAfter = m_rateLimiter.getRetryAfterSeconds(clientIP);
+                String errorMsg = buildWsRateLimitError(retryAfter);
+                client->text(errorMsg);
+                return false;
+            }
+            return true;
+        },
+        [this](AsyncWebSocketClient* client, JsonDocument& doc) {
+            // Auth check (moved from handleWsMessage)
+#if FEATURE_API_AUTH
+            const char* key = config::NetworkConfig::API_KEY_VALUE;
+            if (key != nullptr && key[0] != '\0') {
+                if (m_authenticatedClients.find(client->id()) == m_authenticatedClients.end()) {
+                    const char* msgType = doc["type"] | "";
+                    if (strcmp(msgType, "auth") == 0) {
+                        const char* providedKey = doc["apiKey"] | "";
+                        if (strcmp(providedKey, key) == 0) {
+                            m_authenticatedClients.insert(client->id());
+                            client->text("{\"type\":\"auth\",\"success\":true}");
+                        } else {
+                            client->text(buildWsError(ErrorCodes::UNAUTHORIZED, "Invalid API key").c_str());
+                        }
+                    } else {
+                        client->text("{\"type\":\"error\",\"error\":{\"code\":\"UNAUTHORIZED\",\"message\":\"Authentication required. Send {\\\"type\\\":\\\"auth\\\",\\\"apiKey\\\":\\\"...\\\"}\"}}\n");
+                    }
+                    return false;
+                }
+            }
+#endif
+            return true;
+        },
+        [this](AsyncWebSocketClient* client) {
+            handleWsConnect(client);
+        },
+        [this](AsyncWebSocketClient* client) {
+            handleWsDisconnect(client);
+        },
+        nullptr  // No fallback handler - all commands are now registered
+    );
 
-        for (uint8_t i = 0; i < static_cast<uint8_t>(TransitionType::TYPE_COUNT); i++) {
-            JsonObject t = types.add<JsonObject>();
-            t["id"] = i;
-            t["name"] = getTransitionName(static_cast<TransitionType>(i));
-            t["duration"] = getDefaultDuration(static_cast<TransitionType>(i));
-            t["centerOrigin"] = true;  // All v2 transitions are center-origin
-        }
-    }, 1536);
+    // Register WebSocket event handler
+    m_ws->onEvent(webserver::WsGateway::onEvent);
+    m_server->addHandler(m_ws);
+
+    // Register WS command handlers (Phase 2: modular command registration)
+    webserver::ws::registerWsDeviceCommands(ctx);
+    webserver::ws::registerWsEffectsCommands(ctx);
+    webserver::ws::registerWsZonesCommands(ctx);
+    webserver::ws::registerWsTransitionCommands(ctx);
+    webserver::ws::registerWsNarrativeCommands(ctx);
+    webserver::ws::registerWsMotionCommands(ctx);
+    webserver::ws::registerWsColorCommands(ctx);
+    webserver::ws::registerWsPaletteCommands(ctx);
+    webserver::ws::registerWsBatchCommands(ctx);
+#if FEATURE_AUDIO_SYNC
+    webserver::ws::registerWsAudioCommands(ctx);
+#endif
+    webserver::ws::registerWsStreamCommands(ctx);
 }
 
-void WebServer::handleTransitionTrigger(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    StaticJsonDocument<512> doc;
-    VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::TriggerTransition, request);
+// ============================================================================
+// setupV1Routes() removed - functionality migrated to V1ApiRoutes::registerRoutes()
 
-    uint8_t toEffect = doc["toEffect"];
-    if (toEffect >= m_renderer->getEffectCount()) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", "toEffect");
-        return;
-    }
-
-    uint8_t transitionType = doc["type"] | 0;
-    bool randomType = doc["random"] | false;
-
-    if (randomType) {
-        m_renderer->startRandomTransition(toEffect);
-    } else {
-        m_renderer->startTransition(toEffect, transitionType);
-    }
-
-    sendSuccessResponse(request, [this, toEffect, transitionType](JsonObject& respData) {
-        respData["effectId"] = toEffect;
-        respData["name"] = m_renderer->getEffectName(toEffect);
-        respData["transitionType"] = transitionType;
-    });
-
-    broadcastStatus();
-}
-
-void WebServer::handleBatch(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    StaticJsonDocument<512> doc;
-    VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::BatchOperations, request);
-
-    // Schema validates operations is an array with 1-10 items
-    JsonArray ops = doc["operations"];
-
-    uint8_t processed = 0;
-    uint8_t failed = 0;
-
-    for (JsonVariant op : ops) {
-        String action = op["action"] | "";
-        if (executeBatchAction(action, op)) {
-            processed++;
-        } else {
-            failed++;
-        }
-    }
-
-    sendSuccessResponse(request, [processed, failed](JsonObject& data) {
-        data["processed"] = processed;
-        data["failed"] = failed;
-    });
-
-    broadcastStatus();
-}
+// ============================================================================
+// Handler Methods Migration Summary
+// ============================================================================
+// All REST API handlers have been moved to dedicated handler classes:
+// - ParameterHandlers: handleParametersGet/Set
+// - AudioHandlers: handleAudio* (all audio REST endpoints)
+// - TransitionHandlers: handleTransitionTypes/Trigger
+// - SystemHandlers: handleApiDiscovery, handleHealth, handleOpenApiSpec
+// - DeviceHandlers: handleStatus, handleInfo
+// - EffectHandlers: handleList, handleCurrent, handleSet, handleMetadata, etc.
+// - ZoneHandlers: handleList, handleGet, handleLayout, handleSet*, etc.
+// - PaletteHandlers: handleList, handleCurrent, handleSet
+// - NarrativeHandlers: handleStatus, handleConfigGet/Set
+// - BatchHandlers: handleExecute
 
 bool WebServer::executeBatchAction(const String& action, JsonVariant params) {
     if (action == "setBrightness") {
@@ -3059,658 +674,42 @@ bool WebServer::executeBatchAction(const String& action, JsonVariant params) {
 }
 
 // ============================================================================
-// Palette API Handlers
-// ============================================================================
-
-void WebServer::handlePalettesList(AsyncWebServerRequest* request) {
-    if (!m_renderer) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::SYSTEM_NOT_READY, "Renderer not available");
-        return;
-    }
-
-    // Get optional filter parameters
-    bool filterCategory = request->hasParam("category");
-    String categoryFilter = filterCategory ? request->getParam("category")->value() : "";
-    bool filterFlags = request->hasParam("warm") || request->hasParam("cool") ||
-                       request->hasParam("calm") || request->hasParam("vivid") ||
-                       request->hasParam("cvd");
-
-    // Get pagination parameters (1-indexed page, limit 1-50, default 20)
-    uint16_t page = 1;
-    uint16_t limit = 20;
-    if (request->hasParam("page")) {
-        page = request->getParam("page")->value().toInt();
-        if (page < 1) page = 1;
-    }
-    if (request->hasParam("limit")) {
-        limit = request->getParam("limit")->value().toInt();
-        if (limit < 1) limit = 1;
-        if (limit > 50) limit = 50;
-    }
-
-    // First pass: collect all palette IDs that pass the filters
-    uint8_t filteredIds[MASTER_PALETTE_COUNT];
-    uint16_t filteredCount = 0;
-
-    for (uint8_t i = 0; i < MASTER_PALETTE_COUNT; i++) {
-        // Apply category filter
-        if (filterCategory) {
-            if (categoryFilter == "artistic" && !isCptCityPalette(i)) continue;
-            if (categoryFilter == "scientific" && !isCrameriPalette(i)) continue;
-            if (categoryFilter == "lgpOptimized" && !isColorspacePalette(i)) continue;
-        }
-
-        // Apply flag filters
-        if (filterFlags) {
-            bool match = true;
-            if (request->hasParam("warm") && request->getParam("warm")->value() == "true") {
-                match = match && isPaletteWarm(i);
-            }
-            if (request->hasParam("cool") && request->getParam("cool")->value() == "true") {
-                match = match && isPaletteCool(i);
-            }
-            if (request->hasParam("calm") && request->getParam("calm")->value() == "true") {
-                match = match && isPaletteCalm(i);
-            }
-            if (request->hasParam("vivid") && request->getParam("vivid")->value() == "true") {
-                match = match && isPaletteVivid(i);
-            }
-            if (request->hasParam("cvd") && request->getParam("cvd")->value() == "true") {
-                match = match && isPaletteCVDFriendly(i);
-            }
-            if (!match) continue;
-        }
-
-        // This palette passes all filters
-        filteredIds[filteredCount++] = i;
-    }
-
-    // Calculate pagination
-    uint16_t totalPages = (filteredCount + limit - 1) / limit;  // Ceiling division
-    if (totalPages == 0) totalPages = 1;
-    if (page > totalPages) page = totalPages;
-
-    uint16_t startIdx = (page - 1) * limit;
-    uint16_t endIdx = startIdx + limit;
-    if (endIdx > filteredCount) endIdx = filteredCount;
-
-    // Build response - buffer sized for up to 50 palettes per page
-    StaticJsonDocument<512> doc;
-    doc["success"] = true;
-    doc["timestamp"] = millis();
-    doc["version"] = API_VERSION;
-
-    JsonObject data = doc["data"].to<JsonObject>();
-
-    // Categorize palettes (static counts, not affected by filters)
-    JsonObject categories = data["categories"].to<JsonObject>();
-    categories["artistic"] = CPT_CITY_END - CPT_CITY_START + 1;
-    categories["scientific"] = CRAMERI_END - CRAMERI_START + 1;
-    categories["lgpOptimized"] = COLORSPACE_END - COLORSPACE_START + 1;
-
-    JsonArray palettes = data["palettes"].to<JsonArray>();
-
-    // Second pass: add only the paginated subset of filtered palettes
-    for (uint16_t idx = startIdx; idx < endIdx; idx++) {
-        uint8_t i = filteredIds[idx];
-
-        JsonObject palette = palettes.add<JsonObject>();
-        palette["id"] = i;
-        palette["name"] = MasterPaletteNames[i];
-        palette["category"] = getPaletteCategory(i);
-
-        // Flags
-        JsonObject flags = palette["flags"].to<JsonObject>();
-        flags["warm"] = isPaletteWarm(i);
-        flags["cool"] = isPaletteCool(i);
-        flags["calm"] = isPaletteCalm(i);
-        flags["vivid"] = isPaletteVivid(i);
-        flags["cvdFriendly"] = isPaletteCVDFriendly(i);
-        flags["whiteHeavy"] = paletteHasFlag(i, PAL_WHITE_HEAVY);
-
-        // Metadata
-        palette["avgBrightness"] = getPaletteAvgBrightness(i);
-        palette["maxBrightness"] = getPaletteMaxBrightness(i);
-    }
-
-    // Add pagination object
-    JsonObject pagination = data["pagination"].to<JsonObject>();
-    pagination["page"] = page;
-    pagination["limit"] = limit;
-    pagination["total"] = filteredCount;
-    pagination["pages"] = totalPages;
-
-    String output;
-    serializeJson(doc, output);
-    request->send(HttpStatus::OK, "application/json", output);
-}
-
-void WebServer::handlePalettesCurrent(AsyncWebServerRequest* request) {
-    if (!m_renderer) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::SYSTEM_NOT_READY, "Renderer not available");
-        return;
-    }
-
-    sendSuccessResponse(request, [this](JsonObject& data) {
-        uint8_t id = m_renderer->getPaletteIndex();
-        data["paletteId"] = id;
-        data["name"] = MasterPaletteNames[id];
-        data["category"] = getPaletteCategory(id);
-
-        JsonObject flags = data["flags"].to<JsonObject>();
-        flags["warm"] = isPaletteWarm(id);
-        flags["cool"] = isPaletteCool(id);
-        flags["calm"] = isPaletteCalm(id);
-        flags["vivid"] = isPaletteVivid(id);
-        flags["cvdFriendly"] = isPaletteCVDFriendly(id);
-
-        data["avgBrightness"] = getPaletteAvgBrightness(id);
-        data["maxBrightness"] = getPaletteMaxBrightness(id);
-    });
-}
-
-void WebServer::handlePalettesSet(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    StaticJsonDocument<512> doc;
-    VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::SetPalette, request);
-
-    uint8_t paletteId = doc["paletteId"];
-    if (paletteId >= MASTER_PALETTE_COUNT) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::OUT_OF_RANGE, "Palette ID out of range (0-74)", "paletteId");
-        return;
-    }
-
-    m_actorSystem.setPalette(paletteId);
-
-    sendSuccessResponse(request, [paletteId](JsonObject& respData) {
-        respData["paletteId"] = paletteId;
-        respData["name"] = MasterPaletteNames[paletteId];
-        respData["category"] = getPaletteCategory(paletteId);
-    });
-
-    broadcastStatus();
-}
-
-
-
-// ============================================================================
-// Transition Config Handlers
-// ============================================================================
-
-void WebServer::handleTransitionConfigGet(AsyncWebServerRequest* request) {
-    if (!m_renderer) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::SYSTEM_NOT_READY, "Renderer not available");
-        return;
-    }
-
-    sendSuccessResponse(request, [](JsonObject& data) {
-        // Current transition state
-        data["enabled"] = true;  // Transitions always enabled in v2
-        data["defaultDuration"] = 1000;
-        data["defaultType"] = 0;  // FADE
-        data["defaultTypeName"] = getTransitionName(TransitionType::FADE);
-
-        // Available easing curves (simplified list)
-        JsonArray easings = data["easings"].to<JsonArray>();
-        const char* easingNames[] = {
-            "LINEAR", "IN_QUAD", "OUT_QUAD", "IN_OUT_QUAD",
-            "IN_CUBIC", "OUT_CUBIC", "IN_OUT_CUBIC",
-            "IN_ELASTIC", "OUT_ELASTIC", "IN_OUT_ELASTIC"
-        };
-        for (uint8_t i = 0; i < 10; i++) {
-            JsonObject easing = easings.add<JsonObject>();
-            easing["id"] = i;
-            easing["name"] = easingNames[i];
-        }
-    });
-}
-
-void WebServer::handleTransitionConfigSet(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    StaticJsonDocument<512> doc;
-    // Validate - all fields are optional but if present must be valid
-    auto vr = RequestValidator::parseAndValidate(data, len, doc, RequestSchemas::TransitionConfig);
-    if (!vr.valid) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          vr.errorCode, vr.errorMessage, vr.fieldName);
-        return;
-    }
-
-    // Currently transition config is not persisted, this endpoint acknowledges the request
-    // Future: store default transition type, duration, easing in NVS
-
-    // Schema validates type is 0-15 if present
-    uint16_t duration = doc["defaultDuration"] | 1000;
-    uint8_t type = doc["defaultType"] | 0;
-
-    sendSuccessResponse(request, [duration, type](JsonObject& respData) {
-        respData["defaultDuration"] = duration;
-        respData["defaultType"] = type;
-        respData["defaultTypeName"] = getTransitionName(static_cast<TransitionType>(type));
-        respData["message"] = "Transition config updated";
-    });
-}
-
-// ============================================================================
-// Narrative Handlers
-// ============================================================================
-
-void WebServer::handleNarrativeStatus(AsyncWebServerRequest* request) {
-    using namespace lightwaveos::narrative;
-    NarrativeEngine& narrative = NarrativeEngine::getInstance();
-    
-    sendSuccessResponse(request, [&narrative](JsonObject& data) {
-        // Current state
-        data["enabled"] = narrative.isEnabled();
-        data["tension"] = narrative.getTension() * 100.0f;  // Convert 0-1 to 0-100
-        data["phaseT"] = narrative.getPhaseT();
-        data["cycleT"] = narrative.getCycleT();
-        
-        // Phase as string
-        NarrativePhase phase = narrative.getPhase();
-        const char* phaseName = "UNKNOWN";
-        switch (phase) {
-            case PHASE_BUILD:   phaseName = "BUILD"; break;
-            case PHASE_HOLD:    phaseName = "HOLD"; break;
-            case PHASE_RELEASE: phaseName = "RELEASE"; break;
-            case PHASE_REST:    phaseName = "REST"; break;
-        }
-        data["phase"] = phaseName;
-        data["phaseId"] = static_cast<uint8_t>(phase);
-        
-        // Phase durations
-        JsonObject durations = data["durations"].to<JsonObject>();
-        durations["build"] = narrative.getBuildDuration();
-        durations["hold"] = narrative.getHoldDuration();
-        durations["release"] = narrative.getReleaseDuration();
-        durations["rest"] = narrative.getRestDuration();
-        durations["total"] = narrative.getTotalDuration();
-        
-        // Derived values
-        data["tempoMultiplier"] = narrative.getTempoMultiplier();
-        data["complexityScaling"] = narrative.getComplexityScaling();
-    });
-}
-
-void WebServer::handleNarrativeConfigGet(AsyncWebServerRequest* request) {
-    using namespace lightwaveos::narrative;
-    NarrativeEngine& narrative = NarrativeEngine::getInstance();
-    
-    sendSuccessResponse(request, [&narrative](JsonObject& data) {
-        // Phase durations
-        JsonObject durations = data["durations"].to<JsonObject>();
-        durations["build"] = narrative.getBuildDuration();
-        durations["hold"] = narrative.getHoldDuration();
-        durations["release"] = narrative.getReleaseDuration();
-        durations["rest"] = narrative.getRestDuration();
-        durations["total"] = narrative.getTotalDuration();
-        
-        // Curves
-        JsonObject curves = data["curves"].to<JsonObject>();
-        curves["build"] = static_cast<uint8_t>(narrative.getBuildCurve());
-        curves["release"] = static_cast<uint8_t>(narrative.getReleaseCurve());
-        
-        // Optional behaviors
-        data["holdBreathe"] = narrative.getHoldBreathe();
-        data["snapAmount"] = narrative.getSnapAmount();
-        data["durationVariance"] = narrative.getDurationVariance();
-        
-        data["enabled"] = narrative.isEnabled();
-    });
-}
-
-void WebServer::handleNarrativeConfigSet(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    using namespace lightwaveos::narrative;
-    StaticJsonDocument<512> doc;
-    DeserializationError error = deserializeJson(doc, data, len);
-    
-    if (error) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::INVALID_JSON, "Invalid JSON");
-        return;
-    }
-    
-    NarrativeEngine& narrative = NarrativeEngine::getInstance();
-    bool updated = false;
-    
-    // Update phase durations if provided
-    if (doc.containsKey("durations")) {
-        JsonObject durations = doc["durations"];
-        if (durations.containsKey("build")) {
-            narrative.setBuildDuration(durations["build"] | 1.5f);
-            updated = true;
-        }
-        if (durations.containsKey("hold")) {
-            narrative.setHoldDuration(durations["hold"] | 0.5f);
-            updated = true;
-        }
-        if (durations.containsKey("release")) {
-            narrative.setReleaseDuration(durations["release"] | 1.5f);
-            updated = true;
-        }
-        if (durations.containsKey("rest")) {
-            narrative.setRestDuration(durations["rest"] | 0.5f);
-            updated = true;
-        }
-    }
-    
-    // Update curves if provided
-    if (doc.containsKey("curves")) {
-        JsonObject curves = doc["curves"];
-        if (curves.containsKey("build")) {
-            narrative.setBuildCurve(static_cast<lightwaveos::effects::EasingCurve>(curves["build"] | 1));
-            updated = true;
-        }
-        if (curves.containsKey("release")) {
-            narrative.setReleaseCurve(static_cast<lightwaveos::effects::EasingCurve>(curves["release"] | 6));
-            updated = true;
-        }
-    }
-    
-    // Update optional behaviors
-    if (doc.containsKey("holdBreathe")) {
-        narrative.setHoldBreathe(doc["holdBreathe"] | 0.0f);
-        updated = true;
-    }
-    if (doc.containsKey("snapAmount")) {
-        narrative.setSnapAmount(doc["snapAmount"] | 0.0f);
-        updated = true;
-    }
-    if (doc.containsKey("durationVariance")) {
-        narrative.setDurationVariance(doc["durationVariance"] | 0.0f);
-        updated = true;
-    }
-    
-    // Update enabled state
-    if (doc.containsKey("enabled")) {
-        bool enabled = doc["enabled"] | false;
-        if (enabled) {
-            narrative.enable();
-        } else {
-            narrative.disable();
-        }
-        updated = true;
-    }
-    
-    // TODO: Persist to NVS if needed
-    
-    sendSuccessResponse(request, [updated](JsonObject& respData) {
-        respData["message"] = updated ? "Narrative config updated" : "No changes";
-        respData["updated"] = updated;
-    });
-}
-
-// ============================================================================
-// OpenAPI Specification Handler
-// ============================================================================
-
-void WebServer::handleOpenApiSpec(AsyncWebServerRequest* request) {
-    // OpenAPI 3.0.3 specification for LightwaveOS API v1
-    // Expanded to document all implemented REST endpoints
-    StaticJsonDocument<512> doc;
-
-    doc["openapi"] = "3.0.3";
-
-    JsonObject info = doc["info"].to<JsonObject>();
-    info["title"] = "LightwaveOS API";
-    info["version"] = "2.0.0";
-    info["description"] = "REST API for LightwaveOS ESP32-S3 LED Control System";
-
-    JsonArray servers = doc["servers"].to<JsonArray>();
-    JsonObject server = servers.add<JsonObject>();
-    server["url"] = "http://lightwaveos.local/api/v1";
-    server["description"] = "Local device";
-
-    JsonObject paths = doc["paths"].to<JsonObject>();
-
-    // ========== Device Endpoints ==========
-
-    // GET /device/status
-    JsonObject deviceStatus = paths["/device/status"].to<JsonObject>();
-    JsonObject getDeviceStatus = deviceStatus["get"].to<JsonObject>();
-    getDeviceStatus["summary"] = "Get device status (uptime, heap, FPS)";
-    getDeviceStatus["tags"].add("Device");
-
-    // GET /device/info
-    JsonObject deviceInfo = paths["/device/info"].to<JsonObject>();
-    JsonObject getDeviceInfo = deviceInfo["get"].to<JsonObject>();
-    getDeviceInfo["summary"] = "Get device info (firmware, hardware, SDK)";
-    getDeviceInfo["tags"].add("Device");
-
-    // ========== Effects Endpoints ==========
-
-    // GET /effects
-    JsonObject effects = paths["/effects"].to<JsonObject>();
-    JsonObject getEffects = effects["get"].to<JsonObject>();
-    getEffects["summary"] = "List effects with pagination";
-    getEffects["tags"].add("Effects");
-    JsonArray effectsParams = getEffects["parameters"].to<JsonArray>();
-    JsonObject pageParam = effectsParams.add<JsonObject>();
-    pageParam["name"] = "page";
-    pageParam["in"] = "query";
-    pageParam["schema"]["type"] = "integer";
-    JsonObject limitParam = effectsParams.add<JsonObject>();
-    limitParam["name"] = "limit";
-    limitParam["in"] = "query";
-    limitParam["schema"]["type"] = "integer";
-    JsonObject categoryParam = effectsParams.add<JsonObject>();
-    categoryParam["name"] = "category";
-    categoryParam["in"] = "query";
-    categoryParam["schema"]["type"] = "string";
-    JsonObject detailsParam = effectsParams.add<JsonObject>();
-    detailsParam["name"] = "details";
-    detailsParam["in"] = "query";
-    detailsParam["schema"]["type"] = "boolean";
-
-    // GET /effects/current
-    JsonObject effectsCurrent = paths["/effects/current"].to<JsonObject>();
-    JsonObject getEffectsCurrent = effectsCurrent["get"].to<JsonObject>();
-    getEffectsCurrent["summary"] = "Get current effect state";
-    getEffectsCurrent["tags"].add("Effects");
-
-    // POST /effects/set
-    JsonObject effectsSet = paths["/effects/set"].to<JsonObject>();
-    JsonObject postEffectsSet = effectsSet["post"].to<JsonObject>();
-    postEffectsSet["summary"] = "Set current effect by ID";
-    postEffectsSet["tags"].add("Effects");
-
-    // GET /effects/metadata
-    JsonObject effectsMeta = paths["/effects/metadata"].to<JsonObject>();
-    JsonObject getEffectsMeta = effectsMeta["get"].to<JsonObject>();
-    getEffectsMeta["summary"] = "Get effect metadata by ID";
-    getEffectsMeta["tags"].add("Effects");
-    JsonArray metaParams = getEffectsMeta["parameters"].to<JsonArray>();
-    JsonObject idParam = metaParams.add<JsonObject>();
-    idParam["name"] = "id";
-    idParam["in"] = "query";
-    idParam["required"] = true;
-    idParam["schema"]["type"] = "integer";
-
-    // GET/POST /effects/parameters
-    JsonObject effectsParametersPath = paths["/effects/parameters"].to<JsonObject>();
-    JsonObject getEffectsParams = effectsParametersPath["get"].to<JsonObject>();
-    getEffectsParams["summary"] = "Get effect parameter schema and values";
-    getEffectsParams["tags"].add("Effects");
-    JsonArray effectParamQuery = getEffectsParams["parameters"].to<JsonArray>();
-    JsonObject effectIdParam = effectParamQuery.add<JsonObject>();
-    effectIdParam["name"] = "id";
-    effectIdParam["in"] = "query";
-    effectIdParam["required"] = false;
-    effectIdParam["schema"]["type"] = "integer";
-
-    JsonObject postEffectsParams = effectsParametersPath["post"].to<JsonObject>();
-    postEffectsParams["summary"] = "Update effect parameters";
-    postEffectsParams["tags"].add("Effects");
-
-    // GET /effects/families
-    JsonObject effectsFamilies = paths["/effects/families"].to<JsonObject>();
-    JsonObject getEffectsFamilies = effectsFamilies["get"].to<JsonObject>();
-    getEffectsFamilies["summary"] = "List effect families/categories";
-    getEffectsFamilies["tags"].add("Effects");
-
-    // ========== Palettes Endpoints ==========
-
-    // GET /palettes
-    JsonObject palettes = paths["/palettes"].to<JsonObject>();
-    JsonObject getPalettes = palettes["get"].to<JsonObject>();
-    getPalettes["summary"] = "List palettes with pagination";
-    getPalettes["tags"].add("Palettes");
-    JsonArray paletteParams = getPalettes["parameters"].to<JsonArray>();
-    JsonObject palPageParam = paletteParams.add<JsonObject>();
-    palPageParam["name"] = "page";
-    palPageParam["in"] = "query";
-    palPageParam["schema"]["type"] = "integer";
-    JsonObject palLimitParam = paletteParams.add<JsonObject>();
-    palLimitParam["name"] = "limit";
-    palLimitParam["in"] = "query";
-    palLimitParam["schema"]["type"] = "integer";
-
-    // GET /palettes/current
-    JsonObject palettesCurrent = paths["/palettes/current"].to<JsonObject>();
-    JsonObject getPalettesCurrent = palettesCurrent["get"].to<JsonObject>();
-    getPalettesCurrent["summary"] = "Get current palette";
-    getPalettesCurrent["tags"].add("Palettes");
-
-    // POST /palettes/set
-    JsonObject palettesSet = paths["/palettes/set"].to<JsonObject>();
-    JsonObject postPalettesSet = palettesSet["post"].to<JsonObject>();
-    postPalettesSet["summary"] = "Set palette by ID";
-    postPalettesSet["tags"].add("Palettes");
-
-    // ========== Parameters Endpoints ==========
-
-    // GET /parameters
-    JsonObject parameters = paths["/parameters"].to<JsonObject>();
-    JsonObject getParams = parameters["get"].to<JsonObject>();
-    getParams["summary"] = "Get visual parameters";
-    getParams["tags"].add("Parameters");
-
-    // POST /parameters
-    JsonObject postParams = parameters["post"].to<JsonObject>();
-    postParams["summary"] = "Update visual parameters (brightness, speed, etc.)";
-    postParams["tags"].add("Parameters");
-
-    // ========== Audio Parameters Endpoints ==========
-    JsonObject audioParams = paths["/audio/parameters"].to<JsonObject>();
-    JsonObject getAudioParams = audioParams["get"].to<JsonObject>();
-    getAudioParams["summary"] = "Get audio pipeline and contract parameters";
-    getAudioParams["tags"].add("Audio");
-
-    JsonObject postAudioParams = audioParams["post"].to<JsonObject>();
-    postAudioParams["summary"] = "Update audio pipeline and contract parameters";
-    postAudioParams["tags"].add("Audio");
-
-    // ========== Transitions Endpoints ==========
-
-    // GET /transitions/types
-    JsonObject transTypes = paths["/transitions/types"].to<JsonObject>();
-    JsonObject getTransTypes = transTypes["get"].to<JsonObject>();
-    getTransTypes["summary"] = "List transition types";
-    getTransTypes["tags"].add("Transitions");
-
-    // GET /transitions/config
-    JsonObject transConfig = paths["/transitions/config"].to<JsonObject>();
-    JsonObject getTransConfig = transConfig["get"].to<JsonObject>();
-    getTransConfig["summary"] = "Get transition configuration";
-    getTransConfig["tags"].add("Transitions");
-
-    // POST /transitions/config
-    JsonObject postTransConfig = transConfig["post"].to<JsonObject>();
-    postTransConfig["summary"] = "Update transition configuration";
-    postTransConfig["tags"].add("Transitions");
-
-    // POST /transitions/trigger
-    JsonObject transTrigger = paths["/transitions/trigger"].to<JsonObject>();
-    JsonObject postTransTrigger = transTrigger["post"].to<JsonObject>();
-    postTransTrigger["summary"] = "Trigger a transition";
-    postTransTrigger["tags"].add("Transitions");
-
-    // ========== Narrative Endpoints ==========
-
-    // GET /narrative/status
-    JsonObject narrativeStatus = paths["/narrative/status"].to<JsonObject>();
-    JsonObject getNarrativeStatus = narrativeStatus["get"].to<JsonObject>();
-    getNarrativeStatus["summary"] = "Get narrative engine status";
-    getNarrativeStatus["tags"].add("Narrative");
-
-    // GET /narrative/config
-    JsonObject narrativeConfig = paths["/narrative/config"].to<JsonObject>();
-    JsonObject getNarrativeConfig = narrativeConfig["get"].to<JsonObject>();
-    getNarrativeConfig["summary"] = "Get narrative configuration";
-    getNarrativeConfig["tags"].add("Narrative");
-
-    // POST /narrative/config
-    JsonObject postNarrativeConfig = narrativeConfig["post"].to<JsonObject>();
-    postNarrativeConfig["summary"] = "Update narrative configuration";
-    postNarrativeConfig["tags"].add("Narrative");
-
-    // ========== Zones Endpoints ==========
-
-    // GET /zones
-    JsonObject zones = paths["/zones"].to<JsonObject>();
-    JsonObject getZones = zones["get"].to<JsonObject>();
-    getZones["summary"] = "List all zones with configuration";
-    getZones["tags"].add("Zones");
-
-    // POST /zones/layout
-    JsonObject zonesLayout = paths["/zones/layout"].to<JsonObject>();
-    JsonObject postZonesLayout = zonesLayout["post"].to<JsonObject>();
-    postZonesLayout["summary"] = "Set zone layout configuration";
-    postZonesLayout["tags"].add("Zones");
-
-    // ========== Batch Endpoints ==========
-
-    // POST /batch
-    JsonObject batch = paths["/batch"].to<JsonObject>();
-    JsonObject postBatch = batch["post"].to<JsonObject>();
-    postBatch["summary"] = "Execute batch operations (max 10)";
-    postBatch["tags"].add("Batch");
-
-    // ========== Sync Endpoints ==========
-
-    // GET /sync/status
-    JsonObject syncStatus = paths["/sync/status"].to<JsonObject>();
-    JsonObject getSyncStatus = syncStatus["get"].to<JsonObject>();
-    getSyncStatus["summary"] = "Get multi-device sync status";
-    getSyncStatus["tags"].add("Sync");
-
-    String output;
-    serializeJson(doc, output);
-    request->send(HttpStatus::OK, "application/json", output);
-}
-
-// ============================================================================
 // WebSocket Handlers
 // ============================================================================
 
 void WebServer::onWsEvent(AsyncWebSocket* server, AsyncWebSocketClient* client,
                           AwsEventType type, void* arg, uint8_t* data, size_t len) {
-    switch (type) {
-        case WS_EVT_CONNECT:
-            if (webServerInstance) webServerInstance->handleWsConnect(client);
-            break;
-
-        case WS_EVT_DISCONNECT:
-            if (webServerInstance) webServerInstance->handleWsDisconnect(client);
-            break;
-
-        case WS_EVT_DATA:
-            if (webServerInstance) webServerInstance->handleWsMessage(client, data, len);
-            break;
-
-        case WS_EVT_ERROR:
-            LW_LOGW("WS: Error from client %u", client->id());
-            break;
-
-        case WS_EVT_PONG:
-            // Pong received
-            break;
+    // Delegate to WsGateway (Phase 2: gateway handles all WS events)
+    if (webServerInstance && webServerInstance->m_wsGateway) {
+        webserver::WsGateway::onEvent(server, client, type, arg, data, len);
+    } else {
+        // Fallback for legacy path (should not happen after Phase 2 completion)
+        switch (type) {
+            case WS_EVT_CONNECT:
+                if (webServerInstance) webServerInstance->handleWsConnect(client);
+                break;
+            case WS_EVT_DISCONNECT:
+                if (webServerInstance) webServerInstance->handleWsDisconnect(client);
+                break;
+            case WS_EVT_DATA:
+                if (webServerInstance) webServerInstance->handleWsMessage(client, data, len);
+                break;
+            case WS_EVT_ERROR:
+                LW_LOGW("WS: Error from client %u", client->id());
+                break;
+            case WS_EVT_PONG:
+                break;
+        }
     }
 }
 
 void WebServer::handleWsConnect(AsyncWebSocketClient* client) {
+    // SAFETY: Validate m_ws pointer before accessing
+    if (!m_ws) {
+        LW_LOGW("handleWsConnect: m_ws is null");
+        return;
+    }
+    
     // Ensure stale client entries are purged before applying connection limits.
     m_ws->cleanupClients();
     if (m_ws->count() > WebServerConfig::MAX_WS_CLIENTS) {
@@ -3721,9 +720,12 @@ void WebServer::handleWsConnect(AsyncWebSocketClient* client) {
 
     LW_LOGI("WS: Client %u connected from %s", client->id(), client->remoteIP().toString().c_str());
 
-    // Send initial state
-    broadcastStatus();
-    broadcastZoneState();
+    // QUEUE PROTECTION: Defer initial broadcasts to prevent queue saturation on connect
+    // Instead of broadcasting immediately (which can queue messages for all clients),
+    // we defer to the update() loop which has proper throttling
+    // This prevents "Too many messages queued" errors when multiple clients connect rapidly
+    m_broadcastPending = true;  // Defer status broadcast
+    // Zone state will be sent on next update() tick if needed
 }
 
 void WebServer::handleWsDisconnect(AsyncWebSocketClient* client) {
@@ -3740,2418 +742,182 @@ void WebServer::handleWsDisconnect(AsyncWebSocketClient* client) {
 }
 
 void WebServer::handleWsMessage(AsyncWebSocketClient* client, uint8_t* data, size_t len) {
-    // Rate limit check (per-client IP)
-    IPAddress clientIP = client->remoteIP();
-    if (!m_rateLimiter.checkWebSocket(clientIP)) {
-        uint32_t retryAfter = m_rateLimiter.getRetryAfterSeconds(clientIP);
-        String errorMsg = buildWsRateLimitError(retryAfter);
-        client->text(errorMsg);
-        return;
+    // Delegate to WsGateway (Phase 2: gateway handles rate limiting, parsing, auth, routing)
+    if (m_wsGateway) {
+        m_wsGateway->handleMessage(client, data, len);
+    } else {
+        // Fallback if gateway not initialized (should not happen)
+        client->text(buildWsError(ErrorCodes::INTERNAL_ERROR, "Gateway not initialized"));
     }
-
-    // Parse message
-    if (len > 1024) {
-        client->text(buildWsError(ErrorCodes::INVALID_VALUE, "Message too large"));
-        return;
-    }
-
-    StaticJsonDocument<512> doc;
-    DeserializationError error = deserializeJson(doc, data, len);
-
-    if (error) {
-        client->text(buildWsError(ErrorCodes::INVALID_JSON, "Parse error"));
-        return;
-    }
-
-#if FEATURE_API_AUTH
-    // WebSocket authentication check
-    const char* key = config::NetworkConfig::API_KEY_VALUE;
-    if (key != nullptr && key[0] != '\0') {
-        // Auth is enabled - check if client is authenticated
-        if (m_authenticatedClients.find(client->id()) == m_authenticatedClients.end()) {
-            // Client not authenticated - only allow "auth" command
-            const char* msgType = doc["type"] | "";
-            if (strcmp(msgType, "auth") == 0) {
-                const char* providedKey = doc["apiKey"] | "";
-                if (strcmp(providedKey, key) == 0) {
-                    m_authenticatedClients.insert(client->id());
-                    client->text("{\"type\":\"auth\",\"success\":true}");
-                } else {
-                    client->text(buildWsError(ErrorCodes::UNAUTHORIZED, "Invalid API key").c_str());
-                }
-            } else {
-                client->text("{\"type\":\"error\",\"error\":{\"code\":\"UNAUTHORIZED\",\"message\":\"Authentication required. Send {\\\"type\\\":\\\"auth\\\",\\\"apiKey\\\":\\\"...\\\"}\"}}\n");
-            }
-            return;
-        }
-    }
-#endif
-
-    processWsCommand(client, doc);
 }
 
-void WebServer::processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc) {
-    if (!doc.containsKey("type")) {
-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "Missing 'type' field"));
-        return;
-    }
-
-    String type = doc["type"].as<String>();
-
-    // Effect control
-    if (type == "setEffect") {
-        uint8_t effectId = doc["effectId"] | 0;
-        if (effectId < m_renderer->getEffectCount()) {
-            m_actorSystem.setEffect(effectId);
-            broadcastStatus();
-        }
-    }
-    else if (type == "nextEffect") {
-        uint8_t current = m_renderer->getCurrentEffect();
-        uint8_t next = (current + 1) % m_renderer->getEffectCount();
-        m_actorSystem.setEffect(next);
-        broadcastStatus();
-    }
-    else if (type == "prevEffect") {
-        uint8_t current = m_renderer->getCurrentEffect();
-        uint8_t prev = (current + m_renderer->getEffectCount() - 1) % m_renderer->getEffectCount();
-        m_actorSystem.setEffect(prev);
-        broadcastStatus();
-    }
-
-    // Parameter control
-    else if (type == "setBrightness") {
-        uint8_t value = doc["value"] | 128;
-        m_actorSystem.setBrightness(value);
-        broadcastStatus();
-    }
-    else if (type == "setSpeed") {
-        uint8_t value = doc["value"] | 15;
-        if (value >= 1 && value <= 50) {
-            m_actorSystem.setSpeed(value);
-            broadcastStatus();
-        }
-    }
-    else if (type == "setPalette") {
-        uint8_t paletteId = doc["paletteId"] | 0;
-        m_actorSystem.setPalette(paletteId);
-        broadcastStatus();
-    }
-
-    // Transition control
-    else if (type == "transition.trigger") {
-        uint8_t toEffect = doc["toEffect"] | 0;
-        uint8_t transType = doc["transitionType"] | 0;
-        bool random = doc["random"] | false;
-
-        if (toEffect < m_renderer->getEffectCount()) {
-            if (random) {
-                m_renderer->startRandomTransition(toEffect);
-            } else {
-                m_renderer->startTransition(toEffect, transType);
-            }
-            broadcastStatus();
-        }
-    }
-
-    // Zone control
-    else if (type == "zone.enable" && m_zoneComposer) {
-        bool enable = doc["enable"] | false;
-        m_zoneComposer->setEnabled(enable);
-        broadcastZoneState();
-    }
-    else if (type == "zone.setEffect" && m_zoneComposer) {
-        uint8_t zoneId = doc["zoneId"] | 0;
-        uint8_t effectId = doc["effectId"] | 0;
-        m_zoneComposer->setZoneEffect(zoneId, effectId);
-        broadcastZoneState();
-    }
-    else if (type == "zone.setBrightness" && m_zoneComposer) {
-        uint8_t zoneId = doc["zoneId"] | 0;
-        uint8_t brightness = doc["brightness"] | 128;
-        m_zoneComposer->setZoneBrightness(zoneId, brightness);
-        broadcastZoneState();
-    }
-    else if (type == "zone.setSpeed" && m_zoneComposer) {
-        uint8_t zoneId = doc["zoneId"] | 0;
-        uint8_t speed = doc["speed"] | 15;
-        m_zoneComposer->setZoneSpeed(zoneId, speed);
-        broadcastZoneState();
-    }
-    else if (type == "zone.loadPreset" && m_zoneComposer) {
-        uint8_t presetId = doc["presetId"] | 0;
-        m_zoneComposer->loadPreset(presetId);
-        broadcastZoneState();
-    }
-
-    // Query commands
-    else if (type == "getStatus") {
-        broadcastStatus();
-    }
-    else if (type == "getZoneState") {
-        broadcastZoneState();
-    }
-
-    // LED stream subscription (for real-time visualizer)
-    else if (type == "ledStream.subscribe") {
-        uint32_t clientId = client->id();
-        const char* requestId = doc["requestId"] | "";
-        bool ok = setLEDStreamSubscription(client, true);
-        
-        if (ok) {
-            String response = buildWsResponse("ledStream.subscribed", requestId, [clientId](JsonObject& data) {
-                data["clientId"] = clientId;
-                data["frameSize"] = webserver::LedStreamConfig::FRAME_SIZE;
-                data["frameVersion"] = webserver::LedStreamConfig::FRAME_VERSION;
-                data["numStrips"] = webserver::LedStreamConfig::NUM_STRIPS;
-                data["ledsPerStrip"] = webserver::LedStreamConfig::LEDS_PER_STRIP;
-                data["targetFps"] = webserver::LedStreamConfig::TARGET_FPS;
-                data["magicByte"] = webserver::LedStreamConfig::MAGIC_BYTE;
-                data["accepted"] = true;
-            });
-            client->text(response);
-            LW_LOGD("WS: Client %u subscribed to LED stream (v%d, %d bytes)",
-                    clientId, webserver::LedStreamConfig::FRAME_VERSION, webserver::LedStreamConfig::FRAME_SIZE);
-        } else {
-            // Manually build rejection response to set success=false
-            JsonDocument response;
-            response["type"] = "ledStream.rejected";
-            if (requestId != nullptr && strlen(requestId) > 0) {
-                response["requestId"] = requestId;
-            }
-            response["success"] = false;
-            JsonObject error = response["error"].to<JsonObject>();
-            error["code"] = "RESOURCE_EXHAUSTED";
-            error["message"] = "Subscriber table full";
-
-            String output;
-            serializeJson(response, output);
-            client->text(output);
-            LW_LOGW("WS: Client %u LED stream subscription REJECTED", clientId);
-        }
-    }
-    else if (type == "ledStream.unsubscribe") {
-        uint32_t clientId = client->id();
-        setLEDStreamSubscription(client, false);
-        const char* requestId = doc["requestId"] | "";
-        String response = buildWsResponse("ledStream.unsubscribed", requestId, [clientId](JsonObject& data) {
-            data["clientId"] = clientId;
-        });
-        client->text(response);
-        LW_LOGD("WS: Client %u unsubscribed from LED stream", clientId);
-    }
-
-    // Request-response pattern with requestId
-    else if (type == "effects.getCurrent") {
-        const char* requestId = doc["requestId"] | "";
-        String response = buildWsResponse("effects.current", requestId, [this](JsonObject& data) {
-            data["effectId"] = m_renderer->getCurrentEffect();
-            data["name"] = m_renderer->getEffectName(m_renderer->getCurrentEffect());
-            data["brightness"] = m_renderer->getBrightness();
-            data["speed"] = m_renderer->getSpeed();
-            data["paletteId"] = m_renderer->getPaletteIndex();
-            data["hue"] = m_renderer->getHue();
-            data["intensity"] = m_renderer->getIntensity();
-            data["saturation"] = m_renderer->getSaturation();
-            data["complexity"] = m_renderer->getComplexity();
-            data["variation"] = m_renderer->getVariation();
-        });
-        client->text(response);
-    }
-    else if (type == "parameters.get") {
-        const char* requestId = doc["requestId"] | "";
-        String response = buildWsResponse("parameters", requestId, [this](JsonObject& data) {
-            data["brightness"] = m_renderer->getBrightness();
-            data["speed"] = m_renderer->getSpeed();
-            data["paletteId"] = m_renderer->getPaletteIndex();
-            data["hue"] = m_renderer->getHue();
-            data["intensity"] = m_renderer->getIntensity();
-            data["saturation"] = m_renderer->getSaturation();
-            data["complexity"] = m_renderer->getComplexity();
-            data["variation"] = m_renderer->getVariation();
-        });
-        client->text(response);
-    }
-#if FEATURE_AUDIO_SYNC
-    else if (type == "audio.parameters.get") {
-        const char* requestId = doc["requestId"] | "";
-        auto* audio = m_actorSystem.getAudio();
-        if (!audio) {
-            client->text(buildWsError(ErrorCodes::SYSTEM_NOT_READY, "Audio system not available", requestId));
-            return;
-        }
-
-        audio::AudioPipelineTuning pipeline = audio->getPipelineTuning();
-        audio::AudioDspState state = audio->getDspState();
-        audio::AudioContractTuning contract = m_renderer ? m_renderer->getAudioContractTuning()
-                                                         : audio::clampAudioContractTuning(audio::AudioContractTuning{});
-
-        String response = buildWsResponse("audio.parameters", requestId, [&](JsonObject& data) {
-            JsonObject pipelineObj = data["pipeline"].to<JsonObject>();
-            pipelineObj["dcAlpha"] = pipeline.dcAlpha;
-            pipelineObj["agcTargetRms"] = pipeline.agcTargetRms;
-            pipelineObj["agcMinGain"] = pipeline.agcMinGain;
-            pipelineObj["agcMaxGain"] = pipeline.agcMaxGain;
-            pipelineObj["agcAttack"] = pipeline.agcAttack;
-            pipelineObj["agcRelease"] = pipeline.agcRelease;
-            pipelineObj["agcClipReduce"] = pipeline.agcClipReduce;
-            pipelineObj["agcIdleReturnRate"] = pipeline.agcIdleReturnRate;
-            pipelineObj["noiseFloorMin"] = pipeline.noiseFloorMin;
-            pipelineObj["noiseFloorRise"] = pipeline.noiseFloorRise;
-            pipelineObj["noiseFloorFall"] = pipeline.noiseFloorFall;
-            pipelineObj["gateStartFactor"] = pipeline.gateStartFactor;
-            pipelineObj["gateRangeFactor"] = pipeline.gateRangeFactor;
-            pipelineObj["gateRangeMin"] = pipeline.gateRangeMin;
-            pipelineObj["rmsDbFloor"] = pipeline.rmsDbFloor;
-            pipelineObj["rmsDbCeil"] = pipeline.rmsDbCeil;
-            pipelineObj["bandDbFloor"] = pipeline.bandDbFloor;
-            pipelineObj["bandDbCeil"] = pipeline.bandDbCeil;
-            pipelineObj["chromaDbFloor"] = pipeline.chromaDbFloor;
-            pipelineObj["chromaDbCeil"] = pipeline.chromaDbCeil;
-            pipelineObj["fluxScale"] = pipeline.fluxScale;
-
-            JsonObject controlBus = data["controlBus"].to<JsonObject>();
-            controlBus["alphaFast"] = pipeline.controlBusAlphaFast;
-            controlBus["alphaSlow"] = pipeline.controlBusAlphaSlow;
-
-            JsonObject contractObj = data["contract"].to<JsonObject>();
-            contractObj["audioStalenessMs"] = contract.audioStalenessMs;
-            contractObj["bpmMin"] = contract.bpmMin;
-            contractObj["bpmMax"] = contract.bpmMax;
-            contractObj["bpmTau"] = contract.bpmTau;
-            contractObj["confidenceTau"] = contract.confidenceTau;
-            contractObj["phaseCorrectionGain"] = contract.phaseCorrectionGain;
-            contractObj["barCorrectionGain"] = contract.barCorrectionGain;
-            contractObj["beatsPerBar"] = contract.beatsPerBar;
-            contractObj["beatUnit"] = contract.beatUnit;
-
-            JsonObject stateObj = data["state"].to<JsonObject>();
-            stateObj["rmsRaw"] = state.rmsRaw;
-            stateObj["rmsMapped"] = state.rmsMapped;
-            stateObj["rmsPreGain"] = state.rmsPreGain;
-            stateObj["fluxMapped"] = state.fluxMapped;
-            stateObj["agcGain"] = state.agcGain;
-            stateObj["dcEstimate"] = state.dcEstimate;
-            stateObj["noiseFloor"] = state.noiseFloor;
-            stateObj["minSample"] = state.minSample;
-            stateObj["maxSample"] = state.maxSample;
-            stateObj["peakCentered"] = state.peakCentered;
-            stateObj["meanSample"] = state.meanSample;
-            stateObj["clipCount"] = state.clipCount;
-
-            JsonObject caps = data["capabilities"].to<JsonObject>();
-            caps["sampleRate"] = audio::SAMPLE_RATE;
-            caps["hopSize"] = audio::HOP_SIZE;
-            caps["fftSize"] = audio::FFT_SIZE;
-            caps["goertzelWindow"] = audio::GOERTZEL_WINDOW;
-            caps["bandCount"] = audio::NUM_BANDS;
-            caps["chromaCount"] = audio::CONTROLBUS_NUM_CHROMA;
-            caps["waveformPoints"] = audio::CONTROLBUS_WAVEFORM_N;
-        });
-        client->text(response);
-    }
-    // audio.subscribe - Subscribe client to binary audio stream
-    else if (type == "audio.subscribe") {
-        uint32_t clientId = client->id();
-        const char* requestId = doc["requestId"] | "";
-        bool ok = setAudioStreamSubscription(client, true);
-
-        if (ok) {
-            String response = buildWsResponse("audio.subscribed", requestId, [clientId](JsonObject& data) {
-                data["clientId"] = clientId;
-                data["frameSize"] = webserver::AudioStreamConfig::FRAME_SIZE;
-                data["streamVersion"] = webserver::AudioStreamConfig::STREAM_VERSION;
-                data["numBands"] = webserver::AudioStreamConfig::NUM_BANDS;
-                data["numChroma"] = webserver::AudioStreamConfig::NUM_CHROMA;
-                data["waveformSize"] = webserver::AudioStreamConfig::WAVEFORM_SIZE;
-                data["targetFps"] = webserver::AudioStreamConfig::TARGET_FPS;
-                data["status"] = "ok";
-            });
-            client->text(response);
-        } else {
-            // Build rejection response
-            JsonDocument response;
-            response["type"] = "audio.subscribed";
-            if (requestId != nullptr && strlen(requestId) > 0) {
-                response["requestId"] = requestId;
-            }
-            response["success"] = false;
-            JsonObject error = response["error"].to<JsonObject>();
-            error["code"] = "RESOURCE_EXHAUSTED";
-            error["message"] = "Audio subscriber table full or audio system unavailable";
-
-            String output;
-            serializeJson(response, output);
-            client->text(output);
-            LW_LOGW("WS: Client %u audio subscription REJECTED", clientId);
-        }
-    }
-    // audio.unsubscribe - Unsubscribe client from binary audio stream
-    else if (type == "audio.unsubscribe") {
-        uint32_t clientId = client->id();
-        const char* requestId = doc["requestId"] | "";
-        setAudioStreamSubscription(client, false);
-
-        String response = buildWsResponse("audio.unsubscribed", requestId, [clientId](JsonObject& data) {
-            data["clientId"] = clientId;
-            data["status"] = "ok";
-        });
-        client->text(response);
-    }
-    // audio.zone-agc.get - Get Zone AGC state
-    else if (type == "audio.zone-agc.get") {
-        const char* requestId = doc["requestId"] | "";
-        auto* audio = m_actorSystem.getAudio();
-        if (!audio) {
-            client->text(buildWsError(ErrorCodes::AUDIO_UNAVAILABLE, "Audio unavailable", requestId));
-            return;
-        }
-        const audio::ControlBus& controlBus = audio->getControlBusRef();
-        String response = buildWsResponse("audio.zone-agc.state", requestId,
-            [&controlBus](JsonObject& data) {
-                data["enabled"] = controlBus.getZoneAGCEnabled();
-                data["lookaheadEnabled"] = controlBus.getLookaheadEnabled();
-                JsonArray zones = data["zones"].to<JsonArray>();
-                for (uint8_t z = 0; z < audio::CONTROLBUS_NUM_ZONES; ++z) {
-                    JsonObject zone = zones.add<JsonObject>();
-                    zone["index"] = z;
-                    zone["follower"] = controlBus.getZoneFollower(z);
-                    zone["maxMag"] = controlBus.getZoneMaxMag(z);
-                }
-            });
-        client->text(response);
-    }
-    // audio.zone-agc.set - Set Zone AGC settings
-    else if (type == "audio.zone-agc.set") {
-        const char* requestId = doc["requestId"] | "";
-        auto* audio = m_actorSystem.getAudio();
-        if (!audio) {
-            client->text(buildWsError(ErrorCodes::AUDIO_UNAVAILABLE, "Audio unavailable", requestId));
-            return;
-        }
-        audio::ControlBus& controlBus = audio->getControlBusMut();
-        bool updated = false;
-        if (doc.containsKey("enabled")) {
-            controlBus.setZoneAGCEnabled(doc["enabled"].as<bool>());
-            updated = true;
-        }
-        if (doc.containsKey("lookaheadEnabled")) {
-            controlBus.setLookaheadEnabled(doc["lookaheadEnabled"].as<bool>());
-            updated = true;
-        }
-        if (doc.containsKey("attackRate") || doc.containsKey("releaseRate")) {
-            float attack = doc["attackRate"] | 0.05f;
-            float release = doc["releaseRate"] | 0.05f;
-            controlBus.setZoneAGCRates(attack, release);
-            updated = true;
-        }
-        if (doc.containsKey("minFloor")) {
-            controlBus.setZoneMinFloor(doc["minFloor"].as<float>());
-            updated = true;
-        }
-        String response = buildWsResponse("audio.zone-agc.updated", requestId,
-            [updated](JsonObject& data) { data["updated"] = updated; });
-        client->text(response);
-    }
-    // audio.spike-detection.get - Get spike detection stats
-    else if (type == "audio.spike-detection.get") {
-        const char* requestId = doc["requestId"] | "";
-        auto* audio = m_actorSystem.getAudio();
-        if (!audio) {
-            client->text(buildWsError(ErrorCodes::AUDIO_UNAVAILABLE, "Audio unavailable", requestId));
-            return;
-        }
-        const audio::ControlBus& controlBus = audio->getControlBusRef();
-        const audio::SpikeDetectionStats& stats = controlBus.getSpikeStats();
-        String response = buildWsResponse("audio.spike-detection.state", requestId,
-            [&controlBus, &stats](JsonObject& data) {
-                data["enabled"] = controlBus.getLookaheadEnabled();
-                JsonObject statsObj = data["stats"].to<JsonObject>();
-                statsObj["totalFrames"] = stats.totalFrames;
-                statsObj["spikesDetectedBands"] = stats.spikesDetectedBands;
-                statsObj["spikesDetectedChroma"] = stats.spikesDetectedChroma;
-                statsObj["spikesCorrected"] = stats.spikesCorrected;
-                statsObj["totalEnergyRemoved"] = stats.totalEnergyRemoved;
-                statsObj["avgSpikesPerFrame"] = stats.avgSpikesPerFrame;
-                statsObj["avgCorrectionMagnitude"] = stats.avgCorrectionMagnitude;
-            });
-        client->text(response);
-    }
-    // audio.spike-detection.reset - Reset spike detection stats
-    else if (type == "audio.spike-detection.reset") {
-        const char* requestId = doc["requestId"] | "";
-        auto* audio = m_actorSystem.getAudio();
-        if (!audio) {
-            client->text(buildWsError(ErrorCodes::AUDIO_UNAVAILABLE, "Audio unavailable", requestId));
-            return;
-        }
-        audio->getControlBusMut().resetSpikeStats();
-        String response = buildWsResponse("audio.spike-detection.reset", requestId,
-            [](JsonObject& data) { data["reset"] = true; });
-        client->text(response);
-    }
-#endif
-
-    // ========== MISSING V1 COMMANDS - NOW IMPLEMENTED ==========
-
-    // device.getStatus - Device status via WebSocket
-    else if (type == "device.getStatus") {
-        const char* requestId = doc["requestId"] | "";
-        String response = buildWsResponse("device.status", requestId, [this](JsonObject& data) {
-            data["uptime"] = (millis() - m_startTime) / 1000;
-            data["freeHeap"] = ESP.getFreeHeap();
-            data["heapSize"] = ESP.getHeapSize();
-            data["cpuFreq"] = ESP.getCpuFreqMHz();
-
-            // Render stats
-            const RenderStats& stats = m_renderer->getStats();
-            data["fps"] = stats.currentFPS;
-            data["cpuPercent"] = stats.cpuPercent;
-            data["framesRendered"] = stats.framesRendered;
-
-            // Network info
-            JsonObject network = data["network"].to<JsonObject>();
-            network["connected"] = WiFi.status() == WL_CONNECTED;
-            network["apMode"] = m_apMode;
-            if (WiFi.status() == WL_CONNECTED) {
-                network["ip"] = WiFi.localIP().toString();
-                network["rssi"] = WiFi.RSSI();
-            }
-
-            data["wsClients"] = m_ws->count();
-        });
-        client->text(response);
-    }
-
-    // effects.getMetadata - Effect metadata by ID
-    else if (type == "effects.getMetadata") {
-        const char* requestId = doc["requestId"] | "";
-        uint8_t effectId = doc["effectId"] | 255;
-
-        if (effectId == 255 || effectId >= m_renderer->getEffectCount()) {
-            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid effectId", requestId));
-            return;
-        }
-
-        String response = buildWsResponse("effects.metadata", requestId, [this, effectId](JsonObject& data) {
-            data["id"] = effectId;
-            data["name"] = m_renderer->getEffectName(effectId);
-
-            // Query PatternRegistry for metadata
-            const PatternMetadata* meta = PatternRegistry::getPatternMetadata(effectId);
-            if (meta) {
-                // Get family name
-                char familyName[32];
-                PatternRegistry::getFamilyName(meta->family, familyName, sizeof(familyName));
-                data["family"] = familyName;
-                data["familyId"] = static_cast<uint8_t>(meta->family);
-                
-                // Story and optical intent
-                if (meta->story) {
-                    data["story"] = meta->story;
-                }
-                if (meta->opticalIntent) {
-                    data["opticalIntent"] = meta->opticalIntent;
-                }
-                
-                // Tags as array
-                JsonArray tags = data["tags"].to<JsonArray>();
-                if (meta->hasTag(PatternTags::STANDING)) tags.add("STANDING");
-                if (meta->hasTag(PatternTags::TRAVELING)) tags.add("TRAVELING");
-                if (meta->hasTag(PatternTags::MOIRE)) tags.add("MOIRE");
-                if (meta->hasTag(PatternTags::DEPTH)) tags.add("DEPTH");
-                if (meta->hasTag(PatternTags::SPECTRAL)) tags.add("SPECTRAL");
-                if (meta->hasTag(PatternTags::CENTER_ORIGIN)) tags.add("CENTER_ORIGIN");
-                if (meta->hasTag(PatternTags::DUAL_STRIP)) tags.add("DUAL_STRIP");
-                if (meta->hasTag(PatternTags::PHYSICS)) tags.add("PHYSICS");
-            } else {
-                // Fallback if metadata not found
-                data["family"] = "Unknown";
-                data["familyId"] = 255;
-            }
-
-            // Effect properties
-            JsonObject properties = data["properties"].to<JsonObject>();
-            properties["centerOrigin"] = true;
-            properties["symmetricStrips"] = true;
-            properties["paletteAware"] = true;
-            properties["speedResponsive"] = true;
-
-            // Recommended settings
-            JsonObject recommended = data["recommended"].to<JsonObject>();
-            recommended["brightness"] = 180;
-            recommended["speed"] = 15;
-        });
-        client->text(response);
-    }
-    else if (type == "effects.parameters.get") {
-        const char* requestId = doc["requestId"] | "";
-        uint8_t effectId = doc["effectId"] | m_renderer->getCurrentEffect();
-
-        if (effectId >= m_renderer->getEffectCount()) {
-            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid effectId", requestId));
-            return;
-        }
-
-        plugins::IEffect* effect = m_renderer->getEffectInstance(effectId);
-        String response = buildWsResponse("effects.parameters", requestId, [this, effectId, effect](JsonObject& data) {
-            data["effectId"] = effectId;
-            data["name"] = m_renderer->getEffectName(effectId);
-            data["hasParameters"] = (effect != nullptr && effect->getParameterCount() > 0);
-
-            JsonArray params = data["parameters"].to<JsonArray>();
-            if (!effect) {
-                return;
-            }
-
-            uint8_t count = effect->getParameterCount();
-            for (uint8_t i = 0; i < count; ++i) {
-                const plugins::EffectParameter* param = effect->getParameter(i);
-                if (!param) continue;
-                JsonObject p = params.add<JsonObject>();
-                p["name"] = param->name;
-                p["displayName"] = param->displayName;
-                p["min"] = param->minValue;
-                p["max"] = param->maxValue;
-                p["default"] = param->defaultValue;
-                p["value"] = effect->getParameter(param->name);
-            }
-        });
-        client->text(response);
-    }
-
-    // effects.getCategories - Effect categories list (now returns Pattern Registry families)
-    else if (type == "effects.getCategories") {
-        const char* requestId = doc["requestId"] | "";
-        String response = buildWsResponse("effects.categories", requestId, [](JsonObject& data) {
-            JsonArray families = data["categories"].to<JsonArray>();
-            
-            // Return all 10 pattern families from registry
-            for (uint8_t i = 0; i < 10; i++) {
-                PatternFamily family = static_cast<PatternFamily>(i);
-                uint8_t count = PatternRegistry::getFamilyCount(family);
-                
-                JsonObject familyObj = families.add<JsonObject>();
-                familyObj["id"] = i;
-                
-                char familyName[32];
-                PatternRegistry::getFamilyName(family, familyName, sizeof(familyName));
-                familyObj["name"] = familyName;
-                familyObj["count"] = count;
-            }
-            
-            data["total"] = 10;
-        });
-        client->text(response);
-    }
-
-    // effects.getByFamily - Get effects by family ID
-    else if (type == "effects.getByFamily") {
-        const char* requestId = doc["requestId"] | "";
-        uint8_t familyId = doc["familyId"] | 255;
-        
-        if (familyId >= 10) {
-            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid familyId (0-9)", requestId));
-            return;
-        }
-        
-        PatternFamily family = static_cast<PatternFamily>(familyId);
-        uint8_t patternIndices[128];  // Max 128 patterns per family
-        uint8_t count = PatternRegistry::getPatternsByFamily(family, patternIndices, 128);
-        
-        String response = buildWsResponse("effects.byFamily", requestId, [familyId, patternIndices, count](JsonObject& data) {
-            data["familyId"] = familyId;
-            
-            char familyName[32];
-            PatternRegistry::getFamilyName(static_cast<PatternFamily>(familyId), familyName, sizeof(familyName));
-            data["familyName"] = familyName;
-            
-            JsonArray effects = data["effects"].to<JsonArray>();
-            for (uint8_t i = 0; i < count; i++) {
-                effects.add(patternIndices[i]);
-            }
-            
-            data["count"] = count;
-        });
-        client->text(response);
-    }
-
-    // transition.getTypes - Transition types list
-    else if (type == "transition.getTypes") {
-        const char* requestId = doc["requestId"] | "";
-        String response = buildWsResponse("transitions.types", requestId, [](JsonObject& data) {
-            JsonArray types = data["types"].to<JsonArray>();
-
-            for (uint8_t i = 0; i < static_cast<uint8_t>(TransitionType::TYPE_COUNT); i++) {
-                JsonObject type = types.add<JsonObject>();
-                type["id"] = i;
-                type["name"] = getTransitionName(static_cast<TransitionType>(i));
-            }
-
-            data["total"] = static_cast<uint8_t>(TransitionType::TYPE_COUNT);
-        });
-        client->text(response);
-    }
-
-    // transition.config - Get transition configuration
-    else if (type == "transition.config" && !doc.containsKey("defaultDuration") && !doc.containsKey("defaultType")) {
-        const char* requestId = doc["requestId"] | "";
-        String response = buildWsResponse("transitions.config", requestId, [](JsonObject& data) {
-            data["enabled"] = true;
-            data["defaultDuration"] = 1000;
-            data["defaultType"] = 0;
-            data["defaultTypeName"] = getTransitionName(TransitionType::FADE);
-
-            // Available easing curves
-            JsonArray easings = data["easings"].to<JsonArray>();
-            const char* easingNames[] = {
-                "LINEAR", "IN_QUAD", "OUT_QUAD", "IN_OUT_QUAD",
-                "IN_CUBIC", "OUT_CUBIC", "IN_OUT_CUBIC",
-                "IN_ELASTIC", "OUT_ELASTIC", "IN_OUT_ELASTIC"
-            };
-            for (uint8_t i = 0; i < 10; i++) {
-                JsonObject easing = easings.add<JsonObject>();
-                easing["id"] = i;
-                easing["name"] = easingNames[i];
-            }
-        });
-        client->text(response);
-    }
-
-    // transition.config - Set transition configuration
-    else if (type == "transition.config" && (doc.containsKey("defaultDuration") || doc.containsKey("defaultType"))) {
-        const char* requestId = doc["requestId"] | "";
-        uint16_t duration = doc["defaultDuration"] | 1000;
-        uint8_t type = doc["defaultType"] | 0;
-
-        if (type >= static_cast<uint8_t>(TransitionType::TYPE_COUNT)) {
-            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid transition type", requestId));
-            return;
-        }
-
-        // Currently transition config is not persisted, acknowledge the request
-        String response = buildWsResponse("transitions.config", requestId, [duration, type](JsonObject& data) {
-            data["defaultDuration"] = duration;
-            data["defaultType"] = type;
-            data["defaultTypeName"] = getTransitionName(static_cast<TransitionType>(type));
-            data["message"] = "Transition config updated";
-        });
-        client->text(response);
-    }
-
-    // zones.get - Zones list
-    else if (type == "zones.get") {
-        const char* requestId = doc["requestId"] | "";
-        
-        if (!m_zoneComposer) {
-            client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
-            return;
-        }
-
-        String response = buildWsResponse("zones", requestId, [this](JsonObject& data) {
-            data["enabled"] = m_zoneComposer->isEnabled();
-            data["layout"] = static_cast<uint8_t>(m_zoneComposer->getLayout());
-            data["layoutName"] = m_zoneComposer->getLayout() == ZoneLayout::QUAD ? "QUAD" : "TRIPLE";
-            data["zoneCount"] = m_zoneComposer->getZoneCount();
-
-            JsonArray zones = data["zones"].to<JsonArray>();
-            for (uint8_t i = 0; i < m_zoneComposer->getZoneCount(); i++) {
-                JsonObject zone = zones.add<JsonObject>();
-                zone["id"] = i;
-                zone["enabled"] = m_zoneComposer->isZoneEnabled(i);
-                zone["effectId"] = m_zoneComposer->getZoneEffect(i);
-                zone["effectName"] = m_renderer->getEffectName(m_zoneComposer->getZoneEffect(i));
-                zone["brightness"] = m_zoneComposer->getZoneBrightness(i);
-                zone["speed"] = m_zoneComposer->getZoneSpeed(i);
-                zone["paletteId"] = m_zoneComposer->getZonePalette(i);
-                zone["blendMode"] = static_cast<uint8_t>(m_zoneComposer->getZoneBlendMode(i));
-                zone["blendModeName"] = getBlendModeName(m_zoneComposer->getZoneBlendMode(i));
-            }
-
-            // Available presets
-            JsonArray presets = data["presets"].to<JsonArray>();
-            for (uint8_t i = 0; i < 5; i++) {
-                JsonObject preset = presets.add<JsonObject>();
-                preset["id"] = i;
-                preset["name"] = ZoneComposer::getPresetName(i);
-            }
-        });
-        client->text(response);
-    }
-
-    // batch - Batch operations via WebSocket
-    else if (type == "batch") {
-        const char* requestId = doc["requestId"] | "";
-
-        if (!doc.containsKey("operations") || !doc["operations"].is<JsonArray>()) {
-            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "operations array required", requestId));
-            return;
-        }
-
-        JsonArray ops = doc["operations"];
-        if (ops.size() > WebServerConfig::MAX_BATCH_OPERATIONS) {
-            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Max 10 operations per batch", requestId));
-            return;
-        }
-
-        uint8_t processed = 0;
-        uint8_t failed = 0;
-
-        for (JsonVariant op : ops) {
-            String action = op["action"] | "";
-            if (executeBatchAction(action, op)) {
-                processed++;
-            } else {
-                failed++;
-            }
-        }
-
-        String response = buildWsResponse("batch.result", requestId, [processed, failed](JsonObject& data) {
-            data["processed"] = processed;
-            data["failed"] = failed;
-        });
-        client->text(response);
-
-        broadcastStatus();
-    }
-
-    // ========== V2 WebSocket Commands ==========
-
-    // zone.setPalette - Set zone palette (CRITICAL for dashboard)
-    else if (type == "zone.setPalette" && m_zoneComposer) {
-        const char* requestId = doc["requestId"] | "";
-        uint8_t zoneId = doc["zoneId"] | 0;
-        uint8_t paletteId = doc["paletteId"] | 0;
-
-        if (zoneId >= m_zoneComposer->getZoneCount()) {
-            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid zoneId", requestId));
-            return;
-        }
-
-        m_zoneComposer->setZonePalette(zoneId, paletteId);
-        broadcastZoneState();
-
-        String response = buildWsResponse("zone.paletteChanged", requestId, [zoneId, paletteId](JsonObject& data) {
-            data["zoneId"] = zoneId;
-            data["paletteId"] = paletteId;
-        });
-        client->text(response);
-    }
-
-    // effects.list - Return paginated effects list
-    else if (type == "effects.list") {
-        const char* requestId = doc["requestId"] | "";
-        uint8_t page = doc["page"] | 1;
-        uint8_t limit = doc["limit"] | 20;
-        bool details = doc["details"] | false;
-
-        if (page < 1) page = 1;
-        if (limit < 1) limit = 1;
-        if (limit > 50) limit = 50;
-
-        uint8_t effectCount = m_renderer->getEffectCount();
-        uint8_t startIdx = (page - 1) * limit;
-        uint8_t endIdx = min((uint8_t)(startIdx + limit), effectCount);
-
-        String response = buildWsResponse("effects.list", requestId, [this, effectCount, startIdx, endIdx, page, limit, details](JsonObject& data) {
-            JsonArray effects = data["effects"].to<JsonArray>();
-
-            for (uint8_t i = startIdx; i < endIdx; i++) {
-                JsonObject effect = effects.add<JsonObject>();
-                effect["id"] = i;
-                effect["name"] = m_renderer->getEffectName(i);
-
-                if (details) {
-                    // Category based on ID ranges
-                    if (i <= 4) {
-                        effect["category"] = "Classic";
-                    } else if (i <= 7) {
-                        effect["category"] = "Wave";
-                    } else if (i <= 12) {
-                        effect["category"] = "Physics";
-                    } else {
-                        effect["category"] = "Custom";
-                    }
-                }
-            }
-
-            JsonObject pagination = data["pagination"].to<JsonObject>();
-            pagination["page"] = page;
-            pagination["limit"] = limit;
-            pagination["total"] = effectCount;
-            pagination["pages"] = (effectCount + limit - 1) / limit;
-        });
-        client->text(response);
-    }
-
-    // effects.setCurrent - Set effect with optional transition
-    else if (type == "effects.setCurrent") {
-        const char* requestId = doc["requestId"] | "";
-        uint8_t effectId = doc["effectId"] | 255;
-
-        if (effectId == 255) {
-            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "effectId required", requestId));
-            return;
-        }
-
-        if (effectId >= m_renderer->getEffectCount()) {
-            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid effectId", requestId));
-            return;
-        }
-
-        // Check for transition options
-        bool useTransition = false;
-        uint8_t transType = 0;
-        uint16_t duration = 1000;
-
-        if (doc.containsKey("transition")) {
-            JsonObject trans = doc["transition"];
-            useTransition = true;
-            transType = trans["type"] | 0;
-            duration = trans["duration"] | 1000;
-        }
-
-        if (useTransition && transType < static_cast<uint8_t>(TransitionType::TYPE_COUNT)) {
-            m_renderer->startTransition(effectId, transType);
-        } else {
-            m_actorSystem.setEffect(effectId);
-        }
-
-        broadcastStatus();
-
-        String response = buildWsResponse("effects.changed", requestId, [this, effectId, useTransition](JsonObject& data) {
-            data["effectId"] = effectId;
-            data["name"] = m_renderer->getEffectName(effectId);
-            data["transitionActive"] = useTransition;
-        });
-        client->text(response);
-    }
-
-    else if (type == "effects.parameters.set") {
-        const char* requestId = doc["requestId"] | "";
-        uint8_t effectId = doc["effectId"] | m_renderer->getCurrentEffect();
-
-        if (effectId >= m_renderer->getEffectCount()) {
-            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid effectId", requestId));
-            return;
-        }
-
-        plugins::IEffect* effect = m_renderer->getEffectInstance(effectId);
-        if (!effect) {
-            client->text(buildWsError(ErrorCodes::INVALID_VALUE, "Effect has no parameters", requestId));
-            return;
-        }
-
-        if (!doc.containsKey("parameters") || !doc["parameters"].is<JsonObject>()) {
-            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "Missing parameters object", requestId));
-            return;
-        }
-
-        JsonObject params = doc["parameters"].as<JsonObject>();
-        String response = buildWsResponse("effects.parameters.changed", requestId,
-                                          [this, effectId, effect, params](JsonObject& data) {
-            data["effectId"] = effectId;
-            data["name"] = m_renderer->getEffectName(effectId);
-
-            JsonArray queuedArr = data["queued"].to<JsonArray>();
-            JsonArray failedArr = data["failed"].to<JsonArray>();
-
-            for (JsonPair kv : params) {
-                const char* key = kv.key().c_str();
-                float value = kv.value().as<float>();
-                bool known = false;
-                uint8_t count = effect->getParameterCount();
-                for (uint8_t i = 0; i < count; ++i) {
-                    const plugins::EffectParameter* param = effect->getParameter(i);
-                    if (param && strcmp(param->name, key) == 0) {
-                        known = true;
-                        break;
-                    }
-                }
-                if (!known) {
-                    failedArr.add(key);
-                    continue;
-                }
-                if (m_renderer->enqueueEffectParameterUpdate(effectId, key, value)) {
-                    queuedArr.add(key);
-                } else {
-                    failedArr.add(key);
-                }
-            }
-        });
-        client->text(response);
-    }
-
-    // parameters.set - Update parameters
-    else if (type == "parameters.set") {
-        const char* requestId = doc["requestId"] | "";
-
-        // Track what was updated
-        bool updatedBrightness = false;
-        bool updatedSpeed = false;
-        bool updatedPalette = false;
-        bool updatedIntensity = false;
-        bool updatedSaturation = false;
-        bool updatedComplexity = false;
-        bool updatedVariation = false;
-        bool updatedHue = false;
-
-        if (doc.containsKey("brightness")) {
-            uint8_t value = doc["brightness"] | 128;
-            m_actorSystem.setBrightness(value);
-            updatedBrightness = true;
-        }
-
-        if (doc.containsKey("speed")) {
-            uint8_t value = doc["speed"] | 15;
-            if (value >= 1 && value <= 50) {
-                m_actorSystem.setSpeed(value);
-                updatedSpeed = true;
-            }
-        }
-
-        if (doc.containsKey("paletteId")) {
-            uint8_t value = doc["paletteId"] | 0;
-            m_actorSystem.setPalette(value);
-            updatedPalette = true;
-        }
-
-        if (doc.containsKey("intensity")) {
-            uint8_t value = doc["intensity"] | 128;
-            m_actorSystem.setIntensity(value);
-            updatedIntensity = true;
-        }
-
-        if (doc.containsKey("saturation")) {
-            uint8_t value = doc["saturation"] | 255;
-            m_actorSystem.setSaturation(value);
-            updatedSaturation = true;
-        }
-
-        if (doc.containsKey("complexity")) {
-            uint8_t value = doc["complexity"] | 128;
-            m_actorSystem.setComplexity(value);
-            updatedComplexity = true;
-        }
-
-        if (doc.containsKey("variation")) {
-            uint8_t value = doc["variation"] | 0;
-            m_actorSystem.setVariation(value);
-            updatedVariation = true;
-        }
-
-        if (doc.containsKey("hue")) {
-            uint8_t value = doc["hue"] | 0;
-            m_actorSystem.setHue(value);
-            updatedHue = true;
-        }
-
-        broadcastStatus();
-
-        String response = buildWsResponse("parameters.changed", requestId, [this, updatedBrightness, updatedSpeed, updatedPalette, updatedIntensity, updatedSaturation, updatedComplexity, updatedVariation, updatedHue](JsonObject& data) {
-            JsonArray updated = data["updated"].to<JsonArray>();
-            if (updatedBrightness) updated.add("brightness");
-            if (updatedSpeed) updated.add("speed");
-            if (updatedPalette) updated.add("paletteId");
-            if (updatedIntensity) updated.add("intensity");
-            if (updatedSaturation) updated.add("saturation");
-            if (updatedComplexity) updated.add("complexity");
-            if (updatedVariation) updated.add("variation");
-            if (updatedHue) updated.add("hue");
-
-            JsonObject current = data["current"].to<JsonObject>();
-            current["brightness"] = m_renderer->getBrightness();
-            current["speed"] = m_renderer->getSpeed();
-            current["paletteId"] = m_renderer->getPaletteIndex();
-            current["hue"] = m_renderer->getHue();
-            current["intensity"] = m_renderer->getIntensity();
-            current["saturation"] = m_renderer->getSaturation();
-            current["complexity"] = m_renderer->getComplexity();
-            current["variation"] = m_renderer->getVariation();
-        });
-        client->text(response);
-    }
-#if FEATURE_AUDIO_SYNC
-    else if (type == "audio.parameters.set") {
-        const char* requestId = doc["requestId"] | "";
-        auto* audio = m_actorSystem.getAudio();
-        if (!audio) {
-            client->text(buildWsError(ErrorCodes::SYSTEM_NOT_READY, "Audio system not available", requestId));
-            return;
-        }
-
-        bool updatedPipeline = false;
-        bool updatedContract = false;
-        bool resetState = false;
-
-        audio::AudioPipelineTuning pipeline = audio->getPipelineTuning();
-        audio::AudioContractTuning contract = m_renderer ? m_renderer->getAudioContractTuning()
-                                                         : audio::clampAudioContractTuning(audio::AudioContractTuning{});
-
-        auto applyFloat = [](JsonVariant source, const char* key, float& target, bool& updated) {
-            if (!source.is<JsonObject>()) return;
-            if (source.containsKey(key)) {
-                target = source[key].as<float>();
-                updated = true;
-            }
-        };
-
-        auto applyUint8 = [](JsonVariant source, const char* key, uint8_t& target, bool& updated) {
-            if (!source.is<JsonObject>()) return;
-            if (source.containsKey(key)) {
-                target = source[key].as<uint8_t>();
-                updated = true;
-            }
-        };
-
-        JsonVariant pipelineSrc = doc.as<JsonVariant>();
-        if (doc.containsKey("pipeline")) {
-            pipelineSrc = doc["pipeline"];
-        }
-        applyFloat(pipelineSrc, "dcAlpha", pipeline.dcAlpha, updatedPipeline);
-        applyFloat(pipelineSrc, "agcTargetRms", pipeline.agcTargetRms, updatedPipeline);
-        applyFloat(pipelineSrc, "agcMinGain", pipeline.agcMinGain, updatedPipeline);
-        applyFloat(pipelineSrc, "agcMaxGain", pipeline.agcMaxGain, updatedPipeline);
-        applyFloat(pipelineSrc, "agcAttack", pipeline.agcAttack, updatedPipeline);
-        applyFloat(pipelineSrc, "agcRelease", pipeline.agcRelease, updatedPipeline);
-        applyFloat(pipelineSrc, "agcClipReduce", pipeline.agcClipReduce, updatedPipeline);
-        applyFloat(pipelineSrc, "agcIdleReturnRate", pipeline.agcIdleReturnRate, updatedPipeline);
-        applyFloat(pipelineSrc, "noiseFloorMin", pipeline.noiseFloorMin, updatedPipeline);
-        applyFloat(pipelineSrc, "noiseFloorRise", pipeline.noiseFloorRise, updatedPipeline);
-        applyFloat(pipelineSrc, "noiseFloorFall", pipeline.noiseFloorFall, updatedPipeline);
-        applyFloat(pipelineSrc, "gateStartFactor", pipeline.gateStartFactor, updatedPipeline);
-        applyFloat(pipelineSrc, "gateRangeFactor", pipeline.gateRangeFactor, updatedPipeline);
-        applyFloat(pipelineSrc, "gateRangeMin", pipeline.gateRangeMin, updatedPipeline);
-        applyFloat(pipelineSrc, "rmsDbFloor", pipeline.rmsDbFloor, updatedPipeline);
-        applyFloat(pipelineSrc, "rmsDbCeil", pipeline.rmsDbCeil, updatedPipeline);
-        applyFloat(pipelineSrc, "bandDbFloor", pipeline.bandDbFloor, updatedPipeline);
-        applyFloat(pipelineSrc, "bandDbCeil", pipeline.bandDbCeil, updatedPipeline);
-        applyFloat(pipelineSrc, "chromaDbFloor", pipeline.chromaDbFloor, updatedPipeline);
-        applyFloat(pipelineSrc, "chromaDbCeil", pipeline.chromaDbCeil, updatedPipeline);
-        applyFloat(pipelineSrc, "fluxScale", pipeline.fluxScale, updatedPipeline);
-
-        JsonVariant controlBusSrc = doc.as<JsonVariant>();
-        if (doc.containsKey("controlBus")) {
-            controlBusSrc = doc["controlBus"];
-        }
-        applyFloat(controlBusSrc, "alphaFast", pipeline.controlBusAlphaFast, updatedPipeline);
-        applyFloat(controlBusSrc, "alphaSlow", pipeline.controlBusAlphaSlow, updatedPipeline);
-
-        JsonVariant contractSrc = doc.as<JsonVariant>();
-        if (doc.containsKey("contract")) {
-            contractSrc = doc["contract"];
-        }
-        applyFloat(contractSrc, "audioStalenessMs", contract.audioStalenessMs, updatedContract);
-        applyFloat(contractSrc, "bpmMin", contract.bpmMin, updatedContract);
-        applyFloat(contractSrc, "bpmMax", contract.bpmMax, updatedContract);
-        applyFloat(contractSrc, "bpmTau", contract.bpmTau, updatedContract);
-        applyFloat(contractSrc, "confidenceTau", contract.confidenceTau, updatedContract);
-        applyFloat(contractSrc, "phaseCorrectionGain", contract.phaseCorrectionGain, updatedContract);
-        applyFloat(contractSrc, "barCorrectionGain", contract.barCorrectionGain, updatedContract);
-        applyUint8(contractSrc, "beatsPerBar", contract.beatsPerBar, updatedContract);
-        applyUint8(contractSrc, "beatUnit", contract.beatUnit, updatedContract);
-
-        if (doc.containsKey("resetState")) {
-            resetState = doc["resetState"] | false;
-        }
-
-        if (updatedPipeline) {
-            audio->setPipelineTuning(pipeline);
-        }
-        if (updatedContract && m_renderer) {
-            m_renderer->setAudioContractTuning(contract);
-        }
-        if (resetState) {
-            audio->resetDspState();
-        }
-
-        String response = buildWsResponse("audio.parameters.changed", requestId,
-                                          [updatedPipeline, updatedContract, resetState](JsonObject& data) {
-            JsonArray updated = data["updated"].to<JsonArray>();
-            if (updatedPipeline) updated.add("pipeline");
-            if (updatedContract) updated.add("contract");
-            if (resetState) updated.add("state");
-        });
-        client->text(response);
-    }
-#endif
-
-    // zones.list - Return all zones (alias for zones.get with v2 naming)
-    else if (type == "zones.list") {
-        const char* requestId = doc["requestId"] | "";
-
-        if (!m_zoneComposer) {
-            client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
-            return;
-        }
-
-        String response = buildWsResponse("zones.list", requestId, [this](JsonObject& data) {
-            data["enabled"] = m_zoneComposer->isEnabled();
-            data["zoneCount"] = m_zoneComposer->getZoneCount();
-
-            JsonArray zones = data["zones"].to<JsonArray>();
-            for (uint8_t i = 0; i < m_zoneComposer->getZoneCount(); i++) {
-                JsonObject zone = zones.add<JsonObject>();
-                zone["id"] = i;
-                zone["enabled"] = m_zoneComposer->isZoneEnabled(i);
-                zone["effectId"] = m_zoneComposer->getZoneEffect(i);
-                zone["effectName"] = m_renderer->getEffectName(m_zoneComposer->getZoneEffect(i));
-                zone["brightness"] = m_zoneComposer->getZoneBrightness(i);
-                zone["speed"] = m_zoneComposer->getZoneSpeed(i);
-                zone["paletteId"] = m_zoneComposer->getZonePalette(i);
-            }
-        });
-        client->text(response);
-    }
-
-    // zones.update - Update zone configuration
-    else if (type == "zones.update" && m_zoneComposer) {
-        const char* requestId = doc["requestId"] | "";
-        uint8_t zoneId = doc["zoneId"] | 255;
-
-        if (zoneId == 255) {
-            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "zoneId required", requestId));
-            return;
-        }
-
-        if (zoneId >= m_zoneComposer->getZoneCount()) {
-            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid zoneId", requestId));
-            return;
-        }
-
-        // Track what was updated
-        bool updatedEffect = false;
-        bool updatedBrightness = false;
-        bool updatedSpeed = false;
-        bool updatedPalette = false;
-
-        if (doc.containsKey("effectId")) {
-            uint8_t effectId = doc["effectId"] | 0;
-            if (effectId < m_renderer->getEffectCount()) {
-                m_zoneComposer->setZoneEffect(zoneId, effectId);
-                updatedEffect = true;
-            }
-        }
-
-        if (doc.containsKey("brightness")) {
-            uint8_t brightness = doc["brightness"] | 128;
-            m_zoneComposer->setZoneBrightness(zoneId, brightness);
-            updatedBrightness = true;
-        }
-
-        if (doc.containsKey("speed")) {
-            uint8_t speed = doc["speed"] | 15;
-            m_zoneComposer->setZoneSpeed(zoneId, speed);
-            updatedSpeed = true;
-        }
-
-        if (doc.containsKey("paletteId")) {
-            uint8_t paletteId = doc["paletteId"] | 0;
-            m_zoneComposer->setZonePalette(zoneId, paletteId);
-            updatedPalette = true;
-        }
-
-        broadcastZoneState();
-
-        String response = buildWsResponse("zones.changed", requestId, [this, zoneId, updatedEffect, updatedBrightness, updatedSpeed, updatedPalette](JsonObject& data) {
-            data["zoneId"] = zoneId;
-
-            JsonArray updated = data["updated"].to<JsonArray>();
-            if (updatedEffect) updated.add("effectId");
-            if (updatedBrightness) updated.add("brightness");
-            if (updatedSpeed) updated.add("speed");
-            if (updatedPalette) updated.add("paletteId");
-
-            JsonObject current = data["current"].to<JsonObject>();
-            current["effectId"] = m_zoneComposer->getZoneEffect(zoneId);
-            current["brightness"] = m_zoneComposer->getZoneBrightness(zoneId);
-            current["speed"] = m_zoneComposer->getZoneSpeed(zoneId);
-            current["paletteId"] = m_zoneComposer->getZonePalette(zoneId);
-        });
-        client->text(response);
-    }
-
-    // zones.setEffect - Set zone effect (v2 naming)
-    else if (type == "zones.setEffect" && m_zoneComposer) {
-        const char* requestId = doc["requestId"] | "";
-        uint8_t zoneId = doc["zoneId"] | 255;
-        uint8_t effectId = doc["effectId"] | 255;
-
-        if (zoneId == 255) {
-            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "zoneId required", requestId));
-            return;
-        }
-
-        if (effectId == 255) {
-            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "effectId required", requestId));
-            return;
-        }
-
-        if (zoneId >= m_zoneComposer->getZoneCount()) {
-            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid zoneId", requestId));
-            return;
-        }
-
-        if (effectId >= m_renderer->getEffectCount()) {
-            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid effectId", requestId));
-            return;
-        }
-
-        m_zoneComposer->setZoneEffect(zoneId, effectId);
-        broadcastZoneState();
-
-        String response = buildWsResponse("zones.effectChanged", requestId, [this, zoneId, effectId](JsonObject& data) {
-            data["zoneId"] = zoneId;
-            data["effectId"] = effectId;
-            data["effectName"] = m_renderer->getEffectName(effectId);
-        });
-        client->text(response);
-    }
-
-    // device.getInfo - Device hardware info via WebSocket
-    else if (type == "device.getInfo") {
-        const char* requestId = doc["requestId"] | "";
-        String response = buildWsResponse("device.info", requestId, [](JsonObject& data) {
-            data["firmware"] = "2.0.0";
-            data["board"] = "ESP32-S3-DevKitC-1";
-            data["sdk"] = ESP.getSdkVersion();
-            data["flashSize"] = ESP.getFlashChipSize();
-            data["sketchSize"] = ESP.getSketchSize();
-            data["freeSketch"] = ESP.getFreeSketchSpace();
-            data["chipModel"] = ESP.getChipModel();
-            data["chipRevision"] = ESP.getChipRevision();
-            data["chipCores"] = ESP.getChipCores();
-        });
-        client->text(response);
-    }
-
-    // transitions.list - Transition types list (v2 naming)
-    else if (type == "transitions.list") {
-        const char* requestId = doc["requestId"] | "";
-        String response = buildWsResponse("transitions.list", requestId, [](JsonObject& data) {
-            JsonArray types = data["types"].to<JsonArray>();
-
-            for (uint8_t i = 0; i < static_cast<uint8_t>(TransitionType::TYPE_COUNT); i++) {
-                JsonObject type = types.add<JsonObject>();
-                type["id"] = i;
-                type["name"] = getTransitionName(static_cast<TransitionType>(i));
-            }
-
-            JsonArray easings = data["easingCurves"].to<JsonArray>();
-            const char* easingNames[] = {
-                "LINEAR", "IN_QUAD", "OUT_QUAD", "IN_OUT_QUAD",
-                "IN_CUBIC", "OUT_CUBIC", "IN_OUT_CUBIC",
-                "IN_ELASTIC", "OUT_ELASTIC", "IN_OUT_ELASTIC"
-            };
-            for (uint8_t i = 0; i < 10; i++) {
-                JsonObject easing = easings.add<JsonObject>();
-                easing["id"] = i;
-                easing["name"] = easingNames[i];
-            }
-
-            data["total"] = static_cast<uint8_t>(TransitionType::TYPE_COUNT);
-        });
-        client->text(response);
-    }
-
-    // transitions.trigger - Trigger transition (v2 naming)
-    else if (type == "transitions.trigger") {
-        const char* requestId = doc["requestId"] | "";
-        uint8_t toEffect = doc["toEffect"] | 255;
-        uint8_t transType = doc["type"] | 0;
-        uint16_t duration = doc["duration"] | 1000;
-
-        if (toEffect == 255) {
-            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "toEffect required", requestId));
-            return;
-        }
-
-        if (toEffect >= m_renderer->getEffectCount()) {
-            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid toEffect", requestId));
-            return;
-        }
-
-        uint8_t fromEffect = m_renderer->getCurrentEffect();
-        m_renderer->startTransition(toEffect, transType);
-        broadcastStatus();
-
-        String response = buildWsResponse("transition.started", requestId, [this, fromEffect, toEffect, transType, duration](JsonObject& data) {
-            data["fromEffect"] = fromEffect;
-            data["toEffect"] = toEffect;
-            data["toEffectName"] = m_renderer->getEffectName(toEffect);
-            data["transitionType"] = transType;
-            data["transitionName"] = getTransitionName(static_cast<TransitionType>(transType));
-            data["duration"] = duration;
-        });
-        client->text(response);
-    }
-
-    // narrative.getStatus - Get current narrative state
-    else if (type == "narrative.getStatus") {
-        using namespace lightwaveos::narrative;
-        const char* requestId = doc["requestId"] | "";
-        NarrativeEngine& narrative = NarrativeEngine::getInstance();
-        
-        String response = buildWsResponse("narrative.status", requestId, [&narrative](JsonObject& data) {
-            // Current state
-            data["enabled"] = narrative.isEnabled();
-            data["tension"] = narrative.getTension() * 100.0f;  // Convert 0-1 to 0-100
-            data["phaseT"] = narrative.getPhaseT();
-            data["cycleT"] = narrative.getCycleT();
-            
-            // Phase as string
-            NarrativePhase phase = narrative.getPhase();
-            const char* phaseName = "UNKNOWN";
-            switch (phase) {
-                case PHASE_BUILD:   phaseName = "BUILD"; break;
-                case PHASE_HOLD:    phaseName = "HOLD"; break;
-                case PHASE_RELEASE: phaseName = "RELEASE"; break;
-                case PHASE_REST:    phaseName = "REST"; break;
-            }
-            data["phase"] = phaseName;
-            data["phaseId"] = static_cast<uint8_t>(phase);
-            
-            // Phase durations
-            JsonObject durations = data["durations"].to<JsonObject>();
-            durations["build"] = narrative.getBuildDuration();
-            durations["hold"] = narrative.getHoldDuration();
-            durations["release"] = narrative.getReleaseDuration();
-            durations["rest"] = narrative.getRestDuration();
-            durations["total"] = narrative.getTotalDuration();
-            
-            // Derived values
-            data["tempoMultiplier"] = narrative.getTempoMultiplier();
-            data["complexityScaling"] = narrative.getComplexityScaling();
-        });
-        client->text(response);
-    }
-
-    // narrative.config - Get narrative configuration
-    else if (type == "narrative.config" && !doc.containsKey("durations") && !doc.containsKey("enabled") && !doc.containsKey("curves")) {
-        using namespace lightwaveos::narrative;
-        const char* requestId = doc["requestId"] | "";
-        NarrativeEngine& narrative = NarrativeEngine::getInstance();
-        
-        String response = buildWsResponse("narrative.config", requestId, [&narrative](JsonObject& data) {
-            // Phase durations
-            JsonObject durations = data["durations"].to<JsonObject>();
-            durations["build"] = narrative.getBuildDuration();
-            durations["hold"] = narrative.getHoldDuration();
-            durations["release"] = narrative.getReleaseDuration();
-            durations["rest"] = narrative.getRestDuration();
-            durations["total"] = narrative.getTotalDuration();
-            
-            // Curves
-            JsonObject curves = data["curves"].to<JsonObject>();
-            curves["build"] = static_cast<uint8_t>(narrative.getBuildCurve());
-            curves["release"] = static_cast<uint8_t>(narrative.getReleaseCurve());
-            
-            // Optional behaviors
-            data["holdBreathe"] = narrative.getHoldBreathe();
-            data["snapAmount"] = narrative.getSnapAmount();
-            data["durationVariance"] = narrative.getDurationVariance();
-            
-            data["enabled"] = narrative.isEnabled();
-        });
-        client->text(response);
-    }
-
-    // narrative.config - Set narrative configuration
-    else if (type == "narrative.config" && (doc.containsKey("durations") || doc.containsKey("enabled") || doc.containsKey("curves"))) {
-        using namespace lightwaveos::narrative;
-        const char* requestId = doc["requestId"] | "";
-        NarrativeEngine& narrative = NarrativeEngine::getInstance();
-        bool updated = false;
-        
-        // Update phase durations if provided
-        if (doc.containsKey("durations")) {
-            JsonObject durations = doc["durations"];
-            if (durations.containsKey("build")) {
-                narrative.setBuildDuration(durations["build"] | 1.5f);
-                updated = true;
-            }
-            if (durations.containsKey("hold")) {
-                narrative.setHoldDuration(durations["hold"] | 0.5f);
-                updated = true;
-            }
-            if (durations.containsKey("release")) {
-                narrative.setReleaseDuration(durations["release"] | 1.5f);
-                updated = true;
-            }
-            if (durations.containsKey("rest")) {
-                narrative.setRestDuration(durations["rest"] | 0.5f);
-                updated = true;
-            }
-        }
-        
-        // Update curves if provided
-        if (doc.containsKey("curves")) {
-            JsonObject curves = doc["curves"];
-            if (curves.containsKey("build")) {
-                narrative.setBuildCurve(static_cast<lightwaveos::effects::EasingCurve>(curves["build"] | 1));
-                updated = true;
-            }
-            if (curves.containsKey("release")) {
-                narrative.setReleaseCurve(static_cast<lightwaveos::effects::EasingCurve>(curves["release"] | 6));
-                updated = true;
-            }
-        }
-        
-        // Update optional behaviors
-        if (doc.containsKey("holdBreathe")) {
-            narrative.setHoldBreathe(doc["holdBreathe"] | 0.0f);
-            updated = true;
-        }
-        if (doc.containsKey("snapAmount")) {
-            narrative.setSnapAmount(doc["snapAmount"] | 0.0f);
-            updated = true;
-        }
-        if (doc.containsKey("durationVariance")) {
-            narrative.setDurationVariance(doc["durationVariance"] | 0.0f);
-            updated = true;
-        }
-        
-        // Update enabled state
-        if (doc.containsKey("enabled")) {
-            bool enabled = doc["enabled"] | false;
-            if (enabled) {
-                narrative.enable();
-            } else {
-                narrative.disable();
-            }
-            updated = true;
-        }
-        
-        String response = buildWsResponse("narrative.config", requestId, [updated](JsonObject& data) {
-            data["message"] = updated ? "Narrative config updated" : "No changes";
-            data["updated"] = updated;
-        });
-        client->text(response);
-    }
-
-    // palettes.list - Return paginated palette list
-    else if (type == "palettes.list") {
-        const char* requestId = doc["requestId"] | "";
-        uint8_t page = doc["page"] | 1;
-        uint8_t limit = doc["limit"] | 20;
-
-        if (page < 1) page = 1;
-        if (limit < 1) limit = 1;
-        if (limit > 50) limit = 50;
-
-        uint8_t startIdx = (page - 1) * limit;
-        uint8_t endIdx = min((uint8_t)(startIdx + limit), (uint8_t)MASTER_PALETTE_COUNT);
-
-        String response = buildWsResponse("palettes.list", requestId, [startIdx, endIdx, page, limit](JsonObject& data) {
-            JsonArray palettes = data["palettes"].to<JsonArray>();
-
-            for (uint8_t i = startIdx; i < endIdx; i++) {
-                JsonObject palette = palettes.add<JsonObject>();
-                palette["id"] = i;
-                palette["name"] = MasterPaletteNames[i];
-                palette["category"] = getPaletteCategory(i);
-            }
-
-            JsonObject pagination = data["pagination"].to<JsonObject>();
-            pagination["page"] = page;
-            pagination["limit"] = limit;
-            pagination["total"] = MASTER_PALETTE_COUNT;
-            pagination["pages"] = (MASTER_PALETTE_COUNT + limit - 1) / limit;
-        });
-        client->text(response);
-    }
-
-    // palettes.get - Get single palette details
-    else if (type == "palettes.get") {
-        const char* requestId = doc["requestId"] | "";
-        uint8_t paletteId = doc["paletteId"] | 255;
-
-        if (paletteId == 255) {
-            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "paletteId required", requestId));
-            return;
-        }
-
-        if (paletteId >= MASTER_PALETTE_COUNT) {
-            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Palette ID out of range", requestId));
-            return;
-        }
-
-        String response = buildWsResponse("palettes.get", requestId, [paletteId](JsonObject& data) {
-            JsonObject palette = data["palette"].to<JsonObject>();
-            palette["id"] = paletteId;
-            palette["name"] = MasterPaletteNames[paletteId];
-            palette["category"] = getPaletteCategory(paletteId);
-
-            JsonObject flags = palette["flags"].to<JsonObject>();
-            flags["warm"] = isPaletteWarm(paletteId);
-            flags["cool"] = isPaletteCool(paletteId);
-            flags["calm"] = isPaletteCalm(paletteId);
-            flags["vivid"] = isPaletteVivid(paletteId);
-            flags["cvdFriendly"] = isPaletteCVDFriendly(paletteId);
-            flags["whiteHeavy"] = paletteHasFlag(paletteId, PAL_WHITE_HEAVY);
-
-            palette["avgBrightness"] = getPaletteAvgBrightness(paletteId);
-            palette["maxBrightness"] = getPaletteMaxBrightness(paletteId);
-        });
-        client->text(response);
-    }
-
-    // ========================================================================
-    // Motion Engine - Core, Phase, and Speed Commands
-    // ========================================================================
-
-    // motion.getStatus - Get motion engine status
-    else if (type == "motion.getStatus") {
-        const char* requestId = doc["requestId"] | "";
-        auto& engine = lightwaveos::enhancement::MotionEngine::getInstance();
-
-        String response = buildWsResponse("motion.getStatus", requestId, [&engine](JsonObject& data) {
-            data["enabled"] = engine.isEnabled();
-            data["phaseOffset"] = engine.getPhaseController().stripPhaseOffset;
-            data["autoRotateSpeed"] = engine.getPhaseController().phaseVelocity;
-            data["baseSpeed"] = engine.getSpeedModulator().getBaseSpeed();
-        });
-        client->text(response);
-    }
-
-    // motion.enable - Enable motion engine
-    else if (type == "motion.enable") {
-        const char* requestId = doc["requestId"] | "";
-        auto& engine = lightwaveos::enhancement::MotionEngine::getInstance();
-        engine.enable();
-
-        String response = buildWsResponse("motion.enable", requestId, [](JsonObject& data) {
-            data["enabled"] = true;
-        });
-        client->text(response);
-    }
-
-    // motion.disable - Disable motion engine
-    else if (type == "motion.disable") {
-        const char* requestId = doc["requestId"] | "";
-        auto& engine = lightwaveos::enhancement::MotionEngine::getInstance();
-        engine.disable();
-
-        String response = buildWsResponse("motion.disable", requestId, [](JsonObject& data) {
-            data["enabled"] = false;
-        });
-        client->text(response);
-    }
-
-    // motion.phase.setOffset - Set strip phase offset
-    else if (type == "motion.phase.setOffset") {
-        const char* requestId = doc["requestId"] | "";
-        float degrees = doc["degrees"] | -1.0f;
-
-        if (degrees < 0.0f || degrees > 360.0f) {
-            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "degrees must be 0-360", requestId));
-            return;
-        }
-
-        auto& engine = lightwaveos::enhancement::MotionEngine::getInstance();
-        engine.getPhaseController().setStripPhaseOffset(degrees);
-
-        String response = buildWsResponse("motion.phase.setOffset", requestId, [degrees](JsonObject& data) {
-            data["degrees"] = degrees;
-        });
-        client->text(response);
-    }
-
-    // motion.phase.enableAutoRotate - Enable auto-rotation
-    else if (type == "motion.phase.enableAutoRotate") {
-        const char* requestId = doc["requestId"] | "";
-        float degreesPerSecond = doc["degreesPerSecond"] | 0.0f;
-
-        auto& engine = lightwaveos::enhancement::MotionEngine::getInstance();
-        engine.getPhaseController().enableAutoRotate(degreesPerSecond);
-
-        String response = buildWsResponse("motion.phase.enableAutoRotate", requestId, [degreesPerSecond](JsonObject& data) {
-            data["degreesPerSecond"] = degreesPerSecond;
-            data["autoRotate"] = true;
-        });
-        client->text(response);
-    }
-
-    // motion.phase.getPhase - Get current phase
-    else if (type == "motion.phase.getPhase") {
-        const char* requestId = doc["requestId"] | "";
-        auto& engine = lightwaveos::enhancement::MotionEngine::getInstance();
-        float radians = engine.getPhaseController().getStripPhaseRadians();
-        float degrees = radians * 180.0f / 3.14159265f;
-
-        String response = buildWsResponse("motion.phase.getPhase", requestId, [degrees, radians](JsonObject& data) {
-            data["degrees"] = degrees;
-            data["radians"] = radians;
-        });
-        client->text(response);
-    }
-
-    // motion.speed.setModulation - Set speed modulation mode
-    else if (type == "motion.speed.setModulation") {
-        const char* requestId = doc["requestId"] | "";
-        const char* modTypeStr = doc["type"] | "";
-        float depth = doc["depth"] | 0.5f;
-
-        if (depth < 0.0f || depth > 1.0f) {
-            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "depth must be 0.0-1.0", requestId));
-            return;
-        }
-
-        // Parse modulation type string
-        lightwaveos::enhancement::SpeedModulator::ModulationType modType;
-        if (strcmp(modTypeStr, "CONSTANT") == 0) {
-            modType = lightwaveos::enhancement::SpeedModulator::MOD_CONSTANT;
-        } else if (strcmp(modTypeStr, "SINE_WAVE") == 0) {
-            modType = lightwaveos::enhancement::SpeedModulator::MOD_SINE_WAVE;
-        } else if (strcmp(modTypeStr, "EXPONENTIAL_DECAY") == 0) {
-            modType = lightwaveos::enhancement::SpeedModulator::MOD_EXPONENTIAL_DECAY;
-        } else {
-            client->text(buildWsError(ErrorCodes::INVALID_VALUE, "Invalid type (CONSTANT, SINE_WAVE, EXPONENTIAL_DECAY)", requestId));
-            return;
-        }
-
-        auto& engine = lightwaveos::enhancement::MotionEngine::getInstance();
-        engine.getSpeedModulator().setModulation(modType, depth);
-
-        String response = buildWsResponse("motion.speed.setModulation", requestId, [modTypeStr, depth](JsonObject& data) {
-            data["type"] = modTypeStr;
-            data["depth"] = depth;
-        });
-        client->text(response);
-    }
-
-    // motion.speed.setBaseSpeed - Set base speed
-    else if (type == "motion.speed.setBaseSpeed") {
-        const char* requestId = doc["requestId"] | "";
-        float speed = doc["speed"] | -1.0f;
-
-        if (speed < 0.0f) {
-            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "speed required", requestId));
-            return;
-        }
-
-        auto& engine = lightwaveos::enhancement::MotionEngine::getInstance();
-        engine.getSpeedModulator().setBaseSpeed(speed);
-
-        String response = buildWsResponse("motion.speed.setBaseSpeed", requestId, [speed](JsonObject& data) {
-            data["speed"] = speed;
-        });
-        client->text(response);
-    }
-
-    // ========================================================================
-    // Motion Engine - Momentum/Particle Physics Commands
-    // ========================================================================
-
-    // motion.momentum.getStatus - Get particle system status
-    else if (type == "motion.momentum.getStatus") {
-        const char* requestId = doc["requestId"] | "";
-        auto& momentum = lightwaveos::enhancement::MotionEngine::getInstance().getMomentumEngine();
-
-        String response = buildWsResponse("motion.momentum.getStatus", requestId, [&momentum](JsonObject& data) {
-            data["activeCount"] = momentum.getActiveCount();
-            data["maxParticles"] = lightwaveos::enhancement::MomentumEngine::MAX_PARTICLES;
-        });
-        client->text(response);
-    }
-
-    // motion.momentum.addParticle - Create a new particle
-    else if (type == "motion.momentum.addParticle") {
-        const char* requestId = doc["requestId"] | "";
-        auto& momentum = lightwaveos::enhancement::MotionEngine::getInstance().getMomentumEngine();
-
-        float pos = doc["position"] | 0.5f;
-        float vel = doc["velocity"] | 0.0f;
-        float mass = doc["mass"] | 1.0f;
-
-        // Parse boundary mode from string
-        lightwaveos::enhancement::BoundaryMode mode = lightwaveos::enhancement::BOUNDARY_WRAP;
-        String boundaryStr = doc["boundary"] | "WRAP";
-        if (boundaryStr == "BOUNCE") mode = lightwaveos::enhancement::BOUNDARY_BOUNCE;
-        else if (boundaryStr == "CLAMP") mode = lightwaveos::enhancement::BOUNDARY_CLAMP;
-        else if (boundaryStr == "DIE") mode = lightwaveos::enhancement::BOUNDARY_DIE;
-
-        int id = momentum.addParticle(pos, vel, mass, CRGB::White, mode);
-
-        String response = buildWsResponse("motion.momentum.addParticle", requestId, [id](JsonObject& data) {
-            data["particleId"] = id;
-            data["success"] = (id >= 0);
-        });
-        client->text(response);
-    }
-
-    // motion.momentum.applyForce - Apply force to a particle
-    else if (type == "motion.momentum.applyForce") {
-        const char* requestId = doc["requestId"] | "";
-
-        if (!doc.containsKey("particleId")) {
-            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "particleId required", requestId));
-            return;
-        }
-
-        int particleId = doc["particleId"] | -1;
-        float force = doc["force"] | 0.0f;
-
-        if (particleId < 0 || particleId >= lightwaveos::enhancement::MomentumEngine::MAX_PARTICLES) {
-            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "particleId out of range (0-31)", requestId));
-            return;
-        }
-
-        auto& momentum = lightwaveos::enhancement::MotionEngine::getInstance().getMomentumEngine();
-        momentum.applyForce(particleId, force);
-
-        String response = buildWsResponse("motion.momentum.applyForce", requestId, [particleId, force](JsonObject& data) {
-            data["particleId"] = particleId;
-            data["force"] = force;
-            data["applied"] = true;
-        });
-        client->text(response);
-    }
-
-    // motion.momentum.getParticle - Get particle state
-    else if (type == "motion.momentum.getParticle") {
-        const char* requestId = doc["requestId"] | "";
-
-        if (!doc.containsKey("particleId")) {
-            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "particleId required", requestId));
-            return;
-        }
-
-        int particleId = doc["particleId"] | -1;
-
-        if (particleId < 0 || particleId >= lightwaveos::enhancement::MomentumEngine::MAX_PARTICLES) {
-            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "particleId out of range (0-31)", requestId));
-            return;
-        }
-
-        auto& momentum = lightwaveos::enhancement::MotionEngine::getInstance().getMomentumEngine();
-        auto* particle = momentum.getParticle(particleId);
-
-        if (!particle) {
-            client->text(buildWsError(ErrorCodes::INTERNAL_ERROR, "Failed to get particle", requestId));
-            return;
-        }
-
-        String response = buildWsResponse("motion.momentum.getParticle", requestId, [particleId, particle](JsonObject& data) {
-            data["particleId"] = particleId;
-            data["position"] = particle->position;
-            data["velocity"] = particle->velocity;
-            data["mass"] = particle->mass;
-            data["alive"] = particle->active;
-        });
-        client->text(response);
-    }
-
-    // motion.momentum.reset - Clear all particles
-    else if (type == "motion.momentum.reset") {
-        const char* requestId = doc["requestId"] | "";
-        auto& momentum = lightwaveos::enhancement::MotionEngine::getInstance().getMomentumEngine();
-
-        momentum.reset();
-
-        String response = buildWsResponse("motion.momentum.reset", requestId, [](JsonObject& data) {
-            data["message"] = "All particles cleared";
-            data["activeCount"] = 0;
-        });
-        client->text(response);
-    }
-
-    // motion.momentum.update - Force physics tick
-    else if (type == "motion.momentum.update") {
-        const char* requestId = doc["requestId"] | "";
-        float deltaTime = doc["deltaTime"] | 0.016f;  // Default ~60fps
-
-        auto& momentum = lightwaveos::enhancement::MotionEngine::getInstance().getMomentumEngine();
-        momentum.update(deltaTime);
-
-        String response = buildWsResponse("motion.momentum.update", requestId, [deltaTime, &momentum](JsonObject& data) {
-            data["deltaTime"] = deltaTime;
-            data["activeCount"] = momentum.getActiveCount();
-            data["updated"] = true;
-        });
-        client->text(response);
-    }
-
-    // ========================================================================
-    // Color Engine - Cross-palette blending, rotation, diffusion
-    // ========================================================================
-
-    // color.getStatus - Get current engine state
-    else if (type == "color.getStatus") {
-        const char* requestId = doc["requestId"] | "";
-        auto& engine = lightwaveos::enhancement::ColorEngine::getInstance();
-
-        String response = buildWsResponse("color.getStatus", requestId, [&engine](JsonObject& data) {
-            data["active"] = engine.isActive();
-            data["blendEnabled"] = engine.isCrossBlendEnabled();
-
-            JsonArray blendFactors = data["blendFactors"].to<JsonArray>();
-            blendFactors.add(engine.getBlendFactor1());
-            blendFactors.add(engine.getBlendFactor2());
-            blendFactors.add(engine.getBlendFactor3());
-
-            data["rotationEnabled"] = engine.isRotationEnabled();
-            data["rotationSpeed"] = engine.getRotationSpeed();
-            data["rotationPhase"] = engine.getRotationPhase();
-
-            data["diffusionEnabled"] = engine.isDiffusionEnabled();
-            data["diffusionAmount"] = engine.getDiffusionAmount();
-        });
-        client->text(response);
-    }
-
-    // color.enableBlend - Enable/disable cross-palette blending
-    else if (type == "color.enableBlend") {
-        const char* requestId = doc["requestId"] | "";
-
-        if (!doc.containsKey("enable")) {
-            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "enable required", requestId));
-            return;
-        }
-
-        bool enable = doc["enable"] | false;
-        auto& engine = lightwaveos::enhancement::ColorEngine::getInstance();
-        engine.enableCrossBlend(enable);
-
-        String response = buildWsResponse("color.enableBlend", requestId, [enable](JsonObject& data) {
-            data["blendEnabled"] = enable;
-        });
-        client->text(response);
-    }
-
-    // color.setBlendPalettes - Set 2-3 palettes to blend
-    else if (type == "color.setBlendPalettes") {
-        const char* requestId = doc["requestId"] | "";
-
-        if (!doc.containsKey("palette1") || !doc.containsKey("palette2")) {
-            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "palette1 and palette2 required", requestId));
-            return;
-        }
-
-        uint8_t p1 = doc["palette1"] | 0;
-        uint8_t p2 = doc["palette2"] | 0;
-        uint8_t p3 = doc["palette3"] | 255; // 255 = not specified
-
-        if (p1 >= MASTER_PALETTE_COUNT || p2 >= MASTER_PALETTE_COUNT ||
-            (p3 != 255 && p3 >= MASTER_PALETTE_COUNT)) {
-            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Palette ID out of range", requestId));
-            return;
-        }
-
-        auto& engine = lightwaveos::enhancement::ColorEngine::getInstance();
-        CRGBPalette16 pal1(gMasterPalettes[p1]);
-        CRGBPalette16 pal2(gMasterPalettes[p2]);
-
-        if (p3 != 255) {
-            CRGBPalette16 pal3(gMasterPalettes[p3]);
-            engine.setBlendPalettes(pal1, pal2, &pal3);
-        } else {
-            engine.setBlendPalettes(pal1, pal2, nullptr);
-        }
-
-        String response = buildWsResponse("color.setBlendPalettes", requestId, [p1, p2, p3](JsonObject& data) {
-            JsonArray palettes = data["blendPalettes"].to<JsonArray>();
-            palettes.add(p1);
-            palettes.add(p2);
-            if (p3 != 255) palettes.add(p3);
-        });
-        client->text(response);
-    }
-
-    // color.setBlendFactors - Set blend weights
-    else if (type == "color.setBlendFactors") {
-        const char* requestId = doc["requestId"] | "";
-
-        if (!doc.containsKey("factor1") || !doc.containsKey("factor2")) {
-            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "factor1 and factor2 required", requestId));
-            return;
-        }
-
-        uint8_t f1 = doc["factor1"] | 0;
-        uint8_t f2 = doc["factor2"] | 0;
-        uint8_t f3 = doc["factor3"] | 0;
-
-        auto& engine = lightwaveos::enhancement::ColorEngine::getInstance();
-        engine.setBlendFactors(f1, f2, f3);
-
-        String response = buildWsResponse("color.setBlendFactors", requestId, [f1, f2, f3](JsonObject& data) {
-            JsonArray factors = data["blendFactors"].to<JsonArray>();
-            factors.add(f1);
-            factors.add(f2);
-            factors.add(f3);
-        });
-        client->text(response);
-    }
-
-    // color.enableRotation - Enable temporal hue rotation
-    else if (type == "color.enableRotation") {
-        const char* requestId = doc["requestId"] | "";
-
-        if (!doc.containsKey("enable")) {
-            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "enable required", requestId));
-            return;
-        }
-
-        bool enable = doc["enable"] | false;
-        auto& engine = lightwaveos::enhancement::ColorEngine::getInstance();
-        engine.enableTemporalRotation(enable);
-
-        String response = buildWsResponse("color.enableRotation", requestId, [enable](JsonObject& data) {
-            data["rotationEnabled"] = enable;
-        });
-        client->text(response);
-    }
-
-    // color.setRotationSpeed - Set rotation speed
-    else if (type == "color.setRotationSpeed") {
-        const char* requestId = doc["requestId"] | "";
-
-        if (!doc.containsKey("degreesPerFrame")) {
-            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "degreesPerFrame required", requestId));
-            return;
-        }
-
-        float speed = doc["degreesPerFrame"] | 0.0f;
-        auto& engine = lightwaveos::enhancement::ColorEngine::getInstance();
-        engine.setRotationSpeed(speed);
-
-        String response = buildWsResponse("color.setRotationSpeed", requestId, [speed](JsonObject& data) {
-            data["rotationSpeed"] = speed;
-        });
-        client->text(response);
-    }
-
-    // color.enableDiffusion - Enable Gaussian blur
-    else if (type == "color.enableDiffusion") {
-        const char* requestId = doc["requestId"] | "";
-
-        if (!doc.containsKey("enable")) {
-            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "enable required", requestId));
-            return;
-        }
-
-        bool enable = doc["enable"] | false;
-        auto& engine = lightwaveos::enhancement::ColorEngine::getInstance();
-        engine.enableDiffusion(enable);
-
-        String response = buildWsResponse("color.enableDiffusion", requestId, [enable](JsonObject& data) {
-            data["diffusionEnabled"] = enable;
-        });
-        client->text(response);
-    }
-
-    // color.setDiffusionAmount - Set blur intensity
-    else if (type == "color.setDiffusionAmount") {
-        const char* requestId = doc["requestId"] | "";
-
-        if (!doc.containsKey("amount")) {
-            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "amount required", requestId));
-            return;
-        }
-
-        uint8_t amount = doc["amount"] | 0;
-        auto& engine = lightwaveos::enhancement::ColorEngine::getInstance();
-        engine.setDiffusionAmount(amount);
-
-        String response = buildWsResponse("color.setDiffusionAmount", requestId, [amount](JsonObject& data) {
-            data["diffusionAmount"] = amount;
-        });
-        client->text(response);
-    }
-
-    // ========================================================================
-    // Color Correction Engine - White/Brown guardrails, gamma, auto-exposure
-    // ========================================================================
-
-    // colorCorrection.getConfig - Get full configuration
-    else if (type == "colorCorrection.getConfig") {
-        const char* requestId = doc["requestId"] | "";
-        auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
-        auto& cfg = engine.getConfig();
-
-        String response = buildWsResponse("colorCorrection.getConfig", requestId, [&cfg](JsonObject& data) {
-            data["mode"] = (uint8_t)cfg.mode;
-            data["modeNames"] = "OFF,HSV,RGB,BOTH";
-            data["hsvMinSaturation"] = cfg.hsvMinSaturation;
-            data["rgbWhiteThreshold"] = cfg.rgbWhiteThreshold;
-            data["rgbTargetMin"] = cfg.rgbTargetMin;
-            data["autoExposureEnabled"] = cfg.autoExposureEnabled;
-            data["autoExposureTarget"] = cfg.autoExposureTarget;
-            data["gammaEnabled"] = cfg.gammaEnabled;
-            data["gammaValue"] = cfg.gammaValue;
-            data["brownGuardrailEnabled"] = cfg.brownGuardrailEnabled;
-            data["maxGreenPercentOfRed"] = cfg.maxGreenPercentOfRed;
-            data["maxBluePercentOfRed"] = cfg.maxBluePercentOfRed;
-        });
-        client->text(response);
-    }
-
-    // colorCorrection.setMode - Set correction mode
-    else if (type == "colorCorrection.setMode") {
-        const char* requestId = doc["requestId"] | "";
-
-        if (!doc.containsKey("mode")) {
-            client->text(buildWsError(ErrorCodes::MISSING_FIELD, "mode required (0-3)", requestId));
-            return;
-        }
-
-        uint8_t mode = doc["mode"] | 2;
-        if (mode > 3) {
-            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "mode must be 0-3 (OFF,HSV,RGB,BOTH)", requestId));
-            return;
-        }
-
-        auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
-        engine.setMode((lightwaveos::enhancement::CorrectionMode)mode);
-
-        String response = buildWsResponse("colorCorrection.setMode", requestId, [mode](JsonObject& data) {
-            data["mode"] = mode;
-            const char* names[] = {"OFF", "HSV", "RGB", "BOTH"};
-            data["modeName"] = names[mode];
-        });
-        client->text(response);
-    }
-
-    // colorCorrection.setConfig - Update configuration fields
-    else if (type == "colorCorrection.setConfig") {
-        const char* requestId = doc["requestId"] | "";
-        auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
-        auto& cfg = engine.getConfig();
-
-        // Update any fields provided
-        if (doc.containsKey("mode")) {
-            uint8_t mode = doc["mode"];
-            if (mode <= 3) cfg.mode = (lightwaveos::enhancement::CorrectionMode)mode;
-        }
-        if (doc.containsKey("hsvMinSaturation")) {
-            cfg.hsvMinSaturation = doc["hsvMinSaturation"];
-        }
-        if (doc.containsKey("rgbWhiteThreshold")) {
-            cfg.rgbWhiteThreshold = doc["rgbWhiteThreshold"];
-        }
-        if (doc.containsKey("rgbTargetMin")) {
-            cfg.rgbTargetMin = doc["rgbTargetMin"];
-        }
-        if (doc.containsKey("autoExposureEnabled")) {
-            cfg.autoExposureEnabled = doc["autoExposureEnabled"];
-        }
-        if (doc.containsKey("autoExposureTarget")) {
-            cfg.autoExposureTarget = doc["autoExposureTarget"];
-        }
-        if (doc.containsKey("gammaEnabled")) {
-            cfg.gammaEnabled = doc["gammaEnabled"];
-        }
-        if (doc.containsKey("gammaValue")) {
-            float val = doc["gammaValue"];
-            if (val >= 1.0f && val <= 3.0f) cfg.gammaValue = val;
-        }
-        if (doc.containsKey("brownGuardrailEnabled")) {
-            cfg.brownGuardrailEnabled = doc["brownGuardrailEnabled"];
-        }
-        if (doc.containsKey("maxGreenPercentOfRed")) {
-            cfg.maxGreenPercentOfRed = doc["maxGreenPercentOfRed"];
-        }
-        if (doc.containsKey("maxBluePercentOfRed")) {
-            cfg.maxBluePercentOfRed = doc["maxBluePercentOfRed"];
-        }
-
-        String response = buildWsResponse("colorCorrection.setConfig", requestId, [&cfg](JsonObject& data) {
-            data["mode"] = (uint8_t)cfg.mode;
-            data["updated"] = true;
-        });
-        client->text(response);
-    }
-
-    // colorCorrection.save - Save configuration to NVS
-    else if (type == "colorCorrection.save") {
-        const char* requestId = doc["requestId"] | "";
-        lightwaveos::enhancement::ColorCorrectionEngine::getInstance().saveToNVS();
-
-        String response = buildWsResponse("colorCorrection.save", requestId, [](JsonObject& data) {
-            data["saved"] = true;
-        });
-        client->text(response);
-    }
-
-#if FEATURE_AUDIO_BENCHMARK
-    // benchmark.subscribe - Subscribe to benchmark metrics stream
-    else if (type == "benchmark.subscribe") {
-        uint32_t clientId = client->id();
-        const char* requestId = doc["requestId"] | "";
-        bool ok = setBenchmarkStreamSubscription(client, true);
-
-        if (ok) {
-            String response = buildWsResponse("benchmark.subscribed", requestId, [clientId](JsonObject& data) {
-                data["clientId"] = clientId;
-                data["frameSize"] = webserver::BenchmarkStreamConfig::COMPACT_FRAME_SIZE;
-                data["targetFps"] = webserver::BenchmarkStreamConfig::TARGET_FPS;
-                data["magicByte"] = (webserver::BenchmarkStreamConfig::MAGIC >> 24) & 0xFF;
-                data["accepted"] = true;
-            });
-            client->text(response);
-            LW_LOGD("WS: Client %u subscribed to benchmark stream", clientId);
-        } else {
-            // Build rejection response manually
-            JsonDocument response;
-            response["type"] = "benchmark.rejected";
-            if (requestId != nullptr && strlen(requestId) > 0) {
-                response["requestId"] = requestId;
-            }
-            response["success"] = false;
-            JsonObject error = response["error"].to<JsonObject>();
-            error["code"] = "RESOURCE_EXHAUSTED";
-            error["message"] = "Subscriber table full";
-
-            String output;
-            serializeJson(response, output);
-            client->text(output);
-            LW_LOGW("WS: Client %u benchmark subscription rejected", clientId);
-        }
-    }
-    else if (type == "benchmark.unsubscribe") {
-        uint32_t clientId = client->id();
-        setBenchmarkStreamSubscription(client, false);
-        const char* requestId = doc["requestId"] | "";
-        String response = buildWsResponse("benchmark.unsubscribed", requestId, [clientId](JsonObject& data) {
-            data["clientId"] = clientId;
-        });
-        client->text(response);
-        LW_LOGD("WS: Client %u unsubscribed from benchmark stream", clientId);
-    }
-    // benchmark.start - Start benchmark collection
-    else if (type == "benchmark.start") {
-        const char* requestId = doc["requestId"] | "";
-        auto* audio = m_actorSystem.getAudio();
-        if (!audio) {
-            client->text(buildWsError(ErrorCodes::SYSTEM_NOT_READY, "Audio system not available", requestId));
-            return;
-        }
-
-        audio->resetBenchmarkStats();
-        if (m_benchmarkBroadcaster) {
-            m_benchmarkBroadcaster->setStreamingActive(true);
-        }
-
-        String response = buildWsResponse("benchmark.started", requestId, [](JsonObject& data) {
-            data["active"] = true;
-        });
-        client->text(response);
-        LW_LOGI("WS: Benchmark collection started");
-    }
-    // benchmark.stop - Stop benchmark collection and get results
-    else if (type == "benchmark.stop") {
-        const char* requestId = doc["requestId"] | "";
-        auto* audio = m_actorSystem.getAudio();
-        if (!audio) {
-            client->text(buildWsError(ErrorCodes::SYSTEM_NOT_READY, "Audio system not available", requestId));
-            return;
-        }
-
-        if (m_benchmarkBroadcaster) {
-            m_benchmarkBroadcaster->setStreamingActive(false);
-        }
-
-        const audio::AudioBenchmarkStats& stats = audio->getBenchmarkStats();
-
-        String response = buildWsResponse("benchmark.stopped", requestId, [&stats](JsonObject& data) {
-            data["active"] = false;
-            JsonObject results = data["results"].to<JsonObject>();
-            results["avgTotalUs"] = stats.avgTotalUs;
-            results["avgGoertzelUs"] = stats.avgGoertzelUs;
-            results["cpuLoadPercent"] = stats.cpuLoadPercent;
-            results["hopCount"] = stats.hopCount;
-            results["peakTotalUs"] = stats.peakTotalUs;
-        });
-        client->text(response);
-        LW_LOGI("WS: Benchmark collection stopped");
-    }
-    // benchmark.get - Get current benchmark stats
-    else if (type == "benchmark.get") {
-        const char* requestId = doc["requestId"] | "";
-        auto* audio = m_actorSystem.getAudio();
-        if (!audio) {
-            client->text(buildWsError(ErrorCodes::SYSTEM_NOT_READY, "Audio system not available", requestId));
-            return;
-        }
-
-        const audio::AudioBenchmarkStats& stats = audio->getBenchmarkStats();
-        bool streaming = hasBenchmarkStreamSubscribers();
-
-        String response = buildWsResponse("benchmark.stats", requestId, [&stats, streaming](JsonObject& data) {
-            data["streaming"] = streaming;
-
-            JsonObject timing = data["timing"].to<JsonObject>();
-            timing["avgTotalUs"] = stats.avgTotalUs;
-            timing["avgGoertzelUs"] = stats.avgGoertzelUs;
-            timing["avgDcAgcUs"] = stats.avgDcAgcUs;
-            timing["avgChromaUs"] = stats.avgChromaUs;
-            timing["peakTotalUs"] = stats.peakTotalUs;
-
-            JsonObject load = data["load"].to<JsonObject>();
-            load["cpuPercent"] = stats.cpuLoadPercent;
-            load["hopCount"] = stats.hopCount;
-        });
-        client->text(response);
-    }
-#endif
-
-#if FEATURE_EFFECT_VALIDATION
-    // validation.subscribe - Subscribe to effect validation stream
-    else if (type == "validation.subscribe") {
-        uint32_t clientId = client->id();
-        const char* requestId = doc["requestId"] | "";
-
-        // Find a free slot in the subscriber table
-        bool subscribed = false;
-        for (size_t i = 0; i < MAX_VALIDATION_SUBSCRIBERS; ++i) {
-            if (s_validationSubscribers[i] == nullptr ||
-                s_validationSubscribers[i]->status() != WS_CONNECTED) {
-                s_validationSubscribers[i] = client;
-                subscribed = true;
-                break;
-            }
-            // Already subscribed
-            if (s_validationSubscribers[i] == client) {
-                subscribed = true;
-                break;
-            }
-        }
-
-        if (subscribed) {
-            String response = buildWsResponse("validation.subscribed", requestId, [clientId](JsonObject& data) {
-                data["clientId"] = clientId;
-                data["sampleSize"] = lightwaveos::validation::ValidationStreamConfig::SAMPLE_SIZE;
-                data["maxSamplesPerFrame"] = lightwaveos::validation::ValidationStreamConfig::MAX_SAMPLES_PER_FRAME;
-                data["targetFps"] = lightwaveos::validation::ValidationStreamConfig::DEFAULT_DRAIN_RATE_HZ;
-                data["accepted"] = true;
-            });
-            client->text(response);
-            LW_LOGD("WS: Client %u subscribed to validation stream", clientId);
-        } else {
-            // Build rejection response manually
-            JsonDocument response;
-            response["type"] = "validation.rejected";
-            if (requestId != nullptr && strlen(requestId) > 0) {
-                response["requestId"] = requestId;
-            }
-            response["success"] = false;
-            JsonObject error = response["error"].to<JsonObject>();
-            error["code"] = "RESOURCE_EXHAUSTED";
-            error["message"] = "Validation subscriber table full";
-
-            String output;
-            serializeJson(response, output);
-            client->text(output);
-            LW_LOGW("WS: Client %u validation subscription rejected", clientId);
-        }
-    }
-    else if (type == "validation.unsubscribe") {
-        uint32_t clientId = client->id();
-        const char* requestId = doc["requestId"] | "";
-
-        // Remove from subscriber table
-        for (size_t i = 0; i < MAX_VALIDATION_SUBSCRIBERS; ++i) {
-            if (s_validationSubscribers[i] == client) {
-                s_validationSubscribers[i] = nullptr;
-                break;
-            }
-        }
-
-        String response = buildWsResponse("validation.unsubscribed", requestId, [clientId](JsonObject& data) {
-            data["clientId"] = clientId;
-        });
-        client->text(response);
-        LW_LOGD("WS: Client %u unsubscribed from validation stream", clientId);
-    }
-#endif
-
-    // Unknown command
-    else {
-        const char* requestId = doc["requestId"] | "";
-        client->text(buildWsError(ErrorCodes::INVALID_VALUE, "Unknown command type", requestId));
-    }
-}
+// processWsCommand has been removed - all commands are now handled by modular command handlers
+// This function previously contained ~2400 LOC which has been extracted to:
+// - WsEffectsCommands, WsZonesCommands, WsAudioCommands, WsStreamCommands,
+// - WsTransitionCommands, WsNarrativeCommands, WsMotionCommands,
+// - WsColorCommands, WsPaletteCommands, WsBatchCommands
+//
+// All commands are now registered via WsCommandRouter in the respective command modules.
 
 // ============================================================================
 // Broadcasting
 // ============================================================================
 
 void WebServer::broadcastStatus() {
-    uint32_t now = millis();
-    
-    // Coalesce rapid calls - if called within BROADCAST_COALESCE_MS, defer to next update()
-    if (now - m_lastImmediateBroadcast < BROADCAST_COALESCE_MS) {
-        m_broadcastPending = true;
-        return;
-    }
-    
-    // Enough time has passed, send immediately
-    m_lastImmediateBroadcast = now;
-    m_broadcastPending = false;
-    doBroadcastStatus();
+    // SAFETY: Always defer broadcasts to avoid calling doBroadcastStatus() from within
+    // AsyncTCP/AsyncWebServer callback context. This prevents re-entrancy issues and
+    // corrupted pointer access when accessing m_renderer (Core 1) or m_ws from Core 0.
+    // All broadcasts are processed in update() which runs in a safe context.
+    // 
+    // QUEUE PROTECTION: Setting m_broadcastPending is idempotent - multiple calls
+    // before the next update() tick will only result in one broadcast, preventing
+    // queue buildup from rapid API calls.
+    m_broadcastPending = true;
 }
 
 void WebServer::doBroadcastStatus() {
+    // SAFETY CHECKS: Validate pointers and state before accessing
+    if (!m_ws) {
+        LW_LOGW("doBroadcastStatus: m_ws is null");
+        return;
+    }
+    
     if (m_ws->count() == 0) return;
 
     // Cleanup disconnected clients before broadcasting
     m_ws->cleanupClients();
     if (m_ws->count() == 0) return;
 
+    // QUEUE PROTECTION: Conservative approach - limit broadcast frequency
+    // AsyncWebSocket has internal queue limits, but we can't check them directly
+    // Instead, we use time-based throttling to prevent queue saturation
+    static uint32_t lastBroadcastAttempt = 0;
+    uint32_t now = millis();
+    if (now - lastBroadcastAttempt < 10) {  // Minimum 10ms between broadcast attempts
+        return;  // Skip this broadcast to prevent queue buildup
+    }
+    lastBroadcastAttempt = now;
+
     StaticJsonDocument<512> doc;
     doc["type"] = "status";
 
-    if (m_renderer) {
-        doc["effectId"] = m_renderer->getCurrentEffect();
-        doc["effectName"] = m_renderer->getEffectName(m_renderer->getCurrentEffect());
-        doc["brightness"] = m_renderer->getBrightness();
-        doc["speed"] = m_renderer->getSpeed();
-        doc["paletteId"] = m_renderer->getPaletteIndex();
-        doc["hue"] = m_renderer->getHue();
-        doc["intensity"] = m_renderer->getIntensity();
-        doc["saturation"] = m_renderer->getSaturation();
-        doc["complexity"] = m_renderer->getComplexity();
-        doc["variation"] = m_renderer->getVariation();
-
-        const RenderStats& stats = m_renderer->getStats();
-        doc["fps"] = stats.currentFPS;
-        doc["cpuPercent"] = stats.cpuPercent;
+    // SAFE: Use cached state instead of unsafe cross-core access
+    const CachedRendererState& cached = m_cachedRendererState;
+    doc["effectId"] = cached.currentEffect;
+    if (cached.currentEffect < cached.effectCount && cached.effectNames[cached.currentEffect]) {
+        doc["effectName"] = cached.effectNames[cached.currentEffect];
     }
+    doc["brightness"] = cached.brightness;
+    doc["speed"] = cached.speed;
+    doc["paletteId"] = cached.paletteIndex;
+    doc["hue"] = cached.hue;
+    doc["intensity"] = cached.intensity;
+    doc["saturation"] = cached.saturation;
+    doc["complexity"] = cached.complexity;
+    doc["variation"] = cached.variation;
+    doc["fps"] = cached.stats.currentFPS;
+    doc["cpuPercent"] = cached.stats.cpuPercent;
 
     doc["freeHeap"] = ESP.getFreeHeap();
     doc["uptime"] = millis() / 1000;
 
     String output;
     serializeJson(doc, output);
-    m_ws->textAll(output);
+    
+    // SAFETY: Validate m_ws is still valid before calling textAll()
+    // Note: AsyncWebSocket will handle queue overflow internally, but we throttle to prevent it
+    if (m_ws && m_ws->count() > 0) {
+        m_ws->textAll(output);
+    }
 }
 
 void WebServer::broadcastZoneState() {
+    // SAFETY: Validate pointers before accessing
+    if (!m_ws) {
+        LW_LOGW("broadcastZoneState: m_ws is null");
+        return;
+    }
+    
     if (m_ws->count() == 0 || !m_zoneComposer) return;
 
-    StaticJsonDocument<512> doc;
-    doc["type"] = "zone.state";
+    StaticJsonDocument<1024> doc;  // Increased size for additional fields
+    doc["type"] = "zones.list";  // Changed from "zone.state"
     doc["enabled"] = m_zoneComposer->isEnabled();
     doc["zoneCount"] = m_zoneComposer->getZoneCount();
+
+    // Include segment definitions
+    JsonArray segmentsArray = doc["segments"].to<JsonArray>();
+    const ZoneSegment* segments = m_zoneComposer->getZoneConfig();
+    for (uint8_t i = 0; i < m_zoneComposer->getZoneCount(); i++) {
+        JsonObject seg = segmentsArray.add<JsonObject>();
+        seg["zoneId"] = segments[i].zoneId;
+        seg["s1LeftStart"] = segments[i].s1LeftStart;
+        seg["s1LeftEnd"] = segments[i].s1LeftEnd;
+        seg["s1RightStart"] = segments[i].s1RightStart;
+        seg["s1RightEnd"] = segments[i].s1RightEnd;
+        seg["totalLeds"] = segments[i].totalLeds;
+    }
 
     JsonArray zones = doc["zones"].to<JsonArray>();
     for (uint8_t i = 0; i < m_zoneComposer->getZoneCount(); i++) {
         JsonObject zone = zones.add<JsonObject>();
         zone["id"] = i;
         zone["enabled"] = m_zoneComposer->isZoneEnabled(i);
-        zone["effectId"] = m_zoneComposer->getZoneEffect(i);
+        uint8_t effectId = m_zoneComposer->getZoneEffect(i);
+        zone["effectId"] = effectId;
+        // SAFE: Use cached state instead of unsafe cross-core access
+        const CachedRendererState& cached = m_cachedRendererState;
+        if (effectId < cached.effectCount && cached.effectNames[effectId]) {
+            zone["effectName"] = cached.effectNames[effectId];
+        }
         zone["brightness"] = m_zoneComposer->getZoneBrightness(i);
         zone["speed"] = m_zoneComposer->getZoneSpeed(i);
         zone["paletteId"] = m_zoneComposer->getZonePalette(i);
+        zone["blendMode"] = static_cast<uint8_t>(m_zoneComposer->getZoneBlendMode(i));
+        zone["blendModeName"] = getBlendModeName(m_zoneComposer->getZoneBlendMode(i));
+    }
+
+    // Add presets array
+    JsonArray presets = doc["presets"].to<JsonArray>();
+    for (uint8_t i = 0; i < 5; i++) {
+        JsonObject preset = presets.add<JsonObject>();
+        preset["id"] = i;
+        preset["name"] = ZoneComposer::getPresetName(i);
     }
 
     String output;
     serializeJson(doc, output);
-    m_ws->textAll(output);
+    
+    // QUEUE PROTECTION: Throttle zone broadcasts to prevent queue saturation
+    static uint32_t lastZoneBroadcastAttempt = 0;
+    uint32_t now = millis();
+    if (now - lastZoneBroadcastAttempt < 10) {  // Minimum 10ms between zone broadcasts
+        return;  // Skip this broadcast to prevent queue buildup
+    }
+    lastZoneBroadcastAttempt = now;
+    
+    // SAFETY: Validate m_ws is still valid before calling textAll()
+    if (m_ws && m_ws->count() > 0) {
+        m_ws->textAll(output);
+    }
 }
 
 void WebServer::notifyEffectChange(uint8_t effectId, const char* name) {
+    // SAFETY: Validate pointers before accessing
+    if (!m_ws) {
+        LW_LOGW("notifyEffectChange: m_ws is null");
+        return;
+    }
+    
     if (m_ws->count() == 0) return;
+
+    // QUEUE PROTECTION: Throttle notifications to prevent queue saturation
+    static uint32_t lastEffectNotifyAttempt = 0;
+    uint32_t now = millis();
+    if (now - lastEffectNotifyAttempt < 10) {  // Minimum 10ms between notifications
+        return;  // Skip this notification to prevent queue buildup
+    }
+    lastEffectNotifyAttempt = now;
 
     StaticJsonDocument<512> doc;
     doc["type"] = "effectChanged";
@@ -6160,7 +926,11 @@ void WebServer::notifyEffectChange(uint8_t effectId, const char* name) {
 
     String output;
     serializeJson(doc, output);
-    m_ws->textAll(output);
+    
+    // SAFETY: Validate m_ws is still valid before calling textAll()
+    if (m_ws && m_ws->count() > 0) {
+        m_ws->textAll(output);
+    }
 }
 
 void WebServer::notifyParameterChange() {
@@ -6217,8 +987,21 @@ void WebServer::broadcastAudioFrame() {
 }
 
 void WebServer::broadcastBeatEvent() {
-    if (!m_renderer || !m_ws || m_ws->count() == 0) return;
-
+    // SAFETY: Validate pointers before accessing
+    if (!m_ws || m_ws->count() == 0) return;
+    
+    // QUEUE PROTECTION: Throttle beat events to prevent queue saturation
+    static uint32_t lastBeatBroadcastAttempt = 0;
+    uint32_t now = millis();
+    if (now - lastBeatBroadcastAttempt < 50) {  // Minimum 50ms between beat broadcasts (20 Hz max)
+        return;  // Skip this broadcast to prevent queue buildup
+    }
+    lastBeatBroadcastAttempt = now;
+    
+    // Note: We need to get musical grid from cached state or another safe source
+    // For now, we'll skip if renderer is not available (this should use cached audio state)
+    if (!m_renderer) return;
+    
     const auto& grid = m_renderer->getLastMusicalGrid();
 
     // Only broadcast on actual beat/downbeat (single-frame pulses)
@@ -6237,7 +1020,11 @@ void WebServer::broadcastBeatEvent() {
 
     String json;
     serializeJson(doc, json);
-    m_ws->textAll(json);
+    
+    // SAFETY: Validate m_ws is still valid before calling textAll()
+    if (m_ws) {
+        m_ws->textAll(json);
+    }
 }
 
 bool WebServer::setAudioStreamSubscription(AsyncWebSocketClient* client, bool subscribe) {
@@ -6294,134 +1081,6 @@ bool WebServer::setBenchmarkStreamSubscription(AsyncWebSocketClient* client, boo
 
 bool WebServer::hasBenchmarkStreamSubscribers() const {
     return m_benchmarkBroadcaster && m_benchmarkBroadcaster->hasSubscribers();
-}
-
-// ============================================================================
-// Benchmark REST API Handlers
-// ============================================================================
-
-void WebServer::handleBenchmarkGet(AsyncWebServerRequest* request) {
-    auto* audio = m_actorSystem.getAudio();
-    if (!audio) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
-        return;
-    }
-
-    const audio::AudioBenchmarkStats& stats = audio->getBenchmarkStats();
-    bool hasSubscribers = hasBenchmarkStreamSubscribers();
-
-    sendSuccessResponse(request, [&stats, hasSubscribers](JsonObject& d) {
-        d["streaming"] = hasSubscribers;
-
-        JsonObject timing = d["timing"].to<JsonObject>();
-        timing["avgTotalUs"] = stats.avgTotalUs;
-        timing["avgGoertzelUs"] = stats.avgGoertzelUs;
-        timing["avgDcAgcUs"] = stats.avgDcAgcUs;
-        timing["avgChromaUs"] = stats.avgChromaUs;
-        timing["peakTotalUs"] = stats.peakTotalUs;
-        timing["peakGoertzelUs"] = stats.peakGoertzelUs;
-
-        JsonObject load = d["load"].to<JsonObject>();
-        load["cpuPercent"] = stats.cpuLoadPercent;
-        load["hopCount"] = stats.hopCount;
-        load["goertzelCount"] = stats.goertzelCount;
-
-        JsonArray histogram = d["histogram"].to<JsonArray>();
-        for (int i = 0; i < 8; i++) {
-            histogram.add(stats.histogramBins[i]);
-        }
-    });
-}
-
-void WebServer::handleBenchmarkStart(AsyncWebServerRequest* request) {
-    auto* audio = m_actorSystem.getAudio();
-    if (!audio) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
-        return;
-    }
-
-    // Reset stats to start fresh collection
-    audio->resetBenchmarkStats();
-
-    if (m_benchmarkBroadcaster) {
-        m_benchmarkBroadcaster->setStreamingActive(true);
-    }
-
-    LW_LOGI("Benchmark collection started");
-
-    sendSuccessResponse(request, [](JsonObject& d) {
-        d["message"] = "Benchmark collection started";
-        d["active"] = true;
-    });
-}
-
-void WebServer::handleBenchmarkStop(AsyncWebServerRequest* request) {
-    auto* audio = m_actorSystem.getAudio();
-    if (!audio) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
-        return;
-    }
-
-    if (m_benchmarkBroadcaster) {
-        m_benchmarkBroadcaster->setStreamingActive(false);
-    }
-
-    // Return final stats
-    const audio::AudioBenchmarkStats& stats = audio->getBenchmarkStats();
-
-    LW_LOGI("Benchmark collection stopped");
-
-    sendSuccessResponse(request, [&stats](JsonObject& d) {
-        d["message"] = "Benchmark collection stopped";
-        d["active"] = false;
-
-        JsonObject results = d["results"].to<JsonObject>();
-        results["avgTotalUs"] = stats.avgTotalUs;
-        results["avgGoertzelUs"] = stats.avgGoertzelUs;
-        results["cpuLoadPercent"] = stats.cpuLoadPercent;
-        results["hopCount"] = stats.hopCount;
-        results["peakTotalUs"] = stats.peakTotalUs;
-    });
-}
-
-void WebServer::handleBenchmarkHistory(AsyncWebServerRequest* request) {
-    auto* audio = m_actorSystem.getAudio();
-    if (!audio) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
-        return;
-    }
-
-    // Get ring buffer reference (read-only peek, no destructive pop)
-    const auto& ring = audio->getBenchmarkRing();
-    size_t available = ring.available();
-
-    // Limit to last 32 samples to avoid response bloat
-    constexpr size_t MAX_HISTORY = 32;
-    size_t count = (available < MAX_HISTORY) ? available : MAX_HISTORY;
-
-    // Collect samples via peekLast (non-destructive read, most recent first)
-    audio::AudioBenchmarkSample samples[MAX_HISTORY];
-    size_t peekedCount = ring.peekLast(samples, count);
-
-    sendSuccessResponse(request, [available, peekedCount, &samples](JsonObject& d) {
-        d["available"] = available;
-        d["returned"] = peekedCount;
-
-        JsonArray arr = d["samples"].to<JsonArray>();
-
-        for (size_t i = 0; i < peekedCount; i++) {
-            JsonObject s = arr.add<JsonObject>();
-            s["ts"] = samples[i].timestamp_us;
-            s["total"] = samples[i].totalProcessUs;
-            s["goertzel"] = samples[i].goertzelUs;
-            s["dcAgc"] = samples[i].dcAgcLoopUs;
-            s["chroma"] = samples[i].chromaUs;
-        }
-    });
 }
 #endif
 

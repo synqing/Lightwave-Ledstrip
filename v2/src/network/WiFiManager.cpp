@@ -239,15 +239,17 @@ void WiFiManager::handleStateConnecting() {
         }
     }
 
-    // Wait for connection events
+    // Wait for connection success events only
+    // Don't wait for failure events - timeout will handle that
     EventBits_t bits = xEventGroupWaitBits(
         m_wifiEventGroup,
-        EVENT_CONNECTED | EVENT_GOT_IP | EVENT_CONNECTION_FAILED,
+        EVENT_CONNECTED | EVENT_GOT_IP,
         pdTRUE,   // Clear on exit
         pdFALSE,  // Wait for any bit
         pdMS_TO_TICKS(100)
     );
 
+    // Check if we got connected
     if (bits & EVENT_GOT_IP) {
         m_connectStarted = false;
         m_successfulConnections++;
@@ -258,27 +260,64 @@ void WiFiManager::handleStateConnecting() {
         LW_LOGI("Connected! IP: %s, RSSI: %d dBm",
                 WiFi.localIP().toString().c_str(), WiFi.RSSI());
         setState(STATE_WIFI_CONNECTED);
-    } else if ((bits & EVENT_CONNECTION_FAILED) ||
-               (millis() - m_connectStartTime > CONNECT_TIMEOUT_MS)) {
-        m_connectStarted = false;
-        m_connectionAttempts++;
-
-        LW_LOGW("Connection failed (attempt %d)", m_connectionAttempts);
-        setState(STATE_WIFI_FAILED);
+    } else if (bits & EVENT_CONNECTED) {
+        // Got CONNECTED but not GOT_IP yet - wait a bit more
+        // This is normal, GOT_IP usually follows CONNECTED
+    } else if (millis() - m_connectStartTime > CONNECT_TIMEOUT_MS) {
+        // Timeout - but check if we're actually connected before marking as failed
+        // This handles the case where GOT_IP arrives after wait timeout
+        if (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0)) {
+            // We're actually connected! Set the bit and transition
+            LW_LOGI("Connected! IP: %s (detected after timeout)", 
+                    WiFi.localIP().toString().c_str());
+            if (m_wifiEventGroup) {
+                xEventGroupSetBits(m_wifiEventGroup, EVENT_GOT_IP);
+            }
+            m_connectStarted = false;
+            m_successfulConnections++;
+            m_lastConnectionTime = millis();
+            m_reconnectDelay = RECONNECT_DELAY_MS;
+            m_attemptsOnCurrentNetwork = 0;
+            setState(STATE_WIFI_CONNECTED);
+        } else {
+            // Genuine timeout
+            m_connectStarted = false;
+            m_connectionAttempts++;
+            LW_LOGW("Connection timeout (attempt %d)", m_connectionAttempts);
+            setState(STATE_WIFI_FAILED);
+        }
     }
 }
 
 void WiFiManager::handleStateConnected() {
     static uint32_t lastStatusPrint = 0;
-    static bool sleepSettingsApplied = false;
 
-    // Apply sleep settings once on entry to connected state (defensive)
-    // This handles edge cases where ESP32 WiFi stack resets settings
-    if (!sleepSettingsApplied) {
+    // One-time entry actions (must be instance state, not static).
+    // WiFi can disconnect/reconnect; we must reapply settings and clear stale events.
+    if (!m_inConnectedState) {
+        m_inConnectedState = true;
+        m_connectedStateEntryTimeMs = millis();
+        m_sleepSettingsApplied = false;
+
+        // Clear any stale disconnect events that may have accumulated during connection.
+        if (m_wifiEventGroup) {
+            xEventGroupClearBits(m_wifiEventGroup, EVENT_DISCONNECTED);
+        }
+    }
+
+    // Apply sleep settings once on entry to connected state (defensive).
+    // This handles edge cases where ESP32 WiFi stack resets settings.
+    if (!m_sleepSettingsApplied) {
         WiFi.setSleep(false);
         WiFi.setAutoReconnect(true);
-        sleepSettingsApplied = true;
+        esp_wifi_set_ps(WIFI_PS_NONE);  // ESP-IDF level disable
+        m_sleepSettingsApplied = true;
         LW_LOGD("Applied WiFi stability settings in connected state");
+    }
+
+    // Grace period: ignore disconnect flaps immediately after connect.
+    if (millis() - m_connectedStateEntryTimeMs < CONNECTED_DISCONNECT_GRACE_MS) {
+        return;
     }
 
     // Print status periodically (every 30 seconds)
@@ -429,6 +468,10 @@ bool WiFiManager::connectToAP() {
     // apply them in the GOT_IP event handler to ensure they persist
     WiFi.setSleep(false);           // Disable modem sleep (prevents ASSOC_LEAVE disconnects)
     WiFi.setAutoReconnect(true);    // Auto-reconnect on disconnect
+    
+    // Also disable at ESP-IDF level for maximum reliability
+    esp_wifi_set_ps(WIFI_PS_NONE);
+    
     LW_LOGD("WiFi sleep disabled, auto-reconnect enabled");
 
     return true;
@@ -489,6 +532,13 @@ void WiFiManager::updateBestChannel() {
 
 void WiFiManager::setState(WiFiState newState) {
     if (xSemaphoreTake(m_stateMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        // Reset connected-state bookkeeping when leaving CONNECTED.
+        if (m_currentState == STATE_WIFI_CONNECTED && newState != STATE_WIFI_CONNECTED) {
+            m_inConnectedState = false;
+            m_sleepSettingsApplied = false;
+            m_connectedStateEntryTimeMs = 0;
+        }
+
         // Reset state-specific flags on entry to avoid persistence bugs
         // (previously used static variables that persisted across state exits)
         if (newState == STATE_WIFI_SCANNING) {
@@ -666,16 +716,26 @@ void WiFiManager::onWiFiEvent(WiFiEvent_t event) {
 #else
         case SYSTEM_EVENT_STA_GOT_IP:
 #endif
-            LW_LOGI("Event: Got IP - %s", WiFi.localIP().toString().c_str());
-            
-            // CRITICAL: Disable WiFi sleep AFTER connection is fully established
-            // This prevents ASSOC_LEAVE disconnects that occur when modem enters sleep
-            WiFi.setSleep(false);
-            WiFi.setAutoReconnect(true);
-            LW_LOGD("WiFi sleep disabled after GOT_IP (prevents ASSOC_LEAVE)");
-            
-            if (manager.m_wifiEventGroup) {
-                xEventGroupSetBits(manager.m_wifiEventGroup, EVENT_GOT_IP);
+            {
+                LW_LOGI("Event: Got IP - %s", WiFi.localIP().toString().c_str());
+
+                // CRITICAL: Disable WiFi sleep AFTER connection is fully established
+                // This prevents ASSOC_LEAVE disconnects that occur when modem enters sleep
+                WiFi.setSleep(false);
+                WiFi.setAutoReconnect(true);
+
+                // Also disable at ESP-IDF level for maximum reliability
+                // WIFI_PS_NONE = 0 (no power save)
+                esp_err_t err = esp_wifi_set_ps(WIFI_PS_NONE);
+                if (err != ESP_OK) {
+                    LW_LOGW("Failed to set WiFi PS mode: %d", err);
+                }
+
+                LW_LOGD("WiFi sleep disabled after GOT_IP (prevents ASSOC_LEAVE)");
+
+                if (manager.m_wifiEventGroup) {
+                    xEventGroupSetBits(manager.m_wifiEventGroup, EVENT_GOT_IP);
+                }
             }
             break;
 
@@ -687,12 +747,9 @@ void WiFiManager::onWiFiEvent(WiFiEvent_t event) {
 #endif
             LW_LOGW("Event: Disconnected from AP");
             if (manager.m_wifiEventGroup) {
-                // Set both events so the appropriate state handler can respond:
-                // - CONNECTING state waits for EVENT_CONNECTION_FAILED
-                // - CONNECTED state waits for EVENT_DISCONNECTED
-                // This avoids 10-second timeout delays on failed connections
-                xEventGroupSetBits(manager.m_wifiEventGroup,
-                    EVENT_DISCONNECTED | EVENT_CONNECTION_FAILED);
+                // Only set EVENT_DISCONNECTED - let timeout handle connection failures
+                // This avoids race conditions where disconnect happens but WiFi auto-reconnects
+                xEventGroupSetBits(manager.m_wifiEventGroup, EVENT_DISCONNECTED);
             }
             break;
 

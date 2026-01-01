@@ -2,6 +2,7 @@
 
 #include "../HttpRouteRegistry.h"
 #include "../../ApiResponse.h"
+#include "../../WebServer.h"  // For CachedRendererState
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 
@@ -23,7 +24,7 @@ public:
 
     static void handleList(AsyncWebServerRequest* request, lightwaveos::actors::RendererActor* renderer);
     static void handleCurrent(AsyncWebServerRequest* request, lightwaveos::actors::RendererActor* renderer);
-    static void handleSet(AsyncWebServerRequest* request, uint8_t* data, size_t len, lightwaveos::actors::ActorSystem& actors, lightwaveos::actors::RendererActor* renderer, std::function<void()> broadcastStatus);
+    static void handleSet(AsyncWebServerRequest* request, uint8_t* data, size_t len, lightwaveos::actors::ActorSystem& actors, const lightwaveos::network::WebServer::CachedRendererState& cachedState, std::function<void()> broadcastStatus);
     static void handleMetadata(AsyncWebServerRequest* request, lightwaveos::actors::RendererActor* renderer);
     static void handleFamilies(AsyncWebServerRequest* request);
     static void handleParametersGet(AsyncWebServerRequest* request, lightwaveos::actors::RendererActor* renderer);

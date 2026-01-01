@@ -2,11 +2,11 @@
  * @file WebServer.h
  * @brief Web Server for LightwaveOS v2 with Actor System integration
  *
- * Provides REST API (v1 modern + legacy) and WebSocket real-time control.
+ * Provides REST API (v1) and WebSocket real-time control.
  * All state changes go through the Actor System for thread-safe operation.
  *
  * Features:
- * - Legacy API (/api/*) for backward compatibility
+ * - V1 REST API (/api/v1/*)
  * - Modern API v1 (/api/v1/*) with HATEOAS and standardized responses
  * - WebSocket (/ws) for real-time control and events
  * - Rate limiting: 20 req/sec HTTP, 50 msg/sec WebSocket
@@ -71,6 +71,15 @@ namespace lightwaveos {
 
 namespace lightwaveos {
 namespace network {
+namespace webserver {
+    class V1ApiRoutes;  // Forward declaration for friend
+    class WsGateway;    // WebSocket gateway (implementation in webserver/WsGateway.*)
+}
+}
+} // namespace lightwaveos
+
+namespace lightwaveos {
+namespace network {
 
 // ============================================================================
 // Configuration
@@ -130,6 +139,8 @@ namespace RateLimitConfig {
  * ensuring thread-safe operation with the RendererActor on Core 1.
  */
 class WebServer {
+    friend class webserver::V1ApiRoutes;  // Allow V1ApiRoutes to access private handlers
+
 public:
     /**
      * @brief Construct WebServer
@@ -159,7 +170,7 @@ public:
     /**
      * @brief Initialize and start the web server
      *
-     * Sets up WiFi (STA or AP mode), HTTP routes, and WebSocket.
+     * Sets up WiFi (STA mode via WiFiManager), HTTP routes, and WebSocket.
      * Call from setup() after ActorSystem is started.
      *
      * @return true if server started successfully
@@ -186,6 +197,66 @@ public:
     bool isConnected() const { return WiFi.status() == WL_CONNECTED; }
     bool isAPMode() const { return m_apMode; }
     size_t getClientCount() const { return m_ws->count(); }
+    AsyncWebSocket* getWebSocket() const { return m_ws; }
+    
+    // ========================================================================
+    // Cached Renderer State (thread-safe read-only access from request handlers)
+    // ========================================================================
+    
+    /**
+     * @brief Cached read-only state from RendererActor
+     * 
+     * Updated in update() (safe context) to avoid cross-core access from request handlers.
+     * All request handlers should use this cached state instead of direct renderer-> calls.
+     */
+    struct CachedRendererState {
+        uint8_t effectCount;
+        uint8_t currentEffect;
+        uint8_t brightness;
+        uint8_t speed;
+        uint8_t paletteIndex;
+        uint8_t hue;
+        uint8_t intensity;
+        uint8_t saturation;
+        uint8_t complexity;
+        uint8_t variation;
+        uint8_t mood;
+        uint8_t fadeAmount;
+        bool isRunning;
+        uint8_t queueUtilization;
+        uint16_t queueLength;
+        // Stats - simplified struct to avoid include dependency
+        struct {
+            uint16_t currentFPS;
+            uint8_t cpuPercent;
+            uint32_t framesRendered;
+        } stats;
+        // Effect names - pointers to stable strings in RendererActor (valid until next cache update)
+        const char* effectNames[96];  // MAX_EFFECTS (keep in sync with RendererActor::MAX_EFFECTS)
+        // Audio tuning (if available) - simplified to avoid include dependency
+#if FEATURE_AUDIO_SYNC
+        struct {
+            float audioStalenessMs;
+            float bpmMin;
+            float bpmMax;
+            float bpmTau;
+            float confidenceTau;
+            float phaseCorrectionGain;
+            float barCorrectionGain;
+            uint8_t beatsPerBar;
+            uint8_t beatUnit;
+        } audioTuning;
+        const void* lastMusicalGrid;  // Opaque pointer to avoid include dependency
+#endif
+    };
+    
+    /**
+     * @brief Get cached renderer state (thread-safe read-only access)
+     * 
+     * Returns a const reference to the cached renderer state, which is updated
+     * in update() (safe context). Safe to call from request handlers.
+     */
+    const CachedRendererState& getCachedRendererState() const { return m_cachedRendererState; }
 
     // ========================================================================
     // Broadcasting
@@ -312,95 +383,14 @@ private:
     bool startAPMode();
     void setupCORS();
     void setupRoutes();
-    void setupLegacyRoutes();
-    void setupV1Routes();
     void setupWebSocket();
     void startMDNS();
 
-    // ========================================================================
-    // Legacy API Handlers (/api/*)
-    // ========================================================================
-
-    void handleLegacyStatus(AsyncWebServerRequest* request);
-    void handleLegacySetEffect(AsyncWebServerRequest* request, uint8_t* data, size_t len);
-    void handleLegacySetBrightness(AsyncWebServerRequest* request, uint8_t* data, size_t len);
-    void handleLegacySetSpeed(AsyncWebServerRequest* request, uint8_t* data, size_t len);
-    void handleLegacySetPalette(AsyncWebServerRequest* request, uint8_t* data, size_t len);
-    void handleLegacyZoneCount(AsyncWebServerRequest* request, uint8_t* data, size_t len);
-    void handleLegacyZoneEffect(AsyncWebServerRequest* request, uint8_t* data, size_t len);
 
     // ========================================================================
     // V1 API Handlers (/api/v1/*)
     // ========================================================================
-
-    void handleApiDiscovery(AsyncWebServerRequest* request);
-    void handleHealth(AsyncWebServerRequest* request);
-    void handleParametersGet(AsyncWebServerRequest* request);
-    void handleParametersSet(AsyncWebServerRequest* request, uint8_t* data, size_t len);
-    void handleAudioParametersGet(AsyncWebServerRequest* request);
-    void handleAudioParametersSet(AsyncWebServerRequest* request, uint8_t* data, size_t len);
-    void handleAudioControl(AsyncWebServerRequest* request, uint8_t* data, size_t len);
-    void handleAudioStateGet(AsyncWebServerRequest* request);
-    void handleAudioTempoGet(AsyncWebServerRequest* request);
-    void handleAudioPresetsList(AsyncWebServerRequest* request);
-    void handleAudioPresetGet(AsyncWebServerRequest* request, uint8_t presetId);
-    void handleAudioPresetSave(AsyncWebServerRequest* request, uint8_t* data, size_t len);
-    void handleAudioPresetApply(AsyncWebServerRequest* request, uint8_t presetId);
-    void handleAudioPresetDelete(AsyncWebServerRequest* request, uint8_t presetId);
-
-    // Audio-Effect Mapping (Phase 4)
-    void handleAudioMappingsListSources(AsyncWebServerRequest* request);
-    void handleAudioMappingsListTargets(AsyncWebServerRequest* request);
-    void handleAudioMappingsListCurves(AsyncWebServerRequest* request);
-    void handleAudioMappingsList(AsyncWebServerRequest* request);
-    void handleAudioMappingsGet(AsyncWebServerRequest* request, uint8_t effectId);
-    void handleAudioMappingsSet(AsyncWebServerRequest* request, uint8_t effectId, uint8_t* data, size_t len);
-    void handleAudioMappingsDelete(AsyncWebServerRequest* request, uint8_t effectId);
-    void handleAudioMappingsEnable(AsyncWebServerRequest* request, uint8_t effectId, bool enable);
-    void handleAudioMappingsStats(AsyncWebServerRequest* request);
-
-    // Zone AGC endpoints
-    void handleAudioZoneAGCGet(AsyncWebServerRequest* request);
-    void handleAudioZoneAGCSet(AsyncWebServerRequest* request, uint8_t* data, size_t len);
-
-    // Spike detection endpoints
-    void handleAudioSpikeDetectionGet(AsyncWebServerRequest* request);
-    void handleAudioSpikeDetectionReset(AsyncWebServerRequest* request);
-
-    // Noise calibration endpoints (SensoryBridge pattern)
-    void handleAudioCalibrateStatus(AsyncWebServerRequest* request);
-    void handleAudioCalibrateStart(AsyncWebServerRequest* request, uint8_t* data, size_t len);
-    void handleAudioCalibrateCancel(AsyncWebServerRequest* request);
-    void handleAudioCalibrateApply(AsyncWebServerRequest* request);
-
-    void handleTransitionTypes(AsyncWebServerRequest* request);
-    void handleTransitionTrigger(AsyncWebServerRequest* request, uint8_t* data, size_t len);
-    void handleBatch(AsyncWebServerRequest* request, uint8_t* data, size_t len);
-    void handlePalettesList(AsyncWebServerRequest* request);
-    void handlePalettesCurrent(AsyncWebServerRequest* request);
-    void handlePalettesSet(AsyncWebServerRequest* request, uint8_t* data, size_t len);
-
-#if FEATURE_AUDIO_BENCHMARK
-    // Audio Benchmark API
-    void handleBenchmarkGet(AsyncWebServerRequest* request);
-    void handleBenchmarkStart(AsyncWebServerRequest* request);
-    void handleBenchmarkStop(AsyncWebServerRequest* request);
-    void handleBenchmarkHistory(AsyncWebServerRequest* request);
-#endif
-
-
-
-    // Narrative
-    void handleNarrativeStatus(AsyncWebServerRequest* request);
-    void handleNarrativeConfigGet(AsyncWebServerRequest* request);
-    void handleNarrativeConfigSet(AsyncWebServerRequest* request, uint8_t* data, size_t len);
-
-    // Transition Config
-    void handleTransitionConfigGet(AsyncWebServerRequest* request);
-    void handleTransitionConfigSet(AsyncWebServerRequest* request, uint8_t* data, size_t len);
-
-    // OpenAPI Specification
-    void handleOpenApiSpec(AsyncWebServerRequest* request);
+    // All REST API handlers moved to dedicated handler classes (see WebServer.cpp comments)
 
     // ========================================================================
     // WebSocket Handlers
@@ -412,7 +402,6 @@ private:
     void handleWsConnect(AsyncWebSocketClient* client);
     void handleWsDisconnect(AsyncWebSocketClient* client);
     void handleWsMessage(AsyncWebSocketClient* client, uint8_t* data, size_t len);
-    void processWsCommand(AsyncWebSocketClient* client, JsonDocument& doc);
 
     // ========================================================================
     // Batch Operations
@@ -440,6 +429,7 @@ private:
     AsyncWebServer* m_server;
     AsyncWebSocket* m_ws;
     webserver::RateLimiter m_rateLimiter;
+    webserver::WsGateway* m_wsGateway;  // WebSocket gateway (Phase 2)
 
     bool m_running;
     bool m_apMode;
@@ -472,6 +462,19 @@ private:
 
     // Reference to external components (not owned)
     zones::ZoneComposer* m_zoneComposer;
+
+    // ========================================================================
+    // Cached Renderer State (private implementation)
+    // ========================================================================
+    
+    CachedRendererState m_cachedRendererState;
+    uint32_t m_lastStateCacheUpdate;
+    static constexpr uint32_t STATE_CACHE_TTL_MS = 100;  // Update every 100ms
+    
+    /**
+     * @brief Update cached renderer state (called from update() in safe context)
+     */
+    void updateCachedRendererState();
 };
 
 // ============================================================================

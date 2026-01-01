@@ -379,6 +379,12 @@ private:
     bool m_connectStarted = false;        ///< Reset when entering CONNECTING
     uint32_t m_connectStartTime = 0;      ///< Reset when entering CONNECTING
 
+    // Connected-state bookkeeping (must not be static: WiFi can disconnect/reconnect)
+    bool m_inConnectedState = false;
+    bool m_sleepSettingsApplied = false;
+    uint32_t m_connectedStateEntryTimeMs = 0;
+    static constexpr uint32_t CONNECTED_DISCONNECT_GRACE_MS = 500;  // Ignore disconnect flaps briefly after connect
+
     // ========================================================================
     // Connection Parameters
     // ========================================================================

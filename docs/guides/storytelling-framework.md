@@ -11,8 +11,8 @@
 ```
 
 **Related Documents:**
-- [Creative Pattern Guide](LGP_CREATIVE_PATTERN_GUIDE.md) - Physics and pattern fundamentals
-- [Implementation Playbook](PATTERN_IMPLEMENTATION_PLAYBOOK.md) - Technical specifications
+- [Creative Pattern Guide](pattern-development-guide.md) - Physics and pattern fundamentals
+- [Implementation Playbook](implementation-playbook.md) - Technical specifications
 
 ---
 

@@ -11,8 +11,8 @@
 ```
 
 **Related Documents:**
-- [Creative Pattern Guide](LGP_CREATIVE_PATTERN_GUIDE.md) - Physics and artistic fundamentals
-- [Storytelling Framework](LIGHTSHOW_STORYTELLING_FRAMEWORK.md) - Emotional narrative design
+- [Creative Pattern Guide](pattern-development-guide.md) - Physics and artistic fundamentals
+- [Storytelling Framework](storytelling-framework.md) - Emotional narrative design
 
 ---
 

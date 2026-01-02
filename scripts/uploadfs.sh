@@ -18,7 +18,7 @@ echo "✓ Device found at $PORT"
 echo ""
 
 # Upload filesystem
-pio run -e esp32dev_wifi -t uploadfs --upload-port "$PORT"
+cd firmware/v2 && pio run -e esp32dev_audio -t uploadfs --upload-port "$PORT"
 
 if [ $? -eq 0 ]; then
     echo ""

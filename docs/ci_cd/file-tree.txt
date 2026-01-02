@@ -34,7 +34,7 @@ Quick Command Reference
 =======================
 
 Local Testing:
-  cd v2/test/tools && ./test_tools.sh
+  cd firmware/v2/test/tools && ./test_tools.sh
 
 Run Benchmark:
   cd v2

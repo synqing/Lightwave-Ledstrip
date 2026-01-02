@@ -10,12 +10,12 @@ echo ""
 # Clean build
 if [ "$1" == "clean" ]; then
     echo "Performing clean build..."
-    pio run -t clean
+    cd firmware/v2 && pio run -t clean
 fi
 
 # Compile
 echo "Compiling project..."
-pio run
+cd firmware/v2 && pio run
 
 # Show build size if successful
 if [ $? -eq 0 ]; then
@@ -23,7 +23,7 @@ if [ $? -eq 0 ]; then
     echo "Build successful!"
     echo ""
     echo "Memory usage:"
-    pio run -t size
+    cd firmware/v2 && pio run -t size
 else
     echo ""
     echo "Build failed!"

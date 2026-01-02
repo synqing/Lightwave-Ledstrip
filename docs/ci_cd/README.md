@@ -134,7 +134,7 @@ Before deploying CI/CD changes:
 
 ```bash
 # Validate all tools work correctly
-cd v2/test/tools
+cd firmware/v2/test/tools
 chmod +x test_tools.sh
 ./test_tools.sh
 

@@ -21,7 +21,7 @@ fi
 # Compile and upload
 echo ""
 echo "Compiling and uploading..."
-pio run -t upload
+cd firmware/v2 && pio run -t upload
 
 # Start monitor after upload
 if [ $? -eq 0 ]; then

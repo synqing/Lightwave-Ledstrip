@@ -378,9 +378,8 @@ body {
 
 .control-btn.compact {
     min-height: 32px;
-    padding: 6px var(--space-sm);
-    font-size: 0.75rem;
-    line-height: 1.4;
+    padding: var(--space-xs) var(--space-sm);
+    font-size: 0.875rem;
     border-radius: 8px;
     text-transform: none;
     letter-spacing: 0;

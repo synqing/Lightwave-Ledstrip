@@ -26,7 +26,7 @@ python test/tools/detect_regressions.py test/baseline/benchmark_baseline.json <(
 ### One-Liner Local Test
 
 ```bash
-cd v2 && pio test -e native_test -f test_pipeline_benchmark --verbose 2>&1 | tee /tmp/bench.log && python test/tools/parse_benchmark_serial.py /tmp/bench.log --platformio --format summary && python test/tools/detect_regressions.py test/baseline/benchmark_baseline.json <(python test/tools/parse_benchmark_serial.py /tmp/bench.log --platformio)
+cd firmware/v2 && pio test -e native_test -f test_pipeline_benchmark --verbose 2>&1 | tee /tmp/bench.log && python test/tools/parse_benchmark_serial.py /tmp/bench.log --platformio --format summary && python test/tools/detect_regressions.py test/baseline/benchmark_baseline.json <(python test/tools/parse_benchmark_serial.py /tmp/bench.log --platformio)
 ```
 
 ## What Gets Tested

@@ -11,8 +11,8 @@
 ```
 
 **Related Documents:**
-- [Storytelling Framework](LIGHTSHOW_STORYTELLING_FRAMEWORK.md) - Emotional narrative construction
-- [Implementation Playbook](PATTERN_IMPLEMENTATION_PLAYBOOK.md) - Technical specifications
+- [Storytelling Framework](storytelling-framework.md) - Emotional narrative construction
+- [Implementation Playbook](implementation-playbook.md) - Technical specifications
 
 ---
 

@@ -183,7 +183,7 @@ python test/tools/detect_regressions.py \
 Before pushing changes to the CI/CD scripts:
 
 ```bash
-cd v2/test/tools
+cd firmware/v2/test/tools
 
 # Run validation tests
 chmod +x test_tools.sh

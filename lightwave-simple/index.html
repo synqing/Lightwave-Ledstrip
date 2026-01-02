@@ -41,7 +41,7 @@
         <!-- Row 1: Pattern and Palette side-by-side -->
         <div class="controls-row">
             <!-- Pattern Card -->
-            <section class="control-card full-width">
+            <section class="control-card compact full-width">
                 <h2 class="card-header">Pattern</h2>
                 <select id="patternSelect" class="dropdown-select">
                     <option value="">Loading...</option>
@@ -60,7 +60,7 @@
             </section>
 
             <!-- Palette Card -->
-            <section class="control-card full-width">
+            <section class="control-card compact full-width">
                 <h2 class="card-header">Palette</h2>
                 <select id="paletteSelect" class="dropdown-select">
                     <option value="">Loading...</option>
@@ -72,22 +72,12 @@
                     <button class="control-btn compact" id="paletteNext" aria-label="Next palette">▶</button>
                 </div>
             </section>
-
-            <!-- Zone Mode Toggle -->
-            <section class="control-card full-width">
-                <h2 class="card-header">Zone Mode</h2>
-                <div class="value-display compact" id="zoneModeStatus">OFF</div>
-                <div class="value-secondary compact" id="zoneModeInfo">--</div>
-                <div class="button-row">
-                    <button class="control-btn compact" id="zoneModeToggle" aria-label="Toggle zone mode">Toggle</button>
-                </div>
-            </section>
         </div>
 
         <!-- Row 2: Brightness and Speed sliders side-by-side -->
         <div class="controls-row">
             <!-- Brightness Slider -->
-            <section class="control-card full-width slider-card">
+            <section class="control-card compact full-width slider-card">
                 <h2 class="card-header">Brightness</h2>
                 <div class="slider-container">
                     <input type="range" id="brightnessSlider" min="0" max="255" value="128" class="slider" aria-label="Brightness">
@@ -96,7 +86,7 @@
             </section>
 
             <!-- Speed Slider -->
-            <section class="control-card full-width slider-card">
+            <section class="control-card compact full-width slider-card">
                 <h2 class="card-header">Speed</h2>
                 <div class="slider-container">
                     <input type="range" id="speedSlider" min="1" max="100" value="25" class="slider" aria-label="Speed">
@@ -108,7 +98,7 @@
         <!-- Row 3: Mood and Trail Fade sliders side-by-side -->
         <div class="controls-row">
             <!-- Mood Slider -->
-            <section class="control-card full-width slider-card">
+            <section class="control-card compact full-width slider-card">
                 <h2 class="card-header">Mood</h2>
                 <div class="slider-container">
                     <input type="range" id="moodSlider" min="0" max="255" value="128" class="slider" aria-label="Mood">
@@ -117,7 +107,7 @@
             </section>
 
             <!-- Trail Fade Slider -->
-            <section class="control-card full-width slider-card">
+            <section class="control-card compact full-width slider-card">
                 <h2 class="card-header">Trail Fade</h2>
                 <div class="slider-container">
                     <input type="range" id="fadeSlider" min="0" max="255" value="20" class="slider" aria-label="Trail Fade">
@@ -126,10 +116,22 @@
             </section>
         </div>
 
-        <!-- Row 4: Zone Speed Controls (only shown when zones enabled) -->
+        <!-- Row 4: Zone Mode Toggle (full width) -->
+        <div class="controls-row">
+            <section class="control-card compact full-width">
+                <h2 class="card-header">Zone Mode</h2>
+                <div class="value-display compact" id="zoneModeStatus">OFF</div>
+                <div class="value-secondary compact" id="zoneModeInfo">--</div>
+                <div class="button-row">
+                    <button class="control-btn compact" id="zoneModeToggle" aria-label="Toggle zone mode">Toggle</button>
+                </div>
+            </section>
+        </div>
+
+        <!-- Row 5: Zone Speed Controls (only shown when zones enabled) -->
         <div class="controls-row" id="zoneControlsRow" style="display: none;">
             <!-- Zone 0 Speed -->
-            <section class="control-card full-width slider-card">
+            <section class="control-card compact full-width slider-card">
                 <h2 class="card-header">Zone 0 Speed</h2>
                 <div class="slider-container">
                     <input type="range" id="zone0SpeedSlider" min="1" max="50" value="15" class="slider" aria-label="Zone 0 Speed">
@@ -137,7 +139,7 @@
                 </div>
             </section>
             <!-- Zone 1 Speed -->
-            <section class="control-card full-width slider-card">
+            <section class="control-card compact full-width slider-card">
                 <h2 class="card-header">Zone 1 Speed</h2>
                 <div class="slider-container">
                     <input type="range" id="zone1SpeedSlider" min="1" max="50" value="15" class="slider" aria-label="Zone 1 Speed">
@@ -145,7 +147,7 @@
                 </div>
             </section>
             <!-- Zone 2 Speed -->
-            <section class="control-card full-width slider-card">
+            <section class="control-card compact full-width slider-card">
                 <h2 class="card-header">Zone 2 Speed</h2>
                 <div class="slider-container">
                     <input type="range" id="zone2SpeedSlider" min="1" max="50" value="15" class="slider" aria-label="Zone 2 Speed">

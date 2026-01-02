@@ -117,7 +117,7 @@ Validation script for testing all tools locally.
 
 **Usage**:
 ```bash
-cd v2/test/tools
+cd firmware/v2/test/tools
 chmod +x test_tools.sh
 ./test_tools.sh
 ```
@@ -534,7 +534,7 @@ All code uses Python standard library only.
 
 ```bash
 # Validate tools
-cd v2/test/tools
+cd firmware/v2/test/tools
 chmod +x test_tools.sh
 ./test_tools.sh
 

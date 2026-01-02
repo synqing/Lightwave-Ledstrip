@@ -1,147 +1,105 @@
 #pragma once
 // ============================================================================
-// LedFeedback - RGB LED Status Indicators for M5ROTATE8
+// LedFeedback - Connection Status LED Feedback for Tab5.encoder
 // ============================================================================
-// Provides visual feedback through the 9 RGB LEDs on M5ROTATE8:
-//   - LEDs 0-7: One per encoder (activity flash on value change)
-//   - LED 8: Status/center LED (connection status with breathing animation)
+// Phase 4 (F.5): Connection status feedback using M5ROTATE8 status LEDs.
+// Uses LED 8 on BOTH Unit A and Unit B to show connection state.
 //
-// Ported from K1.8encoderS3, adapted for Tab5.encoder's Rotate8Transport.
+// Connection States:
+//   WIFI_DISCONNECTED  - Solid red      (no WiFi connection)
+//   WIFI_CONNECTING    - Blue breathing (WiFi connecting)
+//   WIFI_CONNECTED     - Solid blue     (WiFi up, brief before WS)
+//   WS_CONNECTING      - Yellow breathing (WebSocket connecting)
+//   WS_CONNECTED       - Solid green    (fully connected)
+//   WS_RECONNECTING    - Orange breathing (WebSocket reconnecting)
 //
-// Usage:
-//   LedFeedback ledFeedback;
-//   ledFeedback.begin(encoderService.transport());
-//   ledFeedback.setStatus(ConnectionStatus::CONNECTED);
-//   // In loop:
-//   ledFeedback.update();
+// Breathing Animation (K1 pattern):
+//   Uses sine wave: brightness = base + amplitude * sin(millis() * 2 * PI / period)
+//   Period: ~1500ms for natural breathing rhythm
+//   Range: 30% to 100% brightness
 //
-// Status LED Colors:
-//   - CONNECTING:    Cyan (0, 128, 255) with breathing animation
-//   - CONNECTED:     Green (0, 255, 0) solid
-//   - DISCONNECTED:  Red (255, 0, 0) solid
-//   - RECONNECTING:  Orange (255, 128, 0) with breathing animation
+// Reference: K1.8encoderS3 LedFeedback pattern adapted for dual encoder setup.
 // ============================================================================
 
 #include <Arduino.h>
 
 // Forward declaration
-class Rotate8Transport;
+class DualEncoderService;
 
-// Connection status for status LED (LED 8)
-enum class ConnectionStatus : uint8_t {
-    CONNECTING,    // Breathing cyan - WiFi/WebSocket connecting
-    CONNECTED,     // Solid green - Connected and communicating
-    DISCONNECTED,  // Solid red - Disconnected/error
-    RECONNECTING   // Breathing orange - Attempting reconnect
+// Connection status states (ordered by connection progression)
+enum class ConnectionState : uint8_t {
+    WIFI_DISCONNECTED = 0,   // Solid red - no WiFi
+    WIFI_CONNECTING,         // Blue breathing - WiFi connecting
+    WIFI_CONNECTED,          // Solid blue (brief) - WiFi up, pre-WS
+    WS_CONNECTING,           // Yellow breathing - WebSocket connecting
+    WS_CONNECTED,            // Solid green - fully connected
+    WS_RECONNECTING          // Orange breathing - WebSocket reconnecting
 };
 
-// RGB color structure (constexpr-compatible for static const colors)
-struct LedColor {
+// RGB color structure (compact, no dynamic allocation)
+struct StatusLedColor {
     uint8_t r;
     uint8_t g;
     uint8_t b;
 
-    constexpr LedColor() : r(0), g(0), b(0) {}
-    constexpr LedColor(uint8_t red, uint8_t green, uint8_t blue) : r(red), g(green), b(blue) {}
+    constexpr StatusLedColor() : r(0), g(0), b(0) {}
+    constexpr StatusLedColor(uint8_t red, uint8_t green, uint8_t blue)
+        : r(red), g(green), b(blue) {}
 };
 
 class LedFeedback {
 public:
+    // Constructor - requires DualEncoderService for LED control
+    explicit LedFeedback(DualEncoderService* encoders);
+
+    // Default constructor (encoders set later via setEncoders)
     LedFeedback();
 
-    /**
-     * Initialize LED feedback with transport reference
-     * @param transport Reference to Rotate8Transport instance
-     */
-    void begin(Rotate8Transport& transport);
+    // Set encoder service reference (alternative to constructor)
+    void setEncoders(DualEncoderService* encoders);
 
-    /**
-     * Set connection status (controls LED 8 behavior)
-     * @param status Current connection status
-     */
-    void setStatus(ConnectionStatus status);
+    // Initialize LED feedback (turns off all status LEDs)
+    void begin();
 
-    /**
-     * Flash encoder LED briefly (bright green) on value change
-     * @param index Encoder index (0-7)
-     */
-    void flashEncoder(uint8_t index);
+    // Set connection state (updates LED color/animation)
+    void setState(ConnectionState state);
 
-    /**
-     * Flash encoder LED cyan on button reset
-     * @param index Encoder index (0-7)
-     */
-    void flashReset(uint8_t index);
+    // Get current connection state
+    ConnectionState getState() const { return m_state; }
 
-    /**
-     * Update animations (call in main loop)
-     * Handles breathing effect for status LED and flash timeouts
-     */
+    // Update LED animations (call in main loop)
+    // Non-blocking: handles breathing animation timing internally
     void update();
 
-    /**
-     * Turn off all LEDs (0-8)
-     */
+    // Turn off both status LEDs
     void allOff();
 
-    /**
-     * Set LED brightness scaling (0-255)
-     * @param brightness Global brightness multiplier
-     */
-    void setBrightness(uint8_t brightness);
-
-    /**
-     * Get current brightness level
-     * @return Current brightness (0-255)
-     */
-    uint8_t getBrightness() const { return _brightness; }
-
-    /**
-     * Check if feedback system is initialized
-     * @return true if begin() was called with valid transport
-     */
-    bool isInitialized() const { return _transport != nullptr; }
+    // Get status as human-readable string (for debugging)
+    const char* getStateString() const;
 
 private:
-    Rotate8Transport* _transport;
+    DualEncoderService* m_encoders;
+    ConnectionState m_state;
 
-    // Connection status
-    ConnectionStatus _status;
+    // Animation state
+    uint32_t m_animationStartTime;
+    bool m_isBreathing;
 
-    // Global brightness (0-255)
-    uint8_t _brightness;
+    // Cached base color for current state
+    StatusLedColor m_baseColor;
 
-    // Breathing animation state for status LED
-    uint32_t _breathStart;
-    bool _breathingEnabled;
+    // Timing constants
+    static constexpr uint32_t BREATHING_PERIOD_MS = 1500;  // Full breath cycle
+    static constexpr uint8_t BREATHING_MIN_PERCENT = 30;   // 30% min brightness
+    static constexpr uint8_t BREATHING_MAX_PERCENT = 100;  // 100% max brightness
 
-    // Flash state per encoder (LEDs 0-7)
-    struct FlashState {
-        uint32_t startTime;
-        bool active;
-        uint8_t r, g, b;
-    };
-    FlashState _flash[8];
+    // State-to-color mapping
+    static StatusLedColor getColorForState(ConnectionState state);
+    static bool stateRequiresBreathing(ConnectionState state);
 
-    // Animation timing constants
-    static constexpr uint32_t BREATH_PERIOD_MS = 2000;    // Full breathing cycle
-    static constexpr uint32_t FLASH_DURATION_MS = 100;    // Flash duration
+    // Apply LED color to both units (Unit A LED 8 and Unit B LED 8)
+    void applyColorToBothUnits(const StatusLedColor& color);
 
-    // Status LED colors
-    static constexpr LedColor COLOR_CONNECTING   = LedColor(0, 128, 255);   // Cyan
-    static constexpr LedColor COLOR_CONNECTED    = LedColor(0, 255, 0);     // Green
-    static constexpr LedColor COLOR_DISCONNECTED = LedColor(255, 0, 0);     // Red
-    static constexpr LedColor COLOR_RECONNECTING = LedColor(255, 128, 0);   // Orange
-
-    // Flash colors
-    static constexpr LedColor COLOR_FLASH_VALUE  = LedColor(0, 255, 0);     // Bright green
-    static constexpr LedColor COLOR_FLASH_RESET  = LedColor(0, 128, 255);   // Cyan
-
-    // Internal methods
-    void updateBreathing(uint32_t now);
-    void updateFlash(uint32_t now);
-    uint8_t breathValue(uint32_t elapsed);
-    LedColor getStatusColor(ConnectionStatus status) const;
-    void applyBrightness(LedColor& color) const;
-    void setRawLed(uint8_t index, const LedColor& color);
+    // Calculate breathing brightness factor (0.30 - 1.0)
+    float calculateBreathingFactor() const;
 };

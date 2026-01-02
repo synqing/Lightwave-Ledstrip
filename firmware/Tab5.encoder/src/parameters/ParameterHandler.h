@@ -23,27 +23,24 @@
 #include <functional>
 
 // Forward declarations
-class EncoderService;
+class DualEncoderService;
 class WebSocketClient;
 
 /**
  * Display update callback type
- * @param values Pointer to 16-element array of parameter values
- * @param highlightIndex Index of parameter to highlight (-1 for none)
+ * @param index Parameter index that changed (0-15)
+ * @param value New value for the parameter
  */
-using DisplayCallback = std::function<void(uint8_t* values, int highlightIndex)>;
+using DisplayCallback = std::function<void(uint8_t index, uint16_t value)>;
 
 class ParameterHandler {
 public:
     /**
      * Constructor
-     * @param encoderService Pointer to EncoderService (Tab5 encoder interface)
-     * @param wsClient Pointer to WebSocketClient
+     * @param encoderService Pointer to DualEncoderService (Tab5 dual encoder interface)
+     * @param wsClient Optional pointer to WebSocketClient (can be null)
      */
-    ParameterHandler(
-        EncoderService* encoderService,
-        WebSocketClient* wsClient
-    );
+    ParameterHandler(DualEncoderService* encoderService, WebSocketClient* wsClient = nullptr);
 
     /**
      * Handle encoder value change
@@ -60,7 +57,7 @@ public:
      * @param doc JSON document with "type": "status" and parameter fields
      * @return true if any parameters were updated
      */
-    bool applyStatus(StaticJsonDocument<1024>& doc);
+    bool applyStatus(JsonDocument& doc);
 
     /**
      * Get current parameter value
@@ -90,7 +87,7 @@ public:
     void setDisplayCallback(DisplayCallback callback) { m_displayCallback = callback; }
 
 private:
-    EncoderService* m_encoderService;
+    DualEncoderService* m_encoderService;
     WebSocketClient* m_wsClient;
     DisplayCallback m_displayCallback;
 
@@ -114,7 +111,7 @@ private:
 
     /**
      * Notify display of parameter change
-     * @param highlightIndex Index of parameter to highlight (-1 for none)
+     * @param index Index of parameter that changed (0-15), or -1 for bulk refresh
      */
-    void notifyDisplay(int highlightIndex);
+    void notifyDisplay(int index);
 };

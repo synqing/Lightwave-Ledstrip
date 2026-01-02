@@ -1,33 +1,207 @@
 #pragma once
 // ============================================================================
-// WebSocketClient - Stub for Tab5.encoder
+// WebSocketClient - Tab5.encoder
 // ============================================================================
-// TODO (Milestone E): Implement full WebSocket client
-// This stub provides the interface that ParameterHandler expects, allowing
-// the firmware to compile without network functionality.
+// Bidirectional WebSocket client for LightwaveOS communication.
+// Ported from K1.8encoderS3 with Tab5-specific extensions (zone support).
+//
+// NOTE: WiFi is currently DISABLED on Tab5 (ESP32-P4) due to SDIO pin
+// configuration issues with the ESP32-C6 WiFi co-processor.
+// See Config.h ENABLE_WIFI flag for details.
 // ============================================================================
 
-#include <Arduino.h>
+#include "config/Config.h"
+
+#if ENABLE_WIFI
+
+#include <WebSocketsClient.h>
+#include <ArduinoJson.h>
+#include <functional>
+#include "config/network_config.h"
+
+// State Machine:
+//   DISCONNECTED -> CONNECTING -> CONNECTED -> ERROR
+//        ^              |             |          |
+//        |              v             v          v
+//        +-------------+-------------+-----------+
+//
+// Key Features:
+//   - Non-blocking update() for main loop integration
+//   - Exponential backoff reconnection (1s initial, 30s max)
+//   - Per-parameter rate limiting (50ms throttle)
+//   - Deferred hello message pattern
+//   - Zone-specific command support (Tab5 extension)
+//   - Uses constants from network_config.h
+//
+// WebSocket Protocol (LightwaveOS v2):
+//   Outbound:
+//     {"type": "effects.setCurrent", "effectId": N}
+//     {"type": "parameters.set", "brightness": N, ...}
+//     {"type": "zone.setEffect", "zoneId": N, "effectId": N}
+//     {"type": "zone.setBrightness", "zoneId": N, "value": N}
+//     {"type": "getStatus"}
+//
+//   Inbound:
+//     {"type": "status", ...} - Full state sync
+//     {"type": "effect.changed", ...} - Effect updates
+//     {"type": "parameters.updated", ...} - Parameter changes
+
+enum class WebSocketStatus {
+    DISCONNECTED,
+    CONNECTING,
+    CONNECTED,
+    ERROR
+};
+
+// Callback type for received messages
+// Uses JsonDocument (ArduinoJson v7+) for flexible document handling
+// Note: ArduinoJson 7 deprecated StaticJsonDocument in favor of JsonDocument
+using WebSocketMessageCallback = std::function<void(JsonDocument& doc)>;
 
 class WebSocketClient {
 public:
-    WebSocketClient() = default;
+    WebSocketClient();
 
-    // Connection management (stub - always returns false)
-    bool begin(const char* host, uint16_t port = 80, const char* path = "/ws") { return false; }
-    void loop() {}
-    bool isConnected() const { return false; }
+    // Initialize WebSocket connection to host (by hostname)
+    // @param host Hostname (e.g., "lightwaveos.local")
+    // @param port Port number (default: 80)
+    // @param path WebSocket path (default: "/ws")
+    void begin(const char* host, uint16_t port = 80, const char* path = "/ws");
 
-    // Parameter change notifications (stub - do nothing)
-    void sendEffectChange(uint8_t value) {}
-    void sendBrightnessChange(uint8_t value) {}
-    void sendPaletteChange(uint8_t value) {}
-    void sendSpeedChange(uint8_t value) {}
-    void sendIntensityChange(uint8_t value) {}
-    void sendSaturationChange(uint8_t value) {}
-    void sendComplexityChange(uint8_t value) {}
-    void sendVariationChange(uint8_t value) {}
+    // Initialize WebSocket connection to host (by IP address)
+    // @param ip IP address
+    // @param port Port number (default: 80)
+    // @param path WebSocket path (default: "/ws")
+    void begin(IPAddress ip, uint16_t port = 80, const char* path = "/ws");
 
-    // Generic parameter (for Unit B params 8-15)
-    void sendGenericParameter(const char* fieldName, uint8_t value) {}
+    // Update WebSocket connection and handle events (call from loop())
+    // Non-blocking: returns immediately, handles state transitions internally
+    void update();
+
+    // Get connection status
+    WebSocketStatus getStatus() const { return _status; }
+    bool isConnected() const { return _status == WebSocketStatus::CONNECTED; }
+    bool isConnecting() const { return _status == WebSocketStatus::CONNECTING; }
+
+    // Get reconnect delay (for observability/debugging)
+    unsigned long getReconnectDelay() const { return _reconnectDelay; }
+
+    // ========================================================================
+    // Global Parameter Commands (Unit A, encoders 0-7)
+    // ========================================================================
+
+    void sendEffectChange(uint8_t effectId);
+    void sendBrightnessChange(uint8_t brightness);
+    void sendPaletteChange(uint8_t paletteId);
+    void sendSpeedChange(uint8_t speed);
+    void sendIntensityChange(uint8_t intensity);
+    void sendSaturationChange(uint8_t saturation);
+    void sendComplexityChange(uint8_t complexity);
+    void sendVariationChange(uint8_t variation);
+
+    // ========================================================================
+    // Zone Commands (Tab5 extension for Unit B, encoders 8-15)
+    // ========================================================================
+
+    void sendZoneEffect(uint8_t zoneId, uint8_t effectId);
+    void sendZoneBrightness(uint8_t zoneId, uint8_t value);
+    void sendZoneSpeed(uint8_t zoneId, uint8_t value);
+    void sendZonePalette(uint8_t zoneId, uint8_t paletteId);
+
+    // ========================================================================
+    // Generic Commands
+    // ========================================================================
+
+    void sendGenericParameter(const char* fieldName, uint8_t value);
+
+    // ========================================================================
+    // Message Handling
+    // ========================================================================
+
+    void onMessage(WebSocketMessageCallback callback) { _messageCallback = callback; }
+    void disconnect();
+    const char* getStatusString() const;
+
+private:
+    WebSocketsClient _ws;
+    WebSocketStatus _status;
+    WebSocketMessageCallback _messageCallback;
+
+    // Reconnection state
+    unsigned long _lastReconnectAttempt;
+    unsigned long _reconnectDelay;
+    bool _shouldReconnect;
+    IPAddress _serverIP;
+    const char* _serverHost;
+    uint16_t _serverPort;
+    const char* _serverPath;
+    bool _useIP;
+    bool _pendingHello;
+
+    // Rate limiting state (16 parameters for dual encoder units)
+    struct RateLimiter {
+        unsigned long lastSend[16];
+    };
+    RateLimiter _rateLimiter;
+
+    // Parameter indices for rate limiting
+    enum ParamIndex : uint8_t {
+        EFFECT = 0, BRIGHTNESS = 1, PALETTE = 2, SPEED = 3,
+        INTENSITY = 4, SATURATION = 5, COMPLEXITY = 6, VARIATION = 7,
+        ZONE0_EFFECT = 8, ZONE0_BRIGHTNESS = 9,
+        ZONE1_EFFECT = 10, ZONE1_BRIGHTNESS = 11,
+        ZONE2_EFFECT = 12, ZONE2_BRIGHTNESS = 13,
+        ZONE3_EFFECT = 14, ZONE3_BRIGHTNESS = 15
+    };
+
+    // Fixed buffer for JSON serialization
+    static constexpr size_t JSON_BUFFER_SIZE = 256;
+    char _jsonBuffer[JSON_BUFFER_SIZE];
+
+    // Internal methods
+    void handleEvent(WStype_t type, uint8_t* payload, size_t length);
+    void attemptReconnect();
+    void resetReconnectBackoff();
+    void increaseReconnectBackoff();
+    bool canSend(uint8_t paramIndex);
+    void sendJSON(const char* type, JsonDocument& doc);
+    void sendHelloMessage();
 };
+
+#else // ENABLE_WIFI == 0
+
+// Stub class when WiFi is disabled
+enum class WebSocketStatus {
+    DISCONNECTED,
+    ERROR
+};
+
+class WebSocketClient {
+public:
+    WebSocketClient() {}
+    void begin(const char*, uint16_t = 80, const char* = "/ws") {}
+    // Note: begin(IPAddress, ...) omitted - not needed when WiFi disabled
+    void update() {}
+    WebSocketStatus getStatus() const { return WebSocketStatus::DISCONNECTED; }
+    bool isConnected() const { return false; }
+    bool isConnecting() const { return false; }
+    unsigned long getReconnectDelay() const { return 0; }
+    template<typename F> void onMessage(F) {}  // Accept any callback, do nothing
+    void sendEffectChange(uint8_t) {}
+    void sendBrightnessChange(uint8_t) {}
+    void sendPaletteChange(uint8_t) {}
+    void sendSpeedChange(uint8_t) {}
+    void sendIntensityChange(uint8_t) {}
+    void sendSaturationChange(uint8_t) {}
+    void sendComplexityChange(uint8_t) {}
+    void sendVariationChange(uint8_t) {}
+    void sendZoneEffect(uint8_t, uint8_t) {}
+    void sendZoneBrightness(uint8_t, uint8_t) {}
+    void sendZoneSpeed(uint8_t, uint8_t) {}
+    void sendZonePalette(uint8_t, uint8_t) {}
+    void sendGenericParameter(const char*, uint8_t) {}
+    void disconnect() {}
+    const char* getStatusString() const { return "WiFi Disabled"; }
+};
+
+#endif // ENABLE_WIFI

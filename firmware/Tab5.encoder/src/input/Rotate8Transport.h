@@ -5,15 +5,21 @@
 // A simple wrapper around M5ROTATE8 that provides:
 // - Custom TwoWire instance support (for Tab5's M5.Ex_I2C)
 // - Basic connection state tracking
-// - NO aggressive recovery logic (safe for Tab5)
+// - Integration with I2CRecovery for software-level bus recovery
 //
 // This layer handles only I2C transport. Processing logic (debounce, wrap,
 // clamp) is in EncoderProcessing.h.
+//
+// RECOVERY INTEGRATION:
+// This transport layer optionally integrates with I2CRecovery to track I2C
+// errors and trigger software-level bus recovery when errors exceed threshold.
+// Recovery is SAFE for Tab5 - uses only Wire.end()/begin() and SCL toggling.
 // ============================================================================
 
 #include <Arduino.h>
 #include <Wire.h>
 #include <M5ROTATE8.h>
+#include "I2CRecovery.h"
 
 class Rotate8Transport {
 public:
@@ -55,11 +61,16 @@ public:
     /**
      * Check if M5ROTATE8 is currently responding
      * This performs an actual I2C transaction
+     * Records error if device is not responding
      * @return true if device responds
      */
     bool isConnected() {
         if (!_available) return false;
-        return _encoder.isConnected();
+        bool connected = _encoder.isConnected();
+        if (!connected) {
+            I2CRecovery::recordError();
+        }
+        return connected;
     }
 
     /**
@@ -78,15 +89,28 @@ public:
     /**
      * Get relative counter delta for an encoder channel
      * The counter is automatically reset after reading
+     * Tracks I2C errors for recovery integration
      * @param channel Encoder channel (0-7)
      * @return Delta value since last read (can be negative)
      */
     int32_t getRelCounter(uint8_t channel) {
         if (!_available || channel > 7) return 0;
+
+        // Read with error tracking
         int32_t value = _encoder.getRelCounter(channel);
+
+        // Sanity check for wild values (indicates I2C corruption)
+        if (value > 100 || value < -100) {
+            I2CRecovery::recordError();
+            return 0;  // Discard corrupt value
+        }
+
+        // Record success for non-zero valid reads
         if (value != 0) {
+            I2CRecovery::recordSuccess();
             _encoder.resetCounter(channel);
         }
+
         return value;
     }
 
@@ -212,12 +236,36 @@ public:
      */
     uint8_t getAddress() const { return _address; }
 
+    /**
+     * Mark the transport as unavailable (called during recovery)
+     * Recovery will re-probe after bus reset
+     */
+    void markUnavailable() {
+        _available = false;
+    }
+
+    /**
+     * Attempt to reinitialize after recovery
+     * @return true if device is now available
+     */
+    bool reinit() {
+        _available = _encoder.begin() && _encoder.isConnected();
+        if (_available) {
+            // Clear all LEDs on successful reinit
+            for (uint8_t i = 0; i < 9; i++) {
+                _encoder.writeRGB(i, 0, 0, 0);
+            }
+            Serial.printf("[Rotate8Transport] Reinit successful at 0x%02X\n", _address);
+        }
+        return _available;
+    }
+
 private:
     M5ROTATE8 _encoder;
     uint8_t _address;
     bool _available;
 
-    // NOTE: No recovery logic here!
-    // Tab5's shared I2C bus means we cannot safely do aggressive resets.
-    // If the encoder stops responding, the user should power-cycle.
+    // NOTE: Recovery is now handled by I2CRecovery module.
+    // Uses software-level bus clear (SCL toggling) which is safe for Tab5.
+    // No hardware peripheral resets are performed.
 };

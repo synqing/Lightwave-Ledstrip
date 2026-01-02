@@ -24,15 +24,17 @@ static const ParameterDef PARAMETER_TABLE[] = {
     {ParameterId::Complexity, 6, "complexity", "parameters.set",     0,   255, 128},
     {ParameterId::Variation,  7, "variation",  "parameters.set",     0,   255, 0},
 
-    // Unit B (8-15) - Placeholder parameters (TBD functionality)
-    {ParameterId::Param8,     8,  "param8",    "parameters.set",     0,   255, 128},
-    {ParameterId::Param9,     9,  "param9",    "parameters.set",     0,   255, 128},
-    {ParameterId::Param10,    10, "param10",   "parameters.set",     0,   255, 128},
-    {ParameterId::Param11,    11, "param11",   "parameters.set",     0,   255, 128},
-    {ParameterId::Param12,    12, "param12",   "parameters.set",     0,   255, 128},
-    {ParameterId::Param13,    13, "param13",   "parameters.set",     0,   255, 128},
-    {ParameterId::Param14,    14, "param14",   "parameters.set",     0,   255, 128},
-    {ParameterId::Param15,    15, "param15",   "parameters.set",     0,   255, 128}
+    // Unit B (8-15) - Zone parameters
+    // Zone Effect: 0-95 (wraps for continuous scrolling), Zone Brightness: 0-255 (clamped)
+    // WebSocket: zones.setEffect for effect, zones.setBrightness for brightness
+    {ParameterId::Zone0Effect,     8,  "zone0Effect",     "zones.setEffect",     0,   95,  0},
+    {ParameterId::Zone0Brightness, 9,  "zone0Brightness", "zones.setBrightness", 0,   255, 128},
+    {ParameterId::Zone1Effect,     10, "zone1Effect",     "zones.setEffect",     0,   95,  0},
+    {ParameterId::Zone1Brightness, 11, "zone1Brightness", "zones.setBrightness", 0,   255, 128},
+    {ParameterId::Zone2Effect,     12, "zone2Effect",     "zones.setEffect",     0,   95,  0},
+    {ParameterId::Zone2Brightness, 13, "zone2Brightness", "zones.setBrightness", 0,   255, 128},
+    {ParameterId::Zone3Effect,     14, "zone3Effect",     "zones.setEffect",     0,   95,  0},
+    {ParameterId::Zone3Brightness, 15, "zone3Brightness", "zones.setBrightness", 0,   255, 128}
 };
 
 const ParameterDef* getParameterByIndex(uint8_t index) {

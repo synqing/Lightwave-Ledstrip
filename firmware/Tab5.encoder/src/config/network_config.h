@@ -9,8 +9,8 @@
 
 // WiFi Access Point Credentials
 // Replace with your actual network SSID and password
-#define WIFI_SSID "YourSSID"
-#define WIFI_PASSWORD "YourPassword"
+#define WIFI_SSID "VX220-013F"
+#define WIFI_PASSWORD "3232AA90E0F24"
 
 // LightwaveOS Server
 // Default: mDNS hostname (resolved automatically)

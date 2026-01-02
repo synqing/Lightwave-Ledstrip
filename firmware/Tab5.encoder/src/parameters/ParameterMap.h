@@ -31,15 +31,16 @@ enum class ParameterId : uint8_t {
     Saturation = 5,
     Complexity = 6,
     Variation = 7,
-    // Unit B (8-15) - Placeholder parameters
-    Param8 = 8,
-    Param9 = 9,
-    Param10 = 10,
-    Param11 = 11,
-    Param12 = 12,
-    Param13 = 13,
-    Param14 = 14,
-    Param15 = 15
+    // Unit B (8-15) - Zone parameters
+    // Pattern: [Zone N Effect, Zone N Brightness] pairs
+    Zone0Effect = 8,
+    Zone0Brightness = 9,
+    Zone1Effect = 10,
+    Zone1Brightness = 11,
+    Zone2Effect = 12,
+    Zone2Brightness = 13,
+    Zone3Effect = 14,
+    Zone3Brightness = 15
 };
 
 /**

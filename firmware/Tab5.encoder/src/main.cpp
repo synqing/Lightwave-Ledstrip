@@ -1,10 +1,11 @@
 // ============================================================================
 // Tab5.encoder - M5Stack Tab5 (ESP32-P4) Dual ROTATE8 Encoder Controller
 // ============================================================================
-// Milestone E: Dual M5ROTATE8 Integration (16 Encoders)
+// Milestone F: Network Control Plane (WiFi + WebSocket + LightwaveOS Sync)
 //
 // This firmware reads 16 rotary encoders via TWO M5ROTATE8 units on the
-// same I2C bus (Grove Port.A) using different addresses.
+// same I2C bus (Grove Port.A) using different addresses, and synchronizes
+// parameter changes with LightwaveOS v2 firmware over WebSocket.
 //
 // Hardware:
 //   - M5Stack Tab5 (ESP32-P4)
@@ -15,15 +16,22 @@
 // Grove Port.A I2C:
 //   - SDA: GPIO 53
 //   - SCL: GPIO 54
-//   - Unit A: 0x42 (encoders 0-7)
-//   - Unit B: 0x41 (encoders 8-15)
+//   - Unit A: 0x42 (encoders 0-7) - Core parameters
+//   - Unit B: 0x41 (encoders 8-15) - Zone parameters
+//
+// Network:
+//   - WiFi: Connects to configured AP
+//   - mDNS: Resolves lightwaveos.local
+//   - WebSocket: Bidirectional sync with v2 firmware
+//
+// I2C RECOVERY (Phase G.2):
+// This firmware includes SOFTWARE-LEVEL I2C recovery for the external
+// Grove Port.A bus. It uses SCL toggling and Wire reinit - NOT aggressive
+// hardware resets (periph_module_reset, i2cDeinit) which differ on ESP32-P4.
 //
 // CRITICAL SAFETY NOTE:
-// This code does NOT use aggressive I2C recovery (periph_module_reset,
-// i2cDeinit, bus clear pin twiddling) because Tab5's internal I2C bus
-// is shared with display/touch/audio. The external I2C on Grove Port.A
-// is isolated and safe, but we still avoid aggressive recovery to
-// maintain system stability.
+// Tab5's INTERNAL I2C bus is shared with display/touch/audio - NEVER touch it.
+// The external I2C on Grove Port.A is isolated and safe for recovery.
 // ============================================================================
 
 #include <Arduino.h>
@@ -31,7 +39,20 @@
 #include <Wire.h>
 
 #include "config/Config.h"
+#if ENABLE_WIFI
+#include <WiFi.h>  // For WiFi.setPins() - must be called before M5.begin()
+#endif
+#include "config/network_config.h"
 #include "input/DualEncoderService.h"
+#include "input/I2CRecovery.h"
+#include "input/TouchHandler.h"
+#include "network/WiFiManager.h"
+#include "network/WebSocketClient.h"
+#include "network/WsMessageRouter.h"
+#include "parameters/ParameterHandler.h"
+#include "storage/NvsStorage.h"
+#include "ui/LedFeedback.h"
+#include "ui/DisplayUI.h"
 
 // ============================================================================
 // I2C Addresses for Dual Unit Setup
@@ -40,61 +61,7 @@
 constexpr uint8_t ADDR_UNIT_A = 0x42;  // Reprogrammed via register 0xFF
 constexpr uint8_t ADDR_UNIT_B = 0x41;  // Factory default
 
-// ============================================================================
-// K1-Style Color Palette (RGB565 Neon Cyberpunk)
-// ============================================================================
-
-// Background color (near-black)
-constexpr uint16_t COLOR_BG = 0x0841;  // #0a0a14
-
-// Per-parameter colors (each encoder has unique color for identification)
-constexpr uint16_t PARAM_COLORS[16] = {
-    // Unit A (0-7): Core parameters
-    0xF810,  // 0: Effect     - hot pink    #ff0080
-    0xFFE0,  // 1: Brightness - yellow      #ffff00
-    0x07FF,  // 2: Palette    - cyan        #00ffff
-    0xFA20,  // 3: Speed      - orange      #ff4400
-    0xF81F,  // 4: Intensity  - magenta     #ff00ff
-    0x07F1,  // 5: Saturation - green       #00ff88
-    0x901F,  // 6: Complexity - purple      #8800ff
-    0x047F,  // 7: Variation  - blue        #0088ff
-    // Unit B (8-15): Extended parameters (repeat palette)
-    0xF810,  // 8:  Param8    - hot pink
-    0xFFE0,  // 9:  Param9    - yellow
-    0x07FF,  // 10: Param10   - cyan
-    0xFA20,  // 11: Param11   - orange
-    0xF81F,  // 12: Param12   - magenta
-    0x07F1,  // 13: Param13   - green
-    0x901F,  // 14: Param14   - purple
-    0x047F,  // 15: Param15   - blue
-};
-
-// ============================================================================
-// RGB565 Color Manipulation (K1 Pattern)
-// ============================================================================
-
-/**
- * Dim an RGB565 color by a factor (0.0 to 1.5+)
- * Used for glow effects: outer=30%, middle=50%, inner=100%
- */
-inline uint16_t dimColor(uint16_t color, float factor) {
-    // Extract RGB565 components
-    uint8_t r = (color >> 11) & 0x1F;  // 5 bits red (0-31)
-    uint8_t g = (color >> 5) & 0x3F;   // 6 bits green (0-63)
-    uint8_t b = color & 0x1F;          // 5 bits blue (0-31)
-
-    // Scale each component (clamp to max)
-    uint8_t rScaled = static_cast<uint8_t>(r * factor);
-    uint8_t gScaled = static_cast<uint8_t>(g * factor);
-    uint8_t bScaled = static_cast<uint8_t>(b * factor);
-
-    r = (rScaled > 31) ? 31 : rScaled;
-    g = (gScaled > 63) ? 63 : gScaled;
-    b = (bScaled > 31) ? 31 : bScaled;
-
-    // Reconstruct RGB565
-    return (r << 11) | (g << 5) | b;
-}
+// NOTE: Color palette and dimColor() moved to ui/DisplayUI.h
 
 // ============================================================================
 // Global State
@@ -102,6 +69,23 @@ inline uint16_t dimColor(uint16_t color, float factor) {
 
 // Dual encoder service (initialized in setup)
 DualEncoderService* g_encoders = nullptr;
+
+// Network components (Milestone F)
+WiFiManager g_wifiManager;
+WebSocketClient g_wsClient;
+ParameterHandler* g_paramHandler = nullptr;
+
+// WebSocket connection state
+bool g_wsConfigured = false;  // true after wsClient.begin() called
+
+// Connection status LED feedback (Phase F.5)
+LedFeedback g_ledFeedback;
+
+// Touch screen handler (Phase G.3)
+TouchHandler g_touchHandler;
+
+// Cyberpunk UI (Phase H)
+DisplayUI* g_ui = nullptr;
 
 // ============================================================================
 // I2C Scanner Utility
@@ -151,9 +135,6 @@ uint8_t scanI2CBus(TwoWire& wire, const char* busName) {
 // Encoder Change Callback
 // ============================================================================
 
-// Forward declaration for highlight support
-void updateDisplay(int8_t highlightIdx);
-
 /**
  * Called when any encoder value changes
  * @param index Encoder index (0-15)
@@ -172,172 +153,111 @@ void onEncoderChange(uint8_t index, uint16_t value, bool wasReset) {
         Serial.printf("[%s:%d] %s: → %d\n", unit, localIdx, name, value);
     }
 
-    // Update display with this encoder highlighted
-    updateDisplay(index);
+    // Update display with new value
+    if (g_ui) {
+        g_ui->update(index, value);
+    }
 
-    // TODO (Milestone F): Send to LightwaveOS via WebSocket
-    // webSocket.sendParameter(param, value);
-}
+    // Queue parameter for NVS persistence (debounced to prevent flash wear)
+    NvsStorage::requestSave(index, value);
 
-// ============================================================================
-// Display Update (K1-Style: State Caching, Selective Updates, Glow Borders)
-// ============================================================================
-
-// State cache for selective updates (K1 pattern: only redraw changed cells)
-static uint16_t s_displayValues[16] = {
-    0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
-    0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF
-};  // Initialize to impossible values to force first draw
-static int8_t s_highlightIndex = -1;  // Currently active encoder (-1 = none)
-
-/**
- * Draw 3-layer glow border around a cell (K1 pattern)
- * Creates soft neon glow effect with 30%, 50%, 100% brightness layers
- */
-void drawGlowBorder(int16_t x, int16_t y, int16_t w, int16_t h,
-                    uint16_t color, bool highlight) {
-    float glow = highlight ? 1.0f : 0.6f;  // Brighter when highlighted
-
-    uint16_t outerColor = dimColor(color, 0.3f * glow);   // 18-30%
-    uint16_t middleColor = dimColor(color, 0.5f * glow);  // 30-50%
-    uint16_t innerColor = dimColor(color, glow);          // 60-100%
-
-    M5.Display.drawRect(x, y, w, h, outerColor);
-    M5.Display.drawRect(x + 1, y + 1, w - 2, h - 2, middleColor);
-    M5.Display.drawRect(x + 2, y + 2, w - 4, h - 4, innerColor);
-}
-
-/**
- * Draw a single parameter cell with K1 styling
- */
-void drawCell(uint8_t index, uint16_t value, bool highlight) {
-    // Layout constants
-    constexpr int yStart = 200;
-    constexpr int cellHeight = 35;
-    constexpr int colWidth = 320;
-    constexpr int barHeight = 8;
-    constexpr int barYOffset = 24;  // Below text
-
-    int col = index / 8;
-    int row = index % 8;
-    int x = 20 + col * colWidth;
-    int y = yStart + row * cellHeight;
-    int cellW = colWidth - 20;
-
-    uint16_t paramColor = PARAM_COLORS[index];
-
-    // Clear cell background
-    M5.Display.fillRect(x, y, cellW, cellHeight - 2, COLOR_BG);
-
-    // Draw glow border
-    drawGlowBorder(x, y, cellW, cellHeight - 2, paramColor, highlight);
-
-    // Draw label with parameter color
-    Parameter param = static_cast<Parameter>(index);
-    const char* name = getParameterName(param);
-
-    M5.Display.setTextSize(2);
-    M5.Display.setTextColor(paramColor, COLOR_BG);
-    M5.Display.setCursor(x + 6, y + 4);
-    M5.Display.printf("%d:%-8s", index, name);
-
-    // Draw value in white
-    M5.Display.setTextColor(TFT_WHITE, COLOR_BG);
-    M5.Display.setCursor(x + cellW - 50, y + 4);
-    M5.Display.printf("%3d", value);
-
-    // Draw progress bar
-    int barX = x + 6;
-    int barY = y + barYOffset;
-    int barW = cellW - 12;
-    int fillWidth = (static_cast<int32_t>(value) * barW) / 255;
-
-    // Bar background (darker)
-    M5.Display.fillRect(barX, barY, barW, barHeight, dimColor(paramColor, 0.15f));
-
-    // Filled portion
-    if (fillWidth > 0) {
-        M5.Display.fillRect(barX, barY, fillWidth, barHeight, dimColor(paramColor, 0.7f));
-
-        // Bright leading edge (glow effect)
-        if (fillWidth > 1) {
-            M5.Display.drawFastVLine(barX + fillWidth - 1, barY, barHeight, paramColor);
+    // Send to LightwaveOS via WebSocket (Milestone F)
+    if (g_wsClient.isConnected()) {
+        // Unit A (0-7): Core parameters
+        if (index < 8) {
+            switch (index) {
+                case 0: g_wsClient.sendEffectChange(value); break;
+                case 1: g_wsClient.sendBrightnessChange(value); break;
+                case 2: g_wsClient.sendPaletteChange(value); break;
+                case 3: g_wsClient.sendSpeedChange(value); break;
+                case 4: g_wsClient.sendIntensityChange(value); break;
+                case 5: g_wsClient.sendSaturationChange(value); break;
+                case 6: g_wsClient.sendComplexityChange(value); break;
+                case 7: g_wsClient.sendVariationChange(value); break;
+            }
+        }
+        // Unit B (8-15): Zone parameters
+        else {
+            uint8_t zoneId = ZoneParam::getZoneId(index);
+            if (ZoneParam::isZoneEffect(index)) {
+                g_wsClient.sendZoneEffect(zoneId, value);
+            } else {
+                g_wsClient.sendZoneBrightness(zoneId, value);
+            }
         }
     }
 }
 
-/**
- * Update display with K1 patterns:
- * - State caching (only redraw changed cells)
- * - Per-parameter colors
- * - Glow borders
- * - Progress bars
- */
-void updateDisplay(int8_t highlightIdx = -1) {
-    if (!g_encoders) return;
-
-    // Update highlight if changed
-    if (highlightIdx != s_highlightIndex) {
-        int8_t oldHighlight = s_highlightIndex;
-        s_highlightIndex = highlightIdx;
-
-        // Force redraw of old and new highlight cells
-        if (oldHighlight >= 0 && oldHighlight < 16) {
-            s_displayValues[oldHighlight] = 0xFFFF;  // Force redraw
-        }
-        if (highlightIdx >= 0 && highlightIdx < 16) {
-            s_displayValues[highlightIdx] = 0xFFFF;  // Force redraw
-        }
-    }
-
-    // BEGIN TRANSACTION - batch all display operations (K1 flicker-free pattern)
-    M5.Display.startWrite();
-
-    // Selective update: only redraw cells where value changed
-    for (uint8_t i = 0; i < 16; i++) {
-        uint16_t value = g_encoders->getValue(i);
-
-        // Skip unchanged cells (state caching optimization)
-        if (value == s_displayValues[i]) {
-            continue;
-        }
-
-        // Update cache and redraw cell
-        s_displayValues[i] = value;
-        bool isHighlight = (i == s_highlightIndex);
-        drawCell(i, value, isHighlight);
-    }
-
-    // END TRANSACTION - commit all at once (eliminates flicker)
-    M5.Display.endWrite();
-}
-
-/**
- * Force full display refresh (used after setup/errors)
- */
-void forceDisplayRefresh() {
-    // Invalidate all cached values
-    for (uint8_t i = 0; i < 16; i++) {
-        s_displayValues[i] = 0xFFFF;
-    }
-    updateDisplay();
-}
+// NOTE: Display rendering moved to ui/DisplayUI.h/cpp (Cyberpunk UI with radial gauges)
 
 // ============================================================================
-// Status LED Update (consistent green=connected, red=disconnected)
+// Connection Status LED Feedback (Phase F.5)
+// ============================================================================
+// Determines connection state from WiFiManager and WebSocketClient,
+// then updates both Unit A and Unit B status LEDs via LedFeedback.
+//
+// State Priority (highest to lowest):
+//   1. WS_CONNECTED       - WebSocket connected (green solid)
+//   2. WS_RECONNECTING    - WebSocket lost, reconnecting (orange breathing)
+//   3. WS_CONNECTING      - WiFi up, WS connecting (yellow breathing)
+//   4. WIFI_CONNECTED     - WiFi up, no WS yet (blue solid)
+//   5. WIFI_CONNECTING    - WiFi connecting (blue breathing)
+//   6. WIFI_DISCONNECTED  - No WiFi (red solid)
 // ============================================================================
 
-void updateStatusLeds() {
-    if (!g_encoders) return;
+// Track previous WS connection for reconnection detection
+static bool s_wasWsConnected = false;
 
-    bool unitA = g_encoders->isUnitAAvailable();
-    bool unitB = g_encoders->isUnitBAvailable();
+void updateConnectionLeds() {
+    ConnectionState state;
 
-    // Unit A status LED: green if connected, red if not
-    g_encoders->setStatusLed(0, unitA ? 0 : 32, unitA ? 32 : 0, 0);
+    // Determine current connection state
+    if (!g_wifiManager.isConnected()) {
+        // No WiFi connection
+        WiFiConnectionStatus wifiStatus = g_wifiManager.getStatus();
+        if (wifiStatus == WiFiConnectionStatus::CONNECTING) {
+            state = ConnectionState::WIFI_CONNECTING;
+        } else {
+            state = ConnectionState::WIFI_DISCONNECTED;
+        }
+        s_wasWsConnected = false;  // Reset WS tracking
+    }
+    else if (g_wsClient.isConnected()) {
+        // Fully connected
+        state = ConnectionState::WS_CONNECTED;
+        s_wasWsConnected = true;
+    }
+    else if (g_wsClient.isConnecting()) {
+        // WebSocket connecting
+        if (s_wasWsConnected) {
+            // Was connected before, now reconnecting
+            state = ConnectionState::WS_RECONNECTING;
+        } else {
+            // First connection attempt
+            state = ConnectionState::WS_CONNECTING;
+        }
+    }
+    else if (g_wsConfigured) {
+        // WS configured but not connecting (between reconnect attempts)
+        if (s_wasWsConnected) {
+            state = ConnectionState::WS_RECONNECTING;
+        } else {
+            state = ConnectionState::WS_CONNECTING;
+        }
+    }
+    else {
+        // WiFi connected, mDNS not resolved yet or WS not configured
+        if (!g_wifiManager.isMDNSResolved()) {
+            // Still resolving mDNS - treat as WiFi connected phase
+            state = ConnectionState::WIFI_CONNECTED;
+        } else {
+            // mDNS resolved, WS about to be configured
+            state = ConnectionState::WS_CONNECTING;
+        }
+    }
 
-    // Unit B status LED: green if connected, red if not
-    g_encoders->setStatusLed(1, unitB ? 0 : 32, unitB ? 32 : 0, 0);
+    // Update LED feedback state
+    g_ledFeedback.setState(state);
 }
 
 // ============================================================================
@@ -351,13 +271,28 @@ void setup() {
 
     Serial.println("\n");
     Serial.println("============================================");
-    Serial.println("  Tab5.encoder - Milestone E");
-    Serial.println("  Dual M5ROTATE8 (16 Encoders)");
+    Serial.println("  Tab5.encoder - Milestone F");
+    Serial.println("  Dual M5ROTATE8 (16 Encoders) + WiFi");
     Serial.println("============================================");
 
+    // =========================================================================
+    // CRITICAL: Configure Tab5 WiFi SDIO pins BEFORE any WiFi initialization
+    // =========================================================================
+    // Tab5 uses ESP32-C6 WiFi co-processor via SDIO on non-default pins.
+    // This MUST be called before M5.begin() or WiFi.begin().
+    // See: https://github.com/nikthefix/M5stack_Tab5_Arduino_Wifi_Example
+#if ENABLE_WIFI
+    Serial.println("[WIFI] Configuring Tab5 SDIO pins for ESP32-C6 co-processor...");
+    WiFi.setPins(TAB5_WIFI_SDIO_CLK, TAB5_WIFI_SDIO_CMD,
+                 TAB5_WIFI_SDIO_D0, TAB5_WIFI_SDIO_D1,
+                 TAB5_WIFI_SDIO_D2, TAB5_WIFI_SDIO_D3,
+                 TAB5_WIFI_SDIO_RST);
+    Serial.println("[WIFI] SDIO pins configured");
+#endif
+
     // Initialize M5Stack Tab5
-    // This initializes internal I2C (display, touch, audio) automatically
     auto cfg = M5.config();
+    cfg.external_spk = true;
     M5.begin(cfg);
 
     // Set display orientation (landscape, USB on left)
@@ -387,8 +322,24 @@ void setup() {
     Serial.printf("[INIT] Wire initialized at %lu Hz, timeout %u ms\n",
                   (unsigned long)I2C::FREQ_HZ, I2C::TIMEOUT_MS);
 
+    // =========================================================================
+    // Initialize I2C Recovery Module (Phase G.2)
+    // =========================================================================
+    // Software-level bus recovery for external I2C (Grove Port.A)
+    // Uses SCL toggling and Wire reinit - NO hardware peripheral resets
+    I2CRecovery::init(&Wire, extSDA, extScl, I2C::FREQ_HZ);
+    Serial.println("[I2C_RECOVERY] Recovery module initialized for external bus");
+
     // Allow I2C bus to stabilize
     delay(100);
+
+    // =========================================================================
+    // Initialize NVS Storage (Phase G.1)
+    // =========================================================================
+    Serial.println("\n[NVS] Initializing parameter storage...");
+    if (!NvsStorage::init()) {
+        Serial.println("[NVS] WARNING: NVS init failed - parameters will not persist");
+    }
 
     // Scan external I2C bus for devices
     uint8_t found = scanI2CBus(Wire, "External I2C (Grove Port.A)");
@@ -398,6 +349,30 @@ void setup() {
     g_encoders = new DualEncoderService(&Wire, ADDR_UNIT_A, ADDR_UNIT_B);
     g_encoders->setChangeCallback(onEncoderChange);
     bool encoderOk = g_encoders->begin();
+
+    // =========================================================================
+    // Initialize LED Feedback (Phase F.5)
+    // =========================================================================
+    g_ledFeedback.setEncoders(g_encoders);
+    g_ledFeedback.begin();
+    Serial.println("[LED] Connection status LED feedback initialized");
+
+    // =========================================================================
+    // Load Saved Parameters from NVS (Phase G.1)
+    // =========================================================================
+    if (NvsStorage::isReady()) {
+        uint16_t savedValues[16];
+        uint8_t loadedCount = NvsStorage::loadAllParameters(savedValues);
+
+        // Apply loaded values to encoder service (without triggering callbacks)
+        for (uint8_t i = 0; i < 16; i++) {
+            g_encoders->setValue(i, savedValues[i], false);
+        }
+
+        if (loadedCount > 0) {
+            Serial.printf("[NVS] Restored %d parameters from flash\n", loadedCount);
+        }
+    }
 
     // Check unit status
     bool unitA = g_encoders->isUnitAAvailable();
@@ -417,26 +392,17 @@ void setup() {
         g_encoders->allLedsOff();
 
         // Set status LEDs (both green for connected)
-        updateStatusLeds();
+        updateConnectionLeds();
 
-        // Show success on Tab5 display (wrapped in transaction for flicker-free)
-        M5.Display.startWrite();
-        M5.Display.fillScreen(TFT_BLACK);
-        M5.Display.setTextSize(2);
-        M5.Display.setTextColor(TFT_GREEN);
-        M5.Display.setCursor(20, 20);
-        M5.Display.println("Tab5.encoder");
-        M5.Display.setTextColor(TFT_WHITE);
-        M5.Display.setCursor(20, 60);
-        M5.Display.println("Milestone E: PASS");
-        M5.Display.setCursor(20, 100);
-        M5.Display.printf("Unit A (0x%02X): OK", ADDR_UNIT_A);
-        M5.Display.setCursor(20, 130);
-        M5.Display.printf("Unit B (0x%02X): OK", ADDR_UNIT_B);
-        M5.Display.endWrite();
+        // Initialize Cyberpunk UI (Phase H)
+        g_ui = new DisplayUI(M5.Display);
+        g_ui->begin();
+        g_ui->setConnectionState(false, false, unitA, unitB);
 
-        // Show initial values with K1-style display
-        forceDisplayRefresh();
+        // Show initial values on radial gauges
+        for (uint8_t i = 0; i < 16; i++) {
+            g_ui->update(i, g_encoders->getValue(i));
+        }
 
     } else if (unitA || unitB) {
         // Partial success - one unit available
@@ -444,28 +410,17 @@ void setup() {
         Serial.println("[WARN] Check wiring for missing unit");
 
         // Set status LEDs (green for available, red for missing)
-        updateStatusLeds();
+        updateConnectionLeds();
 
-        // Show partial success on display (wrapped in transaction for flicker-free)
-        M5.Display.startWrite();
-        M5.Display.fillScreen(TFT_BLACK);
-        M5.Display.setTextSize(2);
-        M5.Display.setTextColor(TFT_YELLOW);
-        M5.Display.setCursor(20, 20);
-        M5.Display.println("Tab5.encoder");
-        M5.Display.setTextColor(TFT_WHITE);
-        M5.Display.setCursor(20, 60);
-        M5.Display.println("Milestone E: PARTIAL");
-        M5.Display.setCursor(20, 100);
-        M5.Display.setTextColor(unitA ? TFT_GREEN : TFT_RED);
-        M5.Display.printf("Unit A (0x%02X): %s", ADDR_UNIT_A, unitA ? "OK" : "FAIL");
-        M5.Display.setCursor(20, 130);
-        M5.Display.setTextColor(unitB ? TFT_GREEN : TFT_RED);
-        M5.Display.printf("Unit B (0x%02X): %s", ADDR_UNIT_B, unitB ? "OK" : "FAIL");
-        M5.Display.endWrite();
+        // Initialize Cyberpunk UI (Phase H)
+        g_ui = new DisplayUI(M5.Display);
+        g_ui->begin();
+        g_ui->setConnectionState(false, false, unitA, unitB);
 
-        // Show initial values with K1-style display
-        forceDisplayRefresh();
+        // Show initial values on radial gauges
+        for (uint8_t i = 0; i < 16; i++) {
+            g_ui->update(i, g_encoders->getValue(i));
+        }
 
     } else {
         Serial.println("\n[ERROR] No encoder units found!");
@@ -474,25 +429,79 @@ void setup() {
         Serial.println("  - Is Unit B (0x41) connected to Grove Port.A?");
         Serial.println("  - Are the Grove cables properly seated?");
 
-        // Show error on Tab5 display (wrapped in transaction for flicker-free)
-        M5.Display.startWrite();
-        M5.Display.fillScreen(TFT_BLACK);
-        M5.Display.setTextSize(2);
-        M5.Display.setTextColor(TFT_RED);
-        M5.Display.setCursor(20, 20);
-        M5.Display.println("Tab5.encoder");
-        M5.Display.setTextColor(TFT_WHITE);
-        M5.Display.setCursor(20, 60);
-        M5.Display.println("Milestone E: FAIL");
-        M5.Display.setCursor(20, 100);
-        M5.Display.println("No encoder units found!");
-        M5.Display.setCursor(20, 140);
-        M5.Display.println("Check Grove Port.A wiring");
-        M5.Display.endWrite();
+        // Initialize Cyberpunk UI even without encoders (shows system status)
+        g_ui = new DisplayUI(M5.Display);
+        g_ui->begin();
+        g_ui->setConnectionState(false, false, false, false);
     }
+
+    // =========================================================================
+    // Initialize Network (Milestone F)
+    // =========================================================================
+#if ENABLE_WIFI
+    Serial.println("\n[NETWORK] Initializing WiFi...");
+
+    // Initialize ParameterHandler (bridges encoders ↔ WebSocket ↔ display)
+    g_paramHandler = new ParameterHandler(g_encoders);
+    g_paramHandler->setDisplayCallback([](uint8_t index, uint16_t value) {
+        // Called when parameters are updated from WebSocket
+        // Update radial gauge display
+        if (g_ui) {
+            g_ui->update(index, value);
+        }
+    });
+
+    // Initialize WsMessageRouter (routes incoming WebSocket messages)
+    WsMessageRouter::init(g_paramHandler, &g_wsClient);
+
+    // Register WebSocket message callback
+    g_wsClient.onMessage([](JsonDocument& doc) {
+        WsMessageRouter::route(doc);
+    });
+
+    // Start WiFi connection
+    g_wifiManager.begin(WIFI_SSID, WIFI_PASSWORD);
+    Serial.printf("[NETWORK] Connecting to '%s'...\n", WIFI_SSID);
+#else
+    // WiFi disabled on ESP32-P4 due to SDIO pin configuration issues
+    // See Config.h ENABLE_WIFI flag for details
+    Serial.println("\n[NETWORK] WiFi DISABLED - ESP32-P4 SDIO pin config not supported");
+    Serial.println("[NETWORK] Encoder functionality available, network sync disabled");
+#endif // ENABLE_WIFI
+
+    // =========================================================================
+    // Initialize Touch Handler (Phase G.3)
+    // =========================================================================
+    Serial.println("\n[TOUCH] Initializing touch screen handler...");
+    g_touchHandler.init();
+    g_touchHandler.setEncoderService(g_encoders);
+
+    // Register long press callback - resets parameter to default
+    g_touchHandler.onLongPress([](uint8_t paramIndex) {
+        // Parameter reset is handled internally by TouchHandler
+        // This callback is for additional actions (e.g., LED feedback, sound)
+        Serial.printf("[TOUCH] Long press reset on param %d\n", paramIndex);
+
+        // Flash encoder LED cyan for reset feedback (same as encoder button)
+        if (g_encoders) {
+            g_encoders->flashLed(paramIndex, 0, 128, 255);
+        }
+    });
+
+    // Optional: Register tap callback for highlight feedback
+    g_touchHandler.onTap([](uint8_t paramIndex) {
+        // Flash encoder LED for tap feedback
+        if (g_encoders) {
+            g_encoders->flashLed(paramIndex, 128, 128, 128);
+        }
+    });
+
+    Serial.println("[TOUCH] Touch handler initialized - long press to reset params");
 
     Serial.println("\n============================================");
     Serial.println("  Setup complete - turn encoders to test");
+    Serial.println("  WiFi connecting in background...");
+    Serial.println("  Touch screen: long press to reset params");
     Serial.println("============================================\n");
 }
 
@@ -504,7 +513,109 @@ void loop() {
     // Update M5Stack (handles button events, touch, etc.)
     M5.update();
 
-    // Skip encoder processing if service not available
+    // =========================================================================
+    // TOUCH: Process touch events (Phase G.3)
+    // =========================================================================
+    g_touchHandler.update();
+
+    // =========================================================================
+    // NETWORK: Service WebSocket EARLY to prevent TCP timeouts (K1 pattern)
+    // =========================================================================
+    g_wsClient.update();
+
+    // =========================================================================
+    // NETWORK: Update WiFi state machine
+    // =========================================================================
+    g_wifiManager.update();
+
+    // =========================================================================
+    // LED FEEDBACK: Update connection status LEDs (Phase F.5)
+    // =========================================================================
+    updateConnectionLeds();
+    g_ledFeedback.update();  // Non-blocking breathing animation
+
+    // =========================================================================
+    // NETWORK: Handle mDNS resolution and WebSocket connection
+    // =========================================================================
+#if ENABLE_WIFI
+    static bool s_wifiWasConnected = false;
+    static bool s_mdnsLogged = false;
+
+    if (g_wifiManager.isConnected()) {
+        // Log WiFi connection once
+        if (!s_wifiWasConnected) {
+            s_wifiWasConnected = true;
+            Serial.printf("[NETWORK] WiFi connected! IP: %s\n",
+                          g_wifiManager.getLocalIP().toString().c_str());
+        }
+
+        // Try mDNS resolution (with internal backoff)
+        if (!g_wifiManager.isMDNSResolved()) {
+            g_wifiManager.resolveMDNS("lightwaveos");
+        }
+
+        // Once mDNS resolved, configure WebSocket (ONCE)
+        if (g_wifiManager.isMDNSResolved() && !g_wsConfigured) {
+            g_wsConfigured = true;
+            IPAddress serverIP = g_wifiManager.getResolvedIP();
+
+            if (!s_mdnsLogged) {
+                s_mdnsLogged = true;
+                Serial.printf("[NETWORK] mDNS resolved: lightwaveos.local -> %s\n",
+                              serverIP.toString().c_str());
+            }
+
+            Serial.printf("[NETWORK] Connecting WebSocket to %s:%d%s\n",
+                          serverIP.toString().c_str(),
+                          LIGHTWAVE_PORT,
+                          LIGHTWAVE_WS_PATH);
+
+            g_wsClient.begin(serverIP, LIGHTWAVE_PORT, LIGHTWAVE_WS_PATH);
+        }
+    } else {
+        // WiFi disconnected - reset state for reconnection
+        if (s_wifiWasConnected) {
+            s_wifiWasConnected = false;
+            s_mdnsLogged = false;
+            g_wsConfigured = false;
+            Serial.println("[NETWORK] WiFi disconnected");
+        }
+    }
+#endif // ENABLE_WIFI
+
+    // =========================================================================
+    // I2C RECOVERY: Update recovery state machine (Phase G.2)
+    // =========================================================================
+    // Non-blocking - advances one step per call when recovering
+    // Safe to call every loop iteration
+    I2CRecovery::update();
+
+    // After recovery completes, attempt to reinitialize encoder transports
+    static bool s_wasRecovering = false;
+    bool isRecovering = I2CRecovery::isRecovering();
+
+    if (s_wasRecovering && !isRecovering) {
+        // Recovery just completed - try to reinit encoder transports
+        Serial.println("[I2C_RECOVERY] Recovery complete - reinitializing encoders...");
+
+        if (g_encoders) {
+            // Try to reinit both transports
+            bool unitAOk = g_encoders->transportA().reinit();
+            bool unitBOk = g_encoders->transportB().reinit();
+
+            Serial.printf("[I2C_RECOVERY] Post-recovery: Unit A=%s, Unit B=%s\n",
+                          unitAOk ? "OK" : "FAIL",
+                          unitBOk ? "OK" : "FAIL");
+
+            // Update status LEDs
+            updateConnectionLeds();
+        }
+    }
+    s_wasRecovering = isRecovering;
+
+    // =========================================================================
+    // ENCODERS: Skip processing if service not available
+    // =========================================================================
     if (!g_encoders || !g_encoders->isAnyAvailable()) {
         delay(100);
         return;
@@ -514,21 +625,29 @@ void loop() {
     // The callback (onEncoderChange) handles display updates with highlighting
     g_encoders->update();
 
-    // Clear highlight after brief delay (fade effect)
-    // The callback sets highlight; this clears it after ~500ms of no changes
-    static uint32_t lastChange = 0;
-    static int8_t lastHighlight = -1;
+    // =========================================================================
+    // NVS: Process pending parameter saves (debounced writes)
+    // =========================================================================
+    NvsStorage::update();
 
-    if (s_highlightIndex >= 0) {
-        lastChange = millis();
-        lastHighlight = s_highlightIndex;
-    } else if (lastHighlight >= 0 && millis() - lastChange > 500) {
-        // Clear highlight and force redraw of that cell
-        updateDisplay(-1);
-        lastHighlight = -1;
+    // =========================================================================
+    // UI: Update system monitor animation and connection status
+    // =========================================================================
+    if (g_ui) {
+        // Sync connection state to display
+        bool wifiOk = g_wifiManager.isConnected();
+        bool wsOk = g_wsClient.isConnected();
+        bool unitA = g_encoders->isUnitAAvailable();
+        bool unitB = g_encoders->isUnitBAvailable();
+        g_ui->setConnectionState(wifiOk, wsOk, unitA, unitB);
+
+        // Animate system monitor waveform
+        g_ui->loop();
     }
 
-    // Periodic status (every 10 seconds)
+    // =========================================================================
+    // PERIODIC STATUS: Every 10 seconds (now includes network status)
+    // =========================================================================
     static uint32_t lastStatus = 0;
     uint32_t now = millis();
 
@@ -538,13 +657,30 @@ void loop() {
         bool unitA = g_encoders->isUnitAAvailable();
         bool unitB = g_encoders->isUnitBAvailable();
 
-        Serial.printf("[STATUS] A:%s B:%s heap:%u\n",
+        // Network status
+        const char* wifiStatus = g_wifiManager.isConnected() ? "OK" : "DISC";
+        const char* wsStatus = g_wsClient.isConnected() ? "OK" :
+                              (g_wsClient.isConnecting() ? "CONN" : "DISC");
+
+        // NVS pending saves
+        uint8_t nvsPending = NvsStorage::getPendingCount();
+
+        // I2C recovery stats
+        uint8_t i2cErrors = I2CRecovery::getErrorCount();
+        uint16_t i2cRecoveries = I2CRecovery::getRecoverySuccesses();
+
+        Serial.printf("[STATUS] A:%s B:%s WiFi:%s WS:%s NVS:%d I2C_err:%d I2C_rec:%d heap:%u\n",
                       unitA ? "OK" : "FAIL",
                       unitB ? "OK" : "FAIL",
+                      wifiStatus,
+                      wsStatus,
+                      nvsPending,
+                      i2cErrors,
+                      i2cRecoveries,
                       ESP.getFreeHeap());
 
         // Update status LEDs in case connection state changed
-        updateStatusLeds();
+        updateConnectionLeds();
     }
 
     delay(5);  // ~200Hz polling

@@ -4,6 +4,24 @@
 #include <Arduino.h>
 
 // ============================================================================
+// Feature Flags
+// ============================================================================
+
+// Tab5 WiFi: ESP32-C6 co-processor via SDIO with custom pins
+// WiFi.setPins() must be called BEFORE WiFi.begin() or M5.begin()
+// See: https://github.com/nikthefix/M5stack_Tab5_Arduino_Wifi_Example
+#define ENABLE_WIFI 1
+
+// Tab5 WiFi SDIO pin definitions (ESP32-C6 co-processor)
+#define TAB5_WIFI_SDIO_CLK   12
+#define TAB5_WIFI_SDIO_CMD   13
+#define TAB5_WIFI_SDIO_D0    11
+#define TAB5_WIFI_SDIO_D1    10
+#define TAB5_WIFI_SDIO_D2    9
+#define TAB5_WIFI_SDIO_D3    8
+#define TAB5_WIFI_SDIO_RST   15
+
+// ============================================================================
 // Tab5.encoder Configuration
 // ============================================================================
 // M5Stack Tab5 (ESP32-P4) with dual M5ROTATE8 units
@@ -46,17 +64,51 @@ enum class Parameter : uint8_t {
     Saturation = 5,
     Complexity = 6,
     Variation = 7,
-    // Unit B (8-15) - Placeholder parameters (TBD)
-    Param8 = 8,
-    Param9 = 9,
-    Param10 = 10,
-    Param11 = 11,
-    Param12 = 12,
-    Param13 = 13,
-    Param14 = 14,
-    Param15 = 15,
+    // Unit B (8-15) - Zone parameters
+    // Pattern: [Zone N Effect, Zone N Brightness] pairs
+    Zone0Effect = 8,
+    Zone0Brightness = 9,
+    Zone1Effect = 10,
+    Zone1Brightness = 11,
+    Zone2Effect = 12,
+    Zone2Brightness = 13,
+    Zone3Effect = 14,
+    Zone3Brightness = 15,
     COUNT = 16
 };
+
+// Zone parameter helper functions
+namespace ZoneParam {
+    // Check if parameter index is a zone parameter (8-15)
+    constexpr bool isZoneParameter(uint8_t index) {
+        return index >= 8 && index <= 15;
+    }
+
+    // Get zone ID (0-3) from parameter index
+    constexpr uint8_t getZoneId(uint8_t index) {
+        return (index - 8) / 2;
+    }
+
+    // Check if parameter is a zone effect selector
+    constexpr bool isZoneEffect(uint8_t index) {
+        return isZoneParameter(index) && ((index - 8) % 2 == 0);
+    }
+
+    // Check if parameter is a zone brightness control
+    constexpr bool isZoneBrightness(uint8_t index) {
+        return isZoneParameter(index) && ((index - 8) % 2 == 1);
+    }
+
+    // Get encoder index for a zone's effect parameter
+    constexpr uint8_t getZoneEffectIndex(uint8_t zoneId) {
+        return 8 + (zoneId * 2);
+    }
+
+    // Get encoder index for a zone's brightness parameter
+    constexpr uint8_t getZoneBrightnessIndex(uint8_t zoneId) {
+        return 9 + (zoneId * 2);
+    }
+}
 
 // Parameter Ranges
 namespace ParamRange {
@@ -85,30 +137,35 @@ namespace ParamRange {
     constexpr uint8_t VARIATION_MIN = 0;
     constexpr uint8_t VARIATION_MAX = 255;
 
-    // Unit B (8-15) - Placeholder parameters (all 0-255 for now)
-    constexpr uint8_t PARAM8_MIN = 0;
-    constexpr uint8_t PARAM8_MAX = 255;
+    // Unit B (8-15) - Zone parameters
+    // Zone Effect: 0-95 (wraps around for continuous scrolling)
+    constexpr uint8_t ZONE_EFFECT_MIN = 0;
+    constexpr uint8_t ZONE_EFFECT_MAX = 95;
 
-    constexpr uint8_t PARAM9_MIN = 0;
-    constexpr uint8_t PARAM9_MAX = 255;
+    // Zone Brightness: 0-255 (clamped, no wrap)
+    constexpr uint8_t ZONE_BRIGHTNESS_MIN = 0;
+    constexpr uint8_t ZONE_BRIGHTNESS_MAX = 255;
 
-    constexpr uint8_t PARAM10_MIN = 0;
-    constexpr uint8_t PARAM10_MAX = 255;
+    // Aliases for individual parameters (for backward compatibility)
+    constexpr uint8_t ZONE0_EFFECT_MIN = ZONE_EFFECT_MIN;
+    constexpr uint8_t ZONE0_EFFECT_MAX = ZONE_EFFECT_MAX;
+    constexpr uint8_t ZONE0_BRIGHTNESS_MIN = ZONE_BRIGHTNESS_MIN;
+    constexpr uint8_t ZONE0_BRIGHTNESS_MAX = ZONE_BRIGHTNESS_MAX;
 
-    constexpr uint8_t PARAM11_MIN = 0;
-    constexpr uint8_t PARAM11_MAX = 255;
+    constexpr uint8_t ZONE1_EFFECT_MIN = ZONE_EFFECT_MIN;
+    constexpr uint8_t ZONE1_EFFECT_MAX = ZONE_EFFECT_MAX;
+    constexpr uint8_t ZONE1_BRIGHTNESS_MIN = ZONE_BRIGHTNESS_MIN;
+    constexpr uint8_t ZONE1_BRIGHTNESS_MAX = ZONE_BRIGHTNESS_MAX;
 
-    constexpr uint8_t PARAM12_MIN = 0;
-    constexpr uint8_t PARAM12_MAX = 255;
+    constexpr uint8_t ZONE2_EFFECT_MIN = ZONE_EFFECT_MIN;
+    constexpr uint8_t ZONE2_EFFECT_MAX = ZONE_EFFECT_MAX;
+    constexpr uint8_t ZONE2_BRIGHTNESS_MIN = ZONE_BRIGHTNESS_MIN;
+    constexpr uint8_t ZONE2_BRIGHTNESS_MAX = ZONE_BRIGHTNESS_MAX;
 
-    constexpr uint8_t PARAM13_MIN = 0;
-    constexpr uint8_t PARAM13_MAX = 255;
-
-    constexpr uint8_t PARAM14_MIN = 0;
-    constexpr uint8_t PARAM14_MAX = 255;
-
-    constexpr uint8_t PARAM15_MIN = 0;
-    constexpr uint8_t PARAM15_MAX = 255;
+    constexpr uint8_t ZONE3_EFFECT_MIN = ZONE_EFFECT_MIN;
+    constexpr uint8_t ZONE3_EFFECT_MAX = ZONE_EFFECT_MAX;
+    constexpr uint8_t ZONE3_BRIGHTNESS_MIN = ZONE_BRIGHTNESS_MIN;
+    constexpr uint8_t ZONE3_BRIGHTNESS_MAX = ZONE_BRIGHTNESS_MAX;
 }
 
 // Parameter Default Values
@@ -123,15 +180,17 @@ namespace ParamDefault {
     constexpr uint8_t COMPLEXITY = 128;
     constexpr uint8_t VARIATION = 0;
 
-    // Unit B (8-15) - Placeholder parameters (default 128)
-    constexpr uint8_t PARAM8 = 128;
-    constexpr uint8_t PARAM9 = 128;
-    constexpr uint8_t PARAM10 = 128;
-    constexpr uint8_t PARAM11 = 128;
-    constexpr uint8_t PARAM12 = 128;
-    constexpr uint8_t PARAM13 = 128;
-    constexpr uint8_t PARAM14 = 128;
-    constexpr uint8_t PARAM15 = 128;
+    // Unit B (8-15) - Zone parameters
+    // Zone Effect defaults to 0 (first effect)
+    // Zone Brightness defaults to 128 (50% brightness)
+    constexpr uint8_t ZONE0_EFFECT = 0;
+    constexpr uint8_t ZONE0_BRIGHTNESS = 128;
+    constexpr uint8_t ZONE1_EFFECT = 0;
+    constexpr uint8_t ZONE1_BRIGHTNESS = 128;
+    constexpr uint8_t ZONE2_EFFECT = 0;
+    constexpr uint8_t ZONE2_BRIGHTNESS = 128;
+    constexpr uint8_t ZONE3_EFFECT = 0;
+    constexpr uint8_t ZONE3_BRIGHTNESS = 128;
 }
 
 // Parameter Names (for display/debugging)
@@ -146,15 +205,16 @@ namespace ParamName {
     constexpr const char* COMPLEXITY = "Complexity";
     constexpr const char* VARIATION = "Variation";
 
-    // Unit B (8-15) - Placeholder parameters
-    constexpr const char* PARAM8 = "Param 8";
-    constexpr const char* PARAM9 = "Param 9";
-    constexpr const char* PARAM10 = "Param 10";
-    constexpr const char* PARAM11 = "Param 11";
-    constexpr const char* PARAM12 = "Param 12";
-    constexpr const char* PARAM13 = "Param 13";
-    constexpr const char* PARAM14 = "Param 14";
-    constexpr const char* PARAM15 = "Param 15";
+    // Unit B (8-15) - Zone parameters
+    // Short names for display (max 8 chars to fit cell layout)
+    constexpr const char* ZONE0_EFFECT = "Z0 Eff";
+    constexpr const char* ZONE0_BRIGHTNESS = "Z0 Bri";
+    constexpr const char* ZONE1_EFFECT = "Z1 Eff";
+    constexpr const char* ZONE1_BRIGHTNESS = "Z1 Bri";
+    constexpr const char* ZONE2_EFFECT = "Z2 Eff";
+    constexpr const char* ZONE2_BRIGHTNESS = "Z2 Bri";
+    constexpr const char* ZONE3_EFFECT = "Z3 Eff";
+    constexpr const char* ZONE3_BRIGHTNESS = "Z3 Bri";
 }
 
 // Helper: Get parameter name
@@ -169,15 +229,15 @@ inline const char* getParameterName(Parameter param) {
         case Parameter::Saturation:  return ParamName::SATURATION;
         case Parameter::Complexity:  return ParamName::COMPLEXITY;
         case Parameter::Variation:   return ParamName::VARIATION;
-        // Unit B (8-15)
-        case Parameter::Param8:      return ParamName::PARAM8;
-        case Parameter::Param9:      return ParamName::PARAM9;
-        case Parameter::Param10:     return ParamName::PARAM10;
-        case Parameter::Param11:     return ParamName::PARAM11;
-        case Parameter::Param12:     return ParamName::PARAM12;
-        case Parameter::Param13:     return ParamName::PARAM13;
-        case Parameter::Param14:     return ParamName::PARAM14;
-        case Parameter::Param15:     return ParamName::PARAM15;
+        // Unit B (8-15) - Zone parameters
+        case Parameter::Zone0Effect:     return ParamName::ZONE0_EFFECT;
+        case Parameter::Zone0Brightness: return ParamName::ZONE0_BRIGHTNESS;
+        case Parameter::Zone1Effect:     return ParamName::ZONE1_EFFECT;
+        case Parameter::Zone1Brightness: return ParamName::ZONE1_BRIGHTNESS;
+        case Parameter::Zone2Effect:     return ParamName::ZONE2_EFFECT;
+        case Parameter::Zone2Brightness: return ParamName::ZONE2_BRIGHTNESS;
+        case Parameter::Zone3Effect:     return ParamName::ZONE3_EFFECT;
+        case Parameter::Zone3Brightness: return ParamName::ZONE3_BRIGHTNESS;
         default:                     return "Unknown";
     }
 }
@@ -194,15 +254,15 @@ inline uint8_t getParameterMin(Parameter param) {
         case Parameter::Saturation:  return ParamRange::SATURATION_MIN;
         case Parameter::Complexity:  return ParamRange::COMPLEXITY_MIN;
         case Parameter::Variation:   return ParamRange::VARIATION_MIN;
-        // Unit B (8-15)
-        case Parameter::Param8:      return ParamRange::PARAM8_MIN;
-        case Parameter::Param9:      return ParamRange::PARAM9_MIN;
-        case Parameter::Param10:     return ParamRange::PARAM10_MIN;
-        case Parameter::Param11:     return ParamRange::PARAM11_MIN;
-        case Parameter::Param12:     return ParamRange::PARAM12_MIN;
-        case Parameter::Param13:     return ParamRange::PARAM13_MIN;
-        case Parameter::Param14:     return ParamRange::PARAM14_MIN;
-        case Parameter::Param15:     return ParamRange::PARAM15_MIN;
+        // Unit B (8-15) - Zone parameters
+        case Parameter::Zone0Effect:     return ParamRange::ZONE0_EFFECT_MIN;
+        case Parameter::Zone0Brightness: return ParamRange::ZONE0_BRIGHTNESS_MIN;
+        case Parameter::Zone1Effect:     return ParamRange::ZONE1_EFFECT_MIN;
+        case Parameter::Zone1Brightness: return ParamRange::ZONE1_BRIGHTNESS_MIN;
+        case Parameter::Zone2Effect:     return ParamRange::ZONE2_EFFECT_MIN;
+        case Parameter::Zone2Brightness: return ParamRange::ZONE2_BRIGHTNESS_MIN;
+        case Parameter::Zone3Effect:     return ParamRange::ZONE3_EFFECT_MIN;
+        case Parameter::Zone3Brightness: return ParamRange::ZONE3_BRIGHTNESS_MIN;
         default:                     return 0;
     }
 }
@@ -219,15 +279,15 @@ inline uint8_t getParameterMax(Parameter param) {
         case Parameter::Saturation:  return ParamRange::SATURATION_MAX;
         case Parameter::Complexity:  return ParamRange::COMPLEXITY_MAX;
         case Parameter::Variation:   return ParamRange::VARIATION_MAX;
-        // Unit B (8-15)
-        case Parameter::Param8:      return ParamRange::PARAM8_MAX;
-        case Parameter::Param9:      return ParamRange::PARAM9_MAX;
-        case Parameter::Param10:     return ParamRange::PARAM10_MAX;
-        case Parameter::Param11:     return ParamRange::PARAM11_MAX;
-        case Parameter::Param12:     return ParamRange::PARAM12_MAX;
-        case Parameter::Param13:     return ParamRange::PARAM13_MAX;
-        case Parameter::Param14:     return ParamRange::PARAM14_MAX;
-        case Parameter::Param15:     return ParamRange::PARAM15_MAX;
+        // Unit B (8-15) - Zone parameters
+        case Parameter::Zone0Effect:     return ParamRange::ZONE0_EFFECT_MAX;
+        case Parameter::Zone0Brightness: return ParamRange::ZONE0_BRIGHTNESS_MAX;
+        case Parameter::Zone1Effect:     return ParamRange::ZONE1_EFFECT_MAX;
+        case Parameter::Zone1Brightness: return ParamRange::ZONE1_BRIGHTNESS_MAX;
+        case Parameter::Zone2Effect:     return ParamRange::ZONE2_EFFECT_MAX;
+        case Parameter::Zone2Brightness: return ParamRange::ZONE2_BRIGHTNESS_MAX;
+        case Parameter::Zone3Effect:     return ParamRange::ZONE3_EFFECT_MAX;
+        case Parameter::Zone3Brightness: return ParamRange::ZONE3_BRIGHTNESS_MAX;
         default:                     return 255;
     }
 }
@@ -244,15 +304,15 @@ inline uint8_t getParameterDefault(Parameter param) {
         case Parameter::Saturation:  return ParamDefault::SATURATION;
         case Parameter::Complexity:  return ParamDefault::COMPLEXITY;
         case Parameter::Variation:   return ParamDefault::VARIATION;
-        // Unit B (8-15)
-        case Parameter::Param8:      return ParamDefault::PARAM8;
-        case Parameter::Param9:      return ParamDefault::PARAM9;
-        case Parameter::Param10:     return ParamDefault::PARAM10;
-        case Parameter::Param11:     return ParamDefault::PARAM11;
-        case Parameter::Param12:     return ParamDefault::PARAM12;
-        case Parameter::Param13:     return ParamDefault::PARAM13;
-        case Parameter::Param14:     return ParamDefault::PARAM14;
-        case Parameter::Param15:     return ParamDefault::PARAM15;
+        // Unit B (8-15) - Zone parameters
+        case Parameter::Zone0Effect:     return ParamDefault::ZONE0_EFFECT;
+        case Parameter::Zone0Brightness: return ParamDefault::ZONE0_BRIGHTNESS;
+        case Parameter::Zone1Effect:     return ParamDefault::ZONE1_EFFECT;
+        case Parameter::Zone1Brightness: return ParamDefault::ZONE1_BRIGHTNESS;
+        case Parameter::Zone2Effect:     return ParamDefault::ZONE2_EFFECT;
+        case Parameter::Zone2Brightness: return ParamDefault::ZONE2_BRIGHTNESS;
+        case Parameter::Zone3Effect:     return ParamDefault::ZONE3_EFFECT;
+        case Parameter::Zone3Brightness: return ParamDefault::ZONE3_BRIGHTNESS;
         default:                     return 128;
     }
 }

@@ -7,13 +7,13 @@
 
 #include "ParameterHandler.h"
 #include "ParameterMap.h"
-#include "../input/EncoderService.h"
+#include "../input/DualEncoderService.h"
 #include "../network/WebSocketClient.h"
 #include <Arduino.h>
 #include <cstring>
 
 ParameterHandler::ParameterHandler(
-    EncoderService* encoderService,
+    DualEncoderService* encoderService,
     WebSocketClient* wsClient
 )
     : m_encoderService(encoderService)
@@ -58,8 +58,9 @@ void ParameterHandler::onEncoderChanged(uint8_t index, uint16_t value, bool wasR
                   wasReset ? " (reset)" : "");
 }
 
-bool ParameterHandler::applyStatus(StaticJsonDocument<1024>& doc) {
-    if (!doc.containsKey("type") || strcmp(doc["type"], "status") != 0) {
+bool ParameterHandler::applyStatus(JsonDocument& doc) {
+    // Check type field using ArduinoJson 7 pattern (is<T>() instead of containsKey)
+    if (!doc["type"].is<const char*>() || strcmp(doc["type"], "status") != 0) {
         return false;
     }
 
@@ -70,8 +71,8 @@ bool ParameterHandler::applyStatus(StaticJsonDocument<1024>& doc) {
         const ParameterDef* param = getParameterByIndex(i);
         if (!param) continue;
 
-        // Check if this field exists in the status message
-        if (doc.containsKey(param->statusField)) {
+        // Check if this field exists in the status message (ArduinoJson 7 pattern)
+        if (doc[param->statusField].is<int>() || doc[param->statusField].is<uint8_t>()) {
             uint8_t newValue = 0;
 
             // Handle different JSON types (uint8_t, int, etc.)
@@ -169,31 +170,31 @@ void ParameterHandler::sendParameterChange(const ParameterDef* param, uint8_t va
             m_wsClient->sendVariationChange(value);
             break;
 
-        // Unit B (8-15) - Placeholder parameters
+        // Unit B (8-15) - Zone parameters
         // These use generic parameter.set with field name
-        case ParameterId::Param8:
-            m_wsClient->sendGenericParameter("param8", value);
+        case ParameterId::Zone0Effect:
+            m_wsClient->sendGenericParameter("zone0Effect", value);
             break;
-        case ParameterId::Param9:
-            m_wsClient->sendGenericParameter("param9", value);
+        case ParameterId::Zone0Brightness:
+            m_wsClient->sendGenericParameter("zone0Brightness", value);
             break;
-        case ParameterId::Param10:
-            m_wsClient->sendGenericParameter("param10", value);
+        case ParameterId::Zone1Effect:
+            m_wsClient->sendGenericParameter("zone1Effect", value);
             break;
-        case ParameterId::Param11:
-            m_wsClient->sendGenericParameter("param11", value);
+        case ParameterId::Zone1Brightness:
+            m_wsClient->sendGenericParameter("zone1Brightness", value);
             break;
-        case ParameterId::Param12:
-            m_wsClient->sendGenericParameter("param12", value);
+        case ParameterId::Zone2Effect:
+            m_wsClient->sendGenericParameter("zone2Effect", value);
             break;
-        case ParameterId::Param13:
-            m_wsClient->sendGenericParameter("param13", value);
+        case ParameterId::Zone2Brightness:
+            m_wsClient->sendGenericParameter("zone2Brightness", value);
             break;
-        case ParameterId::Param14:
-            m_wsClient->sendGenericParameter("param14", value);
+        case ParameterId::Zone3Effect:
+            m_wsClient->sendGenericParameter("zone3Effect", value);
             break;
-        case ParameterId::Param15:
-            m_wsClient->sendGenericParameter("param15", value);
+        case ParameterId::Zone3Brightness:
+            m_wsClient->sendGenericParameter("zone3Brightness", value);
             break;
     }
 }
@@ -212,8 +213,18 @@ uint8_t ParameterHandler::clampValue(const ParameterDef* param, uint8_t value) c
     return value;
 }
 
-void ParameterHandler::notifyDisplay(int highlightIndex) {
-    if (m_displayCallback) {
-        m_displayCallback(m_values, highlightIndex);
+void ParameterHandler::notifyDisplay(int index) {
+    if (!m_displayCallback) {
+        return;
+    }
+
+    if (index >= 0 && index < PARAMETER_COUNT) {
+        // Single parameter update
+        m_displayCallback(static_cast<uint8_t>(index), m_values[index]);
+    } else {
+        // Bulk refresh: notify all parameters
+        for (uint8_t i = 0; i < PARAMETER_COUNT; i++) {
+            m_displayCallback(i, m_values[i]);
+        }
     }
 }

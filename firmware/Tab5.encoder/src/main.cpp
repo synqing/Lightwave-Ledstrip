@@ -1,19 +1,22 @@
 // ============================================================================
-// Tab5.encoder - M5Stack Tab5 (ESP32-P4) ROTATE8 Encoder Controller
+// Tab5.encoder - M5Stack Tab5 (ESP32-P4) Dual ROTATE8 Encoder Controller
 // ============================================================================
-// Milestone D: Full EncoderService Integration
+// Milestone E: Dual M5ROTATE8 Integration (16 Encoders)
 //
-// This firmware reads 8 rotary encoders via M5ROTATE8 on Grove Port.A
-// and optionally sends parameter changes to LightwaveOS via WebSocket.
+// This firmware reads 16 rotary encoders via TWO M5ROTATE8 units on the
+// same I2C bus (Grove Port.A) using different addresses.
 //
 // Hardware:
 //   - M5Stack Tab5 (ESP32-P4)
-//   - M5ROTATE8 8-encoder unit connected to Grove Port.A
+//   - M5ROTATE8 Unit A @ 0x42 (reprogrammed via register 0xFF)
+//   - M5ROTATE8 Unit B @ 0x41 (factory default)
+//   - Both connected to Grove Port.A via hub or daisy-chain
 //
 // Grove Port.A I2C:
 //   - SDA: GPIO 53
 //   - SCL: GPIO 54
-//   - Address: 0x41 (M5ROTATE8)
+//   - Unit A: 0x42 (encoders 0-7)
+//   - Unit B: 0x41 (encoders 8-15)
 //
 // CRITICAL SAFETY NOTE:
 // This code does NOT use aggressive I2C recovery (periph_module_reset,
@@ -28,14 +31,21 @@
 #include <Wire.h>
 
 #include "config/Config.h"
-#include "input/EncoderService.h"
+#include "input/DualEncoderService.h"
+
+// ============================================================================
+// I2C Addresses for Dual Unit Setup
+// ============================================================================
+
+constexpr uint8_t ADDR_UNIT_A = 0x42;  // Reprogrammed via register 0xFF
+constexpr uint8_t ADDR_UNIT_B = 0x41;  // Factory default
 
 // ============================================================================
 // Global State
 // ============================================================================
 
-// Encoder service (initialized in setup)
-EncoderService* g_encoders = nullptr;
+// Dual encoder service (initialized in setup)
+DualEncoderService* g_encoders = nullptr;
 
 // ============================================================================
 // I2C Scanner Utility
@@ -59,8 +69,10 @@ uint8_t scanI2CBus(TwoWire& wire, const char* busName) {
             Serial.printf("  Found device at 0x%02X", addr);
 
             // Identify known devices
-            if (addr == I2C::ROTATE8_ADDRESS) {
-                Serial.print(" (M5ROTATE8)");
+            if (addr == ADDR_UNIT_A) {
+                Serial.print(" (M5ROTATE8 Unit A)");
+            } else if (addr == ADDR_UNIT_B) {
+                Serial.print(" (M5ROTATE8 Unit B)");
             }
 
             Serial.println();
@@ -85,54 +97,81 @@ uint8_t scanI2CBus(TwoWire& wire, const char* busName) {
 
 /**
  * Called when any encoder value changes
- * @param index Encoder index (0-7)
+ * @param index Encoder index (0-15)
  * @param value New parameter value
  * @param wasReset true if this was a button-press reset to default
  */
 void onEncoderChange(uint8_t index, uint16_t value, bool wasReset) {
     Parameter param = static_cast<Parameter>(index);
     const char* name = getParameterName(param);
+    const char* unit = (index < 8) ? "A" : "B";
+    uint8_t localIdx = index % 8;
 
     if (wasReset) {
-        Serial.printf("Encoder %d (%s) button: reset to %d\n", index, name, value);
+        Serial.printf("[%s:%d] %s reset to %d\n", unit, localIdx, name, value);
     } else {
-        Serial.printf("Encoder %d (%s): → %d\n", index, name, value);
+        Serial.printf("[%s:%d] %s: → %d\n", unit, localIdx, name, value);
     }
 
-    // TODO (Milestone E): Send to LightwaveOS via WebSocket
+    // TODO (Milestone F): Send to LightwaveOS via WebSocket
     // webSocket.sendParameter(param, value);
 }
 
 // ============================================================================
-// Display Update
+// Display Update (2-column layout for 16 parameters, readable font)
 // ============================================================================
 
 void updateDisplay() {
     if (!g_encoders) return;
 
-    // Start below the header (which ends around y=160)
+    // Layout: 2 columns × 8 rows for 16 parameters
+    // Column 0: params 0-7 (Unit A)
+    // Column 1: params 8-15 (Unit B)
     int yStart = 200;
-    int lineHeight = 40;
+    int lineHeight = 35;   // 8 rows × 35 = 280px fits well
+    int colWidth = 320;    // Half of ~640 usable width
 
-    M5.Display.setTextSize(2);
+    // BEGIN TRANSACTION - batch all display operations (K1 pattern for flicker-free)
+    M5.Display.startWrite();
+
+    M5.Display.setTextSize(2);  // Readable font size!
     M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
 
-    // Draw 2 columns of 4 parameters each
-    for (uint8_t i = 0; i < 8; i++) {
-        int col = i / 4;
-        int row = i % 4;
-        int x = 20 + col * 300;
+    for (uint8_t i = 0; i < 16; i++) {
+        int col = i / 8;         // 0 for params 0-7, 1 for params 8-15
+        int row = i % 8;         // 0-7 within each column
+        int x = 20 + col * colWidth;
         int y = yStart + row * lineHeight;
 
         Parameter param = static_cast<Parameter>(i);
         const char* name = getParameterName(param);
         uint16_t value = g_encoders->getValue(i);
 
-        // Clear the line area and redraw
-        M5.Display.fillRect(x, y, 280, lineHeight - 5, TFT_BLACK);
+        // Clear line and redraw (fillRect needed for changing values)
+        M5.Display.fillRect(x, y, colWidth - 10, lineHeight - 2, TFT_BLACK);
         M5.Display.setCursor(x, y);
-        M5.Display.printf("%d: %-11s %3d", i, name, value);
+        M5.Display.printf("%2d:%-10s%3d", i, name, value);
     }
+
+    // END TRANSACTION - commit all at once (eliminates flicker)
+    M5.Display.endWrite();
+}
+
+// ============================================================================
+// Status LED Update (consistent green=connected, red=disconnected)
+// ============================================================================
+
+void updateStatusLeds() {
+    if (!g_encoders) return;
+
+    bool unitA = g_encoders->isUnitAAvailable();
+    bool unitB = g_encoders->isUnitBAvailable();
+
+    // Unit A status LED: green if connected, red if not
+    g_encoders->setStatusLed(0, unitA ? 0 : 32, unitA ? 32 : 0, 0);
+
+    // Unit B status LED: green if connected, red if not
+    g_encoders->setStatusLed(1, unitB ? 0 : 32, unitB ? 32 : 0, 0);
 }
 
 // ============================================================================
@@ -146,14 +185,17 @@ void setup() {
 
     Serial.println("\n");
     Serial.println("============================================");
-    Serial.println("  Tab5.encoder - Milestone D");
-    Serial.println("  Full EncoderService");
+    Serial.println("  Tab5.encoder - Milestone E");
+    Serial.println("  Dual M5ROTATE8 (16 Encoders)");
     Serial.println("============================================");
 
     // Initialize M5Stack Tab5
     // This initializes internal I2C (display, touch, audio) automatically
     auto cfg = M5.config();
     M5.begin(cfg);
+
+    // Set display orientation (landscape, USB on left)
+    M5.Display.setRotation(3);
 
     Serial.println("\n[INIT] M5Stack Tab5 initialized");
 
@@ -185,25 +227,34 @@ void setup() {
     // Scan external I2C bus for devices
     uint8_t found = scanI2CBus(Wire, "External I2C (Grove Port.A)");
 
-    // Initialize EncoderService
-    g_encoders = new EncoderService(&Wire, I2C::ROTATE8_ADDRESS);
+    // Initialize DualEncoderService with both addresses
+    // Unit A @ 0x42 (reprogrammed), Unit B @ 0x41 (factory)
+    g_encoders = new DualEncoderService(&Wire, ADDR_UNIT_A, ADDR_UNIT_B);
     g_encoders->setChangeCallback(onEncoderChange);
     bool encoderOk = g_encoders->begin();
 
-    if (encoderOk) {
-        uint8_t version = g_encoders->getVersion();
-        Serial.printf("\n[OK] EncoderService initialized (firmware v%d)\n", version);
-        Serial.println("[OK] Milestone D: Full encoder service active");
+    // Check unit status
+    bool unitA = g_encoders->isUnitAAvailable();
+    bool unitB = g_encoders->isUnitBAvailable();
+
+    Serial.printf("\n[INIT] Unit A (0x%02X): %s\n", ADDR_UNIT_A, unitA ? "OK" : "NOT FOUND");
+    Serial.printf("[INIT] Unit B (0x%02X): %s\n", ADDR_UNIT_B, unitB ? "OK" : "NOT FOUND");
+
+    if (unitA && unitB) {
+        Serial.println("\n[OK] Both units detected - 16 encoders available!");
+        Serial.println("[OK] Milestone E: Dual encoder service active");
 
         // Flash all LEDs green briefly to indicate success
-        g_encoders->transport().setAllLEDs(0, 64, 0);
+        g_encoders->transportA().setAllLEDs(0, 64, 0);
+        g_encoders->transportB().setAllLEDs(0, 64, 0);
         delay(200);
         g_encoders->allLedsOff();
 
-        // Set status LED (LED 8) to dim green
-        g_encoders->setStatusLed(0, 32, 0);
+        // Set status LEDs (both green for connected)
+        updateStatusLeds();
 
-        // Show success on Tab5 display
+        // Show success on Tab5 display (wrapped in transaction for flicker-free)
+        M5.Display.startWrite();
         M5.Display.fillScreen(TFT_BLACK);
         M5.Display.setTextSize(2);
         M5.Display.setTextColor(TFT_GREEN);
@@ -211,23 +262,54 @@ void setup() {
         M5.Display.println("Tab5.encoder");
         M5.Display.setTextColor(TFT_WHITE);
         M5.Display.setCursor(20, 60);
-        M5.Display.println("Milestone D: PASS");
+        M5.Display.println("Milestone E: PASS");
         M5.Display.setCursor(20, 100);
-        M5.Display.printf("ROTATE8 v%d at 0x%02X", version, I2C::ROTATE8_ADDRESS);
-        M5.Display.setCursor(20, 140);
-        M5.Display.printf("I2C: SDA=%d SCL=%d", extSDA, extScl);
+        M5.Display.printf("Unit A (0x%02X): OK", ADDR_UNIT_A);
+        M5.Display.setCursor(20, 130);
+        M5.Display.printf("Unit B (0x%02X): OK", ADDR_UNIT_B);
+        M5.Display.endWrite();
+
+        // Show initial values
+        updateDisplay();
+
+    } else if (unitA || unitB) {
+        // Partial success - one unit available
+        Serial.println("\n[WARN] Only one unit detected - 8 encoders available");
+        Serial.println("[WARN] Check wiring for missing unit");
+
+        // Set status LEDs (green for available, red for missing)
+        updateStatusLeds();
+
+        // Show partial success on display (wrapped in transaction for flicker-free)
+        M5.Display.startWrite();
+        M5.Display.fillScreen(TFT_BLACK);
+        M5.Display.setTextSize(2);
+        M5.Display.setTextColor(TFT_YELLOW);
+        M5.Display.setCursor(20, 20);
+        M5.Display.println("Tab5.encoder");
+        M5.Display.setTextColor(TFT_WHITE);
+        M5.Display.setCursor(20, 60);
+        M5.Display.println("Milestone E: PARTIAL");
+        M5.Display.setCursor(20, 100);
+        M5.Display.setTextColor(unitA ? TFT_GREEN : TFT_RED);
+        M5.Display.printf("Unit A (0x%02X): %s", ADDR_UNIT_A, unitA ? "OK" : "FAIL");
+        M5.Display.setCursor(20, 130);
+        M5.Display.setTextColor(unitB ? TFT_GREEN : TFT_RED);
+        M5.Display.printf("Unit B (0x%02X): %s", ADDR_UNIT_B, unitB ? "OK" : "FAIL");
+        M5.Display.endWrite();
 
         // Show initial values
         updateDisplay();
 
     } else {
-        Serial.println("\n[ERROR] EncoderService initialization failed!");
+        Serial.println("\n[ERROR] No encoder units found!");
         Serial.println("[ERROR] Check wiring:");
-        Serial.println("  - Is ROTATE8 connected to Grove Port.A?");
-        Serial.println("  - Is the Grove cable properly seated?");
-        Serial.println("  - Is ROTATE8 powered?");
+        Serial.println("  - Is Unit A (0x42) connected to Grove Port.A?");
+        Serial.println("  - Is Unit B (0x41) connected to Grove Port.A?");
+        Serial.println("  - Are the Grove cables properly seated?");
 
-        // Show error on Tab5 display
+        // Show error on Tab5 display (wrapped in transaction for flicker-free)
+        M5.Display.startWrite();
         M5.Display.fillScreen(TFT_BLACK);
         M5.Display.setTextSize(2);
         M5.Display.setTextColor(TFT_RED);
@@ -235,11 +317,12 @@ void setup() {
         M5.Display.println("Tab5.encoder");
         M5.Display.setTextColor(TFT_WHITE);
         M5.Display.setCursor(20, 60);
-        M5.Display.println("Milestone D: FAIL");
+        M5.Display.println("Milestone E: FAIL");
         M5.Display.setCursor(20, 100);
-        M5.Display.println("EncoderService init failed!");
+        M5.Display.println("No encoder units found!");
         M5.Display.setCursor(20, 140);
         M5.Display.println("Check Grove Port.A wiring");
+        M5.Display.endWrite();
     }
 
     Serial.println("\n============================================");
@@ -256,25 +339,25 @@ void loop() {
     M5.update();
 
     // Skip encoder processing if service not available
-    if (!g_encoders || !g_encoders->isAvailable()) {
+    if (!g_encoders || !g_encoders->isAnyAvailable()) {
         delay(100);
         return;
     }
 
     // Track if values changed this frame
-    static uint16_t lastValues[8] = {0};
+    static uint16_t lastValues[16] = {0};
     bool anyChange = false;
 
     // Cache current values before update
-    for (uint8_t i = 0; i < 8; i++) {
+    for (uint8_t i = 0; i < 16; i++) {
         lastValues[i] = g_encoders->getValue(i);
     }
 
-    // Update encoder service (polls all 8 encoders, handles debounce, fires callbacks)
+    // Update encoder service (polls all 16 encoders, handles debounce, fires callbacks)
     g_encoders->update();
 
     // Check for changes
-    for (uint8_t i = 0; i < 8; i++) {
+    for (uint8_t i = 0; i < 16; i++) {
         if (g_encoders->getValue(i) != lastValues[i]) {
             anyChange = true;
             break;
@@ -293,13 +376,16 @@ void loop() {
     if (now - lastStatus >= 10000) {
         lastStatus = now;
 
-        if (g_encoders->isConnected()) {
-            Serial.printf("[STATUS] 8Enc:OK heap:%u\n", ESP.getFreeHeap());
-        } else {
-            Serial.printf("[STATUS] 8Enc:DISCONNECTED heap:%u\n", ESP.getFreeHeap());
-            // Update status LED to red
-            g_encoders->setStatusLed(64, 0, 0);
-        }
+        bool unitA = g_encoders->isUnitAAvailable();
+        bool unitB = g_encoders->isUnitBAvailable();
+
+        Serial.printf("[STATUS] A:%s B:%s heap:%u\n",
+                      unitA ? "OK" : "FAIL",
+                      unitB ? "OK" : "FAIL",
+                      ESP.getFreeHeap());
+
+        // Update status LEDs in case connection state changed
+        updateStatusLeds();
     }
 
     delay(5);  // ~200Hz polling

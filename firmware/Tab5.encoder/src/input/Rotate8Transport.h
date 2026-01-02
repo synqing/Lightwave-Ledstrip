@@ -1,0 +1,223 @@
+#pragma once
+// ============================================================================
+// Rotate8Transport - Clean M5ROTATE8 I2C Transport Layer
+// ============================================================================
+// A simple wrapper around M5ROTATE8 that provides:
+// - Custom TwoWire instance support (for Tab5's M5.Ex_I2C)
+// - Basic connection state tracking
+// - NO aggressive recovery logic (safe for Tab5)
+//
+// This layer handles only I2C transport. Processing logic (debounce, wrap,
+// clamp) is in EncoderProcessing.h.
+// ============================================================================
+
+#include <Arduino.h>
+#include <Wire.h>
+#include <M5ROTATE8.h>
+
+class Rotate8Transport {
+public:
+    /**
+     * Constructor
+     * @param wire Pointer to TwoWire instance (e.g., &Wire after Wire.begin())
+     * @param address M5ROTATE8 I2C address (default: 0x41)
+     */
+    Rotate8Transport(TwoWire* wire, uint8_t address = 0x41)
+        : _encoder(address, wire)
+        , _address(address)
+        , _available(false)
+    {}
+
+    /**
+     * Initialize connection to M5ROTATE8
+     * @return true if device responds on I2C bus
+     */
+    bool begin() {
+        _available = _encoder.begin() && _encoder.isConnected();
+
+        if (_available) {
+            // Clear all LEDs on successful init
+            // M5ROTATE8 has 9 LEDs: 0-7 for encoders, 8 for status
+            for (uint8_t i = 0; i < 9; i++) {
+                _encoder.writeRGB(i, 0, 0, 0);
+            }
+        }
+
+        return _available;
+    }
+
+    /**
+     * Check if M5ROTATE8 is available
+     * @return true if device was successfully initialized
+     */
+    bool isAvailable() const { return _available; }
+
+    /**
+     * Check if M5ROTATE8 is currently responding
+     * This performs an actual I2C transaction
+     * @return true if device responds
+     */
+    bool isConnected() {
+        if (!_available) return false;
+        return _encoder.isConnected();
+    }
+
+    /**
+     * Get firmware version from M5ROTATE8
+     * @return Version number (typically 2 for V2 firmware)
+     */
+    uint8_t getVersion() {
+        if (!_available) return 0;
+        return _encoder.getVersion();
+    }
+
+    // ========================================================================
+    // Encoder Reading
+    // ========================================================================
+
+    /**
+     * Get relative counter delta for an encoder channel
+     * The counter is automatically reset after reading
+     * @param channel Encoder channel (0-7)
+     * @return Delta value since last read (can be negative)
+     */
+    int32_t getRelCounter(uint8_t channel) {
+        if (!_available || channel > 7) return 0;
+        int32_t value = _encoder.getRelCounter(channel);
+        if (value != 0) {
+            _encoder.resetCounter(channel);
+        }
+        return value;
+    }
+
+    /**
+     * Get absolute counter value for an encoder channel
+     * @param channel Encoder channel (0-7)
+     * @return Absolute counter value
+     */
+    int32_t getAbsCounter(uint8_t channel) {
+        if (!_available || channel > 7) return 0;
+        return _encoder.getAbsCounter(channel);
+    }
+
+    /**
+     * Check if encoder button is pressed
+     * @param channel Encoder channel (0-7)
+     * @return true if button is pressed
+     */
+    bool getKeyPressed(uint8_t channel) {
+        if (!_available || channel > 7) return false;
+        return _encoder.getKeyPressed(channel);
+    }
+
+    /**
+     * Reset counter for a specific channel
+     * @param channel Encoder channel (0-7)
+     */
+    void resetCounter(uint8_t channel) {
+        if (!_available || channel > 7) return;
+        _encoder.resetCounter(channel);
+    }
+
+    /**
+     * Reset all encoder counters
+     */
+    void resetAll() {
+        if (!_available) return;
+        _encoder.resetAll();
+    }
+
+    // ========================================================================
+    // LED Control
+    // ========================================================================
+
+    /**
+     * Set RGB color for an LED
+     * @param channel LED channel (0-7 for encoders, 8 for status LED)
+     * @param r Red component (0-255)
+     * @param g Green component (0-255)
+     * @param b Blue component (0-255)
+     */
+    void setLED(uint8_t channel, uint8_t r, uint8_t g, uint8_t b) {
+        if (!_available || channel > 8) return;
+        _encoder.writeRGB(channel, r, g, b);
+    }
+
+    /**
+     * Set all LEDs to the same color
+     * @param r Red component (0-255)
+     * @param g Green component (0-255)
+     * @param b Blue component (0-255)
+     */
+    void setAllLEDs(uint8_t r, uint8_t g, uint8_t b) {
+        if (!_available) return;
+        _encoder.setAll(r, g, b);
+    }
+
+    /**
+     * Turn off all LEDs
+     */
+    void allLEDsOff() {
+        if (!_available) return;
+        _encoder.allOff();
+    }
+
+    // ========================================================================
+    // V2 Firmware Features
+    // ========================================================================
+
+    /**
+     * Get encoder change mask (V2 firmware)
+     * Bit N is set if encoder N has changed since last read
+     * @return Bitmask of changed encoders
+     */
+    uint8_t getEncoderChangeMask() {
+        if (!_available) return 0;
+        return _encoder.getEncoderChangeMask();
+    }
+
+    /**
+     * Get button change mask (V2 firmware)
+     * Bit N is set if button N is pressed
+     * @return Bitmask of pressed buttons
+     */
+    uint8_t getButtonChangeMask() {
+        if (!_available) return 0;
+        return _encoder.getButtonChangeMask();
+    }
+
+    /**
+     * Get input switch state
+     * @return Switch position (0 or 1)
+     */
+    uint8_t getInputSwitch() {
+        if (!_available) return 0;
+        return _encoder.inputSwitch();
+    }
+
+    // ========================================================================
+    // Direct Access (for advanced use)
+    // ========================================================================
+
+    /**
+     * Get reference to underlying M5ROTATE8 instance
+     * Use with caution - bypasses transport layer checks
+     * @return Reference to M5ROTATE8
+     */
+    M5ROTATE8& encoder() { return _encoder; }
+
+    /**
+     * Get I2C address
+     * @return I2C address (typically 0x41)
+     */
+    uint8_t getAddress() const { return _address; }
+
+private:
+    M5ROTATE8 _encoder;
+    uint8_t _address;
+    bool _available;
+
+    // NOTE: No recovery logic here!
+    // Tab5's shared I2C bus means we cannot safely do aggressive resets.
+    // If the encoder stops responding, the user should power-cycle.
+};

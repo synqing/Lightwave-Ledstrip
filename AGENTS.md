@@ -12,39 +12,47 @@ This repository contains firmware for an ESP32‑S3 driving a dual‑strip Light
 
 ## Where Things Live
 
-- **v2 firmware**: `v2/src/` (actor system, zones, IEffect plugins, web server)
+- **v2 firmware**: `firmware/v2/src/` (actor system, zones, IEffect plugins, web server)
+- **Encoder firmware**: `firmware/K1.8encoderS3/` (M5Stack AtomS3 with 8-encoder control)
 - **Effects**:
-  - Legacy function effects: `v2/src/effects/*.cpp`
-  - Native IEffect effects: `v2/src/effects/ieffect/*.h|*.cpp`
-- **Effect runtime API**: `v2/src/plugins/api/` (`IEffect.h`, `EffectContext.h`)
-- **Renderer / render loop**: `v2/src/core/actors/RendererActor.*`
-- **LED topology / centre config**: `v2/src/core/actors/RendererActor.h` (`LedConfig`), `v2/src/hal/led/LedDriverConfig.h`; centre‑pair helpers in `v2/src/effects/CoreEffects.h`
-- **Zones**: `v2/src/effects/zones/ZoneComposer.*`
-- **Pattern taxonomy registry**: `v2/src/effects/PatternRegistry.*`
+  - Legacy function effects: `firmware/v2/src/effects/*.cpp`
+  - Native IEffect effects: `firmware/v2/src/effects/ieffect/*.h|*.cpp`
+- **Effect runtime API**: `firmware/v2/src/plugins/api/` (`IEffect.h`, `EffectContext.h`)
+- **Renderer / render loop**: `firmware/v2/src/core/actors/RendererActor.*`
+- **LED topology / centre config**: `firmware/v2/src/core/actors/RendererActor.h` (`LedConfig`), `firmware/v2/src/hal/led/LedDriverConfig.h`; centre‑pair helpers in `firmware/v2/src/effects/CoreEffects.h`
+- **Zones**: `firmware/v2/src/effects/zones/ZoneComposer.*`
+- **Pattern taxonomy registry**: `firmware/v2/src/effects/PatternRegistry.*`
 - **Web server (REST + WS)**:
-  - Core: `v2/src/network/WebServer.*`
-  - Handlers: `v2/src/network/webserver/handlers/*`
+  - Core: `firmware/v2/src/network/WebServer.*`
+  - Handlers: `firmware/v2/src/network/webserver/handlers/*`
 - **Dashboard (web app)**: `lightwave-dashboard/`
 
 ## Build / Flash / Monitor (PlatformIO)
 
-This repo uses PlatformIO. Key environments are defined in `platformio.ini`.
+This repo uses PlatformIO with two standalone projects:
+- **LightwaveOS (v2)**: `firmware/v2/`
+- **Encoder (K1.8encoderS3)**: `firmware/K1.8encoderS3/`
 
-- **Build (default, no WiFi)**:
-  - `pio run -e esp32dev`
+### LightwaveOS Build Commands
+
+- **Build (default, audio-enabled)**:
+  - `cd firmware/v2 && pio run -e esp32dev_audio`
 - **Build + upload**:
-  - `pio run -e esp32dev -t upload`
-- **WiFi/WebServer build**:
-  - `pio run -e esp32dev_wifi`
-- **WiFi/WebServer build + upload**:
-  - `pio run -e esp32dev_wifi -t upload`
+  - `cd firmware/v2 && pio run -e esp32dev_audio -t upload`
 - **Serial monitor**:
   - `pio device monitor -b 115200`
+
+### Encoder Build Commands
+
+- **Build**:
+  - `cd firmware/K1.8encoderS3 && pio run -e atoms3`
+- **Build + upload**:
+  - `cd firmware/K1.8encoderS3 && pio run -e atoms3 -t upload`
 
 Notes:
 - `wifi_credentials.ini` is loaded via `extra_configs` and may be gitignored. See `wifi_credentials.ini.template`.
 - There is also a `native` environment for host builds, but it only compiles a small subset.
-- Other useful environments: `esp32dev_debug`, `memory_debug`, `esp32dev_enhanced` (see `platformio.ini`).
+- Other useful environments: `esp32dev_debug`, `memory_debug`, `esp32dev_enhanced` (see `firmware/v2/platformio.ini`).
 
 ## Runtime Testing (Firmware)
 
@@ -77,27 +85,27 @@ If you change the effect pipeline, always verify:
 
 ### Creating / migrating an effect to native IEffect
 
-1. Create `v2/src/effects/ieffect/<Name>Effect.h|.cpp`
+1. Create `firmware/v2/src/effects/ieffect/<Name>Effect.h|.cpp`
 2. Implement:
    - `bool init(EffectContext&)`: reset instance state
    - `void render(EffectContext&)`: do the work (no heap alloc)
    - `void cleanup()`: usually no‑op
    - `const EffectMetadata& getMetadata() const`
 3. Move any `static` render state into **instance members**.
-4. Register it in `v2/src/effects/CoreEffects.cpp` using:
+4. Register it in `firmware/v2/src/effects/CoreEffects.cpp` using:
    - `renderer->registerEffect(effectId, &instance);`
 5. Keep the effect ID stable (must match PatternRegistry indices).
 
 ## PatternRegistry vs IEffect Metadata
 
-`v2/src/effects/PatternRegistry.*` provides taxonomy metadata (family/tags/story).
+`firmware/v2/src/effects/PatternRegistry.*` provides taxonomy metadata (family/tags/story).
 `IEffect::getMetadata()` provides runtime effect metadata (name/description/category/version).
 
 When exposing metadata externally (API/UI), prefer IEffect metadata when available, and supplement with PatternRegistry taxonomy fields.
 
 ## Web API Expectations
 
-The REST API is served from `v2/src/network/WebServer.*` and handlers in `v2/src/network/webserver/handlers/`.
+The REST API is served from `firmware/v2/src/network/WebServer.*` and handlers in `firmware/v2/src/network/webserver/handlers/`.
 
 Effects endpoints to keep stable:
 - `GET /api/v1/effects`
@@ -238,6 +246,7 @@ Use this section as a fast “where do I change what?” map. Keep changes minim
 - **Centre mapping errors**: Centre is between LEDs 79 and 80. Be careful with integer rounding when computing signed position.
 - **ZoneComposer buffer sizes**: ZoneComposer renders to a temp buffer; avoid assuming global `ledCount` inside effects.
 - **Colour correction sensitivity**: Some LGP/interference effects are sensitive; check `PatternRegistry::isLGPSensitive()` and related logic.
+- **Build paths**: Always `cd` into `firmware/v2` or `firmware/K1.8encoderS3` before running PlatformIO commands.
 
 ## Agent Workflow Expectations
 

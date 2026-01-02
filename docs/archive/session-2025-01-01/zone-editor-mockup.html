@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zone Editor Mockup</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #0f1219;
+            color: #e0e4eb;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: rgba(37, 45, 63, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08) inset, 0 12px 32px rgba(0, 0, 0, 0.25);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .card-title {
+            font-size: 15px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+            color: #e0e4eb;
+        }
+
+        .badge {
+            background: rgba(47, 56, 73, 0.65);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            padding: 4px 8px;
+            font-size: 9px;
+            color: #9ca3af;
+        }
+
+        /* Preset Selector */
+        .preset-selector {
+            margin-bottom: 20px;
+        }
+
+        .preset-selector label {
+            display: block;
+            font-size: 11px;
+            font-weight: 500;
+            color: #e0e4eb;
+            margin-bottom: 8px;
+        }
+
+        .preset-selector select {
+            width: 100%;
+            padding: 8px 12px;
+            background: #2f3849;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            color: #e0e4eb;
+            font-size: 14px;
+        }
+
+        /* LED Strip Visualization */
+        .visualization-container {
+            margin-bottom: 20px;
+        }
+
+        .visualization-label {
+            font-size: 11px;
+            font-weight: 500;
+            color: #e0e4eb;
+            margin-bottom: 8px;
+        }
+
+        .strip-container {
+            position: relative;
+            height: 120px;
+            margin-bottom: 10px;
+        }
+
+        .strip-section {
+            position: absolute;
+            top: 0;
+            width: 50%;
+            height: 100%;
+        }
+
+        .strip-left {
+            left: 0;
+        }
+
+        .strip-right {
+            right: 0;
+        }
+
+        .strip-label {
+            font-size: 9px;
+            color: #9ca3af;
+            margin-bottom: 4px;
+        }
+
+        .led-strip {
+            display: flex;
+            gap: 2px;
+            height: 64px;
+        }
+
+        .led-strip.reverse {
+            flex-direction: row-reverse;
+        }
+
+        .led {
+            flex: 1;
+            border-radius: 2px;
+            border: 1px solid;
+            min-width: 2px;
+        }
+
+        .led.zone-0 {
+            background: linear-gradient(to bottom, rgba(6, 182, 212, 0.8), rgba(6, 182, 212, 0.4));
+            border-color: rgba(6, 182, 212, 0.6);
+        }
+
+        .led.zone-1 {
+            background: linear-gradient(to bottom, rgba(34, 197, 94, 0.8), rgba(34, 197, 94, 0.4));
+            border-color: rgba(34, 197, 94, 0.6);
+        }
+
+        .led.zone-2 {
+            background: linear-gradient(to bottom, rgba(168, 85, 247, 0.8), rgba(168, 85, 247, 0.4));
+            border-color: rgba(168, 85, 247, 0.6);
+        }
+
+        .led.zone-3 {
+            background: linear-gradient(to bottom, rgba(59, 130, 246, 0.8), rgba(59, 130, 246, 0.4));
+            border-color: rgba(59, 130, 246, 0.6);
+        }
+
+        .led.unassigned {
+            background: #2f3849;
+            border-color: rgba(255, 255, 255, 0.05);
+        }
+
+        .led.center {
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 1), 0 0 0 4px rgba(37, 45, 63, 1);
+        }
+
+        .center-divider {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            width: 1px;
+            height: 100%;
+            background: rgba(59, 130, 246, 0.4);
+            transform: translateX(-50%);
+        }
+
+        .center-label {
+            text-align: center;
+            font-size: 9px;
+            color: #9ca3af;
+            margin-top: 8px;
+        }
+
+        /* Zone Segment Editors */
+        .zones-list {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .zone-editor {
+            background: rgba(47, 56, 73, 0.5);
+            border-radius: 8px;
+            padding: 12px;
+            border: 1px solid;
+        }
+
+        .zone-editor.zone-0 {
+            border-color: rgba(6, 182, 212, 0.6);
+        }
+
+        .zone-editor.zone-1 {
+            border-color: rgba(34, 197, 94, 0.6);
+        }
+
+        .zone-editor.zone-2 {
+            border-color: rgba(168, 85, 247, 0.6);
+        }
+
+        .zone-editor.zone-3 {
+            border-color: rgba(59, 130, 246, 0.6);
+        }
+
+        .zone-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .zone-title {
+            font-size: 12px;
+            font-weight: 500;
+            color: #e0e4eb;
+        }
+
+        .zone-led-count {
+            font-size: 9px;
+            color: #9ca3af;
+        }
+
+        .segment-inputs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .segment-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .segment-group label {
+            font-size: 9px;
+            color: #9ca3af;
+        }
+
+        .segment-input-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .input-group {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .input-group label {
+            font-size: 8px;
+            color: #9ca3af;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 6px 8px;
+            background: #2f3849;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            color: #e0e4eb;
+            font-size: 12px;
+        }
+
+        /* Validation Errors */
+        .validation-errors {
+            margin-top: 16px;
+            padding: 12px;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 8px;
+        }
+
+        .validation-errors-title {
+            font-size: 11px;
+            font-weight: 500;
+            color: #fca5a5;
+            margin-bottom: 8px;
+        }
+
+        .validation-errors-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .validation-error {
+            font-size: 9px;
+            color: #fecaca;
+        }
+
+        /* Apply Button */
+        .apply-button {
+            width: 100%;
+            padding: 12px;
+            margin-top: 16px;
+            background: rgba(59, 130, 246, 0.2);
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            border-radius: 8px;
+            color: #60a5fa;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .apply-button:hover:not(:disabled) {
+            background: rgba(59, 130, 246, 0.3);
+        }
+
+        .apply-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Zone Layout Editor</h2>
+                <span class="badge">3 Zones</span>
+            </div>
+
+            <!-- Preset Selector -->
+            <div class="preset-selector">
+                <label>Preset</label>
+                <select id="presetSelect">
+                    <option value="-1">Custom</option>
+                    <option value="0">Unified</option>
+                    <option value="1">Dual Split</option>
+                    <option value="2">Triple Rings</option>
+                    <option value="3">Quad Active</option>
+                    <option value="4">Heartbeat Focus</option>
+                </select>
+            </div>
+
+            <!-- LED Strip Visualization -->
+            <div class="visualization-container">
+                <div class="visualization-label">LED Strip Visualization</div>
+                <div class="strip-container">
+                    <!-- Left Strip (0-79, displayed reversed) -->
+                    <div class="strip-section strip-left">
+                        <div class="strip-label">Left (0-79)</div>
+                        <div class="led-strip reverse" id="leftStrip"></div>
+                    </div>
+
+                    <!-- Centre Divider -->
+                    <div class="center-divider"></div>
+
+                    <!-- Right Strip (80-159) -->
+                    <div class="strip-section strip-right">
+                        <div class="strip-label" style="text-align: right;">Right (80-159)</div>
+                        <div class="led-strip" id="rightStrip"></div>
+                    </div>
+                </div>
+                <div class="center-label">Centre pair: LEDs 79 (left) / 80 (right)</div>
+            </div>
+
+            <!-- Zone Segment Editors -->
+            <div class="zones-list" id="zonesList">
+                <!-- Zones will be rendered here -->
+            </div>
+
+            <!-- Validation Errors (hidden by default) -->
+            <div class="validation-errors" id="validationErrors" style="display: none;">
+                <div class="validation-errors-title">Validation Errors</div>
+                <ul class="validation-errors-list" id="validationErrorsList"></ul>
+            </div>
+
+            <!-- Apply Button -->
+            <button class="apply-button" id="applyButton">Apply Zone Layout</button>
+        </div>
+    </div>
+
+    <script>
+        // Sample zone data (3-zone configuration)
+        const sampleZones = [
+            { zoneId: 0, s1LeftStart: 65, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 94, totalLeds: 30 },
+            { zoneId: 1, s1LeftStart: 20, s1LeftEnd: 64, s1RightStart: 95, s1RightEnd: 139, totalLeds: 90 },
+            { zoneId: 2, s1LeftStart: 0, s1LeftEnd: 19, s1RightStart: 140, s1RightEnd: 159, totalLeds: 40 }
+        ];
+
+        let currentZones = JSON.parse(JSON.stringify(sampleZones));
+
+        // Render LED strips
+        function renderStrips() {
+            const leftStrip = document.getElementById('leftStrip');
+            const rightStrip = document.getElementById('rightStrip');
+            
+            leftStrip.innerHTML = '';
+            rightStrip.innerHTML = '';
+
+            // Left strip (0-79, displayed reversed)
+            for (let i = 0; i <= 79; i++) {
+                const led = document.createElement('div');
+                led.className = 'led';
+                const zoneId = getZoneForLed(i, false);
+                if (zoneId >= 0) {
+                    led.classList.add(`zone-${zoneId}`);
+                } else {
+                    led.classList.add('unassigned');
+                }
+                if (i === 79) {
+                    led.classList.add('center');
+                }
+                led.title = `LED ${i}${i === 79 ? ' (Centre)' : ''}`;
+                leftStrip.appendChild(led);
+            }
+
+            // Right strip (80-159)
+            for (let i = 80; i <= 159; i++) {
+                const led = document.createElement('div');
+                led.className = 'led';
+                const zoneId = getZoneForLed(i, true);
+                if (zoneId >= 0) {
+                    led.classList.add(`zone-${zoneId}`);
+                } else {
+                    led.classList.add('unassigned');
+                }
+                if (i === 80) {
+                    led.classList.add('center');
+                }
+                led.title = `LED ${i}${i === 80 ? ' (Centre)' : ''}`;
+                rightStrip.appendChild(led);
+            }
+        }
+
+        function getZoneForLed(ledIndex, isRight) {
+            for (const zone of currentZones) {
+                if (isRight) {
+                    if (ledIndex >= zone.s1RightStart && ledIndex <= zone.s1RightEnd) {
+                        return zone.zoneId;
+                    }
+                } else {
+                    if (ledIndex >= zone.s1LeftStart && ledIndex <= zone.s1LeftEnd) {
+                        return zone.zoneId;
+                    }
+                }
+            }
+            return -1;
+        }
+
+        // Render zone editors
+        function renderZoneEditors() {
+            const zonesList = document.getElementById('zonesList');
+            zonesList.innerHTML = '';
+
+            currentZones.forEach((zone, index) => {
+                const zoneEditor = document.createElement('div');
+                zoneEditor.className = `zone-editor zone-${zone.zoneId}`;
+                
+                zoneEditor.innerHTML = `
+                    <div class="zone-header">
+                        <div class="zone-title">Zone ${zone.zoneId}</div>
+                        <div class="zone-led-count">${zone.totalLeds} LEDs total</div>
+                    </div>
+                    <div class="segment-inputs">
+                        <div class="segment-group">
+                            <label>Left Segment</label>
+                            <div class="segment-input-row">
+                                <div class="input-group">
+                                    <label>Start</label>
+                                    <input type="number" min="0" max="79" value="${zone.s1LeftStart}" 
+                                           data-zone="${index}" data-field="s1LeftStart">
+                                </div>
+                                <div class="input-group">
+                                    <label>End</label>
+                                    <input type="number" min="${zone.s1LeftStart}" max="79" value="${zone.s1LeftEnd}" 
+                                           data-zone="${index}" data-field="s1LeftEnd">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="segment-group">
+                            <label>Right Segment</label>
+                            <div class="segment-input-row">
+                                <div class="input-group">
+                                    <label>Start</label>
+                                    <input type="number" min="80" max="159" value="${zone.s1RightStart}" 
+                                           data-zone="${index}" data-field="s1RightStart">
+                                </div>
+                                <div class="input-group">
+                                    <label>End</label>
+                                    <input type="number" min="${zone.s1RightStart}" max="159" value="${zone.s1RightEnd}" 
+                                           data-zone="${index}" data-field="s1RightEnd">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                zonesList.appendChild(zoneEditor);
+            });
+
+            // Attach event listeners
+            document.querySelectorAll('.zone-editor input').forEach(input => {
+                input.addEventListener('input', (e) => {
+                    const zoneIndex = parseInt(e.target.dataset.zone);
+                    const field = e.target.dataset.field;
+                    const value = parseInt(e.target.value) || 0;
+                    currentZones[zoneIndex][field] = value;
+                    
+                    // Recalculate totalLeds
+                    const zone = currentZones[zoneIndex];
+                    const leftSize = zone.s1LeftEnd - zone.s1LeftStart + 1;
+                    const rightSize = zone.s1RightEnd - zone.s1RightStart + 1;
+                    zone.totalLeds = (leftSize + rightSize) * 2;
+                    
+                    // Update display
+                    renderStrips();
+                    renderZoneEditors();
+                });
+            });
+        }
+
+        // Preset handler
+        document.getElementById('presetSelect').addEventListener('change', (e) => {
+            const presetId = parseInt(e.target.value);
+            if (presetId === -1) return;
+
+            const presets = {
+                0: [{ zoneId: 0, s1LeftStart: 65, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 94, totalLeds: 30 },
+                    { zoneId: 1, s1LeftStart: 20, s1LeftEnd: 64, s1RightStart: 95, s1RightEnd: 139, totalLeds: 90 },
+                    { zoneId: 2, s1LeftStart: 0, s1LeftEnd: 19, s1RightStart: 140, s1RightEnd: 159, totalLeds: 40 }],
+                1: [{ zoneId: 0, s1LeftStart: 65, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 94, totalLeds: 30 },
+                    { zoneId: 1, s1LeftStart: 20, s1LeftEnd: 64, s1RightStart: 95, s1RightEnd: 139, totalLeds: 90 },
+                    { zoneId: 2, s1LeftStart: 0, s1LeftEnd: 19, s1RightStart: 140, s1RightEnd: 159, totalLeds: 40 }],
+                2: [{ zoneId: 0, s1LeftStart: 65, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 94, totalLeds: 30 },
+                    { zoneId: 1, s1LeftStart: 20, s1LeftEnd: 64, s1RightStart: 95, s1RightEnd: 139, totalLeds: 90 },
+                    { zoneId: 2, s1LeftStart: 0, s1LeftEnd: 19, s1RightStart: 140, s1RightEnd: 159, totalLeds: 40 }],
+                3: [{ zoneId: 0, s1LeftStart: 60, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 99, totalLeds: 40 },
+                    { zoneId: 1, s1LeftStart: 40, s1LeftEnd: 59, s1RightStart: 100, s1RightEnd: 119, totalLeds: 40 },
+                    { zoneId: 2, s1LeftStart: 20, s1LeftEnd: 39, s1RightStart: 120, s1RightEnd: 139, totalLeds: 40 },
+                    { zoneId: 3, s1LeftStart: 0, s1LeftEnd: 19, s1RightStart: 140, s1RightEnd: 159, totalLeds: 40 }],
+                4: [{ zoneId: 0, s1LeftStart: 65, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 94, totalLeds: 30 },
+                    { zoneId: 1, s1LeftStart: 20, s1LeftEnd: 64, s1RightStart: 95, s1RightEnd: 139, totalLeds: 90 },
+                    { zoneId: 2, s1LeftStart: 0, s1LeftEnd: 19, s1RightStart: 140, s1RightEnd: 159, totalLeds: 40 }]
+            };
+
+            if (presets[presetId]) {
+                currentZones = JSON.parse(JSON.stringify(presets[presetId]));
+                document.querySelector('.badge').textContent = `${currentZones.length} Zones`;
+                renderStrips();
+                renderZoneEditors();
+            }
+        });
+
+        // Apply button
+        document.getElementById('applyButton').addEventListener('click', () => {
+            alert('Apply functionality would send zones to API:\n' + JSON.stringify(currentZones, null, 2));
+        });
+
+        // Initial render
+        renderStrips();
+        renderZoneEditors();
+    </script>
+</body>
+</html>
+

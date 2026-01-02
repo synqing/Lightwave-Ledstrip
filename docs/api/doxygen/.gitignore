@@ -1,0 +1,4 @@
+# Ignore all generated Doxygen output
+*
+# But keep this .gitignore
+!.gitignore

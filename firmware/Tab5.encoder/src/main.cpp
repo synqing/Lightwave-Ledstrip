@@ -41,6 +41,62 @@ constexpr uint8_t ADDR_UNIT_A = 0x42;  // Reprogrammed via register 0xFF
 constexpr uint8_t ADDR_UNIT_B = 0x41;  // Factory default
 
 // ============================================================================
+// K1-Style Color Palette (RGB565 Neon Cyberpunk)
+// ============================================================================
+
+// Background color (near-black)
+constexpr uint16_t COLOR_BG = 0x0841;  // #0a0a14
+
+// Per-parameter colors (each encoder has unique color for identification)
+constexpr uint16_t PARAM_COLORS[16] = {
+    // Unit A (0-7): Core parameters
+    0xF810,  // 0: Effect     - hot pink    #ff0080
+    0xFFE0,  // 1: Brightness - yellow      #ffff00
+    0x07FF,  // 2: Palette    - cyan        #00ffff
+    0xFA20,  // 3: Speed      - orange      #ff4400
+    0xF81F,  // 4: Intensity  - magenta     #ff00ff
+    0x07F1,  // 5: Saturation - green       #00ff88
+    0x901F,  // 6: Complexity - purple      #8800ff
+    0x047F,  // 7: Variation  - blue        #0088ff
+    // Unit B (8-15): Extended parameters (repeat palette)
+    0xF810,  // 8:  Param8    - hot pink
+    0xFFE0,  // 9:  Param9    - yellow
+    0x07FF,  // 10: Param10   - cyan
+    0xFA20,  // 11: Param11   - orange
+    0xF81F,  // 12: Param12   - magenta
+    0x07F1,  // 13: Param13   - green
+    0x901F,  // 14: Param14   - purple
+    0x047F,  // 15: Param15   - blue
+};
+
+// ============================================================================
+// RGB565 Color Manipulation (K1 Pattern)
+// ============================================================================
+
+/**
+ * Dim an RGB565 color by a factor (0.0 to 1.5+)
+ * Used for glow effects: outer=30%, middle=50%, inner=100%
+ */
+inline uint16_t dimColor(uint16_t color, float factor) {
+    // Extract RGB565 components
+    uint8_t r = (color >> 11) & 0x1F;  // 5 bits red (0-31)
+    uint8_t g = (color >> 5) & 0x3F;   // 6 bits green (0-63)
+    uint8_t b = color & 0x1F;          // 5 bits blue (0-31)
+
+    // Scale each component (clamp to max)
+    uint8_t rScaled = static_cast<uint8_t>(r * factor);
+    uint8_t gScaled = static_cast<uint8_t>(g * factor);
+    uint8_t bScaled = static_cast<uint8_t>(b * factor);
+
+    r = (rScaled > 31) ? 31 : rScaled;
+    g = (gScaled > 63) ? 63 : gScaled;
+    b = (bScaled > 31) ? 31 : bScaled;
+
+    // Reconstruct RGB565
+    return (r << 11) | (g << 5) | b;
+}
+
+// ============================================================================
 // Global State
 // ============================================================================
 
@@ -95,6 +151,9 @@ uint8_t scanI2CBus(TwoWire& wire, const char* busName) {
 // Encoder Change Callback
 // ============================================================================
 
+// Forward declaration for highlight support
+void updateDisplay(int8_t highlightIdx);
+
 /**
  * Called when any encoder value changes
  * @param index Encoder index (0-15)
@@ -113,48 +172,155 @@ void onEncoderChange(uint8_t index, uint16_t value, bool wasReset) {
         Serial.printf("[%s:%d] %s: → %d\n", unit, localIdx, name, value);
     }
 
+    // Update display with this encoder highlighted
+    updateDisplay(index);
+
     // TODO (Milestone F): Send to LightwaveOS via WebSocket
     // webSocket.sendParameter(param, value);
 }
 
 // ============================================================================
-// Display Update (2-column layout for 16 parameters, readable font)
+// Display Update (K1-Style: State Caching, Selective Updates, Glow Borders)
 // ============================================================================
 
-void updateDisplay() {
+// State cache for selective updates (K1 pattern: only redraw changed cells)
+static uint16_t s_displayValues[16] = {
+    0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF,
+    0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF
+};  // Initialize to impossible values to force first draw
+static int8_t s_highlightIndex = -1;  // Currently active encoder (-1 = none)
+
+/**
+ * Draw 3-layer glow border around a cell (K1 pattern)
+ * Creates soft neon glow effect with 30%, 50%, 100% brightness layers
+ */
+void drawGlowBorder(int16_t x, int16_t y, int16_t w, int16_t h,
+                    uint16_t color, bool highlight) {
+    float glow = highlight ? 1.0f : 0.6f;  // Brighter when highlighted
+
+    uint16_t outerColor = dimColor(color, 0.3f * glow);   // 18-30%
+    uint16_t middleColor = dimColor(color, 0.5f * glow);  // 30-50%
+    uint16_t innerColor = dimColor(color, glow);          // 60-100%
+
+    M5.Display.drawRect(x, y, w, h, outerColor);
+    M5.Display.drawRect(x + 1, y + 1, w - 2, h - 2, middleColor);
+    M5.Display.drawRect(x + 2, y + 2, w - 4, h - 4, innerColor);
+}
+
+/**
+ * Draw a single parameter cell with K1 styling
+ */
+void drawCell(uint8_t index, uint16_t value, bool highlight) {
+    // Layout constants
+    constexpr int yStart = 200;
+    constexpr int cellHeight = 35;
+    constexpr int colWidth = 320;
+    constexpr int barHeight = 8;
+    constexpr int barYOffset = 24;  // Below text
+
+    int col = index / 8;
+    int row = index % 8;
+    int x = 20 + col * colWidth;
+    int y = yStart + row * cellHeight;
+    int cellW = colWidth - 20;
+
+    uint16_t paramColor = PARAM_COLORS[index];
+
+    // Clear cell background
+    M5.Display.fillRect(x, y, cellW, cellHeight - 2, COLOR_BG);
+
+    // Draw glow border
+    drawGlowBorder(x, y, cellW, cellHeight - 2, paramColor, highlight);
+
+    // Draw label with parameter color
+    Parameter param = static_cast<Parameter>(index);
+    const char* name = getParameterName(param);
+
+    M5.Display.setTextSize(2);
+    M5.Display.setTextColor(paramColor, COLOR_BG);
+    M5.Display.setCursor(x + 6, y + 4);
+    M5.Display.printf("%d:%-8s", index, name);
+
+    // Draw value in white
+    M5.Display.setTextColor(TFT_WHITE, COLOR_BG);
+    M5.Display.setCursor(x + cellW - 50, y + 4);
+    M5.Display.printf("%3d", value);
+
+    // Draw progress bar
+    int barX = x + 6;
+    int barY = y + barYOffset;
+    int barW = cellW - 12;
+    int fillWidth = (static_cast<int32_t>(value) * barW) / 255;
+
+    // Bar background (darker)
+    M5.Display.fillRect(barX, barY, barW, barHeight, dimColor(paramColor, 0.15f));
+
+    // Filled portion
+    if (fillWidth > 0) {
+        M5.Display.fillRect(barX, barY, fillWidth, barHeight, dimColor(paramColor, 0.7f));
+
+        // Bright leading edge (glow effect)
+        if (fillWidth > 1) {
+            M5.Display.drawFastVLine(barX + fillWidth - 1, barY, barHeight, paramColor);
+        }
+    }
+}
+
+/**
+ * Update display with K1 patterns:
+ * - State caching (only redraw changed cells)
+ * - Per-parameter colors
+ * - Glow borders
+ * - Progress bars
+ */
+void updateDisplay(int8_t highlightIdx = -1) {
     if (!g_encoders) return;
 
-    // Layout: 2 columns × 8 rows for 16 parameters
-    // Column 0: params 0-7 (Unit A)
-    // Column 1: params 8-15 (Unit B)
-    int yStart = 200;
-    int lineHeight = 35;   // 8 rows × 35 = 280px fits well
-    int colWidth = 320;    // Half of ~640 usable width
+    // Update highlight if changed
+    if (highlightIdx != s_highlightIndex) {
+        int8_t oldHighlight = s_highlightIndex;
+        s_highlightIndex = highlightIdx;
 
-    // BEGIN TRANSACTION - batch all display operations (K1 pattern for flicker-free)
+        // Force redraw of old and new highlight cells
+        if (oldHighlight >= 0 && oldHighlight < 16) {
+            s_displayValues[oldHighlight] = 0xFFFF;  // Force redraw
+        }
+        if (highlightIdx >= 0 && highlightIdx < 16) {
+            s_displayValues[highlightIdx] = 0xFFFF;  // Force redraw
+        }
+    }
+
+    // BEGIN TRANSACTION - batch all display operations (K1 flicker-free pattern)
     M5.Display.startWrite();
 
-    M5.Display.setTextSize(2);  // Readable font size!
-    M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
-
+    // Selective update: only redraw cells where value changed
     for (uint8_t i = 0; i < 16; i++) {
-        int col = i / 8;         // 0 for params 0-7, 1 for params 8-15
-        int row = i % 8;         // 0-7 within each column
-        int x = 20 + col * colWidth;
-        int y = yStart + row * lineHeight;
-
-        Parameter param = static_cast<Parameter>(i);
-        const char* name = getParameterName(param);
         uint16_t value = g_encoders->getValue(i);
 
-        // Clear line and redraw (fillRect needed for changing values)
-        M5.Display.fillRect(x, y, colWidth - 10, lineHeight - 2, TFT_BLACK);
-        M5.Display.setCursor(x, y);
-        M5.Display.printf("%2d:%-10s%3d", i, name, value);
+        // Skip unchanged cells (state caching optimization)
+        if (value == s_displayValues[i]) {
+            continue;
+        }
+
+        // Update cache and redraw cell
+        s_displayValues[i] = value;
+        bool isHighlight = (i == s_highlightIndex);
+        drawCell(i, value, isHighlight);
     }
 
     // END TRANSACTION - commit all at once (eliminates flicker)
     M5.Display.endWrite();
+}
+
+/**
+ * Force full display refresh (used after setup/errors)
+ */
+void forceDisplayRefresh() {
+    // Invalidate all cached values
+    for (uint8_t i = 0; i < 16; i++) {
+        s_displayValues[i] = 0xFFFF;
+    }
+    updateDisplay();
 }
 
 // ============================================================================
@@ -269,8 +435,8 @@ void setup() {
         M5.Display.printf("Unit B (0x%02X): OK", ADDR_UNIT_B);
         M5.Display.endWrite();
 
-        // Show initial values
-        updateDisplay();
+        // Show initial values with K1-style display
+        forceDisplayRefresh();
 
     } else if (unitA || unitB) {
         // Partial success - one unit available
@@ -298,8 +464,8 @@ void setup() {
         M5.Display.printf("Unit B (0x%02X): %s", ADDR_UNIT_B, unitB ? "OK" : "FAIL");
         M5.Display.endWrite();
 
-        // Show initial values
-        updateDisplay();
+        // Show initial values with K1-style display
+        forceDisplayRefresh();
 
     } else {
         Serial.println("\n[ERROR] No encoder units found!");
@@ -344,29 +510,22 @@ void loop() {
         return;
     }
 
-    // Track if values changed this frame
-    static uint16_t lastValues[16] = {0};
-    bool anyChange = false;
-
-    // Cache current values before update
-    for (uint8_t i = 0; i < 16; i++) {
-        lastValues[i] = g_encoders->getValue(i);
-    }
-
     // Update encoder service (polls all 16 encoders, handles debounce, fires callbacks)
+    // The callback (onEncoderChange) handles display updates with highlighting
     g_encoders->update();
 
-    // Check for changes
-    for (uint8_t i = 0; i < 16; i++) {
-        if (g_encoders->getValue(i) != lastValues[i]) {
-            anyChange = true;
-            break;
-        }
-    }
+    // Clear highlight after brief delay (fade effect)
+    // The callback sets highlight; this clears it after ~500ms of no changes
+    static uint32_t lastChange = 0;
+    static int8_t lastHighlight = -1;
 
-    // Update display if any value changed
-    if (anyChange) {
-        updateDisplay();
+    if (s_highlightIndex >= 0) {
+        lastChange = millis();
+        lastHighlight = s_highlightIndex;
+    } else if (lastHighlight >= 0 && millis() - lastChange > 500) {
+        // Clear highlight and force redraw of that cell
+        updateDisplay(-1);
+        lastHighlight = -1;
     }
 
     // Periodic status (every 10 seconds)

@@ -9,6 +9,7 @@
 #include "ZoneComposerUI.h"
 #include "../parameters/ParameterMap.h"
 #include "../config/Config.h"
+#include <M5Unified.h>
 #include <esp_system.h>
 #include <cstdio>
 #include <cstring>
@@ -18,7 +19,7 @@ DisplayUI::DisplayUI(M5GFX& display)
     : _display(display)
     , _currentScreen(UIScreen::GLOBAL)
 {
-    _statusBar = nullptr;
+    _header = nullptr;
     _zoneComposer = nullptr;
     for (int i = 0; i < 16; i++) {
         _gauges[i] = nullptr;
@@ -26,9 +27,9 @@ DisplayUI::DisplayUI(M5GFX& display)
 }
 
 DisplayUI::~DisplayUI() {
-    if (_statusBar) {
-        delete _statusBar;
-        _statusBar = nullptr;
+    if (_header) {
+        delete _header;
+        _header = nullptr;
     }
     if (_zoneComposer) {
         delete _zoneComposer;
@@ -49,10 +50,10 @@ void DisplayUI::begin() {
 
     _display.fillScreen(Theme::BG_DARK);
 
-    // Create status bar
-    _statusBar = new StatusBar(&_display);
+    // Create header
+    _header = new UIHeader(&_display);
 #if ENABLE_UI_DIAGNOSTICS
-    Serial.printf("[DBG] statusbar_created ptr=%p\n", _statusBar);
+    Serial.printf("[DBG] header_created ptr=%p\n", _header);
 #endif
 
     // Create 8x1 grid of gauges (8 global parameters only)
@@ -87,6 +88,7 @@ void DisplayUI::begin() {
 
     // Create zone composer UI
     _zoneComposer = new ZoneComposerUI(_display);
+    _zoneComposer->setHeader(_header);  // Share header instance
     _zoneComposer->begin();
 
 #if ENABLE_UI_DIAGNOSTICS
@@ -111,8 +113,8 @@ void DisplayUI::setScreen(UIScreen screen) {
             _display.fillScreen(Theme::BG_DARK);
             
             // Force all widgets to redraw
-            if (_statusBar) {
-                _statusBar->markDirty();
+            if (_header) {
+                _header->markDirty();
             }
             for (int i = 0; i < 8; i++) {
                 if (_gauges[i]) {
@@ -132,11 +134,11 @@ void DisplayUI::renderCurrentScreen() {
     
     switch (_currentScreen) {
         case UIScreen::GLOBAL:
-            if (_statusBar) {
+            if (_header) {
 #if ENABLE_UI_DIAGNOSTICS
-                Serial.printf("[DBG] rendering statusbar\n");
+                Serial.printf("[DBG] rendering header\n");
 #endif
-                _statusBar->render();
+                _header->render();
             }
             // Only 8 global gauges exist (indices 0-7)
             for (int i = 0; i < 8; i++) {
@@ -163,10 +165,10 @@ void DisplayUI::renderCurrentScreen() {
 void DisplayUI::loop() {
     uint32_t now = millis();
 
-    // Update stats every 500ms (only for global screen)
-    if (_currentScreen == UIScreen::GLOBAL && now - _lastStatsUpdate >= 500) {
+    // Update header (power + connection) every 500ms
+    if (now - _lastStatsUpdate >= 500) {
         _lastStatsUpdate = now;
-        updateStats();
+        updateHeader();
     }
 
     // Clear highlight after 300ms (only for global screen)
@@ -179,8 +181,10 @@ void DisplayUI::loop() {
     // Render current screen
     switch (_currentScreen) {
         case UIScreen::GLOBAL:
-            // Render status bar (checks dirty flag internally)
-            _statusBar->render();
+            // Render header (checks dirty flag internally)
+            if (_header) {
+                _header->render();
+            }
             // Render gauges (each checks dirty flag internally) - only 8 global parameters
             for (int i = 0; i < 8; i++) {
                 if (_gauges[i]) {
@@ -189,6 +193,10 @@ void DisplayUI::loop() {
             }
             break;
         case UIScreen::ZONE_COMPOSER:
+            // Render header on Zone Composer screen too
+            if (_header) {
+                _header->render();
+            }
             if (_zoneComposer) {
                 _zoneComposer->loop();
             }
@@ -233,32 +241,30 @@ void DisplayUI::handleTouch(int16_t x, int16_t y) {
 }
 
 void DisplayUI::setConnectionState(bool wifi, bool ws, bool encA, bool encB) {
+    if (!_header) return;
+    
     DeviceConnState state;
     state.wifi = wifi;
     state.ws = ws;
     state.encA = encA;
     state.encB = encB;
-    _statusBar->setConnection(state);
+    _header->setConnection(state);
 }
 
 void DisplayUI::updateStats() {
-    uint32_t heap = ESP.getFreeHeap();
-    uint32_t psram = ESP.getFreePsram();
+    // Legacy method - kept for compatibility but no longer used
+    // Stats (heap/psram/uptime) removed from simplified header
+}
 
-    // Calculate uptime
-    uint32_t sec = millis() / 1000;
-    uint32_t min = sec / 60;
-    uint32_t hr = min / 60;
-    min %= 60;
-
-    char uptime[16];
-    if (hr > 0) {
-        sprintf(uptime, "%uh%02um", hr, min);
-    } else {
-        sprintf(uptime, "%um%02us", min, sec % 60);
-    }
-
-    _statusBar->setStats(heap, psram, uptime);
+void DisplayUI::updateHeader() {
+    if (!_header) return;
+    
+    // Update power state from M5.Power
+    int8_t batteryPercent = M5.Power.getBatteryLevel();
+    bool isCharging = M5.Power.isCharging();
+    // Get voltage in volts (M5.Power.getBatteryVoltage() returns millivolts)
+    float voltage = M5.Power.getBatteryVoltage() / 1000.0f;
+    _header->setPower(batteryPercent, isCharging, voltage);
 }
 
 // ============================================================================

@@ -9,7 +9,7 @@
 #include <M5GFX.h>
 #include "Theme.h"
 #include "widgets/GaugeWidget.h"
-#include "widgets/StatusBar.h"
+#include "widgets/UIHeader.h"
 
 // Forward declaration
 class ZoneComposerUI;
@@ -47,13 +47,16 @@ public:
     // Get zone composer UI (for router initialization)
     ZoneComposerUI* getZoneComposerUI() { return _zoneComposer; }
     
+    // Get header instance (for ZoneComposerUI)
+    UIHeader* getHeader() { return _header; }
+    
     // Touch handling (forward to ZoneComposerUI when on that screen)
     void handleTouch(int16_t x, int16_t y);
 
 private:
     M5GFX& _display;
 
-    StatusBar* _statusBar;
+    UIHeader* _header;
     GaugeWidget* _gauges[16];
     ZoneComposerUI* _zoneComposer = nullptr;
 
@@ -66,5 +69,6 @@ private:
     uint32_t _highlightTime = 0;
 
     void updateStats();
+    void updateHeader();
     void renderCurrentScreen();
 };

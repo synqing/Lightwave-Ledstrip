@@ -47,7 +47,7 @@ constexpr const char* PARAM_NAMES[16] = {
     "PALETTE",     // 2
     "SPEED",       // 3
     "MOOD",        // 4
-    "FADE AMT",    // 5
+    "FADE",        // 5
     "COMPLEXITY",  // 6
     "VARIATION",   // 7
     "Z0 EFFECT",   // 8

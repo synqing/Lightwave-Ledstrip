@@ -58,7 +58,7 @@ namespace lightwaveos { namespace zones { class ZoneComposer; } }
 namespace lightwaveos { namespace transitions { class TransitionEngine; enum class TransitionType : uint8_t; } }
 namespace lightwaveos { namespace plugins { class IEffect; namespace runtime { class LegacyEffectAdapter; } } }
 #if FEATURE_AUDIO_SYNC
-namespace lightwaveos { namespace audio { class AudioActor; } }
+namespace lightwaveos { namespace audio { class AudioNode; } }
 #endif
 
 namespace lightwaveos {
@@ -322,9 +322,9 @@ public:
      * @brief Set the audio SnapshotBuffer reference
      *
      * Called by ActorSystem during initialization to connect the renderer
-     * to the AudioActor's ControlBusFrame buffer.
+     * to the AudioNode's ControlBusFrame buffer.
      *
-     * @param buffer Pointer to AudioActor's SnapshotBuffer (nullptr to disable)
+     * @param buffer Pointer to AudioNode's SnapshotBuffer (nullptr to disable)
      */
     void setAudioBuffer(const audio::SnapshotBuffer<audio::ControlBusFrame>* buffer) {
         m_controlBusBuffer = buffer;
@@ -341,7 +341,7 @@ public:
     /**
      * @brief Get the cached ControlBusFrame for audio streaming
      *
-     * Returns a const reference to the last ControlBusFrame read from AudioActor.
+     * Returns a const reference to the last ControlBusFrame read from AudioNode.
      * Safe to call from WebServer thread - returns a copy stored by value.
      */
     const audio::ControlBusFrame& getCachedAudioFrame() const { return m_lastControlBus; }
@@ -362,10 +362,10 @@ public:
      * @brief Set the TempoTracker reference for phase advancement
      *
      * Called by ActorSystem during initialization to connect the renderer
-     * to AudioActor's TempoTracker instance. The renderer calls
+     * to AudioNode's TempoTracker instance. The renderer calls
      * advancePhase() at 120 FPS for smooth beat tracking.
      *
-     * @param tempo Pointer to AudioActor's TempoTracker (nullptr to disable)
+     * @param tempo Pointer to AudioNode's TempoTracker (nullptr to disable)
      */
     void setTempo(lightwaveos::audio::TempoTracker* tempo) {
         m_tempo = tempo;
@@ -635,7 +635,7 @@ private:
      */
     audio::MusicalGrid m_musicalGrid;
 
-    /// Last ControlBusFrame read from AudioActor (by-value copy)
+    /// Last ControlBusFrame read from AudioNode (by-value copy)
     audio::ControlBusFrame m_lastControlBus;
 
     /// Last MusicalGridSnapshot from our owned m_musicalGrid
@@ -659,11 +659,11 @@ private:
     std::atomic<bool> m_audioContractDirty{false};
 
     /**
-     * Pointer to AudioActor's SnapshotBuffer (set during init)
+     * Pointer to AudioNode's SnapshotBuffer (set during init)
      *
-     * This is a raw pointer because AudioActor owns the buffer, and
+     * This is a raw pointer because AudioNode owns the buffer, and
      * we just read from it via the lock-free ReadLatest() method.
-     * Set to nullptr if AudioActor isn't running.
+     * Set to nullptr if AudioNode isn't running.
      */
     const audio::SnapshotBuffer<audio::ControlBusFrame>* m_controlBusBuffer = nullptr;
 
@@ -675,11 +675,11 @@ private:
     // ========================================================================
 
     /**
-     * Pointer to AudioActor's TempoTracker (set during init)
+     * Pointer to AudioNode's TempoTracker (set during init)
      *
      * The renderer calls advancePhase() at 120 FPS for smooth beat tracking.
-     * AudioActor calls updateNovelty() and updateTempo() per audio hop.
-     * Set to nullptr if AudioActor isn't running.
+     * AudioNode calls updateNovelty() and updateTempo() per audio hop.
+     * Set to nullptr if AudioNode isn't running.
      */
     lightwaveos::audio::TempoTracker* m_tempo = nullptr;
 #endif

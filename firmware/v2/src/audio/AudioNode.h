@@ -1,14 +1,14 @@
 /**
- * @file AudioActor.h
+ * @file AudioNode.h
  * @brief Actor for audio capture and processing pipeline
  *
- * The AudioActor runs on Core 0 and handles:
+ * The AudioNode runs on Core 0 and handles:
  * - I2S audio capture from SPH0645 microphone
  * - 256-sample hop capture at 62.5 Hz (Tab5 parity)
  * - Future: Goertzel frequency analysis, beat detection
  *
  * Architecture:
- *   AudioActor (Core 0, Priority 4)
+ *   AudioNode (Core 0, Priority 4)
  *     |
  *     +-> AudioCapture (I2S DMA)
  *     |
@@ -35,7 +35,7 @@
 
 #include <atomic>
 
-#include "../core/actors/Actor.h"
+#include "../core/actors/Node.h"
 #include "../config/audio_config.h"
 #include "AudioCapture.h"
 #include "AudioTuning.h"
@@ -60,9 +60,9 @@ namespace lightwaveos {
 namespace audio {
 
 /**
- * @brief AudioActor state
+ * @brief AudioNode state
  */
-enum class AudioActorState : uint8_t {
+enum class AudioNodeState : uint8_t {
     UNINITIALIZED = 0,  // Not started
     INITIALIZING,       // Starting up
     RUNNING,            // Normal operation
@@ -73,19 +73,19 @@ enum class AudioActorState : uint8_t {
 /**
  * @brief Audio actor statistics
  */
-struct AudioActorStats {
+struct AudioNodeStats {
     uint32_t tickCount;          // Total ticks processed
     uint32_t captureSuccessCount; // Successful captures
     uint32_t captureFailCount;   // Failed captures
     uint32_t lastTickTimeUs;     // Time of last tick
-    AudioActorState state;       // Current state
+    AudioNodeState state;       // Current state
 
     void reset() {
         tickCount = 0;
         captureSuccessCount = 0;
         captureFailCount = 0;
         lastTickTimeUs = 0;
-        state = AudioActorState::UNINITIALIZED;
+        state = AudioNodeState::UNINITIALIZED;
     }
 };
 
@@ -125,19 +125,19 @@ struct AudioDspState {
  * - Publish band energies to ControlBus
  * - Beat detection and onset events
  */
-class AudioActor : public actors::Actor {
+class AudioNode : public nodes::Node {
 public:
     /**
-     * @brief Construct the AudioActor
+     * @brief Construct the AudioNode
      *
      * Uses configuration from audio_config.h for timing and core affinity.
      */
-    AudioActor();
+    AudioNode();
 
     /**
      * @brief Destructor
      */
-    ~AudioActor() override;
+    ~AudioNode() override;
 
     // ========================================================================
     // State Accessors
@@ -146,12 +146,12 @@ public:
     /**
      * @brief Get current state
      */
-    AudioActorState getState() const { return m_state; }
+    AudioNodeState getState() const { return m_state; }
 
     /**
      * @brief Get audio actor statistics
      */
-    const AudioActorStats& getStats() const { return m_stats; }
+    const AudioNodeStats& getStats() const { return m_stats; }
 
     /**
      * @brief Get audio capture statistics
@@ -161,7 +161,7 @@ public:
     /**
      * @brief Check if audio capture is working
      */
-    bool isCapturing() const { return m_state == AudioActorState::RUNNING; }
+    bool isCapturing() const { return m_state == AudioNodeState::RUNNING; }
 
     // ========================================================================
     // Control
@@ -402,7 +402,7 @@ protected:
      * - SHUTDOWN: Stop actor
      * - HEALTH_CHECK: Respond with status
      */
-    void onMessage(const actors::Message& msg) override;
+    void onMessage(const nodes::Message& msg) override;
 
     /**
      * @brief Capture one hop of audio samples
@@ -427,10 +427,10 @@ private:
     AudioCapture m_capture;
 
     // Current state
-    AudioActorState m_state;
+    AudioNodeState m_state;
 
     // Statistics
-    AudioActorStats m_stats;
+    AudioNodeStats m_stats;
 
     // Sample buffer for last captured hop
     int16_t m_hopBuffer[HOP_SIZE];
@@ -622,19 +622,19 @@ private:
 };
 
 // ============================================================================
-// Actor Configuration
+// Node Configuration
 // ============================================================================
 
-namespace ActorConfigs {
+namespace NodeConfigs {
 
 /**
- * @brief Configuration for AudioActor
+ * @brief Configuration for AudioNode
  *
  * Runs on Core 0 at priority 4 (below Renderer at 5).
  * 16ms tick interval matches hop size for Tab5 parity.
  */
-inline actors::ActorConfig Audio() {
-    return actors::ActorConfig(
+inline nodes::NodeConfig Audio() {
+    return nodes::NodeConfig(
         "Audio",                                    // name
         AUDIO_ACTOR_STACK_WORDS,                    // stackSize (16KB)
         AUDIO_ACTOR_PRIORITY,                       // priority (4)
@@ -644,7 +644,7 @@ inline actors::ActorConfig Audio() {
     );
 }
 
-} // namespace ActorConfigs
+} // namespace NodeConfigs
 
 } // namespace audio
 } // namespace lightwaveos

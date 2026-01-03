@@ -1,5 +1,5 @@
 /**
- * @file AudioActor.cpp
+ * @file AudioNode.cpp
  * @brief Actor implementation for audio capture and processing
  *
  * Phase 1 Implementation:
@@ -12,7 +12,7 @@
  * @version 2.0.0
  */
 
-#include "AudioActor.h"
+#include "AudioNode.h"
 
 #if FEATURE_AUDIO_SYNC
 
@@ -74,9 +74,9 @@ namespace audio {
 // Constructor / Destructor
 // ============================================================================
 
-AudioActor::AudioActor()
-    : Actor(ActorConfigs::Audio())
-    , m_state(AudioActorState::UNINITIALIZED)
+AudioNode::AudioNode()
+    : Node(NodeConfigs::Audio())
+    , m_state(AudioNodeState::UNINITIALIZED)
 {
     m_stats.reset();
     memset(m_hopBuffer, 0, sizeof(m_hopBuffer));
@@ -84,7 +84,7 @@ AudioActor::AudioActor()
     m_noiseFloor = m_pipelineTuning.noiseFloorMin;
 }
 
-AudioActor::~AudioActor()
+AudioNode::~AudioNode()
 {
     // Base class handles task cleanup
     // AudioCapture destructor handles I2S cleanup
@@ -94,29 +94,29 @@ AudioActor::~AudioActor()
 // Control Methods
 // ============================================================================
 
-void AudioActor::pause()
+void AudioNode::pause()
 {
-    if (m_state == AudioActorState::RUNNING) {
+    if (m_state == AudioNodeState::RUNNING) {
         LW_LOGI("Pausing audio capture");
-        m_state = AudioActorState::PAUSED;
+        m_state = AudioNodeState::PAUSED;
     }
 }
 
-void AudioActor::resume()
+void AudioNode::resume()
 {
-    if (m_state == AudioActorState::PAUSED) {
+    if (m_state == AudioNodeState::PAUSED) {
         LW_LOGI("Resuming audio capture");
-        m_state = AudioActorState::RUNNING;
+        m_state = AudioNodeState::RUNNING;
     }
 }
 
-void AudioActor::resetStats()
+void AudioNode::resetStats()
 {
     m_stats.reset();
     m_capture.resetStats();
 }
 
-AudioPipelineTuning AudioActor::getPipelineTuning() const
+AudioPipelineTuning AudioNode::getPipelineTuning() const
 {
     AudioPipelineTuning out;
     uint32_t v0;
@@ -130,7 +130,7 @@ AudioPipelineTuning AudioActor::getPipelineTuning() const
     return out;
 }
 
-void AudioActor::setPipelineTuning(const AudioPipelineTuning& tuning)
+void AudioNode::setPipelineTuning(const AudioPipelineTuning& tuning)
 {
     AudioPipelineTuning clamped = clampAudioPipelineTuning(tuning);
     uint32_t v = m_pipelineTuningSeq.load(std::memory_order_relaxed);
@@ -139,12 +139,12 @@ void AudioActor::setPipelineTuning(const AudioPipelineTuning& tuning)
     m_pipelineTuningSeq.store(v + 2U, std::memory_order_release);
 }
 
-void AudioActor::resetDspState()
+void AudioNode::resetDspState()
 {
     m_dspResetPending.store(true, std::memory_order_release);
 }
 
-AudioDspState AudioActor::getDspState() const
+AudioDspState AudioNode::getDspState() const
 {
     AudioDspState out;
     uint32_t v0;
@@ -162,15 +162,15 @@ AudioDspState AudioActor::getDspState() const
 // Buffer Access
 // ============================================================================
 
-const int16_t* AudioActor::getLastHop() const
+const int16_t* AudioNode::getLastHop() const
 {
-    if (m_state == AudioActorState::RUNNING || m_state == AudioActorState::PAUSED) {
+    if (m_state == AudioNodeState::RUNNING || m_state == AudioNodeState::PAUSED) {
         return m_hopBuffer;
     }
     return nullptr;
 }
 
-bool AudioActor::hasNewHop()
+bool AudioNode::hasNewHop()
 {
     if (m_newHopAvailable) {
         m_newHopAvailable = false;
@@ -183,22 +183,22 @@ bool AudioActor::hasNewHop()
 // Actor Lifecycle
 // ============================================================================
 
-void AudioActor::onStart()
+void AudioNode::onStart()
 {
-    LW_LOGI("AudioActor starting on Core %d", xPortGetCoreID());
+    LW_LOGI("AudioNode starting on Core %d", xPortGetCoreID());
 
-    m_state = AudioActorState::INITIALIZING;
+    m_state = AudioNodeState::INITIALIZING;
     m_stats.state = m_state;
 
     // Initialize I2S audio capture
     if (!m_capture.init()) {
         LW_LOGE("Failed to initialize audio capture");
-        m_state = AudioActorState::ERROR;
+        m_state = AudioNodeState::ERROR;
         m_stats.state = m_state;
         return;
     }
 
-    m_state = AudioActorState::RUNNING;
+    m_state = AudioNodeState::RUNNING;
     m_stats.state = m_state;
 
     // Initialize TempoTracker beat tracker
@@ -207,25 +207,25 @@ void AudioActor::onStart()
     m_lastTempoOutput = m_tempo.getOutput();
     LW_LOGI("TempoTracker initialized");
 
-    LW_LOGI("AudioActor started (tick=%dms, hop=%d, rate=%.1fHz)",
+    LW_LOGI("AudioNode started (tick=%dms, hop=%d, rate=%.1fHz)",
              AUDIO_ACTOR_TICK_MS, HOP_SIZE, HOP_RATE_HZ);
 }
 
-void AudioActor::onMessage(const actors::Message& msg)
+void AudioNode::onMessage(const nodes::Message& msg)
 {
     switch (msg.type) {
-        case actors::MessageType::SHUTDOWN:
+        case nodes::MessageType::SHUTDOWN:
             LW_LOGI("Received SHUTDOWN message");
             // Will be handled by base class
             break;
 
-        case actors::MessageType::HEALTH_CHECK:
+        case nodes::MessageType::HEALTH_CHECK:
             LW_LOGD("Health check: state=%d, captures=%lu",
                      static_cast<int>(m_state), m_stats.captureSuccessCount);
             // TODO: Send HEALTH_STATUS response when MessageBus is integrated
             break;
 
-        case actors::MessageType::PING:
+        case nodes::MessageType::PING:
             // Respond with PONG for latency testing
             // TODO: Send PONG via MessageBus
             LW_LOGD("PING received");
@@ -239,10 +239,10 @@ void AudioActor::onMessage(const actors::Message& msg)
     }
 }
 
-void AudioActor::onTick()
+void AudioNode::onTick()
 {
     // Skip if not in running state
-    if (m_state != AudioActorState::RUNNING) {
+    if (m_state != AudioNodeState::RUNNING) {
         return;
     }
 
@@ -309,14 +309,14 @@ void AudioActor::onTick()
     }
 }
 
-void AudioActor::onStop()
+void AudioNode::onStop()
 {
-    LW_LOGI("AudioActor stopping");
+    LW_LOGI("AudioNode stopping");
 
     // Deinitialize audio capture
     m_capture.deinit();
 
-    m_state = AudioActorState::UNINITIALIZED;
+    m_state = AudioNodeState::UNINITIALIZED;
     m_stats.state = m_state;
 
     // Log final statistics
@@ -335,7 +335,7 @@ void AudioActor::onStop()
 // Internal Methods
 // ============================================================================
 
-void AudioActor::captureHop()
+void AudioNode::captureHop()
 {
     CaptureResult result = m_capture.captureHop(m_hopBuffer);
 
@@ -356,7 +356,7 @@ void AudioActor::captureHop()
 // Phase 2: DSP Processing
 // ============================================================================
 
-void AudioActor::processHop()
+void AudioNode::processHop()
 {
     // MabuTrace: Wrap entire pipeline for Perfetto timeline visualization
     TRACE_SCOPE("audio_pipeline");
@@ -578,7 +578,7 @@ void AudioActor::processHop()
 #ifndef NATIVE_BUILD
     UBaseType_t stackHighWater = uxTaskGetStackHighWaterMark(nullptr);
     if (stackHighWater < 512) {  // Less than 2KB remaining (512 words * 4 bytes)
-        LW_LOGW("AudioActor stack low! High water mark: %u words (%.1f KB remaining)",
+        LW_LOGW("AudioNode stack low! High water mark: %u words (%.1f KB remaining)",
                 stackHighWater, stackHighWater * 4.0f / 1024.0f);
     }
 #endif
@@ -907,7 +907,7 @@ void AudioActor::processHop()
 #endif
 }
 
-float AudioActor::computeRMS(const int16_t* samples, size_t count)
+float AudioNode::computeRMS(const int16_t* samples, size_t count)
 {
     if (count == 0) return 0.0f;
 
@@ -924,13 +924,13 @@ float AudioActor::computeRMS(const int16_t* samples, size_t count)
     return std::min(1.0f, rms / 32768.0f);
 }
 
-void AudioActor::handleCaptureError(CaptureResult result)
+void AudioNode::handleCaptureError(CaptureResult result)
 {
     // Log error based on type
     switch (result) {
         case CaptureResult::NOT_INITIALIZED:
             LW_LOGE("Capture error: not initialized");
-            m_state = AudioActorState::ERROR;
+            m_state = AudioNodeState::ERROR;
             m_stats.state = m_state;
             break;
 
@@ -961,7 +961,7 @@ void AudioActor::handleCaptureError(CaptureResult result)
 // ============================================================================
 
 #if FEATURE_AUDIO_BENCHMARK
-void AudioActor::aggregateBenchmarkStats()
+void AudioNode::aggregateBenchmarkStats()
 {
     // Pop all available samples and update stats
     AudioBenchmarkSample sample;
@@ -979,7 +979,7 @@ void AudioActor::aggregateBenchmarkStats()
 // Noise Calibration (SensoryBridge pattern)
 // ============================================================================
 
-bool AudioActor::startNoiseCalibration(uint32_t durationMs, float safetyMultiplier)
+bool AudioNode::startNoiseCalibration(uint32_t durationMs, float safetyMultiplier)
 {
     // Only start if not already running
     if (m_noiseCalibration.state == CalibrationState::MEASURING ||
@@ -999,7 +999,7 @@ bool AudioActor::startNoiseCalibration(uint32_t durationMs, float safetyMultipli
     return true;
 }
 
-void AudioActor::cancelNoiseCalibration()
+void AudioNode::cancelNoiseCalibration()
 {
     if (m_noiseCalibration.state != CalibrationState::IDLE) {
         LW_LOGI("Calibration cancelled");
@@ -1007,7 +1007,7 @@ void AudioActor::cancelNoiseCalibration()
     }
 }
 
-bool AudioActor::applyCalibrationResults()
+bool AudioNode::applyCalibrationResults()
 {
     if (!m_noiseCalibration.result.valid) {
         LW_LOGW("Cannot apply: no valid calibration results");
@@ -1031,7 +1031,7 @@ bool AudioActor::applyCalibrationResults()
     return true;
 }
 
-void AudioActor::processNoiseCalibration(float rms, const float* bands, const float* chroma, uint32_t nowMs)
+void AudioNode::processNoiseCalibration(float rms, const float* bands, const float* chroma, uint32_t nowMs)
 {
     switch (m_noiseCalibration.state) {
         case CalibrationState::IDLE:

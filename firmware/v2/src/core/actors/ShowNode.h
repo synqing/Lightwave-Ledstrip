@@ -1,10 +1,10 @@
 /**
- * @file ShowDirectorActor.h
+ * @file ShowNode.h
  * @brief Actor responsible for orchestrating choreographed light shows
  *
  * LightwaveOS v2 - Show System
  *
- * The ShowDirectorActor manages multi-minute light shows with:
+ * The ShowNode manages multi-minute light shows with:
  * - Timed cues (effect changes, parameter sweeps, transitions)
  * - Chapter-based narrative structure
  * - Integration with NarrativeEngine for tension modulation
@@ -23,7 +23,7 @@
 
 #pragma once
 
-#include "Actor.h"
+#include "Node.h"
 #include "../bus/MessageBus.h"
 #include "../shows/ShowTypes.h"
 #include "../shows/CueScheduler.h"
@@ -34,7 +34,7 @@
 struct ShowDefinition;
 
 namespace lightwaveos {
-namespace actors {
+namespace nodes {
 
 /**
  * @brief Actor responsible for show orchestration
@@ -42,17 +42,17 @@ namespace actors {
  * Runs on Core 0 at priority 2 (background processing).
  * Updates at 20Hz (50ms tick interval) to process cues and parameter sweeps.
  */
-class ShowDirectorActor : public Actor {
+class ShowNode : public Node {
 public:
     /**
-     * @brief Construct the ShowDirectorActor
+     * @brief Construct the ShowNode
      */
-    ShowDirectorActor();
+    ShowNode();
 
     /**
      * @brief Destructor
      */
-    ~ShowDirectorActor() override;
+    ~ShowNode() override;
 
     // ========================================================================
     // State Accessors (read-only, for diagnostics)
@@ -69,7 +69,7 @@ public:
 
 protected:
     // ========================================================================
-    // Actor Lifecycle
+    // Node Lifecycle
     // ========================================================================
 
     void onStart() override;
@@ -133,12 +133,12 @@ private:
     ShowCue m_cueBuffer[shows::CueScheduler::MAX_CUES_PER_FRAME];
 
     // Reference to RendererActor for sending commands
-    Actor* m_rendererActor;
+    Node* m_rendererActor;
 
     // NarrativeEngine reference
     narrative::NarrativeEngine* m_narrative;
 };
 
-} // namespace actors
+} // namespace nodes
 } // namespace lightwaveos
 

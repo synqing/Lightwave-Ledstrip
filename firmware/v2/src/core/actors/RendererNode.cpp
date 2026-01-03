@@ -1,8 +1,8 @@
 /**
- * @file RendererActor.cpp
- * @brief Implementation of the RendererActor
+ * @file RendererNode.cpp
+ * @brief Implementation of the RendererNode
  *
- * The RendererActor runs the main render loop at 120 FPS on Core 1.
+ * The RendererNode runs the main render loop at 120 FPS on Core 1.
  * It processes incoming commands (effect changes, brightness, etc.)
  * between frames and publishes FRAME_RENDERED events.
  *
@@ -16,7 +16,7 @@
  * @version 2.0.0
  */
 
-#include "RendererActor.h"
+#include "RendererNode.h"
 #include "../../effects/zones/ZoneComposer.h"
 #include "../../effects/transitions/TransitionEngine.h"
 #include "../../effects/PatternRegistry.h"
@@ -30,7 +30,7 @@
 
 // Audio integration (Phase 2)
 #if FEATURE_AUDIO_SYNC
-#include "../../audio/AudioActor.h"
+#include "../../audio/AudioNode.h"
 // TempoTracker integration (replaces K1)
 #include "../../audio/tempo/TempoTracker.h"
 #endif
@@ -40,7 +40,7 @@ using namespace lightwaveos::palettes;
 
 // Stub for legacy effect ID tracking - no-op when legacy effects are disabled
 // When legacy/LegacyEffectWrapper is re-enabled, this will be replaced by the real implementation
-namespace lightwaveos { namespace actors {
+namespace lightwaveos { namespace nodes {
     void setCurrentLegacyEffectId(uint8_t) {}  // No-op stub
 }}
 
@@ -55,7 +55,7 @@ namespace lightwaveos { namespace actors {
 #include "utils/Log.h"
 
 namespace lightwaveos {
-namespace actors {
+namespace nodes {
 
 #if FEATURE_AUDIO_SYNC
 static audio::MusicalGridTuning toMusicalGridTuning(const audio::AudioContractTuning& tuning) {
@@ -74,8 +74,8 @@ static audio::MusicalGridTuning toMusicalGridTuning(const audio::AudioContractTu
 // Constructor / Destructor
 // ============================================================================
 
-RendererActor::RendererActor()
-    : Actor(ActorConfigs::Renderer())
+RendererNode::RendererNode()
+    : Node(NodeConfigs::Renderer())
     , m_currentEffect(0)
     , m_brightness(LedConfig::DEFAULT_BRIGHTNESS)
     , m_speed(LedConfig::DEFAULT_SPEED)
@@ -141,7 +141,7 @@ RendererActor::RendererActor()
 #endif
 }
 
-RendererActor::~RendererActor()
+RendererNode::~RendererNode()
 {
     // Clean up transition engine
     if (m_transitionEngine) {
@@ -155,7 +155,7 @@ RendererActor::~RendererActor()
 // State Accessors
 // ============================================================================
 
-void RendererActor::getBufferCopy(CRGB* outBuffer) const
+void RendererNode::getBufferCopy(CRGB* outBuffer) const
 {
     if (outBuffer != nullptr) {
         // Note: This is a snapshot - the buffer may change during copy
@@ -168,14 +168,14 @@ void RendererActor::getBufferCopy(CRGB* outBuffer) const
 // Effect Registration
 // ============================================================================
 
-bool RendererActor::registerEffect(uint8_t id, const char* name, EffectRenderFn fn)
+bool RendererNode::registerEffect(uint8_t id, const char* name, EffectRenderFn fn)
 {
     if (id >= MAX_EFFECTS || name == nullptr || fn == nullptr) {
         return false;
     }
 
     // Create LegacyEffectAdapter to wrap function pointer
-    // Allocate adapter (owned by RendererActor)
+    // Allocate adapter (owned by RendererNode)
     if (m_legacyAdapters[id] != nullptr) {
         // Already registered - clean up old adapter
         delete m_legacyAdapters[id];
@@ -200,7 +200,7 @@ bool RendererActor::registerEffect(uint8_t id, const char* name, EffectRenderFn 
     return true;
 }
 
-bool RendererActor::registerEffect(uint8_t id, plugins::IEffect* effect)
+bool RendererNode::registerEffect(uint8_t id, plugins::IEffect* effect)
 {
     if (id >= MAX_EFFECTS || effect == nullptr) {
         return false;
@@ -229,7 +229,7 @@ bool RendererActor::registerEffect(uint8_t id, plugins::IEffect* effect)
     return true;
 }
 
-const char* RendererActor::getEffectName(uint8_t id) const
+const char* RendererNode::getEffectName(uint8_t id) const
 {
     if (id < MAX_EFFECTS && m_effects[id].active) {
         return m_effects[id].name;
@@ -237,17 +237,17 @@ const char* RendererActor::getEffectName(uint8_t id) const
     return "Unknown";
 }
 
-uint8_t RendererActor::getPaletteCount() const
+uint8_t RendererNode::getPaletteCount() const
 {
     return MASTER_PALETTE_COUNT;
 }
 
-const char* RendererActor::getPaletteName(uint8_t id) const
+const char* RendererNode::getPaletteName(uint8_t id) const
 {
     return lightwaveos::palettes::getPaletteName(id);
 }
 
-plugins::IEffect* RendererActor::getEffectInstance(uint8_t id) const
+plugins::IEffect* RendererNode::getEffectInstance(uint8_t id) const
 {
     if (id < MAX_EFFECTS && m_effects[id].active) {
         return m_effects[id].effect;
@@ -260,7 +260,7 @@ plugins::IEffect* RendererActor::getEffectInstance(uint8_t id) const
  * 
  * DEFENSIVE CHECK: Prevents LoadProhibited crashes from corrupted effect ID.
  * 
- * RendererActor uses m_effects[MAX_EFFECTS] array where MAX_EFFECTS = 96. If
+ * RendererNode uses m_effects[MAX_EFFECTS] array where MAX_EFFECTS = 96. If
  * effectId is corrupted (e.g., by memory corruption, invalid input, or race
  * condition), accessing m_effects[effectId] would cause out-of-bounds access
  * and crash.
@@ -271,7 +271,7 @@ plugins::IEffect* RendererActor::getEffectInstance(uint8_t id) const
  * @param effectId Effect ID to validate
  * @return Valid effect ID in [0, MAX_EFFECTS-1], defaults to 0 if out of bounds
  */
-uint8_t RendererActor::validateEffectId(uint8_t effectId) const {
+uint8_t RendererNode::validateEffectId(uint8_t effectId) const {
 #if FEATURE_VALIDATION_PROFILING
 #ifndef NATIVE_BUILD
     int64_t start = esp_timer_get_time();
@@ -306,7 +306,7 @@ uint8_t RendererActor::validateEffectId(uint8_t effectId) const {
 // Actor Lifecycle
 // ============================================================================
 
-void RendererActor::onStart()
+void RendererNode::onStart()
 {
     LW_LOGI("Initializing LEDs on Core %d", xPortGetCoreID());
 
@@ -322,7 +322,7 @@ void RendererActor::onStart()
              m_effectCount, m_brightness, LedConfig::TARGET_FPS);
 }
 
-void RendererActor::onMessage(const Message& msg)
+void RendererNode::onMessage(const Message& msg)
 {
     switch (msg.type) {
         case MessageType::SET_EFFECT:
@@ -405,7 +405,7 @@ void RendererActor::onMessage(const Message& msg)
     }
 }
 
-void RendererActor::onTick()
+void RendererNode::onTick()
 {
     uint32_t frameStartUs = micros();
 
@@ -460,7 +460,7 @@ void RendererActor::onTick()
     m_frameCount++;
 }
 
-void RendererActor::onStop()
+void RendererNode::onStop()
 {
     LW_LOGI("Stopping - rendered %lu frames, %lu drops",
              m_stats.framesRendered, m_stats.frameDrops);
@@ -477,7 +477,7 @@ void RendererActor::onStop()
 // Frame Capture System (for testbed)
 // ============================================================================
 
-void RendererActor::setCaptureMode(bool enabled, uint8_t tapMask) {
+void RendererNode::setCaptureMode(bool enabled, uint8_t tapMask) {
     m_captureEnabled = enabled;
     m_captureTapMask = tapMask & 0x07;  // Only bits 0-2 are valid
     
@@ -491,7 +491,7 @@ void RendererActor::setCaptureMode(bool enabled, uint8_t tapMask) {
              enabled ? "enabled" : "disabled", m_captureTapMask);
 }
 
-bool RendererActor::getCapturedFrame(CaptureTap tap, CRGB* outBuffer) const {
+bool RendererNode::getCapturedFrame(CaptureTap tap, CRGB* outBuffer) const {
     if (!m_captureEnabled || outBuffer == nullptr) {
         return false;
     }
@@ -524,12 +524,12 @@ bool RendererActor::getCapturedFrame(CaptureTap tap, CRGB* outBuffer) const {
     return false;
 }
 
-RendererActor::CaptureMetadata RendererActor::getCaptureMetadata() const {
+RendererNode::CaptureMetadata RendererNode::getCaptureMetadata() const {
     return m_captureMetadata;
 }
 
 #if FEATURE_AUDIO_SYNC
-audio::AudioContractTuning RendererActor::getAudioContractTuning() const {
+audio::AudioContractTuning RendererNode::getAudioContractTuning() const {
     audio::AudioContractTuning out;
     uint32_t v0;
     uint32_t v1;
@@ -542,7 +542,7 @@ audio::AudioContractTuning RendererActor::getAudioContractTuning() const {
     return out;
 }
 
-void RendererActor::setAudioContractTuning(const audio::AudioContractTuning& tuning) {
+void RendererNode::setAudioContractTuning(const audio::AudioContractTuning& tuning) {
     audio::AudioContractTuning clamped = audio::clampAudioContractTuning(tuning);
     uint32_t v = m_audioContractSeq.load(std::memory_order_relaxed);
     m_audioContractSeq.store(v + 1U, std::memory_order_release);
@@ -551,7 +551,7 @@ void RendererActor::setAudioContractTuning(const audio::AudioContractTuning& tun
     m_audioContractDirty.store(true, std::memory_order_release);
 }
 
-void RendererActor::applyPendingAudioContractTuning() {
+void RendererNode::applyPendingAudioContractTuning() {
     if (!m_audioContractDirty.exchange(false, std::memory_order_acq_rel)) {
         return;
     }
@@ -563,7 +563,7 @@ void RendererActor::applyPendingAudioContractTuning() {
 
 #endif
 
-bool RendererActor::enqueueEffectParameterUpdate(uint8_t effectId, const char* name, float value) {
+bool RendererNode::enqueueEffectParameterUpdate(uint8_t effectId, const char* name, float value) {
     if (!name || name[0] == '\0') {
         return false;
     }
@@ -585,7 +585,7 @@ bool RendererActor::enqueueEffectParameterUpdate(uint8_t effectId, const char* n
     return true;
 }
 
-void RendererActor::applyPendingEffectParameterUpdates() {
+void RendererNode::applyPendingEffectParameterUpdates() {
     uint8_t tail = m_paramQueueTail.load(std::memory_order_relaxed);
     uint8_t head = m_paramQueueHead.load(std::memory_order_acquire);
     while (tail != head) {
@@ -604,7 +604,7 @@ void RendererActor::applyPendingEffectParameterUpdates() {
     }
 }
 
-void RendererActor::forceOneShotCapture(CaptureTap tap) {
+void RendererNode::forceOneShotCapture(CaptureTap tap) {
     // Preserve the live LED state buffer so buffer-feedback effects are not disturbed.
     CRGB savedLeds[LedConfig::TOTAL_LEDS];
     memcpy(savedLeds, m_leds, sizeof(savedLeds));
@@ -638,7 +638,7 @@ void RendererActor::forceOneShotCapture(CaptureTap tap) {
     m_hue = savedHue;
 }
 
-void RendererActor::captureFrame(CaptureTap tap, const CRGB* sourceBuffer) {
+void RendererNode::captureFrame(CaptureTap tap, const CRGB* sourceBuffer) {
     if (sourceBuffer == nullptr) {
         return;
     }
@@ -674,7 +674,7 @@ void RendererActor::captureFrame(CaptureTap tap, const CRGB* sourceBuffer) {
 // Private Methods
 // ============================================================================
 
-void RendererActor::initLeds()
+void RendererNode::initLeds()
 {
 #ifndef NATIVE_BUILD
     // Initialize FastLED for dual strips
@@ -698,7 +698,7 @@ void RendererActor::initLeds()
 #endif
 }
 
-void RendererActor::renderFrame()
+void RendererNode::renderFrame()
 {
 #if FEATURE_AUDIO_SYNC
     applyPendingAudioContractTuning();
@@ -916,7 +916,7 @@ void RendererActor::renderFrame()
     m_hue += 1;  // Slow rotation
 }
 
-void RendererActor::showLeds()
+void RendererNode::showLeds()
 {
 #ifndef NATIVE_BUILD
     // Copy from unified buffer to strip buffers
@@ -958,7 +958,7 @@ void RendererActor::showLeds()
 #endif
 }
 
-void RendererActor::updateStats(uint32_t frameTimeUs)
+void RendererNode::updateStats(uint32_t frameTimeUs)
 {
     m_stats.framesRendered++;
 
@@ -998,7 +998,7 @@ void RendererActor::updateStats(uint32_t frameTimeUs)
     }
 }
 
-void RendererActor::handleSetEffect(uint8_t effectId)
+void RendererNode::handleSetEffect(uint8_t effectId)
 {
     if (effectId >= MAX_EFFECTS || !m_effects[effectId].active) {
         LW_LOGW("Invalid effect ID: %d", effectId);
@@ -1065,7 +1065,7 @@ void RendererActor::handleSetEffect(uint8_t effectId)
     }
 }
 
-void RendererActor::handleSetBrightness(uint8_t brightness)
+void RendererNode::handleSetBrightness(uint8_t brightness)
 {
     // Clamp to max brightness
     if (brightness > LedConfig::MAX_BRIGHTNESS) {
@@ -1082,7 +1082,7 @@ void RendererActor::handleSetBrightness(uint8_t brightness)
     }
 }
 
-void RendererActor::handleSetSpeed(uint8_t speed)
+void RendererNode::handleSetSpeed(uint8_t speed)
 {
     // Clamp to valid range
     if (speed == 0) speed = 1;
@@ -1097,7 +1097,7 @@ void RendererActor::handleSetSpeed(uint8_t speed)
     }
 }
 
-void RendererActor::handleSetPalette(uint8_t paletteIndex)
+void RendererNode::handleSetPalette(uint8_t paletteIndex)
 {
     // Validate palette ID before access
     uint8_t safe_palette = lightwaveos::palettes::validatePaletteId(paletteIndex);
@@ -1121,7 +1121,7 @@ void RendererActor::handleSetPalette(uint8_t paletteIndex)
     }
 }
 
-void RendererActor::handleSetIntensity(uint8_t intensity)
+void RendererNode::handleSetIntensity(uint8_t intensity)
 {
     if (m_intensity != intensity) {
         m_intensity = intensity;
@@ -1129,7 +1129,7 @@ void RendererActor::handleSetIntensity(uint8_t intensity)
     }
 }
 
-void RendererActor::handleSetSaturation(uint8_t saturation)
+void RendererNode::handleSetSaturation(uint8_t saturation)
 {
     if (m_saturation != saturation) {
         m_saturation = saturation;
@@ -1137,7 +1137,7 @@ void RendererActor::handleSetSaturation(uint8_t saturation)
     }
 }
 
-void RendererActor::handleSetComplexity(uint8_t complexity)
+void RendererNode::handleSetComplexity(uint8_t complexity)
 {
     if (m_complexity != complexity) {
         m_complexity = complexity;
@@ -1145,7 +1145,7 @@ void RendererActor::handleSetComplexity(uint8_t complexity)
     }
 }
 
-void RendererActor::handleSetVariation(uint8_t variation)
+void RendererNode::handleSetVariation(uint8_t variation)
 {
     if (m_variation != variation) {
         m_variation = variation;
@@ -1153,7 +1153,7 @@ void RendererActor::handleSetVariation(uint8_t variation)
     }
 }
 
-void RendererActor::handleSetHue(uint8_t hue)
+void RendererNode::handleSetHue(uint8_t hue)
 {
     if (m_hue != hue) {
         m_hue = hue;
@@ -1161,7 +1161,7 @@ void RendererActor::handleSetHue(uint8_t hue)
     }
 }
 
-void RendererActor::handleSetMood(uint8_t mood)
+void RendererNode::handleSetMood(uint8_t mood)
 {
     if (m_mood != mood) {
         m_mood = mood;
@@ -1169,7 +1169,7 @@ void RendererActor::handleSetMood(uint8_t mood)
     }
 }
 
-void RendererActor::handleSetFadeAmount(uint8_t fadeAmount)
+void RendererNode::handleSetFadeAmount(uint8_t fadeAmount)
 {
     if (m_fadeAmount != fadeAmount) {
         m_fadeAmount = fadeAmount;
@@ -1181,7 +1181,7 @@ void RendererActor::handleSetFadeAmount(uint8_t fadeAmount)
 // Transition Methods
 // ============================================================================
 
-void RendererActor::handleStartTransition(uint8_t newEffectId, uint8_t transitionType)
+void RendererNode::handleStartTransition(uint8_t newEffectId, uint8_t transitionType)
 {
     // Thread-safe handler called from message queue (Core 1)
     if (!m_transitionEngine) return;
@@ -1216,20 +1216,20 @@ void RendererActor::handleStartTransition(uint8_t newEffectId, uint8_t transitio
              getTransitionName(type));
 }
 
-void RendererActor::startTransition(uint8_t newEffectId, uint8_t transitionType)
+void RendererNode::startTransition(uint8_t newEffectId, uint8_t transitionType)
 {
     // DEPRECATED: Direct call - unsafe from Core 0. Use ActorSystem::startTransition() instead.
-    // This method is kept for internal use (ShowDirectorActor on Core 1) but should not be called from request handlers.
+    // This method is kept for internal use (ShowNode on Core 1) but should not be called from request handlers.
     handleStartTransition(newEffectId, transitionType);
 }
 
-void RendererActor::startRandomTransition(uint8_t newEffectId)
+void RendererNode::startRandomTransition(uint8_t newEffectId)
 {
     TransitionType type = TransitionEngine::getRandomTransition();
     startTransition(newEffectId, static_cast<uint8_t>(type));
 }
 
-bool RendererActor::isTransitionActive() const
+bool RendererNode::isTransitionActive() const
 {
     return m_transitionEngine && m_transitionEngine->isActive();
 }

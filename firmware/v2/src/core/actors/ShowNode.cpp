@@ -1,13 +1,13 @@
 /**
- * @file ShowDirectorActor.cpp
- * @brief Implementation of the ShowDirectorActor
+ * @file ShowNode.cpp
+ * @brief Implementation of the ShowNode
  *
  * LightwaveOS v2 - Show System
  */
 
-#include "ShowDirectorActor.h"
-#include "ActorSystem.h"
-#include "RendererActor.h"
+#include "ShowNode.h"
+#include "NodeOrchestrator.h"
+#include "RendererNode.h"
 #include "../shows/BuiltinShows.h"
 #include "../narrative/NarrativeEngine.h"
 #include <cstring>
@@ -21,19 +21,19 @@ static const char* TAG = "ShowDirector";
 #endif
 
 namespace lightwaveos {
-namespace actors {
+namespace nodes {
 
 // ============================================================================
 // Static Callbacks for ParameterSweeper
 // ============================================================================
 
 // Static instance pointer for callbacks
-static ShowDirectorActor* s_instance = nullptr;
+static ShowNode* s_instance = nullptr;
 
-void ShowDirectorActor::applyParamValue(ParamId param, uint8_t zone, uint8_t value) {
+void ShowNode::applyParamValue(ParamId param, uint8_t zone, uint8_t value) {
     if (!s_instance) return;
 
-    // Send message to RendererActor based on parameter type
+    // Send message to RendererNode based on parameter type
     Message msg;
     switch (param) {
         case PARAM_BRIGHTNESS:
@@ -60,13 +60,13 @@ void ShowDirectorActor::applyParamValue(ParamId param, uint8_t zone, uint8_t val
     s_instance->sendToRenderer(msg);
 }
 
-uint8_t ShowDirectorActor::getParamValue(ParamId param, uint8_t zone) {
+uint8_t ShowNode::getParamValue(ParamId param, uint8_t zone) {
     if (!s_instance || !s_instance->m_rendererActor) {
         return 128;  // Default mid-value
     }
 
-    // Get current value from RendererActor
-    RendererActor* renderer = static_cast<RendererActor*>(s_instance->m_rendererActor);
+    // Get current value from RendererNode
+    RendererNode* renderer = static_cast<RendererNode*>(s_instance->m_rendererActor);
     switch (param) {
         case PARAM_BRIGHTNESS:
             return renderer->getBrightness();
@@ -93,8 +93,8 @@ uint8_t ShowDirectorActor::getParamValue(ParamId param, uint8_t zone) {
 // Constructor / Destructor
 // ============================================================================
 
-ShowDirectorActor::ShowDirectorActor()
-    : Actor(ActorConfig(
+ShowNode::ShowNode()
+    : Node(NodeConfig(
           "ShowDirector",  // name
           4096,            // stackSize (16KB) - increased from 2048 due to PROGMEM copy operations
           2,               // priority
@@ -111,7 +111,7 @@ ShowDirectorActor::ShowDirectorActor()
     s_instance = this;
 }
 
-ShowDirectorActor::~ShowDirectorActor() {
+ShowNode::~ShowNode() {
     s_instance = nullptr;
 }
 
@@ -119,16 +119,16 @@ ShowDirectorActor::~ShowDirectorActor() {
 // Actor Lifecycle
 // ============================================================================
 
-void ShowDirectorActor::onStart() {
+void ShowNode::onStart() {
 #ifndef NATIVE_BUILD
-    ESP_LOGI(TAG, "ShowDirectorActor starting on Core %d", xPortGetCoreID());
+    ESP_LOGI(TAG, "ShowNode starting on Core %d", xPortGetCoreID());
 #endif
 
-    // Get RendererActor reference from ActorSystem
-    m_rendererActor = ActorSystem::instance().getRenderer();
+    // Get RendererNode reference from NodeOrchestrator
+    m_rendererActor = NodeOrchestrator::instance().getRenderer();
     if (!m_rendererActor) {
 #ifndef NATIVE_BUILD
-        ESP_LOGW(TAG, "RendererActor not available");
+        ESP_LOGW(TAG, "RendererNode not available");
 #endif
     }
 
@@ -136,11 +136,11 @@ void ShowDirectorActor::onStart() {
     m_narrative = &narrative::NarrativeEngine::getInstance();
 
 #ifndef NATIVE_BUILD
-    ESP_LOGI(TAG, "ShowDirectorActor ready");
+    ESP_LOGI(TAG, "ShowNode ready");
 #endif
 }
 
-void ShowDirectorActor::onMessage(const Message& msg) {
+void ShowNode::onMessage(const Message& msg) {
     switch (msg.type) {
         case MessageType::SHOW_LOAD:
             if (msg.param1 < BUILTIN_SHOW_COUNT) {
@@ -182,7 +182,7 @@ void ShowDirectorActor::onMessage(const Message& msg) {
     }
 }
 
-void ShowDirectorActor::onTick() {
+void ShowNode::onTick() {
     // Update show playback (called at 20Hz)
     if (m_state.playing && !m_state.paused) {
         updateShow();
@@ -192,7 +192,7 @@ void ShowDirectorActor::onTick() {
     m_paramSweeper.update(millis());
 }
 
-void ShowDirectorActor::onStop() {
+void ShowNode::onStop() {
     stopShow();
     unloadShow();
 }
@@ -201,7 +201,7 @@ void ShowDirectorActor::onStop() {
 // Show Control
 // ============================================================================
 
-bool ShowDirectorActor::loadShow(const ShowDefinition* show) {
+bool ShowNode::loadShow(const ShowDefinition* show) {
     if (show == nullptr) {
         return false;
     }
@@ -226,7 +226,7 @@ bool ShowDirectorActor::loadShow(const ShowDefinition* show) {
     return true;
 }
 
-bool ShowDirectorActor::loadShowById(uint8_t showId) {
+bool ShowNode::loadShowById(uint8_t showId) {
     if (showId >= BUILTIN_SHOW_COUNT) {
         return false;
     }
@@ -235,14 +235,14 @@ bool ShowDirectorActor::loadShowById(uint8_t showId) {
     return loadShow(&BUILTIN_SHOWS[showId]);
 }
 
-void ShowDirectorActor::unloadShow() {
+void ShowNode::unloadShow() {
     stopShow();
     m_currentShow = nullptr;
     m_state.reset();
     m_cueScheduler.reset();
 }
 
-void ShowDirectorActor::startShow() {
+void ShowNode::startShow() {
     if (m_currentShow == nullptr) {
         return;
     }
@@ -270,7 +270,7 @@ void ShowDirectorActor::startShow() {
 #endif
 }
 
-void ShowDirectorActor::stopShow() {
+void ShowNode::stopShow() {
     m_state.playing = false;
     m_state.paused = false;
     m_paramSweeper.cancelAll();
@@ -282,7 +282,7 @@ void ShowDirectorActor::stopShow() {
 #endif
 }
 
-void ShowDirectorActor::pauseShow() {
+void ShowNode::pauseShow() {
     if (!m_state.playing || m_state.paused) {
         return;
     }
@@ -297,7 +297,7 @@ void ShowDirectorActor::pauseShow() {
 #endif
 }
 
-void ShowDirectorActor::resumeShow() {
+void ShowNode::resumeShow() {
     if (!m_state.playing || !m_state.paused) {
         return;
     }
@@ -313,7 +313,7 @@ void ShowDirectorActor::resumeShow() {
 #endif
 }
 
-void ShowDirectorActor::seekShow(uint32_t timeMs) {
+void ShowNode::seekShow(uint32_t timeMs) {
     if (m_currentShow == nullptr) {
         return;
     }
@@ -353,7 +353,7 @@ void ShowDirectorActor::seekShow(uint32_t timeMs) {
 // Show Update
 // ============================================================================
 
-void ShowDirectorActor::updateShow() {
+void ShowNode::updateShow() {
     if (!m_state.playing || m_state.paused) {
         return;
     }
@@ -402,15 +402,15 @@ void ShowDirectorActor::updateShow() {
     }
 }
 
-void ShowDirectorActor::executeCue(const ShowCue& cue) {
+void ShowNode::executeCue(const ShowCue& cue) {
     switch (cue.type) {
         case CUE_EFFECT: {
             uint8_t effectId = cue.effectId();
             uint8_t transitionType = cue.effectTransition();
             
             if (transitionType != 0 && m_rendererActor) {
-                // Use transition - call RendererActor's startTransition method directly
-                RendererActor* renderer = static_cast<RendererActor*>(m_rendererActor);
+                // Use transition - call RendererNode's startTransition method directly
+                RendererNode* renderer = static_cast<RendererNode*>(m_rendererActor);
                 renderer->startTransition(effectId, transitionType);
             } else {
                 // Instant change
@@ -441,7 +441,7 @@ void ShowDirectorActor::executeCue(const ShowCue& cue) {
 
         case CUE_TRANSITION: {
             // CUE_TRANSITION triggers a transition without changing effect
-            // For now, we'll skip this - RendererActor doesn't have a direct transition-only method
+            // For now, we'll skip this - RendererNode doesn't have a direct transition-only method
             // Future: Add TRIGGER_TRANSITION message type or method
             (void)cue;  // Unused for now
             break;
@@ -458,7 +458,7 @@ void ShowDirectorActor::executeCue(const ShowCue& cue) {
     }
 }
 
-void ShowDirectorActor::updateChapter(uint32_t elapsedMs) {
+void ShowNode::updateChapter(uint32_t elapsedMs) {
     (void)elapsedMs;  // May be used for interpolation later
 
     if (m_currentShow == nullptr) {
@@ -479,7 +479,7 @@ void ShowDirectorActor::updateChapter(uint32_t elapsedMs) {
     modulateNarrative(chapter.narrativePhase, chapter.tensionLevel);
 }
 
-void ShowDirectorActor::handleShowEnd() {
+void ShowNode::handleShowEnd() {
     ShowDefinition showCopy;
     memcpy_P(&showCopy, m_currentShow, sizeof(ShowDefinition));
 
@@ -498,7 +498,7 @@ void ShowDirectorActor::handleShowEnd() {
     }
 }
 
-uint8_t ShowDirectorActor::getChapterForTime(uint32_t timeMs) const {
+uint8_t ShowNode::getChapterForTime(uint32_t timeMs) const {
     if (m_currentShow == nullptr) {
         return 0;
     }
@@ -524,7 +524,7 @@ uint8_t ShowDirectorActor::getChapterForTime(uint32_t timeMs) const {
 // Narrative Integration
 // ============================================================================
 
-void ShowDirectorActor::modulateNarrative(uint8_t phase, uint8_t tension) {
+void ShowNode::modulateNarrative(uint8_t phase, uint8_t tension) {
     if (!m_narrative) return;
 
     using namespace lightwaveos::effects;
@@ -551,7 +551,7 @@ void ShowDirectorActor::modulateNarrative(uint8_t phase, uint8_t tension) {
     setNarrativePhase(narrativePhase, durationMs);
 }
 
-void ShowDirectorActor::setNarrativePhase(lightwaveos::effects::NarrativePhase phase, uint32_t durationMs) {
+void ShowNode::setNarrativePhase(lightwaveos::effects::NarrativePhase phase, uint32_t durationMs) {
     if (!m_narrative) return;
     m_narrative->setPhase(phase, durationMs);
 }
@@ -560,18 +560,18 @@ void ShowDirectorActor::setNarrativePhase(lightwaveos::effects::NarrativePhase p
 // Helper Methods
 // ============================================================================
 
-void ShowDirectorActor::sendToRenderer(const Message& msg) {
+void ShowNode::sendToRenderer(const Message& msg) {
     if (m_rendererActor) {
         m_rendererActor->send(msg, pdMS_TO_TICKS(10));
     }
 }
 
-void ShowDirectorActor::publishShowEvent(MessageType eventType, uint8_t param1, uint8_t param2) {
+void ShowNode::publishShowEvent(MessageType eventType, uint8_t param1, uint8_t param2) {
     Message evt(eventType, param1, param2);
     bus::MessageBus::instance().publish(evt);
 }
 
-float ShowDirectorActor::getProgress() const {
+float ShowNode::getProgress() const {
     if (m_currentShow == nullptr || !m_state.playing) {
         return 0.0f;
     }
@@ -587,7 +587,7 @@ float ShowDirectorActor::getProgress() const {
     return (float)elapsed / (float)showCopy.totalDurationMs;
 }
 
-uint32_t ShowDirectorActor::getRemainingMs() const {
+uint32_t ShowNode::getRemainingMs() const {
     if (m_currentShow == nullptr || !m_state.playing) {
         return 0;
     }

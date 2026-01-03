@@ -50,8 +50,6 @@ public:
     // Get header instance (for ZoneComposerUI)
     UIHeader* getHeader() { return _header; }
     
-    // Touch handling (forward to ZoneComposerUI when on that screen)
-    void handleTouch(int16_t x, int16_t y);
 
 private:
     M5GFX& _display;

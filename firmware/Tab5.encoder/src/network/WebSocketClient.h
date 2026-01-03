@@ -5,9 +5,8 @@
 // Bidirectional WebSocket client for LightwaveOS communication.
 // Ported from K1.8encoderS3 with Tab5-specific extensions (zone support).
 //
-// NOTE: WiFi is currently DISABLED on Tab5 (ESP32-P4) due to SDIO pin
-// configuration issues with the ESP32-C6 WiFi co-processor.
-// See Config.h ENABLE_WIFI flag for details.
+// ESP32-P4 uses ESP32-C6 co-processor for WiFi via SDIO.
+// Requires WiFi.setPins() before WiFi.begin() - see Config.h for pin defs.
 // ============================================================================
 
 #include "config/Config.h"

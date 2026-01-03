@@ -59,36 +59,11 @@ void ZoneComposerUI::loop() {
     if (now - _lastRenderTime >= FRAME_INTERVAL_MS) {
         // Promote pending dirty to dirty (enables re-entry redraw)
         if (_pendingDirty) {
-            // #region agent log
-            {
-                char buf[200];
-                const int n = snprintf(
-                    buf, sizeof(buf),
-                    "{\"sessionId\":\"debug-session\",\"runId\":\"tab5-zone-ui-fix\",\"hypothesisId\":\"FIX1\",\"location\":\"Tab5.encoder/src/ui/ZoneComposerUI.cpp:loop\",\"message\":\"pendingDirty.promoted\",\"data\":{\"pendingDirty\":true,\"dirtyBefore\":%s},\"timestamp\":%lu}",
-                    _dirty ? "true" : "false",
-                    static_cast<unsigned long>(millis())
-                );
-                if (n > 0) Serial.println(buf);
-            }
-            // #endregion
             _dirty = true;
             _pendingDirty = false;
         }
         
         if (_dirty) {
-            // #region agent log
-            {
-                char buf[200];
-                const int n = snprintf(
-                    buf, sizeof(buf),
-                    "{\"sessionId\":\"debug-session\",\"runId\":\"tab5-zone-ui-fix\",\"hypothesisId\":\"FIX2\",\"location\":\"Tab5.encoder/src/ui/ZoneComposerUI.cpp:loop\",\"message\":\"render.executed\",\"data\":{\"dirty\":true,\"zoneCount\":%u,\"editingZoneCount\":%u},\"timestamp\":%lu}",
-                    static_cast<unsigned>(_zoneCount),
-                    static_cast<unsigned>(_editingZoneCount),
-                    static_cast<unsigned long>(millis())
-                );
-                if (n > 0) Serial.println(buf);
-            }
-            // #endregion
             render();
             _dirty = false;
         }
@@ -242,8 +217,17 @@ void ZoneComposerUI::drawZoneList(int x, int y, int w, int h) {
     _display.setTextDatum(textdatum_t::top_left);
     _display.drawString("Zone Controls", x, y - 25);
 
-    // Draw zone rows (up to _editingZoneCount zones)
-    uint8_t displayCount = _editingZoneCount > 0 ? _editingZoneCount : _zoneCount;
+    // Prefer actual zone count from server, fallback to editing count
+    uint8_t displayCount = _zoneCount > 0 ? _zoneCount : _editingZoneCount;
+    
+    // Guard: nothing to display
+    if (displayCount == 0) {
+        _display.setTextColor(Theme::TEXT_DIM);
+        _display.setTextDatum(textdatum_t::top_left);
+        _display.drawString("Waiting for zone data...", x, y);
+        return;
+    }
+    
     int rowH = h / displayCount;
     if (rowH < 40) rowH = 40;
 
@@ -368,21 +352,6 @@ uint16_t ZoneComposerUI::rgb888To565(uint32_t rgb888) {
     return (r << 11) | (g << 5) | b;
 }
 
-uint8_t ZoneComposerUI::getZoneForLed(uint8_t ledIndex, bool isRight) {
-    for (uint8_t i = 0; i < _zoneCount; i++) {
-        const zones::ZoneSegment& seg = _segments[i];
-        if (isRight) {
-            if (ledIndex >= seg.s1RightStart && ledIndex <= seg.s1RightEnd) {
-                return seg.zoneId;
-            }
-        } else {
-            if (ledIndex >= seg.s1LeftStart && ledIndex <= seg.s1LeftEnd) {
-                return seg.zoneId;
-            }
-        }
-    }
-    return 255;  // No zone assigned
-}
 
 
 void ZoneComposerUI::handleTouch(int16_t x, int16_t y) {

@@ -14,36 +14,22 @@ ButtonHandler::ButtonHandler() {
 }
 
 bool ButtonHandler::handleButtonPress(uint8_t index) {
-    // Enc0 button (Unit B, index 8): Toggle zone mode
-    if (index == 8) {
-        toggleZoneMode();
-        return true;  // Handled - don't reset encoder
+    // =========================================================================
+    // Unit-B buttons (8-15): Reserved for Preset System
+    // =========================================================================
+    // These are handled by ClickDetector + PresetManager in main.cpp.
+    // Return TRUE to prevent DualEncoderService from resetting the encoder,
+    // but do NOT call any zone mode functions - presets only.
+    if (index >= 8) {
+        return true;  // Handled (no action) - prevent reset behavior
     }
 
-    // Enc1/3/5/7 buttons (Unit B, indices 9, 11, 13, 15): Toggle Speed/Palette mode
-    // These correspond to zones 0, 1, 2, 3
-    if (index == 9 || index == 11 || index == 13 || index == 15) {
-        uint8_t zoneId = (index - 9) / 2;  // Maps 9->0, 11->1, 13->2, 15->3
-        toggleSpeedPaletteMode(zoneId);
-        return true;  // Handled - don't reset encoder
-    }
-
-    // All other buttons: allow default reset behavior
+    // Unit-A buttons (0-7): Allow default reset-to-default behavior
     return false;
 }
 
 void ButtonHandler::toggleZoneMode() {
-    bool wasBefore = _zoneModeEnabled;
     _zoneModeEnabled = !_zoneModeEnabled;
-    
-    // #region agent log
-    Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"tab5-fix2\",\"hypothesisId\":\"H2\",\"location\":\"ButtonHandler.cpp:toggleZoneMode\",\"message\":\"zone.toggle\",\"data\":{\"before\":%s,\"after\":%s,\"hasCallback\":%s},\"timestamp\":%lu}\n",
-        wasBefore ? "true" : "false",
-        _zoneModeEnabled ? "true" : "false",
-        _zoneModeToggleCallback ? "true" : "false",
-        static_cast<unsigned long>(millis()));
-    // #endregion
-    
     Serial.printf("[Button] Zone mode %s\n", _zoneModeEnabled ? "ENABLED" : "DISABLED");
 
     // Send zone mode command to LightwaveOS

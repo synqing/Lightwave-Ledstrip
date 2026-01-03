@@ -56,6 +56,8 @@
 #include "storage/NvsStorage.h"
 #include "ui/LedFeedback.h"
 #include "ui/DisplayUI.h"
+#include "input/ClickDetector.h"
+#include "presets/PresetManager.h"
 
 // ============================================================================
 // I2C Addresses for Dual Unit Setup
@@ -92,6 +94,11 @@ DisplayUI* g_ui = nullptr;
 
 // Button handler for zone mode and speed/palette toggles
 ButtonHandler* g_buttonHandler = nullptr;
+
+// Preset system (8 slots for Unit-B encoders)
+PresetManager* g_presetManager = nullptr;
+ClickDetector g_clickDetectors[8];  // One per Unit-B encoder
+uint8_t g_activePresetSlot = 255;   // Currently active preset (255 = none)
 
 // ============================================================================
 // Effect / Palette name caches (from LightwaveOS via WebSocket lists)
@@ -438,28 +445,15 @@ void setup() {
     g_encoders->setChangeCallback(onEncoderChange);
     bool encoderOk = g_encoders->begin();
 
-    // Initialize ButtonHandler for zone mode and speed/palette toggles
+    // Initialize ButtonHandler (handles Unit-A button resets)
+    // NOTE: Unit-B buttons (8-15) are now reserved for Preset System.
+    //       Zone mode control has been moved to the webapp.
     g_buttonHandler = new ButtonHandler();
     g_buttonHandler->setWebSocketClient(&g_wsClient);
-    
-    // Set up callbacks
-    g_buttonHandler->onZoneModeToggle([](bool enabled) {
-        Serial.printf("[Button] Zone mode toggled: %s\n", enabled ? "ON" : "OFF");
-        // Switch UI screen when zone mode is enabled
-        if (g_ui) {
-            g_ui->setScreen(enabled ? UIScreen::ZONE_COMPOSER : UIScreen::GLOBAL);
-        }
-    });
-    
-    g_buttonHandler->onSpeedPaletteToggle([](uint8_t zoneId, SpeedPaletteMode mode) {
-        const char* modeName = (mode == SpeedPaletteMode::SPEED) ? "SPEED" : "PALETTE";
-        Serial.printf("[Button] Zone %u encoder mode: %s\n", zoneId, modeName);
-        // TODO: Update UI to show current mode
-    });
-    
+
     // Connect ButtonHandler to encoder service
     g_encoders->setButtonHandler(g_buttonHandler);
-    Serial.println("[Button] Button handler initialized");
+    Serial.println("[Button] Button handler initialized (presets on Unit-B)");
 
     // =========================================================================
     // Initialize LED Feedback (Phase F.5)
@@ -559,22 +553,56 @@ void setup() {
         // Called when parameters are updated from WebSocket
         // Update radial gauge display (fast, non-blocking)
         if (g_ui) {
-            // #region agent log
-            if (index == 15 || index == 3 || index == 0) {
-                FILE* f = fopen("/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/.cursor/debug.log", "a");
-                if (f) {
-                    fprintf(f,
-                            "{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\",\"location\":\"main.cpp:displayCallback\",\"message\":\"ws_display_update\",\"data\":{\"index\":%u,\"value\":%u},\"timestamp\":%lu}\n",
-                            (unsigned)index,
-                            (unsigned)value,
-                            (unsigned long)millis());
-                    fclose(f);
-                }
-            }
-            // #endregion
             g_ui->updateValue(index, value);
         }
     });
+
+    // =========================================================================
+    // Initialize Preset Manager (Phase 8: 8-bank preset system)
+    // =========================================================================
+    g_presetManager = new PresetManager(g_paramHandler, &g_wsClient);
+    if (g_presetManager->init()) {
+        Serial.printf("[PRESET] Initialized with %d stored presets\n",
+                      g_presetManager->getOccupiedCount());
+
+        // Set up feedback callback for UI updates
+        g_presetManager->setFeedbackCallback([](uint8_t slot, PresetAction action, bool success) {
+            const char* actionName = "";
+            switch (action) {
+                case PresetAction::SAVE:   actionName = "SAVE"; break;
+                case PresetAction::RECALL: actionName = "RECALL"; break;
+                case PresetAction::DELETE: actionName = "DELETE"; break;
+                case PresetAction::ERROR:  actionName = "ERROR"; break;
+            }
+            Serial.printf("[PRESET] Slot %d %s: %s\n", slot, actionName,
+                          success ? "OK" : "FAILED");
+
+            // Update active preset slot on successful recall
+            if (action == PresetAction::RECALL && success) {
+                g_activePresetSlot = slot;
+            } else if (action == PresetAction::DELETE && success && g_activePresetSlot == slot) {
+                g_activePresetSlot = 255;  // Clear active if deleted
+            }
+
+            // Flash LED feedback
+            if (g_encoders) {
+                uint8_t ledIndex = 8 + slot;  // Unit-B LEDs
+                if (success) {
+                    if (action == PresetAction::SAVE) {
+                        g_encoders->flashLed(ledIndex, 255, 200, 0);   // Yellow for save
+                    } else if (action == PresetAction::RECALL) {
+                        g_encoders->flashLed(ledIndex, 0, 255, 0);     // Green for recall
+                    } else if (action == PresetAction::DELETE) {
+                        g_encoders->flashLed(ledIndex, 255, 0, 0);     // Red for delete
+                    }
+                } else {
+                    g_encoders->flashLed(ledIndex, 255, 0, 0);         // Red for error
+                }
+            }
+        });
+    } else {
+        Serial.println("[PRESET] WARNING: Preset manager init failed");
+    }
 
     // Initialize WsMessageRouter (routes incoming WebSocket messages)
     // Pass ZoneComposerUI if available (for zone state updates)
@@ -729,13 +757,6 @@ void setup() {
         }
     });
     
-    // Register status bar touch callback for Zone Composer screen
-    g_touchHandler.onStatusBarTouch([](int16_t x, int16_t y) {
-        // Forward to DisplayUI for Zone Composer touch handling
-        if (g_ui && g_ui->getCurrentScreen() == UIScreen::ZONE_COMPOSER) {
-            g_ui->handleTouch(x, y);
-        }
-    });
 
     Serial.println("[TOUCH] Touch handler initialized - long press to reset params");
 
@@ -758,14 +779,6 @@ void loop() {
     // TOUCH: Process touch events (Phase G.3)
     // =========================================================================
     g_touchHandler.update();
-    
-    // Forward touch to Zone Composer UI if on that screen
-    if (g_ui && g_ui->getCurrentScreen() == UIScreen::ZONE_COMPOSER) {
-        auto touch = M5.Touch.getDetail();
-        if (touch.isPressed()) {
-            g_ui->handleTouch(touch.x, touch.y);
-        }
-    }
 
     // =========================================================================
     // NETWORK: Service WebSocket EARLY to prevent TCP timeouts (K1 pattern)
@@ -916,6 +929,56 @@ void loop() {
     // Update encoder service (polls all 16 encoders, handles debounce, fires callbacks)
     // The callback (onEncoderChange) handles display updates with highlighting
     g_encoders->update();
+
+    // =========================================================================
+    // PRESETS: Process Unit-B button click patterns (Main Dashboard only)
+    // =========================================================================
+    // When in Main Dashboard mode, Unit-B buttons (8-15) act as 8 preset banks:
+    //   - SINGLE_CLICK: Recall preset
+    //   - DOUBLE_CLICK: Save current state to preset
+    //   - LONG_HOLD: Delete preset
+    // When in Zone Composer mode, buttons retain their zone control functions.
+    if (g_presetManager && g_ui && g_ui->getCurrentScreen() == UIScreen::GLOBAL) {
+        uint32_t now = millis();
+
+        // Poll Unit-B button states and run through click detectors
+        if (g_encoders->isUnitBAvailable()) {
+            for (uint8_t slot = 0; slot < 8; slot++) {
+                bool isPressed = g_encoders->transportB().getKeyPressed(slot);
+                ClickType click = g_clickDetectors[slot].update(isPressed, now);
+
+                if (click != ClickType::NONE) {
+                    switch (click) {
+                        case ClickType::SINGLE_CLICK:
+                            // Recall preset from this slot
+                            if (g_presetManager->isSlotOccupied(slot)) {
+                                g_presetManager->recallPreset(slot);
+                            } else {
+                                // Slot is empty - flash red to indicate
+                                g_encoders->flashLed(8 + slot, 255, 64, 0);
+                                Serial.printf("[PRESET] Slot %d is empty\n", slot);
+                            }
+                            break;
+
+                        case ClickType::DOUBLE_CLICK:
+                            // Save current state to this slot
+                            g_presetManager->savePreset(slot);
+                            break;
+
+                        case ClickType::LONG_HOLD:
+                            // Delete preset from this slot
+                            if (g_presetManager->isSlotOccupied(slot)) {
+                                g_presetManager->deletePreset(slot);
+                            }
+                            break;
+
+                        default:
+                            break;
+                    }
+                }
+            }
+        }
+    }
 
     // =========================================================================
     // NVS: Process pending parameter saves (debounced writes)

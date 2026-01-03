@@ -23,6 +23,16 @@ constexpr uint16_t STATUS_CONN = 0xFD20;   // Orange (connecting)
 constexpr uint16_t STATUS_ERR  = 0xF800;   // Red
 
 // ============================================================================
+// Preset Bank Colors
+// ============================================================================
+
+constexpr uint16_t PRESET_EMPTY     = 0x2104;  // Dark gray (empty slot)
+constexpr uint16_t PRESET_OCCUPIED  = 0x04FF;  // Blue (has preset)
+constexpr uint16_t PRESET_ACTIVE    = 0x07E0;  // Green (last recalled)
+constexpr uint16_t PRESET_SAVING    = 0xFFE0;  // Yellow (saving feedback)
+constexpr uint16_t PRESET_DELETING  = 0xF800;  // Red (deleting feedback)
+
+// ============================================================================
 // Parameter Colors (8 neon colors for global parameters)
 // ============================================================================
 

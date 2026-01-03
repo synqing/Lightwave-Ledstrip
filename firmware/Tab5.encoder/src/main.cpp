@@ -113,12 +113,12 @@ static uint8_t s_paletteNextPage = 1;
 
 static bool s_requestedLists = false;
 
-static const char* lookupEffectName(uint8_t id) {
+const char* lookupEffectName(uint8_t id) {
     if (id < MAX_EFFECTS && s_effectKnown[id] && s_effectNames[id][0]) return s_effectNames[id];
     return nullptr;
 }
 
-static const char* lookupPaletteName(uint8_t id) {
+const char* lookupPaletteName(uint8_t id) {
     if (id < MAX_PALETTES && s_paletteKnown[id] && s_paletteNames[id][0]) return s_paletteNames[id];
     return nullptr;
 }

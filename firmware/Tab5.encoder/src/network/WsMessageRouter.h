@@ -20,8 +20,10 @@
 #include <ArduinoJson.h>
 #include "../parameters/ParameterHandler.h"
 #include "../parameters/ParameterMap.h"
+#include "../zones/ZoneDefinition.h"
+#include "../ui/ZoneComposerUI.h"
 
-// Forward declaration for WebSocketClient (if we need to request status)
+// Forward declarations
 class WebSocketClient;
 
 /**
@@ -39,10 +41,12 @@ public:
      * @brief Initialize router with parameter handler and optional WebSocket client
      * @param paramHandler Parameter handler for status messages
      * @param wsClient WebSocket client for requesting status refreshes (optional)
+     * @param zoneComposerUI Zone composer UI for zone state updates (optional)
      */
-    static void init(ParameterHandler* paramHandler, WebSocketClient* wsClient = nullptr) {
+    static void init(ParameterHandler* paramHandler, WebSocketClient* wsClient = nullptr, ZoneComposerUI* zoneComposerUI = nullptr) {
         s_paramHandler = paramHandler;
         s_wsClient = wsClient;
+        s_zoneComposerUI = zoneComposerUI;
     }
 
     /**
@@ -83,6 +87,16 @@ public:
             return true;
         }
 
+        if (strcmp(type, "zones.changed") == 0) {
+            handleZonesChanged(doc);
+            return true;
+        }
+
+        if (strcmp(type, "zones.list") == 0) {
+            handleZonesList(doc);
+            return true;
+        }
+
         if (strcmp(type, "effects.changed") == 0) {
             handleEffectsChanged(doc);
             return true;
@@ -96,6 +110,7 @@ public:
 private:
     static inline ParameterHandler* s_paramHandler = nullptr;
     static inline WebSocketClient* s_wsClient = nullptr;
+    static inline ZoneComposerUI* s_zoneComposerUI = nullptr;
 
     /**
      * @brief Handle "status" message from LightwaveOS
@@ -206,8 +221,8 @@ private:
             uint8_t zoneId = zone["id"].as<uint8_t>();
 
             // Map zone parameters to Unit B encoders (indices 8-15)
-            // Zone 0 -> Zone0Effect (8), Zone0Brightness (9)
-            // Zone 1 -> Zone1Effect (10), Zone1Brightness (11)
+            // Zone 0 -> Zone0Effect (8), Zone0Speed (9)
+            // Zone 1 -> Zone1Effect (10), Zone1Speed (11)
             // etc.
             if (zoneId > 3) {
                 Serial.printf("[WsRouter] Zone %d out of range (max 3)\n", zoneId);
@@ -215,23 +230,23 @@ private:
             }
 
             // Map zone ID to the correct ParameterId enum values
-            ParameterId effectParam, brightnessParam;
+            ParameterId effectParam, speedParam;
             switch (zoneId) {
                 case 0:
                     effectParam = ParameterId::Zone0Effect;
-                    brightnessParam = ParameterId::Zone0Brightness;
+                    speedParam = ParameterId::Zone0Speed;
                     break;
                 case 1:
                     effectParam = ParameterId::Zone1Effect;
-                    brightnessParam = ParameterId::Zone1Brightness;
+                    speedParam = ParameterId::Zone1Speed;
                     break;
                 case 2:
                     effectParam = ParameterId::Zone2Effect;
-                    brightnessParam = ParameterId::Zone2Brightness;
+                    speedParam = ParameterId::Zone2Speed;
                     break;
                 case 3:
                     effectParam = ParameterId::Zone3Effect;
-                    brightnessParam = ParameterId::Zone3Brightness;
+                    speedParam = ParameterId::Zone3Speed;
                     break;
                 default:
                     continue;  // Should not reach here
@@ -243,10 +258,17 @@ private:
                 s_paramHandler->setValue(effectParam, effectId);
             }
 
-            // Zone brightness
-            if (zone["brightness"].is<uint8_t>()) {
-                uint8_t brightness = zone["brightness"].as<uint8_t>();
-                s_paramHandler->setValue(brightnessParam, brightness);
+            // Zone speed
+            if (zone["speed"].is<uint8_t>()) {
+                uint8_t speed = zone["speed"].as<uint8_t>();
+                s_paramHandler->setValue(speedParam, speed);
+            }
+
+            // Zone palette (optional, when in palette mode)
+            if (zone["paletteId"].is<uint8_t>()) {
+                // Note: palette is controlled via the same encoder as speed (toggled)
+                // We'll store it but won't update the encoder value directly
+                // The UI can display it separately
             }
 
             zoneCount++;
@@ -273,5 +295,139 @@ private:
         // Optional: Could request updated effect list
         Serial.println("[WsRouter] Effects changed notification");
         (void)doc;
+    }
+
+    /**
+     * @brief Handle "zones.changed" message
+     *
+     * Notification that zone configuration has changed.
+     * Triggers zone state refresh request.
+     */
+    static void handleZonesChanged(JsonDocument& doc) {
+        Serial.println("[WsRouter] Zones changed notification");
+        // Request fresh zone state
+        if (s_wsClient) {
+            s_wsClient->requestZonesState();
+        }
+        (void)doc;
+    }
+
+    /**
+     * @brief Handle "zones.list" message
+     *
+     * Zone state list from server (response to zones.get).
+     * Updates zone composer UI with current zone states, segments, and blendMode.
+     *
+     * Expected format:
+     * {
+     *   "type": "zones.list",
+     *   "enabled": true,
+     *   "zoneCount": 3,
+     *   "zones": [
+     *     {
+     *       "id": 0,
+     *       "effectId": 5,
+     *       "effectName": "Fire",
+     *       "speed": 25,
+     *       "paletteId": 0,
+     *       "paletteName": "Sunset Real",
+     *       "blendMode": 0,
+     *       "blendModeName": "OVERWRITE",
+     *       "enabled": true
+     *     },
+     *     ...
+     *   ],
+     *   "segments": [
+     *     {
+     *       "zoneId": 0,
+     *       "s1LeftStart": 65,
+     *       "s1LeftEnd": 79,
+     *       "s1RightStart": 80,
+     *       "s1RightEnd": 94,
+     *       "totalLeds": 30
+     *     },
+     *     ...
+     *   ]
+     * }
+     */
+    static void handleZonesList(JsonDocument& doc) {
+        if (!s_zoneComposerUI) {
+            // Fallback to handleZoneStatus if no UI available
+            if (doc["zones"].is<JsonArray>()) {
+                handleZoneStatus(doc);
+            }
+            Serial.println("[WsRouter] Zones list received (no UI)");
+            return;
+        }
+
+        // Parse enabled and zoneCount
+        bool enabled = doc["enabled"].as<bool>();
+        uint8_t zoneCount = doc["zoneCount"].as<uint8_t>();
+        if (zoneCount > zones::MAX_ZONES) {
+            zoneCount = zones::MAX_ZONES;
+        }
+
+        // Parse segments array if present
+        if (doc["segments"].is<JsonArray>()) {
+            JsonArray segmentsArray = doc["segments"].as<JsonArray>();
+            zones::ZoneSegment segments[zones::MAX_ZONES];
+            uint8_t segCount = 0;
+
+            for (JsonObject seg : segmentsArray) {
+                if (segCount >= zones::MAX_ZONES) break;
+
+                segments[segCount].zoneId = seg["zoneId"].as<uint8_t>();
+                segments[segCount].s1LeftStart = seg["s1LeftStart"].as<uint8_t>();
+                segments[segCount].s1LeftEnd = seg["s1LeftEnd"].as<uint8_t>();
+                segments[segCount].s1RightStart = seg["s1RightStart"].as<uint8_t>();
+                segments[segCount].s1RightEnd = seg["s1RightEnd"].as<uint8_t>();
+                segments[segCount].totalLeds = seg["totalLeds"].as<uint8_t>();
+                segCount++;
+            }
+
+            // Update UI with segments
+            s_zoneComposerUI->updateSegments(segments, segCount);
+        }
+
+        // Parse zones array for runtime state (effect, palette, blend, speed)
+        if (doc["zones"].is<JsonArray>()) {
+            JsonArray zones = doc["zones"].as<JsonArray>();
+
+            for (JsonObject zone : zones) {
+                if (!zone["id"].is<uint8_t>()) continue;
+
+                uint8_t zoneId = zone["id"].as<uint8_t>();
+                if (zoneId >= zones::MAX_ZONES) continue;
+
+                // Update ZoneState for UI
+                ZoneState state;
+                state.effectId = zone["effectId"].as<uint8_t>();
+                if (zone["effectName"].is<const char*>()) {
+                    state.effectName = zone["effectName"].as<const char*>();
+                }
+                state.speed = zone["speed"].as<uint8_t>();
+                state.paletteId = zone["paletteId"].as<uint8_t>();
+                if (zone["paletteName"].is<const char*>()) {
+                    state.paletteName = zone["paletteName"].as<const char*>();
+                }
+                state.blendMode = zone["blendMode"].as<uint8_t>();
+                if (zone["blendModeName"].is<const char*>()) {
+                    state.blendModeName = zone["blendModeName"].as<const char*>();
+                }
+                state.enabled = zone["enabled"].as<bool>();
+
+                // Calculate LED range from segments (if available)
+                // For now, use placeholder - will be updated from segments
+                state.ledStart = 0;
+                state.ledEnd = 0;
+
+                s_zoneComposerUI->updateZone(zoneId, state);
+            }
+
+            // Also update parameter handler for encoder sync
+            handleZoneStatus(doc);
+        }
+
+        Serial.printf("[WsRouter] Zones list: enabled=%d, count=%d\n", enabled, zoneCount);
     }
 };

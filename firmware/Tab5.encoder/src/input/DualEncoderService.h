@@ -33,6 +33,9 @@
 #include "EncoderProcessing.h"
 #include "../config/Config.h"
 
+// Forward declaration (for class members)
+class ButtonHandler;
+
 class DualEncoderService {
 public:
     // Callback signature: (encoder_index 0-15, new_value, was_button_reset)
@@ -103,6 +106,12 @@ public:
      * @param callback Function to call when any parameter changes
      */
     void setChangeCallback(ChangeCallback callback);
+
+    /**
+     * Set button handler for special button behaviors
+     * @param handler ButtonHandler instance (can be nullptr to disable)
+     */
+    void setButtonHandler(ButtonHandler* handler) { _buttonHandler = handler; }
 
     // ========================================================================
     // Status
@@ -202,6 +211,9 @@ private:
     // Unified callback
     ChangeCallback _callback = nullptr;
 
+    // Button handler for special behaviors (zone mode, speed/palette toggle)
+    ButtonHandler* _buttonHandler = nullptr;
+
     // ========================================================================
     // Internal Methods
     // ========================================================================
@@ -293,20 +305,25 @@ inline DualEncoderService::DualEncoderService(TwoWire* wire, uint8_t addressA, u
     , _transportB(wire, addressB)  // Same bus, address 0x41 (factory)
 {
     // Initialize values to defaults
-    // Unit A (indices 0-7): Use defined parameter defaults
+    // Unit A (indices 0-7): Global parameters
     _values[0] = ParamDefault::EFFECT;
-    _values[1] = ParamDefault::BRIGHTNESS;
-    _values[2] = ParamDefault::PALETTE;
-    _values[3] = ParamDefault::SPEED;
-    _values[4] = ParamDefault::INTENSITY;
-    _values[5] = ParamDefault::SATURATION;
+    _values[1] = ParamDefault::PALETTE;
+    _values[2] = ParamDefault::SPEED;
+    _values[3] = ParamDefault::MOOD;
+    _values[4] = ParamDefault::FADEAMOUNT;
+    _values[5] = ParamDefault::BRIGHTNESS;
     _values[6] = ParamDefault::COMPLEXITY;
     _values[7] = ParamDefault::VARIATION;
 
-    // Unit B (indices 8-15): Default to 128 (placeholder until parameters defined)
-    for (uint8_t i = ENCODERS_PER_UNIT; i < TOTAL_ENCODERS; i++) {
-        _values[i] = 128;
-    }
+    // Unit B (indices 8-15): Zone parameters
+    _values[8] = ParamDefault::ZONE0_EFFECT;
+    _values[9] = ParamDefault::ZONE0_SPEED;
+    _values[10] = ParamDefault::ZONE1_EFFECT;
+    _values[11] = ParamDefault::ZONE1_SPEED;
+    _values[12] = ParamDefault::ZONE2_EFFECT;
+    _values[13] = ParamDefault::ZONE2_SPEED;
+    _values[14] = ParamDefault::ZONE3_EFFECT;
+    _values[15] = ParamDefault::ZONE3_SPEED;
 }
 
 inline bool DualEncoderService::begin() {
@@ -389,18 +406,23 @@ inline void DualEncoderService::getAllValues(uint16_t values[TOTAL_ENCODERS]) co
 inline void DualEncoderService::resetToDefaults(bool triggerCallbacks) {
     // Reset Unit A parameters (0-7)
     _values[0] = ParamDefault::EFFECT;
-    _values[1] = ParamDefault::BRIGHTNESS;
-    _values[2] = ParamDefault::PALETTE;
-    _values[3] = ParamDefault::SPEED;
-    _values[4] = ParamDefault::INTENSITY;
-    _values[5] = ParamDefault::SATURATION;
+    _values[1] = ParamDefault::PALETTE;
+    _values[2] = ParamDefault::SPEED;
+    _values[3] = ParamDefault::MOOD;
+    _values[4] = ParamDefault::FADEAMOUNT;
+    _values[5] = ParamDefault::BRIGHTNESS;
     _values[6] = ParamDefault::COMPLEXITY;
     _values[7] = ParamDefault::VARIATION;
 
-    // Reset Unit B parameters (8-15) to placeholder default
-    for (uint8_t i = ENCODERS_PER_UNIT; i < TOTAL_ENCODERS; i++) {
-        _values[i] = 128;
-    }
+    // Reset Unit B parameters (8-15) to zone defaults
+    _values[8] = ParamDefault::ZONE0_EFFECT;
+    _values[9] = ParamDefault::ZONE0_SPEED;
+    _values[10] = ParamDefault::ZONE1_EFFECT;
+    _values[11] = ParamDefault::ZONE1_SPEED;
+    _values[12] = ParamDefault::ZONE2_EFFECT;
+    _values[13] = ParamDefault::ZONE2_SPEED;
+    _values[14] = ParamDefault::ZONE3_EFFECT;
+    _values[15] = ParamDefault::ZONE3_SPEED;
 
     // Reset all processing states
     for (uint8_t i = 0; i < TOTAL_ENCODERS; i++) {
@@ -491,25 +513,39 @@ inline void DualEncoderService::processEncoderDelta(uint8_t globalIdx, int32_t r
     }
 }
 
+// Include ButtonHandler before inline method that uses it
+#include "ButtonHandler.h"
+
 inline void DualEncoderService::processButton(uint8_t globalIdx, bool isPressed, uint32_t now) {
     if (globalIdx >= TOTAL_ENCODERS) return;
 
     if (_buttonDebounce[globalIdx].processState(isPressed, now)) {
-        // Debounced button press - reset to default
-        uint16_t defaultVal = getDefaultValue(globalIdx);
-        _values[globalIdx] = defaultVal;
+        // Check if ButtonHandler wants to handle this button
+        bool handled = false;
+        if (_buttonHandler) {
+            handled = _buttonHandler->handleButtonPress(globalIdx);
+        }
 
-        // Reset debounce state
-        _detentDebounce[globalIdx].reset();
+        if (!handled) {
+            // Default behavior: reset to default
+            uint16_t defaultVal = getDefaultValue(globalIdx);
+            _values[globalIdx] = defaultVal;
 
-        // Force callback (resets always propagate)
-        _callbackThrottle[globalIdx].force(now);
+            // Reset debounce state
+            _detentDebounce[globalIdx].reset();
 
-        // Flash LED cyan for reset
-        flashLed(globalIdx, 0, 128, 255);
+            // Force callback (resets always propagate)
+            _callbackThrottle[globalIdx].force(now);
 
-        // Invoke callback
-        invokeCallback(globalIdx, _values[globalIdx], true);
+            // Flash LED cyan for reset
+            flashLed(globalIdx, 0, 128, 255);
+
+            // Invoke callback
+            invokeCallback(globalIdx, _values[globalIdx], true);
+        } else {
+            // Button was handled by ButtonHandler - flash LED green to indicate special action
+            flashLed(globalIdx, 0, 255, 0);
+        }
     }
 }
 

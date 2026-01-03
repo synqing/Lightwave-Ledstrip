@@ -218,7 +218,21 @@ namespace EncoderProcessing {
 inline uint16_t clampValue(uint8_t param, int32_t value) {
     if (param >= 8) return 0;
 
-    Parameter p = static_cast<Parameter>(param);
+    // Map encoder index to Parameter enum:
+    // Encoder: 0=Effect, 1=Palette, 2=Speed, 3=Mood, 4=FadeAmount, 5=Brightness, 6=Complexity, 7=Variation
+    // Parameter enum: Effect=0, Brightness=1, Palette=2, Speed=3, Mood=4, FadeAmount=5, Complexity=6, Variation=7
+    Parameter p;
+    switch (param) {
+        case 0: p = Parameter::Effect; break;
+        case 1: p = Parameter::Palette; break;
+        case 2: p = Parameter::Speed; break;
+        case 3: p = Parameter::Mood; break;
+        case 4: p = Parameter::FadeAmount; break;
+        case 5: p = Parameter::Brightness; break;
+        case 6: p = Parameter::Complexity; break;
+        case 7: p = Parameter::Variation; break;
+        default: p = Parameter::Effect; break;
+    }
     uint8_t minVal = getParameterMin(p);
     uint8_t maxVal = getParameterMax(p);
 
@@ -236,7 +250,21 @@ inline uint16_t clampValue(uint8_t param, int32_t value) {
 inline uint16_t wrapValue(uint8_t param, int32_t value) {
     if (param >= 8) return 0;
 
-    Parameter p = static_cast<Parameter>(param);
+    // Map encoder index to Parameter enum:
+    // Encoder: 0=Effect, 1=Palette, 2=Speed, 3=Mood, 4=FadeAmount, 5=Brightness, 6=Complexity, 7=Variation
+    // Parameter enum: Effect=0, Brightness=1, Palette=2, Speed=3, Mood=4, FadeAmount=5, Complexity=6, Variation=7
+    Parameter p;
+    switch (param) {
+        case 0: p = Parameter::Effect; break;
+        case 1: p = Parameter::Palette; break;
+        case 2: p = Parameter::Speed; break;
+        case 3: p = Parameter::Mood; break;
+        case 4: p = Parameter::FadeAmount; break;
+        case 5: p = Parameter::Brightness; break;
+        case 6: p = Parameter::Complexity; break;
+        case 7: p = Parameter::Variation; break;
+        default: p = Parameter::Effect; break;
+    }
     uint8_t minVal = getParameterMin(p);
     uint8_t maxVal = getParameterMax(p);
     int32_t range = (maxVal - minVal) + 1;
@@ -254,8 +282,8 @@ inline uint16_t wrapValue(uint8_t param, int32_t value) {
  * @return true if parameter wraps, false if it clamps
  */
 inline bool shouldWrap(uint8_t param) {
-    return (param == static_cast<uint8_t>(Parameter::Effect) ||
-            param == static_cast<uint8_t>(Parameter::Palette));
+    // Encoder index mapping: 0=Effect, 1=Palette, 2=Speed, 3=Mood, 4=FadeAmount, 5=Brightness, 6=Complexity, 7=Variation
+    return (param == 0 || param == 1);  // Effect (0) and Palette (1) wrap
 }
 
 /**

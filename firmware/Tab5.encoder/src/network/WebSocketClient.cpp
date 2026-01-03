@@ -14,6 +14,7 @@
 #if ENABLE_WIFI
 
 #include <cstring>
+#include "../zones/ZoneDefinition.h"
 
 WebSocketClient::WebSocketClient()
     : _status(WebSocketStatus::DISCONNECTED)
@@ -244,6 +245,36 @@ void WebSocketClient::sendHelloMessage() {
     JsonDocument doc;
     // Empty payload - getStatus doesn't need parameters
     sendJSON("getStatus", doc);
+
+    // Also request zone state
+    requestZonesState();
+}
+
+void WebSocketClient::requestEffectsList(uint8_t page, uint8_t limit, const char* requestId) {
+    if (!isConnected()) return;
+    JsonDocument doc;
+    doc["page"] = page;
+    doc["limit"] = limit;
+    doc["details"] = false;
+    if (requestId && *requestId) doc["requestId"] = requestId;
+    sendJSON("effects.list", doc);
+}
+
+void WebSocketClient::requestPalettesList(uint8_t page, uint8_t limit, const char* requestId) {
+    if (!isConnected()) return;
+    JsonDocument doc;
+    doc["page"] = page;
+    doc["limit"] = limit;
+    if (requestId && *requestId) doc["requestId"] = requestId;
+    sendJSON("palettes.list", doc);
+}
+
+void WebSocketClient::requestZonesState() {
+    if (!isConnected()) return;
+    Serial.println("[WS] Requesting zone state (zones.get)");
+    JsonDocument doc;
+    // Empty payload - zones.get doesn't need parameters
+    sendJSON("zones.get", doc);
 }
 
 // ============================================================================
@@ -290,23 +321,23 @@ void WebSocketClient::sendSpeedChange(uint8_t speed) {
     sendJSON("parameters.set", doc);
 }
 
-void WebSocketClient::sendIntensityChange(uint8_t intensity) {
-    if (!canSend(ParamIndex::INTENSITY)) {
+void WebSocketClient::sendMoodChange(uint8_t mood) {
+    if (!canSend(ParamIndex::MOOD)) {
         return;
     }
 
     JsonDocument doc;
-    doc["intensity"] = intensity;
+    doc["mood"] = mood;
     sendJSON("parameters.set", doc);
 }
 
-void WebSocketClient::sendSaturationChange(uint8_t saturation) {
-    if (!canSend(ParamIndex::SATURATION)) {
+void WebSocketClient::sendFadeAmountChange(uint8_t fadeAmount) {
+    if (!canSend(ParamIndex::FADEAMOUNT)) {
         return;
     }
 
     JsonDocument doc;
-    doc["saturation"] = saturation;
+    doc["fadeAmount"] = fadeAmount;
     sendJSON("parameters.set", doc);
 }
 
@@ -334,6 +365,16 @@ void WebSocketClient::sendVariationChange(uint8_t variation) {
 // Zone Commands (Tab5 extension for Unit B, encoders 8-15)
 // ============================================================================
 
+void WebSocketClient::sendZoneEnable(bool enable) {
+    if (!isConnected()) {
+        return;
+    }
+
+    JsonDocument doc;
+    doc["enable"] = enable;
+    sendJSON("zone.enable", doc);
+}
+
 void WebSocketClient::sendZoneEffect(uint8_t zoneId, uint8_t effectId) {
     // Map zoneId to rate limiter index
     uint8_t paramIndex = ParamIndex::ZONE0_EFFECT + (zoneId * 2);
@@ -348,8 +389,9 @@ void WebSocketClient::sendZoneEffect(uint8_t zoneId, uint8_t effectId) {
 }
 
 void WebSocketClient::sendZoneBrightness(uint8_t zoneId, uint8_t value) {
-    // Map zoneId to rate limiter index
-    uint8_t paramIndex = ParamIndex::ZONE0_BRIGHTNESS + (zoneId * 2);
+    // Zone brightness uses rate limiter slot for zone effect (same encoder pair)
+    // Note: Brightness is no longer a parameter in new layout, but API still supports it
+    uint8_t paramIndex = ParamIndex::ZONE0_EFFECT + (zoneId * 2);
     if (zoneId > 3 || !canSend(paramIndex)) {
         return;
     }
@@ -361,15 +403,15 @@ void WebSocketClient::sendZoneBrightness(uint8_t zoneId, uint8_t value) {
 }
 
 void WebSocketClient::sendZoneSpeed(uint8_t zoneId, uint8_t value) {
-    // Zone speed shares rate limit with zone brightness (same encoder)
-    uint8_t paramIndex = ParamIndex::ZONE0_BRIGHTNESS + (zoneId * 2);
+    // Zone speed uses rate limiter slots (indices 9, 11, 13, 15)
+    uint8_t paramIndex = ParamIndex::ZONE0_SPEED + (zoneId * 2);
     if (zoneId > 3 || !canSend(paramIndex)) {
         return;
     }
 
     JsonDocument doc;
     doc["zoneId"] = zoneId;
-    doc["value"] = value;
+    doc["speed"] = value;
     sendJSON("zone.setSpeed", doc);
 }
 
@@ -384,6 +426,42 @@ void WebSocketClient::sendZonePalette(uint8_t zoneId, uint8_t paletteId) {
     doc["zoneId"] = zoneId;
     doc["paletteId"] = paletteId;
     sendJSON("zone.setPalette", doc);
+}
+
+void WebSocketClient::sendZoneBlend(uint8_t zoneId, uint8_t blendMode) {
+    // Zone blend uses rate limiter slot for zone effect (same encoder pair)
+    uint8_t paramIndex = ParamIndex::ZONE0_EFFECT + (zoneId * 2);
+    if (zoneId > 3 || blendMode > 7 || !canSend(paramIndex)) {
+        return;
+    }
+
+    JsonDocument doc;
+    doc["zoneId"] = zoneId;
+    doc["blendMode"] = blendMode;
+    sendJSON("zone.setBlend", doc);
+}
+
+void WebSocketClient::sendZonesSetLayout(const struct zones::ZoneSegment* segments, uint8_t zoneCount) {
+    if (!isConnected() || !segments || zoneCount == 0 || zoneCount > zones::MAX_ZONES) {
+        return;
+    }
+
+    // Serialize segments array to JSON
+    JsonDocument doc;
+    JsonArray zonesArray = doc["zones"].to<JsonArray>();
+
+    for (uint8_t i = 0; i < zoneCount; i++) {
+        JsonObject zoneObj = zonesArray.add<JsonObject>();
+        zoneObj["zoneId"] = segments[i].zoneId;
+        zoneObj["s1LeftStart"] = segments[i].s1LeftStart;
+        zoneObj["s1LeftEnd"] = segments[i].s1LeftEnd;
+        zoneObj["s1RightStart"] = segments[i].s1RightStart;
+        zoneObj["s1RightEnd"] = segments[i].s1RightEnd;
+        // Note: totalLeds is calculated by server, but we can include it for validation
+        zoneObj["totalLeds"] = segments[i].totalLeds;
+    }
+
+    sendJSON("zones.setLayout", doc);
 }
 
 // ============================================================================

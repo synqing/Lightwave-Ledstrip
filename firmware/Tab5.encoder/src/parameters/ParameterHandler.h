@@ -25,6 +25,7 @@
 // Forward declarations
 class DualEncoderService;
 class WebSocketClient;
+class ButtonHandler;
 
 /**
  * Display update callback type
@@ -86,13 +87,37 @@ public:
      */
     void setDisplayCallback(DisplayCallback callback) { m_displayCallback = callback; }
 
+    /**
+     * Mark a parameter as locally changed (for holdoff/anti-snapback)
+     * Call this when encoder changes before sending to server.
+     * @param index Parameter index (0-15)
+     */
+    void markLocalChange(uint8_t index) {
+        if (index < PARAMETER_COUNT) {
+            m_lastLocalChangeMs[index] = millis();
+        }
+    }
+
+    /**
+     * Set button handler for checking speed/palette mode
+     * @param handler ButtonHandler instance (can be nullptr)
+     */
+    void setButtonHandler(ButtonHandler* handler) { m_buttonHandler = handler; }
+
 private:
     DualEncoderService* m_encoderService;
     WebSocketClient* m_wsClient;
+    ButtonHandler* m_buttonHandler = nullptr;
     DisplayCallback m_displayCallback;
 
     // Local state cache (for UI updates) - 16 parameters
     uint8_t m_values[PARAMETER_COUNT];
+
+    // Echo/snapback prevention: when a parameter was just changed locally (encoder),
+    // ignore incoming server status updates for a generous hold window.
+    // 1 second is enough to cover network RTT + server processing + broadcast delay.
+    uint32_t m_lastLocalChangeMs[PARAMETER_COUNT] = {0};
+    static constexpr uint32_t LOCAL_OVERRIDE_HOLDOFF_MS = 1000;
 
     /**
      * Send parameter change via WebSocket

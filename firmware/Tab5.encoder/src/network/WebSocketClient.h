@@ -18,6 +18,7 @@
 #include <ArduinoJson.h>
 #include <functional>
 #include "config/network_config.h"
+#include "../zones/ZoneDefinition.h"
 
 // State Machine:
 //   DISCONNECTED -> CONNECTING -> CONNECTED -> ERROR
@@ -91,11 +92,11 @@ public:
     // ========================================================================
 
     void sendEffectChange(uint8_t effectId);
-    void sendBrightnessChange(uint8_t brightness);
     void sendPaletteChange(uint8_t paletteId);
     void sendSpeedChange(uint8_t speed);
-    void sendIntensityChange(uint8_t intensity);
-    void sendSaturationChange(uint8_t saturation);
+    void sendMoodChange(uint8_t mood);
+    void sendFadeAmountChange(uint8_t fadeAmount);
+    void sendBrightnessChange(uint8_t brightness);
     void sendComplexityChange(uint8_t complexity);
     void sendVariationChange(uint8_t variation);
 
@@ -103,16 +104,28 @@ public:
     // Zone Commands (Tab5 extension for Unit B, encoders 8-15)
     // ========================================================================
 
+    void sendZoneEnable(bool enable);
     void sendZoneEffect(uint8_t zoneId, uint8_t effectId);
     void sendZoneBrightness(uint8_t zoneId, uint8_t value);
     void sendZoneSpeed(uint8_t zoneId, uint8_t value);
     void sendZonePalette(uint8_t zoneId, uint8_t paletteId);
+    void sendZoneBlend(uint8_t zoneId, uint8_t blendMode);
+    void sendZonesSetLayout(const struct zones::ZoneSegment* segments, uint8_t zoneCount);
 
     // ========================================================================
     // Generic Commands
     // ========================================================================
 
     void sendGenericParameter(const char* fieldName, uint8_t value);
+
+    // ========================================================================
+    // Metadata Requests (names for UI)
+    // ========================================================================
+    // These request lists from LightwaveOS. Responses come back as WebSocket
+    // messages with the same "type" (e.g. "effects.list", "palettes.list").
+    void requestEffectsList(uint8_t page, uint8_t limit, const char* requestId);
+    void requestPalettesList(uint8_t page, uint8_t limit, const char* requestId);
+    void requestZonesState();
 
     // ========================================================================
     // Message Handling
@@ -144,14 +157,14 @@ private:
     };
     RateLimiter _rateLimiter;
 
-    // Parameter indices for rate limiting
+    // Parameter indices for rate limiting (matches Config.h Parameter enum)
     enum ParamIndex : uint8_t {
         EFFECT = 0, BRIGHTNESS = 1, PALETTE = 2, SPEED = 3,
-        INTENSITY = 4, SATURATION = 5, COMPLEXITY = 6, VARIATION = 7,
-        ZONE0_EFFECT = 8, ZONE0_BRIGHTNESS = 9,
-        ZONE1_EFFECT = 10, ZONE1_BRIGHTNESS = 11,
-        ZONE2_EFFECT = 12, ZONE2_BRIGHTNESS = 13,
-        ZONE3_EFFECT = 14, ZONE3_BRIGHTNESS = 15
+        MOOD = 4, FADEAMOUNT = 5, COMPLEXITY = 6, VARIATION = 7,
+        ZONE0_EFFECT = 8, ZONE0_SPEED = 9,
+        ZONE1_EFFECT = 10, ZONE1_SPEED = 11,
+        ZONE2_EFFECT = 12, ZONE2_SPEED = 13,
+        ZONE3_EFFECT = 14, ZONE3_SPEED = 15
     };
 
     // Fixed buffer for JSON serialization
@@ -188,17 +201,20 @@ public:
     unsigned long getReconnectDelay() const { return 0; }
     template<typename F> void onMessage(F) {}  // Accept any callback, do nothing
     void sendEffectChange(uint8_t) {}
-    void sendBrightnessChange(uint8_t) {}
     void sendPaletteChange(uint8_t) {}
     void sendSpeedChange(uint8_t) {}
-    void sendIntensityChange(uint8_t) {}
-    void sendSaturationChange(uint8_t) {}
+    void sendMoodChange(uint8_t) {}
+    void sendFadeAmountChange(uint8_t) {}
+    void sendBrightnessChange(uint8_t) {}
     void sendComplexityChange(uint8_t) {}
     void sendVariationChange(uint8_t) {}
+    void sendZoneEnable(bool) {}
     void sendZoneEffect(uint8_t, uint8_t) {}
     void sendZoneBrightness(uint8_t, uint8_t) {}
     void sendZoneSpeed(uint8_t, uint8_t) {}
     void sendZonePalette(uint8_t, uint8_t) {}
+    void sendZoneBlend(uint8_t, uint8_t) {}
+    void sendZonesSetLayout(const struct zones::ZoneSegment*, uint8_t) {}
     void sendGenericParameter(const char*, uint8_t) {}
     void disconnect() {}
     const char* getStatusString() const { return "WiFi Disabled"; }

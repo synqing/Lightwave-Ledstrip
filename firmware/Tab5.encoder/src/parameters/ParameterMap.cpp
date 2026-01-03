@@ -6,35 +6,41 @@
 // ============================================================================
 
 #include "ParameterMap.h"
+#include <Arduino.h>
 #include <cstring>
 
+// Runtime metadata storage (initialized from PARAMETER_TABLE, can be updated dynamically)
+static ParameterMetadata s_parameterMetadata[PARAMETER_COUNT];
+static bool s_metadataInitialized = false;
+
 // Parameter definitions table - single source of truth
-// Indices 0-7: Unit A (Core LightwaveOS parameters)
-// Indices 8-15: Unit B (Placeholder parameters)
+// Indices 0-7: Unit A (Global LightwaveOS parameters)
+// Indices 8-15: Unit B (Zone parameters)
 static const ParameterDef PARAMETER_TABLE[] = {
     // id, encoderIndex, statusField, wsCommandType, min, max, defaultValue
 
-    // Unit A (0-7) - Core LightwaveOS parameters
+    // Unit A (0-7) - Global LightwaveOS parameters
     {ParameterId::EffectId,   0, "effectId",   "effects.setCurrent", 0,   95,  0},
     {ParameterId::Brightness, 1, "brightness", "parameters.set",     0,   255, 128},
     {ParameterId::PaletteId,  2, "paletteId",  "parameters.set",     0,   63,  0},
     {ParameterId::Speed,      3, "speed",      "parameters.set",     1,   100, 25},
-    {ParameterId::Intensity,  4, "intensity",  "parameters.set",     0,   255, 128},
-    {ParameterId::Saturation, 5, "saturation", "parameters.set",     0,   255, 255},
+    {ParameterId::Mood,       4, "mood",       "parameters.set",     0,   255, 0},
+    {ParameterId::FadeAmount, 5, "fadeAmount", "parameters.set",     0,   255, 0},
     {ParameterId::Complexity, 6, "complexity", "parameters.set",     0,   255, 128},
     {ParameterId::Variation,  7, "variation",  "parameters.set",     0,   255, 0},
 
     // Unit B (8-15) - Zone parameters
-    // Zone Effect: 0-95 (wraps for continuous scrolling), Zone Brightness: 0-255 (clamped)
-    // WebSocket: zones.setEffect for effect, zones.setBrightness for brightness
-    {ParameterId::Zone0Effect,     8,  "zone0Effect",     "zones.setEffect",     0,   95,  0},
-    {ParameterId::Zone0Brightness, 9,  "zone0Brightness", "zones.setBrightness", 0,   255, 128},
-    {ParameterId::Zone1Effect,     10, "zone1Effect",     "zones.setEffect",     0,   95,  0},
-    {ParameterId::Zone1Brightness, 11, "zone1Brightness", "zones.setBrightness", 0,   255, 128},
-    {ParameterId::Zone2Effect,     12, "zone2Effect",     "zones.setEffect",     0,   95,  0},
-    {ParameterId::Zone2Brightness, 13, "zone2Brightness", "zones.setBrightness", 0,   255, 128},
-    {ParameterId::Zone3Effect,     14, "zone3Effect",     "zones.setEffect",     0,   95,  0},
-    {ParameterId::Zone3Brightness, 15, "zone3Brightness", "zones.setBrightness", 0,   255, 128}
+    // Pattern: [Zone N Effect, Zone N Speed/Palette] pairs
+    // Note: Encoders 9, 11, 13, 15 can toggle between Speed and Palette via button
+    // Default mode is Speed; when toggled, encoder controls Palette instead
+    {ParameterId::Zone0Effect, 8,  "zone0Effect", "zone.setEffect",   0,   95,  0},
+    {ParameterId::Zone0Speed,  9,  "zone0Speed",  "zone.setSpeed",    1,   100, 25},  // Also zone0Palette when toggled
+    {ParameterId::Zone1Effect, 10, "zone1Effect", "zone.setEffect",   0,   95,  0},
+    {ParameterId::Zone1Speed,  11, "zone1Speed",  "zone.setSpeed",    1,   100, 25},  // Also zone1Palette when toggled
+    {ParameterId::Zone2Effect, 12, "zone2Effect", "zone.setEffect",   0,   95,  0},
+    {ParameterId::Zone2Speed,  13, "zone2Speed",  "zone.setSpeed",    1,   100, 25},  // Also zone2Palette when toggled
+    {ParameterId::Zone3Effect, 14, "zone3Effect", "zone.setEffect",   0,   95,  0},
+    {ParameterId::Zone3Speed,  15, "zone3Speed",  "zone.setSpeed",    1,   100, 25}   // Also zone3Palette when toggled
 };
 
 const ParameterDef* getParameterByIndex(uint8_t index) {
@@ -64,4 +70,82 @@ const ParameterDef* getParameterByField(const char* fieldName) {
     }
 
     return nullptr;
+}
+
+// Initialize metadata from hardcoded defaults (called on first access)
+static void initializeMetadata() {
+    if (s_metadataInitialized) {
+        return;
+    }
+
+    for (uint8_t i = 0; i < PARAMETER_COUNT; i++) {
+        const ParameterDef* param = &PARAMETER_TABLE[i];
+        s_parameterMetadata[i].min = param->min;
+        s_parameterMetadata[i].max = param->max;
+        s_parameterMetadata[i].isDynamic = false;  // Start with hardcoded defaults
+    }
+
+    s_metadataInitialized = true;
+}
+
+void updateParameterMetadata(uint8_t index, uint8_t min, uint8_t max) {
+    if (index >= PARAMETER_COUNT) {
+        return;
+    }
+
+    // Ensure metadata is initialized
+    if (!s_metadataInitialized) {
+        initializeMetadata();
+    }
+
+    s_parameterMetadata[index].min = min;
+    s_parameterMetadata[index].max = max;
+    s_parameterMetadata[index].isDynamic = true;
+
+    // Log the update for debugging
+    const ParameterDef* param = getParameterByIndex(index);
+    if (param) {
+        Serial.printf("[ParamMap] Updated metadata for %s: min=%u, max=%u (was %u)\n",
+                      param->statusField, min, max, param->max);
+    }
+}
+
+uint8_t getParameterMax(uint8_t index) {
+    if (index >= PARAMETER_COUNT) {
+        return 255;  // Safe fallback
+    }
+
+    // Ensure metadata is initialized
+    if (!s_metadataInitialized) {
+        initializeMetadata();
+    }
+
+    // Return dynamic max if available, else fall back to hardcoded
+    if (s_parameterMetadata[index].isDynamic) {
+        return s_parameterMetadata[index].max;
+    }
+
+    // Fallback to hardcoded value from PARAMETER_TABLE
+    const ParameterDef* param = getParameterByIndex(index);
+    return param ? param->max : 255;
+}
+
+uint8_t getParameterMin(uint8_t index) {
+    if (index >= PARAMETER_COUNT) {
+        return 0;  // Safe fallback
+    }
+
+    // Ensure metadata is initialized
+    if (!s_metadataInitialized) {
+        initializeMetadata();
+    }
+
+    // Return dynamic min if available, else fall back to hardcoded
+    if (s_parameterMetadata[index].isDynamic) {
+        return s_parameterMetadata[index].min;
+    }
+
+    // Fallback to hardcoded value from PARAMETER_TABLE
+    const ParameterDef* param = getParameterByIndex(index);
+    return param ? param->min : 0;
 }

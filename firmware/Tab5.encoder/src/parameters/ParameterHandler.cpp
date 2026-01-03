@@ -8,9 +8,25 @@
 #include "ParameterHandler.h"
 #include "ParameterMap.h"
 #include "../input/DualEncoderService.h"
+#include "../input/ButtonHandler.h"
 #include "../network/WebSocketClient.h"
 #include <Arduino.h>
 #include <cstring>
+
+// #region agent log
+static inline void agent_dbg_ndjson(const char* location, const char* message, const char* hypothesisId, const char* dataJson) {
+    FILE* f = fopen("/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/.cursor/debug.log", "a");
+    if (!f) return;
+    fprintf(f,
+            "{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"%s\",\"location\":\"%s\",\"message\":\"%s\",\"data\":%s,\"timestamp\":%lu}\n",
+            hypothesisId,
+            location,
+            message,
+            (dataJson ? dataJson : "{}"),
+            (unsigned long)millis());
+    fclose(f);
+}
+// #endregion
 
 ParameterHandler::ParameterHandler(
     DualEncoderService* encoderService,
@@ -36,6 +52,10 @@ void ParameterHandler::onEncoderChanged(uint8_t index, uint16_t value, bool wasR
     if (!param || !m_wsClient) {
         return;
     }
+
+    // Mark this parameter as locally “authoritative” for a short window to prevent
+    // server status echo from snapping the UI/encoder back and forth.
+    m_lastLocalChangeMs[index] = millis();
 
     // Clamp value to valid range
     uint8_t clampedValue = clampValue(param, static_cast<uint8_t>(value));
@@ -65,11 +85,21 @@ bool ParameterHandler::applyStatus(JsonDocument& doc) {
     }
 
     bool updated = false;
+    uint32_t nowMs = millis();
 
     // Apply each parameter from status message
     for (uint8_t i = 0; i < getParameterCount(); i++) {
         const ParameterDef* param = getParameterByIndex(i);
         if (!param) continue;
+
+        // If this parameter was just changed locally, ignore server status for a short time.
+        // This prevents snapback/jitter when LightwaveOS broadcasts status slightly behind.
+        if (m_lastLocalChangeMs[i] != 0 && (nowMs - m_lastLocalChangeMs[i] < LOCAL_OVERRIDE_HOLDOFF_MS)) {
+            // #region agent log
+            // Holdoff active - skip this parameter (anti-snapback protection)
+            // #endregion
+            continue;
+        }
 
         // Check if this field exists in the status message (ArduinoJson 7 pattern)
         if (doc[param->statusField].is<int>() || doc[param->statusField].is<uint8_t>()) {
@@ -144,12 +174,9 @@ void ParameterHandler::sendParameterChange(const ParameterDef* param, uint8_t va
 
     // Send command based on parameter type using existing methods
     switch (param->id) {
-        // Unit A (0-7) - Core parameters with dedicated methods
+        // Unit A (0-7) - Global parameters with dedicated methods
         case ParameterId::EffectId:
             m_wsClient->sendEffectChange(value);
-            break;
-        case ParameterId::Brightness:
-            m_wsClient->sendBrightnessChange(value);
             break;
         case ParameterId::PaletteId:
             m_wsClient->sendPaletteChange(value);
@@ -157,11 +184,14 @@ void ParameterHandler::sendParameterChange(const ParameterDef* param, uint8_t va
         case ParameterId::Speed:
             m_wsClient->sendSpeedChange(value);
             break;
-        case ParameterId::Intensity:
-            m_wsClient->sendIntensityChange(value);
+        case ParameterId::Mood:
+            m_wsClient->sendMoodChange(value);
             break;
-        case ParameterId::Saturation:
-            m_wsClient->sendSaturationChange(value);
+        case ParameterId::FadeAmount:
+            m_wsClient->sendFadeAmountChange(value);
+            break;
+        case ParameterId::Brightness:
+            m_wsClient->sendBrightnessChange(value);
             break;
         case ParameterId::Complexity:
             m_wsClient->sendComplexityChange(value);
@@ -171,30 +201,51 @@ void ParameterHandler::sendParameterChange(const ParameterDef* param, uint8_t va
             break;
 
         // Unit B (8-15) - Zone parameters
-        // These use generic parameter.set with field name
+        // Zone effects use zone.setEffect
+        // Zone speeds use zone.setSpeed (can toggle to zone.setPalette via button)
         case ParameterId::Zone0Effect:
-            m_wsClient->sendGenericParameter("zone0Effect", value);
+            m_wsClient->sendZoneEffect(0, value);
             break;
-        case ParameterId::Zone0Brightness:
-            m_wsClient->sendGenericParameter("zone0Brightness", value);
+        case ParameterId::Zone0Speed:
+            // Check if button toggled to palette mode
+            if (m_buttonHandler && m_buttonHandler->getZoneEncoderMode(0) == SpeedPaletteMode::PALETTE) {
+                m_wsClient->sendZonePalette(0, value);
+            } else {
+                m_wsClient->sendZoneSpeed(0, value);
+            }
             break;
         case ParameterId::Zone1Effect:
-            m_wsClient->sendGenericParameter("zone1Effect", value);
+            m_wsClient->sendZoneEffect(1, value);
             break;
-        case ParameterId::Zone1Brightness:
-            m_wsClient->sendGenericParameter("zone1Brightness", value);
+        case ParameterId::Zone1Speed:
+            // Check if button toggled to palette mode
+            if (m_buttonHandler && m_buttonHandler->getZoneEncoderMode(1) == SpeedPaletteMode::PALETTE) {
+                m_wsClient->sendZonePalette(1, value);
+            } else {
+                m_wsClient->sendZoneSpeed(1, value);
+            }
             break;
         case ParameterId::Zone2Effect:
-            m_wsClient->sendGenericParameter("zone2Effect", value);
+            m_wsClient->sendZoneEffect(2, value);
             break;
-        case ParameterId::Zone2Brightness:
-            m_wsClient->sendGenericParameter("zone2Brightness", value);
+        case ParameterId::Zone2Speed:
+            // Check if button toggled to palette mode
+            if (m_buttonHandler && m_buttonHandler->getZoneEncoderMode(2) == SpeedPaletteMode::PALETTE) {
+                m_wsClient->sendZonePalette(2, value);
+            } else {
+                m_wsClient->sendZoneSpeed(2, value);
+            }
             break;
         case ParameterId::Zone3Effect:
-            m_wsClient->sendGenericParameter("zone3Effect", value);
+            m_wsClient->sendZoneEffect(3, value);
             break;
-        case ParameterId::Zone3Brightness:
-            m_wsClient->sendGenericParameter("zone3Brightness", value);
+        case ParameterId::Zone3Speed:
+            // Check if button toggled to palette mode
+            if (m_buttonHandler && m_buttonHandler->getZoneEncoderMode(3) == SpeedPaletteMode::PALETTE) {
+                m_wsClient->sendZonePalette(3, value);
+            } else {
+                m_wsClient->sendZoneSpeed(3, value);
+            }
             break;
     }
 }
@@ -204,11 +255,15 @@ uint8_t ParameterHandler::clampValue(const ParameterDef* param, uint8_t value) c
         return value;
     }
 
-    if (value < param->min) {
-        return param->min;
+    // Use dynamic min/max from ParameterMap (falls back to hardcoded if not available)
+    uint8_t min = getParameterMin(param->encoderIndex);
+    uint8_t max = getParameterMax(param->encoderIndex);
+
+    if (value < min) {
+        return min;
     }
-    if (value > param->max) {
-        return param->max;
+    if (value > max) {
+        return max;
     }
     return value;
 }
@@ -220,11 +275,31 @@ void ParameterHandler::notifyDisplay(int index) {
 
     if (index >= 0 && index < PARAMETER_COUNT) {
         // Single parameter update
+        // #region agent log
+        if (index == 15 || index == 3 || index == 0) {
+            char buf[96];
+            snprintf(buf, sizeof(buf), "{\"mode\":\"single\",\"index\":%d,\"value\":%u}", index, (unsigned)m_values[index]);
+            agent_dbg_ndjson("ParameterHandler.cpp:notifyDisplay", "display_notify", "H1", buf);
+        }
+        // #endregion
         m_displayCallback(static_cast<uint8_t>(index), m_values[index]);
     } else {
         // Bulk refresh: notify all parameters
+        // #region agent log
+        agent_dbg_ndjson("ParameterHandler.cpp:notifyDisplay", "display_notify_bulk_begin", "H1", "{\"mode\":\"bulk\",\"count\":16}");
+        // #endregion
         for (uint8_t i = 0; i < PARAMETER_COUNT; i++) {
+            // #region agent log
+            if (i == 0 || i == 15) {
+                char buf[96];
+                snprintf(buf, sizeof(buf), "{\"mode\":\"bulk\",\"index\":%u,\"value\":%u}", (unsigned)i, (unsigned)m_values[i]);
+                agent_dbg_ndjson("ParameterHandler.cpp:notifyDisplay", "display_notify_bulk_item", "H1", buf);
+            }
+            // #endregion
             m_displayCallback(i, m_values[i]);
         }
+        // #region agent log
+        agent_dbg_ndjson("ParameterHandler.cpp:notifyDisplay", "display_notify_bulk_end", "H1", "{\"mode\":\"bulk\"}");
+        // #endregion
     }
 }

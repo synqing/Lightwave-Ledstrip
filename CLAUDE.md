@@ -397,6 +397,7 @@ The v1 API provides standardized responses, rate limiting, and rich metadata.
 | `/api/v1/transitions/types` | GET | 12 transition types |
 | `/api/v1/transitions/trigger` | POST | Trigger transition |
 | `/api/v1/batch` | POST | Batch operations (max 10) |
+| `/api/v1/debug/memory/zones` | GET | Zone system memory stats (debug) |
 
 **Response Format**:
 ```json

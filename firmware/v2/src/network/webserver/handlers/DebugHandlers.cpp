@@ -5,6 +5,7 @@
 
 #include "DebugHandlers.h"
 #include "../../ApiResponse.h"
+#include "../../../effects/zones/ZoneComposer.h"
 #include <ArduinoJson.h>
 
 #if FEATURE_AUDIO_SYNC
@@ -15,6 +16,38 @@ namespace lightwaveos {
 namespace network {
 namespace webserver {
 namespace handlers {
+
+// ==================== Zone Memory Profiling (Phase 2c.2) ====================
+
+void DebugHandlers::handleZoneMemoryStats(AsyncWebServerRequest* request,
+                                           zones::ZoneComposer* zoneComposer) {
+    if (!zoneComposer) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
+        return;
+    }
+
+    zones::ZoneMemoryStats stats = zoneComposer->getMemoryStats();
+
+    sendSuccessResponse(request, [&stats](JsonObject& data) {
+        data["configSize"] = stats.configSize;
+        data["bufferSize"] = stats.bufferSize;
+        data["composerOverhead"] = stats.composerOverhead;
+        data["totalZoneBytes"] = stats.totalZoneBytes;
+        data["presetStorageMax"] = stats.presetStorageMax;
+        data["activeZones"] = stats.activeZones;
+        data["heapFree"] = stats.heapFree;
+        data["heapLargestBlock"] = stats.heapLargestBlock;
+
+        // Add breakdown for documentation
+        JsonObject breakdown = data["breakdown"].to<JsonObject>();
+        breakdown["zoneStateSize"] = sizeof(zones::ZoneState);
+        breakdown["zoneStateTotal"] = sizeof(zones::ZoneState) * zones::MAX_ZONES;
+        breakdown["crgbSize"] = sizeof(CRGB);
+        breakdown["totalLeds"] = zones::TOTAL_LEDS;
+        breakdown["maxZones"] = zones::MAX_ZONES;
+    });
+}
 
 #if FEATURE_AUDIO_SYNC
 

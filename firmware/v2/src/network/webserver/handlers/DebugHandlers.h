@@ -1,15 +1,18 @@
 /**
  * @file DebugHandlers.h
- * @brief Debug-related HTTP handlers for audio verbosity control
+ * @brief Debug-related HTTP handlers for audio verbosity and memory profiling
  *
- * Provides REST API endpoints for runtime control of audio debug verbosity.
- * All endpoints are guarded by FEATURE_AUDIO_SYNC.
+ * Provides REST API endpoints for runtime control of audio debug verbosity
+ * and zone system memory profiling (Phase 2c.2).
  */
 
 #pragma once
 
 #include <ESPAsyncWebServer.h>
 #include "../../../config/features.h"
+
+// Forward declarations
+namespace lightwaveos { namespace zones { class ZoneComposer; } }
 
 namespace lightwaveos {
 namespace network {
@@ -22,9 +25,31 @@ namespace handlers {
  * Endpoints:
  *   GET  /api/v1/debug/audio - Get current verbosity settings
  *   POST /api/v1/debug/audio - Set verbosity level and/or base interval
+ *   GET  /api/v1/debug/memory/zones - Get zone system memory stats (Phase 2c.2)
  */
 class DebugHandlers {
 public:
+    // ==================== Zone Memory Profiling (Phase 2c.2) ====================
+
+    /**
+     * @brief Handle GET /api/v1/debug/memory/zones
+     *
+     * Returns zone system memory footprint:
+     * - configSize: Per-zone config storage bytes
+     * - bufferSize: LED buffer bytes (all zone buffers)
+     * - composerOverhead: ZoneComposer struct size
+     * - totalZoneBytes: Total zone system RAM footprint
+     * - presetStorageMax: Max NVS usage for zone presets
+     * - activeZones: Currently enabled zone count
+     * - heapFree: ESP free heap
+     * - heapLargestBlock: Largest contiguous free block
+     *
+     * @param request HTTP request
+     * @param zoneComposer ZoneComposer instance for memory stats
+     */
+    static void handleZoneMemoryStats(AsyncWebServerRequest* request,
+                                       zones::ZoneComposer* zoneComposer);
+
 #if FEATURE_AUDIO_SYNC
     /**
      * @brief Handle GET /api/v1/debug/audio

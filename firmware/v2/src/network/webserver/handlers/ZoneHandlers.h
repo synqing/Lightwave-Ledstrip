@@ -37,6 +37,21 @@ public:
     static void handleConfigSave(AsyncWebServerRequest* request, lightwaveos::zones::ZoneComposer* composer, lightwaveos::persistence::ZoneConfigManager* configManager);
     static void handleConfigLoad(AsyncWebServerRequest* request, lightwaveos::zones::ZoneComposer* composer, lightwaveos::persistence::ZoneConfigManager* configManager, std::function<void()> broadcastZoneState);
 
+    // Timing Metrics API handler (Phase 2a.1)
+    static void handleTimingGet(AsyncWebServerRequest* request, lightwaveos::zones::ZoneComposer* composer);
+    static void handleTimingReset(AsyncWebServerRequest* request, lightwaveos::zones::ZoneComposer* composer);
+
+    // Zone Audio Config API handlers (Phase 2b.1)
+    static void handleAudioConfigGet(AsyncWebServerRequest* request, uint8_t zoneId, lightwaveos::zones::ZoneComposer* composer);
+    static void handleAudioConfigSet(AsyncWebServerRequest* request, uint8_t* data, size_t len, uint8_t zoneId, lightwaveos::zones::ZoneComposer* composer, std::function<void()> broadcastZoneState);
+
+    // Zone Beat Trigger API handlers (Phase 2b.2)
+    static void handleBeatTriggerGet(AsyncWebServerRequest* request, uint8_t zoneId, lightwaveos::zones::ZoneComposer* composer);
+    static void handleBeatTriggerSet(AsyncWebServerRequest* request, uint8_t* data, size_t len, uint8_t zoneId, lightwaveos::zones::ZoneComposer* composer, std::function<void()> broadcastZoneState);
+
+    // Zone Reordering API handler (Phase 2c.1)
+    static void handleReorder(AsyncWebServerRequest* request, uint8_t* data, size_t len, lightwaveos::zones::ZoneComposer* composer, std::function<void()> broadcastZoneState);
+
 private:
     static uint8_t extractZoneIdFromPath(AsyncWebServerRequest* request);
 };

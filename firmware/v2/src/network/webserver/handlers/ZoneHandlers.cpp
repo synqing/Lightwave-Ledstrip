@@ -505,6 +505,373 @@ void ZoneHandlers::handleConfigLoad(AsyncWebServerRequest* request, lightwaveos:
     }
 }
 
+// ============================================================================
+// Timing Metrics API Handler (Phase 2a.1)
+// ============================================================================
+
+void ZoneHandlers::handleTimingGet(AsyncWebServerRequest* request, lightwaveos::zones::ZoneComposer* composer) {
+    if (!composer) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
+        return;
+    }
+
+    const lightwaveos::zones::ZoneTimingMetrics& timing = composer->getTimingMetrics();
+
+    sendSuccessResponse(request, [composer, &timing](JsonObject& data) {
+        // Per-zone render times array
+        JsonArray zoneRenderUs = data["zoneRenderUs"].to<JsonArray>();
+        for (uint8_t i = 0; i < lightwaveos::zones::MAX_ZONES; i++) {
+            zoneRenderUs.add(timing.zoneRenderUs[i]);
+        }
+
+        // Blend/composite time
+        data["zoneBlendUs"] = timing.zoneBlendUs;
+
+        // Total zone system overhead
+        data["zoneTotalUs"] = timing.zoneTotalUs;
+
+        // Frame skip count (exceeded 2000us threshold)
+        data["frameSkipCount"] = timing.frameSkipCount;
+
+        // Average frame time in milliseconds
+        data["averageFrameMs"] = timing.getAverageFrameMs();
+
+        // Frame count for statistics
+        data["frameCount"] = timing.frameCount;
+
+        // Last update timestamp
+        data["lastUpdateMs"] = timing.lastUpdateMs;
+
+        // Zone system status
+        data["enabled"] = composer->isEnabled();
+        data["zoneCount"] = composer->getZoneCount();
+    });
+}
+
+void ZoneHandlers::handleTimingReset(AsyncWebServerRequest* request, lightwaveos::zones::ZoneComposer* composer) {
+    if (!composer) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
+        return;
+    }
+
+    composer->resetTimingMetrics();
+
+    sendSuccessResponse(request, [](JsonObject& data) {
+        data["reset"] = true;
+        data["message"] = "Zone timing metrics reset";
+    });
+}
+
+// ============================================================================
+// Zone Audio Config API Handlers (Phase 2b.1)
+// ============================================================================
+
+void ZoneHandlers::handleAudioConfigGet(AsyncWebServerRequest* request, uint8_t zoneId, lightwaveos::zones::ZoneComposer* composer) {
+    if (!composer) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
+        return;
+    }
+
+    if (zoneId >= composer->getZoneCount()) {
+        sendErrorResponse(request, HttpStatus::NOT_FOUND,
+                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range");
+        return;
+    }
+
+    lightwaveos::zones::ZoneAudioConfig audio = composer->getZoneAudioConfig(zoneId);
+
+    sendSuccessResponse(request, [zoneId, &audio](JsonObject& data) {
+        data["zoneId"] = zoneId;
+        data["tempoSync"] = audio.tempoSync;
+        data["beatModulation"] = audio.beatModulation;
+        data["tempoSpeedScale"] = audio.tempoSpeedScale;
+        data["beatDecay"] = audio.beatDecay;
+        data["audioBand"] = audio.audioBand;
+    });
+}
+
+void ZoneHandlers::handleAudioConfigSet(AsyncWebServerRequest* request, uint8_t* data, size_t len, uint8_t zoneId, lightwaveos::zones::ZoneComposer* composer, std::function<void()> broadcastZoneState) {
+    if (!composer) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
+        return;
+    }
+
+    if (zoneId >= composer->getZoneCount()) {
+        sendErrorResponse(request, HttpStatus::NOT_FOUND,
+                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range");
+        return;
+    }
+
+    // Parse JSON body
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, data, len);
+    if (error) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::INVALID_JSON, error.c_str());
+        return;
+    }
+
+    // Get current config and apply updates (partial update pattern)
+    lightwaveos::zones::ZoneAudioConfig audio = composer->getZoneAudioConfig(zoneId);
+    bool hasUpdates = false;
+
+    if (doc.containsKey("tempoSync")) {
+        audio.tempoSync = doc["tempoSync"].as<bool>();
+        hasUpdates = true;
+    }
+
+    if (doc.containsKey("beatModulation")) {
+        audio.beatModulation = doc["beatModulation"].as<uint8_t>();
+        hasUpdates = true;
+    }
+
+    if (doc.containsKey("tempoSpeedScale")) {
+        audio.tempoSpeedScale = doc["tempoSpeedScale"].as<uint8_t>();
+        hasUpdates = true;
+    }
+
+    if (doc.containsKey("beatDecay")) {
+        audio.beatDecay = doc["beatDecay"].as<uint8_t>();
+        hasUpdates = true;
+    }
+
+    if (doc.containsKey("audioBand")) {
+        uint8_t band = doc["audioBand"].as<uint8_t>();
+        audio.audioBand = (band > 3) ? 0 : band;  // Clamp to 0-3
+        hasUpdates = true;
+    }
+
+    if (!hasUpdates) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::MISSING_FIELD, "No valid audio config fields provided");
+        return;
+    }
+
+    // Apply the updated config
+    composer->setZoneAudioConfig(zoneId, audio);
+
+    sendSuccessResponse(request, [zoneId, &audio](JsonObject& respData) {
+        respData["zoneId"] = zoneId;
+        respData["tempoSync"] = audio.tempoSync;
+        respData["beatModulation"] = audio.beatModulation;
+        respData["tempoSpeedScale"] = audio.tempoSpeedScale;
+        respData["beatDecay"] = audio.beatDecay;
+        respData["audioBand"] = audio.audioBand;
+    });
+
+    if (broadcastZoneState) broadcastZoneState();
+}
+
+// ============================================================================
+// Zone Beat Trigger API Handlers (Phase 2b.2)
+// ============================================================================
+
+void ZoneHandlers::handleBeatTriggerGet(AsyncWebServerRequest* request, uint8_t zoneId, lightwaveos::zones::ZoneComposer* composer) {
+    if (!composer) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
+        return;
+    }
+
+    if (zoneId >= composer->getZoneCount()) {
+        sendErrorResponse(request, HttpStatus::NOT_FOUND,
+                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range");
+        return;
+    }
+
+    bool enabled = false;
+    uint8_t interval = 4;
+    uint8_t effectIds[8] = {0};
+    uint8_t effectCount = 0;
+    uint8_t currentIndex = 0;
+
+    composer->getZoneBeatTriggerConfig(zoneId, enabled, interval, effectIds, effectCount, currentIndex);
+
+    sendSuccessResponse(request, [zoneId, enabled, interval, &effectIds, effectCount, currentIndex](JsonObject& data) {
+        data["zoneId"] = zoneId;
+        data["enabled"] = enabled;
+        data["interval"] = interval;
+        data["currentIndex"] = currentIndex;
+        JsonArray effects = data["effectList"].to<JsonArray>();
+        for (uint8_t i = 0; i < effectCount; i++) {
+            effects.add(effectIds[i]);
+        }
+    });
+}
+
+void ZoneHandlers::handleBeatTriggerSet(AsyncWebServerRequest* request, uint8_t* data, size_t len, uint8_t zoneId, lightwaveos::zones::ZoneComposer* composer, std::function<void()> broadcastZoneState) {
+    if (!composer) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
+        return;
+    }
+
+    if (zoneId >= composer->getZoneCount()) {
+        sendErrorResponse(request, HttpStatus::NOT_FOUND,
+                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range");
+        return;
+    }
+
+    // Parse JSON body
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, data, len);
+    if (error) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::INVALID_JSON, error.c_str());
+        return;
+    }
+
+    bool hasUpdates = false;
+
+    // Handle enabled field
+    if (doc.containsKey("enabled")) {
+        composer->setZoneBeatTriggerEnabled(zoneId, doc["enabled"].as<bool>());
+        hasUpdates = true;
+    }
+
+    // Handle interval field
+    if (doc.containsKey("interval")) {
+        uint8_t interval = doc["interval"].as<uint8_t>();
+        // Clamp to valid range (1-32)
+        if (interval < 1) interval = 1;
+        if (interval > 32) interval = 32;
+        composer->setZoneBeatTriggerInterval(zoneId, interval);
+        hasUpdates = true;
+    }
+
+    // Handle effectList array
+    if (doc.containsKey("effectList")) {
+        JsonArray effects = doc["effectList"].as<JsonArray>();
+        if (effects) {
+            uint8_t effectIds[8] = {0};
+            uint8_t count = 0;
+            for (JsonVariant v : effects) {
+                if (count >= 8) break;
+                effectIds[count++] = v.as<uint8_t>();
+            }
+            composer->setZoneBeatTriggerEffectList(zoneId, effectIds, count);
+            hasUpdates = true;
+        }
+    }
+
+    if (!hasUpdates) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::MISSING_FIELD, "No valid beat trigger config fields provided");
+        return;
+    }
+
+    // Retrieve updated config for response
+    bool enabled = false;
+    uint8_t interval = 4;
+    uint8_t effectIds[8] = {0};
+    uint8_t effectCount = 0;
+    uint8_t currentIndex = 0;
+
+    composer->getZoneBeatTriggerConfig(zoneId, enabled, interval, effectIds, effectCount, currentIndex);
+
+    sendSuccessResponse(request, [zoneId, enabled, interval, &effectIds, effectCount, currentIndex](JsonObject& respData) {
+        respData["zoneId"] = zoneId;
+        respData["enabled"] = enabled;
+        respData["interval"] = interval;
+        respData["currentIndex"] = currentIndex;
+        JsonArray effects = respData["effectList"].to<JsonArray>();
+        for (uint8_t i = 0; i < effectCount; i++) {
+            effects.add(effectIds[i]);
+        }
+    });
+
+    if (broadcastZoneState) broadcastZoneState();
+}
+
+// ============================================================================
+// Zone Reordering API Handler (Phase 2c.1)
+// ============================================================================
+
+void ZoneHandlers::handleReorder(AsyncWebServerRequest* request, uint8_t* data, size_t len, lightwaveos::zones::ZoneComposer* composer, std::function<void()> broadcastZoneState) {
+    if (!composer) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
+        return;
+    }
+
+    // Parse JSON body
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, data, len);
+    if (error) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::INVALID_JSON, error.c_str());
+        return;
+    }
+
+    // Validate "order" array exists
+    if (!doc.containsKey("order") || !doc["order"].is<JsonArray>()) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::MISSING_FIELD, "Required field 'order' must be an array", "order");
+        return;
+    }
+
+    JsonArray orderArray = doc["order"];
+    uint8_t orderCount = orderArray.size();
+
+    // Validate order array size matches current zone count
+    if (orderCount != composer->getZoneCount()) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::INVALID_VALUE, "Order array size must match current zone count", "order");
+        return;
+    }
+
+    // Validate order array size is within bounds
+    if (orderCount == 0 || orderCount > lightwaveos::zones::MAX_ZONES) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::OUT_OF_RANGE, "Order array size out of range (1-4)", "order");
+        return;
+    }
+
+    // Extract order values into array
+    uint8_t newOrder[lightwaveos::zones::MAX_ZONES];
+    uint8_t idx = 0;
+    for (JsonVariant v : orderArray) {
+        if (idx >= lightwaveos::zones::MAX_ZONES) break;
+        if (!v.is<int>()) {
+            sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                              ErrorCodes::INVALID_TYPE, "Order array must contain integers", "order");
+            return;
+        }
+        int val = v.as<int>();
+        if (val < 0 || val >= orderCount) {
+            sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                              ErrorCodes::OUT_OF_RANGE, "Zone ID in order array out of range", "order");
+            return;
+        }
+        newOrder[idx++] = static_cast<uint8_t>(val);
+    }
+
+    // Attempt reorder - ZoneComposer will validate CENTER ORIGIN constraint
+    bool success = composer->reorderZones(newOrder, orderCount);
+
+    if (!success) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::INVALID_VALUE, "Reorder failed: CENTER ORIGIN constraint violated - Zone 0 must contain LEDs 79/80", "order");
+        return;
+    }
+
+    // Build response with new order
+    sendSuccessResponse(request, [&newOrder, orderCount](JsonObject& respData) {
+        JsonArray orderResp = respData["order"].to<JsonArray>();
+        for (uint8_t i = 0; i < orderCount; i++) {
+            orderResp.add(newOrder[i]);
+        }
+        respData["zoneCount"] = orderCount;
+    });
+
+    // Broadcast zone state update to all WebSocket clients
+    if (broadcastZoneState) broadcastZoneState();
+}
+
 } // namespace handlers
 } // namespace webserver
 } // namespace network

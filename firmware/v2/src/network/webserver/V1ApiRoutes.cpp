@@ -23,6 +23,8 @@
 #include "handlers/DebugHandlers.h"
 #include "handlers/EffectPresetHandlers.h"
 #include "handlers/FirmwareHandlers.h"
+#include "handlers/PresetHandlers.h"
+#include "handlers/ZonePresetHandlers.h"
 #include <ESPAsyncWebServer.h>
 #include <Arduino.h>
 
@@ -37,9 +39,11 @@
 namespace lightwaveos {
 namespace persistence {
 class ZoneConfigManager;
+class PresetManager;
 }
 }
 extern lightwaveos::persistence::ZoneConfigManager* zoneConfigMgr;
+extern lightwaveos::persistence::PresetManager* presetMgr;
 
 namespace lightwaveos {
 namespace network {
@@ -517,6 +521,13 @@ void V1ApiRoutes::registerRoutes(
         }
     );
 
+    // Debug routes - Zone memory profiling (Phase 2c.2)
+    registry.onGet("/api/v1/debug/memory/zones", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::DebugHandlers::handleZoneMemoryStats(request, ctx.zoneComposer);
+    });
+
     // Transition routes
     registry.onGet("/api/v1/transitions/types", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
@@ -764,6 +775,173 @@ void V1ApiRoutes::registerRoutes(
         handlers::ZoneHandlers::handleConfigLoad(request, ctx.zoneComposer, zoneConfigMgr, broadcastZoneState);
     });
 
+    // ==================== Zone Timing Metrics Routes (Phase 2a.1) ====================
+
+    // GET /api/v1/zones/timing - Get zone composition timing metrics
+    registry.onGet("/api/v1/zones/timing", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::ZoneHandlers::handleTimingGet(request, ctx.zoneComposer);
+    });
+
+    // POST /api/v1/zones/timing/reset - Reset timing metrics
+    registry.onPost("/api/v1/zones/timing/reset", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::ZoneHandlers::handleTimingReset(request, ctx.zoneComposer);
+    });
+
+    // ==================== Zone Audio Config Routes (Phase 2b.1) ====================
+
+    // GET /api/v1/zones/:id/audio - Get zone audio config
+    registry.onGetRegex("^\\/api\\/v1\\/zones\\/([0-3])\\/audio$", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        // Extract zone ID from URL
+        String path = request->url();
+        int zonesIdx = path.indexOf("/zones/");
+        uint8_t zoneId = (zonesIdx >= 0 && zonesIdx + 7 < path.length())
+            ? path.charAt(zonesIdx + 7) - '0'
+            : 255;
+        handlers::ZoneHandlers::handleAudioConfigGet(request, zoneId, ctx.zoneComposer);
+    });
+
+    // POST /api/v1/zones/:id/audio - Set zone audio config
+    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([0-3])\\/audio$",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [ctx, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            // Extract zone ID from URL
+            String path = request->url();
+            int zonesIdx = path.indexOf("/zones/");
+            uint8_t zoneId = (zonesIdx >= 0 && zonesIdx + 7 < path.length())
+                ? path.charAt(zonesIdx + 7) - '0'
+                : 255;
+            handlers::ZoneHandlers::handleAudioConfigSet(request, data, len, zoneId, ctx.zoneComposer, broadcastZoneState);
+        }
+    );
+
+    // ==================== Zone Beat Trigger Routes (Phase 2b.2) ====================
+
+    // GET /api/v1/zones/:id/beat-trigger - Get zone beat trigger config
+    registry.onGetRegex("^\\/api\\/v1\\/zones\\/([0-3])\\/beat-trigger$", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        // Extract zone ID from URL
+        String path = request->url();
+        int zonesIdx = path.indexOf("/zones/");
+        uint8_t zoneId = (zonesIdx >= 0 && zonesIdx + 7 < path.length())
+            ? path.charAt(zonesIdx + 7) - '0'
+            : 255;
+        handlers::ZoneHandlers::handleBeatTriggerGet(request, zoneId, ctx.zoneComposer);
+    });
+
+    // POST /api/v1/zones/:id/beat-trigger - Set zone beat trigger config
+    registry.onPostRegex("^\\/api\\/v1\\/zones\\/([0-3])\\/beat-trigger$",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [ctx, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            // Extract zone ID from URL
+            String path = request->url();
+            int zonesIdx = path.indexOf("/zones/");
+            uint8_t zoneId = (zonesIdx >= 0 && zonesIdx + 7 < path.length())
+                ? path.charAt(zonesIdx + 7) - '0'
+                : 255;
+            handlers::ZoneHandlers::handleBeatTriggerSet(request, data, len, zoneId, ctx.zoneComposer, broadcastZoneState);
+        }
+    );
+
+    // ==================== Zone Reordering Route (Phase 2c.1) ====================
+
+    // POST /api/v1/zones/reorder - Reorder zones with CENTER ORIGIN constraint
+    registry.onPost("/api/v1/zones/reorder",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [ctx, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::ZoneHandlers::handleReorder(request, data, len, ctx.zoneComposer, broadcastZoneState);
+        }
+    );
+
+    // ==================== Zone Preset Library Routes ====================
+
+    // GET /api/v1/presets - List all saved presets
+    registry.onGet("/api/v1/presets", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::PresetHandlers::handleList(request, presetMgr);
+    });
+
+    // GET /api/v1/presets/{name} - Download preset as JSON file
+    registry.onGetRegex("^\\/api\\/v1\\/presets\\/([^/]+)$", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::PresetHandlers::handleGet(request, presetMgr);
+    });
+
+    // POST /api/v1/presets - Upload/save new preset (JSON body)
+    registry.onPost("/api/v1/presets",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::PresetHandlers::handleSave(request, data, len, presetMgr);
+        }
+    );
+
+    // PUT /api/v1/presets/{name} - Update existing preset
+    registry.onPutRegex("^\\/api\\/v1\\/presets\\/([^/]+)$",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::PresetHandlers::handleUpdate(request, data, len, presetMgr);
+        }
+    );
+
+    // DELETE /api/v1/presets/{name} - Delete a preset
+    registry.onDeleteRegex("^\\/api\\/v1\\/presets\\/([^/]+)$", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::PresetHandlers::handleDelete(request, presetMgr);
+    });
+
+    // POST /api/v1/presets/{name}/rename - Rename a preset
+    registry.onPostRegex("^\\/api\\/v1\\/presets\\/([^/]+)\\/rename$",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::PresetHandlers::handleRename(request, data, len, presetMgr);
+        }
+    );
+
+    // POST /api/v1/presets/{name}/load - Load preset into active zone config
+    registry.onPostRegex("^\\/api\\/v1\\/presets\\/([^/]+)\\/load$", [ctx, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::PresetHandlers::handleLoad(request, ctx.zoneComposer, zoneConfigMgr, presetMgr, broadcastZoneState);
+    });
+
+    // POST /api/v1/presets/save-current - Save current config as new preset
+    registry.onPost("/api/v1/presets/save-current",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::PresetHandlers::handleSaveCurrent(request, data, len, ctx.zoneComposer, zoneConfigMgr, presetMgr);
+        }
+    );
+
     // ==================== Effect Preset Routes ====================
     // List all saved effect presets
     registry.onGet("/api/v1/effect-presets", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
@@ -820,6 +998,64 @@ void V1ApiRoutes::registerRoutes(
         }
         uint8_t id = request->getParam("id")->value().toInt();
         handlers::EffectPresetHandlers::handleDelete(request, id);
+    });
+
+    // ==================== Zone Preset Routes (Phase 2a.2) ====================
+    // List all saved zone presets
+    registry.onGet("/api/v1/zone-presets", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::ZonePresetHandlers::handleList(request);
+    });
+
+    // Save current zone config as new preset
+    registry.onPost("/api/v1/zone-presets",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::ZonePresetHandlers::handleSave(request, data, len, ctx.zoneComposer);
+        }
+    );
+
+    // Get zone preset by ID
+    registry.onGet("/api/v1/zone-presets/get", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        if (!request->hasParam("id")) {
+            sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                              ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
+            return;
+        }
+        uint8_t id = request->getParam("id")->value().toInt();
+        handlers::ZonePresetHandlers::handleGet(request, id);
+    });
+
+    // Apply zone preset by ID
+    registry.onPost("/api/v1/zone-presets/apply", [ctx, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        if (!request->hasParam("id")) {
+            sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                              ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
+            return;
+        }
+        uint8_t id = request->getParam("id")->value().toInt();
+        handlers::ZonePresetHandlers::handleApply(request, id, ctx.actorSystem, ctx.zoneComposer, broadcastZoneState);
+    });
+
+    // Delete zone preset by ID
+    registry.onDelete("/api/v1/zone-presets/delete", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        if (!request->hasParam("id")) {
+            sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                              ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
+            return;
+        }
+        uint8_t id = request->getParam("id")->value().toInt();
+        handlers::ZonePresetHandlers::handleDelete(request, id);
     });
 
     // ==================== Firmware/OTA Routes ====================

@@ -132,32 +132,32 @@
             <section class="control-card full-width slider-card">
                 <h2 class="card-header">Zone 0 Speed</h2>
                 <div class="slider-container">
-                    <input type="range" id="zone0SpeedSlider" min="1" max="50" value="15" class="slider" aria-label="Zone 0 Speed">
-                    <div class="slider-value" id="zone0SpeedValue">15</div>
+                    <input type="range" id="zone0SpeedSlider" min="1" max="50" value="1" class="slider" aria-label="Zone 0 Speed">
+                    <div class="slider-value" id="zone0SpeedValue">1</div>
                 </div>
             </section>
             <!-- Zone 1 Speed -->
             <section class="control-card full-width slider-card">
                 <h2 class="card-header">Zone 1 Speed</h2>
                 <div class="slider-container">
-                    <input type="range" id="zone1SpeedSlider" min="1" max="50" value="15" class="slider" aria-label="Zone 1 Speed">
-                    <div class="slider-value" id="zone1SpeedValue">15</div>
+                    <input type="range" id="zone1SpeedSlider" min="1" max="50" value="1" class="slider" aria-label="Zone 1 Speed">
+                    <div class="slider-value" id="zone1SpeedValue">1</div>
                 </div>
             </section>
             <!-- Zone 2 Speed -->
             <section class="control-card full-width slider-card">
                 <h2 class="card-header">Zone 2 Speed</h2>
                 <div class="slider-container">
-                    <input type="range" id="zone2SpeedSlider" min="1" max="50" value="15" class="slider" aria-label="Zone 2 Speed">
-                    <div class="slider-value" id="zone2SpeedValue">15</div>
+                    <input type="range" id="zone2SpeedSlider" min="1" max="50" value="1" class="slider" aria-label="Zone 2 Speed">
+                    <div class="slider-value" id="zone2SpeedValue">1</div>
                 </div>
             </section>
             <!-- Zone 3 Speed -->
             <section class="control-card full-width slider-card">
                 <h2 class="card-header">Zone 3 Speed</h2>
                 <div class="slider-container">
-                    <input type="range" id="zone3SpeedSlider" min="1" max="50" value="15" class="slider" aria-label="Zone 3 Speed">
-                    <div class="slider-value" id="zone3SpeedValue">15</div>
+                    <input type="range" id="zone3SpeedSlider" min="1" max="50" value="1" class="slider" aria-label="Zone 3 Speed">
+                    <div class="slider-value" id="zone3SpeedValue">1</div>
                 </div>
             </section>
         </div>
@@ -270,6 +270,44 @@
 
                 <!-- Apply Button -->
                 <button id="zoneApplyButton" class="control-btn compact" style="width: 100%; margin-top: var(--space-md); background: var(--gold); color: var(--bg-base);" disabled>Apply Zone Layout</button>
+            </section>
+        </div>
+
+        <!-- Row 8: Preset Library (only shown when zones enabled) -->
+        <div class="controls-row" id="presetLibraryRow" style="display: none;">
+            <section class="control-card full-width" id="presetLibraryCard">
+                <h2 class="card-header">Preset Library</h2>
+                
+                <!-- Save Current Config -->
+                <div style="margin-bottom: var(--space-md); padding: var(--space-sm); background: var(--bg-elevated); border-radius: 8px;">
+                    <div class="card-header" style="text-align: left; margin-bottom: var(--space-xs);">Save Current Configuration</div>
+                    <div style="display: flex; gap: var(--space-xs); flex-wrap: wrap;">
+                        <input type="text" id="presetNameInput" placeholder="Preset name" class="control-btn compact" style="flex: 1; min-width: 150px; padding: var(--space-xs) var(--space-sm); text-align: left; font-size: 0.75rem;">
+                        <input type="text" id="presetDescriptionInput" placeholder="Description (optional)" class="control-btn compact" style="flex: 1; min-width: 150px; padding: var(--space-xs) var(--space-sm); text-align: left; font-size: 0.75rem;">
+                        <button id="presetSaveButton" class="control-btn compact" style="background: var(--gold); color: var(--bg-base);">Save Preset</button>
+                    </div>
+                </div>
+
+                <!-- Preset List -->
+                <div style="margin-bottom: var(--space-md);">
+                    <div class="card-header" style="text-align: left; margin-bottom: var(--space-xs);">Saved Presets</div>
+                    <div class="value-secondary compact" style="font-size: 0.625rem; color: var(--text-tertiary); margin-bottom: var(--space-xs); padding: 0 var(--space-xs);">
+                        Rename is available via the Rename button. Fallback: Download → edit JSON name → Upload → Delete old.
+                    </div>
+                    <div id="presetList" style="display: flex; flex-direction: column; gap: var(--space-xs); max-height: 300px; overflow-y: auto;">
+                        <div class="value-secondary compact" style="text-align: center; padding: var(--space-sm);">Loading presets...</div>
+                    </div>
+                </div>
+
+                <!-- Upload Preset -->
+                <div style="padding: var(--space-sm); background: var(--bg-elevated); border-radius: 8px;">
+                    <div class="card-header" style="text-align: left; margin-bottom: var(--space-xs);">Upload Preset</div>
+                    <div style="display: flex; gap: var(--space-xs); align-items: center;">
+                        <input type="file" id="presetUploadInput" accept=".json" style="display: none;">
+                        <button id="presetUploadButton" class="control-btn compact" style="flex: 1;">Choose File</button>
+                        <span id="presetUploadFileName" class="value-secondary compact" style="flex: 1; text-align: left; padding: 0 var(--space-sm);">No file selected</span>
+                    </div>
+                </div>
             </section>
         </div>
     </main>

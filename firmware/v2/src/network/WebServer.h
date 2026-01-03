@@ -284,6 +284,17 @@ public:
     void broadcastZoneState();
 
     /**
+     * @brief Broadcast a single zone's state change to all WebSocket clients
+     *
+     * Sends a "zones.stateChanged" event with the current state of the specified zone.
+     * Called from ZoneComposer callback when any zone property is modified.
+     * Throttling is handled by ZoneComposer (max 10/sec per zone).
+     *
+     * @param zoneId Zone that changed (0-3)
+     */
+    void broadcastSingleZoneState(uint8_t zoneId);
+
+    /**
      * @brief Broadcast LED frame data to subscribed clients
      *
      * Sends binary WebSocket frame containing RGB data for all 320 LEDs.

@@ -16,6 +16,7 @@
 #ifndef NATIVE_BUILD
 #include <esp_task_wdt.h>
 #endif
+#include <time.h>
 
 #define LW_LOG_TAG "Main"
 #include "utils/Log.h"
@@ -26,6 +27,7 @@
 #include "core/actors/RendererActor.h"
 #include "core/persistence/NVSManager.h"
 #include "core/persistence/ZoneConfigManager.h"
+#include "core/persistence/PresetManager.h"
 #include "effects/CoreEffects.h"
 #include "effects/zones/ZoneComposer.h"
 #include "effects/PatternRegistry.h"
@@ -69,6 +71,7 @@ using namespace lightwaveos::plugins;
 
 ZoneComposer zoneComposer;
 ZoneConfigManager* zoneConfigMgr = nullptr;
+PresetManager* presetMgr = nullptr;
 
 // Global Actor System Access
 ActorSystem& actors = ActorSystem::instance();
@@ -144,6 +147,14 @@ void setup() {
 
         // Create config manager
         zoneConfigMgr = new ZoneConfigManager(&zoneComposer);
+
+        // Create preset manager
+        presetMgr = new PresetManager();
+        if (presetMgr->init()) {
+            LW_LOGI("PresetManager: INITIALIZED");
+        } else {
+            LW_LOGW("PresetManager: Init failed (presets may not be available)");
+        }
 
         // Try to load saved zone configuration
         if (zoneConfigMgr->loadFromNVS()) {
@@ -256,7 +267,8 @@ void setup() {
     Serial.println("  Z       - Print zone status");
     Serial.println("  zs      - Set zone speed: zs <zoneId> <speed> OR zs <speed0> <speed1> <speed2>");
     Serial.println("  1-5     - Load zone preset (in zone mode)");
-    Serial.println("  S       - Save all settings to NVS");
+    Serial.println("  S       - Save settings to NVS and also save a timestamped preset");
+    Serial.println("  R       - List saved presets");
     Serial.println("\nTransition Commands:");
     Serial.println("  t       - Transition to next effect (random type)");
     Serial.println("  T       - Transition to next effect (fade)");
@@ -1170,7 +1182,7 @@ void loop() {
                     break;
 
                 case 'S':
-                    // Save all settings to NVS
+                    // Save all settings to NVS (auto-load on boot)
                     if (zoneConfigMgr) {
                         Serial.println("Saving settings to NVS...");
                         bool zoneOk = zoneConfigMgr->saveToNVS();
@@ -1180,6 +1192,34 @@ void loop() {
                             renderer->getSpeed(),
                             renderer->getPaletteIndex()
                         );
+                        
+                        // Also save to preset library with timestamp name
+                        if (presetMgr && zoneOk) {
+                            ZoneConfigData config;
+                            zoneConfigMgr->exportConfig(config);
+                            
+                            // Generate timestamp name
+                            struct tm timeinfo;
+                            char presetName[32];
+                            bool timeValid = false;
+                            
+                            // Try to get local time (requires NTP sync)
+                            if (getLocalTime(&timeinfo)) {
+                                strftime(presetName, sizeof(presetName), "preset-%Y%m%d-%H%M%S", &timeinfo);
+                                timeValid = true;
+                            } else {
+                                // Fallback: use millis-based name if time not available
+                                uint32_t millisNow = millis();
+                                snprintf(presetName, sizeof(presetName), "preset-%lu", millisNow);
+                            }
+                            
+                            if (presetMgr->savePreset(presetName, config)) {
+                                Serial.printf("  Preset saved: %s\n", presetName);
+                            } else {
+                                Serial.printf("  Preset save failed: %s\n", presetName);
+                            }
+                        }
+                        
                         if (zoneOk && sysOk) {
                             Serial.println("  All settings saved!");
                         } else {
@@ -1388,6 +1428,40 @@ void loop() {
                                           (!inZoneMode && i == currentEffect) ? " <--" : "");
                         }
                         Serial.println();
+                    }
+                    break;
+
+                case 'R':
+                    // List all saved presets
+                    if (presetMgr) {
+                        if (!presetMgr->init()) {
+                            Serial.println("ERROR: Preset manager not initialized");
+                            break;
+                        }
+                        std::vector<String> presets = presetMgr->listPresets();
+                        Serial.printf("\n=== Saved Presets (%d total) ===\n", presets.size());
+                        if (presets.empty()) {
+                            Serial.println("  No presets saved yet");
+                        } else {
+                            for (size_t i = 0; i < presets.size(); i++) {
+                                lightwaveos::persistence::PresetMetadata metadata;
+                                if (presetMgr->getPresetMetadata(presets[i].c_str(), metadata)) {
+                                    Serial.printf("  %s", presets[i].c_str());
+                                    if (metadata.description.length() > 0) {
+                                        Serial.printf(" - %s", metadata.description.c_str());
+                                    }
+                                    if (metadata.created.length() > 0) {
+                                        Serial.printf(" (%s)", metadata.created.c_str());
+                                    }
+                                    Serial.println();
+                                } else {
+                                    Serial.printf("  %s\n", presets[i].c_str());
+                                }
+                            }
+                        }
+                        Serial.println();
+                    } else {
+                        Serial.println("ERROR: Preset manager not available");
                     }
                     break;
 

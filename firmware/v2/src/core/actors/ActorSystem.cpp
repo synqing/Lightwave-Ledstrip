@@ -7,6 +7,10 @@
  */
 
 #include "ActorSystem.h"
+#include "../../effects/zones/ZoneComposer.h"
+#if FEATURE_AUDIO_SYNC
+#include "../../audio/tempo/TempoTracker.h"
+#endif
 
 #ifndef NATIVE_BUILD
 #include <Arduino.h>
@@ -187,6 +191,16 @@ bool ActorSystem::start()
             m_renderer->setAudioBuffer(&m_audio->getControlBusBuffer());
             // Wire up TempoTracker for phase advancement at 120 FPS
             m_renderer->setTempo(&m_audio->getTempoMut());
+
+            // Phase 2b.1: Wire TempoTracker to ZoneComposer for per-zone tempo modulation
+            zones::ZoneComposer* zoneComposer = m_renderer->getZoneComposer();
+            if (zoneComposer) {
+                zoneComposer->setTempoTracker(&m_audio->getTempoMut());
+#ifndef NATIVE_BUILD
+                ESP_LOGI(TAG, "Zone tempo modulation enabled (Phase 2b.1)");
+#endif
+            }
+
 #ifndef NATIVE_BUILD
             ESP_LOGI(TAG, "Audio integration enabled - ControlBus + TempoTracker");
 #endif

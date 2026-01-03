@@ -376,7 +376,8 @@ static void handleZonesUpdate(AsyncWebSocketClient* client, JsonDocument& doc, c
     bool updatedSpeed = false;
     bool updatedPalette = false;
     bool updatedBlend = false;
-    
+    bool updatedAudio = false;  // Phase 2b.1
+
     if (doc.containsKey("effectId")) {
         uint8_t effectId = doc["effectId"] | 0;
         // DEFENSIVE CHECK: Validate effectId before array access
@@ -386,19 +387,19 @@ static void handleZonesUpdate(AsyncWebSocketClient* client, JsonDocument& doc, c
             updatedEffect = true;
         }
     }
-    
+
     if (doc.containsKey("brightness")) {
         uint8_t brightness = doc["brightness"] | 128;
         ctx.zoneComposer->setZoneBrightness(zoneId, brightness);
         updatedBrightness = true;
     }
-    
+
     if (doc.containsKey("speed")) {
         uint8_t speed = doc["speed"] | 15;
         ctx.zoneComposer->setZoneSpeed(zoneId, speed);
         updatedSpeed = true;
     }
-    
+
     if (doc.containsKey("paletteId")) {
         uint8_t paletteId = doc["paletteId"] | 0;
         // DEFENSIVE CHECK: Validate paletteId before array access
@@ -406,7 +407,7 @@ static void handleZonesUpdate(AsyncWebSocketClient* client, JsonDocument& doc, c
         ctx.zoneComposer->setZonePalette(zoneId, paletteId);
         updatedPalette = true;
     }
-    
+
     if (doc.containsKey("blendMode")) {
         uint8_t blendModeVal = doc["blendMode"] | 0;
         if (blendModeVal <= 7) {
@@ -415,19 +416,42 @@ static void handleZonesUpdate(AsyncWebSocketClient* client, JsonDocument& doc, c
             updatedBlend = true;
         }
     }
-    
+
+    // Phase 2b.1: Zone Audio Config fields
+    if (doc.containsKey("tempoSync")) {
+        ctx.zoneComposer->setZoneTempoSync(zoneId, doc["tempoSync"].as<bool>());
+        updatedAudio = true;
+    }
+    if (doc.containsKey("beatModulation")) {
+        ctx.zoneComposer->setZoneBeatModulation(zoneId, doc["beatModulation"].as<uint8_t>());
+        updatedAudio = true;
+    }
+    if (doc.containsKey("tempoSpeedScale")) {
+        ctx.zoneComposer->setZoneTempoSpeedScale(zoneId, doc["tempoSpeedScale"].as<uint8_t>());
+        updatedAudio = true;
+    }
+    if (doc.containsKey("beatDecay")) {
+        ctx.zoneComposer->setZoneBeatDecay(zoneId, doc["beatDecay"].as<uint8_t>());
+        updatedAudio = true;
+    }
+    if (doc.containsKey("audioBand")) {
+        ctx.zoneComposer->setZoneAudioBand(zoneId, doc["audioBand"].as<uint8_t>());
+        updatedAudio = true;
+    }
+
     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
-    
-    String response = buildWsResponse("zones.changed", requestId, [&ctx, zoneId, updatedEffect, updatedBrightness, updatedSpeed, updatedPalette, updatedBlend](JsonObject& data) {
+
+    String response = buildWsResponse("zones.changed", requestId, [&ctx, zoneId, updatedEffect, updatedBrightness, updatedSpeed, updatedPalette, updatedBlend, updatedAudio](JsonObject& data) {
         data["zoneId"] = zoneId;
-        
+
         JsonArray updated = data["updated"].to<JsonArray>();
         if (updatedEffect) updated.add("effectId");
         if (updatedBrightness) updated.add("brightness");
         if (updatedSpeed) updated.add("speed");
         if (updatedPalette) updated.add("paletteId");
         if (updatedBlend) updated.add("blendMode");
-        
+        if (updatedAudio) updated.add("audioConfig");
+
         JsonObject current = data["current"].to<JsonObject>();
         current["effectId"] = ctx.zoneComposer->getZoneEffect(zoneId);
         current["brightness"] = ctx.zoneComposer->getZoneBrightness(zoneId);
@@ -435,6 +459,15 @@ static void handleZonesUpdate(AsyncWebSocketClient* client, JsonDocument& doc, c
         current["paletteId"] = ctx.zoneComposer->getZonePalette(zoneId);
         current["blendMode"] = static_cast<uint8_t>(ctx.zoneComposer->getZoneBlendMode(zoneId));
         current["blendModeName"] = getBlendModeName(ctx.zoneComposer->getZoneBlendMode(zoneId));
+
+        // Include audio config in response (Phase 2b.1)
+        ZoneAudioConfig audio = ctx.zoneComposer->getZoneAudioConfig(zoneId);
+        JsonObject audioObj = current["audio"].to<JsonObject>();
+        audioObj["tempoSync"] = audio.tempoSync;
+        audioObj["beatModulation"] = audio.beatModulation;
+        audioObj["tempoSpeedScale"] = audio.tempoSpeedScale;
+        audioObj["beatDecay"] = audio.beatDecay;
+        audioObj["audioBand"] = audio.audioBand;
     });
     client->text(response);
 }
@@ -495,13 +528,330 @@ static void handleGetZoneState(AsyncWebSocketClient* client, JsonDocument& doc, 
     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
 }
 
+// Phase 2b.1: Get zone audio config
+static void handleZonesGetAudio(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    if (!ctx.zoneComposer) {
+        const char* requestId = doc["requestId"] | "";
+        client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
+        return;
+    }
+
+    const char* requestId = doc["requestId"] | "";
+    uint8_t zoneId = doc["zoneId"] | 255;
+
+    if (zoneId == 255) {
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "zoneId required", requestId));
+        return;
+    }
+
+    zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
+
+    if (zoneId >= ctx.zoneComposer->getZoneCount()) {
+        client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid zoneId", requestId));
+        return;
+    }
+
+    ZoneAudioConfig audio = ctx.zoneComposer->getZoneAudioConfig(zoneId);
+
+    String response = buildWsResponse("zones.audioConfig", requestId, [zoneId, &audio](JsonObject& data) {
+        data["zoneId"] = zoneId;
+        data["tempoSync"] = audio.tempoSync;
+        data["beatModulation"] = audio.beatModulation;
+        data["tempoSpeedScale"] = audio.tempoSpeedScale;
+        data["beatDecay"] = audio.beatDecay;
+        data["audioBand"] = audio.audioBand;
+    });
+    client->text(response);
+}
+
+// Phase 2b.1: Set zone audio config
+static void handleZonesSetAudio(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    if (!ctx.zoneComposer) {
+        const char* requestId = doc["requestId"] | "";
+        client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
+        return;
+    }
+
+    const char* requestId = doc["requestId"] | "";
+    uint8_t zoneId = doc["zoneId"] | 255;
+
+    if (zoneId == 255) {
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "zoneId required", requestId));
+        return;
+    }
+
+    zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
+
+    if (zoneId >= ctx.zoneComposer->getZoneCount()) {
+        client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid zoneId", requestId));
+        return;
+    }
+
+    // Get current audio config and apply updates
+    ZoneAudioConfig audio = ctx.zoneComposer->getZoneAudioConfig(zoneId);
+    bool hasUpdates = false;
+
+    if (doc.containsKey("tempoSync")) {
+        audio.tempoSync = doc["tempoSync"].as<bool>();
+        hasUpdates = true;
+    }
+    if (doc.containsKey("beatModulation")) {
+        audio.beatModulation = doc["beatModulation"].as<uint8_t>();
+        hasUpdates = true;
+    }
+    if (doc.containsKey("tempoSpeedScale")) {
+        audio.tempoSpeedScale = doc["tempoSpeedScale"].as<uint8_t>();
+        hasUpdates = true;
+    }
+    if (doc.containsKey("beatDecay")) {
+        audio.beatDecay = doc["beatDecay"].as<uint8_t>();
+        hasUpdates = true;
+    }
+    if (doc.containsKey("audioBand")) {
+        uint8_t band = doc["audioBand"].as<uint8_t>();
+        audio.audioBand = (band > 3) ? 0 : band;
+        hasUpdates = true;
+    }
+
+    if (!hasUpdates) {
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "No audio config fields provided", requestId));
+        return;
+    }
+
+    ctx.zoneComposer->setZoneAudioConfig(zoneId, audio);
+    if (ctx.broadcastZoneState) ctx.broadcastZoneState();
+
+    String response = buildWsResponse("zones.audioChanged", requestId, [zoneId, &audio](JsonObject& data) {
+        data["zoneId"] = zoneId;
+        data["tempoSync"] = audio.tempoSync;
+        data["beatModulation"] = audio.beatModulation;
+        data["tempoSpeedScale"] = audio.tempoSpeedScale;
+        data["beatDecay"] = audio.beatDecay;
+        data["audioBand"] = audio.audioBand;
+    });
+    client->text(response);
+}
+
+// Phase 2b.2: Get zone beat trigger config
+static void handleZonesGetBeatTrigger(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    if (!ctx.zoneComposer) {
+        const char* requestId = doc["requestId"] | "";
+        client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
+        return;
+    }
+
+    const char* requestId = doc["requestId"] | "";
+    uint8_t zoneId = doc["zoneId"] | 255;
+
+    if (zoneId == 255) {
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "zoneId required", requestId));
+        return;
+    }
+
+    zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
+
+    if (zoneId >= ctx.zoneComposer->getZoneCount()) {
+        client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid zoneId", requestId));
+        return;
+    }
+
+    bool enabled = false;
+    uint8_t interval = 4;
+    uint8_t effectIds[8] = {0};
+    uint8_t effectCount = 0;
+    uint8_t currentIndex = 0;
+
+    ctx.zoneComposer->getZoneBeatTriggerConfig(zoneId, enabled, interval, effectIds, effectCount, currentIndex);
+
+    String response = buildWsResponse("zones.beatTrigger", requestId, [zoneId, enabled, interval, &effectIds, effectCount, currentIndex](JsonObject& data) {
+        data["zoneId"] = zoneId;
+        data["enabled"] = enabled;
+        data["interval"] = interval;
+        data["currentIndex"] = currentIndex;
+        JsonArray effects = data["effectList"].to<JsonArray>();
+        for (uint8_t i = 0; i < effectCount; i++) {
+            effects.add(effectIds[i]);
+        }
+    });
+    client->text(response);
+}
+
+// Phase 2b.2: Set zone beat trigger config
+static void handleZonesSetBeatTrigger(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    if (!ctx.zoneComposer) {
+        const char* requestId = doc["requestId"] | "";
+        client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
+        return;
+    }
+
+    const char* requestId = doc["requestId"] | "";
+    uint8_t zoneId = doc["zoneId"] | 255;
+
+    if (zoneId == 255) {
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "zoneId required", requestId));
+        return;
+    }
+
+    zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
+
+    if (zoneId >= ctx.zoneComposer->getZoneCount()) {
+        client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid zoneId", requestId));
+        return;
+    }
+
+    bool hasUpdates = false;
+
+    // Handle enabled field
+    if (doc.containsKey("enabled")) {
+        ctx.zoneComposer->setZoneBeatTriggerEnabled(zoneId, doc["enabled"].as<bool>());
+        hasUpdates = true;
+    }
+
+    // Handle interval field
+    if (doc.containsKey("interval")) {
+        uint8_t interval = doc["interval"].as<uint8_t>();
+        // Clamp to valid values (1, 2, 4, 8, 16, 32)
+        if (interval < 1) interval = 1;
+        if (interval > 32) interval = 32;
+        ctx.zoneComposer->setZoneBeatTriggerInterval(zoneId, interval);
+        hasUpdates = true;
+    }
+
+    // Handle effectList array
+    if (doc.containsKey("effectList")) {
+        JsonArray effects = doc["effectList"].as<JsonArray>();
+        if (effects) {
+            uint8_t effectIds[8] = {0};
+            uint8_t count = 0;
+            for (JsonVariant v : effects) {
+                if (count >= 8) break;
+                effectIds[count++] = v.as<uint8_t>();
+            }
+            ctx.zoneComposer->setZoneBeatTriggerEffectList(zoneId, effectIds, count);
+            hasUpdates = true;
+        }
+    }
+
+    if (!hasUpdates) {
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "No beat trigger config fields provided", requestId));
+        return;
+    }
+
+    if (ctx.broadcastZoneState) ctx.broadcastZoneState();
+
+    // Retrieve updated config for response
+    bool enabled = false;
+    uint8_t interval = 4;
+    uint8_t effectIds[8] = {0};
+    uint8_t effectCount = 0;
+    uint8_t currentIndex = 0;
+
+    ctx.zoneComposer->getZoneBeatTriggerConfig(zoneId, enabled, interval, effectIds, effectCount, currentIndex);
+
+    String response = buildWsResponse("zones.beatTriggerChanged", requestId, [zoneId, enabled, interval, &effectIds, effectCount, currentIndex](JsonObject& data) {
+        data["zoneId"] = zoneId;
+        data["enabled"] = enabled;
+        data["interval"] = interval;
+        data["currentIndex"] = currentIndex;
+        JsonArray effects = data["effectList"].to<JsonArray>();
+        for (uint8_t i = 0; i < effectCount; i++) {
+            effects.add(effectIds[i]);
+        }
+    });
+    client->text(response);
+}
+
+// Phase 2c.1: Reorder zones with CENTER ORIGIN constraint
+static void handleZonesReorder(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    if (!ctx.zoneComposer) {
+        const char* requestId = doc["requestId"] | "";
+        client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
+        return;
+    }
+
+    const char* requestId = doc["requestId"] | "";
+
+    // Validate "order" array exists
+    if (!doc.containsKey("order") || !doc["order"].is<JsonArray>()) {
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "Required field 'order' must be an array", requestId));
+        return;
+    }
+
+    JsonArray orderArray = doc["order"];
+    uint8_t orderCount = orderArray.size();
+
+    // Validate order array size matches current zone count
+    if (orderCount != ctx.zoneComposer->getZoneCount()) {
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, "Order array size must match current zone count", requestId));
+        return;
+    }
+
+    // Validate order array size is within bounds
+    if (orderCount == 0 || orderCount > MAX_ZONES) {
+        client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Order array size out of range (1-4)", requestId));
+        return;
+    }
+
+    // Extract order values into array
+    uint8_t newOrder[MAX_ZONES];
+    uint8_t idx = 0;
+    for (JsonVariant v : orderArray) {
+        if (idx >= MAX_ZONES) break;
+        if (!v.is<int>()) {
+            client->text(buildWsError(ErrorCodes::INVALID_TYPE, "Order array must contain integers", requestId));
+            return;
+        }
+        int val = v.as<int>();
+        if (val < 0 || val >= static_cast<int>(orderCount)) {
+            client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Zone ID in order array out of range", requestId));
+            return;
+        }
+        newOrder[idx++] = static_cast<uint8_t>(val);
+    }
+
+    // Attempt reorder - ZoneComposer will validate CENTER ORIGIN constraint
+    bool success = ctx.zoneComposer->reorderZones(newOrder, orderCount);
+
+    if (!success) {
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, "Reorder failed: CENTER ORIGIN constraint violated - Zone 0 must contain LEDs 79/80", requestId));
+        return;
+    }
+
+    // Broadcast zone state update to all WebSocket clients
+    if (ctx.broadcastZoneState) ctx.broadcastZoneState();
+
+    // Also broadcast a specific reorder event
+    if (ctx.ws) {
+        StaticJsonDocument<256> eventDoc;
+        eventDoc["type"] = "zones.reordered";
+        JsonArray orderResp = eventDoc["order"].to<JsonArray>();
+        for (uint8_t i = 0; i < orderCount; i++) {
+            orderResp.add(newOrder[i]);
+        }
+        eventDoc["zoneCount"] = orderCount;
+        String eventOutput;
+        serializeJson(eventDoc, eventOutput);
+        ctx.ws->textAll(eventOutput);
+    }
+
+    // Send success response to requesting client
+    String response = buildWsResponse("zones.reordered", requestId, [&newOrder, orderCount](JsonObject& data) {
+        JsonArray orderResp = data["order"].to<JsonArray>();
+        for (uint8_t i = 0; i < orderCount; i++) {
+            orderResp.add(newOrder[i]);
+        }
+        data["zoneCount"] = orderCount;
+    });
+    client->text(response);
+}
+
 static void handleZonesSetLayout(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     if (!ctx.zoneComposer) {
         const char* requestId = doc["requestId"] | "";
         client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
         return;
     }
-    
+
     const char* requestId = doc["requestId"] | "";
     
     // Parse zones array
@@ -564,6 +914,17 @@ void registerWsZonesCommands(const WebServerContext& ctx) {
     WsCommandRouter::registerCommand("zones.setEffect", handleZonesSetEffect);
     WsCommandRouter::registerCommand("zones.setLayout", handleZonesSetLayout);
     WsCommandRouter::registerCommand("getZoneState", handleGetZoneState);
+
+    // Phase 2b.1: Zone Audio Config commands
+    WsCommandRouter::registerCommand("zones.getAudio", handleZonesGetAudio);
+    WsCommandRouter::registerCommand("zones.setAudio", handleZonesSetAudio);
+
+    // Phase 2b.2: Zone Beat Trigger commands
+    WsCommandRouter::registerCommand("zones.getBeatTrigger", handleZonesGetBeatTrigger);
+    WsCommandRouter::registerCommand("zones.setBeatTrigger", handleZonesSetBeatTrigger);
+
+    // Phase 2c.1: Zone Reordering command
+    WsCommandRouter::registerCommand("zones.reorder", handleZonesReorder);
 }
 
 } // namespace ws

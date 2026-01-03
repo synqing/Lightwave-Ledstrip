@@ -42,6 +42,7 @@
 #include "webserver/ws/WsColorCommands.h"
 #include "webserver/ws/WsPaletteCommands.h"
 #include "webserver/ws/WsPresetCommands.h"
+#include "webserver/ws/WsZonePresetCommands.h"
 #include "webserver/ws/WsBatchCommands.h"
 #if FEATURE_AUDIO_SYNC
 #include "webserver/ws/WsAudioCommands.h"
@@ -161,7 +162,7 @@ bool WebServer::begin() {
     LW_LOGI("Starting v2 WebServer...");
 
     // Initialize LittleFS for static file serving
-    if (!LittleFS.begin(true)) {
+    if (!LittleFS.begin(false)) {
         LW_LOGW("LittleFS mount failed!");
     } else {
         LW_LOGI("LittleFS mounted");
@@ -225,6 +226,14 @@ bool WebServer::begin() {
     // Get zone composer reference if available
     if (m_renderer) {
         m_zoneComposer = m_renderer->getZoneComposer();
+    }
+
+    // Wire up zone state change callback for real-time WebSocket broadcasts
+    if (m_zoneComposer) {
+        m_zoneComposer->setStateChangeCallback([this](uint8_t zoneId) {
+            broadcastSingleZoneState(zoneId);
+        });
+        LW_LOGI("Zone state callback registered");
     }
 
     LW_LOGI("Server running on port %d", WebServerConfig::HTTP_PORT);
@@ -612,6 +621,7 @@ void WebServer::setupWebSocket() {
     webserver::ws::registerWsColorCommands(ctx);
     webserver::ws::registerWsPaletteCommands(ctx);
     webserver::ws::registerWsPresetCommands(ctx);
+    webserver::ws::registerWsZonePresetCommands(ctx);
     webserver::ws::registerWsBatchCommands(ctx);
 #if FEATURE_AUDIO_SYNC
     webserver::ws::registerWsAudioCommands(ctx);
@@ -903,11 +913,66 @@ void WebServer::broadcastZoneState() {
         return;  // Skip this broadcast to prevent queue buildup
     }
     lastZoneBroadcastAttempt = now;
-    
+
     // SAFETY: Validate m_ws is still valid before calling textAll()
     if (m_ws && m_ws->count() > 0) {
         m_ws->textAll(output);
     }
+}
+
+void WebServer::broadcastSingleZoneState(uint8_t zoneId) {
+    // SAFETY: Validate pointers before accessing
+    if (!m_ws) {
+        LW_LOGW("broadcastSingleZoneState: m_ws is null");
+        return;
+    }
+
+    if (m_ws->count() == 0 || !m_zoneComposer) return;
+
+    // Validate zone ID
+    if (zoneId >= m_zoneComposer->getZoneCount()) {
+        LW_LOGW("broadcastSingleZoneState: invalid zoneId %d", zoneId);
+        return;
+    }
+
+    // Build zones.stateChanged message
+    StaticJsonDocument<512> doc;
+    doc["type"] = "zones.stateChanged";
+    doc["zoneId"] = zoneId;
+    doc["timestamp"] = millis();
+
+    // Add current zone state
+    JsonObject current = doc["current"].to<JsonObject>();
+    current["enabled"] = m_zoneComposer->isZoneEnabled(zoneId);
+
+    uint8_t effectId = m_zoneComposer->getZoneEffect(zoneId);
+    current["effectId"] = effectId;
+
+    // SAFE: Use cached state for effect name (thread-safe)
+    const CachedRendererState& cached = m_cachedRendererState;
+    if (effectId < cached.effectCount && cached.effectNames[effectId]) {
+        current["effectName"] = cached.effectNames[effectId];
+    } else {
+        current["effectName"] = "Unknown";
+    }
+
+    current["brightness"] = m_zoneComposer->getZoneBrightness(zoneId);
+    current["speed"] = m_zoneComposer->getZoneSpeed(zoneId);
+    current["paletteId"] = m_zoneComposer->getZonePalette(zoneId);
+
+    uint8_t blendModeValue = static_cast<uint8_t>(m_zoneComposer->getZoneBlendMode(zoneId));
+    current["blendMode"] = blendModeValue;
+    current["blendModeName"] = zones::getBlendModeName(m_zoneComposer->getZoneBlendMode(zoneId));
+
+    String output;
+    serializeJson(doc, output);
+
+    // SAFETY: Validate m_ws is still valid before calling textAll()
+    if (m_ws && m_ws->count() > 0) {
+        m_ws->textAll(output);
+    }
+
+    LW_LOGD("Broadcast zones.stateChanged for zone %d", zoneId);
 }
 
 void WebServer::notifyEffectChange(uint8_t effectId, const char* name) {

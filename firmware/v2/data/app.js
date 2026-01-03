@@ -144,6 +144,10 @@ const state = {
     bpmConfidence: 0,
     lastBeatTime: 0,
 
+    // Preset library throttling
+    lastPresetListFetchMs: 0,
+    presetListFetchThrottleMs: 3000,  // Only fetch once every 3 seconds max
+
     // Limits
     PALETTE_COUNT: 75,  // 0-74
     BRIGHTNESS_MIN: 0,
@@ -1364,6 +1368,24 @@ function fetchZonesState() {
     });
 }
 
+function fetchZoneConfig() {
+    // Fetch zone configuration persistence status
+    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zones/config`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(data => {
+        if (data.success && data.data) {
+            log(`[REST] Zone Config: version=${data.data.configVersion}, checksumValid=${data.data.checksumValid}, enabled=${data.data.enabled}, zoneCount=${data.data.zoneCount}`);
+            console.log('[ZONE CONFIG]', data.data);
+            return data.data;
+        }
+    })
+    .catch(e => {
+        log(`[REST] Error fetching zone config: ${e.message}`);
+    });
+}
+
 function fetchCurrentParameters() {
     const url = `http://${state.deviceHost || '192.168.0.16'}/api/v1/parameters`;
     fetchWithRetry(url)
@@ -1506,12 +1528,14 @@ function updateZonesUI() {
     const zoneRow = document.getElementById('zoneControlsRow');
     const zoneBrightnessRow = document.getElementById('zoneBrightnessRow');
     const zoneQuickControlsRow = document.getElementById('zoneQuickControlsRow');
+    const presetLibraryRow = document.getElementById('presetLibraryRow');
 
     // Show/hide zone controls based on state
     if (state.zones && state.zones.enabled && state.zones.zones && state.zones.zones.length > 0) {
         if (zoneRow) zoneRow.style.display = 'flex';
         if (zoneBrightnessRow) zoneBrightnessRow.style.display = 'flex';
         if (zoneQuickControlsRow) zoneQuickControlsRow.style.display = 'flex';
+        if (presetLibraryRow) presetLibraryRow.style.display = 'flex';
 
         // Update each zone slider (up to 4 zones)
         for (let i = 0; i < Math.min(4, state.zones.zones.length); i++) {
@@ -1557,10 +1581,17 @@ function updateZonesUI() {
 
         // Render zone quick controls
         renderZoneQuickControls();
+        
+        // Load preset list (throttled - only if enough time has passed)
+        const now = Date.now();
+        if (now - state.lastPresetListFetchMs >= state.presetListFetchThrottleMs) {
+            fetchPresetList();
+        }
     } else {
         if (zoneRow) zoneRow.style.display = 'none';
         if (zoneBrightnessRow) zoneBrightnessRow.style.display = 'none';
         if (zoneQuickControlsRow) zoneQuickControlsRow.style.display = 'none';
+        if (presetLibraryRow) presetLibraryRow.style.display = 'none';
     }
 
     // Update zone mode UI
@@ -1580,13 +1611,21 @@ function buildPaletteOptions(selectedId) {
 // Build effect options for dropdown
 function buildEffectOptions(selectedId) {
     let html = '';
-    if (state.effectsList && state.effectsList.length > 0) {
-        for (const effect of state.effectsList) {
+    // Apply current filter to effects list
+    let filteredEffects = state.effectsList || [];
+    if (state.patternFilter === 'reactive') {
+        filteredEffects = filteredEffects.filter(eff => eff.isAudioReactive === true);
+    } else if (state.patternFilter === 'ambient') {
+        filteredEffects = filteredEffects.filter(eff => eff.isAudioReactive !== true);
+    }
+    
+    if (filteredEffects.length > 0) {
+        for (const effect of filteredEffects) {
             const selected = effect.id === selectedId ? 'selected' : '';
             html += `<option value="${effect.id}" ${selected}>${effect.name}</option>`;
         }
     } else {
-        // Fallback if effects list not loaded yet
+        // Fallback if effects list not loaded yet or filter results in empty list
         html = `<option value="${selectedId || 0}">Effect ${selectedId || 0}</option>`;
     }
     return html;
@@ -1617,8 +1656,8 @@ function renderZoneQuickControls() {
                 <div class="card-header" style="color: ${zoneColor}; margin-bottom: var(--space-xs); text-align: left;">Zone ${i}</div>
                 <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
                     <div>
-                        <label style="font-size: 0.65rem; color: var(--text-secondary); display: block; margin-bottom: 2px;">Effect</label>
-                        <select class="control-btn compact zone-quick-select" data-zone="${i}" data-type="effect" style="width: 100%; font-size: 0.7rem; padding: 4px 6px;">
+                        <label style="font-size: 0.65rem; color: var(--text-secondary); display: block; margin-bottom: 2px;">Pattern</label>
+                        <select class="control-btn compact zone-quick-select" data-zone="${i}" data-type="effect" style="width: 100%;">
                             ${buildEffectOptions(currentEffectId)}
                         </select>
                     </div>
@@ -2310,6 +2349,275 @@ function applyZoneLayout() {
     }
 }
 
+// ─────────────────────────────────────────────────────────────
+// Preset Library Management
+// ─────────────────────────────────────────────────────────────
+
+function fetchPresetList() {
+    // Update throttle timestamp
+    state.lastPresetListFetchMs = Date.now();
+    
+    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/presets`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(data => {
+        if (data.success && data.data && data.data.presets) {
+            renderPresetList(data.data.presets);
+        }
+    })
+    .catch(e => {
+        log(`[PRESETS] Error fetching preset list: ${e.message}`);
+        const presetList = document.getElementById('presetList');
+        if (presetList) {
+            presetList.innerHTML = '<div class="value-secondary compact" style="text-align: center; padding: var(--space-sm); color: var(--error);">Failed to load presets</div>';
+        }
+    });
+}
+
+function renderPresetList(presets) {
+    const presetList = document.getElementById('presetList');
+    if (!presetList) return;
+
+    if (!presets || presets.length === 0) {
+        presetList.innerHTML = '<div class="value-secondary compact" style="text-align: center; padding: var(--space-sm);">No presets saved yet</div>';
+        return;
+    }
+
+    let html = '';
+    for (const preset of presets) {
+        const name = preset.name || 'Unnamed';
+        const description = preset.description || '';
+        const author = preset.author || '';
+        const created = preset.created || '';
+        
+        html += `
+            <div style="display: flex; align-items: center; gap: var(--space-xs); padding: var(--space-xs); background: var(--bg-elevated); border-radius: 6px;">
+                <div style="flex: 1; min-width: 0;">
+                    <div style="font-size: 0.75rem; font-weight: 600; color: var(--text-primary);">${name}</div>
+                    ${description ? `<div style="font-size: 0.625rem; color: var(--text-secondary); margin-top: 2px;">${description}</div>` : ''}
+                    ${author || created ? `<div style="font-size: 0.5625rem; color: var(--text-tertiary); margin-top: 2px;">${author ? author + ' • ' : ''}${created ? new Date(created).toLocaleDateString() : ''}</div>` : ''}
+                </div>
+                <div style="display: flex; gap: var(--space-xs); flex-shrink: 0;">
+                    <button class="control-btn compact" data-preset-name="${name}" data-preset-action="load" style="font-size: 0.625rem; padding: 4px 8px;">Load</button>
+                    <button class="control-btn compact" data-preset-name="${name}" data-preset-action="rename" style="font-size: 0.625rem; padding: 4px 8px;">Rename</button>
+                    <button class="control-btn compact" data-preset-name="${name}" data-preset-action="download" style="font-size: 0.625rem; padding: 4px 8px;">Download</button>
+                    <button class="control-btn compact" data-preset-name="${name}" data-preset-action="delete" style="font-size: 0.625rem; padding: 4px 8px; background: var(--error); color: var(--bg-base);">Delete</button>
+                </div>
+            </div>
+        `;
+    }
+    presetList.innerHTML = html;
+
+    // Attach event listeners
+    presetList.querySelectorAll('[data-preset-action]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const action = e.target.dataset.presetAction;
+            const name = e.target.dataset.presetName;
+            if (action === 'load') {
+                loadPreset(name);
+            } else if (action === 'rename') {
+                renamePreset(name);
+            } else if (action === 'download') {
+                downloadPreset(name);
+            } else if (action === 'delete') {
+                if (confirm(`Delete preset "${name}"?`)) {
+                    deletePreset(name);
+                }
+            }
+        });
+    });
+}
+
+function saveCurrentAsPreset() {
+    const nameInput = document.getElementById('presetNameInput');
+    const descInput = document.getElementById('presetDescriptionInput');
+    
+    if (!nameInput || !nameInput.value.trim()) {
+        alert('Please enter a preset name');
+        return;
+    }
+
+    const name = nameInput.value.trim();
+    const description = descInput ? descInput.value.trim() : '';
+
+    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/presets/save-current`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            name: name,
+            description: description || undefined
+        })
+    })
+    .then(data => {
+        if (data.success) {
+            log(`[PRESETS] ✅ Preset saved: ${name}`);
+            if (nameInput) nameInput.value = '';
+            if (descInput) descInput.value = '';
+            fetchPresetList();
+        } else {
+            log(`[PRESETS] ❌ Failed to save preset: ${data.error?.message || 'Unknown error'}`);
+            alert(`Failed to save preset: ${data.error?.message || 'Unknown error'}`);
+        }
+    })
+    .catch(e => {
+        log(`[PRESETS] ❌ Error: ${e.message}`);
+        alert(`Error saving preset: ${e.message}`);
+    });
+}
+
+function loadPreset(name) {
+    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/presets/${encodeURIComponent(name)}/load`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(data => {
+        if (data.success) {
+            log(`[PRESETS] ✅ Preset loaded: ${name}`);
+            // Refresh zones state to show updated configuration
+            fetchZonesState();
+        } else {
+            log(`[PRESETS] ❌ Failed to load preset: ${data.error?.message || 'Unknown error'}`);
+            alert(`Failed to load preset: ${data.error?.message || 'Unknown error'}`);
+        }
+    })
+    .catch(e => {
+        log(`[PRESETS] ❌ Error: ${e.message}`);
+        alert(`Error loading preset: ${e.message}`);
+    });
+}
+
+function downloadPreset(name) {
+    const url = `http://${state.deviceHost || '192.168.0.16'}/api/v1/presets/${encodeURIComponent(name)}`;
+    
+    fetch(url, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => {
+                throw new Error(data.error?.message || `HTTP ${response.status}`);
+            });
+        }
+        return response.text();
+    })
+    .then(text => {
+        // Parse to validate JSON, then stringify with formatting
+        const jsonData = JSON.parse(text);
+        const jsonStr = JSON.stringify(jsonData, null, 2);
+        
+        // Create download link
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = `${name}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+        
+        log(`[PRESETS] ✅ Preset downloaded: ${name}`);
+    })
+    .catch(e => {
+        log(`[PRESETS] ❌ Error downloading preset: ${e.message}`);
+        alert(`Error downloading preset: ${e.message}`);
+    });
+}
+
+function renamePreset(oldName) {
+    const newName = prompt(`Rename preset "${oldName}" to:`, oldName);
+    if (!newName || newName.trim() === '' || newName === oldName) {
+        return;  // User cancelled or didn't change name
+    }
+
+    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/presets/${encodeURIComponent(oldName)}/rename`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newName: newName.trim() })
+    })
+    .then(data => {
+        if (data.success) {
+            log(`[PRESETS] ✅ Preset renamed: ${oldName} -> ${data.data?.newName || newName}`);
+            fetchPresetList();
+        } else {
+            log(`[PRESETS] ❌ Failed to rename preset: ${data.error?.message || 'Unknown error'}`);
+            alert(`Failed to rename preset: ${data.error?.message || 'Unknown error'}`);
+        }
+    })
+    .catch(e => {
+        log(`[PRESETS] ❌ Error: ${e.message}`);
+        alert(`Error renaming preset: ${e.message}`);
+    });
+}
+
+function deletePreset(name) {
+    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/presets/${encodeURIComponent(name)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(data => {
+        if (data.success) {
+            log(`[PRESETS] ✅ Preset deleted: ${name}`);
+            fetchPresetList();
+        } else {
+            log(`[PRESETS] ❌ Failed to delete preset: ${data.error?.message || 'Unknown error'}`);
+            alert(`Failed to delete preset: ${data.error?.message || 'Unknown error'}`);
+        }
+    })
+    .catch(e => {
+        log(`[PRESETS] ❌ Error: ${e.message}`);
+        alert(`Error deleting preset: ${e.message}`);
+    });
+}
+
+function uploadPreset(file) {
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const jsonData = JSON.parse(e.target.result);
+            
+            // Validate JSON structure
+            if (!jsonData.name || !jsonData.zones || !jsonData.segments) {
+                throw new Error('Invalid preset format');
+            }
+
+            // Upload preset
+            fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/presets`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(jsonData)
+            })
+            .then(data => {
+                if (data.success) {
+                    log(`[PRESETS] ✅ Preset uploaded: ${jsonData.name}`);
+                    fetchPresetList();
+                    
+                    // Clear file input
+                    const uploadInput = document.getElementById('presetUploadInput');
+                    if (uploadInput) uploadInput.value = '';
+                    const fileNameSpan = document.getElementById('presetUploadFileName');
+                    if (fileNameSpan) fileNameSpan.textContent = 'No file selected';
+                } else {
+                    log(`[PRESETS] ❌ Failed to upload preset: ${data.error?.message || 'Unknown error'}`);
+                    alert(`Failed to upload preset: ${data.error?.message || 'Unknown error'}`);
+                }
+            })
+            .catch(e => {
+                log(`[PRESETS] ❌ Error: ${e.message}`);
+                alert(`Error uploading preset: ${e.message}`);
+            });
+        } catch (err) {
+            log(`[PRESETS] ❌ Invalid JSON file: ${err.message}`);
+            alert(`Invalid preset file: ${err.message}`);
+        }
+    };
+    reader.readAsText(file);
+}
+
 function updateAllUI() {
     updateConnectionUI();
     updatePatternUI();
@@ -2520,6 +2828,10 @@ function init() {
             }
             updatePatternFilterUI();
             populateEffectsDropdown();
+            // Refresh zone quick controls to apply filter
+            if (state.zones && state.zones.enabled) {
+                renderZoneQuickControls();
+            }
         });
     }
     
@@ -2609,6 +2921,41 @@ function init() {
     }
     if (zoneApplyButton) {
         zoneApplyButton.addEventListener('click', applyZoneLayout);
+    }
+
+    // Bind preset library events
+    const presetSaveButton = document.getElementById('presetSaveButton');
+    const presetUploadButton = document.getElementById('presetUploadButton');
+    const presetUploadInput = document.getElementById('presetUploadInput');
+    const presetNameInput = document.getElementById('presetNameInput');
+    
+    if (presetSaveButton) {
+        presetSaveButton.addEventListener('click', saveCurrentAsPreset);
+    }
+    
+    if (presetNameInput) {
+        presetNameInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                saveCurrentAsPreset();
+            }
+        });
+    }
+    
+    if (presetUploadButton && presetUploadInput) {
+        presetUploadButton.addEventListener('click', () => {
+            presetUploadInput.click();
+        });
+        
+        presetUploadInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const fileNameSpan = document.getElementById('presetUploadFileName');
+                if (fileNameSpan) {
+                    fileNameSpan.textContent = file.name;
+                }
+                uploadPreset(file);
+            }
+        });
     }
 
     // Check if we're running on the device or remotely

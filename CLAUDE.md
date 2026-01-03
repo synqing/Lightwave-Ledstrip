@@ -254,6 +254,8 @@ pio run -e esp32dev_wifi -t upload
 
 ## Build Commands
 
+### LightwaveOS v2 (ESP32-S3)
+
 ```bash
 # Default build (no WiFi)
 pio run -t upload
@@ -270,6 +272,43 @@ pio device monitor -b 115200
 # Clean build
 pio run -t clean
 ```
+
+### Tab5 Encoder (ESP32-P4) - CRITICAL BUILD REQUIREMENTS
+
+**⚠️ Tab5 uses ESP32-P4 (RISC-V). It requires a SPECIFIC build invocation.**
+
+#### ⛔ FORBIDDEN - These commands WILL FAIL:
+
+```bash
+# ❌ WRONG - Missing PATH isolation
+pio run -e tab5 -d firmware/Tab5.encoder
+
+# ❌ WRONG - Never cd into directory
+cd firmware/Tab5.encoder && pio run -e tab5
+
+# ❌ WRONG - Never add hardcoded toolchain paths
+PATH="...:$HOME/.platformio/packages/toolchain-riscv32-esp/..." pio run ...
+
+# ❌ WRONG - Never specify upload port manually
+pio run -e tab5 -t upload --upload-port /dev/cu.usbmodem21401 ...
+```
+
+#### ✅ CORRECT - Run from repository root:
+
+```bash
+# Build:
+PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" pio run -e tab5 -d firmware/Tab5.encoder
+
+# Build + Upload (auto-detect port):
+PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" pio run -e tab5 -t upload -d firmware/Tab5.encoder
+
+# Monitor:
+pio device monitor -d firmware/Tab5.encoder -b 115200
+```
+
+**Why:** The pre-build hook (`scripts/pio_pre.py`) injects the RISC-V toolchain. A clean PATH lets it work correctly.
+
+**See:** `firmware/Tab5.encoder/README.md` for full details.
 
 ## Hardware Configuration
 

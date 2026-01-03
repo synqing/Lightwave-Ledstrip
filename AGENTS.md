@@ -29,9 +29,10 @@ This repository contains firmware for an ESP32‑S3 driving a dual‑strip Light
 
 ## Build / Flash / Monitor (PlatformIO)
 
-This repo uses PlatformIO with two standalone projects:
+This repo uses PlatformIO with three standalone projects:
 - **LightwaveOS (v2)**: `firmware/v2/`
 - **Encoder (K1.8encoderS3)**: `firmware/K1.8encoderS3/`
+- **Tab5 Encoder**: `firmware/Tab5.encoder/`
 
 ### LightwaveOS Build Commands
 
@@ -48,6 +49,57 @@ This repo uses PlatformIO with two standalone projects:
   - `cd firmware/K1.8encoderS3 && pio run -e atoms3`
 - **Build + upload**:
   - `cd firmware/K1.8encoderS3 && pio run -e atoms3 -t upload`
+
+### Tab5 Encoder Build Commands
+
+**⚠️ CRITICAL: Tab5 (ESP32-P4/RISC-V) requires a SPECIFIC build invocation. The pre-build hook handles toolchain setup - do NOT add manual toolchain paths.**
+
+---
+
+#### ⛔ FORBIDDEN COMMANDS - THESE WILL FAIL ⛔
+
+```bash
+# ❌ WRONG - Missing PATH isolation
+pio run -e tab5 -d firmware/Tab5.encoder
+
+# ❌ WRONG - Never cd into the directory
+cd firmware/Tab5.encoder && pio run -e tab5
+
+# ❌ WRONG - Never add hardcoded toolchain paths (the hook does this)
+PATH="...:$HOME/.platformio/packages/toolchain-riscv32-esp/riscv32-esp-elf/bin" pio run ...
+
+# ❌ WRONG - Never specify upload port manually
+pio run -e tab5 -t upload --upload-port /dev/cu.usbmodem21401 -d firmware/Tab5.encoder
+
+# ❌ WRONG - Never try to manually fix toolchain PATH
+export PATH="$PATH:$HOME/.platformio/packages/toolchain-riscv32-esp/bin"
+```
+
+---
+
+#### ✅ CORRECT COMMANDS (from repository root) ✅
+
+```bash
+# Build only:
+PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" pio run -e tab5 -d firmware/Tab5.encoder
+
+# Build + Upload (auto-detect port - DO NOT specify port manually):
+PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" pio run -e tab5 -t upload -d firmware/Tab5.encoder
+
+# Serial monitor:
+pio device monitor -d firmware/Tab5.encoder -b 115200
+```
+
+---
+
+#### Why This Works
+
+1. **Clean PATH** - The minimal PATH prevents wrong toolchains from being picked up
+2. **Pre-build hook** - `scripts/pio_pre.py` automatically finds and injects the RISC-V toolchain
+3. **`-d` flag** - Specifies project directory without `cd`, ensuring hook runs correctly
+4. **Auto-detect port** - Manual port specification fails due to USB CDC timing issues
+
+**DO NOT remove or modify `firmware/Tab5.encoder/scripts/pio_pre.py` - it is essential for the build.**
 
 Notes:
 - `wifi_credentials.ini` is loaded via `extra_configs` and may be gitignored. See `wifi_credentials.ini.template`.
@@ -246,7 +298,14 @@ Use this section as a fast “where do I change what?” map. Keep changes minim
 - **Centre mapping errors**: Centre is between LEDs 79 and 80. Be careful with integer rounding when computing signed position.
 - **ZoneComposer buffer sizes**: ZoneComposer renders to a temp buffer; avoid assuming global `ledCount` inside effects.
 - **Colour correction sensitivity**: Some LGP/interference effects are sensitive; check `PatternRegistry::isLGPSensitive()` and related logic.
-- **Build paths**: Always `cd` into `firmware/v2` or `firmware/K1.8encoderS3` before running PlatformIO commands.
+- **Build paths**:
+  - For `firmware/v2` or `firmware/K1.8encoderS3`: Always `cd` into the directory before running PlatformIO commands.
+  - For `firmware/Tab5.encoder`: **CRITICAL - READ CAREFULLY:**
+    - **NEVER** `cd` into the directory
+    - **NEVER** add hardcoded toolchain paths to PATH
+    - **NEVER** specify `--upload-port` manually
+    - **ALWAYS** run from repository root with clean PATH: `PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" pio run -e tab5 -d firmware/Tab5.encoder`
+    - The pre-build hook (`scripts/pio_pre.py`) handles toolchain injection - do not bypass it
 
 ## Agent Workflow Expectations
 

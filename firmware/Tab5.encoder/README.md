@@ -35,9 +35,82 @@ SCL (white)     ──── SCL (GPIO 54)
 
 ## Build Instructions
 
-### Option 1: Arduino IDE (Recommended)
+### Option 1: PlatformIO (Recommended)
 
-Arduino IDE is the guaranteed development path for Tab5.
+The Tab5 uses ESP32-P4 (RISC-V architecture). A pre-build hook (`scripts/pio_pre.py`) automatically configures the toolchain.
+
+---
+
+## ⛔ CRITICAL: WHAT NOT TO DO ⛔
+
+**These commands WILL FAIL. Do not use them:**
+
+```bash
+# ❌ WRONG - Missing PATH isolation, will use wrong toolchain
+pio run -e tab5 -d firmware/Tab5.encoder
+
+# ❌ WRONG - Never cd into the directory
+cd firmware/Tab5.encoder && pio run -e tab5
+
+# ❌ WRONG - Never add hardcoded toolchain paths
+PATH="...:$HOME/.platformio/packages/toolchain-riscv32-esp/riscv32-esp-elf/bin" pio run ...
+
+# ❌ WRONG - Never specify upload port manually (use auto-detect)
+pio run -e tab5 -t upload --upload-port /dev/cu.usbmodem21401 -d firmware/Tab5.encoder
+
+# ❌ WRONG - Never try to manually fix toolchain PATH issues
+export PATH="$PATH:$HOME/.platformio/packages/toolchain-riscv32-esp/bin"
+```
+
+---
+
+## ✅ CORRECT BUILD COMMANDS ✅
+
+**Run these from the REPOSITORY ROOT (`Lightwave-Ledstrip/`):**
+
+```bash
+# Build only:
+PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" pio run -e tab5 -d firmware/Tab5.encoder
+
+# Build + Upload (auto-detect port):
+PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" pio run -e tab5 -t upload -d firmware/Tab5.encoder
+
+# Monitor serial output:
+pio device monitor -d firmware/Tab5.encoder -b 115200
+```
+
+---
+
+## Why This Specific Command?
+
+1. **`PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"`** - Provides a clean, minimal PATH. The pre-build hook (`scripts/pio_pre.py`) then adds the correct RISC-V toolchain path automatically.
+
+2. **`-d firmware/Tab5.encoder`** - Tells PlatformIO where the project is WITHOUT changing directory. This ensures the pre-build hook runs correctly.
+
+3. **No `--upload-port`** - Let PlatformIO auto-detect the port. Manual port specification often fails due to timing issues with USB CDC.
+
+4. **Pre-build hook** - `scripts/pio_pre.py` automatically:
+   - Finds the RISC-V toolchain (`toolchain-riscv32-esp`)
+   - Prepends its `bin/` directory to PATH
+   - Adds framework include directories for Network/Ethernet libraries
+
+---
+
+## Pre-Build Hook Details
+
+The `scripts/pio_pre.py` script is **CRITICAL** - do not remove or modify it unless you know what you're doing.
+
+It logs diagnostics to `.cursor/debug.log` (if that path exists) showing:
+- H1: Toolchain directory detection
+- H2: Bin directory selection
+- H5: Framework directory detection
+- H6: Extra include directories added
+
+---
+
+### Option 2: Arduino IDE (Fallback)
+
+If PlatformIO fails, use Arduino IDE:
 
 1. **Add Board Manager URL:**
    - File → Preferences → Additional Board Manager URLs
@@ -61,23 +134,6 @@ Arduino IDE is the guaranteed development path for Tab5.
    - Connect Tab5 via USB-C
    - Select port (Tools → Port)
    - Click Upload
-
-### Option 2: PlatformIO (Experimental)
-
-PlatformIO support for ESP32-P4 is experimental and uses a community fork.
-
-```bash
-# From the Tab5.encoder directory:
-pio run -e tab5
-
-# Upload:
-pio run -e tab5 -t upload
-
-# Monitor serial:
-pio device monitor -b 115200
-```
-
-**Note:** If PlatformIO fails, fall back to Arduino IDE.
 
 ## WiFi Configuration
 

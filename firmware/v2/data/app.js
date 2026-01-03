@@ -114,6 +114,7 @@ const state = {
     pendingMoodChange: null,       // Timer ID when mood change is pending
     pendingFadeChange: null,       // Timer ID when fade change is pending
     pendingZoneSpeedChange: {},    // Object: { [zoneId]: timerId } for per-zone debouncing
+    pendingZoneBrightnessChange: {}, // Object: { [zoneId]: timerId } for per-zone brightness debouncing
     pendingZoneModeToggle: null,   // Timer ID when zone mode toggle is pending (prevents rapid toggles)
 
     // Current values (synced from server)
@@ -215,6 +216,21 @@ function connect() {
             clearTimeout(state.pendingZoneModeToggle);
             state.pendingZoneModeToggle = null;
         }
+
+        // Clear pending zone speed/brightness changes
+        for (const zoneId in state.pendingZoneSpeedChange) {
+            if (state.pendingZoneSpeedChange[zoneId]) {
+                clearTimeout(state.pendingZoneSpeedChange[zoneId]);
+            }
+        }
+        state.pendingZoneSpeedChange = {};
+
+        for (const zoneId in state.pendingZoneBrightnessChange) {
+            if (state.pendingZoneBrightnessChange[zoneId]) {
+                clearTimeout(state.pendingZoneBrightnessChange[zoneId]);
+            }
+        }
+        state.pendingZoneBrightnessChange = {};
 
         // Request initial state (re-fetch all state on reconnect)
         setTimeout(() => {
@@ -1207,6 +1223,68 @@ function onZoneSpeedChange(zoneId) {
     }
 }
 
+// Zone brightness control handlers (per-zone)
+const zoneBrightnessUpdateTimers = {};
+
+function onZoneBrightnessChange(zoneId) {
+    const slider = elements[`zone${zoneId}BrightnessSlider`];
+    if (!slider) return;
+
+    const newVal = parseInt(slider.value);
+    if (!state.zones || !state.zones.zones || !state.zones.zones[zoneId]) return;
+
+    const currentBrightness = state.zones.zones[zoneId].brightness || 128;
+    if (newVal !== currentBrightness) {
+        state.zones.zones[zoneId].brightness = newVal;
+        const valueEl = elements[`zone${zoneId}BrightnessValue`];
+        if (valueEl) valueEl.textContent = newVal;
+
+        // Set pending flag to ignore stale server updates while dragging
+        if (state.pendingZoneBrightnessChange[zoneId]) {
+            clearTimeout(state.pendingZoneBrightnessChange[zoneId]);
+        }
+        state.pendingZoneBrightnessChange[zoneId] = setTimeout(() => {
+            state.pendingZoneBrightnessChange[zoneId] = null;
+        }, 1000);
+
+        // Debounce API calls while dragging
+        if (zoneBrightnessUpdateTimers[zoneId]) {
+            clearTimeout(zoneBrightnessUpdateTimers[zoneId]);
+        }
+
+        zoneBrightnessUpdateTimers[zoneId] = setTimeout(() => {
+            // Only send if zones are enabled (prevents flooding when disabled)
+            if (!state.zones || !state.zones.enabled) {
+                log(`[ZONE] Zone mode is disabled, not sending brightness change for zone ${zoneId}`);
+                return;
+            }
+
+            // Try WebSocket
+            if (state.connected && state.ws && state.ws.readyState === WebSocket.OPEN) {
+                send({ type: 'zones.update', zoneId: zoneId, brightness: newVal });
+            }
+
+            // REST API backup (only if zones are enabled)
+            fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zones/${zoneId}/brightness`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ brightness: newVal })
+            })
+            .then(data => {
+                if (data.success) {
+                    log(`[REST] Zone ${zoneId} brightness set to: ${newVal}`);
+                }
+            })
+            .catch(e => {
+                // 404 is OK if zones aren't fully initialized yet
+                if (e.message && !e.message.includes('404')) {
+                    log(`[REST] Error setting zone ${zoneId} brightness: ${e.message}`);
+                }
+            });
+        }, 300); // Debounce time matches speed slider
+    }
+}
+
 // ─────────────────────────────────────────────────────────────
 // UI Update Functions
 // ─────────────────────────────────────────────────────────────
@@ -1421,46 +1499,163 @@ function updateZoneModeUI() {
     }
 }
 
+// Zone colour mapping (used by updateZonesUI and renderZoneQuickControls)
+const ZONE_COLORS = ['#06b6d4', '#22c55e', '#a855f7', '#3b82f6'];  // cyan, green, purple, blue
+
 function updateZonesUI() {
     const zoneRow = document.getElementById('zoneControlsRow');
-    if (!zoneRow) return;
+    const zoneBrightnessRow = document.getElementById('zoneBrightnessRow');
+    const zoneQuickControlsRow = document.getElementById('zoneQuickControlsRow');
 
     // Show/hide zone controls based on state
     if (state.zones && state.zones.enabled && state.zones.zones && state.zones.zones.length > 0) {
-        zoneRow.style.display = 'flex';
-        
-        // Update each zone slider (up to 3 zones)
-        for (let i = 0; i < Math.min(3, state.zones.zones.length); i++) {
+        if (zoneRow) zoneRow.style.display = 'flex';
+        if (zoneBrightnessRow) zoneBrightnessRow.style.display = 'flex';
+        if (zoneQuickControlsRow) zoneQuickControlsRow.style.display = 'flex';
+
+        // Update each zone slider (up to 4 zones)
+        for (let i = 0; i < Math.min(4, state.zones.zones.length); i++) {
             const zone = state.zones.zones[i];
             if (!zone) continue;
 
-            const slider = elements[`zone${i}SpeedSlider`];
-            const value = elements[`zone${i}SpeedValue`];
-            
-            if (slider && zone.speed !== undefined) {
+            // Update speed slider
+            const speedSlider = elements[`zone${i}SpeedSlider`];
+            const speedValue = elements[`zone${i}SpeedValue`];
+
+            if (speedSlider && zone.speed !== undefined) {
                 // Only update if not pending (user is not dragging)
                 if (!state.pendingZoneSpeedChange[i]) {
-                    slider.value = zone.speed;
+                    speedSlider.value = zone.speed;
                 }
             }
-            if (value && zone.speed !== undefined) {
-                value.textContent = zone.speed;
+            if (speedValue && zone.speed !== undefined) {
+                speedValue.textContent = zone.speed;
+            }
+
+            // Update brightness slider
+            const brightnessSlider = elements[`zone${i}BrightnessSlider`];
+            const brightnessValue = elements[`zone${i}BrightnessValue`];
+            const zoneBrightness = zone.brightness !== undefined ? zone.brightness : 128;
+
+            if (brightnessSlider) {
+                // Only update if not pending (user is not dragging)
+                if (!state.pendingZoneBrightnessChange[i]) {
+                    brightnessSlider.value = zoneBrightness;
+                }
+            }
+            if (brightnessValue) {
+                brightnessValue.textContent = zoneBrightness;
             }
         }
+
+        // Show/hide zone 3 sliders based on zone count
+        const hasZone3 = state.zones.zones.length >= 4;
+        const zone3SpeedSection = elements.zone3SpeedSlider ? elements.zone3SpeedSlider.closest('section') : null;
+        const zone3BrightnessSection = elements.zone3BrightnessSlider ? elements.zone3BrightnessSlider.closest('section') : null;
+        if (zone3SpeedSection) zone3SpeedSection.style.display = hasZone3 ? 'block' : 'none';
+        if (zone3BrightnessSection) zone3BrightnessSection.style.display = hasZone3 ? 'block' : 'none';
+
+        // Render zone quick controls
+        renderZoneQuickControls();
     } else {
-        zoneRow.style.display = 'none';
+        if (zoneRow) zoneRow.style.display = 'none';
+        if (zoneBrightnessRow) zoneBrightnessRow.style.display = 'none';
+        if (zoneQuickControlsRow) zoneQuickControlsRow.style.display = 'none';
     }
-    
+
     // Update zone mode UI
     updateZoneModeUI();
+}
+
+// Build palette options for dropdown
+function buildPaletteOptions(selectedId) {
+    let html = '';
+    for (let i = 0; i < PALETTE_NAMES.length; i++) {
+        const selected = i === selectedId ? 'selected' : '';
+        html += `<option value="${i}" ${selected}>${PALETTE_NAMES[i]}</option>`;
+    }
+    return html;
+}
+
+// Build effect options for dropdown
+function buildEffectOptions(selectedId) {
+    let html = '';
+    if (state.effectsList && state.effectsList.length > 0) {
+        for (const effect of state.effectsList) {
+            const selected = effect.id === selectedId ? 'selected' : '';
+            html += `<option value="${effect.id}" ${selected}>${effect.name}</option>`;
+        }
+    } else {
+        // Fallback if effects list not loaded yet
+        html = `<option value="${selectedId || 0}">Effect ${selectedId || 0}</option>`;
+    }
+    return html;
+}
+
+// Render zone quick controls (palette and effect dropdowns per zone)
+function renderZoneQuickControls() {
+    const container = document.getElementById('zoneQuickControlsGrid');
+    if (!container) return;
+    if (!state.zones || !state.zones.zones) {
+        container.innerHTML = '';
+        return;
+    }
+
+    const zoneCount = state.zones.zones.length;
+    let html = '';
+
+    for (let i = 0; i < zoneCount; i++) {
+        const zone = state.zones.zones[i];
+        if (!zone) continue;
+
+        const zoneColor = ZONE_COLORS[i % ZONE_COLORS.length];
+        const currentPaletteId = zone.paletteId !== undefined ? zone.paletteId : state.paletteId;
+        const currentEffectId = zone.effectId !== undefined ? zone.effectId : state.effectId;
+
+        html += `
+            <div class="zone-quick-control" style="padding: var(--space-sm); border: 1px solid ${zoneColor}40; border-radius: 8px; background: ${zoneColor}10;">
+                <div class="card-header" style="color: ${zoneColor}; margin-bottom: var(--space-xs); text-align: left;">Zone ${i}</div>
+                <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
+                    <div>
+                        <label style="font-size: 0.65rem; color: var(--text-secondary); display: block; margin-bottom: 2px;">Effect</label>
+                        <select class="control-btn compact zone-quick-select" data-zone="${i}" data-type="effect" style="width: 100%; font-size: 0.7rem; padding: 4px 6px;">
+                            ${buildEffectOptions(currentEffectId)}
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size: 0.65rem; color: var(--text-secondary); display: block; margin-bottom: 2px;">Palette</label>
+                        <select class="control-btn compact zone-quick-select" data-zone="${i}" data-type="palette" style="width: 100%; font-size: 0.7rem; padding: 4px 6px;">
+                            ${buildPaletteOptions(currentPaletteId)}
+                        </select>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    container.innerHTML = html;
+
+    // Attach change handlers
+    container.querySelectorAll('.zone-quick-select').forEach(select => {
+        select.addEventListener('change', (e) => {
+            const zoneId = parseInt(e.target.dataset.zone);
+            const type = e.target.dataset.type;
+            const value = parseInt(e.target.value);
+
+            if (type === 'palette') {
+                setZonePalette(zoneId, value);
+            } else if (type === 'effect') {
+                setZoneEffect(zoneId, value);
+            }
+        });
+    });
 }
 
 // ─────────────────────────────────────────────────────────────
 // Zone Editor Functions
 // ─────────────────────────────────────────────────────────────
 
-// Zone colour mapping
-const ZONE_COLORS = ['#06b6d4', '#22c55e', '#a855f7', '#3b82f6'];  // cyan, green, purple, blue
+// Zone editor constants (ZONE_COLORS is defined above updateZonesUI)
 const CENTER_LEFT = 79;
 const CENTER_RIGHT = 80;
 const MAX_LED = 159;
@@ -2292,6 +2487,18 @@ function init() {
     elements.zone1SpeedValue = document.getElementById('zone1SpeedValue');
     elements.zone2SpeedSlider = document.getElementById('zone2SpeedSlider');
     elements.zone2SpeedValue = document.getElementById('zone2SpeedValue');
+    elements.zone3SpeedSlider = document.getElementById('zone3SpeedSlider');
+    elements.zone3SpeedValue = document.getElementById('zone3SpeedValue');
+
+    // Zone brightness sliders
+    elements.zone0BrightnessSlider = document.getElementById('zone0BrightnessSlider');
+    elements.zone0BrightnessValue = document.getElementById('zone0BrightnessValue');
+    elements.zone1BrightnessSlider = document.getElementById('zone1BrightnessSlider');
+    elements.zone1BrightnessValue = document.getElementById('zone1BrightnessValue');
+    elements.zone2BrightnessSlider = document.getElementById('zone2BrightnessSlider');
+    elements.zone2BrightnessValue = document.getElementById('zone2BrightnessValue');
+    elements.zone3BrightnessSlider = document.getElementById('zone3BrightnessSlider');
+    elements.zone3BrightnessValue = document.getElementById('zone3BrightnessValue');
 
     // Bind button events
     document.getElementById('patternPrev').addEventListener('click', prevPattern);
@@ -2368,7 +2575,24 @@ function init() {
     if (elements.zone2SpeedSlider) {
         elements.zone2SpeedSlider.addEventListener('input', () => onZoneSpeedChange(2));
     }
-    
+    if (elements.zone3SpeedSlider) {
+        elements.zone3SpeedSlider.addEventListener('input', () => onZoneSpeedChange(3));
+    }
+
+    // Bind zone brightness slider events
+    if (elements.zone0BrightnessSlider) {
+        elements.zone0BrightnessSlider.addEventListener('input', () => onZoneBrightnessChange(0));
+    }
+    if (elements.zone1BrightnessSlider) {
+        elements.zone1BrightnessSlider.addEventListener('input', () => onZoneBrightnessChange(1));
+    }
+    if (elements.zone2BrightnessSlider) {
+        elements.zone2BrightnessSlider.addEventListener('input', () => onZoneBrightnessChange(2));
+    }
+    if (elements.zone3BrightnessSlider) {
+        elements.zone3BrightnessSlider.addEventListener('input', () => onZoneBrightnessChange(3));
+    }
+
     // Bind zone editor events
     const zoneCountSelect = document.getElementById('zoneCountSelect');
     const zonePresetSelect = document.getElementById('zonePresetSelect');

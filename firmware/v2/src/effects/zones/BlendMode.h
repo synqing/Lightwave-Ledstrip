@@ -45,6 +45,27 @@ inline const char* getBlendModeName(BlendMode mode) {
     }
 }
 
+/**
+ * @brief Validate and clamp blend mode to valid range
+ * @param mode Raw blend mode value
+ * @return Valid BlendMode (defaults to OVERWRITE if invalid)
+ */
+inline BlendMode validateBlendMode(uint8_t mode) {
+    if (mode >= static_cast<uint8_t>(BlendMode::MODE_COUNT)) {
+        return BlendMode::OVERWRITE;
+    }
+    return static_cast<BlendMode>(mode);
+}
+
+/**
+ * @brief Check if blend mode value is valid
+ * @param mode Blend mode value to check
+ * @return true if valid (0-7)
+ */
+inline bool isValidBlendMode(uint8_t mode) {
+    return mode < static_cast<uint8_t>(BlendMode::MODE_COUNT);
+}
+
 // ==================== Blend Functions ====================
 
 /**

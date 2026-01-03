@@ -518,7 +518,9 @@ void ZoneComposer::setZoneBlendMode(uint8_t zone, BlendMode mode) {
     if (safeZone >= MAX_ZONES || safeZone >= m_zoneCount) {
         return;  // Invalid zone, ignore request
     }
-    m_zones[safeZone].blendMode = mode;
+    // DEFENSIVE CHECK: Validate blend mode before storing
+    BlendMode safeMode = validateBlendMode(static_cast<uint8_t>(mode));
+    m_zones[safeZone].blendMode = safeMode;
 }
 
 void ZoneComposer::setZoneEnabled(uint8_t zone, bool enabled) {

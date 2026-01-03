@@ -152,9 +152,61 @@
                     <div class="slider-value" id="zone2SpeedValue">15</div>
                 </div>
             </section>
+            <!-- Zone 3 Speed -->
+            <section class="control-card full-width slider-card">
+                <h2 class="card-header">Zone 3 Speed</h2>
+                <div class="slider-container">
+                    <input type="range" id="zone3SpeedSlider" min="1" max="50" value="15" class="slider" aria-label="Zone 3 Speed">
+                    <div class="slider-value" id="zone3SpeedValue">15</div>
+                </div>
+            </section>
         </div>
 
-        <!-- Row 5: Zone Layout Editor (only shown when zones enabled) -->
+        <!-- Row 5: Zone Brightness Controls (only shown when zones enabled) -->
+        <div class="controls-row" id="zoneBrightnessRow" style="display: none;">
+            <!-- Zone 0 Brightness -->
+            <section class="control-card full-width slider-card">
+                <h2 class="card-header">Zone 0 Brightness</h2>
+                <div class="slider-container">
+                    <input type="range" id="zone0BrightnessSlider" min="0" max="255" value="128" class="slider" aria-label="Zone 0 Brightness">
+                    <div class="slider-value" id="zone0BrightnessValue">128</div>
+                </div>
+            </section>
+            <!-- Zone 1 Brightness -->
+            <section class="control-card full-width slider-card">
+                <h2 class="card-header">Zone 1 Brightness</h2>
+                <div class="slider-container">
+                    <input type="range" id="zone1BrightnessSlider" min="0" max="255" value="128" class="slider" aria-label="Zone 1 Brightness">
+                    <div class="slider-value" id="zone1BrightnessValue">128</div>
+                </div>
+            </section>
+            <!-- Zone 2 Brightness -->
+            <section class="control-card full-width slider-card">
+                <h2 class="card-header">Zone 2 Brightness</h2>
+                <div class="slider-container">
+                    <input type="range" id="zone2BrightnessSlider" min="0" max="255" value="128" class="slider" aria-label="Zone 2 Brightness">
+                    <div class="slider-value" id="zone2BrightnessValue">128</div>
+                </div>
+            </section>
+            <!-- Zone 3 Brightness -->
+            <section class="control-card full-width slider-card">
+                <h2 class="card-header">Zone 3 Brightness</h2>
+                <div class="slider-container">
+                    <input type="range" id="zone3BrightnessSlider" min="0" max="255" value="128" class="slider" aria-label="Zone 3 Brightness">
+                    <div class="slider-value" id="zone3BrightnessValue">128</div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Row 6: Zone Quick Controls (only shown when zones enabled) -->
+        <div class="controls-row" id="zoneQuickControlsRow" style="display: none;">
+            <section class="control-card full-width" id="zoneQuickControlsCard">
+                <h2 class="card-header">Zone Quick Controls</h2>
+                <div id="zoneQuickControlsGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-md);"></div>
+            </section>
+        </div>
+
+        <!-- Row 7: Zone Layout Editor (only shown when zones enabled) -->
         <div class="controls-row" id="zoneEditorRow" style="display: none;">
             <section class="control-card full-width" id="zoneEditorCard">
                 <h2 class="card-header">Zone Layout Editor</h2>

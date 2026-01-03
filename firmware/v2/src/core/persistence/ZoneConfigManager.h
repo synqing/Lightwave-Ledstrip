@@ -229,7 +229,7 @@ private:
     // Effect limits (should match RendererActor upper bound)
     static constexpr uint8_t MAX_EFFECT_ID = 96;
     static constexpr uint8_t MIN_SPEED = 1;
-    static constexpr uint8_t MAX_SPEED = 50;
+    static constexpr uint8_t MAX_SPEED = 100;
     static constexpr uint8_t MAX_PALETTE_ID = 36;
 };
 

@@ -2,21 +2,60 @@
 
 ## Overview
 
-LightwaveOS supports Over-The-Air (OTA) firmware updates via HTTP POST to the `/update` endpoint. This allows firmware deployment without physical USB connection to the ESP32-S3 device.
+LightwaveOS supports Over-The-Air (OTA) firmware updates via HTTP POST. This allows firmware deployment without physical USB connection to the ESP32-S3 device.
 
 ## Quick Reference
 
-### OTA Endpoint
+### OTA Endpoints
 
-| Property | Value |
-|----------|-------|
-| URL | `http://lightwaveos.local/update` or `http://<device-ip>/update` |
-| Method | `POST` |
-| Auth Header | `X-OTA-Token: LW-OTA-2024-SecureUpdate` |
-| Content Type | `multipart/form-data` or `application/octet-stream` |
+| Endpoint | URL | Response Format |
+|----------|-----|-----------------|
+| V1 API | `POST /api/v1/firmware/update` | JSON (v1 API standard) |
+| Legacy | `POST /update` | Plain text |
+| Version | `GET /api/v1/firmware/version` | JSON (v1 API standard) |
 
-### Recommended Upload Command
+**Base URL:** `http://lightwaveos.local` or `http://<device-ip>`
 
+**Auth Header:** `X-OTA-Token: LW-OTA-2024-SecureUpdate`
+
+**Content Type:** `multipart/form-data` (recommended) or `application/octet-stream`
+
+### Check Current Version
+
+```bash
+curl -s http://lightwaveos.local/api/v1/firmware/version | python3 -m json.tool
+```
+
+Response:
+```json
+{
+  "success": true,
+  "data": {
+    "version": "2.0.0",
+    "board": "ESP32-S3-DevKitC-1",
+    "sdk": "v5.1.4",
+    "sketchSize": 1475501,
+    "freeSketch": 1835008,
+    "flashSize": 8388608,
+    "buildDate": "Jan  3 2026",
+    "buildTime": "12:00:00",
+    "maxOtaSize": 1835008,
+    "otaAvailable": true
+  }
+}
+```
+
+### Recommended Upload Commands
+
+**V1 API Endpoint (recommended):**
+```bash
+curl -X POST \
+  -H "X-OTA-Token: LW-OTA-2024-SecureUpdate" \
+  -F "update=@.pio/build/esp32dev_audio/firmware.bin;type=application/octet-stream" \
+  "http://lightwaveos.local/api/v1/firmware/update"
+```
+
+**Legacy Endpoint (curl-friendly):**
 ```bash
 curl -X POST \
   -H "X-OTA-Token: LW-OTA-2024-SecureUpdate" \

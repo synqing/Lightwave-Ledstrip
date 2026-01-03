@@ -21,6 +21,8 @@
 #include "handlers/BatchHandlers.h"
 #include "handlers/AudioHandlers.h"
 #include "handlers/DebugHandlers.h"
+#include "handlers/EffectPresetHandlers.h"
+#include "handlers/FirmwareHandlers.h"
 #include <ESPAsyncWebServer.h>
 #include <Arduino.h>
 
@@ -30,6 +32,14 @@
 #if FEATURE_MULTI_DEVICE
 #include "../../sync/DeviceUUID.h"
 #endif
+
+// Extern declaration for zone config manager (defined in main.cpp)
+namespace lightwaveos {
+namespace persistence {
+class ZoneConfigManager;
+}
+}
+extern lightwaveos::persistence::ZoneConfigManager* zoneConfigMgr;
 
 namespace lightwaveos {
 namespace network {
@@ -700,34 +710,153 @@ void V1ApiRoutes::registerRoutes(
         [ctx, server, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
-            
+
             if (!ctx.zoneComposer) {
                 sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                                   ErrorCodes::FEATURE_DISABLED, "Zone system not available");
                 return;
             }
-            
+
             JsonDocument doc;
             VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::ZoneEnabled, request);
-            
+
             bool enabled = doc["enabled"];
             ctx.zoneComposer->setEnabled(enabled);
-            
+
             // Send WebSocket event
             StaticJsonDocument<128> eventDoc;
-            eventDoc["type"] = "zone.enabledChanged";
+            eventDoc["type"] = "zones.enabledChanged";
             eventDoc["enabled"] = enabled;
             String eventOutput;
             serializeJson(eventDoc, eventOutput);
             if (server->getWebSocket()) {
                 server->getWebSocket()->textAll(eventOutput);
             }
-            
+
             broadcastZoneState();
-            
+
             sendSuccessResponse(request, [enabled](JsonObject& respData) {
                 respData["enabled"] = enabled;
             });
+        }
+    );
+
+    // ==================== Zone Persistence Routes (Phase 1.5) ====================
+
+    // GET /api/v1/zones/config - Get zone persistence status
+    registry.onGet("/api/v1/zones/config", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::ZoneHandlers::handleConfigGet(request, ctx.zoneComposer, zoneConfigMgr);
+    });
+
+    // POST /api/v1/zones/config/save - Save zone config to NVS
+    registry.onPost("/api/v1/zones/config/save", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::ZoneHandlers::handleConfigSave(request, ctx.zoneComposer, zoneConfigMgr);
+    });
+
+    // POST /api/v1/zones/config/load - Reload config from NVS
+    registry.onPost("/api/v1/zones/config/load", [ctx, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::ZoneHandlers::handleConfigLoad(request, ctx.zoneComposer, zoneConfigMgr, broadcastZoneState);
+    });
+
+    // ==================== Effect Preset Routes ====================
+    // List all saved effect presets
+    registry.onGet("/api/v1/effect-presets", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::EffectPresetHandlers::handleList(request);
+    });
+
+    // Save current effect config as new preset
+    registry.onPost("/api/v1/effect-presets",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::EffectPresetHandlers::handleSave(request, data, len, ctx.renderer);
+        }
+    );
+
+    // Get preset by ID
+    registry.onGet("/api/v1/effect-presets/get", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        if (!request->hasParam("id")) {
+            sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                              ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
+            return;
+        }
+        uint8_t id = request->getParam("id")->value().toInt();
+        handlers::EffectPresetHandlers::handleGet(request, id);
+    });
+
+    // Apply preset by ID
+    registry.onPost("/api/v1/effect-presets/apply", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        if (!request->hasParam("id")) {
+            sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                              ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
+            return;
+        }
+        uint8_t id = request->getParam("id")->value().toInt();
+        handlers::EffectPresetHandlers::handleApply(request, id, ctx.actorSystem, ctx.renderer);
+    });
+
+    // Delete preset by ID
+    registry.onDelete("/api/v1/effect-presets/delete", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        if (!request->hasParam("id")) {
+            sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                              ErrorCodes::MISSING_FIELD, "Missing id parameter", "id");
+            return;
+        }
+        uint8_t id = request->getParam("id")->value().toInt();
+        handlers::EffectPresetHandlers::handleDelete(request, id);
+    });
+
+    // ==================== Firmware/OTA Routes ====================
+
+    // Firmware version - GET /api/v1/firmware/version (public - no auth required)
+    registry.onGet("/api/v1/firmware/version", [checkRateLimit](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        handlers::FirmwareHandlers::handleVersion(request);
+    });
+
+    // V1 API OTA update - POST /api/v1/firmware/update
+    // Uses X-OTA-Token header for authentication
+    registry.onPost("/api/v1/firmware/update",
+        [](AsyncWebServerRequest* request) {
+            // Request handler - called after upload completes
+            handlers::FirmwareHandlers::handleV1Update(request,
+                handlers::FirmwareHandlers::checkOTAToken);
+        },
+        [](AsyncWebServerRequest* request, const String& filename, size_t index,
+           uint8_t* data, size_t len, bool final) {
+            // Upload handler - processes firmware chunks
+            handlers::FirmwareHandlers::handleUpload(request, filename, index, data, len, final);
+        }
+    );
+
+    // Legacy OTA update - POST /update
+    // Simple text response format for curl compatibility
+    registry.onPost("/update",
+        [](AsyncWebServerRequest* request) {
+            // Request handler - called after upload completes
+            handlers::FirmwareHandlers::handleLegacyUpdate(request,
+                handlers::FirmwareHandlers::checkOTAToken);
+        },
+        [](AsyncWebServerRequest* request, const String& filename, size_t index,
+           uint8_t* data, size_t len, bool final) {
+            // Upload handler - processes firmware chunks
+            handlers::FirmwareHandlers::handleUpload(request, filename, index, data, len, final);
         }
     );
 }

@@ -76,6 +76,8 @@ void SystemHandlers::handleApiDiscovery(AsyncWebServerRequest* request) {
         links["audioParameters"] = "/api/v1/audio/parameters";
         links["transitions"] = "/api/v1/transitions/types";
         links["batch"] = "/api/v1/batch";
+        links["firmwareVersion"] = "/api/v1/firmware/version";
+        links["firmwareUpdate"] = "/api/v1/firmware/update";
         links["websocket"] = "ws://lightwaveos.local/ws";
     }, 1024);
 }
@@ -148,7 +150,20 @@ void SystemHandlers::handleOpenApiSpec(AsyncWebServerRequest* request) {
     JsonObject batchPost = batch["post"].to<JsonObject>();
     batchPost["summary"] = "Execute batch operations";
     batchPost["operationId"] = "executeBatch";
-    
+
+    // Firmware version
+    JsonObject firmwareVer = paths["/api/v1/firmware/version"].to<JsonObject>();
+    JsonObject firmwareVerGet = firmwareVer["get"].to<JsonObject>();
+    firmwareVerGet["summary"] = "Get firmware version and build info";
+    firmwareVerGet["operationId"] = "getFirmwareVersion";
+
+    // Firmware update
+    JsonObject firmwareUpd = paths["/api/v1/firmware/update"].to<JsonObject>();
+    JsonObject firmwareUpdPost = firmwareUpd["post"].to<JsonObject>();
+    firmwareUpdPost["summary"] = "Upload firmware for OTA update";
+    firmwareUpdPost["operationId"] = "updateFirmware";
+    firmwareUpdPost["description"] = "Requires X-OTA-Token header";
+
     String output;
     serializeJson(spec, output);
     request->send(HttpStatus::OK, "application/json", output);

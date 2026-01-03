@@ -41,6 +41,7 @@
 #include "webserver/ws/WsMotionCommands.h"
 #include "webserver/ws/WsColorCommands.h"
 #include "webserver/ws/WsPaletteCommands.h"
+#include "webserver/ws/WsPresetCommands.h"
 #include "webserver/ws/WsBatchCommands.h"
 #if FEATURE_AUDIO_SYNC
 #include "webserver/ws/WsAudioCommands.h"
@@ -610,6 +611,7 @@ void WebServer::setupWebSocket() {
     webserver::ws::registerWsMotionCommands(ctx);
     webserver::ws::registerWsColorCommands(ctx);
     webserver::ws::registerWsPaletteCommands(ctx);
+    webserver::ws::registerWsPresetCommands(ctx);
     webserver::ws::registerWsBatchCommands(ctx);
 #if FEATURE_AUDIO_SYNC
     webserver::ws::registerWsAudioCommands(ctx);

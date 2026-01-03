@@ -408,6 +408,103 @@ uint8_t ZoneHandlers::extractZoneIdFromPath(AsyncWebServerRequest* request) {
     return 255;  // Invalid
 }
 
+// ============================================================================
+// Persistence API Handlers (Phase 1.5)
+// ============================================================================
+
+void ZoneHandlers::handleConfigGet(AsyncWebServerRequest* request, lightwaveos::zones::ZoneComposer* composer, lightwaveos::persistence::ZoneConfigManager* configManager) {
+    if (!composer) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
+        return;
+    }
+
+    if (!configManager) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::FEATURE_DISABLED, "Zone config manager not available");
+        return;
+    }
+
+    // Export current configuration to check persistence status
+    lightwaveos::persistence::ZoneConfigData currentConfig;
+    configManager->exportConfig(currentConfig);
+
+    sendSuccessResponse(request, [composer, &currentConfig](JsonObject& data) {
+        data["enabled"] = composer->isEnabled();
+        data["zoneCount"] = composer->getZoneCount();
+        data["configVersion"] = currentConfig.version;
+        data["checksumValid"] = currentConfig.isValid();
+
+        // Per-zone summary
+        JsonArray zones = data["zones"].to<JsonArray>();
+        for (uint8_t i = 0; i < composer->getZoneCount(); i++) {
+            JsonObject zone = zones.add<JsonObject>();
+            zone["id"] = i;
+            zone["effectId"] = composer->getZoneEffect(i);
+            zone["brightness"] = composer->getZoneBrightness(i);
+            zone["speed"] = composer->getZoneSpeed(i);
+            zone["paletteId"] = composer->getZonePalette(i);
+        }
+    });
+}
+
+void ZoneHandlers::handleConfigSave(AsyncWebServerRequest* request, lightwaveos::zones::ZoneComposer* composer, lightwaveos::persistence::ZoneConfigManager* configManager) {
+    if (!composer) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
+        return;
+    }
+
+    if (!configManager) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::FEATURE_DISABLED, "Zone config manager not available");
+        return;
+    }
+
+    bool success = configManager->saveToNVS();
+
+    if (success) {
+        sendSuccessResponse(request, [](JsonObject& data) {
+            data["saved"] = true;
+            data["message"] = "Zone configuration saved to NVS";
+        });
+    } else {
+        sendErrorResponse(request, HttpStatus::INTERNAL_ERROR,
+                          ErrorCodes::INTERNAL_ERROR, "Failed to save zone configuration to NVS");
+    }
+}
+
+void ZoneHandlers::handleConfigLoad(AsyncWebServerRequest* request, lightwaveos::zones::ZoneComposer* composer, lightwaveos::persistence::ZoneConfigManager* configManager, std::function<void()> broadcastZoneState) {
+    if (!composer) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
+        return;
+    }
+
+    if (!configManager) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::FEATURE_DISABLED, "Zone config manager not available");
+        return;
+    }
+
+    bool success = configManager->loadFromNVS();
+
+    if (success) {
+        // Broadcast updated zone state after loading
+        if (broadcastZoneState) broadcastZoneState();
+
+        sendSuccessResponse(request, [composer](JsonObject& data) {
+            data["loaded"] = true;
+            data["message"] = "Zone configuration loaded from NVS";
+            data["enabled"] = composer->isEnabled();
+            data["zoneCount"] = composer->getZoneCount();
+        });
+    } else {
+        sendErrorResponse(request, HttpStatus::NOT_FOUND,
+                          ErrorCodes::NOT_FOUND, "No saved zone configuration found in NVS or configuration invalid");
+    }
+}
+
 } // namespace handlers
 } // namespace webserver
 } // namespace network

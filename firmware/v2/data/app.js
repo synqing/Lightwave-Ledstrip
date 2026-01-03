@@ -144,6 +144,30 @@ const state = {
     bpmConfidence: 0,
     lastBeatTime: 0,
 
+    // Shows state
+    shows: {
+        list: [],              // Array of {id, name, durationSeconds, type: 'builtin'|'custom'}
+        current: null,         // Current show being edited/played {id, name, durationSeconds, scenes, isSaved}
+        scenes: [],            // Array of TimelineScene objects
+        isPlaying: false,
+        isPaused: false,
+        progress: 0,           // 0.0 - 1.0
+        elapsedMs: 0,
+        remainingMs: 0,
+        currentChapter: 0,
+        loading: false,
+        error: null,
+        dragState: {           // Drag-and-drop state
+            isDragging: false,
+            sceneId: null,
+            startX: 0,
+            offsetX: 0,
+            currentZoneId: null,
+            originalStartPercent: 0,
+            originalZoneId: 0
+        }
+    },
+
     // Preset library throttling
     lastPresetListFetchMs: 0,
     presetListFetchThrottleMs: 3000,  // Only fetch once every 3 seconds max
@@ -246,6 +270,7 @@ function connect() {
             // Fetch palettes and effects lists for dropdowns
             fetchPalettesList();
             fetchEffectsList();
+            fetchShowsList();
         }, 100);
     };
 
@@ -676,6 +701,159 @@ function handleMessage(msg) {
 
         case 'beat.event':
             handleBeatEvent(msgFlat);
+            break;
+
+        // Show commands responses
+        case 'show.list':
+            if (msgFlat.success && msgFlat.data) {
+                const allShows = [
+                    ...(msgFlat.data.builtin || []).map(s => ({
+                        id: String(s.id),
+                        name: s.name,
+                        durationSeconds: s.durationSeconds || Math.floor((s.durationMs || 0) / 1000),
+                        type: 'builtin',
+                        isSaved: true
+                    })),
+                    ...(msgFlat.data.custom || []).map(s => ({
+                        id: s.id,
+                        name: s.name,
+                        durationSeconds: s.durationSeconds || Math.floor((s.durationMs || 0) / 1000),
+                        type: 'custom',
+                        isSaved: s.isSaved !== false
+                    }))
+                ];
+                state.shows.list = allShows;
+                state.shows.loading = false;
+                log(`[WS] ✅ Loaded ${allShows.length} shows`);
+                updateShowsUI();
+            }
+            break;
+
+        case 'show.get':
+            if (msgFlat.success && msgFlat.data) {
+                const show = {
+                    id: String(msgFlat.data.id),
+                    name: msgFlat.data.name,
+                    durationSeconds: msgFlat.data.durationSeconds || Math.floor((msgFlat.data.durationMs || 0) / 1000),
+                    scenes: msgFlat.data.scenes || [],
+                    isSaved: msgFlat.data.type === 'builtin' || msgFlat.data.isSaved !== false,
+                    type: msgFlat.data.type || 'custom'
+                };
+                state.shows.current = show;
+                state.shows.scenes = show.scenes;
+                state.shows.loading = false;
+                log(`[WS] ✅ Loaded show: ${show.name}`);
+                updateShowsUI();
+                renderTimeline();
+            }
+            break;
+
+        case 'show.create':
+        case 'show.update':
+            if (msgFlat.success && msgFlat.data) {
+                const show = {
+                    id: String(msgFlat.data.id),
+                    name: msgFlat.data.name,
+                    durationSeconds: msgFlat.data.durationSeconds || 0,
+                    scenes: state.shows.scenes,
+                    isSaved: true,
+                    type: 'custom'
+                };
+                state.shows.current = show;
+                state.shows.loading = false;
+                log(`[WS] ✅ ${msgFlat.type === 'show.create' ? 'Created' : 'Updated'} show: ${show.name}`);
+                fetchShowsList(); // Refresh list
+                updateShowsUI();
+            }
+            break;
+
+        case 'show.delete':
+            if (msgFlat.success) {
+                if (state.shows.current && String(state.shows.current.id) === String(msgFlat.showId)) {
+                    state.shows.current = null;
+                    state.shows.scenes = [];
+                }
+                state.shows.loading = false;
+                log(`[WS] ✅ Deleted show: ${msgFlat.showId}`);
+                fetchShowsList(); // Refresh list
+                updateShowsUI();
+                renderTimeline();
+            }
+            break;
+
+        case 'show.current':
+            if (msgFlat.success && msgFlat.data) {
+                state.shows.isPlaying = msgFlat.data.isPlaying || false;
+                state.shows.isPaused = msgFlat.data.isPaused || false;
+                state.shows.progress = msgFlat.data.progress || 0;
+                state.shows.elapsedMs = msgFlat.data.elapsedMs || 0;
+                state.shows.remainingMs = msgFlat.data.remainingMs || 0;
+                state.shows.currentChapter = msgFlat.data.currentChapter || 0;
+                
+                if (msgFlat.data.showId !== null && msgFlat.data.showId !== undefined) {
+                    if (!state.shows.current || String(state.shows.current.id) !== String(msgFlat.data.showId)) {
+                        fetchShowDetails(msgFlat.data.showId, 'scenes');
+                    }
+                }
+                
+                updateShowsUI();
+                renderPlayhead();
+            }
+            break;
+
+        // Show events (broadcast from firmware)
+        case 'show.started':
+            state.shows.isPlaying = true;
+            state.shows.isPaused = false;
+            if (msgFlat.showId !== undefined) {
+                fetchShowDetails(msgFlat.showId, 'scenes');
+            }
+            updateShowsUI();
+            log(`[WS] Show started: ${msgFlat.showName || msgFlat.showId}`);
+            break;
+
+        case 'show.stopped':
+            state.shows.isPlaying = false;
+            state.shows.isPaused = false;
+            state.shows.progress = 0;
+            state.shows.elapsedMs = 0;
+            updateShowsUI();
+            renderPlayhead();
+            log(`[WS] Show stopped`);
+            break;
+
+        case 'show.paused':
+            state.shows.isPaused = true;
+            updateShowsUI();
+            log(`[WS] Show paused`);
+            break;
+
+        case 'show.resumed':
+            state.shows.isPaused = false;
+            updateShowsUI();
+            log(`[WS] Show resumed`);
+            break;
+
+        case 'show.progress':
+            if (msgFlat.progress !== undefined) {
+                state.shows.progress = msgFlat.progress;
+            }
+            if (msgFlat.elapsedMs !== undefined) {
+                state.shows.elapsedMs = msgFlat.elapsedMs;
+            }
+            if (msgFlat.remainingMs !== undefined) {
+                state.shows.remainingMs = msgFlat.remainingMs;
+            }
+            updateShowsUI();
+            renderPlayhead();
+            break;
+
+        case 'show.chapterChanged':
+            if (msgFlat.chapterIndex !== undefined) {
+                state.shows.currentChapter = msgFlat.chapterIndex;
+                updateShowsUI();
+            }
+            log(`[WS] Chapter changed: ${msgFlat.chapterIndex}`);
             break;
 
         default:
@@ -2914,6 +3092,932 @@ function populatePalettesDropdown() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Shows API Functions
+// ─────────────────────────────────────────────────────────────
+
+function fetchShowsList() {
+    state.shows.loading = true;
+    state.shows.error = null;
+    
+    // Try WebSocket first
+    if (state.connected && state.ws && state.ws.readyState === WebSocket.OPEN) {
+        send({ type: 'show.list' });
+    }
+    
+    // REST API backup
+    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/shows`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(data => {
+        if (data.success && data.data) {
+            const allShows = [
+                ...(data.data.builtin || []).map(s => ({
+                    id: String(s.id),
+                    name: s.name,
+                    durationSeconds: s.durationSeconds || Math.floor((s.durationMs || 0) / 1000),
+                    type: 'builtin',
+                    isSaved: true
+                })),
+                ...(data.data.custom || []).map(s => ({
+                    id: s.id,
+                    name: s.name,
+                    durationSeconds: s.durationSeconds || Math.floor((s.durationMs || 0) / 1000),
+                    type: 'custom',
+                    isSaved: s.isSaved !== false
+                }))
+            ];
+            state.shows.list = allShows;
+            state.shows.loading = false;
+            log(`[REST] ✅ Loaded ${allShows.length} shows`);
+            updateShowsUI();
+        }
+    })
+    .catch(e => {
+        state.shows.loading = false;
+        state.shows.error = e.message;
+        log(`[REST] ❌ Error fetching shows: ${e.message}`);
+    });
+}
+
+function fetchShowDetails(showId, format = 'scenes') {
+    state.shows.loading = true;
+    state.shows.error = null;
+    
+    // Try WebSocket first
+    if (state.connected && state.ws && state.ws.readyState === WebSocket.OPEN) {
+        send({ type: 'show.get', showId: showId, format: format });
+    }
+    
+    // REST API backup
+    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/shows/${showId}?format=${format}`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(data => {
+        if (data.success && data.data) {
+            const show = {
+                id: String(data.data.id),
+                name: data.data.name,
+                durationSeconds: data.data.durationSeconds || Math.floor((data.data.durationMs || 0) / 1000),
+                scenes: data.data.scenes || [],
+                isSaved: data.data.type === 'builtin' || data.data.isSaved !== false,
+                type: data.data.type || (parseInt(showId) < 100 ? 'builtin' : 'custom')
+            };
+            state.shows.current = show;
+            state.shows.scenes = show.scenes;
+            state.shows.loading = false;
+            log(`[REST] ✅ Loaded show: ${show.name}`);
+            updateShowsUI();
+            renderTimeline();
+        }
+    })
+    .catch(e => {
+        state.shows.loading = false;
+        state.shows.error = e.message;
+        log(`[REST] ❌ Error fetching show details: ${e.message}`);
+    });
+}
+
+function createShow(name, durationSeconds, scenes) {
+    state.shows.loading = true;
+    state.shows.error = null;
+    
+    const payload = {
+        name: name,
+        durationSeconds: durationSeconds,
+        scenes: scenes.map(s => ({
+            id: s.id,
+            zoneId: s.zoneId,
+            effectName: s.effectName,
+            startTimePercent: s.startTimePercent,
+            durationPercent: s.durationPercent,
+            accentColor: s.accentColor || 'primary'
+        }))
+    };
+    
+    // Try WebSocket first
+    if (state.connected && state.ws && state.ws.readyState === WebSocket.OPEN) {
+        send({ type: 'show.create', ...payload });
+    }
+    
+    // REST API backup
+    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/shows`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(data => {
+        if (data.success && data.data) {
+            const newShow = {
+                id: data.data.id,
+                name: data.data.name || name,
+                durationSeconds: durationSeconds,
+                scenes: scenes,
+                isSaved: true,
+                type: 'custom'
+            };
+            state.shows.current = newShow;
+            state.shows.scenes = scenes;
+            state.shows.loading = false;
+            log(`[REST] ✅ Created show: ${newShow.name}`);
+            fetchShowsList(); // Refresh list
+            updateShowsUI();
+        }
+    })
+    .catch(e => {
+        state.shows.loading = false;
+        state.shows.error = e.message;
+        log(`[REST] ❌ Error creating show: ${e.message}`);
+    });
+}
+
+function updateShow(showId, name, durationSeconds, scenes) {
+    state.shows.loading = true;
+    state.shows.error = null;
+    
+    const payload = {
+        name: name,
+        durationSeconds: durationSeconds,
+        scenes: scenes.map(s => ({
+            id: s.id,
+            zoneId: s.zoneId,
+            effectName: s.effectName,
+            startTimePercent: s.startTimePercent,
+            durationPercent: s.durationPercent,
+            accentColor: s.accentColor || 'primary'
+        }))
+    };
+    
+    // Try WebSocket first
+    if (state.connected && state.ws && state.ws.readyState === WebSocket.OPEN) {
+        send({ type: 'show.update', showId: showId, ...payload });
+    }
+    
+    // REST API backup
+    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/shows/${showId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(data => {
+        if (data.success && data.data) {
+            const updatedShow = {
+                id: String(showId),
+                name: data.data.name || name,
+                durationSeconds: durationSeconds,
+                scenes: scenes,
+                isSaved: true,
+                type: 'custom'
+            };
+            state.shows.current = updatedShow;
+            state.shows.scenes = scenes;
+            state.shows.loading = false;
+            log(`[REST] ✅ Updated show: ${updatedShow.name}`);
+            fetchShowsList(); // Refresh list
+            updateShowsUI();
+        }
+    })
+    .catch(e => {
+        state.shows.loading = false;
+        state.shows.error = e.message;
+        log(`[REST] ❌ Error updating show: ${e.message}`);
+    });
+}
+
+function deleteShow(showId) {
+    state.shows.loading = true;
+    state.shows.error = null;
+    
+    // Try WebSocket first
+    if (state.connected && state.ws && state.ws.readyState === WebSocket.OPEN) {
+        send({ type: 'show.delete', showId: showId });
+    }
+    
+    // REST API backup
+    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/shows/${showId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(data => {
+        if (data.success) {
+            if (state.shows.current && String(state.shows.current.id) === String(showId)) {
+                state.shows.current = null;
+                state.shows.scenes = [];
+            }
+            state.shows.loading = false;
+            log(`[REST] ✅ Deleted show: ${showId}`);
+            fetchShowsList(); // Refresh list
+            updateShowsUI();
+            renderTimeline();
+        }
+    })
+    .catch(e => {
+        state.shows.loading = false;
+        state.shows.error = e.message;
+        log(`[REST] ❌ Error deleting show: ${e.message}`);
+    });
+}
+
+function controlShow(action, showId, timeMs) {
+    state.shows.error = null;
+    
+    // Validate showId for start action
+    if (action === 'start' && showId !== undefined) {
+        // Only numeric IDs are supported (built-in shows only)
+        if (typeof showId === 'string' || isNaN(showId)) {
+            log(`[SHOWS] ❌ Cannot start custom show: ${showId}. Only built-in shows (0-9) are supported.`);
+            state.shows.error = 'Custom shows cannot be played yet. Only built-in shows are supported.';
+            return;
+        }
+    }
+    
+    const payload = { action: action };
+    if (action === 'start' && showId !== undefined && !isNaN(showId)) {
+        payload.showId = showId;
+    }
+    if (action === 'seek' && timeMs !== undefined) {
+        payload.timeMs = timeMs;
+    }
+    
+    // Try WebSocket first
+    if (state.connected && state.ws && state.ws.readyState === WebSocket.OPEN) {
+        send({ type: 'show.control', ...payload });
+    }
+    
+    // REST API backup
+    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/shows/control`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(data => {
+        if (data.success) {
+            log(`[REST] ✅ Show control: ${action}`);
+            if (action === 'start') {
+                fetchCurrentShowStatus();
+            }
+        }
+    })
+    .catch(e => {
+        state.shows.error = e.message;
+        log(`[REST] ❌ Error controlling show: ${e.message}`);
+    });
+}
+
+function fetchCurrentShowStatus() {
+    // Try WebSocket first
+    if (state.connected && state.ws && state.ws.readyState === WebSocket.OPEN) {
+        send({ type: 'show.current' });
+    }
+    
+    // REST API backup
+    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/shows/current`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(data => {
+        if (data.success && data.data) {
+            state.shows.isPlaying = data.data.isPlaying || false;
+            state.shows.isPaused = data.data.isPaused || false;
+            state.shows.progress = data.data.progress || 0;
+            state.shows.elapsedMs = data.data.elapsedMs || 0;
+            state.shows.remainingMs = data.data.remainingMs || 0;
+            state.shows.currentChapter = data.data.currentChapter || 0;
+            
+            if (data.data.showId !== null && data.data.showId !== undefined) {
+                if (!state.shows.current || String(state.shows.current.id) !== String(data.data.showId)) {
+                    // Load show details if not already loaded
+                    fetchShowDetails(data.data.showId, 'scenes');
+                }
+            }
+            
+            updateShowsUI();
+            renderPlayhead();
+        }
+    })
+    .catch(e => {
+        // Ignore errors for status polling
+    });
+}
+
+// ─────────────────────────────────────────────────────────────
+// Shows UI Functions
+// ─────────────────────────────────────────────────────────────
+
+function updateShowsUI() {
+    // Update show selector dropdown
+    const showSelect = document.getElementById('showSelect');
+    if (showSelect) {
+        const currentValue = showSelect.value;
+        showSelect.innerHTML = '<option value="">Select Show...</option>' +
+            state.shows.list.map(s => 
+                `<option value="${s.id}">${s.name} (${s.type})</option>`
+            ).join('');
+        if (currentValue) {
+            showSelect.value = currentValue;
+        }
+    }
+    
+    // Update save button state
+    const saveBtn = document.getElementById('showSaveBtn');
+    if (saveBtn) {
+        saveBtn.disabled = !state.shows.current || state.shows.current.isSaved || state.shows.current.type === 'builtin';
+    }
+    
+    // Update transport controls
+    const playBtn = document.getElementById('showPlayBtn');
+    const pauseBtn = document.getElementById('showPauseBtn');
+    if (playBtn && pauseBtn) {
+        if (state.shows.isPlaying && !state.shows.isPaused) {
+            playBtn.style.display = 'none';
+            pauseBtn.style.display = 'inline-block';
+        } else {
+            playBtn.style.display = 'inline-block';
+            pauseBtn.style.display = 'none';
+        }
+    }
+    
+    // Update time display
+    updateShowTimeDisplay();
+    
+    // Update scene list
+    renderSceneList();
+}
+
+function updateShowTimeDisplay() {
+    const timeDisplay = document.getElementById('showTimeDisplay');
+    if (!timeDisplay || !state.shows.current) return;
+    
+    const totalSeconds = state.shows.current.durationSeconds || 0;
+    if (totalSeconds === 0) {
+        timeDisplay.textContent = '0:00 / 0:00';
+        return;
+    }
+    
+    const elapsedSeconds = Math.floor((state.shows.elapsedMs || 0) / 1000);
+    const totalSecondsDisplay = Math.floor(totalSeconds);
+    
+    const formatTime = (seconds) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    };
+    
+    timeDisplay.textContent = `${formatTime(elapsedSeconds)} / ${formatTime(totalSecondsDisplay)}`;
+    
+    // Sync seek slider with progress
+    const seekSlider = document.getElementById('showSeekSlider');
+    if (seekSlider) {
+        if (state.shows.progress > 0) {
+            seekSlider.value = Math.round(state.shows.progress * 100);
+        }
+        // Update max value when show changes
+        seekSlider.max = 100; // Keep at 100 since we use percentage
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Timeline Rendering
+// ─────────────────────────────────────────────────────────────
+
+const ZONE_LABELS = [
+    { id: 0, label: 'GLOBAL', color: 'var(--gold)' },
+    { id: 1, label: 'ZONE 1', color: '#00d4ff' },
+    { id: 2, label: 'ZONE 2', color: 'var(--success)' },
+    { id: 3, label: 'ZONE 3', color: 'var(--text-secondary)' },
+    { id: 4, label: 'ZONE 4', color: 'var(--gold)' }
+];
+
+const SCENE_COLORS = {
+    0: { bg: 'rgba(255, 184, 77, 0.3)', border: 'rgba(255, 184, 77, 0.4)', text: 'var(--gold)' },
+    1: { bg: 'rgba(0, 212, 255, 0.3)', border: 'rgba(0, 212, 255, 0.4)', text: '#00d4ff' },
+    2: { bg: 'rgba(77, 255, 184, 0.3)', border: 'rgba(77, 255, 184, 0.4)', text: 'var(--success)' },
+    3: { bg: 'rgba(156, 163, 176, 0.3)', border: 'rgba(156, 163, 176, 0.4)', text: 'var(--text-secondary)' },
+    4: { bg: 'rgba(255, 184, 77, 0.3)', border: 'rgba(255, 184, 77, 0.4)', text: 'var(--gold)' }
+};
+
+function renderTimeline() {
+    if (!state.shows.current) {
+        const tracksEl = document.getElementById('timelineTracks');
+        if (tracksEl) tracksEl.innerHTML = '<div class="value-secondary compact" style="text-align: center; padding: var(--space-md);">No show selected</div>';
+        const rulerEl = document.getElementById('timeRuler');
+        if (rulerEl) rulerEl.innerHTML = '';
+        renderSceneList(); // Clear scene list
+        return;
+    }
+    
+    renderTimeRuler();
+    renderZoneTracks();
+    renderScenes();
+    renderPlayhead();
+    renderSceneList();
+}
+
+function renderTimeRuler() {
+    const rulerEl = document.getElementById('timeRuler');
+    if (!rulerEl || !state.shows.current) {
+        if (rulerEl) rulerEl.innerHTML = '';
+        return;
+    }
+    
+    const durationSeconds = state.shows.current.durationSeconds || 120;
+    if (durationSeconds <= 0) {
+        rulerEl.innerHTML = '';
+        return;
+    }
+    
+    const markers = [];
+    
+    // Add markers every 30 seconds, with major markers every 60 seconds
+    for (let seconds = 0; seconds <= durationSeconds; seconds += 30) {
+        const percent = (seconds / durationSeconds) * 100;
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        const isMajor = seconds % 60 === 0;
+        markers.push({
+            percent: percent,
+            label: `${mins}:${secs.toString().padStart(2, '0')}`,
+            isMajor: isMajor
+        });
+    }
+    
+    rulerEl.innerHTML = markers.map(m => 
+        `<span style="position: absolute; left: ${m.percent}%; transform: translateX(-50%); font-size: 0.6rem; color: var(--text-secondary); ${m.isMajor ? 'font-weight: 600;' : ''}">${m.label}</span>`
+    ).join('');
+}
+
+function renderZoneTracks() {
+    const tracksEl = document.getElementById('timelineTracks');
+    if (!tracksEl) return;
+    
+    tracksEl.innerHTML = ZONE_LABELS.map(zone => {
+        const scenes = getScenesForZone(zone.id);
+        return `
+            <div class="timeline-track" data-track="${zone.id}" data-zone-id="${zone.id}" 
+                 style="position: relative; min-height: 3rem; padding: var(--space-sm); margin-bottom: var(--space-xs); 
+                        background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-radius: 4px;">
+                <div style="position: absolute; left: var(--space-sm); top: 50%; transform: translateY(-50%); 
+                            font-size: 0.6rem; color: ${zone.color}; writing-mode: vertical-rl; text-orientation: mixed;">
+                    ${zone.label}
+                </div>
+                <div style="margin-left: 3rem; position: relative; height: 2rem;">
+                    <!-- Scenes will be rendered here -->
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderScenes() {
+    if (!state.shows.current) return;
+    
+    ZONE_LABELS.forEach(zone => {
+        const trackEl = document.querySelector(`[data-zone-id="${zone.id}"]`);
+        if (!trackEl) return;
+        
+        const scenesContainer = trackEl.querySelector('div > div');
+        if (!scenesContainer) return;
+        
+        // Clear container to remove old event listeners
+        scenesContainer.innerHTML = '';
+        
+        const scenes = getScenesForZone(zone.id);
+        const colors = SCENE_COLORS[zone.id] || SCENE_COLORS[0];
+        
+        // Create scene elements
+        scenes.forEach(scene => {
+            const isDragging = state.shows.dragState.isDragging && state.shows.dragState.sceneId === scene.id;
+            const sceneEl = document.createElement('div');
+            sceneEl.className = 'timeline-scene';
+            sceneEl.setAttribute('data-scene-id', scene.id);
+            sceneEl.style.cssText = `
+                position: absolute; 
+                left: ${scene.startTimePercent}%; 
+                width: ${scene.durationPercent}%; 
+                height: 100%; 
+                background: ${colors.bg}; 
+                border: 1px solid ${colors.border}; 
+                border-radius: 4px; 
+                cursor: grab; 
+                user-select: none; 
+                ${isDragging ? 'opacity: 0.3;' : 'opacity: 1;'}
+                display: flex; 
+                align-items: center; 
+                justify-content: center; 
+                padding: 0 var(--space-xs);
+            `;
+            sceneEl.setAttribute('tabindex', '0');
+            sceneEl.setAttribute('role', 'button');
+            sceneEl.setAttribute('aria-label', `Scene: ${scene.effectName}, Zone ${zone.label}, Start: ${scene.startTimePercent.toFixed(1)}%, Duration: ${scene.durationPercent.toFixed(1)}%`);
+            
+            const span = document.createElement('span');
+            span.style.cssText = `font-size: 0.6rem; color: ${colors.text}; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;`;
+            span.textContent = scene.effectName;
+            sceneEl.appendChild(span);
+            
+            // Attach event listeners
+            sceneEl.addEventListener('pointerdown', (e) => handleScenePointerDown(e, scene));
+            sceneEl.addEventListener('keydown', (e) => handleSceneKeyDown(e, scene));
+            
+            scenesContainer.appendChild(sceneEl);
+        });
+    });
+}
+
+function renderPlayhead() {
+    const playheadEl = document.getElementById('timelinePlayhead');
+    const timelineContainer = document.querySelector('.timeline-container');
+    if (!playheadEl || !timelineContainer || !state.shows.current) {
+        if (playheadEl) playheadEl.style.display = 'none';
+        return;
+    }
+    
+    if (state.shows.isPlaying || (state.shows.progress > 0 && state.shows.progress <= 1)) {
+        const progressPercent = Math.min(100, Math.max(0, state.shows.progress * 100));
+        playheadEl.style.display = 'block';
+        playheadEl.style.left = `${progressPercent}%`;
+    } else {
+        playheadEl.style.display = 'none';
+    }
+}
+
+function getScenesForZone(zoneId) {
+    if (!state.shows.current || !state.shows.scenes) return [];
+    return state.shows.scenes.filter(scene => scene.zoneId === zoneId);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Drag-and-Drop Implementation
+// ─────────────────────────────────────────────────────────────
+
+function handleScenePointerDown(e, scene) {
+    if (!state.connected) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const target = e.currentTarget;
+    target.setPointerCapture(e.pointerId);
+    
+    const rect = target.getBoundingClientRect();
+    const offsetX = e.clientX - rect.left;
+    
+    state.shows.dragState = {
+        isDragging: true,
+        sceneId: scene.id,
+        startX: e.clientX,
+        offsetX: offsetX,
+        currentZoneId: scene.zoneId,
+        originalStartPercent: scene.startTimePercent,
+        originalZoneId: scene.zoneId
+    };
+    
+    // Add global event listeners
+    document.addEventListener('pointermove', handleScenePointerMove);
+    document.addEventListener('pointerup', handleScenePointerUp);
+    
+    renderScenes(); // Re-render to show dragging state
+}
+
+function handleScenePointerMove(e) {
+    if (!state.shows.dragState.isDragging) return;
+    
+    // Detect zone from Y position
+    const hoveredZone = detectZoneFromY(e.clientY);
+    if (hoveredZone !== null && hoveredZone !== state.shows.dragState.currentZoneId) {
+        state.shows.dragState.currentZoneId = hoveredZone;
+    }
+    
+    // Calculate percentage position
+    const trackEl = document.querySelector(`[data-zone-id="${state.shows.dragState.currentZoneId}"]`);
+    if (trackEl) {
+        const scenesContainer = trackEl.querySelector('div > div');
+        if (scenesContainer) {
+            const rect = scenesContainer.getBoundingClientRect();
+            const relativeX = e.clientX - rect.left - state.shows.dragState.offsetX;
+            const percent = (relativeX / rect.width) * 100;
+            const snappedPercent = snapToGrid(Math.max(0, Math.min(100, percent)));
+            
+            // Update scene position temporarily (will be applied on pointerup)
+            const scene = state.shows.scenes.find(s => s.id === state.shows.dragState.sceneId);
+            if (scene) {
+                scene.startTimePercent = snappedPercent;
+                scene.zoneId = state.shows.dragState.currentZoneId;
+                renderScenes();
+            }
+        }
+    }
+}
+
+function handleScenePointerUp(e) {
+    if (!state.shows.dragState.isDragging) {
+        document.removeEventListener('pointermove', handleScenePointerMove);
+        document.removeEventListener('pointerup', handleScenePointerUp);
+        return;
+    }
+    
+    const dragState = state.shows.dragState;
+    const scene = state.shows.scenes.find(s => s.id === dragState.sceneId);
+    
+    if (scene) {
+        // Calculate final position
+        const trackEl = document.querySelector(`[data-zone-id="${dragState.currentZoneId}"]`);
+        if (trackEl) {
+            const scenesContainer = trackEl.querySelector('div > div');
+            if (scenesContainer) {
+                const rect = scenesContainer.getBoundingClientRect();
+                const relativeX = e.clientX - rect.left - dragState.offsetX;
+                const rawPercent = (relativeX / rect.width) * 100;
+                const snappedPercent = snapToGrid(Math.max(0, Math.min(100 - scene.durationPercent, rawPercent)));
+                const finalZone = dragState.currentZoneId !== null ? dragState.currentZoneId : dragState.originalZoneId;
+                
+                // Only update if position changed
+                if (snappedPercent !== dragState.originalStartPercent || finalZone !== dragState.originalZoneId) {
+                    updateScenePosition(dragState.sceneId, snappedPercent, finalZone);
+                } else {
+                    // Restore original position
+                    scene.startTimePercent = dragState.originalStartPercent;
+                    scene.zoneId = dragState.originalZoneId;
+                }
+            }
+        }
+    }
+    
+    // Reset drag state
+    state.shows.dragState = {
+        isDragging: false,
+        sceneId: null,
+        startX: 0,
+        offsetX: 0,
+        currentZoneId: null,
+        originalStartPercent: 0,
+        originalZoneId: 0
+    };
+    
+    document.removeEventListener('pointermove', handleScenePointerMove);
+    document.removeEventListener('pointerup', handleScenePointerUp);
+    
+    renderScenes();
+}
+
+function detectZoneFromY(clientY) {
+    const tracks = document.querySelectorAll('.timeline-track');
+    for (let i = 0; i < tracks.length; i++) {
+        const track = tracks[i];
+        const rect = track.getBoundingClientRect();
+        if (clientY >= rect.top && clientY <= rect.bottom) {
+            const zoneId = parseInt(track.getAttribute('data-zone-id'));
+            return zoneId;
+        }
+    }
+    return null;
+}
+
+function snapToGrid(percent) {
+    return Math.round(percent / 1.0) * 1.0;
+}
+
+function updateScenePosition(sceneId, newStartPercent, newZoneId) {
+    const scene = state.shows.scenes.find(s => s.id === sceneId);
+    if (!scene) return;
+    
+    scene.startTimePercent = newStartPercent;
+    scene.zoneId = newZoneId;
+    
+    if (state.shows.current) {
+        state.shows.current.isSaved = false;
+        state.shows.current.scenes = state.shows.scenes;
+    }
+    
+    updateShowsUI();
+    renderScenes();
+}
+
+function handleSceneKeyDown(e, scene) {
+    if (!state.connected) return;
+    
+    switch (e.key) {
+        case 'Enter':
+        case ' ':
+            e.preventDefault();
+            // Open scene editor (to be implemented)
+            break;
+        case 'ArrowLeft':
+            e.preventDefault();
+            updateScenePosition(scene.id, Math.max(0, scene.startTimePercent - (e.shiftKey ? 5 : 1)), scene.zoneId);
+            break;
+        case 'ArrowRight':
+            e.preventDefault();
+            updateScenePosition(scene.id, Math.min(100 - scene.durationPercent, scene.startTimePercent + (e.shiftKey ? 5 : 1)), scene.zoneId);
+            break;
+        case 'ArrowUp':
+            e.preventDefault();
+            {
+                const zoneIds = ZONE_LABELS.map(z => z.id);
+                const currentIndex = zoneIds.indexOf(scene.zoneId);
+                const prevZone = currentIndex > 0 ? zoneIds[currentIndex - 1] : zoneIds[zoneIds.length - 1];
+                updateScenePosition(scene.id, scene.startTimePercent, prevZone);
+            }
+            break;
+        case 'ArrowDown':
+            e.preventDefault();
+            {
+                const zoneIds = ZONE_LABELS.map(z => z.id);
+                const currentIndex = zoneIds.indexOf(scene.zoneId);
+                const nextZone = currentIndex < zoneIds.length - 1 ? zoneIds[currentIndex + 1] : zoneIds[0];
+                updateScenePosition(scene.id, scene.startTimePercent, nextZone);
+            }
+            break;
+        case 'Delete':
+            e.preventDefault();
+            if (window.confirm(`Delete scene "${scene.effectName}"?`)) {
+                deleteScene(scene.id);
+            }
+            break;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Scene Management
+// ─────────────────────────────────────────────────────────────
+
+function addScene(zoneId, effectName) {
+    if (!state.shows.current) {
+        log('[SHOWS] No show selected');
+        return;
+    }
+    
+    const newScene = {
+        id: 'scene-' + Date.now(),
+        zoneId: zoneId,
+        effectName: effectName || 'New Scene',
+        startTimePercent: 0,
+        durationPercent: 10,
+        accentColor: ZONE_LABELS.find(z => z.id === zoneId)?.color || 'primary'
+    };
+    
+    state.shows.scenes.push(newScene);
+    state.shows.current.scenes = state.shows.scenes;
+    state.shows.current.isSaved = false;
+    
+    updateShowsUI();
+    renderScenes();
+}
+
+function deleteScene(sceneId) {
+    state.shows.scenes = state.shows.scenes.filter(s => s.id !== sceneId);
+    if (state.shows.current) {
+        state.shows.current.scenes = state.shows.scenes;
+        state.shows.current.isSaved = false;
+    }
+    
+    updateShowsUI();
+    renderScenes();
+}
+
+function updateScene(sceneId, updates) {
+    const scene = state.shows.scenes.find(s => s.id === sceneId);
+    if (!scene) return;
+    
+    Object.assign(scene, updates);
+    if (state.shows.current) {
+        state.shows.current.scenes = state.shows.scenes;
+        state.shows.current.isSaved = false;
+    }
+    
+    updateShowsUI();
+    renderScenes();
+}
+
+function duplicateScene(sceneId) {
+    const scene = state.shows.scenes.find(s => s.id === sceneId);
+    if (!scene) return;
+    
+    const newScene = {
+        ...scene,
+        id: 'scene-' + Date.now(),
+        startTimePercent: Math.min(100 - scene.durationPercent, scene.startTimePercent + scene.durationPercent)
+    };
+    
+    state.shows.scenes.push(newScene);
+    if (state.shows.current) {
+        state.shows.current.scenes = state.shows.scenes;
+        state.shows.current.isSaved = false;
+    }
+    
+    updateShowsUI();
+    renderScenes();
+    renderSceneList();
+}
+
+// ─────────────────────────────────────────────────────────────
+// Scene List Rendering
+// ─────────────────────────────────────────────────────────────
+
+function renderSceneList() {
+    const sceneListEl = document.getElementById('sceneList');
+    if (!sceneListEl) return;
+    
+    if (!state.shows.current || !state.shows.scenes || state.shows.scenes.length === 0) {
+        sceneListEl.innerHTML = '<div class="value-secondary compact" style="text-align: center; padding: var(--space-sm);">No scenes. Add scenes by dragging effects onto the timeline.</div>';
+        return;
+    }
+    
+    sceneListEl.innerHTML = state.shows.scenes.map((scene, index) => {
+        const zoneLabel = ZONE_LABELS.find(z => z.id === scene.zoneId)?.label || `Zone ${scene.zoneId}`;
+        const colors = SCENE_COLORS[scene.zoneId] || SCENE_COLORS[0];
+        return `
+            <div class="scene-list-item" style="background: ${colors.bg}; border-color: ${colors.border};">
+                <div style="flex: 1;">
+                    <div style="font-size: 0.75rem; color: ${colors.text}; font-weight: 600;">${scene.effectName}</div>
+                    <div style="font-size: 0.65rem; color: var(--text-secondary); margin-top: 2px;">
+                        ${zoneLabel} • ${scene.startTimePercent.toFixed(1)}% • ${scene.durationPercent.toFixed(1)}% duration
+                    </div>
+                </div>
+                <button class="control-btn compact" style="font-size: 0.7rem; padding: var(--space-xs) var(--space-sm);" 
+                        onclick="deleteScene('${scene.id}')" aria-label="Delete scene">
+                    ✕
+                </button>
+            </div>
+        `;
+    }).join('');
+}
+
+// ─────────────────────────────────────────────────────────────
+// Shows Tab UI Handlers
+// ─────────────────────────────────────────────────────────────
+
+function toggleShowsTab() {
+    const showsTabRow = document.getElementById('showsTabRow');
+    if (!showsTabRow) return;
+    
+    const isVisible = showsTabRow.style.display !== 'none';
+    showsTabRow.style.display = isVisible ? 'none' : 'block';
+    
+    if (!isVisible) {
+        // Load shows when tab is opened
+        fetchShowsList();
+    }
+}
+
+function onShowSelectChange() {
+    const select = elements.showSelect;
+    if (!select || !select.value) {
+        state.shows.current = null;
+        state.shows.scenes = [];
+        renderTimeline();
+        return;
+    }
+    
+    fetchShowDetails(select.value, 'scenes');
+}
+
+function onShowNew() {
+    const name = prompt('Enter show name:', 'New Show');
+    if (!name) return;
+    
+    const durationSeconds = parseInt(prompt('Enter duration in seconds:', '120')) || 120;
+    
+    const newShow = {
+        id: 'new-' + Date.now(),
+        name: name,
+        durationSeconds: durationSeconds,
+        scenes: [],
+        isSaved: false,
+        type: 'custom'
+    };
+    
+    state.shows.current = newShow;
+    state.shows.scenes = [];
+    
+    updateShowsUI();
+    renderTimeline();
+}
+
+function onShowSave() {
+    if (!state.shows.current) {
+        log('[SHOWS] No show to save');
+        return;
+    }
+    
+    const show = state.shows.current;
+    
+    if (show.type === 'builtin') {
+        log('[SHOWS] Cannot save built-in shows');
+        return;
+    }
+    
+    if (show.id.startsWith('new-')) {
+        // Create new show
+        createShow(show.name, show.durationSeconds, show.scenes);
+    } else {
+        // Update existing show
+        updateShow(show.id, show.name, show.durationSeconds, show.scenes);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
 // Initialization
 // ─────────────────────────────────────────────────────────────
 
@@ -3015,6 +4119,69 @@ function init() {
     if (elements.zoneModeToggle) {
         elements.zoneModeToggle.addEventListener('click', toggleZoneMode);
     }
+    
+    // Shows tab event handlers
+    if (elements.showsTabToggle) {
+        elements.showsTabToggle.addEventListener('click', toggleShowsTab);
+    }
+    
+    if (elements.showSelect) {
+        elements.showSelect.addEventListener('change', onShowSelectChange);
+    }
+    
+    if (elements.showNewBtn) {
+        elements.showNewBtn.addEventListener('click', onShowNew);
+    }
+    
+    if (elements.showSaveBtn) {
+        elements.showSaveBtn.addEventListener('click', onShowSave);
+    }
+    
+    if (elements.showPlayBtn) {
+        elements.showPlayBtn.addEventListener('click', () => {
+            if (state.shows.current) {
+                // Only built-in shows can be played (ShowNode limitation)
+                const showId = state.shows.current.type === 'builtin' 
+                    ? parseInt(state.shows.current.id) 
+                    : null;
+                if (showId !== null && !isNaN(showId)) {
+                    controlShow('start', showId);
+                } else {
+                    log('[SHOWS] Custom shows cannot be played yet (ShowNode limitation)');
+                    alert('Custom shows cannot be played yet. Only built-in shows (0-9) are supported for playback.');
+                }
+            }
+        });
+    }
+    
+    if (elements.showPauseBtn) {
+        elements.showPauseBtn.addEventListener('click', () => {
+            controlShow('pause');
+        });
+    }
+    
+    if (elements.showStopBtn) {
+        elements.showStopBtn.addEventListener('click', () => {
+            controlShow('stop');
+        });
+    }
+    
+    if (elements.showSeekSlider) {
+        elements.showSeekSlider.addEventListener('input', (e) => {
+            if (state.shows.current && state.shows.current.durationSeconds > 0) {
+                const percent = parseFloat(e.target.value);
+                const timeMs = Math.floor((percent / 100) * state.shows.current.durationSeconds * 1000);
+                controlShow('seek', undefined, timeMs);
+            }
+        });
+    }
+    
+    // Poll for show status during playback
+    setInterval(() => {
+        if (state.shows.isPlaying && state.connected) {
+            fetchCurrentShowStatus();
+        }
+    }, 100);
     
     // Bind slider events
     if (elements.brightnessSlider) {

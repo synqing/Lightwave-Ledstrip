@@ -25,6 +25,7 @@
 #include "handlers/FirmwareHandlers.h"
 #include "handlers/PresetHandlers.h"
 #include "handlers/ZonePresetHandlers.h"
+#include "handlers/ShowHandlers.h"
 #include <ESPAsyncWebServer.h>
 #include <Arduino.h>
 
@@ -615,6 +616,94 @@ void V1ApiRoutes::registerRoutes(
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
             handlers::NarrativeHandlers::handleConfigSet(request, data, len);
+        }
+    );
+
+    // Show routes - list is handled in the /shows route with ID parsing
+
+    registry.onGet("/api/v1/shows/current", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::ShowHandlers::handleCurrent(request, ctx.orchestrator);
+    });
+
+    // GET /api/v1/shows/{id} - parse ID from URL manually
+    registry.onGet("/api/v1/shows", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        
+        // Check if this is a specific show request (URL contains /shows/ followed by ID)
+        String url = request->url();
+        int showsPos = url.indexOf("/shows/");
+        if (showsPos >= 0) {
+            // Extract ID from URL
+            String showId = url.substring(showsPos + 7);  // "/shows/" is 7 chars
+            // Remove query string if present
+            int queryPos = showId.indexOf('?');
+            if (queryPos >= 0) {
+                showId = showId.substring(0, queryPos);
+            }
+            String format = request->hasParam("format") ? request->getParam("format")->value() : "scenes";
+            handlers::ShowHandlers::handleGet(request, showId, format, ctx.orchestrator);
+        } else {
+            // List all shows
+            handlers::ShowHandlers::handleList(request, ctx.orchestrator);
+        }
+    });
+
+    registry.onPost("/api/v1/shows",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::ShowHandlers::handleCreate(request, data, len, ctx.orchestrator);
+        }
+    );
+
+    // PUT /api/v1/shows/{id} - parse ID from URL
+    registry.onPut("/api/v1/shows", 
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            String url = request->url();
+            int showsPos = url.indexOf("/shows/");
+            if (showsPos >= 0) {
+                String showId = url.substring(showsPos + 7);
+                int queryPos = showId.indexOf('?');
+                if (queryPos >= 0) showId = showId.substring(0, queryPos);
+                handlers::ShowHandlers::handleUpdate(request, showId, data, len, ctx.orchestrator);
+            } else {
+                request->send(400, "application/json", "{\"error\":\"Invalid URL\"}");
+            }
+        }
+    );
+
+    // DELETE /api/v1/shows/{id} - parse ID from URL
+    registry.onDelete("/api/v1/shows", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        String url = request->url();
+        int showsPos = url.indexOf("/shows/");
+        if (showsPos >= 0) {
+            String showId = url.substring(showsPos + 7);
+            int queryPos = showId.indexOf('?');
+            if (queryPos >= 0) showId = showId.substring(0, queryPos);
+            handlers::ShowHandlers::handleDelete(request, showId, ctx.orchestrator);
+        } else {
+            request->send(400, "application/json", "{\"error\":\"Invalid URL\"}");
+        }
+    });
+
+    registry.onPost("/api/v1/shows/control",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::ShowHandlers::handleControl(request, data, len, ctx.orchestrator);
         }
     );
 

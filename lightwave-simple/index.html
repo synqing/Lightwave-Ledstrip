@@ -124,6 +124,7 @@
                 <div class="value-secondary compact" id="zoneModeInfo">--</div>
                 <div class="button-row">
                     <button class="control-btn compact" id="zoneModeToggle" aria-label="Toggle zone mode">Toggle</button>
+                    <button class="control-btn compact" id="showsTabToggle" aria-label="Toggle shows tab">Shows</button>
                 </div>
             </section>
         </div>
@@ -220,6 +221,53 @@
 
                 <!-- Apply Button -->
                 <button id="zoneApplyButton" class="control-btn compact" style="width: 100%; margin-top: var(--space-md); background: var(--gold); color: var(--bg-base);" disabled>Apply Zone Layout</button>
+            </section>
+        </div>
+
+        <!-- Row 6: Shows Tab (Timeline Editor) -->
+        <div class="controls-row" id="showsTabRow" style="display: none;">
+            <section class="control-card full-width" id="showsTab">
+                <h2 class="card-header">Timeline Editor</h2>
+                
+                <!-- Show Selector -->
+                <div class="shows-header" style="display: flex; gap: var(--space-sm); margin-bottom: var(--space-md); align-items: center;">
+                    <select id="showSelect" class="dropdown-select" style="flex: 1;">
+                        <option value="">Select Show...</option>
+                    </select>
+                    <button id="showNewBtn" class="control-btn compact">New</button>
+                    <button id="showSaveBtn" class="control-btn compact" disabled>Save</button>
+                </div>
+                
+                <!-- Transport Controls -->
+                <div class="transport-controls" style="display: flex; gap: var(--space-sm); margin-bottom: var(--space-md); align-items: center; justify-content: center;">
+                    <button id="showPlayBtn" class="control-btn compact">▶ Play</button>
+                    <button id="showPauseBtn" class="control-btn compact" style="display: none;">⏸ Pause</button>
+                    <button id="showStopBtn" class="control-btn compact">⏹ Stop</button>
+                    <div style="flex: 1; max-width: 300px;">
+                        <input type="range" id="showSeekSlider" min="0" max="100" value="0" class="slider" style="width: 100%;">
+                        <div class="value-secondary compact" style="text-align: center; font-size: 0.7rem;" id="showTimeDisplay">0:00 / 0:00</div>
+                    </div>
+                </div>
+                
+                <!-- Timeline -->
+                <div class="timeline-container" style="position: relative; margin-bottom: var(--space-md);">
+                    <div class="time-ruler" id="timeRuler" style="position: relative; height: 24px; background: rgba(255,255,255,0.05); border-radius: 4px; margin-bottom: var(--space-xs); padding: 0 var(--space-xs);">
+                        <!-- Time markers will be generated here -->
+                    </div>
+                    <div class="timeline-tracks" id="timelineTracks" style="position: relative;">
+                        <!-- Zone tracks will be generated here -->
+                    </div>
+                    <!-- Playhead -->
+                    <div id="timelinePlayhead" style="position: absolute; top: 24px; bottom: 0; width: 2px; background: var(--accent-primary); pointer-events: none; z-index: 20; display: none; box-shadow: 0 0 8px rgba(255,184,77,0.5);"></div>
+                </div>
+                
+                <!-- Scene Editor -->
+                <div class="scene-editor" id="sceneEditor" style="margin-top: var(--space-md);">
+                    <div class="card-header" style="margin-bottom: var(--space-sm);">Scenes</div>
+                    <div id="sceneList" style="display: flex; flex-direction: column; gap: var(--space-xs);">
+                        <!-- Scenes will be listed here -->
+                    </div>
+                </div>
             </section>
         </div>
     </main>

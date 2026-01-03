@@ -1,20 +1,20 @@
 /**
- * @file ActorSystem.h
- * @brief Orchestrates all Actors in the LightwaveOS v2 system
+ * @file NodeOrchestrator.h
+ * @brief Orchestrates all Nodes in the LightwaveOS v2 system
  *
- * The ActorSystem is the top-level manager that:
- * - Creates and owns all Actor instances
- * - Starts/stops Actors in the correct order
- * - Provides access to Actors for external code
+ * The NodeOrchestrator is the top-level manager that:
+ * - Creates and owns all Node instances
+ * - Starts/stops Nodes in the correct order
+ * - Provides access to Nodes for external code
  * - Handles system-wide events (shutdown, etc.)
  *
  * Startup order:
- * 1. StateStoreActor - Load saved state
- * 2. RendererActor - Initialize LEDs
- * 3. NetworkActor - Start web server
- * 4. HmiActor - Start encoder polling
- * 5. PluginManagerActor - Load plugins
- * 6. SyncManagerActor - Connect to peers
+ * 1. StateStoreNode - Load saved state
+ * 2. RendererNode - Initialize LEDs
+ * 3. NetworkNode - Start web server
+ * 4. HmiNode - Start encoder polling
+ * 5. PluginManagerNode - Load plugins
+ * 6. SyncManagerNode - Connect to peers
  *
  * Shutdown order: Reverse of startup
  *
@@ -24,20 +24,20 @@
 
 #pragma once
 
-#include "Actor.h"
-#include "RendererActor.h"
-#include "ShowDirectorActor.h"
+#include "Node.h"
+#include "RendererNode.h"
+#include "ShowNode.h"
 #include "../bus/MessageBus.h"
 #include "../../config/features.h"
 #include <memory>
 
 // Audio integration (Phase 2)
 #if FEATURE_AUDIO_SYNC
-#include "../../audio/AudioActor.h"
+#include "../../audio/AudioNode.h"
 #endif
 
 namespace lightwaveos {
-namespace actors {
+namespace nodes {
 
 // ============================================================================
 // System State
@@ -48,10 +48,10 @@ namespace actors {
  */
 enum class SystemState : uint8_t {
     UNINITIALIZED = 0,  // Not yet started
-    STARTING,           // Actors being created
-    RUNNING,            // All actors running
+    STARTING,           // Nodes being created
+    RUNNING,            // All nodes running
     STOPPING,           // Shutdown in progress
-    STOPPED             // All actors stopped
+    STOPPED             // All nodes stopped
 };
 
 /**
@@ -62,67 +62,67 @@ struct SystemStats {
     uint32_t totalMessages;         // Total messages processed
     uint32_t heapFreeBytes;         // Current free heap
     uint32_t heapMinFreeBytes;      // Minimum free heap ever
-    uint8_t activeActors;           // Number of running actors
+    uint8_t activeNodes;           // Number of running nodes
 
     SystemStats()
         : uptimeMs(0), totalMessages(0)
         , heapFreeBytes(0), heapMinFreeBytes(0)
-        , activeActors(0) {}
+        , activeNodes(0) {}
 };
 
 // ============================================================================
-// ActorSystem Class
+// NodeOrchestrator Class
 // ============================================================================
 
 /**
- * @brief Top-level Actor orchestration
+ * @brief Top-level Node orchestration
  *
- * Singleton class that manages the lifecycle of all Actors.
+ * Singleton class that manages the lifecycle of all Nodes.
  *
  * Usage:
- *   ActorSystem::instance().init();
- *   ActorSystem::instance().start();
+ *   NodeOrchestrator::instance().init();
+ *   NodeOrchestrator::instance().start();
  *   // ... application running ...
- *   ActorSystem::instance().shutdown();
+ *   NodeOrchestrator::instance().shutdown();
  */
-class ActorSystem {
+class NodeOrchestrator {
 public:
     /**
      * @brief Get the singleton instance
      */
-    static ActorSystem& instance();
+    static NodeOrchestrator& instance();
 
     // Prevent copying
-    ActorSystem(const ActorSystem&) = delete;
-    ActorSystem& operator=(const ActorSystem&) = delete;
+    NodeOrchestrator(const NodeOrchestrator&) = delete;
+    NodeOrchestrator& operator=(const NodeOrchestrator&) = delete;
 
     // ========================================================================
     // Lifecycle
     // ========================================================================
 
     /**
-     * @brief Initialize the system (create actors)
+     * @brief Initialize the system (create nodes)
      *
-     * Creates all Actor instances but does not start them.
+     * Creates all Node instances but does not start them.
      * Call this once during setup().
      *
-     * @return true if all actors created successfully
+     * @return true if all nodes created successfully
      */
     bool init();
 
     /**
-     * @brief Start all actors
+     * @brief Start all nodes
      *
-     * Starts actors in dependency order. Call after init().
+     * Starts nodes in dependency order. Call after init().
      *
-     * @return true if all actors started successfully
+     * @return true if all nodes started successfully
      */
     bool start();
 
     /**
-     * @brief Shutdown all actors gracefully
+     * @brief Shutdown all nodes gracefully
      *
-     * Stops actors in reverse order. Blocks until complete.
+     * Stops nodes in reverse order. Blocks until complete.
      */
     void shutdown();
 
@@ -137,33 +137,33 @@ public:
     bool isRunning() const { return m_state == SystemState::RUNNING; }
 
     // ========================================================================
-    // Actor Access
+    // Node Access
     // ========================================================================
 
     /**
-     * @brief Get the RendererActor
+     * @brief Get the RendererNode
      *
      * Returns nullptr if not initialized.
      */
-    RendererActor* getRenderer() { return m_renderer.get(); }
-    const RendererActor* getRenderer() const { return m_renderer.get(); }
+    RendererNode* getRenderer() { return m_renderer.get(); }
+    const RendererNode* getRenderer() const { return m_renderer.get(); }
 
     /**
-     * @brief Get the ShowDirectorActor
+     * @brief Get the ShowNode
      *
      * Returns nullptr if not initialized.
      */
-    ShowDirectorActor* getShowDirector() { return m_showDirector.get(); }
-    const ShowDirectorActor* getShowDirector() const { return m_showDirector.get(); }
+    ShowNode* getShowDirector() { return m_showDirector.get(); }
+    const ShowNode* getShowDirector() const { return m_showDirector.get(); }
 
 #if FEATURE_AUDIO_SYNC
     /**
-     * @brief Get the AudioActor (Phase 2)
+     * @brief Get the AudioNode (Phase 2)
      *
      * Returns nullptr if not initialized or FEATURE_AUDIO_SYNC disabled.
      */
-    audio::AudioActor* getAudio() { return m_audio.get(); }
-    const audio::AudioActor* getAudio() const { return m_audio.get(); }
+    audio::AudioNode* getAudio() { return m_audio.get(); }
+    const audio::AudioNode* getAudio() const { return m_audio.get(); }
 #endif
 
     // Future: getNetwork(), getHmi(), getStateStore(), etc.
@@ -175,7 +175,7 @@ public:
     /**
      * @brief Set the current effect
      *
-     * Sends a SET_EFFECT message to the RendererActor.
+     * Sends a SET_EFFECT message to the RendererNode.
      *
      * @param effectId Effect ID to set
      * @return true if message was sent
@@ -185,7 +185,7 @@ public:
     /**
      * @brief Start a transition to a new effect (thread-safe)
      *
-     * Sends a START_TRANSITION message to the RendererActor.
+     * Sends a START_TRANSITION message to the RendererNode.
      *
      * @param effectId Target effect ID
      * @param transitionType Transition type (0-11)
@@ -274,25 +274,26 @@ public:
 
 private:
     // Private constructor for singleton
-    ActorSystem();
-    ~ActorSystem();
+    NodeOrchestrator();
+    ~NodeOrchestrator();
 
-    // Actor instances (using unique_ptr for RAII cleanup)
-    std::unique_ptr<RendererActor> m_renderer;
-    std::unique_ptr<ShowDirectorActor> m_showDirector;
+    // Node instances (using unique_ptr for RAII cleanup)
+    std::unique_ptr<RendererNode> m_renderer;
+    std::unique_ptr<ShowNode> m_showDirector;
 #if FEATURE_AUDIO_SYNC
-    std::unique_ptr<audio::AudioActor> m_audio;  // Phase 2: Audio capture and DSP
+    std::unique_ptr<audio::AudioNode> m_audio;  // Phase 2: Audio capture and DSP
 #endif
-    // Future: std::unique_ptr<NetworkActor> m_network;
-    // Future: std::unique_ptr<HmiActor> m_hmi;
-    // Future: std::unique_ptr<StateStoreActor> m_stateStore;
-    // Future: std::unique_ptr<SyncManagerActor> m_syncManager;
-    // Future: std::unique_ptr<PluginManagerActor> m_pluginManager;
+    // Future: std::unique_ptr<NetworkNode> m_network;
+    // Future: std::unique_ptr<HmiNode> m_hmi;
+    // Future: std::unique_ptr<StateStoreNode> m_stateStore;
+    // Future: std::unique_ptr<SyncManagerNode> m_syncManager;
+    // Future: std::unique_ptr<PluginManagerNode> m_pluginManager;
 
     // State
     SystemState m_state;
     uint32_t m_startTime;
 };
 
-} // namespace actors
+} // namespace nodes
 } // namespace lightwaveos
+

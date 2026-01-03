@@ -1,12 +1,12 @@
 /**
- * @file ActorSystem.cpp
- * @brief Implementation of the ActorSystem orchestrator
+ * @file NodeOrchestrator.cpp
+ * @brief Implementation of the NodeOrchestrator orchestrator
  *
  * @author LightwaveOS Team
  * @version 2.0.0
  */
 
-#include "ActorSystem.h"
+#include "NodeOrchestrator.h"
 #include "../../effects/zones/ZoneComposer.h"
 #if FEATURE_AUDIO_SYNC
 #include "../../audio/tempo/TempoTracker.h"
@@ -17,19 +17,19 @@
 #include <esp_log.h>
 #include <esp_heap_caps.h>
 
-static const char* TAG = "ActorSystem";
+static const char* TAG = "NodeOrchestrator";
 #endif
 
 namespace lightwaveos {
-namespace actors {
+namespace nodes {
 
 // ============================================================================
 // Singleton Instance
 // ============================================================================
 
-ActorSystem& ActorSystem::instance()
+NodeOrchestrator& NodeOrchestrator::instance()
 {
-    static ActorSystem instance;
+    static NodeOrchestrator instance;
     return instance;
 }
 
@@ -37,13 +37,13 @@ ActorSystem& ActorSystem::instance()
 // Constructor / Destructor
 // ============================================================================
 
-ActorSystem::ActorSystem()
+NodeOrchestrator::NodeOrchestrator()
     : m_state(SystemState::UNINITIALIZED)
     , m_startTime(0)
 {
 }
 
-ActorSystem::~ActorSystem()
+NodeOrchestrator::~NodeOrchestrator()
 {
     if (m_state == SystemState::RUNNING) {
         shutdown();
@@ -54,7 +54,7 @@ ActorSystem::~ActorSystem()
 // Lifecycle
 // ============================================================================
 
-bool ActorSystem::init()
+bool NodeOrchestrator::init()
 {
     if (m_state != SystemState::UNINITIALIZED) {
 #ifndef NATIVE_BUILD
@@ -64,64 +64,64 @@ bool ActorSystem::init()
     }
 
 #ifndef NATIVE_BUILD
-    ESP_LOGI(TAG, "Initializing Actor System...");
+    ESP_LOGI(TAG, "Initializing Node Orchestrator...");
     ESP_LOGI(TAG, "Free heap: %lu bytes", esp_get_free_heap_size());
 #endif
 
     m_state = SystemState::STARTING;
 
-    // Create actors in dependency order
-    // 1. RendererActor (must be first - other actors may depend on it)
-    // 2. ShowDirectorActor (depends on RendererActor)
-    // Future: StateStoreActor, NetworkActor, HmiActor, etc.
+    // Create nodes in dependency order
+    // 1. RendererNode (must be first - other nodes may depend on it)
+    // 2. ShowNode (depends on RendererNode)
+    // Future: StateStoreNode, NetworkNode, HmiNode, etc.
 
     try {
-        // Create RendererActor
-        m_renderer = std::make_unique<RendererActor>();
+        // Create RendererNode
+        m_renderer = std::make_unique<RendererNode>();
 
         if (m_renderer == nullptr) {
 #ifndef NATIVE_BUILD
-            ESP_LOGE(TAG, "Failed to create RendererActor");
+            ESP_LOGE(TAG, "Failed to create RendererNode");
 #endif
             m_state = SystemState::UNINITIALIZED;
             return false;
         }
 
-        // Create ShowDirectorActor
-        m_showDirector = std::make_unique<ShowDirectorActor>();
+        // Create ShowNode
+        m_showDirector = std::make_unique<ShowNode>();
 
         if (m_showDirector == nullptr) {
 #ifndef NATIVE_BUILD
-            ESP_LOGE(TAG, "Failed to create ShowDirectorActor");
+            ESP_LOGE(TAG, "Failed to create ShowNode");
 #endif
             m_state = SystemState::UNINITIALIZED;
             return false;
         }
 
 #if FEATURE_AUDIO_SYNC
-        // Create AudioActor (Phase 2)
-        m_audio = std::make_unique<audio::AudioActor>();
+        // Create AudioNode (Phase 2)
+        m_audio = std::make_unique<audio::AudioNode>();
 
         if (m_audio == nullptr) {
 #ifndef NATIVE_BUILD
-            ESP_LOGE(TAG, "Failed to create AudioActor");
+            ESP_LOGE(TAG, "Failed to create AudioNode");
 #endif
             m_state = SystemState::UNINITIALIZED;
             return false;
         }
 #ifndef NATIVE_BUILD
-        ESP_LOGI(TAG, "AudioActor created (Phase 2 audio sync enabled)");
+        ESP_LOGI(TAG, "AudioNode created (Phase 2 audio sync enabled)");
 #endif
 #endif
 
 #ifndef NATIVE_BUILD
-        ESP_LOGI(TAG, "Actors created successfully");
+        ESP_LOGI(TAG, "Nodes created successfully");
         ESP_LOGI(TAG, "Free heap after init: %lu bytes", esp_get_free_heap_size());
 #endif
 
     } catch (...) {
 #ifndef NATIVE_BUILD
-        ESP_LOGE(TAG, "Exception during actor creation");
+        ESP_LOGE(TAG, "Exception during node creation");
 #endif
         m_state = SystemState::UNINITIALIZED;
         return false;
@@ -130,7 +130,7 @@ bool ActorSystem::init()
     return true;
 }
 
-bool ActorSystem::start()
+bool NodeOrchestrator::start()
 {
     if (m_state != SystemState::STARTING) {
         if (m_state == SystemState::UNINITIALIZED) {
@@ -147,41 +147,41 @@ bool ActorSystem::start()
     }
 
 #ifndef NATIVE_BUILD
-    ESP_LOGI(TAG, "Starting actors...");
+    ESP_LOGI(TAG, "Starting nodes...");
 #endif
 
-    // Start actors in dependency order
-    // 1. StateStoreActor (load config) - future
-    // 2. RendererActor (init LEDs)
-    // 3. ShowDirectorActor (depends on RendererActor)
-    // 4. NetworkActor (start server) - future
-    // 5. HmiActor (start encoder) - future
-    // 6. PluginManagerActor - future
-    // 7. SyncManagerActor - future
+    // Start nodes in dependency order
+    // 1. StateStoreNode (load config) - future
+    // 2. RendererNode (init LEDs)
+    // 3. ShowNode (depends on RendererNode)
+    // 4. NetworkNode (start server) - future
+    // 5. HmiNode (start encoder) - future
+    // 6. PluginManagerNode - future
+    // 7. SyncManagerNode - future
 
-    // Start RendererActor
+    // Start RendererNode
     if (m_renderer && !m_renderer->start()) {
 #ifndef NATIVE_BUILD
-        ESP_LOGE(TAG, "Failed to start RendererActor");
+        ESP_LOGE(TAG, "Failed to start RendererNode");
 #endif
         m_state = SystemState::STOPPED;
         return false;
     }
 
-    // Start ShowDirectorActor
+    // Start ShowNode
     if (m_showDirector && !m_showDirector->start()) {
 #ifndef NATIVE_BUILD
-        ESP_LOGE(TAG, "Failed to start ShowDirectorActor");
+        ESP_LOGE(TAG, "Failed to start ShowNode");
 #endif
         m_state = SystemState::STOPPED;
         return false;
     }
 
 #if FEATURE_AUDIO_SYNC
-    // Start AudioActor (Phase 2)
+    // Start AudioNode (Phase 2)
     if (m_audio && !m_audio->start()) {
 #ifndef NATIVE_BUILD
-        ESP_LOGE(TAG, "Failed to start AudioActor");
+        ESP_LOGE(TAG, "Failed to start AudioNode");
 #endif
         // Audio failure is non-fatal - continue without audio
         ESP_LOGW(TAG, "Continuing without audio sync");
@@ -212,14 +212,14 @@ bool ActorSystem::start()
     m_state = SystemState::RUNNING;
 
 #ifndef NATIVE_BUILD
-    ESP_LOGI(TAG, "All actors started successfully");
+    ESP_LOGI(TAG, "All nodes started successfully");
     ESP_LOGI(TAG, "Free heap: %lu bytes", esp_get_free_heap_size());
 #endif
 
     return true;
 }
 
-void ActorSystem::shutdown()
+void NodeOrchestrator::shutdown()
 {
     if (m_state != SystemState::RUNNING) {
 #ifndef NATIVE_BUILD
@@ -229,34 +229,34 @@ void ActorSystem::shutdown()
     }
 
 #ifndef NATIVE_BUILD
-    ESP_LOGI(TAG, "Shutting down actors...");
+    ESP_LOGI(TAG, "Shutting down nodes...");
 #endif
 
     m_state = SystemState::STOPPING;
 
-    // Stop actors in reverse order
-    // Future: SyncManagerActor, PluginManagerActor, HmiActor, NetworkActor, etc.
+    // Stop nodes in reverse order
+    // Future: SyncManagerNode, PluginManagerNode, HmiNode, NetworkNode, etc.
 
 #if FEATURE_AUDIO_SYNC
-    // Stop AudioActor (Phase 2) - must stop before renderer
+    // Stop AudioNode (Phase 2) - must stop before renderer
     if (m_audio) {
-        // Disconnect cross-actor wiring first
+        // Disconnect cross-node wiring first
         if (m_renderer) {
             m_renderer->setAudioBuffer(nullptr);
         }
         m_audio->stop();
 #ifndef NATIVE_BUILD
-        ESP_LOGI(TAG, "AudioActor stopped");
+        ESP_LOGI(TAG, "AudioNode stopped");
 #endif
     }
 #endif
 
-    // Stop ShowDirectorActor
+    // Stop ShowNode
     if (m_showDirector) {
         m_showDirector->stop();
     }
 
-    // Stop RendererActor
+    // Stop RendererNode
     if (m_renderer) {
         m_renderer->stop();
     }
@@ -264,7 +264,7 @@ void ActorSystem::shutdown()
     m_state = SystemState::STOPPED;
 
 #ifndef NATIVE_BUILD
-    ESP_LOGI(TAG, "All actors stopped");
+    ESP_LOGI(TAG, "All nodes stopped");
     ESP_LOGI(TAG, "Final heap: %lu bytes", esp_get_free_heap_size());
 #endif
 }
@@ -273,7 +273,7 @@ void ActorSystem::shutdown()
 // Convenience Commands
 // ============================================================================
 
-bool ActorSystem::setEffect(uint8_t effectId)
+bool NodeOrchestrator::setEffect(uint8_t effectId)
 {
     if (!m_renderer || !m_renderer->isRunning()) {
         return false;
@@ -300,7 +300,7 @@ bool ActorSystem::setEffect(uint8_t effectId)
     return success;
 }
 
-bool ActorSystem::setBrightness(uint8_t brightness)
+bool NodeOrchestrator::setBrightness(uint8_t brightness)
 {
     if (!m_renderer || !m_renderer->isRunning()) {
         return false;
@@ -327,7 +327,7 @@ bool ActorSystem::setBrightness(uint8_t brightness)
     return success;
 }
 
-bool ActorSystem::setSpeed(uint8_t speed)
+bool NodeOrchestrator::setSpeed(uint8_t speed)
 {
     if (!m_renderer || !m_renderer->isRunning()) {
         return false;
@@ -354,7 +354,7 @@ bool ActorSystem::setSpeed(uint8_t speed)
     return success;
 }
 
-bool ActorSystem::setPalette(uint8_t paletteIndex)
+bool NodeOrchestrator::setPalette(uint8_t paletteIndex)
 {
     if (!m_renderer || !m_renderer->isRunning()) {
         return false;
@@ -364,7 +364,7 @@ bool ActorSystem::setPalette(uint8_t paletteIndex)
     return m_renderer->send(msg, pdMS_TO_TICKS(10));
 }
 
-bool ActorSystem::setIntensity(uint8_t intensity)
+bool NodeOrchestrator::setIntensity(uint8_t intensity)
 {
     if (!m_renderer || !m_renderer->isRunning()) {
         return false;
@@ -374,7 +374,7 @@ bool ActorSystem::setIntensity(uint8_t intensity)
     return m_renderer->send(msg, pdMS_TO_TICKS(10));
 }
 
-bool ActorSystem::setSaturation(uint8_t saturation)
+bool NodeOrchestrator::setSaturation(uint8_t saturation)
 {
     if (!m_renderer || !m_renderer->isRunning()) {
         return false;
@@ -384,7 +384,7 @@ bool ActorSystem::setSaturation(uint8_t saturation)
     return m_renderer->send(msg, pdMS_TO_TICKS(10));
 }
 
-bool ActorSystem::setComplexity(uint8_t complexity)
+bool NodeOrchestrator::setComplexity(uint8_t complexity)
 {
     if (!m_renderer || !m_renderer->isRunning()) {
         return false;
@@ -394,7 +394,7 @@ bool ActorSystem::setComplexity(uint8_t complexity)
     return m_renderer->send(msg, pdMS_TO_TICKS(10));
 }
 
-bool ActorSystem::setVariation(uint8_t variation)
+bool NodeOrchestrator::setVariation(uint8_t variation)
 {
     if (!m_renderer || !m_renderer->isRunning()) {
         return false;
@@ -404,7 +404,7 @@ bool ActorSystem::setVariation(uint8_t variation)
     return m_renderer->send(msg, pdMS_TO_TICKS(10));
 }
 
-bool ActorSystem::setHue(uint8_t hue)
+bool NodeOrchestrator::setHue(uint8_t hue)
 {
     if (!m_renderer || !m_renderer->isRunning()) {
         return false;
@@ -414,7 +414,7 @@ bool ActorSystem::setHue(uint8_t hue)
     return m_renderer->send(msg, pdMS_TO_TICKS(10));
 }
 
-bool ActorSystem::setMood(uint8_t mood)
+bool NodeOrchestrator::setMood(uint8_t mood)
 {
     if (!m_renderer || !m_renderer->isRunning()) {
         return false;
@@ -424,7 +424,7 @@ bool ActorSystem::setMood(uint8_t mood)
     return m_renderer->send(msg, pdMS_TO_TICKS(10));
 }
 
-bool ActorSystem::setFadeAmount(uint8_t fadeAmount)
+bool NodeOrchestrator::setFadeAmount(uint8_t fadeAmount)
 {
     if (!m_renderer || !m_renderer->isRunning()) {
         return false;
@@ -434,7 +434,7 @@ bool ActorSystem::setFadeAmount(uint8_t fadeAmount)
     return m_renderer->send(msg, pdMS_TO_TICKS(10));
 }
 
-bool ActorSystem::startTransition(uint8_t effectId, uint8_t transitionType)
+bool NodeOrchestrator::startTransition(uint8_t effectId, uint8_t transitionType)
 {
     if (!m_renderer || !m_renderer->isRunning()) {
         return false;
@@ -467,7 +467,7 @@ bool ActorSystem::startTransition(uint8_t effectId, uint8_t transitionType)
 // Diagnostics
 // ============================================================================
 
-SystemStats ActorSystem::getStats() const
+SystemStats NodeOrchestrator::getStats() const
 {
     SystemStats stats;
 
@@ -482,27 +482,27 @@ SystemStats ActorSystem::getStats() const
     stats.heapMinFreeBytes = esp_get_minimum_free_heap_size();
 #endif
 
-    // Count active actors
-    stats.activeActors = 0;
-    if (m_renderer && m_renderer->isRunning()) stats.activeActors++;
-    if (m_showDirector && m_showDirector->isRunning()) stats.activeActors++;
+    // Count active nodes
+    stats.activeNodes = 0;
+    if (m_renderer && m_renderer->isRunning()) stats.activeNodes++;
+    if (m_showDirector && m_showDirector->isRunning()) stats.activeNodes++;
 #if FEATURE_AUDIO_SYNC
-    if (m_audio && m_audio->isRunning()) stats.activeActors++;
+    if (m_audio && m_audio->isRunning()) stats.activeNodes++;
 #endif
-    // Future: count other actors
+    // Future: count other nodes
 
     return stats;
 }
 
-void ActorSystem::printStatus()
+void NodeOrchestrator::printStatus()
 {
 #ifndef NATIVE_BUILD
     SystemStats stats = getStats();
 
-    Serial.println(F("\n=== LightwaveOS v2 Actor System ==="));
+    Serial.println(F("\n=== LightwaveOS v2 Node System ==="));
     Serial.printf("State: %d\n", static_cast<int>(m_state));
     Serial.printf("Uptime: %lu ms\n", stats.uptimeMs);
-    Serial.printf("Active actors: %d\n", stats.activeActors);
+    Serial.printf("Active nodes: %d\n", stats.activeNodes);
     Serial.printf("Total messages: %lu\n", stats.totalMessages);
     Serial.printf("Heap: %lu / min %lu bytes\n",
                   stats.heapFreeBytes, stats.heapMinFreeBytes);
@@ -548,7 +548,7 @@ void ActorSystem::printStatus()
 #endif
 }
 
-uint32_t ActorSystem::getUptimeMs() const
+uint32_t NodeOrchestrator::getUptimeMs() const
 {
     if (m_state != SystemState::RUNNING) {
         return 0;
@@ -556,5 +556,6 @@ uint32_t ActorSystem::getUptimeMs() const
     return millis() - m_startTime;
 }
 
-} // namespace actors
+} // namespace nodes
 } // namespace lightwaveos
+

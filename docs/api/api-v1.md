@@ -11,11 +11,17 @@
 3. [Error Codes](#error-codes)
 4. [Rate Limiting](#rate-limiting)
 5. [REST API Endpoints](#rest-api-endpoints)
+   - [Device Endpoints](#device-endpoints)
+   - [Effects Endpoints](#effects-endpoints)
+   - [Parameters Endpoints](#parameters-endpoints)
+   - [Transitions Endpoints](#transitions-endpoints)
+   - [Zones Endpoints](#zones-endpoints)
+   - [Effect Presets Endpoints](#effect-presets-endpoints)
+   - [Batch Operations](#batch-operations)
 6. [WebSocket Commands](#websocket-commands)
-7. [Batch Operations](#batch-operations)
-8. [Effect Metadata](#effect-metadata)
-9. [Examples](#examples)
-10. [Related Documentation](#related-documentation)
+7. [Effect Metadata](#effect-metadata)
+8. [Examples](#examples)
+9. [Related Documentation](#related-documentation)
 
 ---
 
@@ -76,6 +82,9 @@ All v1 API responses follow a standardized JSON structure.
 | `OUT_OF_RANGE` | 400 | Parameter value exceeds valid range |
 | `SCHEMA_MISMATCH` | 400 | Request doesn't match expected schema |
 | `RATE_LIMITED` | 429 | Too many requests, client is rate limited |
+| `NOT_FOUND` | 404 | Requested resource not found |
+| `STORAGE_FULL` | 507 | No free storage slots available |
+| `SYSTEM_NOT_READY` | 503 | System component not initialized |
 | `INTERNAL_ERROR` | 500 | Server-side error occurred |
 
 ---
@@ -1009,6 +1018,272 @@ Enable or disable the entire zone system.
 
 ---
 
+#### `GET /api/v1/zones/config`
+
+Get zone configuration persistence status.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "enabled": true,
+    "zoneCount": 3,
+    "segments": [...],
+    "zones": [...]
+  },
+  "timestamp": 123456789,
+  "version": "2.0"
+}
+```
+
+**cURL Example:**
+```bash
+curl http://lightwaveos.local/api/v1/zones/config
+```
+
+---
+
+#### `POST /api/v1/zones/config/save`
+
+Save current zone configuration to NVS flash storage.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "saved": true,
+    "message": "Zone configuration saved to NVS"
+  },
+  "timestamp": 123456789,
+  "version": "2.0"
+}
+```
+
+**cURL Example:**
+```bash
+curl -X POST http://lightwaveos.local/api/v1/zones/config/save
+```
+
+---
+
+#### `POST /api/v1/zones/config/load`
+
+Reload zone configuration from NVS flash storage.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "loaded": true,
+    "message": "Zone configuration loaded from NVS"
+  },
+  "timestamp": 123456789,
+  "version": "2.0"
+}
+```
+
+**cURL Example:**
+```bash
+curl -X POST http://lightwaveos.local/api/v1/zones/config/load
+```
+
+---
+
+### Effect Presets Endpoints
+
+Effect presets allow saving and recalling complete effect configurations (effect ID, brightness, speed, palette).
+
+#### `GET /api/v1/effect-presets`
+
+List all saved effect presets.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "count": 3,
+    "maxPresets": 10,
+    "presets": [
+      {"id": 0, "name": "Chill Mode"},
+      {"id": 2, "name": "Party"},
+      {"id": 5, "name": "Focus"}
+    ]
+  },
+  "timestamp": 123456789,
+  "version": "2.0"
+}
+```
+
+**cURL Example:**
+```bash
+curl http://lightwaveos.local/api/v1/effect-presets
+```
+
+---
+
+#### `GET /api/v1/effect-presets/get`
+
+Get details of a specific preset.
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | uint8 | Yes | Preset ID (0-9) |
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 0,
+    "name": "Chill Mode",
+    "effectId": 22,
+    "brightness": 180,
+    "speed": 15,
+    "paletteId": 5
+  },
+  "timestamp": 123456789,
+  "version": "2.0"
+}
+```
+
+**cURL Example:**
+```bash
+curl "http://lightwaveos.local/api/v1/effect-presets/get?id=0"
+```
+
+---
+
+#### `POST /api/v1/effect-presets`
+
+Save current effect configuration as a new preset.
+
+**Request Body:**
+```json
+{
+  "name": "My Preset"
+}
+```
+
+Optionally override values:
+```json
+{
+  "name": "Custom Preset",
+  "effectId": 15,
+  "brightness": 200,
+  "speed": 25,
+  "paletteId": 3
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 3,
+    "name": "My Preset",
+    "effectId": 15,
+    "brightness": 200,
+    "speed": 25,
+    "paletteId": 3,
+    "message": "Preset saved"
+  },
+  "timestamp": 123456789,
+  "version": "2.0"
+}
+```
+
+**Error Response (storage full):**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "STORAGE_FULL",
+    "message": "No free preset slots"
+  }
+}
+```
+
+**cURL Example:**
+```bash
+curl -X POST http://lightwaveos.local/api/v1/effect-presets \
+  -H "Content-Type: application/json" \
+  -d '{"name": "My Preset"}'
+```
+
+---
+
+#### `POST /api/v1/effect-presets/apply`
+
+Apply a saved preset (sets effect, brightness, speed, palette).
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | uint8 | Yes | Preset ID (0-9) |
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 0,
+    "name": "Chill Mode",
+    "effectId": 22,
+    "brightness": 180,
+    "speed": 15,
+    "paletteId": 5,
+    "message": "Preset applied"
+  },
+  "timestamp": 123456789,
+  "version": "2.0"
+}
+```
+
+**cURL Example:**
+```bash
+curl -X POST "http://lightwaveos.local/api/v1/effect-presets/apply?id=0"
+```
+
+---
+
+#### `DELETE /api/v1/effect-presets/delete`
+
+Delete a saved preset.
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | uint8 | Yes | Preset ID (0-9) |
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 0,
+    "message": "Preset deleted"
+  },
+  "timestamp": 123456789,
+  "version": "2.0"
+}
+```
+
+**cURL Example:**
+```bash
+curl -X DELETE "http://lightwaveos.local/api/v1/effect-presets/delete?id=0"
+```
+
+---
+
 ### Batch Operations
 
 #### `POST /api/v1/batch`
@@ -1700,6 +1975,113 @@ ws.send(JSON.stringify({
 
 ---
 
+### Command: `presets.list`
+
+List all saved effect presets.
+
+**Send:**
+```json
+{
+  "type": "presets.list"
+}
+```
+
+**Receive:**
+```json
+{
+  "type": "presets.list",
+  "success": true,
+  "count": 3,
+  "maxPresets": 10,
+  "presets": [
+    {"id": 0, "name": "Chill Mode"},
+    {"id": 2, "name": "Party"},
+    {"id": 5, "name": "Focus"}
+  ]
+}
+```
+
+---
+
+### Command: `presets.apply`
+
+Apply a saved preset by ID.
+
+**Send:**
+```json
+{
+  "type": "presets.apply",
+  "id": 0
+}
+```
+
+**Receive:**
+```json
+{
+  "type": "presets.applied",
+  "success": true,
+  "id": 0,
+  "name": "Chill Mode",
+  "effectId": 22,
+  "brightness": 180,
+  "speed": 15,
+  "paletteId": 5
+}
+```
+
+---
+
+### Command: `presets.save`
+
+Save current effect configuration as a new preset.
+
+**Send:**
+```json
+{
+  "type": "presets.save",
+  "name": "My Preset"
+}
+```
+
+**Receive:**
+```json
+{
+  "type": "presets.saved",
+  "success": true,
+  "id": 3,
+  "name": "My Preset",
+  "effectId": 15,
+  "brightness": 200,
+  "speed": 25,
+  "paletteId": 3
+}
+```
+
+---
+
+### Command: `presets.delete`
+
+Delete a saved preset by ID.
+
+**Send:**
+```json
+{
+  "type": "presets.delete",
+  "id": 0
+}
+```
+
+**Receive:**
+```json
+{
+  "type": "presets.deleted",
+  "success": true,
+  "id": 0
+}
+```
+
+---
+
 ## Effect Metadata
 
 ### Effect Categories
@@ -1904,6 +2286,6 @@ For audio-specific APIs (requires `esp32dev_audio` build):
 
 ---
 
-**Documentation Version:** 1.0.0
-**Last Updated:** 2025-12-27
-**API Base:** LightwaveOS v1.0.0
+**Documentation Version:** 1.1.0
+**Last Updated:** 2026-01-03
+**API Base:** LightwaveOS v2.0.0

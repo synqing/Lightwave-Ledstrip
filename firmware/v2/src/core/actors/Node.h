@@ -1,14 +1,14 @@
 /**
- * @file Actor.h
- * @brief Base Actor class for LightwaveOS v2 cross-core communication
+ * @file Node.h
+ * @brief Base Node class for LightwaveOS v2 cross-core communication
  *
- * The Actor Model provides thread-safe, lock-free communication between
- * cores on the ESP32-S3. Each Actor runs on a pinned core and communicates
+ * The Node Model provides thread-safe, lock-free communication between
+ * cores on the ESP32-S3. Each Node runs on a pinned core and communicates
  * exclusively via message queues, eliminating race conditions.
  *
  * Architecture:
- *   Core 0 (Network/Input): NetworkActor, HmiActor, PluginManagerActor
- *   Core 1 (Rendering): RendererActor, StateStoreActor
+ *   Core 0 (Network/Input): NetworkNode, HmiNode, PluginManagerNode
+ *   Core 1 (Rendering): RendererNode, StateStoreNode
  *
  * @author LightwaveOS Team
  * @version 2.0.0
@@ -31,7 +31,7 @@
 #endif
 
 namespace lightwaveos {
-namespace actors {
+namespace nodes {
 
 // ============================================================================
 // Message Types
@@ -194,24 +194,24 @@ struct Message {
 static_assert(sizeof(Message) == 16, "Message must be exactly 16 bytes");
 
 // ============================================================================
-// Actor Configuration
+// Node Configuration
 // ============================================================================
 
 /**
- * @brief Configuration for Actor creation
+ * @brief Configuration for Node creation
  *
  * Stack sizes (in words, 4 bytes each):
- * - RendererActor: 4096 words (16KB) - effect rendering + FastLED
- * - NetworkActor: 3072 words (12KB) - WebSocket + HTTP handling
- * - HmiActor: 2048 words (8KB) - encoder polling
+ * - RendererNode: 4096 words (16KB) - effect rendering + FastLED
+ * - NetworkNode: 3072 words (12KB) - WebSocket + HTTP handling
+ * - HmiNode: 2048 words (8KB) - encoder polling
  * - Others: 2048 words (8KB) - default
  *
  * Priorities (higher = more important):
- * - RendererActor: 5 - Must hit 120 FPS
- * - NetworkActor: 3 - Responsive but not critical
+ * - RendererNode: 5 - Must hit 120 FPS
+ * - NetworkNode: 3 - Responsive but not critical
  * - Others: 2 - Background processing
  */
-struct ActorConfig {
+struct NodeConfig {
     const char* name;           // Task name for debugging
     uint16_t stackSize;         // Stack size in words (x4 for bytes)
     uint8_t priority;           // FreeRTOS priority (0-configMAX_PRIORITIES)
@@ -219,15 +219,15 @@ struct ActorConfig {
     uint8_t queueSize;          // Message queue depth
     TickType_t tickInterval;    // Interval for onTick() callback (0 = disabled)
 
-    ActorConfig()
-        : name("Actor")
+    NodeConfig()
+        : name("Node")
         , stackSize(2048)
         , priority(2)
         , coreId(0)
         , queueSize(16)
         , tickInterval(0) {}
 
-    ActorConfig(const char* n, uint16_t stack, uint8_t prio,
+    NodeConfig(const char* n, uint16_t stack, uint8_t prio,
                 BaseType_t core, uint8_t qSize, TickType_t tick = 0)
         : name(n)
         , stackSize(stack)
@@ -238,11 +238,11 @@ struct ActorConfig {
 };
 
 // ============================================================================
-// Actor Base Class
+// Node Base Class
 // ============================================================================
 
 /**
- * @brief Base class for all Actors in the system
+ * @brief Base class for all Nodes in the system
  *
  * Lifecycle:
  * 1. Constructor - Store config, allocate queue
@@ -254,37 +254,37 @@ struct ActorConfig {
  * Thread safety:
  * - send() is thread-safe (can be called from any core)
  * - sendFromISR() is ISR-safe (interrupt context)
- * - onMessage() is always called from the Actor's own task
+ * - onMessage() is always called from the Node's own task
  */
-class Actor {
+class Node {
 public:
     /**
-     * @brief Construct an Actor with the given configuration
-     * @param config Actor configuration (name, stack, priority, etc.)
+     * @brief Construct a Node with the given configuration
+     * @param config Node configuration (name, stack, priority, etc.)
      */
-    explicit Actor(const ActorConfig& config);
+    explicit Node(const NodeConfig& config);
 
     /**
      * @brief Virtual destructor - cleans up FreeRTOS resources
      */
-    virtual ~Actor();
+    virtual ~Node();
 
     // Prevent copying (FreeRTOS handles can't be copied)
-    Actor(const Actor&) = delete;
-    Actor& operator=(const Actor&) = delete;
+    Node(const Node&) = delete;
+    Node& operator=(const Node&) = delete;
 
     // ========================================================================
     // Lifecycle
     // ========================================================================
 
     /**
-     * @brief Start the Actor's FreeRTOS task
+     * @brief Start the Node's FreeRTOS task
      * @return true if task created successfully
      */
     bool start();
 
     /**
-     * @brief Stop the Actor gracefully
+     * @brief Stop the Node gracefully
      *
      * Sends SHUTDOWN message and waits up to 100ms for the task to exit.
      * If the task doesn't exit in time, it will be forcefully deleted.
@@ -292,7 +292,7 @@ public:
     void stop();
 
     /**
-     * @brief Check if the Actor is currently running
+     * @brief Check if the Node is currently running
      */
     bool isRunning() const { return m_running; }
 
@@ -301,7 +301,7 @@ public:
     // ========================================================================
 
     /**
-     * @brief Send a message to this Actor's queue
+     * @brief Send a message to this Node's queue
      *
      * Thread-safe - can be called from any task on any core.
      *
@@ -337,12 +337,12 @@ public:
     // ========================================================================
 
     /**
-     * @brief Get the Actor's name
+     * @brief Get the Node's name
      */
     const char* getName() const { return m_config.name; }
 
     /**
-     * @brief Get the core this Actor runs on
+     * @brief Get the core this Node runs on
      */
     BaseType_t getCoreId() const { return m_config.coreId; }
 
@@ -350,7 +350,7 @@ public:
      * @brief Get stack high water mark (minimum free stack ever)
      *
      * Useful for tuning stack sizes. If this gets too low, increase
-     * the Actor's stack size.
+     * the Node's stack size.
      *
      * @return Minimum free stack in words (multiply by 4 for bytes)
      */
@@ -367,7 +367,7 @@ protected:
     // ========================================================================
 
     /**
-     * @brief Called once when the Actor starts
+     * @brief Called once when the Node starts
      *
      * Override to perform initialization that requires the task context
      * (e.g., initializing hardware that needs to run on a specific core).
@@ -377,8 +377,8 @@ protected:
     /**
      * @brief Called for each received message
      *
-     * This is the main message handler. Implement your Actor's logic here.
-     * Always called from the Actor's own task (single-threaded).
+     * This is the main message handler. Implement your Node's logic here.
+     * Always called from the Node's own task (single-threaded).
      *
      * @param msg The received message
      */
@@ -394,7 +394,7 @@ protected:
     virtual void onTick() {}
 
     /**
-     * @brief Called when the Actor is stopping
+     * @brief Called when the Node is stopping
      *
      * Override to clean up resources before the task exits.
      */
@@ -416,9 +416,9 @@ protected:
     void sleep(uint32_t ms);
 
     /**
-     * @brief Get the Actor's configuration
+     * @brief Get the Node's configuration
      */
-    const ActorConfig& getConfig() const { return m_config; }
+    const NodeConfig& getConfig() const { return m_config; }
 
 private:
     /**
@@ -431,7 +431,7 @@ private:
      */
     void run();
 
-    ActorConfig m_config;               // Configuration
+    NodeConfig m_config;               // Configuration
     TaskHandle_t m_taskHandle;          // FreeRTOS task handle
     QueueHandle_t m_queue;              // Message queue
     volatile bool m_running;            // Running flag (atomic on ESP32)
@@ -440,13 +440,13 @@ private:
 };
 
 // ============================================================================
-// Predefined Actor Configurations
+// Predefined Node Configurations
 // ============================================================================
 
-namespace ActorConfigs {
+namespace NodeConfigs {
 
 /**
- * @brief Configuration for RendererActor
+ * @brief Configuration for RendererNode
  *
  * Runs on Core 1 at highest priority for deterministic 120 FPS rendering.
  * Large queue (32) to buffer commands during frame rendering.
@@ -456,8 +456,8 @@ namespace ActorConfigs {
  * Actual usage: ~8-10KB (effect rendering, FastLED, context setup).
  * High water mark monitoring recommended to verify adequate margin.
  */
-inline ActorConfig Renderer() {
-    return ActorConfig(
+inline NodeConfig Renderer() {
+    return NodeConfig(
         "Renderer",     // name
         4096,           // stackSize (16KB) - 50% safety margin over ~8-10KB usage
         5,              // priority (highest)
@@ -468,7 +468,7 @@ inline ActorConfig Renderer() {
 }
 
 /**
- * @brief Configuration for NetworkActor
+ * @brief Configuration for NetworkNode
  *
  * Runs on Core 0 where WiFi stack runs. Medium priority.
  * 
@@ -476,8 +476,8 @@ inline ActorConfig Renderer() {
  * Actual usage: ~6-8KB (WebSocket, HTTP, JSON parsing, mDNS).
  * High water mark monitoring recommended to verify adequate margin.
  */
-inline ActorConfig Network() {
-    return ActorConfig(
+inline NodeConfig Network() {
+    return NodeConfig(
         "Network",      // name
         3072,           // stackSize (12KB) - 50% safety margin over ~6-8KB usage
         3,              // priority
@@ -488,7 +488,7 @@ inline ActorConfig Network() {
 }
 
 /**
- * @brief Configuration for HmiActor
+ * @brief Configuration for HmiNode
  *
  * Runs on Core 0 for I2C encoder polling.
  * Tick interval of 20ms for 50Hz polling rate.
@@ -497,8 +497,8 @@ inline ActorConfig Network() {
  * Actual usage: ~2-4KB (I2C operations, encoder state).
  * High water mark monitoring recommended to verify adequate margin.
  */
-inline ActorConfig Hmi() {
-    return ActorConfig(
+inline NodeConfig Hmi() {
+    return NodeConfig(
         "Hmi",          // name
         2048,           // stackSize (8KB) - 50% safety margin over ~2-4KB usage
         2,              // priority
@@ -509,7 +509,7 @@ inline ActorConfig Hmi() {
 }
 
 /**
- * @brief Configuration for StateStoreActor
+ * @brief Configuration for StateStoreNode
  *
  * Manages persistent state (NVS). Runs on Core 1 with Renderer.
  * 
@@ -517,8 +517,8 @@ inline ActorConfig Hmi() {
  * Actual usage: ~2-4KB (NVS operations, state management).
  * High water mark monitoring recommended to verify adequate margin.
  */
-inline ActorConfig StateStore() {
-    return ActorConfig(
+inline NodeConfig StateStore() {
+    return NodeConfig(
         "StateStore",   // name
         2048,           // stackSize (8KB) - 50% safety margin over ~2-4KB usage
         2,              // priority
@@ -529,7 +529,7 @@ inline ActorConfig StateStore() {
 }
 
 /**
- * @brief Configuration for SyncManagerActor
+ * @brief Configuration for SyncManagerNode
  *
  * Handles multi-device synchronization. Runs on Core 0 with network.
  * Tick interval of 100ms for heartbeat/discovery updates.
@@ -538,8 +538,8 @@ inline ActorConfig StateStore() {
  * Actual usage: ~16-20KB (JSON serialization, WebSocket frames, state sync).
  * High water mark monitoring recommended to verify adequate margin.
  */
-inline ActorConfig SyncManager() {
-    return ActorConfig(
+inline NodeConfig SyncManager() {
+    return NodeConfig(
         "SyncManager",  // name
         8192,           // stackSize (32KB) - 50% safety margin over ~16-20KB usage
         2,              // priority
@@ -550,12 +550,12 @@ inline ActorConfig SyncManager() {
 }
 
 /**
- * @brief Configuration for PluginManagerActor
+ * @brief Configuration for PluginManagerNode
  *
  * Manages plugin lifecycle. Runs on Core 0.
  */
-inline ActorConfig PluginManager() {
-    return ActorConfig(
+inline NodeConfig PluginManager() {
+    return NodeConfig(
         "PluginMgr",    // name
         2048,           // stackSize (8KB)
         2,              // priority
@@ -565,7 +565,8 @@ inline ActorConfig PluginManager() {
     );
 }
 
-} // namespace ActorConfigs
+} // namespace NodeConfigs
 
-} // namespace actors
+} // namespace nodes
 } // namespace lightwaveos
+

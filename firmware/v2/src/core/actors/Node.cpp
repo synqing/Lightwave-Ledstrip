@@ -1,8 +1,8 @@
 /**
- * @file Actor.cpp
- * @brief Implementation of the Actor base class
+ * @file Node.cpp
+ * @brief Implementation of the Node base class
  *
- * This file implements the FreeRTOS-based Actor system for LightwaveOS v2.
+ * This file implements the FreeRTOS-based Node system for LightwaveOS v2.
  *
  * Key implementation details:
  * - Tasks are pinned to specific cores using xTaskCreatePinnedToCore()
@@ -14,23 +14,23 @@
  * @version 2.0.0
  */
 
-#include "Actor.h"
+#include "Node.h"
 
 #ifndef NATIVE_BUILD
 #include <Arduino.h>
 #include <esp_log.h>
 
-static const char* TAG = "Actor";
+static const char* TAG = "Node";
 #endif
 
 namespace lightwaveos {
-namespace actors {
+namespace nodes {
 
 // ============================================================================
 // Constructor / Destructor
 // ============================================================================
 
-Actor::Actor(const ActorConfig& config)
+Node::Node(const NodeConfig& config)
     : m_config(config)
     , m_taskHandle(nullptr)
     , m_queue(nullptr)
@@ -50,7 +50,7 @@ Actor::Actor(const ActorConfig& config)
     }
 }
 
-Actor::~Actor()
+Node::~Node()
 {
     // Ensure the task is stopped
     if (m_running) {
@@ -68,7 +68,7 @@ Actor::~Actor()
 // Lifecycle
 // ============================================================================
 
-bool Actor::start()
+bool Node::start()
 {
     if (m_running) {
 #ifndef NATIVE_BUILD
@@ -116,7 +116,7 @@ bool Actor::start()
     return true;
 }
 
-void Actor::stop()
+void Node::stop()
 {
     if (!m_running && m_taskHandle == nullptr) {
         return; // Already stopped
@@ -162,7 +162,7 @@ void Actor::stop()
 // Message Passing
 // ============================================================================
 
-bool Actor::send(const Message& msg, TickType_t timeout)
+bool Node::send(const Message& msg, TickType_t timeout)
 {
     if (m_queue == nullptr) {
         return false;
@@ -196,7 +196,7 @@ bool Actor::send(const Message& msg, TickType_t timeout)
     return (result == pdTRUE);
 }
 
-bool Actor::sendFromISR(const Message& msg)
+bool Node::sendFromISR(const Message& msg)
 {
     if (m_queue == nullptr) {
         return false;
@@ -213,7 +213,7 @@ bool Actor::sendFromISR(const Message& msg)
     return (result == pdTRUE);
 }
 
-UBaseType_t Actor::getQueueLength() const
+UBaseType_t Node::getQueueLength() const
 {
     if (m_queue == nullptr) {
         return 0;
@@ -221,7 +221,7 @@ UBaseType_t Actor::getQueueLength() const
     return uxQueueMessagesWaiting(m_queue);
 }
 
-uint8_t Actor::getQueueUtilization() const
+uint8_t Node::getQueueUtilization() const
 {
     if (m_queue == nullptr || m_config.queueSize == 0) {
         return 0;
@@ -234,7 +234,7 @@ uint8_t Actor::getQueueUtilization() const
 // Diagnostics
 // ============================================================================
 
-UBaseType_t Actor::getStackHighWaterMark() const
+UBaseType_t Node::getStackHighWaterMark() const
 {
     if (m_taskHandle == nullptr) {
         return 0;
@@ -246,12 +246,12 @@ UBaseType_t Actor::getStackHighWaterMark() const
 // Utilities
 // ============================================================================
 
-uint32_t Actor::getTickCount() const
+uint32_t Node::getTickCount() const
 {
     return xTaskGetTickCount();
 }
 
-void Actor::sleep(uint32_t ms)
+void Node::sleep(uint32_t ms)
 {
     vTaskDelay(pdMS_TO_TICKS(ms));
 }
@@ -260,18 +260,18 @@ void Actor::sleep(uint32_t ms)
 // Private Implementation
 // ============================================================================
 
-void Actor::taskFunction(void* param)
+void Node::taskFunction(void* param)
 {
-    Actor* actor = static_cast<Actor*>(param);
-    if (actor != nullptr) {
-        actor->run();
+    Node* node = static_cast<Node*>(param);
+    if (node != nullptr) {
+        node->run();
     }
 
     // Task function should never return, but if it does, delete self
     vTaskDelete(nullptr);
 }
 
-void Actor::run()
+void Node::run()
 {
     m_running = true;
 
@@ -336,5 +336,6 @@ void Actor::run()
     m_running = false;
 }
 
-} // namespace actors
+} // namespace nodes
 } // namespace lightwaveos
+

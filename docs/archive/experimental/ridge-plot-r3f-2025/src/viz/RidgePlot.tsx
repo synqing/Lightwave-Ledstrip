@@ -4,17 +4,16 @@ import * as THREE from "three";
 import { AudioHistoryTexture } from "./AudioHistoryTexture";
 import { ridgeVertexShader, ridgeFragmentShader } from "./ridgeShaders";
 
-const PLANE_WIDTH = 20;
-const PLANE_HEIGHT = 12;
 const DEFAULT_GAIN = 2.2;
-const ROTATION_X = -Math.PI * 0.35;
 
 type Props = {
   history: AudioHistoryTexture;
   offsetRef: React.MutableRefObject<number>;
+  width?: number;
+  height?: number;
 };
 
-export function RidgePlot({ history, offsetRef }: Props) {
+export function RidgePlot({ history, offsetRef, width = 20, height = 12 }: Props) {
   const meshRef = useRef<THREE.Mesh>(null);
 
   const uniforms = useMemo(
@@ -41,10 +40,8 @@ export function RidgePlot({ history, offsetRef }: Props) {
     <mesh
       ref={meshRef}
       frustumCulled={false}
-      rotation={[ROTATION_X, 0, 0]}
-      position={[0, -2.0, 0]}
     >
-      <planeGeometry args={[PLANE_WIDTH, PLANE_HEIGHT, bins - 1, rows - 1]} />
+      <planeGeometry args={[width, height, bins - 1, rows - 1]} />
       <shaderMaterial
         uniforms={uniforms}
         vertexShader={ridgeVertexShader}

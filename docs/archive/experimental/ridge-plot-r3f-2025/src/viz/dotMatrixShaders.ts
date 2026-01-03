@@ -16,39 +16,30 @@ export const dotMatrixFragmentShader = `
   uniform float uOffset;
   uniform vec2 uGrid;
   uniform float uGain;
-  uniform float uDotRadius;
 
   varying vec2 vUv;
 
-  float dotMask(vec2 uv, vec2 grid, float radius) {
-    vec2 cell = fract(uv * grid) - 0.5;
-    float d = length(cell);
-    float aa = fwidth(d);
-    return 1.0 - smoothstep(radius - aa, radius + aa, d);
-  }
-
   void main() {
-    // Same UV offset logic as ridge plot
-    float yLookup = fract(uOffset - vUv.y);
-    float s = texture2D(uAudioTex, vec2(vUv.x, yLookup)).r;
-    float shaped = pow(s, 1.15);
+    // 1. Grid Logic - create LCD-style dot cells
+    vec2 gridUV = vUv * uGrid;
+    vec2 cellUV = fract(gridUV);
+    float dist = length(cellUV - 0.5);
 
-    // Background dot lattice
-    float bgDots = dotMask(vUv, uGrid, uDotRadius) * 0.12;
+    // 2. Audio Sampling
+    // vUv.y=1 is TOP (newest), vUv.y=0 is BOTTOM (oldest)
+    // Invert Y so data flows DOWNWARD from shared edge
+    float timeScroll = fract(uOffset + (1.0 - vUv.y));
+    float audio = texture2D(uAudioTex, vec2(vUv.x, timeScroll)).r;
 
-    // Foreground dots driven by audio
-    float fgDots = dotMask(vUv, uGrid, uDotRadius) * (shaped * uGain);
+    // 3. Dot Styling - size depends on audio amplitude
+    float radius = 0.45 * smoothstep(0.01, 0.4, audio * uGain);
+    float dot = 1.0 - smoothstep(radius - 0.05, radius + 0.05, dist);
 
-    // Age fade
-    float age = clamp(vUv.y, 0.0, 1.0);
-    float fade = pow(1.0 - age, 1.5);
+    // 4. Color & Opacity
+    // Fade out at bottom (oldest data), bright at top (newest)
+    float opacity = dot * (0.1 + 0.9 * vUv.y);
+    vec3 color = mix(vec3(0.4, 0.6, 1.0), vec3(1.0), vUv.y * audio);
 
-    float outv = bgDots + fgDots;
-    outv *= (0.3 + 0.7 * fade);
-
-    // Gamma
-    outv = pow(outv, 1.0 / 2.2);
-
-    gl_FragColor = vec4(vec3(outv), 1.0);
+    gl_FragColor = vec4(color, opacity);
   }
 `;

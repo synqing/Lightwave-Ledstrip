@@ -98,7 +98,7 @@ export default function App() {
       <div className="overlay">{overlay}</div>
 
       <Canvas
-        camera={{ position: [0, 4.5, 16], fov: 45, near: 0.1, far: 200 }}
+        camera={{ position: [0, 2, 45], fov: 25, near: 0.1, far: 200 }}
         onCreated={({ gl }) => {
           const maxVTF = getMaxVertexTextureUnits(gl as unknown as THREE.WebGLRenderer);
           setStatus((prev) => {

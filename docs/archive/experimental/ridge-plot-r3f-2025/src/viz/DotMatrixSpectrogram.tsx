@@ -7,9 +7,11 @@ import { dotMatrixVertexShader, dotMatrixFragmentShader } from "./dotMatrixShade
 type Props = {
   history: AudioHistoryTexture;
   offsetRef: React.MutableRefObject<number>;
+  width?: number;
+  height?: number;
 };
 
-export function DotMatrixSpectrogram({ history, offsetRef }: Props) {
+export function DotMatrixSpectrogram({ history, offsetRef, width = 20, height = 8 }: Props) {
   const meshRef = useRef<THREE.Mesh>(null);
 
   const uniforms = useMemo(() => ({
@@ -26,17 +28,13 @@ export function DotMatrixSpectrogram({ history, offsetRef }: Props) {
   });
 
   return (
-    <mesh
-      ref={meshRef}
-      frustumCulled={false}
-      rotation={[-Math.PI * 0.35, 0, 0]}
-      position={[0, -9, -3]}
-    >
-      <planeGeometry args={[20, 8, 1, 1]} />
+    <mesh ref={meshRef} frustumCulled={false}>
+      <planeGeometry args={[width, height, 1, 1]} />
       <shaderMaterial
         uniforms={uniforms}
         vertexShader={dotMatrixVertexShader}
         fragmentShader={dotMatrixFragmentShader}
+        transparent={true}
         side={THREE.DoubleSide}
       />
     </mesh>

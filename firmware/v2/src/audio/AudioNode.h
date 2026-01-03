@@ -328,7 +328,7 @@ public:
     bool applyCalibrationResults();
 
     // ========================================================================
-    // TempoTracker Integration (replaces K1 Pipeline)
+    // EmotiscopeEngine Integration (replaces K1 Pipeline / TempoTracker)
     // ========================================================================
 
     /**

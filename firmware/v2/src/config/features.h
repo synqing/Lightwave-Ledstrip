@@ -193,5 +193,5 @@
 #define FEATURE_MABUTRACE 0
 #endif
 
-// Note: K1 beat tracker has been replaced by TempoTracker
+// Note: K1 beat tracker has been replaced by EmotiscopeEngine (Phase 2)
 // Use 'tempo' serial command for tempo debugging

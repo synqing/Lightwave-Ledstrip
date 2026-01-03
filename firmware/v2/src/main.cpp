@@ -42,7 +42,7 @@
 #include "core/system/MemoryLeakDetector.h"
 #include "core/system/ValidationProfiler.h"
 
-// TempoTracker debug included via AudioNode.h
+// EmotiscopeEngine debug included via AudioNode.h
 
 #if FEATURE_AUDIO_SYNC
 #include "audio/AudioDebugConfig.h"
@@ -295,7 +295,7 @@ void setup() {
     Serial.println("  brown 0/1 - Disable/enable brown guardrail (accepts 'brown0' or 'brown 0')");
     Serial.println("  Csave   - Save color settings to NVS");
 #if FEATURE_AUDIO_SYNC
-    Serial.println("\nTempoTracker Debug:");
+    Serial.println("\nEmotiscopeEngine Debug:");
     Serial.println("  tempo   - Show BPM, confidence, phase, lock state");
 #endif
 #if FEATURE_AUDIO_SYNC
@@ -1010,20 +1010,19 @@ void loop() {
         else if (inputLower.startsWith("tempo")) {
             handledMulti = true;
 
-            // Get TempoTracker from AudioNode
+            // Get EmotiscopeEngine status from AudioNode
             auto* audio = orchestrator.getAudio();
             if (audio) {
                 const auto& tempo = audio->getTempo();
-                auto output = tempo.getOutput();
-                Serial.println("=== TempoTracker Status ===");
-                Serial.printf("  BPM: %.1f\n", output.bpm);
-                Serial.printf("  Phase: %.3f\n", output.phase01);
-                Serial.printf("  Confidence: %.2f\n", output.confidence);
-                Serial.printf("  Locked: %s\n", output.locked ? "YES" : "NO");
-                Serial.printf("  Beat Strength: %.2f\n", output.beat_strength);
-                Serial.printf("  Winner Bin: %u\n", tempo.getWinnerBin());
+                Serial.println("=== EmotiscopeEngine Status ===");
+                Serial.printf("  BPM: %.1f\n", tempo.bpm);
+                Serial.printf("  Phase: %.3f\n", tempo.phase01);
+                Serial.printf("  Confidence: %.2f\n", tempo.confidence);
+                Serial.printf("  Locked: %s\n", tempo.locked ? "YES" : "NO");
+                Serial.printf("  Beat Strength: %.2f\n", tempo.beat_strength);
+                Serial.printf("  Beat Tick: %s\n", tempo.beat_tick ? "YES" : "NO");
             } else {
-                Serial.println("TempoTracker not available (audio not enabled)");
+                Serial.println("EmotiscopeEngine not available (audio not enabled)");
             }
         }
 #endif

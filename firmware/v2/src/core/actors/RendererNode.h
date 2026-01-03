@@ -48,7 +48,7 @@
 #include "../../audio/contracts/MusicalGrid.h"
 #include "../../audio/contracts/SnapshotBuffer.h"
 #include "../../audio/contracts/AudioEffectMapping.h"
-// TempoTracker integration (replaces K1)
+// EmotiscopeEngine integration (replaces K1 / TempoTracker)
 #include "../../audio/tempo/EmotiscopeEngine.h"
 #include "../../utils/LockFreeQueue.h"
 #endif
@@ -355,17 +355,17 @@ public:
     const audio::MusicalGridSnapshot& getLastMusicalGrid() const { return m_lastMusicalGrid; }
 
     // ========================================================================
-    // TempoTracker Integration (replaces K1)
+    // EmotiscopeEngine Integration (replaces K1 / TempoTracker)
     // ========================================================================
 
     /**
-     * @brief Set the TempoTracker reference for phase advancement
+     * @brief Set the EmotiscopeEngine reference for phase advancement
      *
-     * Called by ActorSystem during initialization to connect the renderer
-     * to AudioNode's TempoTracker instance. The renderer calls
+     * Called by NodeOrchestrator during initialization to connect the renderer
+     * to AudioNode's EmotiscopeEngine instance. The renderer calls
      * advancePhase() at 120 FPS for smooth beat tracking.
      *
-     * @param tempo Pointer to AudioNode's TempoTracker (nullptr to disable)
+     * @param tempo Pointer to AudioNode's EmotiscopeEngine (nullptr to disable)
      */
     void setTempo(lightwaveos::audio::EmotiscopeEngine* tempo) {
         m_tempo = tempo;
@@ -671,11 +671,11 @@ private:
     bool m_effectHasAudioMappings = false;
 
     // ========================================================================
-    // TempoTracker Integration (replaces K1)
+    // EmotiscopeEngine Integration (replaces K1 / TempoTracker)
     // ========================================================================
 
     /**
-     * Pointer to AudioNode's TempoTracker (set during init)
+     * Pointer to AudioNode's EmotiscopeEngine (set during init)
      *
      * The renderer calls advancePhase() at 120 FPS for smooth beat tracking.
      * AudioNode calls updateNovelty() and updateTempo() per audio hop.

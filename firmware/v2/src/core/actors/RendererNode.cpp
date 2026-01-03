@@ -703,7 +703,7 @@ void RendererNode::renderFrame()
 #if FEATURE_AUDIO_SYNC
     applyPendingAudioContractTuning();
 
-    // Advance TempoTracker phase at 120 FPS
+    // Advance EmotiscopeEngine phase at 120 FPS
     // This must happen every frame for smooth beat tracking
     if (m_tempo != nullptr) {
         // Calculate delta time in seconds (from micros)
@@ -732,7 +732,7 @@ void RendererNode::renderFrame()
                 m_musicalGrid.OnBeatObservation(
                     m_lastAudioTime,
                     tempoOut.beat_strength,
-                    false  // is_downbeat - not tracked by TempoTracker
+                    false  // is_downbeat - not tracked by EmotiscopeEngine
                 );
             }
         }

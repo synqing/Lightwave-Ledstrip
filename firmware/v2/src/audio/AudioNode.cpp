@@ -302,7 +302,7 @@ void AudioNode::onTick()
                  styleClass.styleWeights[4]);
 #endif
 
-        // Log TempoTracker beat tracking metrics
+        // Log EmotiscopeEngine beat tracking metrics
         LW_LOGI(LW_CLR_MAGENTA "Beat:" LW_ANSI_RESET " BPM=%.1f conf=%.2f phase=%.2f lock=%s",
                  m_lastTempoOutput.bpm, m_lastTempoOutput.confidence,
                  m_lastTempoOutput.phase01, m_lastTempoOutput.locked ? "YES" : "no");
@@ -399,7 +399,7 @@ void AudioNode::processHop()
 #endif
         m_prevChordRoot = 0;
         m_controlBus.Reset();
-        // TempoTracker reset
+        // EmotiscopeEngine reset
         m_emotiscope.init();
         m_lastTempoOutput = m_emotiscope.getOutput();
     }
@@ -751,7 +751,7 @@ void AudioNode::processHop()
         }
         m_analyze64Ready = true;
 
-        // Cache 64-bin spectrum for TempoTracker novelty input
+        // Cache 64-bin spectrum for EmotiscopeEngine novelty input
         // This is used every hop for tempo detection (stale data better than coarse 8-band)
         memcpy(m_bins64Cached, m_bins64Raw, sizeof(m_bins64Cached));
 
@@ -867,7 +867,7 @@ void AudioNode::processHop()
     // === Phase: ControlBus Update ===
     BENCH_START_PHASE();
 
-        // 7a. Populate beat tracker state for rhythmic saliency (using TempoTracker output)
+        // 7a. Populate beat tracker state for rhythmic saliency (using EmotiscopeEngine output)
     // Field names kept as k1* for backward compatibility with effects
     raw.tempo.locked = m_lastTempoOutput.locked;
     raw.tempo.confidence = m_lastTempoOutput.confidence;
@@ -888,7 +888,7 @@ void AudioNode::processHop()
     {
         bool chordChanged = (m_controlBus.GetFrame().chordState.rootNote != m_prevChordRoot);
         m_prevChordRoot = m_controlBus.GetFrame().chordState.rootNote;
-        // Use TempoTracker beat tracker confidence for style detection
+        // Use EmotiscopeEngine beat tracker confidence for style detection
         float beatConfidence = m_lastTempoOutput.locked ? m_lastTempoOutput.confidence : 0.0f;
         m_styleDetector.update(
             rmsMapped,

@@ -32,7 +32,7 @@ void ZonePresetHandlers::handleList(AsyncWebServerRequest* request) {
     uint8_t ids[ZonePresetManager::MAX_PRESETS];
     uint8_t count = mgr.listPresets(names, ids);
 
-    sendSuccessResponse(request, [count, &names, &ids](JsonObject& data) {
+    sendSuccessResponse(request, [count, &names, &ids, &mgr](JsonObject& data) {
         data["count"] = count;
         data["maxPresets"] = ZonePresetManager::MAX_PRESETS;
         JsonArray presets = data["presets"].to<JsonArray>();
@@ -40,6 +40,12 @@ void ZonePresetHandlers::handleList(AsyncWebServerRequest* request) {
             JsonObject p = presets.add<JsonObject>();
             p["id"] = ids[i];
             p["name"] = names[i];
+
+            // Load preset to get zone count for list display
+            ZonePreset preset;
+            if (mgr.getPreset(ids[i], preset)) {
+                p["zoneCount"] = preset.zoneCount;
+            }
         }
     });
 }

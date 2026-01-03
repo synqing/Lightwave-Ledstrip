@@ -33,7 +33,16 @@ bool ButtonHandler::handleButtonPress(uint8_t index) {
 }
 
 void ButtonHandler::toggleZoneMode() {
+    bool wasBefore = _zoneModeEnabled;
     _zoneModeEnabled = !_zoneModeEnabled;
+    
+    // #region agent log
+    Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"tab5-fix2\",\"hypothesisId\":\"H2\",\"location\":\"ButtonHandler.cpp:toggleZoneMode\",\"message\":\"zone.toggle\",\"data\":{\"before\":%s,\"after\":%s,\"hasCallback\":%s},\"timestamp\":%lu}\n",
+        wasBefore ? "true" : "false",
+        _zoneModeEnabled ? "true" : "false",
+        _zoneModeToggleCallback ? "true" : "false",
+        static_cast<unsigned long>(millis()));
+    // #endregion
     
     Serial.printf("[Button] Zone mode %s\n", _zoneModeEnabled ? "ENABLED" : "DISABLED");
 

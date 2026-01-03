@@ -49,7 +49,7 @@ namespace persistence {
  * - Layout segment definitions
  */
 struct ZonePreset {
-    static constexpr uint8_t CURRENT_VERSION = 1;
+    static constexpr uint8_t CURRENT_VERSION = 2;  // v2: Added audio config fields
     static constexpr size_t NAME_MAX_LEN = 32;
     static constexpr uint8_t MAX_ZONES = 4;
 
@@ -67,6 +67,19 @@ struct ZonePreset {
         uint8_t speed = 25;
         uint8_t paletteId = 0;
         uint8_t blendMode = 0;  // Maps to BlendMode enum
+
+        // Audio config (v2)
+        bool tempoSync = false;
+        uint8_t beatModulation = 128;   // 0-255, how much tempo affects speed
+        uint8_t tempoSpeedScale = 100;  // 0-200, tempo multiplier percentage
+        uint8_t beatDecay = 200;        // 0-255, how fast beat energy fades
+        uint8_t audioBand = 0;          // 0=Full, 1=Bass, 2=Mid, 3=High
+
+        // Beat trigger config (v2)
+        bool beatTriggerEnabled = false;
+        uint8_t beatTriggerInterval = 4;  // Beats between effect changes (1,2,4,8)
+        uint8_t effectListSize = 0;       // Number of effects in rotation
+        uint8_t effectList[8] = {0};      // Up to 8 effects for rotation
     } zones[MAX_ZONES];
 
     // Layout segments (zone boundaries on the LED strip)

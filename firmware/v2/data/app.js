@@ -530,6 +530,28 @@ function handleMessage(msg) {
                         if (msgFlat.current.effectId !== undefined) {
                             state.zones.zones[zoneId].effectId = msgFlat.current.effectId;
                         }
+                        // Audio config fields (fixes UI revert bug)
+                        if (msgFlat.current.tempoSync !== undefined) {
+                            state.zones.zones[zoneId].tempoSync = msgFlat.current.tempoSync;
+                        }
+                        if (msgFlat.current.audioBand !== undefined) {
+                            state.zones.zones[zoneId].audioBand = msgFlat.current.audioBand;
+                        }
+                        if (msgFlat.current.beatTriggerEnabled !== undefined) {
+                            state.zones.zones[zoneId].beatTriggerEnabled = msgFlat.current.beatTriggerEnabled;
+                        }
+                        if (msgFlat.current.beatTriggerInterval !== undefined) {
+                            state.zones.zones[zoneId].beatTriggerInterval = msgFlat.current.beatTriggerInterval;
+                        }
+                        if (msgFlat.current.beatModulation !== undefined) {
+                            state.zones.zones[zoneId].beatModulation = msgFlat.current.beatModulation;
+                        }
+                        if (msgFlat.current.tempoSpeedScale !== undefined) {
+                            state.zones.zones[zoneId].tempoSpeedScale = msgFlat.current.tempoSpeedScale;
+                        }
+                        if (msgFlat.current.beatDecay !== undefined) {
+                            state.zones.zones[zoneId].beatDecay = msgFlat.current.beatDecay;
+                        }
                     }
                     log(`[ZONES] Zone ${zoneId} updated: speed=${state.zones.zones[zoneId].speed}`);
                     updateZonesUI();
@@ -2832,7 +2854,7 @@ function fetchPalettesList() {
 }
 
 function fetchEffectsList() {
-    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/effects`, {
+    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/effects?limit=100`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
     })

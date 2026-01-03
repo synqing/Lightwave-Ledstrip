@@ -52,6 +52,17 @@ void ZonePreset::clamp() {
 
         // blendMode: 0-7
         if (zones[i].blendMode > 7) zones[i].blendMode = 0;
+
+        // Audio config (v2): tempoSpeedScale 0-200, audioBand 0-3
+        if (zones[i].tempoSpeedScale > 200) zones[i].tempoSpeedScale = 100;
+        if (zones[i].audioBand > 3) zones[i].audioBand = 0;
+
+        // Beat trigger (v2): interval must be 1,2,4,8; effectListSize 0-8
+        uint8_t interval = zones[i].beatTriggerInterval;
+        if (interval != 1 && interval != 2 && interval != 4 && interval != 8) {
+            zones[i].beatTriggerInterval = 4;
+        }
+        if (zones[i].effectListSize > 8) zones[i].effectListSize = 8;
     }
 
     // Clamp segment values to strip length (0-159)
@@ -89,6 +100,28 @@ void ZonePresetManager::captureFromComposer(ZonePreset& preset, const ZoneCompos
         preset.zones[i].speed = composer->getZoneSpeed(i);
         preset.zones[i].paletteId = composer->getZonePalette(i);
         preset.zones[i].blendMode = static_cast<uint8_t>(composer->getZoneBlendMode(i));
+
+        // Capture audio config (v2)
+        ZoneAudioConfig audioConfig = composer->getZoneAudioConfig(i);
+        preset.zones[i].tempoSync = audioConfig.tempoSync;
+        preset.zones[i].beatModulation = audioConfig.beatModulation;
+        preset.zones[i].tempoSpeedScale = audioConfig.tempoSpeedScale;
+        preset.zones[i].beatDecay = audioConfig.beatDecay;
+        preset.zones[i].audioBand = audioConfig.audioBand;
+
+        // Capture beat trigger config (v2)
+        bool beatEnabled = false;
+        uint8_t beatInterval = 4;
+        uint8_t effectList[8] = {0};
+        uint8_t effectCount = 0;
+        uint8_t currentIndex = 0;  // Not persisted (runtime state)
+        composer->getZoneBeatTriggerConfig(i, beatEnabled, beatInterval, effectList, effectCount, currentIndex);
+        preset.zones[i].beatTriggerEnabled = beatEnabled;
+        preset.zones[i].beatTriggerInterval = beatInterval;
+        preset.zones[i].effectListSize = effectCount;
+        for (uint8_t j = 0; j < 8; j++) {
+            preset.zones[i].effectList[j] = (j < effectCount) ? effectList[j] : 0;
+        }
     }
 
     // Capture segment layout
@@ -185,6 +218,21 @@ bool ZonePresetManager::applyPreset(uint8_t id, ZoneComposer* composer, actors::
         composer->setZonePalette(i, preset.zones[i].paletteId);
         composer->setZoneBlendMode(i, static_cast<BlendMode>(preset.zones[i].blendMode));
         composer->setZoneEnabled(i, preset.zones[i].enabled);
+
+        // Apply audio config (v2)
+        composer->setZoneTempoSync(i, preset.zones[i].tempoSync);
+        composer->setZoneBeatModulation(i, preset.zones[i].beatModulation);
+        composer->setZoneTempoSpeedScale(i, preset.zones[i].tempoSpeedScale);
+        composer->setZoneBeatDecay(i, preset.zones[i].beatDecay);
+        composer->setZoneAudioBand(i, preset.zones[i].audioBand);
+
+        // Apply beat trigger config (v2)
+        composer->setZoneBeatTriggerEnabled(i, preset.zones[i].beatTriggerEnabled);
+        composer->setZoneBeatTriggerInterval(i, preset.zones[i].beatTriggerInterval);
+        if (preset.zones[i].effectListSize > 0) {
+            composer->setZoneBeatTriggerEffectList(i, preset.zones[i].effectList,
+                                                   preset.zones[i].effectListSize);
+        }
     }
 
     // Apply enabled state

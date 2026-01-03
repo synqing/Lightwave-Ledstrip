@@ -73,9 +73,20 @@ public:
     void setHeader(UIHeader* header) { _header = header; }
 
     /**
-     * Mark UI as dirty (needs redraw)
+     * Mark UI as dirty (needs redraw) - queued for next frame
      */
     void markDirty() { _pendingDirty = true; }
+    
+    /**
+     * Force immediate dirty state (bypasses pending mechanism)
+     * Use this for screen transitions that require immediate redraw
+     * Also resets frame timer to ensure immediate render
+     */
+    void forceDirty() { 
+        _dirty = true; 
+        _pendingDirty = false; 
+        _lastRenderTime = 0;  // Reset frame timer to force immediate render
+    }
     
     /**
      * Handle touch event (called from DisplayUI)
@@ -98,29 +109,9 @@ private:
     uint8_t _zoneCount = 0;
     bool _zonesEnabled = false;
 
-    // Editor state
-    uint8_t _selectedZone = 255;  // No zone selected
-    uint8_t _zoneCountSelect = 3;  // Default 3 zones
-    int8_t _presetSelect = -1;  // -1 = custom, 0-4 = preset IDs
-    
-    // Editing segments (working copy, not yet applied)
+    // Editing segments (working copy for visualization)
     zones::ZoneSegment _editingSegments[zones::MAX_ZONES];
     uint8_t _editingZoneCount = 0;
-
-    // Dropdown state
-    enum class DropdownType : uint8_t {
-        NONE = 0,
-        EFFECT,
-        PALETTE,
-        BLEND
-    };
-    DropdownType _openDropdown = DropdownType::NONE;
-    uint8_t _openDropdownZone = 255;
-    int16_t _dropdownScroll = 0;
-    int16_t _dropdownX = 0;
-    int16_t _dropdownY = 0;
-    int16_t _dropdownW = 0;
-    int16_t _dropdownH = 0;
 
     // Rendering state
     bool _dirty = true;
@@ -143,30 +134,16 @@ private:
         0x9D4EDD   // Zone 3: Purple
     };
 
-    // Touch handling (private helpers)
-    int8_t hitTestLedStrip(int16_t x, int16_t y);
-    int8_t hitTestDropdown(int16_t x, int16_t y);
-    uint8_t getZoneForLed(uint8_t ledIndex, bool isRight);
-    
-    // Dropdown handling
-    void openDropdown(DropdownType type, uint8_t zoneId, int16_t x, int16_t y, int16_t w, int16_t h);
-    void closeDropdown();
-    void drawDropdown();
-    void drawDropdownList(DropdownType type, int16_t x, int16_t y, int16_t w, int16_t h);
-    void handleDropdownSelection(DropdownType type, uint8_t zoneId, int itemIndex);
-
     void render();
     void drawLedStripVisualiser(int x, int y, int w, int h);
     void drawZoneList(int x, int y, int w, int h);
     void drawZoneRow(uint8_t zoneId, int x, int y, int w, int h);
-    void drawEditorControls(int x, int y, int w, int h);
-    void drawStepperControls(int x, int y, int w, int h);
+    void drawZoneInfo(int x, int y, int w, int h);
     uint32_t getZoneColor(uint8_t zoneId) const;
     
-    // Zone layout generation and editing
+    // Zone layout generation (for visualization)
     void generateZoneSegments(uint8_t zoneCount);
     void loadPreset(int8_t presetId);
-    void adjustZoneBoundary(uint8_t zoneId, bool increase);
     bool validateLayout(const zones::ZoneSegment* segments, uint8_t count) const;
     void validatePresets();  // Boot-time preset validation
     

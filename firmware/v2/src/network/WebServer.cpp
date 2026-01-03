@@ -858,7 +858,7 @@ void WebServer::broadcastZoneState() {
     
     if (m_ws->count() == 0 || !m_zoneComposer) return;
 
-    StaticJsonDocument<1024> doc;  // Increased size for additional fields
+    StaticJsonDocument<2048> doc;  // Increased for audio config fields
     doc["type"] = "zones.list";  // Changed from "zone.state"
     doc["enabled"] = m_zoneComposer->isEnabled();
     doc["zoneCount"] = m_zoneComposer->getZoneCount();
@@ -893,6 +893,16 @@ void WebServer::broadcastZoneState() {
         zone["paletteId"] = m_zoneComposer->getZonePalette(i);
         zone["blendMode"] = static_cast<uint8_t>(m_zoneComposer->getZoneBlendMode(i));
         zone["blendModeName"] = getBlendModeName(m_zoneComposer->getZoneBlendMode(i));
+
+        // Audio config fields (fixes UI revert bug)
+        ZoneAudioConfig audioConfig = m_zoneComposer->getZoneAudioConfig(i);
+        zone["tempoSync"] = audioConfig.tempoSync;
+        zone["beatModulation"] = audioConfig.beatModulation;
+        zone["tempoSpeedScale"] = audioConfig.tempoSpeedScale;
+        zone["beatDecay"] = audioConfig.beatDecay;
+        zone["audioBand"] = audioConfig.audioBand;
+        zone["beatTriggerEnabled"] = audioConfig.beatTriggerEnabled;
+        zone["beatTriggerInterval"] = audioConfig.beatTriggerInterval;
     }
 
     // Add presets array

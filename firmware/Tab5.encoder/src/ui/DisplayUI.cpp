@@ -104,14 +104,22 @@ void DisplayUI::begin() {
 }
 
 void DisplayUI::setScreen(UIScreen screen) {
+    // #region agent log
+    Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"tab5-fix2\",\"hypothesisId\":\"H1\",\"location\":\"DisplayUI.cpp:setScreen\",\"message\":\"setScreen.enter\",\"data\":{\"requestedScreen\":%d,\"currentScreen\":%d,\"willSwitch\":%s,\"zoneComposerPtr\":%s},\"timestamp\":%lu}\n",
+        static_cast<int>(screen),
+        static_cast<int>(_currentScreen),
+        (_currentScreen != screen) ? "true" : "false",
+        _zoneComposer ? "valid" : "null",
+        static_cast<unsigned long>(millis()));
+    // #endregion
+
     if (_currentScreen != screen) {
         _currentScreen = screen;
         
-        // When switching to GLOBAL, force full redraw to ensure clean transition
+        // Clear screen for ANY transition to ensure clean rendering
+        _display.fillScreen(Theme::BG_DARK);
+        
         if (_currentScreen == UIScreen::GLOBAL) {
-            // Clear screen to remove any Zone Composer artifacts
-            _display.fillScreen(Theme::BG_DARK);
-            
             // Force all widgets to redraw
             if (_header) {
                 _header->markDirty();
@@ -121,7 +129,18 @@ void DisplayUI::setScreen(UIScreen screen) {
                     _gauges[i]->markDirty();
                 }
             }
+        } else if (_currentScreen == UIScreen::ZONE_COMPOSER) {
+            // Force Zone Composer to redraw by setting _dirty directly
+            if (_zoneComposer) {
+                _zoneComposer->forceDirty();  // New method to bypass pending
+            }
         }
+        
+        // #region agent log
+        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"tab5-fix2\",\"hypothesisId\":\"H1\",\"location\":\"DisplayUI.cpp:setScreen\",\"message\":\"setScreen.callingRender\",\"data\":{\"newScreen\":%d},\"timestamp\":%lu}\n",
+            static_cast<int>(_currentScreen),
+            static_cast<unsigned long>(millis()));
+        // #endregion
         
         renderCurrentScreen();
     }
@@ -154,8 +173,13 @@ void DisplayUI::renderCurrentScreen() {
 #endif
             break;
         case UIScreen::ZONE_COMPOSER:
+            // #region agent log
+            Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"tab5-fix2\",\"hypothesisId\":\"H3\",\"location\":\"DisplayUI.cpp:renderCurrentScreen\",\"message\":\"zoneComposer.init\",\"data\":{\"zoneComposerPtr\":%s},\"timestamp\":%lu}\n",
+                _zoneComposer ? "valid" : "null",
+                static_cast<unsigned long>(millis()));
+            // #endregion
             if (_zoneComposer) {
-                _zoneComposer->markDirty();
+                _zoneComposer->forceDirty();  // Immediate redraw, bypass pending
                 _zoneComposer->loop();
             }
             break;
@@ -193,6 +217,18 @@ void DisplayUI::loop() {
             }
             break;
         case UIScreen::ZONE_COMPOSER:
+            // #region agent log
+            {
+                static uint32_t s_lastLoopLog = 0;
+                uint32_t nowLog = millis();
+                if (nowLog - s_lastLoopLog >= 2000) {  // Log every 2 seconds
+                    s_lastLoopLog = nowLog;
+                    Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"tab5-fix2\",\"hypothesisId\":\"H5\",\"location\":\"DisplayUI.cpp:loop\",\"message\":\"loop.zoneComposer\",\"data\":{\"zoneComposerPtr\":%s},\"timestamp\":%lu}\n",
+                        _zoneComposer ? "valid" : "null",
+                        static_cast<unsigned long>(nowLog));
+                }
+            }
+            // #endregion
             // Render header on Zone Composer screen too
             if (_header) {
                 _header->render();

@@ -13,20 +13,6 @@
 #include <Arduino.h>
 #include <cstring>
 
-// #region agent log
-static inline void agent_dbg_ndjson(const char* location, const char* message, const char* hypothesisId, const char* dataJson) {
-    FILE* f = fopen("/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/.cursor/debug.log", "a");
-    if (!f) return;
-    fprintf(f,
-            "{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"%s\",\"location\":\"%s\",\"message\":\"%s\",\"data\":%s,\"timestamp\":%lu}\n",
-            hypothesisId,
-            location,
-            message,
-            (dataJson ? dataJson : "{}"),
-            (unsigned long)millis());
-    fclose(f);
-}
-// #endregion
 
 ParameterHandler::ParameterHandler(
     DualEncoderService* encoderService,
@@ -36,13 +22,15 @@ ParameterHandler::ParameterHandler(
     , m_wsClient(wsClient)
     , m_displayCallback(nullptr)
 {
-    // Initialize with default values for all 16 parameters
+    // Sync cache with encoder service values (which have NVS-restored data)
+    // This ensures ParameterHandler cache matches hardware state from startup.
     for (uint8_t i = 0; i < PARAMETER_COUNT; i++) {
-        const ParameterDef* param = getParameterByIndex(i);
-        if (param) {
-            m_values[i] = param->defaultValue;
+        if (m_encoderService) {
+            m_values[i] = m_encoderService->getValue(i);
         } else {
-            m_values[i] = 128;  // Fallback default
+            // Fallback to defaults if encoder service not available
+            const ParameterDef* param = getParameterByIndex(i);
+            m_values[i] = param ? param->defaultValue : 128;
         }
     }
 }
@@ -95,10 +83,7 @@ bool ParameterHandler::applyStatus(JsonDocument& doc) {
         // If this parameter was just changed locally, ignore server status for a short time.
         // This prevents snapback/jitter when LightwaveOS broadcasts status slightly behind.
         if (m_lastLocalChangeMs[i] != 0 && (nowMs - m_lastLocalChangeMs[i] < LOCAL_OVERRIDE_HOLDOFF_MS)) {
-            // #region agent log
-            // Holdoff active - skip this parameter (anti-snapback protection)
-            // #endregion
-            continue;
+            continue;  // Holdoff active - anti-snapback protection
         }
 
         // Check if this field exists in the status message (ArduinoJson 7 pattern)
@@ -275,31 +260,11 @@ void ParameterHandler::notifyDisplay(int index) {
 
     if (index >= 0 && index < PARAMETER_COUNT) {
         // Single parameter update
-        // #region agent log
-        if (index == 15 || index == 3 || index == 0) {
-            char buf[96];
-            snprintf(buf, sizeof(buf), "{\"mode\":\"single\",\"index\":%d,\"value\":%u}", index, (unsigned)m_values[index]);
-            agent_dbg_ndjson("ParameterHandler.cpp:notifyDisplay", "display_notify", "H1", buf);
-        }
-        // #endregion
         m_displayCallback(static_cast<uint8_t>(index), m_values[index]);
     } else {
         // Bulk refresh: notify all parameters
-        // #region agent log
-        agent_dbg_ndjson("ParameterHandler.cpp:notifyDisplay", "display_notify_bulk_begin", "H1", "{\"mode\":\"bulk\",\"count\":16}");
-        // #endregion
         for (uint8_t i = 0; i < PARAMETER_COUNT; i++) {
-            // #region agent log
-            if (i == 0 || i == 15) {
-                char buf[96];
-                snprintf(buf, sizeof(buf), "{\"mode\":\"bulk\",\"index\":%u,\"value\":%u}", (unsigned)i, (unsigned)m_values[i]);
-                agent_dbg_ndjson("ParameterHandler.cpp:notifyDisplay", "display_notify_bulk_item", "H1", buf);
-            }
-            // #endregion
             m_displayCallback(i, m_values[i]);
         }
-        // #region agent log
-        agent_dbg_ndjson("ParameterHandler.cpp:notifyDisplay", "display_notify_bulk_end", "H1", "{\"mode\":\"bulk\"}");
-        // #endregion
     }
 }

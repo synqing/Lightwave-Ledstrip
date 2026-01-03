@@ -306,12 +306,14 @@ inline DualEncoderService::DualEncoderService(TwoWire* wire, uint8_t addressA, u
 {
     // Initialize values to defaults
     // Unit A (indices 0-7): Global parameters
+    // CRITICAL: Order must match Parameter enum and ParameterMap!
+    // Index 0=Effect, 1=Brightness, 2=Palette, 3=Speed, 4=Mood, 5=FadeAmount, 6=Complexity, 7=Variation
     _values[0] = ParamDefault::EFFECT;
-    _values[1] = ParamDefault::PALETTE;
-    _values[2] = ParamDefault::SPEED;
-    _values[3] = ParamDefault::MOOD;
-    _values[4] = ParamDefault::FADEAMOUNT;
-    _values[5] = ParamDefault::BRIGHTNESS;
+    _values[1] = ParamDefault::BRIGHTNESS;   // Index 1 = Brightness (128)
+    _values[2] = ParamDefault::PALETTE;      // Index 2 = Palette (0)
+    _values[3] = ParamDefault::SPEED;        // Index 3 = Speed (25)
+    _values[4] = ParamDefault::MOOD;         // Index 4 = Mood (0)
+    _values[5] = ParamDefault::FADEAMOUNT;   // Index 5 = FadeAmount (0)
     _values[6] = ParamDefault::COMPLEXITY;
     _values[7] = ParamDefault::VARIATION;
 
@@ -405,12 +407,13 @@ inline void DualEncoderService::getAllValues(uint16_t values[TOTAL_ENCODERS]) co
 
 inline void DualEncoderService::resetToDefaults(bool triggerCallbacks) {
     // Reset Unit A parameters (0-7)
+    // CRITICAL: Order must match Parameter enum and ParameterMap!
     _values[0] = ParamDefault::EFFECT;
-    _values[1] = ParamDefault::PALETTE;
-    _values[2] = ParamDefault::SPEED;
-    _values[3] = ParamDefault::MOOD;
-    _values[4] = ParamDefault::FADEAMOUNT;
-    _values[5] = ParamDefault::BRIGHTNESS;
+    _values[1] = ParamDefault::BRIGHTNESS;   // Index 1 = Brightness (128)
+    _values[2] = ParamDefault::PALETTE;      // Index 2 = Palette (0)
+    _values[3] = ParamDefault::SPEED;        // Index 3 = Speed (25)
+    _values[4] = ParamDefault::MOOD;         // Index 4 = Mood (0)
+    _values[5] = ParamDefault::FADEAMOUNT;   // Index 5 = FadeAmount (0)
     _values[6] = ParamDefault::COMPLEXITY;
     _values[7] = ParamDefault::VARIATION;
 

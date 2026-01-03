@@ -18,7 +18,7 @@
 // Phase 2b.1: Audio-reactive zone modulation
 // Phase 2b.3: Zone audio band routing
 #if FEATURE_AUDIO_SYNC
-#include "../../audio/tempo/TempoTracker.h"
+#include "../../audio/tempo/EmotiscopeEngine.h"
 #include "AudioBandFilter.h"
 #endif
 
@@ -226,11 +226,11 @@ void ZoneComposer::render(CRGB* leds, uint16_t numLeds, CRGBPalette16* palette,
     }
 
     // Phase 2b.2: Process beat triggers for all zones
-    // Get beat tick from TempoTracker (edge detection: only trigger on rising edge)
+    // Get beat tick from Emotiscope (edge detection: only trigger on rising edge)
 #if FEATURE_AUDIO_SYNC
     bool currentBeatTick = false;
-    if (m_tempo != nullptr) {
-        audio::TempoOutput tempoOut = m_tempo->getOutput();
+    if (m_emotiscope != nullptr) {
+        audio::TempoOutput tempoOut = m_emotiscope->getOutput();
         currentBeatTick = tempoOut.beat_tick && tempoOut.locked;
     }
 
@@ -334,9 +334,9 @@ void ZoneComposer::renderZone(uint8_t zoneId, CRGB* leds, uint16_t numLeds,
     uint8_t effectiveSpeed = zone.speed;
 
 #if FEATURE_AUDIO_SYNC
-    if (zone.audio.tempoSync && m_tempo != nullptr) {
+    if (zone.audio.tempoSync && m_emotiscope != nullptr) {
         // Get current tempo output for beat envelope and BPM
-        audio::TempoOutput tempoOut = m_tempo->getOutput();
+        audio::TempoOutput tempoOut = m_emotiscope->getOutput();
 
         // Beat modulation affects brightness
         if (zone.audio.beatModulation > 0 && tempoOut.locked) {

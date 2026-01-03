@@ -49,7 +49,7 @@
 #include "contracts/SnapshotBuffer.h"
 
 // Tempo tracker
-#include "tempo/TempoTracker.h"
+#include "tempo/EmotiscopeEngine.h"
 
 #if FEATURE_AUDIO_BENCHMARK
 #include "AudioBenchmarkMetrics.h"
@@ -332,17 +332,19 @@ public:
     // ========================================================================
 
     /**
-     * @brief Get const reference to TempoTracker for diagnostics
+     * @brief Get current tempo state (Emotiscope V2)
      */
-    const TempoTracker& getTempo() const { return m_tempo; }
+    TempoOutput getTempo() const { return m_emotiscope.getOutput(); }
 
     /**
-     * @brief Get mutable reference to TempoTracker for phase advancement
-     *
-     * Called by ActorSystem to give RendererActor access to advancePhase().
-     * RendererActor calls advancePhase() at 120 FPS in the render loop.
+     * @brief Get mutable reference to Emotiscope engine
      */
-    TempoTracker& getTempoMut() { return m_tempo; }
+    EmotiscopeEngine& getEmotiscopeMut() { return m_emotiscope; }
+
+        /**
+         * @brief Get pointer to Emotiscope engine (for Renderer phase advancement)
+         */
+        EmotiscopeEngine* getEmotiscope() { return &m_emotiscope; }
 
     /**
      * @brief Check if tempo tracking is initialized
@@ -521,11 +523,11 @@ private:
     GoertzelNoveltyTuning m_noveltyTuning;
 
     // ========================================================================
-    // TempoTracker Beat Tracker
+    // Emotiscope Beat Tracker (v2.0)
     // ========================================================================
 
-    /// Tempo tracker
-    TempoTracker m_tempo;
+    /// Emotiscope Engine
+    EmotiscopeEngine m_emotiscope;
 
     /// Last tempo output for diagnostics
     TempoOutput m_lastTempoOutput;

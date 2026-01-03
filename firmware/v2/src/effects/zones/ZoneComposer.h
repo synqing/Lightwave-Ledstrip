@@ -34,8 +34,8 @@
 // Forward declaration for audio context
 namespace lightwaveos { namespace plugins { struct AudioContext; } }
 
-// Forward declaration for TempoTracker (Phase 2b.1)
-namespace lightwaveos { namespace audio { class TempoTracker; } }
+// Forward declaration for EmotiscopeEngine (Phase 2b.1)
+namespace lightwaveos { namespace audio { class EmotiscopeEngine; } }
 
 namespace lightwaveos {
 namespace zones {
@@ -299,10 +299,10 @@ public:
     // ==================== Zone Audio Config (Phase 2b.1) ====================
 
     /**
-     * @brief Set the TempoTracker for audio-reactive zone modulation
-     * @param tempo Pointer to TempoTracker (from AudioNode)
+     * @brief Set the EmotiscopeEngine for audio-reactive zone modulation
+     * @param emotiscope Pointer to EmotiscopeEngine (from AudioNode)
      */
-    void setTempoTracker(audio::TempoTracker* tempo) { m_tempo = tempo; }
+    void setEmotiscope(audio::EmotiscopeEngine* emotiscope) { m_emotiscope = emotiscope; }
 
     /**
      * @brief Get zone audio configuration
@@ -513,8 +513,8 @@ private:
 
     RendererNode* m_renderer;          // Renderer for effect access
 
-    // TempoTracker for audio-reactive zone modulation (Phase 2b.1)
-    audio::TempoTracker* m_tempo = nullptr;
+    // EmotiscopeEngine for audio-reactive zone modulation (Phase 2b.1)
+    audio::EmotiscopeEngine* m_emotiscope = nullptr;
 
     // Persistent per-zone render buffers (preserve temporal smoothing/trails)
     // Each zone effect renders into its own full buffer, preventing cross-zone

@@ -9,7 +9,7 @@
 #include "NodeOrchestrator.h"
 #include "../../effects/zones/ZoneComposer.h"
 #if FEATURE_AUDIO_SYNC
-#include "../../audio/tempo/TempoTracker.h"
+#include "../../audio/tempo/EmotiscopeEngine.h"
 #endif
 
 #ifndef NATIVE_BUILD
@@ -189,20 +189,20 @@ bool NodeOrchestrator::start()
         // Wire up audio buffer to renderer for cross-core access
         if (m_renderer) {
             m_renderer->setAudioBuffer(&m_audio->getControlBusBuffer());
-            // Wire up TempoTracker for phase advancement at 120 FPS
-            m_renderer->setTempo(&m_audio->getTempoMut());
+            // Wire up EmotiscopeEngine for phase advancement at 120 FPS
+            m_renderer->setTempo(&m_audio->getEmotiscopeMut());
 
-            // Phase 2b.1: Wire TempoTracker to ZoneComposer for per-zone tempo modulation
+            // Phase 2b.1: Wire EmotiscopeEngine to ZoneComposer for per-zone tempo modulation
             zones::ZoneComposer* zoneComposer = m_renderer->getZoneComposer();
             if (zoneComposer) {
-                zoneComposer->setTempoTracker(&m_audio->getTempoMut());
+                zoneComposer->setEmotiscope(&m_audio->getEmotiscopeMut());
 #ifndef NATIVE_BUILD
                 ESP_LOGI(TAG, "Zone tempo modulation enabled (Phase 2b.1)");
 #endif
             }
 
 #ifndef NATIVE_BUILD
-            ESP_LOGI(TAG, "Audio integration enabled - ControlBus + TempoTracker");
+            ESP_LOGI(TAG, "Audio integration enabled - ControlBus + EmotiscopeEngine");
 #endif
         }
     }

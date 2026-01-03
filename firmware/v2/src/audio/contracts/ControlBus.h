@@ -4,6 +4,7 @@
 #include "AudioTime.h"
 #include "MusicalSaliency.h"
 #include "StyleDetector.h"
+#include "TempoOutput.h"
 
 namespace lightwaveos::audio {
 
@@ -66,10 +67,8 @@ struct ControlBusRawInput {
     static constexpr uint8_t BINS_64_COUNT = 64;
     float bins64[BINS_64_COUNT] = {0};  // 0..1 normalized magnitudes
 
-    // Phase 2: K1 Beat Tracker Output (for rhythmic saliency)
-    bool k1Locked = false;          // True if K1 beat tracker is phase-locked
-    float k1Confidence = 0.0f;      // K1 confidence (0-1), high = strong beat lock
-    bool k1BeatTick = false;        // True on beat frame (when k1Locked)
+    // Phase 2: Tempo Output (Emotiscope V2)
+    TempoOutput tempo = {0};
 };
 
 /**
@@ -108,10 +107,8 @@ struct ControlBusFrame {
     static constexpr uint8_t BINS_64_COUNT = 64;
     float bins64[BINS_64_COUNT] = {0};  // 0..1 normalized magnitudes
 
-    // Phase 2: K1 Beat Tracker Output (stored for saliency computation)
-    bool k1Locked = false;          // True if K1 beat tracker is phase-locked
-    float k1Confidence = 0.0f;      // K1 confidence (0-1), high = strong beat lock
-    bool k1BeatTick = false;        // True on beat frame (when k1Locked)
+    // Phase 2: Tempo Output (Emotiscope V2)
+    TempoOutput tempo = {0};
 
     // Silence detection (Sensory Bridge pattern)
     // silentScale fades from 1.0 to 0.0 after silenceHysteresisMs of silence

@@ -31,6 +31,7 @@
 #include <cstdint>
 #include <cmath>
 #include <algorithm>
+#include "../contracts/TempoOutput.h"
 
 namespace lightwaveos {
 namespace audio {
@@ -96,22 +97,9 @@ struct TempoBin {
 };
 
 // ============================================================================
-// Output Structure
+// Output Structure (Moved to contracts/TempoOutput.h)
 // ============================================================================
 
-/**
- * @brief Tempo tracker output for effect consumption
- *
- * Provides all the information effects need for beat-synchronized visuals.
- */
-struct TempoOutput {
-    float bpm;                      ///< Current detected tempo
-    float phase01;                  ///< Phase [0, 1) - 0 = beat instant
-    float confidence;               ///< Confidence [0, 1] - how dominant this tempo is
-    bool beat_tick;                 ///< True for one frame at beat instant
-    bool locked;                    ///< True if confidence > threshold
-    float beat_strength;            ///< Smoothed magnitude of winning bin
-};
 
 // ============================================================================
 // TempoTracker Class
@@ -189,6 +177,8 @@ public:
      * @return TempoOutput with BPM, phase, confidence, beat_tick
      */
     TempoOutput getOutput() const;
+
+    float getNovelty() const { return 0.0f; } // Placeholder for compatibility with debug logging
 
     // ========================================================================
     // Debug Accessors

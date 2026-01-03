@@ -40,7 +40,7 @@
 #include "AudioDebugConfig.h"
 
 // TempoTracker integration
-#include "tempo/TempoTracker.h"
+// #include "tempo/TempoTracker.h" (Removed - Phase 2 cleanup)
 
 // Perceptual band weights for spectral flux calculation (derived from K1 research)
 // Bass bands weighted higher for better kick detection
@@ -201,11 +201,11 @@ void AudioNode::onStart()
     m_state = AudioNodeState::RUNNING;
     m_stats.state = m_state;
 
-    // Initialize TempoTracker beat tracker
-    m_tempo.init();
+    // Initialize Emotiscope beat tracker
+    m_emotiscope.init();
     // Initialize last output state
-    m_lastTempoOutput = m_tempo.getOutput();
-    LW_LOGI("TempoTracker initialized");
+    m_lastTempoOutput = m_emotiscope.getOutput();
+    LW_LOGI("EmotiscopeEngine initialized");
 
     LW_LOGI("AudioNode started (tick=%dms, hop=%d, rate=%.1fHz)",
              AUDIO_ACTOR_TICK_MS, HOP_SIZE, HOP_RATE_HZ);
@@ -400,8 +400,8 @@ void AudioNode::processHop()
         m_prevChordRoot = 0;
         m_controlBus.Reset();
         // TempoTracker reset
-        m_tempo.init();
-        m_lastTempoOutput = m_tempo.getOutput();
+        m_emotiscope.init();
+        m_lastTempoOutput = m_emotiscope.getOutput();
     }
 
     // 1. Build AudioTime for this hop
@@ -702,12 +702,13 @@ void AudioNode::processHop()
     }
 
     // ========================================================================
-    // TempoTracker Beat Tracker Processing
+    // TempoTracker Beat Tracker Processing (DEPRECATED - Replaced by EmotiscopeEngine)
     // ========================================================================
     // Dual-rate novelty input:
     // - Spectral flux from 8-band Goertzel when ready (31.25 Hz)
     // - VU derivative from RMS every hop (62.5 Hz)
     // goertzelTriggered fires when 8-band analysis completes (every 512 samples)
+    /*
     m_tempo.updateNovelty(
         goertzelTriggered ? raw.bands : nullptr,  // 8-band magnitudes or nullptr
         8,                                         // num_bands
@@ -718,23 +719,21 @@ void AudioNode::processHop()
     // Update tempo detection (interleaved Goertzel computation)
     float delta_sec = 0.016f;  // ~16ms per hop
     m_tempo.updateTempo(delta_sec);
+    */
 
-    // Store for change detection (used by getTempo() diagnostics)
-    m_lastTempoOutput = m_tempo.getOutput();
 
-    // Note: advancePhase() is called by RendererActor at 120 FPS
-    // This separation allows smooth beat tracking at render rate
-    // while novelty and tempo updates happen at audio rate (~62.5 Hz)
 
     // ========================================================================
-    // 64-bin Goertzel Analysis (Sensory Bridge parity)
+    // 64-bin Goertzel Analysis (SensoryBridge parity)
     // Runs less frequently - needs 1500 samples (~94ms to accumulate)
     // ========================================================================
     // DEFENSIVE: Clear buffers before use (moved from stack to class members to reduce stack usage)
     memset(m_bins64Raw, 0, sizeof(m_bins64Raw));
     memset(m_bands64Folded, 0, sizeof(m_bands64Folded));
     
+    bool goertzel64Triggered = false;
     if (m_analyzer.analyze64(m_bins64Raw)) {
+        goertzel64Triggered = true;
         TRACE_BEGIN("goertzel64_fold");
 
         // Fold 64 bins -> 8 bands (8 bins per band, take max)
@@ -781,6 +780,29 @@ void AudioNode::processHop()
 
         TRACE_END();
     }
+
+    // Update Emotiscope v2.0 Hybrid Engine (Phase 2: Hot-Swap)
+    // Uses 64-bin Goertzel for spectral flux (when available) and RMS for VU flux (every hop)
+    // Note: m_bins64Raw is only valid when goertzel64Triggered is true
+    float delta_sec = 0.016f;  // ~16ms per hop
+    m_emotiscope.updateNovelty(goertzel64Triggered ? m_bins64Raw : nullptr, rmsRaw);
+    m_emotiscope.updateTempo(delta_sec);
+
+    // Store for change detection (used by getTempo() diagnostics)
+    m_lastTempoOutput = m_emotiscope.getOutput(); // V2 HYBRID
+
+    // Log V2 status every ~1s (62 hops)
+    static uint32_t beatLogCounter = 0;
+    if (++beatLogCounter >= 62) {
+        beatLogCounter = 0;
+        TempoOutput v2 = m_emotiscope.getOutput();
+        // Color coding: Beat(V2) - magenta, BPM - dim magenta, Conf - green/red based on threshold
+        const char* confColor = (v2.confidence >= 0.8f) ? LW_CLR_GREEN : LW_CLR_RED;
+        LW_LOGI(LW_CLR_MAGENTA "Beat(V2):" LW_ANSI_RESET " BPM=" "\033[35m" "%.1f" LW_ANSI_RESET " Conf=" "%s" "%.2f" LW_ANSI_RESET " Nov=%.3f",
+                v2.bpm, confColor, v2.confidence, m_emotiscope.getNovelty());
+    }
+
+
 
     // MabuTrace: Detect false trigger - activity gated but no significant band energy
     // This helps identify noise floor calibration issues
@@ -847,9 +869,11 @@ void AudioNode::processHop()
 
         // 7a. Populate beat tracker state for rhythmic saliency (using TempoTracker output)
     // Field names kept as k1* for backward compatibility with effects
-    raw.k1Locked = m_lastTempoOutput.locked;
-    raw.k1Confidence = m_lastTempoOutput.confidence;
-    raw.k1BeatTick = m_lastTempoOutput.beat_tick && m_lastTempoOutput.locked;
+    raw.tempo.locked = m_lastTempoOutput.locked;
+    raw.tempo.confidence = m_lastTempoOutput.confidence;
+    raw.tempo.beat_tick = m_lastTempoOutput.beat_tick && m_lastTempoOutput.locked;
+    // Copy full tempo object for effects
+    raw.tempo = m_lastTempoOutput;
 
     // 7. Update ControlBus with attack/release smoothing
     m_controlBus.setSmoothing(tuning.controlBusAlphaFast, tuning.controlBusAlphaSlow);

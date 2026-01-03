@@ -49,7 +49,7 @@
 #include "../../audio/contracts/SnapshotBuffer.h"
 #include "../../audio/contracts/AudioEffectMapping.h"
 // TempoTracker integration (replaces K1)
-#include "../../audio/tempo/TempoTracker.h"
+#include "../../audio/tempo/EmotiscopeEngine.h"
 #include "../../utils/LockFreeQueue.h"
 #endif
 
@@ -367,7 +367,7 @@ public:
      *
      * @param tempo Pointer to AudioNode's TempoTracker (nullptr to disable)
      */
-    void setTempo(lightwaveos::audio::TempoTracker* tempo) {
+    void setTempo(lightwaveos::audio::EmotiscopeEngine* tempo) {
         m_tempo = tempo;
     }
 
@@ -681,7 +681,7 @@ private:
      * AudioNode calls updateNovelty() and updateTempo() per audio hop.
      * Set to nullptr if AudioNode isn't running.
      */
-    lightwaveos::audio::TempoTracker* m_tempo = nullptr;
+    lightwaveos::audio::EmotiscopeEngine* m_tempo = nullptr;
 #endif
 
     /**

@@ -31,8 +31,8 @@ struct AudioDebugConfig {
 
     // Derived intervals based on baseInterval
     uint16_t interval8Band() const { return baseInterval; }           // Level 5: ~1s
-    uint16_t interval64Bin() const { return baseInterval / 2; }       // Level 4: ~0.5s
-    uint16_t intervalDMA() const { return baseInterval * 5; }         // Level 3: ~5s
+    uint16_t interval64Bin() const { return baseInterval * 5; }        // Level 4: ~5s (10x slower)
+    uint16_t intervalDMA() const { return baseInterval * 5; }           // Level 3: ~5s
 };
 
 /**

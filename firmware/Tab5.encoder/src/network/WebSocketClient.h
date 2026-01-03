@@ -58,6 +58,24 @@ enum class WebSocketStatus {
 // Note: ArduinoJson 7 deprecated StaticJsonDocument in favor of JsonDocument
 using WebSocketMessageCallback = std::function<void(JsonDocument& doc)>;
 
+// ============================================================================
+// Color Correction State (cached from LightwaveOS v2 server)
+// ============================================================================
+// Populated by colorCorrection.getConfig response, used by PresetManager
+// to capture/apply gamma, auto-exposure, and brown guardrail settings.
+
+struct ColorCorrectionState {
+    bool gammaEnabled = true;
+    float gammaValue = 2.2f;
+    bool autoExposureEnabled = false;
+    uint8_t autoExposureTarget = 110;
+    bool brownGuardrailEnabled = false;
+    uint8_t maxGreenPercentOfRed = 28;
+    uint8_t maxBluePercentOfRed = 8;
+    uint8_t mode = 2;  // 0=OFF, 1=HSV, 2=RGB, 3=BOTH
+    bool valid = false;  // True after first sync from server
+};
+
 class WebSocketClient {
 public:
     WebSocketClient();
@@ -112,6 +130,22 @@ public:
     void sendZonesSetLayout(const struct zones::ZoneSegment* segments, uint8_t zoneCount);
 
     // ========================================================================
+    // Color Correction Commands
+    // ========================================================================
+
+    void requestColorCorrectionConfig();
+    void sendColorCorrectionConfig(bool gammaEnabled, float gammaValue,
+                                   bool autoExposureEnabled, uint8_t autoExposureTarget,
+                                   bool brownGuardrailEnabled);
+    void sendGammaChange(bool enabled, float value);
+    void sendAutoExposureChange(bool enabled, uint8_t target);
+    void sendBrownGuardrailChange(bool enabled);
+
+    // Color correction state accessors
+    const ColorCorrectionState& getColorCorrectionState() const { return _colorCorrectionState; }
+    void setColorCorrectionState(const ColorCorrectionState& state) { _colorCorrectionState = state; }
+
+    // ========================================================================
     // Generic Commands
     // ========================================================================
 
@@ -138,6 +172,9 @@ private:
     WebSocketsClient _ws;
     WebSocketStatus _status;
     WebSocketMessageCallback _messageCallback;
+
+    // Color correction state (cached from server)
+    ColorCorrectionState _colorCorrectionState;
 
     // Reconnection state
     unsigned long _lastReconnectAttempt;
@@ -188,6 +225,19 @@ enum class WebSocketStatus {
     ERROR
 };
 
+// Stub ColorCorrectionState for non-WiFi builds
+struct ColorCorrectionState {
+    bool gammaEnabled = true;
+    float gammaValue = 2.2f;
+    bool autoExposureEnabled = false;
+    uint8_t autoExposureTarget = 110;
+    bool brownGuardrailEnabled = false;
+    uint8_t maxGreenPercentOfRed = 28;
+    uint8_t maxBluePercentOfRed = 8;
+    uint8_t mode = 2;
+    bool valid = false;
+};
+
 class WebSocketClient {
 public:
     WebSocketClient() {}
@@ -215,6 +265,14 @@ public:
     void sendZoneBlend(uint8_t, uint8_t) {}
     void sendZonesSetLayout(const struct zones::ZoneSegment*, uint8_t) {}
     void sendGenericParameter(const char*, uint8_t) {}
+    // Color correction stubs
+    void requestColorCorrectionConfig() {}
+    void sendColorCorrectionConfig(bool, float, bool, uint8_t, bool) {}
+    void sendGammaChange(bool, float) {}
+    void sendAutoExposureChange(bool, uint8_t) {}
+    void sendBrownGuardrailChange(bool) {}
+    const ColorCorrectionState& getColorCorrectionState() const { static ColorCorrectionState s; return s; }
+    void setColorCorrectionState(const ColorCorrectionState&) {}
     void disconnect() {}
     const char* getStatusString() const { return "WiFi Disabled"; }
 };

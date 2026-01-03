@@ -10,9 +10,11 @@
 #include "Theme.h"
 #include "widgets/GaugeWidget.h"
 #include "widgets/UIHeader.h"
+#include "widgets/PresetSlotWidget.h"
 
-// Forward declaration
+// Forward declarations
 class ZoneComposerUI;
+class PresetManager;
 
 /**
  * UI screen types
@@ -49,14 +51,21 @@ public:
     
     // Get header instance (for ZoneComposerUI)
     UIHeader* getHeader() { return _header; }
-    
+
+    // Preset bank UI
+    PresetSlotWidget* getPresetSlot(uint8_t slot) { return (slot < 8) ? _presetSlots[slot] : nullptr; }
+    void updatePresetSlot(uint8_t slot, bool occupied, uint8_t effectId, uint8_t paletteId, uint8_t brightness);
+    void setActivePresetSlot(uint8_t slot);
+    void refreshAllPresetSlots(PresetManager* pm);
 
 private:
     M5GFX& _display;
 
     UIHeader* _header;
     GaugeWidget* _gauges[16];
+    PresetSlotWidget* _presetSlots[8];
     ZoneComposerUI* _zoneComposer = nullptr;
+    uint8_t _activePresetSlot = 0xFF;  // 0xFF = none active
 
     // Screen state
     UIScreen _currentScreen = UIScreen::GLOBAL;

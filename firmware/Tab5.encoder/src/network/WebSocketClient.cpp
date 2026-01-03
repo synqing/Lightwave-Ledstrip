@@ -263,6 +263,9 @@ void WebSocketClient::sendHelloMessage() {
 
     // Also request zone state
     requestZonesState();
+
+    // Request color correction state (for presets)
+    requestColorCorrectionConfig();
 }
 
 void WebSocketClient::requestEffectsList(uint8_t page, uint8_t limit, const char* requestId) {
@@ -524,6 +527,85 @@ void WebSocketClient::sendZonesSetLayout(const struct zones::ZoneSegment* segmen
     }
 
     sendJSON("zones.setLayout", doc);
+}
+
+// ============================================================================
+// Color Correction Commands
+// ============================================================================
+
+void WebSocketClient::requestColorCorrectionConfig() {
+    if (!isConnected()) {
+        return;
+    }
+
+    JsonDocument doc;
+    doc["requestId"] = "cc_sync";
+    sendJSON("colorCorrection.getConfig", doc);
+    Serial.println("[WS] Requested colorCorrection.getConfig");
+}
+
+void WebSocketClient::sendColorCorrectionConfig(bool gammaEnabled, float gammaValue,
+                                                bool aeEnabled, uint8_t aeTarget,
+                                                bool brownEnabled) {
+    if (!isConnected()) {
+        return;
+    }
+
+    JsonDocument doc;
+    doc["gammaEnabled"] = gammaEnabled;
+    doc["gammaValue"] = gammaValue;
+    doc["autoExposureEnabled"] = aeEnabled;
+    doc["autoExposureTarget"] = aeTarget;
+    doc["brownGuardrailEnabled"] = brownEnabled;
+    sendJSON("colorCorrection.setConfig", doc);
+
+    Serial.printf("[WS] Sent colorCorrection.setConfig: gamma=%s (%.1f), ae=%s, brown=%s\n",
+                  gammaEnabled ? "ON" : "OFF", gammaValue,
+                  aeEnabled ? "ON" : "OFF",
+                  brownEnabled ? "ON" : "OFF");
+}
+
+void WebSocketClient::sendGammaChange(bool enabled, float value) {
+    if (!isConnected()) {
+        return;
+    }
+
+    JsonDocument doc;
+    doc["gammaEnabled"] = enabled;
+    doc["gammaValue"] = value;
+    sendJSON("colorCorrection.setConfig", doc);
+
+    // Update local cache
+    _colorCorrectionState.gammaEnabled = enabled;
+    _colorCorrectionState.gammaValue = value;
+}
+
+void WebSocketClient::sendAutoExposureChange(bool enabled, uint8_t target) {
+    if (!isConnected()) {
+        return;
+    }
+
+    JsonDocument doc;
+    doc["autoExposureEnabled"] = enabled;
+    doc["autoExposureTarget"] = target;
+    sendJSON("colorCorrection.setConfig", doc);
+
+    // Update local cache
+    _colorCorrectionState.autoExposureEnabled = enabled;
+    _colorCorrectionState.autoExposureTarget = target;
+}
+
+void WebSocketClient::sendBrownGuardrailChange(bool enabled) {
+    if (!isConnected()) {
+        return;
+    }
+
+    JsonDocument doc;
+    doc["brownGuardrailEnabled"] = enabled;
+    sendJSON("colorCorrection.setConfig", doc);
+
+    // Update local cache
+    _colorCorrectionState.brownGuardrailEnabled = enabled;
 }
 
 // ============================================================================

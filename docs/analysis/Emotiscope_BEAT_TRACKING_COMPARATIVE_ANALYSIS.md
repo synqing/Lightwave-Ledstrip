@@ -1057,14 +1057,13 @@ void check_silence(float current_novelty) {
 
 ```cpp
 float unwrap_phase(float phase) {
-    // NOTE: This function has a BUG!
-    // "phase - phase > PI" is always 0 > PI = false
-    // The actual phase wrapping happens in sync_beat_phase()
-
-    while (phase - phase > M_PI) {   // BUG: always false!
+    // CORRECTED REFERENCE IMPLEMENTATION
+    // (Original had a tautology bug: phase - phase > PI)
+    
+    while (phase > M_PI) {
         phase -= 2 * M_PI;
     }
-    while (phase - phase < -M_PI) {  // BUG: always false!
+    while (phase < -M_PI) {
         phase += 2 * M_PI;
     }
     return phase;

@@ -22,9 +22,7 @@
 #include "../parameters/ParameterMap.h"
 #include "../zones/ZoneDefinition.h"
 #include "../ui/ZoneComposerUI.h"
-
-// Forward declarations
-class WebSocketClient;
+#include "WebSocketClient.h"  // For ColorCorrectionState struct
 
 /**
  * @class WsMessageRouter
@@ -99,6 +97,11 @@ public:
 
         if (strcmp(type, "effects.changed") == 0) {
             handleEffectsChanged(doc);
+            return true;
+        }
+
+        if (strcmp(type, "colorCorrection.getConfig") == 0) {
+            handleColorCorrectionConfig(doc);
             return true;
         }
 
@@ -429,5 +432,63 @@ private:
         }
 
         Serial.printf("[WsRouter] Zones list: enabled=%d, count=%d\n", enabled, zoneCount);
+    }
+
+    /**
+     * @brief Handle "colorCorrection.getConfig" response
+     *
+     * Caches color correction state from LightwaveOS v2 server.
+     * Used by PresetManager to capture/apply gamma, auto-exposure, brown guardrail.
+     *
+     * Expected format:
+     * {
+     *   "type": "colorCorrection.getConfig",
+     *   "success": true,
+     *   "data": {
+     *     "gammaEnabled": true,
+     *     "gammaValue": 2.2,
+     *     "autoExposureEnabled": false,
+     *     "autoExposureTarget": 110,
+     *     "brownGuardrailEnabled": false,
+     *     "maxGreenPercentOfRed": 28,
+     *     "maxBluePercentOfRed": 8,
+     *     "mode": 2
+     *   }
+     * }
+     */
+    static void handleColorCorrectionConfig(JsonDocument& doc) {
+        if (!s_wsClient) {
+            Serial.println("[WsRouter] ColorCorrection: no wsClient");
+            return;
+        }
+
+        // Check for success field (v2 API pattern)
+        if (doc["success"].is<bool>() && !doc["success"].as<bool>()) {
+            Serial.println("[WsRouter] ColorCorrection: request failed");
+            return;
+        }
+
+        // Data can be in "data" object or at root level
+        JsonObject data = doc["data"].is<JsonObject>()
+            ? doc["data"].as<JsonObject>()
+            : doc.as<JsonObject>();
+
+        ColorCorrectionState state;
+        state.gammaEnabled = data["gammaEnabled"] | true;
+        state.gammaValue = data["gammaValue"] | 2.2f;
+        state.autoExposureEnabled = data["autoExposureEnabled"] | false;
+        state.autoExposureTarget = data["autoExposureTarget"] | 110;
+        state.brownGuardrailEnabled = data["brownGuardrailEnabled"] | false;
+        state.maxGreenPercentOfRed = data["maxGreenPercentOfRed"] | 28;
+        state.maxBluePercentOfRed = data["maxBluePercentOfRed"] | 8;
+        state.mode = data["mode"] | 2;
+        state.valid = true;
+
+        s_wsClient->setColorCorrectionState(state);
+
+        Serial.printf("[WsRouter] ColorCorrection synced: gamma=%s (%.1f), ae=%s, brown=%s\n",
+                      state.gammaEnabled ? "ON" : "OFF", state.gammaValue,
+                      state.autoExposureEnabled ? "ON" : "OFF",
+                      state.brownGuardrailEnabled ? "ON" : "OFF");
     }
 };

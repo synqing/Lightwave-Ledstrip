@@ -84,6 +84,11 @@ constexpr int GRID_COLS = 8;  // 8 columns for 8 global parameters
 constexpr int CELL_W = SCREEN_W / GRID_COLS;                        // 160
 constexpr int CELL_H = 120;  // Fixed height for horizontal bar layout
 
+// Preset bank row layout (below gauge row, matches ENC-B physical position)
+constexpr int PRESET_ROW_Y  = STATUS_BAR_H + CELL_H;  // 80 + 120 = 200
+constexpr int PRESET_SLOT_W = CELL_W;                  // 160 (same as gauge)
+constexpr int PRESET_SLOT_H = 80;                      // Compact height
+
 // ============================================================================
 // Helper Functions
 // ============================================================================

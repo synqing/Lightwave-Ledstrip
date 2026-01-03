@@ -95,6 +95,33 @@ public:
      */
     void handleTouch(int16_t x, int16_t y);
 
+    // ========================================================================
+    // Zone State Accessors (for PresetManager)
+    // ========================================================================
+
+    /**
+     * Check if zone mode is enabled
+     * @return true if zones are active
+     */
+    bool isZoneModeEnabled() const { return _zonesEnabled; }
+
+    /**
+     * Get number of active zones
+     * @return Zone count (1-4)
+     */
+    uint8_t getZoneCount() const { return _zoneCount; }
+
+    /**
+     * Get zone state
+     * @param zoneId Zone ID (0-3)
+     * @return Const reference to ZoneState
+     */
+    const ZoneState& getZoneState(uint8_t zoneId) const {
+        static ZoneState empty;
+        if (zoneId >= 4) return empty;
+        return _zones[zoneId];
+    }
+
 private:
     M5GFX& _display;
     ButtonHandler* _buttonHandler = nullptr;

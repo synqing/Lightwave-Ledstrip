@@ -31,8 +31,8 @@
 // Audio integration (Phase 2)
 #if FEATURE_AUDIO_SYNC
 #include "../../audio/AudioNode.h"
-// TempoTracker integration (replaces K1)
-#include "../../audio/tempo/TempoTracker.h"
+// EmotiscopeEngine integration (replaces K1/TempoTracker)
+#include "../../audio/tempo/EmotiscopeEngine.h"
 #endif
 
 using namespace lightwaveos::transitions;

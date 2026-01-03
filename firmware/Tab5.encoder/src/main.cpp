@@ -599,7 +599,32 @@ void setup() {
                     g_encoders->flashLed(ledIndex, 255, 0, 0);         // Red for error
                 }
             }
+
+            // UI feedback for preset slots
+            if (g_ui && success) {
+                if (action == PresetAction::SAVE) {
+                    g_ui->getPresetSlot(slot)->showSaveFeedback();
+                    // Refresh slot data after save
+                    PresetData preset;
+                    if (g_presetManager && g_presetManager->getPreset(slot, preset)) {
+                        g_ui->updatePresetSlot(slot, true,
+                            preset.effectId, preset.paletteId, preset.brightness);
+                    }
+                } else if (action == PresetAction::RECALL) {
+                    g_ui->setActivePresetSlot(slot);
+                    g_ui->getPresetSlot(slot)->showRecallFeedback();
+                } else if (action == PresetAction::DELETE) {
+                    g_ui->getPresetSlot(slot)->showDeleteFeedback();
+                    g_ui->updatePresetSlot(slot, false, 0, 0, 0);
+                }
+            }
         });
+
+        // Initialize preset slot UI from NVS
+        if (g_ui) {
+            g_ui->refreshAllPresetSlots(g_presetManager);
+            Serial.println("[PRESET] UI slots refreshed from NVS");
+        }
     } else {
         Serial.println("[PRESET] WARNING: Preset manager init failed");
     }
@@ -611,6 +636,11 @@ void setup() {
         zoneUI->setWebSocketClient(&g_wsClient);
     }
     WsMessageRouter::init(g_paramHandler, &g_wsClient, zoneUI);
+
+    // Wire ZoneComposerUI to PresetManager for zone state capture
+    if (g_presetManager && zoneUI) {
+        g_presetManager->setZoneComposerUI(zoneUI);
+    }
 
     // Register WebSocket message callback
     g_wsClient.onMessage([](JsonDocument& doc) {

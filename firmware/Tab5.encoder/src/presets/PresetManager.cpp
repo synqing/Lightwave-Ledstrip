@@ -6,6 +6,7 @@
 #include "../parameters/ParameterHandler.h"
 #include "../parameters/ParameterMap.h"
 #include "../network/WebSocketClient.h"
+#include "../ui/ZoneComposerUI.h"
 
 // ============================================================================
 // Constructor
@@ -177,31 +178,75 @@ void PresetManager::captureCurrentState(PresetData& preset) {
         preset.complexity = values[static_cast<uint8_t>(ParameterId::Complexity)];
         preset.variation = values[static_cast<uint8_t>(ParameterId::Variation)];
 
-        // Unit B zone parameters (8-15)
+        // Unit B zone parameters from encoder values (fallback)
         for (int z = 0; z < 4; z++) {
             uint8_t effectIdx = 8 + (z * 2);   // Zone effect indices: 8, 10, 12, 14
             uint8_t speedIdx = 9 + (z * 2);    // Zone speed indices: 9, 11, 13, 15
 
             preset.zones[z].effectId = values[effectIdx];
             preset.zones[z].speed = values[speedIdx];
-            preset.zones[z].brightness = 255;  // Default full brightness
+            preset.zones[z].brightness = 255;  // Default
             preset.zones[z].enabled = true;
-            preset.zones[z].paletteId = 0;     // Default palette
+            preset.zones[z].paletteId = 0;
         }
     }
 
-    // Zone mode state
-    // TODO: Get from ButtonHandler or WsMessageRouter zone state
-    preset.zoneModeEnabled = false;
-    preset.zoneCount = 1;
+    // Zone mode state from ZoneComposerUI (authoritative source)
+    if (_zoneUI) {
+        preset.zoneModeEnabled = _zoneUI->isZoneModeEnabled();
+        preset.zoneCount = _zoneUI->getZoneCount();
 
-    // Additional settings (defaults until WebSocket protocol extended)
-    preset.gamma = 22;           // Default gamma 2.2
-    preset.brownGuardrail = false;
-    preset.autoExposure = false;
+        // Override zone configs with actual state from UI
+        for (uint8_t z = 0; z < 4; z++) {
+            const ZoneState& zs = _zoneUI->getZoneState(z);
+            preset.zones[z].effectId = zs.effectId;
+            preset.zones[z].speed = zs.speed;
+            preset.zones[z].paletteId = zs.paletteId;
+            preset.zones[z].enabled = zs.enabled;
+            // Note: ZoneState doesn't have brightness, use LED count as proxy or default
+            preset.zones[z].brightness = 255;
+        }
+    } else {
+        // Fallback if ZoneComposerUI not set
+        preset.zoneModeEnabled = false;
+        preset.zoneCount = 1;
+    }
 
-    Serial.printf("[PresetManager] Captured state: effect=%d, brightness=%d, palette=%d, speed=%d\n",
-                  preset.effectId, preset.brightness, preset.paletteId, preset.speed);
+    // Color correction from cached WebSocket state
+    if (_wsClient) {
+        const ColorCorrectionState& cc = _wsClient->getColorCorrectionState();
+        if (cc.valid) {
+            // Store gamma as uint8 (value * 10, so 2.2 = 22)
+            preset.gamma = cc.gammaEnabled ? static_cast<uint8_t>(cc.gammaValue * 10.0f) : 0;
+            preset.brownGuardrail = cc.brownGuardrailEnabled;
+            preset.autoExposure = cc.autoExposureEnabled;
+        } else {
+            // Fallback defaults if not yet synced
+            preset.gamma = 22;
+            preset.brownGuardrail = false;
+            preset.autoExposure = false;
+            Serial.println("[PresetManager] Warning: ColorCorrection not synced, using defaults");
+        }
+    } else {
+        preset.gamma = 22;
+        preset.brownGuardrail = false;
+        preset.autoExposure = false;
+    }
+
+    // Log complete captured state
+    Serial.printf("[PresetManager] Captured: E=%d B=%d P=%d S=%d M=%d F=%d C=%d V=%d\n",
+                  preset.effectId, preset.brightness, preset.paletteId, preset.speed,
+                  preset.mood, preset.fade, preset.complexity, preset.variation);
+    Serial.printf("[PresetManager]   Zones: enabled=%d count=%d gamma=%d ae=%d brown=%d\n",
+                  preset.zoneModeEnabled, preset.zoneCount, preset.gamma,
+                  preset.autoExposure, preset.brownGuardrail);
+    if (preset.zoneModeEnabled && preset.zoneCount > 0) {
+        for (uint8_t z = 0; z < preset.zoneCount && z < 4; z++) {
+            Serial.printf("[PresetManager]   Zone%d: E=%d S=%d P=%d en=%d\n",
+                          z, preset.zones[z].effectId, preset.zones[z].speed,
+                          preset.zones[z].paletteId, preset.zones[z].enabled);
+        }
+    }
 }
 
 // ============================================================================
@@ -245,8 +290,22 @@ bool PresetManager::applyPresetState(const PresetData& preset) {
         _wsClient->sendZoneEnable(false);
     }
 
-    // TODO: Apply gamma, brownGuardrail, autoExposure when WebSocket protocol extended
-    // These require new WebSocket commands to be added in Phase 6
+    // Apply color correction settings
+    bool gammaEnabled = (preset.gamma > 0);
+    float gammaValue = gammaEnabled ? (preset.gamma / 10.0f) : 2.2f;
+
+    _wsClient->sendColorCorrectionConfig(
+        gammaEnabled,
+        gammaValue,
+        preset.autoExposure,
+        110,  // Default auto-exposure target
+        preset.brownGuardrail
+    );
+
+    Serial.printf("[PresetManager] Applied color correction: gamma=%s (%.1f), ae=%s, brown=%s\n",
+                  gammaEnabled ? "ON" : "OFF", gammaValue,
+                  preset.autoExposure ? "ON" : "OFF",
+                  preset.brownGuardrail ? "ON" : "OFF");
 
     // Update local ParameterHandler state to match
     if (_paramHandler) {
@@ -260,8 +319,12 @@ bool PresetManager::applyPresetState(const PresetData& preset) {
         _paramHandler->setValue(ParameterId::Variation, preset.variation);
     }
 
-    Serial.printf("[PresetManager] Applied preset: effect=%d, brightness=%d, palette=%d, speed=%d\n",
-                  preset.effectId, preset.brightness, preset.paletteId, preset.speed);
+    // Log complete applied state
+    Serial.printf("[PresetManager] Applied: E=%d B=%d P=%d S=%d M=%d F=%d C=%d V=%d\n",
+                  preset.effectId, preset.brightness, preset.paletteId, preset.speed,
+                  preset.mood, preset.fade, preset.complexity, preset.variation);
+    Serial.printf("[PresetManager]   Zones: enabled=%d count=%d\n",
+                  preset.zoneModeEnabled, preset.zoneCount);
 
     return true;
 }

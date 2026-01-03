@@ -9,6 +9,7 @@
 #include "ZoneComposerUI.h"
 #include "../parameters/ParameterMap.h"
 #include "../config/Config.h"
+#include "../presets/PresetManager.h"
 #include <M5Unified.h>
 #include <esp_system.h>
 #include <cstdio>
@@ -23,6 +24,9 @@ DisplayUI::DisplayUI(M5GFX& display)
     _zoneComposer = nullptr;
     for (int i = 0; i < 16; i++) {
         _gauges[i] = nullptr;
+    }
+    for (int i = 0; i < 8; i++) {
+        _presetSlots[i] = nullptr;
     }
 }
 
@@ -39,6 +43,12 @@ DisplayUI::~DisplayUI() {
         if (_gauges[i]) {
             delete _gauges[i];
             _gauges[i] = nullptr;
+        }
+    }
+    for (int i = 0; i < 8; i++) {
+        if (_presetSlots[i]) {
+            delete _presetSlots[i];
+            _presetSlots[i] = nullptr;
         }
     }
 }
@@ -86,6 +96,16 @@ void DisplayUI::begin() {
         _gauges[i] = nullptr;
     }
 
+    // Create 8 preset slot widgets below gauge row
+    for (int i = 0; i < 8; i++) {
+        int x = i * Theme::PRESET_SLOT_W;
+        int y = Theme::PRESET_ROW_Y;
+        _presetSlots[i] = new PresetSlotWidget(&_display, x, y, i);
+    }
+#if ENABLE_UI_DIAGNOSTICS
+    Serial.printf("[DBG] preset_slots_created count=8\n");
+#endif
+
     // Create zone composer UI
     _zoneComposer = new ZoneComposerUI(_display);
     _zoneComposer->setHeader(_header);  // Share header instance
@@ -119,6 +139,9 @@ void DisplayUI::setScreen(UIScreen screen) {
                 if (_gauges[i]) {
                     _gauges[i]->markDirty();
                 }
+                if (_presetSlots[i]) {
+                    _presetSlots[i]->markDirty();
+                }
             }
         } else if (_currentScreen == UIScreen::ZONE_COMPOSER) {
             // Force Zone Composer to redraw by setting _dirty directly
@@ -151,6 +174,12 @@ void DisplayUI::renderCurrentScreen() {
                     Serial.printf("[DBG] rendering gauge %d\n", i);
 #endif
                     _gauges[i]->render();
+                }
+            }
+            // Render preset slots below gauges
+            for (int i = 0; i < 8; i++) {
+                if (_presetSlots[i]) {
+                    _presetSlots[i]->render();
                 }
             }
 #if ENABLE_UI_DIAGNOSTICS
@@ -193,6 +222,13 @@ void DisplayUI::loop() {
             for (int i = 0; i < 8; i++) {
                 if (_gauges[i]) {
                     _gauges[i]->render();
+                }
+            }
+            // Update and render preset slots
+            for (int i = 0; i < 8; i++) {
+                if (_presetSlots[i]) {
+                    _presetSlots[i]->update();  // Handle animations
+                    _presetSlots[i]->render();
                 }
             }
             break;
@@ -286,4 +322,50 @@ void DisplayUI::setWiFiInfo(const char* ip, const char* ssid, int32_t rssi) {
     (void)ip;
     (void)ssid;
     (void)rssi;
+}
+
+// ============================================================================
+// Preset Bank UI Methods
+// ============================================================================
+
+void DisplayUI::updatePresetSlot(uint8_t slot, bool occupied, uint8_t effectId, uint8_t paletteId, uint8_t brightness) {
+    if (slot >= 8 || !_presetSlots[slot]) return;
+
+    _presetSlots[slot]->setOccupied(occupied);
+    if (occupied) {
+        _presetSlots[slot]->setPresetInfo(effectId, paletteId, brightness);
+    }
+}
+
+void DisplayUI::setActivePresetSlot(uint8_t slot) {
+    // Clear previous active
+    if (_activePresetSlot < 8 && _presetSlots[_activePresetSlot]) {
+        _presetSlots[_activePresetSlot]->setActive(false);
+    }
+
+    // Set new active
+    _activePresetSlot = slot;
+    if (slot < 8 && _presetSlots[slot]) {
+        _presetSlots[slot]->setActive(true);
+    }
+}
+
+void DisplayUI::refreshAllPresetSlots(PresetManager* pm) {
+    if (!pm) return;
+
+    uint8_t occupancy = pm->getOccupancyMask();
+
+    for (uint8_t i = 0; i < 8; i++) {
+        if (!_presetSlots[i]) continue;
+
+        bool occupied = (occupancy & (1 << i)) != 0;
+        _presetSlots[i]->setOccupied(occupied);
+
+        if (occupied) {
+            PresetData preset;
+            if (pm->getPreset(i, preset)) {
+                _presetSlots[i]->setPresetInfo(preset.effectId, preset.paletteId, preset.brightness);
+            }
+        }
+    }
 }

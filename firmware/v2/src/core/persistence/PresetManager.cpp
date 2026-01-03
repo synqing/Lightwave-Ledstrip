@@ -76,7 +76,7 @@ bool PresetManager::savePreset(const char* name, const ZoneConfigData& config,
     String filepath = getPresetPath(sanitizedName.c_str());
 
     // Create JSON document
-    StaticJsonDocument<2048> doc;
+    JsonDocument doc;
 
     // Add metadata
     doc["name"] = sanitizedName;
@@ -149,7 +149,7 @@ bool PresetManager::loadPreset(const char* name, ZoneConfigData& config) {
     }
 
     // Parse JSON
-    StaticJsonDocument<2048> doc;
+    JsonDocument doc;
     DeserializationError error = deserializeJson(doc, file);
     file.close();
 
@@ -321,7 +321,7 @@ bool PresetManager::getPresetMetadata(const char* name, PresetMetadata& metadata
         return false;
     }
 
-    StaticJsonDocument<512> doc;
+    JsonDocument doc;
     DeserializationError error = deserializeJson(doc, file);
     file.close();
 

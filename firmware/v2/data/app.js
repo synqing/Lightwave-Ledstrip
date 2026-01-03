@@ -1631,6 +1631,23 @@ function buildEffectOptions(selectedId) {
     return html;
 }
 
+// Audio band options for zone routing
+const AUDIO_BANDS = [
+    { value: 0, label: 'Full' },
+    { value: 1, label: 'Bass' },
+    { value: 2, label: 'Mid' },
+    { value: 3, label: 'High' }
+];
+
+// Beat divisor options for beat triggers
+const BEAT_DIVISORS = [
+    { value: 0, label: 'Off' },
+    { value: 1, label: '1 Beat' },
+    { value: 2, label: '2 Beats' },
+    { value: 4, label: '4 Beats' },
+    { value: 8, label: '8 Beats' }
+];
+
 // Render zone quick controls (palette and effect dropdowns per zone)
 function renderZoneQuickControls() {
     const container = document.getElementById('zoneQuickControlsGrid');
@@ -1650,10 +1667,29 @@ function renderZoneQuickControls() {
         const zoneColor = ZONE_COLORS[i % ZONE_COLORS.length];
         const currentPaletteId = zone.paletteId !== undefined ? zone.paletteId : state.paletteId;
         const currentEffectId = zone.effectId !== undefined ? zone.effectId : state.effectId;
+        const currentAudioBand = zone.audioBand !== undefined ? zone.audioBand : 0;
+        const tempoSync = zone.tempoSync || false;
+        const beatDivisor = zone.beatDivisor !== undefined ? zone.beatDivisor : 0;
+
+        // Build audio band options
+        const audioBandOptions = AUDIO_BANDS.map(b =>
+            `<option value="${b.value}" ${b.value === currentAudioBand ? 'selected' : ''}>${b.label}</option>`
+        ).join('');
+
+        // Build beat divisor options
+        const beatDivisorOptions = BEAT_DIVISORS.map(b =>
+            `<option value="${b.value}" ${b.value === beatDivisor ? 'selected' : ''}>${b.label}</option>`
+        ).join('');
 
         html += `
             <div class="zone-quick-control" style="padding: var(--space-sm); border: 1px solid ${zoneColor}40; border-radius: 8px; background: ${zoneColor}10;">
-                <div class="card-header" style="color: ${zoneColor}; margin-bottom: var(--space-xs); text-align: left;">Zone ${i}</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-xs);">
+                    <div class="card-header" style="color: ${zoneColor}; text-align: left; margin: 0;">Zone ${i}</div>
+                    <div style="display: flex; gap: 2px;">
+                        <button class="control-btn compact zone-reorder-btn" data-zone="${i}" data-dir="up" style="padding: 2px 6px; font-size: 0.625rem; ${i === 0 ? 'opacity: 0.3; pointer-events: none;' : ''}">▲</button>
+                        <button class="control-btn compact zone-reorder-btn" data-zone="${i}" data-dir="down" style="padding: 2px 6px; font-size: 0.625rem; ${i === zoneCount - 1 ? 'opacity: 0.3; pointer-events: none;' : ''}">▼</button>
+                    </div>
+                </div>
                 <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
                     <div>
                         <label style="font-size: 0.65rem; color: var(--text-secondary); display: block; margin-bottom: 2px;">Pattern</label>
@@ -1667,6 +1703,26 @@ function renderZoneQuickControls() {
                             ${buildPaletteOptions(currentPaletteId)}
                         </select>
                     </div>
+                    <div style="border-top: 1px solid ${zoneColor}30; padding-top: var(--space-xs); margin-top: var(--space-xs);">
+                        <label style="font-size: 0.65rem; color: var(--text-secondary); display: block; margin-bottom: 2px;">Audio Band</label>
+                        <select class="control-btn compact zone-quick-select" data-zone="${i}" data-type="audioBand" style="width: 100%;">
+                            ${audioBandOptions}
+                        </select>
+                    </div>
+                    <div style="display: flex; gap: var(--space-xs); align-items: center;">
+                        <div style="flex: 1;">
+                            <label style="font-size: 0.65rem; color: var(--text-secondary); display: block; margin-bottom: 2px;">Tempo Sync</label>
+                            <button class="control-btn compact zone-tempo-toggle" data-zone="${i}" style="width: 100%; background: ${tempoSync ? zoneColor : 'var(--bg-elevated)'}; color: ${tempoSync ? 'var(--bg-base)' : 'var(--text-primary)'};">
+                                ${tempoSync ? 'ON' : 'OFF'}
+                            </button>
+                        </div>
+                        <div style="flex: 1;">
+                            <label style="font-size: 0.65rem; color: var(--text-secondary); display: block; margin-bottom: 2px;">Beat Trigger</label>
+                            <select class="control-btn compact zone-quick-select" data-zone="${i}" data-type="beatDivisor" style="width: 100%;">
+                                ${beatDivisorOptions}
+                            </select>
+                        </div>
+                    </div>
                 </div>
             </div>
         `;
@@ -1674,7 +1730,7 @@ function renderZoneQuickControls() {
 
     container.innerHTML = html;
 
-    // Attach change handlers
+    // Attach change handlers for dropdowns
     container.querySelectorAll('.zone-quick-select').forEach(select => {
         select.addEventListener('change', (e) => {
             const zoneId = parseInt(e.target.dataset.zone);
@@ -1685,7 +1741,30 @@ function renderZoneQuickControls() {
                 setZonePalette(zoneId, value);
             } else if (type === 'effect') {
                 setZoneEffect(zoneId, value);
+            } else if (type === 'audioBand') {
+                setZoneAudioBand(zoneId, value);
+            } else if (type === 'beatDivisor') {
+                setZoneBeatDivisor(zoneId, value);
             }
+        });
+    });
+
+    // Attach click handlers for tempo sync toggles
+    container.querySelectorAll('.zone-tempo-toggle').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const zoneId = parseInt(e.target.dataset.zone);
+            const zone = state.zones.zones[zoneId];
+            const newValue = !(zone && zone.tempoSync);
+            setZoneTempoSync(zoneId, newValue);
+        });
+    });
+
+    // Attach click handlers for zone reorder buttons
+    container.querySelectorAll('.zone-reorder-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const zoneId = parseInt(e.target.dataset.zone);
+            const dir = e.target.dataset.dir;
+            reorderZone(zoneId, dir);
         });
     });
 }
@@ -2000,6 +2079,132 @@ function setZoneBlend(zoneId, blendMode) {
         })
         .catch(e => {
             log(`[REST] ❌ Error setting zone ${zoneId} blend: ${e.message}`);
+        });
+    }
+}
+
+function setZoneAudioBand(zoneId, audioBand) {
+    // Update local state immediately for responsive UI
+    if (state.zones && state.zones.zones && state.zones.zones[zoneId]) {
+        state.zones.zones[zoneId].audioBand = audioBand;
+    }
+
+    if (state.connected && state.ws) {
+        send({ type: 'zones.update', zoneId, audioBand });
+        log(`[WS] Zone ${zoneId} audioBand: ${audioBand}`);
+    } else {
+        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zones/${zoneId}/audio`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ audioBand })
+        })
+        .then(data => {
+            if (data.success) {
+                log(`[REST] Zone ${zoneId} audioBand: ${audioBand}`);
+            }
+        })
+        .catch(e => {
+            log(`[REST] ❌ Error setting zone ${zoneId} audioBand: ${e.message}`);
+        });
+    }
+}
+
+function setZoneTempoSync(zoneId, tempoSync) {
+    // Update local state immediately for responsive UI
+    if (state.zones && state.zones.zones && state.zones.zones[zoneId]) {
+        state.zones.zones[zoneId].tempoSync = tempoSync;
+    }
+    // Re-render to update button state
+    renderZoneQuickControls();
+
+    if (state.connected && state.ws) {
+        send({ type: 'zones.update', zoneId, tempoSync });
+        log(`[WS] Zone ${zoneId} tempoSync: ${tempoSync}`);
+    } else {
+        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zones/${zoneId}/audio`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tempoSync })
+        })
+        .then(data => {
+            if (data.success) {
+                log(`[REST] Zone ${zoneId} tempoSync: ${tempoSync}`);
+            }
+        })
+        .catch(e => {
+            log(`[REST] ❌ Error setting zone ${zoneId} tempoSync: ${e.message}`);
+        });
+    }
+}
+
+function setZoneBeatDivisor(zoneId, beatDivisor) {
+    // Update local state immediately for responsive UI
+    if (state.zones && state.zones.zones && state.zones.zones[zoneId]) {
+        state.zones.zones[zoneId].beatDivisor = beatDivisor;
+        // If beatDivisor > 0, beat trigger is enabled
+        state.zones.zones[zoneId].beatTriggerEnabled = beatDivisor > 0;
+    }
+
+    if (state.connected && state.ws) {
+        send({ type: 'zones.update', zoneId, beatDivisor, beatTriggerEnabled: beatDivisor > 0 });
+        log(`[WS] Zone ${zoneId} beatDivisor: ${beatDivisor}`);
+    } else {
+        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zones/${zoneId}/audio`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ beatDivisor, beatTriggerEnabled: beatDivisor > 0 })
+        })
+        .then(data => {
+            if (data.success) {
+                log(`[REST] Zone ${zoneId} beatDivisor: ${beatDivisor}`);
+            }
+        })
+        .catch(e => {
+            log(`[REST] ❌ Error setting zone ${zoneId} beatDivisor: ${e.message}`);
+        });
+    }
+}
+
+function reorderZone(zoneId, direction) {
+    if (!state.zones || !state.zones.zones) return;
+
+    const zoneCount = state.zones.zones.length;
+    if (zoneCount < 2) return;
+
+    // Calculate new order
+    const currentOrder = [];
+    for (let i = 0; i < zoneCount; i++) {
+        currentOrder.push(i);
+    }
+
+    const targetIndex = direction === 'up' ? zoneId - 1 : zoneId + 1;
+    if (targetIndex < 0 || targetIndex >= zoneCount) return;
+
+    // Swap positions
+    [currentOrder[zoneId], currentOrder[targetIndex]] = [currentOrder[targetIndex], currentOrder[zoneId]];
+
+    log(`[ZONES] Reordering: ${currentOrder.join(',')}`);
+
+    // Send reorder request
+    if (state.connected && state.ws) {
+        send({ type: 'zones.reorder', order: currentOrder });
+    } else {
+        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zones/reorder`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ order: currentOrder })
+        })
+        .then(data => {
+            if (data.success) {
+                log(`[ZONES] ✅ Reordered`);
+                fetchZonesState();
+            } else {
+                log(`[ZONES] ❌ Reorder failed: ${data.error?.message || 'Unknown error'}`);
+                alert(`Reorder failed: ${data.error?.message || 'Zone 0 must contain center LEDs (79/80)'}`);
+            }
+        })
+        .catch(e => {
+            log(`[ZONES] ❌ Error: ${e.message}`);
         });
     }
 }
@@ -2356,8 +2561,9 @@ function applyZoneLayout() {
 function fetchPresetList() {
     // Update throttle timestamp
     state.lastPresetListFetchMs = Date.now();
-    
-    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/presets`, {
+
+    // Use zone presets API (saves complete zone configuration)
+    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zone-presets`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
     })
@@ -2367,7 +2573,7 @@ function fetchPresetList() {
         }
     })
     .catch(e => {
-        log(`[PRESETS] Error fetching preset list: ${e.message}`);
+        log(`[ZONE PRESETS] Error fetching preset list: ${e.message}`);
         const presetList = document.getElementById('presetList');
         if (presetList) {
             presetList.innerHTML = '<div class="value-secondary compact" style="text-align: center; padding: var(--space-sm); color: var(--error);">Failed to load presets</div>';
@@ -2380,29 +2586,25 @@ function renderPresetList(presets) {
     if (!presetList) return;
 
     if (!presets || presets.length === 0) {
-        presetList.innerHTML = '<div class="value-secondary compact" style="text-align: center; padding: var(--space-sm);">No presets saved yet</div>';
+        presetList.innerHTML = '<div class="value-secondary compact" style="text-align: center; padding: var(--space-sm);">No zone presets saved yet</div>';
         return;
     }
 
     let html = '';
     for (const preset of presets) {
+        const id = preset.id;
         const name = preset.name || 'Unnamed';
-        const description = preset.description || '';
-        const author = preset.author || '';
-        const created = preset.created || '';
-        
+        const zoneCount = preset.zoneCount || '?';
+
         html += `
             <div style="display: flex; align-items: center; gap: var(--space-xs); padding: var(--space-xs); background: var(--bg-elevated); border-radius: 6px;">
                 <div style="flex: 1; min-width: 0;">
                     <div style="font-size: 0.75rem; font-weight: 600; color: var(--text-primary);">${name}</div>
-                    ${description ? `<div style="font-size: 0.625rem; color: var(--text-secondary); margin-top: 2px;">${description}</div>` : ''}
-                    ${author || created ? `<div style="font-size: 0.5625rem; color: var(--text-tertiary); margin-top: 2px;">${author ? author + ' • ' : ''}${created ? new Date(created).toLocaleDateString() : ''}</div>` : ''}
+                    <div style="font-size: 0.625rem; color: var(--text-secondary); margin-top: 2px;">${zoneCount} zones • ID: ${id}</div>
                 </div>
                 <div style="display: flex; gap: var(--space-xs); flex-shrink: 0;">
-                    <button class="control-btn compact" data-preset-name="${name}" data-preset-action="load" style="font-size: 0.625rem; padding: 4px 8px;">Load</button>
-                    <button class="control-btn compact" data-preset-name="${name}" data-preset-action="rename" style="font-size: 0.625rem; padding: 4px 8px;">Rename</button>
-                    <button class="control-btn compact" data-preset-name="${name}" data-preset-action="download" style="font-size: 0.625rem; padding: 4px 8px;">Download</button>
-                    <button class="control-btn compact" data-preset-name="${name}" data-preset-action="delete" style="font-size: 0.625rem; padding: 4px 8px; background: var(--error); color: var(--bg-base);">Delete</button>
+                    <button class="control-btn compact" data-preset-id="${id}" data-preset-name="${name}" data-preset-action="load" style="font-size: 0.625rem; padding: 4px 8px; background: var(--gold); color: var(--bg-base);">Apply</button>
+                    <button class="control-btn compact" data-preset-id="${id}" data-preset-name="${name}" data-preset-action="delete" style="font-size: 0.625rem; padding: 4px 8px; background: var(--error); color: var(--bg-base);">Delete</button>
                 </div>
             </div>
         `;
@@ -2413,16 +2615,13 @@ function renderPresetList(presets) {
     presetList.querySelectorAll('[data-preset-action]').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const action = e.target.dataset.presetAction;
+            const id = parseInt(e.target.dataset.presetId);
             const name = e.target.dataset.presetName;
             if (action === 'load') {
-                loadPreset(name);
-            } else if (action === 'rename') {
-                renamePreset(name);
-            } else if (action === 'download') {
-                downloadPreset(name);
+                applyZonePreset(id, name);
             } else if (action === 'delete') {
-                if (confirm(`Delete preset "${name}"?`)) {
-                    deletePreset(name);
+                if (confirm(`Delete zone preset "${name}"?`)) {
+                    deleteZonePreset(id, name);
                 }
             }
         });
@@ -2432,7 +2631,7 @@ function renderPresetList(presets) {
 function saveCurrentAsPreset() {
     const nameInput = document.getElementById('presetNameInput');
     const descInput = document.getElementById('presetDescriptionInput');
-    
+
     if (!nameInput || !nameInput.value.trim()) {
         alert('Please enter a preset name');
         return;
@@ -2441,7 +2640,8 @@ function saveCurrentAsPreset() {
     const name = nameInput.value.trim();
     const description = descInput ? descInput.value.trim() : '';
 
-    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/presets/save-current`, {
+    // Use zone presets API - saves current zone configuration
+    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zone-presets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2451,123 +2651,58 @@ function saveCurrentAsPreset() {
     })
     .then(data => {
         if (data.success) {
-            log(`[PRESETS] ✅ Preset saved: ${name}`);
+            log(`[ZONE PRESETS] ✅ Preset saved: ${name}`);
             if (nameInput) nameInput.value = '';
             if (descInput) descInput.value = '';
             fetchPresetList();
         } else {
-            log(`[PRESETS] ❌ Failed to save preset: ${data.error?.message || 'Unknown error'}`);
+            log(`[ZONE PRESETS] ❌ Failed to save preset: ${data.error?.message || 'Unknown error'}`);
             alert(`Failed to save preset: ${data.error?.message || 'Unknown error'}`);
         }
     })
     .catch(e => {
-        log(`[PRESETS] ❌ Error: ${e.message}`);
+        log(`[ZONE PRESETS] ❌ Error: ${e.message}`);
         alert(`Error saving preset: ${e.message}`);
     });
 }
 
-function loadPreset(name) {
-    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/presets/${encodeURIComponent(name)}/load`, {
+function applyZonePreset(id, name) {
+    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zone-presets/apply?id=${id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
     })
     .then(data => {
         if (data.success) {
-            log(`[PRESETS] ✅ Preset loaded: ${name}`);
+            log(`[ZONE PRESETS] ✅ Applied: ${name}`);
             // Refresh zones state to show updated configuration
             fetchZonesState();
         } else {
-            log(`[PRESETS] ❌ Failed to load preset: ${data.error?.message || 'Unknown error'}`);
-            alert(`Failed to load preset: ${data.error?.message || 'Unknown error'}`);
+            log(`[ZONE PRESETS] ❌ Failed to apply: ${data.error?.message || 'Unknown error'}`);
+            alert(`Failed to apply preset: ${data.error?.message || 'Unknown error'}`);
         }
     })
     .catch(e => {
-        log(`[PRESETS] ❌ Error: ${e.message}`);
-        alert(`Error loading preset: ${e.message}`);
+        log(`[ZONE PRESETS] ❌ Error: ${e.message}`);
+        alert(`Error applying preset: ${e.message}`);
     });
 }
 
-function downloadPreset(name) {
-    const url = `http://${state.deviceHost || '192.168.0.16'}/api/v1/presets/${encodeURIComponent(name)}`;
-    
-    fetch(url, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' }
-    })
-    .then(response => {
-        if (!response.ok) {
-            return response.json().then(data => {
-                throw new Error(data.error?.message || `HTTP ${response.status}`);
-            });
-        }
-        return response.text();
-    })
-    .then(text => {
-        // Parse to validate JSON, then stringify with formatting
-        const jsonData = JSON.parse(text);
-        const jsonStr = JSON.stringify(jsonData, null, 2);
-        
-        // Create download link
-        const blob = new Blob([jsonStr], { type: 'application/json' });
-        const blobUrl = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = `${name}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(blobUrl);
-        
-        log(`[PRESETS] ✅ Preset downloaded: ${name}`);
-    })
-    .catch(e => {
-        log(`[PRESETS] ❌ Error downloading preset: ${e.message}`);
-        alert(`Error downloading preset: ${e.message}`);
-    });
-}
-
-function renamePreset(oldName) {
-    const newName = prompt(`Rename preset "${oldName}" to:`, oldName);
-    if (!newName || newName.trim() === '' || newName === oldName) {
-        return;  // User cancelled or didn't change name
-    }
-
-    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/presets/${encodeURIComponent(oldName)}/rename`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ newName: newName.trim() })
-    })
-    .then(data => {
-        if (data.success) {
-            log(`[PRESETS] ✅ Preset renamed: ${oldName} -> ${data.data?.newName || newName}`);
-            fetchPresetList();
-        } else {
-            log(`[PRESETS] ❌ Failed to rename preset: ${data.error?.message || 'Unknown error'}`);
-            alert(`Failed to rename preset: ${data.error?.message || 'Unknown error'}`);
-        }
-    })
-    .catch(e => {
-        log(`[PRESETS] ❌ Error: ${e.message}`);
-        alert(`Error renaming preset: ${e.message}`);
-    });
-}
-
-function deletePreset(name) {
-    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/presets/${encodeURIComponent(name)}`, {
+function deleteZonePreset(id, name) {
+    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zone-presets/delete?id=${id}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' }
     })
     .then(data => {
         if (data.success) {
-            log(`[PRESETS] ✅ Preset deleted: ${name}`);
+            log(`[ZONE PRESETS] ✅ Deleted: ${name}`);
             fetchPresetList();
         } else {
-            log(`[PRESETS] ❌ Failed to delete preset: ${data.error?.message || 'Unknown error'}`);
+            log(`[ZONE PRESETS] ❌ Failed to delete: ${data.error?.message || 'Unknown error'}`);
             alert(`Failed to delete preset: ${data.error?.message || 'Unknown error'}`);
         }
     })
     .catch(e => {
-        log(`[PRESETS] ❌ Error: ${e.message}`);
+        log(`[ZONE PRESETS] ❌ Error: ${e.message}`);
         alert(`Error deleting preset: ${e.message}`);
     });
 }
@@ -2965,6 +3100,8 @@ function init() {
 
     if (isOnDevice) {
         // Running on device - hide config bar, auto-connect
+        // CRITICAL: Set deviceHost to current hostname for API calls
+        state.deviceHost = window.location.hostname;
         elements.configBar.classList.add('hidden');
         connect();
     } else {

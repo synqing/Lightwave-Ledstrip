@@ -273,39 +273,29 @@
             </section>
         </div>
 
-        <!-- Row 8: Preset Library (only shown when zones enabled) -->
+        <!-- Row 8: Zone Presets (only shown when zones enabled) -->
         <div class="controls-row" id="presetLibraryRow" style="display: none;">
             <section class="control-card full-width" id="presetLibraryCard">
-                <h2 class="card-header">Preset Library</h2>
-                
-                <!-- Save Current Config -->
+                <h2 class="card-header">Zone Presets</h2>
+
+                <!-- Save Current Zone Config -->
                 <div style="margin-bottom: var(--space-md); padding: var(--space-sm); background: var(--bg-elevated); border-radius: 8px;">
-                    <div class="card-header" style="text-align: left; margin-bottom: var(--space-xs);">Save Current Configuration</div>
+                    <div class="card-header" style="text-align: left; margin-bottom: var(--space-xs);">Save Current Zone Configuration</div>
                     <div style="display: flex; gap: var(--space-xs); flex-wrap: wrap;">
                         <input type="text" id="presetNameInput" placeholder="Preset name" class="control-btn compact" style="flex: 1; min-width: 150px; padding: var(--space-xs) var(--space-sm); text-align: left; font-size: 0.75rem;">
-                        <input type="text" id="presetDescriptionInput" placeholder="Description (optional)" class="control-btn compact" style="flex: 1; min-width: 150px; padding: var(--space-xs) var(--space-sm); text-align: left; font-size: 0.75rem;">
-                        <button id="presetSaveButton" class="control-btn compact" style="background: var(--gold); color: var(--bg-base);">Save Preset</button>
+                        <input type="text" id="presetDescriptionInput" placeholder="Description (optional)" class="control-btn compact" style="flex: 2; min-width: 200px; padding: var(--space-xs) var(--space-sm); text-align: left; font-size: 0.75rem;">
+                        <button id="presetSaveButton" class="control-btn compact" style="background: var(--gold); color: var(--bg-base);">Save</button>
+                    </div>
+                    <div class="value-secondary compact" style="font-size: 0.625rem; color: var(--text-tertiary); margin-top: var(--space-xs);">
+                        Saves all zone effects, palettes, audio bands, tempo settings, and layout.
                     </div>
                 </div>
 
                 <!-- Preset List -->
-                <div style="margin-bottom: var(--space-md);">
-                    <div class="card-header" style="text-align: left; margin-bottom: var(--space-xs);">Saved Presets</div>
-                    <div class="value-secondary compact" style="font-size: 0.625rem; color: var(--text-tertiary); margin-bottom: var(--space-xs); padding: 0 var(--space-xs);">
-                        Rename is available via the Rename button. Fallback: Download → edit JSON name → Upload → Delete old.
-                    </div>
+                <div>
+                    <div class="card-header" style="text-align: left; margin-bottom: var(--space-xs);">Saved Zone Presets</div>
                     <div id="presetList" style="display: flex; flex-direction: column; gap: var(--space-xs); max-height: 300px; overflow-y: auto;">
                         <div class="value-secondary compact" style="text-align: center; padding: var(--space-sm);">Loading presets...</div>
-                    </div>
-                </div>
-
-                <!-- Upload Preset -->
-                <div style="padding: var(--space-sm); background: var(--bg-elevated); border-radius: 8px;">
-                    <div class="card-header" style="text-align: left; margin-bottom: var(--space-xs);">Upload Preset</div>
-                    <div style="display: flex; gap: var(--space-xs); align-items: center;">
-                        <input type="file" id="presetUploadInput" accept=".json" style="display: none;">
-                        <button id="presetUploadButton" class="control-btn compact" style="flex: 1;">Choose File</button>
-                        <span id="presetUploadFileName" class="value-secondary compact" style="flex: 1; text-align: left; padding: 0 var(--space-sm);">No file selected</span>
                     </div>
                 </div>
             </section>

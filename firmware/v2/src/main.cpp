@@ -148,13 +148,10 @@ void setup() {
         // Create config manager
         zoneConfigMgr = new ZoneConfigManager(&zoneComposer);
 
-        // Create preset manager
+        // Create preset manager (lazy init - will initialize when LittleFS is mounted)
         presetMgr = new PresetManager();
-        if (presetMgr->init()) {
-            LW_LOGI("PresetManager: INITIALIZED");
-        } else {
-            LW_LOGW("PresetManager: Init failed (presets may not be available)");
-        }
+        // Don't call init() here - LittleFS isn't mounted yet (mounted in WebServer::begin())
+        // PresetManager will auto-initialize on first use when LittleFS is available
 
         // Try to load saved zone configuration
         if (zoneConfigMgr->loadFromNVS()) {

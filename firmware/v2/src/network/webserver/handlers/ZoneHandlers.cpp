@@ -1,25 +1,25 @@
 #include "ZoneHandlers.h"
 #include "../../RequestValidator.h"
-#include "../../../core/actors/ActorSystem.h"
+#include "../../../core/actors/NodeOrchestrator.h"
 #include "../../../palettes/Palettes_Master.h"
 #include "../../../effects/zones/BlendMode.h"
 
 using namespace lightwaveos::palettes;
-using namespace lightwaveos::actors;
+using namespace lightwaveos::nodes;
 
 namespace lightwaveos {
 namespace network {
 namespace webserver {
 namespace handlers {
 
-void ZoneHandlers::handleList(AsyncWebServerRequest* request, lightwaveos::actors::ActorSystem& actors, const lightwaveos::network::WebServer::CachedRendererState& cachedState, lightwaveos::zones::ZoneComposer* composer) {
+void ZoneHandlers::handleList(AsyncWebServerRequest* request, lightwaveos::nodes::NodeOrchestrator& orchestrator, const lightwaveos::network::WebServer::CachedRendererState& cachedState, lightwaveos::zones::ZoneComposer* composer) {
     if (!composer) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::FEATURE_DISABLED, "Zone system not available");
         return;
     }
 
-    if (!actors.isRunning()) {
+    if (!orchestrator.isRunning()) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::SYSTEM_NOT_READY, "System not ready");
         return;
@@ -158,14 +158,14 @@ void ZoneHandlers::handleLayout(AsyncWebServerRequest* request, uint8_t* data, s
     if (broadcastZoneState) broadcastZoneState();
 }
 
-void ZoneHandlers::handleGet(AsyncWebServerRequest* request, lightwaveos::actors::ActorSystem& actors, const lightwaveos::network::WebServer::CachedRendererState& cachedState, lightwaveos::zones::ZoneComposer* composer) {
+void ZoneHandlers::handleGet(AsyncWebServerRequest* request, lightwaveos::nodes::NodeOrchestrator& orchestrator, const lightwaveos::network::WebServer::CachedRendererState& cachedState, lightwaveos::zones::ZoneComposer* composer) {
     if (!composer) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::FEATURE_DISABLED, "Zone system not available");
         return;
     }
 
-    if (!actors.isRunning()) {
+    if (!orchestrator.isRunning()) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::SYSTEM_NOT_READY, "System not ready");
         return;
@@ -196,14 +196,14 @@ void ZoneHandlers::handleGet(AsyncWebServerRequest* request, lightwaveos::actors
     });
 }
 
-void ZoneHandlers::handleSetEffect(AsyncWebServerRequest* request, uint8_t* data, size_t len, lightwaveos::actors::ActorSystem& actors, const lightwaveos::network::WebServer::CachedRendererState& cachedState, lightwaveos::zones::ZoneComposer* composer, std::function<void()> broadcastZoneState) {
+void ZoneHandlers::handleSetEffect(AsyncWebServerRequest* request, uint8_t* data, size_t len, lightwaveos::nodes::NodeOrchestrator& orchestrator, const lightwaveos::network::WebServer::CachedRendererState& cachedState, lightwaveos::zones::ZoneComposer* composer, std::function<void()> broadcastZoneState) {
     if (!composer) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::FEATURE_DISABLED, "Zone system not available");
         return;
     }
 
-    if (!actors.isRunning()) {
+    if (!orchestrator.isRunning()) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::SYSTEM_NOT_READY, "System not ready");
         return;

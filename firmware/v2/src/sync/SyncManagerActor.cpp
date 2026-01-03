@@ -19,7 +19,7 @@ namespace sync {
 SyncManagerActor* SyncManagerActor::s_instance = nullptr;
 
 SyncManagerActor::SyncManagerActor(state::StateStore& stateStore)
-    : Actor(actors::ActorConfigs::SyncManager())
+    : Node(nodes::NodeConfigs::SyncManager())
     , m_stateStore(stateStore)
     , m_syncState(SyncState::INITIALIZING)
     , m_stateEnterTime(0)
@@ -61,8 +61,8 @@ void SyncManagerActor::onStart() {
     transitionTo(SyncState::DISCOVERING);
 }
 
-void SyncManagerActor::onMessage(const actors::Message& msg) {
-    using actors::MessageType;
+void SyncManagerActor::onMessage(const nodes::Message& msg) {
+    using nodes::MessageType;
 
     switch (msg.type) {
         case MessageType::STATE_UPDATED:
@@ -295,7 +295,7 @@ void SyncManagerActor::handleReconnecting() {
 // Message Handlers
 // ============================================================================
 
-void SyncManagerActor::handleStateUpdated(const actors::Message& msg) {
+void SyncManagerActor::handleStateUpdated(const nodes::Message& msg) {
     (void)msg;
 
     if (m_election.isLeader()) {

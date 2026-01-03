@@ -11,8 +11,8 @@
 #include "../WsCommandRouter.h"
 #include "../WebServerContext.h"
 #include "../../ApiResponse.h"
-#include "../../../core/actors/ActorSystem.h"
-#include "../../../core/actors/RendererActor.h"
+#include "../../../core/actors/NodeOrchestrator.h"
+#include "../../../core/actors/RendererNode.h"
 #include "../../../core/persistence/ZonePreset.h"
 #include "../../../effects/zones/ZoneComposer.h"
 #include "../../../effects/zones/BlendMode.h"
@@ -220,7 +220,7 @@ static void handleZonePresetsApply(AsyncWebSocketClient* client, JsonDocument& d
     }
 
     // Apply preset
-    if (!mgr.applyPreset(presetId, ctx.zoneComposer, ctx.actorSystem)) {
+    if (!mgr.applyPreset(presetId, ctx.zoneComposer, ctx.orchestrator)) {
         client->text(buildWsError(ErrorCodes::INTERNAL_ERROR, "Failed to apply preset", requestId));
         return;
     }

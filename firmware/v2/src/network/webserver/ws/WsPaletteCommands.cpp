@@ -7,7 +7,7 @@
 #include "../WsCommandRouter.h"
 #include "../WebServerContext.h"
 #include "../../ApiResponse.h"
-#include "../../../core/actors/ActorSystem.h"
+#include "../../../core/actors/NodeOrchestrator.h"
 #include "../../../palettes/Palettes_Master.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
@@ -98,8 +98,8 @@ static void handlePalettesSet(AsyncWebSocketClient* client, JsonDocument& doc, c
         return;
     }
     
-    // Set palette via ActorSystem
-    ctx.actorSystem.setPalette(paletteId);
+    // Set palette via NodeOrchestrator
+    ctx.orchestrator.setPalette(paletteId);
     
     String response = buildWsResponse("palettes.set", requestId, [paletteId](JsonObject& data) {
         data["paletteId"] = paletteId;

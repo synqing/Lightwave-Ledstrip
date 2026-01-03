@@ -9,7 +9,7 @@
  * - I2S configured for 32-bit samples, RIGHT slot on ESP32-S3 (SEL=GND wiring)
  * - Register fixes: MSB shift enabled, timing delay (BIT(9)), WS polarity inverted
  * - Conversion: >>14 shift with bias/clip, then scale to 16-bit
- * - DC removal handled in AudioActor
+ * - DC removal handled in AudioNode
  *
  * @author LightwaveOS Team
  * @version 2.2.0
@@ -240,7 +240,7 @@ CaptureResult AudioCapture::captureHop(int16_t* buffer)
     // 1. Shift right by 14 to extract 18-bit value (may need adjustment based on diagnostics)
     // 2. Clip to 18-bit range (safety)
     // 3. Scale to 16-bit (>> 2)
-    // 4. DC removal is handled in AudioActor
+    // 4. DC removal is handled in AudioNode
     
     int16_t peak = 0;
     for (size_t i = 0; i < HOP_SIZE; i++) {

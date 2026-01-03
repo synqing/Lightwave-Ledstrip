@@ -6,8 +6,8 @@
 #include "ZonePresetHandlers.h"
 #include "../../ApiResponse.h"
 #include "../../RequestValidator.h"
-#include "../../../core/actors/ActorSystem.h"
-#include "../../../core/actors/RendererActor.h"
+#include "../../../core/actors/NodeOrchestrator.h"
+#include "../../../core/actors/RendererNode.h"
 #include "../../../core/persistence/ZonePreset.h"
 #include "../../../effects/zones/ZoneComposer.h"
 #include "../../../effects/zones/BlendMode.h"
@@ -16,7 +16,7 @@
 #define LW_LOG_TAG "ZonePresetHandlers"
 #include "../../../utils/Log.h"
 
-using namespace lightwaveos::actors;
+using namespace lightwaveos::nodes;
 using namespace lightwaveos::persistence;
 using namespace lightwaveos::zones;
 
@@ -159,7 +159,7 @@ void ZonePresetHandlers::handleSave(AsyncWebServerRequest* request,
 }
 
 void ZonePresetHandlers::handleApply(AsyncWebServerRequest* request, uint8_t presetId,
-                                      ActorSystem& actorSystem,
+                                      NodeOrchestrator& orchestrator,
                                       ZoneComposer* zoneComposer,
                                       std::function<void()> broadcastZoneState) {
     if (!zoneComposer) {
@@ -184,7 +184,7 @@ void ZonePresetHandlers::handleApply(AsyncWebServerRequest* request, uint8_t pre
     }
 
     // Apply the preset
-    if (!mgr.applyPreset(presetId, zoneComposer, actorSystem)) {
+    if (!mgr.applyPreset(presetId, zoneComposer, orchestrator)) {
         sendErrorResponse(request, HttpStatus::INTERNAL_ERROR,
                           ErrorCodes::INTERNAL_ERROR, "Failed to apply preset");
         return;

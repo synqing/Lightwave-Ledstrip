@@ -15,7 +15,7 @@
  *
  * Thread Safety:
  * - init()/deinit() must be called from the same task
- * - captureHop() is single-threaded (called only from AudioActor)
+ * - captureHop() is single-threaded (called only from AudioNode)
  *
  * @author LightwaveOS Team
  * @version 2.1.0

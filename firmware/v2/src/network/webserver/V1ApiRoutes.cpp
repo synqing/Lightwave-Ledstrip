@@ -83,14 +83,14 @@ void V1ApiRoutes::registerRoutes(
         if (!checkAPIKey(request)) return;
         // Need ws client count - get from server
         size_t wsCount = server->getClientCount();
-        handlers::DeviceHandlers::handleStatus(request, ctx.actorSystem, ctx.renderer, ctx.startTime, ctx.apMode, wsCount);
+        handlers::DeviceHandlers::handleStatus(request, ctx.orchestrator, ctx.renderer, ctx.startTime, ctx.apMode, wsCount);
     });
 
     // Device Info - GET /api/v1/device/info
     registry.onGet("/api/v1/device/info", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::DeviceHandlers::handleInfo(request, ctx.actorSystem, ctx.renderer);
+        handlers::DeviceHandlers::handleInfo(request, ctx.orchestrator, ctx.renderer);
     });
 
 #if FEATURE_MULTI_DEVICE
@@ -171,7 +171,7 @@ void V1ApiRoutes::registerRoutes(
         [ctx, checkRateLimit, checkAPIKey, broadcastStatus, server](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
-            handlers::EffectHandlers::handleSet(request, data, len, ctx.actorSystem, server->getCachedRendererState(), broadcastStatus);
+            handlers::EffectHandlers::handleSet(request, data, len, ctx.orchestrator, server->getCachedRendererState(), broadcastStatus);
         }
     );
 
@@ -182,7 +182,7 @@ void V1ApiRoutes::registerRoutes(
         [ctx, checkRateLimit, checkAPIKey, broadcastStatus, server](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
-            handlers::EffectHandlers::handleSet(request, data, len, ctx.actorSystem, server->getCachedRendererState(), broadcastStatus);
+            handlers::EffectHandlers::handleSet(request, data, len, ctx.orchestrator, server->getCachedRendererState(), broadcastStatus);
         }
     );
 
@@ -200,7 +200,7 @@ void V1ApiRoutes::registerRoutes(
         [ctx, checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
-            handlers::ParameterHandlers::handleSet(request, data, len, ctx.actorSystem, broadcastStatus);
+            handlers::ParameterHandlers::handleSet(request, data, len, ctx.orchestrator, broadcastStatus);
         }
     );
 
@@ -211,7 +211,7 @@ void V1ApiRoutes::registerRoutes(
         [ctx, checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
-            handlers::ParameterHandlers::handleSet(request, data, len, ctx.actorSystem, broadcastStatus);
+            handlers::ParameterHandlers::handleSet(request, data, len, ctx.orchestrator, broadcastStatus);
         }
     );
 
@@ -219,7 +219,7 @@ void V1ApiRoutes::registerRoutes(
     registry.onGet("/api/v1/audio/parameters", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::AudioHandlers::handleParametersGet(request, ctx.actorSystem, ctx.renderer);
+        handlers::AudioHandlers::handleParametersGet(request, ctx.orchestrator, ctx.renderer);
     });
 
     registry.onPost("/api/v1/audio/parameters",
@@ -228,7 +228,7 @@ void V1ApiRoutes::registerRoutes(
         [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
-            handlers::AudioHandlers::handleParametersSet(request, data, len, ctx.actorSystem, ctx.renderer);
+            handlers::AudioHandlers::handleParametersSet(request, data, len, ctx.orchestrator, ctx.renderer);
         }
     );
 
@@ -238,7 +238,7 @@ void V1ApiRoutes::registerRoutes(
         [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
-            handlers::AudioHandlers::handleParametersSet(request, data, len, ctx.actorSystem, ctx.renderer);
+            handlers::AudioHandlers::handleParametersSet(request, data, len, ctx.orchestrator, ctx.renderer);
         }
     );
 
@@ -248,20 +248,20 @@ void V1ApiRoutes::registerRoutes(
         [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
-            handlers::AudioHandlers::handleControl(request, data, len, ctx.actorSystem);
+            handlers::AudioHandlers::handleControl(request, data, len, ctx.orchestrator);
         }
     );
 
     registry.onGet("/api/v1/audio/state", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::AudioHandlers::handleStateGet(request, ctx.actorSystem);
+        handlers::AudioHandlers::handleStateGet(request, ctx.orchestrator);
     });
 
     registry.onGet("/api/v1/audio/tempo", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::AudioHandlers::handleTempoGet(request, ctx.actorSystem);
+        handlers::AudioHandlers::handleTempoGet(request, ctx.orchestrator);
     });
 
     registry.onGet("/api/v1/audio/presets", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
@@ -276,7 +276,7 @@ void V1ApiRoutes::registerRoutes(
         [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
-            handlers::AudioHandlers::handlePresetSave(request, data, len, ctx.actorSystem, ctx.renderer);
+            handlers::AudioHandlers::handlePresetSave(request, data, len, ctx.orchestrator, ctx.renderer);
         }
     );
 
@@ -301,7 +301,7 @@ void V1ApiRoutes::registerRoutes(
             return;
         }
         uint8_t id = request->getParam("id")->value().toInt();
-        handlers::AudioHandlers::handlePresetApply(request, id, ctx.actorSystem, ctx.renderer);
+        handlers::AudioHandlers::handlePresetApply(request, id, ctx.orchestrator, ctx.renderer);
     });
 
     registry.onDelete("/api/v1/audio/presets/delete", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
@@ -415,7 +415,7 @@ void V1ApiRoutes::registerRoutes(
     registry.onGet("/api/v1/audio/zone-agc", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::AudioHandlers::handleZoneAGCGet(request, ctx.actorSystem);
+        handlers::AudioHandlers::handleZoneAGCGet(request, ctx.orchestrator);
     });
 
     registry.onPost("/api/v1/audio/zone-agc",
@@ -424,7 +424,7 @@ void V1ApiRoutes::registerRoutes(
         [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
-            handlers::AudioHandlers::handleZoneAGCSet(request, data, len, ctx.actorSystem);
+            handlers::AudioHandlers::handleZoneAGCSet(request, data, len, ctx.orchestrator);
         }
     );
 
@@ -432,20 +432,20 @@ void V1ApiRoutes::registerRoutes(
     registry.onGet("/api/v1/audio/spike-detection", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::AudioHandlers::handleSpikeDetectionGet(request, ctx.actorSystem);
+        handlers::AudioHandlers::handleSpikeDetectionGet(request, ctx.orchestrator);
     });
 
     registry.onPost("/api/v1/audio/spike-detection/reset", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::AudioHandlers::handleSpikeDetectionReset(request, ctx.actorSystem);
+        handlers::AudioHandlers::handleSpikeDetectionReset(request, ctx.orchestrator);
     });
 
     // Calibration routes
     registry.onGet("/api/v1/audio/calibrate", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::AudioHandlers::handleCalibrateStatus(request, ctx.actorSystem);
+        handlers::AudioHandlers::handleCalibrateStatus(request, ctx.orchestrator);
     });
 
     registry.onPost("/api/v1/audio/calibrate/start",
@@ -454,20 +454,20 @@ void V1ApiRoutes::registerRoutes(
         [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
-            handlers::AudioHandlers::handleCalibrateStart(request, data, len, ctx.actorSystem);
+            handlers::AudioHandlers::handleCalibrateStart(request, data, len, ctx.orchestrator);
         }
     );
 
     registry.onPost("/api/v1/audio/calibrate/cancel", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::AudioHandlers::handleCalibrateCancel(request, ctx.actorSystem);
+        handlers::AudioHandlers::handleCalibrateCancel(request, ctx.orchestrator);
     });
 
     registry.onPost("/api/v1/audio/calibrate/apply", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::AudioHandlers::handleCalibrateApply(request, ctx.actorSystem);
+        handlers::AudioHandlers::handleCalibrateApply(request, ctx.orchestrator);
     });
 
 #if FEATURE_AUDIO_BENCHMARK
@@ -475,25 +475,25 @@ void V1ApiRoutes::registerRoutes(
     registry.onGet("/api/v1/audio/benchmark", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::AudioHandlers::handleBenchmarkGet(request, ctx.actorSystem, ctx);
+        handlers::AudioHandlers::handleBenchmarkGet(request, ctx.orchestrator, ctx);
     });
 
     registry.onPost("/api/v1/audio/benchmark/start", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::AudioHandlers::handleBenchmarkStart(request, ctx.actorSystem, ctx);
+        handlers::AudioHandlers::handleBenchmarkStart(request, ctx.orchestrator, ctx);
     });
 
     registry.onPost("/api/v1/audio/benchmark/stop", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::AudioHandlers::handleBenchmarkStop(request, ctx.actorSystem, ctx);
+        handlers::AudioHandlers::handleBenchmarkStop(request, ctx.orchestrator, ctx);
     });
 
     registry.onGet("/api/v1/audio/benchmark/history", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::AudioHandlers::handleBenchmarkHistory(request, ctx.actorSystem);
+        handlers::AudioHandlers::handleBenchmarkHistory(request, ctx.orchestrator);
     });
 #endif
 
@@ -541,7 +541,7 @@ void V1ApiRoutes::registerRoutes(
         [ctx, checkRateLimit, checkAPIKey, broadcastStatus, server](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
-            handlers::TransitionHandlers::handleTrigger(request, data, len, ctx.actorSystem, server->getCachedRendererState(), broadcastStatus);
+            handlers::TransitionHandlers::handleTrigger(request, data, len, ctx.orchestrator, server->getCachedRendererState(), broadcastStatus);
         }
     );
 
@@ -568,7 +568,7 @@ void V1ApiRoutes::registerRoutes(
         [ctx, checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
-            handlers::BatchHandlers::handleExecute(request, data, len, ctx.actorSystem, ctx.executeBatchAction, broadcastStatus);
+            handlers::BatchHandlers::handleExecute(request, data, len, ctx.orchestrator, ctx.executeBatchAction, broadcastStatus);
         }
     );
 
@@ -591,7 +591,7 @@ void V1ApiRoutes::registerRoutes(
         [ctx, checkRateLimit, checkAPIKey, broadcastStatus](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
-            handlers::PaletteHandlers::handleSet(request, data, len, ctx.actorSystem, broadcastStatus);
+            handlers::PaletteHandlers::handleSet(request, data, len, ctx.orchestrator, broadcastStatus);
         }
     );
 
@@ -628,7 +628,7 @@ void V1ApiRoutes::registerRoutes(
     registry.onGet("/api/v1/zones", [ctx, checkRateLimit, checkAPIKey, server](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::ZoneHandlers::handleList(request, ctx.actorSystem, server->getCachedRendererState(), ctx.zoneComposer);
+        handlers::ZoneHandlers::handleList(request, ctx.orchestrator, server->getCachedRendererState(), ctx.zoneComposer);
     });
 
     registry.onPost("/api/v1/zones/layout",
@@ -645,7 +645,7 @@ void V1ApiRoutes::registerRoutes(
     registry.onGetRegex("^\\/api\\/v1\\/zones\\/([0-3])$", [ctx, server, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::ZoneHandlers::handleGet(request, ctx.actorSystem, server->getCachedRendererState(), ctx.zoneComposer);
+        handlers::ZoneHandlers::handleGet(request, ctx.orchestrator, server->getCachedRendererState(), ctx.zoneComposer);
     });
 
     // Zone regex routes - POST /api/v1/zones/:id/effect
@@ -655,7 +655,7 @@ void V1ApiRoutes::registerRoutes(
         [ctx, server, checkRateLimit, checkAPIKey, broadcastZoneState](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
-            handlers::ZoneHandlers::handleSetEffect(request, data, len, ctx.actorSystem, server->getCachedRendererState(), ctx.zoneComposer, broadcastZoneState);
+            handlers::ZoneHandlers::handleSetEffect(request, data, len, ctx.orchestrator, server->getCachedRendererState(), ctx.zoneComposer, broadcastZoneState);
         }
     );
 
@@ -984,7 +984,7 @@ void V1ApiRoutes::registerRoutes(
             return;
         }
         uint8_t id = request->getParam("id")->value().toInt();
-        handlers::EffectPresetHandlers::handleApply(request, id, ctx.actorSystem, ctx.renderer);
+        handlers::EffectPresetHandlers::handleApply(request, id, ctx.orchestrator, ctx.renderer);
     });
 
     // Delete preset by ID
@@ -1042,7 +1042,7 @@ void V1ApiRoutes::registerRoutes(
             return;
         }
         uint8_t id = request->getParam("id")->value().toInt();
-        handlers::ZonePresetHandlers::handleApply(request, id, ctx.actorSystem, ctx.zoneComposer, broadcastZoneState);
+        handlers::ZonePresetHandlers::handleApply(request, id, ctx.orchestrator, ctx.zoneComposer, broadcastZoneState);
     });
 
     // Delete zone preset by ID

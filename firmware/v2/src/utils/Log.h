@@ -31,8 +31,8 @@
 // ============================================================================
 // These match the exact colors already used throughout the codebase:
 // - Green: Effect names (main.cpp, RendererActor.cpp)
-// - Yellow: Hardware/DMA diagnostics, audio levels (AudioCapture.cpp, AudioActor.cpp)
-// - Cyan: Audio spectral analysis (AudioActor.cpp)
+// - Yellow: Hardware/DMA diagnostics, audio levels (AudioCapture.cpp, AudioNode.cpp)
+// - Cyan: Audio spectral analysis (AudioNode.cpp)
 
 #define LW_ANSI_RESET      "\033[0m"
 #define LW_ANSI_BOLD       "\033[1m"

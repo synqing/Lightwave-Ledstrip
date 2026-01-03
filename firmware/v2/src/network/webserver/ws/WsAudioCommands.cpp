@@ -9,8 +9,8 @@
 #include "../../ApiResponse.h"
 #include "../../../audio/AudioTuning.h"
 #include "../../../config/audio_config.h"
-#include "../../../core/actors/ActorSystem.h"
-#include "../../../core/actors/RendererActor.h"
+#include "../../../core/actors/NodeOrchestrator.h"
+#include "../../../core/actors/RendererNode.h"
 #include "../../../audio/contracts/ControlBus.h"
 #include "../../../audio/contracts/AudioTime.h"
 #include "../AudioStreamBroadcaster.h"
@@ -29,7 +29,7 @@ using namespace AudioStreamConfig;
 
 static void handleAudioParametersGet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     const char* requestId = doc["requestId"] | "";
-    auto* audio = ctx.actorSystem.getAudio();
+    auto* audio = ctx.orchestrator.getAudio();
     if (!audio) {
         client->text(buildWsError(ErrorCodes::SYSTEM_NOT_READY, "Audio system not available", requestId));
         return;
@@ -107,7 +107,7 @@ static void handleAudioParametersGet(AsyncWebSocketClient* client, JsonDocument&
 
 static void handleAudioParametersSet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     const char* requestId = doc["requestId"] | "";
-    auto* audio = ctx.actorSystem.getAudio();
+    auto* audio = ctx.orchestrator.getAudio();
     if (!audio) {
         client->text(buildWsError(ErrorCodes::SYSTEM_NOT_READY, "Audio system not available", requestId));
         return;
@@ -265,7 +265,7 @@ static void handleAudioUnsubscribe(AsyncWebSocketClient* client, JsonDocument& d
 
 static void handleAudioZoneAgcGet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     const char* requestId = doc["requestId"] | "";
-    auto* audio = ctx.actorSystem.getAudio();
+    auto* audio = ctx.orchestrator.getAudio();
     if (!audio) {
         client->text(buildWsError(ErrorCodes::AUDIO_UNAVAILABLE, "Audio unavailable", requestId));
         return;
@@ -288,7 +288,7 @@ static void handleAudioZoneAgcGet(AsyncWebSocketClient* client, JsonDocument& do
 
 static void handleAudioZoneAgcSet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     const char* requestId = doc["requestId"] | "";
-    auto* audio = ctx.actorSystem.getAudio();
+    auto* audio = ctx.orchestrator.getAudio();
     if (!audio) {
         client->text(buildWsError(ErrorCodes::AUDIO_UNAVAILABLE, "Audio unavailable", requestId));
         return;
@@ -320,7 +320,7 @@ static void handleAudioZoneAgcSet(AsyncWebSocketClient* client, JsonDocument& do
 
 static void handleAudioSpikeDetectionGet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     const char* requestId = doc["requestId"] | "";
-    auto* audio = ctx.actorSystem.getAudio();
+    auto* audio = ctx.orchestrator.getAudio();
     if (!audio) {
         client->text(buildWsError(ErrorCodes::AUDIO_UNAVAILABLE, "Audio unavailable", requestId));
         return;
@@ -344,7 +344,7 @@ static void handleAudioSpikeDetectionGet(AsyncWebSocketClient* client, JsonDocum
 
 static void handleAudioSpikeDetectionReset(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     const char* requestId = doc["requestId"] | "";
-    auto* audio = ctx.actorSystem.getAudio();
+    auto* audio = ctx.orchestrator.getAudio();
     if (!audio) {
         client->text(buildWsError(ErrorCodes::AUDIO_UNAVAILABLE, "Audio unavailable", requestId));
         return;

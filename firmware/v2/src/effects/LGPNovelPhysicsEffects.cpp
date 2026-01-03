@@ -14,7 +14,7 @@
 namespace lightwaveos {
 namespace effects {
 
-using namespace lightwaveos::actors;
+using namespace lightwaveos::nodes;
 
 // NOTE: Effects migrated to IEffect classes; legacy stubs kept for reference.
 
@@ -55,7 +55,7 @@ void effectRileyDissonance(RenderContext& ctx) {
 
 // ==================== EFFECT REGISTRATION ====================
 
-uint8_t registerLGPNovelPhysicsEffects(RendererActor* renderer, uint8_t startId) {
+uint8_t registerLGPNovelPhysicsEffects(RendererNode* renderer, uint8_t startId) {
     if (!renderer) return 0;
 
     uint8_t count = 0;

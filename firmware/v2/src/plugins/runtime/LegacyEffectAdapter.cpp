@@ -11,7 +11,7 @@ namespace lightwaveos {
 namespace plugins {
 namespace runtime {
 
-LegacyEffectAdapter::LegacyEffectAdapter(const char* name, actors::EffectRenderFn fn)
+LegacyEffectAdapter::LegacyEffectAdapter(const char* name, nodes::EffectRenderFn fn)
     : m_name(name)
     , m_fn(fn)
 {

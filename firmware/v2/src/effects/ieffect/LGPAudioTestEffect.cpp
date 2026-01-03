@@ -40,7 +40,7 @@ void LGPAudioTestEffect::render(plugins::EffectContext& ctx) {
     float bands[8] = {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f};
 
     if (ctx.audio.available) {
-        // Real audio data from AudioActor
+        // Real audio data from AudioNode
         rms = ctx.audio.rms();
         beatPhase = ctx.audio.beatPhase();
         onBeat = ctx.audio.isOnBeat();

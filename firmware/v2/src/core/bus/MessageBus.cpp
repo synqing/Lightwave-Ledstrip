@@ -74,9 +74,9 @@ MessageBus::~MessageBus()
 // Subscription Management
 // ============================================================================
 
-bool MessageBus::subscribe(MessageType type, Actor* actor)
+bool MessageBus::subscribe(MessageType type, Node* node)
 {
-    if (actor == nullptr) {
+    if (node == nullptr) {
         return false;
     }
 
@@ -93,23 +93,23 @@ bool MessageBus::subscribe(MessageType type, Actor* actor)
     // Find or create entry for this type
     SubscriptionEntry* entry = findOrCreateEntry(type);
     if (entry != nullptr) {
-        // Check if actor is already subscribed
+        // Check if node is already subscribed
         bool alreadySubscribed = false;
         for (uint8_t i = 0; i < entry->count; i++) {
-            if (entry->subscribers[i] == actor) {
+            if (entry->subscribers[i] == node) {
                 alreadySubscribed = true;
                 break;
             }
         }
 
         if (!alreadySubscribed && entry->count < MAX_SUBSCRIBERS_PER_TYPE) {
-            entry->subscribers[entry->count] = actor;
+            entry->subscribers[entry->count] = node;
             entry->count++;
             result = true;
 
 #ifndef NATIVE_BUILD
-            ESP_LOGD(TAG, "Actor '%s' subscribed to type 0x%02X (now %d subs)",
-                     actor->getName(), static_cast<uint8_t>(type), entry->count);
+            ESP_LOGD(TAG, "Node '%s' subscribed to type 0x%02X (now %d subs)",
+                     node->getName(), static_cast<uint8_t>(type), entry->count);
 #endif
         }
     }
@@ -118,9 +118,9 @@ bool MessageBus::subscribe(MessageType type, Actor* actor)
     return result;
 }
 
-bool MessageBus::unsubscribe(MessageType type, Actor* actor)
+bool MessageBus::unsubscribe(MessageType type, Node* node)
 {
-    if (actor == nullptr) {
+    if (node == nullptr) {
         return false;
     }
 
@@ -133,9 +133,9 @@ bool MessageBus::unsubscribe(MessageType type, Actor* actor)
 
     SubscriptionEntry* entry = findEntry(type);
     if (entry != nullptr) {
-        // Find and remove the actor
+        // Find and remove the node
         for (uint8_t i = 0; i < entry->count; i++) {
-            if (entry->subscribers[i] == actor) {
+            if (entry->subscribers[i] == node) {
                 // Shift remaining subscribers down
                 for (uint8_t j = i; j < entry->count - 1; j++) {
                     entry->subscribers[j] = entry->subscribers[j + 1];
@@ -150,8 +150,8 @@ bool MessageBus::unsubscribe(MessageType type, Actor* actor)
                 }
 
 #ifndef NATIVE_BUILD
-                ESP_LOGD(TAG, "Actor '%s' unsubscribed from type 0x%02X",
-                         actor->getName(), static_cast<uint8_t>(type));
+                ESP_LOGD(TAG, "Node '%s' unsubscribed from type 0x%02X",
+                         node->getName(), static_cast<uint8_t>(type));
 #endif
                 break;
             }
@@ -162,9 +162,9 @@ bool MessageBus::unsubscribe(MessageType type, Actor* actor)
     return result;
 }
 
-void MessageBus::unsubscribeAll(Actor* actor)
+void MessageBus::unsubscribeAll(Node* node)
 {
-    if (actor == nullptr) {
+    if (node == nullptr) {
         return;
     }
 
@@ -173,11 +173,11 @@ void MessageBus::unsubscribeAll(Actor* actor)
         return;
     }
 
-    // Remove actor from all entries
+    // Remove node from all entries
     for (uint8_t e = 0; e < MAX_TRACKED_TYPES; e++) {
         if (m_entries[e].active) {
             for (uint8_t i = 0; i < m_entries[e].count; i++) {
-                if (m_entries[e].subscribers[i] == actor) {
+                if (m_entries[e].subscribers[i] == node) {
                     // Shift remaining subscribers down
                     for (uint8_t j = i; j < m_entries[e].count - 1; j++) {
                         m_entries[e].subscribers[j] = m_entries[e].subscribers[j + 1];
@@ -189,14 +189,14 @@ void MessageBus::unsubscribeAll(Actor* actor)
                     if (m_entries[e].count == 0) {
                         m_entries[e].active = false;
                     }
-                    break; // Actor can only appear once per entry
+                    break; // Node can only appear once per entry
                 }
             }
         }
     }
 
 #ifndef NATIVE_BUILD
-    ESP_LOGD(TAG, "Actor '%s' unsubscribed from all types", actor->getName());
+    ESP_LOGD(TAG, "Node '%s' unsubscribed from all types", node->getName());
 #endif
 
     xSemaphoreGive(m_mutex);
@@ -234,16 +234,16 @@ uint8_t MessageBus::publish(const Message& msg, TickType_t timeout)
     uint8_t count = entry->count; // Snapshot count
 
     for (uint8_t i = 0; i < count && i < MAX_SUBSCRIBERS_PER_TYPE; i++) {
-        Actor* actor = entry->subscribers[i];
-        if (actor != nullptr && actor->isRunning()) {
-            if (actor->send(msg, timeout)) {
+        Node* node = entry->subscribers[i];
+        if (node != nullptr && node->isRunning()) {
+            if (node->send(msg, timeout)) {
                 delivered++;
                 m_totalDelivered++;
             } else {
                 m_failedDeliveries++;
 #ifndef NATIVE_BUILD
                 ESP_LOGD(TAG, "Failed to deliver to '%s' (queue full)",
-                         actor->getName());
+                         node->getName());
 #endif
             }
         }
@@ -274,9 +274,9 @@ uint8_t MessageBus::publishFromISR(const Message& msg)
     uint8_t count = entry->count;
 
     for (uint8_t i = 0; i < count && i < MAX_SUBSCRIBERS_PER_TYPE; i++) {
-        Actor* actor = entry->subscribers[i];
-        if (actor != nullptr && actor->isRunning()) {
-            if (actor->sendFromISR(msg)) {
+        Node* node = entry->subscribers[i];
+        if (node != nullptr && node->isRunning()) {
+            if (node->sendFromISR(msg)) {
                 delivered++;
                 m_totalDelivered++;
             } else {

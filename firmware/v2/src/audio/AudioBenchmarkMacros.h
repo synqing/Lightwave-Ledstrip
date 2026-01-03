@@ -6,9 +6,9 @@
  * for zero runtime cost. When enabled, they provide microsecond-precision
  * timing with ~3.2us overhead per processHop() call.
  *
- * Usage pattern in AudioActor::processHop():
+ * Usage pattern in AudioNode::processHop():
  * @code
- *   void AudioActor::processHop() {
+ *   void AudioNode::processHop() {
  *       BENCH_DECL_TIMING();
  *       BENCH_START_FRAME();
  *

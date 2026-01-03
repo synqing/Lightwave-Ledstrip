@@ -24,7 +24,7 @@
 
 #pragma once
 
-#include "../actors/Actor.h"
+#include "../actors/Node.h"
 #include <cstdint>
 #include <cstring>
 
@@ -34,9 +34,9 @@ namespace lightwaveos {
 namespace bus {
 
 // Forward declaration
-using actors::Actor;
-using actors::Message;
-using actors::MessageType;
+using nodes::Node;
+using nodes::Message;
+using nodes::MessageType;
 
 // ============================================================================
 // Configuration
@@ -67,7 +67,7 @@ constexpr uint8_t MAX_TRACKED_TYPES = 32;
  */
 struct SubscriptionEntry {
     MessageType type;                               // Message type to match
-    Actor* subscribers[MAX_SUBSCRIBERS_PER_TYPE];   // Subscribed actors
+    Node* subscribers[MAX_SUBSCRIBERS_PER_TYPE];   // Subscribed nodes
     uint8_t count;                                  // Number of subscribers
     bool active;                                    // Entry is in use
 
@@ -113,35 +113,35 @@ public:
     // ========================================================================
 
     /**
-     * @brief Subscribe an Actor to a message type
+     * @brief Subscribe a Node to a message type
      *
      * Thread-safe - protected by mutex.
      *
      * @param type Message type to subscribe to
-     * @param actor Actor to receive messages
+     * @param node Node to receive messages
      * @return true if subscription was added
      */
-    bool subscribe(MessageType type, Actor* actor);
+    bool subscribe(MessageType type, Node* node);
 
     /**
-     * @brief Unsubscribe an Actor from a message type
+     * @brief Unsubscribe a Node from a message type
      *
      * Thread-safe - protected by mutex.
      *
      * @param type Message type to unsubscribe from
-     * @param actor Actor to remove
+     * @param node Node to remove
      * @return true if subscription was removed
      */
-    bool unsubscribe(MessageType type, Actor* actor);
+    bool unsubscribe(MessageType type, Node* node);
 
     /**
-     * @brief Unsubscribe an Actor from all message types
+     * @brief Unsubscribe a Node from all message types
      *
-     * Call this when an Actor is being destroyed.
+     * Call this when a Node is being destroyed.
      *
-     * @param actor Actor to remove from all subscriptions
+     * @param node Node to remove from all subscriptions
      */
-    void unsubscribeAll(Actor* actor);
+    void unsubscribeAll(Node* node);
 
     // ========================================================================
     // Publishing

@@ -168,7 +168,7 @@ ZoneComposer::ZoneComposer()
 
 // ==================== Initialization ====================
 
-bool ZoneComposer::init(RendererActor* renderer) {
+bool ZoneComposer::init(RendererNode* renderer) {
     if (!renderer) {
         Serial.println("[ZoneComposer] ERROR: Null renderer");
         return false;

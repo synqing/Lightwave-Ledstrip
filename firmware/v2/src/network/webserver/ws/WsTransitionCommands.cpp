@@ -7,7 +7,7 @@
 #include "../WsCommandRouter.h"
 #include "../WebServerContext.h"
 #include "../../ApiResponse.h"
-#include "../../../core/actors/RendererActor.h"
+#include "../../../core/actors/RendererNode.h"
 #include "../../../effects/transitions/TransitionTypes.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>

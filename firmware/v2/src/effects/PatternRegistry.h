@@ -240,7 +240,7 @@ bool shouldSkipColorCorrection(uint8_t effectId);
 
 /**
  * @brief Check if an effect is audio-reactive
- * @param effectId Effect ID to check (effect ID space; see RendererActor::MAX_EFFECTS)
+ * @param effectId Effect ID to check (effect ID space; see RendererNode::MAX_EFFECTS)
  * @return true if effect actively uses ctx.audio features
  *
  * Audio-reactive effects respond to real-time audio input via:

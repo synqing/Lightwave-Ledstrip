@@ -10,8 +10,8 @@
 #include <functional>
 
 namespace lightwaveos {
-namespace actors {
-class ActorSystem;
+namespace nodes {
+class NodeOrchestrator;
 }
 }
 
@@ -24,7 +24,7 @@ class BatchHandlers {
 public:
     static void handleExecute(AsyncWebServerRequest* request,
                                 uint8_t* data, size_t len,
-                                lightwaveos::actors::ActorSystem& actorSystem,
+                                lightwaveos::nodes::NodeOrchestrator& orchestrator,
                                 std::function<bool(const String&, JsonVariant)> executeBatchAction,
                                 std::function<void()> broadcastStatus);
 };

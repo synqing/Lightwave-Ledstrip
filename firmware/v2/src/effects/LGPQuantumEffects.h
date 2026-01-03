@@ -9,12 +9,12 @@
 
 #pragma once
 
-#include "../core/actors/RendererActor.h"
+#include "../core/actors/RendererNode.h"
 
 namespace lightwaveos {
 namespace effects {
 
-using namespace lightwaveos::actors;
+using namespace lightwaveos::nodes;
 
 // ==================== LGP Quantum Effects ====================
 
@@ -32,12 +32,12 @@ void effectEvanescentSkin(RenderContext& ctx);
 // ==================== Effect Registration ====================
 
 /**
- * @brief Register all LGP Quantum effects with RendererActor
- * @param renderer Pointer to RendererActor
+ * @brief Register all LGP Quantum effects with RendererNode
+ * @param renderer Pointer to RendererNode
  * @param startId Starting effect ID
  * @return Number of effects registered
  */
-uint8_t registerLGPQuantumEffects(RendererActor* renderer, uint8_t startId);
+uint8_t registerLGPQuantumEffects(RendererNode* renderer, uint8_t startId);
 
 } // namespace effects
 } // namespace lightwaveos

@@ -4,11 +4,11 @@
  */
 
 #include "DeviceHandlers.h"
-#include "core/actors/ActorSystem.h"
-#include "core/actors/RendererActor.h"
+#include "core/actors/NodeOrchestrator.h"
+#include "core/actors/RendererNode.h"
 #include <WiFi.h>
 
-using namespace lightwaveos::actors;
+using namespace lightwaveos::nodes;
 
 namespace lightwaveos {
 namespace network {
@@ -25,10 +25,10 @@ void DeviceHandlers::registerRoutes(HttpRouteRegistry& registry,
 }
 
 void DeviceHandlers::handleStatus(AsyncWebServerRequest* request, 
-                                    ActorSystem& actors, 
-                                    RendererActor* renderer, 
+                                    NodeOrchestrator& orchestrator, 
+                                    RendererNode* renderer, 
                                     uint32_t startTime, bool apMode, size_t wsClientCount) {
-    if (!actors.isRunning()) {
+    if (!orchestrator.isRunning()) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::SYSTEM_NOT_READY, "System not ready");
         return;
@@ -60,9 +60,9 @@ void DeviceHandlers::handleStatus(AsyncWebServerRequest* request,
 }
 
 void DeviceHandlers::handleInfo(AsyncWebServerRequest* request, 
-                                  ActorSystem& actors, 
-                                  RendererActor* renderer) {
-    (void)actors;
+                                  NodeOrchestrator& orchestrator, 
+                                  RendererNode* renderer) {
+    (void)orchestrator;
     (void)renderer;
     sendSuccessResponse(request, [](JsonObject& data) {
         data["firmware"] = "2.0.0";

@@ -11,9 +11,9 @@
 #include "../../WebServer.h"  // For CachedRendererState
 
 namespace lightwaveos {
-namespace actors {
-class ActorSystem;
-class RendererActor;
+namespace nodes {
+class NodeOrchestrator;
+class RendererNode;
 }
 }
 
@@ -28,12 +28,12 @@ public:
     
     static void handleTrigger(AsyncWebServerRequest* request,
                                uint8_t* data, size_t len,
-                               lightwaveos::actors::ActorSystem& actors,
+                               lightwaveos::nodes::NodeOrchestrator& orchestrator,
                                const lightwaveos::network::WebServer::CachedRendererState& cachedState,
                                std::function<void()> broadcastStatus);
     
     static void handleConfigGet(AsyncWebServerRequest* request,
-                                 lightwaveos::actors::RendererActor* renderer);
+                                 lightwaveos::nodes::RendererNode* renderer);
     
     static void handleConfigSet(AsyncWebServerRequest* request,
                                  uint8_t* data, size_t len);

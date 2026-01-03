@@ -90,7 +90,7 @@ constexpr size_t DMA_BUFFER_SAMPLES = 512;
  *   1. Shift >> 14 to extract 18-bit value (validate via DMA dbg pk>>N output)
  *   2. Clip to ±131072 (18-bit signed range)
  *   3. Scale to 16-bit (>> 2)
- *   4. DC removal handled in AudioActor
+ *   4. DC removal handled in AudioNode
  */
 constexpr uint8_t I2S_BITS_PER_SAMPLE = 32;   // 32-bit slots for SPH0645
 
@@ -131,7 +131,7 @@ constexpr float STALENESS_THRESHOLD_MS = 100.0f;  // 100ms = 6 frames @ 62.5 Hz
 // ============================================================================
 
 /**
- * AudioActor runs on Core 0 at priority 4 (below Renderer at 5).
+ * AudioNode runs on Core 0 at priority 4 (below Renderer at 5).
  * 16ms tick interval matches hop size for precise timing.
  */
 constexpr uint8_t AUDIO_ACTOR_PRIORITY = 4;

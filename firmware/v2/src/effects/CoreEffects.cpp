@@ -113,7 +113,7 @@
 namespace lightwaveos {
 namespace effects {
 
-using namespace lightwaveos::actors;
+using namespace lightwaveos::nodes;
 
 // ==================== Static State for Stateful Effects ====================
 // Note: In v2, effect state should eventually move to EffectContext
@@ -246,7 +246,7 @@ void effectPulse(RenderContext& ctx) {
 
 // ==================== EFFECT REGISTRATION ====================
 
-uint8_t registerCoreEffects(RendererActor* renderer) {
+uint8_t registerCoreEffects(RendererNode* renderer) {
     if (!renderer) return 0;
 
     uint8_t count = 0;
@@ -282,7 +282,7 @@ uint8_t registerCoreEffects(RendererActor* renderer) {
     return count;
 }
 
-uint8_t registerAllEffects(RendererActor* renderer) {
+uint8_t registerAllEffects(RendererNode* renderer) {
     if (!renderer) return 0;
 
     uint8_t total = 0;

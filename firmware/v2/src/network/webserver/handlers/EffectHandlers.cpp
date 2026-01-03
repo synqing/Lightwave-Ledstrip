@@ -1,6 +1,6 @@
 #include "EffectHandlers.h"
-#include "../../../core/actors/ActorSystem.h"
-#include "../../../core/actors/RendererActor.h"
+#include "../../../core/actors/NodeOrchestrator.h"
+#include "../../../core/actors/RendererNode.h"
 #include "../../../effects/PatternRegistry.h"
 #include "../../../plugins/api/IEffect.h"
 #include "../../RequestValidator.h"
@@ -8,7 +8,7 @@
 #include "../../WebServer.h"  // For CachedRendererState
 #include <cstring>
 
-using namespace lightwaveos::actors;
+using namespace lightwaveos::nodes;
 using namespace lightwaveos::effects;
 using lightwaveos::network::WebServer;
 
@@ -22,7 +22,7 @@ void EffectHandlers::registerRoutes(HttpRouteRegistry& registry) {
     (void)registry;
 }
 
-void EffectHandlers::handleList(AsyncWebServerRequest* request, RendererActor* renderer) {
+void EffectHandlers::handleList(AsyncWebServerRequest* request, RendererNode* renderer) {
     if (!renderer) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::SYSTEM_NOT_READY, "Renderer not available");
@@ -205,7 +205,7 @@ void EffectHandlers::handleList(AsyncWebServerRequest* request, RendererActor* r
     }, 4096);
 }
 
-void EffectHandlers::handleCurrent(AsyncWebServerRequest* request, RendererActor* renderer) {
+void EffectHandlers::handleCurrent(AsyncWebServerRequest* request, RendererNode* renderer) {
     if (!renderer) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::SYSTEM_NOT_READY, "Renderer not available");
@@ -240,7 +240,7 @@ void EffectHandlers::handleCurrent(AsyncWebServerRequest* request, RendererActor
     });
 }
 
-void EffectHandlers::handleParametersGet(AsyncWebServerRequest* request, RendererActor* renderer) {
+void EffectHandlers::handleParametersGet(AsyncWebServerRequest* request, RendererNode* renderer) {
     if (!renderer) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::SYSTEM_NOT_READY, "Renderer not available");
@@ -285,7 +285,7 @@ void EffectHandlers::handleParametersGet(AsyncWebServerRequest* request, Rendere
     });
 }
 
-void EffectHandlers::handleParametersSet(AsyncWebServerRequest* request, uint8_t* data, size_t len, RendererActor* renderer) {
+void EffectHandlers::handleParametersSet(AsyncWebServerRequest* request, uint8_t* data, size_t len, RendererNode* renderer) {
     if (!renderer) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::SYSTEM_NOT_READY, "Renderer not available");
@@ -362,7 +362,7 @@ void EffectHandlers::handleParametersSet(AsyncWebServerRequest* request, uint8_t
     });
 }
 
-void EffectHandlers::handleSet(AsyncWebServerRequest* request, uint8_t* data, size_t len, ActorSystem& actors, const WebServer::CachedRendererState& cachedState, std::function<void()> broadcastStatus) {
+void EffectHandlers::handleSet(AsyncWebServerRequest* request, uint8_t* data, size_t len, NodeOrchestrator& orchestrator, const WebServer::CachedRendererState& cachedState, std::function<void()> broadcastStatus) {
     JsonDocument doc;
     VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::SetEffect, request);
 
@@ -382,9 +382,9 @@ void EffectHandlers::handleSet(AsyncWebServerRequest* request, uint8_t* data, si
 
     // SAFE: All state changes go through ActorSystem message queue (thread-safe)
     if (useTransition) {
-        actors.startTransition(effectId, transitionType);
+        orchestrator.startTransition(effectId, transitionType);
     } else {
-        actors.setEffect(effectId);
+        orchestrator.setEffect(effectId);
     }
 
     sendSuccessResponse(request, [effectId, &cachedState](JsonObject& respData) {
@@ -400,7 +400,7 @@ void EffectHandlers::handleSet(AsyncWebServerRequest* request, uint8_t* data, si
     }
 }
 
-void EffectHandlers::handleMetadata(AsyncWebServerRequest* request, RendererActor* renderer) {
+void EffectHandlers::handleMetadata(AsyncWebServerRequest* request, RendererNode* renderer) {
     if (!renderer) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::SYSTEM_NOT_READY, "Renderer not available");

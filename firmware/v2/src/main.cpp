@@ -22,9 +22,9 @@
 #include "utils/Log.h"
 
 #include "config/features.h"
-#include "core/actors/ActorSystem.h"
+#include "core/actors/NodeOrchestrator.h"
 #include "hardware/EncoderManager.h"
-#include "core/actors/RendererActor.h"
+#include "core/actors/RendererNode.h"
 #include "core/persistence/NVSManager.h"
 #include "core/persistence/ZoneConfigManager.h"
 #include "core/persistence/PresetManager.h"
@@ -34,7 +34,7 @@
 #include "effects/transitions/TransitionEngine.h"
 #include "effects/transitions/TransitionTypes.h"
 #include "core/narrative/NarrativeEngine.h"
-#include "core/actors/ShowDirectorActor.h"
+#include "core/actors/ShowNode.h"
 #include "core/shows/BuiltinShows.h"
 #include "plugins/api/IEffect.h"
 #include "core/system/StackMonitor.h"
@@ -42,7 +42,7 @@
 #include "core/system/MemoryLeakDetector.h"
 #include "core/system/ValidationProfiler.h"
 
-// TempoTracker debug included via AudioActor.h
+// TempoTracker debug included via AudioNode.h
 
 #if FEATURE_AUDIO_SYNC
 #include "audio/AudioDebugConfig.h"
@@ -60,7 +60,7 @@ WebServer* webServerInstance = nullptr;
 
 using namespace lightwaveos::persistence;
 
-using namespace lightwaveos::actors;
+using namespace lightwaveos::nodes;
 using namespace lightwaveos::effects;
 using namespace lightwaveos::zones;
 using namespace lightwaveos::transitions;
@@ -73,9 +73,9 @@ ZoneComposer zoneComposer;
 ZoneConfigManager* zoneConfigMgr = nullptr;
 PresetManager* presetMgr = nullptr;
 
-// Global Actor System Access
-ActorSystem& actors = ActorSystem::instance();
-RendererActor* renderer = nullptr;
+// Global Node Orchestrator Access
+NodeOrchestrator& orchestrator = NodeOrchestrator::instance();
+RendererNode* renderer = nullptr;
 
 // Effect count is now dynamic via renderer->getEffectCount()
 // Effect names retrieved via renderer->getEffectName(id)
@@ -94,7 +94,7 @@ void setup() {
     LW_LOGI("LightwaveOS v2 - Actor System + Zones");
     LW_LOGI("==========================================");
 
-    // Initialize Actor System (creates RendererActor)
+    // Initialize Node System (creates RendererNode)
     // Initialize system monitoring (must be before actors start)
     lightwaveos::core::system::StackMonitor::init();
     LW_LOGI("Stack Monitor: INITIALIZED");
@@ -116,13 +116,13 @@ void setup() {
     delay(1000);  // Wait for system to stabilize
     lightwaveos::core::system::MemoryLeakDetector::resetBaseline();
 
-    LW_LOGI("Initializing Actor System...");
-    if (!actors.init()) {
-        LW_LOGE("Actor System init failed!");
+    LW_LOGI("Initializing Node Orchestrator...");
+    if (!orchestrator.init()) {
+        LW_LOGE("Node Orchestrator init failed!");
         while(1) delay(1000);  // Halt
     }
-    renderer = actors.getRenderer();
-    LW_LOGI("Actor System: INITIALIZED");
+    renderer = orchestrator.getRenderer();
+    LW_LOGI("Node Orchestrator: INITIALIZED");
 
     // Register ALL effects (core + LGP) BEFORE starting actors
     LW_LOGI("Registering effects...");
@@ -164,30 +164,30 @@ void setup() {
         }
     }
 
-    // Start all actors (RendererActor runs on Core 1 at 120 FPS)
-    LW_LOGI("Starting Actor System...");
-    if (!actors.start()) {
-        LW_LOGE("Actor System start failed!");
+    // Start all nodes (RendererNode runs on Core 1 at 120 FPS)
+    LW_LOGI("Starting Node Orchestrator...");
+    if (!orchestrator.start()) {
+        LW_LOGE("Node Orchestrator start failed!");
         while(1) delay(1000);  // Halt
     }
-    LW_LOGI("Actor System: RUNNING");
+    LW_LOGI("Node Orchestrator: RUNNING");
 
     // Load or set initial state
     LW_LOGI("Loading system state...");
     uint8_t savedEffect, savedBrightness, savedSpeed, savedPalette;
     if (zoneConfigMgr && zoneConfigMgr->loadSystemState(savedEffect, savedBrightness, savedSpeed, savedPalette)) {
-        actors.setEffect(savedEffect);
-        actors.setBrightness(savedBrightness);
-        actors.setSpeed(savedSpeed);
-        actors.setPalette(savedPalette);
+        orchestrator.setEffect(savedEffect);
+        orchestrator.setBrightness(savedBrightness);
+        orchestrator.setSpeed(savedSpeed);
+        orchestrator.setPalette(savedPalette);
         LW_LOGI("Restored: Effect=%d, Brightness=%d, Speed=%d, Palette=%d",
                 savedEffect, savedBrightness, savedSpeed, savedPalette);
     } else {
         // First boot defaults
-        actors.setEffect(0);       // Fire
-        actors.setBrightness(128); // 50% brightness
-        actors.setSpeed(15);       // Medium speed
-        actors.setPalette(0);      // Party colors
+        orchestrator.setEffect(0);       // Fire
+        orchestrator.setBrightness(128); // 50% brightness
+        orchestrator.setSpeed(15);       // Medium speed
+        orchestrator.setPalette(0);      // Party colors
         LW_LOGI("Using defaults (first boot)");
     }
 
@@ -231,7 +231,7 @@ void setup() {
     LW_LOGI("Starting Web Server...");
 
     // Instantiate WebServer with dependencies
-    webServerInstance = new WebServer(actors, renderer);
+    webServerInstance = new WebServer(orchestrator, renderer);
 
     if (!webServerInstance->begin()) {
         LW_LOGW("Web Server failed to start!");
@@ -345,7 +345,7 @@ void loop() {
     using namespace lightwaveos::hardware;
     EncoderEvent event;
     while (xQueueReceive(encoderManager.getEventQueue(), &event, 0) == pdTRUE) {
-        handleEncoderEvent(event, actors, renderer);
+        handleEncoderEvent(event, orchestrator, renderer);
     }
 #endif
 
@@ -454,13 +454,13 @@ void loop() {
                                   (tapMask & 0x04) ? "C" : "");
                 }
                 else if (subcmd.startsWith("dump")) {
-                    using namespace lightwaveos::actors;
-                    RendererActor::CaptureTap tap;
+                    using namespace lightwaveos::nodes;
+                    RendererNode::CaptureTap tap;
                     bool valid = false;
 
-                    if (subcmd.indexOf('a') >= 0) { tap = RendererActor::CaptureTap::TAP_A_PRE_CORRECTION; valid = true; }
-                    else if (subcmd.indexOf('b') >= 0) { tap = RendererActor::CaptureTap::TAP_B_POST_CORRECTION; valid = true; }
-                    else if (subcmd.indexOf('c') >= 0) { tap = RendererActor::CaptureTap::TAP_C_PRE_WS2812; valid = true; }
+                    if (subcmd.indexOf('a') >= 0) { tap = RendererNode::CaptureTap::TAP_A_PRE_CORRECTION; valid = true; }
+                    else if (subcmd.indexOf('b') >= 0) { tap = RendererNode::CaptureTap::TAP_B_POST_CORRECTION; valid = true; }
+                    else if (subcmd.indexOf('c') >= 0) { tap = RendererNode::CaptureTap::TAP_C_PRE_WS2812; valid = true; }
 
                     if (valid) {
                         CRGB frame[320];
@@ -571,7 +571,7 @@ void loop() {
                     Serial.printf("ERROR: Invalid effect ID. Valid range: 0-%d\n", effectCount - 1);
                 } else {
                     currentEffect = (uint8_t)effectId;
-                    actors.setEffect((uint8_t)effectId);
+                    orchestrator.setEffect((uint8_t)effectId);
                     Serial.printf("Effect %d: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n", effectId, renderer->getEffectName(effectId));
                 }
             }
@@ -746,7 +746,7 @@ void loop() {
                     Serial.printf("\n=== Validating Effect: %s (ID %d) ===\n", effectName, effectId);
 
                     // Switch to effect temporarily
-                    actors.setEffect(effectId);
+                    orchestrator.setEffect(effectId);
                     delay(100);  // Allow effect to initialize
 
                     // Validation checks
@@ -896,7 +896,7 @@ void loop() {
                                   passCount, totalChecks);
 
                     // Restore original effect
-                    actors.setEffect(savedEffect);
+                    orchestrator.setEffect(savedEffect);
                     delay(50);
 
                     Serial.println("========================================\n");
@@ -934,18 +934,18 @@ void loop() {
                 }
                 else if (subcmd.startsWith("dump ")) {
                     // Dump captured frame: "dump a", "dump b", "dump c"
-                    using namespace lightwaveos::actors;
-                    RendererActor::CaptureTap tap;
+                    using namespace lightwaveos::nodes;
+                    RendererNode::CaptureTap tap;
                     bool valid = false;
                     
                     if (subcmd.indexOf(" a") >= 0) {
-                        tap = RendererActor::CaptureTap::TAP_A_PRE_CORRECTION;
+                        tap = RendererNode::CaptureTap::TAP_A_PRE_CORRECTION;
                         valid = true;
                     } else if (subcmd.indexOf(" b") >= 0) {
-                        tap = RendererActor::CaptureTap::TAP_B_POST_CORRECTION;
+                        tap = RendererNode::CaptureTap::TAP_B_POST_CORRECTION;
                         valid = true;
                     } else if (subcmd.indexOf(" c") >= 0) {
-                        tap = RendererActor::CaptureTap::TAP_C_PRE_WS2812;
+                        tap = RendererNode::CaptureTap::TAP_C_PRE_WS2812;
                         valid = true;
                     }
                     
@@ -1010,8 +1010,8 @@ void loop() {
         else if (inputLower.startsWith("tempo")) {
             handledMulti = true;
 
-            // Get TempoTracker from AudioActor
-            auto* audio = actors.getAudio();
+            // Get TempoTracker from AudioNode
+            auto* audio = orchestrator.getAudio();
             if (audio) {
                 const auto& tempo = audio->getTempo();
                 auto output = tempo.getOutput();
@@ -1131,7 +1131,7 @@ void loop() {
                     
                     if (audioEffectId < renderer->getEffectCount()) {
                         currentEffect = audioEffectId;
-                        actors.setEffect(audioEffectId);
+                        orchestrator.setEffect(audioEffectId);
                         Serial.printf("Audio Effect %d: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n", audioEffectId, renderer->getEffectName(audioEffectId));
                     } else {
                         Serial.printf("ERROR: Audio effect %d not available (effect count: %d)\n", 
@@ -1141,7 +1141,7 @@ void loop() {
                     // Normal numeric effect selection (0-5, 7-9)
                 if (e < renderer->getEffectCount()) {
                     currentEffect = e;
-                    actors.setEffect(e);
+                    orchestrator.setEffect(e);
                     Serial.printf("Effect %d: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n", e, renderer->getEffectName(e));
                     }
                 }
@@ -1155,7 +1155,7 @@ void loop() {
                     uint8_t e = 10 + (cmd - 'a');
                     if (e < renderer->getEffectCount()) {
                         currentEffect = e;
-                        actors.setEffect(e);
+                        orchestrator.setEffect(e);
                         Serial.printf("Effect %d: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n", e, renderer->getEffectName(e));
                         isEffectKey = true;
                     }
@@ -1259,7 +1259,7 @@ void loop() {
 
                         if (newEffectId != 0xFF && newEffectId < effectCount) {
                             currentEffect = newEffectId;
-                            actors.setEffect(currentEffect);
+                            orchestrator.setEffect(currentEffect);
                             const char* suffix = (currentRegister == EffectRegister::REACTIVE) ? "[R]" :
                                                  (currentRegister == EffectRegister::AMBIENT) ? "[M]" : "";
                             Serial.printf("Effect %d%s: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n",
@@ -1299,7 +1299,7 @@ void loop() {
 
                         if (newEffectId != 0xFF && newEffectId < effectCount) {
                             currentEffect = newEffectId;
-                            actors.setEffect(currentEffect);
+                            orchestrator.setEffect(currentEffect);
                             const char* suffix = (currentRegister == EffectRegister::REACTIVE) ? "[R]" :
                                                  (currentRegister == EffectRegister::AMBIENT) ? "[M]" : "";
                             Serial.printf("Effect %d%s: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n",
@@ -1318,7 +1318,7 @@ void loop() {
                         uint8_t reactiveId = PatternRegistry::getReactiveEffectId(reactiveRegisterIndex);
                         if (reactiveId != 0xFF && reactiveId < renderer->getEffectCount()) {
                             currentEffect = reactiveId;
-                            actors.setEffect(reactiveId);
+                            orchestrator.setEffect(reactiveId);
                             Serial.printf("  Current: %s (ID %d)\n",
                                           renderer->getEffectName(reactiveId), reactiveId);
                         }
@@ -1334,7 +1334,7 @@ void loop() {
                         uint8_t ambientId = ambientEffectIds[ambientRegisterIndex];
                         if (ambientId < renderer->getEffectCount()) {
                             currentEffect = ambientId;
-                            actors.setEffect(ambientId);
+                            orchestrator.setEffect(ambientId);
                             Serial.printf("  Current: %s (ID %d)\n",
                                           renderer->getEffectName(ambientId), ambientId);
                         }
@@ -1355,7 +1355,7 @@ void loop() {
                         uint8_t b = renderer->getBrightness();
                         if (b < 250) {
                             b = min((int)b + 16, 250);
-                            actors.setBrightness(b);
+                            orchestrator.setBrightness(b);
                             Serial.printf("Brightness: %d\n", b);
                         }
                     }
@@ -1366,7 +1366,7 @@ void loop() {
                         uint8_t b = renderer->getBrightness();
                         if (b > 16) {
                             b = max((int)b - 16, 16);
-                            actors.setBrightness(b);
+                            orchestrator.setBrightness(b);
                             Serial.printf("Brightness: %d\n", b);
                         }
                     }
@@ -1377,7 +1377,7 @@ void loop() {
                         uint8_t s = renderer->getSpeed();
                         if (s > 1) {
                             s = max((int)s - 1, 1);
-                            actors.setSpeed(s);
+                            orchestrator.setSpeed(s);
                             Serial.printf("Speed: %d\n", s);
                         }
                     }
@@ -1388,7 +1388,7 @@ void loop() {
                         uint8_t s = renderer->getSpeed();
                         if (s < 100) {
                             s = min((int)s + 1, 100);
-                            actors.setSpeed(s);
+                            orchestrator.setSpeed(s);
                             Serial.printf("Speed: %d\n", s);
                         }
                     }
@@ -1399,7 +1399,7 @@ void loop() {
                     {
                         uint8_t paletteCount = renderer->getPaletteCount();
                         uint8_t p = (renderer->getPaletteIndex() + 1) % paletteCount;
-                        actors.setPalette(p);
+                        orchestrator.setPalette(p);
                         Serial.printf("Palette %d/%d: %s\n", p, paletteCount, renderer->getPaletteName(p));
                     }
                     break;
@@ -1409,7 +1409,7 @@ void loop() {
                         uint8_t paletteCount = renderer->getPaletteCount();
                         uint8_t current = renderer->getPaletteIndex();
                         uint8_t p = (current + paletteCount - 1) % paletteCount;
-                        actors.setPalette(p);
+                        orchestrator.setPalette(p);
                         Serial.printf("Palette %d/%d: %s\n", p, paletteCount, renderer->getPaletteName(p));
                     }
                     break;
@@ -1488,7 +1488,7 @@ void loop() {
                     break;
 
                 case 's':
-                    actors.printStatus();
+                    orchestrator.printStatus();
                     if (zoneComposer.isEnabled()) {
                         zoneComposer.printStatus();
                     }
@@ -1587,7 +1587,7 @@ void loop() {
                 case 'w':
                     // Toggle show playback
                     {
-                        ShowDirectorActor* showDir = actors.getShowDirector();
+                        ShowNode* showDir = orchestrator.getShowDirector();
                         if (showDir) {
                             if (showDir->isPlaying()) {
                                 // Stop the show
@@ -1645,7 +1645,7 @@ void loop() {
                 case '{':
                     // Seek backward 30s
                     {
-                        ShowDirectorActor* showDir = actors.getShowDirector();
+                        ShowNode* showDir = orchestrator.getShowDirector();
                         if (showDir && showDir->isPlaying()) {
                             uint32_t elapsed = showDir->getElapsedMs();
                             uint32_t newTime = (elapsed > 30000) ? (elapsed - 30000) : 0;
@@ -1661,7 +1661,7 @@ void loop() {
                 case '}':
                     // Seek forward 30s
                     {
-                        ShowDirectorActor* showDir = actors.getShowDirector();
+                        ShowNode* showDir = orchestrator.getShowDirector();
                         if (showDir && showDir->isPlaying()) {
                             uint32_t elapsed = showDir->getElapsedMs();
                             uint32_t remaining = showDir->getRemainingMs();
@@ -1678,7 +1678,7 @@ void loop() {
                 case '#':
                     // Print show status
                     {
-                        ShowDirectorActor* showDir = actors.getShowDirector();
+                        ShowNode* showDir = orchestrator.getShowDirector();
                         if (showDir) {
                             if (showDir->hasShow()) {
                                 ShowDefinition show;

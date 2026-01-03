@@ -9,9 +9,9 @@
 #include "../../WebServer.h"  // For CachedRendererState
 
 namespace lightwaveos {
-namespace actors {
-class ActorSystem;
-class RendererActor;
+namespace nodes {
+class NodeOrchestrator;
+class RendererNode;
 }
 }
 
@@ -22,10 +22,10 @@ namespace handlers {
 
 class ZoneHandlers {
 public:
-    static void handleList(AsyncWebServerRequest* request, lightwaveos::actors::ActorSystem& actors, const lightwaveos::network::WebServer::CachedRendererState& cachedState, lightwaveos::zones::ZoneComposer* composer);
+    static void handleList(AsyncWebServerRequest* request, lightwaveos::nodes::NodeOrchestrator& orchestrator, const lightwaveos::network::WebServer::CachedRendererState& cachedState, lightwaveos::zones::ZoneComposer* composer);
     static void handleLayout(AsyncWebServerRequest* request, uint8_t* data, size_t len, lightwaveos::zones::ZoneComposer* composer, std::function<void()> broadcastZoneState);
-    static void handleGet(AsyncWebServerRequest* request, lightwaveos::actors::ActorSystem& actors, const lightwaveos::network::WebServer::CachedRendererState& cachedState, lightwaveos::zones::ZoneComposer* composer);
-    static void handleSetEffect(AsyncWebServerRequest* request, uint8_t* data, size_t len, lightwaveos::actors::ActorSystem& actors, const lightwaveos::network::WebServer::CachedRendererState& cachedState, lightwaveos::zones::ZoneComposer* composer, std::function<void()> broadcastZoneState);
+    static void handleGet(AsyncWebServerRequest* request, lightwaveos::nodes::NodeOrchestrator& orchestrator, const lightwaveos::network::WebServer::CachedRendererState& cachedState, lightwaveos::zones::ZoneComposer* composer);
+    static void handleSetEffect(AsyncWebServerRequest* request, uint8_t* data, size_t len, lightwaveos::nodes::NodeOrchestrator& orchestrator, const lightwaveos::network::WebServer::CachedRendererState& cachedState, lightwaveos::zones::ZoneComposer* composer, std::function<void()> broadcastZoneState);
     static void handleSetBrightness(AsyncWebServerRequest* request, uint8_t* data, size_t len, lightwaveos::zones::ZoneComposer* composer, std::function<void()> broadcastZoneState);
     static void handleSetSpeed(AsyncWebServerRequest* request, uint8_t* data, size_t len, lightwaveos::zones::ZoneComposer* composer, std::function<void()> broadcastZoneState);
     static void handleSetPalette(AsyncWebServerRequest* request, uint8_t* data, size_t len, lightwaveos::zones::ZoneComposer* composer, std::function<void()> broadcastZoneState);

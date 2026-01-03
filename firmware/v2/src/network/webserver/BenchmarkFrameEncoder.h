@@ -27,7 +27,7 @@ class BenchmarkFrameEncoder {
 public:
     /**
      * @brief Encode stats into compact frame (32 bytes)
-     * @param stats Source stats from AudioActor
+     * @param stats Source stats from AudioNode
      * @param timestamp_ms Current timestamp in milliseconds
      * @param flags Status flags (streaming active, etc.)
      * @param[out] buffer Output buffer (must be >= COMPACT_FRAME_SIZE)
@@ -62,7 +62,7 @@ public:
 
     /**
      * @brief Encode stats into extended frame (64 bytes)
-     * @param stats Source stats from AudioActor
+     * @param stats Source stats from AudioNode
      * @param timestamp_ms Current timestamp in milliseconds
      * @param flags Status flags
      * @param[out] buffer Output buffer (must be >= EXTENDED_FRAME_SIZE)

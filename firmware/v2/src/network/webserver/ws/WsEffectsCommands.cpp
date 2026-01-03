@@ -11,8 +11,8 @@
 #include "../WebServerContext.h"
 #include "../../ApiResponse.h"
 #include "../../RequestValidator.h"
-#include "../../../core/actors/ActorSystem.h"
-#include "../../../core/actors/RendererActor.h"
+#include "../../../core/actors/NodeOrchestrator.h"
+#include "../../../core/actors/RendererNode.h"
 #include "../../../effects/PatternRegistry.h"
 #include "../../../plugins/api/IEffect.h"
 #include "../../../effects/transitions/TransitionTypes.h"
@@ -131,7 +131,7 @@ static void handleSetEffect(AsyncWebSocketClient* client, JsonDocument& doc, con
     // DEFENSIVE CHECK: Validate effectId before array access
     effectId = lightwaveos::network::validateEffectIdInRequest(effectId);
     if (effectId < ctx.renderer->getEffectCount()) {
-        ctx.actorSystem.setEffect(effectId);
+        ctx.orchestrator.setEffect(effectId);
         if (ctx.broadcastStatus) ctx.broadcastStatus();
     }
 }
@@ -139,27 +139,27 @@ static void handleSetEffect(AsyncWebSocketClient* client, JsonDocument& doc, con
 static void handleNextEffect(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     uint8_t current = ctx.renderer->getCurrentEffect();
     uint8_t next = (current + 1) % ctx.renderer->getEffectCount();
-    ctx.actorSystem.setEffect(next);
+    ctx.orchestrator.setEffect(next);
     if (ctx.broadcastStatus) ctx.broadcastStatus();
 }
 
 static void handlePrevEffect(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     uint8_t current = ctx.renderer->getCurrentEffect();
     uint8_t prev = (current + ctx.renderer->getEffectCount() - 1) % ctx.renderer->getEffectCount();
-    ctx.actorSystem.setEffect(prev);
+    ctx.orchestrator.setEffect(prev);
     if (ctx.broadcastStatus) ctx.broadcastStatus();
 }
 
 static void handleSetBrightness(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     uint8_t value = doc["value"] | 128;
-    ctx.actorSystem.setBrightness(value);
+    ctx.orchestrator.setBrightness(value);
     if (ctx.broadcastStatus) ctx.broadcastStatus();
 }
 
 static void handleSetSpeed(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     uint8_t value = doc["value"] | 15;
     if (value >= 1 && value <= 50) {
-        ctx.actorSystem.setSpeed(value);
+        ctx.orchestrator.setSpeed(value);
         if (ctx.broadcastStatus) ctx.broadcastStatus();
     }
 }
@@ -168,7 +168,7 @@ static void handleSetPalette(AsyncWebSocketClient* client, JsonDocument& doc, co
     uint8_t paletteId = doc["paletteId"] | 0;
     // DEFENSIVE CHECK: Validate paletteId before array access
     paletteId = lightwaveos::network::validatePaletteIdInRequest(paletteId);
-    ctx.actorSystem.setPalette(paletteId);
+    ctx.orchestrator.setPalette(paletteId);
     if (ctx.broadcastStatus) ctx.broadcastStatus();
 }
 
@@ -203,7 +203,7 @@ static void handleEffectsSetCurrent(AsyncWebSocketClient* client, JsonDocument& 
     if (useTransition && transType < static_cast<uint8_t>(lightwaveos::transitions::TransitionType::TYPE_COUNT)) {
         ctx.renderer->startTransition(effectId, transType);
     } else {
-        ctx.actorSystem.setEffect(effectId);
+        ctx.orchestrator.setEffect(effectId);
     }
 
     if (ctx.broadcastStatus) ctx.broadcastStatus();
@@ -389,51 +389,51 @@ static void handleParametersSet(AsyncWebSocketClient* client, JsonDocument& doc,
 
     if (doc.containsKey("brightness")) {
         uint8_t value = doc["brightness"] | 128;
-        ctx.actorSystem.setBrightness(value);
+        ctx.orchestrator.setBrightness(value);
         updatedBrightness = true;
     }
 
     if (doc.containsKey("speed")) {
         uint8_t value = doc["speed"] | 15;
         if (value >= 1 && value <= 50) {
-            ctx.actorSystem.setSpeed(value);
+            ctx.orchestrator.setSpeed(value);
             updatedSpeed = true;
         }
     }
 
     if (doc.containsKey("paletteId")) {
         uint8_t value = doc["paletteId"] | 0;
-        ctx.actorSystem.setPalette(value);
+        ctx.orchestrator.setPalette(value);
         updatedPalette = true;
     }
 
     if (doc.containsKey("intensity")) {
         uint8_t value = doc["intensity"] | 128;
-        ctx.actorSystem.setIntensity(value);
+        ctx.orchestrator.setIntensity(value);
         updatedIntensity = true;
     }
 
     if (doc.containsKey("saturation")) {
         uint8_t value = doc["saturation"] | 255;
-        ctx.actorSystem.setSaturation(value);
+        ctx.orchestrator.setSaturation(value);
         updatedSaturation = true;
     }
 
     if (doc.containsKey("complexity")) {
         uint8_t value = doc["complexity"] | 128;
-        ctx.actorSystem.setComplexity(value);
+        ctx.orchestrator.setComplexity(value);
         updatedComplexity = true;
     }
 
     if (doc.containsKey("variation")) {
         uint8_t value = doc["variation"] | 0;
-        ctx.actorSystem.setVariation(value);
+        ctx.orchestrator.setVariation(value);
         updatedVariation = true;
     }
 
     if (doc.containsKey("hue")) {
         uint8_t value = doc["hue"] | 0;
-        ctx.actorSystem.setHue(value);
+        ctx.orchestrator.setHue(value);
         updatedHue = true;
     }
 

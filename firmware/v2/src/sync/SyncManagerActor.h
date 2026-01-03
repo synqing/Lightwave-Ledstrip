@@ -29,7 +29,7 @@
 
 #pragma once
 
-#include "../core/actors/Actor.h"
+#include "../core/actors/Node.h"
 #include "../core/state/StateStore.h"
 #include "SyncProtocol.h"
 #include "DeviceUUID.h"
@@ -52,7 +52,7 @@ class StateStore;
  * Orchestrates peer discovery, connection management, leader election,
  * and state synchronization across multiple LightwaveOS devices.
  */
-class SyncManagerActor : public actors::Actor {
+class SyncManagerActor : public nodes::Node {
 public:
     /**
      * @brief Construct the sync manager actor
@@ -112,7 +112,7 @@ protected:
     // ========================================================================
 
     void onStart() override;
-    void onMessage(const actors::Message& msg) override;
+    void onMessage(const nodes::Message& msg) override;
     void onTick() override;
     void onStop() override;
 
@@ -168,7 +168,7 @@ private:
     /**
      * @brief Handle STATE_UPDATED message (local state changed)
      */
-    void handleStateUpdated(const actors::Message& msg);
+    void handleStateUpdated(const nodes::Message& msg);
 
     /**
      * @brief Handle SYNC_REQUEST message

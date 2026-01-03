@@ -12,9 +12,9 @@
 
 // Forward declarations
 namespace lightwaveos {
-namespace actors {
-class ActorSystem;
-class RendererActor;
+namespace nodes {
+class NodeOrchestrator;
+class RendererNode;
 }
 }
 
@@ -54,15 +54,15 @@ public:
      */
     static void handleSave(AsyncWebServerRequest* request,
                            uint8_t* data, size_t len,
-                           lightwaveos::actors::RendererActor* renderer);
-
+                           lightwaveos::nodes::RendererNode* renderer);
+    
     /**
      * @brief Apply a preset by ID
      * POST /api/v1/effect-presets/apply?id=N
      */
     static void handleApply(AsyncWebServerRequest* request, uint8_t presetId,
-                            lightwaveos::actors::ActorSystem& actorSystem,
-                            lightwaveos::actors::RendererActor* renderer);
+                            lightwaveos::nodes::NodeOrchestrator& orchestrator,
+                            lightwaveos::nodes::RendererNode* renderer);
 
     /**
      * @brief Delete a preset by ID

@@ -6,8 +6,8 @@
  */
 
 #include "PatternRegistry.h"
-#include "../core/actors/ActorSystem.h"
-#include "../core/actors/RendererActor.h"
+#include "../core/actors/NodeOrchestrator.h"
+#include "../core/actors/RendererNode.h"
 
 // ============================================================================
 // Pattern Metadata Definitions (PROGMEM)
@@ -313,9 +313,9 @@ const lightwaveos::plugins::EffectMetadata* getIEffectMetadata(uint8_t effectId)
         return nullptr;
     }
     
-    // Access RendererActor via ActorSystem
-    using namespace lightwaveos::actors;
-    RendererActor* renderer = ActorSystem::instance().getRenderer();
+    // Access RendererNode via NodeOrchestrator
+    using namespace lightwaveos::nodes;
+    RendererNode* renderer = NodeOrchestrator::instance().getRenderer();
     if (!renderer) {
         return nullptr;
     }

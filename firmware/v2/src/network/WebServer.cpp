@@ -3,7 +3,7 @@
  * @brief Web Server implementation for LightwaveOS v2
  *
  * Implements REST API and WebSocket server integrated with Actor System.
- * All state changes are routed through m_actorSystem for thread safety.
+ * All state changes are routed through m_orchestrator for thread safety.
  */
 
 #include "WebServer.h"
@@ -50,10 +50,10 @@
 #endif
 #include "webserver/ws/WsStreamCommands.h"
 #include "../config/network_config.h"
-#include "../core/actors/ActorSystem.h"
+#include "../core/actors/NodeOrchestrator.h"
 #include "../effects/zones/ZoneDefinition.h"
 #include <Update.h>
-#include "../core/actors/RendererActor.h"
+#include "../core/actors/RendererNode.h"
 #include "../core/persistence/ZoneConfigManager.h"
 #include "../effects/zones/ZoneComposer.h"
 #include "../effects/transitions/TransitionTypes.h"
@@ -88,7 +88,7 @@
 // External zone config manager from main.cpp
 extern lightwaveos::persistence::ZoneConfigManager* zoneConfigMgr;
 
-using namespace lightwaveos::actors;
+using namespace lightwaveos::nodes;
 using namespace lightwaveos::zones;
 using namespace lightwaveos::transitions;
 using namespace lightwaveos::palettes;
@@ -121,7 +121,7 @@ static void initValidationEncoder() {
 // Constructor / Destructor
 // ============================================================================
 
-WebServer::WebServer(ActorSystem& actors, RendererActor* renderer)
+WebServer::WebServer(NodeOrchestrator& orchestrator, RendererNode* renderer)
     : m_server(nullptr)
     , m_ws(nullptr)
     , m_running(false)
@@ -135,7 +135,7 @@ WebServer::WebServer(ActorSystem& actors, RendererActor* renderer)
     , m_lastStateCacheUpdate(0)
     , m_ledBroadcaster(nullptr)
     , m_wsGateway(nullptr)
-    , m_actorSystem(actors)
+    , m_orchestrator(orchestrator)
     , m_renderer(renderer)
 {
 }
@@ -497,7 +497,7 @@ void WebServer::setupRoutes() {
 
     // Create WebServer context (m_startTime set later in begin(), use millis() for now)
     webserver::WebServerContext ctx(
-        m_actorSystem,
+        m_orchestrator,
         m_renderer,
         m_zoneComposer,
         m_rateLimiter,
@@ -530,7 +530,7 @@ void WebServer::setupRoutes() {
 void WebServer::setupWebSocket() {
     // Create WebServer context for gateway
     webserver::WebServerContext ctx(
-        m_actorSystem,
+        m_orchestrator,
         m_renderer,
         m_zoneComposer,
         m_rateLimiter,
@@ -651,26 +651,26 @@ void WebServer::setupWebSocket() {
 bool WebServer::executeBatchAction(const String& action, JsonVariant params) {
     if (action == "setBrightness") {
         if (!params.containsKey("value")) return false;
-        m_actorSystem.setBrightness(params["value"]);
+        m_orchestrator.setBrightness(params["value"]);
         return true;
     }
     else if (action == "setSpeed") {
         if (!params.containsKey("value")) return false;
         uint8_t val = params["value"];
         if (val < 1 || val > 50) return false;
-        m_actorSystem.setSpeed(val);
+        m_orchestrator.setSpeed(val);
         return true;
     }
     else if (action == "setEffect") {
         if (!params.containsKey("effectId")) return false;
         uint8_t id = params["effectId"];
         if (id >= m_renderer->getEffectCount()) return false;
-        m_actorSystem.setEffect(id);
+        m_orchestrator.setEffect(id);
         return true;
     }
     else if (action == "setPalette") {
         if (!params.containsKey("paletteId")) return false;
-        m_actorSystem.setPalette(params["paletteId"]);
+        m_orchestrator.setPalette(params["paletteId"]);
         return true;
     }
     else if (action == "transition") {
@@ -1137,8 +1137,8 @@ bool WebServer::hasAudioStreamSubscribers() const {
 void WebServer::broadcastBenchmarkStats() {
     if (!m_benchmarkBroadcaster) return;
 
-    // Get AudioActor to retrieve benchmark stats
-    auto* audio = m_actorSystem.getAudio();
+    // Get AudioNode to retrieve benchmark stats
+    auto* audio = m_orchestrator.getAudio();
     if (!audio) return;
 
     // Get stats (returns copy - thread safe)

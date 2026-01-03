@@ -19,9 +19,9 @@
 
 // Forward declarations
 namespace lightwaveos {
-namespace actors {
-class ActorSystem;
-class RendererActor;
+namespace nodes {
+class NodeOrchestrator;
+class RendererNode;
 }
 namespace zones {
 class ZoneComposer;
@@ -68,7 +68,7 @@ public:
      * POST /api/v1/zone-presets/apply?id=N
      */
     static void handleApply(AsyncWebServerRequest* request, uint8_t presetId,
-                            lightwaveos::actors::ActorSystem& actorSystem,
+                            lightwaveos::nodes::NodeOrchestrator& orchestrator,
                             lightwaveos::zones::ZoneComposer* zoneComposer,
                             std::function<void()> broadcastZoneState);
 

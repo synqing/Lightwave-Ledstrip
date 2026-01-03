@@ -16,9 +16,9 @@
 
 // Forward declarations
 namespace lightwaveos {
-    namespace actors {
-        class ActorSystem;
-        class RendererActor;
+    namespace nodes {
+        class NodeOrchestrator;
+        class RendererNode;
     }
     namespace zones {
         class ZoneComposer;
@@ -52,8 +52,8 @@ namespace webserver {
  */
 struct WebServerContext {
     // Business systems (non-owning references)
-    actors::ActorSystem& actorSystem;
-    actors::RendererActor* renderer;
+    nodes::NodeOrchestrator& orchestrator;
+    nodes::RendererNode* renderer;
     zones::ZoneComposer* zoneComposer;
 
     // Cross-cutting concerns
@@ -92,8 +92,8 @@ struct WebServerContext {
      * @brief Construct context with all required references
      */
     WebServerContext(
-        actors::ActorSystem& actors,
-        actors::RendererActor* rendererPtr,
+        nodes::NodeOrchestrator& orchestrator,
+        nodes::RendererNode* rendererPtr,
         zones::ZoneComposer* zoneComposerPtr,
         RateLimiter& limiter,
         LedStreamBroadcaster* ledBroadcast,
@@ -120,7 +120,7 @@ struct WebServerContext {
 #endif
         std::function<bool(const String&, JsonVariant)> executeBatchFn = nullptr
     )
-        : actorSystem(actors)
+        : orchestrator(orchestrator)
         , renderer(rendererPtr)
         , zoneComposer(zoneComposerPtr)
         , rateLimiter(limiter)

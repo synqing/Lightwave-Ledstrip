@@ -54,12 +54,12 @@ namespace plugins {
  * @brief Audio context passed to effects (by-value copies for thread safety)
  *
  * This struct contains copies (not references!) of audio data from the
- * AudioActor. It's populated by RendererActor each frame with extrapolated
+ * AudioNode. It's populated by RendererActor each frame with extrapolated
  * timing for smooth 120 FPS beat phase.
  *
  * Thread Safety:
  * - All data is copied by value in renderFrame()
- * - No references to AudioActor's buffers
+ * - No references to AudioNode's buffers
  * - Safe to use throughout effect render()
  */
 struct AudioContext {
@@ -292,7 +292,7 @@ struct AudioContext {
     // Behavior Context Accessors (MIS Phase 3: Adaptive behavior selection)
     // ========================================================================
 
-    BehaviorContext behaviorContext{};  ///< Behavior selection context (populated from AudioActor)
+    BehaviorContext behaviorContext{};  ///< Behavior selection context (populated from AudioNode)
 
     /// Get the recommended primary visual behavior
     VisualBehavior recommendedBehavior() const { return behaviorContext.recommendedPrimary; }

@@ -6,13 +6,13 @@
 #include "SystemHandlers.h"
 #include "../../ApiResponse.h"
 #include "../../WebServer.h"  // For WebServerConfig
-#include "../../../core/actors/RendererActor.h"
+#include "../../../core/actors/RendererNode.h"
 #include "../../../hal/led/LedDriverConfig.h"
 #include "../../../config/network_config.h"
 #include <ESPAsyncWebServer.h>
 #include <WiFi.h>
 
-using namespace lightwaveos::actors;
+using namespace lightwaveos::nodes;
 using namespace lightwaveos::network;
 
 namespace lightwaveos {
@@ -21,7 +21,7 @@ namespace webserver {
 namespace handlers {
 
 void SystemHandlers::handleHealth(AsyncWebServerRequest* request,
-                                    RendererActor* renderer,
+                                    RendererNode* renderer,
                                     AsyncWebSocket* ws) {
     StaticJsonDocument<512> doc;
     doc["success"] = true;
@@ -37,7 +37,7 @@ void SystemHandlers::handleHealth(AsyncWebServerRequest* request,
         data["rendererRunning"] = renderer->isRunning();
         data["queueUtilization"] = renderer->getQueueUtilization();
         data["queueLength"] = renderer->getQueueLength();
-        data["queueCapacity"] = 32;  // RendererActor queue size
+        data["queueCapacity"] = 32;  // RendererNode queue size
         
         const RenderStats& stats = renderer->getStats();
         data["fps"] = stats.currentFPS;

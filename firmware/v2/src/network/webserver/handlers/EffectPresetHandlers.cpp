@@ -6,15 +6,15 @@
 #include "EffectPresetHandlers.h"
 #include "../../ApiResponse.h"
 #include "../../RequestValidator.h"
-#include "../../../core/actors/ActorSystem.h"
-#include "../../../core/actors/RendererActor.h"
+#include "../../../core/actors/NodeOrchestrator.h"
+#include "../../../core/actors/RendererNode.h"
 #include "../../../core/persistence/EffectPreset.h"
 #include <cstring>
 
 #define LW_LOG_TAG "EffectPresetHandlers"
 #include "../../../utils/Log.h"
 
-using namespace lightwaveos::actors;
+using namespace lightwaveos::nodes;
 using namespace lightwaveos::persistence;
 
 namespace lightwaveos {
@@ -69,7 +69,7 @@ void EffectPresetHandlers::handleGet(AsyncWebServerRequest* request, uint8_t pre
 
 void EffectPresetHandlers::handleSave(AsyncWebServerRequest* request,
                                        uint8_t* data, size_t len,
-                                       RendererActor* renderer) {
+                                       RendererNode* renderer) {
     if (!renderer) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::SYSTEM_NOT_READY, "Renderer not available");
@@ -122,8 +122,8 @@ void EffectPresetHandlers::handleSave(AsyncWebServerRequest* request,
 }
 
 void EffectPresetHandlers::handleApply(AsyncWebServerRequest* request, uint8_t presetId,
-                                        ActorSystem& actorSystem,
-                                        RendererActor* renderer) {
+                                        NodeOrchestrator& orchestrator,
+                                        RendererNode* renderer) {
     if (!renderer) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::SYSTEM_NOT_READY, "Renderer not available");
@@ -146,10 +146,10 @@ void EffectPresetHandlers::handleApply(AsyncWebServerRequest* request, uint8_t p
     }
 
     // Apply preset values via ActorSystem
-    actorSystem.setEffect(preset.effectId);
-    actorSystem.setBrightness(preset.brightness);
-    actorSystem.setSpeed(preset.speed);
-    actorSystem.setPalette(preset.paletteId);
+    orchestrator.setEffect(preset.effectId);
+    orchestrator.setBrightness(preset.brightness);
+    orchestrator.setSpeed(preset.speed);
+    orchestrator.setPalette(preset.paletteId);
 
     LW_LOGI("Applied preset '%s' (id=%d): effect=%d, brightness=%d, speed=%d, palette=%d",
             preset.name, presetId, preset.effectId, preset.brightness, preset.speed, preset.paletteId);

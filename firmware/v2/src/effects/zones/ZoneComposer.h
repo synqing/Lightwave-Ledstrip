@@ -28,7 +28,7 @@
 #include "ZoneDefinition.h"
 #include "BlendMode.h"
 #include "AudioBandFilter.h"  // For AudioBands::BAND_* constants
-#include "../../core/actors/RendererActor.h"
+#include "../../core/actors/RendererNode.h"
 #include "../../plugins/api/EffectContext.h"
 
 // Forward declaration for audio context
@@ -40,7 +40,7 @@ namespace lightwaveos { namespace audio { class TempoTracker; } }
 namespace lightwaveos {
 namespace zones {
 
-using namespace lightwaveos::actors;
+using namespace lightwaveos::nodes;
 
 // ==================== Zone State Callback ====================
 
@@ -54,7 +54,7 @@ using namespace lightwaveos::actors;
  */
 using ZoneStateCallback = std::function<void(uint8_t zoneId)>;
 
-// Use the EffectRenderFn typedef from RendererActor
+// Use the EffectRenderFn typedef from RendererNode
 using EffectFunc = EffectRenderFn;
 
 // ==================== Memory Metrics (Phase 2c.2) ====================
@@ -219,10 +219,10 @@ public:
 
     /**
      * @brief Initialize the zone composer
-     * @param renderer Pointer to RendererActor for effect access
+     * @param renderer Pointer to RendererNode for effect access
      * @return true if initialized successfully
      */
-    bool init(RendererActor* renderer);
+    bool init(RendererNode* renderer);
 
     // ==================== Rendering ====================
 
@@ -236,7 +236,7 @@ public:
      * @param deltaTimeMs Time since last frame (ms) - for smooth frame-rate independent animation
      * @param audioCtx Audio context for audio-reactive effects (optional)
      *
-     * This is called by RendererActor instead of a single effect.
+     * This is called by RendererNode instead of a single effect.
      */
     void render(CRGB* leds, uint16_t numLeds, CRGBPalette16* palette,
                 uint8_t hue, uint32_t frameCount, uint32_t deltaTimeMs,
@@ -300,7 +300,7 @@ public:
 
     /**
      * @brief Set the TempoTracker for audio-reactive zone modulation
-     * @param tempo Pointer to TempoTracker (from AudioActor)
+     * @param tempo Pointer to TempoTracker (from AudioNode)
      */
     void setTempoTracker(audio::TempoTracker* tempo) { m_tempo = tempo; }
 
@@ -511,7 +511,7 @@ private:
     // Rebuilt on layout change, updated on blend mode change
     CachedSegmentBounds m_cachedBounds[MAX_ZONES];
 
-    RendererActor* m_renderer;          // Renderer for effect access
+    RendererNode* m_renderer;          // Renderer for effect access
 
     // TempoTracker for audio-reactive zone modulation (Phase 2b.1)
     audio::TempoTracker* m_tempo = nullptr;

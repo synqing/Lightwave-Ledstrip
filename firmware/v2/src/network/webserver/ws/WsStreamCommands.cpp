@@ -205,7 +205,7 @@ static void handleBenchmarkUnsubscribe(AsyncWebSocketClient* client, JsonDocumen
 
 static void handleBenchmarkStart(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     const char* requestId = doc["requestId"] | "";
-    auto* audio = ctx.actorSystem.getAudio();
+    auto* audio = ctx.orchestrator.getAudio();
     if (!audio) {
         client->text(buildWsError(ErrorCodes::SYSTEM_NOT_READY, "Audio system not available", requestId));
         return;
@@ -224,7 +224,7 @@ static void handleBenchmarkStart(AsyncWebSocketClient* client, JsonDocument& doc
 
 static void handleBenchmarkStop(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     const char* requestId = doc["requestId"] | "";
-    auto* audio = ctx.actorSystem.getAudio();
+    auto* audio = ctx.orchestrator.getAudio();
     if (!audio) {
         client->text(buildWsError(ErrorCodes::SYSTEM_NOT_READY, "Audio system not available", requestId));
         return;
@@ -250,7 +250,7 @@ static void handleBenchmarkStop(AsyncWebSocketClient* client, JsonDocument& doc,
 
 static void handleBenchmarkGet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     const char* requestId = doc["requestId"] | "";
-    auto* audio = ctx.actorSystem.getAudio();
+    auto* audio = ctx.orchestrator.getAudio();
     if (!audio) {
         client->text(buildWsError(ErrorCodes::SYSTEM_NOT_READY, "Audio system not available", requestId));
         return;

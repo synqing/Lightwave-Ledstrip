@@ -11,8 +11,8 @@
 #include "../WsCommandRouter.h"
 #include "../WebServerContext.h"
 #include "../../ApiResponse.h"
-#include "../../../core/actors/ActorSystem.h"
-#include "../../../core/actors/RendererActor.h"
+#include "../../../core/actors/NodeOrchestrator.h"
+#include "../../../core/actors/RendererNode.h"
 #include "../../../core/persistence/EffectPreset.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
@@ -192,11 +192,11 @@ static void handlePresetsApply(AsyncWebSocketClient* client, JsonDocument& doc, 
         return;
     }
 
-    // Apply preset values via ActorSystem
-    ctx.actorSystem.setEffect(preset.effectId);
-    ctx.actorSystem.setBrightness(preset.brightness);
-    ctx.actorSystem.setSpeed(preset.speed);
-    ctx.actorSystem.setPalette(preset.paletteId);
+    // Apply preset values via NodeOrchestrator
+    ctx.orchestrator.setEffect(preset.effectId);
+    ctx.orchestrator.setBrightness(preset.brightness);
+    ctx.orchestrator.setSpeed(preset.speed);
+    ctx.orchestrator.setPalette(preset.paletteId);
 
     // Broadcast status update
     if (ctx.broadcastStatus) ctx.broadcastStatus();

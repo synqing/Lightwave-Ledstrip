@@ -7,7 +7,7 @@
 #include "../../effects/zones/ZoneComposer.h"
 #include "../../effects/zones/ZoneDefinition.h"
 #include "../../effects/zones/BlendMode.h"
-#include "../actors/ActorSystem.h"
+#include "../actors/NodeOrchestrator.h"
 
 #include <cstring>
 #include <Arduino.h>
@@ -189,7 +189,7 @@ bool ZonePresetManager::savePresetAt(uint8_t id, const char* name, const ZoneCom
     }
 }
 
-bool ZonePresetManager::applyPreset(uint8_t id, ZoneComposer* composer, actors::ActorSystem& actorSystem) {
+bool ZonePresetManager::applyPreset(uint8_t id, ZoneComposer* composer, nodes::NodeOrchestrator& orchestrator) {
     if (!composer) {
         Serial.println("[ZonePreset] ERROR: ZoneComposer not available");
         return false;

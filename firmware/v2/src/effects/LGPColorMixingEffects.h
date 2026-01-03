@@ -8,12 +8,12 @@
 
 #pragma once
 
-#include "../core/actors/RendererActor.h"
+#include "../core/actors/RendererNode.h"
 
 namespace lightwaveos {
 namespace effects {
 
-using namespace lightwaveos::actors;
+using namespace lightwaveos::nodes;
 
 // ==================== LGP Color Mixing Effects ====================
 
@@ -31,12 +31,12 @@ void effectPerceptualBlend(RenderContext& ctx);
 // ==================== Effect Registration ====================
 
 /**
- * @brief Register all LGP Color Mixing effects with RendererActor
- * @param renderer Pointer to RendererActor
+ * @brief Register all LGP Color Mixing effects with RendererNode
+ * @param renderer Pointer to RendererNode
  * @param startId Starting effect ID
  * @return Number of effects registered
  */
-uint8_t registerLGPColorMixingEffects(RendererActor* renderer, uint8_t startId);
+uint8_t registerLGPColorMixingEffects(RendererNode* renderer, uint8_t startId);
 
 } // namespace effects
 } // namespace lightwaveos

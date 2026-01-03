@@ -10,7 +10,7 @@
 
 #include "LGPChromaticEffects.h"
 #include "CoreEffects.h"
-#include "../core/actors/RendererActor.h"
+#include "../core/actors/RendererNode.h"
 #include "utils/FastLEDOptim.h"
 #include <FastLED.h>
 #include <math.h>
@@ -18,7 +18,7 @@
 namespace lightwaveos {
 namespace effects {
 
-using namespace lightwaveos::actors;
+using namespace lightwaveos::nodes;
 
 // NOTE: Effects migrated to IEffect classes; legacy stubs kept for reference.
 
@@ -56,7 +56,7 @@ void effectChromaticInterference(RenderContext& ctx) {
 // Effect Registration
 // ============================================================================
 
-uint8_t registerLGPChromaticEffects(RendererActor* renderer, uint8_t startId) {
+uint8_t registerLGPChromaticEffects(RendererNode* renderer, uint8_t startId) {
     if (!renderer) return 0;
 
     uint8_t count = 0;

@@ -29,8 +29,8 @@ namespace lightwaveos {
 namespace zones {
 class ZoneComposer;
 }
-namespace actors {
-class ActorSystem;
+namespace nodes {
+class NodeOrchestrator;
 }
 }
 
@@ -120,7 +120,7 @@ struct ZonePreset {
  * Usage:
  *   auto& mgr = ZonePresetManager::instance();
  *   int8_t id = mgr.savePreset("My Zone Config", zoneComposer);
- *   mgr.applyPreset(id, zoneComposer, actorSystem);
+ *   mgr.applyPreset(id, zoneComposer, orchestrator);
  */
 class ZonePresetManager {
 public:
@@ -162,10 +162,10 @@ public:
      *
      * @param id Preset ID (0-4)
      * @param composer ZoneComposer to apply state to
-     * @param actorSystem ActorSystem for setting global effect if single zone
+     * @param orchestrator NodeOrchestrator for setting global effect if single zone
      * @return true on success
      */
-    bool applyPreset(uint8_t id, zones::ZoneComposer* composer, actors::ActorSystem& actorSystem);
+    bool applyPreset(uint8_t id, zones::ZoneComposer* composer, nodes::NodeOrchestrator& orchestrator);
 
     /**
      * @brief Get full preset data by ID

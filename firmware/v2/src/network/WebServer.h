@@ -60,9 +60,9 @@ class AsyncWebSocket;
 class AsyncWebSocketClient;
 
 namespace lightwaveos {
-    namespace actors {
-        class ActorSystem;
-        class RendererActor;
+    namespace nodes {
+        class NodeOrchestrator;
+        class RendererNode;
     }
     namespace zones {
         class ZoneComposer;
@@ -133,9 +133,9 @@ namespace RateLimitConfig {
 // ============================================================================
 
 /**
- * @brief Web Server with Actor System integration
+ * @brief Web Server with Node System integration
  *
- * All state modifications are sent through ActorSystem commands,
+ * All state modifications are sent through NodeOrchestrator commands,
  * ensuring thread-safe operation with the RendererActor on Core 1.
  */
 class WebServer {
@@ -144,10 +144,10 @@ class WebServer {
 public:
     /**
      * @brief Construct WebServer
-     * @param actors Reference to the ActorSystem
+     * @param orchestrator Reference to the NodeOrchestrator
      * @param renderer Pointer to the RendererActor
      */
-    WebServer(lightwaveos::actors::ActorSystem& actors, lightwaveos::actors::RendererActor* renderer);
+    WebServer(lightwaveos::nodes::NodeOrchestrator& orchestrator, lightwaveos::nodes::RendererNode* renderer);
 
     /**
      * @brief Destructor
@@ -159,8 +159,8 @@ public:
     WebServer& operator=(const WebServer&) = delete;
     
 private:
-    lightwaveos::actors::ActorSystem& m_actorSystem;
-    lightwaveos::actors::RendererActor* m_renderer;
+    lightwaveos::nodes::NodeOrchestrator& m_orchestrator;
+    lightwaveos::nodes::RendererNode* m_renderer;
 
     // ========================================================================
     // Lifecycle
@@ -171,7 +171,7 @@ public:
      * @brief Initialize and start the web server
      *
      * Sets up WiFi (STA mode via WiFiManager), HTTP routes, and WebSocket.
-     * Call from setup() after ActorSystem is started.
+     * Call from setup() after NodeOrchestrator is started.
      *
      * @return true if server started successfully
      */

@@ -212,6 +212,21 @@ bool WebSocketClient::canSend(uint8_t paramIndex) {
 
 void WebSocketClient::sendJSON(const char* type, JsonDocument& doc) {
     if (!isConnected()) {
+        // #region agent log
+        {
+            // HWS1: Prove commands are being dropped due to disconnected WS state.
+            char buf[240];
+            const int n = snprintf(
+                buf, sizeof(buf),
+                "{\"sessionId\":\"debug-session\",\"runId\":\"tab5-zone-ui-pre\",\"hypothesisId\":\"HWS1\",\"location\":\"Tab5.encoder/src/network/WebSocketClient.cpp:sendJSON\",\"message\":\"ws.drop.not_connected\",\"data\":{\"type\":\"%s\",\"status\":%u,\"reconnectDelayMs\":%lu},\"timestamp\":%lu}",
+                type ? type : "",
+                static_cast<unsigned>(_status),
+                static_cast<unsigned long>(_reconnectDelay),
+                static_cast<unsigned long>(millis())
+            );
+            if (n > 0) Serial.println(buf);
+        }
+        // #endregion
         return;
     }
 
@@ -379,6 +394,22 @@ void WebSocketClient::sendZoneEffect(uint8_t zoneId, uint8_t effectId) {
     // Map zoneId to rate limiter index
     uint8_t paramIndex = ParamIndex::ZONE0_EFFECT + (zoneId * 2);
     if (zoneId > 3 || !canSend(paramIndex)) {
+        // #region agent log
+        {
+            // HWS2: Prove zone effect sends are being blocked (rate limit / invalid zone).
+            char buf[220];
+            const int n = snprintf(
+                buf, sizeof(buf),
+                "{\"sessionId\":\"debug-session\",\"runId\":\"tab5-zone-ui-pre\",\"hypothesisId\":\"HWS2\",\"location\":\"Tab5.encoder/src/network/WebSocketClient.cpp:sendZoneEffect\",\"message\":\"ws.zoneEffect.blocked\",\"data\":{\"zoneId\":%u,\"effectId\":%u,\"paramIndex\":%u,\"connected\":%s},\"timestamp\":%lu}",
+                static_cast<unsigned>(zoneId),
+                static_cast<unsigned>(effectId),
+                static_cast<unsigned>(paramIndex),
+                isConnected() ? "true" : "false",
+                static_cast<unsigned long>(millis())
+            );
+            if (n > 0) Serial.println(buf);
+        }
+        // #endregion
         return;
     }
 
@@ -419,6 +450,22 @@ void WebSocketClient::sendZonePalette(uint8_t zoneId, uint8_t paletteId) {
     // Zone palette shares rate limit with zone effect (same encoder)
     uint8_t paramIndex = ParamIndex::ZONE0_EFFECT + (zoneId * 2);
     if (zoneId > 3 || !canSend(paramIndex)) {
+        // #region agent log
+        {
+            // HWS3: Prove zone palette sends are being blocked (rate limit / invalid zone).
+            char buf[220];
+            const int n = snprintf(
+                buf, sizeof(buf),
+                "{\"sessionId\":\"debug-session\",\"runId\":\"tab5-zone-ui-pre\",\"hypothesisId\":\"HWS3\",\"location\":\"Tab5.encoder/src/network/WebSocketClient.cpp:sendZonePalette\",\"message\":\"ws.zonePalette.blocked\",\"data\":{\"zoneId\":%u,\"paletteId\":%u,\"paramIndex\":%u,\"connected\":%s},\"timestamp\":%lu}",
+                static_cast<unsigned>(zoneId),
+                static_cast<unsigned>(paletteId),
+                static_cast<unsigned>(paramIndex),
+                isConnected() ? "true" : "false",
+                static_cast<unsigned long>(millis())
+            );
+            if (n > 0) Serial.println(buf);
+        }
+        // #endregion
         return;
     }
 
@@ -443,6 +490,21 @@ void WebSocketClient::sendZoneBlend(uint8_t zoneId, uint8_t blendMode) {
 
 void WebSocketClient::sendZonesSetLayout(const struct zones::ZoneSegment* segments, uint8_t zoneCount) {
     if (!isConnected() || !segments || zoneCount == 0 || zoneCount > zones::MAX_ZONES) {
+        // #region agent log
+        {
+            // HWS4: Prove layout pushes are being skipped due to connection/state gating.
+            char buf[240];
+            const int n = snprintf(
+                buf, sizeof(buf),
+                "{\"sessionId\":\"debug-session\",\"runId\":\"tab5-zone-ui-pre\",\"hypothesisId\":\"HWS4\",\"location\":\"Tab5.encoder/src/network/WebSocketClient.cpp:sendZonesSetLayout\",\"message\":\"ws.zonesSetLayout.skipped\",\"data\":{\"connected\":%s,\"segmentsNull\":%s,\"zoneCount\":%u},\"timestamp\":%lu}",
+                isConnected() ? "true" : "false",
+                segments ? "false" : "true",
+                static_cast<unsigned>(zoneCount),
+                static_cast<unsigned long>(millis())
+            );
+            if (n > 0) Serial.println(buf);
+        }
+        // #endregion
         return;
     }
 

@@ -69,11 +69,14 @@ namespace NetworkConfig {
     // ========================================================================
     // Access Point Settings (fallback when WiFi fails)
     // ========================================================================
+    // AP SSID: "LightwaveOS-AP" - Tab5.encoder devices connect to this as secondary network
+    // Password: "SpectraSynq" - matches Tab5 configuration
+    // IP: 192.168.4.1 (default SoftAP gateway)
 
     #ifdef AP_SSID_CUSTOM
         constexpr const char* AP_SSID = AP_SSID_CUSTOM;
     #else
-        constexpr const char* AP_SSID = "LightwaveOS";
+        constexpr const char* AP_SSID = "LightwaveOS-AP";
     #endif
 
     #ifdef AP_PASSWORD_CUSTOM

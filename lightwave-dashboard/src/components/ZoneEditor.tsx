@@ -250,15 +250,6 @@ export const ZoneEditor: React.FC = () => {
     }
   }, [validateLayout]);
 
-  // Get LED position in visualization (0-159 for left, 160-319 for right)
-  const getLedPosition = useCallback((ledIndex: number, isRight: boolean) => {
-    if (isRight) {
-      return ledIndex; // Right strip: 80-159 maps to 80-159 in visualization
-    } else {
-      return CENTER_LEFT - ledIndex; // Left strip: 0-79 maps to 79-0 (reversed, centre at right)
-    }
-  }, []);
-
   // Check if LED is in a zone
   const getZoneForLed = useCallback((ledIndex: number, isRight: boolean) => {
     for (const seg of editingSegments) {
@@ -316,6 +307,7 @@ export const ZoneEditor: React.FC = () => {
               Preset
             </label>
             <Listbox
+              label="Preset"
               options={[{ value: -1, label: 'Custom' }, ...presetOptions]}
               value={selectedPreset ?? -1}
               onChange={(val) => {
@@ -507,4 +499,3 @@ export const ZoneEditor: React.FC = () => {
     </div>
   );
 };
-

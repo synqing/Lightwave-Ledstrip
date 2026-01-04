@@ -1,10 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { V2Client } from '../services/v2/client';
+import { buildV2BaseUrl } from '../services/v2/config';
 import { useV2 } from '../state/v2';
-import type { Show, TimelineScene } from '../types/timeline';
+import type { Show } from '../types/timeline';
 
 export interface ShowState {
   showId: number | string | null;
   showName: string | null;
+  playbackId?: number;
   isPlaying: boolean;
   isPaused: boolean;
   progress: number;
@@ -19,6 +22,7 @@ interface ShowListResponse {
     name: string;
     durationMs: number;
     durationSeconds: number;
+    playbackId?: number;
     chapterCount?: number;
     cueCount?: number;
     looping: boolean;
@@ -29,13 +33,20 @@ interface ShowListResponse {
     name: string;
     durationMs: number;
     durationSeconds: number;
+    playbackId?: number;
     type: 'custom';
     isSaved: boolean;
   }>;
 }
 
 export function useShows() {
-  const { ws, http } = useV2();
+  const { state, actions } = useV2();
+  const client = useMemo(() => new V2Client({
+    baseUrl: buildV2BaseUrl(state.settings.deviceOrigin),
+    auth: { mode: state.settings.authMode, token: state.settings.authToken || undefined },
+    requestTimeoutMs: 5000,
+  }), [state.settings.authMode, state.settings.authToken, state.settings.deviceOrigin]);
+
   const [shows, setShows] = useState<Show[]>([]);
   const [currentShow, setCurrentShow] = useState<ShowState | null>(null);
   const [loading, setLoading] = useState(false);
@@ -46,57 +57,54 @@ export function useShows() {
     setLoading(true);
     setError(null);
     try {
-      const response = await http.get<{ success: boolean; data: ShowListResponse }>('/api/v1/shows');
-      if (response.data.success) {
-        const allShows: Show[] = [
-          ...response.data.data.builtin.map(s => ({
-            id: String(s.id),
-            name: s.name,
-            durationSeconds: s.durationSeconds,
-            scenes: [], // Will be loaded on demand
-            isSaved: true,
-          })),
-          ...response.data.data.custom.map(s => ({
-            id: s.id,
-            name: s.name,
-            durationSeconds: s.durationSeconds,
-            scenes: [], // Will be loaded on demand
-            isSaved: s.isSaved,
-          })),
-        ];
-        setShows(allShows);
-      }
-    } catch (err: any) {
-      setError(err.message || 'Failed to load shows');
+      const data = await client.get<ShowListResponse>('/shows');
+      const allShows: Show[] = [
+        ...data.builtin.map((s) => ({
+          id: String(s.id),
+          name: s.name,
+          durationSeconds: s.durationSeconds,
+          scenes: [],
+          isSaved: true,
+        })),
+        ...data.custom.map((s) => ({
+          id: s.id,
+          name: s.name,
+          durationSeconds: s.durationSeconds,
+          scenes: [],
+          isSaved: s.isSaved,
+        })),
+      ];
+      setShows(allShows);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to load shows';
+      setError(msg);
     } finally {
       setLoading(false);
     }
-  }, [http]);
+  }, [client]);
 
   // Load a specific show with scenes
   const loadShow = useCallback(async (showId: string | number): Promise<Show | null> => {
     setLoading(true);
     setError(null);
     try {
-      const response = await http.get<{ success: boolean; data: Show }>(`/api/v1/shows/${showId}?format=scenes`);
-      if (response.data.success) {
-        return response.data.data;
-      }
-      return null;
-    } catch (err: any) {
-      setError(err.message || 'Failed to load show');
+      const data = await client.get<Show>(`/shows/${encodeURIComponent(String(showId))}`, { query: { format: 'scenes' } });
+      return data;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to load show';
+      setError(msg);
       return null;
     } finally {
       setLoading(false);
     }
-  }, [http]);
+  }, [client]);
 
   // Save show to firmware
   const saveShow = useCallback(async (show: Show): Promise<string | null> => {
     setLoading(true);
     setError(null);
     try {
-      const response = await http.post<{ success: boolean; data: { id: string; name: string; message: string } }>('/api/v1/shows', {
+      const body = {
         name: show.name,
         durationSeconds: show.durationSeconds,
         scenes: show.scenes.map(s => ({
@@ -106,101 +114,85 @@ export function useShows() {
           startTimePercent: s.startTimePercent,
           durationPercent: s.durationPercent,
         })),
-      });
-      if (response.data.success) {
-        return response.data.data.id;
+      };
+
+      // Built-ins are numeric IDs; only custom shows can be updated.
+      const isBuiltinId = /^[0-9]+$/.test(show.id);
+      if (!isBuiltinId && show.id && !show.id.startsWith('new-')) {
+        await client.put<{ id: string; name: string; message: string; playbackId?: number }>(`/shows/${encodeURIComponent(show.id)}`, body);
+        return show.id;
       }
-      return null;
-    } catch (err: any) {
-      setError(err.message || 'Failed to save show');
+
+      const created = await client.post<{ id: string; name: string; message: string; playbackId?: number }>('/shows', body);
+      return created.id;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to save show';
+      setError(msg);
       return null;
     } finally {
       setLoading(false);
     }
-  }, [http]);
+  }, [client]);
 
   // Delete show
   const deleteShow = useCallback(async (showId: string): Promise<boolean> => {
     setLoading(true);
     setError(null);
     try {
-      const response = await http.delete<{ success: boolean; data: { id: string; message: string } }>(`/api/v1/shows/${showId}`);
-      return response.data.success;
-    } catch (err: any) {
-      setError(err.message || 'Failed to delete show');
+      await client.delete<{ id: string; message: string }>(`/shows/${encodeURIComponent(showId)}`);
+      return true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to delete show';
+      setError(msg);
       return false;
     } finally {
       setLoading(false);
     }
-  }, [http]);
+  }, [client]);
 
   // Control show playback
-  const controlShow = useCallback(async (action: 'start' | 'stop' | 'pause' | 'resume' | 'seek', showId?: number, timeMs?: number): Promise<boolean> => {
+  const controlShow = useCallback(async (action: 'start' | 'stop' | 'pause' | 'resume' | 'seek', showId?: number | string, timeMs?: number): Promise<boolean> => {
     setError(null);
     try {
-      const payload: any = { action };
+      const payload: Record<string, unknown> = { action };
       if (action === 'start' && showId !== undefined) {
         payload.showId = showId;
       }
       if (action === 'seek' && timeMs !== undefined) {
         payload.timeMs = timeMs;
       }
-      const response = await http.post<{ success: boolean; data: { action: string; message: string } }>('/api/v1/shows/control', payload);
-      return response.data.success;
-    } catch (err: any) {
-      setError(err.message || 'Failed to control show');
+      await client.post('/shows/control', payload);
+      return true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to control show';
+      setError(msg);
       return false;
     }
-  }, [http]);
+  }, [client]);
 
   // Get current show state
   const getCurrentState = useCallback(async () => {
     try {
-      const response = await http.get<{ success: boolean; data: ShowState }>('/api/v1/shows/current');
-      if (response.data.success) {
-        setCurrentShow(response.data.data);
-      }
-    } catch (err: any) {
-      // Ignore errors for state polling
+      const data = await client.get<ShowState>('/shows/current');
+      setCurrentShow(data);
+    } catch {
+      // Ignore errors for polling
     }
-  }, [http]);
+  }, [client]);
 
-  // WebSocket event handlers
+  // WebSocket event handlers (best-effort; show events may not be broadcast on all builds)
   useEffect(() => {
+    const ws = actions.getWsClient();
     if (!ws) return;
 
-    const handlers: Record<string, (data: any) => void> = {
-      'show.started': (data: any) => {
-        setCurrentShow(prev => prev ? { ...prev, isPlaying: true, isPaused: false } : {
-          showId: data.showId,
-          showName: data.showName,
-          isPlaying: true,
-          isPaused: false,
-          progress: 0,
-          elapsedMs: 0,
-          remainingMs: 0,
-          currentChapter: null,
-        });
-      },
-      'show.stopped': (data: any) => {
+    const off = ws.onEvent((ev) => {
+      const anyEv = ev as any;
+      if (anyEv.type === 'show.state' && anyEv.success === true && anyEv.data) {
+        setCurrentShow(anyEv.data as ShowState);
+      }
+      if (anyEv.type === 'show.stopped') {
         setCurrentShow(null);
-      },
-      'show.paused': (data: any) => {
-        setCurrentShow(prev => prev ? { ...prev, isPaused: true } : null);
-      },
-      'show.resumed': (data: any) => {
-        setCurrentShow(prev => prev ? { ...prev, isPaused: false } : null);
-      },
-      'show.progress': (data: any) => {
-        setCurrentShow(prev => prev ? { ...prev, progress: data.progress, elapsedMs: data.elapsedMs, remainingMs: data.remainingMs } : null);
-      },
-      'show.chapterChanged': (data: any) => {
-        setCurrentShow(prev => prev ? { ...prev, currentChapter: data.chapterIndex } : null);
-      },
-    };
-
-    Object.entries(handlers).forEach(([type, handler]) => {
-      ws.on(type, handler);
+      }
     });
 
     // Poll for current state every 100ms during playback
@@ -211,12 +203,10 @@ export function useShows() {
     }, 100);
 
     return () => {
-      Object.keys(handlers).forEach(type => {
-        ws.off(type);
-      });
+      off();
       clearInterval(interval);
     };
-  }, [ws, currentShow, getCurrentState]);
+  }, [actions, currentShow, getCurrentState]);
 
   return {
     shows,
@@ -231,4 +221,3 @@ export function useShows() {
     getCurrentState,
   };
 }
-

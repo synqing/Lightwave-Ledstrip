@@ -515,6 +515,29 @@ function handleMessage(msg) {
                         if (msgFlat.current.effectId !== undefined) {
                             state.zones.zones[zoneId].effectId = msgFlat.current.effectId;
                         }
+                        // Audio config fields (Phase 2b.1)
+                        if (msgFlat.current.tempoSync !== undefined) {
+                            state.zones.zones[zoneId].tempoSync = msgFlat.current.tempoSync;
+                        }
+                        if (msgFlat.current.audioBand !== undefined) {
+                            state.zones.zones[zoneId].audioBand = msgFlat.current.audioBand;
+                        }
+                        // Beat trigger fields (Phase 2b.2)
+                        if (msgFlat.current.beatTriggerEnabled !== undefined) {
+                            state.zones.zones[zoneId].beatTriggerEnabled = msgFlat.current.beatTriggerEnabled;
+                        }
+                        if (msgFlat.current.beatTriggerInterval !== undefined) {
+                            state.zones.zones[zoneId].beatTriggerInterval = msgFlat.current.beatTriggerInterval;
+                        }
+                        if (msgFlat.current.beatModulation !== undefined) {
+                            state.zones.zones[zoneId].beatModulation = msgFlat.current.beatModulation;
+                        }
+                        if (msgFlat.current.tempoSpeedScale !== undefined) {
+                            state.zones.zones[zoneId].tempoSpeedScale = msgFlat.current.tempoSpeedScale;
+                        }
+                        if (msgFlat.current.beatDecay !== undefined) {
+                            state.zones.zones[zoneId].beatDecay = msgFlat.current.beatDecay;
+                        }
                     }
                     log(`[ZONES] Zone ${zoneId} updated: speed=${state.zones.zones[zoneId].speed}`);
                     updateZonesUI();
@@ -1528,11 +1551,12 @@ function updateZoneModeUI() {
 
 function updateZonesUI() {
     const zoneRow = document.getElementById('zoneControlsRow');
-    if (!zoneRow) return;
-
+    const zoneQuickControlsRow = document.getElementById('zoneQuickControlsRow');
+    
     // Show/hide zone controls based on state
     if (state.zones && state.zones.enabled && state.zones.zones && state.zones.zones.length > 0) {
-        zoneRow.style.display = 'flex';
+        if (zoneRow) zoneRow.style.display = 'flex';
+        if (zoneQuickControlsRow) zoneQuickControlsRow.style.display = 'flex';
         
         // Update each zone slider (up to 3 zones)
         for (let i = 0; i < Math.min(3, state.zones.zones.length); i++) {
@@ -1552,8 +1576,12 @@ function updateZonesUI() {
                 value.textContent = zone.speed;
             }
         }
+        
+        // Render zone quick controls (pattern, palette, audio config, beat trigger, reordering)
+        renderZoneQuickControls();
     } else {
-        zoneRow.style.display = 'none';
+        if (zoneRow) zoneRow.style.display = 'none';
+        if (zoneQuickControlsRow) zoneQuickControlsRow.style.display = 'none';
     }
     
     // Update zone mode UI
@@ -1569,6 +1597,23 @@ const ZONE_COLORS = ['#06b6d4', '#22c55e', '#a855f7', '#3b82f6'];  // cyan, gree
 const CENTER_LEFT = 79;
 const CENTER_RIGHT = 80;
 const MAX_LED = 159;
+
+// Audio band options for zone audio config
+const AUDIO_BANDS = [
+    { value: 0, label: 'Full' },
+    { value: 1, label: 'Bass' },
+    { value: 2, label: 'Mid' },
+    { value: 3, label: 'High' }
+];
+
+// Beat divisor options for beat triggers
+const BEAT_DIVISORS = [
+    { value: 0, label: 'Off' },
+    { value: 1, label: '1 Beat' },
+    { value: 2, label: '2 Beats' },
+    { value: 4, label: '4 Beats' },
+    { value: 8, label: '8 Beats' }
+];
 
 // Preset segment definitions (matching firmware ZoneDefinition.h)
 const ZONE_PRESETS = {
@@ -1866,6 +1911,130 @@ function setZoneEffect(zoneId, effectId) {
         })
         .catch(e => {
             log(`[REST] ❌ Error setting zone ${zoneId} effect: ${e.message}`);
+        });
+    }
+}
+
+function setZoneAudioBand(zoneId, audioBand) {
+    // Update local state immediately for responsive UI
+    if (state.zones && state.zones.zones && state.zones.zones[zoneId]) {
+        state.zones.zones[zoneId].audioBand = audioBand;
+    }
+
+    if (state.connected && state.ws) {
+        send({ type: 'zones.update', zoneId, audioBand });
+        log(`[WS] Zone ${zoneId} audioBand: ${audioBand}`);
+    } else {
+        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zones/${zoneId}/audio`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ audioBand })
+        })
+        .then(data => {
+            if (data.success) {
+                log(`[REST] Zone ${zoneId} audioBand: ${audioBand}`);
+            }
+        })
+        .catch(e => {
+            log(`[REST] ❌ Error setting zone ${zoneId} audioBand: ${e.message}`);
+        });
+    }
+}
+
+function setZoneTempoSync(zoneId, tempoSync) {
+    // Update local state immediately for responsive UI
+    if (state.zones && state.zones.zones && state.zones.zones[zoneId]) {
+        state.zones.zones[zoneId].tempoSync = tempoSync;
+    }
+    updateZonesUI();
+
+    if (state.connected && state.ws) {
+        send({ type: 'zones.update', zoneId, tempoSync });
+        log(`[WS] Zone ${zoneId} tempoSync: ${tempoSync}`);
+    } else {
+        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zones/${zoneId}/audio`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tempoSync })
+        })
+        .then(data => {
+            if (data.success) {
+                log(`[REST] Zone ${zoneId} tempoSync: ${tempoSync}`);
+            }
+        })
+        .catch(e => {
+            log(`[REST] ❌ Error setting zone ${zoneId} tempoSync: ${e.message}`);
+        });
+    }
+}
+
+function setZoneBeatDivisor(zoneId, beatDivisor) {
+    // Update local state immediately for responsive UI
+    if (state.zones && state.zones.zones && state.zones.zones[zoneId]) {
+        state.zones.zones[zoneId].beatDivisor = beatDivisor;
+        // If beatDivisor > 0, beat trigger is enabled
+        state.zones.zones[zoneId].beatTriggerEnabled = beatDivisor > 0;
+        // Map beatDivisor to beatTriggerInterval (1, 2, 4, 8)
+        if (beatDivisor > 0) {
+            state.zones.zones[zoneId].beatTriggerInterval = beatDivisor;
+        }
+    }
+
+    if (state.connected && state.ws) {
+        send({ type: 'zones.update', zoneId, beatDivisor, beatTriggerEnabled: beatDivisor > 0, beatTriggerInterval: beatDivisor });
+        log(`[WS] Zone ${zoneId} beatDivisor: ${beatDivisor}`);
+    } else {
+        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zones/${zoneId}/audio`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ beatDivisor, beatTriggerEnabled: beatDivisor > 0, beatTriggerInterval: beatDivisor })
+        })
+        .then(data => {
+            if (data.success) {
+                log(`[REST] Zone ${zoneId} beatDivisor: ${beatDivisor}`);
+            }
+        })
+        .catch(e => {
+            log(`[REST] ❌ Error setting zone ${zoneId} beatDivisor: ${e.message}`);
+        });
+    }
+}
+
+function reorderZone(zoneId, direction) {
+    if (!state.zones || !state.zones.zones) return;
+
+    const zoneCount = state.zones.zones.length;
+    if (zoneCount < 2) return;
+
+    // Calculate new order
+    const currentOrder = [];
+    for (let i = 0; i < zoneCount; i++) {
+        currentOrder.push(i);
+    }
+
+    const targetIndex = direction === 'up' ? zoneId - 1 : zoneId + 1;
+    if (targetIndex < 0 || targetIndex >= zoneCount) return;
+
+    // Swap positions
+    [currentOrder[zoneId], currentOrder[targetIndex]] = [currentOrder[targetIndex], currentOrder[zoneId]];
+
+    if (state.connected && state.ws) {
+        send({ type: 'zones.reorder', order: currentOrder });
+        log(`[WS] Zone reorder: ${currentOrder.join(',')}`);
+    } else {
+        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zones/reorder`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ order: currentOrder })
+        })
+        .then(data => {
+            if (data.success) {
+                log(`[REST] Zone reorder: ${currentOrder.join(',')}`);
+                fetchZonesState();
+            }
+        })
+        .catch(e => {
+            log(`[REST] ❌ Error reordering zones: ${e.message}`);
         });
     }
 }

@@ -34,6 +34,8 @@ bool AudioWaveformEffect::init(plugins::EffectContext& ctx) {
     m_sumColorLast[2] = 0.0f;
     m_historyIndex = 0;
     m_lastHopSeq = 0;
+    m_beatSyncMode = false;
+    m_beatSyncPhase = 0.0f;
     return true;
 }
 
@@ -153,6 +155,15 @@ void AudioWaveformEffect::render(plugins::EffectContext& ctx) {
     m_sumColorLast[1] = sum_color_float[1];
     m_sumColorLast[2] = sum_color_float[2];
 
+    // Beat-sync mode: use beat phase to time-stretch waveform display
+    // When enabled, waveform scrolls in sync with beat tempo
+    m_beatSyncMode = (ctx.speed > 75);  // Enable beat-sync when speed > 75
+    if (m_beatSyncMode) {
+        m_beatSyncPhase = ctx.audio.beatPhase();
+    } else {
+        m_beatSyncPhase = 0.0f;
+    }
+
     // Render waveform (matching Sensory Bridge algorithm)
     // Map ctx.speed to smoothing rate (MOOD equivalent)
     // Speed 1-50 maps to smoothing 0.1-1.0 range
@@ -200,7 +211,14 @@ void AudioWaveformEffect::render(plugins::EffectContext& ctx) {
 
         // Map waveform index to radial distance (centre-origin)
         // Waveform index 0 = centre, index 127 = edge
-        float distF = ((float)i / (float)(WAVEFORM_SIZE - 1)) * (float)(HALF_LENGTH - 1);
+        // Apply beat-sync phase offset if enabled (time-stretches display)
+        float waveformPos = (float)i / (float)(WAVEFORM_SIZE - 1);
+        if (m_beatSyncMode) {
+            // Time-stretch: shift waveform position based on beat phase
+            // Creates smooth scrolling effect synchronized to tempo
+            waveformPos = fmodf(waveformPos + m_beatSyncPhase * 0.3f, 1.0f);
+        }
+        float distF = waveformPos * (float)(HALF_LENGTH - 1);
         uint16_t dist = (uint16_t)distF;
 
         // Compute final colour (sum_color * brightness)

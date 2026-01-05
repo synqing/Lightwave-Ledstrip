@@ -105,6 +105,7 @@ bool AudioBloomEffect::init(plugins::EffectContext& ctx) {
     m_lastHopSeq = 0;
     m_scrollPhase = 0.0f;
     m_subBassPulse = 0.0f;
+    m_burstIntensity = 0.0f;
     return true;
 }
 
@@ -294,6 +295,48 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
             }
             if (rightIdx < ctx.ledCount) {
                 ctx.leds[rightIdx] += warmBoost;
+            }
+        }
+    }
+
+    // =========================================================================
+    // Percussion Burst (snare-triggered center burst)
+    // Adds a bright burst at center on snare hits for enhanced rhythmic response.
+    // =========================================================================
+    if (ctx.audio.isSnareHit()) {
+        // Trigger burst on snare hit, scale with snare energy
+        float snareEnergy = ctx.audio.snare();
+        m_burstIntensity = fmaxf(m_burstIntensity, snareEnergy);
+    } else {
+        // Decay burst over time (~150ms at 120 FPS)
+        m_burstIntensity *= 0.92f;
+        if (m_burstIntensity < 0.01f) m_burstIntensity = 0.0f;
+    }
+
+    if (m_burstIntensity > 0.1f) {
+        // Burst radius scales with intensity (max ~15 LEDs from center)
+        uint16_t burstRadius = (uint16_t)(m_burstIntensity * 15.0f);
+        if (burstRadius > HALF_LENGTH / 5) burstRadius = HALF_LENGTH / 5;
+
+        // Bright burst: white-tinted for visibility
+        uint8_t burstBright = (uint8_t)(m_burstIntensity * 120.0f);  // 0-120 brightness add
+
+        for (uint16_t dist = 0; dist < burstRadius; ++dist) {
+            // Fade burst toward edge
+            float fadeIn = 1.0f - ((float)dist / (float)burstRadius);
+            uint8_t fadedBurst = (uint8_t)(burstBright * fadeIn);
+
+            // Apply white-tinted burst to center pair
+            uint16_t leftIdx = ctx.centerPoint - 1 - dist;
+            uint16_t rightIdx = ctx.centerPoint + dist;
+
+            // White tint: equal RGB for bright flash
+            CRGB burstColor = CRGB(fadedBurst, fadedBurst, fadedBurst);
+            if (leftIdx < ctx.ledCount) {
+                ctx.leds[leftIdx] += burstColor;
+            }
+            if (rightIdx < ctx.ledCount) {
+                ctx.leds[rightIdx] += burstColor;
             }
         }
     }

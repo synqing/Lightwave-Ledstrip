@@ -46,6 +46,7 @@ private:
     uint32_t m_lastHopSeq = 0;  // Track hop sequence for updates
     float m_scrollPhase = 0.0f;  // Fractional scroll accumulator
     float m_subBassPulse = 0.0f;  // 64-bin sub-bass energy for center pulse
+    float m_burstIntensity = 0.0f;  // Percussion burst intensity (snare-triggered)
 
     // Helper functions matching Sensory Bridge post-processing
     void distortLogarithmic(CRGB* src, CRGB* dst, uint16_t len);

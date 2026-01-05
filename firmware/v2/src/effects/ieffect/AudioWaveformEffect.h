@@ -58,6 +58,10 @@ private:
     
     // Track hop sequence for updates
     uint32_t m_lastHopSeq = 0;
+    
+    // Beat-sync mode state
+    bool m_beatSyncMode = false;
+    float m_beatSyncPhase = 0.0f;
 };
 
 } // namespace ieffect

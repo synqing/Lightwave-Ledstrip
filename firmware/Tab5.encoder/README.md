@@ -264,7 +264,7 @@ firmware/Tab5.encoder/
 
 | Encoder | Parameter   | Range   | Default |
 |---------|-------------|---------|---------|
-| 0       | Effect      | 0-87    | 0       |
+| 0       | Effect      | 0-95    | 0       |
 | 1       | Brightness  | 0-255   | 128     |
 | 2       | Palette     | 0-63    | 0       |
 | 3       | Speed       | 1-100   | 25      |

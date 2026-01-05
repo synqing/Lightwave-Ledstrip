@@ -265,6 +265,7 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
     // -----------------------------------------
     if (hasAudio && newHop) {
         m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+        m_targetRms = ctx.audio.rms();
 
         // Transform chroma into a stable "brightness proxy"
         float maxBinVal = 0.0f;

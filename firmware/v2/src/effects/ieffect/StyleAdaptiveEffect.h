@@ -14,6 +14,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../enhancement/SmoothingEngine.h"
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
@@ -47,6 +48,15 @@ private:
     // Style transition smoothing
     uint8_t m_currentStyle = 0;       // Current style enum value
     float m_styleConfidence = 0.0f;    // Style detection confidence
+    
+    // Audio smoothing (AsymmetricFollower for mood-adjusted smoothing)
+    enhancement::AsymmetricFollower m_rhythmicPulseFollower{0.0f, 0.05f, 0.30f};
+    enhancement::AsymmetricFollower m_dynamicBreathFollower{0.0f, 0.20f, 0.50f};
+    enhancement::AsymmetricFollower m_rmsFollower{0.0f, 0.05f, 0.30f};
+    
+    // Hop sequence tracking
+    uint32_t m_lastHopSeq = 0;
+    float m_targetRms = 0.0f;
 };
 
 } // namespace ieffect

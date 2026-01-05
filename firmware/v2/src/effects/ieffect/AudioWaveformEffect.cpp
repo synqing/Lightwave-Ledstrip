@@ -36,6 +36,8 @@ bool AudioWaveformEffect::init(plugins::EffectContext& ctx) {
     m_lastHopSeq = 0;
     m_beatSyncMode = false;
     m_beatSyncPhase = 0.0f;
+    m_waveformPeakScaledTarget = 0.0f;
+    m_peakScaledFollower.reset(0.0f);
     return true;
 }
 
@@ -85,17 +87,17 @@ void AudioWaveformEffect::render(plugins::EffectContext& ctx) {
         if (m_maxWaveformValFollower > 0.0f) {
             waveformPeakScaledRaw = maxWaveformVal / m_maxWaveformValFollower;
         }
-
-        if (waveformPeakScaledRaw > m_waveformPeakScaled) {
-            float delta = waveformPeakScaledRaw - m_waveformPeakScaled;
-            m_waveformPeakScaled += delta * PEAK_SCALE_ATTACK;
-        } else if (waveformPeakScaledRaw < m_waveformPeakScaled) {
-            float delta = m_waveformPeakScaled - waveformPeakScaledRaw;
-            m_waveformPeakScaled -= delta * PEAK_SCALE_ATTACK;
-        }
+        
+        // Update target for mood-based smoothing (will be smoothed every frame)
+        m_waveformPeakScaledTarget = waveformPeakScaledRaw;
     }
 
-    // Smooth waveform_peak_scaled (0.03/0.97 tuned for LGP)
+    // Smooth waveform_peak_scaled with mood-adjusted smoothing
+    float dt = ctx.getSafeDeltaSeconds();
+    float moodNorm = ctx.getMoodNormalized();
+    m_waveformPeakScaled = m_peakScaledFollower.updateWithMood(m_waveformPeakScaledTarget, dt, moodNorm);
+    
+    // Additional smoothing for waveform_peak_scaled_last (0.03/0.97 tuned for LGP)
     m_waveformPeakScaledLast = m_waveformPeakScaled * 0.03f + m_waveformPeakScaledLast * 0.97f;
 
     // Compute sum_colour from chromagram (matching Sensory Bridge light_mode_waveform)

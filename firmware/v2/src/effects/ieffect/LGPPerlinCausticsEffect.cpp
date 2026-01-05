@@ -51,6 +51,13 @@ bool LGPPerlinCausticsEffect::init(plugins::EffectContext& ctx) {
     m_smoothMid = 0.0f;
     m_smoothHihat = 0.0f;
     m_time = 0;
+    
+    // Reset AsymmetricFollower instances for mood integration
+    m_trebleFollower.reset(0.0f);
+    m_bassFollower.reset(0.0f);
+    m_midFollower.reset(0.0f);
+    m_hihatFollower.reset(0.0f);
+    
     return true;
 }
 
@@ -83,12 +90,12 @@ void LGPPerlinCausticsEffect::render(plugins::EffectContext& ctx) {
             m_targetHihat = ctx.audio.hihat();
         }
         
-        // Smooth toward targets every frame (keeps motion alive between hops)
-        float alpha = dt / (0.15f + dt); // ~150ms smoothing
-        m_smoothTreble += (m_targetTreble - m_smoothTreble) * alpha;
-        m_smoothBass += (m_targetBass - m_smoothBass) * alpha;
-        m_smoothMid += (m_targetMid - m_smoothMid) * alpha;
-        m_smoothHihat += (m_targetHihat - m_smoothHihat) * alpha;
+        // Smooth toward targets every frame with MOOD-adjusted smoothing
+        float moodNorm = ctx.getMoodNormalized();
+        m_smoothTreble = m_trebleFollower.updateWithMood(m_targetTreble, dt, moodNorm);
+        m_smoothBass = m_bassFollower.updateWithMood(m_targetBass, dt, moodNorm);
+        m_smoothMid = m_midFollower.updateWithMood(m_targetMid, dt, moodNorm);
+        m_smoothHihat = m_hihatFollower.updateWithMood(m_targetHihat, dt, moodNorm);
         
         // Use smoothed values
         trebleNorm = m_smoothTreble;

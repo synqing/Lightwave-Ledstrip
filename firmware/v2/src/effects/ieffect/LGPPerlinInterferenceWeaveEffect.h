@@ -21,6 +21,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../enhancement/SmoothingEngine.h"
 #include <FastLED.h>
 
 namespace lightwaveos {
@@ -49,8 +50,19 @@ private:
     // Time accumulator
     uint16_t m_time;
     
-    // Audio state tracking
+    // Audio smoothing (AsymmetricFollower for natural attack/release)
+    enhancement::AsymmetricFollower m_beatFollower{0.0f, 0.05f, 0.30f};
+    enhancement::AsymmetricFollower m_fluxFollower{0.0f, 0.05f, 0.30f};
+    enhancement::AsymmetricFollower m_chromaFollowers[12];
+    float m_chromaSmoothed[12] = {0.0f};
+    float m_chromaTargets[12] = {0.0f};
+    
+    // Hop sequence tracking
     uint32_t m_lastHopSeq;
+    float m_targetBeat = 0.0f;
+    float m_targetFlux = 0.0f;
+    
+    // Audio state tracking
     uint8_t m_dominantChromaBin;
 };
 

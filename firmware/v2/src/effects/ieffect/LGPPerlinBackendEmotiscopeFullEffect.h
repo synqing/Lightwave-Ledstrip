@@ -15,6 +15,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../enhancement/SmoothingEngine.h"
 #include "PerlinNoiseTypes.h"
 #include <FastLED.h>
 #include <cmath>
@@ -54,6 +55,13 @@ private:
     
     // Audio-driven momentum (Emotiscope-style)
     float m_momentum;
+    
+    // Audio smoothing (AsymmetricFollower for mood-adjusted smoothing)
+    enhancement::AsymmetricFollower m_rmsFollower{0.0f, 0.05f, 0.30f};
+    
+    // Hop sequence tracking
+    uint32_t m_lastHopSeq = 0;
+    float m_targetRms = 0.0f;
     
     // Pre-computed noise array (80 samples, one per centre distance 0-79)
     // 16-byte aligned for SIMD (matches Emotiscope 2.0 architecture)

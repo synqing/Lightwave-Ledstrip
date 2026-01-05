@@ -19,6 +19,7 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../../audio/contracts/ControlBus.h"
+#include "../enhancement/SmoothingEngine.h"
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
@@ -65,6 +66,10 @@ private:
     static constexpr float TRANSITION_DURATION_MS = 200.0f;
     bool m_isTransitioning = false;
 
+    // Audio smoothing (AsymmetricFollower for natural attack/release)
+    enhancement::AsymmetricFollower m_confidenceFollower{0.0f, 0.05f, 0.30f};
+    float m_targetConfidence = 0.0f;
+    
     // Smoothed root note for gradual hue drift
     float m_rootNoteSmooth = 0.0f;
 

@@ -14,6 +14,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../enhancement/SmoothingEngine.h"
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
@@ -34,8 +35,13 @@ public:
     const plugins::EffectMetadata& getMetadata() const override;
 
 private:
-    // Smoothing buffers for each bin (64 bins)
+    // Per-bin smoothing (AsymmetricFollower for natural attack/release)
+    enhancement::AsymmetricFollower m_binFollowers[64];
     float m_binSmoothing[64] = {0};
+    
+    // Hop sequence tracking
+    uint32_t m_lastHopSeq = 0;
+    float m_targetBins[64] = {0.0f};
     
     // Beat-sync mode state
     bool m_beatSyncMode = false;

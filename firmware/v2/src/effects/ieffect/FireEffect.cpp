@@ -29,6 +29,9 @@ void FireEffect::render(plugins::EffectContext& ctx) {
     // Narrative integration: spark frequency modulated by tension
     using namespace lightwaveos::narrative;
 
+    // Fade for trail persistence
+    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+
     // Cool down every cell
     for (int i = 0; i < STRIP_LENGTH; i++) {
         m_fireHeat[i] = qsub8(m_fireHeat[i], random8(0, ((55 * 10) / STRIP_LENGTH) + 2));

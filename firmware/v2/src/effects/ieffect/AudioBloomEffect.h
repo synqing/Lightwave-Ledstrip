@@ -14,6 +14,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../enhancement/SmoothingEngine.h"
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
@@ -45,6 +46,9 @@ private:
     uint32_t m_iter = 0;  // Frame counter for alternate frame logic
     uint32_t m_lastHopSeq = 0;  // Track hop sequence for updates
     float m_scrollPhase = 0.0f;  // Fractional scroll accumulator
+    
+    // Audio smoothing (AsymmetricFollower for natural attack/release)
+    enhancement::AsymmetricFollower m_subBassFollower{0.0f, 0.05f, 0.30f};
     float m_subBassPulse = 0.0f;  // 64-bin sub-bass energy for center pulse
     float m_burstIntensity = 0.0f;  // Percussion burst intensity (snare-triggered)
 

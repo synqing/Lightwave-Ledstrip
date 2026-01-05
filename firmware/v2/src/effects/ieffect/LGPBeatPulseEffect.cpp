@@ -5,6 +5,7 @@
 
 #include "LGPBeatPulseEffect.h"
 #include "../CoreEffects.h"
+#include "../enhancement/SmoothingEngine.h"
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
@@ -18,6 +19,15 @@ namespace ieffect {
 
 bool LGPBeatPulseEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // Initialize smoothing followers
+    m_bassFollower.reset(0.0f);
+    m_midFollower.reset(0.0f);
+    m_trebleFollower.reset(0.0f);
+    m_lastHopSeq = 0;
+    m_targetBass = 0.0f;
+    m_targetMid = 0.0f;
+    m_targetTreble = 0.0f;
+    
     // Primary kick/beat pulse
     m_pulsePosition = 0.0f;
     m_pulseIntensity = 0.0f;
@@ -45,24 +55,38 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
     bool snareHit = false;
     bool hihatHit = false;
 
+    float dt = ctx.getSafeDeltaSeconds();
+    float moodNorm = ctx.getMoodNormalized();
+
     // Spike detection thresholds
     constexpr float SNARE_SPIKE_THRESH = 0.25f;   // Mid energy spike threshold
     constexpr float HIHAT_SPIKE_THRESH = 0.20f;   // Treble energy spike threshold
 
     if (ctx.audio.available) {
         beatPhase = ctx.audio.beatPhase();
-        bassEnergy = ctx.audio.bass();
-        midEnergy = ctx.audio.mid();
-        trebleEnergy = ctx.audio.treble();
         onBeat = ctx.audio.isOnBeat();
+        
+        // Hop-based updates: update targets only on new hops
+        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+        if (newHop) {
+            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+            m_targetBass = ctx.audio.bass();
+            m_targetMid = ctx.audio.mid();
+            m_targetTreble = ctx.audio.treble();
+        }
+        
+        // Smooth toward targets every frame with MOOD-adjusted smoothing
+        bassEnergy = m_bassFollower.updateWithMood(m_targetBass, dt, moodNorm);
+        midEnergy = m_midFollower.updateWithMood(m_targetMid, dt, moodNorm);
+        trebleEnergy = m_trebleFollower.updateWithMood(m_targetTreble, dt, moodNorm);
 
-        // Snare detection: spike in mid-frequency energy
+        // Snare detection: spike in mid-frequency energy (using smoothed values)
         float midDelta = midEnergy - m_lastMidEnergy;
         if (midDelta > SNARE_SPIKE_THRESH && midEnergy > 0.4f) {
             snareHit = true;
         }
 
-        // Hi-hat detection: spike in high-frequency energy
+        // Hi-hat detection: spike in high-frequency energy (using smoothed values)
         float trebleDelta = trebleEnergy - m_lastTrebleEnergy;
         if (trebleDelta > HIHAT_SPIKE_THRESH && trebleEnergy > 0.3f) {
             hihatHit = true;

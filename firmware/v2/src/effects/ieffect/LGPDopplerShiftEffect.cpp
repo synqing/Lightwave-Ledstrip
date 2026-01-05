@@ -52,9 +52,11 @@ void LGPDopplerShiftEffect::render(plugins::EffectContext& ctx) {
 
         uint8_t brightness = (uint8_t)(255.0f * intensity * (1.0f - distFromCenter / HALF_LENGTH));
 
-        ctx.leds[i] = CHSV(shiftedHue, 255, brightness);
+        // Use palette system - apply brightness scaling
+        uint8_t brightU8 = (uint8_t)((brightness * ctx.brightness) / 255);
+        ctx.leds[i] = ctx.palette.getColor(shiftedHue, brightU8);
         if (i + STRIP_LENGTH < ctx.ledCount) {
-            ctx.leds[i + STRIP_LENGTH] = CHSV((uint8_t)(shiftedHue + 90), 255, brightness);
+            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(shiftedHue + 90), brightU8);
         }
     }
 }

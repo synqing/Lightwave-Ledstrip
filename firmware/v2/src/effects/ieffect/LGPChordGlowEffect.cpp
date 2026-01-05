@@ -14,6 +14,7 @@
 
 #include "LGPChordGlowEffect.h"
 #include "../CoreEffects.h"
+#include "../enhancement/SmoothingEngine.h"
 #include "../../config/features.h"
 
 #ifndef NATIVE_BUILD
@@ -80,9 +81,7 @@ bool LGPChordGlowEffect::init(plugins::EffectContext& ctx) {
 
 void LGPChordGlowEffect::render(plugins::EffectContext& ctx) {
     // Clear output buffer with fade for trails
-    const float dt = ctx.deltaTimeMs * 0.001f;  // Convert to seconds
-    const int fadeAmt = (int)roundf(25.0f * (dt * 60.0f));
-    fadeToBlackBy(ctx.leds, ctx.ledCount, clampU8(fadeAmt));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
 #if !FEATURE_AUDIO_SYNC
     (void)ctx;
@@ -122,10 +121,15 @@ void LGPChordGlowEffect::render(plugins::EffectContext& ctx) {
             }
         }
 
-        // Always update confidence (smoothed)
-        m_currentConfidence = smoothValue(m_currentConfidence, chord.confidence, 0.15f);
+        // Update confidence target
+        m_targetConfidence = chord.confidence;
     }
 
+    // Smooth confidence with AsymmetricFollower (every frame)
+    float dt = ctx.getSafeDeltaSeconds();
+    float moodNorm = ctx.getMoodNormalized();
+    m_currentConfidence = m_confidenceFollower.updateWithMood(m_targetConfidence, dt, moodNorm);
+    
     // Update transition progress
     if (m_isTransitioning) {
         m_transitionProgress += (ctx.deltaTimeMs / TRANSITION_DURATION_MS);

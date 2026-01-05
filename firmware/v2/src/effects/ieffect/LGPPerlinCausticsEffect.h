@@ -20,6 +20,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../enhancement/SmoothingEngine.h"
 #include <FastLED.h>
 
 namespace lightwaveos {
@@ -46,13 +47,19 @@ private:
     // Audio state tracking (hop_seq checking for fresh data)
     uint32_t m_lastHopSeq;
     
+    // Audio smoothing (AsymmetricFollower for natural attack/release)
+    enhancement::AsymmetricFollower m_trebleFollower{0.0f, 0.05f, 0.30f};
+    enhancement::AsymmetricFollower m_bassFollower{0.0f, 0.05f, 0.30f};
+    enhancement::AsymmetricFollower m_midFollower{0.0f, 0.05f, 0.30f};
+    enhancement::AsymmetricFollower m_hihatFollower{0.0f, 0.05f, 0.30f};
+    
     // Target values (updated only on new hops)
     float m_targetTreble;
     float m_targetBass;
     float m_targetMid;
     float m_targetHihat;
     
-    // Smoothed audio parameters (eased toward targets every frame)
+    // Smoothed audio parameters (from AsymmetricFollower)
     float m_smoothTreble;
     float m_smoothBass;
     float m_smoothMid;

@@ -8,6 +8,7 @@
 
 #include "SpectrumAnalyzerEffect.h"
 #include "../CoreEffects.h"
+#include "../enhancement/SmoothingEngine.h"
 #include "../../config/features.h"
 
 #ifndef NATIVE_BUILD
@@ -24,7 +25,13 @@ namespace ieffect {
 
 bool SpectrumAnalyzerEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
-    memset(m_binSmoothing, 0, sizeof(m_binSmoothing));
+    // Initialize smoothing followers
+    for (uint8_t i = 0; i < 64; i++) {
+        m_binFollowers[i].reset(0.0f);
+        m_targetBins[i] = 0.0f;
+        m_binSmoothing[i] = 0.0f;
+    }
+    m_lastHopSeq = 0;
     memset(m_peakHold, 0, sizeof(m_peakHold));
     memset(m_peakHoldTime, 0, sizeof(m_peakHoldTime));
     m_beatSyncMode = false;
@@ -96,20 +103,26 @@ void SpectrumAnalyzerEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     const float* bins64 = ctx.audio.bins64();
     constexpr uint8_t NUM_BINS = 64;
+    float dt = ctx.getSafeDeltaSeconds();
+    float moodNorm = ctx.getMoodNormalized();
     
-    // Update smoothing and peak hold
-    float smoothingAlpha = 0.3f;  // Fast response
+    // Hop-based updates: update targets only on new hops
+    bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+    if (newHop) {
+        m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+        for (uint8_t bin = 0; bin < NUM_BINS; ++bin) {
+            m_targetBins[bin] = bins64[bin];
+        }
+    }
+    
+    // Smooth toward targets every frame with MOOD-adjusted smoothing
     uint32_t now = ctx.totalTimeMs;
-    
     for (uint8_t bin = 0; bin < NUM_BINS; ++bin) {
-        float target = bins64[bin];
-        
-        // Smooth the bin value
-        m_binSmoothing[bin] += (target - m_binSmoothing[bin]) * smoothingAlpha;
+        m_binSmoothing[bin] = m_binFollowers[bin].updateWithMood(m_targetBins[bin], dt, moodNorm);
         
         // Update peak hold
-        if (target > m_peakHold[bin]) {
-            m_peakHold[bin] = target;
+        if (m_binSmoothing[bin] > m_peakHold[bin]) {
+            m_peakHold[bin] = m_binSmoothing[bin];
             m_peakHoldTime[bin] = now;
         } else if (now - m_peakHoldTime[bin] > PEAK_HOLD_DURATION_MS) {
             // Decay peak hold after duration

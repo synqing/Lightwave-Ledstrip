@@ -35,8 +35,14 @@ void PlasmaEffect::render(plugins::EffectContext& ctx) {
         narrativeSpeed *= NARRATIVE.getTempoMultiplier();
     }
     
-    m_plasmaTime += (uint16_t)narrativeSpeed;
+    // Mood modulates speed: low mood (reactive) = faster, high mood (smooth) = slower
+    float moodNorm = ctx.getMoodNormalized();
+    float speedMultiplier = 1.0f + moodNorm * 0.5f;  // 1.0x to 1.5x range
+    m_plasmaTime += (uint16_t)(narrativeSpeed * speedMultiplier);
     if (m_plasmaTime > 65535) m_plasmaTime = m_plasmaTime % 65536;
+
+    // Fade for smooth color transitions
+    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         // Use utility function for center-based sin16 calculations

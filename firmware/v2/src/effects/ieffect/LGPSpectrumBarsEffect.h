@@ -14,6 +14,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../enhancement/SmoothingEngine.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -30,7 +31,13 @@ public:
     const plugins::EffectMetadata& getMetadata() const override;
 
 private:
+    // Per-band smoothing (AsymmetricFollower for natural attack/release)
+    enhancement::AsymmetricFollower m_bandFollowers[8];
     float m_smoothedBands[8] = {0};  // Smoothed band values for animation
+    
+    // Hop sequence tracking
+    uint32_t m_lastHopSeq = 0;
+    float m_targetBands[8] = {0.0f};
 };
 
 } // namespace ieffect

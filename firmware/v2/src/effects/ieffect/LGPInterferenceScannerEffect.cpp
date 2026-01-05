@@ -36,6 +36,19 @@ bool LGPInterferenceScannerEffect::init(plugins::EffectContext& ctx) {
     m_bassWavelength = 0.0f;
     m_trebleOverlay = 0.0f;
 
+    // Initialize chromagram smoothing
+    for (uint8_t i = 0; i < 12; i++) {
+        m_chromaFollowers[i].reset(0.0f);
+        m_chromaSmoothed[i] = 0.0f;
+        m_chromaTargets[i] = 0.0f;
+    }
+    
+    // Initialize smoothing followers
+    m_bassFollower.reset(0.0f);
+    m_trebleFollower.reset(0.0f);
+    m_targetBass = 0.0f;
+    m_targetTreble = 0.0f;
+    
     // Initialize enhancement utilities
     m_speedSpring.init(50.0f, 1.0f);  // stiffness=50, mass=1 (critically damped)
     m_speedSpring.reset(1.0f);         // Start at base speed
@@ -66,11 +79,16 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
             if (energyNorm < 0.0f) energyNorm = 0.0f;
             if (energyNorm > 1.0f) energyNorm = 1.0f;
 
-            // Still track dominant chroma bin for color mapping
+            // Update chromagram targets
+            for (uint8_t i = 0; i < 12; i++) {
+                m_chromaTargets[i] = ctx.audio.controlBus.heavy_chroma[i];
+            }
+            
+            // Still track dominant chroma bin for color mapping (use smoothed values)
             float maxBinVal = 0.0f;
             uint8_t dominantBin = 0;
             for (uint8_t i = 0; i < 12; ++i) {
-                float bin = ctx.audio.controlBus.heavy_chroma[i];  // Use heavy_chroma for stability
+                float bin = m_chromaSmoothed[i];
                 if (bin > maxBinVal) {
                     maxBinVal = bin;
                     dominantBin = i;
@@ -86,13 +104,7 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
             for (uint8_t i = 0; i < 6; ++i) {
                 bassSum += ctx.audio.bin(i);
             }
-            float bassNorm = bassSum / 6.0f;
-            // Smooth with fast attack, slower decay for punchy response
-            if (bassNorm > m_bassWavelength) {
-                m_bassWavelength = bassNorm;  // Instant attack
-            } else {
-                m_bassWavelength *= 0.85f;    // ~100ms decay
-            }
+            m_targetBass = bassSum / 6.0f;
 
             // =================================================================
             // 64-bin Treble Overlay (bins 48-63 = 1.3-4.2 kHz)
@@ -103,7 +115,7 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
             for (uint8_t i = 48; i < 64; ++i) {
                 trebleSum += ctx.audio.bin(i);
             }
-            m_trebleOverlay = trebleSum / 16.0f;
+            m_targetTreble = trebleSum / 16.0f;
 
             m_chromaEnergySum -= m_chromaEnergyHist[m_chromaHistIdx];
             m_chromaEnergyHist[m_chromaHistIdx] = energyNorm;
@@ -123,9 +135,21 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
     }
 
     float dt = enhancement::getSafeDeltaSeconds(ctx.deltaTimeMs);
+    float moodNorm = ctx.getMoodNormalized();
+
+    // Smooth chromagram with AsymmetricFollower (every frame)
+    if (hasAudio) {
+        for (uint8_t i = 0; i < 12; i++) {
+            m_chromaSmoothed[i] = m_chromaFollowers[i].updateWithMood(
+                m_chromaTargets[i], dt, moodNorm);
+        }
+    }
+
+    // Smooth bass and treble with AsymmetricFollower
+    m_bassWavelength = m_bassFollower.updateWithMood(m_targetBass, dt, moodNorm);
+    m_trebleOverlay = m_trebleFollower.updateWithMood(m_targetTreble, dt, moodNorm);
 
     // True exponential smoothing with AsymmetricFollower (frame-rate independent)
-    float moodNorm = ctx.mood / 255.0f;  // 0=reactive, 1=smooth
     float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, dt, moodNorm);
     float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, dt, moodNorm);
 

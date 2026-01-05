@@ -19,7 +19,10 @@ bool PulseEffect::init(plugins::EffectContext& ctx) {
 
 void PulseEffect::render(plugins::EffectContext& ctx) {
     // CENTER PAIR Pulse - Canonical pattern
-    float phase = (ctx.frameNumber * ctx.speed / 60.0f);
+    // Mood modulates speed: low mood (reactive) = faster, high mood (smooth) = slower
+    float moodNorm = ctx.getMoodNormalized();
+    float speedMultiplier = 1.0f + moodNorm * 0.5f;  // 1.0x to 1.5x range
+    float phase = (ctx.frameNumber * ctx.speed * speedMultiplier / 60.0f);
     float pulsePos = fmodf(phase, (float)HALF_LENGTH);
 
     memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));

@@ -20,6 +20,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../enhancement/SmoothingEngine.h"
 #include <FastLED.h>
 
 namespace lightwaveos {
@@ -40,6 +41,15 @@ public:
 private:
     // Wave state
     uint32_t m_waveOffset;      // Wave phase accumulator
+
+    // Audio smoothing (AsymmetricFollower for natural attack/release)
+    enhancement::AsymmetricFollower m_rmsFollower{0.0f, 0.05f, 0.30f};
+    enhancement::AsymmetricFollower m_fluxFollower{0.0f, 0.05f, 0.30f};
+    
+    // Hop sequence tracking
+    uint32_t m_lastHopSeq = 0;
+    float m_targetRms = 0.0f;
+    float m_targetFlux = 0.0f;
 
     // Audio state (brightness only, NOT speed)
     float m_lastFlux;           // Previous flux for transient detection

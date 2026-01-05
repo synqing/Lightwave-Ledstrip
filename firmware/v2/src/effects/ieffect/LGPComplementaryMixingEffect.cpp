@@ -42,15 +42,20 @@ void LGPComplementaryMixingEffect::render(plugins::EffectContext& ctx) {
         uint8_t edgeIntensity = (uint8_t)(255.0f * (1.0f - normalizedDist * variation));
 
         if (normalizedDist > 0.5f) {
-            ctx.leds[i] = CHSV(baseHue, 255, (uint8_t)(edgeIntensity * intensity));
+            // Use palette system - apply brightness scaling
+            uint8_t brightU8 = (uint8_t)(edgeIntensity * intensity);
+            brightU8 = (uint8_t)((brightU8 * ctx.brightness) / 255);
+            ctx.leds[i] = ctx.palette.getColor(baseHue, brightU8);
             if (i + STRIP_LENGTH < ctx.ledCount) {
-                ctx.leds[i + STRIP_LENGTH] = CHSV(complementHue, 255, (uint8_t)(edgeIntensity * intensity));
+                ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor(complementHue, brightU8);
             }
         } else {
-            uint8_t saturation = (uint8_t)(255.0f * (normalizedDist * 2.0f));
-            ctx.leds[i] = CHSV(baseHue, saturation, (uint8_t)(128.0f * intensity));
+            // Use palette system - apply brightness scaling
+            uint8_t brightU8 = (uint8_t)(128.0f * intensity);
+            brightU8 = (uint8_t)((brightU8 * ctx.brightness) / 255);
+            ctx.leds[i] = ctx.palette.getColor(baseHue, brightU8);
             if (i + STRIP_LENGTH < ctx.ledCount) {
-                ctx.leds[i + STRIP_LENGTH] = CHSV(complementHue, saturation, (uint8_t)(128.0f * intensity));
+                ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor(complementHue, brightU8);
             }
         }
     }

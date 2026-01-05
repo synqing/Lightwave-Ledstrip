@@ -48,7 +48,7 @@ void ConfettiEffect::render(plugins::EffectContext& ctx) {
     for (int i = CENTER_LEFT - 1; i >= 0; i--) {
         if (ctx.leds[i + 1]) {
             ctx.leds[i] = ctx.leds[i + 1];
-            ctx.leds[i].fadeToBlackBy(25);
+            ctx.leds[i].fadeToBlackBy(ctx.fadeAmount);
 
             // Mirror to strip 2
             if (i + STRIP_LENGTH < ctx.ledCount) {
@@ -61,7 +61,7 @@ void ConfettiEffect::render(plugins::EffectContext& ctx) {
     for (int i = CENTER_RIGHT + 1; i < STRIP_LENGTH; i++) {
         if (ctx.leds[i - 1]) {
             ctx.leds[i] = ctx.leds[i - 1];
-            ctx.leds[i].fadeToBlackBy(25);
+            ctx.leds[i].fadeToBlackBy(ctx.fadeAmount);
 
             // Mirror to strip 2
             if (i + STRIP_LENGTH < ctx.ledCount) {

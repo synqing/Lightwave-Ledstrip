@@ -18,6 +18,7 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../enhancement/SmoothingEngine.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -35,6 +36,16 @@ public:
     const plugins::EffectMetadata& getMetadata() const override;
 
 private:
+    // Audio smoothing (AsymmetricFollower for natural attack/release)
+    enhancement::AsymmetricFollower m_rmsFollower{0.0f, 0.05f, 0.30f};
+    enhancement::AsymmetricFollower m_bandFollowers[8];
+    float m_smoothedBands[8] = {0.0f};
+    
+    // Hop sequence tracking
+    uint32_t m_lastHopSeq = 0;
+    float m_targetRms = 0.0f;
+    float m_targetBands[8] = {0.0f};
+    
     // Beat pulse animation state
     float m_beatDecay = 0.0f;      // Current beat pulse intensity (decays over time)
     float m_lastBeatPhase = 0.0f;  // For detecting beat crossings

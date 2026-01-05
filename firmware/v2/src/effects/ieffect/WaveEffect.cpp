@@ -2,16 +2,16 @@
  * @file WaveEffect.cpp
  * @brief Audio-reactive wave effect implementation
  *
- * Audio Integration (Bloom-inspired):
- * - RMS → wave amplitude (louder = taller waves)
- * - Beat phase → wave speed (synced to tempo when confident)
- * - Flux → brightness boost on transients
+ * Visual Foundation: Time-based wave propagation from center
+ * Audio Enhancement: Audio modulates amplitude/brightness only
  *
- * Fallback strategy:
- * - High confidence (>0.5): Beat-synced wave speed
- * - Medium (0.2-0.5): Slow speed + flux brightness boost
- * - Low (<0.2): RMS-modulated speed
- * - No audio: Time-based fallback
+ * Audio Integration (Visual-First Pattern):
+ * - RMS → wave amplitude (louder = taller waves)
+ * - Flux → brightness boost on transients
+ * - Speed: TIME-BASED (prevents jitter)
+ *
+ * Pattern: Follows WaveAmbientEffect design - time-based speed,
+ * audio modulates brightness/amplitude only.
  */
 
 #include "WaveEffect.h"
@@ -40,59 +40,56 @@ bool WaveEffect::init(plugins::EffectContext& ctx) {
     m_fallbackPhase = 0.0f;
     m_lastFlux = 0.0f;
     m_fluxBoost = 0.0f;
+    m_lastHopSeq = 0;
+    m_targetRms = 0.0f;
+    m_rmsFollower.reset(0.0f);
     return true;
 }
 
 void WaveEffect::render(plugins::EffectContext& ctx) {
     // CENTER ORIGIN WAVE - Waves propagate from center
-    // Now with audio-reactive amplitude and beat-synced speed
+    // Visual Foundation: Time-based wave propagation
+    // Audio Enhancement: Audio modulates amplitude/brightness only (prevents jitter)
 
-    // Default values (no audio)
+    // Speed is TIME-BASED only (prevents jitter from audio→speed coupling)
     float waveSpeed = (float)ctx.speed;
     float amplitude = 1.0f;
-    float waveFreq = 15.0f;  // Base wave frequency
+    float waveFreq = 15.0f;  // Fixed wave frequency
 
 #if FEATURE_AUDIO_SYNC
     if (ctx.audio.available) {
-        float tempoConf = ctx.audio.tempoConfidence();
-
-        // Determine wave speed based on tempo confidence
-        if (tempoConf > 0.5f) {
-            // HIGH CONFIDENCE: Beat-synced wave speed
-            float beatPhase = ctx.audio.beatPhase();
-            // Wave speed oscillates with beat (0.8x to 1.2x base)
-            float beatMod = sinf(beatPhase * 2.0f * 3.14159f);
-            waveSpeed = ctx.speed * (0.8f + 0.4f * (beatMod * 0.5f + 0.5f));
-        } else if (tempoConf > 0.2f) {
-            // MEDIUM CONFIDENCE: Slower base speed
-            waveSpeed = ctx.speed * 0.7f;
-        } else {
-            // LOW CONFIDENCE: RMS-modulated speed
-            float rms = ctx.audio.rms();
-            waveSpeed = ctx.speed * (0.5f + 0.8f * rms);
+        float dt = ctx.getSafeDeltaSeconds();
+        float moodNorm = ctx.getMoodNormalized();
+        
+        // Hop-based updates: update targets only on new hops
+        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+        if (newHop) {
+            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+            m_targetRms = ctx.audio.rms();
         }
+        
+        // Smooth toward targets every frame with MOOD-adjusted smoothing
+        float rms = m_rmsFollower.updateWithMood(m_targetRms, dt, moodNorm);
+        
+        // Speed remains TIME-BASED - no modification from audio
+        // This prevents jitter from noisy audio metrics
 
-        // RMS ALWAYS drives amplitude (the fundamental audio-visual binding)
-        // FIXED: Use sqrt scaling for much more visible low-RMS response
-        float rms = ctx.audio.rms();
+        // RMS drives amplitude (audio→brightness - the valid coupling)
+        // sqrt scaling for more visible low-RMS response
         float rmsScaled = sqrtf(rms);  // 0.1 RMS -> 0.316 scaled
-        amplitude = 0.1f + 0.9f * rmsScaled;  // 10-100% amplitude (DRAMATIC)
+        amplitude = 0.1f + 0.9f * rmsScaled;  // 10-100% amplitude
 
-        // Flux transient detection
+        // Flux transient detection (brightness boost)
         float flux = ctx.audio.flux();
         float fluxDelta = flux - m_lastFlux;
         if (fluxDelta > 0.1f && flux > 0.2f) {
             m_fluxBoost = fmaxf(m_fluxBoost, flux);
         }
         m_lastFlux = flux;
-
-        // FIXED: Keep wave frequency constant to avoid jitter
-        // Wave density was too subtle and caused visual noise
-        waveFreq = 15.0f;
     }
 #endif
 
-    // Update wave offset
+    // Update wave offset (time-based only)
     m_waveOffset += (uint32_t)waveSpeed;
     if (m_waveOffset > 65535) m_waveOffset = m_waveOffset % 65536;
 
@@ -101,7 +98,7 @@ void WaveEffect::render(plugins::EffectContext& ctx) {
     if (m_fluxBoost < 0.01f) m_fluxBoost = 0.0f;
 
     // Gentle fade
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 12);
+    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         float distFromCenter = (float)centerPairDistance((uint16_t)i);

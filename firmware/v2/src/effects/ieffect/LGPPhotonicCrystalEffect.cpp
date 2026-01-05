@@ -65,6 +65,13 @@ bool LGPPhotonicCrystalEffect::init(plugins::EffectContext& ctx) {
     // Collision flash
     m_collisionBoost = 0.0f;
 
+    // Initialize chromagram smoothing
+    for (uint8_t i = 0; i < 12; i++) {
+        m_chromaFollowers[i].reset(0.0f);
+        m_chromaSmoothed[i] = 0.0f;
+        m_chromaTargets[i] = 0.0f;
+    }
+    
     // Chroma tracking
     m_dominantBin = 0;
     m_dominantBinSmooth = 0.0f;
@@ -126,14 +133,25 @@ void LGPPhotonicCrystalEffect::render(plugins::EffectContext& ctx) {
             m_energyDelta = currentEnergy - m_energyAvg;
             if (m_energyDelta < 0.0f) m_energyDelta = 0.0f;
 
-            // Dominant chroma bin detection (for color offset)
+            // Update chromagram targets
+            for (uint8_t i = 0; i < 12; i++) {
+                m_chromaTargets[i] = ctx.audio.controlBus.heavy_chroma[i];
+            }
+            
+            // Dominant chroma bin detection (for color offset) - use smoothed values
             float maxChroma = 0.0f;
             for (uint8_t bin = 0; bin < 12; ++bin) {
-                if (ctx.audio.controlBus.chroma[bin] > maxChroma) {
-                    maxChroma = ctx.audio.controlBus.chroma[bin];
+                if (m_chromaSmoothed[bin] > maxChroma) {
+                    maxChroma = m_chromaSmoothed[bin];
                     m_dominantBin = bin;
                 }
             }
+        }
+        
+        // Smooth chromagram with AsymmetricFollower (every frame)
+        for (uint8_t i = 0; i < 12; i++) {
+            m_chromaSmoothed[i] = m_chromaFollowers[i].updateWithMood(
+                m_chromaTargets[i], dt, moodNorm);
         }
 
         // Asymmetric followers for BRIGHTNESS (not speed!)

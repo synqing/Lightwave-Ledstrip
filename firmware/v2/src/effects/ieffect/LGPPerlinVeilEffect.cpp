@@ -23,7 +23,6 @@ LGPPerlinVeilEffect::LGPPerlinVeilEffect()
     : m_noiseX(0)
     , m_noiseY(0)
     , m_noiseZ(0)
-    , m_momentum(0.0f)
     , m_contrast(0.5f)
     , m_depthVariation(0.0f)
     , m_lastHopSeq(0)
@@ -44,7 +43,6 @@ bool LGPPerlinVeilEffect::init(plugins::EffectContext& ctx) {
     m_noiseX = random16();
     m_noiseY = random16();
     m_noiseZ = random16();
-    m_momentum = 0.0f;
     m_contrast = 0.5f;
     m_depthVariation = 0.0f;
     m_lastHopSeq = 0;
@@ -52,6 +50,11 @@ bool LGPPerlinVeilEffect::init(plugins::EffectContext& ctx) {
     m_targetFlux = 0.0f;
     m_targetBeatStrength = 0.0f;
     m_targetBass = 0.0f;
+    // Initialize smoothing followers
+    m_rmsFollower.reset(0.0f);
+    m_fluxFollower.reset(0.0f);
+    m_beatFollower.reset(0.0f);
+    m_bassFollower.reset(0.0f);
     m_smoothRms = 0.0f;
     m_smoothFlux = 0.0f;
     m_smoothBeatStrength = 0.0f;
@@ -85,23 +88,15 @@ void LGPPerlinVeilEffect::render(plugins::EffectContext& ctx) {
             m_targetBass = ctx.audio.bass();
         }
         
-        // Smooth toward targets every frame (keeps motion alive between hops)
-        float alpha = dt / (0.15f + dt); // ~150ms smoothing
-        m_smoothRms += (m_targetRms - m_smoothRms) * alpha;
-        m_smoothFlux += (m_targetFlux - m_smoothFlux) * alpha;
-        m_smoothBeatStrength += (m_targetBeatStrength - m_smoothBeatStrength) * alpha;
-        m_smoothBass += (m_targetBass - m_smoothBass) * alpha;
+        // Smooth toward targets every frame with MOOD-adjusted smoothing
+        float moodNorm = ctx.getMoodNormalized();
+        m_smoothRms = m_rmsFollower.updateWithMood(m_targetRms, dt, moodNorm);
+        m_smoothFlux = m_fluxFollower.updateWithMood(m_targetFlux, dt, moodNorm);
+        m_smoothBeatStrength = m_beatFollower.updateWithMood(m_targetBeatStrength, dt, moodNorm);
+        m_smoothBass = m_bassFollower.updateWithMood(m_targetBass, dt, moodNorm);
         
-        // Flux/beatStrength → advection momentum (like Emotiscope's vu_level push)
-        float audioPush = m_smoothFlux * 0.3f + m_smoothBeatStrength * 0.2f;
-        audioPush = audioPush * audioPush * audioPush * audioPush; // ^4 for emphasis
-        audioPush *= speedNorm * 0.1f;
-        
-        // Momentum decay and boost (like Emotiscope)
-        m_momentum *= 0.99f;
-        if (audioPush > m_momentum) {
-            m_momentum = audioPush;
-        }
+        // Audio Enhancement: Modulate contrast and depth (NOT momentum)
+        // Momentum is TIME-BASED to prevent jitter
         
         // RMS → contrast modulation (using smoothed value)
         float targetContrast = 0.3f + m_smoothRms * 0.7f;
@@ -110,8 +105,8 @@ void LGPPerlinVeilEffect::render(plugins::EffectContext& ctx) {
         // Bass → depth variation (using smoothed value)
         m_depthVariation = m_smoothBass * 0.5f;
     } else {
-        // Ambient mode: slow decay
-        m_momentum *= 0.98f;
+        // Ambient mode: time-based momentum
+        // Momentum is time-based, not audio-driven
         m_contrast = 0.4f + 0.2f * sinf(ctx.totalTimeMs * 0.001f); // Slow breathing
         m_depthVariation = 0.0f;
         // Smooth audio parameters to zero when no audio
@@ -127,23 +122,28 @@ void LGPPerlinVeilEffect::render(plugins::EffectContext& ctx) {
     }
 #else
     // No audio: ambient mode
-    m_momentum *= 0.98f;
+    // Momentum is time-based, not audio-driven
     m_contrast = 0.4f + 0.2f * sinf(ctx.totalTimeMs * 0.001f);
     m_depthVariation = 0.0f;
 #endif
 
     // =========================================================================
     // Noise Field Advection (centre-origin sampling)
+    // Visual Foundation: TIME-BASED advection (prevents jitter)
     // =========================================================================
     // Base drift (slow wobble like Emotiscope), but keep coordinates in the
     // same "scale space" as existing working inoise8 usage (i*5, time>>3 etc.)
     float angle = ctx.totalTimeMs * 0.001f;
     float wobble = sinf(angle * 0.12f);
 
+    // Momentum is TIME-BASED (speedNorm * dt), not audio-driven
+    // This prevents jitter from audio→momentum coupling
+    float timeBasedMomentum = speedNorm * 0.5f;  // Time-based momentum
+    
     // Keep coordinate deltas large enough to create visible structure.
     // (The previous >>8 coordinate collapse made the field near-constant.)
-    uint16_t advX = (uint16_t)(20 + (uint16_t)(wobble * 12.0f) + (uint16_t)(m_momentum * 900.0f));
-    uint16_t advY = (uint16_t)(18 + (uint16_t)(m_momentum * 1200.0f));
+    uint16_t advX = (uint16_t)(20 + (uint16_t)(wobble * 12.0f) + (uint16_t)(timeBasedMomentum * 900.0f));
+    uint16_t advY = (uint16_t)(18 + (uint16_t)(timeBasedMomentum * 1200.0f));
     uint16_t advZ = (uint16_t)(4 + (uint16_t)(m_depthVariation * 180.0f));
 
     // Speed scales the drift rate, but clamp to avoid "teleporting" noise.

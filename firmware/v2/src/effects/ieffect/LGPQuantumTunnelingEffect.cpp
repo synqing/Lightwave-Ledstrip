@@ -48,9 +48,11 @@ void LGPQuantumTunnelingEffect::render(plugins::EffectContext& ctx) {
             int16_t pos = (int16_t)barrierPos + w;
             if (pos >= 0 && pos < STRIP_LENGTH) {
                 uint8_t barrierBright = (uint8_t)(60 - abs(w) * 3);
-                ctx.leds[pos] = CHSV(160, 255, barrierBright);
+                // Use palette system - fixed hue 160 (cyan) for barriers
+                uint8_t brightU8 = (uint8_t)((barrierBright * ctx.brightness) / 255);
+                ctx.leds[pos] = ctx.palette.getColor(160, brightU8);
                 if (pos + STRIP_LENGTH < ctx.ledCount) {
-                    ctx.leds[pos + STRIP_LENGTH] = CHSV(160, 255, barrierBright);
+                    ctx.leds[pos + STRIP_LENGTH] = ctx.palette.getColor(160, brightU8);
                 }
             }
         }
@@ -90,9 +92,11 @@ void LGPQuantumTunnelingEffect::render(plugins::EffectContext& ctx) {
                             int16_t flashPos = (int16_t)m_particlePos[p] + f;
                             if (flashPos >= 0 && flashPos < STRIP_LENGTH) {
                                 uint8_t flashBright = (uint8_t)(255 - abs(f) * 20);
-                                ctx.leds[flashPos] = CHSV(flashHue, 255, flashBright);
+                                // Use palette system for flash effect
+                                uint8_t flashBrightU8 = (uint8_t)((flashBright * ctx.brightness) / 255);
+                                ctx.leds[flashPos] = ctx.palette.getColor(flashHue, flashBrightU8);
                                 if (flashPos + STRIP_LENGTH < ctx.ledCount) {
-                                    ctx.leds[flashPos + STRIP_LENGTH] = CHSV((uint8_t)(flashHue + 128), 255, flashBright);
+                                    ctx.leds[flashPos + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(flashHue + 128), flashBrightU8);
                                 }
                             }
                         }
@@ -121,10 +125,12 @@ void LGPQuantumTunnelingEffect::render(plugins::EffectContext& ctx) {
                     uint8_t waveBright = (uint8_t)(m_particleEnergy[p] * expf(-abs(w) * 0.2f));
                     uint8_t hue = (uint8_t)(ctx.gHue + p * 25);
 
-                    CRGB waveColor = CHSV(hue, 255, waveBright);
+                    // Use palette system for wave packet
+                    uint8_t waveBrightU8 = (uint8_t)((waveBright * ctx.brightness) / 255);
+                    CRGB waveColor = ctx.palette.getColor(hue, waveBrightU8);
                     ctx.leds[wavePos] = waveColor;
                     if (wavePos + STRIP_LENGTH < ctx.ledCount) {
-                        CRGB waveColor2 = CHSV((uint8_t)(hue + 128), 255, waveBright);
+                        CRGB waveColor2 = ctx.palette.getColor((uint8_t)(hue + 128), waveBrightU8);
                         ctx.leds[wavePos + STRIP_LENGTH] = waveColor2;
                     }
                 }

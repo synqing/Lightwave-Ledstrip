@@ -34,7 +34,9 @@ void JuggleEffect::render(plugins::EffectContext& ctx) {
         int pos1 = CENTER_RIGHT + distFromCenter;
         int pos2 = CENTER_LEFT - distFromCenter;
 
-        CRGB color = CHSV(dothue, ctx.saturation, 255);
+        // Use palette system - apply brightness scaling
+        uint8_t brightU8 = (uint8_t)((255 * ctx.brightness) / 255);
+        CRGB color = ctx.palette.getColor(dothue, brightU8);
 
         if (pos1 < STRIP_LENGTH) {
             ctx.leds[pos1] = color;

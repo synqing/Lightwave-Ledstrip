@@ -77,9 +77,18 @@ private:
     // Texture state
     float m_texturePhase;       // Texture drift phase accumulator
 
-    // Multi-stage smoothing (Sensory Bridge pattern)
+    // Multi-stage smoothing (Sensory Bridge pattern - Enhanced)
     float m_chromaSmoothed[12]; // Smoothed chromagram for color calculation
     float m_energySmoothed;      // Smoothed energy envelope for brightness
+    
+    // AsymmetricFollower for chromagram and RMS smoothing
+    enhancement::AsymmetricFollower m_chromaFollowers[12];
+    enhancement::AsymmetricFollower m_rmsFollower{0.0f, 0.05f, 0.30f};
+    
+    // Hop sequence tracking
+    uint32_t m_lastHopSeq = 0;
+    float m_chromaTargets[12] = {0.0f};
+    float m_targetRms = 0.0f;
 
     // Frame-rate independent radius smoothing
     enhancement::AsymmetricFollower m_radiusFollower;

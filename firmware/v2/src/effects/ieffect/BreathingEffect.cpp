@@ -46,19 +46,23 @@ static constexpr float FALLBACK_BREATH_RATE = 0.02f;  // ~1.5 second period
 // ============================================================================
 // Helper: Compute Chromatic Color from 12-bin Chromagram (Sensory Bridge Pattern)
 // ============================================================================
-static CRGB computeChromaticColor(const float chroma[12]) {
+static CRGB computeChromaticColor(const float chroma[12], const plugins::EffectContext& ctx) {
     CRGB sum = CRGB::Black;
     float share = 1.0f / 6.0f;  // Divide brightness among notes (Sensory Bridge uses 1/6.0)
     
     for (int i = 0; i < 12; i++) {
-        float hue = i / 12.0f;  // 0.0 to 0.917 (0° to 330°)
+        float prog = i / 12.0f;  // 0.0 to 0.917 (0° to 330°)
         float brightness = chroma[i] * chroma[i] * share;  // Quadratic contrast (like Sensory Bridge)
         
         // Clamp brightness to valid range
         if (brightness > 1.0f) brightness = 1.0f;
         
-        CRGB noteColor;
-        hsv2rgb_spectrum(CHSV((uint8_t)(hue * 255), 255, (uint8_t)(brightness * 255)), noteColor);
+        // Use palette system (matches WaveformEffect/SnapwaveEffect pattern)
+        uint8_t paletteIdx = (uint8_t)(prog * 255.0f + ctx.gHue);
+        uint8_t brightU8 = (uint8_t)(brightness * 255.0f);
+        // Apply brightness scaling
+        brightU8 = (uint8_t)((brightU8 * ctx.brightness) / 255);
+        CRGB noteColor = ctx.palette.getColor(paletteIdx, brightU8);
 
         // PRE-SCALE: Prevent white accumulation from 12-bin chromagram sum
         // With 12 bins at full intensity, worst case is 12 * 255 = 3060
@@ -119,6 +123,15 @@ bool BreathingEffect::init(plugins::EffectContext& ctx) {
     m_fluxBoost = 0.0f;
     m_texturePhase = 0.0f;
     m_energySmoothed = 0.0f;
+    
+    // Initialize smoothing followers
+    m_rmsFollower.reset(0.0f);
+    for (int i = 0; i < 12; i++) {
+        m_chromaFollowers[i].reset(0.0f);
+        m_chromaTargets[i] = 0.0f;
+    }
+    m_lastHopSeq = 0;
+    m_targetRms = 0.0f;
 
     // Initialize history buffer
     for (uint8_t i = 0; i < HISTORY_SIZE; ++i) {
@@ -178,7 +191,7 @@ void BreathingEffect::renderBreathing(plugins::EffectContext& ctx) {
     // Audio → Color/Brightness (AUDIO-REACTIVE)
     // Time → Motion Speed (TIME-BASED, USER-CONTROLLED)
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 15);
+    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
     // ========================================================================
     // PHASE 1: TIME-BASED MOTION (User-controlled speed, NOT audio-reactive)
@@ -200,25 +213,36 @@ void BreathingEffect::renderBreathing(plugins::EffectContext& ctx) {
 #if FEATURE_AUDIO_SYNC
     if (ctx.audio.available) {
         // ====================================================================
-        // Multi-Stage Smoothing Pipeline (Sensory Bridge Pattern)
+        // Multi-Stage Smoothing Pipeline (Enhanced with AsymmetricFollower)
         // ====================================================================
+        float dt = ctx.getSafeDeltaSeconds();
+        float moodNorm = ctx.getMoodNormalized();
         
-        // Stage 1: Smooth chromagram (0.75 alpha - fast attack/release)
-        for (int i = 0; i < 12; i++) {
-            float alpha = 0.75f;  // Like spectrogram_smooth in Sensory Bridge
-            m_chromaSmoothed[i] = ctx.audio.controlBus.heavy_chroma[i] * alpha + 
-                                  m_chromaSmoothed[i] * (1.0f - alpha);
+        // Stage 1: Smooth chromagram with AsymmetricFollower (MOOD-adjusted)
+        // Check for new hop to update targets
+        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+        if (newHop) {
+            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+            // Update chromagram targets on new hop
+            for (int i = 0; i < 12; i++) {
+                m_chromaTargets[i] = ctx.audio.controlBus.heavy_chroma[i];
+            }
+            m_targetRms = ctx.audio.rms();
         }
         
-        // Stage 2: Smooth energy envelope (0.3 alpha - slower smoothing)
-        float alpha_energy = 0.3f;  // Like magnitudes_normalized_avg in Sensory Bridge
-        m_energySmoothed = ctx.audio.rms() * alpha_energy + 
-                           m_energySmoothed * (1.0f - alpha_energy);
+        // Smooth chromagram with AsymmetricFollower (per-note smoothing)
+        for (int i = 0; i < 12; i++) {
+            m_chromaSmoothed[i] = m_chromaFollowers[i].updateWithMood(
+                m_chromaTargets[i], dt, moodNorm);
+        }
+        
+        // Stage 2: Smooth energy envelope with AsymmetricFollower
+        m_energySmoothed = m_rmsFollower.updateWithMood(m_targetRms, dt, moodNorm);
         
         // ====================================================================
         // Compute Chromatic Color from Smoothed Chromagram
         // ====================================================================
-        chromaticColor = computeChromaticColor(m_chromaSmoothed);
+        chromaticColor = computeChromaticColor(m_chromaSmoothed, ctx);
         
         // ====================================================================
         // Compute Energy Envelope for Brightness Modulation
@@ -331,7 +355,7 @@ void BreathingEffect::renderPulsing(plugins::EffectContext& ctx) {
     // BLOOM_PULSE: Sharp radial expansion on beat with BPM-adaptive decay
     // Falls back to flux-driven transients when beat tracking unreliable
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);  // Faster fade for snappy feel
+    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);  // Use fadeAmount parameter
 
     float decayRate = 0.92f;  // Default: ~200ms decay
 
@@ -427,7 +451,7 @@ void BreathingEffect::renderTexture(plugins::EffectContext& ctx) {
     // BLOOM_TEXTURE: Slow organic drift with audio-modulated amplitude
     // Motion is TIME-BASED (Sensory Bridge pattern), audio→amplitude only
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 8);  // Slow fade for dreamy feel
+    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);  // Use fadeAmount parameter
 
     // Audio-modulated wave AMPLITUDE parameters (not speed!)
     float timbralMod = 0.5f;   // Default if no audio

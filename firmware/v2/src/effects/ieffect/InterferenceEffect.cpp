@@ -27,8 +27,11 @@ bool InterferenceEffect::init(plugins::EffectContext& ctx) {
 
 void InterferenceEffect::render(plugins::EffectContext& ctx) {
     // CENTER ORIGIN INTERFERENCE - Two waves from center create patterns
-    m_wave1Phase += ctx.speed / 20.0f;
-    m_wave2Phase -= ctx.speed / 30.0f;
+    // Mood modulates speed: low mood (reactive) = faster, high mood (smooth) = slower
+    float moodNorm = ctx.getMoodNormalized();
+    float speedMultiplier = 1.0f + moodNorm * 0.5f;  // 1.0x to 1.5x range
+    m_wave1Phase += (ctx.speed / 20.0f) * speedMultiplier;
+    m_wave2Phase -= (ctx.speed / 30.0f) * speedMultiplier;
 
     // Wrap phases to prevent unbounded growth (prevents hue cycling - no-rainbows rule)
     const float twoPi = 2.0f * PI;
@@ -36,6 +39,9 @@ void InterferenceEffect::render(plugins::EffectContext& ctx) {
     if (m_wave1Phase < 0.0f) m_wave1Phase += twoPi;
     if (m_wave2Phase > twoPi) m_wave2Phase -= twoPi;
     if (m_wave2Phase < 0.0f) m_wave2Phase += twoPi;
+
+    // Fade for interference pattern trails
+    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         float distFromCenter = (float)centerPairDistance((uint16_t)i);

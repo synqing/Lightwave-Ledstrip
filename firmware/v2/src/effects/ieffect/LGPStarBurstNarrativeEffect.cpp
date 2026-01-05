@@ -162,6 +162,10 @@ bool LGPStarBurstNarrativeEffect::init(plugins::EffectContext& ctx) {
     // -----------------------------------------
     m_kickBurst = 0.0f;
     m_trebleShimmerIntensity = 0.0f;
+    
+    // Initialize audio smoothing
+    m_targetRms = 0.0f;
+    m_rmsFollower.reset(0.0f);
 
     return true;
 }
@@ -214,7 +218,9 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
         // -----------------------------------------
         // Enhancement 1: DYNAMIC COLOR WARMTH
         // -----------------------------------------
-        float rmsNorm = ctx.audio.rms();
+        // Smooth RMS with mood-adjusted smoothing
+        float moodNorm = ctx.getMoodNormalized();
+        float rmsNorm = m_rmsFollower.updateWithMood(m_targetRms, dt, moodNorm);
         float targetWarmth = (rmsNorm - 0.5f) * 60.0f;  // Map 0-1 to -30..+30
 
         // Style-aware scaling: strongest for DYNAMIC, subtle for RHYTHMIC
@@ -639,10 +645,13 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
                 }
                 break;
 
-            case plugins::VisualBehavior::BREATHE_WITH_DYNAMICS:
-                // Modulate burst with RMS for organic breathing
-                m_burst = lerp(m_burst, ctx.audio.rms() * 0.7f, dt * 2.0f);
+            case plugins::VisualBehavior::BREATHE_WITH_DYNAMICS: {
+                // Modulate burst with smoothed RMS for organic breathing
+                // RMS is already smoothed above (in warmth calculation)
+                float smoothedRms = m_rmsFollower.getCurrent();
+                m_burst = lerp(m_burst, smoothedRms * 0.7f, dt * 2.0f);
                 break;
+            }
 
             case plugins::VisualBehavior::TEXTURE_FLOW:
                 // Modulate with flux for organic texture
@@ -656,10 +665,9 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
 #endif
 
     // -----------------------------------------
-    // TRAILS (dt-correct)
+    // TRAILS
     // -----------------------------------------
-    const int fadeAmt = (int)roundf(20.0f * (dt * 60.0f));
-    fadeToBlackBy(ctx.leds, ctx.ledCount, clampU8(fadeAmt));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
     // -----------------------------------------
     // RENDER (center-origin, saliency-weighted emphasis)

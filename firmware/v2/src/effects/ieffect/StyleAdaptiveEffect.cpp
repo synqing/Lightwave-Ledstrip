@@ -30,6 +30,11 @@ bool StyleAdaptiveEffect::init(plugins::EffectContext& ctx) {
     m_dynamicBreath = 0.0f;
     m_currentStyle = 0;
     m_styleConfidence = 0.0f;
+    m_rhythmicPulseFollower.reset(0.0f);
+    m_dynamicBreathFollower.reset(0.0f);
+    m_rmsFollower.reset(0.0f);
+    m_lastHopSeq = 0;
+    m_targetRms = 0.0f;
     return true;
 }
 
@@ -118,17 +123,36 @@ void StyleAdaptiveEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     // Audio Enhancement: Style-specific modulation
     // =========================================================================
+    // Hop-based RMS updates
+    bool newHop = false;
+#if FEATURE_AUDIO_SYNC
+    if (ctx.audio.available) {
+        newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+        if (newHop) {
+            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+            m_targetRms = ctx.audio.rms();
+        }
+        
+        // Smooth RMS every frame with mood-adjusted smoothing
+        float moodNorm = ctx.getMoodNormalized();
+        m_rmsFollower.updateWithMood(m_targetRms, dt, moodNorm);
+    }
+#endif
+    
     switch (style) {
         case audio::MusicStyle::RHYTHMIC_DRIVEN: {
             // Fast pulses, bass-heavy
+            float targetPulse = 0.0f;
             if (ctx.audio.isOnBeat()) {
-                m_rhythmicPulse = 1.0f;
-            } else {
-                m_rhythmicPulse *= (1.0f - dt * 8.0f);  // Fast decay
+                targetPulse = 1.0f;
             }
             // Boost with bass energy
             float bass = ctx.audio.bass();
-            m_rhythmicPulse = fmaxf(m_rhythmicPulse, bass * 0.7f);
+            targetPulse = fmaxf(targetPulse, bass * 0.7f);
+            
+            // Smooth with mood-adjusted smoothing
+            float moodNorm = ctx.getMoodNormalized();
+            m_rhythmicPulse = m_rhythmicPulseFollower.updateWithMood(targetPulse, dt, moodNorm);
             break;
         }
         
@@ -157,40 +181,48 @@ void StyleAdaptiveEffect::render(plugins::EffectContext& ctx) {
         }
         
         case audio::MusicStyle::DYNAMIC_DRIVEN: {
-            // RMS breathing for orchestral
-            float rms = ctx.audio.rms();
-            m_dynamicBreath += (rms - m_dynamicBreath) * 0.15f;
+            // RMS breathing for orchestral (use smoothed RMS)
+            float smoothedRms = m_rmsFollower.getCurrent();
+            m_dynamicBreath = m_dynamicBreathFollower.updateWithMood(smoothedRms, dt, moodNorm);
             break;
         }
         
         default: {
-            // UNKNOWN: blend all modes
-            float rms = ctx.audio.rms();
-            m_rhythmicPulse = rms * 0.5f;
+            // UNKNOWN: blend all modes (use smoothed RMS)
+            float smoothedRms = m_rmsFollower.getCurrent();
+            m_rhythmicPulse = m_rhythmicPulseFollower.updateWithMood(smoothedRms * 0.5f, dt, moodNorm);
             m_harmonicDrift += dt * 0.3f;
             if (m_harmonicDrift > 1.0f) m_harmonicDrift -= 1.0f;
             m_melodicShimmer += dt * 0.5f;
             if (m_melodicShimmer > 1.0f) m_melodicShimmer -= 1.0f;
             m_textureFlow += dt * 0.4f;
             if (m_textureFlow > 1.0f) m_textureFlow -= 1.0f;
-            m_dynamicBreath = rms;
+            m_dynamicBreath = m_dynamicBreathFollower.updateWithMood(smoothedRms, dt, moodNorm);
             break;
         }
     }
     
-    // Render based on detected style
+    // =========================================================================
+    // Render: Radial wave pattern with style-dependent modulation
+    // =========================================================================
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
+        float distFromCenter = (float)centerPairDistance((uint16_t)dist);
         float distNorm = (float)dist / (float)HALF_LENGTH;
         
-        float finalBright = 0.0f;
-        uint8_t finalHue = ctx.gHue;
+        // Visual Foundation: Radial wave pattern (like LGPStarBurst)
+        const float freqBase = 0.25f;
+        float star = sinf(distFromCenter * freqBase - m_phase);
+        
+        // Audio Enhancement: Style-dependent brightness modulation
+        float audioGain = 0.5f;
+        uint8_t hue = ctx.gHue;
         
         switch (style) {
             case audio::MusicStyle::RHYTHMIC_DRIVEN: {
                 // Fast pulses, bass at center
-                float pulse = m_rhythmicPhase * (1.0f - distNorm * 0.6f);
-                finalBright = 0.4f + pulse * 0.6f;
-                finalHue = ctx.gHue + (uint8_t)(distNorm * 30.0f);
+                float pulse = m_rhythmicPulse * (1.0f - distNorm * 0.6f);
+                audioGain = 0.4f + pulse * 0.6f;
+                hue += (uint8_t)(distNorm * 30.0f);
                 break;
             }
             
@@ -198,57 +230,58 @@ void StyleAdaptiveEffect::render(plugins::EffectContext& ctx) {
                 // Slow color drift with chord influence
                 float chordHue = ctx.audio.hasChord() ? 
                     (ctx.audio.rootNote() * 21) : 0;
-                finalHue = ctx.gHue + (uint8_t)(m_harmonicDrift * 255.0f) + chordHue;
-                finalBright = 0.5f + 0.3f * sinf(m_harmonicDrift * 2.0f * 3.14159f + distNorm * 2.0f);
+                hue = ctx.gHue + (uint8_t)(m_harmonicDrift * 255.0f) + chordHue;
+                float smoothedRms = m_rmsFollower.getCurrent();
+                audioGain = 0.5f + smoothedRms * 0.5f;
                 break;
             }
             
             case audio::MusicStyle::MELODIC_DRIVEN: {
                 // Treble shimmer
-                float shimmer = sinf(m_melodicShimmer * 2.0f * 3.14159f + distNorm * 4.0f);
-                finalBright = 0.4f + shimmer * 0.4f;
-                finalHue = ctx.gHue + (uint8_t)(distNorm * 60.0f + m_melodicShimmer * 50.0f);
+                float treble = ctx.audio.treble();
+                audioGain = 0.4f + treble * 0.6f;
+                hue += (uint8_t)(distNorm * 60.0f + m_melodicShimmer * 50.0f);
                 break;
             }
             
             case audio::MusicStyle::TEXTURE_DRIVEN: {
                 // Ambient texture
-                float texture = sinf(m_textureFlow * 2.0f * 3.14159f + distNorm * 3.0f) * 0.5f + 0.5f;
-                finalBright = 0.3f + texture * 0.4f;
-                finalHue = ctx.gHue + (uint8_t)(m_textureFlow * 100.0f);
+                float flux = ctx.audio.flux();
+                audioGain = 0.3f + flux * 0.4f;
+                hue += (uint8_t)(m_textureFlow * 100.0f);
                 break;
             }
             
             case audio::MusicStyle::DYNAMIC_DRIVEN: {
                 // RMS breathing
                 float breath = m_dynamicBreath * (1.0f - distNorm * 0.5f);
-                finalBright = 0.3f + breath * 0.7f;
-                finalHue = ctx.gHue + (uint8_t)(distNorm * 40.0f);
+                audioGain = 0.3f + breath * 0.7f;
+                hue += (uint8_t)(distNorm * 40.0f);
                 break;
             }
             
             default: {
                 // UNKNOWN: blend all modes
-                float rhythmic = m_rhythmicPhase * (1.0f - distNorm * 0.6f);
-                float harmonic = 0.5f + 0.3f * sinf(m_harmonicDrift * 2.0f * 3.14159f);
-                float melodic = sinf(m_melodicShimmer * 2.0f * 3.14159f) * 0.5f + 0.5f;
-                float texture = sinf(m_textureFlow * 2.0f * 3.14159f) * 0.5f + 0.5f;
-                float dynamic = m_dynamicBreath;
-                
-                finalBright = (rhythmic * 0.2f + harmonic * 0.2f + melodic * 0.2f + 
-                              texture * 0.2f + dynamic * 0.2f);
-                finalHue = ctx.gHue + (uint8_t)(distNorm * 50.0f);
+                float smoothedRms = m_rmsFollower.getCurrent();
+                audioGain = 0.4f + smoothedRms * 0.4f;
+                hue += (uint8_t)(distNorm * 50.0f);
                 break;
             }
         }
         
+        // Apply audio gain to radial wave pattern
+        float brightness = star * audioGain;
+        
         // Scale by style confidence
-        finalBright *= (0.5f + confidence * 0.5f);
-        finalBright = fminf(1.0f, finalBright);
+        brightness *= (0.5f + confidence * 0.5f);
+        
+        // Normalize brightness
+        brightness = tanhf(brightness * 2.0f) * 0.5f + 0.5f;
+        brightness = fminf(1.0f, brightness);
         
         // Get color from palette
-        uint8_t bright = (uint8_t)(finalBright * ctx.brightness);
-        CRGB color = ctx.palette.getColor(finalHue, bright);
+        uint8_t bright = (uint8_t)(brightness * ctx.brightness);
+        CRGB color = ctx.palette.getColor(hue, bright);
         
         // Set center pair
         SET_CENTER_PAIR(ctx, dist, color);

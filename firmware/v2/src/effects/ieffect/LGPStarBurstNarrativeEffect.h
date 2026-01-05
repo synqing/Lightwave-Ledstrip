@@ -36,6 +36,7 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../../plugins/api/BehaviorSelection.h"
+#include "../enhancement/SmoothingEngine.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -124,6 +125,10 @@ private:
     // -----------------------------------------
     float m_kickBurst = 0.0f;           ///< Sub-bass energy (bins 0-5) for instant burst
     float m_trebleShimmerIntensity = 0.0f;  ///< Treble energy (bins 48-63) for shimmer boost
+    
+    // Audio smoothing (AsymmetricFollower for mood-adjusted smoothing)
+    enhancement::AsymmetricFollower m_rmsFollower{0.0f, 0.05f, 0.30f};
+    float m_targetRms = 0.0f;
 };
 
 } // namespace ieffect

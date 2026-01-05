@@ -14,6 +14,7 @@
 
 #include "WaveAmbientEffect.h"
 #include "../CoreEffects.h"
+#include "../enhancement/SmoothingEngine.h"
 #include <FastLED.h>
 #include <cmath>
 
@@ -33,6 +34,13 @@ WaveAmbientEffect::WaveAmbientEffect()
 
 bool WaveAmbientEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    // Initialize smoothing followers
+    m_rmsFollower.reset(0.0f);
+    m_fluxFollower.reset(0.0f);
+    m_lastHopSeq = 0;
+    m_targetRms = 0.0f;
+    m_targetFlux = 0.0f;
+    
     m_waveOffset = 0;
     m_lastFlux = 0.0f;
     m_fluxBoost = 0.0f;
@@ -51,17 +59,30 @@ void WaveAmbientEffect::render(plugins::EffectContext& ctx) {
 
 #if FEATURE_AUDIO_SYNC
     if (ctx.audio.available) {
+        float dt = ctx.getSafeDeltaSeconds();
+        float moodNorm = ctx.getMoodNormalized();
+        
+        // Hop-based updates: update targets only on new hops
+        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+        if (newHop) {
+            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+            m_targetRms = ctx.audio.rms();
+            m_targetFlux = ctx.audio.flux();
+        }
+        
+        // Smooth toward targets every frame with MOOD-adjusted smoothing
+        float rms = m_rmsFollower.updateWithMood(m_targetRms, dt, moodNorm);
+        float flux = m_fluxFollower.updateWithMood(m_targetFlux, dt, moodNorm);
+        
         // Speed remains TIME-BASED - no modification from audio
         // This is the key difference from the old broken pattern
 
         // RMS drives amplitude (audio→brightness - the valid coupling)
         // sqrt scaling for more visible low-RMS response
-        float rms = ctx.audio.rms();
         float rmsScaled = sqrtf(rms);  // 0.1 RMS -> 0.316 scaled
         amplitude = 0.1f + 0.9f * rmsScaled;  // 10-100% amplitude
 
         // Flux transient detection (brightness boost)
-        float flux = ctx.audio.flux();
         float fluxDelta = flux - m_lastFlux;
         if (fluxDelta > 0.1f && flux > 0.2f) {
             m_fluxBoost = fmaxf(m_fluxBoost, flux);
@@ -79,7 +100,7 @@ void WaveAmbientEffect::render(plugins::EffectContext& ctx) {
     if (m_fluxBoost < 0.01f) m_fluxBoost = 0.0f;
 
     // Gentle fade
-    fadeToBlackBy(ctx.leds, ctx.ledCount, 12);
+    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         float distFromCenter = (float)centerPairDistance((uint16_t)i);

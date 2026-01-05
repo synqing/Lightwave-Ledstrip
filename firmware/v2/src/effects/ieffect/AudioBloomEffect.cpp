@@ -138,12 +138,10 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
         }
         float subBassAvg = subBassSum / 6.0f;
 
-        // Fast attack, slow release for punchy bass response
-        if (subBassAvg > m_subBassPulse) {
-            m_subBassPulse = subBassAvg;  // Instant attack
-        } else {
-            m_subBassPulse *= 0.85f;  // ~100ms decay at 60fps
-        }
+        // Use AsymmetricFollower for natural attack/release (replaces manual smoothing)
+        float dt = ctx.getSafeDeltaSeconds();
+        float moodNorm = ctx.getMoodNormalized();
+        m_subBassPulse = m_subBassFollower.updateWithMood(subBassAvg, dt, moodNorm);
     }
 
     // Update on even iterations (matching Sensory Bridge's bitRead(iter, 0) == 0)

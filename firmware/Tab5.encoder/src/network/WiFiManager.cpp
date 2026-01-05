@@ -11,32 +11,19 @@
 #include "WiFiManager.h"
 
 #if ENABLE_WIFI
-
-#include <cstring>
-
-#ifndef TAB5_AGENT_TRACE
-#define TAB5_AGENT_TRACE 0
-#endif
-
-#if TAB5_AGENT_TRACE
-#define TAB5_AGENT_PRINTF(...) Serial.printf(__VA_ARGS__)
-#else
-#define TAB5_AGENT_PRINTF(...) ((void)0)
-#endif
-
-static void formatIPv4(const IPAddress& ip, char out[16]) {
-    snprintf(out, 16, "%u.%u.%u.%u", ip[0], ip[1], ip[2], ip[3]);
-}
+#include <ESP.h>  // For heap monitoring
 
 WiFiManager::WiFiManager()
     : _ssid(nullptr)
     , _password(nullptr)
-    , _fallbackSsid(nullptr)
-    , _fallbackPassword(nullptr)
-    , _hasFallback(false)
-    , _useFallback(false)
+    , _ssid2(nullptr)
+    , _password2(nullptr)
     , _status(WiFiConnectionStatus::DISCONNECTED)
     , _resolvedIP(INADDR_NONE)
+    , _usingPrimaryNetwork(true)
+    , _primaryAttempts(0)
+    , _secondaryAttempts(0)
+    , _apFallbackStartTime(0)
     , _connectStartTime(0)
     , _lastReconnectAttempt(0)
     , _reconnectDelay(NetworkConfig::WIFI_RECONNECT_DELAY_MS)
@@ -46,74 +33,90 @@ WiFiManager::WiFiManager()
 {
 }
 
-void WiFiManager::begin(const char* ssid, const char* password) {
+void WiFiManager::begin(const char* ssid, const char* password, 
+                        const char* ssid2, const char* password2) {
     _ssid = ssid;
     _password = password;
-    _fallbackSsid = nullptr;
-    _fallbackPassword = nullptr;
-    _hasFallback = false;
-    _useFallback = false;
-    _preferred = PreferredNetwork::AUTO;
-    _resolvedIP = INADDR_NONE;
-    _lastReconnectAttempt = 0;
-    _reconnectDelay = NetworkConfig::WIFI_RECONNECT_DELAY_MS;
+    _ssid2 = ssid2;
+    _password2 = password2;
+
+    _usingPrimaryNetwork = true;
+    _primaryAttempts = 0;
+    _secondaryAttempts = 0;
+    _apFallbackStartTime = 0;
 
     Serial.println("[WiFi] Starting connection...");
-    Serial.printf("[WiFi] SSID: %s\n", activeSsid());
-
-    startScan(false);
-}
-
-void WiFiManager::beginWithFallback(const char* ssid,
-                                   const char* password,
-                                   const char* fallbackSsid,
-                                   const char* fallbackPassword) {
-    _ssid = ssid;
-    _password = password;
-    _fallbackSsid = fallbackSsid;
-    _fallbackPassword = fallbackPassword;
-    _useFallback = false;
-    _preferred = PreferredNetwork::AUTO;
-    _resolvedIP = INADDR_NONE;
-    _lastReconnectAttempt = 0;
-    _reconnectDelay = NetworkConfig::WIFI_RECONNECT_DELAY_MS;
-
-    _hasFallback = (_fallbackSsid && _fallbackSsid[0] != '\0');
-
-    Serial.println("[WiFi] Starting connection...");
-    Serial.printf("[WiFi] SSID: %s\n", activeSsid());
-    if (_hasFallback) {
-        Serial.printf("[WiFi] Fallback SSID: %s\n", _fallbackSsid);
+    Serial.printf("[WiFi] Primary SSID: %s\n", _ssid ? _ssid : "none");
+    if (_ssid2) {
+        Serial.printf("[WiFi] Secondary SSID: %s\n", _ssid2);
     }
 
-    startScan(false);
+    startConnection();
 }
 
 void WiFiManager::startConnection() {
+    // #region agent log
+    Serial.printf("[DEBUG] startConnection entry - Heap: free=%u minFree=%u largest=%u status=%d\n",
+                  ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap(), (int)_status);
+    // #endregion
     _status = WiFiConnectionStatus::CONNECTING;
     _connectStartTime = millis();
 
-    // Stop any AP-only fallback before connecting as STA.
-    WiFi.softAPdisconnect(true);
+    // Determine which network to use
+    const char* currentSSID = _usingPrimaryNetwork ? _ssid : _ssid2;
+    const char* currentPassword = _usingPrimaryNetwork ? _password : _password2;
+
+    if (!currentSSID || strlen(currentSSID) == 0) {
+        Serial.println("[WiFi] No network configured, starting AP mode...");
+        startAPMode();
+        return;
+    }
+
+    // Increment attempt counter
+    if (_usingPrimaryNetwork) {
+        _primaryAttempts++;
+    } else {
+        _secondaryAttempts++;
+    }
+
+    Serial.printf("[WiFi] Attempting connection to %s (attempt %d)...\n",
+                  currentSSID, _usingPrimaryNetwork ? _primaryAttempts : _secondaryAttempts);
 
     // Configure WiFi for station mode
+    // #region agent log
+    Serial.printf("[DEBUG] Before WiFi.mode(WIFI_STA) - Heap: free=%u minFree=%u\n",
+                  ESP.getFreeHeap(), ESP.getMinFreeHeap());
+    // #endregion
     WiFi.mode(WIFI_STA);
+    // #region agent log
+    Serial.printf("[DEBUG] After WiFi.mode(WIFI_STA) - Heap: free=%u minFree=%u\n",
+                  ESP.getFreeHeap(), ESP.getMinFreeHeap());
+    delay(10);  // Small delay for mode change to take effect
+    // #endregion
     WiFi.setAutoReconnect(false);  // We handle reconnection ourselves
 
     // Start connection
-    WiFi.begin(activeSsid(), activePassword());
+    // #region agent log
+    Serial.printf("[DEBUG] Before WiFi.begin - Heap: free=%u minFree=%u largest=%u ssid=%s\n",
+                  ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap(),
+                  currentSSID ? currentSSID : "null");
+    // #endregion
+    WiFi.begin(currentSSID, currentPassword);
+    // #region agent log
+    Serial.printf("[DEBUG] After WiFi.begin - Heap: free=%u minFree=%u wifiStatus=%d\n",
+                  ESP.getFreeHeap(), ESP.getMinFreeHeap(), (int)WiFi.status());
+    delay(50);  // Allow WiFi.begin() to initialize buffers
+    Serial.printf("[DEBUG] After 50ms delay - Heap: free=%u minFree=%u wifiStatus=%d\n",
+                  ESP.getFreeHeap(), ESP.getMinFreeHeap(), (int)WiFi.status());
+    // #endregion
 
-    Serial.printf("[WiFi] Connecting to '%s'...\n", activeSsid());
+    Serial.println("[WiFi] Connecting...");
 }
 
 void WiFiManager::update() {
     switch (_status) {
         case WiFiConnectionStatus::DISCONNECTED:
             handleDisconnected();
-            break;
-
-        case WiFiConnectionStatus::SCANNING:
-            handleScanning();
             break;
 
         case WiFiConnectionStatus::CONNECTING:
@@ -129,169 +132,72 @@ void WiFiManager::update() {
         case WiFiConnectionStatus::ERROR:
             handleError();
             break;
-
-        case WiFiConnectionStatus::AP_ONLY:
-            handleApOnly();
-            break;
     }
 }
 
 void WiFiManager::handleDisconnected() {
     unsigned long now = millis();
 
-    // Scan-first strategy: only attempt a connection when a known SSID is visible.
-    if (now - _lastReconnectAttempt < _reconnectDelay) {
+    // Check if we should fall back to AP mode (both networks exhausted)
+    if (_apFallbackStartTime > 0 && now >= _apFallbackStartTime) {
+        Serial.println("[WiFi] Both networks failed, starting AP mode fallback...");
+        startAPMode();
         return;
     }
 
-    _lastReconnectAttempt = now;
-    startScan(false);
-}
-
-void WiFiManager::startScan(bool keepAp) {
-    const unsigned long now = millis();
-
-    // Avoid starting a new scan too frequently (scan can be expensive on the radio/CPU).
-    const unsigned long minInterval =
-        keepAp ? NetworkConfig::WIFI_AP_ONLY_RESCAN_MS : NetworkConfig::WIFI_SCAN_INTERVAL_MS;
-    if (_lastScanAttempt != 0 && (now - _lastScanAttempt) < minInterval) {
-        return;
-    }
-    _lastScanAttempt = now;
-
-    // If no credentials are configured, skip scanning and enter AP-only.
-    const bool hasPrimary = (_ssid && _ssid[0] != '\0');
-    const bool hasFallback = (_hasFallback && _fallbackSsid && _fallbackSsid[0] != '\0');
-    if (!hasPrimary && !hasFallback) {
-        enterApOnlyMode();
+    // Check if we should switch to secondary network (primary exhausted)
+    if (_usingPrimaryNetwork && 
+        _primaryAttempts >= NetworkConfig::WIFI_ATTEMPTS_PER_NETWORK &&
+        _ssid2 && strlen(_ssid2) > 0) {
+        Serial.println("[WiFi] Primary network exhausted, switching to secondary...");
+        switchToSecondaryNetwork();
         return;
     }
 
-    // Ensure we can scan. If we're keeping AP active, scan in AP+STA mode.
-    _scanKeepAp = keepAp;
-    WiFi.scanDelete();
-    if (keepAp) {
-        WiFi.mode(WIFI_AP_STA);
-    } else {
-        WiFi.mode(WIFI_STA);
-        WiFi.softAPdisconnect(true);
-    }
-
-    _scanStartTime = now;
-    _status = WiFiConnectionStatus::SCANNING;
-
-    const int rc = WiFi.scanNetworks(true /* async */, true /* show hidden */);
-    (void)rc;
-    Serial.printf("[WiFi] Scanning for networks (keepAp=%d)...\n", keepAp ? 1 : 0);
-}
-
-void WiFiManager::handleScanning() {
-    const unsigned long now = millis();
-
-    const int scanResult = WiFi.scanComplete();
-    if (scanResult == -1) {  // -1 = scan running
-        if (_scanStartTime != 0 && (now - _scanStartTime) > NetworkConfig::WIFI_SCAN_TIMEOUT_MS) {
-            Serial.println("[WiFi] Scan timeout, retrying...");
-            WiFi.scanDelete();
-            if (_scanKeepAp) {
-                WiFi.mode(WIFI_AP);
-                _status = WiFiConnectionStatus::AP_ONLY;
-            } else {
-                _status = WiFiConnectionStatus::DISCONNECTED;
-            }
+    // Check if we should start AP fallback timer (both networks tried and failed)
+    if (!_usingPrimaryNetwork && 
+        _secondaryAttempts >= NetworkConfig::WIFI_ATTEMPTS_PER_NETWORK) {
+        if (_apFallbackStartTime == 0) {
+            _apFallbackStartTime = now + NetworkConfig::AP_FALLBACK_DELAY_MS;
+            Serial.printf("[WiFi] Both networks exhausted, AP fallback in %lu ms...\n",
+                          NetworkConfig::AP_FALLBACK_DELAY_MS);
         }
-        return;
     }
-
-    if (scanResult < 0) {
-        // -2 means scan was never started (or was deleted); treat as disconnected.
-        if (_scanKeepAp) {
-            WiFi.mode(WIFI_AP);
-            _status = WiFiConnectionStatus::AP_ONLY;
-        } else {
-            _status = WiFiConnectionStatus::DISCONNECTED;
-        }
-        return;
-    }
-
-    bool primaryFound = false;
-    bool fallbackFound = false;
-
-    for (int i = 0; i < scanResult; i++) {
-        const String ssid = WiFi.SSID(i);
-
-        if (_ssid && _ssid[0] != '\0' && ssid == _ssid) {
-            primaryFound = true;
-        }
-        if (_hasFallback && _fallbackSsid && _fallbackSsid[0] != '\0' && ssid == _fallbackSsid) {
-            fallbackFound = true;
+    
+    // Also check if primary failed and no secondary available - go straight to AP
+    if (_usingPrimaryNetwork && 
+        _primaryAttempts >= NetworkConfig::WIFI_ATTEMPTS_PER_NETWORK &&
+        (!_ssid2 || strlen(_ssid2) == 0)) {
+        if (_apFallbackStartTime == 0) {
+            _apFallbackStartTime = now + NetworkConfig::AP_FALLBACK_DELAY_MS;
+            Serial.printf("[WiFi] Primary network failed, no secondary available. AP fallback in %lu ms...\n",
+                          NetworkConfig::AP_FALLBACK_DELAY_MS);
         }
     }
 
-    WiFi.scanDelete();
+    // Attempt reconnect with backoff delay
+    if (now - _lastReconnectAttempt >= _reconnectDelay) {
+        _lastReconnectAttempt = now;
 
-    if (!primaryFound && !fallbackFound) {
-        enterApOnlyMode();
-        return;
+        Serial.printf("[WiFi] Attempting reconnect (delay: %lu ms)...\n", _reconnectDelay);
+        startConnection();
+
+        // Increase backoff delay (exponential, capped)
+        _reconnectDelay = min(_reconnectDelay * 2, (unsigned long)30000);
     }
-
-    // Choose the best available known network.
-    bool useFallback = false;
-    switch (_preferred) {
-        case PreferredNetwork::PRIMARY:
-            useFallback = !primaryFound && fallbackFound;
-            break;
-        case PreferredNetwork::FALLBACK:
-            useFallback = fallbackFound;
-            break;
-        case PreferredNetwork::AUTO:
-        default:
-            // Deterministic policy: prefer primary if visible; fall back only when primary is absent.
-            useFallback = !primaryFound && fallbackFound;
-            break;
-    }
-
-    _useFallback = useFallback;
-    Serial.printf("[WiFi] Selected SSID: %s\n", activeSsid());
-
-    startConnection();
-}
-
-void WiFiManager::enterApOnlyMode() {
-    // No known SSIDs visible: stop reconnect storms and keep running.
-    WiFi.disconnect(true);
-    WiFi.mode(WIFI_AP);
-
-    bool ok = false;
-    if (TAB5_FALLBACK_AP_PASSWORD[0] != '\0') {
-        // ESP32 requires >=8 chars for WPA2; otherwise it fails.
-        if (strlen(TAB5_FALLBACK_AP_PASSWORD) >= 8) {
-            ok = WiFi.softAP(TAB5_FALLBACK_AP_SSID, TAB5_FALLBACK_AP_PASSWORD);
-        } else {
-            Serial.println("[WiFi] AP password too short (<8), starting open AP");
-            ok = WiFi.softAP(TAB5_FALLBACK_AP_SSID);
-        }
-    } else {
-        ok = WiFi.softAP(TAB5_FALLBACK_AP_SSID);
-    }
-
-    _status = WiFiConnectionStatus::AP_ONLY;
-    _resolvedIP = INADDR_NONE;
-    _lastReconnectAttempt = millis();
-
-    char apIp[16];
-    formatIPv4(WiFi.softAPIP(), apIp);
-    Serial.printf("[WiFi] No known networks in range; AP-only (%s) started=%d ip=%s\n",
-                  TAB5_FALLBACK_AP_SSID, ok ? 1 : 0, apIp);
-}
-
-void WiFiManager::handleApOnly() {
-    // Periodically rescan while keeping AP active.
-    startScan(true);
 }
 
 void WiFiManager::handleConnecting() {
+    // #region agent log
+    Serial.printf("[DEBUG] handleConnecting entry - Heap: free=%u minFree=%u\n",
+                  ESP.getFreeHeap(), ESP.getMinFreeHeap());
+    // #endregion
     wl_status_t wifiStatus = WiFi.status();
+    // #region agent log
+    Serial.printf("[DEBUG] WiFi.status()=%d elapsed=%lu Heap: free=%u minFree=%u\n",
+                  (int)wifiStatus, millis() - _connectStartTime,
+                  ESP.getFreeHeap(), ESP.getMinFreeHeap());
+    // #endregion
     unsigned long elapsed = millis() - _connectStartTime;
 
     if (wifiStatus == WL_CONNECTED) {
@@ -300,11 +206,7 @@ void WiFiManager::handleConnecting() {
         _reconnectDelay = NetworkConfig::WIFI_RECONNECT_DELAY_MS;  // Reset backoff
 
         Serial.println("[WiFi] Connected!");
-        {
-            char ipStr[16];
-            formatIPv4(WiFi.localIP(), ipStr);
-            Serial.printf("[WiFi] IP: %s\n", ipStr);
-        }
+        Serial.printf("[WiFi] IP: %s\n", WiFi.localIP().toString().c_str());
         Serial.printf("[WiFi] RSSI: %d dBm\n", WiFi.RSSI());
 
         // Initialize mDNS responder
@@ -319,24 +221,37 @@ void WiFiManager::handleConnecting() {
         _lastMdnsAttempt = 0;
         _mdnsRetryCount = 0;
 
-    } else if (wifiStatus == WL_CONNECT_FAILED || wifiStatus == WL_NO_SSID_AVAIL) {
-        // Connection failed
-        Serial.printf("[WiFi] Connection failed (status: %d) ssid=%s\n", wifiStatus, activeSsid());
-        WiFi.disconnect(true);
-        _resolvedIP = INADDR_NONE;
-
-        // Back off and re-scan before retrying.
-        _reconnectDelay = min(_reconnectDelay * 2, (unsigned long)30000);
+    } else if (wifiStatus == WL_CONNECT_FAILED ||
+               wifiStatus == WL_NO_SSID_AVAIL) {
+        // Connection failed - check if we should switch networks
+        Serial.printf("[WiFi] Connection failed (status: %d)\n", wifiStatus);
+        
+        // If primary network failed and we have secondary, switch now
+        if (_usingPrimaryNetwork && 
+            _primaryAttempts >= NetworkConfig::WIFI_ATTEMPTS_PER_NETWORK &&
+            _ssid2 && strlen(_ssid2) > 0) {
+            Serial.println("[WiFi] Switching to secondary network...");
+            switchToSecondaryNetwork();
+            return;
+        }
+        
         _status = WiFiConnectionStatus::DISCONNECTED;
         _lastReconnectAttempt = millis();
 
     } else if (elapsed >= NetworkConfig::WIFI_CONNECT_TIMEOUT_MS) {
-        // Connection timeout
-        Serial.printf("[WiFi] Connection timeout after %lu ms (ssid=%s)\n", elapsed, activeSsid());
-        WiFi.disconnect(true);
-        _resolvedIP = INADDR_NONE;
-
-        _reconnectDelay = min(_reconnectDelay * 2, (unsigned long)30000);
+        // Connection timeout - check if we should switch networks
+        Serial.printf("[WiFi] Connection timeout after %lu ms\n", elapsed);
+        WiFi.disconnect();
+        
+        // If primary network timed out and we have secondary, switch now
+        if (_usingPrimaryNetwork && 
+            _primaryAttempts >= NetworkConfig::WIFI_ATTEMPTS_PER_NETWORK &&
+            _ssid2 && strlen(_ssid2) > 0) {
+            Serial.println("[WiFi] Switching to secondary network...");
+            switchToSecondaryNetwork();
+            return;
+        }
+        
         _status = WiFiConnectionStatus::DISCONNECTED;
         _lastReconnectAttempt = millis();
     }
@@ -347,10 +262,6 @@ void WiFiManager::handleConnected() {
     // Check if WiFi is still connected
     if (WiFi.status() != WL_CONNECTED) {
         Serial.println("[WiFi] Connection lost!");
-        // Re-evaluate the best available SSID on reconnect (scan-first).
-        if (_preferred != PreferredNetwork::FALLBACK) {
-            _useFallback = false;
-        }
         _status = WiFiConnectionStatus::DISCONNECTED;
         _resolvedIP = INADDR_NONE;
         _lastReconnectAttempt = millis();
@@ -408,54 +319,83 @@ bool WiFiManager::resolveMDNS(const char* hostname) {
                   hostname, _mdnsRetryCount);
 
     // Query mDNS for the hostname
-    // #region agent log
-    TAB5_AGENT_PRINTF("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"MDNS1\",\"location\":\"WiFiManager.cpp:resolveMDNS\",\"message\":\"mdns.queryHost.before\",\"data\":{\"hostname\":\"%s\",\"attempt\":%d},\"timestamp\":%lu}\n",
-                      hostname, _mdnsRetryCount, (unsigned long)millis());
-    // #endregion
     IPAddress resolvedIP = MDNS.queryHost(hostname);
-    // #region agent log
-    {
-        char resolvedStr[16];
-        formatIPv4(resolvedIP, resolvedStr);
-        TAB5_AGENT_PRINTF("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"MDNS1\",\"location\":\"WiFiManager.cpp:resolveMDNS\",\"message\":\"mdns.queryHost.after\",\"data\":{\"hostname\":\"%s\",\"resolvedIP\":\"%s\",\"isValid\":%d},\"timestamp\":%lu}\n",
-                          hostname, resolvedStr, (resolvedIP != INADDR_NONE) ? 1 : 0, (unsigned long)millis());
+
+    // FALLBACK: If connected to LightwaveOS AP (secondary network) and mDNS fails, use Gateway IP
+    // This ensures connection works even if mDNS is flaky on the SoftAP interface
+    if (resolvedIP == INADDR_NONE && !_usingPrimaryNetwork && 
+        WiFi.SSID() == "LightwaveOS") {
+        Serial.println("[WiFi] mDNS failed, but connected to LightwaveOS AP. Using Gateway IP.");
+        resolvedIP = WiFi.gatewayIP();
     }
-    // #endregion
 
     if (resolvedIP != INADDR_NONE) {
         _resolvedIP = resolvedIP;
         _status = WiFiConnectionStatus::MDNS_RESOLVED;
-        char resolvedStr[16];
-        formatIPv4(resolvedIP, resolvedStr);
         Serial.printf("[WiFi] mDNS resolved: %s.local -> %s\n",
-                      hostname, resolvedStr);
-        // #region agent log
-        TAB5_AGENT_PRINTF("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"MDNS1\",\"location\":\"WiFiManager.cpp:resolveMDNS\",\"message\":\"mdns.resolved\",\"data\":{\"hostname\":\"%s\",\"ip\":\"%s\"},\"timestamp\":%lu}\n",
-                          hostname, resolvedStr, (unsigned long)millis());
-        // #endregion
+                      hostname, resolvedIP.toString().c_str());
         return true;
     } else {
         // Resolution failed, stay in CONNECTED state for retry
         _status = WiFiConnectionStatus::CONNECTED;
         Serial.printf("[WiFi] mDNS resolution failed for %s.local\n", hostname);
-        // #region agent log
-        TAB5_AGENT_PRINTF("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"MDNS1\",\"location\":\"WiFiManager.cpp:resolveMDNS\",\"message\":\"mdns.failed\",\"data\":{\"hostname\":\"%s\",\"attempt\":%d,\"nextRetryDelay\":%d},\"timestamp\":%lu}\n",
-                          hostname, _mdnsRetryCount, NetworkConfig::MDNS_RETRY_DELAY_MS, (unsigned long)millis());
-        // #endregion
         return false;
     }
 }
 
+void WiFiManager::switchToSecondaryNetwork() {
+    if (!_ssid2 || strlen(_ssid2) == 0) {
+        Serial.println("[WiFi] No secondary network configured");
+        return;
+    }
+    
+    _usingPrimaryNetwork = false;
+    _secondaryAttempts = 0;
+    _reconnectDelay = NetworkConfig::WIFI_RECONNECT_DELAY_MS;  // Reset backoff
+    WiFi.disconnect();
+    delay(100);
+    startConnection();
+}
+
+void WiFiManager::startAPMode() {
+    Serial.println("[WiFi] Starting Access Point mode...");
+    Serial.printf("[WiFi] AP SSID: %s (open, no password)\n", NetworkConfig::AP_SSID_VALUE);
+    
+    WiFi.disconnect();
+    delay(100);
+    
+    WiFi.mode(WIFI_AP);
+    // Use empty string or NULL for open AP (no password) - matches v2 firmware
+    const char* apPassword = (NetworkConfig::AP_PASSWORD_VALUE && 
+                              strlen(NetworkConfig::AP_PASSWORD_VALUE) > 0) 
+                             ? NetworkConfig::AP_PASSWORD_VALUE : nullptr;
+    WiFi.softAP(NetworkConfig::AP_SSID_VALUE, apPassword);
+    
+    IPAddress apIP = WiFi.softAPIP();
+    Serial.printf("[WiFi] AP started! IP: %s\n", apIP.toString().c_str());
+    
+    // Initialize mDNS responder for AP mode
+    if (!MDNS.begin("tab5encoder")) {
+        Serial.println("[WiFi] mDNS responder failed to start");
+    } else {
+        Serial.println("[WiFi] mDNS responder started: tab5encoder.local");
+    }
+    
+    _status = WiFiConnectionStatus::CONNECTED;  // AP mode counts as "connected"
+    _resolvedIP = INADDR_NONE;  // No mDNS resolution in AP mode
+}
+
 void WiFiManager::reconnect() {
     Serial.println("[WiFi] Forcing reconnect...");
-    WiFi.disconnect(true);
-    WiFi.softAPdisconnect(true);
-    _useFallback = false;  // Re-evaluate from scan
+    WiFi.disconnect();
     _status = WiFiConnectionStatus::DISCONNECTED;
     _resolvedIP = INADDR_NONE;
-    _lastReconnectAttempt = 0;
+    _usingPrimaryNetwork = true;  // Reset to primary
+    _primaryAttempts = 0;
+    _secondaryAttempts = 0;
+    _apFallbackStartTime = 0;
+    _lastReconnectAttempt = millis();
     _reconnectDelay = NetworkConfig::WIFI_RECONNECT_DELAY_MS;  // Reset backoff
-    _lastScanAttempt = 0;
     _lastMdnsAttempt = 0;
     _mdnsRetryCount = 0;
 }
@@ -466,102 +406,15 @@ void WiFiManager::enterErrorState(const char* reason) {
     _lastReconnectAttempt = millis();
 }
 
-const char* WiFiManager::activeSsid() const {
-    if (_useFallback && _fallbackSsid && _fallbackSsid[0] != '\0') return _fallbackSsid;
-    return _ssid ? _ssid : "";
-}
-
-const char* WiFiManager::activePassword() const {
-    if (_useFallback && _fallbackPassword) return _fallbackPassword;
-    return _password ? _password : "";
-}
-
 const char* WiFiManager::getStatusString() const {
     switch (_status) {
         case WiFiConnectionStatus::DISCONNECTED:   return "Disconnected";
-        case WiFiConnectionStatus::SCANNING:       return "Scanning";
         case WiFiConnectionStatus::CONNECTING:     return "Connecting";
         case WiFiConnectionStatus::CONNECTED:      return "Connected";
         case WiFiConnectionStatus::MDNS_RESOLVING: return "Resolving mDNS";
         case WiFiConnectionStatus::MDNS_RESOLVED:  return "Ready";
-        case WiFiConnectionStatus::AP_ONLY:        return "AP Only";
         case WiFiConnectionStatus::ERROR:          return "Error";
         default:                                   return "Unknown";
-    }
-}
-
-bool WiFiManager::requestSTA() {
-    if (!_hasFallback) {
-        Serial.println("[WiFi] No fallback network configured");
-        return false;
-    }
-
-    if (_preferred == PreferredNetwork::FALLBACK) {
-        Serial.println("[WiFi] Already preferring fallback network");
-        return false;
-    }
-
-    _preferred = PreferredNetwork::FALLBACK;
-    Serial.printf("[WiFi] Preferring fallback network: %s\n", _fallbackSsid);
-    reconnect();
-    startScan(false);
-    return true;
-}
-
-bool WiFiManager::requestAP() {
-    if (_preferred == PreferredNetwork::PRIMARY) {
-        Serial.println("[WiFi] Already preferring primary network");
-        return false;
-    }
-
-    _preferred = PreferredNetwork::PRIMARY;
-    Serial.printf("[WiFi] Preferring primary network: %s\n", _ssid ? _ssid : "");
-    reconnect();
-    startScan(false);
-    return true;
-}
-
-void WiFiManager::printStatus() const {
-    Serial.println("=== WiFi Status ===");
-    Serial.printf("State: %s\n", getStatusString());
-    Serial.printf("Active Network: %s\n", activeSsid());
-    Serial.printf("Using Fallback: %s\n", _useFallback ? "Yes" : "No");
-    Serial.printf("Preference: %s\n",
-                  (_preferred == PreferredNetwork::PRIMARY) ? "Primary" :
-                  (_preferred == PreferredNetwork::FALLBACK) ? "Fallback" : "Auto");
-    
-    if (isConnected()) {
-        {
-            char ipStr[16];
-            formatIPv4(WiFi.localIP(), ipStr);
-            Serial.printf("IP Address: %s\n", ipStr);
-        }
-        Serial.printf("RSSI: %d dBm\n", WiFi.RSSI());
-        Serial.printf("Connected SSID: %s\n", WiFi.SSID().c_str());
-    } else {
-        Serial.println("IP Address: Not connected");
-    }
-
-    if (_status == WiFiConnectionStatus::AP_ONLY) {
-        char apIp[16];
-        formatIPv4(WiFi.softAPIP(), apIp);
-        Serial.printf("SoftAP: %s (ip=%s)\n", TAB5_FALLBACK_AP_SSID, apIp);
-    }
-    
-    if (_hasFallback) {
-        Serial.printf("Primary: %s\n", _ssid ? _ssid : "(none)");
-        Serial.printf("Fallback: %s\n", _fallbackSsid ? _fallbackSsid : "(none)");
-    } else {
-        Serial.printf("Primary: %s\n", _ssid ? _ssid : "(none)");
-        Serial.println("Fallback: Not configured");
-    }
-    
-    if (_resolvedIP != INADDR_NONE) {
-        char resolvedStr[16];
-        formatIPv4(_resolvedIP, resolvedStr);
-        Serial.printf("mDNS Resolved: %s\n", resolvedStr);
-    } else {
-        Serial.println("mDNS Resolved: Not resolved");
     }
 }
 

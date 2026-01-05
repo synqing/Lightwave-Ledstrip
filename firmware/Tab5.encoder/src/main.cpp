@@ -64,23 +64,6 @@
 #include "presets/PresetManager.h"
 
 // ============================================================================
-// Agent tracing (compile-time, default off)
-// ============================================================================
-#ifndef TAB5_AGENT_TRACE
-#define TAB5_AGENT_TRACE 0
-#endif
-
-#if TAB5_AGENT_TRACE
-#define TAB5_AGENT_PRINTF(...) Serial.printf(__VA_ARGS__)
-#else
-#define TAB5_AGENT_PRINTF(...) ((void)0)
-#endif
-
-static void formatIPv4(const IPAddress& ip, char out[16]) {
-    snprintf(out, 16, "%u.%u.%u.%u", ip[0], ip[1], ip[2], ip[3]);
-}
-
-// ============================================================================
 // I2C Addresses for Dual Unit Setup
 // ============================================================================
 
@@ -127,7 +110,7 @@ uint8_t g_activePresetSlot = 255;   // Currently active preset (255 = none)
 static constexpr uint16_t EFFECT_NAME_MAX = 48;
 static constexpr uint16_t PALETTE_NAME_MAX = 48;
 static constexpr uint16_t MAX_EFFECTS = 256;
-static constexpr uint8_t MAX_PALETTES = 64;  // Tab5 encoder range is 0-63
+static constexpr uint8_t MAX_PALETTES = 75;  // Matches v2 MASTER_PALETTE_COUNT (0-74)
 
 static char s_effectNames[MAX_EFFECTS][EFFECT_NAME_MAX] = {{0}};
 static bool s_effectKnown[MAX_EFFECTS] = {false};
@@ -147,37 +130,28 @@ static bool s_uiInitialized = false;  // Track if DisplayUI::begin() has been ca
 // Touch Action Row (Colour Correction Controls)
 // ============================================================================
 
-static float nextGammaValue(float current) {
-    static const float kGammaSteps[] = {1.8f, 2.0f, 2.2f, 2.4f};
-    static constexpr size_t kGammaCount = sizeof(kGammaSteps) / sizeof(kGammaSteps[0]);
-
-    size_t closest = 0;
-    float best = 1000.0f;
-    for (size_t i = 0; i < kGammaCount; ++i) {
-        float diff = fabsf(current - kGammaSteps[i]);
-        if (diff < best) {
-            best = diff;
-            closest = i;
-        }
-    }
-
-    return kGammaSteps[(closest + 1) % kGammaCount];
-}
-
+// Gamma cycling logic matches v2 firmware: OFF → 2.2 → 2.5 → 2.8 → OFF
 static bool nextGammaState(bool enabled, float current, float& nextValue) {
     if (!enabled) {
+        // Enable with default 2.2 (matches v2)
         nextValue = 2.2f;
         return true;
     }
 
-    float next = nextGammaValue(current);
-    if (next <= 1.8f + 0.01f && current >= 2.39f) {
-        nextValue = current;
-        return false;
+    // Cycle through common values: 2.2 → 2.5 → 2.8 → off (matches v2)
+    if (current < 2.3f) {
+        // Currently at 2.2 (or close) → go to 2.5
+        nextValue = 2.5f;
+        return true;
+    } else if (current < 2.6f) {
+        // Currently at 2.5 (or close) → go to 2.8
+        nextValue = 2.8f;
+        return true;
+    } else {
+        // Currently at 2.8 (or higher) → disable
+        nextValue = current;  // Keep current value but disable
+        return false;  // Return false to disable
     }
-
-    nextValue = next;
-    return true;
 }
 
 static void syncColourCorrectionUi() {
@@ -187,102 +161,48 @@ static void syncColourCorrectionUi() {
 }
 
 static void handleActionButton(uint8_t buttonIndex) {
-    // #region agent log
-    Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H5\",\"location\":\"main.cpp:172\",\"message\":\"handleActionButton.entry\",\"data\":{\"buttonIndex\":%d,\"wsConnected\":%d},\"timestamp\":%lu}\n", buttonIndex, g_wsClient.isConnected() ? 1 : 0, (unsigned long)millis());
-    // #endregion
-    
-    // Get current state (use defaults if not valid)
-    ColorCorrectionState cc = g_wsClient.getColorCorrectionState();
-    if (!cc.valid) {
-        // Initialize with defaults if not synced yet
-        cc.valid = true;
-        cc.gammaEnabled = true;
-        cc.gammaValue = 2.2f;
-        cc.mode = 2;  // RGB
-        cc.autoExposureEnabled = false;
-        cc.autoExposureTarget = 110;
-        cc.brownGuardrailEnabled = false;
-        
-        // Request config from server if connected (but don't block UI update)
-        if (g_wsClient.isConnected()) {
-            static uint32_t lastRequestTime = 0;
-            uint32_t now = millis();
-            if (now - lastRequestTime > 2000) {  // Throttle to once per 2 seconds
-                g_wsClient.requestColorCorrectionConfig();
-                lastRequestTime = now;
-                Serial.println("[TOUCH] Colour correction not synced yet - requested config");
-            }
-        }
+    if (!g_wsClient.isConnected()) {
+        Serial.println("[TOUCH] WS not connected - cannot send colour controls");
+        return;
     }
 
-    // Calculate next state optimistically (update UI immediately)
-    bool stateChanged = false;
+    const ColorCorrectionState& cc = g_wsClient.getColorCorrectionState();
+    if (!cc.valid) {
+        g_wsClient.requestColorCorrectionConfig();
+        Serial.println("[TOUCH] Colour correction not synced yet - requested config");
+        return;
+    }
+
     switch (buttonIndex) {
         case 0: {  // Gamma mode (cycle)
             float nextValue = cc.gammaValue;
             bool nextEnabled = nextGammaState(cc.gammaEnabled, cc.gammaValue, nextValue);
-            cc.gammaEnabled = nextEnabled;
-            cc.gammaValue = nextValue;
-            stateChanged = true;
+            g_wsClient.sendGammaChange(nextEnabled, nextValue);
             break;
         }
         case 1: {  // Colour correction mode (cycle)
-            cc.mode = static_cast<uint8_t>((cc.mode + 1) % 4);
-            stateChanged = true;
+            uint8_t next = static_cast<uint8_t>((cc.mode + 1) % 4);
+            g_wsClient.sendColourCorrectionMode(next);
             break;
         }
         case 2: {  // Auto exposure (toggle)
             uint8_t target = (cc.autoExposureTarget == 0) ? 110 : cc.autoExposureTarget;
-            cc.autoExposureEnabled = !cc.autoExposureEnabled;
-            cc.autoExposureTarget = target;
-            stateChanged = true;
+            g_wsClient.sendAutoExposureChange(!cc.autoExposureEnabled, target);
             break;
         }
         case 3: {  // Brown guardrail (toggle)
-            cc.brownGuardrailEnabled = !cc.brownGuardrailEnabled;
-            stateChanged = true;
+            g_wsClient.sendBrownGuardrailChange(!cc.brownGuardrailEnabled);
             break;
         }
         default:
             return;
     }
 
-    if (stateChanged) {
-        // Update local state cache optimistically (even if WS not connected)
-        g_wsClient.setColorCorrectionState(cc);
-        
-        // Update UI immediately (optimistic update)
-        syncColourCorrectionUi();
-        
-        // Try to send command to server (if connected)
-        if (g_wsClient.isConnected()) {
-            switch (buttonIndex) {
-                case 0:
-                    g_wsClient.sendGammaChange(cc.gammaEnabled, cc.gammaValue);
-                    break;
-                case 1:
-                    g_wsClient.sendColourCorrectionMode(cc.mode);
-                    break;
-                case 2:
-                    g_wsClient.sendAutoExposureChange(cc.autoExposureEnabled, cc.autoExposureTarget);
-                    break;
-                case 3:
-                    g_wsClient.sendBrownGuardrailChange(cc.brownGuardrailEnabled);
-                    break;
-            }
-        } else {
-            Serial.println("[TOUCH] WS not connected - UI updated optimistically, command will sync when connected");
-            // #region agent log
-            Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H5\",\"location\":\"main.cpp:220\",\"message\":\"handleActionButton.wsNotConnected\",\"data\":{\"buttonIndex\":%d,\"wsStatus\":\"%s\"},\"timestamp\":%lu}\n", buttonIndex, g_wsClient.getStatusString(), (unsigned long)millis());
-            // #endregion
-        }
-    }
+    syncColourCorrectionUi();
 }
 
 const char* lookupEffectName(uint8_t id) {
-    // Note: id is uint8_t (0-255), MAX_EFFECTS is 256, so id < MAX_EFFECTS is always true
-    // But we also check id <= 87 to enforce actual effect range
-    if (id <= 87 && s_effectKnown[id] && s_effectNames[id][0]) return s_effectNames[id];
+    if (id < MAX_EFFECTS && s_effectKnown[id] && s_effectNames[id][0]) return s_effectNames[id];
     return nullptr;
 }
 
@@ -357,61 +277,8 @@ static void handleSerialCommand(const char* cmd) {
         return;
     }
 
-    // Network commands (similar to v2 firmware)
-    if (strncmp(cmd, "net ", 4) == 0) {
-        const char* args = cmd + 4;
-        
-        if (strcmp(args, "status") == 0) {
-            #if ENABLE_WIFI
-            g_wifiManager.printStatus();
-            #else
-            Serial.println("[WiFi] WiFi disabled (ENABLE_WIFI=0)");
-            #endif
-            return;
-        }
-        
-        if (strcmp(args, "sta") == 0) {
-            #if ENABLE_WIFI
-            if (g_wifiManager.requestSTA()) {
-                Serial.println("[WiFi] Switching to fallback network (STA mode)");
-            } else {
-                Serial.println("[WiFi] Failed to switch to fallback network");
-            }
-            #else
-            Serial.println("[WiFi] WiFi disabled (ENABLE_WIFI=0)");
-            #endif
-            return;
-        }
-        
-        if (strcmp(args, "ap") == 0) {
-            #if ENABLE_WIFI
-            if (g_wifiManager.requestAP()) {
-                Serial.println("[WiFi] Switching to primary network (AP mode)");
-            } else {
-                Serial.println("[WiFi] Failed to switch to primary network");
-            }
-            #else
-            Serial.println("[WiFi] WiFi disabled (ENABLE_WIFI=0)");
-            #endif
-            return;
-        }
-        
-        if (strcmp(args, "help") == 0 || args[0] == '\0') {
-            Serial.println("[NET] Commands:");
-            Serial.println("  net status  - Show WiFi status");
-            Serial.println("  net sta     - Switch to fallback network (STA mode)");
-            Serial.println("  net ap      - Switch to primary network (AP mode)");
-            return;
-        }
-        
-        Serial.println("[NET] Unknown command. Try: net help");
-        return;
-    }
-
     if (strcmp(cmd, "help") == 0) {
-        Serial.println("[HELP] Commands:");
-        Serial.println("  ppa on | ppa off | ppa toggle | ppa bench [N]");
-        Serial.println("  net status | net sta | net ap");
+        Serial.println("[HELP] Commands: ppa on | ppa off | ppa toggle | ppa bench [N]");
         return;
     }
 }
@@ -544,19 +411,11 @@ void onEncoderChange(uint8_t index, uint16_t value, bool wasReset) {
                 case 7: g_wsClient.sendVariationChange(value); break;
             }
         }
-        // Unit B (8-15): Zone parameters
+        // Unit B (8-15): No parameters assigned (encoders disabled)
+        // Unit B buttons are still used for preset management
         else {
-            uint8_t zoneId = ZoneParam::getZoneId(index);
-            if (ZoneParam::isZoneEffect(index)) {
-                g_wsClient.sendZoneEffect(zoneId, value);
-            } else {
-                // Zone speed/palette (handled by ButtonHandler mode)
-                if (g_buttonHandler && g_buttonHandler->getZoneEncoderMode(zoneId) == SpeedPaletteMode::PALETTE) {
-                    g_wsClient.sendZonePalette(zoneId, value);
-                } else {
-                    g_wsClient.sendZoneSpeed(zoneId, value);
-                }
-            }
+            // Encoders 8-15 are not assigned to any parameters
+            // Do nothing - encoders are disabled
         }
     }
 }
@@ -588,7 +447,7 @@ void updateConnectionLeds() {
     if (!g_wifiManager.isConnected()) {
         // No WiFi connection
         WiFiConnectionStatus wifiStatus = g_wifiManager.getStatus();
-        if (wifiStatus == WiFiConnectionStatus::CONNECTING || wifiStatus == WiFiConnectionStatus::SCANNING) {
+        if (wifiStatus == WiFiConnectionStatus::CONNECTING) {
             state = ConnectionState::WIFI_CONNECTING;
         } else {
             state = ConnectionState::WIFI_DISCONNECTED;
@@ -856,10 +715,6 @@ void setup() {
     Serial.println("\n[NETWORK] Initializing WiFi...");
 
     // Initialize ParameterHandler (bridges encoders ↔ WebSocket ↔ display)
-    // CRITICAL FIX: Add null check validation
-    if (!g_encoders) {
-        Serial.println("[ERROR] ParameterHandler: null encoder service!");
-    }
     g_paramHandler = new ParameterHandler(g_encoders, &g_wsClient);
     g_paramHandler->setButtonHandler(g_buttonHandler);
     g_paramHandler->setDisplayCallback([](uint8_t index, uint16_t value) {
@@ -965,13 +820,10 @@ void setup() {
                     if (!e["id"].is<uint8_t>() || !e["name"].is<const char*>()) continue;
                     uint8_t id = e["id"].as<uint8_t>();
                     const char* name = e["name"].as<const char*>();
-                    // CRITICAL FIX: Stricter bounds check - enforce actual effect range (0-87)
-                    if (id < MAX_EFFECTS && id <= 87 && name) {
+                    if (id < MAX_EFFECTS && name) {
                         strncpy(s_effectNames[id], name, EFFECT_NAME_MAX - 1);
                         s_effectNames[id][EFFECT_NAME_MAX - 1] = '\0';
                         s_effectKnown[id] = true;
-                    } else if (id >= MAX_EFFECTS) {
-                        Serial.printf("[WARN] Invalid effect ID %u (max=%u), ignoring\n", id, MAX_EFFECTS - 1);
                     }
                 }
 
@@ -1066,100 +918,6 @@ void setup() {
                 updateUiEffectPaletteLabels();
                 return;
             }
-
-            // Handle colorCorrection.getConfig response
-            if (type && strcmp(type, "colorCorrection.getConfig") == 0) {
-                if (doc["success"].is<bool>() && doc["success"].as<bool>()) {
-                    ColorCorrectionState cc;
-                    cc.valid = true;
-                    
-                    // CRITICAL FIX: Handle both direct fields and nested data object
-                    JsonObject data = doc["data"].is<JsonObject>() ? doc["data"].as<JsonObject>() : doc.as<JsonObject>();
-                    
-                    if (data["gammaEnabled"].is<bool>()) {
-                        cc.gammaEnabled = data["gammaEnabled"].as<bool>();
-                    }
-                    if (data["gammaValue"].is<float>()) {
-                        cc.gammaValue = data["gammaValue"].as<float>();
-                    }
-                    if (data["autoExposureEnabled"].is<bool>()) {
-                        cc.autoExposureEnabled = data["autoExposureEnabled"].as<bool>();
-                    }
-                    if (data["autoExposureTarget"].is<uint8_t>()) {
-                        cc.autoExposureTarget = data["autoExposureTarget"].as<uint8_t>();
-                    }
-                    if (data["brownGuardrailEnabled"].is<bool>()) {
-                        cc.brownGuardrailEnabled = data["brownGuardrailEnabled"].as<bool>();
-                    }
-                    if (data["mode"].is<uint8_t>()) {
-                        cc.mode = data["mode"].as<uint8_t>();
-                    }
-                    if (data["maxGreenPercentOfRed"].is<uint8_t>()) {
-                        cc.maxGreenPercentOfRed = data["maxGreenPercentOfRed"].as<uint8_t>();
-                    }
-                    if (data["maxBluePercentOfRed"].is<uint8_t>()) {
-                        cc.maxBluePercentOfRed = data["maxBluePercentOfRed"].as<uint8_t>();
-                    }
-                    
-                    g_wsClient.setColorCorrectionState(cc);
-                    syncColourCorrectionUi();
-                    Serial.println("[WS] Color correction config synced");
-                }
-                return;
-            }
-
-            // CRITICAL FIX: Handle colorCorrection.setConfig response (confirmation)
-            if (type && strcmp(type, "colorCorrection.setConfig") == 0) {
-                if (doc["success"].is<bool>() && doc["success"].as<bool>()) {
-                    // Update local cache from response if provided
-                    JsonObject data = doc["data"].is<JsonObject>() ? doc["data"].as<JsonObject>() : doc.as<JsonObject>();
-                    ColorCorrectionState cc = g_wsClient.getColorCorrectionState();
-                    
-                    if (data["mode"].is<uint8_t>()) {
-                        cc.mode = data["mode"].as<uint8_t>();
-                    }
-                    // Other fields already updated optimistically in send methods
-                    
-                    g_wsClient.setColorCorrectionState(cc);
-                    Serial.println("[WS] Color correction config update confirmed");
-                } else {
-                    Serial.println("[WS] Color correction config update failed");
-                }
-                return;
-            }
-
-            // CRITICAL FIX: Handle colorCorrection.setMode response (confirmation)
-            if (type && strcmp(type, "colorCorrection.setMode") == 0) {
-                if (doc["success"].is<bool>() && doc["success"].as<bool>()) {
-                    JsonObject data = doc["data"].is<JsonObject>() ? doc["data"].as<JsonObject>() : doc.as<JsonObject>();
-                    ColorCorrectionState cc = g_wsClient.getColorCorrectionState();
-                    
-                    if (data["mode"].is<uint8_t>()) {
-                        cc.mode = data["mode"].as<uint8_t>();
-                    }
-                    if (data["modeName"].is<const char*>()) {
-                        Serial.printf("[WS] Color correction mode set to: %s\n", data["modeName"].as<const char*>());
-                    }
-                    
-                    g_wsClient.setColorCorrectionState(cc);
-                    syncColourCorrectionUi();
-                    Serial.println("[WS] Color correction mode update confirmed");
-                } else {
-                    Serial.println("[WS] Color correction mode update failed");
-                }
-                return;
-            }
-
-            // CRITICAL FIX: Handle error responses from v2 firmware
-            if (type && strcmp(type, "error") == 0) {
-                const char* errorCode = doc["error"]["code"] | "UNKNOWN";
-                const char* errorMsg = doc["error"]["message"] | "Unknown error";
-                const char* requestId = doc["requestId"] | "";
-                Serial.printf("[WS ERROR] Code: %s, Message: %s, RequestId: %s\n", 
-                              errorCode, errorMsg, requestId);
-                // TODO: Could flash LED or show error on display
-                return;
-            }
         }
 
         WsMessageRouter::route(doc);
@@ -1170,18 +928,8 @@ void setup() {
     Serial.printf("[DEBUG] Before WiFiManager::begin() - Heap: free=%u minFree=%u largest=%u\n",
                   ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
     // #endregion
-    
-    // Use fallback credentials if available
-    #ifdef WIFI_SSID2
-    if (strlen(WIFI_SSID2) > 0) {
-        g_wifiManager.beginWithFallback(WIFI_SSID, WIFI_PASSWORD, WIFI_SSID2, WIFI_PASSWORD2);
-    } else {
-        g_wifiManager.begin(WIFI_SSID, WIFI_PASSWORD);
-    }
-    #else
-    g_wifiManager.begin(WIFI_SSID, WIFI_PASSWORD);
-    #endif
-    
+    // Begin WiFi with primary and secondary networks
+    g_wifiManager.begin(WIFI_SSID, WIFI_PASSWORD, WIFI_SSID2, WIFI_PASSWORD2);
     // #region agent log
     Serial.printf("[DEBUG] After WiFiManager::begin() - Heap: free=%u minFree=%u largest=%u\n",
                   ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
@@ -1234,47 +982,6 @@ void setup() {
     Serial.println("  WiFi connecting in background...");
     Serial.println("  Touch screen: long press to reset params");
     Serial.println("============================================\n");
-}
-
-// ============================================================================
-// Cleanup Function (for memory leak prevention)
-// ============================================================================
-// CRITICAL FIX: Cleanup global objects to prevent memory leaks
-// Called on shutdown/restart (if implemented) or can be called manually
-void cleanup() {
-    Serial.println("[CLEANUP] Cleaning up global objects...");
-    
-    if (g_ui) {
-        delete g_ui;
-        g_ui = nullptr;
-        Serial.println("[CLEANUP] DisplayUI deleted");
-    }
-    
-    if (g_presetManager) {
-        delete g_presetManager;
-        g_presetManager = nullptr;
-        Serial.println("[CLEANUP] PresetManager deleted");
-    }
-    
-    if (g_paramHandler) {
-        delete g_paramHandler;
-        g_paramHandler = nullptr;
-        Serial.println("[CLEANUP] ParameterHandler deleted");
-    }
-    
-    if (g_buttonHandler) {
-        delete g_buttonHandler;
-        g_buttonHandler = nullptr;
-        Serial.println("[CLEANUP] ButtonHandler deleted");
-    }
-    
-    if (g_encoders) {
-        delete g_encoders;
-        g_encoders = nullptr;
-        Serial.println("[CLEANUP] DualEncoderService deleted");
-    }
-    
-    Serial.println("[CLEANUP] Cleanup complete");
 }
 
 // ============================================================================
@@ -1396,12 +1103,8 @@ void loop() {
         const char* message = "Initializing...";
 #if ENABLE_WIFI
         WiFiConnectionStatus wifiStatus = g_wifiManager.getStatus();
-        if (wifiStatus == WiFiConnectionStatus::SCANNING) {
-            message = "Scanning WiFi";
-        } else if (wifiStatus == WiFiConnectionStatus::CONNECTING) {
+        if (wifiStatus == WiFiConnectionStatus::CONNECTING) {
             message = "Connecting to WiFi";
-        } else if (wifiStatus == WiFiConnectionStatus::AP_ONLY) {
-            message = "AP only (no networks)";
 #ifdef LIGHTWAVE_IP
         } else if (g_wifiManager.isConnected() && !g_wsConfigured) {
             message = "Connecting to host";
@@ -1424,27 +1127,13 @@ void loop() {
     static bool s_wifiWasConnected = false;
     static bool s_mdnsLogged = false;
     static uint32_t s_lastListRequestMs = 0;
-    static uint32_t s_lastNetworkDebugMs = 0;
-    uint32_t nowMs = millis();
-
-    // Debug network status every 5 seconds
-    if (nowMs - s_lastNetworkDebugMs > 5000) {
-        s_lastNetworkDebugMs = nowMs;
-        Serial.printf("[NETWORK DEBUG] WiFi connected: %d, mDNS resolved: %d, WS configured: %d, WS connected: %d, WS status: %s\n",
-                      g_wifiManager.isConnected() ? 1 : 0,
-                      g_wifiManager.isMDNSResolved() ? 1 : 0,
-                      g_wsConfigured ? 1 : 0,
-                      g_wsClient.isConnected() ? 1 : 0,
-                      g_wsClient.getStatusString());
-    }
 
     if (g_wifiManager.isConnected()) {
         // Log WiFi connection once
         if (!s_wifiWasConnected) {
             s_wifiWasConnected = true;
-            char localIpStr[16];
-            formatIPv4(g_wifiManager.getLocalIP(), localIpStr);
-            Serial.printf("[NETWORK] WiFi connected! IP: %s\n", localIpStr);
+            Serial.printf("[NETWORK] WiFi connected! IP: %s\n",
+                          g_wifiManager.getLocalIP().toString().c_str());
         }
 
         // Direct IP mode (skip mDNS entirely)
@@ -1455,10 +1144,8 @@ void loop() {
             if (!serverIP.fromString(LIGHTWAVE_IP)) {
                 Serial.printf("[NETWORK] Invalid LIGHTWAVE_IP: %s\n", LIGHTWAVE_IP);
             } else {
-                char ipStr[16];
-                formatIPv4(serverIP, ipStr);
                 Serial.printf("[NETWORK] Connecting WebSocket to %s:%d%s\n",
-                              ipStr,
+                              serverIP.toString().c_str(),
                               LIGHTWAVE_PORT,
                               LIGHTWAVE_WS_PATH);
                 g_wsClient.begin(serverIP, LIGHTWAVE_PORT, LIGHTWAVE_WS_PATH);
@@ -1467,10 +1154,6 @@ void loop() {
 #else
         // Try mDNS resolution (with internal backoff)
         if (!g_wifiManager.isMDNSResolved()) {
-            TAB5_AGENT_PRINTF(
-                "[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"MDNS2\",\"location\":\"main.cpp\",\"message\":\"mdns.resolve.attempt\",\"data\":{\"hostname\":\"lightwaveos\"},\"timestamp\":%lu}\n",
-                (unsigned long)millis()
-            );
             g_wifiManager.resolveMDNS("lightwaveos");
         }
 
@@ -1478,29 +1161,24 @@ void loop() {
         if (g_wifiManager.isMDNSResolved() && !g_wsConfigured) {
             g_wsConfigured = true;
             IPAddress serverIP = g_wifiManager.getResolvedIP();
-            char ipStr[16];
-            formatIPv4(serverIP, ipStr);
 
             if (!s_mdnsLogged) {
                 s_mdnsLogged = true;
-                Serial.printf("[NETWORK] mDNS resolved: lightwaveos.local -> %s\n", ipStr);
+                Serial.printf("[NETWORK] mDNS resolved: lightwaveos.local -> %s\n",
+                              serverIP.toString().c_str());
             }
 
             Serial.printf("[NETWORK] Connecting WebSocket to %s:%d%s\n",
-                          ipStr,
+                          serverIP.toString().c_str(),
                           LIGHTWAVE_PORT,
                           LIGHTWAVE_WS_PATH);
-            TAB5_AGENT_PRINTF(
-                "[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"WS3\",\"location\":\"main.cpp\",\"message\":\"ws.begin.fromMdns\",\"data\":{\"ip\":\"%s\",\"port\":%d,\"path\":\"%s\"},\"timestamp\":%lu}\n",
-                ipStr, LIGHTWAVE_PORT, LIGHTWAVE_WS_PATH, (unsigned long)millis()
-            );
 
             g_wsClient.begin(serverIP, LIGHTWAVE_PORT, LIGHTWAVE_WS_PATH);
         }
 #endif
 
         // Once WebSocket is connected, request effect/palette name lists (paged, non-blocking)
-        if (g_wsClient.isConnected() && g_wsClient.canSendCommands()) {
+        if (g_wsClient.isConnected()) {
             uint32_t nowMs = millis();
 
             if (!s_requestedLists) {
@@ -1515,14 +1193,14 @@ void loop() {
 
             // Rate-limit list requests to avoid spamming the server
             if (nowMs - s_lastListRequestMs >= 250) {
-                // Request palettes first (small, deterministic: 64 -> 4 pages @ 20/page)
+                // Request palettes first (small, deterministic: 75 -> 2 pages)
                 if (s_palettePages == 0 || s_paletteNextPage <= s_palettePages) {
-                    g_wsClient.requestPalettesList(s_paletteNextPage, 20, "tab5.palettes");
+                    g_wsClient.requestPalettesList(s_paletteNextPage, 50, "tab5.palettes");
                     s_lastListRequestMs = nowMs;
                 }
-                // Then effects (count may vary; server caps 50 per page; Tab5 requests smaller pages)
+                // Then effects (count may vary; server caps 50 per page)
                 else if (s_effectPages == 0 || s_effectNextPage <= s_effectPages) {
-                    g_wsClient.requestEffectsList(s_effectNextPage, 20, "tab5.effects");
+                    g_wsClient.requestEffectsList(s_effectNextPage, 50, "tab5.effects");
                     s_lastListRequestMs = nowMs;
                 }
             }
@@ -1673,26 +1351,10 @@ void loop() {
         // Update WiFi details for header display
 #if ENABLE_WIFI
         if (wifiOk) {
-            // Avoid per-frame heap churn (e.g. IPAddress::toString() + String copies).
-            static uint32_t s_lastWiFiInfoMs = 0;
-            static char s_ipBuf[16] = {0};
-            static char s_ssidBuf[33] = {0};  // 32 + NUL (802.11 SSID max)
-            static int32_t s_rssi = 0;
-
-            const uint32_t now = millis();
-            if (now - s_lastWiFiInfoMs >= 2000 || s_ipBuf[0] == '\0') {
-                s_lastWiFiInfoMs = now;
-
-                const IPAddress ip = g_wifiManager.getLocalIP();
-                formatIPv4(ip, s_ipBuf);
-
-                const String ssid = g_wifiManager.getSSID();
-                ssid.toCharArray(s_ssidBuf, sizeof(s_ssidBuf));
-
-                s_rssi = g_wifiManager.getRSSI();
-            }
-
-            g_ui->setWiFiInfo(s_ipBuf, s_ssidBuf, s_rssi);
+            IPAddress ip = g_wifiManager.getLocalIP();
+            String ssid = g_wifiManager.getSSID();
+            int32_t rssi = g_wifiManager.getRSSI();
+            g_ui->setWiFiInfo(ip.toString().c_str(), ssid.c_str(), rssi);
         } else {
             g_ui->setWiFiInfo("", "", 0);
         }

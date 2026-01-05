@@ -58,15 +58,7 @@ namespace lightwaveos { namespace nodes {
 #define LW_LOG_TAG "Renderer"
 #include "utils/Log.h"
 
-#ifndef LW_AGENT_TRACE
-#define LW_AGENT_TRACE 0
-#endif
-
-#if LW_AGENT_TRACE
-#define LW_AGENT_PRINTF(...) Serial.printf(__VA_ARGS__)
-#else
-#define LW_AGENT_PRINTF(...) ((void)0)
-#endif
+// Debug logging disabled
 
 namespace lightwaveos {
 namespace nodes {
@@ -263,7 +255,13 @@ const char* RendererNode::getPaletteName(uint8_t id) const
 
 plugins::IEffect* RendererNode::getEffectInstance(uint8_t id) const
 {
-    if (id < MAX_EFFECTS && m_effects[id].active) {
+    if (id >= MAX_EFFECTS) {
+        return nullptr;
+    }
+    if (m_effects == nullptr) {
+        return nullptr;
+    }
+    if (m_effects[id].active) {
         return m_effects[id].effect;
     }
     return nullptr;

@@ -40,17 +40,7 @@ Node::Node(const NodeConfig& config)
 {
     // Create the message queue
     // Queue item size = sizeof(Message) = 16 bytes
-    // #region agent log - Queue creation
-    if (sizeof(Message) != 16) {
-        ESP_LOGE(TAG, "[%s] CRITICAL: Message size is %zu bytes, expected 16! Queue creation will fail!", config.name, sizeof(Message));
-    }
-    // #endregion
     m_queue = xQueueCreate(m_config.queueSize, sizeof(Message));
-    // #region agent log - Queue creation result
-    if (m_queue == nullptr) {
-        ESP_LOGE(TAG, "[%s] CRITICAL: Failed to create queue! size=%d, msgSize=%zu", config.name, config.queueSize, sizeof(Message));
-    }
-    // #endregion
 
     if (m_queue == nullptr) {
 #ifndef NATIVE_BUILD
@@ -339,16 +329,6 @@ void Node::run()
         }
 
         // Wait for a message
-        // #region agent log - Queue receive instrumentation
-        if (m_queue == nullptr) {
-            ESP_LOGE(TAG, "[%s] CRITICAL: m_queue is NULL before xQueueReceive!", m_config.name);
-            // Don't abort here - let FreeRTOS assert catch it
-        }
-        // Verify Message size matches queue item size
-        if (sizeof(Message) != 16) {
-            ESP_LOGE(TAG, "[%s] CRITICAL: Message size mismatch! sizeof(Message)=%zu, expected=16", m_config.name, sizeof(Message));
-        }
-        // #endregion
         BaseType_t received = xQueueReceive(m_queue, &msg, waitTime);
 
         if (received == pdTRUE) {

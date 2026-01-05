@@ -1,7 +1,12 @@
 #ifndef TAB5_CONFIG_H
 #define TAB5_CONFIG_H
 
-#include <Arduino.h>
+#ifdef SIMULATOR_BUILD
+    #include <cstdint>
+    #include <cstddef>
+#else
+    #include <Arduino.h>
+#endif
 
 // ============================================================================
 // Feature Flags
@@ -19,6 +24,13 @@
 // UI diagnostics: Enable to log UI rendering and screen transitions
 // Set to 0 to disable (default: disabled for production)
 #define ENABLE_UI_DIAGNOSTICS 0
+
+// WebSocket diagnostics: Enable verbose WS update logging
+// Set to 0 to disable (default: disabled for production)
+#define ENABLE_WS_DIAGNOSTICS 0
+
+// PPA UI acceleration: Enable PPASrm scaling for large UI transforms
+#define ENABLE_PPA_UI 1
 
 // Tab5 WiFi SDIO pin definitions (ESP32-C6 co-processor)
 #define TAB5_WIFI_SDIO_CLK   12
@@ -72,50 +84,43 @@ enum class Parameter : uint8_t {
     FadeAmount = 5,
     Complexity = 6,
     Variation = 7,
-    // Unit B (8-15) - Zone parameters
-    // Pattern: [Zone N Effect, Zone N Speed/Palette] pairs
-    // Note: Encoders 9, 11, 13, 15 toggle between Speed and Palette via button
-    Zone0Effect = 8,
-    Zone0Speed = 9,      // Also Zone0Palette when button toggled
-    Zone1Effect = 10,
-    Zone1Speed = 11,     // Also Zone1Palette when button toggled
-    Zone2Effect = 12,
-    Zone2Speed = 13,     // Also Zone2Palette when button toggled
-    Zone3Effect = 14,
-    Zone3Speed = 15,     // Also Zone3Palette when button toggled
-    COUNT = 16
+    // Unit B (8-15) - No parameters assigned (encoders disabled)
+    // Zone parameters have been removed from Unit B
+    // Unit B buttons are still used for preset management
+    COUNT = 8  // Only Unit A (0-7) has parameters
 };
 
-// Zone parameter helper functions
+// Zone parameter helper functions - DEPRECATED (Unit B encoders disabled)
+// These functions are kept for backward compatibility but always return false/0
 namespace ZoneParam {
-    // Check if parameter index is a zone parameter (8-15)
+    // Check if parameter index is a zone parameter (8-15) - always false now
     constexpr bool isZoneParameter(uint8_t index) {
-        return index >= 8 && index <= 15;
+        return false;  // Unit B encoders disabled
     }
 
-    // Get zone ID (0-3) from parameter index
+    // Get zone ID (0-3) from parameter index - always returns 0 now
     constexpr uint8_t getZoneId(uint8_t index) {
-        return (index - 8) / 2;
+        return 0;  // Unit B encoders disabled
     }
 
-    // Check if parameter is a zone effect selector
+    // Check if parameter is a zone effect selector - always false now
     constexpr bool isZoneEffect(uint8_t index) {
-        return isZoneParameter(index) && ((index - 8) % 2 == 0);
+        return false;  // Unit B encoders disabled
     }
 
-    // Check if parameter is a zone brightness control
+    // Check if parameter is a zone brightness control - always false now
     constexpr bool isZoneBrightness(uint8_t index) {
-        return isZoneParameter(index) && ((index - 8) % 2 == 1);
+        return false;  // Unit B encoders disabled
     }
 
-    // Get encoder index for a zone's effect parameter
+    // Get encoder index for a zone's effect parameter - deprecated
     constexpr uint8_t getZoneEffectIndex(uint8_t zoneId) {
-        return 8 + (zoneId * 2);
+        return 0;  // Unit B encoders disabled
     }
 
-    // Get encoder index for a zone's brightness parameter
+    // Get encoder index for a zone's brightness parameter - deprecated
     constexpr uint8_t getZoneBrightnessIndex(uint8_t zoneId) {
-        return 9 + (zoneId * 2);
+        return 0;  // Unit B encoders disabled
     }
 }
 
@@ -123,10 +128,10 @@ namespace ZoneParam {
 namespace ParamRange {
     // Unit A (0-7) - Global parameters
     constexpr uint8_t EFFECT_MIN = 0;
-    constexpr uint8_t EFFECT_MAX = 87;  // 88 effects total (0-87) - matches v2 EXPECTED_EFFECT_COUNT
+    constexpr uint8_t EFFECT_MAX = 95;
 
     constexpr uint8_t PALETTE_MIN = 0;
-    constexpr uint8_t PALETTE_MAX = 63;
+    constexpr uint8_t PALETTE_MAX = 74;  // Matches v2 MASTER_PALETTE_COUNT=75 (0-74)
 
     constexpr uint8_t SPEED_MIN = 1;
     constexpr uint8_t SPEED_MAX = 100;
@@ -152,12 +157,12 @@ namespace ParamRange {
     
     // Zone Palette (Unit B, encoders 9, 11, 13, 15 when toggled) - same as global palette
     constexpr uint8_t ZONE_PALETTE_MIN = 0;
-    constexpr uint8_t ZONE_PALETTE_MAX = 63;
+    constexpr uint8_t ZONE_PALETTE_MAX = 74;  // Matches v2 MASTER_PALETTE_COUNT=75 (0-74)
 
     // Unit B (8-15) - Zone parameters
-    // Zone Effect: 0-87 (wraps around for continuous scrolling) - matches v2 EXPECTED_EFFECT_COUNT
+    // Zone Effect: 0-95 (wraps around for continuous scrolling)
     constexpr uint8_t ZONE_EFFECT_MIN = 0;
-    constexpr uint8_t ZONE_EFFECT_MAX = 87;  // 88 effects total (0-87)
+    constexpr uint8_t ZONE_EFFECT_MAX = 95;
 
     // Zone Brightness: 0-255 (clamped, no wrap)
     constexpr uint8_t ZONE_BRIGHTNESS_MIN = 0;
@@ -255,16 +260,8 @@ inline const char* getParameterName(Parameter param) {
         case Parameter::FadeAmount:  return ParamName::FADEAMOUNT;
         case Parameter::Complexity:  return ParamName::COMPLEXITY;
         case Parameter::Variation:   return ParamName::VARIATION;
-        // Unit B (8-15) - Zone parameters
-        case Parameter::Zone0Effect: return ParamName::ZONE0_EFFECT;
-        case Parameter::Zone0Speed:  return ParamName::ZONE0_SPEED;
-        case Parameter::Zone1Effect: return ParamName::ZONE1_EFFECT;
-        case Parameter::Zone1Speed:  return ParamName::ZONE1_SPEED;
-        case Parameter::Zone2Effect: return ParamName::ZONE2_EFFECT;
-        case Parameter::Zone2Speed:  return ParamName::ZONE2_SPEED;
-        case Parameter::Zone3Effect: return ParamName::ZONE3_EFFECT;
-        case Parameter::Zone3Speed:  return ParamName::ZONE3_SPEED;
-        default:                     return "Unknown";
+        // Unit B (8-15) - No parameters assigned (encoders disabled)
+        default: return "Unknown";
     }
 }
 
@@ -280,16 +277,8 @@ inline uint8_t getParameterMin(Parameter param) {
         case Parameter::FadeAmount:  return ParamRange::FADEAMOUNT_MIN;
         case Parameter::Complexity:  return ParamRange::COMPLEXITY_MIN;
         case Parameter::Variation:   return ParamRange::VARIATION_MIN;
-        // Unit B (8-15) - Zone parameters
-        case Parameter::Zone0Effect: return ParamRange::ZONE_EFFECT_MIN;
-        case Parameter::Zone0Speed:  return ParamRange::ZONE_SPEED_MIN;
-        case Parameter::Zone1Effect: return ParamRange::ZONE_EFFECT_MIN;
-        case Parameter::Zone1Speed:  return ParamRange::ZONE_SPEED_MIN;
-        case Parameter::Zone2Effect: return ParamRange::ZONE_EFFECT_MIN;
-        case Parameter::Zone2Speed:  return ParamRange::ZONE_SPEED_MIN;
-        case Parameter::Zone3Effect: return ParamRange::ZONE_EFFECT_MIN;
-        case Parameter::Zone3Speed:  return ParamRange::ZONE_SPEED_MIN;
-        default:                     return 0;
+        // Unit B (8-15) - No parameters assigned (encoders disabled)
+        default: return 0;
     }
 }
 
@@ -305,16 +294,8 @@ inline uint8_t getParameterMax(Parameter param) {
         case Parameter::FadeAmount:  return ParamRange::FADEAMOUNT_MAX;
         case Parameter::Complexity:  return ParamRange::COMPLEXITY_MAX;
         case Parameter::Variation:   return ParamRange::VARIATION_MAX;
-        // Unit B (8-15) - Zone parameters
-        case Parameter::Zone0Effect: return ParamRange::ZONE_EFFECT_MAX;
-        case Parameter::Zone0Speed:  return ParamRange::ZONE_SPEED_MAX;
-        case Parameter::Zone1Effect: return ParamRange::ZONE_EFFECT_MAX;
-        case Parameter::Zone1Speed:  return ParamRange::ZONE_SPEED_MAX;
-        case Parameter::Zone2Effect: return ParamRange::ZONE_EFFECT_MAX;
-        case Parameter::Zone2Speed:  return ParamRange::ZONE_SPEED_MAX;
-        case Parameter::Zone3Effect: return ParamRange::ZONE_EFFECT_MAX;
-        case Parameter::Zone3Speed:  return ParamRange::ZONE_SPEED_MAX;
-        default:                     return 255;
+        // Unit B (8-15) - No parameters assigned (encoders disabled)
+        default: return 255;
     }
 }
 
@@ -330,16 +311,8 @@ inline uint8_t getParameterDefault(Parameter param) {
         case Parameter::FadeAmount:  return ParamDefault::FADEAMOUNT;
         case Parameter::Complexity:  return ParamDefault::COMPLEXITY;
         case Parameter::Variation:   return ParamDefault::VARIATION;
-        // Unit B (8-15) - Zone parameters
-        case Parameter::Zone0Effect: return ParamDefault::ZONE0_EFFECT;
-        case Parameter::Zone0Speed:  return ParamDefault::ZONE0_SPEED;
-        case Parameter::Zone1Effect: return ParamDefault::ZONE1_EFFECT;
-        case Parameter::Zone1Speed:  return ParamDefault::ZONE1_SPEED;
-        case Parameter::Zone2Effect: return ParamDefault::ZONE2_EFFECT;
-        case Parameter::Zone2Speed:  return ParamDefault::ZONE2_SPEED;
-        case Parameter::Zone3Effect: return ParamDefault::ZONE3_EFFECT;
-        case Parameter::Zone3Speed:  return ParamDefault::ZONE3_SPEED;
-        default:                     return 128;
+        // Unit B (8-15) - No parameters assigned (encoders disabled)
+        default: return 128;
     }
 }
 

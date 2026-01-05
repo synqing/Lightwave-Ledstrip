@@ -20,31 +20,28 @@ static const ParameterDef PARAMETER_TABLE[] = {
     // id, encoderIndex, statusField, wsCommandType, min, max, defaultValue
 
     // Unit A (0-7) - Global LightwaveOS parameters
-    {ParameterId::EffectId,   0, "effectId",   "effects.setCurrent", 0,   87,  0},  // 88 effects (0-87)
+    // Note: Effect max=95 (0-95 = 96 effects, matches v2 MAX_EFFECTS=96)
+    // Note: Palette max=74 (0-74 = 75 palettes, matches v2 MASTER_PALETTE_COUNT=75)
+    {ParameterId::EffectId,   0, "effectId",   "effects.setCurrent", 0,   95,  0},
     {ParameterId::Brightness, 1, "brightness", "parameters.set",     0,   255, 128},
-    {ParameterId::PaletteId,  2, "paletteId",  "parameters.set",     0,   63,  0},
+    {ParameterId::PaletteId,  2, "paletteId",  "parameters.set",     0,   74,  0},
     {ParameterId::Speed,      3, "speed",      "parameters.set",     1,   100, 25},
     {ParameterId::Mood,       4, "mood",       "parameters.set",     0,   255, 0},
     {ParameterId::FadeAmount, 5, "fadeAmount", "parameters.set",     0,   255, 0},
     {ParameterId::Complexity, 6, "complexity", "parameters.set",     0,   255, 128},
     {ParameterId::Variation,  7, "variation",  "parameters.set",     0,   255, 0},
 
-    // Unit B (8-15) - Zone parameters
-    // Pattern: [Zone N Effect, Zone N Speed/Palette] pairs
-    // Note: Encoders 9, 11, 13, 15 can toggle between Speed and Palette via button
-    // Default mode is Speed; when toggled, encoder controls Palette instead
-    {ParameterId::Zone0Effect, 8,  "zone0Effect", "zone.setEffect",   0,   87,  0},  // 88 effects (0-87)
-    {ParameterId::Zone0Speed,  9,  "zone0Speed",  "zone.setSpeed",    1,   100, 25},  // Also zone0Palette when toggled
-    {ParameterId::Zone1Effect, 10, "zone1Effect", "zone.setEffect",   0,   87,  0},  // 88 effects (0-87)
-    {ParameterId::Zone1Speed,  11, "zone1Speed",  "zone.setSpeed",    1,   100, 25},  // Also zone1Palette when toggled
-    {ParameterId::Zone2Effect, 12, "zone2Effect", "zone.setEffect",   0,   87,  0},  // 88 effects (0-87)
-    {ParameterId::Zone2Speed,  13, "zone2Speed",  "zone.setSpeed",    1,   100, 25},  // Also zone2Palette when toggled
-    {ParameterId::Zone3Effect, 14, "zone3Effect", "zone.setEffect",   0,   87,  0},  // 88 effects (0-87)
-    {ParameterId::Zone3Speed,  15, "zone3Speed",  "zone.setSpeed",    1,   100, 25}   // Also zone3Palette when toggled
+    // Unit B (8-15) - No parameters assigned (encoders disabled/unused)
+    // Zone parameters have been removed from Unit B
+    // Unit B buttons are still used for preset management
 };
 
 const ParameterDef* getParameterByIndex(uint8_t index) {
     if (index >= getParameterCount()) {
+        return nullptr;
+    }
+    // Unit B (8-15) no longer has parameters assigned
+    if (index >= 8) {
         return nullptr;
     }
     return &PARAMETER_TABLE[index];
@@ -53,6 +50,10 @@ const ParameterDef* getParameterByIndex(uint8_t index) {
 const ParameterDef* getParameterById(ParameterId id) {
     uint8_t index = static_cast<uint8_t>(id);
     if (index >= getParameterCount()) {
+        return nullptr;
+    }
+    // Unit B (8-15) no longer has parameters assigned
+    if (index >= 8) {
         return nullptr;
     }
     return &PARAMETER_TABLE[index];
@@ -78,11 +79,18 @@ static void initializeMetadata() {
         return;
     }
 
-    for (uint8_t i = 0; i < PARAMETER_COUNT; i++) {
+    // Only initialize metadata for Unit A (0-7) - Unit B (8-15) has no parameters
+    for (uint8_t i = 0; i < 8; i++) {
         const ParameterDef* param = &PARAMETER_TABLE[i];
         s_parameterMetadata[i].min = param->min;
         s_parameterMetadata[i].max = param->max;
         s_parameterMetadata[i].isDynamic = false;  // Start with hardcoded defaults
+    }
+    // Unit B (8-15): Initialize with safe defaults (no parameters assigned)
+    for (uint8_t i = 8; i < PARAMETER_COUNT; i++) {
+        s_parameterMetadata[i].min = 0;
+        s_parameterMetadata[i].max = 255;
+        s_parameterMetadata[i].isDynamic = false;
     }
 
     s_metadataInitialized = true;

@@ -130,7 +130,12 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
     // --- Perlin Backend Test Effects (85-87) - A/B/C comparison harness ---
     {PM_STR("Perlin Test: FastLED"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("FastLED inoise8 baseline test (TEST)"), PM_STR("FastLED noise, centre-origin mapping, seed + advection"), PM_STR("")},
     {PM_STR("Perlin Test: Emotiscope2 Full"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Emotiscope 2.0 Perlin full-res per-frame test (TEST)"), PM_STR("Seedable Perlin noise, hash-based gradients, octaves, full resolution"), PM_STR("")},
-    {PM_STR("Perlin Test: Emotiscope2 Quarter"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Emotiscope 2.0 Perlin quarter-res + interpolation test (TEST)"), PM_STR("Seedable Perlin noise, quarter resolution, periodic refresh, linear interpolation"), PM_STR("")}
+    {PM_STR("Perlin Test: Emotiscope2 Quarter"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Emotiscope 2.0 Perlin quarter-res + interpolation test (TEST)"), PM_STR("Seedable Perlin noise, quarter resolution, periodic refresh, linear interpolation"), PM_STR("")},
+
+    // --- Audio Pipeline Enhancement Effects (88-90) - New audio-reactive effects ---
+    {PM_STR("Spectrum Analyzer"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::AUDIO_SYNC, PM_STR("64-bin frequency spectrum visualization, bass at centre, treble at edges"), PM_STR("64-bin Goertzel spectrum, peak hold, beat-sync mode"), PM_STR("Spectrum Bars")},
+    {PM_STR("Saliency Aware"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::AUDIO_SYNC, PM_STR("Adapts visual behavior based on musical saliency (harmonic, rhythmic, timbral, dynamic)"), PM_STR("Musical Intelligence System, saliency metrics, adaptive behavior"), PM_STR("")},
+    {PM_STR("Style Adaptive"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::AUDIO_SYNC, PM_STR("Adapts behavior based on detected music style (EDM, jazz, ambient, orchestral, pop)"), PM_STR("Style detection, music classification, adaptive visual response"), PM_STR("")}
 };
 
 const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(PatternMetadata);
@@ -140,7 +145,7 @@ const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(Pattern
 // ============================================================================
 
 // Expected number of implemented effects (must match registerAllEffects() return value)
-constexpr uint8_t EXPECTED_EFFECT_COUNT = 88;  // 85 base + 3 Perlin backend tests
+constexpr uint8_t EXPECTED_EFFECT_COUNT = 91;  // 88 base + 3 new audio enhancement effects
 
 // Compile-time assertion: metadata must have at least as many entries as implemented effects
 // This ensures we can always map effect IDs to metadata (allows for future effects in metadata)
@@ -385,7 +390,10 @@ static const uint8_t REACTIVE_EFFECT_IDS[] PROGMEM = {
     77,  // Perlin Veil - audio-driven advection
     78,  // Perlin Shocklines - beat-driven ridges
     79,  // Perlin Caustics - treble/bass modulation
-    80   // Perlin Interference Weave - dual-strip moiré
+    80,  // Perlin Interference Weave - dual-strip moiré
+    88,  // Spectrum Analyzer - 64-bin frequency spectrum
+    89,  // Saliency Aware - musical saliency adaptation
+    90   // Style Adaptive - music style adaptation
 };
 static constexpr uint8_t REACTIVE_EFFECT_COUNT = sizeof(REACTIVE_EFFECT_IDS);
 

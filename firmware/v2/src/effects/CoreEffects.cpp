@@ -106,6 +106,9 @@
 #include "ieffect/LGPPerlinShocklinesAmbientEffect.h"
 #include "ieffect/LGPPerlinCausticsAmbientEffect.h"
 #include "ieffect/LGPPerlinInterferenceWeaveAmbientEffect.h"
+#include "ieffect/SpectrumAnalyzerEffect.h"
+#include "ieffect/SaliencyAwareEffect.h"
+#include "ieffect/StyleAdaptiveEffect.h"
 #include "utils/FastLEDOptim.h"
 #include "../core/narrative/NarrativeEngine.h"
 #include <FastLED.h>
@@ -869,9 +872,28 @@ uint8_t registerAllEffects(RendererNode* renderer) {
         total++;
     }
 
+    // Audio Pipeline Enhancement Effects (IDs 88-90) - New audio-reactive effects
+    // Spectrum Analyzer (ID 88) - 64-bin frequency spectrum visualization
+    static ieffect::SpectrumAnalyzerEffect spectrumAnalyzerInstance;
+    if (renderer->registerEffect(total, &spectrumAnalyzerInstance)) {
+        total++;
+    }
+
+    // Saliency Aware (ID 89) - Adapts to musical saliency (harmonic, rhythmic, timbral, dynamic)
+    static ieffect::SaliencyAwareEffect saliencyAwareInstance;
+    if (renderer->registerEffect(total, &saliencyAwareInstance)) {
+        total++;
+    }
+
+    // Style Adaptive (ID 90) - Adapts behavior based on detected music style
+    static ieffect::StyleAdaptiveEffect styleAdaptiveInstance;
+    if (renderer->registerEffect(total, &styleAdaptiveInstance)) {
+        total++;
+    }
+
     // =============== EFFECT COUNT PARITY VALIDATION ===============
     // Runtime validation: ensure registered count matches expected
-    constexpr uint8_t EXPECTED_EFFECT_COUNT = 88;  // 85 base + 3 Perlin backend tests
+    constexpr uint8_t EXPECTED_EFFECT_COUNT = 91;  // 88 base + 3 new audio enhancement effects
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

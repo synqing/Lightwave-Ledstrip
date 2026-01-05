@@ -122,6 +122,21 @@ public:
         return _zones[zoneId];
     }
 
+    /**
+     * Get zone segments (layout) - for preset system
+     * @param segments Output array to fill (must be at least MAX_ZONES)
+     * @param count Output: number of segments (1-4)
+     * @return true if segments are valid
+     */
+    bool getZoneSegments(zones::ZoneSegment* segments, uint8_t& count) const {
+        if (!segments) return false;
+        count = _zoneCount;
+        for (uint8_t i = 0; i < _zoneCount && i < zones::MAX_ZONES; i++) {
+            segments[i] = _segments[i];
+        }
+        return _zoneCount > 0;
+    }
+
 private:
     M5GFX& _display;
     ButtonHandler* _buttonHandler = nullptr;

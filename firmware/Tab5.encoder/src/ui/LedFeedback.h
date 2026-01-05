@@ -21,7 +21,11 @@
 // Reference: K1.8encoderS3 LedFeedback pattern adapted for dual encoder setup.
 // ============================================================================
 
-#include <Arduino.h>
+#ifdef SIMULATOR_BUILD
+    #include <cstdint>
+#else
+    #include <Arduino.h>
+#endif
 
 // Forward declaration
 class DualEncoderService;

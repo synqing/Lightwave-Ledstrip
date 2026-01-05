@@ -45,4 +45,3 @@ private:
     void drawConnectionStatus();
     void drawPowerBar();
 };
-

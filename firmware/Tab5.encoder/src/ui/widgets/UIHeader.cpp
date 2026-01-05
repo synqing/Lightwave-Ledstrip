@@ -206,4 +206,3 @@ void UIHeader::drawPowerBar() {
         _sprite.drawString("CHG", iconX, iconY);  // Charging indicator
     }
 }
-

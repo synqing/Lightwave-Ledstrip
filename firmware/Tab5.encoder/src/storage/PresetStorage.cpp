@@ -26,21 +26,9 @@ bool PresetStorage::init() {
         Serial.println("[PresetStorage] NVS not initialized, initializing...");
         err = nvs_flash_init();
         if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-            // WARNING: This will erase ALL NVS data including presets!
-            // Only do this if absolutely necessary (NVS format changed)
-            Serial.println("[PresetStorage] WARNING: NVS version mismatch - erasing entire NVS partition!");
-            Serial.println("[PresetStorage] WARNING: This will DELETE ALL PRESETS and other stored data!");
-            Serial.println("[PresetStorage] This should only happen after ESP-IDF version upgrade.");
-            // Close any existing handle first
-            if (s_handle != 0) {
-                nvs_close(s_handle);
-                s_handle = 0;
-            }
-            // Erase entire NVS partition (unavoidable for version mismatch)
-            err = nvs_flash_erase();
-            if (err == ESP_OK) {
-                err = nvs_flash_init();
-            }
+            Serial.println("[PresetStorage] Erasing NVS flash...");
+            nvs_flash_erase();
+            err = nvs_flash_init();
         }
 
         if (err != ESP_OK) {

@@ -15,7 +15,6 @@
     #include "../parameters/ParameterMap.h"
     #include "../config/Config.h"
     #include "../presets/PresetManager.h"
-    #include "../network/WebSocketClient.h"  // For ColorCorrectionState
 #endif
 
 #ifdef SIMULATOR_BUILD

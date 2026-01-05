@@ -6,12 +6,34 @@
 // ============================================================================
 
 #include "LedFeedback.h"
-#include "../input/DualEncoderService.h"
+
+#ifdef SIMULATOR_BUILD
+    #include "../hal/SimHal.h"
+    // DualEncoderService not available in simulator - stub it
+    class DualEncoderService {
+    public:
+        void setAllLEDs(uint8_t r, uint8_t g, uint8_t b) {}
+        void allLedsOff() {}
+        void setStatusLed(uint8_t unit, uint8_t r, uint8_t g, uint8_t b) {}
+    };
+#else
+    #include "../input/DualEncoderService.h"
+#endif
+
+#include "../hal/EspHal.h"
 #include <math.h>
 
 // ============================================================================
 // Constructors
 // ============================================================================
+
+static uint32_t nowMillis() {
+#ifdef SIMULATOR_BUILD
+    return EspHal::millis();
+#else
+    return millis();
+#endif
+}
 
 LedFeedback::LedFeedback()
     : m_encoders(nullptr)
@@ -55,7 +77,7 @@ void LedFeedback::setState(ConnectionState state) {
     m_state = state;
     m_baseColor = getColorForState(state);
     m_isBreathing = stateRequiresBreathing(state);
-    m_animationStartTime = millis();
+    m_animationStartTime = nowMillis();
 
     // For non-breathing states, apply color immediately
     if (!m_isBreathing) {
@@ -148,7 +170,7 @@ void LedFeedback::update() {
 
 float LedFeedback::calculateBreathingFactor() const {
     // Calculate phase within breathing cycle (0.0 to 1.0)
-    uint32_t elapsed = millis() - m_animationStartTime;
+    uint32_t elapsed = nowMillis() - m_animationStartTime;
     float phase = static_cast<float>(elapsed % BREATHING_PERIOD_MS) / static_cast<float>(BREATHING_PERIOD_MS);
 
     // Use sine wave for smooth breathing

@@ -1615,6 +1615,34 @@ const BEAT_DIVISORS = [
     { value: 8, label: '8 Beats' }
 ];
 
+// Helper function to build effect options for dropdowns
+function buildEffectOptions(selectedEffectId) {
+    let options = '';
+    if (state.effectsList && state.effectsList.length > 0) {
+        state.effectsList.forEach(eff => {
+            options += `<option value="${eff.id}" ${eff.id === selectedEffectId ? 'selected' : ''}>${eff.name || `Effect ${eff.id}`}</option>`;
+        });
+    } else {
+        options = `<option value="${selectedEffectId}">Effect ${selectedEffectId}</option>`;
+    }
+    return options;
+}
+
+// Helper function to build palette options for dropdowns
+function buildPaletteOptions(selectedPaletteId) {
+    let options = '';
+    if (state.palettesList && state.palettesList.length > 0) {
+        state.palettesList.forEach(pal => {
+            options += `<option value="${pal.id}" ${pal.id === selectedPaletteId ? 'selected' : ''}>${pal.name}</option>`;
+        });
+    } else {
+        // Fallback to hardcoded names if list not available
+        const paletteName = getPaletteName(selectedPaletteId);
+        options = `<option value="${selectedPaletteId}">${paletteName}</option>`;
+    }
+    return options;
+}
+
 // Preset segment definitions (matching firmware ZoneDefinition.h)
 const ZONE_PRESETS = {
     0: [ // Unified - uses 3-zone config

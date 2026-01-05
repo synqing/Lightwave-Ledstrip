@@ -100,7 +100,6 @@ public:
     WebSocketStatus getStatus() const { return _status; }
     bool isConnected() const { return _status == WebSocketStatus::CONNECTED; }
     bool isConnecting() const { return _status == WebSocketStatus::CONNECTING; }
-    bool canSendCommands() const { return !_requiresAuth || _authenticated; }
 
     // Get reconnect delay (for observability/debugging)
     unsigned long getReconnectDelay() const { return _reconnectDelay; }
@@ -178,10 +177,6 @@ private:
     // Color correction state (cached from server)
     ColorCorrectionState _colorCorrectionState;
 
-    // Optional WebSocket auth (LightwaveOS v2 FEATURE_API_AUTH)
-    bool _requiresAuth = false;
-    bool _authenticated = true;
-
     // Reconnection state
     unsigned long _lastReconnectAttempt;
     unsigned long _reconnectDelay;
@@ -199,10 +194,12 @@ private:
     };
     RateLimiter _rateLimiter;
 
-    // Parameter indices for rate limiting (matches Config.h Parameter enum)
+    // Parameter indices for rate limiting
+    // Note: Unit B (8-15) encoders are disabled, but zone functions may still be called from UI
     enum ParamIndex : uint8_t {
         EFFECT = 0, BRIGHTNESS = 1, PALETTE = 2, SPEED = 3,
         MOOD = 4, FADEAMOUNT = 5, COMPLEXITY = 6, VARIATION = 7,
+        // Unit B (8-15) - Rate limiter indices for zone functions (not encoder parameters)
         ZONE0_EFFECT = 8, ZONE0_SPEED = 9,
         ZONE1_EFFECT = 10, ZONE1_SPEED = 11,
         ZONE2_EFFECT = 12, ZONE2_SPEED = 13,
@@ -210,18 +207,8 @@ private:
     };
 
     // Fixed buffer for JSON serialization
-    // CRITICAL FIX: Increased from 256 to 512 to prevent zone layout message drops
-    static constexpr size_t JSON_BUFFER_SIZE = 512;
+    static constexpr size_t JSON_BUFFER_SIZE = 256;
     char _jsonBuffer[JSON_BUFFER_SIZE];
-
-    // Reusable TX document to avoid per-message heap allocation.
-    // Size tuned for small control messages + occasional zone layout payload.
-    static constexpr size_t TX_DOC_CAPACITY = 2048;
-    StaticJsonDocument<TX_DOC_CAPACITY> _txDoc;
-
-    // Reusable RX document to reduce heap churn when parsing responses.
-    // Note: still heap-backed (JsonDocument), but capacity stabilises after first large response.
-    JsonDocument _rxDoc;
 
     // Internal methods
     void handleEvent(WStype_t type, uint8_t* payload, size_t length);

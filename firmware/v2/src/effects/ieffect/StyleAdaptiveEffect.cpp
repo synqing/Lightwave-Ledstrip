@@ -22,7 +22,8 @@ namespace ieffect {
 
 bool StyleAdaptiveEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
-    m_rhythmicPhase = 0.0f;
+    m_phase = 0.0f;
+    m_rhythmicPulse = 0.0f;
     m_harmonicDrift = 0.0f;
     m_melodicShimmer = 0.0f;
     m_textureFlow = 0.0f;
@@ -33,28 +34,52 @@ bool StyleAdaptiveEffect::init(plugins::EffectContext& ctx) {
 }
 
 void StyleAdaptiveEffect::render(plugins::EffectContext& ctx) {
-    // Clear output buffer
-    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+    // CENTER ORIGIN - Radial wave pattern (like LGPStarBurst)
+    // Visual Foundation: Radial waves from center
+    // Audio Enhancement: Style detection switches behaviors and modulates brightness/color
+    
+    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
 #if !FEATURE_AUDIO_SYNC
-    // Fallback: simple color animation
-    for (uint16_t i = 0; i < ctx.ledCount; ++i) {
-        float phase = (float)i / (float)ctx.ledCount + (float)ctx.totalTimeMs * 0.001f;
-        uint8_t bright = (uint8_t)(128 + 127 * sinf(phase * 2.0f * 3.14159f));
-        ctx.leds[i] = ctx.palette.getColor(ctx.gHue + i, bright);
+    // Fallback: simple radial wave pattern
+    float speedNorm = ctx.speed / 50.0f;
+    float dt = ctx.getSafeDeltaSeconds();
+    m_phase += speedNorm * 240.0f * dt;  // Time-based only
+    
+    for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
+        float distFromCenter = (float)centerPairDistance((uint16_t)dist);
+        const float freqBase = 0.25f;
+        float star = sinf(distFromCenter * freqBase - m_phase);
+        uint8_t bright = (uint8_t)(128 + 127 * star);
+        CRGB color = ctx.palette.getColor(ctx.gHue + (uint8_t)(distFromCenter * 2.0f), bright);
+        SET_CENTER_PAIR(ctx, dist, color);
     }
     return;
 #else
     if (!ctx.audio.available) {
         // Fallback when audio unavailable
-        for (uint16_t i = 0; i < ctx.ledCount; ++i) {
-            float phase = (float)i / (float)ctx.ledCount + (float)ctx.totalTimeMs * 0.001f;
-            uint8_t bright = (uint8_t)(128 + 127 * sinf(phase * 2.0f * 3.14159f));
-            ctx.leds[i] = ctx.palette.getColor(ctx.gHue + i, bright);
+        float speedNorm = ctx.speed / 50.0f;
+        float dt = ctx.getSafeDeltaSeconds();
+        m_phase += speedNorm * 240.0f * dt;
+        
+        for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
+            float distFromCenter = (float)centerPairDistance((uint16_t)dist);
+            const float freqBase = 0.25f;
+            float star = sinf(distFromCenter * freqBase - m_phase);
+            uint8_t bright = (uint8_t)(128 + 127 * star);
+            CRGB color = ctx.palette.getColor(ctx.gHue + (uint8_t)(distFromCenter * 2.0f), bright);
+            SET_CENTER_PAIR(ctx, dist, color);
         }
         return;
     }
 
+    // =========================================================================
+    // Visual Foundation: TIME-BASED phase (prevents jitter)
+    // Different speed rates per style (all time-based)
+    // =========================================================================
+    float speedNorm = ctx.speed / 50.0f;
+    float dt = ctx.getSafeDeltaSeconds();
+    
     // Get music style
     audio::MusicStyle style = ctx.audio.musicStyle();
     float confidence = ctx.audio.styleConfidence();
@@ -63,20 +88,47 @@ void StyleAdaptiveEffect::render(plugins::EffectContext& ctx) {
     m_currentStyle = (uint8_t)style;
     m_styleConfidence = confidence;
     
-    float dt = ctx.getSafeDeltaSeconds();
+    // Style-dependent speed rates (all time-based)
+    float speedMultiplier = 1.0f;
+    switch (style) {
+        case audio::MusicStyle::RHYTHMIC_DRIVEN:
+            speedMultiplier = 1.5f;  // Fast for EDM/hip-hop
+            break;
+        case audio::MusicStyle::HARMONIC_DRIVEN:
+            speedMultiplier = 0.5f;  // Slow for jazz/classical
+            break;
+        case audio::MusicStyle::MELODIC_DRIVEN:
+            speedMultiplier = 1.0f;  // Medium for vocal pop
+            break;
+        case audio::MusicStyle::TEXTURE_DRIVEN:
+            speedMultiplier = 0.3f;  // Very slow for ambient
+            break;
+        case audio::MusicStyle::DYNAMIC_DRIVEN:
+            speedMultiplier = 0.8f;  // Medium-slow for orchestral
+            break;
+        default:
+            speedMultiplier = 1.0f;  // Default
+            break;
+    }
     
-    // Update state based on style
+    // Update phase (time-based only)
+    m_phase += speedNorm * 240.0f * speedMultiplier * dt;
+    if (m_phase > 628.3f) m_phase -= 628.3f;  // Wrap at 100*2π
+
+    // =========================================================================
+    // Audio Enhancement: Style-specific modulation
+    // =========================================================================
     switch (style) {
         case audio::MusicStyle::RHYTHMIC_DRIVEN: {
             // Fast pulses, bass-heavy
             if (ctx.audio.isOnBeat()) {
-                m_rhythmicPhase = 1.0f;
+                m_rhythmicPulse = 1.0f;
             } else {
-                m_rhythmicPhase *= (1.0f - dt * 8.0f);  // Fast decay
+                m_rhythmicPulse *= (1.0f - dt * 8.0f);  // Fast decay
             }
             // Boost with bass energy
             float bass = ctx.audio.bass();
-            m_rhythmicPhase = fmaxf(m_rhythmicPhase, bass * 0.7f);
+            m_rhythmicPulse = fmaxf(m_rhythmicPulse, bass * 0.7f);
             break;
         }
         
@@ -114,7 +166,7 @@ void StyleAdaptiveEffect::render(plugins::EffectContext& ctx) {
         default: {
             // UNKNOWN: blend all modes
             float rms = ctx.audio.rms();
-            m_rhythmicPhase = rms * 0.5f;
+            m_rhythmicPulse = rms * 0.5f;
             m_harmonicDrift += dt * 0.3f;
             if (m_harmonicDrift > 1.0f) m_harmonicDrift -= 1.0f;
             m_melodicShimmer += dt * 0.5f;

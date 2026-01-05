@@ -34,8 +34,11 @@ public:
     const plugins::EffectMetadata& getMetadata() const override;
 
 private:
-    // State for different style modes
-    float m_rhythmicPhase = 0.0f;      // Fast pulses for EDM/hip-hop
+    // Visual Foundation: Radial wave pattern phase (time-based)
+    float m_phase = 0.0f;              // Main phase for radial waves
+    
+    // Audio Enhancement: Style-specific modulation
+    float m_rhythmicPulse = 0.0f;      // Fast pulses for EDM/hip-hop
     float m_harmonicDrift = 0.0f;      // Slow color drift for jazz/classical
     float m_melodicShimmer = 0.0f;     // Treble shimmer for vocal pop
     float m_textureFlow = 0.0f;        // Ambient texture for ambient/drone

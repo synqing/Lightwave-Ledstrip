@@ -111,6 +111,8 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
     {PM_STR("Bass Breath"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Organic breathing driven by bass energy"), PM_STR("Bass band tracking, breathing simulation"), PM_STR("")},
     {PM_STR("Audio Waveform"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("True time-domain waveform visualization mirrored from centre"), PM_STR("Waveform samples, time-domain display"), PM_STR("")},
     {PM_STR("Audio Bloom"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Centre bloom pulses triggered by audio transients"), PM_STR("Flux detection, pulse generation, radial decay"), PM_STR("")},
+    {PM_STR("Snapwave"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Time-based oscillating visualization with chromagram-driven color and hyperbolic motion"), PM_STR("Time-domain oscillation, chromagram synthesis, hyperbolic tangent normalization"), PM_STR("")},
+    {PM_STR("Waveform"), PatternFamily::AUDIO_REACTIVE, PatternTags::AUDIO_SYNC | PatternTags::LINEAR, PM_STR("Direct waveform visualization matching Sensory Bridge 3.1.0"), PM_STR("4-frame history averaging, MOOD-based smoothing, chromagram color with max normalization"), PM_STR("")},
     {PM_STR("LGP Star Burst (Narrative)"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN, PM_STR("Story-driven starburst with phrase-gated chord coloring"), PM_STR("Narrative conductor, chord harmonics, phrase timing"), PM_STR("LGP Star Burst")},
     {PM_STR("Chord Glow"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Full chord detection showcase with harmonic color mapping"), PM_STR("Chord detection, root note color, quality modulation"), PM_STR("")},
     {PM_STR("Wave Reactive"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Energy-accumulating wave with audio-driven motion"), PM_STR("Beat accumulation, frequency-driven velocity, kaleidoscope integration"), PM_STR("Wave")},
@@ -133,9 +135,9 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
     {PM_STR("Perlin Test: Emotiscope2 Quarter"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Emotiscope 2.0 Perlin quarter-res + interpolation test (TEST)"), PM_STR("Seedable Perlin noise, quarter resolution, periodic refresh, linear interpolation"), PM_STR("")},
 
     // --- Audio Pipeline Enhancement Effects (88-90) - New audio-reactive effects ---
-    {PM_STR("Spectrum Analyzer"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::AUDIO_SYNC, PM_STR("64-bin frequency spectrum visualization, bass at centre, treble at edges"), PM_STR("64-bin Goertzel spectrum, peak hold, beat-sync mode"), PM_STR("Spectrum Bars")},
-    {PM_STR("Saliency Aware"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::AUDIO_SYNC, PM_STR("Adapts visual behavior based on musical saliency (harmonic, rhythmic, timbral, dynamic)"), PM_STR("Musical Intelligence System, saliency metrics, adaptive behavior"), PM_STR("")},
-    {PM_STR("Style Adaptive"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::AUDIO_SYNC, PM_STR("Adapts behavior based on detected music style (EDM, jazz, ambient, orchestral, pop)"), PM_STR("Style detection, music classification, adaptive visual response"), PM_STR("")}
+    {PM_STR("Spectrum Analyzer"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("64-bin frequency spectrum visualization, bass at centre, treble at edges"), PM_STR("64-bin Goertzel spectrum, peak hold, beat-sync mode"), PM_STR("Spectrum Bars")},
+    {PM_STR("Saliency Aware"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Adapts visual behavior based on musical saliency (harmonic, rhythmic, timbral, dynamic)"), PM_STR("Musical Intelligence System, saliency metrics, adaptive behavior"), PM_STR("")},
+    {PM_STR("Style Adaptive"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Adapts behavior based on detected music style (EDM, jazz, ambient, orchestral, pop)"), PM_STR("Style detection, music classification, adaptive visual response"), PM_STR("")}
 };
 
 const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(PatternMetadata);
@@ -145,7 +147,7 @@ const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(Pattern
 // ============================================================================
 
 // Expected number of implemented effects (must match registerAllEffects() return value)
-constexpr uint8_t EXPECTED_EFFECT_COUNT = 91;  // 88 base + 3 new audio enhancement effects
+constexpr uint8_t EXPECTED_EFFECT_COUNT = 92;  // 91 base + 1 new Waveform effect
 
 // Compile-time assertion: metadata must have at least as many entries as implemented effects
 // This ensures we can always map effect IDs to metadata (allows for future effects in metadata)
@@ -384,13 +386,15 @@ static const uint8_t REACTIVE_EFFECT_IDS[] PROGMEM = {
     71,  // Bass Breath - bass-driven breathing
     72,  // Audio Waveform - time-domain visualization
     73,  // Audio Bloom - transient-triggered blooms
-    74,  // Star Burst Narrative - full musical intelligence
-    75,  // Chord Glow - chord detection showcase
-    76,  // Wave Reactive - energy accumulation
-    77,  // Perlin Veil - audio-driven advection
-    78,  // Perlin Shocklines - beat-driven ridges
-    79,  // Perlin Caustics - treble/bass modulation
-    80,  // Perlin Interference Weave - dual-strip moiré
+    74,  // Snapwave - time-based oscillation with chromagram color
+    75,  // Waveform - direct waveform visualization matching Sensory Bridge 3.1.0
+    76,  // Star Burst Narrative - full musical intelligence
+    77,  // Chord Glow - chord detection showcase
+    78,  // Wave Reactive - energy accumulation
+    79,  // Perlin Veil - audio-driven advection
+    80,  // Perlin Shocklines - beat-driven ridges
+    81,  // Perlin Caustics - treble/bass modulation
+    82,  // Perlin Interference Weave - dual-strip moiré
     88,  // Spectrum Analyzer - 64-bin frequency spectrum
     89,  // Saliency Aware - musical saliency adaptation
     90   // Style Adaptive - music style adaptation

@@ -93,6 +93,8 @@
 #include "ieffect/LGPBassBreathEffect.h"
 #include "ieffect/AudioWaveformEffect.h"
 #include "ieffect/AudioBloomEffect.h"
+#include "ieffect/SnapwaveEffect.h"
+#include "ieffect/WaveformEffect.h"
 #include "ieffect/LGPStarBurstNarrativeEffect.h"
 #include "ieffect/LGPChordGlowEffect.h"
 #include "ieffect/LGPPerlinVeilEffect.h"
@@ -784,27 +786,39 @@ uint8_t registerAllEffects(RendererNode* renderer) {
         total++;
     }
 
-    // LGP Star Burst Narrative (ID 74) - Story conductor + chord-based color
+    // Snapwave (ID 74) - Time-based oscillating visualization with chromagram-driven color
+    static ieffect::SnapwaveEffect snapwaveInstance;
+    if (renderer->registerEffect(total, &snapwaveInstance)) {
+        total++;
+    }
+
+    // Waveform (ID 75) - Direct waveform visualization matching Sensory Bridge 3.1.0
+    static ieffect::WaveformEffect waveformInstance;
+    if (renderer->registerEffect(total, &waveformInstance)) {
+        total++;
+    }
+
+    // LGP Star Burst Narrative (ID 76) - Story conductor + chord-based color
     static ieffect::LGPStarBurstNarrativeEffect starBurstNarrativeInstance;
     if (renderer->registerEffect(total, &starBurstNarrativeInstance)) {
         total++;
     }
 
-    // LGP Chord Glow (ID 75) - Full chord detection showcase effect
+    // LGP Chord Glow (ID 76) - Full chord detection showcase effect
     static ieffect::LGPChordGlowEffect chordGlowInstance;
     if (renderer->registerEffect(total, &chordGlowInstance)) {
         total++;
     }
 
-    // Wave Reactive (ID 76) - Energy-accumulating wave with audio-driven motion
+    // Wave Reactive (ID 77) - Energy-accumulating wave with audio-driven motion
     // Uses Kaleidoscope-style energy accumulation (REACTIVE pattern)
     static ieffect::WaveReactiveEffect waveReactiveInstance;
     if (renderer->registerEffect(total, &waveReactiveInstance)) {
         total++;
     }
 
-    // Perlin-based LGP effects (IDs 77-80) - Audio-reactive noise field patterns
-    // LGP Perlin Veil (ID 77) - Slow drifting curtains from centre, audio-driven advection
+    // Perlin-based LGP effects (IDs 78-81) - Audio-reactive noise field patterns
+    // LGP Perlin Veil (ID 78) - Slow drifting curtains from centre, audio-driven advection
     static ieffect::LGPPerlinVeilEffect perlinVeilInstance;
     if (renderer->registerEffect(total, &perlinVeilInstance)) {
         total++;
@@ -893,7 +907,7 @@ uint8_t registerAllEffects(RendererNode* renderer) {
 
     // =============== EFFECT COUNT PARITY VALIDATION ===============
     // Runtime validation: ensure registered count matches expected
-    constexpr uint8_t EXPECTED_EFFECT_COUNT = 91;  // 88 base + 3 new audio enhancement effects
+    constexpr uint8_t EXPECTED_EFFECT_COUNT = 92;  // 91 base + 1 new Waveform effect
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

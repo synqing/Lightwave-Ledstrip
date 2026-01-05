@@ -2091,6 +2091,127 @@ function setZoneBlend(zoneId, blendMode) {
     }
 }
 
+// Render zone quick controls (pattern, palette, audio config, beat trigger, reordering)
+function renderZoneQuickControls() {
+    const container = document.getElementById('zoneQuickControlsGrid');
+    if (!container) return;
+    if (!state.zones || !state.zones.zones) {
+        container.innerHTML = '';
+        return;
+    }
+
+    const zoneCount = state.zones.zones.length;
+    let html = '';
+
+    for (let i = 0; i < zoneCount; i++) {
+        const zone = state.zones.zones[i];
+        if (!zone) continue;
+
+        const zoneColor = ZONE_COLORS[i % ZONE_COLORS.length];
+        const currentPaletteId = zone.paletteId !== undefined ? zone.paletteId : state.paletteId;
+        const currentEffectId = zone.effectId !== undefined ? zone.effectId : state.effectId;
+        const currentAudioBand = zone.audioBand !== undefined ? zone.audioBand : 0;
+        const tempoSync = zone.tempoSync || false;
+        const beatDivisor = zone.beatDivisor !== undefined ? zone.beatDivisor : (zone.beatTriggerInterval || 0);
+
+        // Build audio band options
+        const audioBandOptions = AUDIO_BANDS.map(b =>
+            `<option value="${b.value}" ${b.value === currentAudioBand ? 'selected' : ''}>${b.label}</option>`
+        ).join('');
+
+        // Build beat divisor options
+        const beatDivisorOptions = BEAT_DIVISORS.map(b =>
+            `<option value="${b.value}" ${b.value === beatDivisor ? 'selected' : ''}>${b.label}</option>`
+        ).join('');
+
+        html += `
+            <div class="zone-quick-control" style="padding: var(--space-sm); border: 1px solid ${zoneColor}40; border-radius: 8px; background: ${zoneColor}10;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-xs);">
+                    <div class="card-header" style="color: ${zoneColor}; text-align: left; margin: 0;">Zone ${i}</div>
+                    <div style="display: flex; gap: 2px;">
+                        <button class="control-btn compact zone-reorder-btn" data-zone="${i}" data-dir="up" style="padding: 2px 6px; font-size: 0.625rem; ${i === 0 ? 'opacity: 0.3; pointer-events: none;' : ''}">▲</button>
+                        <button class="control-btn compact zone-reorder-btn" data-zone="${i}" data-dir="down" style="padding: 2px 6px; font-size: 0.625rem; ${i === zoneCount - 1 ? 'opacity: 0.3; pointer-events: none;' : ''}">▼</button>
+                    </div>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: var(--space-xs);">
+                    <div>
+                        <label style="font-size: 0.65rem; color: var(--text-secondary); display: block; margin-bottom: 2px;">Pattern</label>
+                        <select class="control-btn compact zone-quick-select" data-zone="${i}" data-type="effect" style="width: 100%;">
+                            ${buildEffectOptions(currentEffectId)}
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size: 0.65rem; color: var(--text-secondary); display: block; margin-bottom: 2px;">Palette</label>
+                        <select class="control-btn compact zone-quick-select" data-zone="${i}" data-type="palette" style="width: 100%; font-size: 0.7rem; padding: 4px 6px;">
+                            ${buildPaletteOptions(currentPaletteId)}
+                        </select>
+                    </div>
+                    <div style="border-top: 1px solid ${zoneColor}30; padding-top: var(--space-xs); margin-top: var(--space-xs);">
+                        <label style="font-size: 0.65rem; color: var(--text-secondary); display: block; margin-bottom: 2px;">Audio Band</label>
+                        <select class="control-btn compact zone-quick-select" data-zone="${i}" data-type="audioBand" style="width: 100%;">
+                            ${audioBandOptions}
+                        </select>
+                    </div>
+                    <div style="display: flex; gap: var(--space-xs); align-items: center;">
+                        <div style="flex: 1;">
+                            <label style="font-size: 0.65rem; color: var(--text-secondary); display: block; margin-bottom: 2px;">Tempo Sync</label>
+                            <button class="control-btn compact zone-tempo-toggle" data-zone="${i}" style="width: 100%; background: ${tempoSync ? zoneColor : 'var(--bg-elevated)'}; color: ${tempoSync ? 'var(--bg-base)' : 'var(--text-primary)'};">
+                                ${tempoSync ? 'ON' : 'OFF'}
+                            </button>
+                        </div>
+                        <div style="flex: 1;">
+                            <label style="font-size: 0.65rem; color: var(--text-secondary); display: block; margin-bottom: 2px;">Beat Trigger</label>
+                            <select class="control-btn compact zone-quick-select" data-zone="${i}" data-type="beatDivisor" style="width: 100%;">
+                                ${beatDivisorOptions}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    container.innerHTML = html;
+
+    // Attach change handlers for dropdowns
+    container.querySelectorAll('.zone-quick-select').forEach(select => {
+        select.addEventListener('change', (e) => {
+            const zoneId = parseInt(e.target.dataset.zone);
+            const type = e.target.dataset.type;
+            const value = parseInt(e.target.value);
+
+            if (type === 'palette') {
+                setZonePalette(zoneId, value);
+            } else if (type === 'effect') {
+                setZoneEffect(zoneId, value);
+            } else if (type === 'audioBand') {
+                setZoneAudioBand(zoneId, value);
+            } else if (type === 'beatDivisor') {
+                setZoneBeatDivisor(zoneId, value);
+            }
+        });
+    });
+
+    // Attach click handlers for tempo sync toggles
+    container.querySelectorAll('.zone-tempo-toggle').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const zoneId = parseInt(e.target.dataset.zone);
+            const zone = state.zones.zones[zoneId];
+            const newValue = !(zone && zone.tempoSync);
+            setZoneTempoSync(zoneId, newValue);
+        });
+    });
+
+    // Attach click handlers for zone reorder buttons
+    container.querySelectorAll('.zone-reorder-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const zoneId = parseInt(e.target.dataset.zone);
+            const dir = e.target.dataset.dir;
+            reorderZone(zoneId, dir);
+        });
+    });
+}
+
 // Generate valid segments for a given zone count (1-4)
 function generateZoneSegments(zoneCount) {
     if (zoneCount < 1 || zoneCount > 4) {

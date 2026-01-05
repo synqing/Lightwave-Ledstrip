@@ -70,6 +70,50 @@ void ZoneHandlers::handleList(AsyncWebServerRequest* request, lightwaveos::nodes
     }, 1536);
 }
 
+/**
+ * @brief Reorder zones by distance from centre (innermost first)
+ * 
+ * Ensures zones are ordered centre-outward (Zone 0 = innermost) by sorting
+ * by minimum distance from centre pair (LEDs 79/80). This allows users to
+ * submit zones in any order while maintaining the centre-origin architecture.
+ * 
+ * @param segments Array of zone segments (modified in-place)
+ * @param count Number of zones
+ */
+static void reorderZonesByCentreDistance(lightwaveos::zones::ZoneSegment* segments, uint8_t count) {
+    if (!segments || count == 0 || count > lightwaveos::zones::MAX_ZONES) {
+        return;
+    }
+    
+    // Simple bubble sort: sort by distance from centre (ascending)
+    // Distance calculation: min(79 - s1LeftEnd, s1RightStart - 80)
+    // Smaller distance = closer to centre
+    for (uint8_t i = 0; i < count - 1; i++) {
+        for (uint8_t j = 0; j < count - 1 - i; j++) {
+            // Calculate distances from centre
+            uint8_t leftDist1 = 79 - segments[j].s1LeftEnd;
+            uint8_t rightDist1 = segments[j].s1RightStart - 80;
+            uint8_t dist1 = (leftDist1 < rightDist1) ? leftDist1 : rightDist1;
+            
+            uint8_t leftDist2 = 79 - segments[j + 1].s1LeftEnd;
+            uint8_t rightDist2 = segments[j + 1].s1RightStart - 80;
+            uint8_t dist2 = (leftDist2 < rightDist2) ? leftDist2 : rightDist2;
+            
+            // Swap if outer zone comes before inner zone
+            if (dist1 > dist2) {
+                lightwaveos::zones::ZoneSegment temp = segments[j];
+                segments[j] = segments[j + 1];
+                segments[j + 1] = temp;
+            }
+        }
+    }
+    
+    // Reassign zoneId values sequentially (0, 1, 2, ...)
+    for (uint8_t i = 0; i < count; i++) {
+        segments[i].zoneId = i;
+    }
+}
+
 void ZoneHandlers::handleLayout(AsyncWebServerRequest* request, uint8_t* data, size_t len, lightwaveos::zones::ZoneComposer* composer, std::function<void()> broadcastZoneState) {
     if (!composer) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
@@ -143,6 +187,10 @@ void ZoneHandlers::handleLayout(AsyncWebServerRequest* request, uint8_t* data, s
         uint8_t rightSize = (s1RightEnd >= s1RightStart) ? (s1RightEnd - s1RightStart + 1) : 1;
         segments[i].totalLeds = leftSize + rightSize; // Per-strip count (strip 2 mirrors strip 1)
     }
+
+    // Reorder zones by distance from centre (ensures Zone 0 = innermost)
+    // This allows users to submit zones in any order while maintaining centre-origin architecture
+    reorderZonesByCentreDistance(segments, zoneCount);
 
     // Set layout with validation
     if (!composer->setLayout(segments, zoneCount)) {

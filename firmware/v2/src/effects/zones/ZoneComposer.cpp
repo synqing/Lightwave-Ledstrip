@@ -15,15 +15,7 @@
 #include "../../core/system/ValidationProfiler.h"
 #endif
 
-#ifndef LW_AGENT_TRACE
-#define LW_AGENT_TRACE 0
-#endif
-
-#if LW_AGENT_TRACE
-#define LW_AGENT_PRINTF(...) Serial.printf(__VA_ARGS__)
-#else
-#define LW_AGENT_PRINTF(...) ((void)0)
-#endif
+// Debug logging disabled
 
 // Phase 2b.1: Audio-reactive zone modulation
 // Phase 2b.3: Zone audio band routing
@@ -193,10 +185,6 @@ bool ZoneComposer::init(RendererNode* renderer) {
 // ==================== Zone Control ====================
 
 void ZoneComposer::setEnabled(bool enabled) {
-    // #region agent log
-    LW_AGENT_PRINTF("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A\",\"location\":\"ZoneComposer.cpp:setEnabled\",\"message\":\"setEnabled called\",\"data\":{\"enabled\":%d,\"m_initialized\":%d,\"m_renderer_null\":%d,\"m_zoneCount\":%d},\"timestamp\":%lu}\n",
-        enabled, m_initialized, (m_renderer == nullptr), m_zoneCount, millis());
-    // #endregion
     m_enabled = enabled;
 }
 
@@ -205,10 +193,6 @@ void ZoneComposer::setEnabled(bool enabled) {
 void ZoneComposer::render(CRGB* leds, uint16_t numLeds, CRGBPalette16* palette,
                           uint8_t hue, uint32_t frameCount, uint32_t deltaTimeMs,
                           const plugins::AudioContext* audioCtx) {
-    // #region agent log
-    LW_AGENT_PRINTF("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A\",\"location\":\"ZoneComposer.cpp:render\",\"message\":\"render entry\",\"data\":{\"m_initialized\":%d,\"m_enabled\":%d,\"m_renderer_null\":%d,\"m_zoneCount\":%d},\"timestamp\":%lu}\n",
-        m_initialized, m_enabled, (m_renderer == nullptr), m_zoneCount, millis());
-    // #endregion
     if (!m_initialized || !m_enabled) {
         return;
     }
@@ -260,16 +244,8 @@ void ZoneComposer::render(CRGB* leds, uint16_t numLeds, CRGBPalette16* palette,
 
     // Render each enabled zone with timing
     uint32_t blendStartUs = 0;
-    // #region agent log
-    LW_AGENT_PRINTF("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"B\",\"location\":\"ZoneComposer.cpp:render\",\"message\":\"before zone loop\",\"data\":{\"m_zoneCount\":%d,\"MAX_ZONES\":%d},\"timestamp\":%lu}\n",
-        m_zoneCount, MAX_ZONES, millis());
-    // #endregion
     for (uint8_t z = 0; z < m_zoneCount; z++) {
         if (m_zones[z].enabled) {
-            // #region agent log
-            LW_AGENT_PRINTF("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"C\",\"location\":\"ZoneComposer.cpp:render\",\"message\":\"rendering zone\",\"data\":{\"zoneId\":%d,\"effectId\":%d},\"timestamp\":%lu}\n",
-                z, m_zones[z].effectId, millis());
-            // #endregion
             uint32_t zoneStartUs = micros();
             renderZone(z, leds, numLeds, hue, frameCount);
             uint32_t zoneEndUs = micros();
@@ -282,15 +258,10 @@ void ZoneComposer::render(CRGB* leds, uint16_t numLeds, CRGBPalette16* palette,
         }
     }
     
-    // CRITICAL: Log immediately after loop - if this doesn't appear, crash is in loop or stack overflow
-    LW_AGENT_PRINTF("ZONE_LOOP_DONE\n");
-
     // Time the blend/composite step (memcpy to output)
-    LW_AGENT_PRINTF("BEFORE_MEMCPY\n");
     blendStartUs = micros();
     // Copy composited output to main buffer
     memcpy(leds, m_outputBuffer, numLeds * sizeof(CRGB));
-    LW_AGENT_PRINTF("AFTER_MEMCPY\n");
 
     uint32_t blendEndUs = micros();
     m_timing.zoneBlendUs = (blendEndUs >= blendStartUs)
@@ -313,11 +284,6 @@ void ZoneComposer::render(CRGB* leds, uint16_t numLeds, CRGBPalette16* palette,
     if (m_timing.zoneTotalUs > FRAME_SKIP_THRESHOLD_US) {
         m_timing.frameSkipCount++;
     }
-    
-    // #region agent log
-    LW_AGENT_PRINTF("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"F\",\"location\":\"ZoneComposer.cpp:render\",\"message\":\"render complete\",\"data\":{},\"timestamp\":%lu}\n",
-        millis());
-    // #endregion
 }
 
 void ZoneComposer::renderZone(uint8_t zoneId, CRGB* leds, uint16_t numLeds,
@@ -347,15 +313,10 @@ void ZoneComposer::renderZone(uint8_t zoneId, CRGB* leds, uint16_t numLeds,
     const ZoneSegment& seg = m_zoneConfig[safeZone];
 
     // Get the IEffect instance
-    // #region agent log
-    LW_AGENT_PRINTF("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A\",\"location\":\"ZoneComposer.cpp:renderZone\",\"message\":\"before getEffectInstance\",\"data\":{\"zoneId\":%d,\"effectId\":%d,\"m_renderer_null\":%d},\"timestamp\":%lu}\n",
-        zoneId, zone.effectId, (m_renderer == nullptr), millis());
-    // #endregion
+    if (m_renderer == nullptr) {
+        return;
+    }
     plugins::IEffect* effect = m_renderer->getEffectInstance(zone.effectId);
-    // #region agent log
-    LW_AGENT_PRINTF("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A\",\"location\":\"ZoneComposer.cpp:renderZone\",\"message\":\"after getEffectInstance\",\"data\":{\"zoneId\":%d,\"effectId\":%d,\"effect_null\":%d},\"timestamp\":%lu}\n",
-        zoneId, zone.effectId, (effect == nullptr), millis());
-    // #endregion
     if (!effect) {
         return;
     }
@@ -363,6 +324,9 @@ void ZoneComposer::renderZone(uint8_t zoneId, CRGB* leds, uint16_t numLeds,
     // Per-zone persistent render buffer (preserves trails/smoothing and prevents
     // cross-zone contamination).
     CRGB* zoneBuffer = m_zoneBuffers[safeZone];
+    if (zoneBuffer == nullptr) {
+        return;
+    }
 
     // ==================== Phase 2b.1: Audio Tempo Modulation ====================
     // Apply tempo/beat modulation if enabled for this zone
@@ -421,81 +385,39 @@ void ZoneComposer::renderZone(uint8_t zoneId, CRGB* leds, uint16_t numLeds,
 #endif
 
     // Render effect into this zone's persistent buffer
-    // #region agent log
-    LW_AGENT_PRINTF("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"E\",\"location\":\"ZoneComposer.cpp:renderZone\",\"message\":\"before effect->render\",\"data\":{\"zoneId\":%d,\"effectId\":%d,\"zoneBuffer_null\":%d},\"timestamp\":%lu}\n",
-        zoneId, zone.effectId, (zoneBuffer == nullptr), millis());
-    // #endregion
+    if (effect == nullptr || m_zoneContext.leds == nullptr) {
+        return;
+    }
     effect->render(m_zoneContext);
-    // #region agent log
-    LW_AGENT_PRINTF("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"E\",\"location\":\"ZoneComposer.cpp:renderZone\",\"message\":\"after effect->render\",\"data\":{\"zoneId\":%d},\"timestamp\":%lu}\n",
-        zoneId, millis());
-    // #endregion
 
     // ==================== Phase 2c.3: Optimized Segment Compositing ====================
     // Uses cached segment bounds and pre-fetched blend function for ~40 us savings
 
     // Get cached bounds for this zone (avoids repeated struct member access)
-    // #region agent log
-    LW_AGENT_PRINTF("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"C\",\"location\":\"ZoneComposer.cpp:renderZone\",\"message\":\"before cache access\",\"data\":{\"safeZone\":%d,\"m_zoneCount\":%d},\"timestamp\":%lu}\n",
-        safeZone, m_zoneCount, millis());
-    // #endregion
     const CachedSegmentBounds& cache = m_cachedBounds[safeZone];
     const BlendFunc blendFn = cache.blendFunc;
-    // #region agent log
-    LW_AGENT_PRINTF("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"C\",\"location\":\"ZoneComposer.cpp:renderZone\",\"message\":\"after cache access\",\"data\":{\"safeZone\":%d,\"s1LeftStart\":%d,\"s1LeftEnd\":%d,\"blendFn_null\":%d},\"timestamp\":%lu}\n",
-        safeZone, cache.s1LeftStart, cache.s1LeftEnd, (blendFn == nullptr), millis());
-    // #endregion
 
     // Pre-clamp bounds to numLeds (rarely changes, but defensive)
     const uint16_t maxS1Idx = (numLeds < STRIP_LENGTH) ? numLeds : STRIP_LENGTH;
 
-    // #region agent log
-    LW_AGENT_PRINTF("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"D\",\"location\":\"ZoneComposer.cpp:renderZone\",\"message\":\"before blend loops\",\"data\":{\"safeZone\":%d,\"maxS1Idx\":%d,\"s1LeftStart\":%d,\"s1LeftEnd\":%d,\"s1RightStart\":%d,\"s1RightEnd\":%d,\"zoneBuffer_null\":%d,\"outputBuffer_null\":%d},\"timestamp\":%lu}\n",
-        safeZone, maxS1Idx, cache.s1LeftStart, cache.s1LeftEnd, cache.s1RightStart, cache.s1RightEnd, (zoneBuffer == nullptr), (m_outputBuffer == nullptr), millis());
-    // #endregion
-
     // Process Strip 1 left segment using cached bounds
     // Use effectiveBrightness for audio-reactive modulation (Phase 2b.1)
-    // #region agent log
-    LW_AGENT_PRINTF("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"D\",\"location\":\"ZoneComposer.cpp:renderZone\",\"message\":\"before s1Left loop\",\"data\":{\"safeZone\":%d},\"timestamp\":%lu}\n",
-        safeZone, millis());
-    // #endregion
     for (uint8_t i = cache.s1LeftStart; i <= cache.s1LeftEnd && i < maxS1Idx; i++) {
         CRGB pixel = zoneBuffer[i];
         pixel.nscale8(effectiveBrightness);
         m_outputBuffer[i] = blendFn(m_outputBuffer[i], pixel);
     }
-    // #region agent log
-    LW_AGENT_PRINTF("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"D\",\"location\":\"ZoneComposer.cpp:renderZone\",\"message\":\"after s1Left loop\",\"data\":{\"safeZone\":%d},\"timestamp\":%lu}\n",
-        safeZone, millis());
-    // #endregion
 
     // Process Strip 1 right segment using cached bounds
-    // #region agent log
-    LW_AGENT_PRINTF("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"D\",\"location\":\"ZoneComposer.cpp:renderZone\",\"message\":\"before s1Right loop\",\"data\":{\"safeZone\":%d},\"timestamp\":%lu}\n",
-        safeZone, millis());
-    // #endregion
     for (uint8_t i = cache.s1RightStart; i <= cache.s1RightEnd && i < maxS1Idx; i++) {
         CRGB pixel = zoneBuffer[i];
         pixel.nscale8(effectiveBrightness);
         m_outputBuffer[i] = blendFn(m_outputBuffer[i], pixel);
     }
-    // #region agent log
-    LW_AGENT_PRINTF("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"D\",\"location\":\"ZoneComposer.cpp:renderZone\",\"message\":\"after s1Right loop\",\"data\":{\"safeZone\":%d},\"timestamp\":%lu}\n",
-        safeZone, millis());
-    // #endregion
 
     // Process Strip 2 (indices 160-319) using pre-computed offsets
     // Check numLeds >= STRIP_LENGTH once to avoid per-iteration check
-    // #region agent log
-    LW_AGENT_PRINTF("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"D\",\"location\":\"ZoneComposer.cpp:renderZone\",\"message\":\"before Strip2 check\",\"data\":{\"safeZone\":%d,\"numLeds\":%d,\"STRIP_LENGTH\":%d},\"timestamp\":%lu}\n",
-        safeZone, numLeds, STRIP_LENGTH, millis());
-    // #endregion
     if (numLeds > STRIP_LENGTH) {
-        // #region agent log
-        LW_AGENT_PRINTF("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"D\",\"location\":\"ZoneComposer.cpp:renderZone\",\"message\":\"before Strip2 left loop\",\"data\":{\"safeZone\":%d,\"s1LeftStart\":%d,\"s1LeftEnd\":%d},\"timestamp\":%lu}\n",
-            safeZone, cache.s1LeftStart, cache.s1LeftEnd, millis());
-        // #endregion
         // Strip 2 left segment
         for (uint8_t i = cache.s1LeftStart; i <= cache.s1LeftEnd; i++) {
             uint16_t s2Idx = static_cast<uint16_t>(i) + STRIP_LENGTH;
@@ -505,16 +427,8 @@ void ZoneComposer::renderZone(uint8_t zoneId, CRGB* leds, uint16_t numLeds,
                 m_outputBuffer[s2Idx] = blendFn(m_outputBuffer[s2Idx], pixel);
             }
         }
-        // #region agent log
-        LW_AGENT_PRINTF("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"D\",\"location\":\"ZoneComposer.cpp:renderZone\",\"message\":\"after Strip2 left loop\",\"data\":{\"safeZone\":%d},\"timestamp\":%lu}\n",
-            safeZone, millis());
-        // #endregion
 
         // Strip 2 right segment
-        // #region agent log
-        LW_AGENT_PRINTF("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"D\",\"location\":\"ZoneComposer.cpp:renderZone\",\"message\":\"before Strip2 right loop\",\"data\":{\"safeZone\":%d,\"s1RightStart\":%d,\"s1RightEnd\":%d},\"timestamp\":%lu}\n",
-            safeZone, cache.s1RightStart, cache.s1RightEnd, millis());
-        // #endregion
         for (uint8_t i = cache.s1RightStart; i <= cache.s1RightEnd; i++) {
             uint16_t s2Idx = static_cast<uint16_t>(i) + STRIP_LENGTH;
             if (s2Idx < numLeds) {
@@ -523,15 +437,7 @@ void ZoneComposer::renderZone(uint8_t zoneId, CRGB* leds, uint16_t numLeds,
                 m_outputBuffer[s2Idx] = blendFn(m_outputBuffer[s2Idx], pixel);
             }
         }
-        // #region agent log
-        LW_AGENT_PRINTF("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"D\",\"location\":\"ZoneComposer.cpp:renderZone\",\"message\":\"after Strip2 right loop\",\"data\":{\"safeZone\":%d},\"timestamp\":%lu}\n",
-            safeZone, millis());
-        // #endregion
     }
-    // #region agent log
-    LW_AGENT_PRINTF("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"D\",\"location\":\"ZoneComposer.cpp:renderZone\",\"message\":\"renderZone complete\",\"data\":{\"safeZone\":%d},\"timestamp\":%lu}\n",
-        safeZone, millis());
-    // #endregion
 }
 
 // ==================== Zone Control ====================

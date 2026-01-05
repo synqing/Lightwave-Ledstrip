@@ -294,7 +294,8 @@ uint8_t ZonePresetManager::listPresets(char names[][ZonePreset::NAME_MAX_LEN], u
 
         if (result == NVSResult::OK && preset.isValid()) {
             if (names) {
-                strncpy(names[count], preset.name, ZonePreset::NAME_MAX_LEN);
+                strncpy(names[count], preset.name, ZonePreset::NAME_MAX_LEN - 1);
+                names[count][ZonePreset::NAME_MAX_LEN - 1] = '\0';
             }
             if (ids) {
                 ids[count] = i;

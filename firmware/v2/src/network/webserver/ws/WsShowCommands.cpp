@@ -215,7 +215,11 @@ static void handleShowSave(AsyncWebSocketClient* client, JsonDocument& doc, cons
         return;
     }
     
-    const char* name = doc["name"];
+    const char* name = doc["name"].as<const char*>();
+    if (!name || name[0] == '\0') {
+        sendWsError(client, "show.save", ErrorCodes::INVALID_VALUE, "Invalid 'name' field", requestId);
+        return;
+    }
     uint32_t durationSeconds = doc["durationSeconds"];
     uint32_t durationMs = durationSeconds * 1000;
     
@@ -238,8 +242,9 @@ static void handleShowSave(AsyncWebSocketClient* client, JsonDocument& doc, cons
         
         TimelineScene& scene = scenes[sceneCount++];
         
-        if (sceneObj.containsKey("id")) {
-            strncpy(scene.id, sceneObj["id"], sizeof(scene.id) - 1);
+        const char* sceneId = sceneObj["id"].as<const char*>();
+        if (sceneId && sceneId[0] != '\0') {
+            strncpy(scene.id, sceneId, sizeof(scene.id) - 1);
             scene.id[sizeof(scene.id) - 1] = '\0';
         } else {
             ShowTranslator::generateSceneId(sceneCount - 1, scene.id, sizeof(scene.id));
@@ -249,12 +254,13 @@ static void handleShowSave(AsyncWebSocketClient* client, JsonDocument& doc, cons
         scene.startTimePercent = sceneObj["startTimePercent"] | 0.0f;
         scene.durationPercent = sceneObj["durationPercent"] | 0.0f;
         
-        if (sceneObj.containsKey("effectName")) {
-            strncpy(scene.effectName, sceneObj["effectName"], sizeof(scene.effectName) - 1);
+        const char* effectName = sceneObj["effectName"].as<const char*>();
+        if (effectName && effectName[0] != '\0') {
+            strncpy(scene.effectName, effectName, sizeof(scene.effectName) - 1);
             scene.effectName[sizeof(scene.effectName) - 1] = '\0';
             scene.effectId = ShowTranslator::getEffectIdByName(scene.effectName);
         } else if (sceneObj.containsKey("effectId")) {
-            scene.effectId = sceneObj["effectId"];
+            scene.effectId = sceneObj["effectId"] | 0;
             ShowTranslator::getEffectNameById(scene.effectId, scene.effectName, sizeof(scene.effectName));
         } else {
             sendWsError(client, "show.save", ErrorCodes::MISSING_FIELD, "Scene must have effectName or effectId", requestId);
@@ -314,7 +320,11 @@ static void handleShowControl(AsyncWebSocketClient* client, JsonDocument& doc, c
         return;
     }
     
-    const char* action = doc["action"];
+    const char* action = doc["action"].as<const char*>();
+    if (!action || action[0] == '\0') {
+        sendWsError(client, "show.control", ErrorCodes::INVALID_VALUE, "Invalid 'action' field", requestId);
+        return;
+    }
     Message msg;
     
     if (strcmp(action, "start") == 0) {
@@ -422,4 +432,3 @@ static ShowCommandsRegistrar s_registrar;
 } // namespace webserver
 } // namespace network
 } // namespace lightwaveos
-

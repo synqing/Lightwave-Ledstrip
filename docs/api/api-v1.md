@@ -12,13 +12,16 @@
 4. [Rate Limiting](#rate-limiting)
 5. [REST API Endpoints](#rest-api-endpoints)
    - [Device Endpoints](#device-endpoints)
+   - [Network Endpoints](#network-endpoints)
    - [Effects Endpoints](#effects-endpoints)
    - [Parameters Endpoints](#parameters-endpoints)
    - [Transitions Endpoints](#transitions-endpoints)
    - [Zones Endpoints](#zones-endpoints)
    - [Effect Presets Endpoints](#effect-presets-endpoints)
+   - [Audio Endpoints](#audio-endpoints)
    - [Batch Operations](#batch-operations)
 6. [WebSocket Commands](#websocket-commands)
+   - [Audio Commands](#command-audioparametersget)
 7. [Effect Metadata](#effect-metadata)
 8. [Examples](#examples)
 9. [Related Documentation](#related-documentation)
@@ -208,6 +211,160 @@ Get device hardware and firmware information.
 **cURL Example:**
 ```bash
 curl http://lightwaveos.local/api/v1/device/info
+```
+
+---
+
+### Network Endpoints
+
+#### `GET /api/v1/network/status`
+
+Get network status including WiFi mode, AP/STA configuration, and connection details.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "compiledForceApMode": true,
+    "runtimeForceApMode": false,
+    "state": "AP_MODE",
+    "ap": {
+      "ssid": "LightwaveOS",
+      "ip": "192.168.4.1",
+      "clients": 2
+    },
+    "sta": {
+      "connected": false,
+      "ssid": "",
+      "ip": "0.0.0.0",
+      "rssi": 0,
+      "channel": 0
+    },
+    "ota": {
+      "enabled": true,
+      "tokenConfigured": true
+    }
+  }
+}
+```
+
+**cURL Example:**
+```bash
+curl http://lightwaveos.local/api/v1/network/status
+```
+
+---
+
+#### `POST /api/v1/network/sta/enable`
+
+Enable STA (Station) mode to connect to an existing WiFi network. Optionally auto-revert to AP-only mode after a specified duration.
+
+**Request Headers:**
+- `X-OTA-Token`: Required - OTA update token for authentication
+
+**Request Body:**
+```json
+{
+  "durationSeconds": 300,
+  "revertToApOnly": true,
+  "ssid": "MyNetwork",
+  "password": "MyPassword"
+}
+```
+
+**Parameters:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `durationSeconds` | uint32 | No | Auto-revert to AP-only after this many seconds (0 = no auto-revert) |
+| `revertToApOnly` | bool | No | Whether to auto-revert to AP-only mode after duration expires |
+| `ssid` | string | No | WiFi SSID to connect to (if not provided, uses stored credentials) |
+| `password` | string | No | WiFi password (if not provided, uses stored credentials) |
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "durationSeconds": 300,
+    "revertToApOnly": true
+  }
+}
+```
+
+**cURL Example:**
+```bash
+curl -X POST http://lightwaveos.local/api/v1/network/sta/enable \
+  -H "Content-Type: application/json" \
+  -H "X-OTA-Token: your-token-here" \
+  -d '{"durationSeconds": 300, "revertToApOnly": true, "ssid": "MyNetwork", "password": "MyPassword"}'
+```
+
+---
+
+#### `POST /api/v1/network/ap/enable`
+
+Force AP-only mode (disables STA mode).
+
+**Request Headers:**
+- `X-OTA-Token`: Required - OTA update token for authentication
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {}
+}
+```
+
+**cURL Example:**
+```bash
+curl -X POST http://lightwaveos.local/api/v1/network/ap/enable \
+  -H "X-OTA-Token: your-token-here"
+```
+
+---
+
+### Audio Endpoints
+
+#### `PUT /api/v1/audio/agc`
+
+Toggle AGC (Automatic Gain Control) on/off. When disabled, uses fixed 4x gain (Emotiscope 2.0 mode) with no DC removal.
+
+**Request Body:**
+```json
+{
+  "enabled": false
+}
+```
+
+**Parameters:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `enabled` | bool | Yes | Enable (true) or disable (false) AGC |
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "enabled": false,
+    "agcEnabled": false
+  }
+}
+```
+
+**Behavior:**
+- **When `enabled = true`**: Normal AGC path with DC removal and dynamic gain adjustment (target RMS: 0.25, max gain: 300x).
+- **When `enabled = false`**: Emotiscope 2.0 mode - no DC removal, no AGC, fixed 4x gain (already applied in AudioCapture).
+
+**cURL Example:**
+```bash
+curl -X PUT http://lightwaveos.local/api/v1/audio/agc \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": false}'
 ```
 
 ---
@@ -1638,6 +1795,101 @@ Get all current parameters.
 ```javascript
 ws.send(JSON.stringify({
   type: "parameters.get"
+}));
+```
+
+---
+
+### Command: `audio.parameters.get`
+
+Get audio pipeline tuning parameters including AGC settings.
+
+**Send:**
+```json
+{
+  "type": "audio.parameters.get"
+}
+```
+
+**Receive:**
+```json
+{
+  "type": "audio.parameters",
+  "success": true,
+  "data": {
+    "pipeline": {
+      "dcAlpha": 0.001,
+      "agcEnabled": true,
+      "agcTargetRms": 0.25,
+      "agcMinGain": 1.0,
+      "agcMaxGain": 300.0,
+      "agcAttack": 0.05,
+      "agcRelease": 0.05
+    },
+    "state": {
+      "agcGain": 28.5,
+      "rmsPreGain": 0.015,
+      "noiseFloor": 0.001
+    }
+  }
+}
+```
+
+**JavaScript Example:**
+```javascript
+ws.send(JSON.stringify({
+  type: "audio.parameters.get"
+}));
+```
+
+---
+
+### Command: `audio.parameters.set`
+
+Set audio pipeline tuning parameters including AGC toggle.
+
+**Send:**
+```json
+{
+  "type": "audio.parameters.set",
+  "pipeline": {
+    "agcEnabled": false
+  }
+}
+```
+
+**Receive:**
+```json
+{
+  "type": "audio.parameters.updated",
+  "success": true,
+  "data": {
+    "pipeline": {
+      "agcEnabled": false
+    }
+  }
+}
+```
+
+**Supported Pipeline Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `agcEnabled` | bool | Enable/disable AGC (false = fixed 4x gain, Emotiscope mode) |
+| `dcAlpha` | float | DC removal filter coefficient |
+| `agcTargetRms` | float | Target RMS level for AGC (default: 0.25) |
+| `agcMinGain` | float | Minimum AGC gain (default: 1.0) |
+| `agcMaxGain` | float | Maximum AGC gain (default: 300.0) |
+| `agcAttack` | float | AGC attack rate (default: 0.05) |
+| `agcRelease` | float | AGC release rate (default: 0.05) |
+
+**JavaScript Example:**
+```javascript
+ws.send(JSON.stringify({
+  type: "audio.parameters.set",
+  pipeline: {
+    agcEnabled: false
+  }
 }));
 ```
 

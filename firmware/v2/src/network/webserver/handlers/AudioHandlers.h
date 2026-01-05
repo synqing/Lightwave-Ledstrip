@@ -19,6 +19,13 @@ class RendererNode;
 namespace audio {
 class AudioNode;
 }
+namespace network {
+namespace webserver {
+#if FEATURE_AUDIO_BENCHMARK
+class BenchmarkStreamBroadcaster;
+#endif
+} // namespace webserver
+} // namespace network
 }
 
 namespace lightwaveos {
@@ -45,6 +52,11 @@ public:
     static void handleControl(AsyncWebServerRequest* request,
                               uint8_t* data, size_t len,
                               lightwaveos::nodes::NodeOrchestrator& orchestrator);
+    
+    // AGC Toggle
+    static void handleAGCToggle(AsyncWebServerRequest* request,
+                                uint8_t* data, size_t len,
+                                lightwaveos::nodes::NodeOrchestrator& orchestrator);
 
     // Audio State
     static void handleStateGet(AsyncWebServerRequest* request,
@@ -126,15 +138,15 @@ public:
     // Benchmark
     static void handleBenchmarkGet(AsyncWebServerRequest* request,
                                     lightwaveos::nodes::NodeOrchestrator& orchestrator,
-                                    std::function<bool()> hasSubscribers);
+                                    lightwaveos::network::webserver::BenchmarkStreamBroadcaster* broadcaster);
     
     static void handleBenchmarkStart(AsyncWebServerRequest* request,
                                       lightwaveos::nodes::NodeOrchestrator& orchestrator,
-                                      std::function<void(bool)> setStreamingActive);
+                                      lightwaveos::network::webserver::BenchmarkStreamBroadcaster* broadcaster);
     
     static void handleBenchmarkStop(AsyncWebServerRequest* request,
                                      lightwaveos::nodes::NodeOrchestrator& orchestrator,
-                                     std::function<void(bool)> setStreamingActive);
+                                     lightwaveos::network::webserver::BenchmarkStreamBroadcaster* broadcaster);
     
     static void handleBenchmarkHistory(AsyncWebServerRequest* request,
                                         lightwaveos::nodes::NodeOrchestrator& orchestrator);
@@ -145,4 +157,3 @@ public:
 } // namespace webserver
 } // namespace network
 } // namespace lightwaveos
-

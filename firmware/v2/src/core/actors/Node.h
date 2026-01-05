@@ -452,14 +452,15 @@ namespace NodeConfigs {
  * Large queue (32) to buffer commands during frame rendering.
  * Tick interval of 8ms (~120 FPS) for continuous rendering.
  * 
- * Stack size: 4096 words (16KB) with 50% safety margin.
- * Actual usage: ~8-10KB (effect rendering, FastLED, context setup).
+ * Stack size: 6144 words (24KB) - increased for zone mode (multiple effects + blend loops).
+ * Zone mode renders 3-4 effects per frame, each with deep call stacks.
+ * Actual usage: ~12-16KB in zone mode (effect rendering, FastLED, context setup, blend loops).
  * High water mark monitoring recommended to verify adequate margin.
  */
 inline NodeConfig Renderer() {
     return NodeConfig(
         "Renderer",     // name
-        4096,           // stackSize (16KB) - 50% safety margin over ~8-10KB usage
+        6144,           // stackSize (24KB) - increased for zone mode safety
         5,              // priority (highest)
         1,              // coreId (Core 1 - application)
         32,             // queueSize

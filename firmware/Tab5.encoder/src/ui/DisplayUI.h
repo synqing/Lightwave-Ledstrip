@@ -6,13 +6,25 @@
 // Clean, readable, no bullshit animations
 // ============================================================================
 
-#include <M5GFX.h>
+#ifdef SIMULATOR_BUILD
+    #include "M5GFX_Mock.h"
+#else
+    #include <M5GFX.h>
+#endif
 #include "Theme.h"
 #include "widgets/GaugeWidget.h"
 #include "widgets/UIHeader.h"
+#include "widgets/PresetSlotWidget.h"
+#ifndef SIMULATOR_BUILD
+#include "widgets/ActionRowWidget.h"
+#include "../network/WebSocketClient.h"
+#endif
 
-// Forward declaration
+// Forward declarations
+#ifndef SIMULATOR_BUILD
 class ZoneComposerUI;
+class PresetManager;
+#endif
 
 /**
  * UI screen types
@@ -31,8 +43,8 @@ public:
     void loop();
 
     // Data updates
-    void updateEncoder(uint8_t index, int32_t value);
-    void updateValue(uint8_t index, int32_t value) { updateEncoder(index, value); }  // Alias for compat
+    void updateEncoder(uint8_t index, int32_t value, bool highlight);
+    void updateValue(uint8_t index, int32_t value, bool highlight = true) { updateEncoder(index, value, highlight); }  // Alias for compat
     void setConnectionState(bool wifi, bool ws, bool encA, bool encB);
 
     // Metadata display (for effect/palette names from server)
@@ -45,18 +57,39 @@ public:
     UIScreen getCurrentScreen() const { return _currentScreen; }
     
     // Get zone composer UI (for router initialization)
+    #ifndef SIMULATOR_BUILD
     ZoneComposerUI* getZoneComposerUI() { return _zoneComposer; }
+    #endif
     
     // Get header instance (for ZoneComposerUI)
     UIHeader* getHeader() { return _header; }
-    
+
+    // Preset bank UI
+    PresetSlotWidget* getPresetSlot(uint8_t slot) { return (slot < 8) ? _presetSlots[slot] : nullptr; }
+    void updatePresetSlot(uint8_t slot, bool occupied, uint8_t effectId, uint8_t paletteId, uint8_t brightness);
+    void setActivePresetSlot(uint8_t slot);
+    #ifndef SIMULATOR_BUILD
+    void refreshAllPresetSlots(PresetManager* pm);
+    #endif
+
+    // Colour correction state (touch action row)
+    #ifndef SIMULATOR_BUILD
+    void setColourCorrectionState(const ColorCorrectionState& state);
+    #endif
 
 private:
     M5GFX& _display;
 
     UIHeader* _header;
     GaugeWidget* _gauges[16];
+    PresetSlotWidget* _presetSlots[8];
+    #ifndef SIMULATOR_BUILD
+    ActionRowWidget* _actionRow = nullptr;
+    #endif
+    #ifndef SIMULATOR_BUILD
     ZoneComposerUI* _zoneComposer = nullptr;
+    #endif
+    uint8_t _activePresetSlot = 0xFF;  // 0xFF = none active
 
     // Screen state
     UIScreen _currentScreen = UIScreen::GLOBAL;

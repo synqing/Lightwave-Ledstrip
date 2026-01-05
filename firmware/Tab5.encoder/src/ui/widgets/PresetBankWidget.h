@@ -21,7 +21,9 @@
 // ============================================================================
 
 #include <M5GFX.h>
+#include <Arduino.h>
 #include "../Theme.h"
+#include "../../config/Config.h"
 
 // Preset slot visual state
 enum class PresetSlotState : uint8_t {
@@ -107,6 +109,7 @@ public:
 private:
     M5GFX* _display;
     M5Canvas _sprite;
+    bool _spriteOk = false;
 
     int32_t _x, _y, _w, _h;
     uint8_t _slotIndex;
@@ -140,6 +143,7 @@ private:
 
 inline PresetBankWidget::PresetBankWidget(M5GFX* display, int32_t x, int32_t y, int32_t w, int32_t h, uint8_t slotIndex)
     : _display(display)
+    , _sprite(display)
     , _x(x)
     , _y(y)
     , _w(w)
@@ -147,8 +151,17 @@ inline PresetBankWidget::PresetBankWidget(M5GFX* display, int32_t x, int32_t y, 
     , _slotIndex(slotIndex)
 {
     // Create sprite for flicker-free rendering
-    _sprite.createSprite(w, h);
+    _sprite.setColorDepth(16);
+    _sprite.setPsram(true);
+    _spriteOk = _sprite.createSprite(w, h);
     _sprite.setTextDatum(MC_DATUM);
+
+#if ENABLE_UI_DIAGNOSTICS
+    Serial.printf("[UI] PresetBankWidget sprite idx=%u ok=%u bytes=%u\n",
+                  static_cast<unsigned>(slotIndex),
+                  _spriteOk ? 1u : 0u,
+                  static_cast<unsigned>(w * h * 2));
+#endif
 }
 
 inline PresetBankWidget::~PresetBankWidget() {
@@ -333,6 +346,10 @@ inline void PresetBankWidget::drawBrightnessBar() {
 inline void PresetBankWidget::render() {
     if (!_dirty) return;
     _dirty = false;
+
+    if (!_spriteOk || !_display) {
+        return;
+    }
 
     drawBackground();
     drawSlotNumber();

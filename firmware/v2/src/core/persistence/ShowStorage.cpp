@@ -200,7 +200,7 @@ bool ShowStorage::loadShow(
         return false;
     }
 
-    if (!id || !outName || !outScenes || maxScenes == 0) {
+    if (!id || !outName || nameLen == 0 || !outScenes || maxScenes == 0) {
         m_lastError = NVSResult::INVALID_HANDLE;
         return false;
     }
@@ -353,4 +353,3 @@ bool ShowStorage::hasSpace() {
 
 } // namespace persistence
 } // namespace lightwaveos
-

@@ -73,14 +73,24 @@ namespace NetworkConfig {
     #ifdef AP_SSID_CUSTOM
         constexpr const char* AP_SSID = AP_SSID_CUSTOM;
     #else
-        constexpr const char* AP_SSID = "LightwaveOS-Setup";
+        constexpr const char* AP_SSID = "LightwaveOS";
     #endif
 
     #ifdef AP_PASSWORD_CUSTOM
         constexpr const char* AP_PASSWORD = AP_PASSWORD_CUSTOM;
     #else
-        constexpr const char* AP_PASSWORD = "lightwave123";
+        constexpr const char* AP_PASSWORD = "SpectraSynq";
     #endif
+
+    // ========================================================================
+    // WiFi Mode Selection
+    // ========================================================================
+    // Set to 1 to force AP-only mode (STA architecture remains, just disabled)
+#ifdef LW_FORCE_AP_MODE
+    constexpr bool FORCE_AP_MODE = (LW_FORCE_AP_MODE != 0);
+#else
+    constexpr bool FORCE_AP_MODE = true;
+#endif
 
     // ========================================================================
     // Network Settings

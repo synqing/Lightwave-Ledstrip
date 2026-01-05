@@ -199,8 +199,9 @@ void setup() {
         NetworkConfig::WIFI_SSID_VALUE,
         NetworkConfig::WIFI_PASSWORD_VALUE
     );
-    // STA-only: do not enable SoftAP fallback here.
-    // If you want AP provisioning, explicitly re-enable this call.
+    // Enable STA+AP mode: STA connects to network, AP provides fallback access
+    // AP SSID matches Tab5.encoder default: "LightwaveOS"
+    WIFI_MANAGER.enableSoftAP("LightwaveOS", "lightwave123", 1);
 
     if (!WIFI_MANAGER.begin()) {
         LW_LOGE("WiFiManager failed to start!");
@@ -220,10 +221,13 @@ void setup() {
 
         if (WIFI_MANAGER.isConnected()) {
             LW_LOGI("WiFi: CONNECTED to %s", NetworkConfig::WIFI_SSID_VALUE);
-            LW_LOGI("IP: %s", WiFi.localIP().toString().c_str());
+            LW_LOGI("STA IP: %s", WiFi.localIP().toString().c_str());
+            if (WiFi.getMode() == WIFI_MODE_APSTA) {
+                LW_LOGI("AP IP: %s", WiFi.softAPIP().toString().c_str());
+            }
         } else if (WIFI_MANAGER.isAPMode()) {
             LW_LOGI("WiFi: AP MODE (connect to LightwaveOS-Setup)");
-            LW_LOGI("IP: %s", WiFi.softAPIP().toString().c_str());
+            LW_LOGI("AP IP: %s", WiFi.softAPIP().toString().c_str());
         }
     }
 
@@ -309,6 +313,10 @@ void setup() {
     Serial.println("  GET  /api/v1/effects - List effects");
     Serial.println("  POST /api/v1/effects/set - Set effect");
     Serial.println("  WS   /ws - Real-time control");
+    Serial.println("\nNetwork Commands:");
+    Serial.println("  net status - Show WiFi status");
+    Serial.println("  net sta [seconds] - Enable STA mode (optional auto-revert)");
+    Serial.println("  net ap - Force AP-only mode");
 #endif
     Serial.println();
 }
@@ -1013,15 +1021,13 @@ void loop() {
             // Get TempoTracker from AudioNode
             auto* audio = orchestrator.getAudio();
             if (audio) {
-                const auto& tempo = audio->getTempo();
-                auto output = tempo.getOutput();
+                const auto& output = audio->getTempo();
                 Serial.println("=== TempoTracker Status ===");
                 Serial.printf("  BPM: %.1f\n", output.bpm);
                 Serial.printf("  Phase: %.3f\n", output.phase01);
                 Serial.printf("  Confidence: %.2f\n", output.confidence);
                 Serial.printf("  Locked: %s\n", output.locked ? "YES" : "NO");
                 Serial.printf("  Beat Strength: %.2f\n", output.beat_strength);
-                Serial.printf("  Winner Bin: %u\n", tempo.getWinnerBin());
             } else {
                 Serial.println("TempoTracker not available (audio not enabled)");
             }
@@ -1099,6 +1105,57 @@ void loop() {
                     }
                 }
             }
+        }
+        else if (peekChar == 'n' && input.length() > 1) {
+            // -----------------------------------------------------------------
+            // Network commands: net status/sta/ap
+            // -----------------------------------------------------------------
+#if FEATURE_WEB_SERVER
+            if (inputLower.startsWith("net")) {
+                handledMulti = true;
+                String args = input.substring(3);
+                args.trim();
+
+                if (args.length() == 0 || args == "help") {
+                    Serial.println("net status");
+                    Serial.println("net sta [seconds]   (seconds implies auto-revert to AP-only)");
+                    Serial.println("net ap");
+                } else if (args == "status") {
+                    Serial.printf("WiFi state: %s\n", WIFI_MANAGER.getStateString().c_str());
+                    Serial.printf("AP IP: %s (clients=%d)\n",
+                                  WIFI_MANAGER.getAPIP().toString().c_str(),
+                                  WiFi.softAPgetStationNum());
+                    Serial.printf("STA: %s ssid='%s' ip=%s rssi=%d\n",
+                                  WIFI_MANAGER.isConnected() ? "CONNECTED" : "DISCONNECTED",
+                                  WIFI_MANAGER.getSSID().c_str(),
+                                  WIFI_MANAGER.getLocalIP().toString().c_str(),
+                                  WIFI_MANAGER.isConnected() ? WIFI_MANAGER.getRSSI() : 0);
+                } else if (args.startsWith("sta")) {
+                    String rest = args.substring(3);
+                    rest.trim();
+
+                    if (rest.length() == 0) {
+                        WIFI_MANAGER.requestSTAEnable(0, false);
+                        Serial.println("Requested: STA (no auto-revert)");
+                    } else {
+                        uint32_t seconds = (uint32_t)rest.toInt();
+                        WIFI_MANAGER.requestSTAEnable(seconds * 1000u, true);
+                        Serial.printf("Requested: STA window %lu seconds (auto-revert to AP-only)\n",
+                                      (unsigned long)seconds);
+                    }
+                } else if (args == "ap") {
+                    WIFI_MANAGER.requestAPOnly();
+                    Serial.println("Requested: AP-only");
+                } else {
+                    Serial.println("Unknown net command. Try: net help");
+                }
+            }
+#else
+            if (inputLower.startsWith("net")) {
+                handledMulti = true;
+                Serial.println("Network disabled (FEATURE_WEB_SERVER=0)");
+            }
+#endif
         }
 
         if (handledMulti) {

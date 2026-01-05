@@ -233,32 +233,124 @@ CaptureResult AudioCapture::captureHop(int16_t* buffer)
     }
 
     // Convert samples from 32-bit I2S slots to 16-bit signed samples
-    // SPH0645 outputs 18-bit data, MSB-aligned in 32-bit slot.
-    // With MSB shift enabled, hardware aligns data; >>14 typically extracts 18-bit value.
-    // NOTE: Validate shift against DMA dbg output (pk>>N values) - the diagnostic
-    //       shows which shift produces the largest peak, indicating correct alignment.
-    // 1. Shift right by 14 to extract 18-bit value (may need adjustment based on diagnostics)
-    // 2. Clip to 18-bit range (safety)
-    // 3. Scale to 16-bit (>> 2)
-    // 4. DC removal is handled in AudioNode
+    // Emotiscope 2.0 exact conversion pipeline:
+    // 1. >> 14 shift to extract 18-bit value
+    // 2. Add 7000 offset
+    // 3. Clip to ±131072 (18-bit range)
+    // 4. Subtract 360 offset
+    // 5. Scale to float [-1.0, 1.0] using recip_scale = 1.0 / 131072.0
+    // 6. Apply 4x amplification (Emotiscope fixed gain)
+    // 7. Convert back to int16 by multiplying by 32768.0 and rounding
+    
+    static constexpr float RECIP_SCALE = 1.0f / 131072.0f;  // Max 18-bit signed value
+    static constexpr float FIXED_GAIN = 4.0f;                // Emotiscope fixed amplification
+    static constexpr int32_t OFFSET_1 = 7000;
+    static constexpr int32_t OFFSET_2 = 360;
+    static constexpr int32_t CLIP_MIN_18 = -131072;
+    static constexpr int32_t CLIP_MAX_18 = 131072;
     
     int16_t peak = 0;
-    for (size_t i = 0; i < HOP_SIZE; i++) {
-        // Step 1: Shift by 14 to get 18-bit value with sign preserved
-        // If DMA dbg shows pk>>12 or pk>>16 is much larger, adjust this shift accordingly
-        int32_t raw = (m_dmaBuffer[i] >> 14);
-        raw += DC_BIAS_ADD;
-        if (raw < CLIP_MIN) raw = CLIP_MIN;
-        if (raw > CLIP_MAX) raw = CLIP_MAX;
-        raw -= DC_BIAS_SUB;
-        int16_t sample = static_cast<int16_t>(raw >> 2);
-        buffer[i] = sample;
-
+    // Process 4 samples at a time (vectorized for efficiency)
+    size_t vectorizedEnd = (HOP_SIZE / 4) * 4;
+    for (size_t i = 0; i < vectorizedEnd; i+=4) {
+        // Emotiscope exact conversion (vectorized 4 samples for efficiency)
+        int32_t raw0 = m_dmaBuffer[i+0];
+        int32_t raw1 = m_dmaBuffer[i+1];
+        int32_t raw2 = m_dmaBuffer[i+2];
+        int32_t raw3 = m_dmaBuffer[i+3];
+        
+        // >> 14 shift, add 7000, clip, subtract 360 (matching Emotiscope microphone.h:104-107)
+        int32_t s0 = (raw0 >> 14) + OFFSET_1;
+        int32_t s1 = (raw1 >> 14) + OFFSET_1;
+        int32_t s2 = (raw2 >> 14) + OFFSET_1;
+        int32_t s3 = (raw3 >> 14) + OFFSET_1;
+        
+        // Clip to 18-bit range
+        if (s0 < CLIP_MIN_18) s0 = CLIP_MIN_18;
+        if (s0 > CLIP_MAX_18) s0 = CLIP_MAX_18;
+        if (s1 < CLIP_MIN_18) s1 = CLIP_MIN_18;
+        if (s1 > CLIP_MAX_18) s1 = CLIP_MAX_18;
+        if (s2 < CLIP_MIN_18) s2 = CLIP_MIN_18;
+        if (s2 > CLIP_MAX_18) s2 = CLIP_MAX_18;
+        if (s3 < CLIP_MIN_18) s3 = CLIP_MIN_18;
+        if (s3 > CLIP_MAX_18) s3 = CLIP_MAX_18;
+        
+        // Subtract 360 offset
+        s0 -= OFFSET_2;
+        s1 -= OFFSET_2;
+        s2 -= OFFSET_2;
+        s3 -= OFFSET_2;
+        
+        // Convert to float [-1.0, 1.0] range (matching Emotiscope microphone.h:111)
+        float f0 = (float)s0 * RECIP_SCALE;
+        float f1 = (float)s1 * RECIP_SCALE;
+        float f2 = (float)s2 * RECIP_SCALE;
+        float f3 = (float)s3 * RECIP_SCALE;
+        
+        // Apply 4x amplification (Emotiscope microphone.h:114)
+        f0 *= FIXED_GAIN;
+        f1 *= FIXED_GAIN;
+        f2 *= FIXED_GAIN;
+        f3 *= FIXED_GAIN;
+        
+        // Convert back to int16 (multiply by 32768.0 and round)
+        int32_t i0 = (int32_t)lroundf(f0 * 32768.0f);
+        int32_t i1 = (int32_t)lroundf(f1 * 32768.0f);
+        int32_t i2 = (int32_t)lroundf(f2 * 32768.0f);
+        int32_t i3 = (int32_t)lroundf(f3 * 32768.0f);
+        
+        // Clip to int16 range
+        if (i0 < -32768) i0 = -32768;
+        if (i0 > 32767) i0 = 32767;
+        if (i1 < -32768) i1 = -32768;
+        if (i1 > 32767) i1 = 32767;
+        if (i2 < -32768) i2 = -32768;
+        if (i2 > 32767) i2 = 32767;
+        if (i3 < -32768) i3 = -32768;
+        if (i3 > 32767) i3 = 32767;
+        
+        buffer[i+0] = (int16_t)i0;
+        buffer[i+1] = (int16_t)i1;
+        buffer[i+2] = (int16_t)i2;
+        buffer[i+3] = (int16_t)i3;
+        
         // Track peak for level metering
+        int16_t abs0 = (i0 < 0) ? -i0 : i0;
+        int16_t abs1 = (i1 < 0) ? -i1 : i1;
+        int16_t abs2 = (i2 < 0) ? -i2 : i2;
+        int16_t abs3 = (i3 < 0) ? -i3 : i3;
+        if (abs0 > peak) peak = abs0;
+        if (abs1 > peak) peak = abs1;
+        if (abs2 > peak) peak = abs2;
+        if (abs3 > peak) peak = abs3;
+    }
+    
+    // Handle remaining samples if HOP_SIZE is not divisible by 4
+    for (size_t i = vectorizedEnd; i < HOP_SIZE; ++i) {
+        int32_t raw = m_dmaBuffer[i];
+        
+        // >> 14 shift, add 7000, clip, subtract 360
+        int32_t s = (raw >> 14) + OFFSET_1;
+        if (s < CLIP_MIN_18) s = CLIP_MIN_18;
+        if (s > CLIP_MAX_18) s = CLIP_MAX_18;
+        s -= OFFSET_2;
+        
+        // Convert to float [-1.0, 1.0] range
+        float f = (float)s * RECIP_SCALE;
+        
+        // Apply 4x amplification
+        f *= FIXED_GAIN;
+        
+        // Convert back to int16
+        int32_t sample = (int32_t)lroundf(f * 32768.0f);
+        if (sample < -32768) sample = -32768;
+        if (sample > 32767) sample = 32767;
+        
+        buffer[i] = (int16_t)sample;
+        
+        // Track peak
         int16_t absSample = (sample < 0) ? -sample : sample;
-        if (absSample > peak) {
-            peak = absSample;
-        }
+        if (absSample > peak) peak = absSample;
     }
 
     // Update statistics

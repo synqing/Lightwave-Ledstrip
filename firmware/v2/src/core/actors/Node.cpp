@@ -40,7 +40,17 @@ Node::Node(const NodeConfig& config)
 {
     // Create the message queue
     // Queue item size = sizeof(Message) = 16 bytes
+    // #region agent log - Queue creation
+    if (sizeof(Message) != 16) {
+        ESP_LOGE(TAG, "[%s] CRITICAL: Message size is %zu bytes, expected 16! Queue creation will fail!", config.name, sizeof(Message));
+    }
+    // #endregion
     m_queue = xQueueCreate(m_config.queueSize, sizeof(Message));
+    // #region agent log - Queue creation result
+    if (m_queue == nullptr) {
+        ESP_LOGE(TAG, "[%s] CRITICAL: Failed to create queue! size=%d, msgSize=%zu", config.name, config.queueSize, sizeof(Message));
+    }
+    // #endregion
 
     if (m_queue == nullptr) {
 #ifndef NATIVE_BUILD
@@ -286,7 +296,41 @@ void Node::run()
     while (!m_shutdownRequested) {
         Message msg;
 
-        // Calculate wait time based on tick interval
+        // Queue saturation prevention: drain multiple messages when queue is getting full
+        // This prevents command rejection when rapid inputs (e.g. encoder rotation, zone updates)
+        // exceed the single-message-per-tick processing rate.
+        uint8_t queueUtil = getQueueUtilization();
+        const uint8_t DRAIN_THRESHOLD = 50;  // Start draining at 50% full
+        const uint8_t MAX_MESSAGES_PER_TICK = 8;  // Process up to 8 messages per tick
+
+        if (queueUtil > DRAIN_THRESHOLD) {
+            // Queue is getting full - drain multiple messages with non-blocking receives
+            // BUT: Still respect tick timing - if tick is due, process one message then tick
+            uint8_t messagesProcessed = 0;
+            while (messagesProcessed < MAX_MESSAGES_PER_TICK && !m_shutdownRequested) {
+                BaseType_t received = xQueueReceive(m_queue, &msg, 0);  // Non-blocking
+                if (received != pdTRUE) {
+                    break;  // Queue empty
+                }
+
+                // Handle shutdown message specially
+                if (msg.type == MessageType::SHUTDOWN) {
+                    m_shutdownRequested = true;
+                    break;
+                }
+
+                // Dispatch to derived class handler
+                m_messageCount++;
+                onMessage(msg);
+                messagesProcessed++;
+            }
+            // After draining, continue loop to check tick timing
+            continue;
+        }
+
+        // Normal operation: wait for message with timeout based on tick interval
+        // CRITICAL: Tick happens on timeout, not by checking if due
+        // This preserves the original timing behavior that RendererNode depends on
         TickType_t waitTime;
         if (m_config.tickInterval > 0) {
             waitTime = m_config.tickInterval;
@@ -295,6 +339,16 @@ void Node::run()
         }
 
         // Wait for a message
+        // #region agent log - Queue receive instrumentation
+        if (m_queue == nullptr) {
+            ESP_LOGE(TAG, "[%s] CRITICAL: m_queue is NULL before xQueueReceive!", m_config.name);
+            // Don't abort here - let FreeRTOS assert catch it
+        }
+        // Verify Message size matches queue item size
+        if (sizeof(Message) != 16) {
+            ESP_LOGE(TAG, "[%s] CRITICAL: Message size mismatch! sizeof(Message)=%zu, expected=16", m_config.name, sizeof(Message));
+        }
+        // #endregion
         BaseType_t received = xQueueReceive(m_queue, &msg, waitTime);
 
         if (received == pdTRUE) {
@@ -309,6 +363,7 @@ void Node::run()
             onMessage(msg);
         } else {
             // Timeout - call onTick if configured
+            // This is the original pattern: tick happens when no message arrives in time
             if (m_config.tickInterval > 0) {
                 onTick();
             }

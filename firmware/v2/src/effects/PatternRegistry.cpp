@@ -227,11 +227,15 @@ uint8_t getRelatedPatterns(const char* name, const char** output, uint8_t maxOut
 }
 
 void getFamilyName(PatternFamily family, char* buffer, size_t bufferSize) {
+    if (!buffer || bufferSize == 0) {
+        return;
+    }
     if ((uint8_t)family < 10) {
         strncpy_P(buffer, (char*)pgm_read_ptr(&PATTERN_FAMILY_NAMES[(uint8_t)family]), bufferSize - 1);
         buffer[bufferSize - 1] = '\0';
     } else {
-        strncpy(buffer, "Unknown", bufferSize);
+        strncpy(buffer, "Unknown", bufferSize - 1);
+        buffer[bufferSize - 1] = '\0';
     }
 }
 

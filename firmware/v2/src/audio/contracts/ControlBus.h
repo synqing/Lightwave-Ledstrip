@@ -67,7 +67,7 @@ struct ControlBusRawInput {
     static constexpr uint8_t BINS_64_COUNT = 64;
     float bins64[BINS_64_COUNT] = {0};  // 0..1 normalized magnitudes
 
-    // Phase 2: Tempo Output (Emotiscope V2)
+    // Phase 2: Tempo Output (TempoTracker)
     TempoOutput tempo = {0};
 };
 
@@ -107,7 +107,7 @@ struct ControlBusFrame {
     static constexpr uint8_t BINS_64_COUNT = 64;
     float bins64[BINS_64_COUNT] = {0};  // 0..1 normalized magnitudes
 
-    // Phase 2: Tempo Output (Emotiscope V2)
+    // Phase 2: Tempo Output (TempoTracker)
     TempoOutput tempo = {0};
 
     // Silence detection (Sensory Bridge pattern)

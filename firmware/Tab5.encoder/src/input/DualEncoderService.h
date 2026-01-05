@@ -502,8 +502,13 @@ inline void DualEncoderService::processEncoderDelta(uint8_t globalIdx, int32_t r
 
         if (normalizedDelta != 0) {
             // Apply delta with wrap/clamp
+            uint16_t oldValue = _values[globalIdx];
             int32_t newValue = static_cast<int32_t>(_values[globalIdx]) + normalizedDelta;
             _values[globalIdx] = applyRangeConstraint(globalIdx, newValue);
+
+            // #region agent log
+            Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"WRAP2\",\"location\":\"DualEncoderService.h:503\",\"message\":\"processEncoderDelta\",\"data\":{\"globalIdx\":%d,\"oldValue\":%d,\"normalizedDelta\":%ld,\"newValueBeforeConstraint\":%ld,\"newValueAfterConstraint\":%d,\"shouldWrap\":%d},\"timestamp\":%lu}\n", globalIdx, oldValue, (long)normalizedDelta, (long)newValue, _values[globalIdx], shouldWrapGlobal(globalIdx) ? 1 : 0, (unsigned long)now);
+            // #endregion
 
             // Flash LED for activity feedback (bright green)
             flashLed(globalIdx, 0, 255, 0);

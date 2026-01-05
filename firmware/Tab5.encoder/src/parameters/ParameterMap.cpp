@@ -20,7 +20,7 @@ static const ParameterDef PARAMETER_TABLE[] = {
     // id, encoderIndex, statusField, wsCommandType, min, max, defaultValue
 
     // Unit A (0-7) - Global LightwaveOS parameters
-    {ParameterId::EffectId,   0, "effectId",   "effects.setCurrent", 0,   95,  0},
+    {ParameterId::EffectId,   0, "effectId",   "effects.setCurrent", 0,   87,  0},  // 88 effects (0-87)
     {ParameterId::Brightness, 1, "brightness", "parameters.set",     0,   255, 128},
     {ParameterId::PaletteId,  2, "paletteId",  "parameters.set",     0,   63,  0},
     {ParameterId::Speed,      3, "speed",      "parameters.set",     1,   100, 25},
@@ -33,13 +33,13 @@ static const ParameterDef PARAMETER_TABLE[] = {
     // Pattern: [Zone N Effect, Zone N Speed/Palette] pairs
     // Note: Encoders 9, 11, 13, 15 can toggle between Speed and Palette via button
     // Default mode is Speed; when toggled, encoder controls Palette instead
-    {ParameterId::Zone0Effect, 8,  "zone0Effect", "zone.setEffect",   0,   95,  0},
+    {ParameterId::Zone0Effect, 8,  "zone0Effect", "zone.setEffect",   0,   87,  0},  // 88 effects (0-87)
     {ParameterId::Zone0Speed,  9,  "zone0Speed",  "zone.setSpeed",    1,   100, 25},  // Also zone0Palette when toggled
-    {ParameterId::Zone1Effect, 10, "zone1Effect", "zone.setEffect",   0,   95,  0},
+    {ParameterId::Zone1Effect, 10, "zone1Effect", "zone.setEffect",   0,   87,  0},  // 88 effects (0-87)
     {ParameterId::Zone1Speed,  11, "zone1Speed",  "zone.setSpeed",    1,   100, 25},  // Also zone1Palette when toggled
-    {ParameterId::Zone2Effect, 12, "zone2Effect", "zone.setEffect",   0,   95,  0},
+    {ParameterId::Zone2Effect, 12, "zone2Effect", "zone.setEffect",   0,   87,  0},  // 88 effects (0-87)
     {ParameterId::Zone2Speed,  13, "zone2Speed",  "zone.setSpeed",    1,   100, 25},  // Also zone2Palette when toggled
-    {ParameterId::Zone3Effect, 14, "zone3Effect", "zone.setEffect",   0,   95,  0},
+    {ParameterId::Zone3Effect, 14, "zone3Effect", "zone.setEffect",   0,   87,  0},  // 88 effects (0-87)
     {ParameterId::Zone3Speed,  15, "zone3Speed",  "zone.setSpeed",    1,   100, 25}   // Also zone3Palette when toggled
 };
 

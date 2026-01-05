@@ -123,7 +123,7 @@ namespace ZoneParam {
 namespace ParamRange {
     // Unit A (0-7) - Global parameters
     constexpr uint8_t EFFECT_MIN = 0;
-    constexpr uint8_t EFFECT_MAX = 95;
+    constexpr uint8_t EFFECT_MAX = 87;  // 88 effects total (0-87) - matches v2 EXPECTED_EFFECT_COUNT
 
     constexpr uint8_t PALETTE_MIN = 0;
     constexpr uint8_t PALETTE_MAX = 63;
@@ -155,9 +155,9 @@ namespace ParamRange {
     constexpr uint8_t ZONE_PALETTE_MAX = 63;
 
     // Unit B (8-15) - Zone parameters
-    // Zone Effect: 0-95 (wraps around for continuous scrolling)
+    // Zone Effect: 0-87 (wraps around for continuous scrolling) - matches v2 EXPECTED_EFFECT_COUNT
     constexpr uint8_t ZONE_EFFECT_MIN = 0;
-    constexpr uint8_t ZONE_EFFECT_MAX = 95;
+    constexpr uint8_t ZONE_EFFECT_MAX = 87;  // 88 effects total (0-87)
 
     // Zone Brightness: 0-255 (clamped, no wrap)
     constexpr uint8_t ZONE_BRIGHTNESS_MIN = 0;

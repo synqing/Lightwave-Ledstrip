@@ -59,6 +59,8 @@ void LGPPerlinCausticsEffect::render(plugins::EffectContext& ctx) {
     const bool hasAudio = ctx.audio.available;
     float speedNorm = ctx.speed / 50.0f;
     float intensityNorm = ctx.brightness / 255.0f;
+    float complexityNorm = ctx.complexity / 255.0f;
+    float variationNorm = ctx.variation / 255.0f;
 
     // =========================================================================
     // Audio Analysis (hop_seq checking for fresh data)
@@ -125,9 +127,14 @@ void LGPPerlinCausticsEffect::render(plugins::EffectContext& ctx) {
     fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
     // Audio-modulated parameters (kept conservative to avoid strobing)
-    float sparkleDensity = 0.8f + trebleNorm * 0.9f; // 0.8-1.7
-    float lobeScale = 0.8f + bassNorm * 0.9f;        // 0.8-1.7
+    float sparkleDensity = (0.7f + trebleNorm * 0.9f) * (0.7f + complexityNorm * 0.8f);
+    float lobeScale = (0.7f + bassNorm * 0.9f) * (0.75f + complexityNorm * 0.6f);
     float brightnessMod = 0.75f + midNorm * 0.25f;   // 0.75-1.0
+    uint16_t variationOffset = (uint16_t)(ctx.variation * 257u);
+    uint8_t paletteShift = (uint8_t)(variationNorm * 64.0f);
+    uint16_t freq1 = (uint16_t)(12 + complexityNorm * 16.0f);
+    uint16_t freq2 = (uint16_t)(20 + complexityNorm * 20.0f);
+    uint16_t freq3 = (uint16_t)(6 + complexityNorm * 8.0f);
 
     for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
         // Calculate distance from centre pair
@@ -138,11 +145,11 @@ void LGPPerlinCausticsEffect::render(plugins::EffectContext& ctx) {
         // Sample multiple octaves of noise for caustic effect.
         // Use coordinate style consistent with existing working effects:
         // inoise8(dist*freq, timeShifted).
-        uint8_t n1 = inoise8((uint16_t)(dist * (uint16_t)(14 * lobeScale) + m_noiseX),
+        uint8_t n1 = inoise8((uint16_t)(dist * (uint16_t)(freq1 * lobeScale) + (uint16_t)(m_noiseX + variationOffset)),
                              (uint16_t)(m_time >> 1));
-        uint8_t n2 = inoise8((uint16_t)(dist * (uint16_t)(29 * sparkleDensity) + (m_noiseX + 10000u)),
+        uint8_t n2 = inoise8((uint16_t)(dist * (uint16_t)(freq2 * sparkleDensity) + (uint16_t)(m_noiseX + 10000u + (variationOffset >> 1))),
                              (uint16_t)(m_time >> 2));
-        uint8_t n3 = inoise8((uint16_t)(dist * 7 + (m_noiseY + 20000u)),
+        uint8_t n3 = inoise8((uint16_t)(dist * freq3 + (uint16_t)(m_noiseY + 20000u + (variationOffset >> 2))),
                              (uint16_t)(m_time >> 3));
 
         // Caustic focus: multiplicative highlight shaping (cheap, punchy)
@@ -157,7 +164,7 @@ void LGPPerlinCausticsEffect::render(plugins::EffectContext& ctx) {
         caustic *= centreFalloff;
         
         // Map to palette and brightness
-        uint8_t paletteIndex = (uint8_t)(caustic * 255.0f) + ctx.gHue;
+        uint8_t paletteIndex = (uint8_t)(caustic * 255.0f) + ctx.gHue + paletteShift;
         uint8_t brightness = (uint8_t)((0.3f + caustic * 0.7f) * brightnessMod * 255.0f * intensityNorm);
         
         CRGB color = ctx.palette.getColor(paletteIndex, brightness);

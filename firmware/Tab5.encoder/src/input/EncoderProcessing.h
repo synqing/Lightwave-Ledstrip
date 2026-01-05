@@ -19,6 +19,7 @@
 // ============================================================================
 
 #include <Arduino.h>
+#include <climits>  // For INT32_MAX
 #include "../config/Config.h"
 
 // ============================================================================
@@ -245,9 +246,44 @@ inline uint16_t wrapValue(uint8_t param, int32_t value) {
     uint8_t maxVal = getParameterMax(p);
     int32_t range = (maxVal - minVal) + 1;
 
-    // Normalize value to range
-    while (value < minVal) value += range;
-    while (value > maxVal) value -= range;
+    // #region agent log
+    int32_t originalValue = value;
+    // #endregion
+
+    // Normalize value to range using modulo for efficiency and correctness
+    // Handle negative values correctly with overflow protection
+    if (value < minVal) {
+        int32_t diff = minVal - value;
+        // CRITICAL FIX: Prevent integer overflow in wrap calculation
+        // Use modulo arithmetic instead of multiplication to avoid overflow
+        int32_t wraps = (diff + range - 1) / range;  // Ceiling division
+        // Limit wraps to prevent overflow: max wraps that won't overflow
+        int32_t maxSafeWraps = (INT32_MAX - minVal) / range;
+        if (wraps > maxSafeWraps) {
+            // For extreme values, use modulo directly
+            value = minVal + ((diff % range + range) % range);
+        } else {
+            value += wraps * range;
+        }
+    } else if (value > maxVal) {
+        int32_t diff = value - maxVal;
+        // CRITICAL FIX: Prevent integer overflow in wrap calculation
+        int32_t wraps = (diff + range - 1) / range;  // Ceiling division
+        // Limit wraps to prevent overflow
+        int32_t maxSafeWraps = (INT32_MAX - maxVal) / range;
+        if (wraps > maxSafeWraps) {
+            // For extreme values, use modulo directly
+            value = maxVal - ((diff % range + range) % range);
+        } else {
+            value -= wraps * range;
+        }
+    }
+
+    // #region agent log
+    if (originalValue != value) {
+        Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"WRAP1\",\"location\":\"EncoderProcessing.h:238\",\"message\":\"wrapValue.wrapped\",\"data\":{\"param\":%d,\"originalValue\":%ld,\"wrappedValue\":%ld,\"minVal\":%d,\"maxVal\":%d,\"range\":%ld},\"timestamp\":%lu}\n", param, (long)originalValue, (long)value, minVal, maxVal, (long)range, (unsigned long)millis());
+    }
+    // #endregion
 
     return static_cast<uint16_t>(value);
 }

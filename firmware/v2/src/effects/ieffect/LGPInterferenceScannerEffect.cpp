@@ -48,6 +48,8 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
     // CENTER ORIGIN INTERFERENCE SCANNER - Creates scanning interference patterns
     float speedNorm = ctx.speed / 50.0f;
     float intensityNorm = ctx.brightness / 255.0f;
+    float complexityNorm = ctx.complexity / 255.0f;
+    float variationNorm = ctx.variation / 255.0f;
     const bool hasAudio = ctx.audio.available;
     bool newHop = false;
 
@@ -172,8 +174,8 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
         // On kick drum hits, the interference fringes expand majestically.
         // Bass energy reduces frequency → larger wavelength → wider pattern.
         // =====================================================================
-        float freq1 = 0.20f - 0.05f * m_bassWavelength;  // 0.20→0.15 (wider on bass)
-        float freq2 = 0.35f - 0.08f * m_bassWavelength;  // 0.35→0.27 (wider on bass)
+        float freq1 = (0.16f + 0.08f * complexityNorm) - 0.05f * m_bassWavelength;
+        float freq2 = (0.28f + 0.10f * complexityNorm) - 0.08f * m_bassWavelength;
         float wave1 = sinf(dist * freq1 - m_scanPhase);
         float wave2 = sinf(dist * freq2 - m_scanPhase * 1.2f);  // Slight phase offset
         float interference = wave1 + wave2 * 0.6f;  // Combine with weight for moiré
@@ -191,7 +193,8 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
         // Hi-hat and cymbal energy creates high-frequency brightness overlay.
         // =====================================================================
         if (m_trebleOverlay > 0.1f) {
-            float shimmer = m_trebleOverlay * sinf(dist * 1.5f + m_scanPhase * 4.0f);
+            float shimmerFreq = 1.2f + variationNorm * 0.9f;
+            float shimmer = m_trebleOverlay * sinf(dist * shimmerFreq + m_scanPhase * 4.0f);
             audioGain += shimmer * 0.35f;
         }
 

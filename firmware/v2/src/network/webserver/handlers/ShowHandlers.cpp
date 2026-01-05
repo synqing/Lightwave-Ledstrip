@@ -223,7 +223,12 @@ void ShowHandlers::handleCreate(AsyncWebServerRequest* request,
         return;
     }
     
-    const char* name = doc["name"];
+    const char* name = doc["name"].as<const char*>();
+    if (!name || name[0] == '\0') {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                         ErrorCodes::INVALID_VALUE, "Invalid 'name' field");
+        return;
+    }
     uint32_t durationSeconds = doc["durationSeconds"];
     uint32_t durationMs = durationSeconds * 1000;
     
@@ -250,9 +255,10 @@ void ShowHandlers::handleCreate(AsyncWebServerRequest* request,
         
         TimelineScene& scene = scenes[sceneCount++];
         
-        // Generate ID if not provided
-        if (sceneObj.containsKey("id")) {
-            strncpy(scene.id, sceneObj["id"], sizeof(scene.id) - 1);
+        // Generate ID if not provided (or if provided ID isn't a string)
+        const char* sceneId = sceneObj["id"].as<const char*>();
+        if (sceneId && sceneId[0] != '\0') {
+            strncpy(scene.id, sceneId, sizeof(scene.id) - 1);
             scene.id[sizeof(scene.id) - 1] = '\0';
         } else {
             ShowTranslator::generateSceneId(sceneCount - 1, scene.id, sizeof(scene.id));
@@ -263,12 +269,13 @@ void ShowHandlers::handleCreate(AsyncWebServerRequest* request,
         scene.durationPercent = sceneObj["durationPercent"] | 0.0f;
         
         // Get effect name or ID
-        if (sceneObj.containsKey("effectName")) {
-            strncpy(scene.effectName, sceneObj["effectName"], sizeof(scene.effectName) - 1);
+        const char* effectName = sceneObj["effectName"].as<const char*>();
+        if (effectName && effectName[0] != '\0') {
+            strncpy(scene.effectName, effectName, sizeof(scene.effectName) - 1);
             scene.effectName[sizeof(scene.effectName) - 1] = '\0';
             scene.effectId = ShowTranslator::getEffectIdByName(scene.effectName);
         } else if (sceneObj.containsKey("effectId")) {
-            scene.effectId = sceneObj["effectId"];
+            scene.effectId = sceneObj["effectId"] | 0;
             ShowTranslator::getEffectNameById(scene.effectId, scene.effectName, sizeof(scene.effectName));
         } else {
             sendErrorResponse(request, HttpStatus::BAD_REQUEST,
@@ -485,4 +492,3 @@ void ShowHandlers::handleControl(AsyncWebServerRequest* request,
 } // namespace webserver
 } // namespace network
 } // namespace lightwaveos
-

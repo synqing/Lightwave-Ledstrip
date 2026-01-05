@@ -34,8 +34,6 @@
 // Forward declaration for audio context
 namespace lightwaveos { namespace plugins { struct AudioContext; } }
 
-// Forward declaration for EmotiscopeEngine (Phase 2b.1)
-namespace lightwaveos { namespace audio { class EmotiscopeEngine; } }
 
 namespace lightwaveos {
 namespace zones {
@@ -248,7 +246,7 @@ public:
      * @brief Enable/disable the zone system
      * @param enabled true to enable multi-zone mode
      */
-    void setEnabled(bool enabled) { m_enabled = enabled; }
+    void setEnabled(bool enabled);
     bool isEnabled() const { return m_enabled; }
 
     /**
@@ -297,12 +295,6 @@ public:
     void setZoneEnabled(uint8_t zone, bool enabled);
 
     // ==================== Zone Audio Config (Phase 2b.1) ====================
-
-    /**
-     * @brief Set the EmotiscopeEngine for audio-reactive zone modulation
-     * @param emotiscope Pointer to EmotiscopeEngine (from AudioNode)
-     */
-    void setEmotiscope(audio::EmotiscopeEngine* emotiscope) { m_emotiscope = emotiscope; }
 
     /**
      * @brief Get zone audio configuration
@@ -513,8 +505,6 @@ private:
 
     RendererNode* m_renderer;          // Renderer for effect access
 
-    // EmotiscopeEngine for audio-reactive zone modulation (Phase 2b.1)
-    audio::EmotiscopeEngine* m_emotiscope = nullptr;
 
     // Persistent per-zone render buffers (preserve temporal smoothing/trails)
     // Each zone effect renders into its own full buffer, preventing cross-zone

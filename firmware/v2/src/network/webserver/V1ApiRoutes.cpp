@@ -23,6 +23,7 @@
 #include "handlers/DebugHandlers.h"
 #include "handlers/EffectPresetHandlers.h"
 #include "handlers/FirmwareHandlers.h"
+#include "handlers/NetworkHandlers.h"
 #include "handlers/PresetHandlers.h"
 #include "handlers/ZonePresetHandlers.h"
 #include "handlers/ShowHandlers.h"
@@ -253,6 +254,17 @@ void V1ApiRoutes::registerRoutes(
         }
     );
 
+    // AGC Toggle - PUT /api/v1/audio/agc
+    registry.onPut("/api/v1/audio/agc",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::AudioHandlers::handleAGCToggle(request, data, len, ctx.orchestrator);
+        }
+    );
+
     registry.onGet("/api/v1/audio/state", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
@@ -476,19 +488,19 @@ void V1ApiRoutes::registerRoutes(
     registry.onGet("/api/v1/audio/benchmark", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::AudioHandlers::handleBenchmarkGet(request, ctx.orchestrator, ctx);
+        handlers::AudioHandlers::handleBenchmarkGet(request, ctx.orchestrator, ctx.benchmarkBroadcaster);
     });
 
     registry.onPost("/api/v1/audio/benchmark/start", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::AudioHandlers::handleBenchmarkStart(request, ctx.orchestrator, ctx);
+        handlers::AudioHandlers::handleBenchmarkStart(request, ctx.orchestrator, ctx.benchmarkBroadcaster);
     });
 
     registry.onPost("/api/v1/audio/benchmark/stop", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
-        handlers::AudioHandlers::handleBenchmarkStop(request, ctx.orchestrator, ctx);
+        handlers::AudioHandlers::handleBenchmarkStop(request, ctx.orchestrator, ctx.benchmarkBroadcaster);
     });
 
     registry.onGet("/api/v1/audio/benchmark/history", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
@@ -1184,9 +1196,32 @@ void V1ApiRoutes::registerRoutes(
             handlers::FirmwareHandlers::handleUpload(request, filename, index, data, len, final);
         }
     );
+
+    // ==================== Network Mode Routes ====================
+
+    // GET /api/v1/network/status - connection and mode state (public)
+    registry.onGet("/api/v1/network/status", [checkRateLimit](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        handlers::NetworkHandlers::handleStatus(request);
+    });
+
+    // POST /api/v1/network/sta/enable - temporarily enable STA for OTA
+    registry.onPost("/api/v1/network/sta/enable",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            handlers::NetworkHandlers::handleEnableSTA(request, data, len);
+        }
+    );
+
+    // POST /api/v1/network/ap/enable - force AP-only mode
+    registry.onPost("/api/v1/network/ap/enable", [checkRateLimit](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        handlers::NetworkHandlers::handleEnableAPOnly(request);
+    });
 }
 
 } // namespace webserver
 } // namespace network
 } // namespace lightwaveos
-

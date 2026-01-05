@@ -151,19 +151,18 @@ static void handleTransitionsTrigger(AsyncWebSocketClient* client, JsonDocument&
     client->text(response);
 }
 
+static void handleTransitionConfig(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    if (doc.containsKey("defaultDuration") || doc.containsKey("defaultType")) {
+        handleTransitionConfigSet(client, doc, ctx);
+    } else {
+        handleTransitionConfigGet(client, doc, ctx);
+    }
+}
+
 void registerWsTransitionCommands(const WebServerContext& ctx) {
     WsCommandRouter::registerCommand("transition.trigger", handleTransitionTrigger);
     WsCommandRouter::registerCommand("transition.getTypes", handleTransitionGetTypes);
-    // Note: transition.config is handled by two separate handlers based on whether it's get or set
-    // We need to register a handler that checks for the presence of defaultDuration/defaultType
-    // For now, register both and handle the logic in the handler
-    WsCommandRouter::registerCommand("transition.config", [&ctx](AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& context) {
-        if (doc.containsKey("defaultDuration") || doc.containsKey("defaultType")) {
-            handleTransitionConfigSet(client, doc, context);
-        } else {
-            handleTransitionConfigGet(client, doc, context);
-        }
-    });
+    WsCommandRouter::registerCommand("transition.config", handleTransitionConfig);
     WsCommandRouter::registerCommand("transitions.list", handleTransitionsList);
     WsCommandRouter::registerCommand("transitions.trigger", handleTransitionsTrigger);
 }
@@ -172,4 +171,3 @@ void registerWsTransitionCommands(const WebServerContext& ctx) {
 } // namespace webserver
 } // namespace network
 } // namespace lightwaveos
-

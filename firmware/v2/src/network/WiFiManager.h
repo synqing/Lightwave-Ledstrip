@@ -293,6 +293,37 @@ public:
      */
     void scanNetworks();
 
+    // ========================================================================
+    // OTA / Mode Override Control
+    // ========================================================================
+
+    /**
+     * @brief Temporarily enable STA mode (for OTA without AP-only lock-in)
+     *
+     * This requests the WiFi task to switch to STA mode and attempt to connect
+     * using the configured credentials. Optionally, it can revert back to
+     * AP-only mode after a timeout.
+     *
+     * Notes:
+     * - This does NOT attempt AP+STA dual-mode (historically unreliable).
+     * - If AP-only is forced at compile time, this override is temporary and
+     *   will not survive reboot unless FORCE_AP_MODE is disabled in build flags.
+     *
+     * @param durationMs If >0 and revertToApOnly is true, revert after this duration.
+     * @param revertToApOnly If true, revert to AP-only mode when duration expires.
+     */
+    void requestSTAEnable(uint32_t durationMs = 0, bool revertToApOnly = false);
+
+    /**
+     * @brief Force AP-only mode immediately (cancels any STA window)
+     */
+    void requestAPOnly();
+
+    /**
+     * @brief Check if a runtime AP-only override is currently active
+     */
+    bool isForceApOnlyRuntime() const { return m_forceApModeRuntime; }
+
 private:
     // ========================================================================
     // Private Constructor (Singleton)
@@ -347,6 +378,7 @@ private:
     void setState(WiFiState newState);
     void switchToNextNetwork();
     bool hasSecondaryNetwork() const;
+    void applyPendingModeChange();
 
     // ========================================================================
     // Event Handler
@@ -424,9 +456,21 @@ private:
     // ========================================================================
 
     bool m_apEnabled = false;
+    bool m_apStarted = false;
     String m_apSSID = "LightwaveOS-AP";
     String m_apPassword = "lightwave123";
     uint8_t m_apChannel = 1;
+
+    // ========================================================================
+    // Runtime Mode Overrides (used for OTA workflows)
+    // ========================================================================
+
+    bool m_forceApModeRuntime = config::NetworkConfig::FORCE_AP_MODE;
+    bool m_pendingModeChange = false;
+    bool m_pendingForceApModeRuntime = config::NetworkConfig::FORCE_AP_MODE;
+    bool m_pendingRevertToApOnly = false;
+    uint32_t m_staWindowEndMs = 0;
+    uint32_t m_pendingApplyAtMs = 0;
 };
 
 // ============================================================================

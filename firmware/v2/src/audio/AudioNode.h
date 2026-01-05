@@ -49,7 +49,7 @@
 #include "contracts/SnapshotBuffer.h"
 
 // Tempo tracker
-#include "tempo/EmotiscopeEngine.h"
+#include "tempo/TempoTracker.h"
 
 #if FEATURE_AUDIO_BENCHMARK
 #include "AudioBenchmarkMetrics.h"
@@ -328,23 +328,13 @@ public:
     bool applyCalibrationResults();
 
     // ========================================================================
-    // TempoTracker Integration (replaces K1 Pipeline)
+    // TempoTracker Integration
     // ========================================================================
 
     /**
-     * @brief Get current tempo state (Emotiscope V2)
+     * @brief Get current tempo state
      */
-    TempoOutput getTempo() const { return m_emotiscope.getOutput(); }
-
-    /**
-     * @brief Get mutable reference to Emotiscope engine
-     */
-    EmotiscopeEngine& getEmotiscopeMut() { return m_emotiscope; }
-
-        /**
-         * @brief Get pointer to Emotiscope engine (for Renderer phase advancement)
-         */
-        EmotiscopeEngine* getEmotiscope() { return &m_emotiscope; }
+    TempoOutput getTempo() const { return m_lastTempoOutput; }
 
     /**
      * @brief Check if tempo tracking is initialized
@@ -523,11 +513,11 @@ private:
     GoertzelNoveltyTuning m_noveltyTuning;
 
     // ========================================================================
-    // Emotiscope Beat Tracker (v2.0)
+    // TempoTracker Beat Tracker
     // ========================================================================
 
-    /// Emotiscope Engine
-    EmotiscopeEngine m_emotiscope;
+    /// TempoTracker for beat detection
+    TempoTracker m_tempo;
 
     /// Last tempo output for diagnostics
     TempoOutput m_lastTempoOutput;

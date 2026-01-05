@@ -3,7 +3,13 @@
 // ============================================================================
 
 #include "UIHeader.h"
-#include <M5Unified.h>
+
+#ifdef SIMULATOR_BUILD
+    #include "M5GFX_Mock.h"
+#else
+    #include <M5Unified.h>
+#endif
+
 #include <cstdio>
 #include <cstring>
 
@@ -12,7 +18,7 @@ UIHeader::UIHeader(M5GFX* display)
 {
     _sprite.setColorDepth(16);
     _sprite.setPsram(true);
-    _sprite.createSprite(Theme::SCREEN_W, Theme::STATUS_BAR_H);
+    _spriteOk = _sprite.createSprite(Theme::SCREEN_W, Theme::STATUS_BAR_H);
 }
 
 UIHeader::~UIHeader() {
@@ -40,19 +46,39 @@ void UIHeader::setPower(int8_t batteryPercent, bool isCharging, float voltage) {
 void UIHeader::render() {
     if (!_dirty) return;
 
-    _sprite.startWrite();
-    _sprite.fillSprite(Theme::BG_DARK);
+    if (!_display) return;
 
-    // Bottom border
-    _sprite.drawFastHLine(0, Theme::STATUS_BAR_H - 1, Theme::SCREEN_W, Theme::ACCENT);
-    _sprite.drawFastHLine(0, Theme::STATUS_BAR_H - 2, Theme::SCREEN_W, Theme::dimColor(Theme::ACCENT, 60));
+    if (_spriteOk) {
+        _sprite.startWrite();
+        _sprite.fillSprite(Theme::BG_DARK);
 
-    drawTitle();
-    drawConnectionStatus();
-    drawPowerBar();
+        // Bottom border
+        _sprite.drawFastHLine(0, Theme::STATUS_BAR_H - 1, Theme::SCREEN_W, Theme::ACCENT);
+        _sprite.drawFastHLine(0, Theme::STATUS_BAR_H - 2, Theme::SCREEN_W, Theme::dimColor(Theme::ACCENT, 60));
 
-    _sprite.endWrite();
-    _sprite.pushSprite(0, 0);
+        drawTitle();
+        drawConnectionStatus();
+        drawPowerBar();
+
+        _sprite.endWrite();
+        _sprite.pushSprite(0, 0);
+    } else {
+        _display->startWrite();
+        _display->fillRect(0, 0, Theme::SCREEN_W, Theme::STATUS_BAR_H, Theme::BG_DARK);
+        _display->drawFastHLine(0, Theme::STATUS_BAR_H - 1, Theme::SCREEN_W, Theme::ACCENT);
+        _display->drawFastHLine(0, Theme::STATUS_BAR_H - 2, Theme::SCREEN_W, Theme::dimColor(Theme::ACCENT, 60));
+
+        _display->setTextDatum(textdatum_t::middle_left);
+        _display->setFont(&fonts::FreeSansBold18pt7b);
+        _display->setTextColor(Theme::ACCENT);
+        _display->drawString("LIGHTWAVEOS", 20, 40);
+
+        _display->setFont(&fonts::FreeSans12pt7b);
+        _display->setTextColor(Theme::TEXT_DIM);
+        _display->drawString("// TAB5 CONTROLLER", 280, 40);
+
+        _display->endWrite();
+    }
     _dirty = false;
 }
 

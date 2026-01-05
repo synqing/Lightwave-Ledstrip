@@ -311,21 +311,37 @@ void SyncManagerActor::handleIncomingMessage(
 ) {
     if (!message || length == 0) return;
 
+    if (length > MAX_MESSAGE_SIZE) return;
+
+    const auto containsToken = [](const char* haystack, size_t haystackLen, const char* needle) -> bool {
+        if (!haystack || !needle) return false;
+        const size_t needleLen = strlen(needle);
+        if (needleLen == 0 || haystackLen < needleLen) return false;
+        for (size_t i = 0; i + needleLen <= haystackLen; ++i) {
+            if (memcmp(haystack + i, needle, needleLen) == 0) {
+                return true;
+            }
+        }
+        return false;
+    };
+
     // Determine message type
-    if (strstr(message, "sync.state")) {
+    if (containsToken(message, length, "sync.state")) {
         handleRemoteState(message, length);
-    } else if (strstr(message, "sync.cmd")) {
+    } else if (containsToken(message, length, "sync.cmd")) {
         handleRemoteCommand(message, length);
-    } else if (strstr(message, "sync.hello")) {
+    } else if (containsToken(message, length, "sync.hello")) {
         handleHello(message, length);
-    } else if (strstr(message, "sync.ping")) {
+    } else if (containsToken(message, length, "sync.ping")) {
         handlePing(senderUuid);
-    } else if (strstr(message, "sync.pong")) {
+    } else if (containsToken(message, length, "sync.pong")) {
         handlePong(senderUuid);
     }
 
     // Update peer last seen time
-    m_discovery.touchPeer(senderUuid, millis());
+    if (senderUuid) {
+        m_discovery.touchPeer(senderUuid, millis());
+    }
 }
 
 void SyncManagerActor::handleSyncRequest(const char* senderUuid) {

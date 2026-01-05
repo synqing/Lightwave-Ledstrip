@@ -53,7 +53,7 @@ struct PresetData {
     // ========================================================================
     // Global Parameters (8 bytes) - matches Unit-A encoder mapping
     // ========================================================================
-    uint8_t effectId;      // Current effect index (0-95)
+    uint8_t effectId;      // Current effect index (0-87, 88 effects total)
     uint8_t brightness;    // Global brightness (0-255)
     uint8_t paletteId;     // Current palette index (0-63)
     uint8_t speed;         // Animation speed (1-100)

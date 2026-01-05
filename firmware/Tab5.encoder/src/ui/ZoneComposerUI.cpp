@@ -281,10 +281,7 @@ void ZoneComposerUI::drawZoneRow(uint8_t zoneId, int x, int y, int w, int h) {
     _display.setTextDatum(textdatum_t::middle_left);
     
     // Effect name
-    const char* effectText = zone.effectName;
-    if (!effectText) {
-        effectText = lookupEffectName(zone.effectId);
-    }
+    const char* effectText = (zone.effectName[0] != '\0') ? zone.effectName : lookupEffectName(zone.effectId);
     char effectBuf[48];
     if (!effectText) {
         snprintf(effectBuf, sizeof(effectBuf), "Effect #%u", zone.effectId);
@@ -294,10 +291,7 @@ void ZoneComposerUI::drawZoneRow(uint8_t zoneId, int x, int y, int w, int h) {
     
     // Palette name
     int paletteX = infoX + 200;
-    const char* paletteText = zone.paletteName;
-    if (!paletteText) {
-        paletteText = lookupPaletteName(zone.paletteId);
-    }
+    const char* paletteText = (zone.paletteName[0] != '\0') ? zone.paletteName : lookupPaletteName(zone.paletteId);
     char paletteBuf[48];
     if (!paletteText) {
         snprintf(paletteBuf, sizeof(paletteBuf), "Palette #%u", zone.paletteId);
@@ -307,9 +301,9 @@ void ZoneComposerUI::drawZoneRow(uint8_t zoneId, int x, int y, int w, int h) {
     
     // Blend mode
     int blendX = paletteX + 200;
-    const char* blendText = zone.blendModeName ? zone.blendModeName : "Blend";
+    const char* blendText = (zone.blendModeName[0] != '\0') ? zone.blendModeName : nullptr;
     char blendBuf[32];
-    if (!zone.blendModeName) {
+    if (!blendText) {
         snprintf(blendBuf, sizeof(blendBuf), "Blend #%u", zone.blendMode);
         blendText = blendBuf;
     }

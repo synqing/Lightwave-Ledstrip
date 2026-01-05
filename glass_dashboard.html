@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lightwave OS - THE FUTURIST</title>
+    <style>
+        :root {
+            --bg-dark: #050505;
+            --glass: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --accent: #ff4d00;
+            --accent-sec: #00d2ff;
+        }
+
+        body {
+            margin: 0;
+            background-color: var(--bg-dark);
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+            color: #fff;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Ambient Background */
+        .ambient-glow {
+            position: absolute;
+            width: 800px; height: 800px;
+            background: radial-gradient(circle, rgba(255, 77, 0, 0.15) 0%, transparent 70%);
+            top: -200px; left: -200px;
+            filter: blur(80px);
+            z-index: 0;
+            animation: moveGlow 10s infinite alternate;
+        }
+        .ambient-glow-2 {
+            position: absolute;
+            width: 600px; height: 600px;
+            background: radial-gradient(circle, rgba(0, 210, 255, 0.1) 0%, transparent 70%);
+            bottom: -100px; right: -100px;
+            filter: blur(80px);
+            z-index: 0;
+            animation: moveGlow2 12s infinite alternate;
+        }
+
+        @keyframes moveGlow { from { transform: translate(0,0); } to { transform: translate(100px, 100px); } }
+        @keyframes moveGlow2 { from { transform: translate(0,0); } to { transform: translate(-100px, -50px); } }
+
+        .dashboard {
+            width: 1280px;
+            height: 720px;
+            background: rgba(20, 20, 20, 0.4);
+            backdrop-filter: blur(40px);
+            -webkit-backdrop-filter: blur(40px);
+            border-radius: 40px;
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 40px 80px rgba(0,0,0,0.5);
+            z-index: 10;
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            padding: 40px;
+            gap: 40px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* GLASS CARD */
+        .glass-card {
+            background: linear-gradient(145deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01));
+            border-radius: 30px;
+            border: 1px solid var(--glass-border);
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        /* LEFT PANEL (PLAYER) */
+        .player-art {
+            width: 100%;
+            aspect-ratio: 1;
+            background: #000;
+            border-radius: 20px;
+            margin-bottom: 30px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+        }
+        .player-art img {
+            width: 100%; height: 100%; object-fit: cover; opacity: 0.8;
+            transition: transform 0.5s ease;
+        }
+        .player-art:hover img { transform: scale(1.05); }
+
+        .song-title { font-size: 2rem; font-weight: 700; margin-bottom: 5px; }
+        .artist { font-size: 1.1rem; opacity: 0.6; margin-bottom: 40px; }
+
+        .controls { display: flex; justify-content: space-between; align-items: center; }
+        
+        .btn-round {
+            width: 80px; height: 80px;
+            border-radius: 50%;
+            background: var(--accent);
+            border: none;
+            color: #fff;
+            font-size: 1.5rem;
+            box-shadow: 0 10px 30px rgba(255, 77, 0, 0.4);
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .btn-round:hover { transform: scale(1.05); box-shadow: 0 15px 40px rgba(255, 77, 0, 0.6); }
+
+        .btn-sm {
+            width: 50px; height: 50px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.1);
+            border: none; color: #fff;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .btn-sm:hover { background: rgba(255,255,255,0.2); }
+
+
+        /* RIGHT PANEL (WIDGETS) */
+        .widget-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            grid-template-rows: auto 1fr;
+            gap: 30px;
+            height: 100%;
+        }
+
+        .header-widget {
+            grid-column: 1 / -1;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 80px;
+        }
+
+        .tab-pill {
+            padding: 10px 25px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 20px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .tab-pill.active { background: #fff; color: #000; font-weight: 600; }
+
+        /* CIRCULAR PROGRESS */
+        .progress-circle {
+            width: 150px; height: 150px;
+            position: relative;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .progress-circle svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+        .progress-circle circle {
+            fill: none;
+            stroke-width: 8;
+            stroke-linecap: round;
+        }
+        .progress-bg { stroke: rgba(255,255,255,0.1); }
+        .progress-val { stroke: var(--accent-sec); stroke-dasharray: 440; stroke-dashoffset: 110; transition: stroke-dashoffset 1s ease; }
+
+        .stat-val { font-size: 2.5rem; font-weight: 700; }
+        .stat-label { font-size: 0.9rem; opacity: 0.5; text-transform: uppercase; letter-spacing: 1px; }
+
+        /* SLIDERS */
+        .glass-slider {
+            width: 100%;
+            height: 60px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 15px;
+            margin-bottom: 20px;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+        }
+        .glass-slider::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 60%;
+            background: linear-gradient(90deg, rgba(255,255,255,0.1), rgba(255,255,255,0.2));
+            z-index: 0;
+        }
+        .slider-label { position: relative; z-index: 1; font-weight: 600; }
+        .slider-value { position: relative; z-index: 1; margin-left: auto; font-family: monospace; }
+
+    </style>
+</head>
+<body>
+
+    <div class="ambient-glow"></div>
+    <div class="ambient-glow-2"></div>
+
+    <div class="dashboard">
+        
+        <!-- LEFT -->
+        <div class="glass-card">
+            <div class="player-art">
+                <!-- Abstract Art using CSS -->
+                <div style="width:100%; height:100%; background: conic-gradient(from 180deg, #ff4d00, #222, #00d2ff, #222, #ff4d00);"></div>
+            </div>
+            <div class="song-title">Solar Sailer</div>
+            <div class="artist">Daft Punk</div>
+            
+            <div style="margin-top:auto">
+                <div style="width:100%; height:4px; background:rgba(255,255,255,0.1); margin-bottom:30px; border-radius:2px; overflow:hidden;">
+                    <div style="width:40%; height:100%; background:var(--accent);"></div>
+                </div>
+                <div class="controls">
+                    <button class="btn-sm"><svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg></button>
+                    <button class="btn-round"><svg width="32" height="32" viewBox="0 0 24 24" fill="white"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg></button>
+                    <button class="btn-sm"><svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg></button>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT -->
+        <div class="widget-grid">
+            <div class="header-widget">
+                <h1 style="margin:0; font-size:1.5rem;">System Controls</h1>
+                <div style="display:flex; gap:10px;">
+                    <div class="tab-pill active">Main</div>
+                    <div class="tab-pill">Zones</div>
+                    <div class="tab-pill">Network</div>
+                </div>
+            </div>
+
+            <!-- Stats -->
+            <div class="glass-card" style="align-items:center; justify-content:center;">
+                <div class="progress-circle">
+                    <svg viewBox="0 0 160 160">
+                        <circle class="progress-bg" cx="80" cy="80" r="70"></circle>
+                        <circle class="progress-val" cx="80" cy="80" r="70"></circle>
+                    </svg>
+                    <div style="position:absolute; text-align:center;">
+                        <div class="stat-val">72<span style="font-size:1rem">%</span></div>
+                    </div>
+                </div>
+                <div class="stat-label" style="margin-top:20px;">Brightness</div>
+            </div>
+
+            <div class="glass-card">
+                <div class="stat-label">Quick Access</div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-top:20px;">
+                    <div style="background:rgba(255,77,0,0.2); padding:20px; border-radius:15px; text-align:center; border:1px solid rgba(255,77,0,0.3);">
+                        SYNC
+                    </div>
+                    <div style="background:rgba(0,210,255,0.2); padding:20px; border-radius:15px; text-align:center; border:1px solid rgba(0,210,255,0.3);">
+                        WIFI
+                    </div>
+                </div>
+                
+                <div style="margin-top:30px;">
+                    <div class="glass-slider">
+                        <span class="slider-label">Response</span>
+                        <span class="slider-value">FAST</span>
+                    </div>
+                    <div class="glass-slider">
+                        <span class="slider-label">Gain</span>
+                        <span class="slider-value">+6dB</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</body>
+</html>

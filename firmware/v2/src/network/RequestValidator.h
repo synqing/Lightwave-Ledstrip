@@ -797,6 +797,18 @@ namespace RequestSchemas {
     };
     constexpr size_t NetworkConnectSize = sizeof(NetworkConnect) / sizeof(FieldSchema);
 
+    /**
+     * @brief POST /api/v1/network/sta/enable
+     * Optional: durationSeconds (0 = no auto-revert), revertToApOnly, ssid, password
+     */
+    constexpr FieldSchema NetworkStaEnable[] = {
+        {"durationSeconds", FieldType::UINT32, false, 0, 86400},
+        {"revertToApOnly",  FieldType::BOOL,   false, 0, 0},
+        {"ssid",            FieldType::STRING, false, 1, 32},
+        {"password",        FieldType::STRING, false, 0, 64}
+    };
+    constexpr size_t NetworkStaEnableSize = sizeof(NetworkStaEnable) / sizeof(FieldSchema);
+
     // Legacy API schemas removed - all endpoints migrated to V1 API
 
 }  // namespace RequestSchemas

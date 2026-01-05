@@ -35,6 +35,7 @@
 // Forward declarations
 class ParameterHandler;
 class WebSocketClient;
+class ZoneComposerUI;
 
 // Preset action types for feedback
 enum class PresetAction : uint8_t {
@@ -137,6 +138,14 @@ public:
         _feedbackCallback = callback;
     }
 
+    /**
+     * Set ZoneComposerUI for zone state capture
+     * @param zoneUI ZoneComposerUI instance
+     */
+    void setZoneComposerUI(ZoneComposerUI* zoneUI) {
+        _zoneUI = zoneUI;
+    }
+
     // ========================================================================
     // State Capture (for external use)
     // ========================================================================
@@ -159,6 +168,7 @@ public:
 private:
     ParameterHandler* _paramHandler;
     WebSocketClient* _wsClient;
+    ZoneComposerUI* _zoneUI = nullptr;
     PresetFeedbackCallback _feedbackCallback;
 
     // Cached occupancy mask (updated on init and after operations)

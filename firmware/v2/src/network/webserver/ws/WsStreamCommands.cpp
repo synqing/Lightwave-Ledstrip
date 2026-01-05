@@ -12,6 +12,7 @@
 #include <ArduinoJson.h>
 
 #if FEATURE_AUDIO_BENCHMARK
+#include "../../../core/actors/NodeOrchestrator.h"
 #include "../BenchmarkStreamBroadcaster.h"
 #include "../../../audio/AudioBenchmarkMetrics.h"
 #endif
@@ -299,4 +300,3 @@ void registerWsStreamCommands(const WebServerContext& ctx) {
 } // namespace webserver
 } // namespace network
 } // namespace lightwaveos
-

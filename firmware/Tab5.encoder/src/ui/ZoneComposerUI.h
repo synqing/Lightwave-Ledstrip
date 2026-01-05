@@ -21,12 +21,12 @@
  */
 struct ZoneState {
     uint8_t effectId = 0;
-    const char* effectName = "Unknown";
+    char effectName[48] = {0};
     uint8_t speed = 25;
     uint8_t paletteId = 0;
-    const char* paletteName = "Unknown";
+    char paletteName[48] = {0};
     uint8_t blendMode = 0;
-    const char* blendModeName = "OVERWRITE";
+    char blendModeName[32] = {0};
     bool enabled = false;
     uint8_t ledStart = 0;
     uint8_t ledEnd = 0;
@@ -95,6 +95,33 @@ public:
      */
     void handleTouch(int16_t x, int16_t y);
 
+    // ========================================================================
+    // Zone State Accessors (for PresetManager)
+    // ========================================================================
+
+    /**
+     * Check if zone mode is enabled
+     * @return true if zones are active
+     */
+    bool isZoneModeEnabled() const { return _zonesEnabled; }
+
+    /**
+     * Get number of active zones
+     * @return Zone count (1-4)
+     */
+    uint8_t getZoneCount() const { return _zoneCount; }
+
+    /**
+     * Get zone state
+     * @param zoneId Zone ID (0-3)
+     * @return Const reference to ZoneState
+     */
+    const ZoneState& getZoneState(uint8_t zoneId) const {
+        static ZoneState empty;
+        if (zoneId >= 4) return empty;
+        return _zones[zoneId];
+    }
+
 private:
     M5GFX& _display;
     ButtonHandler* _buttonHandler = nullptr;
@@ -150,4 +177,3 @@ private:
     // Convert RGB888 to RGB565
     static uint16_t rgb888To565(uint32_t rgb888);
 };
-

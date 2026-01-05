@@ -437,6 +437,10 @@ The v1 API provides standardized responses, rate limiting, and rich metadata.
 | `/api/v1/transitions/trigger` | POST | Trigger transition |
 | `/api/v1/batch` | POST | Batch operations (max 10) |
 | `/api/v1/debug/memory/zones` | GET | Zone system memory stats (debug) |
+| `/api/v1/audio/agc` | PUT | Toggle AGC (Automatic Gain Control) `{enabled: true/false}` |
+| `/api/v1/network/status` | GET | Network status (AP/STA mode, IP addresses, RSSI) |
+| `/api/v1/network/sta/enable` | POST | Enable STA mode with optional auto-revert `{durationSeconds: N, revertToApOnly: true}` |
+| `/api/v1/network/ap/enable` | POST | Force AP-only mode |
 
 **Response Format**:
 ```json
@@ -466,6 +470,12 @@ Connect to `ws://lightwaveos.local/ws`
 
 **Legacy Commands**: `setEffect`, `setBrightness`, `setZoneEffect`, etc.
 
+**Audio Commands** (requires `esp32dev_audio` build):
+- `audio.parameters.get` - Get audio pipeline tuning parameters (including `agcEnabled`)
+- `audio.parameters.set` - Set audio pipeline parameters (including `agcEnabled`)
+- `audio.zone-agc.get` - Get zone AGC state
+- `audio.zone-agc.set` - Configure zone AGC parameters
+
 ## Zone System
 
 The Zone Composer (`src/effects/zones/`) provides independent effect control:
@@ -483,6 +493,9 @@ Connect at 115200 baud. Key commands:
 - `b <0-255>` - Set brightness
 - `s <1-50>` - Set speed
 - `h` - Help menu
+- `net status` - Show WiFi status (AP/STA mode, IP addresses, RSSI)
+- `net sta [seconds]` - Enable STA mode (optional auto-revert to AP-only after seconds)
+- `net ap` - Force AP-only mode
 
 ## Dependencies
 

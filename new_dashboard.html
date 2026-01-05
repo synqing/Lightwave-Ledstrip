@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lightwave OS - V4 Dashboard</title>
+    <style>
+        :root {
+            --bg-color: #121418;
+            --panel-bg: #1e2126;
+            --text-main: #e0e0e0;
+            --text-dim: #707580;
+            --accent-cyan: #00e5ff;
+            --accent-orange: #ff4d00;
+            --shadow-light: rgba(255, 255, 255, 0.05);
+            --shadow-dark: rgba(0, 0, 0, 0.4);
+            --neu-shadow: -5px -5px 10px var(--shadow-light), 5px 5px 10px var(--shadow-dark);
+            --neu-inset: inset 5px 5px 10px var(--shadow-dark), inset -5px -5px 10px var(--shadow-light);
+            --font-hud: 'Courier New', Courier, monospace;
+            --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: var(--font-ui);
+            height: 100vh;
+            overflow: hidden;
+            display: grid;
+            grid-template-rows: auto 1fr auto;
+        }
+
+        /* --- HUD HEADER (Image 3 Inspiration) --- */
+        .hud-header {
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #333;
+            background: radial-gradient(circle at 50% -20%, #2a3038, var(--bg-color));
+            font-family: var(--font-hud);
+        }
+
+        .hud-left {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            border: 1px solid #334;
+            padding: 10px 20px;
+            border-radius: 4px;
+            position: relative;
+        }
+
+        /* Decorative bracket corners */
+        .hud-left::before, .hud-left::after {
+            content: '';
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            border: 2px solid var(--accent-cyan);
+            transition: all 0.3s ease;
+        }
+        .hud-left::before { top: -1px; left: -1px; border-right: none; border-bottom: none; }
+        .hud-left::after { bottom: -1px; right: -1px; border-left: none; border-top: none; }
+
+        .time-display {
+            font-size: 2rem;
+            font-weight: bold;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
+        }
+
+        .date-display {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            display: flex;
+            flex-direction: column;
+            line-height: 1.4;
+        }
+
+        .hud-center {
+            text-align: center;
+            opacity: 0.8;
+        }
+        .hud-title {
+            font-size: 1.2rem;
+            letter-spacing: 4px;
+            color: var(--accent-cyan);
+            margin-bottom: 5px;
+        }
+        .hud-status {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+        }
+
+        .hud-right {
+            display: flex;
+            gap: 15px;
+        }
+
+        .stat-badge {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid #333;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .stat-badge.warning { border-color: var(--accent-orange); color: var(--accent-orange); }
+        .stat-badge.info { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+
+        /* --- MAIN CONTENT GRID --- */
+        .main-content {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 30px;
+            padding: 30px;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        /* --- LEFT PANEL: MASTER CONTROL (Image 2 Inspiration - Neumorphism) --- */
+        .master-panel {
+            background: var(--panel-bg);
+            border-radius: 30px;
+            box-shadow: var(--neu-shadow);
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            position: relative;
+        }
+
+        .visualizer-viewport {
+            width: 250px;
+            height: 250px;
+            border-radius: 50%;
+            background: #15171a;
+            box-shadow: var(--neu-inset);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+            margin-bottom: 30px;
+        }
+        
+        .visualizer-canvas {
+            width: 100%;
+            height: 100%;
+            opacity: 0.7;
+        }
+
+        .track-info {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .track-title { font-size: 1.5rem; font-weight: 600; margin-bottom: 5px; color: #fff; }
+        .track-artist { font-size: 1rem; color: var(--text-dim); }
+
+        .master-controls {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .slider-container {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .slider-track {
+            flex: 1;
+            height: 6px;
+            background: #15171a;
+            border-radius: 3px;
+            box-shadow: var(--neu-inset);
+            position: relative;
+        }
+        .slider-fill {
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 60%;
+            background: linear-gradient(90deg, #ff8c00, var(--accent-orange));
+            border-radius: 3px;
+            box-shadow: 0 0 10px rgba(255, 77, 0, 0.5);
+        }
+        .slider-thumb {
+            position: absolute;
+            left: 60%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 16px;
+            height: 16px;
+            background: #2a2e35;
+            border-radius: 50%;
+            box-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            border: 2px solid var(--accent-orange);
+            cursor: pointer;
+        }
+
+        .play-btn {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: linear-gradient(145deg, #ff5e1a, #e64500);
+            box-shadow: 5px 5px 15px rgba(0,0,0,0.4), -5px -5px 15px rgba(255,255,255,0.05);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        .play-btn:active { transform: scale(0.95); }
+        .play-icon { width: 24px; height: 24px; background: white; clip-path: polygon(0 0, 0 100%, 100% 50%); margin-left: 5px; }
+
+        /* --- CENTER PANEL: PARAMETERS (Image 1 Inspiration - Knobs) --- */
+        .params-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-template-rows: repeat(2, 1fr);
+            gap: 20px;
+        }
+
+        .param-card {
+            background: var(--panel-bg);
+            border-radius: 20px;
+            box-shadow: var(--neu-shadow);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            position: relative;
+        }
+
+        /* Toggle switch (Filter style) */
+        .param-toggle {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            width: 30px;
+            height: 16px;
+            background: #15171a;
+            border-radius: 10px;
+            box-shadow: var(--neu-inset);
+            cursor: pointer;
+        }
+        .param-toggle::after {
+            content: '';
+            position: absolute;
+            left: 2px; top: 2px;
+            width: 12px; height: 12px;
+            background: var(--accent-cyan);
+            border-radius: 50%;
+            box-shadow: 0 0 5px var(--accent-cyan);
+        }
+
+        .knob-container {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 10px 0;
+        }
+
+        /* Ticks ring */
+        .knob-ticks {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: conic-gradient(
+                from 225deg,
+                var(--text-dim) 0deg 2deg,
+                transparent 2deg 10deg
+            );
+            background-size: 100% 100%;
+            mask: radial-gradient(transparent 65%, black 66%);
+            -webkit-mask: radial-gradient(transparent 65%, black 66%);
+            transform: rotate(0deg); /* Adjust if needed */
+        }
+
+        /* The Knob Body */
+        .knob-body {
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            background: linear-gradient(145deg, #23272d, #1a1c21);
+            box-shadow: 
+                5px 5px 10px rgba(0,0,0,0.5),
+                -2px -2px 5px rgba(255,255,255,0.05);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            z-index: 2;
+        }
+
+        /* The Indicator Ring (Cyan Arc) */
+        .knob-indicator-ring {
+            position: absolute;
+            top: -5px; left: -5px; right: -5px; bottom: -5px;
+            border-radius: 50%;
+            background: conic-gradient(
+                var(--accent-cyan) 0deg var(--value-deg), 
+                transparent var(--value-deg) 360deg
+            );
+            transform: rotate(-135deg); /* Start at 7 o'clock */
+            z-index: 1;
+            opacity: 0.8;
+            filter: blur(2px);
+        }
+
+        .knob-value {
+            font-family: var(--font-hud);
+            font-size: 1.2rem;
+            color: #fff;
+            font-weight: bold;
+        }
+
+        .param-label {
+            margin-top: 10px;
+            font-size: 0.9rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* --- FOOTER: PRESETS --- */
+        .presets-bar {
+            padding: 20px 30px;
+            background: #16191d;
+            border-top: 1px solid #333;
+            display: flex;
+            gap: 20px;
+            overflow-x: auto;
+        }
+
+        .preset-slot {
+            min-width: 140px;
+            height: 80px;
+            background: var(--panel-bg);
+            border-radius: 12px;
+            box-shadow: var(--neu-shadow);
+            display: flex;
+            flex-direction: column;
+            padding: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+            position: relative;
+        }
+
+        .preset-slot:hover { transform: translateY(-2px); }
+        .preset-slot.active {
+            border-color: var(--accent-orange);
+            box-shadow: 0 0 15px rgba(255, 77, 0, 0.2);
+        }
+        .preset-slot.active::after {
+            content: 'ACTIVE';
+            position: absolute;
+            top: 5px; right: 5px;
+            font-size: 0.5rem;
+            color: var(--accent-orange);
+            font-family: var(--font-hud);
+        }
+
+        .preset-id { font-size: 1.5rem; font-weight: bold; color: var(--text-dim); }
+        .preset-name { font-size: 0.8rem; color: var(--text-main); margin-top: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    </style>
+</head>
+<body>
+
+    <!-- TOP HUD -->
+    <div class="hud-header">
+        <div class="hud-left">
+            <div class="time-display" id="clock">23:56:24</div>
+            <div class="date-display">
+                <span id="date-lg">SUNDAY</span>
+                <span id="date-sm">JAN 04 2026</span>
+            </div>
+        </div>
+        <div class="hud-center">
+            <div class="hud-title">LIGHTWAVE OS</div>
+            <div class="hud-status">// SYSTEM ONLINE // AUDIO SYNC ACTIVE</div>
+        </div>
+        <div class="hud-right">
+            <div class="stat-badge info">
+                <span>WIFI</span> <strong>CONNECTED</strong>
+            </div>
+            <div class="stat-badge warning">
+                <span>BAT</span> <strong>47%</strong>
+            </div>
+            <div class="stat-badge">
+                <span>FPS</span> <strong>118</strong>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN GRID -->
+    <div class="main-content">
+        
+        <!-- LEFT: MASTER CONTROL -->
+        <div class="master-panel">
+            <div style="width:100%; display:flex; justify-content:space-between; padding:0 10px;">
+                <span style="color:var(--text-dim); font-size:1.5rem;">←</span>
+                <span style="color:var(--text-dim);">☰</span>
+            </div>
+
+            <div class="visualizer-viewport">
+                <!-- Simple CSS Visualizer Animation -->
+                <div style="width: 200px; height: 200px; border-radius:50%; background: radial-gradient(circle, #ff4d00 0%, transparent 70%); animation: pulse 2s infinite ease-in-out;"></div>
+                <style>
+                    @keyframes pulse {
+                        0% { transform: scale(0.8); opacity: 0.5; }
+                        50% { transform: scale(1.1); opacity: 0.8; }
+                        100% { transform: scale(0.8); opacity: 0.5; }
+                    }
+                </style>
+            </div>
+
+            <div class="track-info">
+                <div class="track-title">Audio Reactive</div>
+                <div class="track-artist">Energy Mode</div>
+            </div>
+
+            <div class="master-controls">
+                <div class="slider-container">
+                    <span style="font-size:0.8rem; width:30px;">0:00</span>
+                    <div class="slider-track">
+                        <div class="slider-fill" style="width: 75%;"></div>
+                        <div class="slider-thumb" style="left: 75%;"></div>
+                    </div>
+                    <span style="font-size:0.8rem; width:30px;">∞</span>
+                </div>
+
+                <div style="display:flex; gap:30px; align-items:center;">
+                    <button class="play-btn" style="width:50px; height:50px; background:var(--panel-bg); box-shadow:var(--neu-shadow);"><span style="font-size:1.2rem; color:var(--text-dim);">⏮</span></button>
+                    <button class="play-btn"><div class="play-icon"></div></button>
+                    <button class="play-btn" style="width:50px; height:50px; background:var(--panel-bg); box-shadow:var(--neu-shadow);"><span style="font-size:1.2rem; color:var(--text-dim);">⏭</span></button>
+                </div>
+            </div>
+        </div>
+
+        <!-- CENTER: PARAMETER KNOBS -->
+        <div class="params-grid">
+            <!-- Generate 8 Knobs -->
+            <!-- Knob 1 -->
+            <div class="param-card">
+                <div class="param-toggle"></div>
+                <div class="knob-container">
+                    <div class="knob-ticks"></div>
+                    <div class="knob-indicator-ring" style="--value-deg: 200deg;"></div>
+                    <div class="knob-body">
+                        <span class="knob-value">128</span>
+                    </div>
+                </div>
+                <div class="param-label">Speed</div>
+            </div>
+
+            <!-- Knob 2 -->
+            <div class="param-card">
+                <div class="param-toggle"></div>
+                <div class="knob-container">
+                    <div class="knob-ticks"></div>
+                    <div class="knob-indicator-ring" style="--value-deg: 90deg;"></div>
+                    <div class="knob-body">
+                        <span class="knob-value">45</span>
+                    </div>
+                </div>
+                <div class="param-label">Intensity</div>
+            </div>
+
+            <!-- Knob 3 -->
+            <div class="param-card">
+                <div class="param-toggle"></div>
+                <div class="knob-container">
+                    <div class="knob-ticks"></div>
+                    <div class="knob-indicator-ring" style="--value-deg: 260deg;"></div>
+                    <div class="knob-body">
+                        <span class="knob-value">210</span>
+                    </div>
+                </div>
+                <div class="param-label">Hue</div>
+            </div>
+
+            <!-- Knob 4 -->
+            <div class="param-card">
+                <div class="param-toggle"></div>
+                <div class="knob-container">
+                    <div class="knob-ticks"></div>
+                    <div class="knob-indicator-ring" style="--value-deg: 180deg;"></div>
+                    <div class="knob-body">
+                        <span class="knob-value">50%</span>
+                    </div>
+                </div>
+                <div class="param-label">Saturation</div>
+            </div>
+
+            <!-- Knob 5 -->
+            <div class="param-card">
+                <div class="param-toggle"></div>
+                <div class="knob-container">
+                    <div class="knob-ticks"></div>
+                    <div class="knob-indicator-ring" style="--value-deg: 45deg;"></div>
+                    <div class="knob-body">
+                        <span class="knob-value">20</span>
+                    </div>
+                </div>
+                <div class="param-label">Decay</div>
+            </div>
+
+            <!-- Knob 6 -->
+            <div class="param-card">
+                <div class="param-toggle"></div>
+                <div class="knob-container">
+                    <div class="knob-ticks"></div>
+                    <div class="knob-indicator-ring" style="--value-deg: 300deg;"></div>
+                    <div class="knob-body">
+                        <span class="knob-value">HI-PASS</span>
+                    </div>
+                </div>
+                <div class="param-label">Filter A</div>
+            </div>
+
+            <!-- Knob 7 -->
+            <div class="param-card">
+                <div class="param-toggle"></div>
+                <div class="knob-container">
+                    <div class="knob-ticks"></div>
+                    <div class="knob-indicator-ring" style="--value-deg: 10deg;"></div>
+                    <div class="knob-body">
+                        <span class="knob-value">0</span>
+                    </div>
+                </div>
+                <div class="param-label">Offset</div>
+            </div>
+
+             <!-- Knob 8 -->
+             <div class="param-card">
+                <div class="param-toggle"></div>
+                <div class="knob-container">
+                    <div class="knob-ticks"></div>
+                    <div class="knob-indicator-ring" style="--value-deg: 135deg;"></div>
+                    <div class="knob-body">
+                        <span class="knob-value">MIX</span>
+                    </div>
+                </div>
+                <div class="param-label">Blend</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PRESETS FOOTER -->
+    <div class="presets-bar">
+        <div class="preset-slot active">
+            <div class="preset-id">01</div>
+            <div class="preset-name">Neon Night</div>
+        </div>
+        <div class="preset-slot">
+            <div class="preset-id">02</div>
+            <div class="preset-name">Cyber Pulse</div>
+        </div>
+        <div class="preset-slot">
+            <div class="preset-id">03</div>
+            <div class="preset-name">Ambient Flow</div>
+        </div>
+        <div class="preset-slot">
+            <div class="preset-id">04</div>
+            <div class="preset-name">Reactive Bass</div>
+        </div>
+        <div class="preset-slot">
+            <div class="preset-id">05</div>
+            <div class="preset-name">Strobe FX</div>
+        </div>
+        <div class="preset-slot">
+            <div class="preset-id">06</div>
+            <div class="preset-name">Calm Waters</div>
+        </div>
+        <div class="preset-slot">
+            <div class="preset-id">07</div>
+            <div class="preset-name">Fire Hazard</div>
+        </div>
+        <div class="preset-slot">
+            <div class="preset-id">08</div>
+            <div class="preset-name">User Save 1</div>
+        </div>
+    </div>
+
+    <script>
+        // Simple Clock Script
+        function updateClock() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-US', { hour12: false });
+            document.getElementById('clock').innerText = timeString;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // Preset Interaction Mock
+        const slots = document.querySelectorAll('.preset-slot');
+        slots.forEach(slot => {
+            slot.addEventListener('click', () => {
+                slots.forEach(s => s.classList.remove('active'));
+                slot.classList.add('active');
+            });
+        });
+    </script>
+</body>
+</html>

@@ -18,13 +18,30 @@
 // ============================================================================
 
 #include <ArduinoJson.h>
+#include <cstring>
 #include "../parameters/ParameterHandler.h"
 #include "../parameters/ParameterMap.h"
 #include "../zones/ZoneDefinition.h"
 #include "../ui/ZoneComposerUI.h"
 
+// ============================================================================
+// Router logging (compile-time, default off)
+// ============================================================================
+#ifndef TAB5_WS_TRACE
+#define TAB5_WS_TRACE 0
+#endif
+
+#if TAB5_WS_TRACE
+#define TAB5_WS_PRINTF(...) Serial.printf(__VA_ARGS__)
+#define TAB5_WS_PRINTLN(...) Serial.println(__VA_ARGS__)
+#else
+#define TAB5_WS_PRINTF(...) ((void)0)
+#define TAB5_WS_PRINTLN(...) ((void)0)
+#endif
+
 // Forward declarations
 class WebSocketClient;
+class DisplayUI;
 
 /**
  * @class WsMessageRouter
@@ -43,10 +60,11 @@ public:
      * @param wsClient WebSocket client for requesting status refreshes (optional)
      * @param zoneComposerUI Zone composer UI for zone state updates (optional)
      */
-    static void init(ParameterHandler* paramHandler, WebSocketClient* wsClient = nullptr, ZoneComposerUI* zoneComposerUI = nullptr) {
+    static void init(ParameterHandler* paramHandler, WebSocketClient* wsClient = nullptr, ZoneComposerUI* zoneComposerUI = nullptr, DisplayUI* displayUI = nullptr) {
         s_paramHandler = paramHandler;
         s_wsClient = wsClient;
         s_zoneComposerUI = zoneComposerUI;
+        s_displayUI = displayUI;
     }
 
     /**
@@ -111,6 +129,7 @@ private:
     static inline ParameterHandler* s_paramHandler = nullptr;
     static inline WebSocketClient* s_wsClient = nullptr;
     static inline ZoneComposerUI* s_zoneComposerUI = nullptr;
+    static inline DisplayUI* s_displayUI = nullptr;
 
     /**
      * @brief Handle "status" message from LightwaveOS
@@ -135,7 +154,7 @@ private:
         if (s_paramHandler) {
             bool updated = s_paramHandler->applyStatus(doc);
             if (updated) {
-                Serial.println("[WsRouter] Status applied");
+                TAB5_WS_PRINTLN("[WsRouter] Status applied");
             }
         }
     }
@@ -157,8 +176,8 @@ private:
     static void handleDeviceStatus(JsonDocument& doc) {
         // Optional: Log device status for debugging
         if (doc["uptime"].is<unsigned long>()) {
-            Serial.printf("[WsRouter] Device uptime: %lu sec\n",
-                          doc["uptime"].as<unsigned long>());
+            TAB5_WS_PRINTF("[WsRouter] Device uptime: %lu sec\n",
+                           doc["uptime"].as<unsigned long>());
         }
         // Could store device info for display on Tab5 screen
         (void)doc;
@@ -179,7 +198,7 @@ private:
     static void handleParametersChanged(JsonDocument& doc) {
         // Optional: Request fresh status from server
         // For now, rely on periodic status broadcasts from LightwaveOS
-        Serial.println("[WsRouter] Parameters changed notification");
+        TAB5_WS_PRINTLN("[WsRouter] Parameters changed notification");
         (void)doc;
     }
 
@@ -208,7 +227,7 @@ private:
 
         // Check if zones array exists (ArduinoJson 7 pattern)
         if (!doc["zones"].is<JsonArray>()) {
-            Serial.println("[WsRouter] zone.status: missing zones array");
+            TAB5_WS_PRINTLN("[WsRouter] zone.status: missing zones array");
             return;
         }
 
@@ -225,7 +244,7 @@ private:
             // Zone 1 -> Zone1Effect (10), Zone1Speed (11)
             // etc.
             if (zoneId > 3) {
-                Serial.printf("[WsRouter] Zone %d out of range (max 3)\n", zoneId);
+                TAB5_WS_PRINTF("[WsRouter] Zone %d out of range (max 3)\n", zoneId);
                 continue;
             }
 
@@ -275,7 +294,7 @@ private:
         }
 
         if (zoneCount > 0) {
-            Serial.printf("[WsRouter] Zone status: %d zones synced\n", zoneCount);
+            TAB5_WS_PRINTF("[WsRouter] Zone status: %d zones synced\n", zoneCount);
         }
     }
 
@@ -293,7 +312,7 @@ private:
      */
     static void handleEffectsChanged(JsonDocument& doc) {
         // Optional: Could request updated effect list
-        Serial.println("[WsRouter] Effects changed notification");
+        TAB5_WS_PRINTLN("[WsRouter] Effects changed notification");
         (void)doc;
     }
 
@@ -304,7 +323,7 @@ private:
      * Triggers zone state refresh request.
      */
     static void handleZonesChanged(JsonDocument& doc) {
-        Serial.println("[WsRouter] Zones changed notification");
+        TAB5_WS_PRINTLN("[WsRouter] Zones changed notification");
         // Request fresh zone state
         if (s_wsClient) {
             s_wsClient->requestZonesState();
@@ -356,7 +375,7 @@ private:
             if (doc["zones"].is<JsonArray>()) {
                 handleZoneStatus(doc);
             }
-            Serial.println("[WsRouter] Zones list received (no UI)");
+            TAB5_WS_PRINTLN("[WsRouter] Zones list received (no UI)");
             return;
         }
 
@@ -403,16 +422,22 @@ private:
                 ZoneState state;
                 state.effectId = zone["effectId"].as<uint8_t>();
                 if (zone["effectName"].is<const char*>()) {
-                    state.effectName = zone["effectName"].as<const char*>();
+                    const char* name = zone["effectName"].as<const char*>();
+                    strncpy(state.effectName, name, sizeof(state.effectName) - 1);
+                    state.effectName[sizeof(state.effectName) - 1] = '\0';
                 }
                 state.speed = zone["speed"].as<uint8_t>();
                 state.paletteId = zone["paletteId"].as<uint8_t>();
                 if (zone["paletteName"].is<const char*>()) {
-                    state.paletteName = zone["paletteName"].as<const char*>();
+                    const char* name = zone["paletteName"].as<const char*>();
+                    strncpy(state.paletteName, name, sizeof(state.paletteName) - 1);
+                    state.paletteName[sizeof(state.paletteName) - 1] = '\0';
                 }
                 state.blendMode = zone["blendMode"].as<uint8_t>();
                 if (zone["blendModeName"].is<const char*>()) {
-                    state.blendModeName = zone["blendModeName"].as<const char*>();
+                    const char* name = zone["blendModeName"].as<const char*>();
+                    strncpy(state.blendModeName, name, sizeof(state.blendModeName) - 1);
+                    state.blendModeName[sizeof(state.blendModeName) - 1] = '\0';
                 }
                 state.enabled = zone["enabled"].as<bool>();
 
@@ -428,6 +453,6 @@ private:
             handleZoneStatus(doc);
         }
 
-        Serial.printf("[WsRouter] Zones list: enabled=%d, count=%d\n", enabled, zoneCount);
+        TAB5_WS_PRINTF("[WsRouter] Zones list: enabled=%d, count=%d\n", enabled, zoneCount);
     }
 };

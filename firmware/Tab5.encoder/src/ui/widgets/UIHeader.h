@@ -5,7 +5,11 @@
 // Consistent header with title, connection status, and power bar
 // ============================================================================
 
-#include <M5GFX.h>
+#ifdef SIMULATOR_BUILD
+    #include "M5GFX_Mock.h"
+#else
+    #include <M5GFX.h>
+#endif
 #include "../Theme.h"
 
 struct DeviceConnState {
@@ -28,6 +32,7 @@ public:
 private:
     M5GFX* _display;
     M5Canvas _sprite;
+    bool _spriteOk = false;
 
     DeviceConnState _conn;
     int8_t _batteryPercent = -1;  // -1 = unknown/not set

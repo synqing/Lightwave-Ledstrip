@@ -18,6 +18,7 @@
 #endif
 
 #if FEATURE_AUDIO_BENCHMARK
+#include "../BenchmarkStreamBroadcaster.h"
 #include "../../../audio/AudioBenchmarkMetrics.h"
 #endif
 
@@ -52,6 +53,7 @@ void AudioHandlers::handleParametersGet(AsyncWebServerRequest* request,
     sendSuccessResponse(request, [&](JsonObject& data) {
         JsonObject pipelineObj = data["pipeline"].to<JsonObject>();
         pipelineObj["dcAlpha"] = pipeline.dcAlpha;
+        pipelineObj["agcEnabled"] = pipeline.agcEnabled;
         pipelineObj["agcTargetRms"] = pipeline.agcTargetRms;
         pipelineObj["agcMinGain"] = pipeline.agcMinGain;
         pipelineObj["agcMaxGain"] = pipeline.agcMaxGain;
@@ -168,6 +170,13 @@ void AudioHandlers::handleParametersSet(AsyncWebServerRequest* request,
     applyFloat(pipelineSrc, "agcRelease", pipeline.agcRelease, updatedPipeline);
     applyFloat(pipelineSrc, "agcClipReduce", pipeline.agcClipReduce, updatedPipeline);
     applyFloat(pipelineSrc, "agcIdleReturnRate", pipeline.agcIdleReturnRate, updatedPipeline);
+    
+    // AGC enable/disable toggle
+    if (pipelineSrc.containsKey("agcEnabled")) {
+        pipeline.agcEnabled = pipelineSrc["agcEnabled"].as<bool>();
+        updatedPipeline = true;
+    }
+    
     applyFloat(pipelineSrc, "noiseFloorMin", pipeline.noiseFloorMin, updatedPipeline);
     applyFloat(pipelineSrc, "noiseFloorRise", pipeline.noiseFloorRise, updatedPipeline);
     applyFloat(pipelineSrc, "noiseFloorFall", pipeline.noiseFloorFall, updatedPipeline);
@@ -259,6 +268,40 @@ void AudioHandlers::handleControl(AsyncWebServerRequest* request,
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
                           ErrorCodes::INVALID_ACTION, "Use action: pause or resume", "action");
     }
+}
+
+void AudioHandlers::handleAGCToggle(AsyncWebServerRequest* request,
+                                     uint8_t* data, size_t len,
+                                     NodeOrchestrator& orchestrator) {
+    auto* audio = orchestrator.getAudio();
+    if (!audio) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
+        return;
+    }
+
+    StaticJsonDocument<128> doc;
+    if (deserializeJson(doc, data, len)) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::INVALID_JSON, "Invalid JSON");
+        return;
+    }
+
+    if (!doc.containsKey("enabled")) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::MISSING_FIELD, "Missing 'enabled' field");
+        return;
+    }
+
+    bool enabled = doc["enabled"].as<bool>();
+    audio::AudioPipelineTuning tuning = audio->getPipelineTuning();
+    tuning.agcEnabled = enabled;
+    audio->setPipelineTuning(tuning);
+
+    sendSuccessResponse(request, [enabled](JsonObject& d) {
+        d["enabled"] = enabled;
+        d["agcEnabled"] = enabled;  // Alias for consistency
+    });
 }
 
 void AudioHandlers::handleStateGet(AsyncWebServerRequest* request,
@@ -361,6 +404,7 @@ void AudioHandlers::handlePresetGet(AsyncWebServerRequest* request, uint8_t pres
         // Pipeline tuning (DSP parameters)
         JsonObject p = d["pipeline"].to<JsonObject>();
         p["dcAlpha"] = pipeline.dcAlpha;
+        p["agcEnabled"] = pipeline.agcEnabled;
         p["agcTargetRms"] = pipeline.agcTargetRms;
         p["agcMinGain"] = pipeline.agcMinGain;
         p["agcMaxGain"] = pipeline.agcMaxGain;
@@ -1061,7 +1105,7 @@ void AudioHandlers::handleCalibrateApply(AsyncWebServerRequest* request,
 #if FEATURE_AUDIO_BENCHMARK
 void AudioHandlers::handleBenchmarkGet(AsyncWebServerRequest* request,
                                         NodeOrchestrator& orchestrator,
-                                        std::function<bool()> hasSubscribers) {
+                                        webserver::BenchmarkStreamBroadcaster* broadcaster) {
     auto* audio = orchestrator.getAudio();
     if (!audio) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
@@ -1070,7 +1114,7 @@ void AudioHandlers::handleBenchmarkGet(AsyncWebServerRequest* request,
     }
 
     const audio::AudioBenchmarkStats& stats = audio->getBenchmarkStats();
-    bool hasSubs = hasSubscribers();
+    bool hasSubs = broadcaster && broadcaster->hasSubscribers();
 
     sendSuccessResponse(request, [&stats, hasSubs](JsonObject& d) {
         d["streaming"] = hasSubs;
@@ -1097,7 +1141,7 @@ void AudioHandlers::handleBenchmarkGet(AsyncWebServerRequest* request,
 
 void AudioHandlers::handleBenchmarkStart(AsyncWebServerRequest* request,
                                           NodeOrchestrator& orchestrator,
-                                          std::function<void(bool)> setStreamingActive) {
+                                          webserver::BenchmarkStreamBroadcaster* broadcaster) {
     auto* audio = orchestrator.getAudio();
     if (!audio) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
@@ -1108,7 +1152,7 @@ void AudioHandlers::handleBenchmarkStart(AsyncWebServerRequest* request,
     // Reset stats to start fresh collection
     audio->resetBenchmarkStats();
 
-    setStreamingActive(true);
+    if (broadcaster) broadcaster->setStreamingActive(true);
 
     LW_LOGI("Benchmark collection started");
 
@@ -1120,7 +1164,7 @@ void AudioHandlers::handleBenchmarkStart(AsyncWebServerRequest* request,
 
 void AudioHandlers::handleBenchmarkStop(AsyncWebServerRequest* request,
                                          NodeOrchestrator& orchestrator,
-                                         std::function<void(bool)> setStreamingActive) {
+                                         webserver::BenchmarkStreamBroadcaster* broadcaster) {
     auto* audio = orchestrator.getAudio();
     if (!audio) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
@@ -1128,7 +1172,7 @@ void AudioHandlers::handleBenchmarkStop(AsyncWebServerRequest* request,
         return;
     }
 
-    setStreamingActive(false);
+    if (broadcaster) broadcaster->setStreamingActive(false);
 
     // Return final stats
     const audio::AudioBenchmarkStats& stats = audio->getBenchmarkStats();
@@ -1340,4 +1384,3 @@ void AudioHandlers::handleCalibrateApply(AsyncWebServerRequest* request, NodeOrc
 } // namespace webserver
 } // namespace network
 } // namespace lightwaveos
-

@@ -100,6 +100,8 @@ struct NoiseCalibrationState {
 struct AudioPipelineTuning {
     float dcAlpha = 0.001f;
 
+    bool agcEnabled = true;  ///< Enable/disable AGC (false = fixed 4x gain like Emotiscope)
+
     float agcTargetRms = 0.25f;
     float agcMinGain = 1.0f;
     float agcMaxGain = 40.0f;      // Was 100.0 - cap to prevent runaway amplification

@@ -27,6 +27,10 @@
 #if FEATURE_VALIDATION_PROFILING
 #include "../../core/system/ValidationProfiler.h"
 #endif
+#ifndef NATIVE_BUILD
+#include <FreeRTOS.h>
+#include <task.h>
+#endif
 
 // Audio integration (Phase 2)
 #if FEATURE_AUDIO_SYNC
@@ -53,6 +57,16 @@ namespace lightwaveos { namespace nodes {
 // Unified logging system (preserves colored output conventions)
 #define LW_LOG_TAG "Renderer"
 #include "utils/Log.h"
+
+#ifndef LW_AGENT_TRACE
+#define LW_AGENT_TRACE 0
+#endif
+
+#if LW_AGENT_TRACE
+#define LW_AGENT_PRINTF(...) Serial.printf(__VA_ARGS__)
+#else
+#define LW_AGENT_PRINTF(...) ((void)0)
+#endif
 
 namespace lightwaveos {
 namespace nodes {
@@ -703,40 +717,6 @@ void RendererNode::renderFrame()
 #if FEATURE_AUDIO_SYNC
     applyPendingAudioContractTuning();
 
-    // Advance TempoTracker phase at 120 FPS
-    // This must happen every frame for smooth beat tracking
-    if (m_tempo != nullptr) {
-        // Calculate delta time in seconds (from micros)
-        uint32_t now = micros();
-        uint32_t deltaMicros;
-        if (now >= m_lastFrameTime) {
-            deltaMicros = now - m_lastFrameTime;
-        } else {
-            deltaMicros = (UINT32_MAX - m_lastFrameTime) + now;
-        }
-        float deltaSec = static_cast<float>(deltaMicros) / 1000000.0f;
-
-        // Advance tempo phase - this detects beat ticks
-        m_tempo->advancePhase(deltaSec);
-
-        // Get tempo output to update MusicalGrid
-        lightwaveos::audio::TempoOutput tempoOut = m_tempo->getOutput();
-        if (tempoOut.locked) {
-            // Feed tempo to MusicalGrid for effects to use
-            m_musicalGrid.OnTempoEstimate(
-                m_lastAudioTime,
-                tempoOut.bpm,
-                tempoOut.confidence
-            );
-            if (tempoOut.beat_tick) {
-                m_musicalGrid.OnBeatObservation(
-                    m_lastAudioTime,
-                    tempoOut.beat_strength,
-                    false  // is_downbeat - not tracked by TempoTracker
-                );
-            }
-        }
-    }
 #endif
     applyPendingEffectParameterUpdates();
 
@@ -782,11 +762,28 @@ void RendererNode::renderFrame()
             now_us
         );
 
-        // 4. Tick MusicalGrid at 120 FPS
+        // 4. Feed tempo to MusicalGrid from ControlBus (TempoTracker output)
+        // MusicalGrid needs explicit tempo updates for phase correction
+        if (m_lastControlBus.tempo.locked) {
+            m_musicalGrid.OnTempoEstimate(
+                render_now,
+                m_lastControlBus.tempo.bpm,
+                m_lastControlBus.tempo.confidence
+            );
+            if (m_lastControlBus.tempo.beat_tick) {
+                m_musicalGrid.OnBeatObservation(
+                    render_now,
+                    m_lastControlBus.tempo.beat_strength,
+                    false  // is_downbeat - not tracked by TempoTracker
+                );
+            }
+        }
+
+        // 5. Tick MusicalGrid at 120 FPS
         m_musicalGrid.Tick(render_now);
         m_musicalGrid.ReadLatest(m_lastMusicalGrid);
 
-        // 5. Compute freshness
+        // 6. Compute freshness
         float age_s = audio::AudioTime_SecondsBetween(m_lastControlBus.t, render_now);
         float staleness_s = m_audioContractTuning.audioStalenessMs / 1000.0f;
         bool sequence_changed = (seq != prevSeq);

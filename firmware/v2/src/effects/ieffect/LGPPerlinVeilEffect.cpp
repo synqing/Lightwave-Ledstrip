@@ -66,6 +66,8 @@ void LGPPerlinVeilEffect::render(plugins::EffectContext& ctx) {
     float dt = ctx.getSafeDeltaSeconds();
     float speedNorm = ctx.speed / 50.0f;
     float intensityNorm = ctx.brightness / 255.0f;
+    float complexityNorm = ctx.complexity / 255.0f;
+    float variationNorm = ctx.variation / 255.0f;
 
     // =========================================================================
     // Audio Analysis & State Updates (hop_seq checking for fresh data)
@@ -157,55 +159,66 @@ void LGPPerlinVeilEffect::render(plugins::EffectContext& ctx) {
     // Rendering (centre-origin pattern)
     // =========================================================================
     fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    uint16_t variationOffset = (uint16_t)(ctx.variation * 197u);
+    uint8_t paletteShift = (uint8_t)(variationNorm * 56.0f);
+    uint16_t detail1 = (uint16_t)(22 + complexityNorm * 28.0f);
+    uint16_t detail2 = (uint16_t)(40 + complexityNorm * 36.0f);
+    uint8_t contrast8 = (uint8_t)(64 + (uint8_t)(m_contrast * 191.0f)); // 64..255
 
-    for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
-        // Calculate distance from centre pair (0 at centre, 79 at edges)
-        uint16_t dist = centerPairDistance(i);
+    uint16_t x1 = (uint16_t)(m_noiseX + variationOffset);
+    uint16_t x2 = (uint16_t)(m_noiseX + 10000u + (variationOffset >> 1));
+    for (uint16_t dist = 0; dist < HALF_LENGTH; dist++) {
         uint8_t dist8 = (uint8_t)dist;
 
         // Visible "veil" wants broad structures: use low spatial frequency,
         // but still enough delta across 0..79 to show gradients.
-        uint16_t x1 = (uint16_t)(m_noiseX + dist * 28);
-        uint16_t y1 = (uint16_t)(m_noiseY + (uint16_t)(dist8 << 2));
-        uint16_t z1 = m_noiseZ;
+        uint16_t y1 = (uint16_t)(m_noiseY + (variationOffset >> 2) + (uint16_t)(dist8 << 2));
+        uint16_t z1 = (uint16_t)(m_noiseZ + (variationOffset >> 3));
 
-        uint16_t x2 = (uint16_t)(m_noiseX + 10000u + dist * 46);
-        uint16_t y2 = (uint16_t)(m_noiseY + 5000u + (uint16_t)(dist8 << 3));
-        uint16_t z2 = (uint16_t)(m_noiseZ + 25000u);
+        uint16_t y2 = (uint16_t)(m_noiseY + 5000u + (variationOffset >> 3) + (uint16_t)(dist8 << 3));
 
         // Sample two independent 3D noise fields (time is implicit via m_noise*)
         uint8_t hueNoise = inoise8(x1, y1, z1);
-        uint8_t lumNoise = inoise8(x2, y2, z2);
+        uint8_t lumNoise = inoise8(x2, y2);
 
         // Palette index: avoid hue-wheel logic; palette selection defines colour language
-        uint8_t paletteIndex = hueNoise + ctx.gHue;
+        uint8_t paletteIndex = hueNoise + ctx.gHue + paletteShift;
 
-        // Luminance shaping: contrast + centre emphasis (so it "reads" on LGP)
-        float lumNorm = lumNoise / 255.0f; // 0..1
-        lumNorm = lumNorm * lumNorm;       // bias darker, stronger highlights
+        // Luminance shaping: contrast + centre emphasis (fast, integer math)
+        uint8_t lum = scale8(lumNoise, lumNoise); // square for highlights
+        lum = scale8(lum, contrast8);
+        uint8_t centreGain = (uint8_t)(255 - dist8 * 2); // 255..97
+        lum = scale8(lum, centreGain);
 
-        // Contrast: scale around mid-grey
-        float c = 0.35f + 0.65f * m_contrast; // 0.35..1.0
-        lumNorm = 0.5f + (lumNorm - 0.5f) * (0.7f + 0.6f * c);
-        lumNorm = fmaxf(0.0f, fminf(1.0f, lumNorm));
-
-        // Centre emphasis (strongest at centre, fades outward)
-        float centreGain = 1.0f - (dist / 79.0f) * 0.35f; // 1.0 -> 0.65
-        lumNorm *= centreGain;
-
-        // Brightness range: keep a floor so it doesn't vanish at low noise values
-        float brightnessNorm = 0.18f + lumNorm * 0.82f;
-        uint8_t brightness = (uint8_t)(brightnessNorm * 255.0f * intensityNorm);
+        // Brightness range: keep a floor so it doesn't vanish at low values
+        uint8_t brightnessBase = qadd8(46, scale8(lum, 209)); // 0.18 + 0.82*lum
+        uint8_t brightness = scale8(brightnessBase, ctx.brightness);
 
         CRGB color1 = ctx.palette.getColor(paletteIndex, brightness);
-        ctx.leds[i] = color1;
 
-        if (i + STRIP_LENGTH < ctx.ledCount) {
-            // Second strip offset to encourage LGP interference without "rainbow sweeps"
-            uint8_t paletteIndex2 = (uint8_t)(paletteIndex + 24);
-            CRGB color2 = ctx.palette.getColor(paletteIndex2, brightness);
-            ctx.leds[i + STRIP_LENGTH] = color2;
+        uint16_t left1 = CENTER_LEFT - dist;
+        uint16_t right1 = CENTER_RIGHT + dist;
+        if (left1 < ctx.ledCount) {
+            ctx.leds[left1] = color1;
         }
+        if (right1 < ctx.ledCount) {
+            ctx.leds[right1] = color1;
+        }
+
+        // Second strip offset to encourage LGP interference without "rainbow sweeps"
+        uint8_t paletteIndex2 = (uint8_t)(paletteIndex + 24);
+        CRGB color2 = ctx.palette.getColor(paletteIndex2, brightness);
+        uint16_t left2 = left1 + STRIP_LENGTH;
+        uint16_t right2 = right1 + STRIP_LENGTH;
+        if (left2 < ctx.ledCount) {
+            ctx.leds[left2] = color2;
+        }
+        if (right2 < ctx.ledCount) {
+            ctx.leds[right2] = color2;
+        }
+
+        x1 = (uint16_t)(x1 + detail1);
+        x2 = (uint16_t)(x2 + detail2);
     }
 }
 

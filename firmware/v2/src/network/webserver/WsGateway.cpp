@@ -14,6 +14,10 @@
 #undef LW_LOG_TAG
 #define LW_LOG_TAG "WsGateway"
 
+#ifndef LW_AGENT_TRACE
+#define LW_AGENT_TRACE 0
+#endif
+
 namespace lightwaveos {
 namespace network {
 namespace webserver {
@@ -69,24 +73,27 @@ void WsGateway::onEvent(AsyncWebSocket* server, AsyncWebSocketClient* client,
 }
 
 void WsGateway::handleConnect(AsyncWebSocketClient* client) {
+    const IPAddress ip = client->remoteIP();
+    char ipStr[16];
+    snprintf(ipStr, sizeof(ipStr), "%u.%u.%u.%u", ip[0], ip[1], ip[2], ip[3]);
+
     // Log that upgrade request was received and processed
     LW_LOGI("WS: Upgrade request received from %s (client ID: %u)", 
-            client->remoteIP().toString().c_str(), client->id());
+            ipStr, client->id());
     
     // Ensure stale client entries are purged before applying connection limits.
     m_ws->cleanupClients();
 
     const uint32_t nowMs = millis();
-    const IPAddress ip = client->remoteIP();
     const uint32_t ipKey =
         (static_cast<uint32_t>(ip[0]) << 24) |
         (static_cast<uint32_t>(ip[1]) << 16) |
         (static_cast<uint32_t>(ip[2]) << 8)  |
         (static_cast<uint32_t>(ip[3]) << 0);
 
-    // #region agent log
+#if LW_AGENT_TRACE
+    // Hws1: Confirm connect thrash + measure reject causes (max clients vs cooldown).
     {
-        // Hws1: Confirm connect thrash + measure reject causes (max clients vs cooldown).
         char buf[320];
         const int n = snprintf(
             buf, sizeof(buf),
@@ -94,12 +101,12 @@ void WsGateway::handleConnect(AsyncWebSocketClient* client) {
             static_cast<unsigned long>(client->id()),
             static_cast<unsigned>(m_ws->count()),
             static_cast<unsigned>(lightwaveos::network::WebServerConfig::MAX_WS_CLIENTS),
-            ip.toString().c_str(),
+            ipStr,
             static_cast<unsigned long>(nowMs)
         );
         if (n > 0) Serial.println(buf);
     }
-    // #endregion
+#endif
 
     // Per-IP connection cooldown + single-session guard (reduces reconnect storms / overlap)
     if (ipKey != 0) {
@@ -119,20 +126,20 @@ void WsGateway::handleConnect(AsyncWebSocketClient* client) {
             m_connectGuard[slot].ipKey = ipKey;
             m_connectGuard[slot].lastMs = nowMs;
             if (tooSoon) {
-                // #region agent log
+#if LW_AGENT_TRACE
                 {
                     char buf[320];
                     const int n = snprintf(
                         buf, sizeof(buf),
                         "{\"sessionId\":\"debug-session\",\"runId\":\"ws-guard-pre\",\"hypothesisId\":\"Hws1\",\"location\":\"v2/src/network/webserver/WsGateway.cpp:handleConnect\",\"message\":\"ws.connect.reject.cooldown\",\"data\":{\"clientId\":%lu,\"ip\":\"%s\",\"cooldownMs\":%lu},\"timestamp\":%lu}",
                         static_cast<unsigned long>(client->id()),
-                        ip.toString().c_str(),
+                        ipStr,
                         static_cast<unsigned long>(CONNECT_COOLDOWN_MS),
                         static_cast<unsigned long>(nowMs)
                     );
                     if (n > 0) Serial.println(buf);
                 }
-                // #endregion
+#endif
                 client->close(1013, "Reconnect too fast");
                 return;
             }
@@ -141,20 +148,20 @@ void WsGateway::handleConnect(AsyncWebSocketClient* client) {
             // This protects the device from clients that repeatedly call connect() without
             // closing the previous connection or without servicing the socket.
             if (m_connectGuard[slot].active >= 1) {
-                // #region agent log
+#if LW_AGENT_TRACE
                 {
                     char buf[320];
                     const int n = snprintf(
                         buf, sizeof(buf),
                         "{\"sessionId\":\"debug-session\",\"runId\":\"ws-guard-pre\",\"hypothesisId\":\"Hws2\",\"location\":\"v2/src/network/webserver/WsGateway.cpp:handleConnect\",\"message\":\"ws.connect.reject.overlap\",\"data\":{\"clientId\":%lu,\"ip\":\"%s\",\"active\":%u},\"timestamp\":%lu}",
                         static_cast<unsigned long>(client->id()),
-                        ip.toString().c_str(),
+                        ipStr,
                         static_cast<unsigned>(m_connectGuard[slot].active),
                         static_cast<unsigned long>(nowMs)
                     );
                     if (n > 0) Serial.println(buf);
                 }
-                // #endregion
+#endif
                 client->close(1008, "Only one session per device");
                 return;
             }
@@ -168,7 +175,7 @@ void WsGateway::handleConnect(AsyncWebSocketClient* client) {
         return;
     }
 
-    LW_LOGI("WS: Client %u connected from %s", client->id(), client->remoteIP().toString().c_str());
+    LW_LOGI("WS: Client %u connected from %s", client->id(), ipStr);
 
     // Mark active for this IP (best-effort)
     if (ipKey != 0) {
@@ -216,6 +223,8 @@ void WsGateway::handleDisconnect(AsyncWebSocketClient* client) {
 
     const uint32_t nowMs = millis();
     const IPAddress ip = client->remoteIP();
+    char ipStr[16];
+    snprintf(ipStr, sizeof(ipStr), "%u.%u.%u.%u", ip[0], ip[1], ip[2], ip[3]);
     uint32_t ipKey =
         (static_cast<uint32_t>(ip[0]) << 24) |
         (static_cast<uint32_t>(ip[1]) << 16) |
@@ -257,21 +266,21 @@ void WsGateway::handleDisconnect(AsyncWebSocketClient* client) {
         }
     }
 
-    // #region agent log
+#if LW_AGENT_TRACE
+    // Hws3: Confirm whether disconnects correlate with zero messages received.
     {
-        // Hws3: Confirm whether disconnects correlate with zero messages received.
         char buf[320];
         const int n = snprintf(
             buf, sizeof(buf),
             "{\"sessionId\":\"debug-session\",\"runId\":\"ws-guard-pre\",\"hypothesisId\":\"Hws3\",\"location\":\"v2/src/network/webserver/WsGateway.cpp:handleDisconnect\",\"message\":\"ws.disconnect\",\"data\":{\"clientId\":%lu,\"ip\":\"%s\",\"ipKey\":%lu},\"timestamp\":%lu}",
             static_cast<unsigned long>(clientId),
-            ip.toString().c_str(),
+            ipStr,
             static_cast<unsigned long>(ipKey),
             static_cast<unsigned long>(nowMs)
         );
         if (n > 0) Serial.println(buf);
     }
-    // #endregion
+#endif
 
     // Call disconnection callback (for cleanup)
     if (m_onDisconnect) {
@@ -291,29 +300,32 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
         return;
     }
 
-    // #region agent log
+#if LW_AGENT_TRACE
+    // Hws3: Prove whether the encoder ever sends WS data before ack timeouts.
     {
-        // Hws3: Prove whether the encoder ever sends WS data before ack timeouts.
         char buf[320];
+        const IPAddress ip = client->remoteIP();
+        char ipStr[16];
+        snprintf(ipStr, sizeof(ipStr), "%u.%u.%u.%u", ip[0], ip[1], ip[2], ip[3]);
         const int n = snprintf(
             buf, sizeof(buf),
             "{\"sessionId\":\"debug-session\",\"runId\":\"ws-guard-pre\",\"hypothesisId\":\"Hws3\",\"location\":\"v2/src/network/webserver/WsGateway.cpp:handleMessage\",\"message\":\"ws.message.recv\",\"data\":{\"clientId\":%lu,\"len\":%u,\"ip\":\"%s\"},\"timestamp\":%lu}",
             static_cast<unsigned long>(client->id()),
             static_cast<unsigned>(len),
-            client->remoteIP().toString().c_str(),
+            ipStr,
             static_cast<unsigned long>(millis())
         );
         if (n > 0) Serial.println(buf);
     }
-    // #endregion
+#endif
 
     StaticJsonDocument<512> doc;
     DeserializationError error = deserializeJson(doc, data, len);
 
     if (error) {
-        // #region agent log
+#if LW_AGENT_TRACE
+        // Hwse2: Prove whether disconnects follow parse errors (invalid JSON / partial frames).
         {
-            // Hwse2: Prove whether disconnects follow parse errors (invalid JSON / partial frames).
             char buf[360];
             const int n = snprintf(
                 buf, sizeof(buf),
@@ -324,7 +336,7 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
             );
             if (n > 0) Serial.println(buf);
         }
-        // #endregion
+#endif
         client->text(buildWsError(ErrorCodes::INVALID_JSON, "Parse error"));
         return;
     }
@@ -338,9 +350,9 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
     const char* typeStr = doc["type"] | "";
     bool handled = WsCommandRouter::route(client, doc, m_ctx);
 
-    // #region agent log
+#if LW_AGENT_TRACE
+    // Hwse1: Determine whether encoder sends unknown command types that trigger errors/closures.
     {
-        // Hwse1: Determine whether encoder sends unknown command types that trigger errors/closures.
         char buf[380];
         const int n = snprintf(
             buf, sizeof(buf),
@@ -352,7 +364,7 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
         );
         if (n > 0) Serial.println(buf);
     }
-    // #endregion
+#endif
     
     // If not handled by router, send error (all commands should be registered)
     if (!handled) {
@@ -364,4 +376,3 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
 } // namespace webserver
 } // namespace network
 } // namespace lightwaveos
-

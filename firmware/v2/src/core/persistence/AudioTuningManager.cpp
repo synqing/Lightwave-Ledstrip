@@ -100,7 +100,8 @@ bool AudioTuningManager::loadPreset(uint8_t id,
     contract = audio::clampAudioContractTuning(preset.contract);
 
     if (nameOut) {
-        strncpy(nameOut, preset.name, AudioTuningPreset::NAME_MAX_LEN);
+        strncpy(nameOut, preset.name, AudioTuningPreset::NAME_MAX_LEN - 1);
+        nameOut[AudioTuningPreset::NAME_MAX_LEN - 1] = '\0';
     }
 
     Serial.printf("[AudioTuning] Preset '%s' loaded from slot %d\n", preset.name, id);
@@ -137,7 +138,8 @@ uint8_t AudioTuningManager::listPresets(char names[][AudioTuningPreset::NAME_MAX
 
         if (result == NVSResult::OK && preset.isValid()) {
             if (names) {
-                strncpy(names[count], preset.name, AudioTuningPreset::NAME_MAX_LEN);
+                strncpy(names[count], preset.name, AudioTuningPreset::NAME_MAX_LEN - 1);
+                names[count][AudioTuningPreset::NAME_MAX_LEN - 1] = '\0';
             }
             if (ids) {
                 ids[count] = i;

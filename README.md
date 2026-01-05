@@ -134,6 +134,9 @@ Common commands:
 - `b <value>` - Set brightness (0-255)
 - `f <value>` - Set fade amount (0-255)
 - `s <value>` - Set speed (1-50)
+- `net status` - Show WiFi status (AP/STA mode, IP addresses, RSSI)
+- `net sta [seconds]` - Enable STA mode (optional auto-revert to AP-only after seconds)
+- `net ap` - Force AP-only mode
 
 ### Performance Monitoring
 The system provides real-time performance metrics:

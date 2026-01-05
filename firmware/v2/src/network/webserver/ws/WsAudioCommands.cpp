@@ -43,6 +43,7 @@ static void handleAudioParametersGet(AsyncWebSocketClient* client, JsonDocument&
     String response = buildWsResponse("audio.parameters", requestId, [&pipeline, &state, &contract](JsonObject& data) {
         JsonObject pipelineObj = data["pipeline"].to<JsonObject>();
         pipelineObj["dcAlpha"] = pipeline.dcAlpha;
+        pipelineObj["agcEnabled"] = pipeline.agcEnabled;
         pipelineObj["agcTargetRms"] = pipeline.agcTargetRms;
         pipelineObj["agcMinGain"] = pipeline.agcMinGain;
         pipelineObj["agcMaxGain"] = pipeline.agcMaxGain;
@@ -149,6 +150,13 @@ static void handleAudioParametersSet(AsyncWebSocketClient* client, JsonDocument&
     applyFloat(pipelineSrc, "agcRelease", pipeline.agcRelease, updatedPipeline);
     applyFloat(pipelineSrc, "agcClipReduce", pipeline.agcClipReduce, updatedPipeline);
     applyFloat(pipelineSrc, "agcIdleReturnRate", pipeline.agcIdleReturnRate, updatedPipeline);
+    
+    // AGC enable/disable toggle
+    if (pipelineSrc.containsKey("agcEnabled")) {
+        pipeline.agcEnabled = pipelineSrc["agcEnabled"].as<bool>();
+        updatedPipeline = true;
+    }
+    
     applyFloat(pipelineSrc, "noiseFloorMin", pipeline.noiseFloorMin, updatedPipeline);
     applyFloat(pipelineSrc, "noiseFloorRise", pipeline.noiseFloorRise, updatedPipeline);
     applyFloat(pipelineSrc, "noiseFloorFall", pipeline.noiseFloorFall, updatedPipeline);

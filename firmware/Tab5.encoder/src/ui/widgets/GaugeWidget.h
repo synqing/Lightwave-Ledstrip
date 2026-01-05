@@ -3,7 +3,11 @@
 // GaugeWidget - Radial encoder gauge display
 // ============================================================================
 
-#include <M5GFX.h>
+#ifdef SIMULATOR_BUILD
+    #include "M5GFX_Mock.h"
+#else
+    #include <M5GFX.h>
+#endif
 #include "../Theme.h"
 
 class GaugeWidget {
@@ -20,6 +24,7 @@ public:
 private:
     M5GFX* _display;
     M5Canvas _sprite;
+    bool _spriteOk = false;
 
     int32_t _x, _y, _w, _h;
     uint8_t _index;
@@ -36,4 +41,9 @@ private:
     void drawBar();
     void drawValue();
     void drawTitle();
+
+    void drawBackgroundDirect();
+    void drawBarDirect();
+    void drawValueDirect();
+    void drawTitleDirect();
 };

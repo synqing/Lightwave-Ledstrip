@@ -82,7 +82,18 @@ constexpr int GRID_ROWS = 1;  // Single row of 8 encoders
 constexpr int GRID_COLS = 8;  // 8 columns for 8 global parameters
 
 constexpr int CELL_W = SCREEN_W / GRID_COLS;                        // 160
-constexpr int CELL_H = 120;  // Fixed height for horizontal bar layout
+constexpr int CELL_H = 160;  // Reduced by 20% from 200 (200 * 0.8 = 160)
+
+// Preset bank row layout (below gauge row, matches ENC-B physical position)
+constexpr int PRESET_ROW_Y  = STATUS_BAR_H + CELL_H;  // 80 + 160 = 240
+constexpr int PRESET_SLOT_W = CELL_W;                  // 160 (same as gauge)
+constexpr int PRESET_SLOT_H = 144;                     // Reduced by 20% from 180 (180 * 0.8 = 144)
+
+// Touch action row layout (third row)
+constexpr int ACTION_ROW_Y  = PRESET_ROW_Y + PRESET_SLOT_H + 20;
+constexpr int ACTION_ROW_H  = 120;
+constexpr int ACTION_BTN_W  = SCREEN_W / 4;
+constexpr int ACTION_BTN_H  = ACTION_ROW_H;
 
 // ============================================================================
 // Helper Functions

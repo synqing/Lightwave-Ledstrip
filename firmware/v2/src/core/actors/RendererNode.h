@@ -49,7 +49,6 @@
 #include "../../audio/contracts/SnapshotBuffer.h"
 #include "../../audio/contracts/AudioEffectMapping.h"
 // TempoTracker integration (replaces K1)
-#include "../../audio/tempo/EmotiscopeEngine.h"
 #include "../../utils/LockFreeQueue.h"
 #endif
 
@@ -354,38 +353,6 @@ public:
      */
     const audio::MusicalGridSnapshot& getLastMusicalGrid() const { return m_lastMusicalGrid; }
 
-    // ========================================================================
-    // TempoTracker Integration (replaces K1)
-    // ========================================================================
-
-    /**
-     * @brief Set the TempoTracker reference for phase advancement
-     *
-     * Called by ActorSystem during initialization to connect the renderer
-     * to AudioNode's TempoTracker instance. The renderer calls
-     * advancePhase() at 120 FPS for smooth beat tracking.
-     *
-     * @param tempo Pointer to AudioNode's TempoTracker (nullptr to disable)
-     */
-    void setTempo(lightwaveos::audio::EmotiscopeEngine* tempo) {
-        m_tempo = tempo;
-    }
-
-    /**
-     * @brief Check if tempo integration is active
-     */
-    bool isTempoEnabled() const { return m_tempo != nullptr; }
-
-    /**
-     * @brief Get current tempo output (read-only access for diagnostics)
-     * @return TempoOutput with BPM, phase, confidence, beat_tick
-     */
-    lightwaveos::audio::TempoOutput getTempoOutput() const {
-        if (m_tempo) {
-            return m_tempo->getOutput();
-        }
-        return lightwaveos::audio::TempoOutput{};
-    }
 #endif
 
     // ========================================================================
@@ -670,18 +637,6 @@ private:
     /// Cached result of hasActiveMappings() - updated on effect change only
     bool m_effectHasAudioMappings = false;
 
-    // ========================================================================
-    // TempoTracker Integration (replaces K1)
-    // ========================================================================
-
-    /**
-     * Pointer to AudioNode's TempoTracker (set during init)
-     *
-     * The renderer calls advancePhase() at 120 FPS for smooth beat tracking.
-     * AudioNode calls updateNovelty() and updateTempo() per audio hop.
-     * Set to nullptr if AudioNode isn't running.
-     */
-    lightwaveos::audio::EmotiscopeEngine* m_tempo = nullptr;
 #endif
 
     /**

@@ -4,22 +4,44 @@
 
 #include "GaugeWidget.h"
 #include "../../config/Config.h"
+
+#ifdef SIMULATOR_BUILD
+    #include "M5GFX_Mock.h"
+    #include "../../hal/SimHal.h"
+#else
+    #include <ESP.h>  // For heap monitoring
+    #include <Arduino.h>
+#endif
+
+#include "../../hal/EspHal.h"
 #include <cstdio>
-#include <Arduino.h>
 
 GaugeWidget::GaugeWidget(M5GFX* display, int32_t x, int32_t y, int32_t w, int32_t h, uint8_t index)
     : _display(display), _sprite(display), _x(x), _y(y), _w(w), _h(h), _index(index)
 {
+    // #region agent log
+    EspHal::log("[DEBUG] GaugeWidget ctor idx=%d size=%dx%d bytes=%u - Heap before: free=%u minFree=%u\n",
+                  index, w, h, w * h * 2, EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
+    // #endregion
 #if ENABLE_UI_DIAGNOSTICS
-    Serial.printf("[DBG] gauge_ctor idx=%d x=%d y=%d w=%d h=%d\n", index, x, y, w, h);
+    EspHal::log("[DBG] gauge_ctor idx=%d x=%d y=%d w=%d h=%d\n", index, x, y, w, h);
 #endif
 
     _sprite.setColorDepth(16);
     _sprite.setPsram(true);
+    // #region agent log
+    EspHal::log("[DEBUG] Before createSprite(idx=%d) - Heap: free=%u minFree=%u\n",
+                  index, EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
+    // #endregion
     bool spriteOk = _sprite.createSprite(_w, _h);
+    _spriteOk = spriteOk;
+    // #region agent log
+    EspHal::log("[DEBUG] After createSprite(idx=%d) ok=%d - Heap: free=%u minFree=%u\n",
+                  index, spriteOk ? 1 : 0, EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
+    // #endregion
 
 #if ENABLE_UI_DIAGNOSTICS
-    Serial.printf("[DBG] sprite_created idx=%d ok=%d\n", index, spriteOk ? 1 : 0);
+    EspHal::log("[DBG] sprite_created idx=%d ok=%d\n", index, spriteOk ? 1 : 0);
 #endif
 
     _color = (index < 8) ? Theme::PARAM_COLORS[index] : 0xFFFF;
@@ -59,15 +81,24 @@ void GaugeWidget::setHighlight(bool active) {
 void GaugeWidget::render() {
     if (!_dirty) return;
 
-    _sprite.startWrite();
+    if (_spriteOk) {
+        _sprite.startWrite();
 
-    drawBackground();
-    drawBar();
-    drawValue();
-    drawTitle();
+        drawBackground();
+        drawBar();
+        drawValue();
+        drawTitle();
 
-    _sprite.endWrite();
-    _sprite.pushSprite(_x, _y);
+        _sprite.endWrite();
+        _sprite.pushSprite(_x, _y);
+    } else if (_display) {
+        _display->startWrite();
+        drawBackgroundDirect();
+        drawBarDirect();
+        drawValueDirect();
+        drawTitleDirect();
+        _display->endWrite();
+    }
     _dirty = false;
 }
 
@@ -155,12 +186,84 @@ void GaugeWidget::drawTitle() {
     // Parameter name at top-left
     _sprite.setTextDatum(textdatum_t::top_left);
     _sprite.setFont(&fonts::Font2);  // Smaller built-in font
-    _sprite.setTextSize(1);
+    _sprite.setTextSize(2);  // Increased for readability
     
     // Add text shadow effect (draw slightly offset darker version)
     _sprite.setTextColor(Theme::dimColor(_color, 60));
-    _sprite.drawString(_title, 7, 7);  // Shadow offset
+    _sprite.drawString(_title, 9, 9);  // Shadow offset (adjusted for larger text)
     
     _sprite.setTextColor(_highlighted ? _color : Theme::dimColor(_color, 200));
-    _sprite.drawString(_title, 6, 6);  // Main text
+    _sprite.drawString(_title, 8, 8);  // Main text (adjusted for larger text)
+}
+
+void GaugeWidget::drawBackgroundDirect() {
+    _display->fillRect(_x, _y, _w, _h, Theme::BG_DARK);
+
+    uint16_t topColor = Theme::dimColor(Theme::BG_PANEL, 128);
+    _display->fillRect(_x, _y, _w, _h / 3, topColor);
+
+    uint16_t midColor = Theme::dimColor(Theme::BG_PANEL, 160);
+    _display->fillRect(_x, _y + (_h / 3), _w, _h / 3, midColor);
+
+    uint16_t botColor = Theme::dimColor(Theme::BG_PANEL, 192);
+    _display->fillRect(_x, _y + ((_h * 2) / 3), _w, _h - ((_h * 2) / 3), botColor);
+
+    uint16_t borderColor = _highlighted ? _color : Theme::dimColor(_color, 120);
+    uint16_t glowColor = Theme::dimColor(_color, 40);
+
+    _display->drawRect(_x + 1, _y + 1, _w - 2, _h - 2, glowColor);
+    _display->drawRect(_x, _y, _w, _h, borderColor);
+
+    if (_highlighted) {
+        _display->drawRect(_x + 2, _y + 2, _w - 4, _h - 4, Theme::dimColor(_color, 200));
+    }
+}
+
+void GaugeWidget::drawBarDirect() {
+    int barY = _y + (_h - 24);
+    int barH = 16;
+    int barW = _w - 20;
+    int barX = _x + 10;
+
+    float pct = (_maxValue > 0) ? ((float)_value / (float)_maxValue) : 0.0f;
+    int fillW = (int)(barW * pct);
+
+    _display->fillRect(barX, barY, barW, barH, Theme::BG_PANEL);
+    _display->drawRect(barX, barY, barW, barH, Theme::dimColor(_color, 60));
+
+    if (fillW > 0) {
+        uint16_t barColor = _highlighted ? _color : Theme::dimColor(_color, 180);
+        _display->fillRect(barX, barY, fillW, barH, barColor);
+
+        if (_highlighted) {
+            _display->drawFastHLine(barX, barY, fillW, Theme::dimColor(barColor, 250));
+            _display->drawFastHLine(barX, barY + barH - 1, fillW, Theme::dimColor(barColor, 100));
+        }
+    }
+}
+
+void GaugeWidget::drawValueDirect() {
+    int cx = _x + (_w / 2);
+    int cy = _y + (_h / 2) - 10;
+
+    _display->setTextDatum(textdatum_t::middle_center);
+    _display->setFont(&fonts::Font7);
+    _display->setTextSize(1);
+    _display->setTextColor(_highlighted ? Theme::TEXT_BRIGHT : Theme::dimColor(Theme::TEXT_BRIGHT, 200));
+
+    char valueStr[16];
+    snprintf(valueStr, sizeof(valueStr), "%d", _value);
+    _display->drawString(valueStr, cx, cy);
+}
+
+void GaugeWidget::drawTitleDirect() {
+    _display->setTextDatum(textdatum_t::top_left);
+    _display->setFont(&fonts::Font2);
+    _display->setTextSize(2);
+
+    _display->setTextColor(Theme::dimColor(_color, 60));
+    _display->drawString(_title, _x + 9, _y + 9);
+
+    _display->setTextColor(_highlighted ? _color : Theme::dimColor(_color, 200));
+    _display->drawString(_title, _x + 8, _y + 8);
 }

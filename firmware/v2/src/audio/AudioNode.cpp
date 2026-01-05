@@ -201,11 +201,9 @@ void AudioNode::onStart()
     m_state = AudioNodeState::RUNNING;
     m_stats.state = m_state;
 
-    // Initialize Emotiscope beat tracker
-    m_emotiscope.init();
-    // Initialize last output state
-    m_lastTempoOutput = m_emotiscope.getOutput();
-    LW_LOGI("EmotiscopeEngine initialized");
+    // Initialize TempoTracker
+    m_tempo.init();
+    m_lastTempoOutput = m_tempo.getOutput();
 
     LW_LOGI("AudioNode started (tick=%dms, hop=%d, rate=%.1fHz)",
              AUDIO_ACTOR_TICK_MS, HOP_SIZE, HOP_RATE_HZ);
@@ -254,8 +252,14 @@ void AudioNode::onTick()
     // Capture one hop of audio
     captureHop();
 
+    // Advance tempo phase every hop (audio-thread-owned) to avoid cross-core races with the renderer
+    float delta_sec = static_cast<float>(HOP_SIZE) / static_cast<float>(SAMPLE_RATE);
+    m_tempo.advancePhase(delta_sec);
+    m_lastTempoOutput = m_tempo.getOutput();
+
     // Record tick time
-    m_stats.lastTickTimeUs = esp_timer_get_time() - tickStart;
+    uint64_t tickEnd = esp_timer_get_time();
+    m_stats.lastTickTimeUs = tickEnd - tickStart;
 
     // Log periodically (every 620 ticks = ~10 seconds) - gated by verbosity >= 2
     auto& dbgCfg = getAudioDebugConfig();
@@ -400,8 +404,8 @@ void AudioNode::processHop()
         m_prevChordRoot = 0;
         m_controlBus.Reset();
         // TempoTracker reset
-        m_emotiscope.init();
-        m_lastTempoOutput = m_emotiscope.getOutput();
+        m_tempo.init();
+        m_lastTempoOutput = m_tempo.getOutput();
     }
 
     // 1. Build AudioTime for this hop
@@ -438,6 +442,9 @@ void AudioNode::processHop()
     const float gateRangeFactor = tuning.gateRangeFactor;
     const float gateRangeMin = tuning.gateRangeMin;
 
+    const bool agcEnabled = tuning.agcEnabled;
+    const float fixedGain = 4.0f;  // Fixed amplification (already applied in AudioCapture)
+
     // === Phase: DC/AGC Loop ===
     BENCH_START_PHASE();
 
@@ -447,28 +454,49 @@ void AudioNode::processHop()
     uint16_t clipCount = 0;
 
     int64_t sumSqPre = 0;
-    for (size_t i = 0; i < HOP_SIZE; ++i) {
-        float x = (float)m_hopBuffer[i];
-        m_dcEstimate += dcAlpha * (x - m_dcEstimate);
-        float dcRemoved = x - m_dcEstimate;
+    
+    if (agcEnabled) {
+        // Current AGC path (backward compatible)
+        for (size_t i = 0; i < HOP_SIZE; ++i) {
+            float x = (float)m_hopBuffer[i];
+            m_dcEstimate += dcAlpha * (x - m_dcEstimate);
+            float dcRemoved = x - m_dcEstimate;
 
-        int32_t preI = (int32_t)lroundf(dcRemoved);
-        if (preI < -32768) preI = -32768;
-        if (preI > 32767) preI = 32767;
-        sumSqPre += (int64_t)preI * (int64_t)preI;
+            int32_t preI = (int32_t)lroundf(dcRemoved);
+            if (preI < -32768) preI = -32768;
+            if (preI > 32767) preI = 32767;
+            sumSqPre += (int64_t)preI * (int64_t)preI;
 
-        float g = m_agcGain;
-        int32_t gI = (int32_t)lroundf(dcRemoved * g);
-        int32_t c = gI;
-        if (c < -32768) c = -32768;
-        if (c > 32767) c = 32767;
-        if (c != gI) clipCount++;
+            float g = m_agcGain;
+            int32_t gI = (int32_t)lroundf(dcRemoved * g);
+            int32_t c = gI;
+            if (c < -32768) c = -32768;
+            if (c > 32767) c = 32767;
+            if (c != gI) clipCount++;
 
-        m_hopBufferCentered[i] = (int16_t)c;
-        if (c < minC) minC = c;
-        if (c > maxC) maxC = c;
-        int32_t a = (c < 0) ? -c : c;
-        if (a > peakC) peakC = a;
+            m_hopBufferCentered[i] = (int16_t)c;
+            if (c < minC) minC = c;
+            if (c > maxC) maxC = c;
+            int32_t a = (c < 0) ? -c : c;
+            if (a > peakC) peakC = a;
+        }
+    } else {
+        // Fixed gain path: no DC removal, no AGC (4x gain already applied in AudioCapture)
+        // Use same audio for both visual effects and beat tracking
+        for (size_t i = 0; i < HOP_SIZE; ++i) {
+            // AudioCapture already applied 4x gain, so use samples directly
+            int32_t c = (int32_t)m_hopBuffer[i];
+            if (c < -32768) c = -32768;
+            if (c > 32767) c = 32767;
+
+            m_hopBufferCentered[i] = (int16_t)c;
+            
+            sumSqPre += (int64_t)c * (int64_t)c;
+            if (c < minC) minC = c;
+            if (c > maxC) maxC = c;
+            int32_t a = (c < 0) ? -c : c;
+            if (a > peakC) peakC = a;
+        }
     }
     m_lastMinSample = (int16_t)minC;
     m_lastMaxSample = (int16_t)maxC;
@@ -483,36 +511,46 @@ void AudioNode::processHop()
     }
     m_lastRmsPreGain = rmsPre;
 
-    if (m_noiseFloor < noiseFloorMin) {
-        m_noiseFloor = noiseFloorMin;
-    }
-    if (rmsPre < m_noiseFloor) {
-        m_noiseFloor += noiseFloorFall * (rmsPre - m_noiseFloor);
-    } else {
-        m_noiseFloor += noiseFloorRise * (rmsPre - m_noiseFloor);
-    }
-    if (m_noiseFloor < noiseFloorMin) {
-        m_noiseFloor = noiseFloorMin;
-    }
+    float activity = 1.0f;  // Default activity when AGC disabled
 
-    float gateStart = m_noiseFloor * gateStartFactor;
-    float gateRange = std::max(gateRangeMin, m_noiseFloor * gateRangeFactor);
-    float activity = clamp01((rmsPre - gateStart) / gateRange);
+    if (agcEnabled) {
+        // Noise floor gating and AGC gain calculation (only when AGC enabled)
+        if (m_noiseFloor < noiseFloorMin) {
+            m_noiseFloor = noiseFloorMin;
+        }
+        if (rmsPre < m_noiseFloor) {
+            m_noiseFloor += noiseFloorFall * (rmsPre - m_noiseFloor);
+        } else {
+            m_noiseFloor += noiseFloorRise * (rmsPre - m_noiseFloor);
+        }
+        if (m_noiseFloor < noiseFloorMin) {
+            m_noiseFloor = noiseFloorMin;
+        }
 
-    if (clipCount > 0) {
-        m_agcGain *= tuning.agcClipReduce;
-    } else if (rmsPre <= gateStart) {
-        m_agcGain += tuning.agcIdleReturnRate * (1.0f - m_agcGain);
+        float gateStart = m_noiseFloor * gateStartFactor;
+        float gateRange = std::max(gateRangeMin, m_noiseFloor * gateRangeFactor);
+        activity = clamp01((rmsPre - gateStart) / gateRange);
+
+        if (clipCount > 0) {
+            m_agcGain *= tuning.agcClipReduce;
+        } else if (rmsPre <= gateStart) {
+            m_agcGain += tuning.agcIdleReturnRate * (1.0f - m_agcGain);
+        } else {
+            float desired = agcTargetRms / (rmsPre + 1e-6f);
+            if (desired < agcMinGain) desired = agcMinGain;
+            if (desired > agcMaxGain) desired = agcMaxGain;
+            float rate = (desired > m_agcGain) ? agcAttack : agcRelease;
+            m_agcGain += rate * (desired - m_agcGain);
+        }
+        if (m_agcGain < agcMinGain) m_agcGain = agcMinGain;
+        if (m_agcGain > agcMaxGain) m_agcGain = agcMaxGain;
+        m_lastAgcGain = m_agcGain;
     } else {
-        float desired = agcTargetRms / (rmsPre + 1e-6f);
-        if (desired < agcMinGain) desired = agcMinGain;
-        if (desired > agcMaxGain) desired = agcMaxGain;
-        float rate = (desired > m_agcGain) ? agcAttack : agcRelease;
-        m_agcGain += rate * (desired - m_agcGain);
+        // AGC disabled: use fixed gain (already applied in AudioCapture)
+        // No noise floor tracking or gain adjustment needed
+        // Note: 4x gain is already applied in AudioCapture, so AGC gain is 1.0 (unity)
+        m_lastAgcGain = 1.0f;
     }
-    if (m_agcGain < agcMinGain) m_agcGain = agcMinGain;
-    if (m_agcGain > agcMaxGain) m_agcGain = agcMaxGain;
-    m_lastAgcGain = m_agcGain;
 
     BENCH_END_PHASE(dcAgcLoopUs);
 
@@ -613,63 +651,64 @@ void AudioNode::processHop()
 
     // === Phase: Goertzel Analysis ===
     BENCH_START_PHASE();
-    TRACE_BEGIN("goertzel_analyze");
     bool goertzelTriggered = false;
+    {
+        TRACE_SCOPE("goertzel_analyze");
 
-    // 6. Get band energies
-    float bandsRaw[NUM_BANDS] = {0};
+        // 6. Get band energies
+        float bandsRaw[NUM_BANDS] = {0};
 #if FEATURE_AUDIO_OA
-    if (oaReady ? m_analyzer.analyzeWindow(window512, GoertzelAnalyzer::WINDOW_SIZE, bandsRaw)
-                : m_analyzer.analyze(bandsRaw)) {
-        goertzelTriggered = true;
+        if (oaReady ? m_analyzer.analyzeWindow(window512, GoertzelAnalyzer::WINDOW_SIZE, bandsRaw)
+                    : m_analyzer.analyze(bandsRaw)) {
+            goertzelTriggered = true;
 #else
-    if (m_analyzer.analyze(bandsRaw)) {
-        goertzelTriggered = true;
+        if (m_analyzer.analyze(bandsRaw)) {
+            goertzelTriggered = true;
 #endif
-        // Fresh band data available - Goertzel completed a 512-sample window
-        for (int i = 0; i < NUM_BANDS; ++i) {
-            float band = mapLevelDb(bandsRaw[i], tuning.bandDbFloor, tuning.bandDbCeil);
+            // Fresh band data available - Goertzel completed a 512-sample window
+            for (int i = 0; i < NUM_BANDS; ++i) {
+                float band = mapLevelDb(bandsRaw[i], tuning.bandDbFloor, tuning.bandDbCeil);
 
-            // Phase 2: Per-band gain normalization (boost highs, attenuate bass for LGP balance)
-            band *= tuning.perBandGains[i];
-            if (band > 1.0f) band = 1.0f;
+                // Phase 2: Per-band gain normalization (boost highs, attenuate bass for LGP balance)
+                band *= tuning.perBandGains[i];
+                if (band > 1.0f) band = 1.0f;
 
-            // Phase 2: Per-band noise floor gate (calibrated for ambient noise sources)
-            if (tuning.usePerBandNoiseFloor && band < tuning.perBandNoiseFloors[i]) {
-                band = 0.0f;
+                // Phase 2: Per-band noise floor gate (calibrated for ambient noise sources)
+                if (tuning.usePerBandNoiseFloor && band < tuning.perBandNoiseFloors[i]) {
+                    band = 0.0f;
+                }
+
+                m_lastBands[i] = band;
+                raw.bands[i] = band * activity;
             }
 
-            m_lastBands[i] = band;
-            raw.bands[i] = band * activity;
-        }
+            // Throttle 8-band Goertzel debug logging - gated by verbosity >= 5
+            auto& dbgCfg8 = getAudioDebugConfig();
+            if (dbgCfg8.verbosity >= 5 && ++m_goertzelLogCounter >= dbgCfg8.interval8Band()) {
+                m_goertzelLogCounter = 0;
+                // Calculate TRUE mic level in dB from pre-gain RMS (0dB = full scale, silence floor at -60dB)
+                float micLevelDb = (m_lastRmsPreGain > 0.0001f) ? (20.0f * log10f(m_lastRmsPreGain)) : -80.0f;
+                // Bold cyan title, bold yellow for mic dB level, rest uncolored
+                LW_LOGD(LW_CLR_CYAN "Goertzel:" LW_ANSI_RESET " " LW_CLR_YELLOW "%.1fdB" LW_ANSI_RESET " raw=[%.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f] "
+                         "map=[%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f] "
+                         "rms=%.4f->%.3f pre=%.4f g=%.2f dc=%.1f clip=%u pk=%d pkC=%d min=%d max=%d mean=%.1f",
+                         micLevelDb,
+                         bandsRaw[0], bandsRaw[1], bandsRaw[2], bandsRaw[3], bandsRaw[4], bandsRaw[5], bandsRaw[6], bandsRaw[7],
+                         raw.bands[0], raw.bands[1], raw.bands[2], raw.bands[3], raw.bands[4], raw.bands[5], raw.bands[6], raw.bands[7],
+                         rmsRaw, rmsMapped, m_lastRmsPreGain, m_lastAgcGain, m_lastDcEstimate, (unsigned)m_lastClipCount,
+                         m_capture.getStats().peakSample, m_lastPeakCentered, m_lastMinSample, m_lastMaxSample, m_lastMeanSample);
+            }
 
-        // Throttle 8-band Goertzel debug logging - gated by verbosity >= 5
-        auto& dbgCfg8 = getAudioDebugConfig();
-        if (dbgCfg8.verbosity >= 5 && ++m_goertzelLogCounter >= dbgCfg8.interval8Band()) {
-            m_goertzelLogCounter = 0;
-            // Calculate TRUE mic level in dB from pre-gain RMS (0dB = full scale, silence floor at -60dB)
-            float micLevelDb = (m_lastRmsPreGain > 0.0001f) ? (20.0f * log10f(m_lastRmsPreGain)) : -80.0f;
-            // Bold cyan title, bold yellow for mic dB level, rest uncolored
-            LW_LOGD(LW_CLR_CYAN "Goertzel:" LW_ANSI_RESET " " LW_CLR_YELLOW "%.1fdB" LW_ANSI_RESET " raw=[%.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f] "
-                     "map=[%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f] "
-                     "rms=%.4f->%.3f pre=%.4f g=%.2f dc=%.1f clip=%u pk=%d pkC=%d min=%d max=%d mean=%.1f",
-                     micLevelDb,
-                     bandsRaw[0], bandsRaw[1], bandsRaw[2], bandsRaw[3], bandsRaw[4], bandsRaw[5], bandsRaw[6], bandsRaw[7],
-                     raw.bands[0], raw.bands[1], raw.bands[2], raw.bands[3], raw.bands[4], raw.bands[5], raw.bands[6], raw.bands[7],
-                     rmsRaw, rmsMapped, m_lastRmsPreGain, m_lastAgcGain, m_lastDcEstimate, (unsigned)m_lastClipCount,
-                     m_capture.getStats().peakSample, m_lastPeakCentered, m_lastMinSample, m_lastMaxSample, m_lastMeanSample);
-        }
-
-        // Persisted bands updated above (unscaled)
-    } else {
-        // No new analysis this hop - reuse last known bands
-        // This prevents "picket fence" dropouts where bands would be 0 every other hop
-        for (int i = 0; i < NUM_BANDS; ++i) {
-            raw.bands[i] = m_lastBands[i] * activity;
+            // Persisted bands updated above (unscaled)
+        } else {
+            // No new analysis this hop - reuse last known bands
+            // This prevents "picket fence" dropouts where bands would be 0 every other hop
+            for (int i = 0; i < NUM_BANDS; ++i) {
+                raw.bands[i] = m_lastBands[i] * activity;
+            }
         }
     }
 
-    TRACE_END();
     BENCH_END_PHASE(goertzelUs);
     BENCH_SET_FLAG(goertzelTriggered, goertzelTriggered ? 1 : 0);
 
@@ -702,13 +741,12 @@ void AudioNode::processHop()
     }
 
     // ========================================================================
-    // TempoTracker Beat Tracker Processing (DEPRECATED - Replaced by EmotiscopeEngine)
+    // TempoTracker Beat Tracker Processing
     // ========================================================================
     // Dual-rate novelty input:
     // - Spectral flux from 8-band Goertzel when ready (31.25 Hz)
     // - VU derivative from RMS every hop (62.5 Hz)
     // goertzelTriggered fires when 8-band analysis completes (every 512 samples)
-    /*
     m_tempo.updateNovelty(
         goertzelTriggered ? raw.bands : nullptr,  // 8-band magnitudes or nullptr
         8,                                         // num_bands
@@ -717,90 +755,11 @@ void AudioNode::processHop()
     );
 
     // Update tempo detection (interleaved Goertzel computation)
-    float delta_sec = 0.016f;  // ~16ms per hop
+    float delta_sec = static_cast<float>(HOP_SIZE) / static_cast<float>(SAMPLE_RATE);
     m_tempo.updateTempo(delta_sec);
-    */
-
-
-
-    // ========================================================================
-    // 64-bin Goertzel Analysis (SensoryBridge parity)
-    // Runs less frequently - needs 1500 samples (~94ms to accumulate)
-    // ========================================================================
-    // DEFENSIVE: Clear buffers before use (moved from stack to class members to reduce stack usage)
-    memset(m_bins64Raw, 0, sizeof(m_bins64Raw));
-    memset(m_bands64Folded, 0, sizeof(m_bands64Folded));
     
-    bool goertzel64Triggered = false;
-    if (m_analyzer.analyze64(m_bins64Raw)) {
-        goertzel64Triggered = true;
-        TRACE_BEGIN("goertzel64_fold");
-
-        // Fold 64 bins -> 8 bands (8 bins per band, take max)
-        for (size_t bin = 0; bin < GoertzelAnalyzer::NUM_BINS; ++bin) {
-            size_t bandIdx = bin >> 3;  // bin / 8
-            // DEFENSIVE: Bounds check to prevent out-of-bounds access
-            if (bandIdx < 8) {
-                m_bands64Folded[bandIdx] = std::max(m_bands64Folded[bandIdx], m_bins64Raw[bin]);
-            }
-        }
-
-        // Store for logging comparison
-        for (int i = 0; i < 8; ++i) {
-            m_lastBands64[i] = m_bands64Folded[i];
-        }
-        m_analyze64Ready = true;
-
-        // Cache 64-bin spectrum for TempoTracker novelty input
-        // This is used every hop for tempo detection (stale data better than coarse 8-band)
-        memcpy(m_bins64Cached, m_bins64Raw, sizeof(m_bins64Cached));
-
-        // Phase 1.3: Publish full 64-bin spectrum to ControlBusRawInput
-        // Apply activity gating and store in raw.bins64 for ControlBus passthrough
-        for (size_t i = 0; i < GoertzelAnalyzer::NUM_BINS; ++i) {
-            raw.bins64[i] = m_bins64Raw[i] * activity;
-        }
-
-        // Throttled 64-bin logging - gated by verbosity >= 4
-        auto& dbgCfg64 = getAudioDebugConfig();
-        // DEFENSIVE: Validate interval to prevent division by zero or invalid access
-        uint16_t interval = dbgCfg64.interval64Bin();
-        if (interval == 0) {
-            interval = 1;  // Safety fallback: prevent division by zero
-        }
-        
-        if (dbgCfg64.verbosity >= 4 && ++m_goertzel64LogCounter >= interval) {
-            m_goertzel64LogCounter = 0;
-            // DEFENSIVE: Validate array bounds before logging
-            // Cyan for 64-bin spectral analysis (title-only coloring)
-            LW_LOGD(LW_CLR_CYAN_DIM "64-bin Goertzel:" LW_ANSI_RESET " [%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f]",
-                     m_bands64Folded[0], m_bands64Folded[1], m_bands64Folded[2], m_bands64Folded[3],
-                     m_bands64Folded[4], m_bands64Folded[5], m_bands64Folded[6], m_bands64Folded[7]);
-        }
-
-        TRACE_END();
-    }
-
-    // Update Emotiscope v2.0 Hybrid Engine (Phase 2: Hot-Swap)
-    // Uses 64-bin Goertzel for spectral flux (when available) and RMS for VU flux (every hop)
-    // Note: m_bins64Raw is only valid when goertzel64Triggered is true
-    float delta_sec = 0.016f;  // ~16ms per hop
-    m_emotiscope.updateNovelty(goertzel64Triggered ? m_bins64Raw : nullptr, rmsRaw);
-    m_emotiscope.updateTempo(delta_sec);
-
     // Store for change detection (used by getTempo() diagnostics)
-    m_lastTempoOutput = m_emotiscope.getOutput(); // V2 HYBRID
-
-    // Log V2 status every ~1s (62 hops)
-    static uint32_t beatLogCounter = 0;
-    if (++beatLogCounter >= 62) {
-        beatLogCounter = 0;
-        TempoOutput v2 = m_emotiscope.getOutput();
-        // Color coding: Beat(V2) - magenta, BPM - dim magenta, Conf - green/red based on threshold
-        const char* confColor = (v2.confidence >= 0.8f) ? LW_CLR_GREEN : LW_CLR_RED;
-        LW_LOGI(LW_CLR_MAGENTA "Beat(V2):" LW_ANSI_RESET " BPM=" "\033[35m" "%.1f" LW_ANSI_RESET " Conf=" "%s" "%.2f" LW_ANSI_RESET " Nov=%.3f",
-                v2.bpm, confColor, v2.confidence, m_emotiscope.getNovelty());
-    }
+    m_lastTempoOutput = m_tempo.getOutput();
 
 
 
@@ -819,34 +778,35 @@ void AudioNode::processHop()
 
     // === Phase: Chroma Analysis ===
     BENCH_START_PHASE();
-    TRACE_BEGIN("chroma_analyze");
     bool chromaTriggered = false;
+    {
+        TRACE_SCOPE("chroma_analyze");
 
-    // 6.5. Get chromagram
-    float chromaRaw[12] = {0};
-    static float lastChroma[12] = {0};
+        // 6.5. Get chromagram
+        float chromaRaw[12] = {0};
+        static float lastChroma[12] = {0};
 #if FEATURE_AUDIO_OA
-    if (oaReady ? m_chromaAnalyzer.analyzeWindow(window512, ChromaAnalyzer::WINDOW_SIZE, chromaRaw)
-                : m_chromaAnalyzer.analyze(chromaRaw)) {
-        chromaTriggered = true;
+        if (oaReady ? m_chromaAnalyzer.analyzeWindow(window512, ChromaAnalyzer::WINDOW_SIZE, chromaRaw)
+                    : m_chromaAnalyzer.analyze(chromaRaw)) {
+            chromaTriggered = true;
 #else
-    if (m_chromaAnalyzer.analyze(chromaRaw)) {
-        chromaTriggered = true;
+        if (m_chromaAnalyzer.analyze(chromaRaw)) {
+            chromaTriggered = true;
 #endif
-        // Fresh chroma data available
-        for (int i = 0; i < 12; ++i) {
-            float chroma = mapLevelDb(chromaRaw[i], tuning.chromaDbFloor, tuning.chromaDbCeil);
-            lastChroma[i] = chroma;
-            raw.chroma[i] = chroma * activity;
-        }
-    } else {
-        // No new chroma this hop - reuse last known chroma
-        for (int i = 0; i < 12; ++i) {
-            raw.chroma[i] = lastChroma[i] * activity;
+            // Fresh chroma data available
+            for (int i = 0; i < 12; ++i) {
+                float chroma = mapLevelDb(chromaRaw[i], tuning.chromaDbFloor, tuning.chromaDbCeil);
+                lastChroma[i] = chroma;
+                raw.chroma[i] = chroma * activity;
+            }
+        } else {
+            // No new chroma this hop - reuse last known chroma
+            for (int i = 0; i < 12; ++i) {
+                raw.chroma[i] = lastChroma[i] * activity;
+            }
         }
     }
 
-    TRACE_END();
     BENCH_END_PHASE(chromaUs);
     BENCH_SET_FLAG(chromaTriggered, chromaTriggered ? 1 : 0);
 

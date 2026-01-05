@@ -120,7 +120,8 @@ bool EffectPresetManager::loadPreset(uint8_t id,
     paletteId = preset.paletteId;
 
     if (nameOut) {
-        strncpy(nameOut, preset.name, EffectPreset::NAME_MAX_LEN);
+        strncpy(nameOut, preset.name, EffectPreset::NAME_MAX_LEN - 1);
+        nameOut[EffectPreset::NAME_MAX_LEN - 1] = '\0';
     }
 
     Serial.printf("[EffectPreset] Preset '%s' loaded from slot %d\n", preset.name, id);
@@ -179,7 +180,8 @@ uint8_t EffectPresetManager::listPresets(char names[][EffectPreset::NAME_MAX_LEN
 
         if (result == NVSResult::OK && preset.isValid()) {
             if (names) {
-                strncpy(names[count], preset.name, EffectPreset::NAME_MAX_LEN);
+                strncpy(names[count], preset.name, EffectPreset::NAME_MAX_LEN - 1);
+                names[count][EffectPreset::NAME_MAX_LEN - 1] = '\0';
             }
             if (ids) {
                 ids[count] = i;

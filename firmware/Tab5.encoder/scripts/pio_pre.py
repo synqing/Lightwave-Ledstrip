@@ -29,9 +29,37 @@ def _ndjson(hypothesis_id: str, location: str, message: str, data: dict) -> None
 # H1/H2: PlatformIO not injecting the correct toolchain bin directory into PATH.
 toolchain_dir = None
 try:
+    # Prefer PlatformIO's resolved package directory when available.
     toolchain_dir = env.PioPlatform().get_package_dir("toolchain-riscv32-esp")
 except Exception as e:
     _ndjson("H1", "pio_pre.py:35", "get_package_dir_failed", {"error": str(e)})
+
+def _has_compiler(dir_path: str) -> bool:
+    if not dir_path:
+        return False
+    return (
+        os.path.isfile(os.path.join(dir_path, "bin", "riscv32-esp-elf-g++"))
+        or os.path.isfile(os.path.join(dir_path, "riscv32-esp-elf", "bin", "riscv32-esp-elf-g++"))
+    )
+
+if toolchain_dir and not _has_compiler(toolchain_dir):
+    # Some PlatformIO installs can leave a metadata-only toolchain directory around; fall back to scanning.
+    toolchain_dir = None
+
+# Fallback: search for toolchain package manually if get_package_dirs fails
+if not toolchain_dir:
+    pio_packages_dir = os.path.expanduser("~/.platformio/packages")
+    # Search for a toolchain directory that actually contains the compiler binaries.
+    if os.path.isdir(pio_packages_dir):
+        for item in os.listdir(pio_packages_dir):
+            if not item.startswith("toolchain-riscv32-esp"):
+                continue
+            candidate = os.path.join(pio_packages_dir, item)
+            if not os.path.isdir(candidate):
+                continue
+            if _has_compiler(candidate):
+                toolchain_dir = candidate
+                break
 
 _ndjson("H1", "pio_pre.py:37", "toolchain_dir", {"toolchainDir": toolchain_dir})
 
@@ -103,5 +131,3 @@ _ndjson(
     "extra_include_dirs",
     {"includeDirs": include_dirs},
 )
-
-

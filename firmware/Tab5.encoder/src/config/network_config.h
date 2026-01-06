@@ -76,3 +76,9 @@ namespace NetworkConfig {
     // Delay before falling back to AP mode (after both networks fail)
     constexpr uint32_t AP_FALLBACK_DELAY_MS = 10000;  // 10 seconds
 }
+
+// OTA Update Configuration
+// SECURITY: Change this token in production deployments!
+#ifndef OTA_UPDATE_TOKEN
+#define OTA_UPDATE_TOKEN "LW-OTA-2024-SecureUpdate"
+#endif

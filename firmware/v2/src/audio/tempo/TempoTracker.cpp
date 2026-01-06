@@ -241,9 +241,12 @@ void TempoTracker::checkSilence() {
     float contrast = fabsf(max_val - min_val);
     float silence_raw = 1.0f - contrast;
 
-    if (silence_raw > 0.5f) {
+    if (silence_raw > tuning_.silenceThreshold) {
         silence_detected_ = true;
-        silence_level_ = std::max(0.0f, silence_raw - 0.5f) * 2.0f;
+        // Normalize silence level based on threshold
+        float range = 1.0f - tuning_.silenceThreshold;
+        if (range < 0.001f) range = 0.001f;
+        silence_level_ = std::max(0.0f, silence_raw - tuning_.silenceThreshold) / range;
     } else {
         silence_detected_ = false;
         silence_level_ = 0.0f;
@@ -510,16 +513,16 @@ void TempoTracker::updateWinner() {
         best_bin = NUM_TEMPI / 2;
     }
 
-    // Hysteresis: require 10% advantage for 5 consecutive frames
+    // Hysteresis: require advantage for consecutive frames
     if (best_bin != winner_bin_) {
         float current_mag = tempi_smooth_[winner_bin_];
 
         // Check if challenger has significant advantage
-        if (best_mag > current_mag * 1.1f) {
+        if (best_mag > current_mag * tuning_.hysteresisThreshold) {
             // Track consecutive frames with this candidate
             if (best_bin == candidate_bin_) {
                 candidate_frames_++;
-                if (candidate_frames_ >= 5) {
+                if (candidate_frames_ >= tuning_.hysteresisFrames) {
                     // Switch to new winner - ensure it's valid
                     winner_bin_ = best_bin;
                     if (winner_bin_ >= NUM_TEMPI) {

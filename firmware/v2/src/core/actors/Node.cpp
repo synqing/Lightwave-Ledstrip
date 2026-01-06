@@ -88,10 +88,12 @@ bool Node::start()
     m_messageCount = 0;
 
     // Create the FreeRTOS task pinned to the specified core
+    // NOTE: ESP-IDF FreeRTOS xTaskCreatePinnedToCore takes stack size in BYTES,
+    // but our configuration uses WORDS. We must multiply by 4.
     BaseType_t result = xTaskCreatePinnedToCore(
         taskFunction,           // Task function
         m_config.name,          // Task name
-        m_config.stackSize,     // Stack size in words
+        m_config.stackSize * 4, // Stack size in bytes
         this,                   // Parameter (this pointer)
         m_config.priority,      // Priority
         &m_taskHandle,          // Task handle output

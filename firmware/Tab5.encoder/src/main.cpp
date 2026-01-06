@@ -51,6 +51,8 @@
 #include "network/WiFiManager.h"
 #include "network/WebSocketClient.h"
 #include "network/WsMessageRouter.h"
+#include "network/OtaHandler.h"
+#include <ESPAsyncWebServer.h>
 #include <cstring>
 #include <cstdio>
 #include <cmath>
@@ -83,6 +85,9 @@ DualEncoderService* g_encoders = nullptr;
 WiFiManager g_wifiManager;
 WebSocketClient g_wsClient;
 ParameterHandler* g_paramHandler = nullptr;
+
+// OTA HTTP Server (runs alongside WebSocket)
+AsyncWebServer* g_otaServer = nullptr;
 
 // WebSocket connection state
 bool g_wsConfigured = false;  // true after wsClient.begin() called
@@ -1134,6 +1139,35 @@ void loop() {
             s_wifiWasConnected = true;
             Serial.printf("[NETWORK] WiFi connected! IP: %s\n",
                           g_wifiManager.getLocalIP().toString().c_str());
+            
+            // Initialize OTA HTTP server (once, after WiFi connects)
+            if (!g_otaServer) {
+                g_otaServer = new AsyncWebServer(80);
+                
+                // Register OTA endpoints
+                g_otaServer->on("/api/v1/firmware/version", HTTP_GET, 
+                                OtaHandler::handleVersion);
+                g_otaServer->on("/api/v1/firmware/update", HTTP_POST,
+                                [](AsyncWebServerRequest* request) {
+                                    OtaHandler::handleV1Update(request);
+                                },
+                                [](AsyncWebServerRequest* request, const String& filename,
+                                   size_t index, uint8_t* data, size_t len, bool final) {
+                                    OtaHandler::handleUpload(request, filename, index, data, len, final);
+                                });
+                g_otaServer->on("/update", HTTP_POST,
+                                [](AsyncWebServerRequest* request) {
+                                    OtaHandler::handleLegacyUpdate(request);
+                                },
+                                [](AsyncWebServerRequest* request, const String& filename,
+                                   size_t index, uint8_t* data, size_t len, bool final) {
+                                    OtaHandler::handleUpload(request, filename, index, data, len, final);
+                                });
+                
+                g_otaServer->begin();
+                Serial.println("[OTA] HTTP server started on port 80");
+                Serial.printf("[OTA] Endpoints: GET /api/v1/firmware/version, POST /api/v1/firmware/update, POST /update\n");
+            }
         }
 
         // Direct IP mode (skip mDNS entirely)

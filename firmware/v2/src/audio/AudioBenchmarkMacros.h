@@ -29,6 +29,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include "../config/features.h"
 
 #if FEATURE_AUDIO_BENCHMARK

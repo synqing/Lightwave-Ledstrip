@@ -37,14 +37,31 @@ namespace lightwaveos {
 namespace audio {
 
 // ============================================================================
+// Tuning Configuration
+// ============================================================================
+
+struct TempoTrackerTuning {
+    // Hysteresis for winner selection
+    float hysteresisThreshold = 1.1f;    // Ratio (e.g., 1.1 = 10% advantage required)
+    uint8_t hysteresisFrames = 5;        // Consecutive frames to switch
+
+    // Smoothing
+    float magnitudeAlpha = 0.025f;       // Smoothing factor for magnitudes (0.0-1.0)
+    float silentDecay = 0.995f;          // Decay factor for silent bins
+
+    // Silence detection
+    float silenceThreshold = 0.5f;       // 0.0-1.0 (higher = more sensitive)
+};
+
+// ============================================================================
 // Configuration Constants
 // ============================================================================
 
-/// Number of tempo bins (1 BPM resolution from 48-144)
-constexpr uint16_t NUM_TEMPI = 96;
+/// Number of tempo bins (1 BPM resolution from 70-190)
+constexpr uint16_t NUM_TEMPI = 120;
 
 /// BPM range - covers 95% of music
-constexpr float TEMPO_LOW = 60.0f;
+constexpr float TEMPO_LOW = 70.0f;
 constexpr float TEMPO_HIGH = TEMPO_LOW + static_cast<float>(NUM_TEMPI);
 
 /// Spectral novelty rate (8-band Goertzel = every 512 samples @ 16kHz)
@@ -137,6 +154,12 @@ public:
      * Computes Goertzel coefficients and clears buffers.
      */
     void init();
+
+    /**
+     * @brief Update tuning parameters
+     * @param tuning New tuning configuration
+     */
+    void setTuning(const TempoTrackerTuning& tuning) { tuning_ = tuning; }
 
     /**
      * @brief Update novelty from 8-band Goertzel and RMS
@@ -269,6 +292,8 @@ private:
     // ========================================================================
     // State Variables
     // ========================================================================
+
+    TempoTrackerTuning tuning_;
 
     // Tempo bins (96 x 56 bytes = 5.4 KB)
     TempoBin tempi_[NUM_TEMPI];

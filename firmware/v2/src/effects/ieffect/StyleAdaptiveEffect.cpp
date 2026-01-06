@@ -123,6 +123,9 @@ void StyleAdaptiveEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     // Audio Enhancement: Style-specific modulation
     // =========================================================================
+    // Get mood-normalized value (used throughout for mood-adjusted smoothing)
+    float moodNorm = ctx.getMoodNormalized();
+    
     // Hop-based RMS updates
     bool newHop = false;
 #if FEATURE_AUDIO_SYNC
@@ -134,7 +137,6 @@ void StyleAdaptiveEffect::render(plugins::EffectContext& ctx) {
         }
         
         // Smooth RMS every frame with mood-adjusted smoothing
-        float moodNorm = ctx.getMoodNormalized();
         m_rmsFollower.updateWithMood(m_targetRms, dt, moodNorm);
     }
 #endif
@@ -150,8 +152,7 @@ void StyleAdaptiveEffect::render(plugins::EffectContext& ctx) {
             float bass = ctx.audio.bass();
             targetPulse = fmaxf(targetPulse, bass * 0.7f);
             
-            // Smooth with mood-adjusted smoothing
-            float moodNorm = ctx.getMoodNormalized();
+            // Smooth with mood-adjusted smoothing (moodNorm declared above)
             m_rhythmicPulse = m_rhythmicPulseFollower.updateWithMood(targetPulse, dt, moodNorm);
             break;
         }

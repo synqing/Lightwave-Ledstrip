@@ -208,10 +208,10 @@ void ControlBus::detectAndRemoveSpikes(LookaheadBuffer& buffer,
             const float deviation = (middle_val > expected) ?
                                     (middle_val - expected) : (expected - middle_val);
 
-            // Threshold: 15% of expected value, with floor to handle near-zero values
-            const float threshold_floor = 0.02f;  // Minimum threshold
-            const float threshold = (expected * 0.15f > threshold_floor) ?
-                                    expected * 0.15f : threshold_floor;
+            // Threshold: 25% of expected value, with floor to handle near-zero values
+            const float threshold_floor = 0.05f;  // Minimum threshold (increased from 0.02)
+            const float threshold = (expected * 0.25f > threshold_floor) ?
+                                    expected * 0.25f : threshold_floor;
 
             if (deviation > threshold) {
                 // Replace spike with average of neighbors

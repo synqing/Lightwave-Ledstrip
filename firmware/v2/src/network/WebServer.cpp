@@ -67,6 +67,10 @@
 #include "../audio/AudioTuning.h"
 #include "../config/audio_config.h"
 #include "../core/persistence/AudioTuningManager.h"
+#include "../audio/AudioNode.h"
+#include "../audio/contracts/ControlBus.h"
+#include "../audio/contracts/TempoOutput.h"
+#include <cmath>
 #endif
 #if FEATURE_AUDIO_BENCHMARK
 #include "webserver/BenchmarkStreamBroadcaster.h"
@@ -781,6 +785,44 @@ void WebServer::handleWsMessage(AsyncWebSocketClient* client, uint8_t* data, siz
 // Broadcasting
 // ============================================================================
 
+#if FEATURE_AUDIO_SYNC
+/**
+ * @brief Format chord state to musical key string (e.g., "C", "Am", "Dm")
+ * 
+ * @param rootNote 0-11 (C=0, C#=1, ..., B=11)
+ * @param type Chord type (MAJOR, MINOR, DIMINISHED, AUGMENTED)
+ * @return Formatted key name string
+ */
+static const char* formatKeyName(uint8_t rootNote, audio::ChordType type) {
+    static const char* NOTE_NAMES[] = {
+        "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"
+    };
+    
+    if (rootNote >= 12) rootNote = rootNote % 12;
+    const char* note = NOTE_NAMES[rootNote];
+    
+    switch (type) {
+        case audio::ChordType::MAJOR:
+            return note;  // "C", "D", etc.
+        case audio::ChordType::MINOR:
+            // Format as "Am", "Dm", etc.
+            static char minorKey[4];
+            snprintf(minorKey, sizeof(minorKey), "%sm", note);
+            return minorKey;
+        case audio::ChordType::DIMINISHED:
+            static char dimKey[5];
+            snprintf(dimKey, sizeof(dimKey), "%sdim", note);
+            return dimKey;
+        case audio::ChordType::AUGMENTED:
+            static char augKey[5];
+            snprintf(augKey, sizeof(augKey), "%saug", note);
+            return augKey;
+        default:
+            return note;  // Fallback to root note name
+    }
+}
+#endif
+
 void WebServer::broadcastStatus() {
     // SAFETY: Always defer broadcasts to avoid calling doBroadcastStatus() from within
     // AsyncTCP/AsyncWebServer callback context. This prevents re-entrancy issues and
@@ -816,7 +858,7 @@ void WebServer::doBroadcastStatus() {
     }
     lastBroadcastAttempt = now;
 
-    StaticJsonDocument<512> doc;
+    StaticJsonDocument<1024> doc;  // Increased to accommodate audio metrics
     doc["type"] = "status";
 
     // SAFE: Use cached state instead of unsafe cross-core access
@@ -838,6 +880,33 @@ void WebServer::doBroadcastStatus() {
 
     doc["freeHeap"] = ESP.getFreeHeap();
     doc["uptime"] = millis() / 1000;
+
+#if FEATURE_AUDIO_SYNC
+    // Add audio metrics (BPM, KEY, MIC)
+    auto* audio = m_orchestrator.getAudio();
+    if (audio) {
+        // BPM from TempoOutput
+        audio::TempoOutput tempo = audio->getTempo();
+        doc["bpm"] = tempo.bpm;
+        
+        // Mic level in dB (calculated from rmsPreGain)
+        audio::AudioDspState dsp = audio->getDspState();
+        float micLevelDb = (dsp.rmsPreGain > 0.0001f) 
+            ? (20.0f * log10f(dsp.rmsPreGain)) 
+            : -80.0f;
+        doc["mic"] = micLevelDb;
+        
+        // Musical key/chord (formatted string)
+        const audio::ControlBus& controlBus = audio->getControlBusRef();
+        const audio::ControlBusFrame& frame = controlBus.GetFrame();
+        const audio::ChordState& chord = frame.chordState;
+        if (chord.confidence > 0.1f && chord.type != audio::ChordType::NONE) {
+            doc["key"] = formatKeyName(chord.rootNote, chord.type);
+        } else {
+            doc["key"] = "";  // Empty string when no valid key detected
+        }
+    }
+#endif
 
     String output;
     serializeJson(doc, output);

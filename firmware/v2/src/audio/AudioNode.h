@@ -247,6 +247,16 @@ public:
     void setPipelineTuning(const AudioPipelineTuning& tuning);
 
     /**
+     * @brief Get current audio contract tuning (by value)
+     */
+    AudioContractTuning getContractTuning() const;
+
+    /**
+     * @brief Update audio contract tuning
+     */
+    void setContractTuning(const AudioContractTuning& tuning);
+
+    /**
      * @brief Reset DSP state (AGC, DC estimate, noise floor)
      */
     void resetDspState();
@@ -493,6 +503,9 @@ private:
     AudioPipelineTuning m_pipelineTuning;
     std::atomic<uint32_t> m_pipelineTuningSeq{0};
 
+    AudioContractTuning m_contractTuning;
+    std::atomic<uint32_t> m_contractTuningSeq{0};
+
     AudioDspState m_dspState;
     std::atomic<uint32_t> m_dspStateSeq{0};
     std::atomic<bool> m_dspResetPending{false};
@@ -535,6 +548,21 @@ private:
     
     /// Temporary buffer for folded 64-bin bands (moved from stack to reduce stack usage)
     float m_bands64Folded[8] = {0};
+
+    /// Analysis window buffer (moved from stack to reduce stack usage)
+    /// Used for Overlap-Add analysis in processHop()
+    int16_t m_window512[GoertzelAnalyzer::WINDOW_SIZE];
+
+    /// Reusable ControlBusRawInput buffer (moved from stack to reduce stack usage)
+    /// Used in processHop() to aggregate analysis results before smoothing
+    ControlBusRawInput m_rawInput;
+
+    /// Reusable ControlBusFrame buffer (moved from stack to reduce stack usage)
+    /// Used in processHop() to publish analysis results
+    ControlBusFrame m_frameToPublish;
+
+    /// Stack usage tracking
+    UBaseType_t m_stackMinFreeWords = 0;
 
     // ========================================================================
     // Phase 2C: Noise Calibration State

@@ -77,6 +77,7 @@ namespace audio {
 AudioNode::AudioNode()
     : Node(NodeConfigs::Audio())
     , m_state(AudioNodeState::UNINITIALIZED)
+    , m_stackMinFreeWords(AUDIO_ACTOR_STACK_WORDS)
 {
     m_stats.reset();
     memset(m_hopBuffer, 0, sizeof(m_hopBuffer));
@@ -137,6 +138,38 @@ void AudioNode::setPipelineTuning(const AudioPipelineTuning& tuning)
     m_pipelineTuningSeq.store(v + 1U, std::memory_order_release);
     m_pipelineTuning = clamped;
     m_pipelineTuningSeq.store(v + 2U, std::memory_order_release);
+}
+
+AudioContractTuning AudioNode::getContractTuning() const
+{
+    AudioContractTuning out;
+    uint32_t v0;
+    uint32_t v1;
+    do {
+        v0 = m_contractTuningSeq.load(std::memory_order_acquire);
+        if (v0 & 1U) continue;
+        out = m_contractTuning;
+        v1 = m_contractTuningSeq.load(std::memory_order_acquire);
+    } while (v0 != v1 || (v1 & 1U));
+    return out;
+}
+
+void AudioNode::setContractTuning(const AudioContractTuning& tuning)
+{
+    AudioContractTuning clamped = clampAudioContractTuning(tuning);
+    uint32_t v = m_contractTuningSeq.load(std::memory_order_relaxed);
+    m_contractTuningSeq.store(v + 1U, std::memory_order_release);
+    m_contractTuning = clamped;
+    m_contractTuningSeq.store(v + 2U, std::memory_order_release);
+
+    // Apply tuning to TempoTracker
+    TempoTrackerTuning tt;
+    tt.hysteresisThreshold = clamped.tempoHysteresisThreshold;
+    tt.hysteresisFrames = clamped.tempoHysteresisFrames;
+    tt.magnitudeAlpha = clamped.tempoMagnitudeAlpha;
+    tt.silentDecay = clamped.tempoSilentDecay;
+    tt.silenceThreshold = clamped.tempoSilenceThreshold;
+    m_tempo.setTuning(tt);
 }
 
 void AudioNode::resetDspState()
@@ -244,6 +277,13 @@ void AudioNode::onTick()
         return;
     }
 
+#ifndef NATIVE_BUILD
+    UBaseType_t highWater = uxTaskGetStackHighWaterMark(nullptr);
+    if (highWater < m_stackMinFreeWords) {
+        m_stackMinFreeWords = highWater;
+    }
+#endif
+
     m_stats.tickCount++;
 
     // Record tick start time
@@ -268,8 +308,8 @@ void AudioNode::onTick()
         const ControlBusFrame& frame = m_controlBus.GetFrame();
         // Calculate mic level in dB from pre-gain RMS
         float micLevelDb = (m_lastRmsPreGain > 0.0001f) ? (20.0f * log10f(m_lastRmsPreGain)) : -80.0f;
-        LW_LOGI("Audio alive: " LW_CLR_YELLOW "mic=%.1fdB" LW_ANSI_RESET " cap=%lu pk=%d pkC=%d rms=%.4f->%.3f pre=%.4f g=%.2f dc=%.1f clip=%u flux=%.3f min=%d max=%d mean=%.1f",
-                 micLevelDb, cstats.hopsCapured, cstats.peakSample, m_lastPeakCentered, m_lastRmsRaw, frame.rms,
+        LW_LOGI("Audio alive: " LW_CLR_YELLOW "mic=%.1fdB" LW_ANSI_RESET " stk=%u cap=%lu pk=%d pkC=%d rms=%.4f->%.3f pre=%.4f g=%.2f dc=%.1f clip=%u flux=%.3f min=%d max=%d mean=%.1f",
+                 micLevelDb, (unsigned)m_stackMinFreeWords, cstats.hopsCapured, cstats.peakSample, m_lastPeakCentered, m_lastRmsRaw, frame.rms,
                  m_lastRmsPreGain, m_lastAgcGain, m_lastDcEstimate, (unsigned)m_lastClipCount, m_lastFluxMapped,
                  m_lastMinSample, m_lastMaxSample, m_lastMeanSample);
 
@@ -598,7 +638,7 @@ void AudioNode::processHop()
 
     // 4. Analysis window preparation (Overlap-Add)
     // Build 512-sample window from previous + current hop for per-hop analysis
-    int16_t window512[GoertzelAnalyzer::WINDOW_SIZE];
+    int16_t* window512 = m_window512;
     bool oaReady = false;
     // Always accumulate samples for 64-bin Goertzel (needs 1500 samples)
     m_analyzer.accumulate(m_hopBufferCentered, HOP_SIZE);
@@ -622,7 +662,9 @@ void AudioNode::processHop()
 #endif
 
     // 5. Build ControlBusRawInput
-    ControlBusRawInput raw;
+    // Reuse member to save stack (cleared to avoid stale triggers)
+    std::memset(&m_rawInput, 0, sizeof(ControlBusRawInput));
+    ControlBusRawInput& raw = m_rawInput;
     raw.rms = rmsMapped;
     raw.flux = fluxMapped;
 
@@ -652,6 +694,8 @@ void AudioNode::processHop()
     // === Phase: Goertzel Analysis ===
     BENCH_START_PHASE();
     bool goertzelTriggered = false;
+    float bandsPre[NUM_BANDS] = {0}; // Pre-AGC bands for beat tracking.
+
     {
         TRACE_SCOPE("goertzel_analyze");
 
@@ -680,6 +724,25 @@ void AudioNode::processHop()
 
                 m_lastBands[i] = band;
                 raw.bands[i] = band * activity;
+            }
+
+            // Populate bandsPre for beat tracking (Inverse AGC)
+            // Note: m_agcGain is current, window512 is mostly current.
+            float invGain = 1.0f / (m_agcGain + 1e-6f);
+            for (int i = 0; i < NUM_BANDS; ++i) {
+                // Reconstruct pre-AGC magnitude: post / gain
+                float bandLinearPre = bandsRaw[i] * invGain;
+                // Map to dB/0..1 using same tuning
+                float bandMappedPre = mapLevelDb(bandLinearPre, tuning.bandDbFloor, tuning.bandDbCeil);
+                // Apply per-band gains for consistency
+                bandMappedPre *= tuning.perBandGains[i];
+                if (bandMappedPre > 1.0f) bandMappedPre = 1.0f;
+                // Apply noise floor gating if enabled
+                if (tuning.usePerBandNoiseFloor && bandMappedPre < tuning.perBandNoiseFloors[i]) {
+                    bandMappedPre = 0.0f;
+                }
+                // Apply activity gate (matches raw.bands behavior but uses pre-AGC values)
+                bandsPre[i] = bandMappedPre * activity;
             }
 
             // Throttle 8-band Goertzel debug logging - gated by verbosity >= 5
@@ -747,10 +810,13 @@ void AudioNode::processHop()
     // - Spectral flux from 8-band Goertzel when ready (31.25 Hz)
     // - VU derivative from RMS every hop (62.5 Hz)
     // goertzelTriggered fires when 8-band analysis completes (every 512 samples)
+    // CRITICAL FIX: Use Pre-AGC signals for beat tracking!
+    // AGC flattens dynamics, making onset detection impossible.
+    // We use reconstructed Pre-AGC bands and Pre-AGC RMS.
     m_tempo.updateNovelty(
-        goertzelTriggered ? raw.bands : nullptr,  // 8-band magnitudes or nullptr
+        goertzelTriggered ? bandsPre : nullptr,    // Pre-AGC 8-band magnitudes
         8,                                         // num_bands
-        rmsRaw,                                    // RMS for VU calculation
+        rmsPre,                                    // Pre-AGC RMS for VU calculation
         goertzelTriggered                          // bands_ready flag
     );
 
@@ -866,15 +932,16 @@ void AudioNode::processHop()
     // 8. Publish frame to renderer via lock-free SnapshotBuffer
     // Copy style detection results to frame before publishing
     {
-        ControlBusFrame frameToPublish = m_controlBus.GetFrame();
+        // Reuse member to save stack
+        m_frameToPublish = m_controlBus.GetFrame();
 #if FEATURE_STYLE_DETECTION
-        frameToPublish.currentStyle = m_styleDetector.getStyle();
-        frameToPublish.styleConfidence = m_styleDetector.getConfidence();
+        m_frameToPublish.currentStyle = m_styleDetector.getStyle();
+        m_frameToPublish.styleConfidence = m_styleDetector.getConfidence();
 #else
-        frameToPublish.currentStyle = MusicStyle::UNKNOWN;
-        frameToPublish.styleConfidence = 0.0f;
+        m_frameToPublish.currentStyle = MusicStyle::UNKNOWN;
+        m_frameToPublish.styleConfidence = 0.0f;
 #endif
-        m_controlBusBuffer.Publish(frameToPublish);
+        m_controlBusBuffer.Publish(m_frameToPublish);
     }
 
     BENCH_END_PHASE(publishUs);

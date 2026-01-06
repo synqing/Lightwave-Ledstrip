@@ -103,7 +103,7 @@ void SpectrumAnalyzerEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     const float* bins64 = ctx.audio.bins64();
     constexpr uint8_t NUM_BINS = 64;
-    float dt = ctx.getSafeDeltaSeconds();
+    // Reuse dt from above (line 89)
     float moodNorm = ctx.getMoodNormalized();
     
     // Hop-based updates: update targets only on new hops

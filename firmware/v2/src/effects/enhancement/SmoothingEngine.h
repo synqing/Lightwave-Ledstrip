@@ -196,6 +196,14 @@ struct AsymmetricFollower {
     void reset(float newValue = 0.0f) {
         value = newValue;
     }
+
+    /**
+     * Get current smoothed value
+     * @return Current value
+     */
+    float getCurrent() const {
+        return value;
+    }
 };
 
 // ============================================================================

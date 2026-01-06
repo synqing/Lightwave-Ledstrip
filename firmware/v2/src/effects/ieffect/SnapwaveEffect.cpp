@@ -14,10 +14,12 @@
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
+#include <Arduino.h>
 #endif
 
 #include <cmath>
 #include <cstring>
+#include <cstdio>
 
 namespace lightwaveos {
 namespace effects {
@@ -51,6 +53,17 @@ void SnapwaveEffect::render(plugins::EffectContext& ctx) {
 
     // Clear output buffer
     memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+    
+    // #region agent log
+    #ifndef NATIVE_BUILD
+    static uint32_t frameCount = 0;
+    frameCount++;
+    if (frameCount % 60 == 0) {  // Log every 60 frames (~0.5s at 120fps)
+        Serial.printf("{\"id\":\"snap_pipeline\",\"location\":\"SnapwaveEffect.cpp:49\",\"message\":\"Render entry\",\"data\":{\"frame\":%u,\"audioAvailable\":%d,\"ledCount\":%u,\"brightness\":%u,\"gHue\":%u},\"timestamp\":%lu}\n", 
+            frameCount, ctx.audio.available ? 1 : 0, ctx.ledCount, ctx.brightness, ctx.gHue, millis());
+    }
+    #endif
+    // #endregion
 
 #if !FEATURE_AUDIO_SYNC
     // Fallback: Time-based oscillation with palette color
@@ -197,6 +210,23 @@ void SnapwaveEffect::render(plugins::EffectContext& ctx) {
     // Use heavy_chroma for smoothed chromagram (matches original chromagram_smooth)
     const float* chroma = ctx.audio.controlBus.heavy_chroma;
     
+    // #region agent log
+    #ifndef NATIVE_BUILD
+    static uint32_t chromaLogCount = 0;
+    chromaLogCount++;
+    if (chromaLogCount % 60 == 0) {
+        float chromaSum = 0.0f;
+        float chromaMax = 0.0f;
+        for (uint8_t c = 0; c < 12; c++) {
+            chromaSum += chroma[c];
+            if (chroma[c] > chromaMax) chromaMax = chroma[c];
+        }
+        Serial.printf("{\"id\":\"snap_chroma\",\"location\":\"SnapwaveEffect.cpp:200\",\"message\":\"Chromagram values\",\"data\":{\"sum\":%.3f,\"max\":%.3f,\"rms\":%.3f},\"timestamp\":%lu}\n",
+            chromaSum, chromaMax, ctx.audio.rms(), millis());
+    }
+    #endif
+    // #endregion
+    
     // Determine chromatic mode (original uses chromatic_mode boolean)
     // Map saturation parameter: >= 128 = chromatic mode, < 128 = single hue
     const bool chromaticMode = (ctx.saturation >= 128);
@@ -293,6 +323,17 @@ void SnapwaveEffect::render(plugins::EffectContext& ctx) {
         (uint8_t)sum_color_float[1],
         (uint8_t)sum_color_float[2]
     );
+    
+    // #region agent log
+    #ifndef NATIVE_BUILD
+    static uint32_t colorLogCount = 0;
+    colorLogCount++;
+    if (colorLogCount % 60 == 0) {
+        Serial.printf("{\"id\":\"snap_color\",\"location\":\"SnapwaveEffect.cpp:293\",\"message\":\"Final color\",\"data\":{\"r\":%u,\"g\":%u,\"b\":%u,\"totalMagnitude\":%.3f,\"chromaticMode\":%d},\"timestamp\":%lu}\n",
+            m_lastColor.r, m_lastColor.g, m_lastColor.b, totalMagnitude, chromaticMode ? 1 : 0, millis());
+    }
+    #endif
+    // #endregion
 
     // ========================================================================
     // 3. Dynamic Trail Fading (original lines 67-79)
@@ -320,7 +361,7 @@ void SnapwaveEffect::render(plugins::EffectContext& ctx) {
     // MOOD-based oscillation speed modulation
     // Low mood (reactive): Faster oscillation
     // High mood (smooth): Slower oscillation
-    float moodNorm = ctx.getMoodNormalized();
+    // Reuse moodNorm from above (line 179)
     float speedMultiplier = 1.0f + moodNorm * 0.5f;  // 1.0x to 1.5x range
     
     // Create oscillation from dominant chromagram notes
@@ -344,123 +385,106 @@ void SnapwaveEffect::render(plugins::EffectContext& ctx) {
     // Clamp amplitude (original lines 112-113)
     if (amp > 1.0f) amp = 1.0f;
     else if (amp < -1.0f) amp = -1.0f;
+    
+    // #region agent log
+    #ifndef NATIVE_BUILD
+    static uint32_t oscLogCount = 0;
+    oscLogCount++;
+    if (oscLogCount % 60 == 0) {
+        Serial.printf("{\"id\":\"snap_osc\",\"location\":\"SnapwaveEffect.cpp:341\",\"message\":\"Oscillation calculation\",\"data\":{\"oscRaw\":%.3f,\"oscTanh\":%.3f,\"peakScaled\":%.3f,\"amp\":%.3f},\"timestamp\":%lu}\n",
+            oscillation / tanhf(1.0f), oscillation, waveformPeakScaledLast, amp, millis());
+    }
+    #endif
+    // #endregion
 
     // ========================================================================
-    // 6. Waveform Peak Smoothing (0.05/0.95 ratio)
+    // 4. Waveform Peak Smoothing (0.02/0.98 ratio - original line 13)
     // ========================================================================
-    m_waveformPeakScaledLast = waveformPeakScaled * 0.05f + m_waveformPeakScaledLast * 0.95f;
+    m_waveformPeakScaledLast = waveformPeakScaled * 0.02f + m_waveformPeakScaledLast * 0.98f;
     
-    // Calculate peak scaling (original: peak = waveform_peak_scaled_last * 4.0)
-    float peak = m_waveformPeakScaledLast * 4.0f;
-    if (peak > 1.0f) peak = 1.0f;
+    // Apply threshold to ignore tiny movements (original lines 88-91)
+    float threshold = 0.05f;
+    if (fabsf(amp) < threshold) {
+        amp = 0.0f;
+    }
     
     // ========================================================================
     // 5. Scrolling Buffer (original line 82: shift_leds_up)
     // ========================================================================
-    // Scroll buffer up by 1 position BEFORE rendering new waveform
-    // Shift from end to beginning to avoid overwriting
+    // Scroll buffer up by 1 position (shift LEDs up)
     for (int16_t i = STRIP_LENGTH - 1; i > 0; i--) {
         m_scrollBuffer[i] = m_scrollBuffer[i - 1];
     }
-    // Clear new position at start (will be filled with new waveform)
+    // Clear new position at start (will be filled with new dot)
     m_scrollBuffer[0] = CRGB::Black;
-
-    // ========================================================================
-    // 6. Full Waveform Rendering with Oscillation Modulation
-    // ========================================================================
-    // Process all waveform samples and render full waveform pattern
-    // Use oscillation to modulate waveform position/shape (centre-origin)
-    uint8_t waveformLen = ctx.audio.waveformSize();
-    if (waveformLen > WAVEFORM_SIZE) waveformLen = WAVEFORM_SIZE;
     
-    // MOOD-based smoothing rate (matches Sensory Bridge: (0.1 + MOOD * 0.9) * 0.05)
-    float smoothing = (0.1f + moodNorm * 0.9f) * 0.05f;
-    
-    // CENTER ORIGIN: Map waveform samples to LED positions
+    // ========================================================================
+    // 6. Single Dot Placement (original lines 115-122)
+    // ========================================================================
+    // Calculate position: pos = center + amp * half_length
+    // Original: int center = NATIVE_RESOLUTION / 2;
+    //          float pos_f = center + amp * (NATIVE_RESOLUTION / 2.0f);
     float centerPos = 79.5f;  // True centre between LEDs 79 and 80
+    float posF = centerPos + amp * 79.5f;  // Range: 0 to 159 when amp = ±1
+    int pos = (int)(posF + (posF >= 0 ? 0.5f : -0.5f));
+    if (pos < 0) pos = 0;
+    if (pos >= STRIP_LENGTH) pos = STRIP_LENGTH - 1;
     
-    // Render waveform to position 0 in scroll buffer (most recent frame)
-    // The oscillation modulates the waveform shape/position
-    for (uint8_t i = 0; i < waveformLen; ++i) {
-        // 1. Average 4-frame waveform history
-        float waveform_sample = 0.0f;
-        for (uint8_t s = 0; s < WAVEFORM_HISTORY_SIZE; ++s) {
-            waveform_sample += (float)m_waveformHistory[s][i];
+    // Place ONE dot at calculated position with chromagram color (original line 122)
+    m_scrollBuffer[pos] = m_lastColor;
+    
+    // #region agent log
+    #ifndef NATIVE_BUILD
+    static uint32_t posLogCount = 0;
+    posLogCount++;
+    if (posLogCount % 60 == 0) {
+        uint16_t nonZeroPixels = 0;
+        uint16_t maxBright = 0;
+        for (uint16_t j = 0; j < STRIP_LENGTH; j++) {
+            uint16_t bright = m_scrollBuffer[j].r + m_scrollBuffer[j].g + m_scrollBuffer[j].b;
+            if (bright > 0) nonZeroPixels++;
+            if (bright > maxBright) maxBright = bright;
         }
-        waveform_sample /= (float)WAVEFORM_HISTORY_SIZE;
-        
-        // 2. Normalize: /128.0 (maps int16 to [-1,1] range)
-        float input_wave_sample = waveform_sample / 128.0f;
-        
-        // 3. Apply smoothing (mood-based)
-        m_waveformLast[i] = input_wave_sample * smoothing + m_waveformLast[i] * (1.0f - smoothing);
-        
-        // 4. Apply oscillation modulation to waveform position
-        // Map waveform sample index to normalized position (0.0-1.0)
-        float waveformPos = (float)i / (float)(waveformLen - 1);
-        // Modulate position by oscillation (creates "snappy" waveform motion)
-        // Oscillation ranges from -1 to +1, so modulate by ±10% of strip length
-        float modulatedPos = waveformPos + oscillation * 0.1f;
-        if (modulatedPos < 0.0f) modulatedPos = 0.0f;
-        if (modulatedPos > 1.0f) modulatedPos = 1.0f;
-        
-        // 5. Map to centre-origin LED position in scroll buffer
-        // Convert normalized position to LED index (0-159)
-        float ledPosF = modulatedPos * (float)(STRIP_LENGTH - 1);
-        uint16_t ledPos = (uint16_t)(ledPosF + 0.5f);
-        if (ledPos >= STRIP_LENGTH) ledPos = STRIP_LENGTH - 1;
-        
-        // Calculate brightness with lift and peak scaling
-        float output_brightness = m_waveformLast[i];
-        if (output_brightness > 1.0f) output_brightness = 1.0f;
-        if (output_brightness < -1.0f) output_brightness = -1.0f;
-        
-        // Lift: maps [-1,1] to [0,1]
-        output_brightness = 0.5f + output_brightness * 0.5f;
-        if (output_brightness > 1.0f) output_brightness = 1.0f;
-        if (output_brightness < 0.0f) output_brightness = 0.0f;
-        
-        // Scale by peak
-        output_brightness *= peak;
-        
-        // 6. Render to scroll buffer at position 0 (most recent) with chromagram color
-        // Map to centre-origin position in buffer
-        float distFromCenter = fabsf((float)ledPos - centerPos);
-        uint16_t dist = (uint16_t)distFromCenter;
-        if (dist < STRIP_LENGTH) {
-            CRGB color = m_lastColor;
-            color.nscale8_video((uint8_t)(output_brightness * 255.0f));
-            // Add to buffer (additive blending for overlapping samples)
-            m_scrollBuffer[dist] += color;
-        }
+        Serial.printf("{\"id\":\"snap_render\",\"location\":\"SnapwaveEffect.cpp:384\",\"message\":\"Dot placement and buffer\",\"data\":{\"pos\":%d,\"posF\":%.2f,\"amp\":%.3f,\"bufferNonZero\":%u,\"maxBright\":%u,\"lastColorR\":%u},\"timestamp\":%lu}\n",
+            pos, posF, amp, nonZeroPixels, maxBright, m_lastColor.r, millis());
     }
+    #endif
+    // #endregion
     
     // ========================================================================
-    // 7. Render Scroll Buffer to Output (with centre-origin mapping)
+    // 7. Render Scroll Buffer to Output (LINEAR mapping - no centre-origin)
     // ========================================================================
-    // Render scrolling buffer to output LEDs
+    // Render scrolling buffer LINEAR to output LEDs (original renders directly)
     // Buffer[0] = most recent, buffer[159] = oldest
-    // Map to centre-origin for display
     for (uint16_t i = 0; i < STRIP_LENGTH && i < ctx.ledCount; i++) {
-        // Map linear buffer position to centre-origin
-        float distFromCenter = fabsf((float)i - centerPos);
-        uint16_t dist = (uint16_t)distFromCenter;
-        if (dist < STRIP_LENGTH) {
-            SET_CENTER_PAIR(ctx, dist, m_scrollBuffer[i]);
-        }
+        ctx.leds[i] = m_scrollBuffer[i];
     }
     
-    // For strip 2 (160-319): mirror the buffer for dual-strip display
+    // Mirror to strip 2 (original line 124-126: mirror_image_downwards)
     for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
         uint16_t strip2Idx = STRIP_LENGTH + i;
         if (strip2Idx < ctx.ledCount) {
-            float distFromCenter = fabsf((float)i - centerPos);
-            uint16_t dist = (uint16_t)distFromCenter;
-            if (dist < STRIP_LENGTH) {
-                SET_CENTER_PAIR(ctx, dist, m_scrollBuffer[i]);
-            }
+            ctx.leds[strip2Idx] = m_scrollBuffer[i];
         }
     }
+    
+    // #region agent log
+    #ifndef NATIVE_BUILD
+    static uint32_t outputLogCount = 0;
+    outputLogCount++;
+    if (outputLogCount % 60 == 0) {
+        uint16_t outputNonZero = 0;
+        uint16_t outputMaxBright = 0;
+        for (uint16_t j = 0; j < ctx.ledCount && j < 20; j++) {  // Check first 20 LEDs
+            uint16_t bright = ctx.leds[j].r + ctx.leds[j].g + ctx.leds[j].b;
+            if (bright > 0) outputNonZero++;
+            if (bright > outputMaxBright) outputMaxBright = bright;
+        }
+        Serial.printf("{\"id\":\"snap_output\",\"location\":\"SnapwaveEffect.cpp:399\",\"message\":\"Output buffer state\",\"data\":{\"outputNonZero\":%u,\"outputMaxBright\":%u,\"led0R\":%u,\"led79R\":%u},\"timestamp\":%lu}\n",
+            outputNonZero, outputMaxBright, ctx.leds[0].r, ctx.leds[79].r, millis());
+    }
+    #endif
+    // #endregion
 
 #endif  // FEATURE_AUDIO_SYNC
 }
@@ -472,7 +496,7 @@ void SnapwaveEffect::cleanup() {
 const plugins::EffectMetadata& SnapwaveEffect::getMetadata() const {
     static plugins::EffectMetadata meta{
         "Snapwave",
-        "Time-based oscillation with chromagram color and snappy motion",
+        "Single oscillating dot with scrolling history trail, chromagram-driven color, time-based snappy motion",
         plugins::EffectCategory::PARTY,
         1,
         "LightwaveOS"

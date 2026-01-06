@@ -20,7 +20,9 @@ static const ParameterDef PARAMETER_TABLE[] = {
     // id, encoderIndex, statusField, wsCommandType, min, max, defaultValue
 
     // Unit A (0-7) - Global LightwaveOS parameters
-    // Note: Effect max=95 (0-95 = 96 effects, matches v2 MAX_EFFECTS=96)
+    // Note: Effect max=95 (0-95 = 96 effects, safe default for future expansion)
+    // Actual max is dynamically updated from v2 server (currently 92 effects, max=91)
+    // v2 firmware: EXPECTED_EFFECT_COUNT = 92 (see CoreEffects.cpp)
     // Note: Palette max=74 (0-74 = 75 palettes, matches v2 MASTER_PALETTE_COUNT=75)
     {ParameterId::EffectId,   0, "effectId",   "effects.setCurrent", 0,   95,  0},
     {ParameterId::Brightness, 1, "brightness", "parameters.set",     0,   255, 128},

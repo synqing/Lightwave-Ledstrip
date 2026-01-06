@@ -12,11 +12,13 @@
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
+#include <Arduino.h>
 #endif
 
 #include <cmath>
 #include <cstring>
 #include <algorithm>
+#include <cstdio>
 
 namespace lightwaveos {
 namespace effects {
@@ -44,6 +46,17 @@ bool WaveformEffect::init(plugins::EffectContext& ctx) {
 void WaveformEffect::render(plugins::EffectContext& ctx) {
     // Clear output buffer
     memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+    
+    // #region agent log
+    #ifndef NATIVE_BUILD
+    static uint32_t frameCount = 0;
+    frameCount++;
+    if (frameCount % 60 == 0) {
+        Serial.printf("{\"id\":\"wave_pipeline\",\"location\":\"WaveformEffect.cpp:46\",\"message\":\"Render entry\",\"data\":{\"frame\":%u,\"audioAvailable\":%d,\"ledCount\":%u,\"brightness\":%u},\"timestamp\":%lu}\n",
+            frameCount, ctx.audio.available ? 1 : 0, ctx.ledCount, ctx.brightness, millis());
+    }
+    #endif
+    // #endregion
 
 #if !FEATURE_AUDIO_SYNC
     // Fallback: render nothing when audio unavailable
@@ -65,11 +78,36 @@ void WaveformEffect::render(plugins::EffectContext& ctx) {
         // Push current waveform into history ring buffer (matches Sensory Bridge)
         uint8_t waveformLen = ctx.audio.waveformSize();
         if (waveformLen > WAVEFORM_SIZE) waveformLen = WAVEFORM_SIZE;
+        
+        // #region agent log
+        #ifndef NATIVE_BUILD
+        int16_t sampleSum = 0;
+        int16_t sampleMax = 0;
+        #endif
+        // #endregion
+        
         for (uint8_t i = 0; i < waveformLen; ++i) {
             int16_t sample = ctx.audio.getWaveformSample(i);
             m_waveformHistory[m_historyIndex][i] = sample;
+            // #region agent log
+            #ifndef NATIVE_BUILD
+            sampleSum += abs(sample);
+            if (abs(sample) > sampleMax) sampleMax = abs(sample);
+            #endif
+            // #endregion
         }
         m_historyIndex = (m_historyIndex + 1) % WAVEFORM_HISTORY_SIZE;
+        
+        // #region agent log
+        #ifndef NATIVE_BUILD
+        static uint32_t waveformLogCount = 0;
+        waveformLogCount++;
+        if (waveformLogCount % 60 == 0) {
+            Serial.printf("{\"id\":\"wave_samples\",\"location\":\"WaveformEffect.cpp:70\",\"message\":\"Waveform samples\",\"data\":{\"waveformLen\":%u,\"sampleSum\":%d,\"sampleMax\":%d,\"rms\":%.3f},\"timestamp\":%lu}\n",
+                waveformLen, sampleSum, sampleMax, ctx.audio.rms(), millis());
+        }
+        #endif
+        // #endregion
     }
     
     // Calculate waveform_peak_scaled from RMS (proxy for Sensory Bridge algorithm)
@@ -106,6 +144,21 @@ void WaveformEffect::render(plugins::EffectContext& ctx) {
     }
     // Avoid division by zero
     if (chromagram_max_val < 0.001f) chromagram_max_val = 0.001f;
+    
+    // #region agent log
+    #ifndef NATIVE_BUILD
+    static uint32_t chromaLogCount = 0;
+    chromaLogCount++;
+    if (chromaLogCount % 60 == 0) {
+        float chromaSum = 0.0f;
+        for (uint8_t c = 0; c < 12; c++) {
+            chromaSum += chroma[c];
+        }
+        Serial.printf("{\"id\":\"wave_chroma\",\"location\":\"WaveformEffect.cpp:100\",\"message\":\"Chromagram values\",\"data\":{\"sum\":%.3f,\"max\":%.3f,\"chromaMaxVal\":%.3f},\"timestamp\":%lu}\n",
+            chromaSum, chromagram_max_val, chromagram_max_val, millis());
+    }
+    #endif
+    // #endregion
     
     // Map complexity to SQUARE_ITER (0-3 range)
     uint8_t squareIter = (uint8_t)((ctx.complexity / 255.0f) * 3.0f);
@@ -180,23 +233,30 @@ void WaveformEffect::render(plugins::EffectContext& ctx) {
     // Stage 3: Waveform Sample Processing (matches Sensory Bridge lines 220-259)
     // ========================================================================
     // Calculate smoothing rate (MOOD-based - matches Sensory Bridge line 230)
-    float moodNorm = ctx.getMoodNormalized();
+    // Reuse moodNorm from above (line 79)
     float smoothing = (0.1f + moodNorm * 0.9f) * 0.05f;
     
     // Calculate peak scaling (matches Sensory Bridge lines 234-237)
     float peak = m_waveformPeakScaledLast * 4.0f;
     if (peak > 1.0f) peak = 1.0f;
     
-    // Process all waveform samples (LINEAR mapping - NO centre-origin)
-    // For v2: ctx.ledCount / 2 gives single strip length (160)
-    uint16_t stripLength = ctx.ledCount / 2;
-    if (stripLength > STRIP_LENGTH) stripLength = STRIP_LENGTH;
+    // #region agent log
+    #ifndef NATIVE_BUILD
+    static uint32_t colorLogCount = 0;
+    colorLogCount++;
+    if (colorLogCount % 60 == 0) {
+        Serial.printf("{\"id\":\"wave_color\",\"location\":\"WaveformEffect.cpp:250\",\"message\":\"Final color and peak\",\"data\":{\"r\":%.1f,\"g\":%.1f,\"b\":%.1f,\"peak\":%.3f,\"peakScaledLast\":%.3f},\"timestamp\":%lu}\n",
+            sum_color_float[0], sum_color_float[1], sum_color_float[2], peak, m_waveformPeakScaledLast, millis());
+    }
+    #endif
+    // #endregion
     
+    // Process all waveform samples (CENTRE-ORIGIN mapping)
     uint8_t waveformLen = ctx.audio.waveformSize();
     if (waveformLen > WAVEFORM_SIZE) waveformLen = WAVEFORM_SIZE;
     
-    // Process each LED (linear mapping: LED i = waveform sample i)
-    for (uint16_t i = 0; i < stripLength && i < waveformLen; i++) {
+    // Process each waveform sample and map to distance from centre
+    for (uint8_t i = 0; i < waveformLen; ++i) {
         // 1. Average 4-frame history (matches Sensory Bridge lines 221-225)
         float waveform_sample = 0.0f;
         for (uint8_t s = 0; s < WAVEFORM_HISTORY_SIZE; ++s) {
@@ -230,21 +290,40 @@ void WaveformEffect::render(plugins::EffectContext& ctx) {
         // Scale by peak (matches Sensory Bridge line 252)
         output_brightness *= peak;
         
-        // 5. Render to LED (LINEAR mapping - matches Sensory Bridge lines 254-258)
-        ctx.leds[i] = CRGB(
+        // 5. Map waveform index to distance from centre (centre-origin)
+        // Waveform index 0 = centre (LEDs 79/80), index 127 = edge
+        float waveformPos = (float)i / (float)(waveformLen - 1);
+        float distF = waveformPos * (float)(HALF_LENGTH - 1);
+        uint16_t dist = (uint16_t)distF;
+        
+        // 6. Compute final colour (sum_color * brightness)
+        CRGB color = CRGB(
             (uint8_t)(sum_color_float[0] * output_brightness),
             (uint8_t)(sum_color_float[1] * output_brightness),
             (uint8_t)(sum_color_float[2] * output_brightness)
         );
+        
+        // 7. Render symmetric about centre pair (centre-origin)
+        SET_CENTER_PAIR(ctx, dist, color);
     }
     
-    // Render to strip 2 (mirror for dual-strip display)
-    for (uint16_t i = 0; i < stripLength; i++) {
-        uint16_t strip2Idx = stripLength + i;
-        if (strip2Idx < ctx.ledCount) {
-            ctx.leds[strip2Idx] = ctx.leds[i];
+    // #region agent log
+    #ifndef NATIVE_BUILD
+    static uint32_t renderLogCount = 0;
+    renderLogCount++;
+    if (renderLogCount % 60 == 0) {
+        uint16_t outputNonZero = 0;
+        uint16_t outputMaxBright = 0;
+        for (uint16_t j = 0; j < ctx.ledCount && j < 20; j++) {
+            uint16_t bright = ctx.leds[j].r + ctx.leds[j].g + ctx.leds[j].b;
+            if (bright > 0) outputNonZero++;
+            if (bright > outputMaxBright) outputMaxBright = bright;
         }
+        Serial.printf("{\"id\":\"wave_output\",\"location\":\"WaveformEffect.cpp:245\",\"message\":\"Output buffer state\",\"data\":{\"waveformLen\":%u,\"outputNonZero\":%u,\"outputMaxBright\":%u,\"led0R\":%u,\"led79R\":%u,\"led80R\":%u},\"timestamp\":%lu}\n",
+            waveformLen, outputNonZero, outputMaxBright, ctx.leds[0].r, ctx.leds[79].r, ctx.leds[80].r, millis());
     }
+    #endif
+    // #endregion
 
 #endif  // FEATURE_AUDIO_SYNC
 }
@@ -254,13 +333,13 @@ void WaveformEffect::cleanup() {
 }
 
 const plugins::EffectMetadata& WaveformEffect::getMetadata() const {
-    static plugins::EffectMetadata meta{
+    static plugins::EffectMetadata meta(
         "Waveform",
-        "Direct waveform visualization matching Sensory Bridge 3.1.0",
-        plugins::EffectCategory::AUDIO,
+        "Full waveform pattern with centre-origin mapping, chromagram-driven color, symmetric about LEDs 79/80",
+        plugins::EffectCategory::PARTY,
         1,
         "LightwaveOS"
-    };
+    );
     return meta;
 }
 

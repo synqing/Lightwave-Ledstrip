@@ -6,6 +6,7 @@ Utility scripts for building, uploading, and monitoring LightwaveOS firmware.
 
 | Script | Purpose | Usage |
 |--------|---------|-------|
+| `verify.sh` | Pre-push quality gate verification | `./scripts/verify.sh [--skip-build]` |
 | `build.sh` | Compile firmware | `./scripts/build.sh [clean]` |
 | `upload.sh` | Upload firmware to ESP32 | `./scripts/upload.sh` |
 | `uploadfs.sh` | Upload LittleFS filesystem | `./scripts/uploadfs.sh` |
@@ -13,6 +14,57 @@ Utility scripts for building, uploading, and monitoring LightwaveOS firmware.
 | `install.sh` | Install K1 SDK dependencies | `./scripts/install.sh` |
 
 ## Script Details
+
+### verify.sh
+
+**Pre-push quality gate verification** - Comprehensive checks before pushing changes.
+
+```bash
+# Run all checks (recommended before push)
+./scripts/verify.sh
+
+# Skip build verification (faster, for quick checks)
+./scripts/verify.sh --skip-build
+```
+
+**What it checks:**
+
+1. **[1/6] Harness Schema Validation** - Validates `feature_list.json` integrity
+2. **[2/6] PRD JSON Schema Validation** - Validates `.claude/prd/*.json` files
+3. **[3/6] Cross-Reference Integrity** - Verifies PRD references exist
+4. **[4/6] Pattern Compliance** - Enforces NO_RAINBOWS and CENTER_ORIGIN constraints
+5. **[5/6] Build Verification** - Builds `esp32dev_audio` environment
+6. **[6/6] Git Status** - Reports uncommitted changes
+
+**Exit codes:**
+- `0` - All checks passed (or passed with warnings)
+- `1` - One or more critical checks failed
+
+**Execution time:**
+- With build: ~30-60 seconds (incremental builds ~3-5s)
+- Without build (`--skip-build`): ~5-10 seconds
+
+**Dependencies:**
+- Required: `python3`, `pio`, `git`
+- Optional: `jsonschema` (for PRD validation: `pip install jsonschema`)
+
+**Relationship to init.sh:**
+- `.claude/harness/init.sh` - Quick project health check (~10s) for agent work
+- `scripts/verify.sh` - Comprehensive pre-push quality gate (~30-60s) for code quality
+
+**Git hook integration:**
+
+Add to `.git/hooks/pre-push`:
+```bash
+#!/bin/bash
+./scripts/verify.sh
+if [ $? -ne 0 ]; then
+    echo "Pre-push verification failed. Fix issues or use --no-verify to skip."
+    exit 1
+fi
+```
+
+Make executable: `chmod +x .git/hooks/pre-push`
 
 ### build.sh
 

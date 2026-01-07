@@ -111,6 +111,14 @@ Enable/disable features in `src/config/features.h`:
 #define FEATURE_LIGHT_GUIDE_MODE 1  // Light guide effects
 ```
 
+## Development Tools
+
+This project supports development with:
+- **Claude Code**: Full agent system with domain memory harness
+- **Cursor IDE**: AI-powered editor with unified memory (shares Claude-Mem database)
+
+See `.cursor/README.md` for Cursor-specific configuration.
+
 ## Verification
 
 The project includes two verification scripts for different audiences:

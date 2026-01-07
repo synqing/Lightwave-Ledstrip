@@ -14,7 +14,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Branch**: `main`
 - **Active Work**: Security hardening, performance optimization, Tab5 LVGL UI controller
-- **Recent** (2026-01-07): Tab5.encoder migrated to LVGL 9.3.0 UI framework (from PRISM.tab5), WiFi credentials externalized, CORS headers added, TrigLookup optimization, dual M5ROTATE8 encoder support (16 encoders + 8-bank preset system)
+- **Recent** (2026-01-07):
+  - **Effect Modifiers System** completed (71% → 100%): 5 composable modifiers (Speed, Intensity, ColorShift, Mirror, Glitch) with REST API control
+  - **64-bin FFT exposure** completed: Effects can now access detailed frequency spectrum (55Hz-2093Hz, semitone-spaced) via `ctx.audio.bin(index)`
+  - Tab5.encoder migrated to LVGL 9.3.0 UI framework (from PRISM.tab5)
+  - WiFi credentials externalized, CORS headers added, TrigLookup optimization
+  - Dual M5ROTATE8 encoder support (16 encoders + 8-bank preset system)
 
 ## First Steps for New Agents
 
@@ -425,6 +430,133 @@ These features compute musical context for audio-reactive effects. They default 
 **When to disable:** If no effects use `ctx.audio.harmonicSaliency()`, `ctx.audio.musicStyle()`, etc.
 
 **Effects using these features:** BreathingEffect, LGPPhotonicCrystalEffect, LGPStarBurstNarrativeEffect (3 of 76 effects)
+
+## Effect Modifiers System (v2 Only)
+
+**New in 2026-01-07**: Composable post-processing layer for real-time effect transformations.
+
+### Overview
+
+The Effect Modifiers System provides 8 modifier slots that apply transformations to effect output without modifying effect code. Modifiers execute in two phases:
+- **Pre-render modifiers** (e.g., SpeedModifier) execute BEFORE `effect->render()` - modify timing/parameters
+- **Post-render modifiers** (e.g., visual transforms) execute AFTER `effect->render()` - modify pixel data
+
+### Available Modifiers
+
+| Modifier | Type | Description | Parameters |
+|----------|------|-------------|------------|
+| **SpeedModifier** | Pre-render | Time dilation (0.1x-3.0x animation speed) | `multiplier: float` |
+| **IntensityModifier** | Post-render | Brightness scaling (constant or audio-reactive) | `baseIntensity: float`, `source: CONSTANT\|BEAT_PHASE` |
+| **ColorShiftModifier** | Post-render | HSV hue rotation | `hueOffset: 0-255` |
+| **MirrorModifier** | Post-render | Symmetry around center (LED 79/80) | None |
+| **GlitchModifier** | Post-render | Deterministic pixel randomization | `intensity: 0.0-1.0` |
+
+### Memory & Performance
+
+- **Memory:** <2KB total (8 modifiers × ~250 bytes)
+- **CPU:** ~50-100µs per modifier @ 120 FPS
+- **Stack limit:** 8 modifiers maximum
+- **Thread safety:** Mutex-protected add/remove (Core 0), lock-free apply (Core 1)
+
+### Usage Examples
+
+```bash
+# Add SpeedModifier (2x speed)
+curl -X POST http://lightwaveos.local/api/v1/modifiers/add \
+  -H "Content-Type: application/json" \
+  -d '{"type":"speed", "multiplier":2.0}'
+
+# Add ColorShiftModifier (hue rotate +128)
+curl -X POST http://lightwaveos.local/api/v1/modifiers/add \
+  -d '{"type":"color_shift", "hueOffset":128}'
+
+# Stack modifiers: Speed → Mirror → Glitch
+# (Modifiers apply in FIFO order - insertion order preserved)
+
+# Update SpeedModifier to 0.5x (slow motion)
+curl -X POST http://lightwaveos.local/api/v1/modifiers/update \
+  -d '{"type":"speed", "multiplier":0.5}'
+
+# Remove SpeedModifier
+curl -X POST http://lightwaveos.local/api/v1/modifiers/remove \
+  -d '{"type":"speed"}'
+
+# Clear all modifiers
+curl -X POST http://lightwaveos.local/api/v1/modifiers/clear
+```
+
+### Implementation Details
+
+- **RendererNode integration:** `firmware/v2/src/core/actors/RendererNode.cpp` (lines 907-932)
+- **ModifierStack:** `firmware/v2/src/effects/modifiers/ModifierStack.h`
+- **REST API:** `firmware/v2/src/network/webserver/handlers/ModifierHandlers.cpp`
+
+## 64-Bin FFT Exposure (v2 Only)
+
+**New in 2026-01-07**: Effects can now access detailed frequency spectrum data.
+
+### Overview
+
+The AudioNode already computes 64-bin FFT (Goertzel analysis) every 512 samples. This data is now exposed via `ctx.audio.bin(index)` and `ctx.audio.bins64()` for effects to use.
+
+### Frequency Mapping
+
+- **Bins:** 64 (semitone-spaced from 55 Hz to 2093 Hz, A1 to C7)
+- **Update rate:** 31.25 Hz (every 512 samples @ 16 kHz)
+- **Latency:** ~32 ms (AudioNode → RendererNode via SnapshotBuffer)
+- **Dynamic range:** 0.0 (silence) to 1.0 (full scale)
+
+| Bin Range | Frequency (Hz) | Musical Range | Description |
+|-----------|----------------|---------------|-------------|
+| 0-7       | 55-82          | A1-E2         | Sub-bass / kick fundamentals |
+| 8-15      | 87-123         | F2-B2         | Bass / bass guitar |
+| 16-23     | 131-185        | C3-F#3        | Low-mids / male vocals |
+| 24-31     | 196-277        | G3-C#4        | Mids / snare fundamentals |
+| 32-39     | 294-415        | D4-G#4        | Upper mids / female vocals |
+| 40-47     | 440-622        | A4-D#5        | Presence / cymbals |
+| 48-55     | 659-932        | E5-A#5        | Treble / hihat |
+| 56-63     | 988-2093       | B5-C7         | Air / shimmer |
+
+### Usage in Effects
+
+```cpp
+void MyEffect::render(plugins::EffectContext& ctx) {
+    // CRITICAL: Always check musical saliency first!
+    // Read: docs/audio-visual/AUDIO_VISUAL_SEMANTIC_MAPPING.md
+
+    if (ctx.audio.harmonicSaliency() > 0.5f) {
+        // Average bass bins (0-15) for robust detection
+        float bass = 0.0f;
+        for (uint8_t i = 0; i < 16; i++) {
+            bass += ctx.audio.bin(i);
+        }
+        bass /= 16.0f;
+
+        // Use bass to modulate effect parameter
+        float rippleHz = 2.0f + bass * 3.0f;
+    }
+}
+```
+
+### Critical Guidelines
+
+1. **Musical Saliency First:** NEVER use FFT data without checking `ctx.audio.harmonicSaliency()` / `rhythmicSaliency()` first. Raw frequency data without musical context leads to amateur visualizations.
+
+2. **Avoid Single-Bin Decisions:** Single bins are noisy. Always average 3-5 adjacent bins for robust detection.
+
+3. **Style-Adaptive Processing:** Different music styles need different FFT smoothing:
+   - **RHYTHMIC_DRIVEN** (EDM/hip-hop): Raw FFT (preserve transients)
+   - **HARMONIC_DRIVEN** (classical/jazz): 300ms EMA smoothing
+   - **MELODIC_DRIVEN** (pop/vocal): 150ms EMA smoothing
+   - **TEXTURE_DRIVEN** (ambient): 500ms EMA smoothing
+
+4. **Temporal Context:** Use delta detection for onset triggering, not instantaneous values.
+
+### Documentation
+
+Complete FFT usage guide with examples: `firmware/v2/docs/audio-visual/FFT_FREQUENCY_MAPPING.md`
+
+Musical saliency principles: `firmware/v2/docs/audio-visual/AUDIO_VISUAL_SEMANTIC_MAPPING.md`
 
 ## Web API
 

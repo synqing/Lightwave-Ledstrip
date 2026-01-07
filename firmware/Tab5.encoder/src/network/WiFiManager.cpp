@@ -23,7 +23,8 @@ WiFiManager::WiFiManager()
     , _usingPrimaryNetwork(true)
     , _primaryAttempts(0)
     , _secondaryAttempts(0)
-    , _apFallbackStartTime(0)
+    , _retryTimeoutStartTime(0)
+    , _retryButtonEnabled(false)
     , _connectStartTime(0)
     , _lastReconnectAttempt(0)
     , _reconnectDelay(NetworkConfig::WIFI_RECONNECT_DELAY_MS)
@@ -43,7 +44,8 @@ void WiFiManager::begin(const char* ssid, const char* password,
     _usingPrimaryNetwork = true;
     _primaryAttempts = 0;
     _secondaryAttempts = 0;
-    _apFallbackStartTime = 0;
+    _retryTimeoutStartTime = 0;
+    _retryButtonEnabled = false;
 
     Serial.println("[WiFi] Starting connection...");
     Serial.printf("[WiFi] Primary SSID: %s\n", _ssid ? _ssid : "none");
@@ -67,8 +69,8 @@ void WiFiManager::startConnection() {
     const char* currentPassword = _usingPrimaryNetwork ? _password : _password2;
 
     if (!currentSSID || strlen(currentSSID) == 0) {
-        Serial.println("[WiFi] No network configured, starting AP mode...");
-        startAPMode();
+        Serial.println("[WiFi] No network configured");
+        _status = WiFiConnectionStatus::ERROR;
         return;
     }
 
@@ -138,11 +140,17 @@ void WiFiManager::update() {
 void WiFiManager::handleDisconnected() {
     unsigned long now = millis();
 
-    // Check if we should fall back to AP mode (both networks exhausted)
-    if (_apFallbackStartTime > 0 && now >= _apFallbackStartTime) {
-        Serial.println("[WiFi] Both networks failed, starting AP mode fallback...");
-        startAPMode();
-        return;
+    // Track when retry period started (on first disconnect)
+    if (_retryTimeoutStartTime == 0) {
+        _retryTimeoutStartTime = now;
+        _retryButtonEnabled = false;
+        Serial.println("[WiFi] Starting 2-minute retry period...");
+    }
+
+    // Check if 2 minutes have elapsed - enable retry button
+    if (!_retryButtonEnabled && (now - _retryTimeoutStartTime) >= NetworkConfig::WIFI_RETRY_TIMEOUT_MS) {
+        _retryButtonEnabled = true;
+        Serial.println("[WiFi] 2-minute retry period elapsed, retry button enabled");
     }
 
     // Check if we should switch to secondary network (primary exhausted)
@@ -154,27 +162,8 @@ void WiFiManager::handleDisconnected() {
         return;
     }
 
-    // Check if we should start AP fallback timer (both networks tried and failed)
-    if (!_usingPrimaryNetwork && 
-        _secondaryAttempts >= NetworkConfig::WIFI_ATTEMPTS_PER_NETWORK) {
-        if (_apFallbackStartTime == 0) {
-            _apFallbackStartTime = now + NetworkConfig::AP_FALLBACK_DELAY_MS;
-            Serial.printf("[WiFi] Both networks exhausted, AP fallback in %lu ms...\n",
-                          NetworkConfig::AP_FALLBACK_DELAY_MS);
-        }
-    }
-    
-    // Also check if primary failed and no secondary available - go straight to AP
-    if (_usingPrimaryNetwork && 
-        _primaryAttempts >= NetworkConfig::WIFI_ATTEMPTS_PER_NETWORK &&
-        (!_ssid2 || strlen(_ssid2) == 0)) {
-        if (_apFallbackStartTime == 0) {
-            _apFallbackStartTime = now + NetworkConfig::AP_FALLBACK_DELAY_MS;
-            Serial.printf("[WiFi] Primary network failed, no secondary available. AP fallback in %lu ms...\n",
-                          NetworkConfig::AP_FALLBACK_DELAY_MS);
-        }
-    }
-
+    // Continue retrying both networks for 2 minutes
+    // After 2 minutes, retry button will be enabled but we still keep trying
     // Attempt reconnect with backoff delay
     if (now - _lastReconnectAttempt >= _reconnectDelay) {
         _lastReconnectAttempt = now;
@@ -357,32 +346,9 @@ void WiFiManager::switchToSecondaryNetwork() {
     startConnection();
 }
 
-void WiFiManager::startAPMode() {
-    Serial.println("[WiFi] Starting Access Point mode...");
-    Serial.printf("[WiFi] AP SSID: %s (open, no password)\n", NetworkConfig::AP_SSID_VALUE);
-    
-    WiFi.disconnect();
-    delay(100);
-    
-    WiFi.mode(WIFI_AP);
-    // Use empty string or NULL for open AP (no password) - matches v2 firmware
-    const char* apPassword = (NetworkConfig::AP_PASSWORD_VALUE && 
-                              strlen(NetworkConfig::AP_PASSWORD_VALUE) > 0) 
-                             ? NetworkConfig::AP_PASSWORD_VALUE : nullptr;
-    WiFi.softAP(NetworkConfig::AP_SSID_VALUE, apPassword);
-    
-    IPAddress apIP = WiFi.softAPIP();
-    Serial.printf("[WiFi] AP started! IP: %s\n", apIP.toString().c_str());
-    
-    // Initialize mDNS responder for AP mode
-    if (!MDNS.begin("tab5encoder")) {
-        Serial.println("[WiFi] mDNS responder failed to start");
-    } else {
-        Serial.println("[WiFi] mDNS responder started: tab5encoder.local");
-    }
-    
-    _status = WiFiConnectionStatus::CONNECTED;  // AP mode counts as "connected"
-    _resolvedIP = INADDR_NONE;  // No mDNS resolution in AP mode
+void WiFiManager::triggerRetry() {
+    Serial.println("[WiFi] Manual retry triggered by user");
+    reconnect();
 }
 
 void WiFiManager::reconnect() {
@@ -393,7 +359,8 @@ void WiFiManager::reconnect() {
     _usingPrimaryNetwork = true;  // Reset to primary
     _primaryAttempts = 0;
     _secondaryAttempts = 0;
-    _apFallbackStartTime = 0;
+    _retryTimeoutStartTime = 0;  // Reset retry timer
+    _retryButtonEnabled = false;  // Hide retry button
     _lastReconnectAttempt = millis();
     _reconnectDelay = NetworkConfig::WIFI_RECONNECT_DELAY_MS;  // Reset backoff
     _lastMdnsAttempt = 0;

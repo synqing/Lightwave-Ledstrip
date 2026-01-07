@@ -32,7 +32,6 @@
 #include "Rotate8Transport.h"
 #include "EncoderProcessing.h"
 #include "../config/Config.h"
-#include "../parameters/ParameterMap.h"
 
 // Forward declaration (for class members)
 class ButtonHandler;
@@ -318,11 +317,15 @@ inline DualEncoderService::DualEncoderService(TwoWire* wire, uint8_t addressA, u
     _values[6] = ParamDefault::COMPLEXITY;
     _values[7] = ParamDefault::VARIATION;
 
-    // Unit B (indices 8-15): No parameters assigned (encoders disabled)
-    // Unit B buttons are still used for preset management
-    for (uint8_t i = 8; i < TOTAL_ENCODERS; i++) {
-        _values[i] = 0;  // Default to 0 for unused encoders
-    }
+    // Unit B (indices 8-15): Zone parameters
+    _values[8] = ParamDefault::ZONE0_EFFECT;
+    _values[9] = ParamDefault::ZONE0_SPEED;
+    _values[10] = ParamDefault::ZONE1_EFFECT;
+    _values[11] = ParamDefault::ZONE1_SPEED;
+    _values[12] = ParamDefault::ZONE2_EFFECT;
+    _values[13] = ParamDefault::ZONE2_SPEED;
+    _values[14] = ParamDefault::ZONE3_EFFECT;
+    _values[15] = ParamDefault::ZONE3_SPEED;
 }
 
 inline bool DualEncoderService::begin() {
@@ -361,18 +364,18 @@ inline void DualEncoderService::update() {
         }
     }
 
-    // Poll Unit B encoders (indices 8-15) - DISABLED (no parameters assigned)
-    // Unit B buttons are still used for preset management, but encoders are disabled
+    // Poll Unit B encoders (indices 8-15)
     if (_transportB.isAvailable()) {
-        // Only poll buttons for preset management, not encoder rotation
         for (uint8_t localIdx = 0; localIdx < ENCODERS_PER_UNIT; localIdx++) {
             uint8_t globalIdx = localIdx + ENCODERS_PER_UNIT;  // 8-15
-            
-            // Check button state (for preset management)
+
+            // Read raw encoder delta
+            int32_t rawDelta = _transportB.getRelCounter(localIdx);
+            processEncoderDelta(globalIdx, rawDelta, now);
+
+            // Check button state
             bool isPressed = _transportB.getKeyPressed(localIdx);
             processButton(globalIdx, isPressed, now);
-            
-            // Encoder rotation is disabled - no processEncoderDelta() call
         }
     }
 
@@ -414,10 +417,15 @@ inline void DualEncoderService::resetToDefaults(bool triggerCallbacks) {
     _values[6] = ParamDefault::COMPLEXITY;
     _values[7] = ParamDefault::VARIATION;
 
-    // Reset Unit B parameters (8-15) - no parameters assigned
-    for (uint8_t i = 8; i < TOTAL_ENCODERS; i++) {
-        _values[i] = 0;  // Default to 0 for unused encoders
-    }
+    // Reset Unit B parameters (8-15) to zone defaults
+    _values[8] = ParamDefault::ZONE0_EFFECT;
+    _values[9] = ParamDefault::ZONE0_SPEED;
+    _values[10] = ParamDefault::ZONE1_EFFECT;
+    _values[11] = ParamDefault::ZONE1_SPEED;
+    _values[12] = ParamDefault::ZONE2_EFFECT;
+    _values[13] = ParamDefault::ZONE2_SPEED;
+    _values[14] = ParamDefault::ZONE3_EFFECT;
+    _values[15] = ParamDefault::ZONE3_SPEED;
 
     // Reset all processing states
     for (uint8_t i = 0; i < TOTAL_ENCODERS; i++) {
@@ -494,8 +502,13 @@ inline void DualEncoderService::processEncoderDelta(uint8_t globalIdx, int32_t r
 
         if (normalizedDelta != 0) {
             // Apply delta with wrap/clamp
+            uint16_t oldValue = _values[globalIdx];
             int32_t newValue = static_cast<int32_t>(_values[globalIdx]) + normalizedDelta;
             _values[globalIdx] = applyRangeConstraint(globalIdx, newValue);
+
+            // #region agent log
+            Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"WRAP2\",\"location\":\"DualEncoderService.h:503\",\"message\":\"processEncoderDelta\",\"data\":{\"globalIdx\":%d,\"oldValue\":%d,\"normalizedDelta\":%ld,\"newValueBeforeConstraint\":%ld,\"newValueAfterConstraint\":%d,\"shouldWrap\":%d},\"timestamp\":%lu}\n", globalIdx, oldValue, (long)normalizedDelta, (long)newValue, _values[globalIdx], shouldWrapGlobal(globalIdx) ? 1 : 0, (unsigned long)now);
+            // #endregion
 
             // Flash LED for activity feedback (bright green)
             flashLed(globalIdx, 0, 255, 0);
@@ -596,18 +609,19 @@ inline uint16_t DualEncoderService::getDefaultValue(uint8_t globalIdx) const {
 }
 
 inline uint16_t DualEncoderService::applyRangeConstraint(uint8_t globalIdx, int32_t value) const {
-    // Unit B (8-15) no longer has parameters assigned
-    if (globalIdx >= 8) {
-        // Unit B encoders are disabled - return 0
-        return 0;
+    if (globalIdx < ENCODERS_PER_UNIT) {
+        // Unit A: Use EncoderProcessing utilities
+        if (shouldWrapGlobal(globalIdx)) {
+            return EncoderProcessing::wrapValue(globalIdx, value);
+        } else {
+            return EncoderProcessing::clampValue(globalIdx, value);
+        }
     }
 
-    // Unit A: Use EncoderProcessing utilities
-    if (shouldWrapGlobal(globalIdx)) {
-        return EncoderProcessing::wrapValue(globalIdx, value);
-    } else {
-        return EncoderProcessing::clampValue(globalIdx, value);
-    }
+    // Unit B: Simple clamp to 0-255 (placeholder range)
+    if (value < 0) return 0;
+    if (value > 255) return 255;
+    return static_cast<uint16_t>(value);
 }
 
 inline bool DualEncoderService::shouldWrapGlobal(uint8_t globalIdx) const {

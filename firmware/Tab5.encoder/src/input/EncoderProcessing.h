@@ -19,6 +19,7 @@
 // ============================================================================
 
 #include <Arduino.h>
+#include <climits>  // For INT32_MAX
 #include "../config/Config.h"
 
 // ============================================================================
@@ -219,7 +220,7 @@ inline uint16_t clampValue(uint8_t param, int32_t value) {
     if (param >= 8) return 0;
 
     // Direct cast - Parameter enum order matches encoder indices:
-    // 0=Effect, 1=Brightness, 2=Palette, 3=Speed, 4=Mood, 5=FadeAmount, 6=Complexity, 7=Variation
+    // 0=Effect, 1=Palette, 2=Speed, 3=Mood, 4=FadeAmount, 5=Complexity, 6=Variation, 7=Brightness
     Parameter p = static_cast<Parameter>(param);
     uint8_t minVal = getParameterMin(p);
     uint8_t maxVal = getParameterMax(p);
@@ -239,15 +240,50 @@ inline uint16_t wrapValue(uint8_t param, int32_t value) {
     if (param >= 8) return 0;
 
     // Direct cast - Parameter enum order matches encoder indices:
-    // 0=Effect, 1=Brightness, 2=Palette, 3=Speed, 4=Mood, 5=FadeAmount, 6=Complexity, 7=Variation
+    // 0=Effect, 1=Palette, 2=Speed, 3=Mood, 4=FadeAmount, 5=Complexity, 6=Variation, 7=Brightness
     Parameter p = static_cast<Parameter>(param);
     uint8_t minVal = getParameterMin(p);
     uint8_t maxVal = getParameterMax(p);
     int32_t range = (maxVal - minVal) + 1;
 
-    // Normalize value to range
-    while (value < minVal) value += range;
-    while (value > maxVal) value -= range;
+    // #region agent log
+    int32_t originalValue = value;
+    // #endregion
+
+    // Normalize value to range using modulo for efficiency and correctness
+    // Handle negative values correctly with overflow protection
+    if (value < minVal) {
+        int32_t diff = minVal - value;
+        // CRITICAL FIX: Prevent integer overflow in wrap calculation
+        // Use modulo arithmetic instead of multiplication to avoid overflow
+        int32_t wraps = (diff + range - 1) / range;  // Ceiling division
+        // Limit wraps to prevent overflow: max wraps that won't overflow
+        int32_t maxSafeWraps = (INT32_MAX - minVal) / range;
+        if (wraps > maxSafeWraps) {
+            // For extreme values, use modulo directly
+            value = minVal + ((diff % range + range) % range);
+        } else {
+            value += wraps * range;
+        }
+    } else if (value > maxVal) {
+        int32_t diff = value - maxVal;
+        // CRITICAL FIX: Prevent integer overflow in wrap calculation
+        int32_t wraps = (diff + range - 1) / range;  // Ceiling division
+        // Limit wraps to prevent overflow
+        int32_t maxSafeWraps = (INT32_MAX - maxVal) / range;
+        if (wraps > maxSafeWraps) {
+            // For extreme values, use modulo directly
+            value = maxVal - ((diff % range + range) % range);
+        } else {
+            value -= wraps * range;
+        }
+    }
+
+    // #region agent log
+    if (originalValue != value) {
+        Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"WRAP1\",\"location\":\"EncoderProcessing.h:238\",\"message\":\"wrapValue.wrapped\",\"data\":{\"param\":%d,\"originalValue\":%ld,\"wrappedValue\":%ld,\"minVal\":%d,\"maxVal\":%d,\"range\":%ld},\"timestamp\":%lu}\n", param, (long)originalValue, (long)value, minVal, maxVal, (long)range, (unsigned long)millis());
+    }
+    // #endregion
 
     return static_cast<uint16_t>(value);
 }
@@ -258,9 +294,9 @@ inline uint16_t wrapValue(uint8_t param, int32_t value) {
  * @return true if parameter wraps, false if it clamps
  */
 inline bool shouldWrap(uint8_t param) {
-    // Encoder index mapping: 0=Effect, 1=Brightness, 2=Palette, 3=Speed, 4=Mood, 5=FadeAmount, 6=Complexity, 7=Variation
-    // Effect (0) and Palette (2) wrap; Brightness (1) and others clamp
-    return (param == 0 || param == 2);
+    // Encoder index mapping: 0=Effect, 1=Palette, 2=Speed, 3=Mood, 4=FadeAmount, 5=Complexity, 6=Variation, 7=Brightness
+    // Effect (0) and Palette (1) wrap; Speed (2) and others clamp
+    return (param == 0 || param == 1);
 }
 
 /**

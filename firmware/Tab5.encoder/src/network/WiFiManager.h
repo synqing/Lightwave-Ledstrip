@@ -76,10 +76,13 @@ public:
                _status == WiFiConnectionStatus::MDNS_RESOLVED;
     }
 
-    // Check if in AP mode (fallback when both networks fail)
-    bool isAPMode() const {
-        return WiFi.getMode() == WIFI_AP || WiFi.getMode() == WIFI_AP_STA;
+    // Check if retry button should be shown (after 2 minutes of failed connections)
+    bool shouldShowRetryButton() const {
+        return _retryButtonEnabled;
     }
+
+    // Trigger manual retry (reset retry state and restart connection attempts)
+    void triggerRetry();
 
     // Check if mDNS resolved successfully
     bool isMDNSResolved() const {
@@ -109,7 +112,8 @@ private:
     bool _usingPrimaryNetwork;  // true = primary, false = secondary
     uint8_t _primaryAttempts;   // Number of attempts on primary network
     uint8_t _secondaryAttempts; // Number of attempts on secondary network
-    unsigned long _apFallbackStartTime;  // When to start AP mode fallback
+    unsigned long _retryTimeoutStartTime;  // When 2-minute retry period started
+    bool _retryButtonEnabled;  // Whether retry button should be shown
 
     // Timing state
     unsigned long _connectStartTime;
@@ -130,7 +134,6 @@ private:
     // Internal helpers
     void startConnection();
     void switchToSecondaryNetwork();
-    void startAPMode();
     void enterErrorState(const char* reason);
 };
 
@@ -154,7 +157,8 @@ public:
     void update() {}
     WiFiConnectionStatus getStatus() const { return WiFiConnectionStatus::DISCONNECTED; }
     bool isConnected() const { return false; }
-    bool isAPMode() const { return false; }
+    bool shouldShowRetryButton() const { return false; }
+    void triggerRetry() {}
     bool isMDNSResolved() const { return false; }
     void reconnect() {}
     const char* getStatusString() const { return "WiFi Disabled"; }

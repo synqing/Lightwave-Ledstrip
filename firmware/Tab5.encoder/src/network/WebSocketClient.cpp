@@ -267,10 +267,16 @@ void WebSocketClient::sendJSON(const char* type, JsonDocument& doc) {
     // #endregion
     size_t len = serializeJson(message, _jsonBuffer, JSON_BUFFER_SIZE - 1);
     // #region agent log
+    Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H3,H6\",\"location\":\"WebSocketClient.cpp:268\",\"message\":\"sendJSON.serialized\",\"data\":{\"type\":\"%s\",\"len\":%u,\"bufferSize\":%u,\"jsonPreview\":\"%.100s\"},\"timestamp\":%lu}\n",
+                  type ? type : "null", (unsigned)len, JSON_BUFFER_SIZE, _jsonBuffer, (unsigned long)millis());
     Serial.printf("[DEBUG] sendJSON after serialize - len=%u bufferSize=%u Heap: free=%u minFree=%u\n",
                   len, JSON_BUFFER_SIZE, ESP.getFreeHeap(), ESP.getMinFreeHeap());
     // #endregion
     if (len == 0 || len >= JSON_BUFFER_SIZE) {
+        // #region agent log
+        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H3\",\"location\":\"WebSocketClient.cpp:273\",\"message\":\"sendJSON.messageTooLarge\",\"data\":{\"type\":\"%s\",\"len\":%u,\"bufferSize\":%u},\"timestamp\":%lu}\n",
+                      type ? type : "null", (unsigned)len, JSON_BUFFER_SIZE, (unsigned long)millis());
+        // #endregion
         Serial.println("[WS] Message too large, dropping");
         return;
     }
@@ -289,12 +295,19 @@ void WebSocketClient::sendJSON(const char* type, JsonDocument& doc) {
     }
     s_sendInProgress = true;
     s_lastSendTime = now;
+    // #region agent log
+    Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H6\",\"location\":\"WebSocketClient.cpp:290\",\"message\":\"sendJSON.beforeSendTXT\",\"data\":{\"type\":\"%s\",\"len\":%u,\"sendInProgress\":%d},\"timestamp\":%lu}\n",
+                  type ? type : "null", (unsigned)len, s_sendInProgress ? 1 : 0, (unsigned long)now);
     // #endregion
-    _ws.sendTXT(_jsonBuffer);
+    // #endregion
+    bool sendResult = _ws.sendTXT(_jsonBuffer);
     // #region agent log
     s_sendInProgress = false;
-    Serial.printf("[DEBUG] sendJSON after sendTXT - Heap: free=%u minFree=%u largest=%u\n",
-                  ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+    Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H6\",\"location\":\"WebSocketClient.cpp:293\",\"message\":\"sendJSON.afterSendTXT\",\"data\":{\"type\":\"%s\",\"len\":%u,\"sendResult\":%d},\"timestamp\":%lu}\n",
+                  type ? type : "null", (unsigned)len, sendResult ? 1 : 0, (unsigned long)millis());
+    // #endregion
+    Serial.printf("[DEBUG] sendJSON after sendTXT - Heap: free=%u minFree=%u largest=%u sendResult=%d\n",
+                  ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap(), sendResult ? 1 : 0);
     // #endregion
 }
 
@@ -583,99 +596,94 @@ void WebSocketClient::requestColorCorrectionConfig() {
         return;
     }
 
-    // #region agent log
-    Serial.printf("[DEBUG] requestColorCorrectionConfig entry - Heap: free=%u minFree=%u largest=%u\n",
-                  ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-    // #endregion
     JsonDocument doc;
-    doc["requestId"] = "cc_sync";
-    // #region agent log
-    Serial.printf("[DEBUG] requestColorCorrectionConfig before sendJSON - Heap: free=%u minFree=%u\n",
-                  ESP.getFreeHeap(), ESP.getMinFreeHeap());
-    // #endregion
+    // Empty payload
     sendJSON("colorCorrection.getConfig", doc);
-    // #region agent log
-    Serial.printf("[DEBUG] requestColorCorrectionConfig after sendJSON - Heap: free=%u minFree=%u largest=%u\n",
-                  ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-    // #endregion
-    Serial.println("[WS] Requested colorCorrection.getConfig");
 }
 
 void WebSocketClient::sendColorCorrectionConfig(bool gammaEnabled, float gammaValue,
-                                                bool aeEnabled, uint8_t aeTarget,
-                                                bool brownEnabled) {
+                               bool autoExposureEnabled, uint8_t autoExposureTarget,
+                               bool brownGuardrailEnabled, uint8_t mode) {
+    // #region agent log
+    FILE* logFile = fopen("/Users/spectrasynq/Workspace_Management/Software/PRISM.tab5/.cursor/debug.log", "a");
+    if (logFile) {
+        fprintf(logFile, "{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1,H2\",\"location\":\"WebSocketClient.cpp:591\",\"message\":\"sendColorCorrectionConfig.entry\",\"data\":{\"connected\":%d,\"gammaEnabled\":%d,\"gammaValue\":%.1f,\"aeEnabled\":%d,\"aeTarget\":%d,\"brownEnabled\":%d,\"mode\":%d},\"timestamp\":%lu}\n",
+                isConnected() ? 1 : 0, gammaEnabled ? 1 : 0, gammaValue, autoExposureEnabled ? 1 : 0,
+                autoExposureTarget, brownGuardrailEnabled ? 1 : 0, mode, (unsigned long)millis());
+        fclose(logFile);
+    }
+    // #endregion
+    
     if (!isConnected()) {
+        // #region agent log
+        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H2\",\"location\":\"WebSocketClient.cpp:594\",\"message\":\"sendColorCorrectionConfig.notConnected\",\"data\":{\"status\":%d},\"timestamp\":%lu}\n",
+                      (int)_status, (unsigned long)millis());
+        // #endregion
         return;
     }
 
     JsonDocument doc;
     doc["gammaEnabled"] = gammaEnabled;
     doc["gammaValue"] = gammaValue;
-    doc["autoExposureEnabled"] = aeEnabled;
-    doc["autoExposureTarget"] = aeTarget;
-    doc["brownGuardrailEnabled"] = brownEnabled;
-    sendJSON("colorCorrection.setConfig", doc);
-
-    Serial.printf("[WS] Sent colorCorrection.setConfig: gamma=%s (%.1f), ae=%s, brown=%s\n",
+    doc["autoExposureEnabled"] = autoExposureEnabled;
+    doc["autoExposureTarget"] = autoExposureTarget;
+    doc["brownGuardrailEnabled"] = brownGuardrailEnabled;
+    doc["mode"] = mode;  // Include mode field - server requires all fields in setConfig
+    
+    // #region agent log
+    Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H3\",\"location\":\"WebSocketClient.cpp:606\",\"message\":\"sendColorCorrectionConfig.jsonPrepared\",\"data\":{\"command\":\"colorCorrection.setConfig\"},\"timestamp\":%lu}\n",
+                  (unsigned long)millis());
+    // #endregion
+    
+    Serial.printf("[WS] Sending colorCorrection.setConfig: gamma=%s(%.1f) ae=%s brown=%s mode=%d\n",
                   gammaEnabled ? "ON" : "OFF", gammaValue,
-                  aeEnabled ? "ON" : "OFF",
-                  brownEnabled ? "ON" : "OFF");
+                  autoExposureEnabled ? "ON" : "OFF",
+                  brownGuardrailEnabled ? "ON" : "OFF",
+                  mode);
+    
+    sendJSON("colorCorrection.setConfig", doc);
 }
 
 void WebSocketClient::sendGammaChange(bool enabled, float value) {
     if (!isConnected()) {
         return;
     }
-
+    
     JsonDocument doc;
-    doc["gammaEnabled"] = enabled;
-    doc["gammaValue"] = value;
-    sendJSON("colorCorrection.setConfig", doc);
-
-    // Update local cache
-    _colorCorrectionState.gammaEnabled = enabled;
-    _colorCorrectionState.gammaValue = value;
+    doc["enabled"] = enabled;
+    doc["value"] = value;
+    sendJSON("colorCorrection.setGamma", doc);
 }
 
 void WebSocketClient::sendAutoExposureChange(bool enabled, uint8_t target) {
     if (!isConnected()) {
         return;
     }
-
+    
     JsonDocument doc;
-    doc["autoExposureEnabled"] = enabled;
-    doc["autoExposureTarget"] = target;
-    sendJSON("colorCorrection.setConfig", doc);
-
-    // Update local cache
-    _colorCorrectionState.autoExposureEnabled = enabled;
-    _colorCorrectionState.autoExposureTarget = target;
+    doc["enabled"] = enabled;
+    doc["target"] = target;
+    sendJSON("colorCorrection.setAutoExposure", doc);
 }
 
 void WebSocketClient::sendBrownGuardrailChange(bool enabled) {
     if (!isConnected()) {
         return;
     }
-
+    
     JsonDocument doc;
-    doc["brownGuardrailEnabled"] = enabled;
-    sendJSON("colorCorrection.setConfig", doc);
-
-    // Update local cache
-    _colorCorrectionState.brownGuardrailEnabled = enabled;
+    doc["enabled"] = enabled;
+    sendJSON("colorCorrection.setBrownGuardrail", doc);
 }
 
 void WebSocketClient::sendColourCorrectionMode(uint8_t mode) {
     if (!isConnected()) {
         return;
     }
-
+    
     JsonDocument doc;
     doc["mode"] = mode;
-    sendJSON("colorCorrection.setConfig", doc);
-
-    _colorCorrectionState.mode = mode;
-    _colorCorrectionState.valid = true;
+    sendJSON("colorCorrection.setMode", doc);
 }
 
 // ============================================================================
@@ -683,9 +691,7 @@ void WebSocketClient::sendColourCorrectionMode(uint8_t mode) {
 // ============================================================================
 
 void WebSocketClient::sendGenericParameter(const char* fieldName, uint8_t value) {
-    // Generic parameters use a shared rate limiter slot (slot 7 = VARIATION)
-    // This prevents spam from unmapped Unit B encoders
-    if (!canSend(ParamIndex::VARIATION)) {
+    if (!isConnected()) {
         return;
     }
 

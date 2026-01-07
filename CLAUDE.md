@@ -13,8 +13,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Current Focus
 
 - **Branch**: `main`
-- **Active Work**: Security hardening, performance optimization, encoder support
-- **Recent**: WiFi credentials externalized, CORS headers added, TrigLookup optimization, M5ROTATE8 encoder support
+- **Active Work**: Security hardening, performance optimization, Tab5 LVGL UI controller
+- **Recent** (2026-01-07): Tab5.encoder migrated to LVGL 9.3.0 UI framework (from PRISM.tab5), WiFi credentials externalized, CORS headers added, TrigLookup optimization, dual M5ROTATE8 encoder support (16 encoders + 8-bank preset system)
 
 ## First Steps for New Agents
 
@@ -60,7 +60,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    - Network/API → `network-api-engineer`
    - Serial interface → `serial-interface-engineer`
    - Color/palettes → `palette-specialist`
-   - Web development → `agent-nextjs`, `agent-lvgl-uiux`
+   - Web development → `agent-nextjs`
+   - Tab5 LVGL UI → `agent-lvgl-uiux`
    - Backend → `agent-convex`, `agent-vercel`, `agent-clerk`
 
 2. **Determine if multiple agents are needed:**
@@ -312,11 +313,22 @@ pio device monitor -d firmware/Tab5.encoder -b 115200
 
 ## Hardware Configuration
 
+### LightwaveOS v2 (Main Controller)
 - **ESP32-S3-DevKitC-1** @ 240MHz, 8MB flash
 - **Dual WS2812 strips**: GPIO 4 (Strip 1), GPIO 5 (Strip 2)
 - **160 LEDs per strip** = 320 total
 - **Center point**: LED 79/80 (effects originate here)
 - **Optional HMI**: M5ROTATE8 8-encoder unit via I2C (enable with `FEATURE_ROTATE8_ENCODER`)
+
+### Tab5.encoder (External Controller)
+- **M5Stack Tab5** (ESP32-P4 RISC-V) @ 360MHz, 500KB RAM, 16MB flash
+- **5" Display** (800x480, ILI9881C or ST7123 auto-detected)
+- **Dual M5ROTATE8 units**: 16 rotary encoders total (Grove Port.A, I2C)
+  - Unit A (0x42): Encoders 0-7 for global parameters
+  - Unit B (0x41): Encoders 8-15 buttons for 8-bank preset system
+- **LVGL 9.3.0 UI**: Professional widget-based interface
+- **WebSocket client**: Bidirectional sync with LightwaveOS v2
+- **WiFi**: ESP32-C6 co-processor via SDIO (custom pins)
 
 ## Architecture Overview
 
@@ -441,6 +453,11 @@ The v1 API provides standardized responses, rate limiting, and rich metadata.
 | `/api/v1/network/status` | GET | Network status (AP/STA mode, IP addresses, RSSI) |
 | `/api/v1/network/sta/enable` | POST | Enable STA mode with optional auto-revert `{durationSeconds: N, revertToApOnly: true}` |
 | `/api/v1/network/ap/enable` | POST | Force AP-only mode |
+| `/api/v1/modifiers/add` | POST | Add effect modifier `{type: "speed\|intensity\|color_shift\|mirror\|glitch", ...params}` |
+| `/api/v1/modifiers/remove` | POST | Remove modifier `{type: "speed"}` |
+| `/api/v1/modifiers/list` | GET | List all active modifiers |
+| `/api/v1/modifiers/clear` | POST | Clear all modifiers |
+| `/api/v1/modifiers/update` | POST | Update modifier parameters `{type: "speed", ...newParams}` |
 
 **Response Format**:
 ```json
@@ -556,3 +573,39 @@ git status --porcelain | wc -l      # Check uncommitted changes
 - `override_reason` field in .claude/harness/feature_list.json items
 - `--force` flags in harness.py (when implemented)
 - Document why if bypassing rules
+
+---
+
+## Ralph Loop Autonomous Workflow
+
+The Ralph Loop is an autonomous workflow executor that allows agents to work through feature backlog items one at a time, self-managing iteration and convergence.
+
+**What it is**: A single-item-per-invocation autonomous executor that reads PRD requirements, implements features, verifies results, and records progress without human intervention.
+
+**When to use**: Feature items in `feature_list.json` with `ralph_loop.enabled=true` are eligible for autonomous execution. The system handles iterative refinement until convergence criteria are met.
+
+**How to invoke**: Run the skill with `/ralph-loop` command or use the Skill tool:
+```
+/ralph-loop
+```
+
+**Workflow summary**:
+1. **Boot** - Run `.claude/harness/init.sh` to verify project health
+2. **Select** - Choose ONE item with `ralph_loop.enabled=true` (highest priority FAILING)
+3. **Read PRD** - Load requirements from `prd_reference.file` if specified
+4. **Implement** - Make targeted changes following all project constraints
+5. **Verify** - Run acceptance criteria checks and convergence tests
+6. **Record** - Update `attempts[]`, `current_iteration`, and status
+7. **Iterate or STOP** - Continue until `max_iterations` reached or convergence criteria met
+
+**Convergence criteria** (defined per-item):
+- `build_passes`: Compilation succeeds without errors
+- `tests_pass`: All test commands return 0
+- `acceptance_met`: All acceptance criteria verified
+
+**Safety limits**:
+- `max_iterations`: Prevents infinite loops (typically 5-10)
+- `current_iteration`: Tracks progress toward limit
+- Automatic BLOCKING when max iterations exceeded without convergence
+
+**Full protocol documentation**: See `.claude/skills/ralph-loop/SKILL.md` for complete workflow, error handling, and advanced features.

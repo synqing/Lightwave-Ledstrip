@@ -36,6 +36,10 @@
 #define LW_LOG_TAG "Audio"
 #include "utils/Log.h"
 
+// K1 front-end
+#include "k1/K1AudioFrontEnd.h"
+#include "k1/FeatureBus.h"
+
 // Runtime-configurable audio debug verbosity
 #include "AudioDebugConfig.h"
 
@@ -238,6 +242,14 @@ void AudioNode::onStart()
         return;
     }
 
+    // Initialize K1 Dual-Bank Goertzel Front-End
+    if (!m_k1FrontEnd.init()) {
+        LW_LOGE("Failed to initialize K1 front-end");
+        m_state = AudioNodeState::ERROR;
+        m_stats.state = m_state;
+        return;
+    }
+
     m_state = AudioNodeState::RUNNING;
     m_stats.state = m_state;
 
@@ -293,27 +305,15 @@ void AudioNode::onTick()
 
     m_stats.tickCount++;
 
-    // Record tick start time
-    uint64_t tickStart = esp_timer_get_time();
-
     // Capture one hop of audio
     captureHop();
 
     // Advance tempo phase every hop (audio-thread-owned) to avoid cross-core races with the renderer
+    // Use sample counter as single timebase (deterministic, native-safe)
     float delta_sec = static_cast<float>(HOP_SIZE) / static_cast<float>(SAMPLE_RATE);
-    #ifndef NATIVE_BUILD
-    uint64_t tMicros_phase = esp_timer_get_time();
-    #else
-    static uint64_t fake_time_phase = 0;
-    fake_time_phase += static_cast<uint64_t>(delta_sec * 1e6f);
-    uint64_t tMicros_phase = fake_time_phase;
-    #endif
-    m_tempo.advancePhase(delta_sec, tMicros_phase);
+    uint64_t t_samples_phase = m_sampleIndex;
+    m_tempo.advancePhase(delta_sec, t_samples_phase);
     m_lastTempoOutput = m_tempo.getOutput();
-
-    // Record tick time
-    uint64_t tickEnd = esp_timer_get_time();
-    m_stats.lastTickTimeUs = tickEnd - tickStart;
 
     // Log periodically (every 620 ticks = ~10 seconds) - gated by verbosity >= 2
     auto& dbgCfg = getAudioDebugConfig();
@@ -497,7 +497,8 @@ void AudioNode::processHop()
     }
 
     // 1. Build AudioTime for this hop
-    uint64_t now_us = esp_timer_get_time();
+    // Use sample counter as single timebase (deterministic, native-safe)
+    uint64_t now_us = (m_sampleIndex * 1000000ULL) / SAMPLE_RATE;
     AudioTime now(m_sampleIndex, SAMPLE_RATE, now_us);
 
     // Update monotonic counters
@@ -535,6 +536,19 @@ void AudioNode::processHop()
 
     // === Phase: DC/AGC Loop ===
     BENCH_START_PHASE();
+
+    // K1 Front-End: Process hop and publish feature frame
+    k1::AudioFeatureFrame k1Frame;
+    if (m_k1FrontEnd.isInitialized()) {
+        k1::AudioChunk chunk;
+        memcpy(chunk.samples, m_hopBuffer, HOP_SIZE * sizeof(int16_t));
+        chunk.n = HOP_SIZE;
+        chunk.sample_counter_end = m_sampleIndex;
+        
+        bool is_clipping = (maxRaw > 30000 || minRaw < -30000);
+        k1Frame = m_k1FrontEnd.processHop(chunk, is_clipping);
+        m_featureBus.publish(k1Frame);
+    }
 
     int32_t minC = 32767;
     int32_t maxC = -32768;
@@ -878,38 +892,27 @@ void AudioNode::processHop()
     }
 
     // ========================================================================
-    // TempoTracker Beat Tracker Processing
+    // TempoTracker Beat Tracker Processing (K1 Integration)
     // ========================================================================
-    // Dual-rate onset detection input:
-    // - Spectral flux from 8-band analysis when ready (31.25 Hz)
-    // - VU derivative from RMS every hop (62.5 Hz)
-    // goertzelTriggered fires when 8-band analysis completes (every 512 samples)
-    // CRITICAL FIX: Use Pre-AGC signals for beat tracking!
-    // AGC flattens dynamics, making onset detection impossible.
-    // We use reconstructed Pre-AGC bands and Pre-AGC RMS.
-    // Note: TempoTracker uses onset-timing algorithm (not Goertzel tempo analysis)
+    // Use K1 features for tempo tracking (rhythm_novelty as primary onset)
     
-    // Get single timebase for determinism
-    #ifndef NATIVE_BUILD
-    uint64_t tMicros = esp_timer_get_time();
-    #else
-    static uint64_t fake_time = 0;
-    float delta_sec = static_cast<float>(HOP_SIZE) / static_cast<float>(SAMPLE_RATE);
-    fake_time += static_cast<uint64_t>(delta_sec * 1e6f);
-    uint64_t tMicros = fake_time;
-    #endif
-    
-    m_tempo.updateNovelty(
-        goertzelTriggered ? bandsPre : nullptr,    // Pre-AGC 8-band magnitudes
-        8,                                         // num_bands
-        rmsPre,                                    // Pre-AGC RMS for VU calculation
-        goertzelTriggered,                         // bands_ready flag
-        tMicros                                    // Single timebase
-    );
-
-    // Update tempo detection (onset-timing based beat tracking)
-    float delta_sec = static_cast<float>(HOP_SIZE) / static_cast<float>(SAMPLE_RATE);
-    m_tempo.updateTempo(delta_sec, tMicros);
+    // Update tempo tracker from K1 features
+    if (m_k1FrontEnd.isInitialized()) {
+        m_tempo.updateFromFeatures(k1Frame);
+    } else {
+        // Fallback: legacy updateNovelty (for compatibility during migration)
+        uint64_t t_samples = m_sampleIndex;
+        uint64_t tMicros = (t_samples * 1000000ULL) / SAMPLE_RATE;
+        m_tempo.updateNovelty(
+            goertzelTriggered ? bandsPre : nullptr,
+            8,
+            rmsPre,
+            goertzelTriggered,
+            tMicros
+        );
+        float delta_sec = static_cast<float>(HOP_SIZE) / static_cast<float>(SAMPLE_RATE);
+        m_tempo.updateTempo(delta_sec, t_samples);
+    }
     
     // Store for change detection (used by getTempo() diagnostics)
     m_lastTempoOutput = m_tempo.getOutput();
@@ -982,11 +985,10 @@ void AudioNode::processHop()
 
         // 7a. Populate beat tracker state for rhythmic saliency (using TempoTracker output)
     // Field names kept as k1* for backward compatibility with effects
-    raw.tempo.locked = m_lastTempoOutput.locked;
-    raw.tempo.confidence = m_lastTempoOutput.confidence;
-    raw.tempo.beat_tick = m_lastTempoOutput.beat_tick && m_lastTempoOutput.locked;
-    // Copy full tempo object for effects
+    // Copy tempo output (do NOT overwrite gated beat_tick by copying whole struct after)
     raw.tempo = m_lastTempoOutput;
+    // Apply gating to beat_tick (only fire when locked)
+    raw.tempo.beat_tick = m_lastTempoOutput.beat_tick && m_lastTempoOutput.locked;
 
     // 7. Update ControlBus with attack/release smoothing
     m_controlBus.setSmoothing(tuning.controlBusAlphaFast, tuning.controlBusAlphaSlow);

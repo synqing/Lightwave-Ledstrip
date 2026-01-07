@@ -27,6 +27,7 @@
 #include "handlers/PresetHandlers.h"
 #include "handlers/ZonePresetHandlers.h"
 #include "handlers/ShowHandlers.h"
+#include "handlers/ModifierHandlers.h"
 #include <ESPAsyncWebServer.h>
 #include <Arduino.h>
 
@@ -1220,6 +1221,55 @@ void V1ApiRoutes::registerRoutes(
         if (!checkRateLimit(request)) return;
         handlers::NetworkHandlers::handleEnableAPOnly(request);
     });
+
+    // ==================== Modifier Routes ====================
+
+    // GET /api/v1/modifiers/list - List all active modifiers
+    registry.onGet("/api/v1/modifiers/list", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::ModifierHandlers::handleListModifiers(request, ctx.renderer);
+    });
+
+    // POST /api/v1/modifiers/add - Add modifier to stack
+    registry.onPost("/api/v1/modifiers/add",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::ModifierHandlers::handleAddModifier(request, data, len, ctx.renderer);
+        }
+    );
+
+    // POST /api/v1/modifiers/remove - Remove modifier from stack
+    registry.onPost("/api/v1/modifiers/remove",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::ModifierHandlers::handleRemoveModifier(request, data, len, ctx.renderer);
+        }
+    );
+
+    // POST /api/v1/modifiers/clear - Clear all modifiers
+    registry.onPost("/api/v1/modifiers/clear", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::ModifierHandlers::handleClearModifiers(request, ctx.renderer);
+    });
+
+    // POST /api/v1/modifiers/update - Update modifier parameters
+    registry.onPost("/api/v1/modifiers/update",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::ModifierHandlers::handleUpdateModifier(request, data, len, ctx.renderer);
+        }
+    );
 }
 
 } // namespace webserver

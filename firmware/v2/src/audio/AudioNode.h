@@ -44,6 +44,8 @@
 #if FEATURE_STYLE_DETECTION
 #include "StyleDetector.h"
 #endif
+#include "k1/K1AudioFrontEnd.h"
+#include "k1/FeatureBus.h"
 #include "contracts/AudioTime.h"
 #include "contracts/ControlBus.h"
 #include "contracts/SnapshotBuffer.h"
@@ -466,6 +468,10 @@ private:
 
     // Lock-free buffer for cross-core sharing with RendererActor
     SnapshotBuffer<ControlBusFrame> m_controlBusBuffer;
+
+    // K1 Dual-Bank Goertzel Front-End
+    k1::K1AudioFrontEnd m_k1FrontEnd;
+    k1::FeatureBus m_featureBus;
 
     // Monotonic sample counter (64-bit for no overflow)
     uint64_t m_sampleIndex = 0;

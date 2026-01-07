@@ -7,11 +7,10 @@
 // IMPORTANT: Edit this file with your actual WiFi credentials before building.
 // ============================================================================
 
-// WiFi Access Point Credentials (fallback when both networks fail)
-// Matches firmware/v2 AP name for consistency
-// NOTE: v2 firmware uses "lightwave123" password
-#define AP_SSID "LightwaveOS"
-#define AP_PASSWORD "lightwave123"
+// WiFi Access Point Credentials (DISABLED - Tab5 should never create its own AP)
+// Tab5 is a slave to v2 device which provides the AP
+// #define AP_SSID "LightwaveOS"
+// #define AP_PASSWORD "lightwave123"
 
 // WiFi Station Credentials (defaults, overridden by build flags)
 #ifndef WIFI_SSID
@@ -22,12 +21,13 @@
 #endif
 
 // Secondary WiFi Network (fallback)
-// Configured to connect to firmware/v2 AP ("LightwaveOS") if primary fails
+// Tab5 automatically connects to v2 device's AP when primary WiFi unavailable
+// v2 device AP: SSID="LightwaveOS-AP", Password="SpectraSynq", IP=192.168.4.1
 #ifndef WIFI_SSID2
-#define WIFI_SSID2 "LightwaveOS"
+#define WIFI_SSID2 "LightwaveOS-AP"
 #endif
 #ifndef WIFI_PASSWORD2
-#define WIFI_PASSWORD2 "lightwave123"
+#define WIFI_PASSWORD2 "SpectraSynq"
 #endif
 
 // LightwaveOS Server
@@ -65,16 +65,12 @@ namespace NetworkConfig {
 
     // Per-parameter send throttle (minimum interval between sends)
     constexpr uint32_t PARAM_THROTTLE_MS = 50;
-
-    // AP fallback settings (matches firmware/v2)
-    constexpr const char* AP_SSID_VALUE = AP_SSID;
-    constexpr const char* AP_PASSWORD_VALUE = AP_PASSWORD;
     
     // Number of connection attempts per network before switching
     constexpr uint8_t WIFI_ATTEMPTS_PER_NETWORK = 2;
     
-    // Delay before falling back to AP mode (after both networks fail)
-    constexpr uint32_t AP_FALLBACK_DELAY_MS = 10000;  // 10 seconds
+    // WiFi retry timeout before showing retry button (2 minutes)
+    constexpr uint32_t WIFI_RETRY_TIMEOUT_MS = 120000;  // 2 minutes
 }
 
 // OTA Update Configuration

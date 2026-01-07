@@ -81,14 +81,17 @@ void ActionRowWidget::drawButton(int index, const char* label, const char* value
     _sprite.drawRect(x + 1, y + 1, btnW - 2, btnH - 2, border);
     _sprite.drawRect(x, y, btnW, btnH, Theme::dimColor(border, 180));
 
-    _sprite.setTextDatum(textdatum_t::middle_center);
+    // Label at top-center
+    _sprite.setTextDatum(textdatum_t::top_center);
     _sprite.setFont(&fonts::FreeSans9pt7b);
     _sprite.setTextColor(text);
-    _sprite.drawString(label, x + btnW / 2, y + (btnH / 2) - 16);
+    _sprite.drawString(label, x + btnW / 2, y + 8);
 
+    // Value - use larger font
+    _sprite.setTextDatum(textdatum_t::middle_center);
     _sprite.setFont(&fonts::FreeSansBold12pt7b);
     _sprite.setTextColor(active ? accent : Theme::TEXT_DIM);
-    _sprite.drawString(value, x + btnW / 2, y + (btnH / 2) + 16);
+    _sprite.drawString(value, x + btnW / 2, y + btnH / 2 + 12);
 }
 
 void ActionRowWidget::render() {

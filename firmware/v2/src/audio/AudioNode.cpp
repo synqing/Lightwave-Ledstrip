@@ -43,20 +43,21 @@
 // #include "tempo/TempoTracker.h" (Removed - Phase 2 cleanup)
 
 // Perceptual band weights for spectral flux calculation (derived from K1 research)
-// Bass bands weighted higher for better kick detection
+// Reduced disparity to detect weak beats (hi-hats, snares) - matches TempoTracker weights
+// Reduced from 4.67x to 2.4x disparity per research document recommendation
 namespace {
     constexpr float PERCEPTUAL_BAND_WEIGHTS[8] = {
-        1.4f,   // Band 0: Sub-bass (20-40Hz) - critical for kick drums
-        1.3f,   // Band 1: Bass (40-80Hz) - fundamental bass notes
+        1.2f,   // Band 0: Sub-bass (20-40Hz) - critical for kick drums
+        1.1f,   // Band 1: Bass (40-80Hz) - fundamental bass notes
         1.0f,   // Band 2: Low-mid (80-160Hz) - bass harmonics
-        0.9f,   // Band 3: Mid (160-320Hz) - lower vocals, snare body
-        0.8f,   // Band 4: Upper-mid (320-640Hz) - vocals, instruments
-        0.6f,   // Band 5: Presence (640-1280Hz) - clarity frequencies
-        0.4f,   // Band 6: Brilliance (1280-2560Hz) - sibilance, hi-hats
-        0.3f    // Band 7: Air (2560-5120Hz) - sparkle, treble transients
+        0.8f,   // Band 3: Mid (160-320Hz) - lower vocals, snare body
+        0.7f,   // Band 4: Upper-mid (320-640Hz) - vocals, instruments
+        0.5f,   // Band 5: Presence (640-1280Hz) - clarity frequencies
+        0.5f,   // Band 6: Brilliance (1280-2560Hz) - sibilance, hi-hats
+        0.5f    // Band 7: Air (2560-5120Hz) - sparkle, treble transients
     };
     constexpr float PERCEPTUAL_BAND_WEIGHT_SUM =
-        1.4f + 1.3f + 1.0f + 0.9f + 0.8f + 0.6f + 0.4f + 0.3f;  // 6.7f
+        1.2f + 1.1f + 1.0f + 0.8f + 0.7f + 0.5f + 0.5f + 0.5f;  // 6.3f
 }
 
 #ifndef NATIVE_BUILD
@@ -163,12 +164,18 @@ void AudioNode::setContractTuning(const AudioContractTuning& tuning)
     m_contractTuningSeq.store(v + 2U, std::memory_order_release);
 
     // Apply tuning to TempoTracker
+    // Map AudioContractTuning to TempoTrackerTuning (onset-timing parameters)
     TempoTrackerTuning tt;
-    tt.hysteresisThreshold = clamped.tempoHysteresisThreshold;
-    tt.hysteresisFrames = clamped.tempoHysteresisFrames;
-    tt.magnitudeAlpha = clamped.tempoMagnitudeAlpha;
-    tt.silentDecay = clamped.tempoSilentDecay;
-    tt.silenceThreshold = clamped.tempoSilenceThreshold;
+    tt.minBpm = clamped.bpmMin;
+    tt.maxBpm = clamped.bpmMax;
+    tt.lockStrength = clamped.phaseCorrectionGain;
+    tt.confRise = 0.4f;  // Default - no direct mapping from old tuning
+    tt.confFall = 0.2f;  // Reduced from 0.8f - was too aggressive, preventing confidence accumulation
+    tt.onsetThreshK = 1.8f;  // Lowered for better beat detection sensitivity
+    tt.refractoryMs = 100;   // Reduced for fast music (138 BPM = 435ms period, 100ms is safe)
+    tt.baselineAlpha = 0.22f;  // Increased for faster baseline adaptation to dynamics
+    // Note: Old Goertzel-specific parameters (hysteresisThreshold, hysteresisFrames,
+    // silentDecay, silenceThreshold) are no longer applicable to onset-timing approach
     m_tempo.setTuning(tt);
 }
 
@@ -294,7 +301,14 @@ void AudioNode::onTick()
 
     // Advance tempo phase every hop (audio-thread-owned) to avoid cross-core races with the renderer
     float delta_sec = static_cast<float>(HOP_SIZE) / static_cast<float>(SAMPLE_RATE);
-    m_tempo.advancePhase(delta_sec);
+    #ifndef NATIVE_BUILD
+    uint64_t tMicros_phase = esp_timer_get_time();
+    #else
+    static uint64_t fake_time_phase = 0;
+    fake_time_phase += static_cast<uint64_t>(delta_sec * 1e6f);
+    uint64_t tMicros_phase = fake_time_phase;
+    #endif
+    m_tempo.advancePhase(delta_sec, tMicros_phase);
     m_lastTempoOutput = m_tempo.getOutput();
 
     // Record tick time
@@ -350,6 +364,40 @@ void AudioNode::onTick()
         LW_LOGI(LW_CLR_MAGENTA "Beat:" LW_ANSI_RESET " BPM=%.1f conf=%.2f phase=%.2f lock=%s",
                  m_lastTempoOutput.bpm, m_lastTempoOutput.confidence,
                  m_lastTempoOutput.phase01, m_lastTempoOutput.locked ? "YES" : "no");
+
+        // Enhanced beat tracking diagnostics (verbosity level 4+)
+        if (dbgCfg.verbosity >= 4) {
+            const auto& diag = m_tempo.getDiagnostics();
+            
+            // Determine confidence failure reason
+            const char* confReason = "unknown";
+            if (diag.onsetCount == 0) {
+                confReason = "no_onsets";
+            } else if (diag.intervalsValid == 0 && diag.intervalsRejected > 0) {
+                confReason = "intervals_out_of_range";
+            } else if (diag.intervalsValid == 0 && diag.intervalsRejected == 0) {
+                confReason = "waiting_for_second_onset";
+            } else if (diag.confidenceRises == 0) {
+                confReason = "no_conf_rises";
+            } else {
+                confReason = "decay_too_fast";
+            }
+
+            // Onset detection stats
+            LW_LOGI(LW_CLR_CYAN "[Beat Debug]" LW_ANSI_RESET " onsets=%u (rej_refr=%u rej_thr=%u) flux=%.4f thr=%.4f base=%.4f",
+                     diag.onsetCount, diag.onsetRejectedRefractory, diag.onsetRejectedThreshold,
+                     diag.currentFlux, diag.threshold, diag.baseline);
+
+            // Interval validation stats
+            LW_LOGI(LW_CLR_CYAN "[Beat Debug]" LW_ANSI_RESET " intervals: valid=%u rej=%u (inconsist=%u) last_valid=%.3fs last_rej=%.3fs",
+                     diag.intervalsValid, diag.intervalsRejected, diag.intervalsRejectedInconsistent,
+                     diag.lastValidInterval, diag.lastRejectedInterval);
+
+            // Confidence tracking
+            LW_LOGI(LW_CLR_CYAN "[Beat Debug]" LW_ANSI_RESET " confidence: rises=%u falls=%u delta=%.4f reason=%s",
+                     diag.confidenceRises, diag.confidenceFalls,
+                     diag.lastConfidenceDelta, confReason);
+        }
     }
 }
 
@@ -745,6 +793,32 @@ void AudioNode::processHop()
                 bandsPre[i] = bandMappedPre * activity;
             }
 
+            // === Phase 2: 64-bin FFT Analysis ===
+            // Call analyze64() to populate raw.bins64[] with semitone-spaced frequency data
+            // (55 Hz - 2093 Hz, A1 - C7, 5.25 octaves)
+            if (m_analyzer.analyze64(m_bins64Raw)) {
+                // Fresh 64-bin data available - apply same processing as 8-band
+                for (int i = 0; i < 64; ++i) {
+                    float binVal = mapLevelDb(m_bins64Raw[i], tuning.bandDbFloor, tuning.bandDbCeil);
+
+                    // Apply activity gate (consistency with 8-band processing)
+                    binVal *= activity;
+
+                    // Clamp to [0, 1]
+                    if (binVal > 1.0f) binVal = 1.0f;
+
+                    // Cache for next hop when analysis isn't ready
+                    m_bins64Cached[i] = binVal;
+                    raw.bins64[i] = binVal;
+                }
+            } else {
+                // No new 64-bin analysis this hop - reuse cached values
+                // (prevents "picket fence" dropouts in FFT data)
+                for (int i = 0; i < 64; ++i) {
+                    raw.bins64[i] = m_bins64Cached[i] * activity;
+                }
+            }
+
             // Throttle 8-band Goertzel debug logging - gated by verbosity >= 5
             auto& dbgCfg8 = getAudioDebugConfig();
             if (dbgCfg8.verbosity >= 5 && ++m_goertzelLogCounter >= dbgCfg8.interval8Band()) {
@@ -806,23 +880,36 @@ void AudioNode::processHop()
     // ========================================================================
     // TempoTracker Beat Tracker Processing
     // ========================================================================
-    // Dual-rate novelty input:
-    // - Spectral flux from 8-band Goertzel when ready (31.25 Hz)
+    // Dual-rate onset detection input:
+    // - Spectral flux from 8-band analysis when ready (31.25 Hz)
     // - VU derivative from RMS every hop (62.5 Hz)
     // goertzelTriggered fires when 8-band analysis completes (every 512 samples)
     // CRITICAL FIX: Use Pre-AGC signals for beat tracking!
     // AGC flattens dynamics, making onset detection impossible.
     // We use reconstructed Pre-AGC bands and Pre-AGC RMS.
+    // Note: TempoTracker uses onset-timing algorithm (not Goertzel tempo analysis)
+    
+    // Get single timebase for determinism
+    #ifndef NATIVE_BUILD
+    uint64_t tMicros = esp_timer_get_time();
+    #else
+    static uint64_t fake_time = 0;
+    float delta_sec = static_cast<float>(HOP_SIZE) / static_cast<float>(SAMPLE_RATE);
+    fake_time += static_cast<uint64_t>(delta_sec * 1e6f);
+    uint64_t tMicros = fake_time;
+    #endif
+    
     m_tempo.updateNovelty(
         goertzelTriggered ? bandsPre : nullptr,    // Pre-AGC 8-band magnitudes
         8,                                         // num_bands
         rmsPre,                                    // Pre-AGC RMS for VU calculation
-        goertzelTriggered                          // bands_ready flag
+        goertzelTriggered,                         // bands_ready flag
+        tMicros                                    // Single timebase
     );
 
-    // Update tempo detection (interleaved Goertzel computation)
+    // Update tempo detection (onset-timing based beat tracking)
     float delta_sec = static_cast<float>(HOP_SIZE) / static_cast<float>(SAMPLE_RATE);
-    m_tempo.updateTempo(delta_sec);
+    m_tempo.updateTempo(delta_sec, tMicros);
     
     // Store for change detection (used by getTempo() diagnostics)
     m_lastTempoOutput = m_tempo.getOutput();

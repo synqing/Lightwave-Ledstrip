@@ -278,6 +278,12 @@ void V1ApiRoutes::registerRoutes(
         handlers::AudioHandlers::handleTempoGet(request, ctx.orchestrator);
     });
 
+    registry.onGet("/api/v1/audio/fft", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::AudioHandlers::handleFftGet(request, ctx.orchestrator);
+    });
+
     registry.onGet("/api/v1/audio/presets", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;

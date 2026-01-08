@@ -176,7 +176,7 @@ struct ButtonDebounce {
 struct CallbackThrottle {
     uint32_t last_callback_time = 0;
 
-    static const uint32_t THROTTLE_MS = 35;  // 35ms minimum between callbacks
+    static const uint32_t THROTTLE_MS = 50;  // 50ms minimum between callbacks (matches PARAM_THROTTLE_MS)
 
     /**
      * Check if callback should fire (respects throttle)

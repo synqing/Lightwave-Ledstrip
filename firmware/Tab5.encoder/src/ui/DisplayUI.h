@@ -98,6 +98,11 @@ public:
     void showPresetSaveFeedback(uint8_t slot);
     void showPresetRecallFeedback(uint8_t slot);
     void showPresetDeleteFeedback(uint8_t slot);
+
+    // Network configuration UI
+    void showNetworkConfigScreen();
+    void hideNetworkConfigScreen();
+    bool isNetworkConfigVisible() const;
     #ifndef SIMULATOR_BUILD
     void refreshAllPresetSlots(PresetManager* pm);
     #endif
@@ -176,6 +181,13 @@ private:
     float _micLevel = -80.0f;  // Default to -80dB (silence)
     uint32_t _hostUptime = 0;
     uint32_t _lastFooterUpdate = 0;  // For throttling battery/uptime updates (1Hz)
+
+    // Network configuration screen
+    lv_obj_t* _network_config_screen = nullptr;
+    lv_obj_t* _network_config_ip_input = nullptr;
+    lv_obj_t* _network_config_toggle = nullptr;
+    lv_obj_t* _network_config_status_label = nullptr;
+    bool _network_config_visible = false;
 #else
     UIHeader* _header;
     GaugeWidget* _gauges[16];

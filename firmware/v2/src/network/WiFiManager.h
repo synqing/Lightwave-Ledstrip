@@ -19,7 +19,7 @@
  * @code
  * // In setup()
  * WIFI_MANAGER.setCredentials(ssid, password);
- * WIFI_MANAGER.enableSoftAP("LightwaveOS-Setup", "lightwave123");
+ * WIFI_MANAGER.enableSoftAP("LightwaveOS-AP", "SpectraSynq");
  * if (!WIFI_MANAGER.begin()) {
  *     Serial.println("WiFiManager failed!");
  * }
@@ -457,8 +457,8 @@ private:
 
     bool m_apEnabled = false;
     bool m_apStarted = false;
-    String m_apSSID = "LightwaveOS-AP";
-    String m_apPassword = "lightwave123";
+    String m_apSSID = "LightwaveOS-AP";  // Matches Tab5.encoder expectation
+    String m_apPassword = "SpectraSynq";  // Matches Tab5.encoder expectation
     uint8_t m_apChannel = 1;
 
     // ========================================================================

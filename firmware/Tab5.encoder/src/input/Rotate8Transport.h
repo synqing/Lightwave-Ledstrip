@@ -163,7 +163,8 @@ public:
      * @param b Blue component (0-255)
      */
     void setLED(uint8_t channel, uint8_t r, uint8_t g, uint8_t b) {
-        // #region agent log
+        // #region agent log - DISABLED by default (enable with ENABLE_VERBOSE_DEBUG)
+        #ifdef ENABLE_VERBOSE_DEBUG
         static uint32_t s_lastLogTime = 0;
         static uint32_t s_writeCount = 0;
         s_writeCount++;
@@ -174,6 +175,7 @@ public:
             s_writeCount = 0;
             s_lastLogTime = now;
         }
+        #endif // ENABLE_VERBOSE_DEBUG
         // #endregion
         
         if (!_available || channel > 8) {
@@ -196,6 +198,10 @@ public:
      */
     void setAllLEDs(uint8_t r, uint8_t g, uint8_t b) {
         if (!_available) return;
+        // #region agent log
+        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"boot\",\"hypothesisId\":\"H2\",\"location\":\"Rotate8Transport.h:setAllLEDs\",\"message\":\"allLEDs.set\",\"data\":{\"addr\":%u,\"r\":%u,\"g\":%u,\"b\":%u},\"timestamp\":%lu}\n",
+                      _address, r, g, b, static_cast<unsigned long>(millis()));
+        // #endregion
         _encoder.setAll(r, g, b);
     }
 
@@ -204,6 +210,10 @@ public:
      */
     void allLEDsOff() {
         if (!_available) return;
+        // #region agent log
+        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"boot\",\"hypothesisId\":\"H2\",\"location\":\"Rotate8Transport.h:allLEDsOff\",\"message\":\"allLEDs.off\",\"data\":{\"addr\":%u},\"timestamp\":%lu}\n",
+                      _address, static_cast<unsigned long>(millis()));
+        // #endregion
         _encoder.allOff();
     }
 

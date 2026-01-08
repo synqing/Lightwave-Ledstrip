@@ -14,8 +14,12 @@
 #include <cstring>
 #include "../presets/PresetManager.h"
 #include "../hal/EspHal.h"
+#include "../network/WiFiManager.h"
 #include "fonts/bebas_neue_fonts.h"
 #include "fonts/experimental_fonts.h"
+
+// Forward declaration - WiFiManager instance is in main.cpp
+extern WiFiManager g_wifiManager;
 
 static constexpr uint32_t TAB5_COLOR_BG_PAGE = 0x0A0A0B;
 static constexpr uint32_t TAB5_COLOR_BG_SURFACE_BASE = 0x121214;
@@ -1547,5 +1551,113 @@ void DisplayUI::refreshAllPresetSlots(PresetManager* pm) {
     }
 }
 #endif  // !SIMULATOR_BUILD
+
+// Network configuration screen implementation
+void DisplayUI::showNetworkConfigScreen() {
+#if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
+    if (_network_config_visible) {
+        return;  // Already visible
+    }
+
+    // Create modal screen
+    _network_config_screen = lv_obj_create(nullptr);
+    lv_obj_set_size(_network_config_screen, LV_PCT(100), LV_PCT(100));
+    lv_obj_set_style_bg_color(_network_config_screen, lv_color_hex(TAB5_COLOR_BG_PAGE), 0);
+    lv_obj_set_style_bg_opa(_network_config_screen, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(_network_config_screen, LV_OBJ_FLAG_SCROLLABLE);
+
+    // Title
+    lv_obj_t* title = lv_label_create(_network_config_screen);
+    lv_label_set_text(title, "Network Configuration");
+    lv_obj_set_style_text_font(title, &bebas_neue_48, 0);
+    lv_obj_set_style_text_color(title, lv_color_hex(TAB5_COLOR_FG_PRIMARY), 0);
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 40);
+
+    // IP input field
+    _network_config_ip_input = lv_textarea_create(_network_config_screen);
+    lv_textarea_set_placeholder_text(_network_config_ip_input, "192.168.0.XXX");
+    lv_textarea_set_max_length(_network_config_ip_input, 15);
+    lv_obj_set_width(_network_config_ip_input, 400);
+    lv_obj_align(_network_config_ip_input, LV_ALIGN_CENTER, 0, -60);
+    lv_obj_set_style_bg_color(_network_config_ip_input, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), 0);
+    lv_obj_set_style_border_color(_network_config_ip_input, lv_color_hex(TAB5_COLOR_BORDER_BASE), 0);
+    lv_obj_set_style_text_color(_network_config_ip_input, lv_color_hex(TAB5_COLOR_FG_PRIMARY), 0);
+
+    // Toggle: Use Manual IP
+    _network_config_toggle = lv_switch_create(_network_config_screen);
+    lv_obj_align(_network_config_toggle, LV_ALIGN_CENTER, 0, -20);
+    lv_obj_set_style_bg_color(_network_config_toggle, lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_INDICATOR);
+
+    lv_obj_t* toggle_label = lv_label_create(_network_config_screen);
+    lv_label_set_text(toggle_label, "Use Manual IP");
+    lv_obj_align_to(toggle_label, _network_config_toggle, LV_ALIGN_OUT_LEFT_MID, -10, 0);
+    lv_obj_set_style_text_color(toggle_label, lv_color_hex(TAB5_COLOR_FG_SECONDARY), 0);
+
+    // Status label
+    _network_config_status_label = lv_label_create(_network_config_screen);
+    lv_label_set_text(_network_config_status_label, "");
+    lv_obj_align(_network_config_status_label, LV_ALIGN_CENTER, 0, 20);
+    lv_obj_set_style_text_color(_network_config_status_label, lv_color_hex(TAB5_COLOR_FG_SECONDARY), 0);
+
+    // Save button
+    lv_obj_t* save_btn = lv_btn_create(_network_config_screen);
+    lv_obj_set_size(save_btn, 150, 50);
+    lv_obj_align(save_btn, LV_ALIGN_BOTTOM_LEFT, 50, -40);
+    lv_obj_set_style_bg_color(save_btn, lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), 0);
+    lv_obj_t* save_label = lv_label_create(save_btn);
+    lv_label_set_text(save_label, "Save");
+    lv_obj_center(save_label);
+
+    // Cancel button
+    lv_obj_t* cancel_btn = lv_btn_create(_network_config_screen);
+    lv_obj_set_size(cancel_btn, 150, 50);
+    lv_obj_align(cancel_btn, LV_ALIGN_BOTTOM_RIGHT, -50, -40);
+    lv_obj_set_style_bg_color(cancel_btn, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), 0);
+    lv_obj_t* cancel_label = lv_label_create(cancel_btn);
+    lv_label_set_text(cancel_label, "Cancel");
+    lv_obj_center(cancel_label);
+
+    // Load current manual IP if set
+    if (g_wifiManager.shouldUseManualIP()) {
+        IPAddress manualIP = g_wifiManager.getManualIP();
+        lv_textarea_set_text(_network_config_ip_input, manualIP.toString().c_str());
+        lv_obj_add_state(_network_config_toggle, LV_STATE_CHECKED);
+    }
+
+    // Button callbacks (simplified - would need proper event handling)
+    // Note: Full implementation would require proper LVGL event handlers
+    // This is a basic structure that can be expanded
+
+    lv_scr_load(_network_config_screen);
+    _network_config_visible = true;
+#else
+    // Non-LVGL implementation would go here
+    Serial.println("[UI] Network config screen not implemented for non-LVGL build");
+#endif
+}
+
+void DisplayUI::hideNetworkConfigScreen() {
+#if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
+    if (!_network_config_visible) {
+        return;
+    }
+
+    if (_network_config_screen) {
+        lv_obj_del(_network_config_screen);
+        _network_config_screen = nullptr;
+        _network_config_ip_input = nullptr;
+        _network_config_toggle = nullptr;
+        _network_config_status_label = nullptr;
+    }
+
+    // Return to main screen
+    lv_scr_load(_screen_global);
+    _network_config_visible = false;
+#endif
+}
+
+bool DisplayUI::isNetworkConfigVisible() const {
+    return _network_config_visible;
+}
 
 #endif

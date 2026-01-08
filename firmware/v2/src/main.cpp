@@ -164,6 +164,13 @@ void setup() {
         }
     }
 
+    // Load narrative configuration from NVS
+    if (NARRATIVE.loadFromNVS()) {
+        LW_LOGI("Narrative Engine: Configuration loaded from NVS");
+    } else {
+        LW_LOGI("Narrative Engine: Using default configuration");
+    }
+
     // Start all nodes (RendererNode runs on Core 1 at 120 FPS)
     LW_LOGI("Starting Node Orchestrator...");
     if (!orchestrator.start()) {
@@ -200,8 +207,9 @@ void setup() {
         NetworkConfig::WIFI_PASSWORD_VALUE
     );
     // Enable STA+AP mode: STA connects to network, AP provides fallback access
-    // AP SSID matches Tab5.encoder default: "LightwaveOS"
-    WIFI_MANAGER.enableSoftAP("LightwaveOS", "lightwave123", 1);
+    // AP SSID matches Tab5.encoder expectation: "LightwaveOS-AP"
+    // Use NetworkConfig constants for consistency (allows build-time customization)
+    WIFI_MANAGER.enableSoftAP(NetworkConfig::AP_SSID, NetworkConfig::AP_PASSWORD, 1);
 
     if (!WIFI_MANAGER.begin()) {
         LW_LOGE("WiFiManager failed to start!");
@@ -226,7 +234,7 @@ void setup() {
                 LW_LOGI("AP IP: %s", WiFi.softAPIP().toString().c_str());
             }
         } else if (WIFI_MANAGER.isAPMode()) {
-            LW_LOGI("WiFi: AP MODE (connect to LightwaveOS-Setup)");
+            LW_LOGI("WiFi: AP MODE (connect to LightwaveOS-AP)");
             LW_LOGI("AP IP: %s", WiFi.softAPIP().toString().c_str());
         }
     }

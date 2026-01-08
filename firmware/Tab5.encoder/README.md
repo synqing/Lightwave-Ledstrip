@@ -149,10 +149,70 @@ pio device monitor -d firmware/Tab5.encoder -b 115200
 ### Connection Flow
 
 ```
-Tab5 Boot → Try Primary WiFi → Connected? → mDNS lookup → WebSocket
-                ↓ Failed                       ↓ Failed
-         Try Secondary WiFi → Connected → Gateway IP fallback → WebSocket
+Tab5 Boot → Try Primary WiFi → Connected? → Multi-tier Fallback → WebSocket
+                ↓ Failed                       ↓
+         Try Secondary WiFi → Connected → Fallback Strategy
 ```
+
+### Network Configuration & Fallback Strategy
+
+Tab5.encoder implements a **multi-tier fallback strategy** to ensure reliable WebSocket connection even when mDNS fails:
+
+**Fallback Priority (in order):**
+
+1. **Compile-time `LIGHTWAVE_IP`** (if defined in `network_config.h`)
+   - Highest priority - bypasses mDNS entirely
+   - Use for testing or when mDNS is unreliable
+   - Uncomment and set: `#define LIGHTWAVE_IP "192.168.0.XXX"`
+
+2. **Manual IP from NVS** (if configured via UI)
+   - User-configured IP address stored in NVS
+   - Persists across reboots
+   - Configure via: Long-press on network status area → Network Configuration screen
+
+3. **mDNS Resolution** (default)
+   - Attempts to resolve `lightwaveos.local`
+   - Retry interval: 10 seconds
+   - Maximum attempts: 6 (60 seconds total)
+
+4. **Timeout-based Fallback** (automatic)
+   - Triggers after 60 seconds or 6 failed mDNS attempts
+   - Uses manual IP from NVS (if set)
+   - Falls back to gateway IP (if on secondary network: `LightwaveOS-AP`)
+
+**Manual IP Configuration:**
+
+1. **Via UI** (recommended):
+   - Long-press on WiFi/WebSocket status area in header
+   - Enter IP address (e.g., `192.168.0.XXX`)
+   - Toggle "Use Manual IP" switch
+   - Tap "Save"
+   - WebSocket will reconnect with new IP
+
+2. **Via Serial** (advanced):
+   - Use NVS commands to set `tab5net.manual_ip` and `tab5net.use_manual`
+   - Requires serial access and NVS manipulation
+
+**Troubleshooting mDNS Failures:**
+
+- **Symptom**: `[WiFi] mDNS resolution failed for lightwaveos.local`
+- **Solution 1**: Configure manual IP via UI (see above)
+- **Solution 2**: Uncomment `LIGHTWAVE_IP` in `network_config.h` and rebuild
+- **Solution 3**: Connect to secondary network (`LightwaveOS-AP`) - automatic gateway IP fallback
+- **Solution 4**: Verify LightwaveOS v2 device is powered on and on same network
+
+**Network Diagnostics:**
+
+The system logs detailed network status every 5 seconds:
+```
+[NETWORK DEBUG] WiFi:1 mDNS:0(2/6) manualIP:0 fallback:0 WS:0(Disconnected)
+```
+
+- `WiFi`: 1 = connected, 0 = disconnected
+- `mDNS`: Resolution status (attempts/max attempts)
+- `manualIP`: 1 = manual IP configured and enabled, 0 = not set
+- `fallback`: 1 = timeout exceeded, using fallback, 0 = normal operation
+- `WS`: WebSocket connection status
 
 ## UI Architecture (LVGL 9.3.0)
 

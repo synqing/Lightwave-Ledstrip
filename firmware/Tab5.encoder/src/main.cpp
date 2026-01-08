@@ -37,6 +37,7 @@
 #include <Arduino.h>
 #include <M5Unified.h>
 #include <Wire.h>
+#include <esp_task_wdt.h>  // For watchdog timer
 
 #include "config/Config.h"
 #include <ESP.h>   // For heap monitoring (used in debug logs)
@@ -48,6 +49,7 @@
 #include "input/I2CRecovery.h"
 #include "input/TouchHandler.h"
 #include "input/ButtonHandler.h"
+#include "input/CoarseModeManager.h"
 #include "network/WiFiManager.h"
 #include "network/WebSocketClient.h"
 #include "network/WsMessageRouter.h"
@@ -60,7 +62,7 @@
 #include "parameters/ParameterMap.h"
 #include "storage/NvsStorage.h"
 #include "ui/LedFeedback.h"
-#include "ui/PaletteLedDisplay.h"
+// #include "ui/PaletteLedDisplay.h"  // DISABLED - causing encoder regression
 #include "ui/DisplayUI.h"
 #include "ui/LoadingScreen.h"
 #include "ui/Theme.h"
@@ -116,8 +118,12 @@ bool g_wsConfigured = false;  // true after wsClient.begin() called
 // Connection status LED feedback (Phase F.5)
 LedFeedback g_ledFeedback;
 
+// DISABLED - PaletteLedDisplay causing encoder regression
 // Palette color display on Unit B LEDs 0-7
-PaletteLedDisplay g_paletteLedDisplay;
+// PaletteLedDisplay g_paletteLedDisplay;
+
+// Coarse mode manager for ENC-A acceleration
+CoarseModeManager g_coarseModeManager;
 
 // Touch screen handler (Phase G.3)
 TouchHandler g_touchHandler;
@@ -426,6 +432,8 @@ static void handleSerialCommand(const char* cmd) {
     }
 
     // Palette animation commands
+    // DISABLED - PaletteLedDisplay causing encoder regression
+    /*
     if (strncmp(cmd, "paletteanim ", 12) == 0 || strncmp(cmd, "pa ", 3) == 0) {
         const char* modeStr = (cmd[0] == 'p' && cmd[1] == 'a' && cmd[2] == 'l') ? cmd + 12 : cmd + 3;
         
@@ -468,6 +476,7 @@ static void handleSerialCommand(const char* cmd) {
         Serial.printf("[PaletteAnim] Mode cycled to: %s\n", g_paletteLedDisplay.getAnimationModeString());
         return;
     }
+    */
 
     // Network commands (similar to v2 firmware)
     if (strncmp(cmd, "net ", 4) == 0) {
@@ -585,9 +594,10 @@ uint8_t scanI2CBus(TwoWire& wire, const char* busName) {
 static uint32_t s_lastEncoderLogTime = 0;
 static constexpr uint32_t ENCODER_LOG_INTERVAL_MS = 100;  // Log at most every 100ms
 
-// Track previous value for encoder 15 (ENC-B encoder 7) for animation mode cycling
+// Track previous value and accumulator for encoder 15 (ENC-B encoder 7) for animation mode cycling
 static uint16_t s_prevEncoder15Value = 0;
 static bool s_encoder15Initialized = false;
+static int16_t s_encoder15Accumulator = 0;  // Accumulates detents (requires ±2 to cycle mode)
 
 /**
  * Called when any encoder value changes
@@ -596,17 +606,20 @@ static bool s_encoder15Initialized = false;
  * @param wasReset true if this was a button-press reset to default
  */
 void onEncoderChange(uint8_t index, uint16_t value, bool wasReset) {
+    // DISABLED - PaletteLedDisplay causing encoder regression
     // Special handling for encoder 15 (ENC-B encoder 7): Cycle palette animation modes
+    /*
     if (index == 15) {
         if (!s_encoder15Initialized) {
             // First time - just store the value, don't cycle
             s_prevEncoder15Value = value;
             s_encoder15Initialized = true;
+            s_encoder15Accumulator = 0;
             return;
         }
         
-        // Determine direction of change (handle wrap-around)
-        int16_t delta = static_cast<int16_t>(value) - static_cast<int16_t>(s_prevEncoder15Value);
+        // Calculate delta (handle wrap-around)
+        int32_t delta = static_cast<int32_t>(value) - static_cast<int32_t>(s_prevEncoder15Value);
         
         // Handle wrap-around: if delta is very large, it wrapped the other direction
         if (delta > 128) {
@@ -615,35 +628,46 @@ void onEncoderChange(uint8_t index, uint16_t value, bool wasReset) {
             delta += 256;  // Wrapped backward, treat as forward
         }
         
-        // Only cycle if there was actual movement (ignore tiny jitter)
-        if (abs(delta) >= 2) {
-            AnimationMode currentMode = g_paletteLedDisplay.getAnimationMode();
-            uint8_t currentModeIndex = static_cast<uint8_t>(currentMode);
-            
-            // Cycle based on direction
-            const uint8_t modeCount = static_cast<uint8_t>(AnimationMode::MODE_COUNT);
-            if (delta > 0) {
-                // Forward: next mode
-                currentModeIndex = (currentModeIndex + 1) % modeCount;
-            } else {
-                // Backward: previous mode (with wrap)
-                if (currentModeIndex == 0) {
-                    currentModeIndex = modeCount - 1;
+        // Accumulate detents (encoder changes by 1 per detent)
+        s_encoder15Accumulator += delta;
+        
+        // Only cycle mode when accumulator reaches ±2 detents (debounce + intentional movement)
+        if (abs(s_encoder15Accumulator) >= 2) {
+            // Only process if dashboard is loaded (LEDs enabled)
+            if (s_uiInitialized) {
+                AnimationMode currentMode = g_paletteLedDisplay.getAnimationMode();
+                uint8_t currentModeIndex = static_cast<uint8_t>(currentMode);
+                
+                // Cycle based on accumulator direction
+                const uint8_t modeCount = static_cast<uint8_t>(AnimationMode::MODE_COUNT);
+                if (s_encoder15Accumulator > 0) {
+                    // Forward: next mode
+                    currentModeIndex = (currentModeIndex + 1) % modeCount;
                 } else {
-                    currentModeIndex--;
+                    // Backward: previous mode (with wrap)
+                    if (currentModeIndex == 0) {
+                        currentModeIndex = modeCount - 1;
+                    } else {
+                        currentModeIndex--;
+                    }
                 }
+                
+                AnimationMode newMode = static_cast<AnimationMode>(currentModeIndex);
+                g_paletteLedDisplay.setAnimationMode(newMode);
+                
+                Serial.printf("[ENC-B:7] Palette animation mode: %s\n", g_paletteLedDisplay.getAnimationModeString());
             }
             
-            AnimationMode newMode = static_cast<AnimationMode>(currentModeIndex);
-            g_paletteLedDisplay.setAnimationMode(newMode);
-            
-            Serial.printf("[ENC-B:7] Palette animation mode: %s\n", g_paletteLedDisplay.getAnimationModeString());
+            // Reset accumulator (subtract the 2 detents we just processed)
+            int8_t sign = (s_encoder15Accumulator > 0) ? 1 : -1;
+            s_encoder15Accumulator -= (sign * 2);
         }
         
         // Update previous value
         s_prevEncoder15Value = value;
         return;  // Don't process as normal parameter
     }
+    */
     
     Parameter param = static_cast<Parameter>(index);
     const char* name = getParameterName(param);
@@ -674,14 +698,23 @@ void onEncoderChange(uint8_t index, uint16_t value, bool wasReset) {
         g_ui->updateValue(index, value);
     }
 
+    // DISABLED - PaletteLedDisplay causing encoder regression
     // Update palette LED display when palette parameter changes (index 1)
+    /*
     if (index == 1) {  // Palette parameter
         // #region agent log
-        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A\",\"location\":\"main.cpp:625\",\"message\":\"onEncoderChange.paletteChange\",\"data\":{\"paletteId\":%u,\"timestamp\":%lu}\n",
-            value, static_cast<unsigned long>(millis()));
+        bool enabled = g_paletteLedDisplay.isEnabled();
+        bool available = g_encoders ? g_encoders->isUnitBAvailable() : false;
+        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"palette-latch\",\"hypothesisId\":\"A,B,E\",\"location\":\"main.cpp:onEncoderChange\",\"message\":\"palette.change.trigger\",\"data\":{\"paletteId\":%u,\"enabled\":%d,\"unitBAvailable\":%d,\"uiInit\":%d,\"timestamp\":%lu}}\n",
+            value, enabled ? 1 : 0, available ? 1 : 0, s_uiInitialized ? 1 : 0, static_cast<unsigned long>(millis()));
         // #endregion
-        g_paletteLedDisplay.update(static_cast<uint8_t>(value));
+        bool result = g_paletteLedDisplay.update(static_cast<uint8_t>(value));
+        // #region agent log
+        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"palette-latch\",\"hypothesisId\":\"A\",\"location\":\"main.cpp:onEncoderChange\",\"message\":\"palette.update.result\",\"data\":{\"result\":%d,\"timestamp\":%lu}}\n",
+            result ? 1 : 0, static_cast<unsigned long>(millis()));
+        // #endregion
     }
+    */
 
     // Queue parameter for NVS persistence (debounced to prevent flash wear)
     NvsStorage::requestSave(index, value);
@@ -819,15 +852,27 @@ void updateConnectionLeds() {
 // ============================================================================
 
 void setup() {
-    // Initialize serial first for early logging
+    // Initialize watchdog timer FIRST (5-second timeout)
+    // This prevents device freeze on blocking operations
+    esp_task_wdt_config_t wdt_config = {
+        .timeout_ms = 5000,  // 5 second timeout
+        .idle_core_mask = 0,  // Watch both cores (but we're on P4, single core)
+        .trigger_panic = true  // Panic on timeout (hard reset)
+    };
+    esp_task_wdt_init(&wdt_config);
+    esp_task_wdt_add(NULL);  // Add current task (main loop)
     Serial.begin(115200);
     delay(100);
+    Serial.println("[WDT] Watchdog initialized (5s timeout)");
 
     Serial.println("\n");
     Serial.println("============================================");
     Serial.println("  Tab5.encoder - Milestone F");
     Serial.println("  Dual M5ROTATE8 (16 Encoders) + WiFi");
     Serial.println("============================================");
+    
+    // Reset watchdog after serial init
+    esp_task_wdt_reset();
 
     // =========================================================================
     // CRITICAL: Configure Tab5 WiFi SDIO pins BEFORE any WiFi initialization
@@ -969,6 +1014,10 @@ void setup() {
     g_encoders->setButtonHandler(g_buttonHandler);
     Serial.println("[Button] Button handler initialized (presets on Unit-B)");
 
+    // Initialize and connect CoarseModeManager
+    g_encoders->setCoarseModeManager(&g_coarseModeManager);
+    Serial.println("[CoarseMode] Coarse mode manager initialized");
+
     // =========================================================================
     // Initialize LED Feedback (Phase F.5)
     // =========================================================================
@@ -977,11 +1026,14 @@ void setup() {
     Serial.println("[LED] Connection status LED feedback initialized");
 
     // =========================================================================
+    // DISABLED - PaletteLedDisplay causing encoder regression
     // Initialize Palette LED Display
     // =========================================================================
+    /*
     g_paletteLedDisplay.setEncoders(g_encoders);
     g_paletteLedDisplay.begin();
     Serial.println("[LED] Palette LED display initialized");
+    */
 
     // =========================================================================
     // Load Saved Parameters from NVS (Phase G.1)
@@ -999,9 +1051,12 @@ void setup() {
         if (loadedCount > 0) {
             Serial.printf("[NVS] Restored %d parameters from flash\n", loadedCount);
             
+            // DISABLED - PaletteLedDisplay
             // Update palette LED display with restored palette value
+            /*
             uint8_t paletteId = static_cast<uint8_t>(savedValues[1]);  // Index 1 = Palette
             g_paletteLedDisplay.update(paletteId);
+            */
         }
     }
 
@@ -1017,10 +1072,18 @@ void setup() {
         Serial.println("[OK] Milestone E: Dual encoder service active");
 
         // Flash all LEDs green briefly to indicate success
+        // #region agent log
+        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"boot\",\"hypothesisId\":\"H2\",\"location\":\"main.cpp:flash\",\"message\":\"flashGreen.start\",\"data\":{\"unitA\":true,\"unitB\":true},\"timestamp\":%lu}\n",
+                      static_cast<unsigned long>(millis()));
+        // #endregion
         g_encoders->transportA().setAllLEDs(0, 64, 0);
         g_encoders->transportB().setAllLEDs(0, 64, 0);
         delay(200);
         g_encoders->allLedsOff();
+        // #region agent log
+        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"boot\",\"hypothesisId\":\"H2\",\"location\":\"main.cpp:flash\",\"message\":\"flashGreen.cleared\",\"data\":{},\"timestamp\":%lu}\n",
+                      static_cast<unsigned long>(millis()));
+        // #endregion
 
         // Set status LEDs (both green for connected)
         updateConnectionLeds();
@@ -1426,7 +1489,10 @@ void setup() {
                     g_ui->updateAudioMetrics(bpm, key, micLevel);
                 }
 
+                // DISABLED - PaletteLedDisplay causing encoder regression
                 // Update palette LED display if palette parameter is in status message
+                // Guard against snapback by ignoring during local-change holdoff
+                /*
                 if (doc["paletteId"].is<uint8_t>() || doc["paletteId"].is<int>()) {
                     uint8_t paletteId = 0;
                     if (doc["paletteId"].is<uint8_t>()) {
@@ -1437,8 +1503,16 @@ void setup() {
                             paletteId = static_cast<uint8_t>(val);
                         }
                     }
-                    g_paletteLedDisplay.update(paletteId);
+                    bool holdoff = (g_paramHandler && g_paramHandler->isInLocalHoldoff(1)); // index 1 = Palette
+                    // #region agent log
+                    Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"palette-latch\",\"hypothesisId\":\"A\",\"location\":\"main.cpp:wsStatus\",\"message\":\"status.palette.update\",\"data\":{\"paletteId\":%u,\"holdoff\":%d,\"timestamp\":%lu}}\n",
+                                  paletteId, holdoff ? 1 : 0, static_cast<unsigned long>(millis()));
+                    // #endregion
+                    if (!holdoff) {
+                        g_paletteLedDisplay.update(paletteId);
+                    }
                 }
+                */
             }
         }
 
@@ -1608,18 +1682,39 @@ void loop() {
     updateConnectionLeds();
 
     // =========================================================================
-    // PALETTE LED DISPLAY: Update animation (if enabled)
+    // COARSE MODE: Poll ENC-A switch state
     // =========================================================================
-    // #region agent log
-    static uint32_t s_lastLoopLog = 0;
-    uint32_t loopNow = millis();
-    if (loopNow - s_lastLoopLog >= 1000) {  // Log every 1s to track call frequency
-        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\",\"location\":\"main.cpp:1503\",\"message\":\"loop.updateAnimation.call\",\"data\":{\"loopTime\":%lu},\"timestamp\":%lu}\n",
-            static_cast<unsigned long>(loopNow), static_cast<unsigned long>(loopNow));
-        s_lastLoopLog = loopNow;
+    static uint8_t s_lastSwitchState = 0;
+    if (g_encoders && g_encoders->isUnitAAvailable()) {
+        uint8_t currentSwitchState = g_encoders->transportA().getInputSwitch();
+        if (currentSwitchState != s_lastSwitchState) {
+            Serial.printf("[CoarseMode] Switch state changed: %d -> %d\n", 
+                         s_lastSwitchState, currentSwitchState);
+            g_coarseModeManager.updateSwitchState(currentSwitchState);
+            s_lastSwitchState = currentSwitchState;
+        }
     }
-    // #endregion
-    g_paletteLedDisplay.updateAnimation();
+
+    // =========================================================================
+    // DISABLED - PaletteLedDisplay causing encoder regression
+    // PALETTE LED DISPLAY: Update animation (only after dashboard loads)
+    // =========================================================================
+    // Only update palette LEDs after UI is initialized (dashboard loaded)
+    // This prevents LEDs from activating during boot sequence
+    /*
+    if (s_uiInitialized) {
+        // #region agent log
+        static uint32_t s_lastLoopLog = 0;
+        uint32_t loopNow = millis();
+        if (loopNow - s_lastLoopLog >= 1000) {  // Log every 1s to track call frequency
+            Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\",\"location\":\"main.cpp:1503\",\"message\":\"loop.updateAnimation.call\",\"data\":{\"loopTime\":%lu},\"timestamp\":%lu}\n",
+                static_cast<unsigned long>(loopNow), static_cast<unsigned long>(loopNow));
+            s_lastLoopLog = loopNow;
+        }
+        // #endregion
+        g_paletteLedDisplay.updateAnimation();
+    }
+    */
     g_ledFeedback.update();  // Non-blocking breathing animation
 
     // =========================================================================
@@ -1728,6 +1823,11 @@ void loop() {
             
             s_uiInitialized = true;
             Serial.println("[UI] Full UI initialized after WiFi connection");
+            
+            // DISABLED - PaletteLedDisplay
+            // Enable palette LED display now that dashboard is loaded
+            // g_paletteLedDisplay.setEnabled(true);
+            // Serial.println("[LED] Palette LED display enabled (dashboard ready)");
         }
     }
     
@@ -1811,12 +1911,17 @@ void loop() {
     // Debug network status every 5 seconds
     if (nowMs - s_lastNetworkDebugMs > 5000) {
         s_lastNetworkDebugMs = nowMs;
-        Serial.printf("[NETWORK DEBUG] WiFi connected: %d, mDNS resolved: %d, WS configured: %d, WS connected: %d, WS status: %s\n",
+        #ifdef ENABLE_VERBOSE_DEBUG
+        Serial.printf("[NETWORK DEBUG] WiFi:%d mDNS:%d(%d/%d) manualIP:%d fallback:%d WS:%d(%s)\n",
                       g_wifiManager.isConnected() ? 1 : 0,
                       g_wifiManager.isMDNSResolved() ? 1 : 0,
-                      g_wsConfigured ? 1 : 0,
+                      g_wifiManager.getMDNSAttemptCount(),
+                      NetworkConfig::MDNS_MAX_ATTEMPTS,
+                      g_wifiManager.shouldUseManualIP() ? 1 : 0,
+                      g_wifiManager.isMDNSTimeoutExceeded() ? 1 : 0,
                       g_wsClient.isConnected() ? 1 : 0,
                       g_wsClient.getStatusString());
+        #endif // ENABLE_VERBOSE_DEBUG
     }
 
     if (g_wifiManager.isConnected()) {
@@ -1828,7 +1933,13 @@ void loop() {
             Serial.printf("[NETWORK] WiFi connected! IP: %s\n", localIpStr);
         }
 
-        // Direct IP mode (skip mDNS entirely)
+        // Multi-tier fallback strategy:
+        // Priority 1: Compile-time LIGHTWAVE_IP (if defined) → Immediate connection
+        // Priority 2: Manual IP from NVS (if configured and enabled)
+        // Priority 3: mDNS resolution (with timeout fallback)
+        // Priority 4: Timeout-based fallback (manual IP or gateway IP)
+
+        // Priority 1: Compile-time LIGHTWAVE_IP (if defined)
 #ifdef LIGHTWAVE_IP
         if (!g_wsConfigured) {
             g_wsConfigured = true;
@@ -1838,6 +1949,7 @@ void loop() {
             } else {
                 char ipStr[16];
                 formatIPv4(serverIP, ipStr);
+                Serial.printf("[NETWORK] Using compile-time IP: %s\n", ipStr);
                 Serial.printf("[NETWORK] Connecting WebSocket to %s:%d%s\n",
                               ipStr,
                               LIGHTWAVE_PORT,
@@ -1846,37 +1958,66 @@ void loop() {
             }
         }
 #else
-        // Try mDNS resolution (with internal backoff)
-        if (!g_wifiManager.isMDNSResolved()) {
-            TAB5_AGENT_PRINTF(
-                "[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"MDNS2\",\"location\":\"main.cpp\",\"message\":\"mdns.resolve.attempt\",\"data\":{\"hostname\":\"lightwaveos\"},\"timestamp\":%lu}\n",
-                (unsigned long)millis()
-            );
-            g_wifiManager.resolveMDNS("lightwaveos");
-        }
-
-        // Once mDNS resolved, configure WebSocket (ONCE)
-        if (g_wifiManager.isMDNSResolved() && !g_wsConfigured) {
-            g_wsConfigured = true;
-            IPAddress serverIP = g_wifiManager.getResolvedIP();
-            char ipStr[16];
-            formatIPv4(serverIP, ipStr);
-
-            if (!s_mdnsLogged) {
-                s_mdnsLogged = true;
-                Serial.printf("[NETWORK] mDNS resolved: lightwaveos.local -> %s\n", ipStr);
+        // Priority 2: Manual IP from NVS (if configured and enabled)
+        if (!g_wsConfigured && g_wifiManager.shouldUseManualIP()) {
+            IPAddress manualIP = g_wifiManager.getManualIP();
+            if (manualIP != INADDR_NONE) {
+                char ipStr[16];
+                formatIPv4(manualIP, ipStr);
+                Serial.printf("[NETWORK] Using manual IP: %s\n", ipStr);
+                g_wsConfigured = true;
+                g_wsClient.begin(manualIP, LIGHTWAVE_PORT, LIGHTWAVE_WS_PATH);
             }
+        }
+        
+        // Priority 3: mDNS resolution (with timeout fallback)
+        if (!g_wsConfigured) {
+            // Check if mDNS timeout exceeded (WiFiManager handles fallback)
+            if (g_wifiManager.isMDNSTimeoutExceeded() && 
+                g_wifiManager.isMDNSResolved()) {
+                // WiFiManager already resolved to fallback IP
+                IPAddress fallbackIP = g_wifiManager.getResolvedIP();
+                if (fallbackIP != INADDR_NONE) {
+                    char ipStr[16];
+                    formatIPv4(fallbackIP, ipStr);
+                    Serial.printf("[NETWORK] Using fallback IP: %s\n", ipStr);
+                    g_wsConfigured = true;
+                    g_wsClient.begin(fallbackIP, LIGHTWAVE_PORT, LIGHTWAVE_WS_PATH);
+                }
+            } else {
+                // Normal mDNS resolution attempt
+                if (!g_wifiManager.isMDNSResolved()) {
+                    TAB5_AGENT_PRINTF(
+                        "[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"MDNS2\",\"location\":\"main.cpp\",\"message\":\"mdns.resolve.attempt\",\"data\":{\"hostname\":\"lightwaveos\"},\"timestamp\":%lu}\n",
+                        (unsigned long)millis()
+                    );
+                    g_wifiManager.resolveMDNS("lightwaveos");
+                }
+                
+                // Once mDNS resolved, configure WebSocket (ONCE)
+                if (g_wifiManager.isMDNSResolved() && !g_wsConfigured) {
+                    g_wsConfigured = true;
+                    IPAddress serverIP = g_wifiManager.getResolvedIP();
+                    char ipStr[16];
+                    formatIPv4(serverIP, ipStr);
 
-            Serial.printf("[NETWORK] Connecting WebSocket to %s:%d%s\n",
-                          ipStr,
-                          LIGHTWAVE_PORT,
-                          LIGHTWAVE_WS_PATH);
-            TAB5_AGENT_PRINTF(
-                "[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"WS3\",\"location\":\"main.cpp\",\"message\":\"ws.begin.fromMdns\",\"data\":{\"ip\":\"%s\",\"port\":%d,\"path\":\"%s\"},\"timestamp\":%lu}\n",
-                ipStr, LIGHTWAVE_PORT, LIGHTWAVE_WS_PATH, (unsigned long)millis()
-            );
+                    if (!s_mdnsLogged) {
+                        s_mdnsLogged = true;
+                        Serial.printf("[NETWORK] mDNS resolved: lightwaveos.local -> %s\n", ipStr);
+                    }
 
-            g_wsClient.begin(serverIP, LIGHTWAVE_PORT, LIGHTWAVE_WS_PATH);
+                    Serial.printf("[NETWORK] Connecting WebSocket to %s:%d%s\n",
+                                  ipStr,
+                                  LIGHTWAVE_PORT,
+                                  LIGHTWAVE_WS_PATH);
+                    TAB5_AGENT_PRINTF(
+                        "[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"WS3\",\"location\":\"main.cpp\",\"message\":\"ws.begin.fromMdns\",\"data\":{\"ip\":\"%s\",\"port\":%d,\"path\":\"%s\"},\"timestamp\":%lu}\n",
+                        ipStr, LIGHTWAVE_PORT, LIGHTWAVE_WS_PATH, (unsigned long)millis()
+                    );
+
+                    g_wsClient.begin(serverIP, LIGHTWAVE_PORT, LIGHTWAVE_WS_PATH);
+                }
+            }
         }
 #endif
 
@@ -1970,9 +2111,21 @@ void loop() {
         return;
     }
 
+    // Reset watchdog before encoder update (critical path)
+    esp_task_wdt_reset();
+
+    // Reset watchdog before encoder update (critical path)
+    esp_task_wdt_reset();
+
     // Update encoder service (polls all 16 encoders, handles debounce, fires callbacks)
     // The callback (onEncoderChange) handles display updates with highlighting
     g_encoders->update();
+    
+    // Reset watchdog after encoder update
+    esp_task_wdt_reset();
+    
+    // Reset watchdog after encoder update
+    esp_task_wdt_reset();
 
     // =========================================================================
     // PRESETS: Process Unit-B button click patterns (Main Dashboard only)
@@ -2138,6 +2291,9 @@ void loop() {
         // Update status LEDs in case connection state changed
         updateConnectionLeds();
     }
+
+    // Reset watchdog at end of loop iteration
+    esp_task_wdt_reset();
 
     delay(5);  // ~200Hz polling
 }

@@ -16,6 +16,8 @@
 #include <WebSocketsClient.h>
 #include <ArduinoJson.h>
 #include <functional>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include "config/network_config.h"
 #include "../zones/ZoneDefinition.h"
 
@@ -194,6 +196,35 @@ private:
     };
     RateLimiter _rateLimiter;
 
+    // Send queue for parameter changes (prevents blocking on rapid encoder changes)
+    struct PendingMessage {
+        uint8_t paramIndex;
+        uint8_t value;
+        uint8_t zoneId;  // For zone parameters (0-3), unused for global params
+        uint32_t timestamp;
+        const char* type;
+        bool valid;
+        
+        void reset() {
+            valid = false;
+            paramIndex = 0;
+            value = 0;
+            zoneId = 0;
+            timestamp = 0;
+            type = nullptr;
+        }
+    };
+    static constexpr size_t SEND_QUEUE_SIZE = 16;  // One per parameter
+    PendingMessage _sendQueue[SEND_QUEUE_SIZE];
+    uint32_t _consecutiveSendFailures;
+    bool _sendDegraded;
+
+    // Mutex protection for _jsonBuffer (prevents concurrent access corruption)
+    SemaphoreHandle_t _sendMutex;
+    static constexpr uint32_t SEND_MUTEX_TIMEOUT_MS = 10;  // 10ms max wait
+    static constexpr uint32_t SEND_TIMEOUT_MS = 50;  // 50ms max send time
+    uint32_t _sendAttemptStartTime;
+
     // Parameter indices for rate limiting
     // Note: Unit B (8-15) encoders are disabled, but zone functions may still be called from UI
     enum ParamIndex : uint8_t {
@@ -218,8 +249,18 @@ private:
     // Check if parameter send is allowed (rate limiting)
     bool canSend(uint8_t paramIndex);
     
-    // Send JSON message
+    // Send JSON message (non-blocking, protected by mutex)
     void sendJSON(const char* type, JsonDocument& doc);
+    
+    // Queue parameter change for later sending (prevents blocking)
+    void queueParameterChange(uint8_t paramIndex, uint8_t value, const char* type, uint8_t zoneId = 255);
+    
+    // Process send queue (called from update())
+    void processSendQueue();
+    
+    // Mutex helpers
+    bool takeSendLock(uint32_t timeoutMs = SEND_MUTEX_TIMEOUT_MS);
+    void releaseSendLock();
 };
 
 #endif // ENABLE_WIFI

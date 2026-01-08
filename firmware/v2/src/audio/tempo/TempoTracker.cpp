@@ -692,6 +692,18 @@ void TempoTracker::updateNovelty(float onsetStrength, uint64_t t_samples) {
     // Detect onset
     bool onset_now = (onset_strength_ > tuning_.onsetThreshK);
 
+    // Log onset detection decision (verbosity >= 2)
+    auto& dbgCfg = lightwaveos::audio::getAudioDebugConfig();
+    if (dbgCfg.verbosity >= 2) {
+        static uint32_t logCounter = 0;
+        logCounter++;
+        if (logCounter % 16 == 0) {  // Log every 16th call (~250ms)
+            printf("[ONSET] raw=%.3f base=%.3f norm=%.3f thresh=%.2f detected=%d\n",
+                   onsetStrength, onset_state_.baseline_vu, onset_strength_,
+                   tuning_.onsetThreshK, onset_now ? 1 : 0);
+        }
+    }
+
     // Refractory period check
     uint64_t refract_samples = (tuning_.refractoryMs * 16000ULL) / 1000;
     if (onset_now && (t_samples - onset_state_.lastOnsetUs) < refract_samples) {

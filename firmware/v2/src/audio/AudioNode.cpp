@@ -917,17 +917,14 @@ void AudioNode::processHop()
     }
 
     // ========================================================================
-    // Phase 2 Integration: Dual-Bank Processing
+    // Phase 2 Integration: Use K1 Front-End Output
     // ========================================================================
-    // Process dual banks to extract rhythm and harmony features
-    m_rhythmBank.process(m_ringBuffer);
-    m_harmonyBank.process(m_ringBuffer);
-
-    // Build unified AudioFeatureFrame
-    m_latestFrame.rhythmFlux = m_rhythmBank.getFlux();
-    m_latestFrame.harmonyFlux = m_harmonyBank.getFlux();
-    memcpy(m_latestFrame.chroma, m_harmonyBank.getChroma(), 12 * sizeof(float));
-    m_latestFrame.chromaStability = m_harmonyBank.getStability();
+    // Convert K1's AudioFeatureFrame to AudioNode's AudioFeatureFrame
+    // K1 produces rhythm_novelty (~2.5) which is ~32x stronger than old flux (~0.08)
+    m_latestFrame.rhythmFlux = k1Frame.rhythm_novelty;
+    m_latestFrame.harmonyFlux = k1Frame.harmony_valid ? k1Frame.chroma_stability : 0.0f;
+    memcpy(m_latestFrame.chroma, k1Frame.chroma12, 12 * sizeof(float));
+    m_latestFrame.chromaStability = k1Frame.chroma_stability;
     m_latestFrame.timestamp = m_sampleIndex;
 
     // ========================================================================

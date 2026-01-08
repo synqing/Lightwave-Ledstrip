@@ -33,11 +33,27 @@
 // LightwaveOS Server
 // Default: mDNS hostname (resolved automatically)
 // Alternative: Use IP address if mDNS resolution fails
+//
+// Multi-tier fallback strategy (in priority order):
+//   1. Compile-time LIGHTWAVE_IP (if defined) → Immediate connection, bypasses mDNS
+//   2. Manual IP from NVS (if configured via UI) → User-configured IP address
+//   3. mDNS resolution → Attempts with backoff (10s intervals, max 6 attempts)
+//   4. Timeout-based fallback → After 60s or 6 failed attempts:
+//      - Uses manual IP from NVS (if set)
+//      - Falls back to gateway IP (if on secondary network: LightwaveOS-AP)
+//
+// NVS Storage:
+//   - Namespace: "tab5net"
+//   - Keys: "manual_ip" (string), "use_manual" (bool)
+//   - Manual IP can be configured via UI (DisplayUI::showNetworkConfigScreen())
+//
 #define LIGHTWAVE_HOST "lightwaveos.local"
 #define LIGHTWAVE_PORT 80
 #define LIGHTWAVE_WS_PATH "/ws"
 
 // Optional: Direct IP fallback (uncomment and set if mDNS fails)
+// This bypasses mDNS entirely and connects directly to the specified IP.
+// Highest priority - takes precedence over all other methods.
 // #define LIGHTWAVE_IP "192.168.4.1"
 
 // Connection Timeouts (milliseconds)
@@ -53,6 +69,15 @@ namespace NetworkConfig {
 
     // mDNS resolution retry interval
     constexpr uint32_t MDNS_RETRY_DELAY_MS = 10000;
+    
+    // mDNS timeout before fallback (milliseconds)
+    // After this timeout or MDNS_MAX_ATTEMPTS, system will use fallback IP
+    // (manual IP from NVS or gateway IP on secondary network)
+    constexpr uint32_t MDNS_FALLBACK_TIMEOUT_MS = 60000;  // 60 seconds
+    
+    // Maximum mDNS attempts before fallback
+    // System will attempt mDNS resolution this many times before using fallback
+    constexpr uint8_t MDNS_MAX_ATTEMPTS = 6;  // 6 attempts × 10s = 60s
 
     // WebSocket initial reconnect delay
     constexpr uint32_t WS_INITIAL_RECONNECT_MS = 1000;
@@ -66,11 +91,21 @@ namespace NetworkConfig {
     // Per-parameter send throttle (minimum interval between sends)
     constexpr uint32_t PARAM_THROTTLE_MS = 50;
     
+    // Send queue stale message timeout (drop messages older than this)
+    constexpr uint32_t SEND_QUEUE_STALE_TIMEOUT_MS = 500;  // 500ms max age
+    
     // Number of connection attempts per network before switching
     constexpr uint8_t WIFI_ATTEMPTS_PER_NETWORK = 2;
     
     // WiFi retry timeout before showing retry button (2 minutes)
     constexpr uint32_t WIFI_RETRY_TIMEOUT_MS = 120000;  // 2 minutes
+}
+
+// NVS namespace and keys for network configuration
+namespace NetworkNVS {
+    constexpr const char* NAMESPACE = "tab5net";
+    constexpr const char* KEY_MANUAL_IP = "manual_ip";
+    constexpr const char* KEY_USE_MANUAL_IP = "use_manual";
 }
 
 // OTA Update Configuration

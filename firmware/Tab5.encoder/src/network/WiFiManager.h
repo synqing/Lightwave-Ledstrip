@@ -100,6 +100,24 @@ public:
     // Get status as human-readable string
     const char* getStatusString() const;
 
+    // Check if mDNS resolution has exceeded timeout threshold
+    bool isMDNSTimeoutExceeded() const;
+
+    // Get stored manual IP from NVS (if configured)
+    IPAddress getManualIP() const;
+
+    // Set manual IP address (stores in NVS)
+    bool setManualIP(const IPAddress& ip);
+
+    // Check if manual IP should be used
+    bool shouldUseManualIP() const;
+
+    // Clear manual IP configuration from NVS
+    void clearManualIP();
+
+    // Get mDNS attempt count (for diagnostics)
+    uint8_t getMDNSAttemptCount() const { return _mdnsRetryCount; }
+
 private:
     const char* _ssid;
     const char* _password;
@@ -124,6 +142,11 @@ private:
     // mDNS state
     const char* _mdnsHostname;
     uint8_t _mdnsRetryCount;
+    unsigned long _mdnsStartTime;  // When mDNS resolution started
+
+    // Manual IP configuration (from NVS)
+    IPAddress _manualIP;           // User-configured IP (from NVS)
+    bool _useManualIP;              // Whether to use manual IP
 
     // State handlers
     void handleDisconnected();
@@ -135,6 +158,7 @@ private:
     void startConnection();
     void switchToSecondaryNetwork();
     void enterErrorState(const char* reason);
+    void loadManualIPFromNVS();
 };
 
 #else // ENABLE_WIFI == 0

@@ -35,6 +35,7 @@
 
 // Forward declaration (for class members)
 class ButtonHandler;
+class CoarseModeManager;
 
 class DualEncoderService {
 public:
@@ -112,6 +113,12 @@ public:
      * @param handler ButtonHandler instance (can be nullptr to disable)
      */
     void setButtonHandler(ButtonHandler* handler) { _buttonHandler = handler; }
+
+    /**
+     * Set coarse mode manager for ENC-A acceleration
+     * @param manager CoarseModeManager instance (can be nullptr to disable)
+     */
+    void setCoarseModeManager(CoarseModeManager* manager) { _coarseModeManager = manager; }
 
     // ========================================================================
     // Status
@@ -213,6 +220,9 @@ private:
 
     // Button handler for special behaviors (zone mode, speed/palette toggle)
     ButtonHandler* _buttonHandler = nullptr;
+
+    // Coarse mode manager for ENC-A acceleration (encoders 0-7)
+    CoarseModeManager* _coarseModeManager = nullptr;
 
     // ========================================================================
     // Internal Methods
@@ -335,10 +345,18 @@ inline bool DualEncoderService::begin() {
     // Set status LEDs to indicate unit availability
     if (unitAOk) {
         // Unit A status LED: dim green
+        // #region agent log
+        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"boot\",\"hypothesisId\":\"H1\",\"location\":\"DualEncoderService.h:begin\",\"message\":\"statusLed.unitA.set\",\"data\":{\"channel\":8,\"r\":0,\"g\":32,\"b\":0},\"timestamp\":%lu}\n",
+                      static_cast<unsigned long>(millis()));
+        // #endregion
         _transportA.setLED(8, 0, 32, 0);
     }
     if (unitBOk) {
         // Unit B status LED: dim blue (to differentiate from Unit A)
+        // #region agent log
+        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"boot\",\"hypothesisId\":\"H1\",\"location\":\"DualEncoderService.h:begin\",\"message\":\"statusLed.unitB.set\",\"data\":{\"channel\":8,\"r\":0,\"g\":0,\"b\":32},\"timestamp\":%lu}\n",
+                      static_cast<unsigned long>(millis()));
+        // #endregion
         _transportB.setLED(8, 0, 0, 32);
     }
 
@@ -493,6 +511,9 @@ inline void DualEncoderService::allLedsOff() {
     }
 }
 
+// Include CoarseModeManager before inline method that uses it
+#include "CoarseModeManager.h"
+
 inline void DualEncoderService::processEncoderDelta(uint8_t globalIdx, int32_t rawDelta, uint32_t now) {
     if (globalIdx >= TOTAL_ENCODERS) return;
 
@@ -501,6 +522,11 @@ inline void DualEncoderService::processEncoderDelta(uint8_t globalIdx, int32_t r
         int32_t normalizedDelta = _detentDebounce[globalIdx].consumeNormalisedDelta();
 
         if (normalizedDelta != 0) {
+            // Apply coarse mode multiplier if enabled (ENC-A only, indices 0-7)
+            if (_coarseModeManager && globalIdx < 8) {
+                normalizedDelta = _coarseModeManager->applyCoarseMode(globalIdx, normalizedDelta, now);
+            }
+
             // Apply delta with wrap/clamp
             uint16_t oldValue = _values[globalIdx];
             int32_t newValue = static_cast<int32_t>(_values[globalIdx]) + normalizedDelta;

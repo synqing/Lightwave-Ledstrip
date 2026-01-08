@@ -153,7 +153,10 @@ void NarrativeHandlers::handleConfigSet(AsyncWebServerRequest* request,
         updated = true;
     }
     
-    // TODO: Persist to NVS if needed
+    // Persist to NVS if configuration was updated
+    if (updated) {
+        narrative.saveToNVS();
+    }
     
     sendSuccessResponse(request, [updated](JsonObject& respData) {
         respData["message"] = updated ? "Narrative config updated" : "No changes";

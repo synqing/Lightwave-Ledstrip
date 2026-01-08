@@ -785,6 +785,12 @@ void ZoneComposerUI::adjustZoneParameter(uint8_t zoneIndex, int32_t delta) {
             _zoneEffects[zoneIndex] = newVal;
 
             updateEffectLabel(zoneIndex);
+
+            // Send WebSocket command to v2 firmware
+            if (_wsClient && _wsClient->isConnected()) {
+                _wsClient->sendZoneEffect(zoneIndex, _zoneEffects[zoneIndex]);
+            }
+
             Serial.printf("[ZoneComposer] Zone %u Effect → %u\n", zoneIndex, _zoneEffects[zoneIndex]);
             break;
         }
@@ -798,6 +804,12 @@ void ZoneComposerUI::adjustZoneParameter(uint8_t zoneIndex, int32_t delta) {
             _zonePalettes[zoneIndex] = newVal;
 
             updatePaletteLabel(zoneIndex);
+
+            // Send WebSocket command to v2 firmware
+            if (_wsClient && _wsClient->isConnected()) {
+                _wsClient->sendZonePalette(zoneIndex, _zonePalettes[zoneIndex]);
+            }
+
             Serial.printf("[ZoneComposer] Zone %u Palette → %u\n", zoneIndex, _zonePalettes[zoneIndex]);
             break;
         }
@@ -809,6 +821,12 @@ void ZoneComposerUI::adjustZoneParameter(uint8_t zoneIndex, int32_t delta) {
             _zoneSpeeds[zoneIndex] = newVal;
 
             updateSpeedLabel(zoneIndex);
+
+            // Send WebSocket command to v2 firmware
+            if (_wsClient && _wsClient->isConnected()) {
+                _wsClient->sendZoneSpeed(zoneIndex, _zoneSpeeds[zoneIndex]);
+            }
+
             Serial.printf("[ZoneComposer] Zone %u Speed → %u\n", zoneIndex, _zoneSpeeds[zoneIndex]);
             break;
         }
@@ -820,6 +838,12 @@ void ZoneComposerUI::adjustZoneParameter(uint8_t zoneIndex, int32_t delta) {
             _zoneBrightness[zoneIndex] = newVal;
 
             updateBrightnessLabel(zoneIndex);
+
+            // Send WebSocket command to v2 firmware
+            if (_wsClient && _wsClient->isConnected()) {
+                _wsClient->sendZoneBrightness(zoneIndex, _zoneBrightness[zoneIndex]);
+            }
+
             Serial.printf("[ZoneComposer] Zone %u Brightness → %u\n", zoneIndex, _zoneBrightness[zoneIndex]);
             break;
         }
@@ -834,6 +858,14 @@ void ZoneComposerUI::adjustZoneCount(int32_t delta) {
     if (newCount < 1) newCount = 4;  // Wrap to 4
     if (newCount > 4) newCount = 1;  // Wrap to 1
     _zoneCount = newCount;
+
+    // Generate new zone layout
+    generateZoneSegments(_zoneCount);
+
+    // Send WebSocket command to v2 firmware
+    if (_wsClient && _wsClient->isConnected()) {
+        _wsClient->sendZonesSetLayout(_editingSegments, _editingZoneCount);
+    }
 
     updateZoneCountLabel();
     Serial.printf("[ZoneComposer] Zone Count → %u\n", _zoneCount);
@@ -850,8 +882,16 @@ void ZoneComposerUI::adjustPreset(int32_t delta) {
     _currentPresetIndex = newIndex;
     _presetName = presets[_currentPresetIndex];
 
+    // Load the preset zone layout
+    loadPreset(_currentPresetIndex);
+
+    // Send WebSocket command to v2 firmware
+    if (_wsClient && _wsClient->isConnected()) {
+        _wsClient->sendZonesSetLayout(_editingSegments, _editingZoneCount);
+    }
+
     updatePresetLabel();
-    Serial.printf("[ZoneComposer] Preset → %s\n", _presetName);
+    Serial.printf("[ZoneComposer] Preset → %s (%u zones)\n", _presetName, _editingZoneCount);
 }
 
 // Label update helpers (Phase 1 stubs - will be fully implemented in Phase 2)
@@ -920,69 +960,147 @@ static lv_obj_t* make_zone_card(lv_obj_t* parent, bool elevated) {
 }
 
 void ZoneComposerUI::createInteractiveUI(lv_obj_t* parent) {
-    Serial.println("[ZoneComposer] Creating themed LVGL UI matching DisplayUI...");
+    Serial.println("[ZoneComposer] Creating LVGL Zone Composer UI");
 
-    // TODO: Implement proper themed Zone Composer UI
-    // For now, create a placeholder that matches the theme
-    lv_obj_t* placeholder = lv_label_create(parent);
-    lv_label_set_text(placeholder, "ZONE COMPOSER\n(THEMED UI COMING SOON)");
-    lv_obj_set_style_text_color(placeholder, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
-    lv_obj_center(placeholder);
+    // Note: This creates the INTERACTIVE zone parameter controls (touch + encoder).
+    // The LED visualization is still rendered via M5GFX in render().
 
-    Serial.println("[ZoneComposer] Placeholder created - proper themed UI needed");
+    // Main container (not needed, parent is already the zone screen)
+    // Just create components directly on parent
+
+    // Zone count selector row
+    _zoneCountRow = createZoneCountRow(parent);
+
+    // Preset selector row
+    _presetRow = createPresetRow(parent);
+
+    // Zone parameter grid (4 zones × 4 parameters each)
+    createZoneParameterGrid(parent);
+
+    // Mode selector + back button
+    createModeSelector(parent);
+
+    Serial.println("[ZoneComposer] LVGL interactive UI created");
 }
 
 lv_obj_t* ZoneComposerUI::createZoneCountRow(lv_obj_t* parent) {
-    // TODO: Implement with proper theme matching DisplayUI
-    return nullptr;
+    // Create simple label (no complex card needed)
+    lv_obj_t* label = lv_label_create(parent);
+    lv_label_set_text(label, "Zone Count: 1");
+    lv_obj_set_style_text_color(label, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
+    lv_obj_add_flag(label, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(label, zoneCountTouchCb, LV_EVENT_CLICKED, this);
+    _zoneCountValueLabel = label;
+    return label;
 }
 
-// Stub implementations - TODO: Reimplement with proper DisplayUI theme matching
-
 lv_obj_t* ZoneComposerUI::createPresetRow(lv_obj_t* parent) {
-    // TODO: Implement with proper theme matching DisplayUI
-    (void)parent;
-    return nullptr;
+    lv_obj_t* label = lv_label_create(parent);
+    lv_label_set_text(label, "Preset: Unified");
+    lv_obj_set_style_text_color(label, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
+    lv_obj_add_flag(label, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(label, presetTouchCb, LV_EVENT_CLICKED, this);
+    _presetValueLabel = label;
+    return label;
 }
 
 void ZoneComposerUI::createZoneParameterGrid(lv_obj_t* parent) {
-    // TODO: Implement with proper theme matching DisplayUI
-    (void)parent;
+    // Create 4 zone parameter rows
+    for (uint8_t i = 0; i < 4; i++) {
+        createZoneParamRow(parent, i);
+    }
 }
 
 lv_obj_t* ZoneComposerUI::createZoneParamRow(lv_obj_t* parent, uint8_t zoneIndex) {
-    // TODO: Implement with proper theme matching DisplayUI
-    (void)parent;
-    (void)zoneIndex;
-    return nullptr;
+    lv_obj_t* row = lv_obj_create(parent);
+    lv_obj_set_size(row, LV_PCT(100), 50);
+
+    // Zone label
+    lv_obj_t* zoneLabel = lv_label_create(row);
+    char zoneName[16];
+    snprintf(zoneName, sizeof(zoneName), "Zone %d", zoneIndex + 1);
+    lv_label_set_text(zoneLabel, zoneName);
+    lv_obj_set_style_text_color(zoneLabel, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
+
+    // Effect parameter
+    lv_obj_t* effectCard = createClickableParameter(row, "Effect", "Fire", zoneIndex, ZoneParameterMode::EFFECT);
+    _zoneEffectLabels[zoneIndex] = effectCard;
+
+    // Palette parameter
+    lv_obj_t* paletteCard = createClickableParameter(row, "Palette", "Rainbow", zoneIndex, ZoneParameterMode::PALETTE);
+    _zonePaletteLabels[zoneIndex] = paletteCard;
+
+    // Speed parameter
+    lv_obj_t* speedCard = createClickableParameter(row, "Speed", "50", zoneIndex, ZoneParameterMode::SPEED);
+    _zoneSpeedLabels[zoneIndex] = speedCard;
+
+    // Brightness parameter
+    lv_obj_t* brightCard = createClickableParameter(row, "Brightness", "128", zoneIndex, ZoneParameterMode::BRIGHTNESS);
+    _zoneBrightnessLabels[zoneIndex] = brightCard;
+
+    return row;
 }
 
-lv_obj_t* ZoneComposerUI::createClickableParameter(
-    lv_obj_t* parent,
-    const char* label,
-    const char* value,
-    uint8_t zoneIndex,
-    ZoneParameterMode mode
-) {
-    // TODO: Implement with proper theme matching DisplayUI
-    (void)parent;
-    (void)label;
-    (void)value;
-    (void)zoneIndex;
-    (void)mode;
-    return nullptr;
+lv_obj_t* ZoneComposerUI::createClickableParameter(lv_obj_t* parent,
+                                                    const char* label,
+                                                    const char* value,
+                                                    uint8_t zoneIndex,
+                                                    ZoneParameterMode mode) {
+    lv_obj_t* card = lv_obj_create(parent);
+    lv_obj_set_size(card, 100, 40);
+    lv_obj_set_style_bg_color(card, lv_color_hex(TAB5_COLOR_BG_SURFACE_BASE), LV_PART_MAIN);
+    lv_obj_set_style_border_width(card, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_color(card, lv_color_hex(TAB5_COLOR_BORDER_BASE), LV_PART_MAIN);
+
+    lv_obj_t* valueLabel = lv_label_create(card);
+    lv_label_set_text(valueLabel, value);
+    lv_obj_set_style_text_color(valueLabel, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
+    lv_obj_center(valueLabel);
+
+    ParameterMetadata* meta = new ParameterMetadata();
+    meta->zoneIndex = zoneIndex;
+    meta->mode = mode;
+    lv_obj_set_user_data(card, meta);
+
+    lv_obj_add_flag(card, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(card, parameterTouchCb, LV_EVENT_CLICKED, this);
+
+    return card;
 }
 
 void ZoneComposerUI::createModeSelector(lv_obj_t* parent) {
-    // TODO: Implement with proper theme matching DisplayUI
-    (void)parent;
+    const char* modeNames[] = {"Effect", "Palette", "Speed", "Brightness"};
+
+    for (int i = 0; i < 4; i++) {
+        lv_obj_t* btn = lv_obj_create(parent);
+        lv_obj_set_size(btn, 80, 40);
+
+        lv_obj_t* label = lv_label_create(btn);
+        lv_label_set_text(label, modeNames[i]);
+        lv_obj_center(label);
+
+        lv_obj_set_user_data(btn, (void*)(intptr_t)i);
+        lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_event_cb(btn, modeButtonCb, LV_EVENT_CLICKED, this);
+
+        _modeButtons[i] = btn;
+    }
 }
 
 lv_obj_t* ZoneComposerUI::createBackButton(lv_obj_t* parent) {
-    // TODO: Implement with proper theme matching DisplayUI
-    (void)parent;
-    return nullptr;
+    lv_obj_t* btn = lv_obj_create(parent);
+    lv_obj_set_size(btn, LV_PCT(100), 50);
+
+    lv_obj_t* label = lv_label_create(btn);
+    lv_label_set_text(label, "< Back");
+    lv_obj_center(label);
+
+    lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(btn, backButtonCb, LV_EVENT_CLICKED, this);
+
+    return btn;
 }
+
 // ============================================================================
 // Phase 2: LVGL Event Callbacks
 // ============================================================================
@@ -990,10 +1108,8 @@ lv_obj_t* ZoneComposerUI::createBackButton(lv_obj_t* parent) {
 void ZoneComposerUI::parameterTouchCb(lv_event_t* e) {
     ZoneComposerUI* ui = (ZoneComposerUI*)lv_event_get_user_data(e);
     lv_obj_t* target = (lv_obj_t*)lv_event_get_target(e);
-
     ParameterMetadata* meta = (ParameterMetadata*)lv_obj_get_user_data(target);
     if (!meta) return;
-
     ui->selectParameter(meta->zoneIndex, meta->mode);
 }
 
@@ -1010,17 +1126,13 @@ void ZoneComposerUI::presetTouchCb(lv_event_t* e) {
 void ZoneComposerUI::modeButtonCb(lv_event_t* e) {
     ZoneComposerUI* ui = (ZoneComposerUI*)lv_event_get_user_data(e);
     lv_obj_t* btn = (lv_obj_t*)lv_event_get_target(e);
-
     int modeIndex = (int)(intptr_t)lv_obj_get_user_data(btn);
     ui->setActiveMode((ZoneParameterMode)modeIndex);
 }
 
 void ZoneComposerUI::backButtonCb(lv_event_t* e) {
     ZoneComposerUI* ui = (ZoneComposerUI*)lv_event_get_user_data(e);
-
     Serial.println("[ZoneComposer] Back button pressed - returning to GLOBAL screen");
-
-    // Invoke callback to return to GLOBAL screen
     if (ui->_backButtonCallback) {
         ui->_backButtonCallback();
     }

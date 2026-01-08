@@ -22,16 +22,10 @@
 #include <cmath>
 #include "K1FFTConfig.h"
 
-// KissFFT: Use FastLED's embedded implementation
-// TODO: Integrate KissFFT from FastLED when API is finalized
-// For now, using placeholder struct to verify compilation
-
-// Placeholder for KissFFT configuration (from cq_kernel)
-typedef void* kiss_fftr_cfg;
-typedef struct {
-    float r;
-    float i;
-} kiss_fft_cpx;
+// KissFFT: Use FastLED's embedded implementation from third_party/cq_kernel
+extern "C" {
+#include <third_party/cq_kernel/kiss_fftr.h>
+}
 
 namespace lightwaveos {
 namespace audio {
@@ -134,6 +128,7 @@ public:
      */
     void reset() {
         std::memset(m_magnitude, 0, sizeof(m_magnitude));
+        std::memset(m_fftInputFloat, 0, sizeof(m_fftInputFloat));
         std::memset(m_fftInput, 0, sizeof(m_fftInput));
     }
 
@@ -150,7 +145,8 @@ private:
     kiss_fftr_cfg m_fftCfg;  ///< FFT configuration (allocated in init())
 
     // Pre-allocated buffers
-    float m_fftInput[K1FFTConfig::FFT_SIZE];      ///< Windowed input for FFT
+    float m_fftInputFloat[K1FFTConfig::FFT_SIZE];    ///< Windowed float input (for Hann windowing)
+    int16_t m_fftInput[K1FFTConfig::FFT_SIZE];    ///< Windowed input for FFT (int16_t for KissFFT)
     kiss_fft_cpx m_fftOutput[K1FFTConfig::FFT_SIZE / 2 + 1];  ///< FFT output (complex)
     float m_magnitude[K1FFTConfig::MAGNITUDE_BINS];  ///< Magnitude spectrum
     float m_hannWindow[K1FFTConfig::FFT_SIZE];    ///< Pre-computed Hann window

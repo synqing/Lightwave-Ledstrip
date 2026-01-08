@@ -30,8 +30,11 @@ bool K1FFTAnalyzer::init() {
         return true;
     }
 
-    // TODO: Implement actual KissFFT initialization
-    // m_fftCfg = kiss_fftr_alloc(K1FFTConfig::FFT_SIZE, 0, nullptr, nullptr);
+    // Allocate KissFFT context for 512-point real FFT
+    m_fftCfg = kiss_fftr_alloc(K1FFTConfig::FFT_SIZE, 0, nullptr, nullptr);
+    if (m_fftCfg == nullptr) {
+        return false;  // Allocation failed
+    }
 
     // Pre-compute Hann window
     K1FFTConfig::generateHannWindow(m_hannWindow);
@@ -44,42 +47,49 @@ bool K1FFTAnalyzer::init() {
 }
 
 void K1FFTAnalyzer::destroy() {
-    // TODO: Implement actual KissFFT deallocation
-    // if (m_fftCfg != nullptr) {
-    //     kiss_fft_free(m_fftCfg);
-    //     m_fftCfg = nullptr;
-    // }
+    if (m_fftCfg != nullptr) {
+        kiss_fft_free(m_fftCfg);
+        m_fftCfg = nullptr;
+    }
     m_initialized = false;
 }
 
 bool K1FFTAnalyzer::processFrame(const float input[K1FFTConfig::FFT_SIZE]) {
-    if (!m_initialized) {
+    if (!m_initialized || m_fftCfg == nullptr) {
         return false;
     }
 
-    // TODO: Implement actual FFT processing
-    // Apply Hann window to input
-    K1FFTConfig::applyHannWindow(input, m_hannWindow, m_fftInput);
+    // Apply Hann window to input (produces float output)
+    K1FFTConfig::applyHannWindow(input, m_hannWindow, m_fftInputFloat);
 
-    // Perform real FFT
-    // kiss_fftr(m_fftCfg, m_fftInput, m_fftOutput);
+    // Convert windowed float samples to int16_t for KissFFT
+    for (size_t i = 0; i < K1FFTConfig::FFT_SIZE; i++) {
+        float val = m_fftInputFloat[i] * 32767.0f;  // Scale to int16_t range
+        m_fftInput[i] = static_cast<int16_t>(val);
+    }
+
+    // Perform real FFT: input is 512 int16_t samples, output is 257 complex numbers
+    kiss_fftr(reinterpret_cast<kiss_fftr_cfg>(m_fftCfg), m_fftInput, m_fftOutput);
 
     // Extract magnitude spectrum
-    // extractMagnitude(m_fftOutput, m_magnitude);
-
-    // Placeholder: Zero out magnitude
-    std::memset(m_magnitude, 0, sizeof(m_magnitude));
+    extractMagnitude(m_fftOutput, m_magnitude);
 
     return true;
 }
 
 void K1FFTAnalyzer::extractMagnitude(const kiss_fft_cpx fftOut[],
                                      float magnitude[K1FFTConfig::MAGNITUDE_BINS]) {
-    // TODO: Implement actual magnitude extraction
+    // Extract magnitude from complex FFT output
+    // magnitude = sqrt(real^2 + imag^2)
     const uint16_t numBins = K1FFTConfig::FFT_SIZE / 2;  // 256
 
     for (uint16_t k = 0; k < numBins; k++) {
-        magnitude[k] = 0.0f;  // Placeholder
+        float real = fftOut[k].r;
+        float imag = fftOut[k].i;
+
+        // Compute magnitude and normalize by FFT size (standard scaling)
+        float mag = std::sqrt(real * real + imag * imag);
+        magnitude[k] = mag / static_cast<float>(K1FFTConfig::FFT_SIZE);
     }
 }
 

@@ -305,6 +305,12 @@ struct TempoTrackerDiagnostics {
     uint32_t octaveFlips;         ///< Count of half/double corrections
     bool isLocked;                ///< Currently locked (conf > 0.5)
     uint64_t lockStartTime;       ///< Time when lock achieved
+
+    // Phase 4 additions
+    float intervalStdDev;        ///< Standard deviation of recent intervals
+    float intervalCoV;           ///< Coefficient of variation
+    int mismatchStreak;          ///< Current consecutive mismatch count
+    int votesInWinnerBin;        ///< Votes in density buffer winner bin
 };
 
 // ============================================================================
@@ -499,6 +505,32 @@ private:
      */
     void updateBeat(bool onset, float onsetStrength, uint64_t t_samples, float delta_sec);
 
+    /**
+     * @brief Calculate standard deviation of recent intervals
+     * @return Standard deviation in seconds
+     */
+    float calculateRecentIntervalsStdDev() const;
+
+    /**
+     * @brief Calculate coefficient of variation (CoV) of recent intervals
+     * @return CoV = stdDev / mean
+     */
+    float calculateRecentIntervalsCoV() const;
+
+    /**
+     * @brief Count votes in a density buffer bin
+     * @param binIndex Bin index to count
+     * @return Vote count
+     */
+    int countVotesInBin(int binIndex) const;
+
+    /**
+     * @brief Find true second peak in density buffer (excluding winner's kernel)
+     * @param excludePeakIdx Winner peak index to exclude
+     * @return Second peak density value
+     */
+    float findTrueSecondPeak(int excludePeakIdx) const;
+
 private:
     // ========================================================================
     // State Variables
@@ -523,10 +555,13 @@ private:
     // Diagnostic state
     TempoTrackerDiagnostics diagnostics_; ///< Diagnostic metrics for debugging
     uint64_t m_initTime;                  ///< Initialization time (for lock time tracking)
-    
+
     // Periodic summary logging
     uint32_t summaryLogCounter_;  ///< Counter for periodic summary logs
     static constexpr uint32_t SUMMARY_LOG_INTERVAL = 62;  ///< Log every 62 hops (~1 second at 62.5 Hz)
+
+    // Phase 4: Mismatch streak tracking
+    int mismatch_streak_;  ///< Consecutive mismatches between hypothesis and density winner
 };
 
 } // namespace audio

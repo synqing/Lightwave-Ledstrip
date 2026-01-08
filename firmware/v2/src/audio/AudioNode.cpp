@@ -537,8 +537,33 @@ void AudioNode::processHop()
     // === Phase: DC/AGC Loop ===
     BENCH_START_PHASE();
 
+    // ========================================================================
+    // Phase 2 Integration: Populate Ring Buffer for Dual-Bank Processing
+    // ========================================================================
+    // Convert int16_t samples to float and push into ring buffer
+    // This feeds both RhythmBank (24 bins) and HarmonyBank (64 bins)
+    for (size_t i = 0; i < HOP_SIZE; ++i) {
+        // Normalize int16_t → float [-1.0, 1.0]
+        float sample = static_cast<float>(m_hopBuffer[i]) / 32768.0f;
+        m_ringBuffer.push(sample);
+    }
+
     // K1 Front-End: Process hop and publish feature frame
     k1::AudioFeatureFrame k1Frame;
+    // #region agent log
+    static uint32_t k1_log_counter = 0;
+    if ((k1_log_counter++ % 125) == 0) {  // Log every ~1 second
+        char k1_check[256];
+        snprintf(k1_check, sizeof(k1_check),
+            "{\"k1_initialized\":%d,\"hop_buffer_min\":%d,\"hop_buffer_max\":%d,\"sample_index\":%llu,\"hypothesisId\":\"F\"}",
+            m_k1FrontEnd.isInitialized() ? 1 : 0, minRaw, maxRaw, (unsigned long long)m_sampleIndex);
+        // Use debug_log from TempoTracker pattern - need to include AudioDebugConfig.h
+        // For now, use printf directly
+        uint64_t t_us = (m_sampleIndex * 1000000ULL) / 16000;
+        printf("DEBUG_JSON:{\"location\":\"AudioNode.cpp:processHop\",\"message\":\"k1_check\",\"data\":%s,\"timestamp\":%llu}\n",
+               k1_check, (unsigned long long)t_us);
+    }
+    // #endregion
     if (m_k1FrontEnd.isInitialized()) {
         k1::AudioChunk chunk;
         memcpy(chunk.samples, m_hopBuffer, HOP_SIZE * sizeof(int16_t));
@@ -892,28 +917,32 @@ void AudioNode::processHop()
     }
 
     // ========================================================================
-    // TempoTracker Beat Tracker Processing (K1 Integration)
+    // Phase 2 Integration: Dual-Bank Processing
     // ========================================================================
-    // Use K1 features for tempo tracking (rhythm_novelty as primary onset)
-    
-    // Update tempo tracker from K1 features
-    if (m_k1FrontEnd.isInitialized()) {
-        m_tempo.updateFromFeatures(k1Frame);
-    } else {
-        // Fallback: legacy updateNovelty (for compatibility during migration)
-        uint64_t t_samples = m_sampleIndex;
-        uint64_t tMicros = (t_samples * 1000000ULL) / SAMPLE_RATE;
-        m_tempo.updateNovelty(
-            goertzelTriggered ? bandsPre : nullptr,
-            8,
-            rmsPre,
-            goertzelTriggered,
-            tMicros
-        );
-        float delta_sec = static_cast<float>(HOP_SIZE) / static_cast<float>(SAMPLE_RATE);
-        m_tempo.updateTempo(delta_sec, t_samples);
-    }
-    
+    // Process dual banks to extract rhythm and harmony features
+    m_rhythmBank.process(m_ringBuffer);
+    m_harmonyBank.process(m_ringBuffer);
+
+    // Build unified AudioFeatureFrame
+    m_latestFrame.rhythmFlux = m_rhythmBank.getFlux();
+    m_latestFrame.harmonyFlux = m_harmonyBank.getFlux();
+    memcpy(m_latestFrame.chroma, m_harmonyBank.getChroma(), 12 * sizeof(float));
+    m_latestFrame.chromaStability = m_harmonyBank.getStability();
+    m_latestFrame.timestamp = m_sampleIndex;
+
+    // ========================================================================
+    // TempoTracker Beat Tracker Processing (Phase 2 Integration)
+    // ========================================================================
+    // Pass unified onset strength to tempo tracker (70% rhythm + 30% harmony)
+    float onsetStrength = m_latestFrame.getOnsetStrength();
+
+    // Update tempo tracker with unified novelty signal
+    m_tempo.updateNovelty(onsetStrength, m_sampleIndex);
+
+    // Update tempo with full feature frame for 4 critical onset fixes
+    float delta_sec = static_cast<float>(HOP_SIZE) / static_cast<float>(SAMPLE_RATE);
+    m_tempo.updateTempo(m_latestFrame, m_sampleIndex);
+
     // Store for change detection (used by getTempo() diagnostics)
     m_lastTempoOutput = m_tempo.getOutput();
 

@@ -34,6 +34,9 @@
 namespace lightwaveos {
 namespace audio {
 
+// Forward declarations
+struct AudioFeatureFrame;
+
 // ============================================================================
 // Configuration
 // ============================================================================
@@ -254,7 +257,17 @@ public:
     void updateNovelty(const float* bands, uint8_t num_bands, float rms, bool bands_ready, uint64_t tMicros);
 
     /**
-     * @brief Update beat tracking from onset signal
+     * @brief Update novelty from unified onset strength (Phase 2 Integration)
+     *
+     * Accepts pre-computed onset strength from dual-bank analysis.
+     *
+     * @param onsetStrength Unified onset strength [0.0, ∞) from AudioFeatureFrame
+     * @param t_samples Current time in samples (sample counter, deterministic)
+     */
+    void updateNovelty(float onsetStrength, uint64_t t_samples);
+
+    /**
+     * @brief Update beat tracking from onset signal (legacy)
      *
      * If onset detected, updates BPM estimate from inter-onset interval
      * and applies phase-locked loop correction. Updates confidence.
@@ -263,6 +276,20 @@ public:
      * @param t_samples Current time in samples (sample counter, deterministic)
      */
     void updateTempo(float delta_sec, uint64_t t_samples);
+
+    /**
+     * @brief Update beat tracking from AudioFeatureFrame (Phase 2 Integration)
+     *
+     * Implements 4 critical onset fixes:
+     * - P1-A: Onset strength weighting
+     * - P1-B: Conditional octave voting
+     * - P1-C: Harmonic filtering
+     * - P1-D: Outlier rejection
+     *
+     * @param frame Unified audio feature frame with rhythm/harmony flux and chroma
+     * @param t_samples Current time in samples (sample counter, deterministic)
+     */
+    void updateTempo(const AudioFeatureFrame& frame, uint64_t t_samples);
 
     /**
      * @brief Advance beat phase

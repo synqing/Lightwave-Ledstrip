@@ -42,32 +42,152 @@ struct AudioFeatureFrame;
 // ============================================================================
 
 struct TempoTrackerTuning {
-    // Beat tracking parameters
-    float minBpm = 60.0f;                // Minimum BPM
-    float maxBpm = 180.0f;               // Maximum BPM
-    float lockStrength = 0.35f;          // Phase correction gain [0.0-1.0]
-    float confRise = 0.1f;               // Confidence rise per good onset (slower rise)
-    float confFall = 0.2f;               // Confidence fall per second without support
+    // ========================================
+    // BPM RANGE
+    // ========================================
+    float minBpm = 60.0f;                ///< Minimum detectable BPM
+    float maxBpm = 180.0f;               ///< Maximum detectable BPM
 
-    // Onset detection parameters
-    float onsetThreshK = 1.8f;           // Multiplier over baseline for onset (lowered for better sensitivity)
-    uint32_t refractoryMs = 200;         // P0-F FIX: Minimum time between onsets (ms) - increased to 200ms (300 BPM max) to prevent subdivisions
-    float baselineAlpha = 0.22f;         // Baseline smoothing (EMA alpha) (increased for faster adaptation)
+    // ========================================
+    // ONSET DETECTION
+    // ========================================
+    float onsetThreshK = 1.8f;           ///< Multiplier over baseline for onset (lowered for better sensitivity)
+    uint32_t refractoryMs = 200;         ///< P0-F FIX: Minimum time between onsets (ms) - increased to 200ms (300 BPM max) to prevent subdivisions
+    float baselineAlpha = 0.22f;         ///< Baseline smoothing (EMA alpha) (increased for faster adaptation)
+    float minBaselineInit = 0.001f;      ///< Minimum baseline floor to prevent decay to zero
+    float minBaselineVu = 0.001f;        ///< Minimum VU baseline floor
+    float minBaselineSpec = 0.001f;      ///< Minimum spectral baseline floor
 
-    // Low-confidence reset parameters
-    float lowConfThreshold = 0.15f;      // Confidence below which we consider "lost"
-    float lowConfResetTimeSec = 8.0f;    // Seconds of low confidence before soft-reset
-    float densitySoftResetFactor = 0.3f; // Multiply density buffer by this on soft-reset (not full clear)
-    
-    // Interval mismatch reset parameters
-    float intervalMismatchThreshold = 10.0f; // BPM difference to trigger mismatch check
-    uint8_t intervalMismatchCount = 5;       // Number of consecutive mismatched intervals before reset
-    
-    // Interval weighting parameters
-    float consistencyBoostThreshold = 15.0f; // BPM difference for consistency boost (within N BPM = boost)
-    float consistencyBoostMultiplier = 3.0f; // Multiply weight by this if interval matches recent ones
-    uint8_t recentIntervalWindow = 5;        // Number of recent intervals to check for consistency
+    // ========================================
+    // FLUX COMBINATION
+    // ========================================
+    float fluxWeightVu = 0.5f;           ///< Weight for VU delta in combined flux (50/50 with spectral)
+    float fluxWeightSpec = 0.5f;         ///< Weight for spectral flux in combined flux
+    float fluxNormalizedMax = 10.0f;     ///< Maximum normalized flux value (clamp outliers)
+    float fluxBaselineEps = 1e-6f;       ///< Epsilon for baseline division (prevent divide-by-zero)
 
+    // ========================================
+    // BEAT TRACKING
+    // ========================================
+    float lockStrength = 0.35f;          ///< Phase correction gain [0.0-1.0] (DEPRECATED - not used)
+    float confRise = 0.1f;               ///< Confidence rise per good onset (slower rise)
+    float confFall = 0.2f;               ///< Confidence fall per second without support
+    float lockThreshold = 0.5f;          ///< Confidence threshold for "locked" state
+
+    // ========================================
+    // BPM SMOOTHING
+    // ========================================
+    float bpmAlpha = 0.1f;               ///< BPM EMA smoothing factor (slow smoothing)
+
+    // ========================================
+    // CONFIDENCE CALCULATION
+    // ========================================
+    float confAlpha = 0.2f;              ///< Confidence EMA smoothing factor
+
+    // ========================================
+    // DENSITY BUFFER
+    // ========================================
+    float densityDecay = 0.995f;         ///< Density buffer decay per hop (0.995 = 0.5% decay/sec at 125 Hz, ~200s time constant)
+
+    // ========================================
+    // INTERVAL VOTING
+    // ========================================
+    float kernelWidth = 2.0f;            ///< Triangular kernel width for density voting (BPM bins)
+    float octaveVariantWeight = 0.5f;    ///< Weight for octave variants (0.5×, 2×) during search mode
+
+    // ========================================
+    // PLL (PHASE-LOCKED LOOP)
+    // ========================================
+    float pllKp = 0.1f;                  ///< PLL proportional gain (phase correction)
+    float pllKi = 0.01f;                 ///< PLL integral gain (tempo correction)
+    float pllMaxIntegral = 2.0f;         ///< PLL integral windup limit
+    float pllMaxPhaseCorrection = 0.1f;  ///< Maximum phase correction per onset (clamp)
+    float pllMaxTempoCorrection = 5.0f;  ///< Maximum tempo correction per onset (BPM, clamp)
+
+    // ========================================
+    // PHASE ADVANCEMENT
+    // ========================================
+    float phaseWrapHighThreshold = 0.9f; ///< High threshold for beat tick detection (wrap from high to low)
+    float phaseWrapLowThreshold = 0.1f;  ///< Low threshold for beat tick detection
+    float beatTickDebounce = 0.6f;       ///< Debounce factor (60% of beat period minimum)
+
+    // ========================================
+    // LOW-CONFIDENCE RESET
+    // ========================================
+    float lowConfThreshold = 0.15f;      ///< Confidence below which we consider "lost"
+    float lowConfResetTimeSec = 8.0f;    ///< Seconds of low confidence before soft-reset
+    float densitySoftResetFactor = 0.3f; ///< Multiply density buffer by this on soft-reset (not full clear)
+
+    // ========================================
+    // INTERVAL MISMATCH RESET
+    // ========================================
+    float intervalMismatchThreshold = 10.0f; ///< BPM difference to trigger mismatch check
+    uint8_t intervalMismatchCount = 5;       ///< Number of consecutive mismatched intervals before reset
+
+    // ========================================
+    // INTERVAL WEIGHTING (CONSISTENCY BOOST)
+    // ========================================
+    float consistencyBoostThreshold = 15.0f; ///< BPM difference for consistency boost (within N BPM = boost)
+    float consistencyBoostMultiplier = 3.0f; ///< Multiply weight by this if interval matches recent ones
+    uint8_t recentIntervalWindow = 5;        ///< Number of recent intervals to check for consistency
+
+    // ========================================
+    // OCTAVE FLIP DETECTION
+    // ========================================
+    float octaveFlipRatioHigh = 1.8f;    ///< Ratio threshold for octave flip detection (near 2×)
+    float octaveFlipRatioLow = 0.55f;    ///< Ratio threshold for octave flip detection (near 0.5×)
+
+    // ========================================
+    // OUTLIER REJECTION (P1-D)
+    // ========================================
+    float outlierStdDevThreshold = 2.0f; ///< Standard deviation threshold for outlier rejection
+    float outlierMinConfidence = 0.3f;   ///< Minimum confidence to enable outlier rejection
+
+    // ========================================
+    // ONSET STRENGTH WEIGHTING (P1-A)
+    // ========================================
+    float onsetStrengthWeightBase = 1.0f;    ///< Base weight for onset strength
+    float onsetStrengthWeightScale = 0.5f;   ///< Scale factor for onset strength (1.0-3.5× range)
+
+    // ========================================
+    // CONDITIONAL OCTAVE VOTING (P1-B)
+    // ========================================
+    float octaveVotingConfThreshold = 0.3f;  ///< Confidence threshold - vote octaves only below this
+
+    // ========================================
+    // INTERVAL VALIDATION
+    // ========================================
+    float periodAlpha = 0.15f;           ///< EMA alpha for period estimation
+    float periodInitSec = 0.5f;          ///< Initial period estimate (120 BPM = 0.5 sec)
+
+    // ========================================
+    // K1 FRONT-END INITIALIZATION
+    // ========================================
+    float k1BaselineInit = 1.0f;         ///< K1 normalized baseline initialization (novelty ≈ 1.0)
+    float k1BaselineAlpha = 0.05f;       ///< K1 baseline adaptation alpha (5% new, 95% history)
+    float k1BaselineCheckThreshold = 0.1f; ///< Threshold to detect legacy baselines (< 0.1 = reinit)
+
+    // ========================================
+    // PEAK GATING
+    // ========================================
+    float peakGatingCapMultiplier = 1.5f; ///< Cap peak contributions to prevent baseline contamination
+
+    // ========================================
+    // ONSET STRENGTH LIMITS
+    // ========================================
+    float onsetStrengthMin = 0.0f;       ///< Minimum onset strength (clamped)
+    float onsetStrengthMax = 5.0f;       ///< Maximum onset strength (clamped)
+
+    // ========================================
+    // TRIANGULAR KERNEL WEIGHTS (P1-A, updateTempo overload)
+    // ========================================
+    float kernelWeightCenter = 1.0f;     ///< Weight for center bin in triangular kernel
+    float kernelWeightPlus1 = 0.5f;      ///< Weight for ±1 bin
+    float kernelWeightPlus2 = 0.25f;     ///< Weight for ±2 bin
+
+    // ========================================
+    // SPECTRAL WEIGHTS
+    // ========================================
     // Spectral flux weights (8 bands, reduced disparity to detect weak beats)
     // Reduced from 4.67x to 2.4x disparity per research document recommendation
     float spectralWeights[8] = {1.2f, 1.1f, 1.0f, 0.8f, 0.7f, 0.5f, 0.5f, 0.5f};

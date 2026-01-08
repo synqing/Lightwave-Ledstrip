@@ -76,17 +76,16 @@ void TempoTracker::init() {
     // P0-E FIX: Baseline initialization depends on K1 vs legacy mode
 #ifdef FEATURE_K1_FRONT_END
     // K1 normalized range (novelty ≈ 0.5-6.0)
-    onset_state_.baseline_vu = 1.0f;
-    onset_state_.baseline_spec = 1.0f;
+    onset_state_.baseline_vu = tuning_.k1BaselineInit;
+    onset_state_.baseline_spec = tuning_.k1BaselineInit;
 #else
     // Legacy range (flux ≈ 0.01-0.1)
     onset_state_.baseline_vu = 0.01f;
     onset_state_.baseline_spec = 0.01f;
 #endif
     // Safety check: ensure they're at least at minimum floor
-    const float MIN_BASELINE_INIT = 0.001f;
-    if (onset_state_.baseline_vu < MIN_BASELINE_INIT) onset_state_.baseline_vu = MIN_BASELINE_INIT;
-    if (onset_state_.baseline_spec < MIN_BASELINE_INIT) onset_state_.baseline_spec = MIN_BASELINE_INIT;
+    if (onset_state_.baseline_vu < tuning_.minBaselineInit) onset_state_.baseline_vu = tuning_.minBaselineInit;
+    if (onset_state_.baseline_spec < tuning_.minBaselineInit) onset_state_.baseline_spec = tuning_.minBaselineInit;
     onset_state_.flux_prev = 0.0f;
     onset_state_.flux_prevprev = 0.0f;
     onset_state_.lastOnsetUs = 0;  // Store in samples
@@ -99,8 +98,8 @@ void TempoTracker::init() {
     beat_state_.conf = 0.0f;
     beat_state_.lastUs = 0;
     beat_state_.lastOnsetUs = 0;
-    beat_state_.periodSecEma = 0.5f;    // 120 BPM = 0.5 sec period
-    beat_state_.periodAlpha = 0.15f;
+    beat_state_.periodSecEma = tuning_.periodInitSec;    // 120 BPM = 0.5 sec period
+    beat_state_.periodAlpha = tuning_.periodAlpha;
     beat_state_.correctionCheckCounter = 0;
     beat_state_.lastCorrectionBpm = 120.0f;
     beat_state_.intervalCount = 0;
@@ -211,30 +210,27 @@ void TempoTracker::updateNovelty(const float* bands, uint8_t num_bands,
 
     // Update baselines separately (with peak gating)
     // This must happen before normalization so baselines track raw flux values
-    // Minimum baseline floor to prevent decay to zero
-    const float MIN_BASELINE_VU = 0.001f;
-    const float MIN_BASELINE_SPEC = 0.001f;
-    
+
     float vu_thresh = onset_state_.baseline_vu * tuning_.onsetThreshK;
     float baseline_vu_before = onset_state_.baseline_vu;
     if (vu_delta <= vu_thresh) {
         // Normal update when below threshold
-        onset_state_.baseline_vu = (1.0f - tuning_.baselineAlpha) * onset_state_.baseline_vu + 
+        onset_state_.baseline_vu = (1.0f - tuning_.baselineAlpha) * onset_state_.baseline_vu +
                                     tuning_.baselineAlpha * vu_delta;
         // Enforce minimum floor
-        if (onset_state_.baseline_vu < MIN_BASELINE_VU) {
-            onset_state_.baseline_vu = MIN_BASELINE_VU;
+        if (onset_state_.baseline_vu < tuning_.minBaselineVu) {
+            onset_state_.baseline_vu = tuning_.minBaselineVu;
         }
     } else {
         // Peak gating: cap contribution to prevent contamination
         // Use max of current baseline or minimum to ensure recovery from near-zero
-        float effective_baseline = std::max(onset_state_.baseline_vu, MIN_BASELINE_VU);
-        float capped_vu = std::min(vu_delta, effective_baseline * 1.5f);
-        onset_state_.baseline_vu = (1.0f - tuning_.baselineAlpha) * onset_state_.baseline_vu + 
+        float effective_baseline = std::max(onset_state_.baseline_vu, tuning_.minBaselineVu);
+        float capped_vu = std::min(vu_delta, effective_baseline * tuning_.peakGatingCapMultiplier);
+        onset_state_.baseline_vu = (1.0f - tuning_.baselineAlpha) * onset_state_.baseline_vu +
                                     tuning_.baselineAlpha * capped_vu;
         // Enforce minimum floor
-        if (onset_state_.baseline_vu < MIN_BASELINE_VU) {
-            onset_state_.baseline_vu = MIN_BASELINE_VU;
+        if (onset_state_.baseline_vu < tuning_.minBaselineVu) {
+            onset_state_.baseline_vu = tuning_.minBaselineVu;
         }
     }
     
@@ -243,22 +239,22 @@ void TempoTracker::updateNovelty(const float* bands, uint8_t num_bands,
     if (bands_ready) {
         float spec_thresh = onset_state_.baseline_spec * tuning_.onsetThreshK;
         if (spectral_flux <= spec_thresh) {
-            onset_state_.baseline_spec = (1.0f - tuning_.baselineAlpha) * onset_state_.baseline_spec + 
+            onset_state_.baseline_spec = (1.0f - tuning_.baselineAlpha) * onset_state_.baseline_spec +
                                           tuning_.baselineAlpha * spectral_flux;
             // Enforce minimum floor
-            if (onset_state_.baseline_spec < MIN_BASELINE_SPEC) {
-                onset_state_.baseline_spec = MIN_BASELINE_SPEC;
+            if (onset_state_.baseline_spec < tuning_.minBaselineSpec) {
+                onset_state_.baseline_spec = tuning_.minBaselineSpec;
             }
         } else {
             // Peak gating: cap contribution to prevent contamination
             // Use max of current baseline or minimum to ensure recovery from near-zero
-            float effective_baseline = std::max(onset_state_.baseline_spec, MIN_BASELINE_SPEC);
-            float capped_spec = std::min(spectral_flux, effective_baseline * 1.5f);
-            onset_state_.baseline_spec = (1.0f - tuning_.baselineAlpha) * onset_state_.baseline_spec + 
+            float effective_baseline = std::max(onset_state_.baseline_spec, tuning_.minBaselineSpec);
+            float capped_spec = std::min(spectral_flux, effective_baseline * tuning_.peakGatingCapMultiplier);
+            onset_state_.baseline_spec = (1.0f - tuning_.baselineAlpha) * onset_state_.baseline_spec +
                                           tuning_.baselineAlpha * capped_spec;
             // Enforce minimum floor
-            if (onset_state_.baseline_spec < MIN_BASELINE_SPEC) {
-                onset_state_.baseline_spec = MIN_BASELINE_SPEC;
+            if (onset_state_.baseline_spec < tuning_.minBaselineSpec) {
+                onset_state_.baseline_spec = tuning_.minBaselineSpec;
             }
         }
     }
@@ -283,20 +279,17 @@ void TempoTracker::updateNovelty(const float* bands, uint8_t num_bands,
     }
 
     // Normalize each stream before combining (scale-invariant)
-    const float eps = 1e-6f;
-    float vu_n = vu_delta / (onset_state_.baseline_vu + eps);
-    float spec_n = (bands_ready && spectral_flux > 0.0f) ? 
-                   spectral_flux / (onset_state_.baseline_spec + eps) : 0.0f;
-    
+    float vu_n = vu_delta / (onset_state_.baseline_vu + tuning_.fluxBaselineEps);
+    float spec_n = (bands_ready && spectral_flux > 0.0f) ?
+                   spectral_flux / (onset_state_.baseline_spec + tuning_.fluxBaselineEps) : 0.0f;
+
     // Clamp normalized values to prevent extreme outliers
-    vu_n = std::max(0.0f, std::min(10.0f, vu_n));
-    spec_n = std::max(0.0f, std::min(10.0f, spec_n));
-    
+    vu_n = std::max(0.0f, std::min(tuning_.fluxNormalizedMax, vu_n));
+    spec_n = std::max(0.0f, std::min(tuning_.fluxNormalizedMax, spec_n));
+
     // Combine with configurable weights (default 50/50)
-    const float w_vu = 0.5f;
-    const float w_spec = 0.5f;
     if (bands_ready) {
-        combined_flux_ = w_spec * spec_n + w_vu * vu_n;
+        combined_flux_ = tuning_.fluxWeightSpec * spec_n + tuning_.fluxWeightVu * vu_n;
     } else {
         combined_flux_ = vu_n;  // VU only when bands not ready
     }
@@ -355,24 +348,22 @@ void TempoTracker::updateFromFeatures(const k1::AudioFeatureFrame& frame) {
     static bool k1_baselines_initialized = false;
     if (!k1_baselines_initialized) {
         // Check if baselines are still at legacy init values (0.01)
-        if (onset_state_.baseline_vu < 0.1f && onset_state_.baseline_spec < 0.1f) {
-            onset_state_.baseline_vu = 1.0f;
-            onset_state_.baseline_spec = 1.0f;
+        if (onset_state_.baseline_vu < tuning_.k1BaselineCheckThreshold && onset_state_.baseline_spec < tuning_.k1BaselineCheckThreshold) {
+            onset_state_.baseline_vu = tuning_.k1BaselineInit;
+            onset_state_.baseline_spec = tuning_.k1BaselineInit;
         }
         k1_baselines_initialized = true;
     }
-    
+
     // Update combined flux from novelty (K1 already provides normalized novelty)
     combined_flux_ = novelty;
-    
+
     // Baseline EMA: slow adaptation (alpha=0.05 means 5% new value, 95% history)
-    const float baselineAlpha = 0.05f;
-    onset_state_.baseline_spec = (1.0f - baselineAlpha) * onset_state_.baseline_spec + baselineAlpha * novelty;
+    onset_state_.baseline_spec = (1.0f - tuning_.k1BaselineAlpha) * onset_state_.baseline_spec + tuning_.k1BaselineAlpha * novelty;
 
     // Enforce minimum floor to prevent baseline from decaying to near-zero
-    const float MIN_BASELINE = 0.001f;
-    if (onset_state_.baseline_spec < MIN_BASELINE) {
-        onset_state_.baseline_spec = MIN_BASELINE;
+    if (onset_state_.baseline_spec < tuning_.minBaselineSpec) {
+        onset_state_.baseline_spec = tuning_.minBaselineSpec;
     }
     onset_state_.baseline_vu = onset_state_.baseline_spec;  // Keep them in sync for K1 mode
     
@@ -422,7 +413,7 @@ bool TempoTracker::detectOnset(float flux, uint64_t t_samples, float& outStrengt
     float flux_prevprev = onset_state_.flux_prevprev;
     
     // Compute combined baseline for threshold
-    float combined_baseline = (onset_state_.baseline_vu * 0.5f + onset_state_.baseline_spec * 0.5f);
+    float combined_baseline = (onset_state_.baseline_vu * tuning_.fluxWeightVu + onset_state_.baseline_spec * tuning_.fluxWeightSpec);
     // Phase B: For K1 mode, baseline ≈ 1.0, so threshold ≈ 1.8 (onsetThreshK = 1.8)
     // This works well for normalized novelty values of 1-6 (peaks should be >1.8)
     float thresh = combined_baseline * tuning_.onsetThreshK;
@@ -524,9 +515,9 @@ bool TempoTracker::detectOnset(float flux, uint64_t t_samples, float& outStrengt
         diagnostics_.lastOnsetTime = t_samples;  // Store in samples
         diagnostics_.onsetCount++;
         
-        outStrength = (flux - thresh) / (thresh + 1e-6f);
+        outStrength = (flux - thresh) / (thresh + tuning_.fluxBaselineEps);
         // Clamp strength to [0, 5]
-        outStrength = std::max(0.0f, std::min(5.0f, outStrength));
+        outStrength = std::max(tuning_.onsetStrengthMin, std::min(tuning_.onsetStrengthMax, outStrength));
         
         // #region agent log
         char fired_data[512];
@@ -579,7 +570,6 @@ void TempoTracker::updateNovelty(float onsetStrength, uint64_t t_samples) {
     // (70% rhythm + 30% harmony via getOnsetStrength())
 
     // Update baseline with same logic as existing updateNovelty
-    const float MIN_BASELINE = 0.001f;
     float baseline_before = onset_state_.baseline_vu;  // Use VU baseline for unified signal
 
     float thresh = baseline_before * tuning_.onsetThreshK;
@@ -587,23 +577,23 @@ void TempoTracker::updateNovelty(float onsetStrength, uint64_t t_samples) {
         // Normal baseline update
         onset_state_.baseline_vu = (1.0f - tuning_.baselineAlpha) * baseline_before +
                                     tuning_.baselineAlpha * onsetStrength;
-        if (onset_state_.baseline_vu < MIN_BASELINE) {
-            onset_state_.baseline_vu = MIN_BASELINE;
+        if (onset_state_.baseline_vu < tuning_.minBaselineVu) {
+            onset_state_.baseline_vu = tuning_.minBaselineVu;
         }
     } else {
         // Peak gating: cap contribution
-        float effective_baseline = std::max(baseline_before, MIN_BASELINE);
-        float capped = std::min(onsetStrength, effective_baseline * 1.5f);
+        float effective_baseline = std::max(baseline_before, tuning_.minBaselineVu);
+        float capped = std::min(onsetStrength, effective_baseline * tuning_.peakGatingCapMultiplier);
         onset_state_.baseline_vu = (1.0f - tuning_.baselineAlpha) * baseline_before +
                                     tuning_.baselineAlpha * capped;
-        if (onset_state_.baseline_vu < MIN_BASELINE) {
-            onset_state_.baseline_vu = MIN_BASELINE;
+        if (onset_state_.baseline_vu < tuning_.minBaselineVu) {
+            onset_state_.baseline_vu = tuning_.minBaselineVu;
         }
     }
 
     // Store current novelty for onset detection
     combined_flux_ = onsetStrength;
-    onset_strength_ = onsetStrength / (onset_state_.baseline_vu + 1e-6f);
+    onset_strength_ = onsetStrength / (onset_state_.baseline_vu + tuning_.fluxBaselineEps);
 
     // Detect onset
     bool onset_now = (onset_strength_ > tuning_.onsetThreshK);
@@ -704,27 +694,24 @@ void TempoTracker::updateTempo(float delta_sec, uint64_t t_samples) {
     float bpm_hat = BeatState::DENSITY_MIN_BPM + static_cast<float>(peakBin);
     
     // Compute confidence from peak sharpness
-    const float eps = 1e-6f;
-    float conf_from_density = (maxDensity - secondPeak) / (maxDensity + eps);
+    float conf_from_density = (maxDensity - secondPeak) / (maxDensity + tuning_.fluxBaselineEps);
     conf_from_density = std::max(0.0f, std::min(1.0f, conf_from_density));
-    
+
     // Smooth BPM estimate (EMA)
-    const float bpmAlpha = 0.1f;  // Slow smoothing
-    beat_state_.bpm = (1.0f - bpmAlpha) * beat_state_.bpm + bpmAlpha * bpm_hat;
-    
+    beat_state_.bpm = (1.0f - tuning_.bpmAlpha) * beat_state_.bpm + tuning_.bpmAlpha * bpm_hat;
+
     // Update confidence from density (with temporal smoothing)
-    const float confAlpha = 0.2f;
-    beat_state_.conf = (1.0f - confAlpha) * beat_state_.conf + confAlpha * conf_from_density;
-    
+    beat_state_.conf = (1.0f - tuning_.confAlpha) * beat_state_.conf + tuning_.confAlpha * conf_from_density;
+
     // Track lock time
-    if (beat_state_.conf > 0.5f && !diagnostics_.isLocked) {
+    if (beat_state_.conf > tuning_.lockThreshold && !diagnostics_.isLocked) {
         diagnostics_.isLocked = true;
         diagnostics_.lockStartTime = t_samples;
         if (diagnostics_.lockTimeMs == 0) {
             // First lock - record time from init (convert samples to ms)
             diagnostics_.lockTimeMs = ((t_samples - m_initTime) * 1000ULL) / 16000;
         }
-    } else if (beat_state_.conf <= 0.5f && diagnostics_.isLocked) {
+    } else if (beat_state_.conf <= tuning_.lockThreshold && diagnostics_.isLocked) {
         diagnostics_.isLocked = false;
     }
     
@@ -773,7 +760,7 @@ void TempoTracker::updateTempo(float delta_sec, uint64_t t_samples) {
     // Detect octave flips (large BPM jumps)
     if (beat_state_.lastBpmFromDensity > 0.0f) {
         float ratio = bpm_hat / beat_state_.lastBpmFromDensity;
-        if (ratio > 1.8f || ratio < 0.55f) {  // Near 2x or 0.5x
+        if (ratio > tuning_.octaveFlipRatioHigh || ratio < tuning_.octaveFlipRatioLow) {  // Near 2x or 0.5x
             diagnostics_.octaveFlips++;
         }
     }
@@ -1064,11 +1051,11 @@ void TempoTracker::updateBeat(bool onset, float onsetStrength, uint64_t t_sample
                 float intervalWeight = baseWeight * consistencyBoost;
                 
                 // Add octave variants: 0.5×, 1×, 2× (when in range)
-                float variants[] = {candidateBpm * 0.5f, candidateBpm, candidateBpm * 2.0f};
-                
+                float variants[] = {candidateBpm * tuning_.octaveVariantWeight, candidateBpm, candidateBpm * (1.0f / tuning_.octaveVariantWeight)};
+
                 float total_weight_added = 0.0f;
                 int bins_updated = 0;
-                
+
                 for (int oct = 0; oct < 3; oct++) {
                     float bpm = variants[oct];
                     if (bpm >= BeatState::DENSITY_MIN_BPM && bpm <= BeatState::DENSITY_MAX_BPM) {
@@ -1076,12 +1063,11 @@ void TempoTracker::updateBeat(bool onset, float onsetStrength, uint64_t t_sample
                         int bin = static_cast<int>(bpm - BeatState::DENSITY_MIN_BPM + 0.5f);
                         if (bin >= 0 && bin < BeatState::DENSITY_BINS) {
                             // Add triangular kernel (2 BPM width)
-                            float kernelWidth = 2.0f;
                             for (int offset = -2; offset <= 2; offset++) {
                                 int targetBin = bin + offset;
                                 if (targetBin >= 0 && targetBin < BeatState::DENSITY_BINS) {
                                     float dist = std::abs(static_cast<float>(offset));
-                                    float weight = std::max(0.0f, 1.0f - dist / kernelWidth) * intervalWeight;
+                                    float weight = std::max(0.0f, 1.0f - dist / tuning_.kernelWidth) * intervalWeight;
                                     float density_before = beat_state_.tempoDensity[targetBin];
                                     beat_state_.tempoDensity[targetBin] += weight;
                                     total_weight_added += weight;
@@ -1115,25 +1101,24 @@ void TempoTracker::updateBeat(bool onset, float onsetStrength, uint64_t t_sample
                 float phaseError = beat_state_.phase01;  // Current phase (should be 0 at beat)
                 
                 // Clamp phase error to [-0.5, 0.5] range
-                if (phaseError > 0.5f) phaseError -= 1.0f;
-                if (phaseError < -0.5f) phaseError += 1.0f;
-                
+                if (phaseError > tuning_.octaveVariantWeight) phaseError -= 1.0f;
+                if (phaseError < -tuning_.octaveVariantWeight) phaseError += 1.0f;
+
                 // Update integral (with windup protection)
                 beat_state_.phaseErrorIntegral += phaseError;
-                const float maxIntegral = 2.0f;  // Prevent windup
-                beat_state_.phaseErrorIntegral = std::max(-maxIntegral, 
-                                                         std::min(maxIntegral, beat_state_.phaseErrorIntegral));
-                
+                beat_state_.phaseErrorIntegral = std::max(-tuning_.pllMaxIntegral,
+                                                         std::min(tuning_.pllMaxIntegral, beat_state_.phaseErrorIntegral));
+
                 // Proportional correction (phase)
                 float phaseCorrection = beat_state_.pllKp * phaseError;
-                phaseCorrection = std::max(-0.1f, std::min(0.1f, phaseCorrection));  // Clamp
+                phaseCorrection = std::max(-tuning_.pllMaxPhaseCorrection, std::min(tuning_.pllMaxPhaseCorrection, phaseCorrection));  // Clamp
                 beat_state_.phase01 -= phaseCorrection;
-                
+
                 // Integral correction (tempo) - slow tempo correction
                 // Note: Fast tempo updates come from density buffer winner in updateTempo()
                 // PLL provides slow, continuous correction for phase alignment
                 float tempoCorrection = beat_state_.pllKi * beat_state_.phaseErrorIntegral;
-                tempoCorrection = std::max(-5.0f, std::min(5.0f, tempoCorrection));  // Clamp to ±5 BPM
+                tempoCorrection = std::max(-tuning_.pllMaxTempoCorrection, std::min(tuning_.pllMaxTempoCorrection, tempoCorrection));  // Clamp to ±5 BPM
                 beat_state_.bpm += tempoCorrection;
                 
                 // Normalize phase
@@ -1219,12 +1204,12 @@ void TempoTracker::advancePhase(float delta_sec, uint64_t t_samples) {
 
     // Beat tick detection: zero crossing from high to low (phase wraps 1->0)
     // Now compare previous vs current (from updateBeat)
-    beat_tick_ = (prev_phase > 0.9f && beat_state_.phase01 < 0.1f);
+    beat_tick_ = (prev_phase > tuning_.phaseWrapHighThreshold && beat_state_.phase01 < tuning_.phaseWrapLowThreshold);
 
     // Debounce: prevent multiple ticks within 60% of beat period
     if (beat_tick_) {
         float beat_period_samples = (60.0f / beat_state_.bpm) * 16000.0f;  // samples
-        if (last_tick_samples_ > 0 && (t_samples - last_tick_samples_) < static_cast<uint64_t>(beat_period_samples * 0.6f)) {
+        if (last_tick_samples_ > 0 && (t_samples - last_tick_samples_) < static_cast<uint64_t>(beat_period_samples * tuning_.beatTickDebounce)) {
             beat_tick_ = false;  // Too soon, suppress
         } else {
             last_tick_samples_ = t_samples;
@@ -1257,15 +1242,14 @@ void TempoTracker::advancePhase(float delta_sec, uint64_t t_samples) {
 TempoOutput TempoTracker::getOutput() const {
     // P0-B FIX: Gate beat_tick by confidence threshold in getOutput()
     // This prevents the struct copy in AudioNode from overwriting the gating
-    const float lockThreshold = 0.5f;  // Must match tuning parameter (TODO: use tuning_.lockThreshold)
-    bool gated_beat_tick = beat_tick_ && (beat_state_.conf >= lockThreshold);
+    bool gated_beat_tick = beat_tick_ && (beat_state_.conf >= tuning_.lockThreshold);
 
     return TempoOutput{
         .bpm = beat_state_.bpm,
         .phase01 = beat_state_.phase01,
         .confidence = beat_state_.conf,
         .beat_tick = gated_beat_tick,  // Apply gating here
-        .locked = beat_state_.conf >= lockThreshold,
+        .locked = beat_state_.conf >= tuning_.lockThreshold,
         .beat_strength = onset_strength_    // Use last onset strength as beat strength
     };
 }
@@ -1319,7 +1303,7 @@ void TempoTracker::updateTempo(const AudioFeatureFrame& frame, uint64_t t_sample
     float stdDev = sqrtf(variance / 16.0f);
 
     // Reject if > 2σ from mean (only when we have confidence)
-    if (fabsf(interval - mean) > 2.0f * stdDev && beat_state_.conf > 0.3f) {
+    if (fabsf(interval - mean) > tuning_.outlierStdDevThreshold * stdDev && beat_state_.conf > tuning_.outlierMinConfidence) {
         diagnostics_.intervalsRejected++;
         // Don't vote - it's an outlier
         return;
@@ -1345,7 +1329,7 @@ void TempoTracker::updateTempo(const AudioFeatureFrame& frame, uint64_t t_sample
     // ========================================================================
     // Weight votes by onset strength (1.0-3.5× range)
     float outStrength = frame.getOnsetStrength();  // Already weighted 70/30 rhythm/harmony
-    float weight = 1.0f + (outStrength * 0.5f);  // 1.0-3.5× based on strength
+    float weight = tuning_.onsetStrengthWeightBase + (outStrength * tuning_.onsetStrengthWeightScale);  // 1.0-3.5× based on strength
 
     // ========================================================================
     // Vote into density buffer with triangular kernel (±2 bins)
@@ -1353,40 +1337,40 @@ void TempoTracker::updateTempo(const AudioFeatureFrame& frame, uint64_t t_sample
     int centerBin = static_cast<int>(bpm - BeatState::DENSITY_MIN_BPM);
     if (centerBin >= 0 && centerBin < BeatState::DENSITY_BINS) {
         // Triangular kernel: center gets full weight, ±1 gets 0.5×, ±2 gets 0.25×
-        beat_state_.tempoDensity[centerBin] += weight;
+        beat_state_.tempoDensity[centerBin] += weight * tuning_.kernelWeightCenter;
 
         if (centerBin > 0) {
-            beat_state_.tempoDensity[centerBin - 1] += weight * 0.5f;
+            beat_state_.tempoDensity[centerBin - 1] += weight * tuning_.kernelWeightPlus1;
         }
         if (centerBin < BeatState::DENSITY_BINS - 1) {
-            beat_state_.tempoDensity[centerBin + 1] += weight * 0.5f;
+            beat_state_.tempoDensity[centerBin + 1] += weight * tuning_.kernelWeightPlus1;
         }
         if (centerBin > 1) {
-            beat_state_.tempoDensity[centerBin - 2] += weight * 0.25f;
+            beat_state_.tempoDensity[centerBin - 2] += weight * tuning_.kernelWeightPlus2;
         }
         if (centerBin < BeatState::DENSITY_BINS - 2) {
-            beat_state_.tempoDensity[centerBin + 2] += weight * 0.25f;
+            beat_state_.tempoDensity[centerBin + 2] += weight * tuning_.kernelWeightPlus2;
         }
     }
 
     // ========================================================================
     // P1-B: CONDITIONAL OCTAVE VOTING
     // ========================================================================
-    // ONLY vote octave variants when confidence < 0.3 (searching mode)
-    if (beat_state_.conf < 0.3f) {
+    // ONLY vote octave variants when confidence < threshold (searching mode)
+    if (beat_state_.conf < tuning_.octaveVotingConfThreshold) {
         // Vote 0.5× (half tempo - double interval)
-        int idxHalf = static_cast<int>((bpm / 2.0f) - BeatState::DENSITY_MIN_BPM);
+        int idxHalf = static_cast<int>((bpm * tuning_.octaveVariantWeight) - BeatState::DENSITY_MIN_BPM);
         if (idxHalf >= 0 && idxHalf < BeatState::DENSITY_BINS) {
-            beat_state_.tempoDensity[idxHalf] += weight * 0.5f;
+            beat_state_.tempoDensity[idxHalf] += weight * tuning_.octaveVariantWeight;
         }
 
         // Vote 2× (double tempo - half interval)
-        int idxDouble = static_cast<int>((bpm * 2.0f) - BeatState::DENSITY_MIN_BPM);
+        int idxDouble = static_cast<int>((bpm * (1.0f / tuning_.octaveVariantWeight)) - BeatState::DENSITY_MIN_BPM);
         if (idxDouble >= 0 && idxDouble < BeatState::DENSITY_BINS) {
-            beat_state_.tempoDensity[idxDouble] += weight * 0.5f;
+            beat_state_.tempoDensity[idxDouble] += weight * tuning_.octaveVariantWeight;
         }
     }
-    // When confident (>= 0.3), suppress octave variants entirely
+    // When confident (>= threshold), suppress octave variants entirely
 
     // ========================================================================
     // P1-C: HARMONIC FILTERING
@@ -1425,27 +1409,24 @@ void TempoTracker::updateTempo(const AudioFeatureFrame& frame, uint64_t t_sample
     float bpm_hat = BeatState::DENSITY_MIN_BPM + static_cast<float>(peakBin);
 
     // Compute confidence from peak sharpness
-    const float eps = 1e-6f;
-    float conf_from_density = (maxDensity - secondPeak) / (maxDensity + eps);
+    float conf_from_density = (maxDensity - secondPeak) / (maxDensity + tuning_.fluxBaselineEps);
     conf_from_density = std::max(0.0f, std::min(1.0f, conf_from_density));
 
     // Smooth BPM estimate (EMA)
-    const float bpmAlpha = 0.1f;
-    beat_state_.bpm = (1.0f - bpmAlpha) * beat_state_.bpm + bpmAlpha * bpm_hat;
+    beat_state_.bpm = (1.0f - tuning_.bpmAlpha) * beat_state_.bpm + tuning_.bpmAlpha * bpm_hat;
 
     // Update confidence from density (with temporal smoothing)
-    const float confAlpha = 0.2f;
-    beat_state_.conf = (1.0f - confAlpha) * beat_state_.conf + confAlpha * conf_from_density;
+    beat_state_.conf = (1.0f - tuning_.confAlpha) * beat_state_.conf + tuning_.confAlpha * conf_from_density;
 
     // Track lock time
-    if (beat_state_.conf > 0.5f && !diagnostics_.isLocked) {
+    if (beat_state_.conf > tuning_.lockThreshold && !diagnostics_.isLocked) {
         diagnostics_.isLocked = true;
         diagnostics_.lockStartTime = t_samples;
         if (diagnostics_.lockTimeMs == 0) {
             // First lock - record time from init
             diagnostics_.lockTimeMs = ((t_samples - m_initTime) * 1000ULL) / 16000;
         }
-    } else if (beat_state_.conf <= 0.5f && diagnostics_.isLocked) {
+    } else if (beat_state_.conf <= tuning_.lockThreshold && diagnostics_.isLocked) {
         diagnostics_.isLocked = false;
     }
 

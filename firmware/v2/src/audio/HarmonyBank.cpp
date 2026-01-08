@@ -40,15 +40,24 @@ namespace {
 }
 
 // ============================================================================
-// Helper function to convert GoertzelBinSpec to GoertzelConfig
+// Helper function to get static GoertzelConfig array
 // ============================================================================
 
-static void convertToGoertzelConfigs(const GoertzelBinSpec* specs, GoertzelConfig* configs, uint8_t numBins) {
-    for (uint8_t i = 0; i < numBins; i++) {
-        configs[i].freq_hz = specs[i].freq_hz;
-        configs[i].windowSize = specs[i].N;
-        configs[i].coeff_q14 = specs[i].coeff_q14;
+static const GoertzelConfig* getHarmonyConfigs() {
+    // Static array initialized once at program start
+    static GoertzelConfig configs[64];
+    static bool initialized = false;
+
+    if (!initialized) {
+        for (uint8_t i = 0; i < 64; i++) {
+            configs[i].freq_hz = kHarmonyBins_16k_64[i].freq_hz;
+            configs[i].windowSize = kHarmonyBins_16k_64[i].N;
+            configs[i].coeff_q14 = kHarmonyBins_16k_64[i].coeff_q14;
+        }
+        initialized = true;
     }
+
+    return configs;
 }
 
 // ============================================================================
@@ -56,7 +65,7 @@ static void convertToGoertzelConfigs(const GoertzelBinSpec* specs, GoertzelConfi
 // ============================================================================
 
 HarmonyBank::HarmonyBank()
-    : m_goertzel(NUM_BINS, nullptr)  // Will init properly below
+    : m_goertzel(NUM_BINS, getHarmonyConfigs())  // Pass valid pointer
     , m_noiseFloor(NOISE_TIME_CONSTANT, NUM_BINS)
     , m_agc(AGC_ATTACK_TIME, AGC_RELEASE_TIME, AGC_TARGET_LEVEL)
     , m_noveltyFlux(NUM_BINS)
@@ -64,14 +73,6 @@ HarmonyBank::HarmonyBank()
     , m_stability(nullptr)
     , m_flux(0.0f)
 {
-    // Convert kHarmonyBins_16k_64 to GoertzelConfig array
-    static GoertzelConfig configs[NUM_BINS];
-    convertToGoertzelConfigs(kHarmonyBins_16k_64, configs, NUM_BINS);
-
-    // Reconstruct GoertzelBank with proper config
-    m_goertzel.~GoertzelBank();
-    new (&m_goertzel) GoertzelBank(NUM_BINS, configs);
-
     // Set AGC max gain (allow mild boost for harmony)
     m_agc.setMaxGain(AGC_MAX_GAIN);
 

@@ -33,15 +33,24 @@ namespace {
 }
 
 // ============================================================================
-// Helper function to convert GoertzelBinSpec to GoertzelConfig
+// Helper function to get static GoertzelConfig array
 // ============================================================================
 
-static void convertToGoertzelConfigs(const GoertzelBinSpec* specs, GoertzelConfig* configs, uint8_t numBins) {
-    for (uint8_t i = 0; i < numBins; i++) {
-        configs[i].freq_hz = specs[i].freq_hz;
-        configs[i].windowSize = specs[i].N;
-        configs[i].coeff_q14 = specs[i].coeff_q14;
+static const GoertzelConfig* getRhythmConfigs() {
+    // Static array initialized once at program start
+    static GoertzelConfig configs[24];
+    static bool initialized = false;
+
+    if (!initialized) {
+        for (uint8_t i = 0; i < 24; i++) {
+            configs[i].freq_hz = kRhythmBins_16k_24[i].freq_hz;
+            configs[i].windowSize = kRhythmBins_16k_24[i].N;
+            configs[i].coeff_q14 = kRhythmBins_16k_24[i].coeff_q14;
+        }
+        initialized = true;
     }
+
+    return configs;
 }
 
 // ============================================================================
@@ -49,20 +58,12 @@ static void convertToGoertzelConfigs(const GoertzelBinSpec* specs, GoertzelConfi
 // ============================================================================
 
 RhythmBank::RhythmBank()
-    : m_goertzel(NUM_BINS, nullptr)  // Will init properly below
+    : m_goertzel(NUM_BINS, getRhythmConfigs())  // Pass valid pointer
     , m_noiseFloor(NOISE_TIME_CONSTANT, NUM_BINS)
     , m_agc(AGC_ATTACK_TIME, AGC_RELEASE_TIME, AGC_TARGET_LEVEL)
     , m_noveltyFlux(NUM_BINS)
     , m_flux(0.0f)
 {
-    // Convert kRhythmBins_16k_24 to GoertzelConfig array
-    static GoertzelConfig configs[NUM_BINS];
-    convertToGoertzelConfigs(kRhythmBins_16k_24, configs, NUM_BINS);
-
-    // Reconstruct GoertzelBank with proper config
-    m_goertzel.~GoertzelBank();
-    new (&m_goertzel) GoertzelBank(NUM_BINS, configs);
-
     // Set AGC max gain (attenuation-only for rhythm)
     m_agc.setMaxGain(AGC_MAX_GAIN);
 

@@ -38,6 +38,28 @@ namespace audio {
 struct AudioFeatureFrame;
 
 // ============================================================================
+// State Machine
+// ============================================================================
+
+/**
+ * @brief Tempo tracker state machine states
+ *
+ * Represents the tracker's confidence and behavior mode:
+ * - INITIALIZING: Gathering initial data (first 50 hops)
+ * - SEARCHING: Low confidence, sensitive onset detection
+ * - LOCKING: Building confidence, moderate thresholds
+ * - LOCKED: High confidence, selective onset detection
+ * - UNLOCKING: Losing confidence, preparing to search again
+ */
+enum class TempoTrackerState {
+    INITIALIZING,   ///< Just started, gathering initial data
+    SEARCHING,      ///< Looking for tempo, low confidence
+    LOCKING,        ///< Building confidence, tempo hypothesis forming
+    LOCKED,         ///< High confidence, tempo stable
+    UNLOCKING       ///< Confidence dropping, losing lock
+};
+
+// ============================================================================
 // Configuration
 // ============================================================================
 
@@ -311,6 +333,12 @@ struct TempoTrackerDiagnostics {
     float intervalCoV;           ///< Coefficient of variation
     int mismatchStreak;          ///< Current consecutive mismatch count
     int votesInWinnerBin;        ///< Votes in density buffer winner bin
+
+    // Phase 5 additions
+    TempoTrackerState currentState;   ///< Current state machine state
+    uint32_t hopCount;                ///< Total hops since init
+    uint8_t activeIntervalCount;      ///< Non-expired intervals
+    bool enabled = false;             ///< Enable diagnostic logging
 };
 
 // ============================================================================
@@ -531,6 +559,54 @@ private:
      */
     float findTrueSecondPeak(int excludePeakIdx) const;
 
+    /**
+     * @brief Update state machine based on current confidence
+     *
+     * Implements 5-state machine transitions based on confidence thresholds
+     * and timeout conditions.
+     */
+    void updateState();
+
+    /**
+     * @brief Get state-dependent onset threshold multiplier
+     * @param base_threshold Base threshold to modify
+     * @return Adjusted threshold based on current state
+     */
+    float getStateDependentOnsetThreshold(float base_threshold) const;
+
+    /**
+     * @brief Get state-dependent BPM smoothing alpha
+     * @return Alpha value adapted to current state
+     */
+    float getStateDependentBpmAlpha() const;
+
+    /**
+     * @brief Get recency weight for interval voting
+     * @param interval_index Index of interval (0 = oldest, N-1 = newest)
+     * @param total_intervals Total number of valid intervals
+     * @return Weight factor [0.5, 1.0]
+     */
+    float getRecencyWeight(uint8_t interval_index, uint8_t total_intervals) const;
+
+    /**
+     * @brief Add interval to history with timestamp
+     * @param interval Interval duration in seconds
+     * @param timestamp Sample timestamp
+     */
+    void addInterval(float interval, uint64_t timestamp);
+
+    /**
+     * @brief Expire old intervals (> 10 seconds old)
+     * @param current_time Current sample timestamp
+     */
+    void expireOldIntervals(uint64_t current_time);
+
+    /**
+     * @brief Count active (non-expired) intervals
+     * @return Number of valid intervals in history
+     */
+    uint8_t countActiveIntervals() const;
+
 private:
     // ========================================================================
     // State Variables
@@ -562,8 +638,16 @@ private:
 
     // Phase 4: Mismatch streak tracking
     int mismatch_streak_;  ///< Consecutive mismatches between hypothesis and density winner
+
+    // Phase 5: State machine tracking
+    TempoTrackerState state_ = TempoTrackerState::INITIALIZING;  ///< Current state machine state
+    uint32_t hop_count_ = 0;  ///< Total hops since init (for timeout detection)
+
+    // Phase 5: Interval timestamp tracking (16-element circular buffer)
+    float recentIntervalsExtended_[16];      ///< Extended interval history for expiration
+    uint64_t recentIntervalTimestamps_[16];  ///< Timestamps for each recent interval
+    uint8_t recentIntervalIndex_ = 0;        ///< Write index for recent intervals
 };
 
 } // namespace audio
 } // namespace lightwaveos
-

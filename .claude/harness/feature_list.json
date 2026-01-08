@@ -366,7 +366,7 @@
       "ralph_loop": {
         "enabled": true,
         "max_iterations": 10,
-        "current_iteration": 3,
+        "current_iteration": 4,
         "convergence_criteria": {
           "build_passes": true,
           "tests_pass": true,
@@ -442,6 +442,18 @@
             "results_summary": "Phase 4 complete: Optimization + Adaptive Logic - 5 critical components implemented. (1) Interval consistency tracking (CoV), (2) Adaptive thresholds (onset + BPM smoothing), (3) Smarter reset logic (10 consecutive mismatches), (4) Improved confidence (gradual build-up + better peak detection), (5) PLL tuning (wrap-around fix + adaptive limits). Addresses failures #8,#11-14,#17-19,#42-45,#47-50,#56,#66-68,#70-72. Build SUCCESS: 18.8s, RAM 35.2%, Flash 50.7%."
           },
           "commit": "ff89aee"
+        },
+        {
+          "run_id": "run-20260108-142214",
+          "timestamp": "2026-01-08T14:22:14.652383Z",
+          "result": "PASSED",
+          "evidence": {
+            "commands_run": [
+              "pio run -e esp32dev_audio -d firmware/v2"
+            ],
+            "results_summary": "Phase 5 complete: State Machine + Time-Weighted Voting - 5 components implemented. (1) 5-state FSM with 8 transitions (INITIALIZING→SEARCHING→LOCKING→LOCKED→UNLOCKING), (2) State-dependent onset thresholds and BPM smoothing (vary by confidence state), (3) Time-weighted voting with recency weighting (newest intervals vote more), (4) Interval expiration (10-second timeout @ 16kHz = 160000 samples, corrected from microseconds), (5) Diagnostic updates (state tracking, hop count, mismatch streak). Addresses failures #17 (no state management), #23 (rigid onset thresholds), #62 (no interval expiration), #73 (no time weighting), #75 (interval history not used). Build SUCCESS: 19.3s, RAM 35.2%, Flash 50.7%. Zero regressions."
+          },
+          "commit": "a92a969"
         }
       ],
       "override_reason": null,

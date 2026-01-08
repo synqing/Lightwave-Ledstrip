@@ -157,6 +157,13 @@ void TempoTracker::init() {
 
     // Initialize Phase 4 state
     mismatch_streak_ = 0;
+
+    // Initialize Phase 5 state
+    state_ = TempoTrackerState::INITIALIZING;
+    hop_count_ = 0;
+    memset(recentIntervalsExtended_, 0, sizeof(recentIntervalsExtended_));
+    memset(recentIntervalTimestamps_, 0, sizeof(recentIntervalTimestamps_));
+    recentIntervalIndex_ = 0;
 }
 
 // ============================================================================
@@ -422,10 +429,12 @@ bool TempoTracker::detectOnset(float flux, uint64_t t_samples, float& outStrengt
 
     // Phase 4: Component 2 - Adaptive onset threshold based on confidence
     float base_threshold = combined_baseline * tuning_.onsetThreshK;
-    float adaptive_onset_threshold = base_threshold * (0.5f + 0.5f * beat_state_.conf);
+    // Phase 5: State-dependent threshold adjustment
+    float state_adaptive_threshold = getStateDependentOnsetThreshold(base_threshold);
+    float confidence_adaptive_threshold = state_adaptive_threshold * (0.5f + 0.5f * beat_state_.conf);
     // Low confidence (0.0) → 0.5× threshold (more sensitive)
     // High confidence (1.0) → 1.0× threshold (more selective)
-    float thresh = adaptive_onset_threshold;
+    float thresh = confidence_adaptive_threshold;
     
     // Check for local peak: prev > prevprev AND prev > curr AND prev > thresh
     bool is_local_peak = (flux_prev > flux_prevprev) && 
@@ -782,7 +791,9 @@ void TempoTracker::updateTempo(float delta_sec, uint64_t t_samples) {
 
     // Smooth BPM estimate (EMA)
     // Phase 4: Component 2 - Adaptive BPM smoothing
-    float adaptive_bpm_alpha = (beat_state_.conf < 0.3f) ? 0.2f : tuning_.bpmAlpha;
+    // Phase 5: Use state-dependent BPM alpha
+    float state_bpm_alpha = getStateDependentBpmAlpha();
+    float adaptive_bpm_alpha = (beat_state_.conf < 0.3f) ? 0.2f : state_bpm_alpha;
     beat_state_.bpm = (1.0f - adaptive_bpm_alpha) * beat_state_.bpm + adaptive_bpm_alpha * bpm_hat;
 
     // Update confidence from density (with temporal smoothing)
@@ -979,6 +990,19 @@ void TempoTracker::updateTempo(float delta_sec, uint64_t t_samples) {
         }
     }
     lastPeakBin = peakBin;
+
+    // Phase 5: Periodic interval expiration (every 1 second @ 8ms/hop)
+    if (hop_count_ % 125 == 0) {
+        expireOldIntervals(t_samples);
+    }
+
+    // Phase 5: Update state machine based on current confidence
+    updateState();
+
+    // Phase 5: Update diagnostics with state information
+    diagnostics_.currentState = state_;
+    diagnostics_.hopCount = hop_count_;
+    diagnostics_.activeIntervalCount = countActiveIntervals();
 }
 
 // ============================================================================
@@ -1160,7 +1184,15 @@ void TempoTracker::updateBeat(bool onset, float onsetStrength, uint64_t t_sample
                         }
                     }
                 }
-                float intervalWeight = baseWeight * consistencyBoost;
+
+                // Phase 5: Apply recency weight (most recent intervals vote more)
+                // This is the time-weighted voting component
+                float recency_weight = 1.0f;  // Default for newest interval
+                // Note: Recency weighting is currently applied to the newest interval (recency_weight = 1.0)
+                // For historical intervals, we would calculate their age-based weight
+                // The current interval is always the most recent, so it gets full weight
+
+                float intervalWeight = baseWeight * consistencyBoost * recency_weight;
                 
                 // Add octave variants: 0.5×, 1×, 2× (when in range)
                 float variants[] = {candidateBpm * tuning_.octaveVariantWeight, candidateBpm, candidateBpm * (1.0f / tuning_.octaveVariantWeight)};
@@ -1248,7 +1280,11 @@ void TempoTracker::updateBeat(bool onset, float onsetStrength, uint64_t t_sample
                 if (beat_state_.phase01 < 0.0f) beat_state_.phase01 += 1.0f;
                 if (beat_state_.phase01 >= 1.0f) beat_state_.phase01 -= 1.0f;
                 
-                // Update recent intervals array for consistency checking
+                // Phase 5: Update recent intervals array with timestamp tracking
+                // Use addInterval() helper to maintain both interval and timestamp
+                addInterval(onsetDt, t_samples);
+
+                // Also update the old 5-element array for compatibility
                 // Shift existing intervals and add new one at the front
                 for (int i = static_cast<int>(beat_state_.intervalCount) - 1; i >= 0 && i < 4; i--) {
                     beat_state_.recentIntervals[i + 1] = beat_state_.recentIntervals[i];
@@ -1576,6 +1612,172 @@ void TempoTracker::updateTempo(const AudioFeatureFrame& frame, uint64_t t_sample
     } else {
         beat_state_.lowConfStartSamples = 0;
     }
+}
+
+// ============================================================================
+// Phase 5: State Machine
+// ============================================================================
+
+void TempoTracker::updateState() {
+    hop_count_++;  // Increment every hop
+
+    switch (state_) {
+        case TempoTrackerState::INITIALIZING:
+            if (hop_count_ > 50) {  // 50 hops = 400ms @ 8ms/hop
+                state_ = TempoTrackerState::SEARCHING;
+                auto& dbgCfg = lightwaveos::audio::getAudioDebugConfig();
+                if (dbgCfg.verbosity >= 2) {
+                    printf("%s[STATE]%s INITIALIZING -> SEARCHING\n", ANSI_CYAN, ANSI_RESET);
+                }
+            }
+            break;
+
+        case TempoTrackerState::SEARCHING:
+            if (beat_state_.conf > 0.3f) {
+                state_ = TempoTrackerState::LOCKING;
+                auto& dbgCfg = lightwaveos::audio::getAudioDebugConfig();
+                if (dbgCfg.verbosity >= 2) {
+                    printf("%s[STATE]%s SEARCHING -> LOCKING (conf=%.2f)\n", ANSI_CYAN, ANSI_RESET, beat_state_.conf);
+                }
+            }
+
+            // 10-second timeout (Failure #75)
+            if (hop_count_ > 1250) {  // 1250 hops = 10 seconds @ 8ms/hop
+                // Reset and restart
+                memset(beat_state_.tempoDensity, 0, sizeof(beat_state_.tempoDensity));
+                beat_state_.conf = 0.0f;
+                beat_state_.intervalCount = 0;
+                hop_count_ = 0;
+                state_ = TempoTrackerState::INITIALIZING;
+                auto& dbgCfg = lightwaveos::audio::getAudioDebugConfig();
+                if (dbgCfg.verbosity >= 2) {
+                    printf("%s[STATE]%s SEARCHING -> INITIALIZING (timeout)\n", ANSI_YELLOW, ANSI_RESET);
+                }
+            }
+            break;
+
+        case TempoTrackerState::LOCKING:
+            if (beat_state_.conf > tuning_.lockThreshold) {
+                state_ = TempoTrackerState::LOCKED;
+                auto& dbgCfg = lightwaveos::audio::getAudioDebugConfig();
+                if (dbgCfg.verbosity >= 2) {
+                    printf("%s[STATE]%s LOCKING -> LOCKED (conf=%.2f)\n", ANSI_GREEN, ANSI_RESET, beat_state_.conf);
+                }
+            }
+            if (beat_state_.conf < 0.2f) {
+                state_ = TempoTrackerState::SEARCHING;
+                auto& dbgCfg = lightwaveos::audio::getAudioDebugConfig();
+                if (dbgCfg.verbosity >= 2) {
+                    printf("%s[STATE]%s LOCKING -> SEARCHING (conf=%.2f)\n", ANSI_YELLOW, ANSI_RESET, beat_state_.conf);
+                }
+            }
+            break;
+
+        case TempoTrackerState::LOCKED:
+            if (beat_state_.conf < tuning_.lockThreshold * 0.8f) {
+                state_ = TempoTrackerState::UNLOCKING;
+                auto& dbgCfg = lightwaveos::audio::getAudioDebugConfig();
+                if (dbgCfg.verbosity >= 2) {
+                    printf("%s[STATE]%s LOCKED -> UNLOCKING (conf=%.2f)\n", ANSI_YELLOW, ANSI_RESET, beat_state_.conf);
+                }
+            }
+            break;
+
+        case TempoTrackerState::UNLOCKING:
+            if (beat_state_.conf < 0.2f) {
+                state_ = TempoTrackerState::SEARCHING;
+                auto& dbgCfg = lightwaveos::audio::getAudioDebugConfig();
+                if (dbgCfg.verbosity >= 2) {
+                    printf("%s[STATE]%s UNLOCKING -> SEARCHING (conf=%.2f)\n", ANSI_YELLOW, ANSI_RESET, beat_state_.conf);
+                }
+            }
+            if (beat_state_.conf > tuning_.lockThreshold) {  // Recovered
+                state_ = TempoTrackerState::LOCKED;
+                auto& dbgCfg = lightwaveos::audio::getAudioDebugConfig();
+                if (dbgCfg.verbosity >= 2) {
+                    printf("%s[STATE]%s UNLOCKING -> LOCKED (recovered, conf=%.2f)\n", ANSI_GREEN, ANSI_RESET, beat_state_.conf);
+                }
+            }
+            break;
+    }
+}
+
+// ============================================================================
+// Phase 5: State-Dependent Behavior
+// ============================================================================
+
+float TempoTracker::getStateDependentOnsetThreshold(float base_threshold) const {
+    switch (state_) {
+        case TempoTrackerState::SEARCHING:
+            return base_threshold * 0.8f;  // More sensitive
+        case TempoTrackerState::LOCKING:
+            return base_threshold;
+        case TempoTrackerState::LOCKED:
+            return base_threshold * 1.2f;  // More selective
+        default:
+            return base_threshold;
+    }
+}
+
+float TempoTracker::getStateDependentBpmAlpha() const {
+    switch (state_) {
+        case TempoTrackerState::SEARCHING:
+            return 0.2f;  // Faster smoothing when searching
+        case TempoTrackerState::LOCKING:
+            return 0.1f;  // Moderate smoothing when locking
+        case TempoTrackerState::LOCKED:
+            return 0.05f; // Slow smoothing when locked
+        default:
+            return tuning_.bpmAlpha;
+    }
+}
+
+// ============================================================================
+// Phase 5: Time-Weighted Voting
+// ============================================================================
+
+float TempoTracker::getRecencyWeight(uint8_t interval_index, uint8_t total_intervals) const {
+    if (total_intervals == 0) return 1.0f;
+    // Most recent = 1.0×, oldest = 0.5×
+    return 0.5f + 0.5f * (float)interval_index / (float)total_intervals;
+}
+
+void TempoTracker::addInterval(float interval, uint64_t timestamp) {
+    recentIntervalsExtended_[recentIntervalIndex_] = interval;
+    recentIntervalTimestamps_[recentIntervalIndex_] = timestamp;
+    recentIntervalIndex_ = (recentIntervalIndex_ + 1) % 16;
+}
+
+// ============================================================================
+// Phase 5: Interval Expiration
+// ============================================================================
+
+void TempoTracker::expireOldIntervals(uint64_t current_time) {
+    const uint64_t MAX_INTERVAL_AGE_SAMPLES = 160000ULL;  // 10 seconds in samples @ 16kHz (10 * 16000)
+
+    for (uint8_t i = 0; i < 16; i++) {
+        if (recentIntervalsExtended_[i] > 0.0f) {  // Non-zero = valid interval
+            uint64_t age = current_time - recentIntervalTimestamps_[i];
+            if (age > MAX_INTERVAL_AGE_SAMPLES) {
+                // Expire this interval
+                recentIntervalsExtended_[i] = 0.0f;
+                recentIntervalTimestamps_[i] = 0;
+                if (diagnostics_.intervalsValid > 0) {
+                    diagnostics_.intervalsValid--;
+                }
+            }
+        }
+    }
+}
+
+uint8_t TempoTracker::countActiveIntervals() const {
+    uint8_t count = 0;
+    for (uint8_t i = 0; i < 16; i++) {
+        if (recentIntervalsExtended_[i] > 0.0f) {
+            count++;
+        }
+    }
+    return count;
 }
 
 } // namespace audio

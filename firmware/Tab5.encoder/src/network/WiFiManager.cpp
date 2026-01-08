@@ -12,6 +12,7 @@
 
 #if ENABLE_WIFI
 #include <ESP.h>  // For heap monitoring
+#include <Preferences.h>  // For NVS storage
 
 WiFiManager::WiFiManager()
     : _ssid(nullptr)
@@ -23,14 +24,20 @@ WiFiManager::WiFiManager()
     , _usingPrimaryNetwork(true)
     , _primaryAttempts(0)
     , _secondaryAttempts(0)
-    , _apFallbackStartTime(0)
+    , _retryTimeoutStartTime(0)
+    , _retryButtonEnabled(false)
     , _connectStartTime(0)
     , _lastReconnectAttempt(0)
     , _reconnectDelay(NetworkConfig::WIFI_RECONNECT_DELAY_MS)
     , _lastMdnsAttempt(0)
     , _mdnsHostname(nullptr)
     , _mdnsRetryCount(0)
+    , _mdnsStartTime(0)
+    , _manualIP(INADDR_NONE)
+    , _useManualIP(false)
 {
+    // Load manual IP from NVS
+    loadManualIPFromNVS();
 }
 
 void WiFiManager::begin(const char* ssid, const char* password, 
@@ -43,7 +50,8 @@ void WiFiManager::begin(const char* ssid, const char* password,
     _usingPrimaryNetwork = true;
     _primaryAttempts = 0;
     _secondaryAttempts = 0;
-    _apFallbackStartTime = 0;
+    _retryTimeoutStartTime = 0;
+    _retryButtonEnabled = false;
 
     Serial.println("[WiFi] Starting connection...");
     Serial.printf("[WiFi] Primary SSID: %s\n", _ssid ? _ssid : "none");
@@ -67,8 +75,8 @@ void WiFiManager::startConnection() {
     const char* currentPassword = _usingPrimaryNetwork ? _password : _password2;
 
     if (!currentSSID || strlen(currentSSID) == 0) {
-        Serial.println("[WiFi] No network configured, starting AP mode...");
-        startAPMode();
+        Serial.println("[WiFi] No network configured");
+        _status = WiFiConnectionStatus::ERROR;
         return;
     }
 
@@ -138,11 +146,17 @@ void WiFiManager::update() {
 void WiFiManager::handleDisconnected() {
     unsigned long now = millis();
 
-    // Check if we should fall back to AP mode (both networks exhausted)
-    if (_apFallbackStartTime > 0 && now >= _apFallbackStartTime) {
-        Serial.println("[WiFi] Both networks failed, starting AP mode fallback...");
-        startAPMode();
-        return;
+    // Track when retry period started (on first disconnect)
+    if (_retryTimeoutStartTime == 0) {
+        _retryTimeoutStartTime = now;
+        _retryButtonEnabled = false;
+        Serial.println("[WiFi] Starting 2-minute retry period...");
+    }
+
+    // Check if 2 minutes have elapsed - enable retry button
+    if (!_retryButtonEnabled && (now - _retryTimeoutStartTime) >= NetworkConfig::WIFI_RETRY_TIMEOUT_MS) {
+        _retryButtonEnabled = true;
+        Serial.println("[WiFi] 2-minute retry period elapsed, retry button enabled");
     }
 
     // Check if we should switch to secondary network (primary exhausted)
@@ -154,27 +168,8 @@ void WiFiManager::handleDisconnected() {
         return;
     }
 
-    // Check if we should start AP fallback timer (both networks tried and failed)
-    if (!_usingPrimaryNetwork && 
-        _secondaryAttempts >= NetworkConfig::WIFI_ATTEMPTS_PER_NETWORK) {
-        if (_apFallbackStartTime == 0) {
-            _apFallbackStartTime = now + NetworkConfig::AP_FALLBACK_DELAY_MS;
-            Serial.printf("[WiFi] Both networks exhausted, AP fallback in %lu ms...\n",
-                          NetworkConfig::AP_FALLBACK_DELAY_MS);
-        }
-    }
-    
-    // Also check if primary failed and no secondary available - go straight to AP
-    if (_usingPrimaryNetwork && 
-        _primaryAttempts >= NetworkConfig::WIFI_ATTEMPTS_PER_NETWORK &&
-        (!_ssid2 || strlen(_ssid2) == 0)) {
-        if (_apFallbackStartTime == 0) {
-            _apFallbackStartTime = now + NetworkConfig::AP_FALLBACK_DELAY_MS;
-            Serial.printf("[WiFi] Primary network failed, no secondary available. AP fallback in %lu ms...\n",
-                          NetworkConfig::AP_FALLBACK_DELAY_MS);
-        }
-    }
-
+    // Continue retrying both networks for 2 minutes
+    // After 2 minutes, retry button will be enabled but we still keep trying
     // Attempt reconnect with backoff delay
     if (now - _lastReconnectAttempt >= _reconnectDelay) {
         _lastReconnectAttempt = now;
@@ -188,17 +183,19 @@ void WiFiManager::handleDisconnected() {
 }
 
 void WiFiManager::handleConnecting() {
-    // #region agent log
-    Serial.printf("[DEBUG] handleConnecting entry - Heap: free=%u minFree=%u\n",
-                  ESP.getFreeHeap(), ESP.getMinFreeHeap());
-    // #endregion
     wl_status_t wifiStatus = WiFi.status();
-    // #region agent log
-    Serial.printf("[DEBUG] WiFi.status()=%d elapsed=%lu Heap: free=%u minFree=%u\n",
-                  (int)wifiStatus, millis() - _connectStartTime,
-                  ESP.getFreeHeap(), ESP.getMinFreeHeap());
-    // #endregion
     unsigned long elapsed = millis() - _connectStartTime;
+    
+    // #region agent log
+    static uint32_t s_lastConnectingLog = 0;
+    uint32_t now = millis();
+    if (now - s_lastConnectingLog >= 10000) {  // Log every 10 seconds instead of every loop
+        Serial.printf("[DEBUG] handleConnecting - WiFi.status()=%d elapsed=%lu Heap: free=%u minFree=%u\n",
+                      (int)wifiStatus, elapsed,
+                      ESP.getFreeHeap(), ESP.getMinFreeHeap());
+        s_lastConnectingLog = now;
+    }
+    // #endregion
 
     if (wifiStatus == WL_CONNECTED) {
         // Connection successful
@@ -220,6 +217,7 @@ void WiFiManager::handleConnecting() {
         // Reset mDNS resolution state for target host
         _lastMdnsAttempt = 0;
         _mdnsRetryCount = 0;
+        _mdnsStartTime = 0;  // Reset mDNS start time
 
     } else if (wifiStatus == WL_CONNECT_FAILED ||
                wifiStatus == WL_NO_SSID_AVAIL) {
@@ -267,6 +265,7 @@ void WiFiManager::handleConnected() {
         _lastReconnectAttempt = millis();
         _lastMdnsAttempt = 0;  // Reset mDNS timer for next connection
         _mdnsRetryCount = 0;
+        _mdnsStartTime = 0;  // Reset mDNS start time
     }
 }
 
@@ -297,6 +296,44 @@ bool WiFiManager::resolveMDNS(const char* hostname) {
         return true;
     }
 
+    // Track start time on first attempt
+    if (_mdnsStartTime == 0) {
+        _mdnsStartTime = now;
+    }
+
+    // Check if timeout exceeded or max attempts reached
+    bool timeoutExceeded = (now - _mdnsStartTime) >= NetworkConfig::MDNS_FALLBACK_TIMEOUT_MS;
+    bool maxAttemptsReached = _mdnsRetryCount >= NetworkConfig::MDNS_MAX_ATTEMPTS;
+
+    if (timeoutExceeded || maxAttemptsReached) {
+        // Timeout exceeded - use fallback IP
+        IPAddress fallbackIP = INADDR_NONE;
+        const char* fallbackSource = nullptr;
+
+        // Priority 1: Manual IP from NVS (if configured and enabled)
+        if (shouldUseManualIP() && _manualIP != INADDR_NONE) {
+            fallbackIP = _manualIP;
+            fallbackSource = "manual IP from NVS";
+        }
+        // Priority 2: Gateway IP (if on secondary network)
+        else if (!_usingPrimaryNetwork && WiFi.SSID() == "LightwaveOS-AP") {
+            fallbackIP = WiFi.gatewayIP();
+            fallbackSource = "gateway IP (secondary network)";
+        }
+
+        if (fallbackIP != INADDR_NONE) {
+            _resolvedIP = fallbackIP;
+            _status = WiFiConnectionStatus::MDNS_RESOLVED;
+            Serial.printf("[WiFi] mDNS timeout exceeded (attempt %d/%d, elapsed: %lu ms), using %s: %s\n",
+                          _mdnsRetryCount, NetworkConfig::MDNS_MAX_ATTEMPTS,
+                          now - _mdnsStartTime, fallbackSource, fallbackIP.toString().c_str());
+            return true;
+        } else {
+            // No fallback available, continue trying mDNS
+            Serial.printf("[WiFi] mDNS timeout exceeded but no fallback IP available, continuing attempts...\n");
+        }
+    }
+
     // Apply backoff: don't query mDNS every loop tick
     unsigned long delay;
     if (_lastMdnsAttempt == 0) {
@@ -315,6 +352,10 @@ bool WiFiManager::resolveMDNS(const char* hostname) {
     _status = WiFiConnectionStatus::MDNS_RESOLVING;
     _mdnsRetryCount++;
 
+    // Log mDNS attempt with context
+    Serial.printf("[WiFi] mDNS: attempt %d/%d, elapsed: %lu ms, timeout: %lu ms\n",
+                  _mdnsRetryCount, NetworkConfig::MDNS_MAX_ATTEMPTS,
+                  now - _mdnsStartTime, NetworkConfig::MDNS_FALLBACK_TIMEOUT_MS);
     Serial.printf("[WiFi] Resolving mDNS: %s.local (attempt %d)...\n",
                   hostname, _mdnsRetryCount);
 
@@ -324,7 +365,7 @@ bool WiFiManager::resolveMDNS(const char* hostname) {
     // FALLBACK: If connected to LightwaveOS AP (secondary network) and mDNS fails, use Gateway IP
     // This ensures connection works even if mDNS is flaky on the SoftAP interface
     if (resolvedIP == INADDR_NONE && !_usingPrimaryNetwork && 
-        WiFi.SSID() == "LightwaveOS") {
+        WiFi.SSID() == "LightwaveOS-AP") {
         Serial.println("[WiFi] mDNS failed, but connected to LightwaveOS AP. Using Gateway IP.");
         resolvedIP = WiFi.gatewayIP();
     }
@@ -357,32 +398,9 @@ void WiFiManager::switchToSecondaryNetwork() {
     startConnection();
 }
 
-void WiFiManager::startAPMode() {
-    Serial.println("[WiFi] Starting Access Point mode...");
-    Serial.printf("[WiFi] AP SSID: %s (open, no password)\n", NetworkConfig::AP_SSID_VALUE);
-    
-    WiFi.disconnect();
-    delay(100);
-    
-    WiFi.mode(WIFI_AP);
-    // Use empty string or NULL for open AP (no password) - matches v2 firmware
-    const char* apPassword = (NetworkConfig::AP_PASSWORD_VALUE && 
-                              strlen(NetworkConfig::AP_PASSWORD_VALUE) > 0) 
-                             ? NetworkConfig::AP_PASSWORD_VALUE : nullptr;
-    WiFi.softAP(NetworkConfig::AP_SSID_VALUE, apPassword);
-    
-    IPAddress apIP = WiFi.softAPIP();
-    Serial.printf("[WiFi] AP started! IP: %s\n", apIP.toString().c_str());
-    
-    // Initialize mDNS responder for AP mode
-    if (!MDNS.begin("tab5encoder")) {
-        Serial.println("[WiFi] mDNS responder failed to start");
-    } else {
-        Serial.println("[WiFi] mDNS responder started: tab5encoder.local");
-    }
-    
-    _status = WiFiConnectionStatus::CONNECTED;  // AP mode counts as "connected"
-    _resolvedIP = INADDR_NONE;  // No mDNS resolution in AP mode
+void WiFiManager::triggerRetry() {
+    Serial.println("[WiFi] Manual retry triggered by user");
+    reconnect();
 }
 
 void WiFiManager::reconnect() {
@@ -393,11 +411,13 @@ void WiFiManager::reconnect() {
     _usingPrimaryNetwork = true;  // Reset to primary
     _primaryAttempts = 0;
     _secondaryAttempts = 0;
-    _apFallbackStartTime = 0;
+    _retryTimeoutStartTime = 0;  // Reset retry timer
+    _retryButtonEnabled = false;  // Hide retry button
     _lastReconnectAttempt = millis();
     _reconnectDelay = NetworkConfig::WIFI_RECONNECT_DELAY_MS;  // Reset backoff
     _lastMdnsAttempt = 0;
     _mdnsRetryCount = 0;
+    _mdnsStartTime = 0;  // Reset mDNS start time
 }
 
 void WiFiManager::enterErrorState(const char* reason) {
@@ -416,6 +436,94 @@ const char* WiFiManager::getStatusString() const {
         case WiFiConnectionStatus::ERROR:          return "Error";
         default:                                   return "Unknown";
     }
+}
+
+void WiFiManager::loadManualIPFromNVS() {
+    Preferences prefs;
+    if (!prefs.begin(NetworkNVS::NAMESPACE, true)) {  // Read-only
+        _useManualIP = false;
+        _manualIP = INADDR_NONE;
+        return;
+    }
+    
+    // Read use_manual flag
+    _useManualIP = prefs.getBool(NetworkNVS::KEY_USE_MANUAL_IP, false);
+    
+    // Read manual IP string
+    String ipStr = prefs.getString(NetworkNVS::KEY_MANUAL_IP, "");
+    if (ipStr.length() > 0) {
+        if (!_manualIP.fromString(ipStr.c_str())) {
+            Serial.printf("[WiFi] Invalid manual IP in NVS: %s\n", ipStr.c_str());
+            _manualIP = INADDR_NONE;
+            _useManualIP = false;
+        } else {
+            Serial.printf("[WiFi] Loaded manual IP from NVS: %s\n", ipStr.c_str());
+        }
+    } else {
+        _manualIP = INADDR_NONE;
+    }
+    
+    prefs.end();
+}
+
+bool WiFiManager::setManualIP(const IPAddress& ip) {
+    if (ip == INADDR_NONE) {
+        return false;
+    }
+    
+    Preferences prefs;
+    if (!prefs.begin(NetworkNVS::NAMESPACE, false)) {  // Read-write
+        Serial.println("[WiFi] Failed to open NVS for manual IP");
+        return false;
+    }
+    
+    String ipStr = ip.toString();
+    if (!prefs.putString(NetworkNVS::KEY_MANUAL_IP, ipStr)) {
+        Serial.println("[WiFi] Failed to store manual IP in NVS");
+        prefs.end();
+        return false;
+    }
+    
+    if (!prefs.putBool(NetworkNVS::KEY_USE_MANUAL_IP, true)) {
+        Serial.println("[WiFi] Failed to store use_manual flag");
+        prefs.end();
+        return false;
+    }
+    
+    _manualIP = ip;
+    _useManualIP = true;
+    prefs.end();
+    
+    Serial.printf("[WiFi] Manual IP stored: %s\n", ipStr.c_str());
+    return true;
+}
+
+void WiFiManager::clearManualIP() {
+    Preferences prefs;
+    if (prefs.begin(NetworkNVS::NAMESPACE, false)) {
+        prefs.remove(NetworkNVS::KEY_MANUAL_IP);
+        prefs.remove(NetworkNVS::KEY_USE_MANUAL_IP);
+        prefs.end();
+    }
+    _manualIP = INADDR_NONE;
+    _useManualIP = false;
+}
+
+bool WiFiManager::isMDNSTimeoutExceeded() const {
+    if (_mdnsStartTime == 0) {
+        return false;  // Not started yet
+    }
+    unsigned long elapsed = millis() - _mdnsStartTime;
+    return elapsed >= NetworkConfig::MDNS_FALLBACK_TIMEOUT_MS || 
+           _mdnsRetryCount >= NetworkConfig::MDNS_MAX_ATTEMPTS;
+}
+
+IPAddress WiFiManager::getManualIP() const {
+    return _manualIP;
+}
+
+bool WiFiManager::shouldUseManualIP() const {
+    return _useManualIP && _manualIP != INADDR_NONE;
 }
 
 #endif // ENABLE_WIFI

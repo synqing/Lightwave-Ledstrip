@@ -37,6 +37,7 @@
 #include <Arduino.h>
 #include <M5Unified.h>
 #include <Wire.h>
+#include <esp_task_wdt.h>  // For watchdog timer
 
 #include "config/Config.h"
 #include <ESP.h>   // For heap monitoring (used in debug logs)
@@ -48,6 +49,7 @@
 #include "input/I2CRecovery.h"
 #include "input/TouchHandler.h"
 #include "input/ButtonHandler.h"
+#include "input/CoarseModeManager.h"
 #include "network/WiFiManager.h"
 #include "network/WebSocketClient.h"
 #include "network/WsMessageRouter.h"
@@ -60,10 +62,31 @@
 #include "parameters/ParameterMap.h"
 #include "storage/NvsStorage.h"
 #include "ui/LedFeedback.h"
+// #include "ui/PaletteLedDisplay.h"  // DISABLED - causing encoder regression
 #include "ui/DisplayUI.h"
 #include "ui/LoadingScreen.h"
+#include "ui/Theme.h"
+#include "ui/lvgl_bridge.h"
+#include "hal/EspHal.h"
 #include "input/ClickDetector.h"
 #include "presets/PresetManager.h"
+
+// ============================================================================
+// Agent tracing (compile-time, default off)
+// ============================================================================
+#ifndef TAB5_AGENT_TRACE
+#define TAB5_AGENT_TRACE 0
+#endif
+
+#if TAB5_AGENT_TRACE
+#define TAB5_AGENT_PRINTF(...) Serial.printf(__VA_ARGS__)
+#else
+#define TAB5_AGENT_PRINTF(...) ((void)0)
+#endif
+
+static void formatIPv4(const IPAddress& ip, char out[16]) {
+    snprintf(out, 16, "%u.%u.%u.%u", ip[0], ip[1], ip[2], ip[3]);
+}
 
 // ============================================================================
 // I2C Addresses for Dual Unit Setup
@@ -95,6 +118,13 @@ bool g_wsConfigured = false;  // true after wsClient.begin() called
 // Connection status LED feedback (Phase F.5)
 LedFeedback g_ledFeedback;
 
+// DISABLED - PaletteLedDisplay causing encoder regression
+// Palette color display on Unit B LEDs 0-7
+// PaletteLedDisplay g_paletteLedDisplay;
+
+// Coarse mode manager for ENC-A acceleration
+CoarseModeManager g_coarseModeManager;
+
 // Touch screen handler (Phase G.3)
 TouchHandler g_touchHandler;
 
@@ -115,7 +145,7 @@ uint8_t g_activePresetSlot = 255;   // Currently active preset (255 = none)
 static constexpr uint16_t EFFECT_NAME_MAX = 48;
 static constexpr uint16_t PALETTE_NAME_MAX = 48;
 static constexpr uint16_t MAX_EFFECTS = 256;
-static constexpr uint8_t MAX_PALETTES = 75;  // Matches v2 MASTER_PALETTE_COUNT (0-74)
+static constexpr uint8_t MAX_PALETTES = 64;  // Tab5 encoder range is 0-63
 
 static char s_effectNames[MAX_EFFECTS][EFFECT_NAME_MAX] = {{0}};
 static bool s_effectKnown[MAX_EFFECTS] = {false};
@@ -135,28 +165,40 @@ static bool s_uiInitialized = false;  // Track if DisplayUI::begin() has been ca
 // Touch Action Row (Colour Correction Controls)
 // ============================================================================
 
-// Gamma cycling logic matches v2 firmware: OFF → 2.2 → 2.5 → 2.8 → OFF
 static bool nextGammaState(bool enabled, float current, float& nextValue) {
+    // Gamma order: OFF -> 2.2 (ON) -> 2.5 -> 2.8 -> OFF
+    // Array order matches the cycle after starting at 2.2
+    static const float kGammaSteps[] = {2.2f, 2.5f, 2.8f};
+    static constexpr size_t kGammaCount = sizeof(kGammaSteps) / sizeof(kGammaSteps[0]);
+
     if (!enabled) {
-        // Enable with default 2.2 (matches v2)
+        // OFF -> start at 2.2 (default)
         nextValue = 2.2f;
         return true;
     }
 
-    // Cycle through common values: 2.2 → 2.5 → 2.8 → off (matches v2)
-    if (current < 2.3f) {
-        // Currently at 2.2 (or close) → go to 2.5
-        nextValue = 2.5f;
-        return true;
-    } else if (current < 2.6f) {
-        // Currently at 2.5 (or close) → go to 2.8
-        nextValue = 2.8f;
-        return true;
-    } else {
-        // Currently at 2.8 (or higher) → disable
-        nextValue = current;  // Keep current value but disable
-        return false;  // Return false to disable
+    // Find current position in the array
+    size_t currentIdx = 0;
+    float best = 1000.0f;
+    for (size_t i = 0; i < kGammaCount; ++i) {
+        float diff = fabsf(current - kGammaSteps[i]);
+        if (diff < best) {
+            best = diff;
+            currentIdx = i;
+        }
     }
+
+    // Move to next step
+    size_t nextIdx = (currentIdx + 1) % kGammaCount;
+    
+    // If we've wrapped around (nextIdx == 0 and we were at the last step), disable gamma
+    if (nextIdx == 0 && currentIdx == kGammaCount - 1) {
+        nextValue = current;
+        return false;  // Disable gamma
+    }
+
+    nextValue = kGammaSteps[nextIdx];
+    return true;  // Keep gamma enabled
 }
 
 static void syncColourCorrectionUi() {
@@ -166,48 +208,155 @@ static void syncColourCorrectionUi() {
 }
 
 static void handleActionButton(uint8_t buttonIndex) {
-    if (!g_wsClient.isConnected()) {
-        Serial.println("[TOUCH] WS not connected - cannot send colour controls");
-        return;
+    // Debounce: prevent rapid repeated calls (300ms debounce)
+    static uint32_t s_lastActionTime[4] = {0, 0, 0, 0};
+    uint32_t now = millis();
+    if (buttonIndex < 4 && (now - s_lastActionTime[buttonIndex]) < 300) {
+        return;  // Ignore rapid repeated clicks
     }
-
-    const ColorCorrectionState& cc = g_wsClient.getColorCorrectionState();
+    s_lastActionTime[buttonIndex] = now;
+    
+    // #region agent log
+    Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1,H2,H5\",\"location\":\"main.cpp:200\",\"message\":\"handleActionButton.entry\",\"data\":{\"buttonIndex\":%d,\"wsConnected\":%d,\"wsStatus\":%d},\"timestamp\":%lu}\n",
+                  buttonIndex, g_wsClient.isConnected() ? 1 : 0, (int)g_wsClient.getStatus(), (unsigned long)now);
+    // #endregion
+    
+    // Get current state (use defaults if not valid)
+    ColorCorrectionState cc = g_wsClient.getColorCorrectionState();
+    
+    // #region agent log
+    // FILE* logFile = fopen("/Users/spectrasynq/Workspace_Management/Software/PRISM.tab5/.cursor/debug.log", "a");
+    // if (logFile != nullptr) {
+    //     fprintf(logFile, "{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H5\",\"location\":\"main.cpp:215\",\"message\":\"handleActionButton.stateBefore\",\"data\":{\"buttonIndex\":%d,\"gammaEnabled\":%d,\"gammaValue\":%.1f,\"aeEnabled\":%d,\"aeTarget\":%d,\"brownEnabled\":%d,\"mode\":%d,\"valid\":%d},\"timestamp\":%lu}\n",
+    //             buttonIndex, cc.gammaEnabled ? 1 : 0, cc.gammaValue, cc.autoExposureEnabled ? 1 : 0,
+    //             cc.autoExposureTarget, cc.brownGuardrailEnabled ? 1 : 0, cc.mode, cc.valid ? 1 : 0, (unsigned long)millis());
+    //     fclose(logFile);
+    // }
+    // #endregion
     if (!cc.valid) {
-        g_wsClient.requestColorCorrectionConfig();
-        Serial.println("[TOUCH] Colour correction not synced yet - requested config");
-        return;
+        // Initialize with defaults if not synced yet
+        cc.valid = true;
+        cc.gammaEnabled = true;
+        cc.gammaValue = 2.2f;
+        cc.mode = 2;  // RGB
+        cc.autoExposureEnabled = false;
+        cc.autoExposureTarget = 110;
+        cc.brownGuardrailEnabled = false;
+        
+        // Request config from server if connected (but don't block UI update)
+        if (g_wsClient.isConnected()) {
+            static uint32_t lastRequestTime = 0;
+            uint32_t now = millis();
+            if (now - lastRequestTime > 2000) {  // Throttle to once per 2 seconds
+                g_wsClient.requestColorCorrectionConfig();
+                lastRequestTime = now;
+                Serial.println("[TOUCH] Colour correction not synced yet - requested config");
+            }
+        }
     }
 
+    // Calculate next state optimistically (update UI immediately)
+    bool stateChanged = false;
     switch (buttonIndex) {
         case 0: {  // Gamma mode (cycle)
             float nextValue = cc.gammaValue;
             bool nextEnabled = nextGammaState(cc.gammaEnabled, cc.gammaValue, nextValue);
-            g_wsClient.sendGammaChange(nextEnabled, nextValue);
+            cc.gammaEnabled = nextEnabled;
+            cc.gammaValue = nextValue;
+            stateChanged = true;
             break;
         }
         case 1: {  // Colour correction mode (cycle)
-            uint8_t next = static_cast<uint8_t>((cc.mode + 1) % 4);
-            g_wsClient.sendColourCorrectionMode(next);
+            cc.mode = static_cast<uint8_t>((cc.mode + 1) % 4);
+            stateChanged = true;
             break;
         }
         case 2: {  // Auto exposure (toggle)
             uint8_t target = (cc.autoExposureTarget == 0) ? 110 : cc.autoExposureTarget;
-            g_wsClient.sendAutoExposureChange(!cc.autoExposureEnabled, target);
+            cc.autoExposureEnabled = !cc.autoExposureEnabled;
+            cc.autoExposureTarget = target;
+            stateChanged = true;
             break;
         }
         case 3: {  // Brown guardrail (toggle)
-            g_wsClient.sendBrownGuardrailChange(!cc.brownGuardrailEnabled);
+            cc.brownGuardrailEnabled = !cc.brownGuardrailEnabled;
+            stateChanged = true;
             break;
         }
         default:
             return;
     }
 
-    syncColourCorrectionUi();
+    if (stateChanged) {
+        // Update local state cache optimistically (even if WS not connected)
+        g_wsClient.setColorCorrectionState(cc);
+        
+        // Update UI immediately (optimistic update)
+        syncColourCorrectionUi();
+        
+        // #region agent log
+        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H5\",\"location\":\"main.cpp:269\",\"message\":\"handleActionButton.stateAfter\",\"data\":{\"buttonIndex\":%d,\"gammaEnabled\":%d,\"gammaValue\":%.1f,\"aeEnabled\":%d,\"aeTarget\":%d,\"brownEnabled\":%d,\"mode\":%d},\"timestamp\":%lu}\n",
+                      buttonIndex, cc.gammaEnabled ? 1 : 0, cc.gammaValue, cc.autoExposureEnabled ? 1 : 0,
+                      cc.autoExposureTarget, cc.brownGuardrailEnabled ? 1 : 0, cc.mode, (unsigned long)millis());
+        // #endregion
+        
+        // Try to send command to server (if connected)
+        if (g_wsClient.isConnected()) {
+            // #region agent log
+            Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1,H2\",\"location\":\"main.cpp:277\",\"message\":\"handleActionButton.sendingCommand\",\"data\":{\"buttonIndex\":%d,\"commandType\":\"%s\"},\"timestamp\":%lu}\n",
+                          buttonIndex, 
+                          buttonIndex == 0 ? "setConfig" : (buttonIndex == 1 ? "setMode" : (buttonIndex == 2 ? "setConfig" : "setConfig")),
+                          (unsigned long)millis());
+            // #endregion
+            
+            switch (buttonIndex) {
+                case 0:
+                    // Gamma: Use setConfig with all fields including mode
+                    Serial.printf("[TOUCH] Gamma button: enabled=%s value=%.1f\n", 
+                                  cc.gammaEnabled ? "true" : "false", cc.gammaValue);
+                    g_wsClient.sendColorCorrectionConfig(
+                        cc.gammaEnabled, cc.gammaValue,
+                        cc.autoExposureEnabled, cc.autoExposureTarget,
+                        cc.brownGuardrailEnabled, cc.mode);
+                    break;
+                case 1:
+                    // Colour mode: Use dedicated setMode command
+                    Serial.printf("[TOUCH] Colour button: mode=%d\n", cc.mode);
+                    g_wsClient.sendColourCorrectionMode(cc.mode);
+                    break;
+                case 2:
+                    // Auto exposure: Use setConfig with all fields including mode
+                    Serial.printf("[TOUCH] Exposure button: enabled=%s target=%d\n", 
+                                  cc.autoExposureEnabled ? "true" : "false", cc.autoExposureTarget);
+                    g_wsClient.sendColorCorrectionConfig(
+                        cc.gammaEnabled, cc.gammaValue,
+                        cc.autoExposureEnabled, cc.autoExposureTarget,
+                        cc.brownGuardrailEnabled, cc.mode);
+                    break;
+                case 3:
+                    // Brown guardrail: Use setConfig with all fields including mode
+                    Serial.printf("[TOUCH] Brown button: enabled=%s\n", 
+                                  cc.brownGuardrailEnabled ? "true" : "false");
+                    g_wsClient.sendColorCorrectionConfig(
+                        cc.gammaEnabled, cc.gammaValue,
+                        cc.autoExposureEnabled, cc.autoExposureTarget,
+                        cc.brownGuardrailEnabled, cc.mode);
+                    break;
+            }
+        } else {
+            // #region agent log
+            Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H2\",\"location\":\"main.cpp:304\",\"message\":\"handleActionButton.wsNotConnected\",\"data\":{\"buttonIndex\":%d,\"wsStatus\":%d},\"timestamp\":%lu}\n",
+                          buttonIndex, (int)g_wsClient.getStatus(), (unsigned long)millis());
+            // #endregion
+            Serial.println("[TOUCH] WS not connected - UI updated optimistically, command will sync when connected");
+        }
+    }
 }
 
 const char* lookupEffectName(uint8_t id) {
-    if (id < MAX_EFFECTS && s_effectKnown[id] && s_effectNames[id][0]) return s_effectNames[id];
+    // Note: id is uint8_t (0-255), MAX_EFFECTS is 256, so id < MAX_EFFECTS is always true
+    // But we also check id <= 87 to enforce actual effect range
+    if (id <= 87 && s_effectKnown[id] && s_effectNames[id][0]) return s_effectNames[id];
     return nullptr;
 }
 
@@ -219,7 +368,7 @@ const char* lookupPaletteName(uint8_t id) {
 static void updateUiEffectPaletteLabels() {
     if (!g_ui || !g_encoders || !s_uiInitialized) return;  // Only update if UI is initialized
     uint8_t effectId = static_cast<uint8_t>(g_encoders->getValue(0));
-    uint8_t paletteId = static_cast<uint8_t>(g_encoders->getValue(2));
+    uint8_t paletteId = static_cast<uint8_t>(g_encoders->getValue(1));  // FIXED: Palette is encoder 1, not 2
 
     char effectBuf[EFFECT_NAME_MAX];
     char paletteBuf[PALETTE_NAME_MAX];
@@ -282,8 +431,92 @@ static void handleSerialCommand(const char* cmd) {
         return;
     }
 
+    // Palette animation commands
+    // DISABLED - PaletteLedDisplay causing encoder regression
+    /*
+    if (strncmp(cmd, "paletteanim ", 12) == 0 || strncmp(cmd, "pa ", 3) == 0) {
+        const char* modeStr = (cmd[0] == 'p' && cmd[1] == 'a' && cmd[2] == 'l') ? cmd + 12 : cmd + 3;
+        
+        // Parse mode string
+        AnimationMode newMode = AnimationMode::ROTATE;
+        bool valid = false;
+        
+        if (strcmp(modeStr, "static") == 0) {
+            newMode = AnimationMode::STATIC;
+            valid = true;
+        } else if (strcmp(modeStr, "rotate") == 0) {
+            newMode = AnimationMode::ROTATE;
+            valid = true;
+        } else if (strcmp(modeStr, "wave") == 0) {
+            newMode = AnimationMode::WAVE;
+            valid = true;
+        } else if (strcmp(modeStr, "breathing") == 0) {
+            newMode = AnimationMode::BREATHING;
+            valid = true;
+        } else if (strcmp(modeStr, "scroll") == 0) {
+            newMode = AnimationMode::SCROLL;
+            valid = true;
+        }
+        
+        if (valid) {
+            g_paletteLedDisplay.setAnimationMode(newMode);
+            Serial.printf("[PaletteAnim] Mode set to: %s\n", g_paletteLedDisplay.getAnimationModeString());
+        } else {
+            Serial.println("[PaletteAnim] Invalid mode. Use: static, rotate, wave, breathing, scroll");
+        }
+        return;
+    }
+    
+    // Shortcut: "pa" cycles through modes
+    if (strcmp(cmd, "pa") == 0) {
+        AnimationMode current = g_paletteLedDisplay.getAnimationMode();
+        const uint8_t modeCount = static_cast<uint8_t>(AnimationMode::MODE_COUNT);
+        AnimationMode next = static_cast<AnimationMode>((static_cast<uint8_t>(current) + 1) % modeCount);
+        g_paletteLedDisplay.setAnimationMode(next);
+        Serial.printf("[PaletteAnim] Mode cycled to: %s\n", g_paletteLedDisplay.getAnimationModeString());
+        return;
+    }
+    */
+
+    // Network commands (similar to v2 firmware)
+    if (strncmp(cmd, "net ", 4) == 0) {
+        const char* args = cmd + 4;
+        
+        if (strcmp(args, "status") == 0) {
+            #if ENABLE_WIFI
+            Serial.println(g_wifiManager.getStatusString());
+            #else
+            Serial.println("[WiFi] WiFi disabled (ENABLE_WIFI=0)");
+            #endif
+            return;
+        }
+        
+        if (strcmp(args, "sta") == 0) {
+            Serial.println("[WiFi] Manual switching not supported (Auto-managed)");
+            return;
+        }
+        
+        if (strcmp(args, "ap") == 0) {
+            Serial.println("[WiFi] Manual switching not supported (Auto-managed)");
+            return;
+        }
+        
+        if (strcmp(args, "help") == 0 || args[0] == '\0') {
+            Serial.println("[NET] Commands:");
+            Serial.println("  net status  - Show WiFi status");
+            Serial.println("  net sta     - Switch to fallback network (STA mode)");
+            Serial.println("  net ap      - Switch to primary network (AP mode)");
+            return;
+        }
+        
+        Serial.println("[NET] Unknown command. Try: net help");
+        return;
+    }
+
     if (strcmp(cmd, "help") == 0) {
-        Serial.println("[HELP] Commands: ppa on | ppa off | ppa toggle | ppa bench [N]");
+        Serial.println("[HELP] Commands:");
+        Serial.println("  ppa on | ppa off | ppa toggle | ppa bench [N]");
+        Serial.println("  net status | net sta | net ap");
         return;
     }
 }
@@ -361,6 +594,11 @@ uint8_t scanI2CBus(TwoWire& wire, const char* busName) {
 static uint32_t s_lastEncoderLogTime = 0;
 static constexpr uint32_t ENCODER_LOG_INTERVAL_MS = 100;  // Log at most every 100ms
 
+// Track previous value and accumulator for encoder 15 (ENC-B encoder 7) for animation mode cycling
+static uint16_t s_prevEncoder15Value = 0;
+static bool s_encoder15Initialized = false;
+static int16_t s_encoder15Accumulator = 0;  // Accumulates detents (requires ±2 to cycle mode)
+
 /**
  * Called when any encoder value changes
  * @param index Encoder index (0-15)
@@ -368,6 +606,69 @@ static constexpr uint32_t ENCODER_LOG_INTERVAL_MS = 100;  // Log at most every 1
  * @param wasReset true if this was a button-press reset to default
  */
 void onEncoderChange(uint8_t index, uint16_t value, bool wasReset) {
+    // DISABLED - PaletteLedDisplay causing encoder regression
+    // Special handling for encoder 15 (ENC-B encoder 7): Cycle palette animation modes
+    /*
+    if (index == 15) {
+        if (!s_encoder15Initialized) {
+            // First time - just store the value, don't cycle
+            s_prevEncoder15Value = value;
+            s_encoder15Initialized = true;
+            s_encoder15Accumulator = 0;
+            return;
+        }
+        
+        // Calculate delta (handle wrap-around)
+        int32_t delta = static_cast<int32_t>(value) - static_cast<int32_t>(s_prevEncoder15Value);
+        
+        // Handle wrap-around: if delta is very large, it wrapped the other direction
+        if (delta > 128) {
+            delta -= 256;  // Wrapped forward, treat as backward
+        } else if (delta < -128) {
+            delta += 256;  // Wrapped backward, treat as forward
+        }
+        
+        // Accumulate detents (encoder changes by 1 per detent)
+        s_encoder15Accumulator += delta;
+        
+        // Only cycle mode when accumulator reaches ±2 detents (debounce + intentional movement)
+        if (abs(s_encoder15Accumulator) >= 2) {
+            // Only process if dashboard is loaded (LEDs enabled)
+            if (s_uiInitialized) {
+                AnimationMode currentMode = g_paletteLedDisplay.getAnimationMode();
+                uint8_t currentModeIndex = static_cast<uint8_t>(currentMode);
+                
+                // Cycle based on accumulator direction
+                const uint8_t modeCount = static_cast<uint8_t>(AnimationMode::MODE_COUNT);
+                if (s_encoder15Accumulator > 0) {
+                    // Forward: next mode
+                    currentModeIndex = (currentModeIndex + 1) % modeCount;
+                } else {
+                    // Backward: previous mode (with wrap)
+                    if (currentModeIndex == 0) {
+                        currentModeIndex = modeCount - 1;
+                    } else {
+                        currentModeIndex--;
+                    }
+                }
+                
+                AnimationMode newMode = static_cast<AnimationMode>(currentModeIndex);
+                g_paletteLedDisplay.setAnimationMode(newMode);
+                
+                Serial.printf("[ENC-B:7] Palette animation mode: %s\n", g_paletteLedDisplay.getAnimationModeString());
+            }
+            
+            // Reset accumulator (subtract the 2 detents we just processed)
+            int8_t sign = (s_encoder15Accumulator > 0) ? 1 : -1;
+            s_encoder15Accumulator -= (sign * 2);
+        }
+        
+        // Update previous value
+        s_prevEncoder15Value = value;
+        return;  // Don't process as normal parameter
+    }
+    */
+    
     Parameter param = static_cast<Parameter>(index);
     const char* name = getParameterName(param);
     const char* unit = (index < 8) ? "A" : "B";
@@ -397,6 +698,24 @@ void onEncoderChange(uint8_t index, uint16_t value, bool wasReset) {
         g_ui->updateValue(index, value);
     }
 
+    // DISABLED - PaletteLedDisplay causing encoder regression
+    // Update palette LED display when palette parameter changes (index 1)
+    /*
+    if (index == 1) {  // Palette parameter
+        // #region agent log
+        bool enabled = g_paletteLedDisplay.isEnabled();
+        bool available = g_encoders ? g_encoders->isUnitBAvailable() : false;
+        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"palette-latch\",\"hypothesisId\":\"A,B,E\",\"location\":\"main.cpp:onEncoderChange\",\"message\":\"palette.change.trigger\",\"data\":{\"paletteId\":%u,\"enabled\":%d,\"unitBAvailable\":%d,\"uiInit\":%d,\"timestamp\":%lu}}\n",
+            value, enabled ? 1 : 0, available ? 1 : 0, s_uiInitialized ? 1 : 0, static_cast<unsigned long>(millis()));
+        // #endregion
+        bool result = g_paletteLedDisplay.update(static_cast<uint8_t>(value));
+        // #region agent log
+        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"palette-latch\",\"hypothesisId\":\"A\",\"location\":\"main.cpp:onEncoderChange\",\"message\":\"palette.update.result\",\"data\":{\"result\":%d,\"timestamp\":%lu}}\n",
+            result ? 1 : 0, static_cast<unsigned long>(millis()));
+        // #endregion
+    }
+    */
+
     // Queue parameter for NVS persistence (debounced to prevent flash wear)
     NvsStorage::requestSave(index, value);
 
@@ -407,21 +726,36 @@ void onEncoderChange(uint8_t index, uint16_t value, bool wasReset) {
         if (index < 8) {
             switch (index) {
                 case 0: g_wsClient.sendEffectChange(value); break;
-                case 1: g_wsClient.sendBrightnessChange(value); break;
-                case 2: g_wsClient.sendPaletteChange(value); break;
-                case 3: g_wsClient.sendSpeedChange(value); break;
-                case 4: g_wsClient.sendMoodChange(value); break;
-                case 5: g_wsClient.sendFadeAmountChange(value); break;
-                case 6: g_wsClient.sendComplexityChange(value); break;
-                case 7: g_wsClient.sendVariationChange(value); break;
+                case 1: g_wsClient.sendPaletteChange(value); break;      // FIXED: Encoder 1 = Palette
+                case 2: g_wsClient.sendSpeedChange(value); break;         // FIXED: Encoder 2 = Speed
+                case 3: g_wsClient.sendMoodChange(value); break;
+                case 4: g_wsClient.sendFadeAmountChange(value); break;
+                case 5: g_wsClient.sendComplexityChange(value); break;
+                case 6: g_wsClient.sendVariationChange(value); break;
+                case 7: g_wsClient.sendBrightnessChange(value); break;   // FIXED: Encoder 7 = Brightness
             }
         }
-        // Unit B (8-15): No parameters assigned (encoders disabled)
-        // Unit B buttons are still used for preset management
-        else {
-            // Encoders 8-15 are not assigned to any parameters
-            // Do nothing - encoders are disabled
+        // Unit B (8-15): Zone parameters
+        // Note: Encoder 15 (index 15) is handled specially above for animation mode cycling
+        else if (index < 15) {  // Only process 8-14 as zone parameters
+            // #region agent log
+            Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"D\",\"location\":\"main.cpp:648\",\"message\":\"onEncoderChange.encB\",\"data\":{\"index\":%u,\"value\":%u,\"unit\":\"B\",\"localIdx\":%u,\"timestamp\":%lu}\n",
+                index, value, index % 8, static_cast<unsigned long>(millis()));
+            // #endregion
+            
+            uint8_t zoneId = ZoneParam::getZoneId(index);
+            if (ZoneParam::isZoneEffect(index)) {
+                g_wsClient.sendZoneEffect(zoneId, value);
+            } else {
+                // Zone speed/palette (handled by ButtonHandler mode)
+                if (g_buttonHandler && g_buttonHandler->getZoneEncoderMode(zoneId) == SpeedPaletteMode::PALETTE) {
+                    g_wsClient.sendZonePalette(zoneId, value);
+                } else {
+                    g_wsClient.sendZoneSpeed(zoneId, value);
+                }
+            }
         }
+        // Encoder 15 is handled above for animation mode cycling - no WebSocket message needed
     }
 }
 
@@ -457,11 +791,23 @@ void updateConnectionLeds() {
         } else {
             state = ConnectionState::WIFI_DISCONNECTED;
         }
+        // Track disconnection for footer display
+        if (s_wasWsConnected && g_ui && s_uiInitialized) {
+            // Just disconnected
+            g_ui->setWebSocketConnected(false, 0);
+            g_ui->updateWebSocketStatus(WebSocketStatus::DISCONNECTED);
+        }
         s_wasWsConnected = false;  // Reset WS tracking
     }
     else if (g_wsClient.isConnected()) {
         // Fully connected
         state = ConnectionState::WS_CONNECTED;
+        // Track connection time for footer display
+        if (!s_wasWsConnected && g_ui && s_uiInitialized) {
+            // Just connected - record connection time
+            g_ui->setWebSocketConnected(true, millis());
+            g_ui->updateWebSocketStatus(WebSocketStatus::CONNECTED);
+        }
         s_wasWsConnected = true;
     }
     else if (g_wsClient.isConnecting()) {
@@ -472,6 +818,10 @@ void updateConnectionLeds() {
         } else {
             // First connection attempt
             state = ConnectionState::WS_CONNECTING;
+        }
+        // Update footer status
+        if (g_ui && s_uiInitialized) {
+            g_ui->updateWebSocketStatus(WebSocketStatus::CONNECTING);
         }
     }
     else if (g_wsConfigured) {
@@ -502,15 +852,27 @@ void updateConnectionLeds() {
 // ============================================================================
 
 void setup() {
-    // Initialize serial first for early logging
+    // Initialize watchdog timer FIRST (5-second timeout)
+    // This prevents device freeze on blocking operations
+    esp_task_wdt_config_t wdt_config = {
+        .timeout_ms = 5000,  // 5 second timeout
+        .idle_core_mask = 0,  // Watch both cores (but we're on P4, single core)
+        .trigger_panic = true  // Panic on timeout (hard reset)
+    };
+    esp_task_wdt_init(&wdt_config);
+    esp_task_wdt_add(NULL);  // Add current task (main loop)
     Serial.begin(115200);
     delay(100);
+    Serial.println("[WDT] Watchdog initialized (5s timeout)");
 
     Serial.println("\n");
     Serial.println("============================================");
     Serial.println("  Tab5.encoder - Milestone F");
     Serial.println("  Dual M5ROTATE8 (16 Encoders) + WiFi");
     Serial.println("============================================");
+    
+    // Reset watchdog after serial init
+    esp_task_wdt_reset();
 
     // =========================================================================
     // CRITICAL: Configure Tab5 WiFi SDIO pins BEFORE any WiFi initialization
@@ -563,6 +925,27 @@ void setup() {
 
     // Set display orientation (landscape, USB on left)
     M5.Display.setRotation(3);
+    
+    // #region agent log
+    Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H3\",\"location\":\"main.cpp:688\",\"message\":\"before.setSwapBytes\",\"data\":{\"rotation\":3},\"timestamp\":%lu}\n", (unsigned long)millis());
+    // #endregion
+    
+    // CRITICAL: Set byte swapping for BGR565 format BEFORE LVGL initialization
+    // This must match the working implementation in src/src/main.cpp:352
+    M5.Display.setSwapBytes(true);  // Swap bytes for BGR565 format
+    delay(50);  // Allow display configuration to stabilize (matches working impl)
+    
+    // #region agent log
+    Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H3\",\"location\":\"main.cpp:696\",\"message\":\"after.setSwapBytes\",\"data\":{\"swapBytes\":true,\"delay\":50},\"timestamp\":%lu}\n", (unsigned long)millis());
+    Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H3\",\"location\":\"main.cpp:699\",\"message\":\"display.dimensions\",\"data\":{\"width\":%d,\"height\":%d},\"timestamp\":%lu}\n", 
+                  M5.Display.width(), M5.Display.height(), (unsigned long)millis());
+    // #endregion
+
+#if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
+    if (!LVGLBridge::init()) {
+        Serial.println("[lvgl] LVGLBridge::init failed");
+    }
+#endif
 
     Serial.println("\n[INIT] M5Stack Tab5 initialized");
 
@@ -602,7 +985,11 @@ void setup() {
     // =========================================================================
     // Initialize NVS Storage (Phase G.1)
     // =========================================================================
-    Serial.println("\n[NVS] Initializing parameter storage...");
+    Serial.println("\n[NVS] Initialising parameter storage...");
+    // Create DisplayUI early for loading screen (but don't initialize full UI yet)
+    g_ui = new DisplayUI(M5.Display);
+    LoadingScreen::show(M5.Display, "INITIALISING NVS", false, false);
+    
     if (!NvsStorage::init()) {
         Serial.println("[NVS] WARNING: NVS init failed - parameters will not persist");
     }
@@ -612,6 +999,7 @@ void setup() {
 
     // Initialize DualEncoderService with both addresses
     // Unit A @ 0x42 (reprogrammed), Unit B @ 0x41 (factory)
+    LoadingScreen::update(M5.Display, "INITIALISING ENCODERS...", false, false);
     g_encoders = new DualEncoderService(&Wire, ADDR_UNIT_A, ADDR_UNIT_B);
     g_encoders->setChangeCallback(onEncoderChange);
     bool encoderOk = g_encoders->begin();
@@ -626,6 +1014,10 @@ void setup() {
     g_encoders->setButtonHandler(g_buttonHandler);
     Serial.println("[Button] Button handler initialized (presets on Unit-B)");
 
+    // Initialize and connect CoarseModeManager
+    g_encoders->setCoarseModeManager(&g_coarseModeManager);
+    Serial.println("[CoarseMode] Coarse mode manager initialized");
+
     // =========================================================================
     // Initialize LED Feedback (Phase F.5)
     // =========================================================================
@@ -634,9 +1026,20 @@ void setup() {
     Serial.println("[LED] Connection status LED feedback initialized");
 
     // =========================================================================
+    // DISABLED - PaletteLedDisplay causing encoder regression
+    // Initialize Palette LED Display
+    // =========================================================================
+    /*
+    g_paletteLedDisplay.setEncoders(g_encoders);
+    g_paletteLedDisplay.begin();
+    Serial.println("[LED] Palette LED display initialized");
+    */
+
+    // =========================================================================
     // Load Saved Parameters from NVS (Phase G.1)
     // =========================================================================
     if (NvsStorage::isReady()) {
+        LoadingScreen::update(M5.Display, "LOADING PARAMETERS", false, false);
         uint16_t savedValues[16];
         uint8_t loadedCount = NvsStorage::loadAllParameters(savedValues);
 
@@ -647,6 +1050,13 @@ void setup() {
 
         if (loadedCount > 0) {
             Serial.printf("[NVS] Restored %d parameters from flash\n", loadedCount);
+            
+            // DISABLED - PaletteLedDisplay
+            // Update palette LED display with restored palette value
+            /*
+            uint8_t paletteId = static_cast<uint8_t>(savedValues[1]);  // Index 1 = Palette
+            g_paletteLedDisplay.update(paletteId);
+            */
         }
     }
 
@@ -662,28 +1072,25 @@ void setup() {
         Serial.println("[OK] Milestone E: Dual encoder service active");
 
         // Flash all LEDs green briefly to indicate success
+        // #region agent log
+        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"boot\",\"hypothesisId\":\"H2\",\"location\":\"main.cpp:flash\",\"message\":\"flashGreen.start\",\"data\":{\"unitA\":true,\"unitB\":true},\"timestamp\":%lu}\n",
+                      static_cast<unsigned long>(millis()));
+        // #endregion
         g_encoders->transportA().setAllLEDs(0, 64, 0);
         g_encoders->transportB().setAllLEDs(0, 64, 0);
         delay(200);
         g_encoders->allLedsOff();
+        // #region agent log
+        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"boot\",\"hypothesisId\":\"H2\",\"location\":\"main.cpp:flash\",\"message\":\"flashGreen.cleared\",\"data\":{},\"timestamp\":%lu}\n",
+                      static_cast<unsigned long>(millis()));
+        // #endregion
 
         // Set status LEDs (both green for connected)
         updateConnectionLeds();
 
-        // Create DisplayUI object but don't initialize yet (defer until WiFi connects)
-        // This prevents heap fragmentation before WiFi buffer allocation
-        // #region agent log
-        Serial.printf("[DEBUG] Before DisplayUI object creation - Heap: free=%u minFree=%u largest=%u\n",
-                      ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-        // #endregion
-        g_ui = new DisplayUI(M5.Display);
-        // #region agent log
-        Serial.printf("[DEBUG] After DisplayUI object creation - Heap: free=%u minFree=%u\n",
-                      ESP.getFreeHeap(), ESP.getMinFreeHeap());
-        // #endregion
-        
-        // Show loading screen (full UI initialization happens in loop() after WiFi connects)
-        LoadingScreen::show(M5.Display, "Initializing...", unitA, unitB);
+        // DisplayUI object already created earlier (for early loading screen)
+        // Update loading screen with encoder status
+        LoadingScreen::update(M5.Display, "ENCODERS INITIALISED", unitA, unitB);
 
     } else if (unitA || unitB) {
         // Partial success - one unit available
@@ -693,11 +1100,9 @@ void setup() {
         // Set status LEDs (green for available, red for missing)
         updateConnectionLeds();
 
-        // Create DisplayUI object but don't initialize yet (defer until WiFi connects)
-        g_ui = new DisplayUI(M5.Display);
-        
-        // Show loading screen (full UI initialization happens in loop() after WiFi connects)
-        LoadingScreen::show(M5.Display, "Initializing...", unitA, unitB);
+        // DisplayUI object already created earlier (for early loading screen)
+        // Update loading screen with encoder status
+        LoadingScreen::update(M5.Display, "ENCODERS INITIALISED", unitA, unitB);
 
     } else {
         Serial.println("\n[ERROR] No encoder units found!");
@@ -706,20 +1111,22 @@ void setup() {
         Serial.println("  - Is Unit B (0x41) connected to Grove Port.A?");
         Serial.println("  - Are the Grove cables properly seated?");
 
-        // Create DisplayUI object but don't initialize yet (defer until WiFi connects)
-        g_ui = new DisplayUI(M5.Display);
-        
-        // Show loading screen (full UI initialization happens in loop() after WiFi connects)
-        LoadingScreen::show(M5.Display, "Initializing...", false, false);
+        // DisplayUI object already created earlier (for early loading screen)
+        // Update loading screen - encoders not found
+        LoadingScreen::update(M5.Display, "INITIALISING ENCODERS", false, false);
     }
 
     // =========================================================================
     // Initialize Network (Milestone F)
     // =========================================================================
 #if ENABLE_WIFI
-    Serial.println("\n[NETWORK] Initializing WiFi...");
+    Serial.println("\n[NETWORK] Initialising WiFi...");
 
     // Initialize ParameterHandler (bridges encoders ↔ WebSocket ↔ display)
+    // CRITICAL FIX: Add null check validation
+    if (!g_encoders) {
+        Serial.println("[ERROR] ParameterHandler: null encoder service!");
+    }
     g_paramHandler = new ParameterHandler(g_encoders, &g_wsClient);
     g_paramHandler->setButtonHandler(g_buttonHandler);
     g_paramHandler->setDisplayCallback([](uint8_t index, uint16_t value) {
@@ -776,7 +1183,7 @@ void setup() {
             // UI feedback for preset slots
             if (g_ui && s_uiInitialized && success) {  // Only update if UI is initialized
                 if (action == PresetAction::SAVE) {
-                    g_ui->getPresetSlot(slot)->showSaveFeedback();
+                    g_ui->showPresetSaveFeedback(slot);
                     // Refresh slot data after save
                     PresetData preset;
                     if (g_presetManager && g_presetManager->getPreset(slot, preset)) {
@@ -785,9 +1192,9 @@ void setup() {
                     }
                 } else if (action == PresetAction::RECALL) {
                     g_ui->setActivePresetSlot(slot);
-                    g_ui->getPresetSlot(slot)->showRecallFeedback();
+                    g_ui->showPresetRecallFeedback(slot);
                 } else if (action == PresetAction::DELETE) {
-                    g_ui->getPresetSlot(slot)->showDeleteFeedback();
+                    g_ui->showPresetDeleteFeedback(slot);
                     g_ui->updatePresetSlot(slot, false, 0, 0, 0);
                 }
             }
@@ -825,10 +1232,13 @@ void setup() {
                     if (!e["id"].is<uint8_t>() || !e["name"].is<const char*>()) continue;
                     uint8_t id = e["id"].as<uint8_t>();
                     const char* name = e["name"].as<const char*>();
-                    if (id < MAX_EFFECTS && name) {
+                    // CRITICAL FIX: Stricter bounds check - enforce actual effect range (0-87)
+                    if (id < MAX_EFFECTS && id <= 87 && name) {
                         strncpy(s_effectNames[id], name, EFFECT_NAME_MAX - 1);
                         s_effectNames[id][EFFECT_NAME_MAX - 1] = '\0';
                         s_effectKnown[id] = true;
+                    } else if (id >= MAX_EFFECTS) {
+                        Serial.printf("[WARN] Invalid effect ID %u (max=%u), ignoring\n", id, MAX_EFFECTS - 1);
                     }
                 }
 
@@ -903,15 +1313,15 @@ void setup() {
                     uint16_t total = pagination["total"].as<uint16_t>();
                     if (total > 0) {
                         uint8_t paletteMax = (total > 1) ? (total - 1) : 0;  // 0-indexed, clamp to 0
-                        updateParameterMetadata(2, 0, paletteMax);  // PaletteId is index 2
+                        updateParameterMetadata(1, 0, paletteMax);  // PaletteId is now index 1
                         Serial.printf("[ParamMap] Updated Palette max from palettes.list: %u (total=%u)\n", paletteMax, total);
                     }
                 } else if (data["total"].is<uint16_t>()) {
                     // Some API versions put total at data level
                     uint16_t total = data["total"].as<uint16_t>();
                     if (total > 0) {
-                        uint8_t paletteMax = (total > 1) ? (total - 1) : 0;
-                        updateParameterMetadata(2, 0, paletteMax);
+                        uint8_t paletteMax = (total > 1) ? (total - 1) : 0;  // 0-indexed, clamp to 0
+                        updateParameterMetadata(1, 0, paletteMax);  // PaletteId is now index 1
                         Serial.printf("[ParamMap] Updated Palette max from palettes.list: %u (total=%u)\n", paletteMax, total);
                     }
                 }
@@ -923,6 +1333,187 @@ void setup() {
                 updateUiEffectPaletteLabels();
                 return;
             }
+
+            // Handle colorCorrection.getConfig response
+            if (type && strcmp(type, "colorCorrection.getConfig") == 0) {
+                if (doc["success"].is<bool>() && doc["success"].as<bool>()) {
+                    ColorCorrectionState cc;
+                    cc.valid = true;
+                    
+                    // CRITICAL FIX: Handle both direct fields and nested data object
+                    JsonObject data = doc["data"].is<JsonObject>() ? doc["data"].as<JsonObject>() : doc.as<JsonObject>();
+                    
+                    if (data["gammaEnabled"].is<bool>()) {
+                        cc.gammaEnabled = data["gammaEnabled"].as<bool>();
+                    }
+                    if (data["gammaValue"].is<float>()) {
+                        cc.gammaValue = data["gammaValue"].as<float>();
+                    }
+                    if (data["autoExposureEnabled"].is<bool>()) {
+                        cc.autoExposureEnabled = data["autoExposureEnabled"].as<bool>();
+                    }
+                    if (data["autoExposureTarget"].is<uint8_t>()) {
+                        cc.autoExposureTarget = data["autoExposureTarget"].as<uint8_t>();
+                    }
+                    if (data["brownGuardrailEnabled"].is<bool>()) {
+                        cc.brownGuardrailEnabled = data["brownGuardrailEnabled"].as<bool>();
+                    }
+                    if (data["mode"].is<uint8_t>()) {
+                        cc.mode = data["mode"].as<uint8_t>();
+                    }
+                    if (data["maxGreenPercentOfRed"].is<uint8_t>()) {
+                        cc.maxGreenPercentOfRed = data["maxGreenPercentOfRed"].as<uint8_t>();
+                    }
+                    if (data["maxBluePercentOfRed"].is<uint8_t>()) {
+                        cc.maxBluePercentOfRed = data["maxBluePercentOfRed"].as<uint8_t>();
+                    }
+                    
+                    g_wsClient.setColorCorrectionState(cc);
+                    syncColourCorrectionUi();
+                    Serial.println("[WS] Color correction config synced");
+                }
+                return;
+            }
+
+            // CRITICAL FIX: Handle colorCorrection.setConfig response (confirmation)
+            if (type && strcmp(type, "colorCorrection.setConfig") == 0) {
+                // #region agent log
+                bool hasSuccess = doc["success"].is<bool>();
+                bool success = hasSuccess && doc["success"].as<bool>();
+                Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H4\",\"location\":\"main.cpp:1202\",\"message\":\"response.colorCorrection.setConfig\",\"data\":{\"hasSuccess\":%d,\"success\":%d},\"timestamp\":%lu}\n",
+                              hasSuccess ? 1 : 0, success ? 1 : 0, (unsigned long)millis());
+                // #endregion
+                if (doc["success"].is<bool>() && doc["success"].as<bool>()) {
+                    // Update local cache from response if provided
+                    JsonObject data = doc["data"].is<JsonObject>() ? doc["data"].as<JsonObject>() : doc.as<JsonObject>();
+                    ColorCorrectionState cc = g_wsClient.getColorCorrectionState();
+                    
+                    if (data["mode"].is<uint8_t>()) {
+                        cc.mode = data["mode"].as<uint8_t>();
+                    }
+                    // Other fields already updated optimistically in send methods
+                    
+                    g_wsClient.setColorCorrectionState(cc);
+                    Serial.println("[WS] Color correction config update confirmed");
+                } else {
+                    Serial.println("[WS] Color correction config update failed");
+                }
+                return;
+            }
+
+            // CRITICAL FIX: Handle colorCorrection.setMode response (confirmation)
+            if (type && strcmp(type, "colorCorrection.setMode") == 0) {
+                if (doc["success"].is<bool>() && doc["success"].as<bool>()) {
+                    JsonObject data = doc["data"].is<JsonObject>() ? doc["data"].as<JsonObject>() : doc.as<JsonObject>();
+                    ColorCorrectionState cc = g_wsClient.getColorCorrectionState();
+                    
+                    if (data["mode"].is<uint8_t>()) {
+                        cc.mode = data["mode"].as<uint8_t>();
+                    }
+                    if (data["modeName"].is<const char*>()) {
+                        Serial.printf("[WS] Color correction mode set to: %s\n", data["modeName"].as<const char*>());
+                    }
+                    
+                    g_wsClient.setColorCorrectionState(cc);
+                    syncColourCorrectionUi();
+                    Serial.println("[WS] Color correction mode update confirmed");
+                } else {
+                    Serial.println("[WS] Color correction mode update failed");
+                }
+                return;
+            }
+
+            // CRITICAL FIX: Handle error responses from v2 firmware
+            if (type && strcmp(type, "error") == 0) {
+                const char* errorCode = doc["error"]["code"] | "UNKNOWN";
+                const char* errorMsg = doc["error"]["message"] | "Unknown error";
+                const char* requestId = doc["requestId"] | "";
+                Serial.printf("[WS ERROR] Code: %s, Message: %s, RequestId: %s\n", 
+                              errorCode, errorMsg, requestId);
+                // TODO: Could flash LED or show error on display
+                return;
+            }
+
+            // Extract audio metrics from status messages for footer display
+            if (type && strcmp(type, "status") == 0) {
+                float bpm = 0.0f;
+                const char* key = nullptr;
+                float micLevel = -80.0f;  // Default to silence
+
+                // Debug: Log all keys in status message (first time only)
+                static bool s_loggedStatusKeys = false;
+                if (!s_loggedStatusKeys) {
+                    Serial.println("[FOOTER DEBUG] Status message keys:");
+                    for (JsonPair kv : doc.as<JsonObject>()) {
+                        Serial.printf("  - %s\n", kv.key().c_str());
+                    }
+                    s_loggedStatusKeys = true;
+                }
+
+                // Extract BPM
+                if (doc["bpm"].is<float>()) {
+                    bpm = doc["bpm"].as<float>();
+                } else if (doc["bpm"].is<int>()) {
+                    bpm = static_cast<float>(doc["bpm"].as<int>());
+                }
+
+                // Extract key
+                if (doc["key"].is<const char*>()) {
+                    key = doc["key"].as<const char*>();
+                }
+
+                // Extract mic level (could be "mic", "micLevel", "micDb", or "inputLevel")
+                if (doc["mic"].is<float>()) {
+                    micLevel = doc["mic"].as<float>();
+                } else if (doc["micLevel"].is<float>()) {
+                    micLevel = doc["micLevel"].as<float>();
+                } else if (doc["micDb"].is<float>()) {
+                    micLevel = doc["micDb"].as<float>();
+                } else if (doc["inputLevel"].is<float>()) {
+                    micLevel = doc["inputLevel"].as<float>();
+                } else if (doc["audioInput"].is<float>()) {
+                    micLevel = doc["audioInput"].as<float>();
+                }
+
+                // Debug: Log extracted values
+                static uint32_t s_lastDebugLog = 0;
+                uint32_t now = millis();
+                if (now - s_lastDebugLog >= 5000) {  // Log every 5 seconds
+                    Serial.printf("[FOOTER DEBUG] Extracted: bpm=%.1f, key=%s, mic=%.1fdB\n",
+                                  bpm, key ? key : "null", micLevel);
+                    s_lastDebugLog = now;
+                }
+
+                // Update footer if UI is initialized
+                if (g_ui && s_uiInitialized) {
+                    g_ui->updateAudioMetrics(bpm, key, micLevel);
+                }
+
+                // DISABLED - PaletteLedDisplay causing encoder regression
+                // Update palette LED display if palette parameter is in status message
+                // Guard against snapback by ignoring during local-change holdoff
+                /*
+                if (doc["paletteId"].is<uint8_t>() || doc["paletteId"].is<int>()) {
+                    uint8_t paletteId = 0;
+                    if (doc["paletteId"].is<uint8_t>()) {
+                        paletteId = doc["paletteId"].as<uint8_t>();
+                    } else if (doc["paletteId"].is<int>()) {
+                        int val = doc["paletteId"].as<int>();
+                        if (val >= 0 && val <= 255) {
+                            paletteId = static_cast<uint8_t>(val);
+                        }
+                    }
+                    bool holdoff = (g_paramHandler && g_paramHandler->isInLocalHoldoff(1)); // index 1 = Palette
+                    // #region agent log
+                    Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"palette-latch\",\"hypothesisId\":\"A\",\"location\":\"main.cpp:wsStatus\",\"message\":\"status.palette.update\",\"data\":{\"paletteId\":%u,\"holdoff\":%d,\"timestamp\":%lu}}\n",
+                                  paletteId, holdoff ? 1 : 0, static_cast<unsigned long>(millis()));
+                    // #endregion
+                    if (!holdoff) {
+                        g_paletteLedDisplay.update(paletteId);
+                    }
+                }
+                */
+            }
         }
 
         WsMessageRouter::route(doc);
@@ -933,13 +1524,15 @@ void setup() {
     Serial.printf("[DEBUG] Before WiFiManager::begin() - Heap: free=%u minFree=%u largest=%u\n",
                   ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
     // #endregion
+    
     // Begin WiFi with primary and secondary networks
     g_wifiManager.begin(WIFI_SSID, WIFI_PASSWORD, WIFI_SSID2, WIFI_PASSWORD2);
+    
     // #region agent log
     Serial.printf("[DEBUG] After WiFiManager::begin() - Heap: free=%u minFree=%u largest=%u\n",
                   ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
     // #endregion
-    Serial.printf("[NETWORK] Connecting to '%s'...\n", WIFI_SSID);
+    // Note: WiFiManager::begin() starts a scan first - connection happens after scan completes
 #else
     // WiFi disabled on ESP32-P4 due to SDIO pin configuration issues
     // See Config.h ENABLE_WIFI flag for details
@@ -950,7 +1543,10 @@ void setup() {
     // =========================================================================
     // Initialize Touch Handler (Phase G.3)
     // =========================================================================
-    Serial.println("\n[TOUCH] Initializing touch screen handler...");
+    Serial.println("\n[TOUCH] Initialising touch screen handler...");
+    LoadingScreen::update(M5.Display, "INITIALISING TOUCH", 
+                         g_encoders ? g_encoders->isUnitAAvailable() : false,
+                         g_encoders ? g_encoders->isUnitBAvailable() : false);
     g_touchHandler.init();
     g_touchHandler.setEncoderService(g_encoders);
 
@@ -990,6 +1586,47 @@ void setup() {
 }
 
 // ============================================================================
+// Cleanup Function (for memory leak prevention)
+// ============================================================================
+// CRITICAL FIX: Cleanup global objects to prevent memory leaks
+// Called on shutdown/restart (if implemented) or can be called manually
+void cleanup() {
+    Serial.println("[CLEANUP] Cleaning up global objects...");
+    
+    if (g_ui) {
+        delete g_ui;
+        g_ui = nullptr;
+        Serial.println("[CLEANUP] DisplayUI deleted");
+    }
+    
+    if (g_presetManager) {
+        delete g_presetManager;
+        g_presetManager = nullptr;
+        Serial.println("[CLEANUP] PresetManager deleted");
+    }
+    
+    if (g_paramHandler) {
+        delete g_paramHandler;
+        g_paramHandler = nullptr;
+        Serial.println("[CLEANUP] ParameterHandler deleted");
+    }
+    
+    if (g_buttonHandler) {
+        delete g_buttonHandler;
+        g_buttonHandler = nullptr;
+        Serial.println("[CLEANUP] ButtonHandler deleted");
+    }
+    
+    if (g_encoders) {
+        delete g_encoders;
+        g_encoders = nullptr;
+        Serial.println("[CLEANUP] DualEncoderService deleted");
+    }
+    
+    Serial.println("[CLEANUP] Cleanup complete");
+}
+
+// ============================================================================
 // Loop
 // ============================================================================
 
@@ -1001,6 +1638,10 @@ void loop() {
     // TOUCH: Process touch events (Phase G.3)
     // =========================================================================
     g_touchHandler.update();
+
+#if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
+    LVGLBridge::update();
+#endif
 
     // =========================================================================
     // SERIAL: Process simple command input
@@ -1039,6 +1680,41 @@ void loop() {
     // LED FEEDBACK: Update connection status LEDs (Phase F.5)
     // =========================================================================
     updateConnectionLeds();
+
+    // =========================================================================
+    // COARSE MODE: Poll ENC-A switch state
+    // =========================================================================
+    static uint8_t s_lastSwitchState = 0;
+    if (g_encoders && g_encoders->isUnitAAvailable()) {
+        uint8_t currentSwitchState = g_encoders->transportA().getInputSwitch();
+        if (currentSwitchState != s_lastSwitchState) {
+            Serial.printf("[CoarseMode] Switch state changed: %d -> %d\n", 
+                         s_lastSwitchState, currentSwitchState);
+            g_coarseModeManager.updateSwitchState(currentSwitchState);
+            s_lastSwitchState = currentSwitchState;
+        }
+    }
+
+    // =========================================================================
+    // DISABLED - PaletteLedDisplay causing encoder regression
+    // PALETTE LED DISPLAY: Update animation (only after dashboard loads)
+    // =========================================================================
+    // Only update palette LEDs after UI is initialized (dashboard loaded)
+    // This prevents LEDs from activating during boot sequence
+    /*
+    if (s_uiInitialized) {
+        // #region agent log
+        static uint32_t s_lastLoopLog = 0;
+        uint32_t loopNow = millis();
+        if (loopNow - s_lastLoopLog >= 1000) {  // Log every 1s to track call frequency
+            Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\",\"location\":\"main.cpp:1503\",\"message\":\"loop.updateAnimation.call\",\"data\":{\"loopTime\":%lu},\"timestamp\":%lu}\n",
+                static_cast<unsigned long>(loopNow), static_cast<unsigned long>(loopNow));
+            s_lastLoopLog = loopNow;
+        }
+        // #endregion
+        g_paletteLedDisplay.updateAnimation();
+    }
+    */
     g_ledFeedback.update();  // Non-blocking breathing animation
 
     // =========================================================================
@@ -1054,9 +1730,15 @@ void loop() {
 #endif
             // WiFi is connected (or WiFi disabled) - safe to initialize UI now
             // #region agent log
-            Serial.printf("[DEBUG] WiFi connected, initializing UI - Heap: free=%u minFree=%u largest=%u\n",
+            Serial.printf("[DEBUG] WiFi connected, initialising UI - Heap: free=%u minFree=%u largest=%u\n",
                           ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
             // #endregion
+            
+            // Show UI initialization message before hiding loading screen
+            bool unitA = g_encoders ? g_encoders->isUnitAAvailable() : false;
+            bool unitB = g_encoders ? g_encoders->isUnitBAvailable() : false;
+            LoadingScreen::update(M5.Display, "INITIALISING UI", unitA, unitB);
+            delay(500); // Brief display of UI initialization message
             
             // Hide loading screen
             LoadingScreen::hide(M5.Display);
@@ -1068,80 +1750,27 @@ void loop() {
                           ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
             // #endregion
             
-            // Update connection state
-            bool unitA = g_encoders ? g_encoders->isUnitAAvailable() : false;
-            bool unitB = g_encoders ? g_encoders->isUnitBAvailable() : false;
-            g_ui->setConnectionState(
-#if ENABLE_WIFI
-                g_wifiManager.isConnected(),
-#else
-                false,
-#endif
-                false, unitA, unitB);
+            // Wire up action button callback for LVGL
+            #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
+            g_ui->setActionButtonCallback(handleActionButton);
+            g_ui->setRetryButtonCallback([]() {
+                #if ENABLE_WIFI
+                g_wifiManager.triggerRetry();
+                #endif
+            });
             
-            // Show initial values on radial gauges
-            if (g_encoders) {
-                for (uint8_t i = 0; i < 16; i++) {
-                    g_ui->updateValue(i, g_encoders->getValue(i), false);
-                }
+            // Initialize WebSocket status in footer
+            #if ENABLE_WIFI
+            g_ui->updateWebSocketStatus(g_wsClient.getStatus());
+            if (g_wsClient.isConnected()) {
+                g_ui->setWebSocketConnected(true, millis());
             }
-            
-            // Initialize preset slot UI from NVS (now that UI is ready)
-            if (g_presetManager) {
-                g_ui->refreshAllPresetSlots(g_presetManager);
-                Serial.println("[PRESET] UI slots refreshed from NVS");
-            }
-            
-            s_uiInitialized = true;
-            Serial.println("[UI] Full UI initialized after WiFi connection");
-        }
-    }
-    
-    // =========================================================================
-    // LOADING SCREEN: Update animation and message while waiting
-    // =========================================================================
-    if (g_ui && !s_uiInitialized) {
-        // Update loading screen with current WiFi state
-        bool unitA = g_encoders ? g_encoders->isUnitAAvailable() : false;
-        bool unitB = g_encoders ? g_encoders->isUnitBAvailable() : false;
-        
-        const char* message = "Initializing...";
-#if ENABLE_WIFI
-        WiFiConnectionStatus wifiStatus = g_wifiManager.getStatus();
-        if (wifiStatus == WiFiConnectionStatus::CONNECTING) {
-            message = "Connecting to WiFi";
-#ifdef LIGHTWAVE_IP
-        } else if (g_wifiManager.isConnected() && !g_wsConfigured) {
-            message = "Connecting to host";
-        }
-#else
-        } else if (g_wifiManager.isConnected() && !g_wifiManager.isMDNSResolved()) {
-            message = "Resolving host";
-        } else if (g_wifiManager.isMDNSResolved() && !g_wsConfigured) {
-            message = "Connecting to host";
-        }
-#endif
-#endif
-        LoadingScreen::update(M5.Display, message, unitA, unitB);
-    }
-
-    // =========================================================================
-    // NETWORK: Handle mDNS resolution and WebSocket connection
-    // =========================================================================
-#if ENABLE_WIFI
-    static bool s_wifiWasConnected = false;
-    static bool s_mdnsLogged = false;
-    static uint32_t s_lastListRequestMs = 0;
-
-    if (g_wifiManager.isConnected()) {
-        // Log WiFi connection once
-        if (!s_wifiWasConnected) {
-            s_wifiWasConnected = true;
-            Serial.printf("[NETWORK] WiFi connected! IP: %s\n",
-                          g_wifiManager.getLocalIP().toString().c_str());
+            #endif
+            #endif
             
             // Initialize OTA HTTP server (once, after WiFi connects)
-            if (!g_otaServer) {
+            #if ENABLE_WIFI
+            if (!g_otaServer && g_wifiManager.isConnected()) {
                 g_otaServer = new AsyncWebServer(80);
                 
                 // Register OTA endpoints
@@ -1168,9 +1797,149 @@ void loop() {
                 Serial.println("[OTA] HTTP server started on port 80");
                 Serial.printf("[OTA] Endpoints: GET /api/v1/firmware/version, POST /api/v1/firmware/update, POST /update\n");
             }
+            #endif
+            
+            // Update connection state (reuse unitA and unitB from above)
+            g_ui->setConnectionState(
+#if ENABLE_WIFI
+                g_wifiManager.isConnected(),
+#else
+                false,
+#endif
+                false, unitA, unitB);
+            
+            // Show initial values on radial gauges
+            if (g_encoders) {
+                for (uint8_t i = 0; i < 16; i++) {
+                    g_ui->updateValue(i, g_encoders->getValue(i), false);
+                }
+            }
+            
+            // Initialize preset slot UI from NVS (now that UI is ready)
+            if (g_presetManager) {
+                g_ui->refreshAllPresetSlots(g_presetManager);
+                Serial.println("[PRESET] UI slots refreshed from NVS");
+            }
+            
+            s_uiInitialized = true;
+            Serial.println("[UI] Full UI initialized after WiFi connection");
+            
+            // DISABLED - PaletteLedDisplay
+            // Enable palette LED display now that dashboard is loaded
+            // g_paletteLedDisplay.setEnabled(true);
+            // Serial.println("[LED] Palette LED display enabled (dashboard ready)");
+        }
+    }
+    
+    // =========================================================================
+    // LOADING SCREEN: Update animation and message while waiting
+    // =========================================================================
+    if (g_ui && !s_uiInitialized) {
+        // Update loading screen with current state (encoders -> WiFi -> host)
+        bool unitA = g_encoders ? g_encoders->isUnitAAvailable() : false;
+        bool unitB = g_encoders ? g_encoders->isUnitBAvailable() : false;
+        
+        const char* message = nullptr;  // No fallback - will be set by conditions below
+        
+        // Priority 1: Encoder initialization status
+        if (!g_encoders || (!unitA && !unitB)) {
+            message = "INITIALISING ENCODERS";
+        } else {
+            // Encoders are available - show encoder status first, then network status
+            static bool s_encodersStatusShown = false;
+            static uint32_t s_encodersStatusTime = 0;
+            
+            if (!s_encodersStatusShown) {
+                s_encodersStatusShown = true;
+                s_encodersStatusTime = millis();
+                message = "ENCODERS INITIALISED";
+            } else if (millis() - s_encodersStatusTime < 2000) {
+                // Show encoder status for 2 seconds
+                message = "ENCODERS INITIALISED";
+            } else {
+                // Move to network status after encoder status shown
+#if ENABLE_WIFI
+                WiFiConnectionStatus wifiStatus = g_wifiManager.getStatus();
+                if (wifiStatus == WiFiConnectionStatus::CONNECTING) {
+                    // Show detailed WiFi sub-states during connection
+                    wl_status_t wifiRawStatus = WiFi.status();
+                    IPAddress ip = WiFi.localIP();
+                    
+                    if (wifiRawStatus == WL_IDLE_STATUS || wifiRawStatus == WL_DISCONNECTED) {
+                        message = "SCANNING NETWORKS";
+                    } else if (wifiRawStatus != WL_CONNECTED) {
+                        // Not connected yet - check if we have an IP to distinguish states
+                        if (ip == INADDR_NONE || ip == IPAddress(0, 0, 0, 0)) {
+                            message = "AUTHENTICATING";
+                        } else {
+                            message = "OBTAINING IP";
+                        }
+                    } else {
+                        message = "CONNECTING TO WIFI";
+                    }
+                } else if (wifiStatus == WiFiConnectionStatus::CONNECTED) {
+                    message = "CONNECTED TO WIFI";
+                } else if (wifiStatus == WiFiConnectionStatus::MDNS_RESOLVING) {
+                    message = "RESOLVING HOST";
+                } else if (wifiStatus == WiFiConnectionStatus::MDNS_RESOLVED) {
+                    if (!g_wsConfigured) {
+                        message = "CONNECTING TO HOST";  // Animated dots will be shown
+                    } else {
+                        message = "CONNECTED TO HOST";
+                    }
+                }
+#endif
+            }
+        }
+        
+        // Only show message if one was set (no fallback "INITIALISING...")
+        if (message) {
+            LoadingScreen::update(M5.Display, message, unitA, unitB);
+        }
+    }
+
+    // =========================================================================
+    // NETWORK: Handle mDNS resolution and WebSocket connection
+    // =========================================================================
+#if ENABLE_WIFI
+    static bool s_wifiWasConnected = false;
+    static bool s_mdnsLogged = false;
+    static uint32_t s_lastListRequestMs = 0;
+    static uint32_t s_lastNetworkDebugMs = 0;
+    uint32_t nowMs = millis();
+
+    // Debug network status every 5 seconds
+    if (nowMs - s_lastNetworkDebugMs > 5000) {
+        s_lastNetworkDebugMs = nowMs;
+        #ifdef ENABLE_VERBOSE_DEBUG
+        Serial.printf("[NETWORK DEBUG] WiFi:%d mDNS:%d(%d/%d) manualIP:%d fallback:%d WS:%d(%s)\n",
+                      g_wifiManager.isConnected() ? 1 : 0,
+                      g_wifiManager.isMDNSResolved() ? 1 : 0,
+                      g_wifiManager.getMDNSAttemptCount(),
+                      NetworkConfig::MDNS_MAX_ATTEMPTS,
+                      g_wifiManager.shouldUseManualIP() ? 1 : 0,
+                      g_wifiManager.isMDNSTimeoutExceeded() ? 1 : 0,
+                      g_wsClient.isConnected() ? 1 : 0,
+                      g_wsClient.getStatusString());
+        #endif // ENABLE_VERBOSE_DEBUG
+    }
+
+    if (g_wifiManager.isConnected()) {
+        // Log WiFi connection once
+        if (!s_wifiWasConnected) {
+            s_wifiWasConnected = true;
+            char localIpStr[16];
+            formatIPv4(g_wifiManager.getLocalIP(), localIpStr);
+            Serial.printf("[NETWORK] WiFi connected! IP: %s\n", localIpStr);
         }
 
-        // Direct IP mode (skip mDNS entirely)
+        // Multi-tier fallback strategy:
+        // Priority 1: Compile-time LIGHTWAVE_IP (if defined) → Immediate connection
+        // Priority 2: Manual IP from NVS (if configured and enabled)
+        // Priority 3: mDNS resolution (with timeout fallback)
+        // Priority 4: Timeout-based fallback (manual IP or gateway IP)
+
+        // Priority 1: Compile-time LIGHTWAVE_IP (if defined)
 #ifdef LIGHTWAVE_IP
         if (!g_wsConfigured) {
             g_wsConfigured = true;
@@ -1178,36 +1947,77 @@ void loop() {
             if (!serverIP.fromString(LIGHTWAVE_IP)) {
                 Serial.printf("[NETWORK] Invalid LIGHTWAVE_IP: %s\n", LIGHTWAVE_IP);
             } else {
+                char ipStr[16];
+                formatIPv4(serverIP, ipStr);
+                Serial.printf("[NETWORK] Using compile-time IP: %s\n", ipStr);
                 Serial.printf("[NETWORK] Connecting WebSocket to %s:%d%s\n",
-                              serverIP.toString().c_str(),
+                              ipStr,
                               LIGHTWAVE_PORT,
                               LIGHTWAVE_WS_PATH);
                 g_wsClient.begin(serverIP, LIGHTWAVE_PORT, LIGHTWAVE_WS_PATH);
             }
         }
 #else
-        // Try mDNS resolution (with internal backoff)
-        if (!g_wifiManager.isMDNSResolved()) {
-            g_wifiManager.resolveMDNS("lightwaveos");
-        }
-
-        // Once mDNS resolved, configure WebSocket (ONCE)
-        if (g_wifiManager.isMDNSResolved() && !g_wsConfigured) {
-            g_wsConfigured = true;
-            IPAddress serverIP = g_wifiManager.getResolvedIP();
-
-            if (!s_mdnsLogged) {
-                s_mdnsLogged = true;
-                Serial.printf("[NETWORK] mDNS resolved: lightwaveos.local -> %s\n",
-                              serverIP.toString().c_str());
+        // Priority 2: Manual IP from NVS (if configured and enabled)
+        if (!g_wsConfigured && g_wifiManager.shouldUseManualIP()) {
+            IPAddress manualIP = g_wifiManager.getManualIP();
+            if (manualIP != INADDR_NONE) {
+                char ipStr[16];
+                formatIPv4(manualIP, ipStr);
+                Serial.printf("[NETWORK] Using manual IP: %s\n", ipStr);
+                g_wsConfigured = true;
+                g_wsClient.begin(manualIP, LIGHTWAVE_PORT, LIGHTWAVE_WS_PATH);
             }
+        }
+        
+        // Priority 3: mDNS resolution (with timeout fallback)
+        if (!g_wsConfigured) {
+            // Check if mDNS timeout exceeded (WiFiManager handles fallback)
+            if (g_wifiManager.isMDNSTimeoutExceeded() && 
+                g_wifiManager.isMDNSResolved()) {
+                // WiFiManager already resolved to fallback IP
+                IPAddress fallbackIP = g_wifiManager.getResolvedIP();
+                if (fallbackIP != INADDR_NONE) {
+                    char ipStr[16];
+                    formatIPv4(fallbackIP, ipStr);
+                    Serial.printf("[NETWORK] Using fallback IP: %s\n", ipStr);
+                    g_wsConfigured = true;
+                    g_wsClient.begin(fallbackIP, LIGHTWAVE_PORT, LIGHTWAVE_WS_PATH);
+                }
+            } else {
+                // Normal mDNS resolution attempt
+                if (!g_wifiManager.isMDNSResolved()) {
+                    TAB5_AGENT_PRINTF(
+                        "[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"MDNS2\",\"location\":\"main.cpp\",\"message\":\"mdns.resolve.attempt\",\"data\":{\"hostname\":\"lightwaveos\"},\"timestamp\":%lu}\n",
+                        (unsigned long)millis()
+                    );
+                    g_wifiManager.resolveMDNS("lightwaveos");
+                }
+                
+                // Once mDNS resolved, configure WebSocket (ONCE)
+                if (g_wifiManager.isMDNSResolved() && !g_wsConfigured) {
+                    g_wsConfigured = true;
+                    IPAddress serverIP = g_wifiManager.getResolvedIP();
+                    char ipStr[16];
+                    formatIPv4(serverIP, ipStr);
 
-            Serial.printf("[NETWORK] Connecting WebSocket to %s:%d%s\n",
-                          serverIP.toString().c_str(),
-                          LIGHTWAVE_PORT,
-                          LIGHTWAVE_WS_PATH);
+                    if (!s_mdnsLogged) {
+                        s_mdnsLogged = true;
+                        Serial.printf("[NETWORK] mDNS resolved: lightwaveos.local -> %s\n", ipStr);
+                    }
 
-            g_wsClient.begin(serverIP, LIGHTWAVE_PORT, LIGHTWAVE_WS_PATH);
+                    Serial.printf("[NETWORK] Connecting WebSocket to %s:%d%s\n",
+                                  ipStr,
+                                  LIGHTWAVE_PORT,
+                                  LIGHTWAVE_WS_PATH);
+                    TAB5_AGENT_PRINTF(
+                        "[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"WS3\",\"location\":\"main.cpp\",\"message\":\"ws.begin.fromMdns\",\"data\":{\"ip\":\"%s\",\"port\":%d,\"path\":\"%s\"},\"timestamp\":%lu}\n",
+                        ipStr, LIGHTWAVE_PORT, LIGHTWAVE_WS_PATH, (unsigned long)millis()
+                    );
+
+                    g_wsClient.begin(serverIP, LIGHTWAVE_PORT, LIGHTWAVE_WS_PATH);
+                }
+            }
         }
 #endif
 
@@ -1227,14 +2037,14 @@ void loop() {
 
             // Rate-limit list requests to avoid spamming the server
             if (nowMs - s_lastListRequestMs >= 250) {
-                // Request palettes first (small, deterministic: 75 -> 2 pages)
+                // Request palettes first (small, deterministic: 64 -> 4 pages @ 20/page)
                 if (s_palettePages == 0 || s_paletteNextPage <= s_palettePages) {
-                    g_wsClient.requestPalettesList(s_paletteNextPage, 50, "tab5.palettes");
+                    g_wsClient.requestPalettesList(s_paletteNextPage, 20, "tab5.palettes");
                     s_lastListRequestMs = nowMs;
                 }
-                // Then effects (count may vary; server caps 50 per page)
+                // Then effects (count may vary; server caps 50 per page; Tab5 requests smaller pages)
                 else if (s_effectPages == 0 || s_effectNextPage <= s_effectPages) {
-                    g_wsClient.requestEffectsList(s_effectNextPage, 50, "tab5.effects");
+                    g_wsClient.requestEffectsList(s_effectNextPage, 20, "tab5.effects");
                     s_lastListRequestMs = nowMs;
                 }
             }
@@ -1267,7 +2077,7 @@ void loop() {
 
     if (s_wasRecovering && !isRecovering) {
         // Recovery just completed - try to reinit encoder transports
-        Serial.println("[I2C_RECOVERY] Recovery complete - reinitializing encoders...");
+        Serial.println("[I2C_RECOVERY] Recovery complete - reinitialising encoders...");
 
         if (g_encoders) {
             // Try to reinit both transports
@@ -1301,9 +2111,21 @@ void loop() {
         return;
     }
 
+    // Reset watchdog before encoder update (critical path)
+    esp_task_wdt_reset();
+
+    // Reset watchdog before encoder update (critical path)
+    esp_task_wdt_reset();
+
     // Update encoder service (polls all 16 encoders, handles debounce, fires callbacks)
     // The callback (onEncoderChange) handles display updates with highlighting
     g_encoders->update();
+    
+    // Reset watchdog after encoder update
+    esp_task_wdt_reset();
+    
+    // Reset watchdog after encoder update
+    esp_task_wdt_reset();
 
     // =========================================================================
     // PRESETS: Process Unit-B button click patterns (Main Dashboard only)
@@ -1382,18 +2204,47 @@ void loop() {
         
         g_ui->setConnectionState(wifiOk, wsOk, unitA, unitB);
 
+        // Update WebSocket status for footer display
+#if ENABLE_WIFI
+        g_ui->updateWebSocketStatus(g_wsClient.getStatus());
+#endif
+
         // Update WiFi details for header display
 #if ENABLE_WIFI
         if (wifiOk) {
-            IPAddress ip = g_wifiManager.getLocalIP();
-            String ssid = g_wifiManager.getSSID();
-            int32_t rssi = g_wifiManager.getRSSI();
-            g_ui->setWiFiInfo(ip.toString().c_str(), ssid.c_str(), rssi);
+            // Avoid per-frame heap churn (e.g. IPAddress::toString() + String copies).
+            static uint32_t s_lastWiFiInfoMs = 0;
+            static char s_ipBuf[16] = {0};
+            static char s_ssidBuf[33] = {0};  // 32 + NUL (802.11 SSID max)
+            static int32_t s_rssi = 0;
+
+            const uint32_t now = millis();
+            if (now - s_lastWiFiInfoMs >= 2000 || s_ipBuf[0] == '\0') {
+                s_lastWiFiInfoMs = now;
+
+                const IPAddress ip = g_wifiManager.getLocalIP();
+                formatIPv4(ip, s_ipBuf);
+
+                const String ssid = g_wifiManager.getSSID();
+                ssid.toCharArray(s_ssidBuf, sizeof(s_ssidBuf));
+
+                s_rssi = g_wifiManager.getRSSI();
+            }
+
+            g_ui->setWiFiInfo(s_ipBuf, s_ssidBuf, s_rssi);
         } else {
             g_ui->setWiFiInfo("", "", 0);
         }
+        
+        // Update retry button visibility
+        #if ENABLE_WIFI
+        g_ui->updateRetryButton(g_wifiManager.shouldShowRetryButton());
+        #else
+        g_ui->updateRetryButton(false);
+        #endif
 #else
         g_ui->setWiFiInfo("", "", 0);
+        g_ui->updateRetryButton(false);
 #endif
 
         // Ensure Effect/Palette labels stay updated (names best-effort)
@@ -1440,6 +2291,9 @@ void loop() {
         // Update status LEDs in case connection state changed
         updateConnectionLeds();
     }
+
+    // Reset watchdog at end of loop iteration
+    esp_task_wdt_reset();
 
     delay(5);  // ~200Hz polling
 }

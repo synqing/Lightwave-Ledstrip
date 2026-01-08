@@ -291,6 +291,9 @@ static void handleColorCorrectionSetConfig(AsyncWebSocketClient* client, JsonDoc
         cfg.maxBluePercentOfRed = doc["maxBluePercentOfRed"];
     }
     
+    // Apply the config changes (regenerates gamma LUT if gammaValue changed)
+    engine.setConfig(cfg);
+    
     String response = buildWsResponse("colorCorrection.setConfig", requestId, [&cfg](JsonObject& data) {
         data["mode"] = (uint8_t)cfg.mode;
         data["updated"] = true;

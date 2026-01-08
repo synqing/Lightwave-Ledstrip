@@ -322,10 +322,11 @@ private:
     float m_alpha_slow = 0.12f;  // slower response
 
     // LGP_SMOOTH: Asymmetric attack/release for bands
-    float m_band_attack = 0.15f;       // Fast rise for transients
-    float m_band_release = 0.03f;      // Slow fall for LGP viewing
-    float m_heavy_band_attack = 0.08f; // Extra slow rise
-    float m_heavy_band_release = 0.015f; // Ultra slow fall
+    // A1 Optimization: Adjusted for smoother feature transitions
+    float m_band_attack = 0.18f;       // Slightly slower rise (was 0.15f) - smoother onset
+    float m_band_release = 0.04f;      // Slightly faster fall (was 0.03f) - faster decay
+    float m_heavy_band_attack = 0.10f; // Slightly faster rise (was 0.08f) - more responsive
+    float m_heavy_band_release = 0.020f; // Slightly faster fall (was 0.015f) - cleaner fade
 
     // Zone AGC state (Sensory Bridge pattern: 4 zones)
     bool m_zone_agc_enabled = true;  // Enabled by default for balanced frequency response

@@ -163,7 +163,30 @@ public:
      * @param b Blue component (0-255)
      */
     void setLED(uint8_t channel, uint8_t r, uint8_t g, uint8_t b) {
-        if (!_available || channel > 8) return;
+        // #region agent log - DISABLED by default (enable with ENABLE_VERBOSE_DEBUG)
+        #ifdef ENABLE_VERBOSE_DEBUG
+        static uint32_t s_lastLogTime = 0;
+        static uint32_t s_writeCount = 0;
+        s_writeCount++;
+        uint32_t now = millis();
+        if (now - s_lastLogTime >= 100) {  // Log every 100ms
+            Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"C,F\",\"location\":\"Rotate8Transport.h:165\",\"message\":\"setLED.write\",\"data\":{\"channel\":%u,\"writesSinceLastLog\":%lu,\"timestamp\":%lu}\n",
+                channel, static_cast<unsigned long>(s_writeCount), static_cast<unsigned long>(now));
+            s_writeCount = 0;
+            s_lastLogTime = now;
+        }
+        #endif // ENABLE_VERBOSE_DEBUG
+        // #endregion
+        
+        if (!_available || channel > 8) {
+            // #region agent log
+            if (channel > 8) {
+                Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"F\",\"location\":\"Rotate8Transport.h:167\",\"message\":\"setLED.invalidChannel\",\"data\":{\"channel\":%u,\"timestamp\":%lu}\n",
+                    channel, static_cast<unsigned long>(millis()));
+            }
+            // #endregion
+            return;
+        }
         _encoder.writeRGB(channel, r, g, b);
     }
 
@@ -175,6 +198,10 @@ public:
      */
     void setAllLEDs(uint8_t r, uint8_t g, uint8_t b) {
         if (!_available) return;
+        // #region agent log
+        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"boot\",\"hypothesisId\":\"H2\",\"location\":\"Rotate8Transport.h:setAllLEDs\",\"message\":\"allLEDs.set\",\"data\":{\"addr\":%u,\"r\":%u,\"g\":%u,\"b\":%u},\"timestamp\":%lu}\n",
+                      _address, r, g, b, static_cast<unsigned long>(millis()));
+        // #endregion
         _encoder.setAll(r, g, b);
     }
 
@@ -183,6 +210,10 @@ public:
      */
     void allLEDsOff() {
         if (!_available) return;
+        // #region agent log
+        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"boot\",\"hypothesisId\":\"H2\",\"location\":\"Rotate8Transport.h:allLEDsOff\",\"message\":\"allLEDs.off\",\"data\":{\"addr\":%u},\"timestamp\":%lu}\n",
+                      _address, static_cast<unsigned long>(millis()));
+        // #endregion
         _encoder.allOff();
     }
 

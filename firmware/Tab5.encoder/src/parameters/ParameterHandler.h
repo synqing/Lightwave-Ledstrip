@@ -99,6 +99,20 @@ public:
     }
 
     /**
+     * Check if a parameter is currently under local-change holdoff.
+     * When true, incoming server status for this parameter should be ignored.
+     * @param index Parameter index (0-15)
+     * @return true if holdoff is active
+     */
+    bool isInLocalHoldoff(uint8_t index) const {
+        if (index >= PARAMETER_COUNT) return false;
+        uint32_t last = m_lastLocalChangeMs[index];
+        if (last == 0) return false;
+        uint32_t nowMs = millis();
+        return (nowMs - last) < LOCAL_OVERRIDE_HOLDOFF_MS;
+    }
+
+    /**
      * Set button handler for checking speed/palette mode
      * @param handler ButtonHandler instance (can be nullptr)
      */

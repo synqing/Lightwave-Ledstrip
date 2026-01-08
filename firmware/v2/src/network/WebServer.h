@@ -89,7 +89,7 @@ namespace WebServerConfig {
     constexpr uint16_t HTTP_PORT = 80;
     constexpr const char* MDNS_HOSTNAME = "lightwaveos";
     constexpr const char* AP_SSID_PREFIX = "LightwaveOS-";
-    constexpr const char* AP_PASSWORD = "lightwave123";
+    constexpr const char* AP_PASSWORD = "SpectraSynq";  // Matches Tab5.encoder expectation
     constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = 15000;
     constexpr uint32_t STATUS_BROADCAST_INTERVAL_MS = 5000;
     // Allow multiple open dashboard tabs + dev tools without immediately thrashing connections.
@@ -350,6 +350,15 @@ public:
      * @brief Check if any clients are subscribed to audio streaming
      */
     bool hasAudioStreamSubscribers() const;
+
+    /**
+     * @brief Broadcast FFT frame data to subscribed clients (Feature C)
+     *
+     * Sends JSON WebSocket frame containing 64-bin FFT data.
+     * Throttled to 31 Hz (~32ms intervals).
+     * Internally manages subscriber table and frame throttling.
+     */
+    void broadcastFftFrame();
 #endif
 
 #if FEATURE_AUDIO_BENCHMARK

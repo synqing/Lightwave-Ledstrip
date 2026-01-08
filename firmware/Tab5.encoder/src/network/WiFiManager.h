@@ -76,10 +76,13 @@ public:
                _status == WiFiConnectionStatus::MDNS_RESOLVED;
     }
 
-    // Check if in AP mode (fallback when both networks fail)
-    bool isAPMode() const {
-        return WiFi.getMode() == WIFI_AP || WiFi.getMode() == WIFI_AP_STA;
+    // Check if retry button should be shown (after 2 minutes of failed connections)
+    bool shouldShowRetryButton() const {
+        return _retryButtonEnabled;
     }
+
+    // Trigger manual retry (reset retry state and restart connection attempts)
+    void triggerRetry();
 
     // Check if mDNS resolved successfully
     bool isMDNSResolved() const {
@@ -97,6 +100,24 @@ public:
     // Get status as human-readable string
     const char* getStatusString() const;
 
+    // Check if mDNS resolution has exceeded timeout threshold
+    bool isMDNSTimeoutExceeded() const;
+
+    // Get stored manual IP from NVS (if configured)
+    IPAddress getManualIP() const;
+
+    // Set manual IP address (stores in NVS)
+    bool setManualIP(const IPAddress& ip);
+
+    // Check if manual IP should be used
+    bool shouldUseManualIP() const;
+
+    // Clear manual IP configuration from NVS
+    void clearManualIP();
+
+    // Get mDNS attempt count (for diagnostics)
+    uint8_t getMDNSAttemptCount() const { return _mdnsRetryCount; }
+
 private:
     const char* _ssid;
     const char* _password;
@@ -109,7 +130,8 @@ private:
     bool _usingPrimaryNetwork;  // true = primary, false = secondary
     uint8_t _primaryAttempts;   // Number of attempts on primary network
     uint8_t _secondaryAttempts; // Number of attempts on secondary network
-    unsigned long _apFallbackStartTime;  // When to start AP mode fallback
+    unsigned long _retryTimeoutStartTime;  // When 2-minute retry period started
+    bool _retryButtonEnabled;  // Whether retry button should be shown
 
     // Timing state
     unsigned long _connectStartTime;
@@ -120,6 +142,11 @@ private:
     // mDNS state
     const char* _mdnsHostname;
     uint8_t _mdnsRetryCount;
+    unsigned long _mdnsStartTime;  // When mDNS resolution started
+
+    // Manual IP configuration (from NVS)
+    IPAddress _manualIP;           // User-configured IP (from NVS)
+    bool _useManualIP;              // Whether to use manual IP
 
     // State handlers
     void handleDisconnected();
@@ -130,8 +157,8 @@ private:
     // Internal helpers
     void startConnection();
     void switchToSecondaryNetwork();
-    void startAPMode();
     void enterErrorState(const char* reason);
+    void loadManualIPFromNVS();
 };
 
 #else // ENABLE_WIFI == 0
@@ -154,7 +181,8 @@ public:
     void update() {}
     WiFiConnectionStatus getStatus() const { return WiFiConnectionStatus::DISCONNECTED; }
     bool isConnected() const { return false; }
-    bool isAPMode() const { return false; }
+    bool shouldShowRetryButton() const { return false; }
+    void triggerRetry() {}
     bool isMDNSResolved() const { return false; }
     void reconnect() {}
     const char* getStatusString() const { return "WiFi Disabled"; }

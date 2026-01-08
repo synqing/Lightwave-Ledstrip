@@ -31,6 +31,7 @@
 #include "Node.h"
 #include "../bus/MessageBus.h"
 #include "../../effects/enhancement/ColorCorrectionEngine.h"
+#include "../../effects/modifiers/ModifierStack.h"
 #include "../../config/features.h"
 #include "../../plugins/api/EffectContext.h"
 
@@ -313,6 +314,15 @@ public:
     transitions::TransitionEngine* getTransitionEngine() { return m_transitionEngine; }
 
     // ========================================================================
+    // Modifier System Integration
+    // ========================================================================
+
+    /**
+     * @brief Get the modifier stack (for adding/removing modifiers)
+     */
+    effects::modifiers::ModifierStack* getModifierStack() { return &m_modifierStack; }
+
+    // ========================================================================
     // Audio Integration (Phase 2)
     // ========================================================================
 
@@ -571,6 +581,9 @@ private:
     CRGB m_transitionSourceBuffer[LedConfig::TOTAL_LEDS];
     uint8_t m_pendingEffect;
     bool m_transitionPending;
+
+    // Modifier system
+    effects::modifiers::ModifierStack m_modifierStack;
 
     // Frame capture system (for testbed)
     bool m_captureEnabled;

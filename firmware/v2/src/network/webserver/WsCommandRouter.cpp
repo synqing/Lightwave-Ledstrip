@@ -21,7 +21,8 @@ void WsCommandRouter::registerCommand(const char* type, WsCommandHandler handler
         return;
     }
     if (s_handlerCount >= MAX_HANDLERS) {
-        Serial.printf("[WsCommandRouter] ERROR: Handler table full, cannot register '%s'\n", type);
+        Serial.printf("[WsCommandRouter] ERROR: Handler table full (%zu/%zu), cannot register '%s'\n", 
+                      s_handlerCount, MAX_HANDLERS, type);
         return;
     }
     
@@ -80,6 +81,10 @@ bool WsCommandRouter::matchesCommand(const char* type, const WsCommandEntry& ent
 
 size_t WsCommandRouter::getHandlerCount() {
     return s_handlerCount;
+}
+
+size_t WsCommandRouter::getMaxHandlers() {
+    return MAX_HANDLERS;
 }
 
 } // namespace webserver

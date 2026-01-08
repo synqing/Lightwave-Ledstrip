@@ -66,6 +66,10 @@ public:
     static void handleTempoGet(AsyncWebServerRequest* request,
                                 lightwaveos::nodes::NodeOrchestrator& orchestrator);
 
+    // Audio FFT Spectrum
+    static void handleFftGet(AsyncWebServerRequest* request,
+                             lightwaveos::nodes::NodeOrchestrator& orchestrator);
+
     // Audio Presets
     static void handlePresetsList(AsyncWebServerRequest* request);
     

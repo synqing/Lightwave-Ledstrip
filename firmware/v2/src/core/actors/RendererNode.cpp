@@ -904,7 +904,32 @@ void RendererNode::renderFrame()
         }
 #endif
 
+        // =====================================================================
+        // Phase A: Pre-Render Modifiers (speed dilation BEFORE effect)
+        // Apply modifiers that modify context parameters before rendering
+        // =====================================================================
+        for (uint8_t i = 0; i < m_modifierStack.getCount(); i++) {
+            effects::modifiers::IEffectModifier* mod = m_modifierStack.getModifier(i);
+            if (mod && mod->isPreRender() && mod->isEnabled()) {
+                mod->apply(ctx);
+            }
+        }
+
+        // =====================================================================
+        // Effect Render
+        // =====================================================================
         m_effects[m_currentEffect].effect->render(ctx);
+
+        // =====================================================================
+        // Phase A: Post-Render Modifiers (visual transforms AFTER effect)
+        // Apply modifiers that transform the LED buffer after rendering
+        // =====================================================================
+        for (uint8_t i = 0; i < m_modifierStack.getCount(); i++) {
+            effects::modifiers::IEffectModifier* mod = m_modifierStack.getModifier(i);
+            if (mod && !mod->isPreRender() && mod->isEnabled()) {
+                mod->apply(ctx);
+            }
+        }
     }
 
     // Increment hue for effects that use it

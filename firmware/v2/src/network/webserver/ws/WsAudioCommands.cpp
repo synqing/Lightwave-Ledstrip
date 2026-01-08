@@ -363,6 +363,154 @@ static void handleAudioSpikeDetectionReset(AsyncWebSocketClient* client, JsonDoc
     client->text(response);
 }
 
+// ============================================================================
+// FFT WebSocket Streaming (Feature C)
+// ============================================================================
+
+// FFT subscriber tracking (max 4 clients) - matches WsStreamCommands pattern
+static AsyncWebSocketClient* s_fftSubscribers[4] = {nullptr, nullptr, nullptr, nullptr};
+static constexpr size_t MAX_FFT_SUBSCRIBERS = 4;
+static uint32_t s_lastFftBroadcast = 0;
+static constexpr uint32_t FFT_BROADCAST_INTERVAL_MS = 32;  // ~31 Hz
+
+static void handleFftSubscribe(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    uint32_t clientId = client->id();
+    const char* requestId = doc["requestId"] | "";
+
+    bool subscribed = false;
+    for (size_t i = 0; i < MAX_FFT_SUBSCRIBERS; ++i) {
+        if (s_fftSubscribers[i] == nullptr ||
+            s_fftSubscribers[i]->status() != WS_CONNECTED) {
+            s_fftSubscribers[i] = client;
+            subscribed = true;
+            break;
+        }
+        if (s_fftSubscribers[i] == client) {
+            subscribed = true;
+            break;
+        }
+    }
+
+    if (subscribed) {
+        String response = buildWsResponse("audio.fft.subscribed", requestId, [clientId](JsonObject& data) {
+            data["clientId"] = clientId;
+            data["fftBins"] = 64;
+            data["updateRateHz"] = 31;
+            data["accepted"] = true;
+        });
+        client->text(response);
+    } else {
+        JsonDocument response;
+        response["type"] = "audio.fft.rejected";
+        if (requestId != nullptr && strlen(requestId) > 0) {
+            response["requestId"] = requestId;
+        }
+        response["success"] = false;
+        JsonObject error = response["error"].to<JsonObject>();
+        error["code"] = "RESOURCE_EXHAUSTED";
+        error["message"] = "FFT subscriber table full (max 4 concurrent clients)";
+
+        String output;
+        serializeJson(response, output);
+        client->text(output);
+    }
+}
+
+static void handleFftUnsubscribe(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    uint32_t clientId = client->id();
+    const char* requestId = doc["requestId"] | "";
+
+    for (size_t i = 0; i < MAX_FFT_SUBSCRIBERS; ++i) {
+        if (s_fftSubscribers[i] == client) {
+            s_fftSubscribers[i] = nullptr;
+            break;
+        }
+    }
+
+    String response = buildWsResponse("audio.fft.unsubscribed", requestId, [clientId](JsonObject& data) {
+        data["clientId"] = clientId;
+    });
+    client->text(response);
+}
+
+// Helper functions for subscription management
+bool setFftStreamSubscription(AsyncWebSocketClient* client, bool subscribe) {
+    if (subscribe) {
+        // Subscribe: find empty slot or reuse existing
+        for (size_t i = 0; i < MAX_FFT_SUBSCRIBERS; ++i) {
+            if (s_fftSubscribers[i] == nullptr ||
+                s_fftSubscribers[i]->status() != WS_CONNECTED) {
+                s_fftSubscribers[i] = client;
+                return true;
+            }
+            if (s_fftSubscribers[i] == client) {
+                return true;  // Already subscribed
+            }
+        }
+        return false;  // Table full
+    } else {
+        // Unsubscribe: remove from table
+        for (size_t i = 0; i < MAX_FFT_SUBSCRIBERS; ++i) {
+            if (s_fftSubscribers[i] == client) {
+                s_fftSubscribers[i] = nullptr;
+                return true;
+            }
+        }
+        return false;  // Not found
+    }
+}
+
+bool hasFftStreamSubscribers() {
+    for (size_t i = 0; i < MAX_FFT_SUBSCRIBERS; ++i) {
+        if (s_fftSubscribers[i] != nullptr && s_fftSubscribers[i]->status() == WS_CONNECTED) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void broadcastFftFrame(const audio::ControlBusFrame& frame, AsyncWebSocket* ws) {
+    if (!ws || !hasFftStreamSubscribers()) {
+        return;
+    }
+
+    // Throttle to 31 Hz (~32ms intervals)
+    uint32_t now = millis();
+    if (now - s_lastFftBroadcast < FFT_BROADCAST_INTERVAL_MS) {
+        return;
+    }
+    s_lastFftBroadcast = now;
+
+    // Clean up disconnected clients
+    for (size_t i = 0; i < MAX_FFT_SUBSCRIBERS; ++i) {
+        if (s_fftSubscribers[i] != nullptr && s_fftSubscribers[i]->status() != WS_CONNECTED) {
+            s_fftSubscribers[i] = nullptr;
+        }
+    }
+
+    // Build JSON frame with FFT bins
+    JsonDocument doc;
+    doc["type"] = "audio.fft.frame";
+    doc["hopSeq"] = frame.hop_seq;
+
+    // Add 64 FFT bins
+    JsonArray binsArray = doc["bins"].to<JsonArray>();
+    for (uint8_t i = 0; i < 64; i++) {
+        binsArray.add(frame.bins64[i]);
+    }
+
+    // Serialize to string
+    String output;
+    serializeJson(doc, output);
+
+    // Send to all active subscribers
+    for (size_t i = 0; i < MAX_FFT_SUBSCRIBERS; ++i) {
+        if (s_fftSubscribers[i] != nullptr && s_fftSubscribers[i]->status() == WS_CONNECTED) {
+            s_fftSubscribers[i]->text(output);
+        }
+    }
+}
+
 void registerWsAudioCommands(const WebServerContext& ctx) {
 #if FEATURE_AUDIO_SYNC
     WsCommandRouter::registerCommand("audio.parameters.get", handleAudioParametersGet);
@@ -373,6 +521,8 @@ void registerWsAudioCommands(const WebServerContext& ctx) {
     WsCommandRouter::registerCommand("audio.zone-agc.set", handleAudioZoneAgcSet);
     WsCommandRouter::registerCommand("audio.spike-detection.get", handleAudioSpikeDetectionGet);
     WsCommandRouter::registerCommand("audio.spike-detection.reset", handleAudioSpikeDetectionReset);
+    WsCommandRouter::registerCommand("audio.fft.subscribe", handleFftSubscribe);
+    WsCommandRouter::registerCommand("audio.fft.unsubscribe", handleFftUnsubscribe);
 #endif
 }
 

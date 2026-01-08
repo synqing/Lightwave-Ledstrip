@@ -24,6 +24,42 @@ namespace narrative {
 
 using namespace lightwaveos::effects;
 
+// ==================== Narrative Configuration Structure ====================
+
+/**
+ * @brief Serializable narrative configuration for NVS storage
+ */
+struct NarrativeConfigData {
+    uint8_t version;                    // Config format version (currently 1)
+    
+    // Phase durations (seconds)
+    float buildDuration;
+    float holdDuration;
+    float releaseDuration;
+    float restDuration;
+    
+    // Easing curves
+    uint8_t buildCurve;                 // EasingCurve enum as uint8_t
+    uint8_t releaseCurve;               // EasingCurve enum as uint8_t
+    
+    // Behavior parameters (0.0-1.0)
+    float holdBreathe;
+    float snapAmount;
+    float durationVariance;
+    
+    // Enabled state
+    bool enabled;
+    
+    // Checksum for data integrity
+    uint32_t checksum;
+    
+    // Calculate checksum (excludes checksum field itself)
+    void calculateChecksum();
+    
+    // Validate checksum
+    bool isValid() const;
+};
+
 /**
  * @brief Global narrative timing engine
  *
@@ -175,6 +211,20 @@ public:
     // ==================== Debug ====================
 
     void printStatus() const;
+
+    // ==================== NVS Persistence ====================
+
+    /**
+     * @brief Save narrative configuration to NVS
+     * @return true if saved successfully
+     */
+    bool saveToNVS();
+
+    /**
+     * @brief Load narrative configuration from NVS
+     * @return true if loaded successfully (false if no saved config or invalid)
+     */
+    bool loadFromNVS();
 
 private:
     NarrativeEngine();

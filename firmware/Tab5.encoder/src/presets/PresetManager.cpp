@@ -7,7 +7,6 @@
 #include "../parameters/ParameterMap.h"
 #include "../network/WebSocketClient.h"
 #include "../ui/ZoneComposerUI.h"
-#include "../zones/ZoneDefinition.h"
 
 // ============================================================================
 // Constructor
@@ -207,28 +206,10 @@ void PresetManager::captureCurrentState(PresetData& preset) {
             // Note: ZoneState doesn't have brightness, use LED count as proxy or default
             preset.zones[z].brightness = 255;
         }
-
-        // Capture zone layout/segments (stored in reservedFuture[0-15])
-        zones::ZoneSegment segments[zones::MAX_ZONES];
-        uint8_t segmentCount = 0;
-        if (_zoneUI->getZoneSegments(segments, segmentCount) && segmentCount <= 4) {
-            for (uint8_t z = 0; z < segmentCount; z++) {
-                preset.setZoneSegment(z, segments[z].s1LeftStart, segments[z].s1LeftEnd,
-                                     segments[z].s1RightStart, segments[z].s1RightEnd);
-            }
-            // Clear unused segments
-            for (uint8_t z = segmentCount; z < 4; z++) {
-                preset.setZoneSegment(z, 0, 0, 0, 0);
-            }
-        }
     } else {
         // Fallback if ZoneComposerUI not set
         preset.zoneModeEnabled = false;
         preset.zoneCount = 1;
-        // Clear zone segments
-        for (uint8_t z = 0; z < 4; z++) {
-            preset.setZoneSegment(z, 0, 0, 0, 0);
-        }
     }
 
     // Color correction from cached WebSocket state
@@ -297,29 +278,6 @@ bool PresetManager::applyPresetState(const PresetData& preset) {
     if (preset.zoneModeEnabled) {
         _wsClient->sendZoneEnable(true);
 
-        // Restore zone layout/segments first (before setting zone effects)
-        if (preset.zoneCount > 0 && preset.zoneCount <= 4) {
-            zones::ZoneSegment segments[zones::MAX_ZONES];
-            for (uint8_t z = 0; z < preset.zoneCount; z++) {
-                uint8_t s1LeftStart, s1LeftEnd, s1RightStart, s1RightEnd;
-                preset.getZoneSegment(z, s1LeftStart, s1LeftEnd, s1RightStart, s1RightEnd);
-                
-                segments[z].zoneId = z;
-                segments[z].s1LeftStart = s1LeftStart;
-                segments[z].s1LeftEnd = s1LeftEnd;
-                segments[z].s1RightStart = s1RightStart;
-                segments[z].s1RightEnd = s1RightEnd;
-                // Calculate totalLeds (left + right segments)
-                uint8_t leftCount = (s1LeftEnd >= s1LeftStart) 
-                    ? (s1LeftEnd - s1LeftStart + 1) : 0;
-                uint8_t rightCount = (s1RightEnd >= s1RightStart)
-                    ? (s1RightEnd - s1RightStart + 1) : 0;
-                segments[z].totalLeds = (leftCount + rightCount) * 2;  // ×2 for dual strips
-            }
-            _wsClient->sendZonesSetLayout(segments, preset.zoneCount);
-        }
-
-        // Then apply per-zone configs
         for (uint8_t z = 0; z < preset.zoneCount && z < 4; z++) {
             if (preset.zones[z].enabled) {
                 _wsClient->sendZoneEffect(z, preset.zones[z].effectId);
@@ -335,13 +293,17 @@ bool PresetManager::applyPresetState(const PresetData& preset) {
     // Apply color correction settings
     bool gammaEnabled = (preset.gamma > 0);
     float gammaValue = gammaEnabled ? (preset.gamma / 10.0f) : 2.2f;
+    
+    // Get current mode from WebSocket client state (presets don't store mode)
+    uint8_t currentMode = _wsClient->getColorCorrectionState().mode;
 
     _wsClient->sendColorCorrectionConfig(
         gammaEnabled,
         gammaValue,
         preset.autoExposure,
         110,  // Default auto-exposure target
-        preset.brownGuardrail
+        preset.brownGuardrail,
+        currentMode  // Include current mode - server requires all fields in setConfig
     );
 
     Serial.printf("[PresetManager] Applied color correction: gamma=%s (%.1f), ae=%s, brown=%s\n",

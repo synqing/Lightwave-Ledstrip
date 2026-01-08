@@ -36,17 +36,12 @@ ParameterHandler::ParameterHandler(
 }
 
 void ParameterHandler::onEncoderChanged(uint8_t index, uint16_t value, bool wasReset) {
-    // Unit B (8-15) no longer has parameters assigned
-    if (index >= 8) {
-        return;  // Ignore Unit B encoder changes
-    }
-
     const ParameterDef* param = getParameterByIndex(index);
     if (!param || !m_wsClient) {
         return;
     }
 
-    // Mark this parameter as locally "authoritative" for a short window to prevent
+    // Mark this parameter as locally “authoritative” for a short window to prevent
     // server status echo from snapping the UI/encoder back and forth.
     m_lastLocalChangeMs[index] = millis();
 
@@ -190,9 +185,53 @@ void ParameterHandler::sendParameterChange(const ParameterDef* param, uint8_t va
             m_wsClient->sendVariationChange(value);
             break;
 
-        // Unit B (8-15) - No parameters assigned (encoders disabled)
-        // Zone parameters have been removed from Unit B
-        // Unit B buttons are still used for preset management
+        // Unit B (8-15) - Zone parameters
+        // Zone effects use zone.setEffect
+        // Zone speeds use zone.setSpeed (can toggle to zone.setPalette via button)
+        case ParameterId::Zone0Effect:
+            m_wsClient->sendZoneEffect(0, value);
+            break;
+        case ParameterId::Zone0Speed:
+            // Check if button toggled to palette mode
+            if (m_buttonHandler && m_buttonHandler->getZoneEncoderMode(0) == SpeedPaletteMode::PALETTE) {
+                m_wsClient->sendZonePalette(0, value);
+            } else {
+                m_wsClient->sendZoneSpeed(0, value);
+            }
+            break;
+        case ParameterId::Zone1Effect:
+            m_wsClient->sendZoneEffect(1, value);
+            break;
+        case ParameterId::Zone1Speed:
+            // Check if button toggled to palette mode
+            if (m_buttonHandler && m_buttonHandler->getZoneEncoderMode(1) == SpeedPaletteMode::PALETTE) {
+                m_wsClient->sendZonePalette(1, value);
+            } else {
+                m_wsClient->sendZoneSpeed(1, value);
+            }
+            break;
+        case ParameterId::Zone2Effect:
+            m_wsClient->sendZoneEffect(2, value);
+            break;
+        case ParameterId::Zone2Speed:
+            // Check if button toggled to palette mode
+            if (m_buttonHandler && m_buttonHandler->getZoneEncoderMode(2) == SpeedPaletteMode::PALETTE) {
+                m_wsClient->sendZonePalette(2, value);
+            } else {
+                m_wsClient->sendZoneSpeed(2, value);
+            }
+            break;
+        case ParameterId::Zone3Effect:
+            m_wsClient->sendZoneEffect(3, value);
+            break;
+        case ParameterId::Zone3Speed:
+            // Check if button toggled to palette mode
+            if (m_buttonHandler && m_buttonHandler->getZoneEncoderMode(3) == SpeedPaletteMode::PALETTE) {
+                m_wsClient->sendZonePalette(3, value);
+            } else {
+                m_wsClient->sendZoneSpeed(3, value);
+            }
+            break;
     }
 }
 

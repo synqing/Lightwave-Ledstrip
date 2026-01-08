@@ -33,6 +33,7 @@
 #include "webserver/StaticAssetRoutes.h"
 #include "webserver/V1ApiRoutes.h"
 #include "webserver/WsGateway.h"
+#include "webserver/WsCommandRouter.h"
 #include "webserver/ws/WsDeviceCommands.h"
 #include "webserver/ws/WsEffectsCommands.h"
 #include "webserver/ws/WsZonesCommands.h"
@@ -49,6 +50,7 @@
 #include "webserver/ws/WsDebugCommands.h"
 #endif
 #include "webserver/ws/WsStreamCommands.h"
+#include "webserver/ws/WsModifierCommands.h"
 #include "../config/network_config.h"
 #include "../core/actors/NodeOrchestrator.h"
 #include "../effects/zones/ZoneDefinition.h"
@@ -288,6 +290,9 @@ void WebServer::update() {
 #if FEATURE_AUDIO_SYNC
     // Audio frame streaming to subscribed clients (30 FPS)
     broadcastAudioFrame();
+
+    // FFT frame streaming to subscribed clients (31 Hz)
+    broadcastFftFrame();
 
     // Beat event streaming (fires on beat_tick/downbeat_tick)
     broadcastBeatEvent();
@@ -632,6 +637,12 @@ void WebServer::setupWebSocket() {
     webserver::ws::registerWsDebugCommands(ctx);
 #endif
     webserver::ws::registerWsStreamCommands(ctx);
+    webserver::ws::registerWsModifierCommands(ctx);
+
+    // Log handler registration summary
+    size_t handlerCount = webserver::WsCommandRouter::getHandlerCount();
+    size_t maxHandlers = webserver::WsCommandRouter::getMaxHandlers();
+    LW_LOGI("WebSocket commands registered: %zu/%zu handlers", handlerCount, maxHandlers);
 }
 
 // ============================================================================
@@ -1141,7 +1152,7 @@ void WebServer::broadcastAudioFrame() {
 void WebServer::broadcastBeatEvent() {
     // SAFETY: Validate pointers before accessing
     if (!m_ws || m_ws->count() == 0) return;
-    
+
     // QUEUE PROTECTION: Throttle beat events to prevent queue saturation
     static uint32_t lastBeatBroadcastAttempt = 0;
     uint32_t now = millis();
@@ -1149,11 +1160,11 @@ void WebServer::broadcastBeatEvent() {
         return;  // Skip this broadcast to prevent queue buildup
     }
     lastBeatBroadcastAttempt = now;
-    
+
     // Note: We need to get musical grid from cached state or another safe source
     // For now, we'll skip if renderer is not available (this should use cached audio state)
     if (!m_renderer) return;
-    
+
     const auto& grid = m_renderer->getLastMusicalGrid();
 
     // Only broadcast on actual beat/downbeat (single-frame pulses)
@@ -1172,11 +1183,32 @@ void WebServer::broadcastBeatEvent() {
 
     String json;
     serializeJson(doc, json);
-    
+
     // SAFETY: Validate m_ws is still valid before calling textAll()
     if (m_ws) {
         m_ws->textAll(json);
     }
+}
+
+void WebServer::broadcastFftFrame() {
+    // SAFETY: Validate pointers and check if we have subscribers
+    if (!m_ws || !m_renderer) return;
+
+    // Use WsAudioCommands helper to check if FFT subscribers exist
+    // This avoids re-checking in broadcastFftFrame implementation
+    if (!webserver::ws::hasFftStreamSubscribers()) {
+        return;
+    }
+
+    // Get cached audio frame from renderer (cross-core safe)
+    const audio::ControlBusFrame& frame = m_renderer->getCachedAudioFrame();
+
+    // Delegate to WsAudioCommands implementation which handles:
+    // - Subscriber table management
+    // - Throttling to 31 Hz
+    // - JSON serialization with 64 FFT bins
+    // - Cleanup of disconnected clients
+    webserver::ws::broadcastFftFrame(frame, m_ws);
 }
 
 bool WebServer::setAudioStreamSubscription(AsyncWebSocketClient* client, bool subscribe) {

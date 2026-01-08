@@ -25,7 +25,11 @@
           "timestamp": "2025-12-12T08:30:00Z",
           "result": "PASSED",
           "evidence": {
-            "commands_run": ["grep NUM_LEDS", "cat test/test_main.cpp", "pio run -e esp32dev"],
+            "commands_run": [
+              "grep NUM_LEDS",
+              "cat test/test_main.cpp",
+              "pio run -e esp32dev"
+            ],
             "results_summary": "Changed LED assertion from 81 to 320. Palette count (33) was already correct. Build passes."
           },
           "commit": "c68b6a4",
@@ -56,7 +60,9 @@
           "timestamp": "2025-12-12T06:45:00Z",
           "result": "PASSED",
           "evidence": {
-            "commands_run": ["pio run -e esp32dev_wifi"],
+            "commands_run": [
+              "pio run -e esp32dev_wifi"
+            ],
             "results_summary": "SUCCESS - RAM 19.3%, Flash 31.3% (well under 80% limit). Only deprecation warnings (ArduinoJson API changes), no errors."
           },
           "commit": "53de8f1",
@@ -87,7 +93,9 @@
           "timestamp": "2025-12-12T06:38:00Z",
           "result": "PASSED",
           "evidence": {
-            "commands_run": ["./init.sh"],
+            "commands_run": [
+              "./init.sh"
+            ],
             "results_summary": "init.sh created, executable, returns 0, prints PASS/FAIL summary with colors"
           },
           "commit": "4860021",
@@ -146,7 +154,9 @@
       ],
       "status": "PASSING",
       "priority": 4,
-      "dependencies": ["VERIFY-WIFI-BUILD"],
+      "dependencies": [
+        "VERIFY-WIFI-BUILD"
+      ],
       "attempts": [
         {
           "run_id": "worker-006",
@@ -186,7 +196,9 @@
           "timestamp": "2025-12-12T08:20:00Z",
           "result": "PASSED",
           "evidence": {
-            "commands_run": ["git status --porcelain | wc -l"],
+            "commands_run": [
+              "git status --porcelain | wc -l"
+            ],
             "results_summary": "Created 2 commits: (1) Removed deprecated LightwaveOS-Production (95 files), (2) Zone-composer feature with web interface (49 files). Updated .gitignore for dev artifacts. git status now shows 0 uncommitted changes."
           },
           "commit": "3e904c0",
@@ -276,7 +288,9 @@
           "timestamp": "2025-12-12T10:30:00Z",
           "result": "PASSED",
           "evidence": {
-            "commands_run": ["pio run -e esp32dev_wifi"],
+            "commands_run": [
+              "pio run -e esp32dev_wifi"
+            ],
             "results_summary": "Created TrigLookup.h (150 lines) and TrigLookup.cpp (100 lines) with 256-entry sine tables. Provides sin8_fast, cos8_fast, sinf_fast, cosf_fast, plus conversion utilities. Build passes - RAM 19.3%, Flash 31.3%."
           },
           "commit": "d58849e",
@@ -302,14 +316,18 @@
       ],
       "status": "PASSING",
       "priority": 2,
-      "dependencies": ["VERIFY-WIFI-BUILD"],
+      "dependencies": [
+        "VERIFY-WIFI-BUILD"
+      ],
       "attempts": [
         {
           "run_id": "worker-007",
           "timestamp": "2025-12-12T10:25:00Z",
           "result": "PASSED",
           "evidence": {
-            "commands_run": ["pio run -e esp32dev_wifi"],
+            "commands_run": [
+              "pio run -e esp32dev_wifi"
+            ],
             "results_summary": "OTA endpoint already existed at /update in WebServer.cpp. Enabled FEATURE_OTA_UPDATE flag. Added Firmware Update card to web UI with file picker, progress bar, status messages. Dual-slot partition table supports rollback. Build passes."
           },
           "commit": "d58849e",
@@ -318,6 +336,68 @@
       ],
       "override_reason": null,
       "notes": "OTA endpoint existed, just needed UI. Web interface now has full upload capability with progress indicator."
+    },
+    {
+      "id": "TEMPO-TRACKING-FIX-001",
+      "title": "Tempo Tracker System Overhaul: P0 Bug Fixes + Dual-Bank Goertzel Front-End",
+      "description": "Fix 4 critical correctness bugs in TempoTracker (v2/src/audio/tempo/) and implement dual-bank Goertzel analysis to prevent fast onsets from dominating beat detection. Current failure: 99.7% interval rejection due to hat onsets (~0.12s) poisoning beat-scale IOI clock. Root causes: broken beat_tick generation, gating overwrites, unconditional onset timestamp updates, native determinism issues. Solution: unified sample-counter timebase + dual-bank front-end (64-bin HarmonyBank for chroma, 24-bin RhythmBank for beat evidence with kick emphasis).",
+      "acceptance_criteria": [
+        "AC-1: Native builds use sample_counter timebase (no esp_timer_get_time() in algorithmic code)",
+        "AC-2: beat_tick pulses once per beat (phase wrap detection works)",
+        "AC-3: Hat-only loops produce zero beat-candidate intervals, confidence < 0.1",
+        "AC-4: Idle room noise produces no false beats, noise floor converges < 10s",
+        "AC-5: Sustained chords increase chroma_stability, key_clarity > 0.5",
+        "AC-6: CPU budget: RhythmBank ≤ 0.6ms, HarmonyBank ≤ 1.0ms, total ≤ 1.1ms/hop avg",
+        "AC-7: Memory < 32 KB working RAM",
+        "AC-8: 'pio run -e esp32dev_audio' builds without errors/warnings",
+        "AC-9: Tempo lock: EDM ≤ 2.0s, worst-case ≤ 5.0s, BPM jitter ≤ ±1 BPM, octave flips ≤ 1/60s",
+        "AC-10: Silence/speech decays confidence < 0.1 within 3s"
+      ],
+      "verification": [
+        "pio run -e esp32dev_audio",
+        "pio run -e native_test",
+        "grep -n 'esp_timer_get_time' v2/src/audio/tempo/TempoTracker.cpp",
+        "python3 tools/test_tempo_lock.py --audio samples/edm_138bpm.wav --max-lock-time 2.0",
+        "python3 tools/test_tempo_lock.py --audio samples/hats_only.wav --expect-no-lock"
+      ],
+      "status": "FAILING",
+      "priority": 1,
+      "dependencies": [],
+      "ralph_loop": {
+        "enabled": true,
+        "max_iterations": 10,
+        "current_iteration": 0,
+        "convergence_criteria": {
+          "build_passes": true,
+          "tests_pass": true,
+          "acceptance_met": true
+        }
+      },
+      "prd_reference": {
+        "file": "TEMPO-TRACKING-FIX-001.json",
+        "last_updated": "2026-01-08T06:50:00Z",
+        "version": "2.0.0"
+      },
+      "attempts": [
+        {
+          "run_id": "run-20260108-103335",
+          "timestamp": "2026-01-08T10:33:35.028341Z",
+          "result": "PASSED",
+          "evidence": {
+            "commands_run": [
+              "pio run -e esp32dev_audio -d firmware/v2",
+              "python3 tools/test_tempo_lock.py --help",
+              "python3 tools/analyze_intervals.py --help",
+              "python3 tools/measure_onset_accuracy.py --help",
+              "python3 tools/visualize_tempo_data.py --help"
+            ],
+            "results_summary": "Phase 0 complete: Created 4 Python validation tools (test_tempo_lock.py, analyze_intervals.py, measure_onset_accuracy.py, visualize_tempo_data.py), 6 ground truth CSV templates, comprehensive README documentation. All tools execute without errors. Build verification passed. Test infrastructure ready for Ralph Loop iterations 2+."
+          },
+          "commit": "d5825a2"
+        }
+      ],
+      "override_reason": null,
+      "notes": "Derived from z.md (tempo audit), z1.md (pipeline audit), z3.md (engineering spec), z4.md (coefficient tables), z5.md (debug logs). P0 bugs: beat_tick broken (TempoTracker.cpp:530-537), AudioNode gating overwritten (AudioNode.cpp:942-944), onset poisoning (TempoTracker.cpp:520), native determinism broken (TempoTracker.cpp:22-33). Implementation strategy: fix P0 bugs first, then integrate dual-bank front-end."
     }
   ]
 }

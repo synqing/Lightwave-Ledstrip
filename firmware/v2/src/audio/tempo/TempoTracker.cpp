@@ -18,9 +18,21 @@
 #include <cmath>
 #include <algorithm>
 #include <cstdio>
+#include <cstdarg>
 #include "../AudioDebugConfig.h"
 
 // #region agent log
+// ANSI colour codes for terminal readability
+#define ANSI_RESET   "\033[0m"
+#define ANSI_RED     "\033[31m"
+#define ANSI_GREEN   "\033[32m"
+#define ANSI_YELLOW  "\033[33m"
+#define ANSI_BLUE    "\033[34m"
+#define ANSI_MAGENTA "\033[35m"
+#define ANSI_CYAN    "\033[36m"
+#define ANSI_WHITE   "\033[37m"
+#define ANSI_BOLD    "\033[1m"
+
 // Native-safe debug logging using sample counter (not system timers)
 static void debug_log(uint8_t minVerbosity, const char* location, const char* message, const char* data_json, uint64_t t_samples) {
     auto& dbgCfg = lightwaveos::audio::getAudioDebugConfig();
@@ -33,6 +45,21 @@ static void debug_log(uint8_t minVerbosity, const char* location, const char* me
     printf("DEBUG_JSON:{\"location\":\"%s\",\"message\":\"%s\",\"data\":%s,\"timestamp\":%llu}\n",
            location, message, data_json, (unsigned long long)t_us);
 }
+
+// Coloured log for human-readable tempo events (separate from JSON)
+// Always print (verbosity >= 1) because tempo intervals are critical for debugging
+static void tempo_event_log(const char* colour, const char* tag, const char* format, ...) {
+    auto& dbgCfg = lightwaveos::audio::getAudioDebugConfig();
+    if (dbgCfg.verbosity < 1) {
+        return;
+    }
+    printf("%s[%s]%s ", colour, tag, ANSI_RESET);
+    va_list args;
+    va_start(args, format);
+    vprintf(format, args);
+    va_end(args);
+    printf("\n");
+}
 // #endregion
 
 namespace lightwaveos {
@@ -44,11 +71,16 @@ namespace audio {
 
 void TempoTracker::init() {
     // Initialize onset detection state
-    // Initialize to small but reasonable value (typical flux is 0.01-0.1 range)
-    // This prevents huge normalized values on first few frames
-    // Ensure minimum floor to prevent decay to zero
+    // P0-E FIX: Baseline initialization depends on K1 vs legacy mode
+#ifdef FEATURE_K1_FRONT_END
+    // K1 normalized range (novelty ≈ 0.5-6.0)
+    onset_state_.baseline_vu = 1.0f;
+    onset_state_.baseline_spec = 1.0f;
+#else
+    // Legacy range (flux ≈ 0.01-0.1)
     onset_state_.baseline_vu = 0.01f;
     onset_state_.baseline_spec = 0.01f;
+#endif
     // Safety check: ensure they're at least at minimum floor
     const float MIN_BASELINE_INIT = 0.001f;
     if (onset_state_.baseline_vu < MIN_BASELINE_INIT) onset_state_.baseline_vu = MIN_BASELINE_INIT;
@@ -86,6 +118,12 @@ void TempoTracker::init() {
     
     // Initialize octave flip detection
     beat_state_.lastBpmFromDensity = 0.0f;
+    
+    // Initialize low-confidence reset tracking
+    beat_state_.lowConfStartSamples = 0;
+    
+    // Initialize interval mismatch tracking
+    beat_state_.intervalMismatchCounter = 0;
 
     // Initialize diagnostics
     last_onset_ = false;
@@ -288,6 +326,14 @@ void TempoTracker::updateNovelty(const float* bands, uint8_t num_bands,
 // ============================================================================
 
 void TempoTracker::updateFromFeatures(const k1::AudioFeatureFrame& frame) {
+    // #region Phase A: Build verification marker
+    static bool k1_path_verified = false;
+    if (!k1_path_verified) {
+        debug_log(1, "TempoTracker.cpp:updateFromFeatures", "K1_TEMPO_TRACKER_V2", "K1 path active", frame.t_samples);
+        k1_path_verified = true;
+    }
+    // #endregion
+    
     // Use rhythm_novelty as primary onset evidence (already scale-invariant from K1)
     float novelty = frame.rhythm_novelty;
     
@@ -302,8 +348,31 @@ void TempoTracker::updateFromFeatures(const k1::AudioFeatureFrame& frame) {
         m_initTime = t_samples;
     }
     
+    // Phase B: Initialize K1-mode baselines to 1.0 (K1 novelty is normalized, baseline ≈ 1.0)
+    // Legacy init sets baselines to 0.01, which is wrong for normalized K1 novelty
+    static bool k1_baselines_initialized = false;
+    if (!k1_baselines_initialized) {
+        // Check if baselines are still at legacy init values (0.01)
+        if (onset_state_.baseline_vu < 0.1f && onset_state_.baseline_spec < 0.1f) {
+            onset_state_.baseline_vu = 1.0f;
+            onset_state_.baseline_spec = 1.0f;
+        }
+        k1_baselines_initialized = true;
+    }
+    
     // Update combined flux from novelty (K1 already provides normalized novelty)
     combined_flux_ = novelty;
+    
+    // Baseline EMA: slow adaptation (alpha=0.05 means 5% new value, 95% history)
+    const float baselineAlpha = 0.05f;
+    onset_state_.baseline_spec = (1.0f - baselineAlpha) * onset_state_.baseline_spec + baselineAlpha * novelty;
+
+    // Enforce minimum floor to prevent baseline from decaying to near-zero
+    const float MIN_BASELINE = 0.001f;
+    if (onset_state_.baseline_spec < MIN_BASELINE) {
+        onset_state_.baseline_spec = MIN_BASELINE;
+    }
+    onset_state_.baseline_vu = onset_state_.baseline_spec;  // Keep them in sync for K1 mode
     
     // #region agent log
     static uint32_t log_counter = 0;
@@ -352,6 +421,8 @@ bool TempoTracker::detectOnset(float flux, uint64_t t_samples, float& outStrengt
     
     // Compute combined baseline for threshold
     float combined_baseline = (onset_state_.baseline_vu * 0.5f + onset_state_.baseline_spec * 0.5f);
+    // Phase B: For K1 mode, baseline ≈ 1.0, so threshold ≈ 1.8 (onsetThreshK = 1.8)
+    // This works well for normalized novelty values of 1-6 (peaks should be >1.8)
     float thresh = combined_baseline * tuning_.onsetThreshK;
     
     // Check for local peak: prev > prevprev AND prev > curr AND prev > thresh
@@ -536,8 +607,8 @@ void TempoTracker::updateTempo(float delta_sec, uint64_t t_samples) {
     }
     // #endregion
     
-    // Update beat tracking (this will add to density buffer if onset detected)
-    updateBeat(last_onset_, onset_strength_, t_samples, delta_sec);
+    // Phase D: Removed redundant updateBeat() call - updateFromFeatures() already called updateBeat()
+    // Density buffer voting happens in the updateBeat() call from updateFromFeatures(), not here
     
     // Find peak bin in density buffer
     float maxDensity = 0.0f;
@@ -560,9 +631,14 @@ void TempoTracker::updateTempo(float delta_sec, uint64_t t_samples) {
     // #endregion
     
     // Find second peak (for confidence calculation)
+    // Exclude peakBin ± 2 to avoid kernel voting shoulders (triangular kernel spans ±2 bins)
     float secondPeak = 0.0f;
     for (int i = 0; i < BeatState::DENSITY_BINS; i++) {
-        if (i != peakBin && beat_state_.tempoDensity[i] > secondPeak) {
+        // Exclude peak neighborhood to find a real competitor, not the shoulder of the same hill
+        if (i >= (peakBin - 2) && i <= (peakBin + 2)) {
+            continue;  // Skip kernel voting neighborhood
+        }
+        if (beat_state_.tempoDensity[i] > secondPeak) {
             secondPeak = beat_state_.tempoDensity[i];
         }
     }
@@ -593,6 +669,48 @@ void TempoTracker::updateTempo(float delta_sec, uint64_t t_samples) {
         }
     } else if (beat_state_.conf <= 0.5f && diagnostics_.isLocked) {
         diagnostics_.isLocked = false;
+    }
+    
+    // =========================================================================
+    // LOW-CONFIDENCE RESET MECHANISM
+    // If confidence stays below threshold for N seconds, soft-reset density buffer
+    // This allows re-acquisition when tempo changes significantly (e.g., new song)
+    // =========================================================================
+    if (beat_state_.conf < tuning_.lowConfThreshold) {
+        // Start or continue tracking low-confidence duration
+        if (beat_state_.lowConfStartSamples == 0) {
+            beat_state_.lowConfStartSamples = t_samples;
+        } else {
+            // Check if we've been low-confidence long enough to trigger reset
+            float lowConfDurationSec = static_cast<float>(t_samples - beat_state_.lowConfStartSamples) / 16000.0f;
+            if (lowConfDurationSec >= tuning_.lowConfResetTimeSec) {
+                // SOFT RESET: Reduce density buffer to allow new tempo to emerge
+                // Don't fully clear - keep some history to avoid cold-start issues
+                for (int i = 0; i < BeatState::DENSITY_BINS; i++) {
+                    beat_state_.tempoDensity[i] *= tuning_.densitySoftResetFactor;
+                }
+                
+                // Reset tracking state
+                beat_state_.lowConfStartSamples = 0;
+                
+                // Log the reset event (ANSI cyan for visibility)
+                auto& dbgCfg = lightwaveos::audio::getAudioDebugConfig();
+                if (dbgCfg.verbosity >= 2) {
+                    printf("\033[36m[TEMPO RESET]\033[0m Soft-reset density buffer after %.1fs low confidence (conf=%.2f < %.2f)\n",
+                           lowConfDurationSec, beat_state_.conf, tuning_.lowConfThreshold);
+                }
+                
+                // Also log as DEBUG_JSON for parsing
+                char reset_data[256];
+                snprintf(reset_data, sizeof(reset_data),
+                    "{\"reason\":\"low_confidence_timeout\",\"duration_sec\":%.1f,\"conf\":%.2f,\"threshold\":%.2f,\"reset_factor\":%.2f}",
+                    lowConfDurationSec, beat_state_.conf, tuning_.lowConfThreshold, tuning_.densitySoftResetFactor);
+                debug_log(2, "TempoTracker.cpp:updateTempo", "density_soft_reset", reset_data, t_samples);
+            }
+        }
+    } else {
+        // Confidence is above threshold - reset the low-confidence timer
+        beat_state_.lowConfStartSamples = 0;
     }
     
     // Detect octave flips (large BPM jumps)
@@ -634,9 +752,9 @@ void TempoTracker::updateTempo(float delta_sec, uint64_t t_samples) {
             char summary_data[512];
             snprintf(summary_data, sizeof(summary_data),
                 "{\"bpm\":%.1f,\"bpm_hat\":%.1f,\"conf\":%.2f,\"locked\":%d,"
-                "\"density_peak_bin\":%d,\"density_peak_val\":%.2f,\"density_second_peak\":%.2f,"
+                "\"density_peak_bin\":%d,\"density_peak_val\":%.5f,\"density_second_peak\":%.5f,"
                 "\"onsets_total\":%u,\"onsets_rej_refr\":%u,\"onsets_rej_thr\":%u,"
-                "\"intervals_valid\":%u,\"intervals_rej\":%u,\"rejection_rate_pct\":%.1f,"
+                "\"intervals_valid\":%u,\"intervals_rej\":%u,\"intervals_rej_too_fast\":%u,\"intervals_rej_too_slow\":%u,\"rejection_rate_pct\":%.1f,"
                 "\"last_valid_interval\":%.3f,\"last_valid_bpm\":%.1f,"
                 "\"bpm_jitter\":%.2f,\"phase_jitter_ms\":%.1f,\"octave_flips\":%u,"
                 "\"lock_time_ms\":%llu}",
@@ -644,6 +762,7 @@ void TempoTracker::updateTempo(float delta_sec, uint64_t t_samples) {
                 peakBin, maxDensity, secondPeak,
                 diagnostics_.onsetCount, diagnostics_.onsetRejectedRefractory, diagnostics_.onsetRejectedThreshold,
                 diagnostics_.intervalsValid, diagnostics_.intervalsRejected,
+                diagnostics_.intervals_rej_too_fast, diagnostics_.intervals_rej_too_slow,
                 (diagnostics_.intervalsValid + diagnostics_.intervalsRejected > 0) ?
                     (100.0f * diagnostics_.intervalsRejected / (diagnostics_.intervalsValid + diagnostics_.intervalsRejected)) : 0.0f,
                 diagnostics_.lastValidInterval,
@@ -651,6 +770,17 @@ void TempoTracker::updateTempo(float delta_sec, uint64_t t_samples) {
                 diagnostics_.bpmJitter, diagnostics_.phaseJitter, diagnostics_.octaveFlips,
                 diagnostics_.lockTimeMs);
             debug_log(3, "TempoTracker.cpp:updateTempo", "tempo_summary", summary_data, t_samples);
+            
+            // Human-readable coloured summary (CYAN = summary, YELLOW if unlocked, GREEN if locked)
+            float rejRate = (diagnostics_.intervalsValid + diagnostics_.intervalsRejected > 0) ?
+                (100.0f * diagnostics_.intervalsRejected / (diagnostics_.intervalsValid + diagnostics_.intervalsRejected)) : 0.0f;
+            const char* lockColour = diagnostics_.isLocked ? ANSI_GREEN : ANSI_YELLOW;
+            const char* lockStatus = diagnostics_.isLocked ? "LOCKED" : "UNLOCKED";
+            printf("%s[TEMPO]%s BPM=%.1f conf=%.2f %s%s%s valid=%u rej=%u (%.0f%%) peak_bin=%d\n",
+                   ANSI_CYAN, ANSI_RESET,
+                   beat_state_.bpm, beat_state_.conf,
+                   lockColour, lockStatus, ANSI_RESET,
+                   diagnostics_.intervalsValid, diagnostics_.intervalsRejected, rejRate, peakBin);
         }
     }
     
@@ -716,10 +846,8 @@ void TempoTracker::updateBeat(bool onset, float onsetStrength, uint64_t t_sample
     if (dt < 0.0f) dt = 0.0f;
     beat_state_.lastUs = t_samples;  // Store in samples
 
-    // Advance phase from current BPM
-    float period = 60.0f / (beat_state_.bpm + 1e-6f);
-    beat_state_.phase01 += dt / period;
-    beat_state_.phase01 -= floorf(beat_state_.phase01);
+    // Phase D: Removed duplicate phase advancement (was here, now only at end of function)
+    // Phase advancement happens once at end of updateBeat() to avoid 4× per hop corruption
 
     // Track confidence changes for diagnostics
     float confBefore = beat_state_.conf;
@@ -738,31 +866,57 @@ void TempoTracker::updateBeat(bool onset, float onsetStrength, uint64_t t_sample
     }
 
     if (onset) {
-        // Beat-candidate gating: only promote onsets to beat-candidates
-        // Minimum candidate interval: minDt = 60/(maxBpm*2) ≈ 0.166s at 180 BPM
-        const float minDt = 60.0f / (tuning_.maxBpm * 2.0f);  // ≈ 0.166s at 180 BPM
-        
+        // P0-C FIX: Prevent Onset Poisoning (TIGHTENED)
+        // Only process onsets in beat-range intervals (0.333-1.0s = 180-60 BPM)
+        // This is the 99.7% rejection rate fix
+
         // Estimate beat period from time since last onset
         if (beat_state_.lastOnsetUs != 0) {
             float onsetDt = static_cast<float>(t_samples - beat_state_.lastOnsetUs) / 16000.0f;
-            
+
+            // TIGHTENED: 180 BPM max (not 333 BPM max)
+            const float minBeatInterval = 60.0f / tuning_.maxBpm;  // ~0.333s (180 BPM)
+            const float maxBeatInterval = 60.0f / tuning_.minBpm;  // ~1.0s (60 BPM)
+
+            // Only process onsets in plausible beat range
+            if (onsetDt >= minBeatInterval && onsetDt <= maxBeatInterval) {
+                // ... existing interval validation logic continues below ...
+            } else {
+                // Log rejection but DO NOT update lastOnsetUs
+                auto& dbgCfg = lightwaveos::audio::getAudioDebugConfig();
+                if (dbgCfg.verbosity >= 3) {
+                    char rej_data[256];
+                    const char* reason = (onsetDt < minBeatInterval) ? "too_fast" : "too_slow";
+                    snprintf(rej_data, sizeof(rej_data),
+                        "{\"interval\":%.3f,\"minBeatInterval\":%.3f,\"maxBeatInterval\":%.3f,\"reason\":\"%s\",\"hypothesisId\":\"C\"}",
+                        onsetDt, minBeatInterval, maxBeatInterval, reason);
+                    debug_log(3, "TempoTracker.cpp:updateBeat", "onset_rejected_poisoning", rej_data, t_samples);
+                }
+
+                // P0.5: Track rejection counters for diagnostics
+                if (onsetDt < minBeatInterval) {
+                    diagnostics_.intervals_rej_too_fast++;
+                    diagnostics_.intervalsRejected++;
+                } else {
+                    diagnostics_.intervals_rej_too_slow++;
+                    diagnostics_.intervalsRejected++;
+                }
+                diagnostics_.lastRejectedInterval = onsetDt;
+
+                // CRITICAL: DO NOT update lastOnsetUs - this prevents onset poisoning
+                return;
+            }
+
             // #region agent log
             static uint32_t minDt_log_counter = 0;
             if ((minDt_log_counter++ % 50) == 0) {  // Log every 50th check
                 char minDt_check[256];
                 snprintf(minDt_check, sizeof(minDt_check),
-                    "{\"onsetDt\":%.6f,\"minDt\":%.6f,\"rejected\":%d,\"t_samples\":%llu,\"hypothesisId\":\"B\"}",
-                    onsetDt, minDt, (onsetDt < minDt) ? 1 : 0, (unsigned long long)t_samples);
-                debug_log(3, "TempoTracker.cpp:updateBeat", "minDt_gating", minDt_check, t_samples);
+                    "{\"onsetDt\":%.6f,\"minBeatInterval\":%.6f,\"maxBeatInterval\":%.6f,\"accepted\":true,\"t_samples\":%llu,\"hypothesisId\":\"C\"}",
+                    onsetDt, minBeatInterval, maxBeatInterval, (unsigned long long)t_samples);
+                debug_log(3, "TempoTracker.cpp:updateBeat", "onset_accepted_beat_range", minDt_check, t_samples);
             }
             // #endregion
-            
-            // Beat-candidate gating: minimum interval check
-            if (onsetDt < minDt) {
-                // Out-of-range fast onset - do NOT reset beat IOI clock
-                // This prevents hats from stealing the beat clock
-                return;  // Reject this onset as beat-candidate
-            }
 
             // Clamp plausible period
             float minP = 60.0f / tuning_.maxBpm;
@@ -773,27 +927,90 @@ void TempoTracker::updateBeat(bool onset, float onsetStrength, uint64_t t_sample
                 diagnostics_.intervalsValid++;
                 diagnostics_.lastValidInterval = onsetDt;
                 
-                // Log valid interval at verbosity 4 (for debugging interval acceptance)
-                auto& dbgCfg = lightwaveos::audio::getAudioDebugConfig();
-                if (dbgCfg.verbosity >= 4) {
-                    float candidateBpm = 60.0f / onsetDt;
-                    uint64_t onsetDtUs = static_cast<uint64_t>(onsetDt * 1e6f);
-                    char valid_data[512];
-                    snprintf(valid_data, sizeof(valid_data),
-                        "{\"interval\":%.3f,\"intervalUs\":%llu,\"bpm\":%.1f,"
-                        "\"minP\":%.3f,\"maxP\":%.3f,\"minBpm\":%.1f,\"maxBpm\":%.1f,"
-                        "\"density_bins_updated\":3,\"t_samples\":%llu,\"lastOnsetSamples\":%llu}",
-                        onsetDt, (unsigned long long)onsetDtUs, candidateBpm,
-                        minP, maxP, tuning_.minBpm, tuning_.maxBpm,
-                        (unsigned long long)t_samples, (unsigned long long)beat_state_.lastOnsetUs);
-                    debug_log(4, "TempoTracker.cpp:updateBeat", "interval_valid", valid_data, t_samples);
-                }
-                
                 // Compute candidate BPM
                 float candidateBpm = 60.0f / onsetDt;
                 
+                // #region agent log
+                uint64_t onsetDtUs = static_cast<uint64_t>(onsetDt * 1e6f);
+                char valid_data[512];
+                snprintf(valid_data, sizeof(valid_data),
+                    "{\"interval\":%.3f,\"intervalUs\":%llu,\"bpm\":%.1f,"
+                    "\"minP\":%.3f,\"maxP\":%.3f,\"minBpm\":%.1f,\"maxBpm\":%.1f,"
+                    "\"t_samples\":%llu,\"lastOnsetSamples\":%llu,\"hypothesisId\":\"C,D\"}",
+                    onsetDt, (unsigned long long)onsetDtUs, candidateBpm,
+                    minP, maxP, tuning_.minBpm, tuning_.maxBpm,
+                    (unsigned long long)t_samples, (unsigned long long)beat_state_.lastOnsetUs);
+                debug_log(3, "TempoTracker.cpp:updateBeat", "interval_valid", valid_data, t_samples);
+                
+                // Human-readable coloured log (GREEN = valid interval)
+                tempo_event_log(ANSI_GREEN, "VALID", "interval=%.3fs -> %.1f BPM (voting into density)", onsetDt, candidateBpm);
+                
+                // Check for interval mismatch with current density peak
+                // If recent intervals consistently disagree with density peak, trigger reset
+                // Use lastBpmFromDensity (from previous updateTempo call) as reference
+                if (beat_state_.lastBpmFromDensity > 0.0f) {
+                    float bpmDifference = std::abs(candidateBpm - beat_state_.lastBpmFromDensity);
+                    if (bpmDifference > tuning_.intervalMismatchThreshold) {
+                        // P0-G FIX: Add missing opening brace and proper indentation
+                        beat_state_.intervalMismatchCounter++;
+                        if (beat_state_.intervalMismatchCounter >= tuning_.intervalMismatchCount) {
+                            // SOFT RESET: Recent intervals consistently disagree with density peak
+                            for (int i = 0; i < BeatState::DENSITY_BINS; i++) {
+                                beat_state_.tempoDensity[i] *= tuning_.densitySoftResetFactor;
+                            }
+                            beat_state_.intervalMismatchCounter = 0;
+
+                            // Log the reset event
+                            auto& dbgCfg = lightwaveos::audio::getAudioDebugConfig();
+                            if (dbgCfg.verbosity >= 2) {
+                                printf("\033[36m[TEMPO RESET]\033[0m Soft-reset density buffer: intervals (%.1f BPM) disagree with peak (%.1f BPM) by %.1f BPM\n",
+                                       candidateBpm, beat_state_.lastBpmFromDensity, bpmDifference);
+                            }
+                            char reset_data[256];
+                            snprintf(reset_data, sizeof(reset_data),
+                                "{\"reason\":\"interval_mismatch\",\"candidate_bpm\":%.1f,\"peak_bpm\":%.1f,\"difference\":%.1f,\"consecutive_mismatches\":%u}",
+                                candidateBpm, beat_state_.lastBpmFromDensity, bpmDifference, tuning_.intervalMismatchCount);
+                            debug_log(2, "TempoTracker.cpp:updateBeat", "density_soft_reset", reset_data, t_samples);
+                        }
+                    } else {
+                        // Interval agrees with density peak - reset counter
+                        beat_state_.intervalMismatchCounter = 0;
+                    }
+                }  // Close if (lastBpmFromDensity > 0)
+                // #endregion
+                
+                // CONSISTENCY BOOST: Weight intervals that match recent ones more heavily
+                // This helps clusters of similar intervals (like 136-144 BPM) dominate over random noise
+                float baseWeight = 1.0f;
+                float consistencyBoost = 1.0f;
+                if (beat_state_.intervalCount > 0) {
+                    // Check if this interval is similar to recent valid intervals
+                    int matchCount = 0;
+                    for (uint8_t i = 0; i < beat_state_.intervalCount && i < tuning_.recentIntervalWindow; i++) {
+                        float recentBpm = 60.0f / beat_state_.recentIntervals[i];
+                        float bpmDiff = std::abs(candidateBpm - recentBpm);
+                        if (bpmDiff <= tuning_.consistencyBoostThreshold) {
+                            matchCount++;
+                        }
+                    }
+                    // Boost weight if this interval matches recent ones
+                    if (matchCount > 0) {
+                        consistencyBoost = tuning_.consistencyBoostMultiplier;
+                        // Human-readable log for boosted intervals
+                        auto& dbgCfg = lightwaveos::audio::getAudioDebugConfig();
+                        if (dbgCfg.verbosity >= 2) {
+                            printf("\033[33m[BOOST]\033[0m interval=%.3fs -> %.1f BPM matches %d recent intervals (weight ×%.1f)\n",
+                                   onsetDt, candidateBpm, matchCount, consistencyBoost);
+                        }
+                    }
+                }
+                float intervalWeight = baseWeight * consistencyBoost;
+                
                 // Add octave variants: 0.5×, 1×, 2× (when in range)
                 float variants[] = {candidateBpm * 0.5f, candidateBpm, candidateBpm * 2.0f};
+                
+                float total_weight_added = 0.0f;
+                int bins_updated = 0;
                 
                 for (int oct = 0; oct < 3; oct++) {
                     float bpm = variants[oct];
@@ -807,13 +1024,34 @@ void TempoTracker::updateBeat(bool onset, float onsetStrength, uint64_t t_sample
                                 int targetBin = bin + offset;
                                 if (targetBin >= 0 && targetBin < BeatState::DENSITY_BINS) {
                                     float dist = std::abs(static_cast<float>(offset));
-                                    float weight = std::max(0.0f, 1.0f - dist / kernelWidth);
+                                    float weight = std::max(0.0f, 1.0f - dist / kernelWidth) * intervalWeight;
+                                    float density_before = beat_state_.tempoDensity[targetBin];
                                     beat_state_.tempoDensity[targetBin] += weight;
+                                    total_weight_added += weight;
+                                    bins_updated++;
+                                    
+                                    // #region agent log
+                                    if (bins_updated <= 3) {  // Log first 3 bin updates
+                                        char density_update[256];
+                                        snprintf(density_update, sizeof(density_update),
+                                            "{\"bin\":%d,\"bpm\":%.1f,\"weight\":%.3f,\"density_before\":%.6f,\"density_after\":%.6f,\"hypothesisId\":\"D\"}",
+                                            targetBin, bpm, weight, density_before, beat_state_.tempoDensity[targetBin]);
+                                        debug_log(3, "TempoTracker.cpp:updateBeat", "density_update", density_update, t_samples);
+                                    }
+                                    // #endregion
                                 }
                             }
                         }
                     }
                 }
+                
+                // #region agent log
+                char density_summary[256];
+                snprintf(density_summary, sizeof(density_summary),
+                    "{\"total_weight_added\":%.3f,\"bins_updated\":%d,\"candidateBpm\":%.1f,\"hypothesisId\":\"D\"}",
+                    total_weight_added, bins_updated, candidateBpm);
+                debug_log(3, "TempoTracker.cpp:updateBeat", "density_add_summary", density_summary, t_samples);
+                // #endregion
                 
                 // 2nd-order PLL correction on onset
                 // Compute phase error (target is 0.0)
@@ -844,15 +1082,34 @@ void TempoTracker::updateBeat(bool onset, float onsetStrength, uint64_t t_sample
                 // Normalize phase
                 if (beat_state_.phase01 < 0.0f) beat_state_.phase01 += 1.0f;
                 if (beat_state_.phase01 >= 1.0f) beat_state_.phase01 -= 1.0f;
+                
+                // Update recent intervals array for consistency checking
+                // Shift existing intervals and add new one at the front
+                for (int i = static_cast<int>(beat_state_.intervalCount) - 1; i >= 0 && i < 4; i--) {
+                    beat_state_.recentIntervals[i + 1] = beat_state_.recentIntervals[i];
+                }
+                beat_state_.recentIntervals[0] = onsetDt;
+                if (beat_state_.intervalCount < 5) {
+                    beat_state_.intervalCount++;
+                }
+                
+                // Commit accepted onset time (prevents hats/ghost onsets from poisoning intervals)
+                beat_state_.lastOnsetUs = t_samples;  // ✅ Only update for accepted intervals
             } else {
                 // Interval out of range - track it
                 diagnostics_.intervalsRejected++;
                 diagnostics_.lastRejectedInterval = onsetDt;
                 
+                float candidateBpm = 60.0f / onsetDt;
+                const char* reason = (onsetDt < minP) ? "too_fast" : "too_slow";
+                
+                // Human-readable coloured log (RED = rejected interval)
+                tempo_event_log(ANSI_RED, "REJECT", "interval=%.3fs -> %.1f BPM (%s, need %.0f-%.0f)", 
+                               onsetDt, candidateBpm, reason, tuning_.minBpm, tuning_.maxBpm);
+                
                 // Log rejection reason at verbosity 4
                 auto& dbgCfg = lightwaveos::audio::getAudioDebugConfig();
                 if (dbgCfg.verbosity >= 4) {
-                    float candidateBpm = 60.0f / onsetDt;
                     uint64_t onsetDtUs = static_cast<uint64_t>(onsetDt * 1e6f);
                     char rej_data[512];
                     snprintf(rej_data, sizeof(rej_data),
@@ -861,23 +1118,26 @@ void TempoTracker::updateBeat(bool onset, float onsetStrength, uint64_t t_sample
                         "\"reason\":\"%s\",\"t_samples\":%llu,\"lastOnsetSamples\":%llu}",
                         onsetDt, (unsigned long long)onsetDtUs, candidateBpm,
                         tuning_.minBpm, tuning_.maxBpm, minP, maxP,
-                        (onsetDt < minP) ? "too_fast" : "too_slow",
+                        reason,
                         (unsigned long long)t_samples, (unsigned long long)beat_state_.lastOnsetUs);
                     debug_log(4, "TempoTracker.cpp:updateBeat", "interval_rejected", rej_data, t_samples);
                 }
+                
+                // If interval is too slow, we likely missed beats; reset the onset timer
+                // If it's too fast, DO NOT reset (avoids hats stealing the timer)
+                if (onsetDt > maxP) {
+                    beat_state_.lastOnsetUs = t_samples;  // ✅ Reset only for "too slow"
+                }
+                // ❌ Do NOT update lastOnsetUs for "too fast" - that's the bug
             }
+        } else {
+            // First onset - initialize timer
+            beat_state_.lastOnsetUs = t_samples;  // Store in samples
         }
-        beat_state_.lastOnsetUs = t_samples;  // Store in samples
     }
     
-    // Update phase based on current BPM estimate (from density buffer)
-    float currentPeriod = 60.0f / (beat_state_.bpm + 1e-6f);
-    beat_state_.phase01 += dt / currentPeriod;
-    
-    // Normalize phase
-    if (beat_state_.phase01 >= 1.0f) {
-        beat_state_.phase01 -= 1.0f;
-    }
+    // Phase advancement is now handled in advancePhase() to avoid duplication
+    // Removed phase advancement from here (was causing double advancement)
 }
 
 // ============================================================================
@@ -885,20 +1145,24 @@ void TempoTracker::updateBeat(bool onset, float onsetStrength, uint64_t t_sample
 // ============================================================================
 
 void TempoTracker::advancePhase(float delta_sec, uint64_t t_samples) {
-    // Fix beat_tick generation: use stored last_phase_ from previous call (persist across calls)
-    float old_phase = last_phase_;  // Previous phase from last call
-    float new_phase = beat_state_.phase01;  // Current phase
-    
-    // Update stored phase for next call
-    last_phase_ = new_phase;
+    // P0-A FIX: Store previous phase at START, then compare stored vs current
+    float prev_phase = last_phase_;  // Use PREVIOUS stored value
 
-    // Phase already advanced in updateBeat()
-    // This call is kept for AudioNode compatibility, but phase integration
-    // happens in updateTempo() -> updateBeat()
+    // Advance phase based on current BPM estimate (centralized phase advancement)
+    float currentPeriod = 60.0f / (beat_state_.bpm + 1e-6f);
+    beat_state_.phase01 += delta_sec / currentPeriod;
+
+    // Normalize phase
+    if (beat_state_.phase01 >= 1.0f) {
+        beat_state_.phase01 -= 1.0f;
+    }
+
+    // Store current for NEXT call
+    last_phase_ = beat_state_.phase01;
 
     // Beat tick detection: zero crossing from high to low (phase wraps 1->0)
-    // Use old_phase vs new_phase (not same value)
-    beat_tick_ = (old_phase > 0.9f && new_phase < 0.1f);
+    // Now compare previous vs current (from updateBeat)
+    beat_tick_ = (prev_phase > 0.9f && beat_state_.phase01 < 0.1f);
 
     // Debounce: prevent multiple ticks within 60% of beat period
     if (beat_tick_) {
@@ -934,12 +1198,17 @@ void TempoTracker::advancePhase(float delta_sec, uint64_t t_samples) {
 // ============================================================================
 
 TempoOutput TempoTracker::getOutput() const {
+    // P0-B FIX: Gate beat_tick by confidence threshold in getOutput()
+    // This prevents the struct copy in AudioNode from overwriting the gating
+    const float lockThreshold = 0.5f;  // Must match tuning parameter (TODO: use tuning_.lockThreshold)
+    bool gated_beat_tick = beat_tick_ && (beat_state_.conf >= lockThreshold);
+
     return TempoOutput{
         .bpm = beat_state_.bpm,
         .phase01 = beat_state_.phase01,
         .confidence = beat_state_.conf,
-        .beat_tick = beat_tick_,
-        .locked = beat_state_.conf > 0.2f,  // Locked if confidence > 20%
+        .beat_tick = gated_beat_tick,  // Apply gating here
+        .locked = beat_state_.conf >= lockThreshold,
         .beat_strength = onset_strength_    // Use last onset strength as beat strength
     };
 }

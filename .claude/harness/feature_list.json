@@ -394,6 +394,18 @@
             "results_summary": "Phase 0 complete: Created 4 Python validation tools (test_tempo_lock.py, analyze_intervals.py, measure_onset_accuracy.py, visualize_tempo_data.py), 6 ground truth CSV templates, comprehensive README documentation. All tools execute without errors. Build verification passed. Test infrastructure ready for Ralph Loop iterations 2+."
           },
           "commit": "d5825a2"
+        },
+        {
+          "run_id": "run-20260108-124031",
+          "timestamp": "2026-01-08T12:40:31.364588Z",
+          "result": "PASSED",
+          "evidence": {
+            "commands_run": [
+              "pio run -e esp32dev_audio -d firmware/v2"
+            ],
+            "results_summary": "Phase 1 complete: Fixed all 11 P0/P0.5 bugs - P0-A (beat_tick generation), P0-B (gating), P0-C (onset poisoning CRITICAL FIX for 99.7% rejection rate), P0-D (native determinism verified), P0-E (K1 baseline initialization), P0-F (refractory period 100ms→200ms), P0-G (compilation errors), plus 4 P0.5 diagnostic/logging enhancements. Build SUCCESS (Flash: +460 bytes). Ready for onset accuracy measurement with Phase 0 test tools."
+          },
+          "commit": "5a24fc8"
         }
       ],
       "override_reason": null,

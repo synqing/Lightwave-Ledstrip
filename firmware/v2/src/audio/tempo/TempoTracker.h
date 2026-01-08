@@ -48,8 +48,22 @@ struct TempoTrackerTuning {
 
     // Onset detection parameters
     float onsetThreshK = 1.8f;           // Multiplier over baseline for onset (lowered for better sensitivity)
-    uint32_t refractoryMs = 100;         // Minimum time between onsets (ms) (reduced for fast music)
+    uint32_t refractoryMs = 200;         // P0-F FIX: Minimum time between onsets (ms) - increased to 200ms (300 BPM max) to prevent subdivisions
     float baselineAlpha = 0.22f;         // Baseline smoothing (EMA alpha) (increased for faster adaptation)
+
+    // Low-confidence reset parameters
+    float lowConfThreshold = 0.15f;      // Confidence below which we consider "lost"
+    float lowConfResetTimeSec = 8.0f;    // Seconds of low confidence before soft-reset
+    float densitySoftResetFactor = 0.3f; // Multiply density buffer by this on soft-reset (not full clear)
+    
+    // Interval mismatch reset parameters
+    float intervalMismatchThreshold = 10.0f; // BPM difference to trigger mismatch check
+    uint8_t intervalMismatchCount = 5;       // Number of consecutive mismatched intervals before reset
+    
+    // Interval weighting parameters
+    float consistencyBoostThreshold = 15.0f; // BPM difference for consistency boost (within N BPM = boost)
+    float consistencyBoostMultiplier = 3.0f; // Multiply weight by this if interval matches recent ones
+    uint8_t recentIntervalWindow = 5;        // Number of recent intervals to check for consistency
 
     // Spectral flux weights (8 bands, reduced disparity to detect weak beats)
     // Reduced from 4.67x to 2.4x disparity per research document recommendation
@@ -104,7 +118,7 @@ struct BeatState {
     static constexpr float DENSITY_MIN_BPM = 60.0f;
     static constexpr float DENSITY_MAX_BPM = 180.0f;
     float tempoDensity[DENSITY_BINS];  ///< Tempo density histogram
-    float densityDecay = 0.97f;        ///< Decay factor per hop (0.95-0.98)
+    float densityDecay = 0.995f;        ///< Decay factor per hop (Phase C: 0.995 = 0.5% decay/sec at 125 Hz, ~200s time constant)
     
     // 2nd-order PLL state
     float phaseErrorIntegral;     ///< Integral of phase error (for tempo correction)
@@ -121,6 +135,12 @@ struct BeatState {
     
     // Octave flip detection
     float lastBpmFromDensity;  ///< Previous BPM from density buffer
+    
+    // Low-confidence reset tracking
+    uint64_t lowConfStartSamples;  ///< Sample counter when confidence dropped below threshold (0 = not tracking)
+    
+    // Interval mismatch tracking
+    uint8_t intervalMismatchCounter;  ///< Count of consecutive intervals that disagree with density peak
 };
 
 /**
@@ -145,6 +165,8 @@ struct TempoTrackerDiagnostics {
     uint32_t intervalsValid;          ///< Count of valid intervals (in range and consistent)
     uint32_t intervalsRejected;       ///< Count of rejected intervals (out of range or inconsistent)
     uint32_t intervalsRejectedInconsistent; ///< Count rejected due to inconsistency (in range but not matching current BPM)
+    uint32_t intervals_rej_too_fast;  ///< P0.5: Count rejected due to too fast (< minBeatInterval)
+    uint32_t intervals_rej_too_slow;  ///< P0.5: Count rejected due to too slow (> maxBeatInterval)
     float lastValidInterval;          ///< Last valid inter-onset interval
     float lastRejectedInterval;       ///< Last rejected interval (for debugging)
     

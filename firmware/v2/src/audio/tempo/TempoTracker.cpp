@@ -92,8 +92,15 @@ void TempoTracker::init() {
     onset_state_.rms_last = 0.0f;
     memset(onset_state_.bands_last, 0, sizeof(onset_state_.bands_last));
 
+    // Phase 3-4: Initialize flux history buffer
+    memset(onset_state_.flux_history, 0, sizeof(onset_state_.flux_history));
+    onset_state_.flux_history_idx = 0;
+    onset_state_.flux_history_count = 0;
+
     // Initialize beat tracking state
     beat_state_.bpm = 120.0f;
+    beat_state_.bpm_raw = 120.0f;       // Phase 5: Raw BPM estimate
+    beat_state_.bpm_prev = 120.0f;      // Phase 5: Previous smoothed BPM
     beat_state_.phase01 = 0.0f;
     beat_state_.conf = 0.0f;
     beat_state_.lastUs = 0;
@@ -417,24 +424,30 @@ void TempoTracker::updateFromFeatures(const k1::AudioFeatureFrame& frame) {
 // ============================================================================
 
 bool TempoTracker::detectOnset(float flux, uint64_t t_samples, float& outStrength) {
+    // Phase 3-4: Add current flux to history buffer
+    onset_state_.flux_history[onset_state_.flux_history_idx] = flux;
+    onset_state_.flux_history_idx = (onset_state_.flux_history_idx + 1) % OnsetState::FLUX_HISTORY_SIZE;
+    if (onset_state_.flux_history_count < OnsetState::FLUX_HISTORY_SIZE) {
+        onset_state_.flux_history_count++;
+    }
+
     // Update peak detection history
     float flux_curr = flux;
     float flux_prev = onset_state_.flux_prev;
     float flux_prevprev = onset_state_.flux_prevprev;
-    
-    // Compute combined baseline for threshold
-    float combined_baseline = (onset_state_.baseline_vu * tuning_.fluxWeightVu + onset_state_.baseline_spec * tuning_.fluxWeightSpec);
-    // Phase B: For K1 mode, baseline ≈ 1.0, so threshold ≈ 1.8 (onsetThreshK = 1.8)
-    // This works well for normalized novelty values of 1-6 (peaks should be >1.8)
 
-    // Phase 4: Component 2 - Adaptive onset threshold based on confidence
-    float base_threshold = combined_baseline * tuning_.onsetThreshK;
-    // Phase 5: State-dependent threshold adjustment
-    float state_adaptive_threshold = getStateDependentOnsetThreshold(base_threshold);
-    float confidence_adaptive_threshold = state_adaptive_threshold * (0.5f + 0.5f * beat_state_.conf);
-    // Low confidence (0.0) → 0.5× threshold (more sensitive)
-    // High confidence (1.0) → 1.0× threshold (more selective)
-    float thresh = confidence_adaptive_threshold;
+    // Phase 4: Calculate adaptive threshold using Synesthesia formula
+    // threshold = median(flux_history) + 1.5 * σ(flux_history)
+    float combined_baseline = (onset_state_.baseline_vu * tuning_.fluxWeightVu +
+                                onset_state_.baseline_spec * tuning_.fluxWeightSpec);
+    float thresh = 0.0f;
+    if (onset_state_.flux_history_count >= OnsetState::FLUX_HISTORY_SIZE) {
+        // Have full history - use Synesthesia adaptive threshold
+        thresh = calculateAdaptiveThreshold();
+    } else {
+        // Insufficient history - fall back to legacy baseline method
+        thresh = combined_baseline * tuning_.onsetThreshK;
+    }
     
     // Check for local peak: prev > prevprev AND prev > curr AND prev > thresh
     bool is_local_peak = (flux_prev > flux_prevprev) && 
@@ -790,29 +803,48 @@ void TempoTracker::updateTempo(float delta_sec, uint64_t t_samples) {
     // Estimate BPM from peak
     float bpm_hat = BeatState::DENSITY_MIN_BPM + static_cast<float>(peakBin);
 
-    // Compute confidence from peak sharpness
+    // =========================================================================
+    // PHASE 6: MULTI-FACTOR CONFIDENCE SCORING (SYNESTHESIA)
+    // =========================================================================
+    // Confidence = 0.4×onset_strength + 0.3×tempo_consistency + 0.2×stability + 0.1×phase_coherence
+
+    // Factor 1: Onset Strength (peak sharpness - already calculated above)
     float peak_sharpness = (maxDensity - secondPeak) / (maxDensity + tuning_.fluxBaselineEps);
     peak_sharpness = std::max(0.0f, std::min(1.0f, peak_sharpness));
+    float onset_strength_factor = peak_sharpness;
 
-    // Phase 4: Component 1 - Apply interval consistency factor
-    float consistency_factor = 1.0f - std::min(calculateRecentIntervalsCoV(), 1.0f);
-    // High variance (CoV=1.0) → consistency_factor=0.0
-    // Low variance (CoV=0.0) → consistency_factor=1.0
+    // Factor 2: Tempo Consistency (low CoV of recent intervals)
+    float tempo_consistency = 1.0f - std::min(calculateRecentIntervalsCoV(), 1.0f);
+    // High variance (CoV=1.0) → consistency=0.0
+    // Low variance (CoV=0.0) → consistency=1.0
 
-    float raw_confidence = peak_sharpness * consistency_factor;
+    // Factor 3: Stability (votes in winner bin as percentage of total)
+    int votes_in_winner_bin = countVotesInBin(peakBin);
+    int total_votes = 0;
+    for (int i = 0; i < BeatState::DENSITY_BINS; i++) {
+        total_votes += countVotesInBin(i);
+    }
+    float stability_factor = (total_votes > 0) ? (static_cast<float>(votes_in_winner_bin) / static_cast<float>(total_votes)) : 0.0f;
+    stability_factor = std::max(0.0f, std::min(1.0f, stability_factor));
 
-    // Smooth BPM estimate (EMA)
-    // Phase 4: Component 2 - Adaptive BPM smoothing
-    // Phase 5: Use state-dependent BPM alpha
-    float state_bpm_alpha = getStateDependentBpmAlpha();
-    float adaptive_bpm_alpha = (beat_state_.conf < 0.3f) ? 0.2f : state_bpm_alpha;
-    beat_state_.bpm = (1.0f - adaptive_bpm_alpha) * beat_state_.bpm + adaptive_bpm_alpha * bpm_hat;
+    // Factor 4: Phase Coherence (alignment of predicted vs actual phase)
+    float phase_coherence = calculatePhaseCoherence();
 
-    // Update confidence from density (with temporal smoothing)
+    // Compute multi-factor raw confidence
+    float raw_confidence =
+        tuning_.confWeightOnsetStrength * onset_strength_factor +
+        tuning_.confWeightTempoConsistency * tempo_consistency +
+        tuning_.confWeightStability * stability_factor +
+        tuning_.confWeightPhaseCoherence * phase_coherence;
+
+    // Phase 5: Apply Synesthesia exponential smoothing with attack/release
+    beat_state_.bpm = applyBpmSmoothing(bpm_hat);
+
+    // Update confidence from multi-factor score (with temporal smoothing)
     beat_state_.conf = (1.0f - tuning_.confAlpha) * beat_state_.conf + tuning_.confAlpha * raw_confidence;
 
     // Phase 4: Component 4 - Gradual confidence build-up (cap until sustained evidence)
-    int votes_in_winner_bin = countVotesInBin(peakBin);
+    // votes_in_winner_bin already calculated above in Phase 6 section
 
     if (votes_in_winner_bin < 10) {
         // Not enough sustained evidence, cap confidence
@@ -1583,8 +1615,8 @@ void TempoTracker::updateTempo(const AudioFeatureFrame& frame, uint64_t t_sample
     float conf_from_density = (maxDensity - secondPeak) / (maxDensity + tuning_.fluxBaselineEps);
     conf_from_density = std::max(0.0f, std::min(1.0f, conf_from_density));
 
-    // Smooth BPM estimate (EMA)
-    beat_state_.bpm = (1.0f - tuning_.bpmAlpha) * beat_state_.bpm + tuning_.bpmAlpha * bpm_hat;
+    // Phase 5: Apply Synesthesia exponential smoothing with attack/release
+    beat_state_.bpm = applyBpmSmoothing(bpm_hat);
 
     // Update confidence from density (with temporal smoothing)
     beat_state_.conf = (1.0f - tuning_.confAlpha) * beat_state_.conf + tuning_.confAlpha * conf_from_density;
@@ -1790,6 +1822,144 @@ uint8_t TempoTracker::countActiveIntervals() const {
         }
     }
     return count;
+}
+
+// ============================================================================
+// Phase 4: Adaptive Threshold Calculation (Synesthesia Algorithm)
+// ============================================================================
+
+float TempoTracker::calculateAdaptiveThreshold() const {
+    // Synesthesia formula: threshold = median(flux_history) + 1.5 * σ(flux_history)
+    float median = calculateFluxMedian();
+    float stddev = calculateFluxStdDev(median);
+    float threshold = median + tuning_.adaptiveThresholdSensitivity * stddev;
+
+    // Log threshold calculation (verbosity 5, periodic)
+    static uint32_t threshold_log_counter = 0;
+    threshold_log_counter++;
+    auto& dbgCfg = lightwaveos::audio::getAudioDebugConfig();
+    if (dbgCfg.verbosity >= 5 && (threshold_log_counter % 125 == 0)) {  // Log every ~1 second
+        printf("[PHASE4] Adaptive Threshold: median=%.6f stddev=%.6f sensitivity=%.2f threshold=%.6f\n",
+               median, stddev, tuning_.adaptiveThresholdSensitivity, threshold);
+    }
+
+    return threshold;
+}
+
+float TempoTracker::calculateFluxMedian() const {
+    // Copy flux history to temporary buffer for sorting
+    float temp[OnsetState::FLUX_HISTORY_SIZE];
+    uint8_t count = onset_state_.flux_history_count;
+
+    for (uint8_t i = 0; i < count; i++) {
+        temp[i] = onset_state_.flux_history[i];
+    }
+
+    // Sort using std::sort
+    std::sort(temp, temp + count);
+
+    // Return median
+    if (count % 2 == 0) {
+        // Even number of elements - average middle two
+        return (temp[count/2 - 1] + temp[count/2]) / 2.0f;
+    } else {
+        // Odd number of elements - return middle
+        return temp[count/2];
+    }
+}
+
+float TempoTracker::calculateFluxStdDev(float median) const {
+    // Calculate standard deviation using median as center point
+    // (Synesthesia uses median, not mean, for robustness to outliers)
+    float variance = 0.0f;
+    uint8_t count = onset_state_.flux_history_count;
+
+    for (uint8_t i = 0; i < count; i++) {
+        float diff = onset_state_.flux_history[i] - median;
+        variance += diff * diff;
+    }
+
+    variance /= count;
+    return sqrtf(variance);
+}
+
+// ============================================================================
+// Phase 5: Exponential Smoothing with Attack/Release (Synesthesia Algorithm)
+// ============================================================================
+
+float TempoTracker::applyBpmSmoothing(float raw_bpm) {
+    // Phase 5: Synesthesia exponential smoothing
+    // α_attack = 0.15 (when BPM increasing)
+    // α_release = 0.05 (when BPM decreasing)
+
+    float alpha = 0.0f;
+    if (raw_bpm > beat_state_.bpm_prev) {
+        // Attack: tempo speeding up
+        alpha = tuning_.bpmAlphaAttack;
+    } else {
+        // Release: tempo slowing down
+        alpha = tuning_.bpmAlphaRelease;
+    }
+
+    // Apply exponential moving average
+    float smoothed_bpm = alpha * raw_bpm + (1.0f - alpha) * beat_state_.bpm_prev;
+
+    // Log smoothing decision (verbosity 5, periodic)
+    static uint32_t smoothing_log_counter = 0;
+    smoothing_log_counter++;
+    auto& dbgCfg = lightwaveos::audio::getAudioDebugConfig();
+    if (dbgCfg.verbosity >= 5 && (smoothing_log_counter % 125 == 0)) {  // Log every ~1 second
+        printf("[PHASE5] BPM Smoothing: raw=%.2f prev=%.2f alpha=%.3f smoothed=%.2f\n",
+               raw_bpm, beat_state_.bpm_prev, alpha, smoothed_bpm);
+    }
+
+    // Update state for next iteration
+    beat_state_.bpm_raw = raw_bpm;
+    beat_state_.bpm_prev = smoothed_bpm;
+
+    return smoothed_bpm;
+}
+
+// ============================================================================
+// PHASE 6: MULTI-FACTOR CONFIDENCE SCORING (SYNESTHESIA)
+// ============================================================================
+
+float TempoTracker::calculatePhaseCoherence() const {
+    // Phase 6: Measure alignment between predicted phase and current beat state
+    // Ranges from 0 (antiphase) to 1.0 (perfect alignment)
+    //
+    // For now, use a simple approach: if beat is locked and confidence is high,
+    // phase coherence is high. More sophisticated phase tracking can be added later.
+    //
+    // Phase coherence = 1 - |phase_error| / π
+    // where phase_error is in radians
+
+    if (beat_state_.conf < 0.3f) {
+        // Low confidence - phase coherence is unreliable
+        return beat_state_.conf;  // Scale by confidence
+    }
+
+    // Simplified: use confidence as proxy for phase coherence
+    // In LOCKED state with high confidence, phase is coherent
+    // In SEARCHING state, phase coherence is low
+    return beat_state_.conf * beat_state_.conf;  // Square for sharper discrimination
+}
+
+float TempoTracker::calculateOnsetStrengthFactor(float onsetFlux) const {
+    // Phase 6: Simplified onset strength - just normalize the flux value
+    // Returns a factor [0.0, 1.0] where 1.0 = strong onset
+    //
+    // In practice, peak_sharpness from density buffer is used instead
+    // This function is kept for future enhancement with real onset magnitude
+
+    if (onsetFlux < tuning_.fluxBaselineEps) {
+        return 0.0f;
+    }
+
+    // Normalize to a reasonable scale (clamp to [0.0, 1.0])
+    // Assuming max flux values are typically < 10
+    float normalized = onsetFlux / 10.0f;
+    return std::max(0.0f, std::min(1.0f, normalized));
 }
 
 } // namespace audio

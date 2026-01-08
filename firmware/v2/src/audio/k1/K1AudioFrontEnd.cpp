@@ -36,12 +36,15 @@ static void debug_log(uint8_t minVerbosity, const char* location, const char* me
 K1AudioFrontEnd::K1AudioFrontEnd()
     : m_hopIndex(0)
     , m_initialized(false)
+    , m_fftBufferIndex(0)
+    , m_fftFrameCount(0)
 {
     memset(m_rhythmMags, 0, sizeof(m_rhythmMags));
     memset(m_harmonyMags, 0, sizeof(m_harmonyMags));
     memset(m_rhythmMagsRaw, 0, sizeof(m_rhythmMagsRaw));
     memset(m_harmonyMagsRaw, 0, sizeof(m_harmonyMagsRaw));
     memset(m_chroma12, 0, sizeof(m_chroma12));
+    memset(m_fftBuffer, 0, sizeof(m_fftBuffer));
     memset(&m_currentFrame, 0, sizeof(m_currentFrame));
 }
 
@@ -133,6 +136,14 @@ bool K1AudioFrontEnd::init() {
     // Initialize chroma stability
     m_chromaStability.init(8);
 
+    // Phase 1: Initialize FFT components
+    if (!m_fftAnalyzer.init()) {
+        return false;
+    }
+    m_spectralFlux.reset();
+    m_fftBufferIndex = 0;
+    m_fftFrameCount = 0;
+
     m_hopIndex = 0;
     m_initialized = true;
     return true;
@@ -172,6 +183,30 @@ AudioFeatureFrame K1AudioFrontEnd::processHop(const AudioChunk& chunk, bool is_c
     // Push chunk into ring buffer
     m_ringBuffer.push(chunk.samples, chunk.n, chunk.sample_counter_end);
 
+    // Phase 1: Accumulate samples for FFT processing (512-sample frames)
+    // Each hop is 128 samples, so we accumulate 4 hops into one FFT frame
+    const size_t samples_to_copy = chunk.n;
+    if (m_fftBufferIndex + samples_to_copy <= K1FFTConfig::FFT_SIZE) {
+        // Copy samples to FFT buffer, converting int16 to float
+        for (size_t i = 0; i < samples_to_copy; i++) {
+            m_fftBuffer[m_fftBufferIndex + i] = static_cast<float>(chunk.samples[i]) / 32768.0f;
+        }
+        m_fftBufferIndex += samples_to_copy;
+
+        // Check if we have a complete FFT frame
+        if (m_fftBufferIndex >= K1FFTConfig::FFT_SIZE) {
+            // Process FFT frame
+            if (m_fftAnalyzer.processFrame(m_fftBuffer)) {
+                m_fftFrameCount++;
+                // Get magnitude spectrum and map to rhythm/harmony bands
+                const float* fftMagnitude = m_fftAnalyzer.getMagnitude();
+                FrequencyBandExtractor::mapToRhythmArray(fftMagnitude, m_rhythmMagsRaw);
+                FrequencyBandExtractor::mapToHarmonyArray(fftMagnitude, m_harmonyMagsRaw);
+            }
+            m_fftBufferIndex = 0;
+        }
+    }
+
     // Derive timestamps from sample counter
     frame.t_samples = chunk.sample_counter_end;
     frame.t_us = static_cast<float>(chunk.sample_counter_end * 1000000ULL) / static_cast<float>(FS_HZ);
@@ -179,8 +214,9 @@ AudioFeatureFrame K1AudioFrontEnd::processHop(const AudioChunk& chunk, bool is_c
     // Set clipping flag
     frame.is_clipping = is_clipping;
 
-    // Process RhythmBank every hop
-    m_rhythmBank.processAll(m_ringBuffer, m_rhythmMagsRaw);
+    // Phase 2: DEPRECATED Goertzel processing - replaced by FFT
+    // m_rhythmBank.processAll(m_ringBuffer, m_rhythmMagsRaw);
+    // FFT magnitudes are populated in the FFT accumulation section above
 
     // #region agent log
     if ((log_counter % 125) == 1) {  // Log right after processing
@@ -247,7 +283,8 @@ AudioFeatureFrame K1AudioFrontEnd::processHop(const AudioChunk& chunk, bool is_c
     frame.harmony_valid = harmony_tick;
 
     if (harmony_tick) {
-        m_harmonyBank.processAll(m_ringBuffer, m_harmonyMagsRaw);
+        // Phase 2: DEPRECATED Goertzel processing - replaced by FFT
+        // m_harmonyBank.processAll(m_ringBuffer, m_harmonyMagsRaw);
 
         // Apply noise floor subtraction
         m_harmonyNoiseFloor.update(m_harmonyMagsRaw, is_clipping);

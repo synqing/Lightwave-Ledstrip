@@ -23,6 +23,9 @@
 #include "ChromaExtractor.h"
 #include "ChromaStability.h"
 #include "K1GoertzelTables_16k.h"
+#include "K1FFTAnalyzer.h"
+#include "FrequencyBandExtractor.h"
+#include "SpectralFlux.h"
 
 namespace lightwaveos {
 namespace audio {
@@ -72,6 +75,7 @@ public:
     bool isInitialized() const { return m_initialized; }
 
 private:
+    // Ring buffer and Goertzel processing (legacy path)
     AudioRingBuffer m_ringBuffer;        ///< Audio history ring buffer
     WindowBank m_windowBank;             ///< Window LUT bank
     GoertzelBank m_rhythmBank;           ///< Rhythm bank (24 bins)
@@ -83,6 +87,13 @@ private:
     NoveltyFlux m_noveltyFlux;           ///< Novelty flux calculator
     ChromaExtractor m_chromaExtractor;    ///< Chroma extractor
     ChromaStability m_chromaStability;   ///< Chroma stability tracker
+
+    // Phase 1: FFT processing components
+    K1FFTAnalyzer m_fftAnalyzer;         ///< Real FFT processor (512-point)
+    SpectralFlux m_spectralFlux;         ///< Spectral flux for onset detection
+    float m_fftBuffer[K1FFTConfig::FFT_SIZE];  ///< Accumulation buffer for FFT frames (512 samples)
+    size_t m_fftBufferIndex;             ///< Current position in FFT accumulation buffer
+    uint32_t m_fftFrameCount;            ///< Number of complete FFT frames processed
 
     // Scratch buffers
     float m_rhythmMags[RHYTHM_BINS];     ///< Rhythm magnitudes (post-processing)

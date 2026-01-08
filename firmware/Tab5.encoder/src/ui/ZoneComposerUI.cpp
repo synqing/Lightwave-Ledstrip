@@ -27,15 +27,26 @@ ZoneComposerUI::~ZoneComposerUI() {
     // Cleanup handled by display
 }
 
-void ZoneComposerUI::begin() {
+void ZoneComposerUI::begin(lv_obj_t* parent) {
     markDirty();
     _lastRenderTime = 0;
-    
+
     // Initialize editing segments with default 3-zone layout
     generateZoneSegments(3);
-    
+
     // Validate presets at boot (back-test against v2 firmware expectations)
     validatePresets();
+
+    // Phase 1: Initialize LVGL styles
+    initStyles();
+
+    // Phase 2: Create LVGL widgets if parent provided
+    if (parent) {
+        createInteractiveUI(parent);
+        Serial.println("[ZoneComposer] LVGL interactive UI created");
+    }
+
+    Serial.println("[ZoneComposer] Interactive UI initialized");
 }
 
 void ZoneComposerUI::validatePresets() {
@@ -550,4 +561,467 @@ bool ZoneComposerUI::validateLayout(const zones::ZoneSegment* segments, uint8_t 
     }
     
     return true;
+}
+
+// ============================================================================
+// Phase 1: State Management Implementation
+// ============================================================================
+
+void ZoneComposerUI::initStyles() {
+    // Selected parameter style (blue accent border + bg tint)
+    lv_style_init(&_styleSelected);
+    lv_style_set_border_color(&_styleSelected, lv_color_hex(Theme::ACCENT));
+    lv_style_set_border_width(&_styleSelected, 3);
+    lv_style_set_bg_color(&_styleSelected, lv_color_hex(0x1A237E));  // Dark blue tint
+    lv_style_set_bg_opa(&_styleSelected, LV_OPA_30);
+
+    // Highlighted parameter style (lighter border)
+    lv_style_init(&_styleHighlighted);
+    lv_style_set_border_color(&_styleHighlighted, lv_color_hex(0x64B5F6));  // Light blue
+    lv_style_set_border_width(&_styleHighlighted, 2);
+    lv_style_set_bg_opa(&_styleHighlighted, LV_OPA_20);
+
+    // Normal style
+    lv_style_init(&_styleNormal);
+    lv_style_set_border_width(&_styleNormal, 1);
+    lv_style_set_border_color(&_styleNormal, lv_color_hex(0x424242));  // Dark gray
+    lv_style_set_bg_opa(&_styleNormal, LV_OPA_TRANSP);
+
+    Serial.println("[ZoneComposer] LVGL styles initialized");
+}
+
+void ZoneComposerUI::selectParameter(uint8_t zoneIndex, ZoneParameterMode mode) {
+    if (zoneIndex >= 4) return;
+
+    ZoneSelection newSelection;
+    newSelection.type = SelectionType::ZONE_PARAMETER;
+    newSelection.zoneIndex = zoneIndex;
+    newSelection.mode = mode;
+
+    // Toggle if same parameter clicked again
+    if (_currentSelection == newSelection) {
+        clearSelection();
+        Serial.printf("[ZoneComposer] Deselected Zone %u %s\n",
+                     zoneIndex, (int)mode == 0 ? "Effect" :
+                                (int)mode == 1 ? "Palette" :
+                                (int)mode == 2 ? "Speed" : "Brightness");
+        return;
+    }
+
+    // Update selection
+    clearSelection();  // Remove old highlighting
+    _currentSelection = newSelection;
+    applySelectionHighlight();
+
+    Serial.printf("[ZoneComposer] Selected Zone %u %s (Mode: %d)\n",
+                 zoneIndex, (int)mode == 0 ? "Effect" :
+                           (int)mode == 1 ? "Palette" :
+                           (int)mode == 2 ? "Speed" : "Brightness",
+                 (int)mode);
+}
+
+void ZoneComposerUI::selectZoneCount() {
+    clearSelection();
+    _currentSelection.type = SelectionType::ZONE_COUNT;
+    _currentSelection.zoneIndex = 0;  // Encoder 0 controls zone count
+
+    applySelectionHighlight();
+    Serial.println("[ZoneComposer] Selected Zone Count (Encoder 0)");
+}
+
+void ZoneComposerUI::selectPreset() {
+    clearSelection();
+    _currentSelection.type = SelectionType::PRESET;
+    _currentSelection.zoneIndex = 0;  // Encoder 0 controls preset (updated from plan)
+
+    applySelectionHighlight();
+    Serial.println("[ZoneComposer] Selected Preset (Encoder 0)");
+}
+
+void ZoneComposerUI::setActiveMode(ZoneParameterMode mode) {
+    _activeMode = mode;
+
+    // Update mode button highlighting (when widgets are created in Phase 3)
+    for (int i = 0; i < 4; i++) {
+        if (_modeButtons[i]) {
+            if (i == (int)mode) {
+                lv_obj_add_style(_modeButtons[i], &_styleSelected, 0);
+            } else {
+                lv_obj_remove_style(_modeButtons[i], &_styleSelected, 0);
+            }
+        }
+    }
+
+    // If a zone parameter is selected, switch its mode
+    if (_currentSelection.type == SelectionType::ZONE_PARAMETER) {
+        _currentSelection.mode = mode;
+        applySelectionHighlight();
+    }
+
+    Serial.printf("[ZoneComposer] Active mode changed to: %s\n",
+                 (int)mode == 0 ? "Effect" :
+                 (int)mode == 1 ? "Palette" :
+                 (int)mode == 2 ? "Speed" : "Brightness");
+}
+
+void ZoneComposerUI::clearSelection() {
+    // Remove all highlighting from zone parameter widgets
+    for (int i = 0; i < 4; i++) {
+        if (_zoneEffectLabels[i]) {
+            lv_obj_remove_style(_zoneEffectLabels[i], &_styleSelected, 0);
+        }
+        if (_zonePaletteLabels[i]) {
+            lv_obj_remove_style(_zonePaletteLabels[i], &_styleSelected, 0);
+        }
+        if (_zoneSpeedLabels[i]) {
+            lv_obj_remove_style(_zoneSpeedLabels[i], &_styleSelected, 0);
+        }
+        if (_zoneBrightnessLabels[i]) {
+            lv_obj_remove_style(_zoneBrightnessLabels[i], &_styleSelected, 0);
+        }
+    }
+
+    // Remove highlighting from zone count and preset rows
+    if (_zoneCountRow) {
+        lv_obj_remove_style(_zoneCountRow, &_styleSelected, 0);
+    }
+    if (_presetRow) {
+        lv_obj_remove_style(_presetRow, &_styleSelected, 0);
+    }
+
+    _currentSelection.type = SelectionType::NONE;
+}
+
+void ZoneComposerUI::applySelectionHighlight() {
+    switch (_currentSelection.type) {
+        case SelectionType::ZONE_PARAMETER: {
+            uint8_t zone = _currentSelection.zoneIndex;
+            lv_obj_t* target = getParameterWidget(zone, _currentSelection.mode);
+
+            if (target) {
+                lv_obj_add_style(target, &_styleSelected, 0);
+            }
+            break;
+        }
+
+        case SelectionType::ZONE_COUNT:
+            if (_zoneCountRow) {
+                lv_obj_add_style(_zoneCountRow, &_styleSelected, 0);
+            }
+            break;
+
+        case SelectionType::PRESET:
+            if (_presetRow) {
+                lv_obj_add_style(_presetRow, &_styleSelected, 0);
+            }
+            break;
+
+        case SelectionType::NONE:
+            break;
+    }
+}
+
+lv_obj_t* ZoneComposerUI::getParameterWidget(uint8_t zoneIndex, ZoneParameterMode mode) {
+    if (zoneIndex >= 4) return nullptr;
+
+    switch (mode) {
+        case ZoneParameterMode::EFFECT:
+            return _zoneEffectLabels[zoneIndex];
+        case ZoneParameterMode::PALETTE:
+            return _zonePaletteLabels[zoneIndex];
+        case ZoneParameterMode::SPEED:
+            return _zoneSpeedLabels[zoneIndex];
+        case ZoneParameterMode::BRIGHTNESS:
+            return _zoneBrightnessLabels[zoneIndex];
+        default:
+            return nullptr;
+    }
+}
+
+void ZoneComposerUI::handleEncoderChange(uint8_t encoderIndex, int32_t delta) {
+    // Route based on current selection
+    switch (_currentSelection.type) {
+        case SelectionType::ZONE_PARAMETER:
+            // Encoder N adjusts Zone N parameter
+            if (encoderIndex == _currentSelection.zoneIndex) {
+                adjustZoneParameter(encoderIndex, delta);
+            } else if (encoderIndex < 4) {
+                // Fallback: encoder N always controls zone N
+                adjustZoneParameter(encoderIndex, delta);
+            }
+            break;
+
+        case SelectionType::ZONE_COUNT:
+            if (encoderIndex == 0) {
+                adjustZoneCount(delta);
+            }
+            break;
+
+        case SelectionType::PRESET:
+            if (encoderIndex == 0) {
+                adjustPreset(delta);
+            }
+            break;
+
+        case SelectionType::NONE:
+            // Fallback: Encoder N adjusts Zone N with current mode
+            if (encoderIndex < 4) {
+                adjustZoneParameter(encoderIndex, delta);
+            }
+            break;
+    }
+}
+
+void ZoneComposerUI::adjustZoneParameter(uint8_t zoneIndex, int32_t delta) {
+    if (zoneIndex >= 4) return;
+
+    switch (_activeMode) {
+        case ZoneParameterMode::EFFECT: {
+            // TODO: Get max effect ID from effect list
+            constexpr int MAX_EFFECT_ID = 75;  // Placeholder
+            int newVal = _zoneEffects[zoneIndex] + delta;
+            if (newVal < 0) newVal = MAX_EFFECT_ID;
+            if (newVal > MAX_EFFECT_ID) newVal = 0;
+            _zoneEffects[zoneIndex] = newVal;
+
+            updateEffectLabel(zoneIndex);
+            Serial.printf("[ZoneComposer] Zone %u Effect → %u\n", zoneIndex, _zoneEffects[zoneIndex]);
+            break;
+        }
+
+        case ZoneParameterMode::PALETTE: {
+            // TODO: Get max palette ID from palette list
+            constexpr int MAX_PALETTE_ID = 23;  // Placeholder
+            int newVal = _zonePalettes[zoneIndex] + delta;
+            if (newVal < 0) newVal = MAX_PALETTE_ID;
+            if (newVal > MAX_PALETTE_ID) newVal = 0;
+            _zonePalettes[zoneIndex] = newVal;
+
+            updatePaletteLabel(zoneIndex);
+            Serial.printf("[ZoneComposer] Zone %u Palette → %u\n", zoneIndex, _zonePalettes[zoneIndex]);
+            break;
+        }
+
+        case ZoneParameterMode::SPEED: {
+            int newVal = _zoneSpeeds[zoneIndex] + delta;
+            if (newVal < 1) newVal = 1;
+            if (newVal > 50) newVal = 50;
+            _zoneSpeeds[zoneIndex] = newVal;
+
+            updateSpeedLabel(zoneIndex);
+            Serial.printf("[ZoneComposer] Zone %u Speed → %u\n", zoneIndex, _zoneSpeeds[zoneIndex]);
+            break;
+        }
+
+        case ZoneParameterMode::BRIGHTNESS: {
+            int newVal = _zoneBrightness[zoneIndex] + (delta * 5);  // Faster adjustment
+            if (newVal < 0) newVal = 0;
+            if (newVal > 255) newVal = 255;
+            _zoneBrightness[zoneIndex] = newVal;
+
+            updateBrightnessLabel(zoneIndex);
+            Serial.printf("[ZoneComposer] Zone %u Brightness → %u\n", zoneIndex, _zoneBrightness[zoneIndex]);
+            break;
+        }
+
+        default:
+            break;
+    }
+}
+
+void ZoneComposerUI::adjustZoneCount(int32_t delta) {
+    int newCount = _zoneCount + delta;
+    if (newCount < 1) newCount = 4;  // Wrap to 4
+    if (newCount > 4) newCount = 1;  // Wrap to 1
+    _zoneCount = newCount;
+
+    updateZoneCountLabel();
+    Serial.printf("[ZoneComposer] Zone Count → %u\n", _zoneCount);
+}
+
+void ZoneComposerUI::adjustPreset(int32_t delta) {
+    const char* presets[] = {"Unified", "Dual Split", "Triple Rings", "Quad Active", "Heartbeat Focus"};
+    const int presetCount = 5;
+
+    int newIndex = _currentPresetIndex + delta;
+    if (newIndex < 0) newIndex = presetCount - 1;  // Wrap to end
+    if (newIndex >= presetCount) newIndex = 0;     // Wrap to start
+
+    _currentPresetIndex = newIndex;
+    _presetName = presets[_currentPresetIndex];
+
+    updatePresetLabel();
+    Serial.printf("[ZoneComposer] Preset → %s\n", _presetName);
+}
+
+// Label update helpers (Phase 1 stubs - will be fully implemented in Phase 2)
+void ZoneComposerUI::updateEffectLabel(uint8_t zoneIndex) {
+    if (zoneIndex >= 4 || !_zoneEffectLabels[zoneIndex]) return;
+    // TODO: Update LVGL label text in Phase 2
+    Serial.printf("[ZoneComposer] updateEffectLabel(%u) - stub\n", zoneIndex);
+}
+
+void ZoneComposerUI::updatePaletteLabel(uint8_t zoneIndex) {
+    if (zoneIndex >= 4 || !_zonePaletteLabels[zoneIndex]) return;
+    // TODO: Update LVGL label text in Phase 2
+    Serial.printf("[ZoneComposer] updatePaletteLabel(%u) - stub\n", zoneIndex);
+}
+
+void ZoneComposerUI::updateSpeedLabel(uint8_t zoneIndex) {
+    if (zoneIndex >= 4 || !_zoneSpeedLabels[zoneIndex]) return;
+    // TODO: Update LVGL label text in Phase 2
+    Serial.printf("[ZoneComposer] updateSpeedLabel(%u) - stub\n", zoneIndex);
+}
+
+void ZoneComposerUI::updateBrightnessLabel(uint8_t zoneIndex) {
+    if (zoneIndex >= 4 || !_zoneBrightnessLabels[zoneIndex]) return;
+    // TODO: Update LVGL label text in Phase 2
+    Serial.printf("[ZoneComposer] updateBrightnessLabel(%u) - stub\n", zoneIndex);
+}
+
+void ZoneComposerUI::updateZoneCountLabel() {
+    if (!_zoneCountValueLabel) return;
+    // TODO: Update LVGL label text in Phase 2
+    Serial.printf("[ZoneComposer] updateZoneCountLabel() - stub\n");
+}
+
+void ZoneComposerUI::updatePresetLabel() {
+    if (!_presetValueLabel) return;
+    // TODO: Update LVGL label text in Phase 2
+    Serial.printf("[ZoneComposer] updatePresetLabel() - stub\n");
+}
+
+// ============================================================================
+// Phase 2: Widget Creation Implementation
+// ============================================================================
+
+// Theme constants matching DisplayUI.cpp
+static constexpr uint32_t TAB5_COLOR_BG_PAGE = 0x0A0A0B;
+static constexpr uint32_t TAB5_COLOR_BG_SURFACE_BASE = 0x121214;
+static constexpr uint32_t TAB5_COLOR_BG_SURFACE_ELEVATED = 0x1A1A1C;
+static constexpr uint32_t TAB5_COLOR_BORDER_BASE = 0x2A2A2E;
+static constexpr uint32_t TAB5_COLOR_FG_PRIMARY = 0xFFFFFF;
+static constexpr uint32_t TAB5_COLOR_FG_SECONDARY = 0x9CA3AF;
+static constexpr uint32_t TAB5_COLOR_BRAND_PRIMARY = 0xFFC700;
+
+// Helper function matching DisplayUI's make_card()
+static lv_obj_t* make_zone_card(lv_obj_t* parent, bool elevated) {
+    lv_obj_t* card = lv_obj_create(parent);
+    lv_obj_set_style_bg_color(card,
+                              lv_color_hex(elevated ? TAB5_COLOR_BG_SURFACE_ELEVATED
+                                                    : TAB5_COLOR_BG_SURFACE_BASE),
+                              LV_PART_MAIN);
+    lv_obj_set_style_border_width(card, 2, LV_PART_MAIN);
+    lv_obj_set_style_border_color(card, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    lv_obj_set_style_radius(card, 14, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(card, 10, LV_PART_MAIN);
+    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+    return card;
+}
+
+void ZoneComposerUI::createInteractiveUI(lv_obj_t* parent) {
+    Serial.println("[ZoneComposer] Creating themed LVGL UI matching DisplayUI...");
+
+    // TODO: Implement proper themed Zone Composer UI
+    // For now, create a placeholder that matches the theme
+    lv_obj_t* placeholder = lv_label_create(parent);
+    lv_label_set_text(placeholder, "ZONE COMPOSER\n(THEMED UI COMING SOON)");
+    lv_obj_set_style_text_color(placeholder, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
+    lv_obj_center(placeholder);
+
+    Serial.println("[ZoneComposer] Placeholder created - proper themed UI needed");
+}
+
+lv_obj_t* ZoneComposerUI::createZoneCountRow(lv_obj_t* parent) {
+    // TODO: Implement with proper theme matching DisplayUI
+    return nullptr;
+}
+
+// Stub implementations - TODO: Reimplement with proper DisplayUI theme matching
+
+lv_obj_t* ZoneComposerUI::createPresetRow(lv_obj_t* parent) {
+    // TODO: Implement with proper theme matching DisplayUI
+    (void)parent;
+    return nullptr;
+}
+
+void ZoneComposerUI::createZoneParameterGrid(lv_obj_t* parent) {
+    // TODO: Implement with proper theme matching DisplayUI
+    (void)parent;
+}
+
+lv_obj_t* ZoneComposerUI::createZoneParamRow(lv_obj_t* parent, uint8_t zoneIndex) {
+    // TODO: Implement with proper theme matching DisplayUI
+    (void)parent;
+    (void)zoneIndex;
+    return nullptr;
+}
+
+lv_obj_t* ZoneComposerUI::createClickableParameter(
+    lv_obj_t* parent,
+    const char* label,
+    const char* value,
+    uint8_t zoneIndex,
+    ZoneParameterMode mode
+) {
+    // TODO: Implement with proper theme matching DisplayUI
+    (void)parent;
+    (void)label;
+    (void)value;
+    (void)zoneIndex;
+    (void)mode;
+    return nullptr;
+}
+
+void ZoneComposerUI::createModeSelector(lv_obj_t* parent) {
+    // TODO: Implement with proper theme matching DisplayUI
+    (void)parent;
+}
+
+lv_obj_t* ZoneComposerUI::createBackButton(lv_obj_t* parent) {
+    // TODO: Implement with proper theme matching DisplayUI
+    (void)parent;
+    return nullptr;
+}
+// ============================================================================
+// Phase 2: LVGL Event Callbacks
+// ============================================================================
+
+void ZoneComposerUI::parameterTouchCb(lv_event_t* e) {
+    ZoneComposerUI* ui = (ZoneComposerUI*)lv_event_get_user_data(e);
+    lv_obj_t* target = (lv_obj_t*)lv_event_get_target(e);
+
+    ParameterMetadata* meta = (ParameterMetadata*)lv_obj_get_user_data(target);
+    if (!meta) return;
+
+    ui->selectParameter(meta->zoneIndex, meta->mode);
+}
+
+void ZoneComposerUI::zoneCountTouchCb(lv_event_t* e) {
+    ZoneComposerUI* ui = (ZoneComposerUI*)lv_event_get_user_data(e);
+    ui->selectZoneCount();
+}
+
+void ZoneComposerUI::presetTouchCb(lv_event_t* e) {
+    ZoneComposerUI* ui = (ZoneComposerUI*)lv_event_get_user_data(e);
+    ui->selectPreset();
+}
+
+void ZoneComposerUI::modeButtonCb(lv_event_t* e) {
+    ZoneComposerUI* ui = (ZoneComposerUI*)lv_event_get_user_data(e);
+    lv_obj_t* btn = (lv_obj_t*)lv_event_get_target(e);
+
+    int modeIndex = (int)(intptr_t)lv_obj_get_user_data(btn);
+    ui->setActiveMode((ZoneParameterMode)modeIndex);
+}
+
+void ZoneComposerUI::backButtonCb(lv_event_t* e) {
+    ZoneComposerUI* ui = (ZoneComposerUI*)lv_event_get_user_data(e);
+
+    Serial.println("[ZoneComposer] Back button pressed - returning to GLOBAL screen");
+
+    // Invoke callback to return to GLOBAL screen
+    if (ui->_backButtonCallback) {
+        ui->_backButtonCallback();
+    }
 }

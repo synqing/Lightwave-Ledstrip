@@ -81,6 +81,11 @@ struct TempoTrackerTuning {
     float minBaselineSpec = 0.001f;      ///< Minimum spectral baseline floor
 
     // ========================================
+    // PHASE 4: ADAPTIVE THRESHOLD (SYNESTHESIA)
+    // ========================================
+    float adaptiveThresholdSensitivity = 1.5f;  ///< Phase 4: Sensitivity multiplier for std dev (Synesthesia: 1.5)
+
+    // ========================================
     // FLUX COMBINATION
     // ========================================
     float fluxWeightVu = 0.5f;           ///< Weight for VU delta in combined flux (50/50 with spectral)
@@ -97,14 +102,22 @@ struct TempoTrackerTuning {
     float lockThreshold = 0.5f;          ///< Confidence threshold for "locked" state
 
     // ========================================
-    // BPM SMOOTHING
+    // BPM SMOOTHING (PHASE 5: SYNESTHESIA EXPONENTIAL SMOOTHING)
     // ========================================
-    float bpmAlpha = 0.1f;               ///< BPM EMA smoothing factor (slow smoothing)
+    float bpmAlphaAttack = 0.15f;        ///< Phase 5: Attack coefficient (BPM increasing)
+    float bpmAlphaRelease = 0.05f;       ///< Phase 5: Release coefficient (BPM decreasing)
+    float bpmAlpha = 0.1f;               ///< Legacy EMA smoothing factor (deprecated in Phase 5)
 
     // ========================================
-    // CONFIDENCE CALCULATION
+    // CONFIDENCE CALCULATION (PHASE 6: MULTI-FACTOR)
     // ========================================
     float confAlpha = 0.2f;              ///< Confidence EMA smoothing factor
+
+    // Phase 6: Multi-factor confidence weights (Synesthesia formula)
+    float confWeightOnsetStrength = 0.4f;   ///< Weight for onset strength factor
+    float confWeightTempoConsistency = 0.3f; ///< Weight for tempo consistency (low CoV)
+    float confWeightStability = 0.2f;      ///< Weight for sustained density (votes)
+    float confWeightPhaseCoherence = 0.1f; ///< Weight for phase alignment
 
     // ========================================
     // DENSITY BUFFER
@@ -223,6 +236,7 @@ struct TempoTrackerTuning {
  * @brief Onset detector state
  *
  * Combines spectral flux and VU derivative to produce a single onset signal.
+ * Implements Synesthesia-style adaptive threshold (Phase 3-4).
  */
 struct OnsetState {
     float baseline_vu;                  ///< EMA baseline for VU derivative
@@ -232,15 +246,24 @@ struct OnsetState {
     uint64_t lastOnsetUs;                ///< Time of last onset (samples, sample counter)
     float bands_last[8];                 ///< Last 8-band values for spectral flux
     float rms_last;                      ///< Last RMS for VU derivative
+
+    // Phase 3-4: Adaptive threshold with flux history
+    static constexpr uint8_t FLUX_HISTORY_SIZE = 40;  ///< 40 frames ≈ 230ms @ 173 Hz hop rate
+    float flux_history[FLUX_HISTORY_SIZE];            ///< Circular buffer of recent flux values
+    uint8_t flux_history_idx;                         ///< Write index for circular buffer
+    uint8_t flux_history_count;                       ///< Number of valid entries (0-40)
 };
 
 /**
  * @brief Beat tracker state
  *
  * Tracks BPM, phase, and confidence based on inter-onset intervals.
+ * Implements Synesthesia-style exponential smoothing (Phase 5).
  */
 struct BeatState {
-    float bpm;                           ///< Current estimated BPM
+    float bpm;                           ///< Current estimated BPM (smoothed)
+    float bpm_raw;                       ///< Raw BPM estimate (before smoothing, Phase 5)
+    float bpm_prev;                      ///< Previous smoothed BPM (for attack/release, Phase 5)
     float phase01;                       ///< Phase [0, 1) - 0 = beat instant
     float conf;                          ///< Confidence [0, 1]
 
@@ -522,6 +545,42 @@ private:
     bool detectOnset(float flux, uint64_t t_samples, float& outStrength);
 
     /**
+     * @brief Calculate adaptive threshold (Phase 4: Synesthesia formula)
+     *
+     * Implements: threshold = median(flux_history) + 1.5 * σ(flux_history)
+     *
+     * @return Adaptive threshold value
+     */
+    float calculateAdaptiveThreshold() const;
+
+    /**
+     * @brief Calculate median of flux history buffer
+     *
+     * @return Median flux value from last 40 frames
+     */
+    float calculateFluxMedian() const;
+
+    /**
+     * @brief Calculate standard deviation of flux history buffer
+     *
+     * @param median Pre-calculated median value (for efficiency)
+     * @return Standard deviation of flux history
+     */
+    float calculateFluxStdDev(float median) const;
+
+    /**
+     * @brief Apply exponential smoothing to BPM (Phase 5: Synesthesia formula)
+     *
+     * Uses attack/release coefficients:
+     * - α_attack = 0.15 (when BPM increasing)
+     * - α_release = 0.05 (when BPM decreasing)
+     *
+     * @param raw_bpm Raw BPM estimate from IOI analysis
+     * @return Smoothed BPM value
+     */
+    float applyBpmSmoothing(float raw_bpm);
+
+    /**
      * @brief Update beat tracking from onset
      *
      * Updates beat_state_ with BPM estimate and phase correction.
@@ -594,6 +653,26 @@ private:
      * @param timestamp Sample timestamp
      */
     void addInterval(float interval, uint64_t timestamp);
+
+    /**
+     * @brief Calculate phase coherence factor (Phase 6)
+     *
+     * Measures alignment between predicted beat phase and current phase.
+     * Ranges from 0 (antiphase) to 1.0 (perfect alignment).
+     *
+     * @return Phase coherence factor [0.0-1.0]
+     */
+    float calculatePhaseCoherence() const;
+
+    /**
+     * @brief Calculate onset strength factor (Phase 6)
+     *
+     * Normalizes recent onset magnitudes relative to baseline.
+     *
+     * @param onsetFlux Current onset flux value
+     * @return Normalized strength [0.0-1.0+]
+     */
+    float calculateOnsetStrengthFactor(float onsetFlux) const;
 
     /**
      * @brief Expire old intervals (> 10 seconds old)

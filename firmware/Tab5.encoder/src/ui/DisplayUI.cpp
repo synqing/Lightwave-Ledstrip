@@ -17,6 +17,7 @@
 #include "../network/WiFiManager.h"
 #include "fonts/bebas_neue_fonts.h"
 #include "fonts/experimental_fonts.h"
+#include "ZoneComposerUI.h"
 
 // Forward declaration - WiFiManager instance is in main.cpp
 extern WiFiManager g_wifiManager;
@@ -31,6 +32,9 @@ static constexpr uint32_t TAB5_COLOR_BRAND_PRIMARY = 0xFFC700;
 
 // Forward declaration
 static void formatDuration(uint32_t seconds, char* buf, size_t bufSize);
+
+// Static member initialization
+DisplayUI* DisplayUI::s_instance = nullptr;
 
 static constexpr int32_t TAB5_STATUSBAR_HEIGHT = 66;
 static constexpr int32_t TAB5_GRID_GAP = 14;
@@ -69,9 +73,15 @@ static lv_obj_t* make_card(lv_obj_t* parent, bool elevated) {
     return card;
 }
 
-DisplayUI::DisplayUI(M5GFX& display) : _display(display) {}
+DisplayUI::DisplayUI(M5GFX& display) : _display(display) {
+    s_instance = this;
+}
 
 DisplayUI::~DisplayUI() {
+    if (_zoneComposer) {
+        delete _zoneComposer;
+        _zoneComposer = nullptr;
+    }
     if (_screen_global) lv_obj_del(_screen_global);
     if (_screen_zone) lv_obj_del(_screen_zone);
     _screen_global = nullptr;
@@ -361,13 +371,13 @@ void DisplayUI::begin() {
     lv_obj_set_style_border_width(_action_container, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(_action_container, 0, LV_PART_MAIN);
     lv_obj_set_layout(_action_container, LV_LAYOUT_GRID);
-    static lv_coord_t action_col_dsc[5] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
+    static lv_coord_t action_col_dsc[6] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
     static lv_coord_t action_row_dsc[2] = {100, LV_GRID_TEMPLATE_LAST};
     lv_obj_set_grid_dsc_array(_action_container, action_col_dsc, action_row_dsc);
     lv_obj_set_style_pad_column(_action_container, TAB5_GRID_GAP, LV_PART_MAIN);
 
-    const char* action_names[] = {"GAMMA", "COLOUR", "EXPOSURE", "BROWN"};
-    for (int i = 0; i < 4; i++) {
+    const char* action_names[] = {"GAMMA", "COLOUR", "EXPOSURE", "BROWN", "ZONES"};
+    for (int i = 0; i < 5; i++) {
         _action_buttons[i] = make_card(_action_container, false);
         lv_obj_set_grid_cell(_action_buttons[i], LV_GRID_ALIGN_STRETCH, i, 1,
                              LV_GRID_ALIGN_STRETCH, 0, 1);
@@ -397,7 +407,15 @@ void DisplayUI::begin() {
             lv_obj_t* btn = static_cast<lv_obj_t*>(lv_event_get_target(e));
             uint8_t index = static_cast<uint8_t>(reinterpret_cast<uintptr_t>(lv_obj_get_user_data(btn)));
             DisplayUI* ui = static_cast<DisplayUI*>(lv_event_get_user_data(e));
-            if (ui && ui->_action_callback) {
+
+            // Special handling for ZONES button (index 4)
+            if (index == 4) {
+                Serial.println("[DisplayUI] ZONES button pressed - switching to Zone Composer");
+                if (ui) {
+                    ui->setScreen(UIScreen::ZONE_COMPOSER);
+                }
+            } else if (ui && ui->_action_callback) {
+                // Other buttons call the registered callback
                 ui->_action_callback(index);
             }
         }, LV_EVENT_CLICKED, reinterpret_cast<void*>(this));
@@ -603,12 +621,17 @@ void DisplayUI::begin() {
     lv_obj_set_style_pad_top(_footer_battery_bar, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_bottom(_footer_battery_bar, 0, LV_PART_MAIN);
 
+    // Create zone composer screen
     _screen_zone = lv_obj_create(nullptr);
     lv_obj_set_style_bg_color(_screen_zone, lv_color_hex(TAB5_COLOR_BG_PAGE), LV_PART_MAIN);
-    lv_obj_t* zoneLabel = lv_label_create(_screen_zone);
-    lv_label_set_text(zoneLabel, "ZONE COMPOSER (LVGL TODO)");
-    lv_obj_set_style_text_color(zoneLabel, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
-    lv_obj_center(zoneLabel);
+    lv_obj_set_style_pad_all(_screen_zone, 0, LV_PART_MAIN);
+
+    // Create ZoneComposerUI and initialize with zone screen as parent
+    _zoneComposer = new ZoneComposerUI(_display);
+    _zoneComposer->setBackButtonCallback(onZoneComposerBackButton);  // Wire Back button
+    _zoneComposer->begin(_screen_zone);  // Create LVGL widgets on zone screen
+
+    Serial.println("[DisplayUI] Zone Composer initialized");
 
     lv_scr_load(_screen_global);
     _currentScreen = UIScreen::GLOBAL;
@@ -807,6 +830,12 @@ void DisplayUI::setScreen(UIScreen screen) {
     if (screen == _currentScreen) return;
     _currentScreen = screen;
     lv_scr_load(screen == UIScreen::GLOBAL ? _screen_global : _screen_zone);
+}
+
+void DisplayUI::onZoneComposerBackButton() {
+    if (s_instance) {
+        s_instance->setScreen(UIScreen::GLOBAL);
+    }
 }
 
 void DisplayUI::updatePresetSlot(uint8_t slot, bool occupied, uint8_t effectId, uint8_t paletteId, uint8_t brightness) {

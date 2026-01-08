@@ -79,7 +79,7 @@ public:
     // Get zone composer UI (for router initialization)
     #ifndef SIMULATOR_BUILD
     #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL)
-    ZoneComposerUI* getZoneComposerUI() { return nullptr; }
+    ZoneComposerUI* getZoneComposerUI() { return _zoneComposer; }
     #else
     ZoneComposerUI* getZoneComposerUI() { return _zoneComposer; }
     #endif
@@ -120,6 +120,9 @@ private:
     M5GFX& _display;
 
 #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
+    // Static callback for zone composer Back button
+    static DisplayUI* s_instance;
+    static void onZoneComposerBackButton();
     uint8_t _activePresetSlot = 0xFF;
     UIScreen _currentScreen = UIScreen::GLOBAL;
 
@@ -153,12 +156,15 @@ private:
     uint32_t _feedback_color_hex[8] = {0};
 
     lv_obj_t* _action_container = nullptr;
-    lv_obj_t* _action_buttons[4] = {nullptr};
-    lv_obj_t* _action_labels[4] = {nullptr};
-    lv_obj_t* _action_values[4] = {nullptr};
+    lv_obj_t* _action_buttons[5] = {nullptr};
+    lv_obj_t* _action_labels[5] = {nullptr};
+    lv_obj_t* _action_values[5] = {nullptr};
 
     ActionButtonCallback _action_callback = nullptr;
     RetryButtonCallback _retry_callback = nullptr;
+
+    // Zone Composer UI
+    ZoneComposerUI* _zoneComposer = nullptr;
 
     // Footer UI elements
     lv_obj_t* _footer = nullptr;

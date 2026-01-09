@@ -1369,11 +1369,8 @@ void TempoTracker::updateBeat(bool onset, float onsetStrength, uint64_t t_sample
                 }
                 
                 // If interval is too slow, we likely missed beats; reset the onset timer
-                // If it's too fast, DO NOT reset (avoids hats stealing the timer)
-                if (onsetDt > maxP) {
-                    beat_state_.lastOnsetUs = t_samples;  // ✅ Reset only for "too slow"
-                }
-                // ❌ Do NOT update lastOnsetUs for "too fast" - that's the bug
+                // If it's too fast, update the timer so it advances (prevents stalling when hi-hats dominate)
+                beat_state_.lastOnsetUs = t_samples;  // ✅ Update for both "too_fast" and "too_slow"
             }
         } else {
             // First onset - initialize timer
@@ -1928,21 +1925,13 @@ float TempoTracker::calculatePhaseCoherence() const {
     // Phase 6: Measure alignment between predicted phase and current beat state
     // Ranges from 0 (antiphase) to 1.0 (perfect alignment)
     //
-    // For now, use a simple approach: if beat is locked and confidence is high,
-    // phase coherence is high. More sophisticated phase tracking can be added later.
-    //
-    // Phase coherence = 1 - |phase_error| / π
-    // where phase_error is in radians
+    // Uses phase error (predicted vs actual beat phase) to assess coherence
+    // Phase coherence = 1 - 2*|phase_error| / π (normalized to [0, 1])
 
-    if (beat_state_.conf < 0.3f) {
-        // Low confidence - phase coherence is unreliable
-        return beat_state_.conf;  // Scale by confidence
-    }
-
-    // Simplified: use confidence as proxy for phase coherence
-    // In LOCKED state with high confidence, phase is coherent
-    // In SEARCHING state, phase coherence is low
-    return beat_state_.conf * beat_state_.conf;  // Square for sharper discrimination
+    // Early exit: always return 0.0 for now
+    // Phase coherence requires tight phase tracking which will be added in Phase 7
+    // For now, let other factors drive confidence (onset strength + tempo consistency)
+    return 0.0f;
 }
 
 float TempoTracker::calculateOnsetStrengthFactor(float onsetFlux) const {

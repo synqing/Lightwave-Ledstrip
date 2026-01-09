@@ -68,7 +68,7 @@ struct TempoTrackerTuning {
     // BPM RANGE
     // ========================================
     float minBpm = 60.0f;                ///< Minimum detectable BPM
-    float maxBpm = 180.0f;               ///< Maximum detectable BPM
+    float maxBpm = 300.0f;               ///< Maximum detectable BPM (matches refractory period: 60/0.2s = 300 BPM)
 
     // ========================================
     // ONSET DETECTION

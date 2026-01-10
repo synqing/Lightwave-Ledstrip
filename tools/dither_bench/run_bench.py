@@ -17,6 +17,7 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from dither_bench.utils.config import BenchConfig
+from dither_bench.runner import BenchmarkRunner
 
 
 def main():
@@ -123,12 +124,22 @@ def main():
     print("=" * 80)
     print()
     
-    # TODO: Implement actual benchmark execution
-    # This will be filled in as we implement the quantisers and pipelines
-    print("⚠️  Benchmark execution not yet implemented.")
-    print("    Configuration saved. Implementation continues in next todos.")
+    # Run benchmark
+    runner = BenchmarkRunner(config)
+    runner.run_all()
+    
+    # Save results
+    runner.save_results(output_dir)
+    
     print()
-    print(f"Configuration saved to: {output_dir / 'run_config.json'}")
+    print("=" * 80)
+    print("✓ Benchmark Complete")
+    print("=" * 80)
+    print(f"Results saved to: {output_dir}")
+    print()
+    print("Next steps:")
+    print(f"  python generate_report.py --input {output_dir}")
+    print()
     
     return 0
 

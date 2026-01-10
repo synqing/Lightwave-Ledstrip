@@ -362,13 +362,60 @@ private:
     lv_obj_t* createPresetRow(lv_obj_t* parent);
 
     /**
-     * Create zone parameter grid (4 rows × 4 parameters)
+     * Create LED strip visualization bar (4 colored segments)
+     * @param parent Parent LVGL object
+     */
+    void createLedStripBar(lv_obj_t* parent);
+
+    /**
+     * Create zone cards grid (4 HORIZONTAL columns)
+     * @param parent Parent LVGL object
+     */
+    void createZoneCardsGrid(lv_obj_t* parent);
+
+    /**
+     * Create individual zone card
+     * @param parent Parent LVGL object
+     * @param zoneIndex Zone index (0-3)
+     * @return Zone card object
+     */
+    lv_obj_t* createZoneCard(lv_obj_t* parent, uint8_t zoneIndex);
+
+    /**
+     * Create parameter section (EFFECT or PALETTE)
+     * @param parent Parent LVGL object
+     * @param zoneIndex Zone index (0-3)
+     * @param label Section label ("EFFECT" or "PALETTE")
+     * @param value Current value text
+     */
+    void createParameterSection(lv_obj_t* parent, uint8_t zoneIndex,
+                                const char* label, const char* value);
+
+    /**
+     * Create SPD/BRI circular buttons row
+     * @param parent Parent LVGL object
+     * @param zoneIndex Zone index (0-3)
+     */
+    void createSpeedBrightnessButtons(lv_obj_t* parent, uint8_t zoneIndex);
+
+    /**
+     * Create circular button with ring outline
+     * @param parent Parent LVGL object
+     * @param text Button text ("SPD" or "BRI")
+     * @param ringColor Ring border color
+     * @param zoneIndex Zone index (0-3)
+     */
+    void createCircularButton(lv_obj_t* parent, const char* text,
+                              uint32_t ringColor, uint8_t zoneIndex);
+
+    /**
+     * Create zone parameter grid (4 rows × 4 parameters) - LEGACY
      * @param parent Parent LVGL object
      */
     void createZoneParameterGrid(lv_obj_t* parent);
 
     /**
-     * Create single zone parameter row
+     * Create single zone parameter row - LEGACY
      * @param parent Parent LVGL object
      * @param zoneIndex Zone index (0-3)
      * @return Zone parameter row object
@@ -376,7 +423,7 @@ private:
     lv_obj_t* createZoneParamRow(lv_obj_t* parent, uint8_t zoneIndex);
 
     /**
-     * Create clickable parameter widget (Effect/Palette/Speed/Brightness)
+     * Create clickable parameter widget (Effect/Palette/Speed/Brightness) - LEGACY
      * @param parent Parent LVGL object
      * @param label Parameter label text
      * @param value Initial value text

@@ -78,7 +78,13 @@ void WebSocketClient::begin(const char* host, uint16_t port, const char* path) {
     // links2004/WebSockets uses setReconnectInterval for both reconnect and initial timeout
     _ws.setReconnectInterval(NetworkConfig::WS_CONNECTION_TIMEOUT_MS);
 
+    // CRITICAL FIX: Feed watchdog before begin() which can trigger DNS resolution
+    esp_task_wdt_reset();
+    
     _ws.begin(host, port, path);
+    
+    // CRITICAL FIX: Feed watchdog after begin() returns
+    esp_task_wdt_reset();
 }
 
 void WebSocketClient::begin(IPAddress ip, uint16_t port, const char* path) {
@@ -98,11 +104,19 @@ void WebSocketClient::begin(IPAddress ip, uint16_t port, const char* path) {
 
     Serial.printf("[WS] Connecting to ws://%s:%d%s...\n",
                   ip.toString().c_str(), port, path);
+    Serial.printf("[WS] Connection timeout: %lu ms\n", NetworkConfig::WS_CONNECTION_TIMEOUT_MS);
+    Serial.printf("[WS] Local IP: %s\n", WiFi.localIP().toString().c_str());
 
     // Configure connection timeout
     _ws.setReconnectInterval(NetworkConfig::WS_CONNECTION_TIMEOUT_MS);
 
+    // CRITICAL FIX: Feed watchdog before begin() which can trigger TCP connection
+    esp_task_wdt_reset();
+    
     _ws.begin(ip, port, path);
+    
+    // CRITICAL FIX: Feed watchdog after begin() returns
+    esp_task_wdt_reset();
 }
 
 void WebSocketClient::update() {
@@ -120,7 +134,28 @@ void WebSocketClient::update() {
     }
 #endif
     // #endregion
+    
+    // CRITICAL FIX: The third-party WebSocketsClient::loop() can block for >5s during
+    // connection attempts (DNS resolution, TCP connect, SSL handshake, etc).
+    // To prevent watchdog timeouts, we:
+    // 1. Add an extra WDT reset immediately before the call
+    // 2. Track execution time and log warnings if it exceeds threshold
+    // 3. Add another WDT reset immediately after
+    
+    esp_task_wdt_reset();  // Extra reset before potentially-blocking _ws.loop()
+    
+    uint32_t loopStartMs = millis();
     _ws.loop();
+    uint32_t loopDurationMs = millis() - loopStartMs;
+    
+    // Warn if _ws.loop() took >1s (normal is <10ms)
+    if (loopDurationMs > 1000) {
+        Serial.printf("[WS] WARNING: _ws.loop() took %lu ms (status=%d)\n", 
+                      loopDurationMs, (int)_status);
+    }
+    
+    esp_task_wdt_reset();  // Extra reset after potentially-blocking _ws.loop()
+    
     // #region agent log
 #if ENABLE_WS_DIAGNOSTICS
     if ((uint32_t)(millis() - s_lastLoopLog) >= 500) {
@@ -140,6 +175,22 @@ void WebSocketClient::update() {
     if (_pendingHello && _status == WebSocketStatus::CONNECTED) {
         _pendingHello = false;
         sendHelloMessage();
+    }
+
+    // Check if stuck in CONNECTING state too long (timeout protection)
+    static uint32_t s_connectingStartTime = 0;
+    if (_status == WebSocketStatus::CONNECTING) {
+        if (s_connectingStartTime == 0) {
+            s_connectingStartTime = millis();
+        } else if ((millis() - s_connectingStartTime) > NetworkConfig::WS_CONNECTION_TIMEOUT_MS) {
+            // Stuck in CONNECTING too long, reset state to allow retry
+            Serial.println("[WS] Connection timeout, resetting state");
+            _status = WebSocketStatus::DISCONNECTED;
+            s_connectingStartTime = 0;
+            increaseReconnectBackoff();
+        }
+    } else {
+        s_connectingStartTime = 0;  // Reset when not connecting
     }
 
     // Handle reconnection logic
@@ -180,7 +231,13 @@ void WebSocketClient::handleEvent(WStype_t type, uint8_t* payload, size_t length
             break;
 
         case WStype_CONNECTED:
-            Serial.println("[WS] Connected to server");
+            {
+                Serial.println("[WS] Connected to server");
+                Serial.printf("[WS] Server IP: %s:%d%s\n", 
+                              _useIP ? _serverIP.toString().c_str() : (_serverHost ? _serverHost : "unknown"),
+                              _serverPort, _serverPath);
+                Serial.printf("[WS] Local IP: %s\n", WiFi.localIP().toString().c_str());
+            }
             _status = WebSocketStatus::CONNECTED;
             resetReconnectBackoff();
             // Defer hello message to next update() to ensure connection is fully ready
@@ -204,7 +261,14 @@ void WebSocketClient::handleEvent(WStype_t type, uint8_t* payload, size_t length
             break;
 
         case WStype_ERROR:
-            Serial.printf("[WS] Error occurred (delay: %lu ms)\n", _reconnectDelay);
+            {
+                Serial.printf("[WS] Error occurred (delay: %lu ms)\n", _reconnectDelay);
+                Serial.printf("[WS] Target: ws://%s:%d%s\n",
+                              _useIP ? _serverIP.toString().c_str() : (_serverHost ? _serverHost : "unknown"),
+                              _serverPort, _serverPath);
+                Serial.printf("[WS] Local IP: %s, WiFi Status: %d\n", 
+                              WiFi.localIP().toString().c_str(), (int)WiFi.status());
+            }
             _status = WebSocketStatus::ERROR;
             increaseReconnectBackoff();
             break;
@@ -230,11 +294,17 @@ void WebSocketClient::attemptReconnect() {
 
         Serial.printf("[WS] Reconnecting (delay was: %lu ms)...\n", _reconnectDelay);
 
+        // CRITICAL FIX: Feed watchdog before reconnect attempt
+        esp_task_wdt_reset();
+        
         if (_useIP) {
             _ws.begin(_serverIP, _serverPort, _serverPath);
         } else {
             _ws.begin(_serverHost, _serverPort, _serverPath);
         }
+        
+        // CRITICAL FIX: Feed watchdog after reconnect attempt
+        esp_task_wdt_reset();
     }
 }
 
@@ -689,13 +759,10 @@ void WebSocketClient::sendColorCorrectionConfig(bool gammaEnabled, float gammaVa
                                bool autoExposureEnabled, uint8_t autoExposureTarget,
                                bool brownGuardrailEnabled, uint8_t mode) {
     // #region agent log
-    FILE* logFile = fopen("/Users/spectrasynq/Workspace_Management/Software/PRISM.tab5/.cursor/debug.log", "a");
-    if (logFile) {
-        fprintf(logFile, "{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1,H2\",\"location\":\"WebSocketClient.cpp:591\",\"message\":\"sendColorCorrectionConfig.entry\",\"data\":{\"connected\":%d,\"gammaEnabled\":%d,\"gammaValue\":%.1f,\"aeEnabled\":%d,\"aeTarget\":%d,\"brownEnabled\":%d,\"mode\":%d},\"timestamp\":%lu}\n",
-                isConnected() ? 1 : 0, gammaEnabled ? 1 : 0, gammaValue, autoExposureEnabled ? 1 : 0,
-                autoExposureTarget, brownGuardrailEnabled ? 1 : 0, mode, (unsigned long)millis());
-        fclose(logFile);
-    }
+    // NOTE: Do NOT write to host filesystem paths from firmware. Serial-only tracing is safe.
+    Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1,H2\",\"location\":\"WebSocketClient.cpp:sendColorCorrectionConfig\",\"message\":\"entry\",\"data\":{\"connected\":%d,\"gammaEnabled\":%d,\"gammaValue\":%.1f,\"aeEnabled\":%d,\"aeTarget\":%d,\"brownEnabled\":%d,\"mode\":%d},\"timestamp\":%lu}\n",
+                  isConnected() ? 1 : 0, gammaEnabled ? 1 : 0, gammaValue, autoExposureEnabled ? 1 : 0,
+                  autoExposureTarget, brownGuardrailEnabled ? 1 : 0, mode, (unsigned long)millis());
     // #endregion
     
     if (!isConnected()) {

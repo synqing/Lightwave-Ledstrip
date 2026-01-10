@@ -54,6 +54,17 @@
 // Optional: Direct IP fallback (uncomment and set if mDNS fails)
 // This bypasses mDNS entirely and connects directly to the specified IP.
 // Highest priority - takes precedence over all other methods.
+// Useful for debugging or when mDNS is unreliable.
+//
+// To find v2 device IP:
+//  1. Check v2 device serial logs for "STA IP: x.x.x.x"
+//  2. Or use router admin interface to find device IP
+//  3. Or connect to v2's AP (LightwaveOS-AP) - gateway IP is 192.168.4.1
+//
+// Example for v2 device on local network (replace with actual IP):
+#define LIGHTWAVE_IP "192.168.1.102"
+//
+// Example for v2 device's AP fallback:
 // #define LIGHTWAVE_IP "192.168.4.1"
 
 // Connection Timeouts (milliseconds)
@@ -99,6 +110,10 @@ namespace NetworkConfig {
     
     // WiFi retry timeout before showing retry button (2 minutes)
     constexpr uint32_t WIFI_RETRY_TIMEOUT_MS = 120000;  // 2 minutes
+    
+    // Default fallback IP for primary network (when mDNS fails)
+    // This should match v2 device's typical IP on primary network
+    constexpr const char* MDNS_FALLBACK_IP_PRIMARY = "192.168.1.102";
 }
 
 // NVS namespace and keys for network configuration

@@ -11,6 +11,7 @@
 #include "WiFiManager.h"
 
 #if ENABLE_WIFI
+#include <esp_task_wdt.h>  // For watchdog reset around blocking calls
 #include <ESP.h>  // For heap monitoring
 #include <Preferences.h>  // For NVS storage
 
@@ -57,7 +58,11 @@ void WiFiManager::begin(const char* ssid, const char* password,
     Serial.printf("[WiFi] Primary SSID: %s\n", _ssid ? _ssid : "none");
     if (_ssid2) {
         Serial.printf("[WiFi] Secondary SSID: %s\n", _ssid2);
+    } else {
+        Serial.println("[WiFi] Secondary SSID: (none)");
     }
+    Serial.printf("[WiFi] Target hostname: %s:%d%s\n",
+                  LIGHTWAVE_HOST, LIGHTWAVE_PORT, LIGHTWAVE_WS_PATH);
 
     startConnection();
 }
@@ -109,7 +114,9 @@ void WiFiManager::startConnection() {
                   ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap(),
                   currentSSID ? currentSSID : "null");
     // #endregion
+    esp_task_wdt_reset();  // CRITICAL: Reset WDT before potentially blocking WiFi.begin()
     WiFi.begin(currentSSID, currentPassword);
+    esp_task_wdt_reset();  // CRITICAL: Reset WDT after WiFi.begin() completes
     // #region agent log
     Serial.printf("[DEBUG] After WiFi.begin - Heap: free=%u minFree=%u wifiStatus=%d\n",
                   ESP.getFreeHeap(), ESP.getMinFreeHeap(), (int)WiFi.status());
@@ -320,6 +327,11 @@ bool WiFiManager::resolveMDNS(const char* hostname) {
             fallbackIP = WiFi.gatewayIP();
             fallbackSource = "gateway IP (secondary network)";
         }
+        // Priority 3: Default fallback IP for primary network
+        else if (_usingPrimaryNetwork) {
+            fallbackIP.fromString(NetworkConfig::MDNS_FALLBACK_IP_PRIMARY);
+            fallbackSource = "default fallback IP (primary network)";
+        }
 
         if (fallbackIP != INADDR_NONE) {
             _resolvedIP = fallbackIP;
@@ -329,8 +341,11 @@ bool WiFiManager::resolveMDNS(const char* hostname) {
                           now - _mdnsStartTime, fallbackSource, fallbackIP.toString().c_str());
             return true;
         } else {
-            // No fallback available, continue trying mDNS
-            Serial.printf("[WiFi] mDNS timeout exceeded but no fallback IP available, continuing attempts...\n");
+            // No fallback available - reset counters to break infinite loop and allow fresh timeout cycle
+            _mdnsStartTime = 0;
+            _mdnsRetryCount = 0;
+            Serial.printf("[WiFi] mDNS timeout exceeded but no fallback available, resetting retry counter\n");
+            return false;  // Allow fresh timeout cycle
         }
     }
 
@@ -358,9 +373,25 @@ bool WiFiManager::resolveMDNS(const char* hostname) {
                   now - _mdnsStartTime, NetworkConfig::MDNS_FALLBACK_TIMEOUT_MS);
     Serial.printf("[WiFi] Resolving mDNS: %s.local (attempt %d)...\n",
                   hostname, _mdnsRetryCount);
+    
+    // Diagnostic information
+    Serial.printf("[WiFi] Network status: SSID='%s', IP=%s, Gateway=%s, Mode=%s\n",
+                  WiFi.SSID().c_str(),
+                  WiFi.localIP().toString().c_str(),
+                  WiFi.gatewayIP().toString().c_str(),
+                  _usingPrimaryNetwork ? "PRIMARY" : "SECONDARY");
 
     // Query mDNS for the hostname
+    esp_task_wdt_reset();  // CRITICAL: Reset WDT before potentially blocking mDNS query
     IPAddress resolvedIP = MDNS.queryHost(hostname);
+    esp_task_wdt_reset();  // CRITICAL: Reset WDT after mDNS query completes
+
+    // Enhanced diagnostic on failure
+    if (resolvedIP == INADDR_NONE) {
+        Serial.printf("[WiFi] mDNS queryHost('%s') returned INADDR_NONE\n", hostname);
+    } else {
+        Serial.printf("[WiFi] mDNS queryHost('%s') returned: %s\n", hostname, resolvedIP.toString().c_str());
+    }
 
     // FALLBACK: If connected to LightwaveOS AP (secondary network) and mDNS fails, use Gateway IP
     // This ensures connection works even if mDNS is flaky on the SoftAP interface
@@ -377,10 +408,11 @@ bool WiFiManager::resolveMDNS(const char* hostname) {
                       hostname, resolvedIP.toString().c_str());
         return true;
     } else {
-        // Resolution failed, stay in CONNECTED state for retry
-        _status = WiFiConnectionStatus::CONNECTED;
-        Serial.printf("[WiFi] mDNS resolution failed for %s.local\n", hostname);
-        return false;
+        // Resolution failed - keep status as MDNS_RESOLVING (or CONNECTED) to allow retry
+        // Don't change to CONNECTED here - let main loop handle retries via resolveMDNS() calls
+        // Status will be checked again on next resolveMDNS() call
+        Serial.printf("[WiFi] mDNS resolution failed for %s.local (will retry)\n", hostname);
+        return false;  // Return false to allow retry
     }
 }
 

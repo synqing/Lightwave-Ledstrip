@@ -1525,8 +1525,10 @@ void setup() {
                   ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
     // #endregion
     
-    // Begin WiFi with primary and secondary networks
-    g_wifiManager.begin(WIFI_SSID, WIFI_PASSWORD, WIFI_SSID2, WIFI_PASSWORD2);
+    // Begin WiFi - auto-connect to v2 SoftAP (LightwaveOS-AP) as baseline/primary network
+    // User can switch to home WiFi from the Connectivity tab if needed
+    // Primary: LightwaveOS-AP (v2 SoftAP), Secondary: Home WiFi (WIFI_SSID)
+    g_wifiManager.begin("LightwaveOS-AP", "SpectraSynq", WIFI_SSID, WIFI_PASSWORD);
     
     // #region agent log
     Serial.printf("[DEBUG] After WiFiManager::begin() - Heap: free=%u minFree=%u largest=%u\n",
@@ -1631,6 +1633,18 @@ void cleanup() {
 // ============================================================================
 
 void loop() {
+    // CRITICAL: Reset watchdog at START of every loop iteration
+    esp_task_wdt_reset();
+
+    // TRACE: Log every 2 seconds to verify loop is running
+    static uint32_t s_lastLoopTrace = 0;
+    static uint32_t s_loopCount = 0;
+    s_loopCount++;
+    if (millis() - s_lastLoopTrace >= 2000) {
+        Serial.printf("[LOOP_TRACE] loop() running @ %lu ms, iterations=%lu\n", millis(), s_loopCount);
+        s_lastLoopTrace = millis();
+    }
+
     // Update M5Stack (handles button events, touch, etc.)
     M5.update();
 
@@ -1641,6 +1655,7 @@ void loop() {
 
 #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
     LVGLBridge::update();
+    esp_task_wdt_reset();  // Reset after LVGL (can block on SPI I/O)
 #endif
 
     // =========================================================================
@@ -1662,6 +1677,7 @@ void loop() {
 #endif
     // #endregion
     g_wsClient.update();
+    esp_task_wdt_reset();  // Reset after WebSocket (can block on network I/O)
     // #region agent log
 #if ENABLE_WS_DIAGNOSTICS
     if ((uint32_t)(millis() - s_lastWsUpdateLog) >= 1000) {
@@ -1675,6 +1691,7 @@ void loop() {
     // NETWORK: Update WiFi state machine
     // =========================================================================
     g_wifiManager.update();
+    esp_task_wdt_reset();  // Reset after WiFi state machine (can block on network events)
 
     // =========================================================================
     // LED FEEDBACK: Update connection status LEDs (Phase F.5)
@@ -1744,7 +1761,11 @@ void loop() {
             LoadingScreen::hide(M5.Display);
             
             // Initialize full UI
+            Serial.printf("[MAIN_TRACE] Before g_ui->begin() @ %lu ms\n", millis());
+            esp_task_wdt_reset();
             g_ui->begin();
+            Serial.printf("[MAIN_TRACE] After g_ui->begin() @ %lu ms\n", millis());
+            esp_task_wdt_reset();
             // #region agent log
             Serial.printf("[DEBUG] After DisplayUI::begin() - Heap: free=%u minFree=%u largest=%u\n",
                           ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
@@ -1942,11 +1963,13 @@ void loop() {
         // Priority 1: Compile-time LIGHTWAVE_IP (if defined)
 #ifdef LIGHTWAVE_IP
         if (!g_wsConfigured) {
-            g_wsConfigured = true;
             IPAddress serverIP;
             if (!serverIP.fromString(LIGHTWAVE_IP)) {
                 Serial.printf("[NETWORK] Invalid LIGHTWAVE_IP: %s\n", LIGHTWAVE_IP);
+                // Don't set g_wsConfigured if IP parsing fails - allow retry with next priority
             } else {
+                // Only set g_wsConfigured after validation succeeds
+                g_wsConfigured = true;
                 char ipStr[16];
                 formatIPv4(serverIP, ipStr);
                 Serial.printf("[NETWORK] Using compile-time IP: %s\n", ipStr);
@@ -1972,11 +1995,18 @@ void loop() {
         
         // Priority 3: mDNS resolution (with timeout fallback)
         if (!g_wsConfigured) {
-            // Check if mDNS timeout exceeded (WiFiManager handles fallback)
-            if (g_wifiManager.isMDNSTimeoutExceeded() && 
+            // Check if mDNS timeout exceeded OR resolved (not both AND - fixes broken logic)
+            if (g_wifiManager.isMDNSTimeoutExceeded() || 
                 g_wifiManager.isMDNSResolved()) {
-                // WiFiManager already resolved to fallback IP
                 IPAddress fallbackIP = g_wifiManager.getResolvedIP();
+                
+                // If timeout exceeded but no resolved IP, use default fallback for primary network
+                if (fallbackIP == INADDR_NONE && g_wifiManager.isMDNSTimeoutExceeded()) {
+                    fallbackIP.fromString(NetworkConfig::MDNS_FALLBACK_IP_PRIMARY);
+                    Serial.printf("[NETWORK] mDNS timeout exceeded, using default fallback IP: %s\n", 
+                                  NetworkConfig::MDNS_FALLBACK_IP_PRIMARY);
+                }
+                
                 if (fallbackIP != INADDR_NONE) {
                     char ipStr[16];
                     formatIPv4(fallbackIP, ipStr);
@@ -2020,6 +2050,17 @@ void loop() {
             }
         }
 #endif
+
+        // Reset g_wsConfigured if WebSocket disconnects (allows reconnection)
+        // Use existing global s_wasWsConnected from updateConnectionLeds()
+        bool isWsConnected = g_wsClient.isConnected();
+        if (s_wasWsConnected && !isWsConnected) {
+            // WebSocket just disconnected (WiFi still connected)
+            Serial.println("[NETWORK] WebSocket disconnected, resetting connection state");
+            g_wsConfigured = false;  // Allow reconnection
+            s_mdnsLogged = false;    // Allow fresh mDNS log
+        }
+        // Note: s_wasWsConnected is updated in updateConnectionLeds() which is called later in the loop
 
         // Once WebSocket is connected, request effect/palette name lists (paged, non-blocking)
         if (g_wsClient.isConnected()) {
@@ -2076,17 +2117,35 @@ void loop() {
     bool isRecovering = I2CRecovery::isRecovering();
 
     if (s_wasRecovering && !isRecovering) {
-        // Recovery just completed - try to reinit encoder transports
-        Serial.println("[I2C_RECOVERY] Recovery complete - reinitialising encoders...");
+        // Recovery just completed - wait for I2C bus to settle before reinit
+        Serial.println("[I2C_RECOVERY] Recovery complete - waiting for I2C bus to settle...");
+
+        // Allow I2C bus to fully settle before reinit (prevents failed reinit after recovery)
+        esp_task_wdt_reset();
+        delay(50);
+        esp_task_wdt_reset();
 
         if (g_encoders) {
-            // Try to reinit both transports
-            bool unitAOk = g_encoders->transportA().reinit();
-            bool unitBOk = g_encoders->transportB().reinit();
+            bool unitAOk = false;
+            bool unitBOk = false;
 
-            Serial.printf("[I2C_RECOVERY] Post-recovery: Unit A=%s, Unit B=%s\n",
-                          unitAOk ? "OK" : "FAIL",
-                          unitBOk ? "OK" : "FAIL");
+            // Retry reinit up to 3 times with delays (increases success rate after recovery)
+            for (uint8_t attempt = 0; attempt < 3 && (!unitAOk || !unitBOk); attempt++) {
+                if (!unitAOk) unitAOk = g_encoders->transportA().reinit();
+                if (!unitBOk) unitBOk = g_encoders->transportB().reinit();
+
+                if (!unitAOk || !unitBOk) {
+                    Serial.printf("[I2C_RECOVERY] Reinit attempt %d: A=%s B=%s\n",
+                                  attempt + 1, unitAOk ? "OK" : "FAIL", unitBOk ? "OK" : "FAIL");
+                    if (attempt < 2) {  // Don't delay after last attempt
+                        delay(100);
+                        esp_task_wdt_reset();
+                    }
+                }
+            }
+
+            Serial.printf("[I2C_RECOVERY] Final: Unit A=%s, Unit B=%s\n",
+                          unitAOk ? "OK" : "FAIL", unitBOk ? "OK" : "FAIL");
 
             // Update status LEDs
             updateConnectionLeds();
@@ -2098,6 +2157,7 @@ void loop() {
     // ENCODERS: Skip processing if service not available
     // =========================================================================
     if (!g_encoders || !g_encoders->isAnyAvailable()) {
+        esp_task_wdt_reset();  // CRITICAL: Prevent watchdog timeout during encoder unavailability
         delay(100);
         return;
     }
@@ -2108,6 +2168,7 @@ void loop() {
     // Prevents collisions between the recovery state machine (Wire.end/begin, SCL toggling)
     // and normal I2C traffic, which can otherwise trigger ESP_ERR_INVALID_STATE.
     if (isRecovering) {
+        esp_task_wdt_reset();  // CRITICAL: Prevent watchdog timeout during I2C recovery
         return;
     }
 
@@ -2252,6 +2313,7 @@ void loop() {
 
         // Animate system monitor waveform
         g_ui->loop();
+        esp_task_wdt_reset();  // Reset after UI loop (can involve display updates)
     }
 
     // =========================================================================

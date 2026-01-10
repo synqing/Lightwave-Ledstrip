@@ -47,6 +47,10 @@ enum class ModifierType : uint8_t {
     COLOR_SHIFT,        // Palette rotation (hue offset)
     MIRROR,             // Symmetry break/restore
     GLITCH,             // Controlled chaos (beat-synced)
+    BLUR,               // Spatial smoothing (box/gaussian)
+    TRAIL,              // Temporal persistence (fade trails)
+    SATURATION,         // Color intensity adjustment
+    STROBE,             // Rhythmic pulsing (beat-synced)
     CUSTOM              // User-defined modifiers
 };
 

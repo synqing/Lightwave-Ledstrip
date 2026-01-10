@@ -30,6 +30,7 @@
 // Forward declarations
 #ifndef SIMULATOR_BUILD
 class ZoneComposerUI;
+class ConnectivityTab;
 class PresetManager;
 #endif
 class UIHeader;
@@ -39,7 +40,8 @@ class UIHeader;
  */
 enum class UIScreen : uint8_t {
     GLOBAL = 0,        // Default: 16-parameter gauge view
-    ZONE_COMPOSER = 1  // Zone composer dashboard
+    ZONE_COMPOSER = 1, // Zone composer dashboard
+    CONNECTIVITY = 2   // Network connectivity management
 };
 
 #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
@@ -80,8 +82,10 @@ public:
     #ifndef SIMULATOR_BUILD
     #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL)
     ZoneComposerUI* getZoneComposerUI() { return _zoneComposer; }
+    ConnectivityTab* getConnectivityTab() { return _connectivityTab; }
     #else
     ZoneComposerUI* getZoneComposerUI() { return _zoneComposer; }
+    ConnectivityTab* getConnectivityTab() { return _connectivityTab; }
     #endif
     #endif
     
@@ -123,11 +127,13 @@ private:
     // Static callback for zone composer Back button
     static DisplayUI* s_instance;
     static void onZoneComposerBackButton();
+    static void onConnectivityTabBackButton();
     uint8_t _activePresetSlot = 0xFF;
     UIScreen _currentScreen = UIScreen::GLOBAL;
 
     lv_obj_t* _screen_global = nullptr;
     lv_obj_t* _screen_zone = nullptr;
+    lv_obj_t* _screen_connectivity = nullptr;
 
     lv_obj_t* _header = nullptr;
     lv_obj_t* _header_title_main = nullptr;
@@ -165,6 +171,9 @@ private:
 
     // Zone Composer UI
     ZoneComposerUI* _zoneComposer = nullptr;
+    
+    // Connectivity Tab UI
+    ConnectivityTab* _connectivityTab = nullptr;
 
     // Footer UI elements
     lv_obj_t* _footer = nullptr;

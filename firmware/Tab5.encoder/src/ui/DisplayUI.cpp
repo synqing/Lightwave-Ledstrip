@@ -12,12 +12,14 @@
 #include <Arduino.h>
 #include <cstdio>
 #include <cstring>
+#include <esp_task_wdt.h>
 #include "../presets/PresetManager.h"
 #include "../hal/EspHal.h"
 #include "../network/WiFiManager.h"
 #include "fonts/bebas_neue_fonts.h"
 #include "fonts/experimental_fonts.h"
 #include "ZoneComposerUI.h"
+#include "ConnectivityTab.h"
 
 // Forward declaration - WiFiManager instance is in main.cpp
 extern WiFiManager g_wifiManager;
@@ -82,10 +84,16 @@ DisplayUI::~DisplayUI() {
         delete _zoneComposer;
         _zoneComposer = nullptr;
     }
+    if (_connectivityTab) {
+        delete _connectivityTab;
+        _connectivityTab = nullptr;
+    }
     if (_screen_global) lv_obj_del(_screen_global);
     if (_screen_zone) lv_obj_del(_screen_zone);
+    if (_screen_connectivity) lv_obj_del(_screen_connectivity);
     _screen_global = nullptr;
     _screen_zone = nullptr;
+    _screen_connectivity = nullptr;
 }
 
 void DisplayUI::begin() {
@@ -128,46 +136,7 @@ void DisplayUI::begin() {
     lv_obj_set_flex_flow(_header, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(_header, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    _header_title_main = lv_label_create(_header);
-    lv_label_set_text(_header_title_main, "LIGHTWAVE");
-    lv_obj_set_style_text_font(_header_title_main, &bebas_neue_40px, LV_PART_MAIN);
-    lv_obj_set_style_text_color(_header_title_main, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
-    lv_obj_set_style_text_align(_header_title_main, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
-    // Ensure consistent vertical alignment
-    lv_obj_set_style_pad_top(_header_title_main, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_bottom(_header_title_main, 0, LV_PART_MAIN);
-
-    _header_title_os = lv_label_create(_header);
-    lv_label_set_text(_header_title_os, "OS");
-    lv_obj_set_style_text_font(_header_title_os, &bebas_neue_40px, LV_PART_MAIN);
-    lv_obj_set_style_text_color(_header_title_os, lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_MAIN);
-    lv_obj_set_style_text_align(_header_title_os, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
-    // Match padding to align baseline with main title
-    lv_obj_set_style_pad_top(_header_title_os, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_bottom(_header_title_os, 0, LV_PART_MAIN);
-
-    // Create retry button (initially hidden)
-    _header_retry_button = lv_label_create(_header);
-    lv_label_set_text(_header_retry_button, "RETRY");
-    lv_obj_set_style_text_font(_header_retry_button, RAJDHANI_MED_24, LV_PART_MAIN);
-    lv_obj_set_style_text_color(_header_retry_button, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
-    lv_obj_set_style_pad_left(_header_retry_button, 12, LV_PART_MAIN);
-    lv_obj_set_style_pad_right(_header_retry_button, 8, LV_PART_MAIN);
-    lv_obj_set_style_pad_top(_header_retry_button, 4, LV_PART_MAIN);
-    lv_obj_set_style_pad_bottom(_header_retry_button, 4, LV_PART_MAIN);
-    lv_obj_add_flag(_header_retry_button, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(_header_retry_button, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_bg_opa(_header_retry_button, LV_OPA_TRANSP, LV_PART_MAIN);
-    
-    // Add event handler for retry button click
-    lv_obj_add_event_cb(_header_retry_button, [](lv_event_t* e) {
-        DisplayUI* ui = static_cast<DisplayUI*>(lv_event_get_user_data(e));
-        if (ui && ui->_retry_callback) {
-            ui->_retry_callback();
-        }
-    }, LV_EVENT_CLICKED, reinterpret_cast<void*>(this));
-
-    // Pattern container (fixed width to prevent shifting)
+    // Pattern container (fixed width to prevent shifting) - moved to first position
     _header_effect_container = lv_obj_create(_header);
     // Set height explicitly to font size (24px) instead of line height (26px) to prevent extra space at bottom
     lv_obj_set_size(_header_effect_container, 300, 24);
@@ -184,7 +153,7 @@ void DisplayUI::begin() {
     lv_obj_set_style_bg_opa(_header_effect_container, LV_OPA_TRANSP, LV_PART_SCROLLBAR);
     lv_obj_set_style_bg_opa(_header_effect_container, LV_OPA_TRANSP, LV_PART_INDICATOR);
     lv_obj_set_style_pad_all(_header_effect_container, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_left(_header_effect_container, 54, LV_PART_MAIN); // Gap after LIGHTWAVEOS (24 + 30px right)
+    lv_obj_set_style_pad_left(_header_effect_container, 0, LV_PART_MAIN); // No left padding - header padding provides edge spacing
 
     _header_effect = lv_label_create(_header_effect_container);
     lv_label_set_text(_header_effect, "--");
@@ -216,7 +185,7 @@ void DisplayUI::begin() {
     // #endregion
     lv_obj_set_width(_header_effect, 300);
 
-    // Palette container (fixed width to prevent shifting)
+    // Palette container (fixed width to prevent shifting) - moved to second position
     _header_palette_container = lv_obj_create(_header);
     // Set height explicitly to font size (24px) instead of line height (26px) to prevent extra space at bottom
     lv_obj_set_size(_header_palette_container, 280, 24);
@@ -232,7 +201,7 @@ void DisplayUI::begin() {
     lv_obj_set_style_bg_opa(_header_palette_container, LV_OPA_TRANSP, LV_PART_SCROLLBAR);
     lv_obj_set_style_bg_opa(_header_palette_container, LV_OPA_TRANSP, LV_PART_INDICATOR);
     lv_obj_set_style_pad_all(_header_palette_container, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_left(_header_palette_container, 48, LV_PART_MAIN); // Gap after Pattern (18 + 30px right)
+    lv_obj_set_style_pad_left(_header_palette_container, 20, LV_PART_MAIN); // 20px gap after Effect container
 
     _header_palette = lv_label_create(_header_palette_container);
     // #region agent log
@@ -267,10 +236,34 @@ void DisplayUI::begin() {
     // #endregion
     lv_obj_set_width(_header_palette, 280);
 
-    // Spacer to push network info to the right
-    lv_obj_t* spacer = lv_obj_create(_header);
-    lv_obj_set_style_bg_opa(spacer, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_flex_grow(spacer, 1);
+    // Left spacer to push LIGHTWAVEOS title toward center
+    lv_obj_t* left_spacer = lv_obj_create(_header);
+    lv_obj_set_style_bg_opa(left_spacer, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_flex_grow(left_spacer, 1);
+
+    // LIGHTWAVEOS title - moved to center position
+    _header_title_main = lv_label_create(_header);
+    lv_label_set_text(_header_title_main, "LIGHTWAVE");
+    lv_obj_set_style_text_font(_header_title_main, &bebas_neue_40px, LV_PART_MAIN);
+    lv_obj_set_style_text_color(_header_title_main, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_text_align(_header_title_main, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
+    // Ensure consistent vertical alignment
+    lv_obj_set_style_pad_top(_header_title_main, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_bottom(_header_title_main, 0, LV_PART_MAIN);
+
+    _header_title_os = lv_label_create(_header);
+    lv_label_set_text(_header_title_os, "OS");
+    lv_obj_set_style_text_font(_header_title_os, &bebas_neue_40px, LV_PART_MAIN);
+    lv_obj_set_style_text_color(_header_title_os, lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_text_align(_header_title_os, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
+    // Match padding to align baseline with main title
+    lv_obj_set_style_pad_top(_header_title_os, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_bottom(_header_title_os, 0, LV_PART_MAIN);
+
+    // Right spacer to keep LIGHTWAVEOS centered and push network info to the right
+    lv_obj_t* right_spacer = lv_obj_create(_header);
+    lv_obj_set_style_bg_opa(right_spacer, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_flex_grow(right_spacer, 1);
 
     // Network info: SSID (RSSI) IP - create in display order
     _header_net_ssid = lv_label_create(_header);
@@ -289,6 +282,27 @@ void DisplayUI::begin() {
     lv_obj_set_style_text_font(_header_net_ip, &bebas_neue_24px, LV_PART_MAIN);
     lv_obj_set_style_text_color(_header_net_ip, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
     lv_obj_set_style_pad_left(_header_net_ip, 8, LV_PART_MAIN);  // 8px gap after RSSI
+
+    // Create retry button (initially hidden) - moved to last position
+    _header_retry_button = lv_label_create(_header);
+    lv_label_set_text(_header_retry_button, "RETRY");
+    lv_obj_set_style_text_font(_header_retry_button, RAJDHANI_MED_24, LV_PART_MAIN);
+    lv_obj_set_style_text_color(_header_retry_button, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
+    lv_obj_set_style_pad_left(_header_retry_button, 12, LV_PART_MAIN);
+    lv_obj_set_style_pad_right(_header_retry_button, 8, LV_PART_MAIN);
+    lv_obj_set_style_pad_top(_header_retry_button, 4, LV_PART_MAIN);
+    lv_obj_set_style_pad_bottom(_header_retry_button, 4, LV_PART_MAIN);
+    lv_obj_add_flag(_header_retry_button, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(_header_retry_button, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_bg_opa(_header_retry_button, LV_OPA_TRANSP, LV_PART_MAIN);
+    
+    // Add event handler for retry button click
+    lv_obj_add_event_cb(_header_retry_button, [](lv_event_t* e) {
+        DisplayUI* ui = static_cast<DisplayUI*>(lv_event_get_user_data(e));
+        if (ui && ui->_retry_callback) {
+            ui->_retry_callback();
+        }
+    }, LV_EVENT_CLICKED, reinterpret_cast<void*>(this));
 
     _gauges_container = lv_obj_create(_screen_global);
     lv_obj_set_size(_gauges_container, 1280 - 2 * TAB5_GRID_MARGIN, 125);
@@ -633,8 +647,48 @@ void DisplayUI::begin() {
 
     Serial.println("[DisplayUI] Zone Composer initialized");
 
+    Serial.printf("[DisplayUI_TRACE] Creating connectivity screen @ %lu ms\n", millis());
+    esp_task_wdt_reset();
+
+    // Create connectivity screen
+    _screen_connectivity = lv_obj_create(nullptr);
+    lv_obj_set_style_bg_color(_screen_connectivity, lv_color_hex(TAB5_COLOR_BG_PAGE), LV_PART_MAIN);
+    lv_obj_set_style_pad_all(_screen_connectivity, 0, LV_PART_MAIN);
+
+    Serial.printf("[DisplayUI_TRACE] Connectivity screen created @ %lu ms\n", millis());
+    esp_task_wdt_reset();
+
+#if ENABLE_WIFI
+    Serial.printf("[DisplayUI_TRACE] Creating ConnectivityTab @ %lu ms\n", millis());
+    Serial.flush();
+    // Create ConnectivityTab and initialize with connectivity screen as parent
+    _connectivityTab = new ConnectivityTab(_display);
+    Serial.printf("[DisplayUI_TRACE] ConnectivityTab constructed @ %lu ms\n", millis());
+    Serial.flush();
+    _connectivityTab->setBackButtonCallback(onConnectivityTabBackButton);  // Wire Back button
+    Serial.printf("[DisplayUI_TRACE] setBackButtonCallback done @ %lu ms\n", millis());
+    Serial.flush();
+    _connectivityTab->setWiFiManager(&g_wifiManager);
+    Serial.printf("[DisplayUI_TRACE] setWiFiManager done @ %lu ms\n", millis());
+    Serial.flush();
+    esp_task_wdt_reset();
+    Serial.printf("[DisplayUI_TRACE] Before ConnectivityTab::begin @ %lu ms\n", millis());
+    Serial.flush();
+    _connectivityTab->begin(_screen_connectivity);  // Create LVGL widgets on connectivity screen
+    Serial.printf("[DisplayUI_TRACE] After ConnectivityTab::begin @ %lu ms\n", millis());
+    Serial.flush();
+    Serial.println("[DisplayUI] Connectivity Tab initialized");
+#else
+    Serial.println("[DisplayUI_TRACE] ENABLE_WIFI not defined - skipping ConnectivityTab");
+#endif
+
+    Serial.printf("[DisplayUI_TRACE] Before lv_scr_load @ %lu ms\n", millis());
+    esp_task_wdt_reset();
     lv_scr_load(_screen_global);
+    Serial.printf("[DisplayUI_TRACE] After lv_scr_load @ %lu ms\n", millis());
+    esp_task_wdt_reset();
     _currentScreen = UIScreen::GLOBAL;
+    Serial.printf("[DisplayUI_TRACE] begin() complete @ %lu ms\n", millis());
 }
 
 void DisplayUI::loop() {
@@ -829,10 +883,29 @@ void DisplayUI::updateRetryButton(bool shouldShow) {
 void DisplayUI::setScreen(UIScreen screen) {
     if (screen == _currentScreen) return;
     _currentScreen = screen;
-    lv_scr_load(screen == UIScreen::GLOBAL ? _screen_global : _screen_zone);
+    
+    lv_obj_t* targetScreen = _screen_global;
+    switch (screen) {
+        case UIScreen::GLOBAL:
+            targetScreen = _screen_global;
+            break;
+        case UIScreen::ZONE_COMPOSER:
+            targetScreen = _screen_zone;
+            break;
+        case UIScreen::CONNECTIVITY:
+            targetScreen = _screen_connectivity;
+            break;
+    }
+    lv_scr_load(targetScreen);
 }
 
 void DisplayUI::onZoneComposerBackButton() {
+    if (s_instance) {
+        s_instance->setScreen(UIScreen::GLOBAL);
+    }
+}
+
+void DisplayUI::onConnectivityTabBackButton() {
     if (s_instance) {
         s_instance->setScreen(UIScreen::GLOBAL);
     }
@@ -1245,16 +1318,8 @@ void DisplayUI::begin() {
     _actionRow = new ActionRowWidget(&_display, 0, Theme::ACTION_ROW_Y, Theme::SCREEN_W, Theme::ACTION_ROW_H);
     #endif
 
-    // Create zone composer UI
-    #ifndef SIMULATOR_BUILD
-    _zoneComposer = new ZoneComposerUI(_display);
-    _zoneComposer->setHeader(_header);  // Share header instance
-    _zoneComposer->begin();
-
-    #if ENABLE_UI_DIAGNOSTICS
-    EspHal::log("[DBG] zonecomposer_created ptr=%p\n", _zoneComposer);
-    #endif
-    #endif  // !SIMULATOR_BUILD
+    // NOTE: Zone Composer UI is created later at line 642-645 with _screen_zone as parent
+    // DO NOT create it here or it will create duplicate LVGL widgets!
 
     // Clear entire screen to black background
     _display.fillScreen(Theme::BG_DARK);
@@ -1364,6 +1429,16 @@ void DisplayUI::renderCurrentScreen() {
             }
             #endif
             break;
+        case UIScreen::CONNECTIVITY:
+            #ifndef SIMULATOR_BUILD
+            #if ENABLE_WIFI
+            if (_connectivityTab) {
+                _connectivityTab->forceDirty();  // Immediate redraw, bypass pending
+                _connectivityTab->loop();
+            }
+            #endif
+            #endif
+            break;
     }
 }
 
@@ -1421,6 +1496,19 @@ void DisplayUI::loop() {
             #ifndef SIMULATOR_BUILD
             if (_zoneComposer) {
                 _zoneComposer->loop();
+            }
+            #endif
+            #endif
+            break;
+        case UIScreen::CONNECTIVITY:
+            // Render header on Connectivity screen too
+            if (_header) {
+                _header->render();
+            }
+            #ifndef SIMULATOR_BUILD
+            #if ENABLE_WIFI
+            if (_connectivityTab) {
+                _connectivityTab->loop();
             }
             #endif
             #endif

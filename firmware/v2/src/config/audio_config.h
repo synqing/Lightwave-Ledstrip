@@ -43,21 +43,22 @@ constexpr gpio_num_t I2S_LRCL_PIN = GPIO_NUM_12;  // Left/Right Clock (Word Sele
 // ============================================================================
 
 /**
- * Tab5 beat tracker timing: 16kHz / FFT_N=512 / HOP_N=256 = 62.5 Hz frames
+ * K1 Dual-Bank Goertzel Front-End timing: 16kHz / HOP_N=128 = 125 Hz frames
  *
  * DO NOT change hop size without updating:
  * - Filter constants in ControlBus
  * - Resonator Q values in beat tracker
  * - Attack/release envelope timing
+ * - K1 front-end hop cadence
  */
-constexpr uint16_t SAMPLE_RATE = 16000;       // 16 kHz (Tab5 standard)
-constexpr uint16_t HOP_SIZE = 256;            // 16ms hop @ 16kHz = 62.5 Hz frames
-constexpr uint16_t FFT_SIZE = 512;            // For beat tracker spectral analysis
-constexpr uint16_t GOERTZEL_WINDOW = 512;     // 32ms window for bass coherence
+constexpr uint16_t SAMPLE_RATE = 16000;       // 16 kHz (K1 standard)
+constexpr uint16_t HOP_SIZE = 128;            // 8ms hop @ 16kHz = 125 Hz frames (K1)
+constexpr uint16_t FFT_SIZE = 512;            // For beat tracker spectral analysis (legacy)
+constexpr uint16_t GOERTZEL_WINDOW = 512;     // 32ms window for bass coherence (legacy)
 
 // Derived timing constants
-constexpr float HOP_DURATION_MS = (HOP_SIZE * 1000.0f) / SAMPLE_RATE;  // 16ms
-constexpr float HOP_RATE_HZ = SAMPLE_RATE / static_cast<float>(HOP_SIZE);  // 62.5 Hz
+constexpr float HOP_DURATION_MS = (HOP_SIZE * 1000.0f) / SAMPLE_RATE;  // 8ms
+constexpr float HOP_RATE_HZ = SAMPLE_RATE / static_cast<float>(HOP_SIZE);  // 125 Hz
 
 // ============================================================================
 // I2S DMA Configuration

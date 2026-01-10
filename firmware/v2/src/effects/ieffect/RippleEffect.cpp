@@ -131,9 +131,8 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
         float maxBinVal = 0.0f;
         for (uint8_t i = 0; i < 12; ++i) {
             float bin = m_chromaSmoothed[i];  // Use smoothed chromagram
-            float bright = bin;
-            bright = bright * bright;
-            bright *= 1.5f;
+            // FIX: Use sqrt scaling instead of squaring to preserve low-level signals
+            float bright = sqrtf(bin) * 1.5f;
             if (bright > 1.0f) bright = 1.0f;
             if (bright > maxBinVal) {
                 maxBinVal = bright;
@@ -152,10 +151,13 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
         energyAvg = m_chromaEnergySum / CHROMA_HISTORY;
 
         energyDelta = energyNorm - energyAvg;
-        if (energyDelta < 0.0f) energyDelta = 0.0f;
+        // FIX: Allow small negative delta to still contribute (halve threshold)
+        if (energyDelta < -0.1f) energyDelta = 0.0f;
+        else if (energyDelta < 0.0f) energyDelta = 0.0f;  // Clamp to zero but don't skip
         m_lastChromaEnergy = energyNorm;
 
-        float chanceF = energyDelta * 510.0f + energyAvg * 80.0f;
+        // FIX: Lower spawn threshold multipliers for more activity
+        float chanceF = energyDelta * 400.0f + energyAvg * 120.0f;
         if (chanceF > 255.0f) chanceF = 255.0f;
         spawnChance = (uint8_t)chanceF;
     } else

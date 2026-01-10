@@ -71,8 +71,8 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
             for (uint8_t i = 0; i < 12; ++i) {
                 // Use smoothed chromagram for energy calculation
                 float bin = m_chromaSmoothed[i];
-                float bright = bin * bin;
-                bright *= 1.5f;
+                // FIX: Use sqrt scaling instead of squaring to preserve low-level signals
+                float bright = sqrtf(bin) * 1.5f;
                 if (bright > 1.0f) bright = 1.0f;
                 if (bright > maxBinVal) {
                     maxBinVal = bright;
@@ -216,6 +216,8 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
 
         // Base audio intensity (without uniform collision boost - moved to spatial flash)
         float audioIntensity = 0.4f + 0.5f * energyAvgSmooth + 0.4f * energyDeltaSmooth;
+        // FIX: Add minimum amplitude floor for wave visibility at low bass
+        audioIntensity = fmaxf(0.2f, audioIntensity);
         float interference = wave1 * audioIntensity + collisionFlash * 0.8f;  // Collision adds separate layer
 
         // CRITICAL: Use tanhf for uniform brightness (like ChevronWaves)

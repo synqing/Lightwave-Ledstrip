@@ -26,7 +26,7 @@ bool NvsStorage::init() {
         return true;
     }
 
-    Serial.println("[NVS] Initializing NVS flash...");
+    Serial.println("[NVS] Initialising NVS flash...");
 
     // Initialize NVS flash partition
     esp_err_t err = nvs_flash_init();

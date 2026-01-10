@@ -111,6 +111,77 @@ Enable/disable features in `src/config/features.h`:
 #define FEATURE_LIGHT_GUIDE_MODE 1  // Light guide effects
 ```
 
+## Development Tools
+
+This project supports development with:
+- **Claude Code**: Full agent system with domain memory harness
+- **Cursor IDE**: AI-powered editor with unified memory (shares Claude-Mem database)
+
+See `.cursor/README.md` for Cursor-specific configuration.
+
+## Verification
+
+The project includes two verification scripts for different audiences:
+
+### Boot Ritual (`.claude/harness/init.sh`)
+**Purpose:** Quick health check before agent work (~10-60 seconds)
+
+**When to use:**
+- Before starting any agent work
+- After pulling changes
+- To verify build system is healthy
+
+**What it checks:**
+- Git repository health
+- PlatformIO toolchain availability
+- Default build compiles (esp32dev or esp32dev_audio)
+
+**Usage:**
+```bash
+cd .claude/harness && ./init.sh
+```
+
+### Pre-Push Quality Gate (`scripts/verify.sh`)
+**Purpose:** Comprehensive validation before pushing changes (~2-5 minutes)
+
+**When to use:**
+- Before `git push` (manual or via git hook)
+- After completing a feature
+- To validate entire repository state
+
+**What it checks:**
+1. **Harness Schema Validation** - feature_list.json structure
+2. **PRD JSON Schema Validation** - All PRDs validate against schema
+3. **Cross-Reference Integrity** - PRD references exist, no orphans
+4. **Pattern Compliance** - NO_RAINBOWS enforcement, CENTER_ORIGIN heuristics
+5. **Build Verification** - Critical builds compile (esp32dev_audio, native_test)
+6. **Git Status** - Warns on uncommitted changes
+
+**Usage:**
+```bash
+# Full verification (includes builds, ~2-5 mins)
+scripts/verify.sh
+
+# Quick verification (skip builds, ~5-10 seconds)
+scripts/verify.sh --skip-build
+```
+
+**Exit codes:**
+- `0` - All checks passed
+- `1` - Validation failures detected
+
+### Git Hook Integration (Optional)
+To automatically run `verify.sh` before pushing:
+
+```bash
+# Install pre-push hook
+cat > .git/hooks/pre-push << 'EOF'
+#!/bin/bash
+scripts/verify.sh
+EOF
+chmod +x .git/hooks/pre-push
+```
+
 ## Usage
 
 ### Physical Controls

@@ -169,15 +169,19 @@ void LGPPerlinShocklinesEffect::render(plugins::EffectContext& ctx) {
         uint8_t baseNoise = inoise8((uint16_t)(m_noiseX + dist * 23), (uint16_t)(m_time));
 
         // Travelling ridge at the wavefront (simple, fast profile)
+        // 2x brightness boost for ridge visibility
         uint8_t ridge = qsub8(255, (uint8_t)(abs((int16_t)dist8 - (int16_t)m_waveFront) * 9));
         ridge = scale8(ridge, (uint8_t)(m_waveEnergy * 255.0f));
+        ridge = qadd8(ridge, ridge); // Double the ridge brightness
 
-        // Combine noise + ridge
-        uint8_t combined8 = qadd8((uint8_t)(baseNoise >> 1), scale8(ridge, (uint8_t)(180 + sharpness * 75.0f)));
-        
-        // Map to palette and brightness
+        // Combine noise + ridge (boosted noise base)
+        uint8_t combined8 = qadd8((uint8_t)(baseNoise >> 1) + 32, scale8(ridge, (uint8_t)(220 + sharpness * 35.0f)));
+
+        // Map to palette and brightness - 2x boost with minimum floor
         uint8_t paletteIndex = combined8 + ctx.gHue;
-        uint8_t brightness = scale8(qadd8(48, combined8), (uint8_t)(255.0f * intensityNorm));
+        uint8_t baseBright = qadd8(80, combined8); // Higher base (was 48)
+        uint8_t brightness = scale8(baseBright, (uint8_t)(255.0f * intensityNorm));
+        brightness = (brightness < 50) ? 50 : brightness; // Minimum floor
         
         CRGB color = ctx.palette.getColor(paletteIndex, brightness);
         

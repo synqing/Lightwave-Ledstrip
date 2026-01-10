@@ -221,9 +221,12 @@ void LGPPhotonicCrystalEffect::render(plugins::EffectContext& ctx) {
         }
 
         // ================================================================
-        // AUDIO LAYER: Apply brightness gain
+        // AUDIO LAYER: Apply brightness gain with minimum floor
+        // VISIBILITY FIX: Ensure base brightness even with ambient/sparse music
         // ================================================================
-        brightness = scale8(brightness, (uint8_t)(ctx.brightness * brightnessGain));
+        float brightnessFloat = (float)brightness * brightnessGain;
+        brightnessFloat = fmaxf(0.2f * 255.0f, brightnessFloat);  // 20% minimum
+        brightness = scale8((uint8_t)fminf(255.0f, brightnessFloat), ctx.brightness);
 
         // ================================================================
         // AUDIO LAYER: Collision flash (spatial decay from center)

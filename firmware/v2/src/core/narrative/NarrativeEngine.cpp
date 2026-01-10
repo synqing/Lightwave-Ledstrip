@@ -6,9 +6,26 @@
  */
 
 #include "NarrativeEngine.h"
+#include "../persistence/NVSManager.h"
+#include <cstddef>
 
 namespace lightwaveos {
 namespace narrative {
+
+// ==================== NarrativeConfigData Implementation ====================
+
+void NarrativeConfigData::calculateChecksum() {
+    // Calculate CRC32 over all fields except checksum
+    const size_t dataSize = offsetof(NarrativeConfigData, checksum);
+    checksum = persistence::NVSManager::calculateCRC32(this, dataSize);
+}
+
+bool NarrativeConfigData::isValid() const {
+    // Recalculate checksum and compare
+    const size_t dataSize = offsetof(NarrativeConfigData, checksum);
+    uint32_t calculated = persistence::NVSManager::calculateCRC32(this, dataSize);
+    return (checksum == calculated);
+}
 
 // ============================================================================
 // Constructor
@@ -452,6 +469,119 @@ void NarrativeEngine::printStatus() const {
         }
     }
     Serial.println(F("==============================\n"));
+}
+
+// ============================================================================
+// NVS Persistence
+// ============================================================================
+
+bool NarrativeEngine::saveToNVS() {
+    // Ensure NVS is initialized
+    if (!NVS_MANAGER.isInitialized()) {
+        if (!NVS_MANAGER.init()) {
+            Serial.println("[Narrative] ERROR: Failed to initialize NVS");
+            return false;
+        }
+    }
+
+    // Export current configuration
+    NarrativeConfigData config;
+    config.version = 1;
+    config.buildDuration = m_cycle.buildDuration;
+    config.holdDuration = m_cycle.holdDuration;
+    config.releaseDuration = m_cycle.releaseDuration;
+    config.restDuration = m_cycle.restDuration;
+    config.buildCurve = static_cast<uint8_t>(m_cycle.buildCurve);
+    config.releaseCurve = static_cast<uint8_t>(m_cycle.releaseCurve);
+    config.holdBreathe = m_cycle.holdBreathe;
+    config.snapAmount = m_cycle.snapAmount;
+    config.durationVariance = m_cycle.durationVariance;
+    config.enabled = m_enabled;
+    
+    // Calculate checksum
+    config.calculateChecksum();
+
+    // Save to NVS
+    static constexpr const char* NVS_NAMESPACE = "narrative";
+    static constexpr const char* NVS_KEY_CONFIG = "config";
+    
+    persistence::NVSResult result = NVS_MANAGER.saveBlob(NVS_NAMESPACE, NVS_KEY_CONFIG, &config, sizeof(config));
+
+    if (result == persistence::NVSResult::OK) {
+        Serial.println("[Narrative] Configuration saved to NVS");
+        return true;
+    } else {
+        Serial.printf("[Narrative] ERROR: Save failed: %s\n",
+                      persistence::NVSManager::resultToString(result));
+        return false;
+    }
+}
+
+bool NarrativeEngine::loadFromNVS() {
+    // Ensure NVS is initialized
+    if (!NVS_MANAGER.isInitialized()) {
+        if (!NVS_MANAGER.init()) {
+            Serial.println("[Narrative] ERROR: Failed to initialize NVS");
+            return false;
+        }
+    }
+
+    // Load from NVS
+    NarrativeConfigData config;
+    static constexpr const char* NVS_NAMESPACE = "narrative";
+    static constexpr const char* NVS_KEY_CONFIG = "config";
+    
+    persistence::NVSResult result = NVS_MANAGER.loadBlob(NVS_NAMESPACE, NVS_KEY_CONFIG, &config, sizeof(config));
+
+    if (result == persistence::NVSResult::NOT_FOUND) {
+        Serial.println("[Narrative] No saved configuration found (first boot)");
+        return false;
+    }
+
+    if (result != persistence::NVSResult::OK) {
+        Serial.printf("[Narrative] ERROR: Load failed: %s\n",
+                      persistence::NVSManager::resultToString(result));
+        return false;
+    }
+
+    // Validate checksum
+    if (!config.isValid()) {
+        Serial.println("[Narrative] WARNING: Saved config checksum invalid");
+        return false;
+    }
+
+    // Validate data ranges
+    if (config.buildDuration <= 0.0f || config.releaseDuration <= 0.0f ||
+        config.holdBreathe < 0.0f || config.holdBreathe > 1.0f ||
+        config.snapAmount < 0.0f || config.snapAmount > 1.0f ||
+        config.durationVariance < 0.0f || config.durationVariance > 1.0f) {
+        Serial.println("[Narrative] WARNING: Saved config contains invalid values");
+        return false;
+    }
+
+    // Validate curve values (EasingCurve enum should be 0-15 typically)
+    if (config.buildCurve > 15 || config.releaseCurve > 15) {
+        Serial.println("[Narrative] WARNING: Invalid curve values in saved config");
+        return false;
+    }
+
+    // Apply loaded values
+    m_cycle.buildDuration = config.buildDuration;
+    m_cycle.holdDuration = max(0.0f, config.holdDuration);
+    m_cycle.releaseDuration = config.releaseDuration;
+    m_cycle.restDuration = max(0.0f, config.restDuration);
+    m_cycle.buildCurve = static_cast<EasingCurve>(config.buildCurve);
+    m_cycle.releaseCurve = static_cast<EasingCurve>(config.releaseCurve);
+    m_cycle.holdBreathe = constrain(config.holdBreathe, 0.0f, 1.0f);
+    m_cycle.snapAmount = constrain(config.snapAmount, 0.0f, 1.0f);
+    m_cycle.durationVariance = constrain(config.durationVariance, 0.0f, 1.0f);
+    
+    // Apply enabled state (but don't auto-enable, let user control that)
+    // The enabled state is loaded but we don't auto-enable on boot
+    // User can enable via API if they want
+    
+    Serial.println("[Narrative] Configuration loaded from NVS");
+    return true;
 }
 
 } // namespace narrative

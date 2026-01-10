@@ -146,9 +146,18 @@ void SpectrumAnalyzerEffect::render(plugins::EffectContext& ctx) {
         
         // Reverse: bin 0 (bass) at center, bin 63 (treble) at edge
         uint8_t reversedBin = NUM_BINS - 1 - binIdx;
-        
+
         // Get audio magnitude for this frequency region
         float magnitude = m_binSmoothing[reversedBin];
+
+        // VISIBILITY FIX: Apply sqrt scaling for bass bins (0-15) to boost low volumes
+        // Also add minimum brightness floor for visibility at low levels
+        if (reversedBin < 16) {
+            // sqrt scaling boosts low values: 0.1 -> 0.47, 0.25 -> 0.75
+            magnitude = sqrtf(magnitude) * 1.5f;
+        }
+        magnitude = fmaxf(0.1f, magnitude);  // Minimum brightness floor
+
         float peak = m_peakHold[reversedBin];
         
         // Base spatial frequency: low at center (bass), high at edges (treble)

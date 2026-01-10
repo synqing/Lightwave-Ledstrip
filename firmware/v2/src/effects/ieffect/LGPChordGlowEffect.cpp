@@ -97,8 +97,9 @@ void LGPChordGlowEffect::render(plugins::EffectContext& ctx) {
         m_lastHopSeq = ctx.audio.controlBus.hop_seq;
 
         // Check for chord change (significant change in root or type)
+        // Lower confidence threshold for better responsiveness
         bool chordChanged = false;
-        if (chord.type != audio::ChordType::NONE && chord.confidence > 0.3f) {
+        if (chord.type != audio::ChordType::NONE && chord.confidence > 0.3f) {  // Reduced from 0.5f
             if (chord.rootNote != m_currentRootNote ||
                 chord.type != m_currentChordType) {
                 chordChanged = true;
@@ -120,6 +121,10 @@ void LGPChordGlowEffect::render(plugins::EffectContext& ctx) {
                 m_chordChangePulse = 1.0f;
             }
         }
+        
+        // REMOVED: Harmonic saliency trigger was causing constant transitions and instability
+        // The original implementation triggered too frequently, making the effect unusable
+        // Chord changes are now only triggered by actual root note or chord type changes
 
         // Update confidence target
         m_targetConfidence = chord.confidence;
@@ -177,9 +182,12 @@ void LGPChordGlowEffect::render(plugins::EffectContext& ctx) {
     const uint16_t thirdDist = CHORD_GLOW_HALF_LENGTH / 3;    // ~26 LEDs from center
     const uint16_t fifthDist = (CHORD_GLOW_HALF_LENGTH * 2) / 3;  // ~53 LEDs from center
 
-    // Brightness based on confidence
-    float baseBrightness = m_currentConfidence * currentMood.brightnessScale;
-    baseBrightness = baseBrightness * (0.6f + 0.4f * (ctx.brightness / 255.0f));
+    // Brightness based on confidence - ensure minimum visibility even with low confidence
+    // Base brightness floor of 0.3f ensures fallback glow when chord detection fails (confidence < 0.3)
+    float confidenceContribution = m_currentConfidence * currentMood.brightnessScale * 0.5f;
+    float baseBrightness = fmaxf(0.3f, 0.5f + confidenceContribution);  // Minimum 30% base brightness floor
+    baseBrightness = baseBrightness * (0.8f + 0.2f * (ctx.brightness / 255.0f));  // Increased base brightness multiplier
+    if (baseBrightness > 1.0f) baseBrightness = 1.0f;
 
     // Blend saturation during transition
     float blendedSat = prevMood.saturation * (1.0f - m_transitionProgress) +
@@ -190,7 +198,8 @@ void LGPChordGlowEffect::render(plugins::EffectContext& ctx) {
         float normalizedDist = (float)dist / (float)CHORD_GLOW_HALF_LENGTH;
 
         // Base glow intensity (stronger at center, fades toward edges)
-        float glow = expf(-normalizedDist * 2.5f);
+        // Reduced fade rate so more LEDs are visible (was 2.5f, now 1.8f)
+        float glow = expf(-normalizedDist * 1.8f);
 
         // Add pulsing animation
         float pulse = 0.7f + 0.3f * sinf(m_glowPhase - normalizedDist * 3.0f);

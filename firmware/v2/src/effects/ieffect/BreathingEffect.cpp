@@ -52,7 +52,7 @@ static CRGB computeChromaticColor(const float chroma[12], const plugins::EffectC
     
     for (int i = 0; i < 12; i++) {
         float prog = i / 12.0f;  // 0.0 to 0.917 (0° to 330°)
-        float brightness = chroma[i] * chroma[i] * share;  // Quadratic contrast (like Sensory Bridge)
+        float brightness = sqrtf(chroma[i]) * share * 2.0f;  // Sqrt boost for visibility (was squaring)
         
         // Clamp brightness to valid range
         if (brightness > 1.0f) brightness = 1.0f;
@@ -248,7 +248,7 @@ void BreathingEffect::renderBreathing(plugins::EffectContext& ctx) {
         // Compute Energy Envelope for Brightness Modulation
         // ====================================================================
         energyEnvelope = m_energySmoothed;
-        brightness = energyEnvelope * energyEnvelope;  // Quadratic contrast (like Sensory Bridge)
+        brightness = sqrtf(energyEnvelope) * 1.5f;  // Sqrt boost for visibility (was squaring)
         
         // Optional: Beat sync - reset phase on beat (optional feature)
         if (ctx.audio.isOnBeat()) {
@@ -285,7 +285,7 @@ void BreathingEffect::renderBreathing(plugins::EffectContext& ctx) {
     // ========================================================================
     // Alpha blending with previous frame (0.99 alpha = 99% persistence)
     // This creates smooth motion through frame accumulation, not exponential decay
-    float alpha = 0.99f;  // Like Bloom's draw_sprite() alpha
+    float alpha = 0.94f;  // Faster response (~50ms half-life at 120fps)
     m_currentRadius = m_prevRadius * alpha + avgTargetRadius * (1.0f - alpha);
     m_prevRadius = m_currentRadius;  // Store for next frame
 
@@ -297,7 +297,7 @@ void BreathingEffect::renderBreathing(plugins::EffectContext& ctx) {
     // ========================================================================
     // PHASE 6: RENDERING with Chromatic Color & Energy-Modulated Brightness
     // ========================================================================
-    if (m_currentRadius > 0.001f) {
+    if (m_currentRadius > 0.0001f) {  // Lower threshold for visibility
         for (int i = 0; i < STRIP_LENGTH; i++) {
             float dist = (float)centerPairDistance((uint16_t)i);
 
@@ -310,7 +310,7 @@ void BreathingEffect::renderBreathing(plugins::EffectContext& ctx) {
                 // Apply subtle exponential foreshortening for visual depth
                 float normalizedDist = dist / (float)HALF_LENGTH;
                 float foreshortened = powf(normalizedDist, FORESHORTEN_EXP);
-                float expMod = expf(-foreshortened * 1.5f);
+                float expMod = expf(-foreshortened * 0.8f);  // Softer decay for visibility
                 intensity *= (0.7f + 0.3f * expMod);
 
                 // Apply energy-modulated brightness (audio drives brightness, not motion)
@@ -339,7 +339,7 @@ void BreathingEffect::renderBreathing(plugins::EffectContext& ctx) {
     // Fade outer 32 LEDs using quadratic curve for smooth edge
     for (uint8_t i = 0; i < 32; i++) {
         float prog = i / 31.0f;  // 0.0 to 1.0
-        float falloff = prog * prog;  // Quadratic fade (like Bloom mode)
+        float falloff = prog * 0.7f;  // Linear fade (was quadratic - too aggressive)
         
         // Apply to outer LEDs (from edge inward)
         uint16_t edgeIdx = STRIP_LENGTH - 1 - i;

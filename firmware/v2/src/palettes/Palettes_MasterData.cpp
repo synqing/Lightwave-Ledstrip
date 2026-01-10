@@ -1053,7 +1053,7 @@ const uint8_t master_palette_flags[] = {
     PAL_WARM | PAL_HIGH_SAT | PAL_VIVID, // 20 IB15
     PAL_COOL | PAL_HIGH_SAT | PAL_VIVID, // 21 Fuschia 7
     PAL_COOL | PAL_HIGH_SAT | PAL_VIVID, // 22 Emerald Dragon
-    PAL_WARM | PAL_WHITE_HEAVY | PAL_VIVID, // 23 Lava
+    PAL_WARM | PAL_VIVID, // 23 Lava (removed PAL_WHITE_HEAVY - rgb2hsv_approximate fails on dark reds)
     PAL_WARM | PAL_WHITE_HEAVY | PAL_VIVID, // 24 Fire
     PAL_COOL | PAL_HIGH_SAT | PAL_VIVID, // 25 Colorful
     PAL_WARM | PAL_HIGH_SAT | PAL_VIVID, // 26 Magenta Evening

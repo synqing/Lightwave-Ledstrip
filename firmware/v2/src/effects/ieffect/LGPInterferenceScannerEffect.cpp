@@ -230,10 +230,19 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
 #endif
         audioGain = fminf(audioGain, 2.0f);  // Clamp max to prevent oversaturation
 
+        // VISIBILITY FIX: Ensure minimum interference amplitude
+        float interferenceAbs = fabsf(interference);
+        if (interferenceAbs < 0.2f) {
+            interference = (interference >= 0.0f) ? 0.2f : -0.2f;
+        }
+
         float pattern = interference * audioGain;
 
         // CRITICAL: Use tanhf for uniform brightness (like ChevronWaves)
         pattern = tanhf(pattern * 2.0f) * 0.5f + 0.5f;
+
+        // VISIBILITY FIX: Ensure minimum brightness floor
+        pattern = fmaxf(0.2f, pattern);
 
         uint8_t brightness = (uint8_t)(pattern * 255.0f * intensityNorm);
         uint8_t paletteIndex = (uint8_t)(dist * 2.0f + pattern * 50.0f);

@@ -1,7 +1,7 @@
 // ============================================================================
 // LoadingScreen Implementation
 // ============================================================================
-// Direct framebuffer rendering (no sprites) for minimal memory usage
+// Supports both legacy M5GFX direct rendering and new LVGL-based UI.
 // ============================================================================
 
 #include "LoadingScreen.h"
@@ -25,6 +25,184 @@
 
 #include <cstring>
 
+// Common includes end here.
+
+#if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
+#include "lvgl_bridge.h"
+#include "fonts/experimental_fonts.h"
+#endif
+
+namespace LoadingScreen {
+
+#if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
+
+// ============================================================================
+// LVGL Implementation
+// ============================================================================
+
+static lv_obj_t* s_screen = nullptr;
+static lv_obj_t* s_subtitleLabel = nullptr;
+static lv_obj_t* s_dotsLabel = nullptr;
+static lv_timer_t* s_dotsTimer = nullptr;
+static uint8_t s_dotState = 0;
+static char s_currentSubtitle[64] = {0};  // Track current subtitle to control dots animation
+
+static const lv_image_dsc_t s_logoDsc = {
+    .header = {
+        .magic = LV_IMAGE_HEADER_MAGIC,
+        .cf = LV_COLOR_FORMAT_RGB565,
+        .flags = 0,
+        .w = SPECTRASYNQ_LOGO_SMALL_WIDTH,
+        .h = SPECTRASYNQ_LOGO_SMALL_HEIGHT,
+        .stride = SPECTRASYNQ_LOGO_SMALL_WIDTH * 2,
+        .reserved_2 = 0
+    },
+    .data_size = SPECTRASYNQ_LOGO_SMALL_WIDTH * SPECTRASYNQ_LOGO_SMALL_HEIGHT * 2,
+    .data = (const uint8_t*)SpectraSynq_Logo_Small
+};
+
+static void dots_timer_cb(lv_timer_t* timer) {
+    if (!s_dotsLabel) return;
+    
+    // Always animate dots for "CONNECTING TO HOST" main label (dots are part of main label, not subtitle)
+    // Animate dots one at a time: dot, dot, dot (cycling through 0, 1, 2, 3)
+    s_dotState = (s_dotState + 1) % 4;
+    switch (s_dotState) {
+        case 0: lv_label_set_text(s_dotsLabel, ""); break;
+        case 1: lv_label_set_text(s_dotsLabel, "."); break;
+        case 2: lv_label_set_text(s_dotsLabel, ".."); break;
+        case 3: lv_label_set_text(s_dotsLabel, "..."); break;
+    }
+    // Re-align dots to maintain position relative to main label (which is centered)
+    // Find the main label by getting the parent and finding the first child
+    lv_obj_t* parent = lv_obj_get_parent(s_dotsLabel);
+    if (parent) {
+        lv_obj_t* mainLabel = lv_obj_get_child(parent, 0);
+        if (mainLabel) {
+            lv_obj_align_to(s_dotsLabel, mainLabel, LV_ALIGN_OUT_RIGHT_MID, 4, 0);
+        }
+    }
+}
+
+// create_badge function removed - encoder badges no longer used
+
+// update_badges function removed - encoder badges no longer displayed
+
+void show(M5GFX& display, const char* message, bool unitA, bool unitB) {
+    (void)display; // Unused in LVGL mode
+    if (s_screen) {
+        update(display, message, unitA, unitB);
+        return;
+    }
+
+    s_screen = lv_obj_create(NULL);
+    lv_obj_set_style_bg_color(s_screen, lv_color_hex(0x0A0A0B), 0); // TAB5_COLOR_BG_PAGE
+    lv_obj_set_style_text_font(s_screen, BEBAS_BOLD_24, 0);
+
+    // Layout Container
+    lv_obj_t* cont = lv_obj_create(s_screen);
+    lv_obj_set_size(cont, LV_PCT(100), LV_PCT(100));
+    lv_obj_center(cont);
+    lv_obj_set_flex_flow(cont, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(cont, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_bg_opa(cont, 0, 0);
+    lv_obj_set_style_border_width(cont, 0, 0);
+
+    // Logo - no scaling, use native size from SpectraSynqLogo.h
+    lv_obj_t* logo = lv_image_create(cont);
+    lv_image_set_src(logo, &s_logoDsc);
+    // No scaling - logo displays at native resolution (1170x1478px from converted JPG)
+    lv_obj_set_style_margin_top(logo, -15, 0); // Move logo up 15px
+    
+    // Container for main label and dots - use fixed layout to prevent text movement
+    lv_obj_t* mainLabelCont = lv_obj_create(cont);
+    lv_obj_set_size(mainLabelCont, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(mainLabelCont, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(mainLabelCont, 0, 0);
+    lv_obj_set_style_pad_all(mainLabelCont, 0, 0);
+    lv_obj_set_style_margin_top(mainLabelCont, 24, 0); // GAP_LOGO_TO_TEXT from working impl
+    lv_obj_clear_flag(mainLabelCont, LV_OBJ_FLAG_SCROLLABLE);
+    
+    // Main Label - locked position, text never changes, centered (position doesn't move)
+    lv_obj_t* mainLabel = lv_label_create(mainLabelCont);
+    lv_label_set_text(mainLabel, "CONNECTING TO HOST");
+    lv_obj_set_style_text_color(mainLabel, lv_color_hex(0xFFC700), 0); // TAB5_COLOR_BRAND_PRIMARY
+    lv_obj_set_style_text_font(mainLabel, BEBAS_BOLD_24, 0);
+    lv_obj_set_style_text_letter_space(mainLabel, 2, 0); // Slight letter spacing for better appearance
+    lv_obj_align(mainLabel, LV_ALIGN_CENTER, 0, 0); // Center the main label - position is fixed
+
+    // Dots - positioned absolutely relative to main label, doesn't affect main label position
+    s_dotsLabel = lv_label_create(mainLabelCont);
+    lv_label_set_text(s_dotsLabel, "");
+    lv_obj_set_style_text_color(s_dotsLabel, lv_color_hex(0xFFC700), 0);
+    lv_obj_set_style_text_font(s_dotsLabel, BEBAS_BOLD_24, 0);
+    // Position dots to the right of "CONNECTING TO HOST" text - absolute positioning
+    lv_obj_align_to(s_dotsLabel, mainLabel, LV_ALIGN_OUT_RIGHT_MID, 4, 0);
+
+    // Subtitle
+    s_subtitleLabel = lv_label_create(cont);
+    const char* displayMessage = message ? message : "";
+    lv_label_set_text(s_subtitleLabel, displayMessage);
+    lv_obj_set_style_text_color(s_subtitleLabel, lv_color_hex(0x848484), 0); // TAB5_COLOR_FG_SECONDARY
+    lv_obj_set_style_text_font(s_subtitleLabel, BEBAS_BOLD_24, 0);
+    lv_obj_set_style_margin_top(s_subtitleLabel, 10, 0);
+    // Initialize subtitle tracking for dots animation control
+    strncpy(s_currentSubtitle, displayMessage, sizeof(s_currentSubtitle) - 1);
+    s_currentSubtitle[sizeof(s_currentSubtitle) - 1] = '\0';
+
+    // Encoder badges removed - not needed on loading screen per user request
+
+    s_dotsTimer = lv_timer_create(dots_timer_cb, 500, NULL);
+
+    lv_display_t* disp = LVGLBridge::getDisplay();
+    if (disp) {
+        lv_disp_load_scr(s_screen);
+    }
+}
+
+void update(M5GFX& display, const char* message, bool unitA, bool unitB) {
+    (void)display;
+    (void)unitA;  // Encoder status no longer displayed
+    (void)unitB;  // Encoder status no longer displayed
+    if (!s_screen) return;
+    
+    if (s_subtitleLabel) {
+        const char* displayMessage = message ? message : "";
+        lv_label_set_text(s_subtitleLabel, displayMessage);
+        // Store current subtitle (for potential future use, but dots always animate for main label)
+        strncpy(s_currentSubtitle, displayMessage, sizeof(s_currentSubtitle) - 1);
+        s_currentSubtitle[sizeof(s_currentSubtitle) - 1] = '\0';
+        // Dots always animate - they're part of the "CONNECTING TO HOST" main label, not the subtitle
+    }
+}
+
+void hide(M5GFX& display) {
+    (void)display;
+    if (s_dotsTimer) {
+        lv_timer_del(s_dotsTimer);
+        s_dotsTimer = nullptr;
+    }
+    if (s_screen) {
+        lv_obj_del(s_screen);
+        s_screen = nullptr;
+        s_subtitleLabel = nullptr;
+        s_dotsLabel = nullptr;
+    }
+}
+
+// No-ops for M5GFX specific functions in LVGL mode
+void setPpaEnabled(bool enabled) { (void)enabled; }
+bool isPpaEnabled() { return false; }
+uint32_t benchmarkLogo(M5GFX& display, uint16_t iterations, bool usePpa) { 
+    (void)display; (void)iterations; (void)usePpa; return 0; 
+}
+
+#else
+
+// ============================================================================
+// M5GFX Implementation
+// ============================================================================
+
 #ifndef SIMULATOR_BUILD
     #if ENABLE_PPA_UI && !defined(SIMULATOR_BUILD)
     #include <LGFX_PPA.hpp>
@@ -37,8 +215,6 @@
     #define pgm_read_word(addr) (*(const uint16_t*)(addr))
 #endif
 
-namespace LoadingScreen {
-
 static uint32_t s_lastDotUpdate = 0;
 static uint8_t s_dotState = 0;  // 0="", 1=".", 2="..", 3="..."
 
@@ -46,12 +222,12 @@ static constexpr uint16_t TAB5_COLOR_BG_PAGE_RGB565 = 0x0841;       // RGB888 0x
 static constexpr uint16_t TAB5_COLOR_BRAND_PRIMARY_RGB565 = 0xFE20; // RGB888 0xFFC700
 static constexpr uint16_t TAB5_COLOR_FG_SECONDARY_RGB565 = 0x8410;
 
-static constexpr const char* MAIN_LABEL = "WAITING FOR HOST";
+static constexpr const char* MAIN_LABEL = "CONNECTING TO HOST";
 
 static constexpr uint32_t DOT_INTERVAL_MS = 500;
 static constexpr int DOT_GAP_PX = 10;
 
-static constexpr int LOGO_SCALE = 2;  // Nearest-neighbour scale of the embedded 222px logo
+static constexpr int LOGO_SCALE = 2;  // Nearest-neighbour scale factor for logo (used in non-LVGL paths)
 
 static_assert(LOGO_SCALE == 2, "LoadingScreen logo scaling currently assumes a fixed 2x scale.");
 
@@ -323,12 +499,13 @@ static void drawFull(M5GFX& display, const char* subtitle, bool unitA, bool unit
     computeDotLayout(display, centerX, mainY);
 
     // Subtitle (optional).
+    int subY = 0;
     if (s_lastSubtitle[0] != '\0') {
         display.setFont(&fonts::FreeSans12pt7b);
         display.setTextSize(1);
         display.setTextDatum(textdatum_t::middle_center);
         display.setTextColor(TAB5_COLOR_FG_SECONDARY_RGB565);
-        const int subY = mainY + (mainTextH / 2) + gapMainToSub + (subtitleH / 2);
+        subY = mainY + (mainTextH / 2) + gapMainToSub + (subtitleH / 2);
         display.drawString(s_lastSubtitle, centerX, subY);
     }
 
@@ -395,5 +572,7 @@ void hide(M5GFX& display) {
     // Simply clear the screen - UI will draw over it
     display.fillScreen(Theme::BG_DARK);
 }
+
+#endif  // TAB5_ENCODER_USE_LVGL && !SIMULATOR_BUILD
 
 }  // namespace LoadingScreen

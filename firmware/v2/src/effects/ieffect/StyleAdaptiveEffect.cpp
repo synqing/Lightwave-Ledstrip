@@ -272,10 +272,12 @@ void StyleAdaptiveEffect::render(plugins::EffectContext& ctx) {
         
         // Apply audio gain to radial wave pattern
         float brightness = star * audioGain;
-        
-        // Scale by style confidence
-        brightness *= (0.5f + confidence * 0.5f);
-        
+
+        // Scale by style confidence with minimum floor for visibility
+        // When style classification fails (low confidence), ensure fallback brightness of 0.4
+        float confidenceScale = fmaxf(0.4f, 0.5f + confidence * 0.5f);
+        brightness *= confidenceScale;
+
         // Normalize brightness
         brightness = tanhf(brightness * 2.0f) * 0.5f + 0.5f;
         brightness = fminf(1.0f, brightness);

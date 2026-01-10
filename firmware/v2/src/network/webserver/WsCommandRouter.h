@@ -62,9 +62,14 @@ public:
      * @brief Get handler count (for testing/debugging)
      */
     static size_t getHandlerCount();
+    
+    /**
+     * @brief Get maximum handler capacity
+     */
+    static size_t getMaxHandlers();
 
 private:
-    static constexpr size_t MAX_HANDLERS = 80;  // Enough for all current commands
+    static constexpr size_t MAX_HANDLERS = 128;  // Capacity for all current commands (109 registered) plus headroom
     static WsCommandEntry s_handlers[MAX_HANDLERS];
     static size_t s_handlerCount;
     

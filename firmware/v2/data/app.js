@@ -172,6 +172,24 @@ const state = {
     lastPresetListFetchMs: 0,
     presetListFetchThrottleMs: 3000,  // Only fetch once every 3 seconds max
 
+    // Effect modifiers state
+    modifiers: {
+        stack: [],           // Array of {type, name, enabled, params}
+        selectedType: null,  // Type being edited
+        pendingUpdate: null  // Timer for parameter debouncing
+    },
+
+    // Color correction state
+    colorCorrection: {
+        mode: 3,                    // 0=OFF, 1=HSV, 2=RGB, 3=BOTH
+        autoExposureEnabled: true,
+        autoExposureTarget: 110,
+        brownGuardrailEnabled: true,
+        gammaEnabled: true,
+        gammaValue: 2.2,
+        currentPreset: 2            // 0=Off, 1=Subtle, 2=Balanced, 3=Aggressive
+    },
+
     // Limits
     PALETTE_COUNT: 75,  // 0-74
     BRIGHTNESS_MIN: 0,
@@ -271,6 +289,10 @@ function connect() {
             fetchPalettesList();
             fetchEffectsList();
             fetchShowsList();
+            // Fetch active modifiers
+            fetchModifiersList();
+            // Fetch color correction config
+            fetchColorCorrectionConfig();
         }, 100);
     };
 
@@ -854,6 +876,72 @@ function handleMessage(msg) {
                 updateShowsUI();
             }
             log(`[WS] Chapter changed: ${msgFlat.chapterIndex}`);
+            break;
+
+        // Color correction responses
+        case 'colorCorrection.getConfig':
+            if (msgFlat.mode !== undefined) {
+                state.colorCorrection = {
+                    mode: msgFlat.mode,
+                    autoExposureEnabled: msgFlat.autoExposureEnabled || false,
+                    autoExposureTarget: msgFlat.autoExposureTarget || 110,
+                    brownGuardrailEnabled: msgFlat.brownGuardrailEnabled || false,
+                    gammaEnabled: msgFlat.gammaEnabled || false,
+                    gammaValue: msgFlat.gammaValue || 2.2
+                };
+                updateColorCorrectionUI();
+                log(`[WS] Color correction config loaded: mode=${state.colorCorrection.mode}`);
+            }
+            break;
+
+        case 'colorCorrection.setConfig':
+            // Config updated successfully - refresh UI
+            if (msgFlat.updated) {
+                log(`[WS] Color correction config updated`);
+                fetchColorCorrectionConfig();
+            }
+            break;
+
+        case 'colorCorrection.setMode':
+            // Mode changed successfully
+            if (msgFlat.mode !== undefined) {
+                state.colorCorrection.mode = msgFlat.mode;
+                updateColorCorrectionUI();
+                log(`[WS] Color correction mode: ${msgFlat.modeName || msgFlat.mode}`);
+            }
+            break;
+
+        case 'colorCorrection.save':
+            if (msgFlat.saved) {
+                log(`[WS] Color correction saved to NVS`);
+            }
+            break;
+
+        case 'colorCorrection.setPreset':
+            // Preset applied - update state with new config
+            if (msgFlat.preset !== undefined) {
+                state.colorCorrection.currentPreset = msgFlat.preset;
+                // If config was included, update all settings
+                if (msgFlat.config) {
+                    state.colorCorrection.mode = msgFlat.config.mode;
+                    state.colorCorrection.autoExposureEnabled = msgFlat.config.autoExposureEnabled;
+                    state.colorCorrection.autoExposureTarget = msgFlat.config.autoExposureTarget;
+                    state.colorCorrection.brownGuardrailEnabled = msgFlat.config.brownGuardrailEnabled;
+                    state.colorCorrection.gammaEnabled = msgFlat.config.gammaEnabled;
+                    state.colorCorrection.gammaValue = msgFlat.config.gammaValue;
+                }
+                updateColorCorrectionUI();
+                log(`[WS] Color correction preset: ${msgFlat.presetName || msgFlat.preset}`);
+            }
+            break;
+
+        case 'colorCorrection.getPresets':
+            // Presets list received
+            if (msgFlat.currentPreset !== undefined) {
+                state.colorCorrection.currentPreset = msgFlat.currentPreset;
+                updateColorCorrectionUI();
+                log(`[WS] Current preset: ${msgFlat.currentPresetName || msgFlat.currentPreset}`);
+            }
             break;
 
         default:
@@ -4018,6 +4106,469 @@ function onShowSave() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Effect Modifiers API Functions
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Get default parameters for a modifier type
+ */
+function getModifierDefaults(type) {
+    const defaults = {
+        speed: { multiplier: 1.5 },
+        intensity: { baseIntensity: 1.0, source: 'CONSTANT' },
+        color_shift: { hueOffset: 64 },
+        mirror: {},
+        glitch: { intensity: 0.3 },
+        blur: { radius: 2, strength: 0.8, mode: 'BOX' },
+        trail: { fadeRate: 20, mode: 'CONSTANT' },
+        saturation: { saturation: 200, mode: 'ABSOLUTE' },
+        strobe: { dutyCycle: 0.3, subdivision: 4, mode: 'BEAT_SYNC' }
+    };
+    return defaults[type] || {};
+}
+
+/**
+ * Fetch current modifiers list from device
+ */
+function fetchModifiersList() {
+    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/modifiers/list`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(data => {
+        if (data.success && data.data) {
+            state.modifiers.stack = data.data.modifiers || [];
+            log(`[REST] Loaded ${state.modifiers.stack.length} modifiers`);
+            updateModifiersUI();
+        }
+    })
+    .catch(e => {
+        log(`[REST] Error fetching modifiers: ${e.message}`);
+    });
+}
+
+/**
+ * Update the modifiers UI to reflect current stack
+ */
+function updateModifiersUI() {
+    const container = document.getElementById('modifierStack');
+    if (!container) return;
+
+    if (state.modifiers.stack.length === 0) {
+        container.innerHTML = '<div class="value-secondary compact" style="text-align: center;">No modifiers active</div>';
+    } else {
+        // Build stack display - each modifier as a removable chip
+        const html = state.modifiers.stack.map(mod => {
+            const displayName = mod.type.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
+            return `
+                <div class="modifier-chip" data-type="${mod.type}" style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; margin: 3px; background: rgba(255,208,80,0.15); border: 1px solid var(--gold); border-radius: 12px; cursor: pointer;">
+                    <span style="font-size: 12px; color: var(--gold);">${displayName}</span>
+                    <button class="modifier-remove-btn" data-type="${mod.type}" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 0 2px; font-size: 14px;">&times;</button>
+                </div>
+            `;
+        }).join('');
+        container.innerHTML = html;
+
+        // Attach click handlers for editing
+        container.querySelectorAll('.modifier-chip').forEach(chip => {
+            chip.addEventListener('click', (e) => {
+                // Don't trigger edit if clicking the remove button
+                if (e.target.classList.contains('modifier-remove-btn')) return;
+                const type = chip.dataset.type;
+                openModifierEditor(type);
+            });
+        });
+
+        // Attach remove handlers
+        container.querySelectorAll('.modifier-remove-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const type = btn.dataset.type;
+                removeModifier(type);
+            });
+        });
+    }
+
+    // Update add buttons to show which are active
+    document.querySelectorAll('.modifier-add-btn').forEach(btn => {
+        const type = btn.dataset.modifier;
+        const isActive = state.modifiers.stack.some(m => m.type === type);
+        if (isActive) {
+            btn.style.background = 'rgba(255,208,80,0.3)';
+            btn.style.borderColor = 'var(--gold)';
+        } else {
+            btn.style.background = '';
+            btn.style.borderColor = '';
+        }
+    });
+}
+
+/**
+ * Add a modifier to the stack
+ */
+function addModifier(type) {
+    // Check if already active
+    if (state.modifiers.stack.some(m => m.type === type)) {
+        log(`[MODIFIERS] ${type} already active, opening editor`);
+        openModifierEditor(type);
+        return;
+    }
+
+    const params = getModifierDefaults(type);
+    const payload = { type, ...params };
+
+    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/modifiers/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(data => {
+        if (data.success) {
+            log(`[REST] Added modifier: ${type}`);
+            fetchModifiersList();
+        } else {
+            log(`[REST] Failed to add modifier: ${data.error || 'Unknown error'}`);
+        }
+    })
+    .catch(e => {
+        log(`[REST] Error adding modifier: ${e.message}`);
+    });
+}
+
+/**
+ * Remove a modifier from the stack
+ */
+function removeModifier(type) {
+    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/modifiers/remove`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type })
+    })
+    .then(data => {
+        if (data.success) {
+            log(`[REST] Removed modifier: ${type}`);
+            // Close editor if this modifier was being edited
+            if (state.modifiers.selectedType === type) {
+                closeModifierEditor();
+            }
+            fetchModifiersList();
+        } else {
+            log(`[REST] Failed to remove modifier: ${data.error || 'Unknown error'}`);
+        }
+    })
+    .catch(e => {
+        log(`[REST] Error removing modifier: ${e.message}`);
+    });
+}
+
+/**
+ * Clear all modifiers from the stack
+ */
+function clearAllModifiers() {
+    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/modifiers/clear`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(data => {
+        if (data.success) {
+            log(`[REST] Cleared all modifiers`);
+            closeModifierEditor();
+            fetchModifiersList();
+        } else {
+            log(`[REST] Failed to clear modifiers: ${data.error || 'Unknown error'}`);
+        }
+    })
+    .catch(e => {
+        log(`[REST] Error clearing modifiers: ${e.message}`);
+    });
+}
+
+/**
+ * Open the parameter editor for a modifier
+ */
+function openModifierEditor(type) {
+    const modifier = state.modifiers.stack.find(m => m.type === type);
+    if (!modifier) {
+        log(`[MODIFIERS] Modifier ${type} not found in stack`);
+        return;
+    }
+
+    state.modifiers.selectedType = type;
+    const editorRow = document.getElementById('modifierEditorRow');
+    const titleEl = document.getElementById('modifierEditorTitle');
+    const paramsContainer = document.getElementById('modifierParamsContainer');
+
+    if (!editorRow || !paramsContainer) return;
+
+    // Set title
+    const displayName = type.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
+    if (titleEl) titleEl.textContent = `Edit ${displayName}`;
+
+    // Build parameter inputs based on modifier type
+    let html = '';
+    const params = modifier.params || getModifierDefaults(type);
+
+    switch (type) {
+        case 'speed':
+            html = `
+                <label class="value-secondary" style="display: block; margin-bottom: 4px;">Multiplier (0.1 - 3.0)</label>
+                <input type="range" id="modParam_multiplier" min="0.1" max="3.0" step="0.1" value="${params.multiplier || 1.5}" style="width: 100%;">
+                <div class="value-secondary" id="modParam_multiplier_val" style="text-align: center;">${params.multiplier || 1.5}x</div>
+            `;
+            break;
+
+        case 'intensity':
+            html = `
+                <label class="value-secondary" style="display: block; margin-bottom: 4px;">Base Intensity (0.0 - 2.0)</label>
+                <input type="range" id="modParam_baseIntensity" min="0" max="2.0" step="0.1" value="${params.baseIntensity || 1.0}" style="width: 100%;">
+                <div class="value-secondary" id="modParam_baseIntensity_val" style="text-align: center;">${params.baseIntensity || 1.0}</div>
+                <label class="value-secondary" style="display: block; margin-top: 8px; margin-bottom: 4px;">Source</label>
+                <select id="modParam_source" style="width: 100%; padding: 6px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--text-secondary); border-radius: 4px;">
+                    <option value="CONSTANT" ${params.source === 'CONSTANT' ? 'selected' : ''}>Constant</option>
+                    <option value="BEAT_PHASE" ${params.source === 'BEAT_PHASE' ? 'selected' : ''}>Beat Phase</option>
+                </select>
+            `;
+            break;
+
+        case 'color_shift':
+            html = `
+                <label class="value-secondary" style="display: block; margin-bottom: 4px;">Hue Offset (0 - 255)</label>
+                <input type="range" id="modParam_hueOffset" min="0" max="255" step="1" value="${params.hueOffset || 64}" style="width: 100%;">
+                <div class="value-secondary" id="modParam_hueOffset_val" style="text-align: center;">${params.hueOffset || 64}</div>
+            `;
+            break;
+
+        case 'mirror':
+            html = '<div class="value-secondary" style="text-align: center; padding: 12px;">Mirror has no parameters</div>';
+            break;
+
+        case 'glitch':
+            html = `
+                <label class="value-secondary" style="display: block; margin-bottom: 4px;">Intensity (0.0 - 1.0)</label>
+                <input type="range" id="modParam_intensity" min="0" max="1.0" step="0.05" value="${params.intensity || 0.3}" style="width: 100%;">
+                <div class="value-secondary" id="modParam_intensity_val" style="text-align: center;">${params.intensity || 0.3}</div>
+            `;
+            break;
+
+        case 'blur':
+            html = `
+                <label class="value-secondary" style="display: block; margin-bottom: 4px;">Radius (1 - 10)</label>
+                <input type="range" id="modParam_radius" min="1" max="10" step="1" value="${params.radius || 2}" style="width: 100%;">
+                <div class="value-secondary" id="modParam_radius_val" style="text-align: center;">${params.radius || 2}</div>
+                <label class="value-secondary" style="display: block; margin-top: 8px; margin-bottom: 4px;">Strength (0.0 - 1.0)</label>
+                <input type="range" id="modParam_strength" min="0" max="1.0" step="0.1" value="${params.strength || 0.8}" style="width: 100%;">
+                <div class="value-secondary" id="modParam_strength_val" style="text-align: center;">${params.strength || 0.8}</div>
+                <label class="value-secondary" style="display: block; margin-top: 8px; margin-bottom: 4px;">Mode</label>
+                <select id="modParam_mode" style="width: 100%; padding: 6px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--text-secondary); border-radius: 4px;">
+                    <option value="BOX" ${params.mode === 'BOX' ? 'selected' : ''}>Box</option>
+                    <option value="GAUSSIAN" ${params.mode === 'GAUSSIAN' ? 'selected' : ''}>Gaussian</option>
+                </select>
+            `;
+            break;
+
+        case 'trail':
+            html = `
+                <label class="value-secondary" style="display: block; margin-bottom: 4px;">Fade Rate (1 - 100)</label>
+                <input type="range" id="modParam_fadeRate" min="1" max="100" step="1" value="${params.fadeRate || 20}" style="width: 100%;">
+                <div class="value-secondary" id="modParam_fadeRate_val" style="text-align: center;">${params.fadeRate || 20}</div>
+                <label class="value-secondary" style="display: block; margin-top: 8px; margin-bottom: 4px;">Mode</label>
+                <select id="modParam_mode" style="width: 100%; padding: 6px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--text-secondary); border-radius: 4px;">
+                    <option value="CONSTANT" ${params.mode === 'CONSTANT' ? 'selected' : ''}>Constant</option>
+                    <option value="BEAT_SYNC" ${params.mode === 'BEAT_SYNC' ? 'selected' : ''}>Beat Sync</option>
+                </select>
+            `;
+            break;
+
+        case 'saturation':
+            html = `
+                <label class="value-secondary" style="display: block; margin-bottom: 4px;">Saturation (0 - 255)</label>
+                <input type="range" id="modParam_saturation" min="0" max="255" step="1" value="${params.saturation || 200}" style="width: 100%;">
+                <div class="value-secondary" id="modParam_saturation_val" style="text-align: center;">${params.saturation || 200}</div>
+                <label class="value-secondary" style="display: block; margin-top: 8px; margin-bottom: 4px;">Mode</label>
+                <select id="modParam_mode" style="width: 100%; padding: 6px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--text-secondary); border-radius: 4px;">
+                    <option value="ABSOLUTE" ${params.mode === 'ABSOLUTE' ? 'selected' : ''}>Absolute</option>
+                    <option value="RELATIVE" ${params.mode === 'RELATIVE' ? 'selected' : ''}>Relative</option>
+                </select>
+            `;
+            break;
+
+        case 'strobe':
+            html = `
+                <label class="value-secondary" style="display: block; margin-bottom: 4px;">Duty Cycle (0.1 - 0.9)</label>
+                <input type="range" id="modParam_dutyCycle" min="0.1" max="0.9" step="0.1" value="${params.dutyCycle || 0.3}" style="width: 100%;">
+                <div class="value-secondary" id="modParam_dutyCycle_val" style="text-align: center;">${params.dutyCycle || 0.3}</div>
+                <label class="value-secondary" style="display: block; margin-top: 8px; margin-bottom: 4px;">Subdivision (1 - 8)</label>
+                <input type="range" id="modParam_subdivision" min="1" max="8" step="1" value="${params.subdivision || 4}" style="width: 100%;">
+                <div class="value-secondary" id="modParam_subdivision_val" style="text-align: center;">${params.subdivision || 4}</div>
+                <label class="value-secondary" style="display: block; margin-top: 8px; margin-bottom: 4px;">Mode</label>
+                <select id="modParam_mode" style="width: 100%; padding: 6px; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--text-secondary); border-radius: 4px;">
+                    <option value="BEAT_SYNC" ${params.mode === 'BEAT_SYNC' ? 'selected' : ''}>Beat Sync</option>
+                    <option value="FREE_RUN" ${params.mode === 'FREE_RUN' ? 'selected' : ''}>Free Run</option>
+                </select>
+            `;
+            break;
+
+        default:
+            html = '<div class="value-secondary" style="text-align: center; padding: 12px;">No parameters available</div>';
+    }
+
+    paramsContainer.innerHTML = html;
+
+    // Attach live update handlers to sliders
+    paramsContainer.querySelectorAll('input[type="range"]').forEach(slider => {
+        slider.addEventListener('input', () => {
+            const valEl = document.getElementById(slider.id + '_val');
+            if (valEl) {
+                let suffix = '';
+                if (slider.id.includes('multiplier')) suffix = 'x';
+                valEl.textContent = slider.value + suffix;
+            }
+        });
+    });
+
+    // Show editor
+    editorRow.style.display = '';
+}
+
+/**
+ * Close the modifier parameter editor
+ */
+function closeModifierEditor() {
+    state.modifiers.selectedType = null;
+    const editorRow = document.getElementById('modifierEditorRow');
+    if (editorRow) {
+        editorRow.style.display = 'none';
+    }
+}
+
+/**
+ * Apply modifier parameter changes
+ */
+function applyModifierChanges() {
+    const type = state.modifiers.selectedType;
+    if (!type) {
+        log('[MODIFIERS] No modifier selected');
+        return;
+    }
+
+    // Collect parameters from form
+    const params = {};
+    const paramsContainer = document.getElementById('modifierParamsContainer');
+    if (!paramsContainer) return;
+
+    // Get all inputs
+    paramsContainer.querySelectorAll('input[type="range"], select').forEach(input => {
+        const key = input.id.replace('modParam_', '');
+        if (input.type === 'range') {
+            // Parse as float for decimals, int for whole numbers
+            const val = parseFloat(input.value);
+            params[key] = val;
+        } else {
+            params[key] = input.value;
+        }
+    });
+
+    const payload = { type, ...params };
+
+    // Debounce rapid changes
+    if (state.modifiers.pendingUpdate) {
+        clearTimeout(state.modifiers.pendingUpdate);
+    }
+
+    state.modifiers.pendingUpdate = setTimeout(() => {
+        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/modifiers/update`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(data => {
+            if (data.success) {
+                log(`[REST] Updated modifier: ${type}`);
+                fetchModifiersList();
+            } else {
+                log(`[REST] Failed to update modifier: ${data.error || 'Unknown error'}`);
+            }
+        })
+        .catch(e => {
+            log(`[REST] Error updating modifier: ${e.message}`);
+        });
+
+        state.modifiers.pendingUpdate = null;
+    }, 100);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Color Correction API Functions
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Fetch color correction config from device via WebSocket
+ */
+function fetchColorCorrectionConfig() {
+    send({ type: 'colorCorrection.getConfig' });
+}
+
+/**
+ * Update the color correction UI to reflect current state
+ */
+function updateColorCorrectionUI() {
+    const cc = state.colorCorrection;
+
+    const presetSelect = document.getElementById('ccPreset');
+    const modeSelect = document.getElementById('ccMode');
+    const autoExposureCheckbox = document.getElementById('ccAutoExposure');
+    const brownGuardrailCheckbox = document.getElementById('ccBrownGuardrail');
+    const gammaCheckbox = document.getElementById('ccGamma');
+    const aeTargetSlider = document.getElementById('ccAETarget');
+    const aeTargetVal = document.getElementById('ccAETargetVal');
+    const gammaSlider = document.getElementById('ccGammaSlider');
+    const gammaVal = document.getElementById('ccGammaVal');
+
+    if (presetSelect) presetSelect.value = cc.currentPreset || 2;
+    if (modeSelect) modeSelect.value = cc.mode;
+    if (autoExposureCheckbox) autoExposureCheckbox.checked = cc.autoExposureEnabled;
+    if (brownGuardrailCheckbox) brownGuardrailCheckbox.checked = cc.brownGuardrailEnabled;
+    if (gammaCheckbox) gammaCheckbox.checked = cc.gammaEnabled;
+    if (aeTargetSlider) aeTargetSlider.value = cc.autoExposureTarget;
+    if (aeTargetVal) aeTargetVal.textContent = cc.autoExposureTarget;
+    if (gammaSlider) gammaSlider.value = Math.round(cc.gammaValue * 10);
+    if (gammaVal) gammaVal.textContent = cc.gammaValue.toFixed(1);
+}
+
+/**
+ * Send color correction config update via WebSocket
+ */
+function setColorCorrectionConfig(params) {
+    send({ type: 'colorCorrection.setConfig', ...params });
+}
+
+/**
+ * Save color correction config to NVS via WebSocket
+ */
+function saveColorCorrection() {
+    send({ type: 'colorCorrection.save' });
+    log('[COLOR] Saved color correction config to device');
+}
+
+/**
+ * Apply a color correction preset
+ * @param {number} preset - Preset ID (0=Off, 1=Subtle, 2=Balanced, 3=Aggressive)
+ * @param {boolean} save - Whether to persist to NVS
+ */
+function setColorCorrectionPreset(preset, save = false) {
+    send({ type: 'colorCorrection.setPreset', preset, save });
+    state.colorCorrection.currentPreset = preset;
+    log(`[COLOR] Applying preset: ${['Off', 'Subtle', 'Balanced', 'Aggressive'][preset] || preset}`);
+}
+
+/**
+ * Fetch available presets and current preset via WebSocket
+ */
+function fetchColorCorrectionPresets() {
+    send({ type: 'colorCorrection.getPresets' });
+}
+
+// ─────────────────────────────────────────────────────────────
 // Initialization
 // ─────────────────────────────────────────────────────────────
 
@@ -4280,6 +4831,95 @@ function init() {
                 uploadPreset(file);
             }
         });
+    }
+
+    // Bind modifier events
+    document.querySelectorAll('.modifier-add-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const type = btn.dataset.modifier;
+            if (type) {
+                addModifier(type);
+            }
+        });
+    });
+
+    const modifierClearBtn = document.getElementById('modifierClearBtn');
+    if (modifierClearBtn) {
+        modifierClearBtn.addEventListener('click', clearAllModifiers);
+    }
+
+    const modifierApplyBtn = document.getElementById('modifierApplyBtn');
+    if (modifierApplyBtn) {
+        modifierApplyBtn.addEventListener('click', applyModifierChanges);
+    }
+
+    const modifierCloseBtn = document.getElementById('modifierCloseBtn');
+    if (modifierCloseBtn) {
+        modifierCloseBtn.addEventListener('click', closeModifierEditor);
+    }
+
+    // Bind color correction events
+    const ccPreset = document.getElementById('ccPreset');
+    if (ccPreset) {
+        ccPreset.addEventListener('change', (e) => {
+            setColorCorrectionPreset(parseInt(e.target.value));
+        });
+    }
+
+    const ccMode = document.getElementById('ccMode');
+    if (ccMode) {
+        ccMode.addEventListener('change', (e) => {
+            setColorCorrectionConfig({ mode: parseInt(e.target.value) });
+        });
+    }
+
+    const ccAutoExposure = document.getElementById('ccAutoExposure');
+    if (ccAutoExposure) {
+        ccAutoExposure.addEventListener('change', (e) => {
+            setColorCorrectionConfig({ autoExposureEnabled: e.target.checked });
+        });
+    }
+
+    const ccBrownGuardrail = document.getElementById('ccBrownGuardrail');
+    if (ccBrownGuardrail) {
+        ccBrownGuardrail.addEventListener('change', (e) => {
+            setColorCorrectionConfig({ brownGuardrailEnabled: e.target.checked });
+        });
+    }
+
+    const ccGamma = document.getElementById('ccGamma');
+    if (ccGamma) {
+        ccGamma.addEventListener('change', (e) => {
+            setColorCorrectionConfig({ gammaEnabled: e.target.checked });
+        });
+    }
+
+    const ccAETarget = document.getElementById('ccAETarget');
+    const ccAETargetVal = document.getElementById('ccAETargetVal');
+    if (ccAETarget) {
+        ccAETarget.addEventListener('input', (e) => {
+            if (ccAETargetVal) ccAETargetVal.textContent = e.target.value;
+        });
+        ccAETarget.addEventListener('change', (e) => {
+            setColorCorrectionConfig({ autoExposureTarget: parseInt(e.target.value) });
+        });
+    }
+
+    const ccGammaSlider = document.getElementById('ccGammaSlider');
+    const ccGammaVal = document.getElementById('ccGammaVal');
+    if (ccGammaSlider) {
+        ccGammaSlider.addEventListener('input', (e) => {
+            const val = (parseInt(e.target.value) / 10).toFixed(1);
+            if (ccGammaVal) ccGammaVal.textContent = val;
+        });
+        ccGammaSlider.addEventListener('change', (e) => {
+            setColorCorrectionConfig({ gammaValue: parseInt(e.target.value) / 10 });
+        });
+    }
+
+    const ccSaveBtn = document.getElementById('ccSaveBtn');
+    if (ccSaveBtn) {
+        ccSaveBtn.addEventListener('click', saveColorCorrection);
     }
 
     // Check if we're running on the device or remotely

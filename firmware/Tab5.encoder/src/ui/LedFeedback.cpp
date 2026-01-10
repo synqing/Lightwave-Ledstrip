@@ -2,38 +2,17 @@
 // LedFeedback - Connection Status LED Feedback for Tab5.encoder
 // ============================================================================
 // Implementation: Non-blocking breathing LED animations for connection status.
-// Uses sine wave for smooth breathing effect on BOTH Unit A and Unit B.
+// Uses sine wave for smooth breathing effect on Unit A LED 8.
+// Note: Unit B LED 8 is now used for palette display.
 // ============================================================================
 
 #include "LedFeedback.h"
-
-#ifdef SIMULATOR_BUILD
-    #include "../hal/SimHal.h"
-    // DualEncoderService not available in simulator - stub it
-    class DualEncoderService {
-    public:
-        void setAllLEDs(uint8_t r, uint8_t g, uint8_t b) {}
-        void allLedsOff() {}
-        void setStatusLed(uint8_t unit, uint8_t r, uint8_t g, uint8_t b) {}
-    };
-#else
-    #include "../input/DualEncoderService.h"
-#endif
-
-#include "../hal/EspHal.h"
+#include "../input/DualEncoderService.h"
 #include <math.h>
 
 // ============================================================================
 // Constructors
 // ============================================================================
-
-static uint32_t nowMillis() {
-#ifdef SIMULATOR_BUILD
-    return EspHal::millis();
-#else
-    return millis();
-#endif
-}
 
 LedFeedback::LedFeedback()
     : m_encoders(nullptr)
@@ -77,7 +56,7 @@ void LedFeedback::setState(ConnectionState state) {
     m_state = state;
     m_baseColor = getColorForState(state);
     m_isBreathing = stateRequiresBreathing(state);
-    m_animationStartTime = nowMillis();
+    m_animationStartTime = millis();
 
     // For non-breathing states, apply color immediately
     if (!m_isBreathing) {
@@ -170,7 +149,7 @@ void LedFeedback::update() {
 
 float LedFeedback::calculateBreathingFactor() const {
     // Calculate phase within breathing cycle (0.0 to 1.0)
-    uint32_t elapsed = nowMillis() - m_animationStartTime;
+    uint32_t elapsed = millis() - m_animationStartTime;
     float phase = static_cast<float>(elapsed % BREATHING_PERIOD_MS) / static_cast<float>(BREATHING_PERIOD_MS);
 
     // Use sine wave for smooth breathing
@@ -193,16 +172,14 @@ void LedFeedback::applyColorToBothUnits(const StatusLedColor& color) {
     if (!m_encoders) return;
 
     // Set LED 8 (status LED) on Unit A (unit index 0)
+    // Note: Unit B LED 8 is now used for palette display, so we only set Unit A
     m_encoders->setStatusLed(0, color.r, color.g, color.b);
-
-    // Set LED 8 (status LED) on Unit B (unit index 1)
-    m_encoders->setStatusLed(1, color.r, color.g, color.b);
 }
 
 void LedFeedback::allOff() {
     if (!m_encoders) return;
 
-    // Turn off status LEDs on both units
+    // Turn off status LED on Unit A
+    // Note: Unit B LED 8 is now used for palette display, so we only turn off Unit A
     m_encoders->setStatusLed(0, 0, 0, 0);
-    m_encoders->setStatusLed(1, 0, 0, 0);
 }

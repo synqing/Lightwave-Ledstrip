@@ -358,6 +358,35 @@ void AudioHandlers::handleTempoGet(AsyncWebServerRequest* request,
     });
 }
 
+void AudioHandlers::handleFftGet(AsyncWebServerRequest* request,
+                                 NodeOrchestrator& orchestrator) {
+    auto* renderer = orchestrator.getRenderer();
+    if (!renderer) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::AUDIO_UNAVAILABLE, "Renderer not available");
+        return;
+    }
+
+    const audio::ControlBusFrame& frame = renderer->getCachedAudioFrame();
+
+    sendSuccessResponse(request, [&frame](JsonObject& d) {
+        JsonArray bins = d["bins64"].to<JsonArray>();
+        for (uint8_t i = 0; i < audio::ControlBusFrame::BINS_64_COUNT; i++) {
+            bins.add(frame.bins64[i]);
+        }
+
+        d["binCount"] = audio::ControlBusFrame::BINS_64_COUNT;
+        d["sampleRate"] = audio::SAMPLE_RATE;
+        d["hopSize"] = audio::HOP_SIZE;
+        d["hopSeq"] = frame.hop_seq;
+
+        JsonObject freqMapping = d["frequencyMapping"].to<JsonObject>();
+        freqMapping["minHz"] = 55;      // A1
+        freqMapping["maxHz"] = 2093;    // C7
+        freqMapping["spacing"] = "semitone";
+    });
+}
+
 void AudioHandlers::handlePresetsList(AsyncWebServerRequest* request) {
     using namespace persistence;
     auto& mgr = AudioTuningManager::instance();
@@ -1259,6 +1288,11 @@ void AudioHandlers::handleStateGet(AsyncWebServerRequest* request, NodeOrchestra
 }
 
 void AudioHandlers::handleTempoGet(AsyncWebServerRequest* request, NodeOrchestrator&) {
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void AudioHandlers::handleFftGet(AsyncWebServerRequest* request, NodeOrchestrator&) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }

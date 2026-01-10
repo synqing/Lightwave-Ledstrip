@@ -64,7 +64,13 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
 
     if (ctx.audio.available) {
         beatPhase = ctx.audio.beatPhase();
-        onBeat = ctx.audio.isOnBeat();
+        
+        // Use phase-based beat detection: beat occurs at phase ~0.0
+        // This is more reliable than isOnBeat() which may trigger randomly
+        bool phaseBasedBeat = (beatPhase < 0.1f && m_lastBeatPhase > 0.9f);
+        // Also check isOnBeat() but only if phase is near 0 (within 15% of beat)
+        bool isOnBeatFlag = ctx.audio.isOnBeat();
+        onBeat = phaseBasedBeat || (isOnBeatFlag && beatPhase < 0.15f);
         
         // Hop-based updates: update targets only on new hops
         bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
@@ -120,10 +126,19 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
     m_lastBeatPhase = beatPhase;
 
     // === PRIMARY PULSE (Kick/Beat) ===
-    if (onBeat) {
+    // Add minimum time between beats to prevent rapid-fire triggers
+    static uint32_t lastBeatMs = 0;
+    uint32_t nowMs = millis();
+    uint32_t timeSinceLastBeat = nowMs - lastBeatMs;
+    constexpr uint32_t MIN_BEAT_INTERVAL_MS = 200;  // Minimum 200ms between beats (300 BPM max)
+    
+    if (onBeat && timeSinceLastBeat >= MIN_BEAT_INTERVAL_MS) {
         m_pulsePosition = 0.0f;
         m_pulseIntensity = 0.3f + bassEnergy * 0.7f;
+        lastBeatMs = nowMs;
     }
+    
+    // REMOVED: Rhythmic saliency boost was causing instability and random intensity spikes
 
     // Expand pulse outward (~400ms to reach edge)
     m_pulsePosition += ctx.deltaTimeMs / 400.0f;

@@ -237,12 +237,18 @@ void LGPPerlinBackendEmotiscopeFullEffect::render(plugins::EffectContext& ctx) {
         
         // Array lookup (not recomputation!)
         float noiseNorm = m_noiseArray[dist];
-        
-        // Same shaping as FastLED test (for fair comparison)
-        noiseNorm = noiseNorm * noiseNorm; // Bias toward darker, stronger highlights
-        float brightnessNorm = 0.2f + noiseNorm * 0.8f;
+
+        // Visibility fix: replace squaring with sqrt for better dynamic range
+        // Old: noiseNorm * noiseNorm (crushes mid-values to near-zero)
+        // New: sqrt for gentler curve + 1.5x boost
+        noiseNorm = sqrtf(noiseNorm) * 1.5f;
+        noiseNorm = fminf(1.0f, noiseNorm); // Clamp to valid range
+
+        // Global brightness boost (1.5x) with minimum floor
+        float brightnessNorm = fmaxf(0.2f, 0.3f + noiseNorm * 0.7f) * 1.5f;
+        brightnessNorm = fminf(1.0f, brightnessNorm); // Clamp after boost
         uint8_t brightness = (uint8_t)(brightnessNorm * 255.0f * intensityNorm);
-        uint8_t paletteIndex = (uint8_t)(noiseNorm * 255.0f) + ctx.gHue;
+        uint8_t paletteIndex = (uint8_t)(noiseNorm * 170.0f) + ctx.gHue; // Adjusted for new range
         
         CRGB color = ctx.palette.getColor(paletteIndex, brightness);
         ctx.leds[i] = color;

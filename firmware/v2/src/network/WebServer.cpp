@@ -13,6 +13,7 @@
 #define LW_LOG_TAG "WebServer"
 #include "utils/Log.h"
 
+#include "webserver/LogStreamBroadcaster.h"
 #include "ApiResponse.h"
 #include "RequestValidator.h"
 #include "WiFiManager.h"
@@ -35,6 +36,7 @@
 #include "webserver/WsGateway.h"
 #include "webserver/WsCommandRouter.h"
 #include "webserver/ws/WsDeviceCommands.h"
+#include "webserver/ws/WsFilesystemCommands.h"
 #include "webserver/ws/WsEffectsCommands.h"
 #include "webserver/ws/WsZonesCommands.h"
 #include "webserver/ws/WsTransitionCommands.h"
@@ -133,6 +135,7 @@ WebServer::WebServer(NodeOrchestrator& orchestrator, RendererNode* renderer)
     , m_running(false)
     , m_apMode(false)
     , m_mdnsStarted(false)
+    , m_littleFSMounted(false)
     , m_lastBroadcast(0)
     , m_startTime(0)
     , m_lastImmediateBroadcast(0)
@@ -140,6 +143,7 @@ WebServer::WebServer(NodeOrchestrator& orchestrator, RendererNode* renderer)
     , m_zoneComposer(nullptr)
     , m_lastStateCacheUpdate(0)
     , m_ledBroadcaster(nullptr)
+    , m_logBroadcaster(nullptr)
     , m_wsGateway(nullptr)
     , m_orchestrator(orchestrator)
     , m_renderer(renderer)
@@ -148,13 +152,18 @@ WebServer::WebServer(NodeOrchestrator& orchestrator, RendererNode* renderer)
 
 WebServer::~WebServer() {
     stop();
+
+    // Clear log callback before deleting broadcaster
+    lightwaveos::logging::clearLogCallback();
+
     delete m_wsGateway;
-#if FEATURE_AUDIO_BENCHCHMARK
+#if FEATURE_AUDIO_BENCHMARK
     delete m_benchmarkBroadcaster;
 #endif
 #if FEATURE_AUDIO_SYNC
     delete m_audioBroadcaster;
 #endif
+    delete m_logBroadcaster;
     delete m_ledBroadcaster;
     delete m_ws;
     delete m_server;
@@ -165,11 +174,32 @@ WebServer::~WebServer() {
 // ============================================================================
 
 bool WebServer::begin() {
+    // CRITICAL: Guard against calling begin() multiple times
+    // If already running, stop and clean up first (prevents memory leak and port conflict)
+    if (m_running) {
+        LW_LOGW("WebServer::begin() called when already running - stopping first");
+        stop();  // Clean up existing instance
+        delay(500);  // Give time for cleanup
+    }
+    
+    // CRITICAL: Verify previous instance was cleaned up
+    if (m_server != nullptr) {
+        LW_LOGE("CRITICAL: m_server is not nullptr! Memory leak or double-initialization!");
+        delete m_server;  // Clean up orphaned instance
+        m_server = nullptr;
+    }
+    if (m_ws != nullptr) {
+        LW_LOGE("CRITICAL: m_ws is not nullptr! Memory leak or double-initialization!");
+        delete m_ws;  // Clean up orphaned instance
+        m_ws = nullptr;
+    }
+    
     LW_LOGI("Starting v2 WebServer...");
 
     // Initialize LittleFS for static file serving
-    if (!LittleFS.begin(false)) {
-        LW_LOGW("LittleFS mount failed!");
+    m_littleFSMounted = LittleFS.begin(false);
+    if (!m_littleFSMounted) {
+        LW_LOGW("LittleFS mount failed - preset saves will not be available");
     } else {
         LW_LOGI("LittleFS mounted");
     }
@@ -180,6 +210,17 @@ bool WebServer::begin() {
     
     // Create LED stream broadcaster
     m_ledBroadcaster = new webserver::LedStreamBroadcaster(m_ws, WebServerConfig::MAX_WS_CLIENTS);
+
+    // Create log stream broadcaster (wireless serial monitoring)
+    m_logBroadcaster = new webserver::LogStreamBroadcaster(m_ws);
+
+    // Set up log callback to send logs to WebSocket subscribers
+    lightwaveos::logging::setLogCallback([this](const char* formattedLine) {
+        if (m_logBroadcaster) {
+            m_logBroadcaster->broadcastLine(formattedLine);
+        }
+    });
+    LW_LOGI("Log streaming enabled (ws://lightwaveos.local/ws)");
 
 #if FEATURE_AUDIO_SYNC
     // Create audio stream broadcaster
@@ -196,12 +237,18 @@ bool WebServer::begin() {
     initValidationEncoder();
 #endif
 
-    // Initialise WiFi (STA-only: WebServer must never attempt AP fallback)
-    // WiFiManager owns all WiFi mode decisions.
-    if (!initWiFi()) {
-        LW_LOGW("WiFi init failed (STA-only). Continuing without forcing AP mode.");
-        // Keep running: routes that require WiFi will naturally be unavailable until connected.
+    // AP-first architecture: WiFiManager always starts in AP mode
+    // Check current WiFi state
+    if (WIFI_MANAGER.isAPMode()) {
+        LW_LOGI("WiFi in AP mode via WiFiManager");
+        m_apMode = true;
+    } else if (WIFI_MANAGER.isConnected()) {
+        LW_LOGI("WiFi connected via WiFiManager, IP: %s", WiFi.localIP().toString().c_str());
         m_apMode = false;
+    } else {
+        // Default to AP mode if state unclear
+        LW_LOGW("WiFi state unclear, defaulting to AP mode");
+        m_apMode = true;
     }
 
     // Acquire ZoneComposer before creating any WebServerContext (routes/WS depend on it).
@@ -225,7 +272,13 @@ bool WebServer::begin() {
     // Start mDNS
     startMDNS();
 
-    // Start the server
+    // AP-first architecture: AP IP (192.168.4.1) is always available immediately
+    // No need for IP validation or delays in AP mode
+    IPAddress apIP = WiFi.softAPIP();
+    LW_LOGI("Starting AsyncWebServer on port %d (AP IP: %s)...", 
+            WebServerConfig::HTTP_PORT, apIP.toString().c_str());
+
+    // Start the server (simple startup like commit 937c9abc)
     m_server->begin();
     m_running = true;
 
@@ -243,17 +296,16 @@ bool WebServer::begin() {
     }
 
     LW_LOGI("Server running on port %d", WebServerConfig::HTTP_PORT);
-    if (!m_apMode) {
-        // Verify IP is valid before logging (defensive check)
+    if (m_apMode) {
+        LW_LOGI("AP mode - IP: %s", WiFi.softAPIP().toString().c_str());
+    } else {
+        // STA mode (user-initiated connection)
         IPAddress ip = WiFi.localIP();
         if (ip != INADDR_NONE && ip != IPAddress(0, 0, 0, 0)) {
-            LW_LOGI("Connected - IP: %s", ip.toString().c_str());
+            LW_LOGI("STA mode - IP: %s", ip.toString().c_str());
         } else {
-            LW_LOGW("IP not yet assigned, check WiFiManager status");
+            LW_LOGW("STA mode but IP not assigned, check WiFiManager status");
         }
-    } else {
-        // STA-only build: AP mode should not be entered via WebServer.
-        LW_LOGW("AP mode reported active; STA-only build expects WiFiManager to manage this.");
     }
 
     return true;
@@ -266,6 +318,39 @@ void WebServer::stop() {
         m_running = false;
         LW_LOGI("Server stopped");
     }
+}
+
+bool WebServer::mountLittleFS() {
+    if (m_littleFSMounted) {
+        LW_LOGW("LittleFS already mounted");
+        return true;
+    }
+    
+    m_littleFSMounted = LittleFS.begin(false);
+    if (m_littleFSMounted) {
+        LW_LOGI("LittleFS mounted successfully");
+    } else {
+        LW_LOGE("LittleFS mount failed");
+    }
+    return m_littleFSMounted;
+}
+
+bool WebServer::unmountLittleFS() {
+    if (!m_littleFSMounted) {
+        LW_LOGW("LittleFS not mounted");
+        return true;
+    }
+    
+    // Safety check: Don't unmount if WebServer is running (files may be in use)
+    if (m_running) {
+        LW_LOGW("Cannot unmount LittleFS while WebServer is running");
+        return false;
+    }
+    
+    LittleFS.end();
+    m_littleFSMounted = false;
+    LW_LOGI("LittleFS unmounted");
+    return true;
 }
 
 void WebServer::update() {
@@ -387,7 +472,7 @@ void WebServer::updateCachedRendererState() {
     
     // Cache effect names (pointers to stable strings in RendererActor)
     uint8_t count = m_cachedRendererState.effectCount;
-    if (count > 96) count = 96;  // Safety: MAX_EFFECTS
+    if (count > 102) count = 102;  // Safety: MAX_EFFECTS
     for (uint8_t i = 0; i < count; ++i) {
         m_cachedRendererState.effectNames[i] = m_renderer->getEffectName(i);
     }
@@ -417,52 +502,9 @@ void WebServer::updateCachedRendererState() {
 // WiFi Initialization
 // ============================================================================
 
-bool WebServer::initWiFi() {
-    // WiFiManager handles all WiFi mode switching and connections.
-    // WebServer just checks the current state - no WiFi.mode() calls here!
-    // This avoids mode conflicts (APSTA vs STA vs AP) between components.
+// initWiFi() removed - WiFi state is checked inline in begin() for AP-first architecture
 
-    // Check if WiFiManager has already connected
-    if (WIFI_MANAGER.isConnected()) {
-        LW_LOGI("WiFi already connected via WiFiManager");
-        m_apMode = false;
-        return true;
-    }
-
-    // Check if WiFiManager is in AP mode
-    if (WIFI_MANAGER.isAPMode()) {
-        LW_LOGI("WiFi in AP mode via WiFiManager");
-        m_apMode = true;
-        return true;
-    }
-
-    // If WiFiManager isn't connected yet, wait briefly for it
-    LW_LOGI("Waiting for WiFiManager connection...");
-    uint32_t startTime = millis();
-    while (!WIFI_MANAGER.isConnected() && !WIFI_MANAGER.isAPMode()) {
-        if (millis() - startTime > WebServerConfig::WIFI_CONNECT_TIMEOUT_MS) {
-            LW_LOGW("WiFiManager connection timeout");
-            return false;
-        }
-        delay(100);
-    }
-
-    m_apMode = WIFI_MANAGER.isAPMode();
-    if (m_apMode) {
-        LW_LOGI("WiFi in AP mode via WiFiManager");
-    } else {
-        LW_LOGI("Connected via WiFiManager, IP: %s", WiFi.localIP().toString().c_str());
-    }
-    return true;
-}
-
-bool WebServer::startAPMode() {
-    // STA-only: WebServer must never try to start or rely on AP mode.
-    // Kept only for legacy callers; return false to surface misuse.
-    LW_LOGE("startAPMode is disabled (STA-only). WiFi must be managed by WiFiManager.");
-    m_apMode = false;
-    return false;
-}
+// startAPMode() removed - AP-first architecture: AP is always managed by WiFiManager
 
 void WebServer::setupCORS() {
     DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
@@ -473,9 +515,23 @@ void WebServer::setupCORS() {
 }
 
 void WebServer::startMDNS() {
+    LW_LOGI("Starting mDNS service...");
+    LW_LOGI("  Hostname: %s", WebServerConfig::MDNS_HOSTNAME);
+    
+    // AP-first architecture: Use AP IP when in AP mode, STA IP when connected
+    IPAddress ip = m_apMode ? WiFi.softAPIP() : WiFi.localIP();
+    LW_LOGI("  IP Address: %s", ip.toString().c_str());
+    LW_LOGI("  WiFi Mode: %s", WiFi.getMode() == WIFI_MODE_AP ? "AP" :
+                               WiFi.getMode() == WIFI_MODE_STA ? "STA" : "UNKNOWN");
+    
+    // AP IP (192.168.4.1) is always valid immediately - no need for validation
     if (MDNS.begin(WebServerConfig::MDNS_HOSTNAME)) {
-        MDNS.addService("http", "tcp", WebServerConfig::HTTP_PORT);
-        MDNS.addService("ws", "tcp", WebServerConfig::HTTP_PORT);
+        LW_LOGI("  mDNS.begin() succeeded");
+        
+        bool httpOk = MDNS.addService("http", "tcp", WebServerConfig::HTTP_PORT);
+        bool wsOk = MDNS.addService("ws", "tcp", WebServerConfig::HTTP_PORT);
+        LW_LOGI("  Service registration: http=%s ws=%s", httpOk ? "OK" : "FAIL", wsOk ? "OK" : "FAIL");
+        
         MDNS.addServiceTxt("http", "tcp", "version", "2.0.0");
         MDNS.addServiceTxt("http", "tcp", "board", "ESP32-S3");
 
@@ -484,13 +540,15 @@ void WebServer::startMDNS() {
         MDNS.addServiceTxt("ws", "tcp", "board", "ESP32-S3");
         MDNS.addServiceTxt("ws", "tcp", "uuid", DEVICE_UUID.toString());
         MDNS.addServiceTxt("ws", "tcp", "syncver", "1");
-        LW_LOGI("Sync UUID: %s", DEVICE_UUID.toString());
+        LW_LOGI("  Sync UUID: %s", DEVICE_UUID.toString());
 #endif
 
         m_mdnsStarted = true;
-        LW_LOGI("mDNS started: http://%s.local", WebServerConfig::MDNS_HOSTNAME);
+        LW_LOGI("mDNS started successfully: http://%s.local", WebServerConfig::MDNS_HOSTNAME);
+        LW_LOGI("  WebSocket: ws://%s.local:%d/ws", WebServerConfig::MDNS_HOSTNAME, WebServerConfig::HTTP_PORT);
     } else {
         LW_LOGE("mDNS failed to start");
+        m_mdnsStarted = false;
     }
 }
 
@@ -509,8 +567,10 @@ void WebServer::setupRoutes() {
         m_orchestrator,
         m_renderer,
         m_zoneComposer,
+        this,
         m_rateLimiter,
-        m_ledBroadcaster
+        m_ledBroadcaster,
+        m_logBroadcaster
 #if FEATURE_AUDIO_SYNC
         , m_audioBroadcaster
 #endif
@@ -542,8 +602,10 @@ void WebServer::setupWebSocket() {
         m_orchestrator,
         m_renderer,
         m_zoneComposer,
+        this,
         m_rateLimiter,
-        m_ledBroadcaster
+        m_ledBroadcaster,
+        m_logBroadcaster
 #if FEATURE_AUDIO_SYNC
         , m_audioBroadcaster
 #endif
@@ -556,6 +618,7 @@ void WebServer::setupWebSocket() {
         , [this]() { broadcastZoneState(); }
         , m_ws
         , [this](AsyncWebSocketClient* client, bool subscribe) { return setLEDStreamSubscription(client, subscribe); }
+        , [this](AsyncWebSocketClient* client, bool subscribe) { return setLogStreamSubscription(client, subscribe); }
 #if FEATURE_AUDIO_SYNC
         , [this](AsyncWebSocketClient* client, bool subscribe) { return setAudioStreamSubscription(client, subscribe); }
 #endif
@@ -622,6 +685,7 @@ void WebServer::setupWebSocket() {
 
     // Register WS command handlers (Phase 2: modular command registration)
     webserver::ws::registerWsDeviceCommands(ctx);
+    webserver::ws::registerWsFilesystemCommands(ctx);
     webserver::ws::registerWsEffectsCommands(ctx);
     webserver::ws::registerWsZonesCommands(ctx);
     webserver::ws::registerWsTransitionCommands(ctx);
@@ -1131,6 +1195,25 @@ bool WebServer::setLEDStreamSubscription(AsyncWebSocketClient* client, bool subs
 
 bool WebServer::hasLEDStreamSubscribers() const {
     return m_ledBroadcaster && m_ledBroadcaster->hasSubscribers();
+}
+
+// ============================================================================
+// Log Stream (Wireless Serial Monitoring)
+// ============================================================================
+
+bool WebServer::setLogStreamSubscription(AsyncWebSocketClient* client, bool subscribe) {
+    if (!client || !m_logBroadcaster) return false;
+    uint32_t clientId = client->id();
+    bool success = m_logBroadcaster->setSubscription(clientId, subscribe);
+
+    // Note: LW_LOG calls here would be sent to the subscriber too!
+    // The LogStreamBroadcaster already logs subscription changes internally.
+
+    return success;
+}
+
+bool WebServer::hasLogStreamSubscribers() const {
+    return m_logBroadcaster && m_logBroadcaster->hasSubscribers();
 }
 
 #if FEATURE_AUDIO_SYNC

@@ -9,6 +9,7 @@
 #include "../../ApiResponse.h"
 #include "../../../effects/enhancement/ColorEngine.h"
 #include "../../../effects/enhancement/ColorCorrectionEngine.h"
+#include "../../../effects/enhancement/ColorCorrectionPresets.h"
 #include "../../../palettes/Palettes_Master.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
@@ -304,9 +305,71 @@ static void handleColorCorrectionSetConfig(AsyncWebSocketClient* client, JsonDoc
 static void handleColorCorrectionSave(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     const char* requestId = doc["requestId"] | "";
     ColorCorrectionEngine::getInstance().saveToNVS();
-    
+
     String response = buildWsResponse("colorCorrection.save", requestId, [](JsonObject& data) {
         data["saved"] = true;
+    });
+    client->text(response);
+}
+
+static void handleColorCorrectionGetPresets(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    const char* requestId = doc["requestId"] | "";
+    ColorCorrectionPreset currentPreset = detectCurrentPreset();
+
+    String response = buildWsResponse("colorCorrection.getPresets", requestId, [currentPreset](JsonObject& data) {
+        JsonArray presets = data["presets"].to<JsonArray>();
+
+        for (uint8_t i = 0; i < getPresetCount(); i++) {
+            JsonObject preset = presets.add<JsonObject>();
+            preset["id"] = i;
+            preset["name"] = getPresetName(static_cast<ColorCorrectionPreset>(i));
+        }
+
+        data["currentPreset"] = static_cast<uint8_t>(currentPreset);
+        data["currentPresetName"] = getPresetName(currentPreset);
+    });
+    client->text(response);
+}
+
+static void handleColorCorrectionSetPreset(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    const char* requestId = doc["requestId"] | "";
+
+    if (!doc.containsKey("preset")) {
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "preset required (0-3)", requestId));
+        return;
+    }
+
+    uint8_t presetValue = doc["preset"] | 2;
+    if (presetValue >= getPresetCount()) {
+        client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "preset must be 0-3 (Off,Subtle,Balanced,Aggressive)", requestId));
+        return;
+    }
+
+    bool saveToNVS = doc["save"] | false;
+    ColorCorrectionPreset preset = static_cast<ColorCorrectionPreset>(presetValue);
+    applyPreset(preset, saveToNVS);
+
+    // Get the resulting config
+    const auto& cfg = ColorCorrectionEngine::getInstance().getConfig();
+
+    String response = buildWsResponse("colorCorrection.setPreset", requestId, [preset, saveToNVS, &cfg](JsonObject& data) {
+        data["preset"] = static_cast<uint8_t>(preset);
+        data["presetName"] = getPresetName(preset);
+        data["saved"] = saveToNVS;
+
+        // Include full config for client sync
+        JsonObject config = data["config"].to<JsonObject>();
+        config["mode"] = static_cast<uint8_t>(cfg.mode);
+        config["autoExposureEnabled"] = cfg.autoExposureEnabled;
+        config["autoExposureTarget"] = cfg.autoExposureTarget;
+        config["brownGuardrailEnabled"] = cfg.brownGuardrailEnabled;
+        config["gammaEnabled"] = cfg.gammaEnabled;
+        config["gammaValue"] = cfg.gammaValue;
+        config["vClampEnabled"] = cfg.vClampEnabled;
+        config["maxBrightness"] = cfg.maxBrightness;
+        config["ditheringEnabled"] = cfg.ditheringEnabled;
+        config["spectralCorrectionEnabled"] = cfg.spectralCorrectionEnabled;
+        config["laceEnabled"] = cfg.laceEnabled;
     });
     client->text(response);
 }
@@ -324,6 +387,8 @@ void registerWsColorCommands(const WebServerContext& ctx) {
     WsCommandRouter::registerCommand("colorCorrection.setMode", handleColorCorrectionSetMode);
     WsCommandRouter::registerCommand("colorCorrection.setConfig", handleColorCorrectionSetConfig);
     WsCommandRouter::registerCommand("colorCorrection.save", handleColorCorrectionSave);
+    WsCommandRouter::registerCommand("colorCorrection.getPresets", handleColorCorrectionGetPresets);
+    WsCommandRouter::registerCommand("colorCorrection.setPreset", handleColorCorrectionSetPreset);
 }
 
 } // namespace ws

@@ -47,6 +47,7 @@
 #include "webserver/RateLimiter.h"
 #include "webserver/LedFrameEncoder.h"
 #include "webserver/LedStreamBroadcaster.h"
+#include "webserver/LogStreamBroadcaster.h"
 #if FEATURE_AUDIO_SYNC
 #include "webserver/AudioStreamBroadcaster.h"
 #endif
@@ -199,6 +200,24 @@ public:
     size_t getClientCount() const { return m_ws->count(); }
     AsyncWebSocket* getWebSocket() const { return m_ws; }
     
+    /**
+     * @brief Check if LittleFS is mounted
+     * @return true if filesystem is mounted
+     */
+    bool isLittleFSMounted() const { return m_littleFSMounted; }
+    
+    /**
+     * @brief Attempt to mount LittleFS
+     * @return true if mount succeeded
+     */
+    bool mountLittleFS();
+    
+    /**
+     * @brief Unmount LittleFS (with safety checks)
+     * @return true if unmount succeeded
+     */
+    bool unmountLittleFS();
+    
     // ========================================================================
     // Cached Renderer State (thread-safe read-only access from request handlers)
     // ========================================================================
@@ -232,7 +251,7 @@ public:
             uint32_t framesRendered;
         } stats;
         // Effect names - pointers to stable strings in RendererActor (valid until next cache update)
-        const char* effectNames[96];  // MAX_EFFECTS (keep in sync with RendererActor::MAX_EFFECTS)
+        const char* effectNames[102];  // MAX_EFFECTS (keep in sync with RendererNode::MAX_EFFECTS)
         // Audio tuning (if available) - simplified to avoid include dependency
 #if FEATURE_AUDIO_SYNC
         struct {
@@ -321,6 +340,23 @@ public:
      */
     bool hasLEDStreamSubscribers() const;
 
+    /**
+     * @brief Subscribe/unsubscribe a WebSocket client to log streaming
+     *
+     * Enables wireless serial monitoring by streaming log messages to
+     * WebSocket clients. New subscribers receive backfill of recent logs.
+     *
+     * @param client WebSocket client pointer
+     * @param subscribe true to subscribe, false to unsubscribe
+     * @return true if the subscription table was updated
+     */
+    bool setLogStreamSubscription(AsyncWebSocketClient* client, bool subscribe);
+
+    /**
+     * @brief Check if any clients are subscribed to log streaming
+     */
+    bool hasLogStreamSubscribers() const;
+
 #if FEATURE_AUDIO_SYNC
     /**
      * @brief Broadcast audio frame data to subscribed clients
@@ -399,8 +435,6 @@ private:
     // Setup Methods
     // ========================================================================
 
-    bool initWiFi();
-    bool startAPMode();
     void setupCORS();
     void setupRoutes();
     void setupWebSocket();
@@ -454,6 +488,7 @@ private:
     bool m_running;
     bool m_apMode;
     bool m_mdnsStarted;
+    bool m_littleFSMounted;
     uint32_t m_lastBroadcast;
     uint32_t m_startTime;
     
@@ -464,6 +499,9 @@ private:
 
     // LED frame streaming (extracted to LedStreamBroadcaster)
     webserver::LedStreamBroadcaster* m_ledBroadcaster;
+
+    // Log streaming (wireless serial monitoring)
+    webserver::LogStreamBroadcaster* m_logBroadcaster;
 
 #if FEATURE_AUDIO_SYNC
     // Audio frame streaming

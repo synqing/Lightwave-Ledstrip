@@ -59,39 +59,33 @@ bool WiFiManager::begin() {
     // Register WiFi event handler
     WiFi.onEvent(onWiFiEvent);
 
-    // Configure mode: STA+AP mode (STA connects first, AP always available)
-    // Check if we should force AP-only mode (only if no credentials AND explicitly forced)
-    bool hasCredentials = !m_ssid.isEmpty() && m_ssid != "CONFIGURE_ME";
-    bool shouldForceAP = NetworkConfig::FORCE_AP_MODE && !hasCredentials;
-    
-    // Override runtime flag if we have credentials (STA+AP mode takes priority)
-    if (hasCredentials) {
-        m_forceApModeRuntime = false;  // Force STA+AP mode when credentials available
+    // Initialize credential storage (NVS-based)
+    if (!m_credStorage.begin()) {
+        LW_LOGE("Failed to initialize WiFiCredentialsStorage");
+        // Continue anyway - storage is optional
     } else {
-        m_forceApModeRuntime = shouldForceAP;
+        uint8_t savedCount = m_credStorage.getNetworkCount();
+        LW_LOGI("Credential storage initialized - %d networks saved", savedCount);
     }
     
-    if (m_forceApModeRuntime) {
-        // AP-only mode: no credentials, force AP
+    // AP-first architecture: Always start in AP-only mode
+    // STA mode is only enabled when user explicitly requests connection
         WiFi.mode(WIFI_MODE_AP);
         m_apEnabled = true;
-        LW_LOGI("AP-only mode (no credentials, FORCE_AP_MODE enabled)");
-    } else {
-        // Enable STA+AP mode simultaneously
-        // STA connects to configured network, AP provides fallback access
-        WiFi.mode(WIFI_MODE_APSTA);
-        m_apEnabled = true;
-        LW_LOGI("STA+AP mode enabled");
+    m_forceApModeRuntime = true;  // Force AP-only mode by default
+    
+    LW_LOGI("AP-first mode enabled");
+    LW_LOGI("  AP SSID: '%s'", m_apSSID.c_str());
         
-        // Start AP immediately if configured
+    // Start AP immediately
         if (!m_apSSID.isEmpty()) {
-            LW_LOGI("Starting Soft-AP in STA+AP mode: '%s'", m_apSSID.c_str());
+        LW_LOGI("Starting Soft-AP: '%s'", m_apSSID.c_str());
             if (WiFi.softAP(m_apSSID.c_str(), m_apPassword.c_str(), m_apChannel)) {
+            m_apStarted = true;
                 LW_LOGI("AP started - IP: %s", WiFi.softAPIP().toString().c_str());
                 xEventGroupSetBits(m_wifiEventGroup, EVENT_AP_START);
             } else {
                 LW_LOGE("Failed to start Soft-AP");
-            }
         }
     }
 
@@ -152,9 +146,8 @@ void WiFiManager::wifiTask(void* parameter) {
 
     LW_LOGI("Task started");
 
-    // NOTE: AP is NOT started immediately - it's a FALLBACK only
-    // AP mode is entered via handleStateFailed() when all STA connection attempts
-    // are exhausted. This enforces STA-first architecture.
+    // AP-first architecture: AP starts immediately in begin() and stays running.
+    // STA mode is only enabled when user explicitly requests connection via API.
 
     // Main state machine loop
     while (true) {
@@ -211,40 +204,20 @@ void WiFiManager::wifiTask(void* parameter) {
 void WiFiManager::handleStateInit() {
     LW_LOGD("STATE: INIT");
 
-    // Only force AP-only if explicitly set AND we have no credentials
-    // In STA+AP mode, we should always try STA first, then fall back to AP if needed
-    if (m_forceApModeRuntime && (m_ssid.isEmpty() || m_ssid == "CONFIGURE_ME")) {
-        LW_LOGI("AP-only mode forced (no credentials); skipping STA connection");
+    // AP-first architecture: STA connection is only initiated by user request via API
+    // In normal operation, stay in AP mode unless explicitly requested to connect
+    if (m_forceApModeRuntime || m_ssid.isEmpty() || m_ssid == "CONFIGURE_ME") {
+        // Stay in AP mode - no auto-connection
         setState(STATE_WIFI_AP_MODE);
         return;
     }
     
-    // If force AP mode is set but we have credentials, ignore it (STA+AP mode)
-    if (m_forceApModeRuntime && !m_ssid.isEmpty() && m_ssid != "CONFIGURE_ME") {
-        LW_LOGI("Force AP mode set but credentials available - using STA+AP mode");
-        m_forceApModeRuntime = false;  // Override for this session
-    }
-
-    // Check if we have credentials
-    if (m_ssid.isEmpty()) {
-        LW_LOGW("No credentials configured, switching to AP mode");
-        setState(STATE_WIFI_AP_MODE);
-        return;
-    }
-
-    // Check for "CONFIGURE_ME" placeholder
-    if (m_ssid == "CONFIGURE_ME") {
-        LW_LOGW("WiFi not configured (CONFIGURE_ME), switching to AP mode");
-        setState(STATE_WIFI_AP_MODE);
-        return;
-    }
-
-    // Check if we have cached channel info and it's recent
+    // User has requested STA connection - check if we have cached channel info
     if (m_bestChannel > 0 && (millis() - m_lastScanTime < SCAN_INTERVAL_MS)) {
         LW_LOGD("Using cached channel %d", m_bestChannel);
         setState(STATE_WIFI_CONNECTING);
     } else {
-        LW_LOGI("Starting network scan...");
+        LW_LOGI("Starting network scan for '%s'...", m_ssid.c_str());
         setState(STATE_WIFI_SCANNING);
     }
 }
@@ -293,6 +266,24 @@ void WiFiManager::handleStateConnecting() {
             LW_LOGE("Failed to initiate connection");
             setState(STATE_WIFI_FAILED);
             return;
+        }
+    }
+
+    // APSTA window enforcement during connection attempt
+    // If window expires while still connecting, transition to STA-only
+    uint32_t nowMs = millis();
+    if (m_apstaWindowEndMs > 0 && WiFi.getMode() == WIFI_MODE_APSTA) {
+        if ((int32_t)(nowMs - m_apstaWindowEndMs) >= 0) {
+            LW_LOGI("APSTA window expired during connection - switching to STA-only");
+            m_apstaWindowEndMs = 0;
+
+            // Stop AP and switch to STA-only
+            if (m_apStarted) {
+                WiFi.softAPdisconnect(true);
+                m_apStarted = false;
+                LW_LOGI("AP stopped during connection - heap reclaimed");
+            }
+            WiFi.mode(WIFI_MODE_STA);
         }
     }
 
@@ -377,6 +368,26 @@ void WiFiManager::handleStateConnected() {
         return;
     }
 
+    // APSTA window enforcement: transition to STA-only after window expires
+    uint32_t nowMs = millis();
+    if (m_apstaWindowEndMs > 0 && WiFi.getMode() == WIFI_MODE_APSTA) {
+        if ((int32_t)(nowMs - m_apstaWindowEndMs) >= 0) {
+            LW_LOGI("APSTA window expired - transitioning to STA-only mode (reclaiming heap)");
+            m_apstaWindowEndMs = 0;
+
+            // Stop AP and switch to STA-only
+            if (m_apStarted) {
+                WiFi.softAPdisconnect(true);  // true = stop DHCP server
+                m_apStarted = false;
+                LW_LOGI("AP stopped - freed heap");
+            }
+            WiFi.mode(WIFI_MODE_STA);
+
+            size_t freeHeap = ESP.getFreeHeap();
+            LW_LOGI("STA-only mode active - free heap: %u bytes", (unsigned)freeHeap);
+        }
+    }
+
     // Print status periodically (every 30 seconds)
     if (millis() - lastStatusPrint > 30000) {
         lastStatusPrint = millis();
@@ -418,9 +429,21 @@ void WiFiManager::handleStateFailed() {
         }
     }
 
-    // If AP mode is enabled and we've exhausted all networks, fall back to it
+    // AP-first architecture: If connection failed and all attempts exhausted, return to AP mode
     if (m_apEnabled && m_attemptsOnCurrentNetwork >= NetworkConfig::WIFI_ATTEMPTS_PER_NETWORK && !hasSecondaryNetwork()) {
-        LW_LOGW("Falling back to AP mode for configuration");
+        LW_LOGW("STA connection failed - returning to AP-only mode");
+        // Disconnect STA and return to AP mode
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_MODE_AP);
+        // Ensure AP is still running
+        if (WiFi.softAPIP() == IPAddress(0, 0, 0, 0) && !m_apSSID.isEmpty()) {
+            if (WiFi.softAP(m_apSSID.c_str(), m_apPassword.c_str(), m_apChannel)) {
+                m_apStarted = true;
+                LW_LOGI("AP restarted after STA failure - IP: %s (Tab5 can still connect)", 
+                        WiFi.softAPIP().toString().c_str());
+                xEventGroupSetBits(m_wifiEventGroup, EVENT_AP_START);
+            }
+        }
         setState(STATE_WIFI_AP_MODE);
         return;
     }
@@ -449,16 +472,8 @@ void WiFiManager::handleStateAPMode() {
                 WiFi.softAPgetStationNum());
     }
 
-    // Periodically try to connect to WiFi if we have valid credentials
-    if (!m_forceApModeRuntime && !m_ssid.isEmpty() && m_ssid != "CONFIGURE_ME") {
-        if (millis() - lastRetryTime > 60000) {
-            lastRetryTime = millis();
-            LW_LOGI("Retrying WiFi connection from AP mode...");
-            // Switch back to STA mode before attempting connection
-            WiFi.mode(WIFI_MODE_STA);
-            setState(STATE_WIFI_INIT);
-        }
-    }
+    // AP-first architecture: No automatic retry from AP mode
+    // STA connection must be explicitly requested by user via API
 }
 
 void WiFiManager::handleStateDisconnected() {
@@ -487,10 +502,64 @@ void WiFiManager::performAsyncScan() {
 bool WiFiManager::connectToAP() {
     m_connectionAttempts++;
 
-    if (m_bestChannel > 0) {
-        LW_LOGI("Connecting to '%s' on channel %d", m_ssid.c_str(), m_bestChannel);
+    // Heap-safe APSTA window policy:
+    // Check if we're within APSTA window AND heap is healthy
+    uint32_t nowMs = millis();
+    bool withinApstaWindow = (m_apstaWindowEndMs > 0) && ((int32_t)(nowMs - m_apstaWindowEndMs) < 0);
+    size_t freeHeap = ESP.getFreeHeap();
+    size_t largestBlock = ESP.getMaxAllocHeap();
+    bool heapHealthy = (freeHeap >= MIN_HEAP_FOR_APSTA) && (largestBlock >= MIN_LARGEST_BLOCK_FOR_APSTA);
+
+    wifi_mode_t targetMode = WIFI_STA;  // Default to STA-only (heap-safe)
+
+    if (withinApstaWindow && heapHealthy) {
+        // APSTA allowed: keep AP active during STA connection
+        targetMode = WIFI_AP_STA;
+        LW_LOGI("APSTA window active (remaining: %ldms) and heap healthy (free=%u, largest=%u) - keeping AP active",
+                (long)(m_apstaWindowEndMs - nowMs), (unsigned)freeHeap, (unsigned)largestBlock);
     } else {
-        LW_LOGI("Connecting to '%s'", m_ssid.c_str());
+        // STA-only: reclaim heap by disabling AP
+        if (!withinApstaWindow && m_apstaWindowEndMs > 0) {
+            LW_LOGI("APSTA window expired - switching to STA-only to reclaim heap");
+        } else if (!heapHealthy) {
+            LW_LOGW("Heap pressure detected (free=%u, largest=%u) - forcing STA-only mode (AP disabled)",
+                    (unsigned)freeHeap, (unsigned)largestBlock);
+        } else {
+            LW_LOGI("No APSTA window requested - using STA-only mode");
+        }
+    }
+
+    // Apply target mode
+    if (WiFi.getMode() != targetMode) {
+        WiFi.mode(targetMode);
+
+        if (targetMode == WIFI_AP_STA) {
+            // Ensure AP is still running after mode change
+            if (WiFi.softAPIP() == IPAddress(0, 0, 0, 0) && !m_apSSID.isEmpty()) {
+                if (WiFi.softAP(m_apSSID.c_str(), m_apPassword.c_str(), m_apChannel)) {
+                    m_apStarted = true;
+                    LW_LOGI("AP restarted in APSTA mode - IP: %s", WiFi.softAPIP().toString().c_str());
+                    xEventGroupSetBits(m_wifiEventGroup, EVENT_AP_START);
+                }
+            }
+        } else {
+            // STA-only: explicitly stop AP to reclaim memory
+            if (m_apStarted) {
+                WiFi.softAPdisconnect(true);  // true = stop DHCP server
+                m_apStarted = false;
+                LW_LOGI("AP stopped (STA-only mode) - heap reclaimed");
+            }
+        }
+    }
+
+    if (m_bestChannel > 0) {
+        LW_LOGI("Connecting to '%s' on channel %d (mode: %s)",
+                m_ssid.c_str(), m_bestChannel,
+                targetMode == WIFI_AP_STA ? "APSTA" : "STA-only");
+    } else {
+        LW_LOGI("Connecting to '%s' (mode: %s)",
+                m_ssid.c_str(),
+                targetMode == WIFI_AP_STA ? "APSTA" : "STA-only");
     }
 
     // Configure static IP if requested
@@ -537,11 +606,8 @@ bool WiFiManager::connectToAP() {
 void WiFiManager::startSoftAP() {
     LW_LOGI("Starting Soft-AP: '%s' (channel %d)", m_apSSID.c_str(), m_apChannel);
 
-    // In APSTA mode, AP is already started in begin(). Only switch mode if not already in APSTA.
-    if (WiFi.getMode() != WIFI_MODE_APSTA) {
-        // Switch to AP-only mode (exclusive modes architecture) - only if not in APSTA
+    // AP-first architecture: Always use exclusive AP mode
         WiFi.mode(WIFI_MODE_AP);
-    }
 
     // Configure and start AP
     if (WiFi.softAP(m_apSSID.c_str(), m_apPassword.c_str(), m_apChannel)) {
@@ -567,6 +633,7 @@ void WiFiManager::applyPendingModeChange() {
     bool forceAp = false;
     bool revertToAp = false;
     uint32_t staWindowEndMs = 0;
+    uint32_t apstaWindowDuration = 0;
 
     if (m_stateMutex) {
         xSemaphoreTake(m_stateMutex, portMAX_DELAY);
@@ -575,6 +642,7 @@ void WiFiManager::applyPendingModeChange() {
     forceAp = m_pendingForceApModeRuntime;
     revertToAp = m_pendingRevertToApOnly;
     staWindowEndMs = m_staWindowEndMs;
+    apstaWindowDuration = m_apstaWindowDurationMs;
     m_pendingModeChange = false;
     m_pendingApplyAtMs = 0;
 
@@ -583,27 +651,42 @@ void WiFiManager::applyPendingModeChange() {
     }
 
     if (forceAp) {
+        // AP-first architecture: Force AP-only mode (disconnect STA but keep AP up)
         m_forceApModeRuntime = true;
         m_pendingRevertToApOnly = false;
         m_staWindowEndMs = 0;
+        m_apstaWindowEndMs = 0;  // Clear APSTA window
 
-        // Ensure STA is fully disconnected, then enter AP mode.
+        LW_LOGI("Force AP-only mode - disconnecting STA, keeping AP active");
         WiFi.disconnect(true);
-        WiFi.softAPdisconnect(true);
         WiFi.mode(WIFI_MODE_AP);
+        
+        // Ensure AP is running
+        if (WiFi.softAPIP() == IPAddress(0, 0, 0, 0) && !m_apSSID.isEmpty()) {
+            if (WiFi.softAP(m_apSSID.c_str(), m_apPassword.c_str(), m_apChannel)) {
+                m_apStarted = true;
+                LW_LOGI("AP restarted - IP: %s", WiFi.softAPIP().toString().c_str());
+                xEventGroupSetBits(m_wifiEventGroup, EVENT_AP_START);
+            }
+        }
 
         setState(STATE_WIFI_AP_MODE);
         return;
     }
 
-    // STA enable request.
+    // STA enable request (user-initiated connection) with APSTA window policy
     m_forceApModeRuntime = false;
     m_pendingRevertToApOnly = revertToAp;
     m_staWindowEndMs = staWindowEndMs;
 
-    // Stop AP (no AP+STA dual-mode: avoids channel conflicts and instability).
-    WiFi.softAPdisconnect(true);
-    WiFi.mode(WIFI_MODE_STA);
+    // Set APSTA window end time (will be checked in connectToAP for heap-safe conditional mode)
+    uint32_t nowMs = millis();
+    m_apstaWindowEndMs = nowMs + apstaWindowDuration;
+
+    LW_LOGI("STA enable requested: APSTA window active for %lums (until window expires or heap pressure detected)",
+            (unsigned long)apstaWindowDuration);
+
+    // Mode will be determined in connectToAP() based on heap health and window state
     setState(STATE_WIFI_INIT);
 }
 
@@ -617,6 +700,25 @@ void WiFiManager::requestSTAEnable(uint32_t durationMs, bool revertToApOnly) {
     m_pendingRevertToApOnly = revertToApOnly;
     m_staWindowEndMs = (durationMs > 0 && revertToApOnly) ? (millis() + durationMs) : 0;
     m_pendingApplyAtMs = millis() + 500;
+
+    // Calculate APSTA window duration (bounded)
+    // If durationMs provided, use it for APSTA window (clamped to safe range)
+    // Otherwise use default APSTA window
+    if (durationMs > 0) {
+        // Clamp to safe range
+        if (durationMs < MIN_APSTA_WINDOW_MS) {
+            m_apstaWindowDurationMs = MIN_APSTA_WINDOW_MS;
+        } else if (durationMs > MAX_APSTA_WINDOW_MS) {
+            m_apstaWindowDurationMs = MAX_APSTA_WINDOW_MS;
+        } else {
+            m_apstaWindowDurationMs = durationMs;
+        }
+    } else {
+        m_apstaWindowDurationMs = DEFAULT_APSTA_WINDOW_MS;
+    }
+
+    LW_LOGI("STA enable requested: APSTA window=%lums, revertToApOnly=%s",
+            (unsigned long)m_apstaWindowDurationMs, revertToApOnly ? "true" : "false");
 
     if (m_stateMutex) {
         xSemaphoreGive(m_stateMutex);
@@ -632,6 +734,8 @@ void WiFiManager::requestAPOnly() {
     m_pendingForceApModeRuntime = true;
     m_pendingRevertToApOnly = false;
     m_staWindowEndMs = 0;
+    m_apstaWindowEndMs = 0;  // Clear APSTA window
+    m_apstaWindowDurationMs = 0;
     m_pendingApplyAtMs = millis() + 200;
 
     if (m_stateMutex) {
@@ -685,6 +789,9 @@ void WiFiManager::setState(WiFiState newState) {
             m_sleepSettingsApplied = false;
             m_connectedStateEntryTimeMs = 0;
         }
+        
+        // AP-first architecture: Reset AP started flag when leaving AP_MODE state
+        // AP will be restarted when returning to AP_MODE state
         if (m_currentState == STATE_WIFI_AP_MODE && newState != STATE_WIFI_AP_MODE) {
             m_apStarted = false;
         }
@@ -707,6 +814,9 @@ void WiFiManager::setState(WiFiState newState) {
                 m_apStarted = true;
             }
         }
+        
+        // AP-first architecture: No APSTA mode - AP is managed separately from STA states
+        // When transitioning from AP_MODE to STA states, STA connection attempt will switch mode to STA-only
 
         m_currentState = newState;
         xSemaphoreGive(m_stateMutex);
@@ -744,22 +854,15 @@ void WiFiManager::setCredentials(const String& ssid, const String& password) {
         xSemaphoreTake(m_stateMutex, portMAX_DELAY);
     }
 
-    // SWAP: Make OPTUS_738CC0N primary, VX220-013F fallback
-    // Check if OPTUS_738CC0N is in the secondary slot and swap if needed
+    // Use provided credentials as primary, secondary from config
     String secondarySsid = NetworkConfig::WIFI_SSID_2_VALUE;
     String secondaryPassword = NetworkConfig::WIFI_PASSWORD_2_VALUE;
     
-    // If OPTUS_738CC0N is in secondary, make it primary
-    if (secondarySsid.indexOf("OPTUS_738CC0N") >= 0 || secondarySsid.indexOf("OPTUS") >= 0) {
-        // Swap: OPTUS becomes primary, current primary becomes fallback
-        m_ssid = secondarySsid;
-        m_password = secondaryPassword;
-        m_ssid2 = ssid;
-        m_password2 = password;
-        LW_LOGI("Network priority swapped: %s (primary), %s (fallback)",
-                m_ssid.c_str(), m_ssid2.c_str());
-    } else {
-        // Normal: use provided credentials as primary
+    // Store original primary credentials for switching back
+    m_ssidPrimary = ssid;
+    m_passwordPrimary = password;
+    
+    // Set active credentials to primary
         m_ssid = ssid;
         m_password = password;
         m_ssid2 = secondarySsid;
@@ -770,7 +873,6 @@ void WiFiManager::setCredentials(const String& ssid, const String& password) {
                     ssid.c_str(), m_ssid2.c_str());
         } else {
             LW_LOGI("Credentials set for '%s'", ssid.c_str());
-        }
     }
     
     m_currentNetworkIndex = 0;
@@ -791,11 +893,13 @@ void WiFiManager::switchToNextNetwork() {
     m_currentNetworkIndex = (m_currentNetworkIndex + 1) % 2;
     m_attemptsOnCurrentNetwork = 0;
 
-    // Update active credentials
+    // Update active credentials based on network index
     if (m_currentNetworkIndex == 0) {
-        m_ssid = NetworkConfig::WIFI_SSID_VALUE;
-        m_password = NetworkConfig::WIFI_PASSWORD_VALUE;
+        // Switch back to primary network
+        m_ssid = m_ssidPrimary;
+        m_password = m_passwordPrimary;
     } else {
+        // Switch to secondary network
         m_ssid = m_ssid2;
         m_password = m_password2;
     }
@@ -843,9 +947,27 @@ uint32_t WiFiManager::getUptimeSeconds() const {
 
 void WiFiManager::disconnect() {
     LW_LOGI("Manual disconnect requested");
-    WiFi.disconnect(false);
-    m_apStarted = false;
-    setState(STATE_WIFI_DISCONNECTED);
+    
+    // AP-first architecture: Disconnect STA but keep AP running
+    // Switch back to AP-only mode after disconnecting
+    LW_LOGI("Disconnecting STA - returning to AP-only mode");
+    WiFi.disconnect(true);
+    
+    // Switch to AP mode to ensure AP remains active
+    WiFi.mode(WIFI_MODE_AP);
+    
+    // Ensure AP is still running
+    if (WiFi.softAPIP() == IPAddress(0, 0, 0, 0) && !m_apSSID.isEmpty()) {
+        if (WiFi.softAP(m_apSSID.c_str(), m_apPassword.c_str(), m_apChannel)) {
+            m_apStarted = true;
+            LW_LOGI("AP restarted after disconnect - IP: %s", WiFi.softAPIP().toString().c_str());
+            xEventGroupSetBits(m_wifiEventGroup, EVENT_AP_START);
+        }
+    }
+    
+    // Set flag to force AP-only mode
+    m_forceApModeRuntime = true;
+    setState(STATE_WIFI_AP_MODE);
 }
 
 void WiFiManager::reconnect() {
@@ -860,6 +982,121 @@ void WiFiManager::scanNetworks() {
         LW_LOGI("Manual scan requested");
         setState(STATE_WIFI_SCANNING);
     }
+}
+
+// ============================================================================
+// Credential Storage (AP-first architecture)
+// ============================================================================
+
+bool WiFiManager::addNetwork(const String& ssid, const String& password) {
+    if (m_stateMutex) {
+        xSemaphoreTake(m_stateMutex, portMAX_DELAY);
+    }
+
+    bool result = m_credStorage.saveNetwork(ssid, password);
+
+    if (m_stateMutex) {
+        xSemaphoreGive(m_stateMutex);
+    }
+
+    return result;
+}
+
+bool WiFiManager::connectToSavedNetwork(const String& ssid) {
+    if (m_stateMutex) {
+        xSemaphoreTake(m_stateMutex, portMAX_DELAY);
+    }
+
+    // Check if network exists in storage
+    if (!m_credStorage.hasNetwork(ssid)) {
+        LW_LOGW("Network not found in saved networks: %s", ssid.c_str());
+        if (m_stateMutex) {
+            xSemaphoreGive(m_stateMutex);
+        }
+        return false;
+    }
+
+    // Load credentials from storage
+    WiFiCredentialsStorage::NetworkCredential cred;
+    uint8_t networkCount = m_credStorage.getNetworkCount();
+    bool found = false;
+
+    for (uint8_t i = 0; i < networkCount; i++) {
+        if (m_credStorage.getNetwork(i, cred)) {
+            if (cred.ssid == ssid) {
+                found = true;
+                break;
+            }
+        }
+    }
+
+    if (m_stateMutex) {
+        xSemaphoreGive(m_stateMutex);
+    }
+
+    if (!found) {
+        LW_LOGE("Failed to load credentials for network: %s", ssid.c_str());
+        return false;
+    }
+
+    // Use connectToNetwork with loaded credentials
+    return connectToNetwork(cred.ssid, cred.password);
+}
+
+bool WiFiManager::connectToNetwork(const String& ssid, const String& password) {
+    if (m_stateMutex) {
+        xSemaphoreTake(m_stateMutex, portMAX_DELAY);
+    }
+
+    // Save network to storage if not already saved (auto-save on first connection)
+    if (!m_credStorage.hasNetwork(ssid)) {
+        m_credStorage.saveNetwork(ssid, password);
+        LW_LOGI("Auto-saved network to storage: %s", ssid.c_str());
+    }
+
+    // Set active credentials
+    m_ssid = ssid;
+    m_password = password;
+    m_attemptsOnCurrentNetwork = 0;
+    m_currentNetworkIndex = 0;  // Reset network index for new connection
+
+    if (m_stateMutex) {
+        xSemaphoreGive(m_stateMutex);
+    }
+
+    // Request STA mode and initiate connection
+    requestSTAEnable(0, true);  // No timeout, revert to AP-only after disconnect
+
+    LW_LOGI("Connection to '%s' initiated", ssid.c_str());
+    return true;
+}
+
+uint8_t WiFiManager::getSavedNetworks(WiFiCredentialsStorage::NetworkCredential* networks, uint8_t maxNetworks) {
+    if (m_stateMutex) {
+        xSemaphoreTake(m_stateMutex, portMAX_DELAY);
+    }
+
+    uint8_t count = m_credStorage.loadNetworks(networks, maxNetworks);
+
+    if (m_stateMutex) {
+        xSemaphoreGive(m_stateMutex);
+    }
+
+    return count;
+}
+
+bool WiFiManager::deleteSavedNetwork(const String& ssid) {
+    if (m_stateMutex) {
+        xSemaphoreTake(m_stateMutex, portMAX_DELAY);
+    }
+
+    bool result = m_credStorage.deleteNetwork(ssid);
+
+    if (m_stateMutex) {
+        xSemaphoreGive(m_stateMutex);
+    }
+
+    return result;
 }
 
 // ============================================================================

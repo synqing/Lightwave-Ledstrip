@@ -11,6 +11,7 @@
 #include "../ApiResponse.h"
 #include "../RequestValidator.h"
 #include "handlers/DeviceHandlers.h"
+#include "handlers/FilesystemHandlers.h"
 #include "handlers/EffectHandlers.h"
 #include "handlers/ZoneHandlers.h"
 #include "handlers/ParameterHandlers.h"
@@ -28,6 +29,7 @@
 #include "handlers/ZonePresetHandlers.h"
 #include "handlers/ShowHandlers.h"
 #include "handlers/ModifierHandlers.h"
+#include "handlers/ColorCorrectionHandlers.h"
 #include <ESPAsyncWebServer.h>
 #include <Arduino.h>
 
@@ -94,6 +96,34 @@ void V1ApiRoutes::registerRoutes(
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
         handlers::DeviceHandlers::handleInfo(request, ctx.orchestrator, ctx.renderer);
+    });
+
+    // Filesystem Status - GET /api/v1/filesystem/status
+    registry.onGet("/api/v1/filesystem/status", [server, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::FilesystemHandlers::handleFilesystemStatus(request, server);
+    });
+
+    // Filesystem Mount - POST /api/v1/filesystem/mount
+    registry.onPost("/api/v1/filesystem/mount", [server, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::FilesystemHandlers::handleFilesystemMount(request, server);
+    });
+
+    // Filesystem Unmount - POST /api/v1/filesystem/unmount
+    registry.onPost("/api/v1/filesystem/unmount", [server, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::FilesystemHandlers::handleFilesystemUnmount(request, server);
+    });
+
+    // Filesystem Restart - POST /api/v1/filesystem/restart
+    registry.onPost("/api/v1/filesystem/restart", [server, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::FilesystemHandlers::handleFilesystemRestart(request, server);
     });
 
 #if FEATURE_MULTI_DEVICE
@@ -1228,6 +1258,87 @@ void V1ApiRoutes::registerRoutes(
         handlers::NetworkHandlers::handleEnableAPOnly(request);
     });
 
+    // ==================== Network Management Routes (AP-first architecture) ====================
+
+    // GET /api/v1/network/networks - List all saved networks
+    registry.onGet("/api/v1/network/networks", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::NetworkHandlers::handleListNetworks(request);
+    });
+
+    // POST /api/v1/network/networks - Add new network
+    registry.onPost("/api/v1/network/networks",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::NetworkHandlers::handleAddNetwork(request, data, len);
+        }
+    );
+
+    // DELETE /api/v1/network/networks/{ssid} - Delete network by SSID (path parameter)
+    registry.onDeleteRegex("^\\/api\\/v1\\/network\\/networks\\/([^/]+)$", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        // Extract SSID from path (regex capture group 1)
+        String url = request->url();
+        int lastSlash = url.lastIndexOf('/');
+        if (lastSlash < 0) {
+            sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                              ErrorCodes::MISSING_FIELD, "SSID not found in URL path");
+            return;
+        }
+        String ssid = url.substring(lastSlash + 1);
+        // URL decode the SSID (in case it contains special characters)
+        ssid.replace("%20", " ");
+        ssid.replace("%2F", "/");
+        ssid.replace("%3A", ":");
+        handlers::NetworkHandlers::handleDeleteNetwork(request, ssid);
+    });
+
+    // POST /api/v1/network/connect - Connect to network (saved or new)
+    registry.onPost("/api/v1/network/connect",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::NetworkHandlers::handleConnect(request, data, len);
+        }
+    );
+
+    // POST /api/v1/network/disconnect - Disconnect STA and return to AP-only
+    registry.onPost("/api/v1/network/disconnect", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::NetworkHandlers::handleDisconnect(request);
+    });
+
+    // GET /api/v1/network/scan - Start network scan (async, returns job ID)
+    registry.onGet("/api/v1/network/scan", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::NetworkHandlers::handleScanNetworks(request);
+    });
+
+    // GET /api/v1/network/scan/status - Get scan results (latest scan)
+    // GET /api/v1/network/scan/status/{jobId} - Get scan results by job ID (optional, defaults to latest)
+    registry.onGet("/api/v1/network/scan/status", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::NetworkHandlers::handleScanStatus(request);
+    });
+    
+    // Optional: GET /api/v1/network/scan/status/{jobId} - Get scan results by job ID
+    registry.onGetRegex("^\\/api\\/v1\\/network\\/scan\\/status\\/([0-9]+)$", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        // Job ID is optional - handler will use latest if provided job ID doesn't match
+        handlers::NetworkHandlers::handleScanStatus(request);
+    });
+
     // ==================== Modifier Routes ====================
 
     // GET /api/v1/modifiers/list - List all active modifiers
@@ -1274,6 +1385,62 @@ void V1ApiRoutes::registerRoutes(
             if (!checkRateLimit(request)) return;
             if (!checkAPIKey(request)) return;
             handlers::ModifierHandlers::handleUpdateModifier(request, data, len, ctx.renderer);
+        }
+    );
+
+    // ==================== Color Correction Routes ====================
+
+    // GET /api/v1/colorCorrection/config - Get full config
+    registry.onGet("/api/v1/colorCorrection/config", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::ColorCorrectionHandlers::handleGetConfig(request);
+    });
+
+    // POST /api/v1/colorCorrection/mode - Set correction mode
+    registry.onPost("/api/v1/colorCorrection/mode",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::ColorCorrectionHandlers::handleSetMode(request, data, len);
+        }
+    );
+
+    // POST /api/v1/colorCorrection/config - Update config parameters
+    registry.onPost("/api/v1/colorCorrection/config",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::ColorCorrectionHandlers::handleSetConfig(request, data, len);
+        }
+    );
+
+    // POST /api/v1/colorCorrection/save - Save config to NVS
+    registry.onPost("/api/v1/colorCorrection/save", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::ColorCorrectionHandlers::handleSave(request);
+    });
+
+    // GET /api/v1/colorCorrection/presets - Get available presets
+    registry.onGet("/api/v1/colorCorrection/presets", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::ColorCorrectionHandlers::handleGetPresets(request);
+    });
+
+    // POST /api/v1/colorCorrection/preset - Apply a preset
+    registry.onPost("/api/v1/colorCorrection/preset",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::ColorCorrectionHandlers::handleSetPreset(request, data, len);
         }
     );
 }

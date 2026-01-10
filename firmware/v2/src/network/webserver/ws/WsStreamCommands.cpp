@@ -8,6 +8,7 @@
 #include "../WebServerContext.h"
 #include "../../ApiResponse.h"
 #include "../LedStreamBroadcaster.h"
+#include "../LogStreamBroadcaster.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 
@@ -73,15 +74,72 @@ static void handleLedStreamSubscribe(AsyncWebSocketClient* client, JsonDocument&
 static void handleLedStreamUnsubscribe(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     uint32_t clientId = client->id();
     const char* requestId = doc["requestId"] | "";
-    
+
     if (ctx.setLEDStreamSubscription) {
         ctx.setLEDStreamSubscription(client, false);
     }
-    
+
     String response = buildWsResponse("ledStream.unsubscribed", requestId, [clientId](JsonObject& data) {
         data["clientId"] = clientId;
     });
     client->text(response);
+}
+
+// ============================================================================
+// Log Stream Commands (Wireless Serial Monitoring)
+// ============================================================================
+
+static void handleLogStreamSubscribe(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    uint32_t clientId = client->id();
+    const char* requestId = doc["requestId"] | "";
+
+    if (!ctx.setLogStreamSubscription) {
+        client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Log streaming not available", requestId));
+        return;
+    }
+
+    bool ok = ctx.setLogStreamSubscription(client, true);
+
+    if (ok) {
+        size_t backfillCount = ctx.logBroadcaster ? ctx.logBroadcaster->getBackfillCount() : 0;
+        String response = buildWsResponse("logStream.subscribed", requestId, [clientId, backfillCount](JsonObject& data) {
+            data["clientId"] = clientId;
+            data["backfillCount"] = backfillCount;
+            data["maxMessageLength"] = webserver::LogStreamConfig::MAX_MESSAGE_LENGTH;
+            data["accepted"] = true;
+        });
+        client->text(response);
+        LW_LOGI("Log stream subscriber added: client %lu", clientId);
+    } else {
+        JsonDocument response;
+        response["type"] = "logStream.rejected";
+        if (requestId != nullptr && strlen(requestId) > 0) {
+            response["requestId"] = requestId;
+        }
+        response["success"] = false;
+        JsonObject error = response["error"].to<JsonObject>();
+        error["code"] = "RESOURCE_EXHAUSTED";
+        error["message"] = "Log subscriber table full";
+
+        String output;
+        serializeJson(response, output);
+        client->text(output);
+    }
+}
+
+static void handleLogStreamUnsubscribe(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    uint32_t clientId = client->id();
+    const char* requestId = doc["requestId"] | "";
+
+    if (ctx.setLogStreamSubscription) {
+        ctx.setLogStreamSubscription(client, false);
+    }
+
+    String response = buildWsResponse("logStream.unsubscribed", requestId, [clientId](JsonObject& data) {
+        data["clientId"] = clientId;
+    });
+    client->text(response);
+    LW_LOGI("Log stream subscriber removed: client %lu", clientId);
 }
 
 #if FEATURE_EFFECT_VALIDATION
@@ -281,7 +339,11 @@ static void handleBenchmarkGet(AsyncWebSocketClient* client, JsonDocument& doc, 
 void registerWsStreamCommands(const WebServerContext& ctx) {
     WsCommandRouter::registerCommand("ledStream.subscribe", handleLedStreamSubscribe);
     WsCommandRouter::registerCommand("ledStream.unsubscribe", handleLedStreamUnsubscribe);
-    
+
+    // Log stream (wireless serial monitoring)
+    WsCommandRouter::registerCommand("logStream.subscribe", handleLogStreamSubscribe);
+    WsCommandRouter::registerCommand("logStream.unsubscribe", handleLogStreamUnsubscribe);
+
 #if FEATURE_EFFECT_VALIDATION
     WsCommandRouter::registerCommand("validation.subscribe", handleValidationSubscribe);
     WsCommandRouter::registerCommand("validation.unsubscribe", handleValidationUnsubscribe);

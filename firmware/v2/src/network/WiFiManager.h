@@ -49,6 +49,7 @@
 #include <freertos/semphr.h>
 
 #include "../config/network_config.h"
+#include "WiFiCredentialsStorage.h"
 
 namespace lightwaveos {
 namespace network {
@@ -135,13 +136,52 @@ public:
     // ========================================================================
 
     /**
-     * @brief Set WiFi credentials (primary network)
+     * @brief Set WiFi credentials (primary network) - DEPRECATED for AP-first architecture
      * @param ssid Network SSID
      * @param password Network password
      * 
-     * Also loads secondary network from NetworkConfig if available.
+     * NOTE: In AP-first architecture, credentials are stored in NVS and loaded on demand.
+     * This method is kept for backward compatibility but should not be used.
      */
     void setCredentials(const String& ssid, const String& password);
+
+    /**
+     * @brief Add a network credential to NVS storage
+     * @param ssid Network SSID
+     * @param password Network password
+     * @return true if saved successfully
+     */
+    bool addNetwork(const String& ssid, const String& password);
+
+    /**
+     * @brief Connect to a saved network by SSID
+     * @param ssid Network SSID to connect to (must be in saved networks)
+     * @return true if connection attempt initiated, false if network not found
+     */
+    bool connectToSavedNetwork(const String& ssid);
+
+    /**
+     * @brief Connect to a network with provided credentials (saves to NVS if not already saved)
+     * @param ssid Network SSID
+     * @param password Network password
+     * @return true if connection attempt initiated
+     */
+    bool connectToNetwork(const String& ssid, const String& password);
+
+    /**
+     * @brief Get all saved networks
+     * @param networks Output array to fill
+     * @param maxNetworks Maximum number of networks (array size)
+     * @return Number of networks loaded
+     */
+    uint8_t getSavedNetworks(WiFiCredentialsStorage::NetworkCredential* networks, uint8_t maxNetworks);
+
+    /**
+     * @brief Delete a saved network by SSID
+     * @param ssid Network SSID to delete
+     * @return true if deleted successfully
+     */
+    bool deleteSavedNetwork(const String& ssid);
 
     /**
      * @brief Configure static IP (optional)
@@ -421,10 +461,12 @@ private:
     // Connection Parameters
     // ========================================================================
 
-    String m_ssid;
-    String m_password;
-    String m_ssid2;
-    String m_password2;
+    String m_ssid;                          // Currently active SSID
+    String m_password;                      // Currently active password
+    String m_ssid2;                         // Secondary/fallback SSID
+    String m_password2;                     // Secondary/fallback password
+    String m_ssidPrimary;                   // Original primary SSID (stored for switching back)
+    String m_passwordPrimary;               // Original primary password (stored for switching back)
     uint8_t m_currentNetworkIndex = 0;     // 0 = primary, 1 = secondary
     uint8_t m_attemptsOnCurrentNetwork = 0;
     bool m_useStaticIP = false;
@@ -462,6 +504,12 @@ private:
     uint8_t m_apChannel = 1;
 
     // ========================================================================
+    // Credential Storage (AP-first architecture)
+    // ========================================================================
+
+    WiFiCredentialsStorage m_credStorage;  ///< NVS storage for WiFi credentials
+
+    // ========================================================================
     // Runtime Mode Overrides (used for OTA workflows)
     // ========================================================================
 
@@ -471,6 +519,20 @@ private:
     bool m_pendingRevertToApOnly = false;
     uint32_t m_staWindowEndMs = 0;
     uint32_t m_pendingApplyAtMs = 0;
+
+    // ========================================================================
+    // APSTA Window Policy (heap-safe conditional dual-mode)
+    // ========================================================================
+
+    uint32_t m_apstaWindowEndMs = 0;       ///< End timestamp for APSTA window (0 = disabled)
+    uint32_t m_apstaWindowDurationMs = 0;  ///< Requested APSTA window duration
+
+    // Heap safety thresholds for APSTA mode
+    static constexpr size_t MIN_HEAP_FOR_APSTA = 40000;        ///< Minimum free heap (bytes) to allow APSTA
+    static constexpr size_t MIN_LARGEST_BLOCK_FOR_APSTA = 20000; ///< Minimum largest block (bytes) for APSTA
+    static constexpr uint32_t DEFAULT_APSTA_WINDOW_MS = 60000;   ///< Default APSTA window: 60s
+    static constexpr uint32_t MIN_APSTA_WINDOW_MS = 30000;       ///< Minimum APSTA window: 30s
+    static constexpr uint32_t MAX_APSTA_WINDOW_MS = 300000;      ///< Maximum APSTA window: 5 minutes
 };
 
 // ============================================================================

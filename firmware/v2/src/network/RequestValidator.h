@@ -580,7 +580,7 @@ private:
  * @return Valid effect ID, defaults to 0 if out of bounds
  */
 inline uint8_t validateEffectIdInRequest(uint8_t effectId) {
-    constexpr uint8_t MAX_EFFECTS = 96;  // Keep in sync with RendererActor::MAX_EFFECTS
+    constexpr uint8_t MAX_EFFECTS = 102;  // Keep in sync with RendererNode::MAX_EFFECTS
     if (effectId >= MAX_EFFECTS) {
         return 0;  // Return safe default (effect 0)
     }

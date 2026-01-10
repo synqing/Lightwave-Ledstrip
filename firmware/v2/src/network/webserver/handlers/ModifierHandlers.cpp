@@ -11,6 +11,10 @@
 #include "effects/modifiers/ColorShiftModifier.h"
 #include "effects/modifiers/MirrorModifier.h"
 #include "effects/modifiers/GlitchModifier.h"
+#include "effects/modifiers/BlurModifier.h"
+#include "effects/modifiers/TrailModifier.h"
+#include "effects/modifiers/SaturationModifier.h"
+#include "effects/modifiers/StrobeModifier.h"
 #include <ArduinoJson.h>
 
 #define LW_LOG_TAG "ModifierHandlers"
@@ -31,6 +35,10 @@ IntensityModifier* g_intensityModifier = nullptr;
 ColorShiftModifier* g_colorShiftModifier = nullptr;
 MirrorModifier* g_mirrorModifier = nullptr;
 GlitchModifier* g_glitchModifier = nullptr;
+BlurModifier* g_blurModifier = nullptr;
+TrailModifier* g_trailModifier = nullptr;
+SaturationModifier* g_saturationModifier = nullptr;
+StrobeModifier* g_strobeModifier = nullptr;
 
 void ModifierHandlers::handleAddModifier(
     AsyncWebServerRequest* request,
@@ -124,6 +132,64 @@ void ModifierHandlers::handleAddModifier(
         }
         modifier = g_glitchModifier;
     }
+    else if (strcmp(typeStr, "blur") == 0) {
+        uint8_t radius = doc["radius"] | 2;
+        float strength = doc["strength"] | 0.8f;
+        uint8_t mode = doc["mode"] | 0;  // 0=BOX, 1=GAUSSIAN, 2=MOTION
+        if (!g_blurModifier) {
+            g_blurModifier = new BlurModifier(static_cast<BlurMode>(mode), radius, strength);
+        } else {
+            g_blurModifier->setRadius(radius);
+            g_blurModifier->setStrength(strength);
+            g_blurModifier->setMode(static_cast<BlurMode>(mode));
+        }
+        modifier = g_blurModifier;
+    }
+    else if (strcmp(typeStr, "trail") == 0) {
+        uint8_t fadeRate = doc["fadeRate"] | 20;
+        uint8_t minFade = doc["minFade"] | 5;
+        uint8_t maxFade = doc["maxFade"] | 50;
+        uint8_t mode = doc["mode"] | 0;  // 0=CONSTANT, 1=BEAT_REACTIVE, 2=VELOCITY
+        if (!g_trailModifier) {
+            g_trailModifier = new TrailModifier(static_cast<TrailMode>(mode), fadeRate, minFade, maxFade);
+        } else {
+            g_trailModifier->setFadeRate(fadeRate);
+            g_trailModifier->setMinFade(minFade);
+            g_trailModifier->setMaxFade(maxFade);
+            g_trailModifier->setMode(static_cast<TrailMode>(mode));
+        }
+        modifier = g_trailModifier;
+    }
+    else if (strcmp(typeStr, "saturation") == 0) {
+        int16_t saturation = doc["saturation"] | 200;
+        uint8_t mode = doc["mode"] | 0;  // 0=ABSOLUTE, 1=RELATIVE, 2=VIBRANCE
+        bool preserveLuminance = doc["preserveLuminance"] | true;
+        if (!g_saturationModifier) {
+            g_saturationModifier = new SaturationModifier(static_cast<SatMode>(mode), saturation, preserveLuminance);
+        } else {
+            g_saturationModifier->setSaturation(saturation);
+            g_saturationModifier->setMode(static_cast<SatMode>(mode));
+            g_saturationModifier->setPreserveLuminance(preserveLuminance);
+        }
+        modifier = g_saturationModifier;
+    }
+    else if (strcmp(typeStr, "strobe") == 0) {
+        uint8_t subdivision = doc["subdivision"] | 1;
+        float dutyCycle = doc["dutyCycle"] | 0.3f;
+        float intensity = doc["intensity"] | 1.0f;
+        float rateHz = doc["rateHz"] | 4.0f;
+        uint8_t mode = doc["mode"] | 0;  // 0=BEAT_SYNC, 1=SUBDIVISION, 2=MANUAL_RATE
+        if (!g_strobeModifier) {
+            g_strobeModifier = new StrobeModifier(static_cast<StrobeMode>(mode), subdivision, dutyCycle, intensity, rateHz);
+        } else {
+            g_strobeModifier->setSubdivision(subdivision);
+            g_strobeModifier->setDutyCycle(dutyCycle);
+            g_strobeModifier->setIntensity(intensity);
+            g_strobeModifier->setRateHz(rateHz);
+            g_strobeModifier->setMode(static_cast<StrobeMode>(mode));
+        }
+        modifier = g_strobeModifier;
+    }
     else {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
                           ErrorCodes::INVALID_TYPE,
@@ -206,6 +272,14 @@ void ModifierHandlers::handleRemoveModifier(
         type = ModifierType::MIRROR;
     } else if (strcmp(typeStr, "glitch") == 0) {
         type = ModifierType::GLITCH;
+    } else if (strcmp(typeStr, "blur") == 0) {
+        type = ModifierType::BLUR;
+    } else if (strcmp(typeStr, "trail") == 0) {
+        type = ModifierType::TRAIL;
+    } else if (strcmp(typeStr, "saturation") == 0) {
+        type = ModifierType::SATURATION;
+    } else if (strcmp(typeStr, "strobe") == 0) {
+        type = ModifierType::STROBE;
     } else {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
                           ErrorCodes::INVALID_TYPE,
@@ -265,6 +339,10 @@ void ModifierHandlers::handleListModifiers(
                     case ModifierType::COLOR_SHIFT: typeStr = "color_shift"; break;
                     case ModifierType::MIRROR: typeStr = "mirror"; break;
                     case ModifierType::GLITCH: typeStr = "glitch"; break;
+                    case ModifierType::BLUR: typeStr = "blur"; break;
+                    case ModifierType::TRAIL: typeStr = "trail"; break;
+                    case ModifierType::SATURATION: typeStr = "saturation"; break;
+                    case ModifierType::STROBE: typeStr = "strobe"; break;
                     default: break;
                 }
 
@@ -360,6 +438,14 @@ void ModifierHandlers::handleUpdateModifier(
         type = ModifierType::MIRROR;
     } else if (strcmp(typeStr, "glitch") == 0) {
         type = ModifierType::GLITCH;
+    } else if (strcmp(typeStr, "blur") == 0) {
+        type = ModifierType::BLUR;
+    } else if (strcmp(typeStr, "trail") == 0) {
+        type = ModifierType::TRAIL;
+    } else if (strcmp(typeStr, "saturation") == 0) {
+        type = ModifierType::SATURATION;
+    } else if (strcmp(typeStr, "strobe") == 0) {
+        type = ModifierType::STROBE;
     } else {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
                           ErrorCodes::INVALID_TYPE,
@@ -385,6 +471,25 @@ void ModifierHandlers::handleUpdateModifier(
         updated = modifier->setParameter("hueOffset", doc["hueOffset"]);
     } else if (type == ModifierType::GLITCH && doc.containsKey("glitchAmount")) {
         updated = modifier->setParameter("intensity", doc["glitchAmount"]);
+    } else if (type == ModifierType::BLUR) {
+        if (doc.containsKey("radius")) updated = modifier->setParameter("radius", doc["radius"]);
+        if (doc.containsKey("strength")) updated = modifier->setParameter("strength", doc["strength"]) || updated;
+        if (doc.containsKey("mode")) updated = modifier->setParameter("mode", doc["mode"]) || updated;
+    } else if (type == ModifierType::TRAIL) {
+        if (doc.containsKey("fadeRate")) updated = modifier->setParameter("fadeRate", doc["fadeRate"]);
+        if (doc.containsKey("minFade")) updated = modifier->setParameter("minFade", doc["minFade"]) || updated;
+        if (doc.containsKey("maxFade")) updated = modifier->setParameter("maxFade", doc["maxFade"]) || updated;
+        if (doc.containsKey("mode")) updated = modifier->setParameter("mode", doc["mode"]) || updated;
+    } else if (type == ModifierType::SATURATION) {
+        if (doc.containsKey("saturation")) updated = modifier->setParameter("saturation", doc["saturation"]);
+        if (doc.containsKey("mode")) updated = modifier->setParameter("mode", doc["mode"]) || updated;
+        if (doc.containsKey("preserveLuminance")) updated = modifier->setParameter("preserveLuminance", doc["preserveLuminance"] ? 1.0f : 0.0f) || updated;
+    } else if (type == ModifierType::STROBE) {
+        if (doc.containsKey("subdivision")) updated = modifier->setParameter("subdivision", doc["subdivision"]);
+        if (doc.containsKey("dutyCycle")) updated = modifier->setParameter("dutyCycle", doc["dutyCycle"]) || updated;
+        if (doc.containsKey("intensity")) updated = modifier->setParameter("intensity", doc["intensity"]) || updated;
+        if (doc.containsKey("rateHz")) updated = modifier->setParameter("rateHz", doc["rateHz"]) || updated;
+        if (doc.containsKey("mode")) updated = modifier->setParameter("mode", doc["mode"]) || updated;
     }
 
     if (!updated) {

@@ -13,6 +13,7 @@
 #include "../../../core/actors/RendererNode.h"
 #include "../../../audio/contracts/ControlBus.h"
 #include "../../../audio/contracts/AudioTime.h"
+#include "../../../audio/contracts/AudioEffectMapping.h"
 #include "../AudioStreamBroadcaster.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
@@ -511,6 +512,293 @@ void broadcastFftFrame(const audio::ControlBusFrame& frame, AsyncWebSocket* ws) 
     }
 }
 
+// ============================================================================
+// Audio-Effect Mapping WebSocket Commands
+// ============================================================================
+
+static void handleAudioMappingListSources(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    const char* requestId = doc["requestId"] | "";
+    using namespace lightwaveos::audio;
+    
+    String response = buildWsResponse("audio.mapping.sources", requestId, [](JsonObject& data) {
+        JsonArray sources = data["sources"].to<JsonArray>();
+        
+        // Energy metrics
+        sources.add("RMS");
+        sources.add("FAST_RMS");
+        sources.add("FLUX");
+        sources.add("FAST_FLUX");
+        
+        // Individual frequency bands
+        for (uint8_t i = 0; i < 8; i++) {
+            char bandName[16];
+            snprintf(bandName, sizeof(bandName), "BAND_%d", i);
+            sources.add(bandName);
+        }
+        
+        // Aggregated bands
+        sources.add("BASS");
+        sources.add("MID");
+        sources.add("TREBLE");
+        sources.add("HEAVY_BASS");
+        
+        // Musical timing
+        sources.add("BEAT_PHASE");
+        sources.add("BPM");
+        sources.add("TEMPO_CONFIDENCE");
+    });
+    client->text(response);
+}
+
+static void handleAudioMappingListTargets(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    const char* requestId = doc["requestId"] | "";
+    using namespace lightwaveos::audio;
+    
+    String response = buildWsResponse("audio.mapping.targets", requestId, [](JsonObject& data) {
+        JsonArray targets = data["targets"].to<JsonArray>();
+        targets.add("BRIGHTNESS");
+        targets.add("SPEED");
+        targets.add("INTENSITY");
+        targets.add("SATURATION");
+        targets.add("COMPLEXITY");
+        targets.add("VARIATION");
+        targets.add("HUE");
+    });
+    client->text(response);
+}
+
+static void handleAudioMappingListCurves(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    const char* requestId = doc["requestId"] | "";
+    using namespace lightwaveos::audio;
+    
+    String response = buildWsResponse("audio.mapping.curves", requestId, [](JsonObject& data) {
+        JsonArray curves = data["curves"].to<JsonArray>();
+        curves.add("LINEAR");
+        curves.add("SQUARED");
+        curves.add("SQRT");
+        curves.add("LOG");
+        curves.add("EXP");
+        curves.add("INVERTED");
+    });
+    client->text(response);
+}
+
+static void handleAudioMappingList(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    const char* requestId = doc["requestId"] | "";
+    using namespace lightwaveos::audio;
+    
+    if (!ctx.renderer) {
+        client->text(buildWsError(ErrorCodes::SYSTEM_NOT_READY, "Renderer not available", requestId));
+        return;
+    }
+    
+    auto& registry = AudioMappingRegistry::instance();
+    uint8_t effectCount = ctx.renderer->getEffectCount();
+    
+    String response = buildWsResponse("audio.mapping.list", requestId, [&registry, effectCount, &ctx](JsonObject& data) {
+        data["activeEffects"] = registry.getActiveEffectCount();
+        data["totalMappings"] = registry.getTotalMappingCount();
+        
+        JsonArray effects = data["effects"].to<JsonArray>();
+        
+        for (uint8_t i = 0; i < effectCount && i < AudioMappingRegistry::MAX_EFFECTS; i++) {
+            const EffectAudioMapping* mapping = registry.getMapping(i);
+            if (mapping && mapping->globalEnabled && mapping->mappingCount > 0) {
+                JsonObject e = effects.add<JsonObject>();
+                e["id"] = i;
+                e["name"] = ctx.renderer->getEffectName(i);
+                e["mappingCount"] = mapping->mappingCount;
+                e["enabled"] = mapping->globalEnabled;
+            }
+        }
+    });
+    client->text(response);
+}
+
+static void handleAudioMappingGet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    const char* requestId = doc["requestId"] | "";
+    using namespace lightwaveos::audio;
+    
+    if (!ctx.renderer) {
+        client->text(buildWsError(ErrorCodes::SYSTEM_NOT_READY, "Renderer not available", requestId));
+        return;
+    }
+    
+    uint8_t effectId = doc["effectId"] | 255;
+    
+    if (effectId >= AudioMappingRegistry::MAX_EFFECTS ||
+        effectId >= ctx.renderer->getEffectCount()) {
+        client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", requestId));
+        return;
+    }
+    
+    auto& registry = AudioMappingRegistry::instance();
+    const EffectAudioMapping* config = registry.getMapping(effectId);
+    
+    if (!config) {
+        client->text(buildWsError(ErrorCodes::INTERNAL_ERROR, "Failed to get mapping", requestId));
+        return;
+    }
+    
+    String response = buildWsResponse("audio.mapping.get", requestId, [effectId, &ctx, config](JsonObject& data) {
+        data["effectId"] = effectId;
+        data["effectName"] = ctx.renderer->getEffectName(effectId);
+        data["globalEnabled"] = config->globalEnabled;
+        data["mappingCount"] = config->mappingCount;
+        
+        JsonArray mappings = data["mappings"].to<JsonArray>();
+        
+        for (uint8_t i = 0; i < config->mappingCount; i++) {
+            const AudioParameterMapping& m = config->mappings[i];
+            JsonObject mapping = mappings.add<JsonObject>();
+            
+            mapping["source"] = AudioMappingRegistry::getSourceName(m.source);
+            mapping["target"] = AudioMappingRegistry::getTargetName(m.target);
+            mapping["curve"] = AudioMappingRegistry::getCurveName(m.curve);
+            mapping["inputMin"] = m.inputMin;
+            mapping["inputMax"] = m.inputMax;
+            mapping["outputMin"] = m.outputMin;
+            mapping["outputMax"] = m.outputMax;
+            mapping["smoothingAlpha"] = m.smoothingAlpha;
+            mapping["gain"] = m.gain;
+            mapping["enabled"] = m.enabled;
+            mapping["additive"] = m.additive;
+        }
+    });
+    client->text(response);
+}
+
+static void handleAudioMappingSet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    const char* requestId = doc["requestId"] | "";
+    using namespace lightwaveos::audio;
+    
+    if (!ctx.renderer) {
+        client->text(buildWsError(ErrorCodes::SYSTEM_NOT_READY, "Renderer not available", requestId));
+        return;
+    }
+    
+    uint8_t effectId = doc["effectId"] | 255;
+    
+    if (effectId >= AudioMappingRegistry::MAX_EFFECTS ||
+        effectId >= ctx.renderer->getEffectCount()) {
+        client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", requestId));
+        return;
+    }
+    
+    auto& registry = AudioMappingRegistry::instance();
+    EffectAudioMapping newConfig;
+    newConfig.effectId = effectId;
+    newConfig.globalEnabled = doc["globalEnabled"] | true;
+    newConfig.mappingCount = 0;
+    
+    if (doc["mappings"].is<JsonArray>()) {
+        JsonArray mappingsArr = doc["mappings"];
+        
+        for (JsonVariant m : mappingsArr) {
+            if (newConfig.mappingCount >= EffectAudioMapping::MAX_MAPPINGS_PER_EFFECT) {
+                break;
+            }
+            
+            AudioParameterMapping mapping;
+            mapping.source = AudioMappingRegistry::parseSource(m["source"] | "NONE");
+            mapping.target = AudioMappingRegistry::parseTarget(m["target"] | "NONE");
+            mapping.curve = AudioMappingRegistry::parseCurve(m["curve"] | "LINEAR");
+            mapping.inputMin = m["inputMin"] | 0.0f;
+            mapping.inputMax = m["inputMax"] | 1.0f;
+            mapping.outputMin = m["outputMin"] | 0.0f;
+            mapping.outputMax = m["outputMax"] | 255.0f;
+            mapping.smoothingAlpha = m["smoothingAlpha"] | 0.3f;
+            mapping.gain = m["gain"] | 1.0f;
+            mapping.enabled = m["enabled"] | true;
+            mapping.additive = m["additive"] | false;
+            
+            // Validate
+            if (mapping.source == AudioSource::NONE || mapping.target == VisualTarget::NONE) {
+                continue;  // Skip invalid mappings
+            }
+            
+            newConfig.mappings[newConfig.mappingCount++] = mapping;
+        }
+    }
+    
+    if (!registry.setMapping(effectId, newConfig)) {
+        client->text(buildWsError(ErrorCodes::INTERNAL_ERROR, "Failed to set mapping", requestId));
+        return;
+    }
+    
+    String response = buildWsResponse("audio.mapping.set", requestId, [effectId, &newConfig](JsonObject& data) {
+        data["effectId"] = effectId;
+        data["mappingCount"] = newConfig.mappingCount;
+        data["enabled"] = newConfig.globalEnabled;
+        data["message"] = "Mapping updated";
+    });
+    client->text(response);
+}
+
+static void handleAudioMappingDelete(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    const char* requestId = doc["requestId"] | "";
+    using namespace lightwaveos::audio;
+    
+    uint8_t effectId = doc["effectId"] | 255;
+    
+    if (effectId >= AudioMappingRegistry::MAX_EFFECTS) {
+        client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", requestId));
+        return;
+    }
+    
+    auto& registry = AudioMappingRegistry::instance();
+    EffectAudioMapping* config = registry.getMapping(effectId);
+    
+    if (config) {
+        config->clearMappings();
+        config->globalEnabled = false;
+    }
+    
+    String response = buildWsResponse("audio.mapping.delete", requestId, [effectId](JsonObject& data) {
+        data["effectId"] = effectId;
+        data["message"] = "Mapping cleared";
+    });
+    client->text(response);
+}
+
+static void handleAudioMappingEnable(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    const char* requestId = doc["requestId"] | "";
+    using namespace lightwaveos::audio;
+    
+    uint8_t effectId = doc["effectId"] | 255;
+    bool enable = doc["enable"] | true;
+    
+    if (effectId >= AudioMappingRegistry::MAX_EFFECTS) {
+        client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Effect ID out of range", requestId));
+        return;
+    }
+    
+    auto& registry = AudioMappingRegistry::instance();
+    registry.setEffectMappingEnabled(effectId, enable);
+    
+    String response = buildWsResponse("audio.mapping.enable", requestId, [effectId, enable](JsonObject& data) {
+        data["effectId"] = effectId;
+        data["enabled"] = enable;
+    });
+    client->text(response);
+}
+
+static void handleAudioMappingStats(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    const char* requestId = doc["requestId"] | "";
+    using namespace lightwaveos::audio;
+    
+    auto& registry = AudioMappingRegistry::instance();
+    
+    String response = buildWsResponse("audio.mapping.stats", requestId, [&registry](JsonObject& data) {
+        data["applyCount"] = registry.getApplyCount();
+        data["lastApplyMicros"] = registry.getLastApplyMicros();
+        data["maxApplyMicros"] = registry.getMaxApplyMicros();
+        data["activeEffectsWithMappings"] = registry.getActiveEffectCount();
+        data["totalMappingsConfigured"] = registry.getTotalMappingCount();
+    });
+    client->text(response);
+}
+
 void registerWsAudioCommands(const WebServerContext& ctx) {
 #if FEATURE_AUDIO_SYNC
     WsCommandRouter::registerCommand("audio.parameters.get", handleAudioParametersGet);
@@ -523,6 +811,17 @@ void registerWsAudioCommands(const WebServerContext& ctx) {
     WsCommandRouter::registerCommand("audio.spike-detection.reset", handleAudioSpikeDetectionReset);
     WsCommandRouter::registerCommand("audio.fft.subscribe", handleFftSubscribe);
     WsCommandRouter::registerCommand("audio.fft.unsubscribe", handleFftUnsubscribe);
+    
+    // Audio-Effect Mapping commands
+    WsCommandRouter::registerCommand("audio.mapping.sources", handleAudioMappingListSources);
+    WsCommandRouter::registerCommand("audio.mapping.targets", handleAudioMappingListTargets);
+    WsCommandRouter::registerCommand("audio.mapping.curves", handleAudioMappingListCurves);
+    WsCommandRouter::registerCommand("audio.mapping.list", handleAudioMappingList);
+    WsCommandRouter::registerCommand("audio.mapping.get", handleAudioMappingGet);
+    WsCommandRouter::registerCommand("audio.mapping.set", handleAudioMappingSet);
+    WsCommandRouter::registerCommand("audio.mapping.delete", handleAudioMappingDelete);
+    WsCommandRouter::registerCommand("audio.mapping.enable", handleAudioMappingEnable);
+    WsCommandRouter::registerCommand("audio.mapping.stats", handleAudioMappingStats);
 #endif
 }
 

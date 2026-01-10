@@ -24,9 +24,11 @@ namespace lightwaveos {
         class ZoneComposer;
     }
     namespace network {
+        class WebServer;
         namespace webserver {
             class RateLimiter;
             class LedStreamBroadcaster;
+            class LogStreamBroadcaster;
 #if FEATURE_AUDIO_SYNC
             class AudioStreamBroadcaster;
 #endif
@@ -55,12 +57,14 @@ struct WebServerContext {
     nodes::NodeOrchestrator& orchestrator;
     nodes::RendererNode* renderer;
     zones::ZoneComposer* zoneComposer;
+    WebServer* server;  // WebServer instance (for filesystem operations, etc.)
 
     // Cross-cutting concerns
     RateLimiter& rateLimiter;
 
     // Streaming broadcasters
     LedStreamBroadcaster* ledBroadcaster;
+    LogStreamBroadcaster* logBroadcaster;
 #if FEATURE_AUDIO_SYNC
     AudioStreamBroadcaster* audioBroadcaster;
 #endif
@@ -77,6 +81,7 @@ struct WebServerContext {
     std::function<void()> broadcastZoneState;
     AsyncWebSocket* ws;  // For broadcasting events to all clients
     std::function<bool(AsyncWebSocketClient*, bool)> setLEDStreamSubscription;
+    std::function<bool(AsyncWebSocketClient*, bool)> setLogStreamSubscription;
 #if FEATURE_AUDIO_SYNC
     std::function<bool(AsyncWebSocketClient*, bool)> setAudioStreamSubscription;
 #endif
@@ -95,8 +100,10 @@ struct WebServerContext {
         nodes::NodeOrchestrator& orchestrator,
         nodes::RendererNode* rendererPtr,
         zones::ZoneComposer* zoneComposerPtr,
+        WebServer* serverPtr,
         RateLimiter& limiter,
         LedStreamBroadcaster* ledBroadcast,
+        LogStreamBroadcaster* logBroadcast,
 #if FEATURE_AUDIO_SYNC
         AudioStreamBroadcaster* audioBroadcast,
 #endif
@@ -109,6 +116,7 @@ struct WebServerContext {
         std::function<void()> broadcastZoneStateFn = nullptr,
         AsyncWebSocket* wsPtr = nullptr,
         std::function<bool(AsyncWebSocketClient*, bool)> setLEDStreamFn = nullptr,
+        std::function<bool(AsyncWebSocketClient*, bool)> setLogStreamFn = nullptr,
 #if FEATURE_AUDIO_SYNC
         std::function<bool(AsyncWebSocketClient*, bool)> setAudioStreamFn = nullptr,
 #endif
@@ -123,8 +131,10 @@ struct WebServerContext {
         : orchestrator(orchestrator)
         , renderer(rendererPtr)
         , zoneComposer(zoneComposerPtr)
+        , server(serverPtr)
         , rateLimiter(limiter)
         , ledBroadcaster(ledBroadcast)
+        , logBroadcaster(logBroadcast)
 #if FEATURE_AUDIO_SYNC
         , audioBroadcaster(audioBroadcast)
 #endif
@@ -137,6 +147,7 @@ struct WebServerContext {
         , broadcastZoneState(broadcastZoneStateFn)
         , ws(wsPtr)
         , setLEDStreamSubscription(setLEDStreamFn)
+        , setLogStreamSubscription(setLogStreamFn)
 #if FEATURE_AUDIO_SYNC
         , setAudioStreamSubscription(setAudioStreamFn)
 #endif

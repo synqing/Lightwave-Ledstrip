@@ -70,6 +70,9 @@ void LGPSpectrumBarsEffect::render(plugins::EffectContext& ctx) {
 
         float bandEnergy = m_smoothedBands[bandIdx];
 
+        // VISIBILITY FIX: Add minimum bar height floor to prevent invisible bars
+        bandEnergy = fmaxf(0.1f, bandEnergy);
+
         // Position within band (0-1)
         int posInBand = dist % LEDS_PER_BAND;
         float normalizedPos = (float)posInBand / LEDS_PER_BAND;

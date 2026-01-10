@@ -315,9 +315,12 @@ void AudioNode::onTick()
     m_tempo.advancePhase(delta_sec, t_samples_phase);
     m_lastTempoOutput = m_tempo.getOutput();
 
-    // Log periodically (every 620 ticks = ~10 seconds) - gated by verbosity >= 2
+    // Log periodically - gated by verbosity >= 2, time-based rate limiting (2 seconds minimum)
     auto& dbgCfg = getAudioDebugConfig();
-    if (dbgCfg.verbosity >= 2 && (m_stats.tickCount % 620) == 0) {
+    static uint32_t s_lastStatusLogMs = 0;
+    uint32_t nowMs = millis();
+    if (dbgCfg.verbosity >= 2 && (nowMs - s_lastStatusLogMs >= 2000)) {
+        s_lastStatusLogMs = nowMs;
         const CaptureStats& cstats = m_capture.getStats();
         const ControlBusFrame& frame = m_controlBus.GetFrame();
         // Calculate mic level in dB from pre-gain RMS
@@ -550,20 +553,6 @@ void AudioNode::processHop()
 
     // K1 Front-End: Process hop and publish feature frame
     k1::AudioFeatureFrame k1Frame;
-    // #region agent log
-    static uint32_t k1_log_counter = 0;
-    if ((k1_log_counter++ % 125) == 0) {  // Log every ~1 second
-        char k1_check[256];
-        snprintf(k1_check, sizeof(k1_check),
-            "{\"k1_initialized\":%d,\"hop_buffer_min\":%d,\"hop_buffer_max\":%d,\"sample_index\":%llu,\"hypothesisId\":\"F\"}",
-            m_k1FrontEnd.isInitialized() ? 1 : 0, minRaw, maxRaw, (unsigned long long)m_sampleIndex);
-        // Use debug_log from TempoTracker pattern - need to include AudioDebugConfig.h
-        // For now, use printf directly
-        uint64_t t_us = (m_sampleIndex * 1000000ULL) / 16000;
-        printf("DEBUG_JSON:{\"location\":\"AudioNode.cpp:processHop\",\"message\":\"k1_check\",\"data\":%s,\"timestamp\":%llu}\n",
-               k1_check, (unsigned long long)t_us);
-    }
-    // #endregion
     if (m_k1FrontEnd.isInitialized()) {
         k1::AudioChunk chunk;
         memcpy(chunk.samples, m_hopBuffer, HOP_SIZE * sizeof(int16_t));
@@ -859,9 +848,12 @@ void AudioNode::processHop()
             }
 
             // Throttle 8-band Goertzel debug logging - gated by verbosity >= 5
+            // Use time-based rate limiting (1 second minimum) to prevent serial spam
             auto& dbgCfg8 = getAudioDebugConfig();
-            if (dbgCfg8.verbosity >= 5 && ++m_goertzelLogCounter >= dbgCfg8.interval8Band()) {
-                m_goertzelLogCounter = 0;
+            static uint32_t s_last8BandLogMs = 0;
+            uint32_t nowMs = millis();
+            if (dbgCfg8.verbosity >= 5 && (nowMs - s_last8BandLogMs >= 1000)) {
+                s_last8BandLogMs = nowMs;
                 // Calculate TRUE mic level in dB from pre-gain RMS (0dB = full scale, silence floor at -60dB)
                 float micLevelDb = (m_lastRmsPreGain > 0.0001f) ? (20.0f * log10f(m_lastRmsPreGain)) : -80.0f;
                 // Bold cyan title, bold yellow for mic dB level, rest uncolored

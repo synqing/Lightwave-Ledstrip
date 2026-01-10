@@ -192,14 +192,15 @@ CaptureResult AudioCapture::captureHop(int16_t* buffer)
         // Process only HOP_SIZE samples
     }
 
-    static uint32_t s_dbgHop = 0;
-    static bool s_firstPrint = true;
-    s_dbgHop++;
-
-    // DMA debug log - gated by verbosity >= 3, configurable interval
+    // DMA debug log - gated by verbosity >= 3
+    // Use time-based rate limiting (2 seconds minimum) to prevent serial spam
     auto& dbgCfgDMA = getAudioDebugConfig();
-    if (dbgCfgDMA.verbosity >= 3 && (s_firstPrint || (s_dbgHop % dbgCfgDMA.intervalDMA()) == 0)) {
+    static uint32_t s_lastDmaLogMs = 0;
+    static bool s_firstPrint = true;
+    uint32_t nowMs = millis();
+    if (dbgCfgDMA.verbosity >= 3 && (s_firstPrint || (nowMs - s_lastDmaLogMs >= 2000))) {
         s_firstPrint = false;
+        s_lastDmaLogMs = nowMs;
         int32_t rawMin = INT32_MAX;
         int32_t rawMax = INT32_MIN;
         for (size_t i = 0; i < HOP_SIZE; ++i) {
@@ -223,9 +224,9 @@ CaptureResult AudioCapture::captureHop(int16_t* buffer)
         const char* channelFmt = "RIGHT";  // Current config uses RIGHT channel
 
         // Title-only coloring: color resets before values for readability at 62.5Hz
-        LW_LOGI(LW_CLR_YELLOW "DMA dbg:" LW_ANSI_RESET " hop=%lu ch=%s msb_shift=%s raw0=%08X raw1=%08X min=%ld max=%ld "
+        LW_LOGI(LW_CLR_YELLOW "DMA dbg:" LW_ANSI_RESET " ch=%s msb_shift=%s raw0=%08X raw1=%08X min=%ld max=%ld "
                  "pk>>8=%ld pk>>10=%ld pk>>12=%ld pk>>14=%ld pk>>16=%ld",
-                 (unsigned long)s_dbgHop, channelFmt, msbShiftEnabled ? "ON" : "OFF",
+                 channelFmt, msbShiftEnabled ? "ON" : "OFF",
                  (uint32_t)m_dmaBuffer[0], (uint32_t)m_dmaBuffer[1],
                  (long)rawMin, (long)rawMax,
                  (long)peakShift(8), (long)peakShift(10), (long)peakShift(12),

@@ -49,11 +49,20 @@ void LGPBassBreathEffect::render(plugins::EffectContext& ctx) {
             m_targetMid = ctx.audio.mid();
             m_targetTreble = ctx.audio.treble();
         }
-        
+
         // Smooth toward targets every frame with MOOD-adjusted smoothing
         bass = m_bassFollower.updateWithMood(m_targetBass, dt, moodNorm);
         mid = m_midFollower.updateWithMood(m_targetMid, dt, moodNorm);
         treble = m_trebleFollower.updateWithMood(m_targetTreble, dt, moodNorm);
+
+        // Time-based fallback when bass is low - ensures visibility without audio content
+        float timeBreath = 0.4f + 0.2f * sinf((float)(ctx.totalTimeMs % 4000) / 4000.0f * 6.283f);
+        float audioDrive = bass + mid * 0.5f;
+        if (audioDrive < 0.25f) {
+            // Blend in time-based breathing when audio is quiet
+            float blendFactor = 1.0f - (audioDrive / 0.25f);
+            bass = bass + timeBreath * blendFactor;
+        }
     } else {
         // Fallback: slow sine wave breathing
         float phase = (float)(ctx.totalTimeMs % 3000) / 3000.0f;
@@ -65,6 +74,8 @@ void LGPBassBreathEffect::render(plugins::EffectContext& ctx) {
     // Breath dynamics: use AsymmetricFollower for natural attack/release
     float targetBreath = bass * 0.8f + mid * 0.2f;
     m_breathLevel = m_breathFollower.updateWithMood(targetBreath, dt, moodNorm);
+    // Ensure minimum breath level for visibility
+    m_breathLevel = fmaxf(0.25f, m_breathLevel);
 
     // Hue shifts with treble activity
     m_hueShift += treble * ctx.deltaTimeMs * 0.1f;

@@ -184,6 +184,12 @@ private:
      * @return true if directory exists or was created
      */
     bool ensurePresetsDir();
+
+    /**
+     * @brief Check if LittleFS is mounted and accessible
+     * @return true if filesystem is mounted
+     */
+    bool isLittleFSMounted();
 };
 
 } // namespace persistence

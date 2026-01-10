@@ -400,10 +400,12 @@ void SaliencyAwareEffect::render(plugins::EffectContext& ctx) {
         
         // Apply audio gain to interference pattern
         float brightness = interference * audioGain;
-        
-        // Scale by smoothed overall saliency
-        brightness *= (0.5f + m_smoothOverall * 0.5f);
-        
+
+        // Scale by smoothed overall saliency with base floor
+        // Ensures minimum visibility even when all saliency metrics are low
+        float saliencyScale = fmaxf(0.15f, 0.5f + m_smoothOverall * 0.5f);
+        brightness *= saliencyScale;
+
         // Normalize brightness
         brightness = tanhf(brightness * 2.0f) * 0.5f + 0.5f;
         brightness = fminf(1.0f, brightness);

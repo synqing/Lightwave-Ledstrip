@@ -31,7 +31,8 @@ bool PresetManager::init() {
 
     // Verify LittleFS is accessible (don't try to create directory - it will be created on first file write)
     if (!ensurePresetsDir()) {
-        LW_LOGE("LittleFS not accessible");
+        // LittleFS not mounted yet - this is expected if WebServer hasn't started
+        // Return false gracefully without logging error (auto-init will retry later)
         return false;
     }
 
@@ -48,7 +49,8 @@ bool PresetManager::ensurePresetsDir() {
     // Verify LittleFS is accessible by checking if we can open root
     File root = LittleFS.open("/", "r");
     if (!root || !root.isDirectory()) {
-        LW_LOGE("LittleFS not mounted or not accessible");
+        // Don't log error - LittleFS may not be mounted yet (WebServer hasn't started)
+        // This is expected during early initialization
         if (root) root.close();
         return false;
     }
@@ -59,11 +61,29 @@ bool PresetManager::ensurePresetsDir() {
     return true;
 }
 
+bool PresetManager::isLittleFSMounted() {
+    // Try to open root directory - this will fail if filesystem isn't mounted
+    File root = LittleFS.open("/", "r");
+    if (!root || !root.isDirectory()) {
+        if (root) root.close();
+        return false;
+    }
+    root.close();
+    return true;
+}
+
 // ==================== Preset Operations ====================
 
 bool PresetManager::savePreset(const char* name, const ZoneConfigData& config,
                                 const char* description, const char* author) {
+    // Check if filesystem is mounted before attempting any operations
+    if (!isLittleFSMounted()) {
+        LW_LOGW("Cannot save preset: LittleFS is not mounted");
+        return false;
+    }
+    
     if (!m_initialized && !init()) {
+        LW_LOGW("Cannot save preset: PresetManager initialization failed");
         return false;
     }
 

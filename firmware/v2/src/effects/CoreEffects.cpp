@@ -28,7 +28,6 @@
 #include "ieffect/JuggleEffect.h"
 #include "ieffect/BPMEffect.h"
 #include "ieffect/WaveEffect.h"
-#include "ieffect/WaveAmbientEffect.h"
 #include "ieffect/WaveReactiveEffect.h"
 #include "ieffect/RippleEffect.h"
 #include "ieffect/HeartbeatEffect.h"
@@ -90,11 +89,10 @@
 #include "ieffect/LGPAudioTestEffect.h"
 #include "ieffect/LGPBeatPulseEffect.h"
 #include "ieffect/LGPSpectrumBarsEffect.h"
+#include "ieffect/LGPSpectrumDetailEffect.h"
+#include "ieffect/LGPSpectrumDetailEnhancedEffect.h"
 #include "ieffect/LGPBassBreathEffect.h"
-#include "ieffect/AudioWaveformEffect.h"
-#include "ieffect/AudioBloomEffect.h"
-#include "ieffect/SnapwaveEffect.h"
-#include "ieffect/WaveformEffect.h"
+// DELETED: AudioWaveformEffect, AudioBloomEffect, SnapwaveEffect, WaveformEffect - broken effects removed
 #include "ieffect/LGPStarBurstNarrativeEffect.h"
 #include "ieffect/LGPChordGlowEffect.h"
 #include "ieffect/LGPPerlinVeilEffect.h"
@@ -111,6 +109,14 @@
 #include "ieffect/SpectrumAnalyzerEffect.h"
 #include "ieffect/SaliencyAwareEffect.h"
 #include "ieffect/StyleAdaptiveEffect.h"
+#include "ieffect/BPMEnhancedEffect.h"
+#include "ieffect/RippleEnhancedEffect.h"
+#include "ieffect/BreathingEnhancedEffect.h"
+#include "ieffect/LGPInterferenceScannerEffectEnhanced.h"
+#include "ieffect/LGPWaveCollisionEffectEnhanced.h"
+#include "ieffect/ChevronWavesEffectEnhanced.h"
+#include "ieffect/LGPStarBurstEffectEnhanced.h"
+#include "ieffect/LGPPhotonicCrystalEffectEnhanced.h"
 #include "utils/FastLEDOptim.h"
 #include "../core/narrative/NarrativeEngine.h"
 #include <FastLED.h>
@@ -342,13 +348,8 @@ uint8_t registerAllEffects(RendererNode* renderer) {
         // Effect already counted in registerCoreEffects (count++), just register it
     }
     
-    // Pilot: Wave Ambient (ID 7) - IEffect native (replaces WaveEffect)
-    // Uses time-driven motion with audio amplitude modulation (AMBIENT pattern)
-    static ieffect::WaveAmbientEffect waveAmbientInstance;
-    if (renderer->registerEffect(coreStart + 7, &waveAmbientInstance)) {
-        // Effect already counted in registerCoreEffects (count++), just register it
-    }
-    
+    // DELETED: Wave Ambient (ID 7) - broken visibility, removed
+
     // Pilot: Ripple (ID 8) - IEffect native
     static ieffect::RippleEffect rippleInstance;
     if (renderer->registerEffect(coreStart + 8, &rippleInstance)) {
@@ -768,35 +769,25 @@ uint8_t registerAllEffects(RendererNode* renderer) {
         total++;
     }
 
+    // LGP Spectrum Detail (ID 70.5) - 64-bin FFT spectrum with logarithmic mapping
+    static ieffect::LGPSpectrumDetailEffect spectrumDetailInstance;
+    if (renderer->registerEffect(total, &spectrumDetailInstance)) {
+        total++;
+    }
+
+    // LGP Spectrum Detail Enhanced (ID 102) - Enhanced version with faster response and increased brightness
+    static ieffect::LGPSpectrumDetailEnhancedEffect spectrumDetailEnhancedInstance;
+    if (renderer->registerEffect(total, &spectrumDetailEnhancedInstance)) {
+        total++;
+    }
+
     // LGP Bass Breath (ID 71) - Organic breathing driven by bass
     static ieffect::LGPBassBreathEffect bassBreathInstance;
     if (renderer->registerEffect(total, &bassBreathInstance)) {
         total++;
     }
 
-    // Audio Waveform (ID 72) - True time-domain waveform visualization
-    static ieffect::AudioWaveformEffect audioWaveformInstance;
-    if (renderer->registerEffect(total, &audioWaveformInstance)) {
-        total++;
-    }
-
-    // Audio Bloom (ID 73) - Centre bloom pulses triggered by audio transients
-    static ieffect::AudioBloomEffect audioBloomInstance;
-    if (renderer->registerEffect(total, &audioBloomInstance)) {
-        total++;
-    }
-
-    // Snapwave (ID 74) - Time-based oscillating visualization with chromagram-driven color
-    static ieffect::SnapwaveEffect snapwaveInstance;
-    if (renderer->registerEffect(total, &snapwaveInstance)) {
-        total++;
-    }
-
-    // Waveform (ID 75) - Direct waveform visualization matching Sensory Bridge 3.1.0
-    static ieffect::WaveformEffect waveformInstance;
-    if (renderer->registerEffect(total, &waveformInstance)) {
-        total++;
-    }
+    // DELETED: IDs 72-74 (AudioWaveform, AudioBloom, Snapwave, WaveformEffect) - broken effects removed
 
     // LGP Star Burst Narrative (ID 76) - Story conductor + chord-based color
     static ieffect::LGPStarBurstNarrativeEffect starBurstNarrativeInstance;
@@ -905,9 +896,62 @@ uint8_t registerAllEffects(RendererNode* renderer) {
         total++;
     }
 
+    // =============== ENHANCED AUDIO EFFECTS (IDs 93-101) ===============
+    // Enhanced versions of existing audio-reactive effects with proven feature enhancements
+    
+    // BPM Enhanced (ID 93) - Enhanced version with 64-bin sub-bass, heavy_chroma, beatPhase sync, snare triggers
+    static ieffect::BPMEnhancedEffect bpmEnhancedInstance;
+    if (renderer->registerEffect(total, &bpmEnhancedInstance)) {
+        total++;
+    }
+
+    // DELETED: Wave Ambient Enhanced - broken visibility, removed
+
+    // Ripple Enhanced (ID 95) - Enhanced version with improved 64-bin thresholds, snare triggers, treble shimmer
+    static ieffect::RippleEnhancedEffect rippleEnhancedInstance;
+    if (renderer->registerEffect(total, &rippleEnhancedInstance)) {
+        total++;
+    }
+
+    // Breathing Enhanced (ID 96) - Enhanced version with 64-bin sub-bass, beatPhase sync, snare triggers
+    static ieffect::BreathingEnhancedEffect breathingEnhancedInstance;
+    if (renderer->registerEffect(total, &breathingEnhancedInstance)) {
+        total++;
+    }
+
+    // LGP Interference Scanner Enhanced (ID 97) - Enhanced version with optimized 64-bin usage, enhanced snare boost
+    static ieffect::LGPInterferenceScannerEnhancedEffect interferenceScannerEnhancedInstance;
+    if (renderer->registerEffect(total, &interferenceScannerEnhancedInstance)) {
+        total++;
+    }
+
+    // LGP Wave Collision Enhanced (ID 98) - Enhanced version with 64-bin sub-bass, enhanced snare/hi-hat triggers
+    static ieffect::LGPWaveCollisionEnhancedEffect waveCollisionEnhancedInstance;
+    if (renderer->registerEffect(total, &waveCollisionEnhancedInstance)) {
+        total++;
+    }
+
+    // Chevron Waves Enhanced (ID 99) - Enhanced version with heavy_chroma, 64-bin sub-bass, snare sharpness boost
+    static ieffect::ChevronWavesEnhancedEffect chevronWavesEnhancedInstance;
+    if (renderer->registerEffect(total, &chevronWavesEnhancedInstance)) {
+        total++;
+    }
+
+    // LGP Star Burst Enhanced (ID 100) - Enhanced version with 64-bin sub-bass, enhanced snare/hi-hat triggers
+    static ieffect::LGPStarBurstEnhancedEffect starBurstEnhancedInstance;
+    if (renderer->registerEffect(total, &starBurstEnhancedInstance)) {
+        total++;
+    }
+
+    // LGP Photonic Crystal Enhanced (ID 101) - Enhanced version with heavy_chroma, 64-bin sub-bass, enhanced snare flash
+    static ieffect::LGPPhotonicCrystalEnhancedEffect photonicCrystalEnhancedInstance;
+    if (renderer->registerEffect(total, &photonicCrystalEnhancedInstance)) {
+        total++;
+    }
+
     // =============== EFFECT COUNT PARITY VALIDATION ===============
     // Runtime validation: ensure registered count matches expected
-    constexpr uint8_t EXPECTED_EFFECT_COUNT = 92;  // 91 base + 1 new Waveform effect
+    constexpr uint8_t EXPECTED_EFFECT_COUNT = 101;  // 92 base + 9 enhanced effects
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

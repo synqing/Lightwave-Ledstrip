@@ -36,10 +36,15 @@
 #define ANSI_BOLD    "\033[1m"
 
 // Native-safe debug logging using sample counter (not system timers)
+// Rate-limited to prevent serial monitor spam (1-4 seconds depending on verbosity)
 static void debug_log(uint8_t minVerbosity, const char* location, const char* message, const char* data_json, uint64_t t_samples) {
     auto& dbgCfg = lightwaveos::audio::getAudioDebugConfig();
     if (dbgCfg.verbosity < minVerbosity) {
         return;  // Suppress if verbosity too low
+    }
+    // Rate limiting: only print if enough time has passed
+    if (!dbgCfg.shouldPrint(minVerbosity)) {
+        return;  // Suppress if too soon since last print
     }
     // Output JSON to serial with special prefix for parsing
     // Convert t_samples to microseconds for logging: t_us = (t_samples * 1000000ULL) / 16000
@@ -49,11 +54,15 @@ static void debug_log(uint8_t minVerbosity, const char* location, const char* me
 }
 
 // Coloured log for human-readable tempo events (separate from JSON)
-// Always print (verbosity >= 1) because tempo intervals are critical for debugging
+// Rate-limited to prevent serial monitor spam (2 seconds minimum)
 static void tempo_event_log(const char* colour, const char* tag, const char* format, ...) {
     auto& dbgCfg = lightwaveos::audio::getAudioDebugConfig();
     if (dbgCfg.verbosity < 1) {
         return;
+    }
+    // Rate limiting: tempo events are non-time-sensitive, use 2 second minimum
+    if (!dbgCfg.shouldPrint(2)) {  // Use level 2 interval (2 seconds)
+        return;  // Suppress if too soon since last print
     }
     printf("%s[%s]%s ", colour, tag, ANSI_RESET);
     va_list args;

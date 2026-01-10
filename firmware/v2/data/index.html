@@ -127,7 +127,53 @@
             </section>
         </div>
 
-        <!-- Row 4: Zone Speed Controls (only shown when zones enabled) -->
+        <!-- Row 4: Effect Modifiers -->
+        <div class="controls-row" id="modifiersRow">
+            <section class="control-card full-width" id="modifiersCard">
+                <h2 class="card-header">Effect Modifiers</h2>
+
+                <!-- Active Modifier Stack -->
+                <div id="modifierStack" style="margin-bottom: var(--space-md);">
+                    <div class="value-secondary compact" style="text-align: center;">No modifiers active</div>
+                </div>
+
+                <!-- Quick Add Buttons -->
+                <div class="button-row" style="flex-wrap: wrap; gap: var(--space-xs);">
+                    <button class="control-btn compact modifier-add-btn" data-modifier="speed">Speed</button>
+                    <button class="control-btn compact modifier-add-btn" data-modifier="mirror">Mirror</button>
+                    <button class="control-btn compact modifier-add-btn" data-modifier="blur">Blur</button>
+                    <button class="control-btn compact modifier-add-btn" data-modifier="trail">Trail</button>
+                    <button class="control-btn compact modifier-add-btn" data-modifier="strobe">Strobe</button>
+                    <button class="control-btn compact modifier-add-btn" data-modifier="glitch">Glitch</button>
+                    <button class="control-btn compact modifier-add-btn" data-modifier="color_shift">Hue</button>
+                    <button class="control-btn compact modifier-add-btn" data-modifier="saturation">Sat</button>
+                    <button class="control-btn compact modifier-add-btn" data-modifier="intensity">Int</button>
+                </div>
+
+                <!-- Clear All Button -->
+                <button id="modifierClearBtn" class="control-btn compact" style="width: 100%; margin-top: var(--space-sm); background: rgba(255,77,77,0.2);">
+                    Clear All Modifiers
+                </button>
+            </section>
+        </div>
+
+        <!-- Modifier Parameter Editor (shown when modifier selected) -->
+        <div class="controls-row" id="modifierEditorRow" style="display: none;">
+            <section class="control-card full-width" id="modifierEditorCard">
+                <h2 class="card-header" id="modifierEditorTitle">Edit Modifier</h2>
+                <div id="modifierParamsContainer"></div>
+                <div class="button-row" style="margin-top: var(--space-sm);">
+                    <button id="modifierApplyBtn" class="control-btn compact" style="flex: 1; background: var(--gold); color: var(--bg-base);">
+                        Apply
+                    </button>
+                    <button id="modifierCloseBtn" class="control-btn compact" style="flex: 1;">
+                        Close
+                    </button>
+                </div>
+            </section>
+        </div>
+
+        <!-- Row 5: Zone Speed Controls (only shown when zones enabled) -->
         <div class="controls-row" id="zoneControlsRow" style="display: none;">
             <!-- Zone 0 Speed -->
             <section class="control-card full-width slider-card">
@@ -299,6 +345,55 @@
                         <div class="value-secondary compact" style="text-align: center; padding: var(--space-sm);">Loading presets...</div>
                     </div>
                 </div>
+            </section>
+        </div>
+
+        <!-- Row: Color Correction -->
+        <div class="controls-row" id="colorCorrectionRow">
+            <section class="control-card full-width" id="colorCorrectionCard">
+                <h2 class="card-header">Color Correction</h2>
+
+                <!-- Preset Selector -->
+                <div class="control-group" style="margin-bottom: var(--space-sm);">
+                    <label>Preset</label>
+                    <select id="ccPreset" class="dropdown-select">
+                        <option value="0">Off</option>
+                        <option value="1">Subtle</option>
+                        <option value="2" selected>Balanced</option>
+                        <option value="3">Aggressive</option>
+                    </select>
+                </div>
+
+                <!-- Mode Selector (Advanced) -->
+                <div class="control-group">
+                    <label>Mode</label>
+                    <select id="ccMode" class="dropdown-select">
+                        <option value="0">OFF</option>
+                        <option value="1">HSV</option>
+                        <option value="2">RGB</option>
+                        <option value="3">BOTH</option>
+                    </select>
+                </div>
+
+                <!-- Feature Toggles -->
+                <div class="toggle-row" style="display: flex; flex-wrap: wrap; gap: var(--space-sm); margin: var(--space-sm) 0;">
+                    <label class="toggle-label"><input type="checkbox" id="ccAutoExposure"> Auto-Exposure</label>
+                    <label class="toggle-label"><input type="checkbox" id="ccBrownGuardrail"> Brown Guardrail</label>
+                    <label class="toggle-label"><input type="checkbox" id="ccGamma"> Gamma</label>
+                </div>
+
+                <!-- Sliders -->
+                <div class="slider-container" style="margin-bottom: var(--space-sm);">
+                    <label style="font-size: 0.75rem;">AE Target: <span id="ccAETargetVal">110</span></label>
+                    <input type="range" id="ccAETarget" min="50" max="200" value="110" class="slider">
+                </div>
+                <div class="slider-container" style="margin-bottom: var(--space-sm);">
+                    <label style="font-size: 0.75rem;">Gamma: <span id="ccGammaVal">2.2</span></label>
+                    <input type="range" id="ccGammaSlider" min="10" max="30" value="22" class="slider">
+                </div>
+
+                <!-- Save Button -->
+                <button id="ccSaveBtn" class="control-btn compact" style="width: 100%; margin-top: var(--space-sm);">Save to Device</button>
             </section>
         </div>
 

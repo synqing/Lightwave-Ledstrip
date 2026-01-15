@@ -131,3 +131,33 @@ _ndjson(
     "extra_include_dirs",
     {"includeDirs": include_dirs},
 )
+
+# ==============================================================================
+# Remove ARM Helium assembly files from LVGL (incompatible with RISC-V ESP32-P4)
+# ==============================================================================
+# LVGL 9.x includes ARM Helium and NEON optimized assembly files that cause
+# linker errors on RISC-V: "can't link soft-float modules with single-float modules"
+# The LV_USE_DRAW_SW_ASM=0 build flag doesn't prevent compilation of these files,
+# so we remove them before building.
+
+import shutil
+import glob
+
+libdeps_dir = os.path.join(env.subst("$PROJECT_LIBDEPS_DIR"), env.subst("$PIOENV"))
+lvgl_draw_blend = os.path.join(libdeps_dir, "lvgl", "src", "draw", "sw", "blend")
+
+arm_asm_dirs = ["helium", "neon"]
+removed_dirs = []
+
+for asm_dir in arm_asm_dirs:
+    asm_path = os.path.join(lvgl_draw_blend, asm_dir)
+    if os.path.isdir(asm_path):
+        try:
+            shutil.rmtree(asm_path)
+            removed_dirs.append(asm_dir)
+        except Exception as e:
+            _ndjson("LVGL_ASM", "pio_pre.py:140", f"rmtree_{asm_dir}_failed", {"error": str(e)})
+
+if removed_dirs:
+    _ndjson("LVGL_ASM", "pio_pre.py:143", "removed_arm_asm_dirs", {"removedDirs": removed_dirs})
+    print(f"[pio_pre.py] Removed ARM assembly directories from LVGL: {removed_dirs}")

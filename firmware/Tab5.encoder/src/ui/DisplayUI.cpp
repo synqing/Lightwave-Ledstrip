@@ -20,6 +20,7 @@
 #include "fonts/experimental_fonts.h"
 #include "ZoneComposerUI.h"
 #include "ConnectivityTab.h"
+#include "DemoModeUI.h"
 
 // Forward declaration - WiFiManager instance is in main.cpp
 extern WiFiManager g_wifiManager;
@@ -682,6 +683,20 @@ void DisplayUI::begin() {
     Serial.println("[DisplayUI_TRACE] ENABLE_WIFI not defined - skipping ConnectivityTab");
 #endif
 
+    // Create demo mode screen
+    Serial.printf("[DisplayUI_TRACE] Creating demo screen @ %lu ms\n", millis());
+    esp_task_wdt_reset();
+
+    _screen_demo = lv_obj_create(nullptr);
+    lv_obj_set_style_bg_color(_screen_demo, lv_color_hex(TAB5_COLOR_BG_PAGE), LV_PART_MAIN);
+    lv_obj_set_style_pad_all(_screen_demo, 0, LV_PART_MAIN);
+
+    // Create DemoModeUI and initialize with demo screen as parent
+    _demoMode = new DemoModeUI(_display);
+    _demoMode->setBackButtonCallback(onDemoModeBackButton);  // Wire Back button
+    _demoMode->begin(_screen_demo);  // Create LVGL widgets on demo screen
+    Serial.println("[DisplayUI] Demo Mode UI initialized");
+
     Serial.printf("[DisplayUI_TRACE] Before lv_scr_load @ %lu ms\n", millis());
     esp_task_wdt_reset();
     lv_scr_load(_screen_global);
@@ -883,7 +898,7 @@ void DisplayUI::updateRetryButton(bool shouldShow) {
 void DisplayUI::setScreen(UIScreen screen) {
     if (screen == _currentScreen) return;
     _currentScreen = screen;
-    
+
     lv_obj_t* targetScreen = _screen_global;
     switch (screen) {
         case UIScreen::GLOBAL:
@@ -895,8 +910,23 @@ void DisplayUI::setScreen(UIScreen screen) {
         case UIScreen::CONNECTIVITY:
             targetScreen = _screen_connectivity;
             break;
+        case UIScreen::DEMO_MODE:
+            targetScreen = _screen_demo;
+            break;
     }
     lv_scr_load(targetScreen);
+}
+
+void DisplayUI::onDemoModeBackButton() {
+    if (s_instance) {
+        s_instance->setScreen(UIScreen::GLOBAL);
+    }
+}
+
+void DisplayUI::setWebSocketClientForDemo(WebSocketClient* wsClient) {
+    if (_demoMode) {
+        _demoMode->setWebSocketClient(wsClient);
+    }
 }
 
 void DisplayUI::onZoneComposerBackButton() {

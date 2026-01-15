@@ -1,0 +1,97 @@
+{
+  "total_frames": 9,
+  "port": "/dev/cu.usbmodem212401",
+  "tap": "TAP_B_POST_CORRECTION",
+  "frames": [
+    {
+      "index": 0,
+      "frame_index": 6372,
+      "effect_id": 0,
+      "palette_id": 0,
+      "brightness": 128,
+      "speed": 15,
+      "timestamp_us": 107990587,
+      "led_count": 320
+    },
+    {
+      "index": 1,
+      "frame_index": 6578,
+      "effect_id": 0,
+      "palette_id": 0,
+      "brightness": 128,
+      "speed": 15,
+      "timestamp_us": 111380585,
+      "led_count": 320
+    },
+    {
+      "index": 2,
+      "frame_index": 6786,
+      "effect_id": 0,
+      "palette_id": 0,
+      "brightness": 128,
+      "speed": 15,
+      "timestamp_us": 114802589,
+      "led_count": 320
+    },
+    {
+      "index": 3,
+      "frame_index": 6993,
+      "effect_id": 0,
+      "palette_id": 0,
+      "brightness": 128,
+      "speed": 15,
+      "timestamp_us": 118207672,
+      "led_count": 320
+    },
+    {
+      "index": 4,
+      "frame_index": 7200,
+      "effect_id": 0,
+      "palette_id": 0,
+      "brightness": 128,
+      "speed": 15,
+      "timestamp_us": 121612624,
+      "led_count": 320
+    },
+    {
+      "index": 5,
+      "frame_index": 7408,
+      "effect_id": 0,
+      "palette_id": 0,
+      "brightness": 128,
+      "speed": 15,
+      "timestamp_us": 125032574,
+      "led_count": 320
+    },
+    {
+      "index": 6,
+      "frame_index": 7615,
+      "effect_id": 0,
+      "palette_id": 0,
+      "brightness": 128,
+      "speed": 15,
+      "timestamp_us": 128433598,
+      "led_count": 320
+    },
+    {
+      "index": 7,
+      "frame_index": 8030,
+      "effect_id": 0,
+      "palette_id": 0,
+      "brightness": 128,
+      "speed": 15,
+      "timestamp_us": 135260590,
+      "led_count": 320
+    },
+    {
+      "index": 8,
+      "frame_index": 8237,
+      "effect_id": 0,
+      "palette_id": 0,
+      "brightness": 128,
+      "speed": 15,
+      "timestamp_us": 138661390,
+      "led_count": 320
+    }
+  ]
+}

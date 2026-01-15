@@ -293,7 +293,7 @@ From ARCHITECTURE.md:
 **Run verification commands:**
 ```bash
 # From item.verification[]
-pio run -e esp32dev_wifi
+pio run -e esp32dev_audio
 grep NUM_LEDS src/config/hardware_config.h
 # ... etc
 ```
@@ -314,7 +314,7 @@ else:
 
 **Build verification:**
 ```bash
-pio run -e esp32dev_wifi
+pio run -e esp32dev_audio
 # Exit code 0 = build_passes
 ```
 
@@ -339,7 +339,7 @@ python3 .claude/skills/ralph-loop/scripts/update_attempt.py \
     FIX-TEST-ASSERTIONS \
     PASSED \
     --run-id worker-008 \
-    --commands "pio run -e esp32dev_wifi,grep NUM_LEDS" \
+    --commands "pio run -e esp32dev_audio,grep NUM_LEDS" \
     --summary "Build passes, LED count assertion updated 81→320" \
     --commit abc1234
 ```
@@ -663,7 +663,7 @@ converged = build_passes and tests_pass and acceptance_met
 
 **Check:**
 ```bash
-pio run -e esp32dev_wifi
+pio run -e esp32dev_audio
 ```
 
 **Exit code 0 = build_passes**
@@ -755,7 +755,7 @@ if current_iteration >= max_iterations:
   "timestamp": "2025-12-12T08:30:00Z",
   "result": "PASSED",
   "evidence": {
-    "commands_run": ["pio run -e esp32dev_wifi", "grep NUM_LEDS"],
+    "commands_run": ["pio run -e esp32dev_audio", "grep NUM_LEDS"],
     "results_summary": "Build passes, LED count assertion updated 81→320"
   },
   "commit": "abc1234",

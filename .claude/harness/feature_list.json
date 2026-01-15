@@ -42,14 +42,14 @@
     {
       "id": "VERIFY-WIFI-BUILD",
       "title": "Verify WiFi build compiles successfully",
-      "description": "The WiFi-enabled environment (esp32dev_wifi) is the primary build for web interface testing per CLAUDE.md. Confirm it builds without errors.",
+      "description": "The WiFi-enabled environment (esp32dev_audio) is the primary build for web interface testing per CLAUDE.md. Confirm it builds without errors.",
       "acceptance_criteria": [
-        "pio run -e esp32dev_wifi completes with SUCCESS",
+        "pio run -e esp32dev_audio completes with SUCCESS",
         "No compilation errors",
         "Binary size is reasonable (< 80% flash)"
       ],
       "verification": [
-        "pio run -e esp32dev_wifi"
+        "pio run -e esp32dev_audio"
       ],
       "status": "PASSING",
       "priority": 1,
@@ -61,7 +61,7 @@
           "result": "PASSED",
           "evidence": {
             "commands_run": [
-              "pio run -e esp32dev_wifi"
+              "pio run -e esp32dev_audio"
             ],
             "results_summary": "SUCCESS - RAM 19.3%, Flash 31.3% (well under 80% limit). Only deprecation warnings (ArduinoJson API changes), no errors."
           },
@@ -277,7 +277,7 @@
       ],
       "verification": [
         "test -f src/utils/TrigLookup.h && echo exists",
-        "pio run -e esp32dev_wifi"
+        "pio run -e esp32dev_audio"
       ],
       "status": "PASSING",
       "priority": 1,
@@ -289,7 +289,7 @@
           "result": "PASSED",
           "evidence": {
             "commands_run": [
-              "pio run -e esp32dev_wifi"
+              "pio run -e esp32dev_audio"
             ],
             "results_summary": "Created TrigLookup.h (150 lines) and TrigLookup.cpp (100 lines) with 256-entry sine tables. Provides sin8_fast, cos8_fast, sinf_fast, cosf_fast, plus conversion utilities. Build passes - RAM 19.3%, Flash 31.3%."
           },
@@ -326,7 +326,7 @@
           "result": "PASSED",
           "evidence": {
             "commands_run": [
-              "pio run -e esp32dev_wifi"
+              "pio run -e esp32dev_audio"
             ],
             "results_summary": "OTA endpoint already existed at /update in WebServer.cpp. Enabled FEATURE_OTA_UPDATE flag. Added Firmware Update card to web UI with file picker, progress bar, status messages. Dual-slot partition table supports rollback. Build passes."
           },

@@ -1,0 +1,45 @@
+/**
+ * @file LGPSpectrumBarsEffect.h
+ * @brief 8-band spectrum analyzer from center outward
+ *
+ * Band 0 (bass) at center, Band 7 (treble) at edges.
+ * Bar height shows energy, color from palette.
+ *
+ * Effect ID: 70 (audio demo)
+ * Family: AUDIO_REACTIVE
+ * Tags: CENTER_ORIGIN | AUDIO_SYNC | SPECTRUM
+ */
+
+#pragma once
+
+#include "../../plugins/api/IEffect.h"
+#include "../../plugins/api/EffectContext.h"
+#include "../enhancement/SmoothingEngine.h"
+
+namespace lightwaveos {
+namespace effects {
+namespace ieffect {
+
+class LGPSpectrumBarsEffect : public plugins::IEffect {
+public:
+    LGPSpectrumBarsEffect() = default;
+    ~LGPSpectrumBarsEffect() override = default;
+
+    bool init(plugins::EffectContext& ctx) override;
+    void render(plugins::EffectContext& ctx) override;
+    void cleanup() override;
+    const plugins::EffectMetadata& getMetadata() const override;
+
+private:
+    // Per-band smoothing (AsymmetricFollower for natural attack/release)
+    enhancement::AsymmetricFollower m_bandFollowers[8];
+    float m_smoothedBands[8] = {0};  // Smoothed band values for animation
+    
+    // Hop sequence tracking
+    uint32_t m_lastHopSeq = 0;
+    float m_targetBands[8] = {0.0f};
+};
+
+} // namespace ieffect
+} // namespace effects
+} // namespace lightwaveos

@@ -71,6 +71,23 @@ constexpr const char* PARAM_NAMES[16] = {
 };
 
 // ============================================================================
+// LVGL Colors (24-bit RGB888 hex for lv_color_hex())
+// ============================================================================
+
+namespace LVGL {
+    constexpr uint32_t COLOR_BG            = 0x1A1A2E;   // Dark navy background
+    constexpr uint32_t COLOR_CARD_BG       = 0x252540;   // Slightly lighter card background
+    constexpr uint32_t COLOR_HEADER_BG     = 0x1A1A2E;   // Header matches bg
+    constexpr uint32_t COLOR_ACCENT        = 0x00FFC7;   // Cyan/teal accent
+    constexpr uint32_t COLOR_TEXT_PRIMARY  = 0xFFFFFF;   // White text
+    constexpr uint32_t COLOR_TEXT_SECONDARY= 0x888899;   // Dimmed text
+    constexpr uint32_t COLOR_SUCCESS       = 0x22DD88;   // Green success
+    constexpr uint32_t COLOR_ERROR         = 0xFF4444;   // Red error
+    constexpr uint32_t COLOR_WARNING       = 0xFFCC00;   // Yellow/amber warning
+    constexpr uint32_t COLOR_BORDER        = 0x3A3A50;   // Subtle border
+}
+
+// ============================================================================
 // Layout Constants
 // ============================================================================
 

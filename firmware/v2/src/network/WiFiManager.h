@@ -19,7 +19,7 @@
  * @code
  * // In setup()
  * WIFI_MANAGER.setCredentials(ssid, password);
- * WIFI_MANAGER.enableSoftAP("LightwaveOS-AP", "SpectraSynq");
+ * WIFI_MANAGER.enableSoftAP("LightwaveOS-Setup", "lightwave123");
  * if (!WIFI_MANAGER.begin()) {
  *     Serial.println("WiFiManager failed!");
  * }
@@ -136,52 +136,13 @@ public:
     // ========================================================================
 
     /**
-     * @brief Set WiFi credentials (primary network) - DEPRECATED for AP-first architecture
+     * @brief Set WiFi credentials (primary network)
      * @param ssid Network SSID
      * @param password Network password
      * 
-     * NOTE: In AP-first architecture, credentials are stored in NVS and loaded on demand.
-     * This method is kept for backward compatibility but should not be used.
+     * Also loads secondary network from NetworkConfig if available.
      */
     void setCredentials(const String& ssid, const String& password);
-
-    /**
-     * @brief Add a network credential to NVS storage
-     * @param ssid Network SSID
-     * @param password Network password
-     * @return true if saved successfully
-     */
-    bool addNetwork(const String& ssid, const String& password);
-
-    /**
-     * @brief Connect to a saved network by SSID
-     * @param ssid Network SSID to connect to (must be in saved networks)
-     * @return true if connection attempt initiated, false if network not found
-     */
-    bool connectToSavedNetwork(const String& ssid);
-
-    /**
-     * @brief Connect to a network with provided credentials (saves to NVS if not already saved)
-     * @param ssid Network SSID
-     * @param password Network password
-     * @return true if connection attempt initiated
-     */
-    bool connectToNetwork(const String& ssid, const String& password);
-
-    /**
-     * @brief Get all saved networks
-     * @param networks Output array to fill
-     * @param maxNetworks Maximum number of networks (array size)
-     * @return Number of networks loaded
-     */
-    uint8_t getSavedNetworks(WiFiCredentialsStorage::NetworkCredential* networks, uint8_t maxNetworks);
-
-    /**
-     * @brief Delete a saved network by SSID
-     * @param ssid Network SSID to delete
-     * @return true if deleted successfully
-     */
-    bool deleteSavedNetwork(const String& ssid);
 
     /**
      * @brief Configure static IP (optional)
@@ -334,35 +295,66 @@ public:
     void scanNetworks();
 
     // ========================================================================
-    // OTA / Mode Override Control
+    // Stubs for API compatibility (features not in this version)
     // ========================================================================
 
     /**
-     * @brief Temporarily enable STA mode (for OTA without AP-only lock-in)
-     *
-     * This requests the WiFi task to switch to STA mode and attempt to connect
-     * using the configured credentials. Optionally, it can revert back to
-     * AP-only mode after a timeout.
-     *
-     * Notes:
-     * - This does NOT attempt AP+STA dual-mode (historically unreliable).
-     * - If AP-only is forced at compile time, this override is temporary and
-     *   will not survive reboot unless FORCE_AP_MODE is disabled in build flags.
-     *
-     * @param durationMs If >0 and revertToApOnly is true, revert after this duration.
-     * @param revertToApOnly If true, revert to AP-only mode when duration expires.
+     * @brief Request STA mode enable (stub)
      */
-    void requestSTAEnable(uint32_t durationMs = 0, bool revertToApOnly = false);
+    bool requestSTAEnable(uint32_t timeoutMs = 0, bool autoRevert = false) { 
+        (void)timeoutMs; (void)autoRevert; 
+        return false; 
+    }
 
     /**
-     * @brief Force AP-only mode immediately (cancels any STA window)
+     * @brief Request AP-only mode (stub)
      */
-    void requestAPOnly();
+    bool requestAPOnly() { return false; }
 
     /**
-     * @brief Check if a runtime AP-only override is currently active
+     * @brief Check if force AP-only mode is active (stub)
      */
-    bool isForceApOnlyRuntime() const { return m_forceApModeRuntime; }
+    bool isForceApOnlyRuntime() const { return false; }
+
+    /**
+     * @brief Get saved networks (stub - returns 0)
+     */
+    uint8_t getSavedNetworks(WiFiCredentialsStorage::NetworkCredential* out, uint8_t maxNetworks) const {
+        (void)out; (void)maxNetworks;
+        return 0;
+    }
+
+    /**
+     * @brief Add network to saved list (stub)
+     */
+    bool addNetwork(const String& ssid, const String& password) {
+        (void)ssid; (void)password;
+        return false;
+    }
+
+    /**
+     * @brief Delete saved network (stub)
+     */
+    bool deleteSavedNetwork(const String& ssid) {
+        (void)ssid;
+        return false;
+    }
+
+    /**
+     * @brief Connect to network (stub)
+     */
+    bool connectToNetwork(const String& ssid, const String& password) {
+        (void)ssid; (void)password;
+        return false;
+    }
+
+    /**
+     * @brief Connect to saved network (stub)
+     */
+    bool connectToSavedNetwork(const String& ssid) {
+        (void)ssid;
+        return false;
+    }
 
 private:
     // ========================================================================
@@ -418,7 +410,6 @@ private:
     void setState(WiFiState newState);
     void switchToNextNetwork();
     bool hasSecondaryNetwork() const;
-    void applyPendingModeChange();
 
     // ========================================================================
     // Event Handler
@@ -461,12 +452,10 @@ private:
     // Connection Parameters
     // ========================================================================
 
-    String m_ssid;                          // Currently active SSID
-    String m_password;                      // Currently active password
-    String m_ssid2;                         // Secondary/fallback SSID
-    String m_password2;                     // Secondary/fallback password
-    String m_ssidPrimary;                   // Original primary SSID (stored for switching back)
-    String m_passwordPrimary;               // Original primary password (stored for switching back)
+    String m_ssid;
+    String m_password;
+    String m_ssid2;
+    String m_password2;
     uint8_t m_currentNetworkIndex = 0;     // 0 = primary, 1 = secondary
     uint8_t m_attemptsOnCurrentNetwork = 0;
     bool m_useStaticIP = false;
@@ -498,41 +487,9 @@ private:
     // ========================================================================
 
     bool m_apEnabled = false;
-    bool m_apStarted = false;
-    String m_apSSID = "LightwaveOS-AP";  // Matches Tab5.encoder expectation
-    String m_apPassword = "SpectraSynq";  // Matches Tab5.encoder expectation
+    String m_apSSID = "LightwaveOS-AP";
+    String m_apPassword = "lightwave123";
     uint8_t m_apChannel = 1;
-
-    // ========================================================================
-    // Credential Storage (AP-first architecture)
-    // ========================================================================
-
-    WiFiCredentialsStorage m_credStorage;  ///< NVS storage for WiFi credentials
-
-    // ========================================================================
-    // Runtime Mode Overrides (used for OTA workflows)
-    // ========================================================================
-
-    bool m_forceApModeRuntime = config::NetworkConfig::FORCE_AP_MODE;
-    bool m_pendingModeChange = false;
-    bool m_pendingForceApModeRuntime = config::NetworkConfig::FORCE_AP_MODE;
-    bool m_pendingRevertToApOnly = false;
-    uint32_t m_staWindowEndMs = 0;
-    uint32_t m_pendingApplyAtMs = 0;
-
-    // ========================================================================
-    // APSTA Window Policy (heap-safe conditional dual-mode)
-    // ========================================================================
-
-    uint32_t m_apstaWindowEndMs = 0;       ///< End timestamp for APSTA window (0 = disabled)
-    uint32_t m_apstaWindowDurationMs = 0;  ///< Requested APSTA window duration
-
-    // Heap safety thresholds for APSTA mode
-    static constexpr size_t MIN_HEAP_FOR_APSTA = 40000;        ///< Minimum free heap (bytes) to allow APSTA
-    static constexpr size_t MIN_LARGEST_BLOCK_FOR_APSTA = 20000; ///< Minimum largest block (bytes) for APSTA
-    static constexpr uint32_t DEFAULT_APSTA_WINDOW_MS = 60000;   ///< Default APSTA window: 60s
-    static constexpr uint32_t MIN_APSTA_WINDOW_MS = 30000;       ///< Minimum APSTA window: 30s
-    static constexpr uint32_t MAX_APSTA_WINDOW_MS = 300000;      ///< Maximum APSTA window: 5 minutes
 };
 
 // ============================================================================

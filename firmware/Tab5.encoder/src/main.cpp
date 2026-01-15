@@ -1212,6 +1212,14 @@ void setup() {
     if (zoneUI) {
         zoneUI->setWebSocketClient(&g_wsClient);
     }
+
+    // Wire DemoModeUI to WebSocket client for scene/parameter control
+    #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
+    if (g_ui) {
+        g_ui->setWebSocketClientForDemo(&g_wsClient);
+    }
+    #endif
+
     WsMessageRouter::init(g_paramHandler, &g_wsClient, zoneUI, g_ui);
 
     // Wire ZoneComposerUI to PresetManager for zone state capture
@@ -1525,10 +1533,10 @@ void setup() {
                   ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
     // #endregion
     
-    // Begin WiFi - auto-connect to v2 SoftAP (LightwaveOS-AP) as baseline/primary network
-    // User can switch to home WiFi from the Connectivity tab if needed
-    // Primary: LightwaveOS-AP (v2 SoftAP), Secondary: Home WiFi (WIFI_SSID)
-    g_wifiManager.begin("LightwaveOS-AP", "SpectraSynq", WIFI_SSID, WIFI_PASSWORD);
+    // Begin WiFi - connect to home network first, fallback to secondary
+    // Primary: WIFI_SSID (from wifi_credentials.ini)
+    // Secondary: WIFI_SSID2 (from wifi_credentials.ini)
+    g_wifiManager.begin(WIFI_SSID, WIFI_PASSWORD, WIFI_SSID2, WIFI_PASSWORD2);
     
     // #region agent log
     Serial.printf("[DEBUG] After WiFiManager::begin() - Heap: free=%u minFree=%u largest=%u\n",
@@ -1576,9 +1584,23 @@ void setup() {
     g_touchHandler.onActionButton([](uint8_t buttonIndex) {
         handleActionButton(buttonIndex);
     });
-    
 
-    Serial.println("[TOUCH] Touch handler initialized - long press to reset params");
+    // Status bar touch - navigate to Demo Mode
+    g_touchHandler.onStatusBarTouch([](int16_t x, int16_t y) {
+        Serial.printf("[TOUCH] Status bar touched at (%d, %d)\n", x, y);
+        if (g_ui && s_uiInitialized) {
+            // Toggle between GLOBAL and DEMO_MODE screens
+            if (g_ui->getCurrentScreen() == UIScreen::DEMO_MODE) {
+                Serial.println("[TOUCH] Switching to GLOBAL screen");
+                g_ui->setScreen(UIScreen::GLOBAL);
+            } else {
+                Serial.println("[TOUCH] Switching to DEMO_MODE screen");
+                g_ui->setScreen(UIScreen::DEMO_MODE);
+            }
+        }
+    });
+
+    Serial.println("[TOUCH] Touch handler initialized - long press to reset params, status bar for Demo Mode");
 
     Serial.println("\n============================================");
     Serial.println("  Setup complete - turn encoders to test");

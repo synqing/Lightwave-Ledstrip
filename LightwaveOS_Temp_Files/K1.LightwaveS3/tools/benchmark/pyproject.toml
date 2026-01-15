@@ -1,0 +1,55 @@
+[project]
+name = "lwos-benchmark"
+version = "0.1.0"
+description = "LightwaveOS Audio Pipeline Benchmark Collector and Analysis Tool"
+authors = [
+    {name = "LightwaveOS Team"}
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "websockets>=12.0",
+    "pydantic>=2.10.0",
+    "numpy>=1.26.0",
+    "pandas>=2.2.0",
+    "scipy>=1.14.0",
+    "plotly>=5.24.0",
+    "click>=8.1.0",
+    "dash>=2.18.0",
+    "aiofiles>=24.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.7.0",
+    "mypy>=1.13.0",
+]
+
+[project.scripts]
+lwos-bench = "lwos_benchmark.cli:cli"
+
+[build-system]
+requires = ["setuptools>=75.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "DTZ", "T10", "EM", "ISC", "ICN", "PIE", "PT", "Q", "RSE", "RET", "SIM", "TID", "ARG", "PL", "RUF"]
+ignore = ["PLR0913", "PLR2004"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

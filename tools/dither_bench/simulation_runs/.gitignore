@@ -1,0 +1,13 @@
+# Simulation outputs (large data files)
+*.npz
+*.csv
+*.json
+
+# Analysis visualizations
+*.png
+*.jpg
+*.pdf
+
+# Keep README and documentation
+!README.md
+!*.md

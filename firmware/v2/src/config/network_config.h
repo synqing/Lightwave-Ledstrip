@@ -69,31 +69,18 @@ namespace NetworkConfig {
     // ========================================================================
     // Access Point Settings (fallback when WiFi fails)
     // ========================================================================
-    // AP SSID: "LightwaveOS-AP" - Tab5.encoder devices connect to this as secondary network
-    // Password: "SpectraSynq" - matches Tab5 configuration
-    // IP: 192.168.4.1 (default SoftAP gateway)
 
     #ifdef AP_SSID_CUSTOM
         constexpr const char* AP_SSID = AP_SSID_CUSTOM;
     #else
-        constexpr const char* AP_SSID = "LightwaveOS-AP";
+        constexpr const char* AP_SSID = "LightwaveOS-Setup";
     #endif
 
     #ifdef AP_PASSWORD_CUSTOM
         constexpr const char* AP_PASSWORD = AP_PASSWORD_CUSTOM;
     #else
-        constexpr const char* AP_PASSWORD = "SpectraSynq";
+        constexpr const char* AP_PASSWORD = "lightwave123";
     #endif
-
-    // ========================================================================
-    // WiFi Mode Selection
-    // ========================================================================
-    // Set to 1 to force AP-only mode (STA architecture remains, just disabled)
-#ifdef LW_FORCE_AP_MODE
-    constexpr bool FORCE_AP_MODE = (LW_FORCE_AP_MODE != 0);
-#else
-    constexpr bool FORCE_AP_MODE = true;
-#endif
 
     // ========================================================================
     // Network Settings
@@ -146,6 +133,16 @@ namespace NetworkConfig {
     constexpr uint32_t SCAN_INTERVAL_MS = 60000;        // Re-scan every minute
     constexpr uint32_t RECONNECT_DELAY_MS = 5000;       // 5s between reconnect attempts
     constexpr uint32_t MAX_RECONNECT_DELAY_MS = 60000;  // Max 1 minute backoff
+
+    // ========================================================================
+    // Force AP Mode (from build flag)
+    // ========================================================================
+
+    #ifdef LW_FORCE_AP_MODE
+        constexpr bool FORCE_AP_MODE = (LW_FORCE_AP_MODE != 0);
+    #else
+        constexpr bool FORCE_AP_MODE = false;  // Default: STA mode
+    #endif
 
 } // namespace NetworkConfig
 

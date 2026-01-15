@@ -115,7 +115,7 @@ python3 select_next_item.py --harness-dir .claude/harness
 **Run acceptance criteria:**
 ```bash
 # Example from item verification commands
-pio run -e esp32dev_wifi
+pio run -e esp32dev_audio
 grep NUM_LEDS src/config/hardware_config.h
 ```
 
@@ -153,7 +153,7 @@ python3 update_attempt.py ITEM_ID RESULT \
   "timestamp": "2026-01-07T19:30:00Z",
   "result": "PASSED",
   "evidence": {
-    "commands_run": ["pio run -e esp32dev_wifi", "grep NUM_LEDS"],
+    "commands_run": ["pio run -e esp32dev_audio", "grep NUM_LEDS"],
     "results_summary": "Build passes, LED count correct at 320"
   },
   "commit": "abc1234",

@@ -263,29 +263,55 @@ void setup() {
 
     // Initialize Network (if enabled)
 #if FEATURE_WEB_SERVER
-    // AP-first architecture: WiFiManager always starts in AP mode
+    // Start WiFiManager BEFORE WebServer (pattern from working commit 3c94ff7)
     LW_LOGI("Initializing WiFiManager...");
-    
-    // Configure AP settings (AP is default mode)
-    WIFI_MANAGER.enableSoftAP(NetworkConfig::AP_SSID, NetworkConfig::AP_PASSWORD, 1);
+    WIFI_MANAGER.setCredentials(
+        NetworkConfig::WIFI_SSID_VALUE,
+        NetworkConfig::WIFI_PASSWORD_VALUE
+    );
+    // STA-only: do not enable SoftAP fallback here.
+    // If you want AP provisioning, explicitly re-enable this call.
 
     if (!WIFI_MANAGER.begin()) {
         LW_LOGE("WiFiManager failed to start!");
     } else {
         LW_LOGI("WiFiManager: STARTED");
-        LW_LOGI("WiFi: AP MODE (connect to %s)", NetworkConfig::AP_SSID);
-        LW_LOGI("AP IP: %s", WiFi.softAPIP().toString().c_str());
-        LW_LOGI("STA connection available via API (user-initiated only)");
+
+        // Wait for connection or AP mode (with timeout)
+        LW_LOGI("Connecting to WiFi...");
+        uint32_t waitStart = millis();
+        while (!WIFI_MANAGER.isConnected() && !WIFI_MANAGER.isAPMode()) {
+            if (millis() - waitStart > 30000) {
+                LW_LOGW("WiFi connection timeout, continuing...");
+                break;
+            }
+            delay(100);
+        }
+
+        if (WIFI_MANAGER.isConnected()) {
+            LW_LOGI("WiFi CONNECTED: %s (IP: %s)",
+                    WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
+        } else if (WIFI_MANAGER.isAPMode()) {
+            LW_LOGI("WiFi in AP mode: %s", WiFi.softAPIP().toString().c_str());
+        }
     }
 
     // Start WebServer
+    // NOTE: Give WiFi stack time to stabilize and release temporary buffers.
+    // AsyncTCP creates a 8KB task (CONFIG_ASYNC_TCP_STACK_SIZE) which can fail
+    // if heap is fragmented from WiFi initialization.
+    delay(500);
     LW_LOGI("Starting Web Server...");
+    LW_LOGI("  Heap before WebServer: %lu bytes, largest block: %lu bytes",
+            ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 
     // Instantiate WebServer with dependencies
     webServerInstance = new WebServer(orchestrator, renderer);
 
     if (!webServerInstance->begin()) {
-        LW_LOGW("Web Server failed to start!");
+        LW_LOGE("Web Server failed to start! Check heap fragmentation.");
+        LW_LOGE("  Heap after failure: %lu bytes, largest block: %lu bytes",
+                ESP.getFreeHeap(), ESP.getMaxAllocHeap());
     } else {
         LW_LOGI("Web Server: RUNNING");
         LW_LOGI("REST API: http://lightwaveos.local/api/v1/");

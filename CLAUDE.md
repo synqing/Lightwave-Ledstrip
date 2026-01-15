@@ -25,7 +25,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 1. Read this entire file
 2. **MANDATORY:** Complete Pre-Task Agent Selection Protocol (see below)
-3. Build: `pio run -e esp32dev_wifi -t upload`
+3. Build: `pio run -e esp32dev_audio -t upload`
 4. Access web UI at `http://lightwaveos.local`
 
 ---
@@ -143,7 +143,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Best Practices
 - **Modular Code**: Write focused, reusable code to optimize token usage
 - **UI-First for Web**: When modifying `data/` web interface, build UI first, then add functionality
-- **Test with WiFi build**: `pio run -e esp32dev_wifi -t upload` for web interface testing
+- **Test with audio build**: `pio run -e esp32dev_audio -t upload` for web interface testing
 
 ---
 
@@ -207,7 +207,7 @@ if (newState == STATE_WIFI_CONNECTING) {
 
 **Required Test Before Commit:**
 ```bash
-pio run -e esp32dev_wifi -t upload
+pio run -e esp32dev_audio -t upload
 # Then verify: WiFi connects WITHOUT "IP: 0.0.0.0" appearing first
 ```
 
@@ -240,7 +240,7 @@ pio run -e esp32dev_wifi -t upload
 
 ### Modify Web Interface
 1. Edit files in `data/` (index.html, app.js, styles.css)
-2. Build: `pio run -e esp32dev_wifi -t upload`
+2. Build: `pio run -e esp32dev_audio -t upload`
 3. Access: `http://lightwaveos.local`
 
 ### Add a Zone Effect
@@ -263,14 +263,14 @@ pio run -e esp32dev_wifi -t upload
 ### LightwaveOS v2 (ESP32-S3)
 
 ```bash
-# Default build (no WiFi)
+# Default build (WiFi + Audio enabled)
 pio run -t upload
 
-# WiFi-enabled build
-pio run -e esp32dev_wifi -t upload
+# Explicit audio build (same as default)
+pio run -e esp32dev_audio -t upload
 
-# Memory debug build
-pio run -e memory_debug -t upload
+# Audio build without WiFi
+pio run -e esp32dev_audio_nowifi -t upload
 
 # Monitor serial (115200 baud)
 pio device monitor -b 115200
@@ -410,7 +410,7 @@ Set in `platformio.ini` or `src/config/features.h`:
 
 | Flag | Purpose |
 |------|---------|
-| `FEATURE_WEB_SERVER` | Enable WiFi/WebServer (use `esp32dev_wifi` env) |
+| `FEATURE_WEB_SERVER` | Enable WiFi/WebServer (enabled by default in `esp32dev_audio`) |
 | `FEATURE_SERIAL_MENU` | Serial command interface |
 | `FEATURE_PERFORMANCE_MONITOR` | FPS/memory tracking |
 | `FEATURE_INTERFERENCE_CALC` | Wave physics calculations |
@@ -691,7 +691,7 @@ This project includes a domain memory harness for persistent agent progress acro
 ### Verification Commands
 ```bash
 .claude/harness/init.sh             # Boot ritual
-pio run -e esp32dev_wifi            # Full build with WiFi
+pio run -e esp32dev_audio           # Full build with WiFi + Audio
 git status --porcelain | wc -l      # Check uncommitted changes
 ```
 

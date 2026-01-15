@@ -23,7 +23,7 @@ Options:
 Example:
     python3 update_attempt.py FIX-TEST-ASSERTIONS PASSED \\
         --run-id worker-008 \\
-        --commands "pio run -e esp32dev_wifi,grep NUM_LEDS" \\
+        --commands "pio run -e esp32dev_audio,grep NUM_LEDS" \\
         --summary "Build passes, LED count correct" \\
         --commit abc1234
 """
@@ -250,7 +250,7 @@ Examples:
 
   # Record failed attempt
   python3 update_attempt.py OTA-UPDATES FAILED \\
-      --commands "pio run -e esp32dev_wifi" \\
+      --commands "pio run -e esp32dev_audio" \\
       --summary "Compilation error in WebServer.cpp" \\
       --reverted
 

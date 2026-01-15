@@ -41,6 +41,7 @@
 #include "AudioTuning.h"
 #include "GoertzelAnalyzer.h"
 #include "ChromaAnalyzer.h"
+#include "emotiscope/EmotiscopeAudio.h"
 #if FEATURE_STYLE_DETECTION
 #include "StyleDetector.h"
 #endif
@@ -478,6 +479,16 @@ private:
     // Phase 2: DSP Processing State
     // ========================================================================
 
+    // Emotiscope Audio Pipeline (64-bin Goertzel, tempo, VU)
+    emotiscope::EmotiscopeAudio m_emotiscope;
+
+    // Float buffer for EmotiscopeAudio input (HOP_SIZE samples)
+    float m_hopBufferFloat[HOP_SIZE] = {0};
+
+    // Beat tracking state for rising edge detection (Emotiscope beat_tick)
+    float m_prevEmoBeat = -1.0f;
+
+    // Legacy analyzers (kept for compatibility, may be removed in Phase 6)
     // Goertzel frequency analyzer (8 bands, 512-sample window)
     GoertzelAnalyzer m_analyzer;
 

@@ -48,10 +48,10 @@
 
 ```bash
 # Build with WiFi
-pio run -e esp32dev_wifi
+pio run -e esp32dev_audio
 
 # Upload and verify connection sequence
-pio run -e esp32dev_wifi -t upload
+pio run -e esp32dev_audio -t upload
 pio device monitor -b 115200
 
 # Expected log sequence:

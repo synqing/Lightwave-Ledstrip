@@ -139,7 +139,7 @@ Extract:
 **Run acceptance criteria:**
 ```bash
 # Example from verification commands
-pio run -e esp32dev_wifi
+pio run -e esp32dev_audio
 grep NUM_LEDS src/config/hardware_config.h
 ```
 
@@ -159,7 +159,7 @@ Add to `attempts[]` array:
   "timestamp": "2026-01-07T12:00:00Z",
   "result": "PASSED",
   "evidence": {
-    "commands_run": ["pio run -e esp32dev_wifi", "grep NUM_LEDS"],
+    "commands_run": ["pio run -e esp32dev_audio", "grep NUM_LEDS"],
     "results_summary": "Build passes, LED count correct"
   },
   "commit": "abc1234",

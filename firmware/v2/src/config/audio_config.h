@@ -39,26 +39,27 @@ constexpr gpio_num_t I2S_DOUT_PIN = GPIO_NUM_13;  // Data Out (mic output)
 constexpr gpio_num_t I2S_LRCL_PIN = GPIO_NUM_12;  // Left/Right Clock (Word Select)
 
 // ============================================================================
-// Audio Processing Parameters (Tab5 Parity)
+// Audio Processing Parameters (Emotiscope 12.8kHz Pipeline)
 // ============================================================================
 
 /**
- * K1 Dual-Bank Goertzel Front-End timing: 16kHz / HOP_N=128 = 125 Hz frames
+ * Emotiscope Audio Pipeline: 12.8kHz / HOP_N=64 = 200 Hz frames
  *
- * DO NOT change hop size without updating:
- * - Filter constants in ControlBus
- * - Resonator Q values in beat tracker
- * - Attack/release envelope timing
- * - K1 front-end hop cadence
+ * This sample rate and hop size are optimized for Emotiscope's:
+ * - 64-bin semitone-spaced Goertzel (A1=55Hz to C7=2093Hz)
+ * - 96-bin tempo detection (48-143 BPM)
+ * - 1024-sample novelty curve at 50Hz
+ *
+ * Filter constants and timing have been updated to match.
  */
-constexpr uint16_t SAMPLE_RATE = 16000;       // 16 kHz (K1 standard)
-constexpr uint16_t HOP_SIZE = 128;            // 8ms hop @ 16kHz = 125 Hz frames (K1)
-constexpr uint16_t FFT_SIZE = 512;            // For beat tracker spectral analysis (legacy)
-constexpr uint16_t GOERTZEL_WINDOW = 512;     // 32ms window for bass coherence (legacy)
+constexpr uint16_t SAMPLE_RATE = 12800;       // 12.8 kHz (Emotiscope native)
+constexpr uint16_t HOP_SIZE = 64;             // 5ms hop @ 12.8kHz = 200 Hz frames
+constexpr uint16_t FFT_SIZE = 512;            // Legacy - kept for compatibility
+constexpr uint16_t GOERTZEL_WINDOW = 512;     // Legacy - kept for compatibility
 
 // Derived timing constants
-constexpr float HOP_DURATION_MS = (HOP_SIZE * 1000.0f) / SAMPLE_RATE;  // 8ms
-constexpr float HOP_RATE_HZ = SAMPLE_RATE / static_cast<float>(HOP_SIZE);  // 125 Hz
+constexpr float HOP_DURATION_MS = (HOP_SIZE * 1000.0f) / SAMPLE_RATE;  // 5ms @ 12.8kHz/64
+constexpr float HOP_RATE_HZ = SAMPLE_RATE / static_cast<float>(HOP_SIZE);  // 200 Hz
 
 // ============================================================================
 // I2S DMA Configuration
@@ -133,12 +134,12 @@ constexpr float STALENESS_THRESHOLD_MS = 100.0f;  // 100ms = 6 frames @ 62.5 Hz
 
 /**
  * AudioNode runs on Core 0 at priority 4 (below Renderer at 5).
- * 16ms tick interval matches hop size for precise timing.
+ * 5ms tick interval matches Emotiscope's 64-sample hop at 12.8kHz.
  */
 constexpr uint8_t AUDIO_ACTOR_PRIORITY = 4;
 constexpr uint8_t AUDIO_ACTOR_CORE = 0;
 constexpr uint16_t AUDIO_ACTOR_STACK_WORDS = 8192;  // 32KB stack (Increased from 4096 for safety)
-constexpr uint16_t AUDIO_ACTOR_TICK_MS = 16;        // Match hop duration
+constexpr uint16_t AUDIO_ACTOR_TICK_MS = 5;         // Match Emotiscope hop duration (5ms)
 
 } // namespace audio
 } // namespace lightwaveos

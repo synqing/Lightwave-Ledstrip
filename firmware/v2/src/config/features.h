@@ -33,7 +33,7 @@
 #endif
 
 // ============================================================================
-// Network Features (defined in esp32dev_wifi environment)
+// Network Features (enabled by default in esp32dev_audio environment)
 // ============================================================================
 
 // Web Server with REST API and WebSocket

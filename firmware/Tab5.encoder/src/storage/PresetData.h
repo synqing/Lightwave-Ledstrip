@@ -37,7 +37,7 @@ struct ZonePresetConfig {
     uint8_t speed;         // Zone speed (1-100)
     uint8_t brightness;    // Zone brightness (0-255)
     uint8_t enabled : 1;   // Zone enabled flag
-    uint8_t paletteId : 7; // Zone palette (0-74, 7 bits is enough for 75 palettes)
+    uint8_t paletteId : 7; // Zone palette (0-63, 7 bits is enough)
 };
 
 // Full State Preset (64 bytes total - efficient for NVS blob storage)
@@ -53,9 +53,9 @@ struct PresetData {
     // ========================================================================
     // Global Parameters (8 bytes) - matches Unit-A encoder mapping
     // ========================================================================
-    uint8_t effectId;      // Current effect index (0-95)
+    uint8_t effectId;      // Current effect index (0-87, 88 effects total)
     uint8_t brightness;    // Global brightness (0-255)
-    uint8_t paletteId;     // Current palette index (0-74, matches v2 MASTER_PALETTE_COUNT=75)
+    uint8_t paletteId;     // Current palette index (0-63)
     uint8_t speed;         // Animation speed (1-100)
     uint8_t mood;          // Mood parameter (0-255)
     uint8_t fade;          // Fade amount (0-255)
@@ -96,49 +96,7 @@ struct PresetData {
 
     // Reserved space for future expansion (22 bytes)
     // Total: 2+1+8+18+3+8+2+22 = 64 bytes
-    // Zone segments (16 bytes) stored in reservedFuture[0-15] when zone mode is enabled
-    // Format: 4 zones × 4 bytes each (s1LeftStart, s1LeftEnd, s1RightStart, s1RightEnd)
     uint8_t reservedFuture[22];
-
-    // ========================================================================
-    // Helper methods for zone segment access (stored in reservedFuture[0-15])
-    // ========================================================================
-    
-    /**
-     * Get zone segment data (stored in reservedFuture)
-     * @param zoneId Zone ID (0-3)
-     * @param s1LeftStart Output
-     * @param s1LeftEnd Output
-     * @param s1RightStart Output
-     * @param s1RightEnd Output
-     */
-    void getZoneSegment(uint8_t zoneId, uint8_t& s1LeftStart, uint8_t& s1LeftEnd, 
-                       uint8_t& s1RightStart, uint8_t& s1RightEnd) const {
-        if (zoneId >= 4) return;
-        uint8_t offset = zoneId * 4;
-        s1LeftStart = reservedFuture[offset];
-        s1LeftEnd = reservedFuture[offset + 1];
-        s1RightStart = reservedFuture[offset + 2];
-        s1RightEnd = reservedFuture[offset + 3];
-    }
-
-    /**
-     * Set zone segment data (stored in reservedFuture)
-     * @param zoneId Zone ID (0-3)
-     * @param s1LeftStart
-     * @param s1LeftEnd
-     * @param s1RightStart
-     * @param s1RightEnd
-     */
-    void setZoneSegment(uint8_t zoneId, uint8_t s1LeftStart, uint8_t s1LeftEnd,
-                       uint8_t s1RightStart, uint8_t s1RightEnd) {
-        if (zoneId >= 4) return;
-        uint8_t offset = zoneId * 4;
-        reservedFuture[offset] = s1LeftStart;
-        reservedFuture[offset + 1] = s1LeftEnd;
-        reservedFuture[offset + 2] = s1RightStart;
-        reservedFuture[offset + 3] = s1RightEnd;
-    }
 
     // ========================================================================
     // Methods

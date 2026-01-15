@@ -3,7 +3,8 @@
 // LedFeedback - Connection Status LED Feedback for Tab5.encoder
 // ============================================================================
 // Phase 4 (F.5): Connection status feedback using M5ROTATE8 status LEDs.
-// Uses LED 8 on BOTH Unit A and Unit B to show connection state.
+// Uses LED 8 on Unit A to show connection state.
+// Note: Unit B LED 8 is now used for palette display.
 //
 // Connection States:
 //   WIFI_DISCONNECTED  - Solid red      (no WiFi connection)
@@ -21,11 +22,7 @@
 // Reference: K1.8encoderS3 LedFeedback pattern adapted for dual encoder setup.
 // ============================================================================
 
-#ifdef SIMULATOR_BUILD
-    #include <cstdint>
-#else
-    #include <Arduino.h>
-#endif
+#include <Arduino.h>
 
 // Forward declaration
 class DualEncoderService;
@@ -101,7 +98,8 @@ private:
     static StatusLedColor getColorForState(ConnectionState state);
     static bool stateRequiresBreathing(ConnectionState state);
 
-    // Apply LED color to both units (Unit A LED 8 and Unit B LED 8)
+    // Apply LED color to Unit A LED 8 (status LED)
+    // Note: Unit B LED 8 is now used for palette display
     void applyColorToBothUnits(const StatusLedColor& color);
 
     // Calculate breathing brightness factor (0.30 - 1.0)

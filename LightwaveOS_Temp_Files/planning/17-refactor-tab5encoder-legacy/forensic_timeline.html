@@ -1,0 +1,1510 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lightwave Hub↔Node Forensic Timeline (Jan 2026)</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --panel: #111a33;
+        --panel-2: #0f1730;
+        --text: #e8ecff;
+        --muted: #aab3d6;
+        --axis: #6070b6;
+        --dot: #c7d2ff;
+        --stem: rgba(160, 175, 230, 0.55);
+        --card-border: rgba(185, 200, 255, 0.22);
+        --shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+
+        --canvas-w: 12400px;
+        --canvas-h: 600px;
+        --axis-y: 300px;
+        --pad-x: 88px;
+        --pad-y: 22px;
+
+        --card-w: 240px;
+        --card-gap: 18px;
+        --stack-step: 64px;
+
+        --phase-foundation: #ff6bd6;
+        --phase-planning: #4dc5ff;
+        --phase-split: #ff8a4d;
+        --phase-bringup: #a37aff;
+        --phase-stabilise: #4adca0;
+        --phase-consolidate: #ffc44d;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          Segoe UI,
+          Roboto,
+          Helvetica,
+          Arial,
+          "Apple Color Emoji",
+          "Segoe UI Emoji";
+        background: radial-gradient(1200px 500px at 20% 0%, #16214a 0%, var(--bg) 55%);
+        color: var(--text);
+      }
+
+      header {
+        padding: 22px 22px 10px 22px;
+        max-width: 1100px;
+      }
+
+      h1 {
+        margin: 0 0 6px 0;
+        font-size: 18px;
+        letter-spacing: 0.2px;
+      }
+
+      .sub {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.4;
+      }
+
+      .wrap {
+        padding: 10px 0 22px 0;
+      }
+
+      .scroller {
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding: 14px 22px;
+      }
+
+      .canvas {
+        position: relative;
+        width: var(--canvas-w);
+        height: var(--canvas-h);
+        border: 1px solid rgba(190, 205, 255, 0.14);
+        border-radius: 16px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+        box-shadow: var(--shadow);
+      }
+
+      .axis {
+        position: absolute;
+        left: var(--pad-x);
+        right: var(--pad-x);
+        top: var(--axis-y);
+        height: 2px;
+        background: linear-gradient(90deg, rgba(96, 112, 182, 0.2), var(--axis), rgba(96, 112, 182, 0.2));
+      }
+
+      .grid {
+        position: absolute;
+        inset: 0;
+        padding: var(--pad-y) var(--pad-x);
+        display: grid;
+        grid-template-columns: repeat(45, 1fr);
+        grid-template-rows: 1fr;
+        gap: 0;
+      }
+
+      .eras {
+        position: absolute;
+        left: var(--pad-x);
+        right: var(--pad-x);
+        top: 16px;
+        display: grid;
+        grid-template-columns: repeat(45, 1fr);
+        gap: 10px;
+        pointer-events: none;
+      }
+
+      .era {
+        height: 34px;
+        border-radius: 999px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.92);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: rgba(255, 255, 255, 0.06);
+        letter-spacing: 0.25px;
+      }
+
+      .era small {
+        color: rgba(255, 255, 255, 0.72);
+        margin-left: 8px;
+      }
+
+      .era.foundation {
+        background: rgba(255, 107, 214, 0.12);
+        border-color: rgba(255, 107, 214, 0.22);
+      }
+
+      .era.planning {
+        background: rgba(77, 197, 255, 0.12);
+        border-color: rgba(77, 197, 255, 0.22);
+      }
+
+      .era.split {
+        background: rgba(255, 138, 77, 0.12);
+        border-color: rgba(255, 138, 77, 0.22);
+      }
+
+      .era.bringup {
+        background: rgba(163, 122, 255, 0.14);
+        border-color: rgba(163, 122, 255, 0.22);
+      }
+      .era.stabilise {
+        background: rgba(74, 220, 160, 0.12);
+        border-color: rgba(74, 220, 160, 0.22);
+      }
+      .era.consolidate {
+        background: rgba(255, 196, 77, 0.14);
+        border-color: rgba(255, 196, 77, 0.22);
+      }
+
+      .event {
+        position: relative;
+        grid-row: 1;
+      }
+
+      .dot {
+        position: absolute;
+        left: 50%;
+        top: var(--axis-y);
+        width: 12px;
+        height: 12px;
+        transform: translate(-50%, -50%);
+        border-radius: 999px;
+        background: var(--dot);
+        box-shadow: 0 0 0 5px rgba(199, 210, 255, 0.14);
+      }
+
+      .stem {
+        position: absolute;
+        left: 50%;
+        width: 2px;
+        background: var(--stem);
+        transform: translateX(-50%);
+      }
+
+      .card {
+        position: absolute;
+        left: 50%;
+        width: var(--card-w);
+        transform: translateX(-50%);
+        padding: 10px 10px 10px 10px;
+        border-radius: 12px;
+        border: 1px solid var(--card-border);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04));
+        box-shadow: 0 10px 22px rgba(0, 0, 0, 0.28);
+        backdrop-filter: blur(8px);
+      }
+
+      a.card {
+        display: block;
+        color: inherit;
+        text-decoration: none;
+      }
+
+      a.card:hover {
+        border-color: rgba(210, 220, 255, 0.38);
+      }
+
+      a.card:focus-visible {
+        outline: 3px solid rgba(180, 200, 255, 0.75);
+        outline-offset: 2px;
+        border-color: rgba(210, 220, 255, 0.55);
+      }
+
+      .date {
+        font-size: 11px;
+        color: rgba(232, 236, 255, 0.75);
+        letter-spacing: 0.28px;
+        margin-bottom: 6px;
+      }
+
+      .title {
+        font-size: 13px;
+        font-weight: 650;
+        line-height: 1.25;
+        margin-bottom: 6px;
+      }
+
+      .one {
+        font-size: 12px;
+        color: rgba(232, 236, 255, 0.78);
+        line-height: 1.25;
+      }
+
+      .top {
+        --stack: 0;
+      }
+      .bottom {
+        --stack: 0;
+      }
+
+      .top .card {
+        bottom: calc(100% - var(--axis-y) + var(--card-gap) + (var(--stack) * var(--stack-step)));
+      }
+      .top .stem {
+        top: calc(var(--axis-y) - (var(--card-gap) + (var(--stack) * var(--stack-step))));
+        height: calc(var(--card-gap) + (var(--stack) * var(--stack-step)));
+      }
+
+      .bottom .card {
+        top: calc(var(--axis-y) + var(--card-gap) + (var(--stack) * var(--stack-step)));
+      }
+      .bottom .stem {
+        top: var(--axis-y);
+        height: calc(var(--card-gap) + (var(--stack) * var(--stack-step)));
+      }
+
+      .stack1 {
+        --stack: 1;
+      }
+      .stack2 {
+        --stack: 2;
+      }
+
+      .phase-foundation .card {
+        border-left: 4px solid var(--phase-foundation);
+      }
+      .phase-foundation .title {
+        color: var(--phase-foundation);
+      }
+
+      .phase-planning .card {
+        border-left: 4px solid var(--phase-planning);
+      }
+      .phase-planning .title {
+        color: var(--phase-planning);
+      }
+
+      .phase-split .card {
+        border-left: 4px solid var(--phase-split);
+      }
+      .phase-split .title {
+        color: var(--phase-split);
+      }
+
+      .phase-bringup .card {
+        border-left: 4px solid var(--phase-bringup);
+      }
+      .phase-bringup .title {
+        color: var(--phase-bringup);
+      }
+
+      .phase-stabilise .card {
+        border-left: 4px solid var(--phase-stabilise);
+      }
+      .phase-stabilise .title {
+        color: var(--phase-stabilise);
+      }
+
+      .phase-consolidate .card {
+        border-left: 4px solid var(--phase-consolidate);
+      }
+      .phase-consolidate .title {
+        color: var(--phase-consolidate);
+      }
+
+      footer {
+        padding: 0 22px 26px 22px;
+        max-width: 1100px;
+      }
+
+      details {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 12px;
+        padding: 12px 12px;
+      }
+
+      summary {
+        cursor: pointer;
+        color: rgba(232, 236, 255, 0.9);
+        font-weight: 600;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 12px;
+        font-size: 12px;
+      }
+
+      th,
+      td {
+        text-align: left;
+        padding: 10px 8px;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        vertical-align: top;
+      }
+
+      th {
+        color: rgba(232, 236, 255, 0.78);
+        font-weight: 650;
+      }
+
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        font-size: 11px;
+        color: rgba(232, 236, 255, 0.88);
+      }
+
+      table a {
+        color: rgba(180, 200, 255, 0.95);
+        text-decoration: none;
+      }
+      table a:hover {
+        text-decoration: underline;
+      }
+
+      @media print {
+        :root {
+          --bg: #ffffff;
+          --text: #111111;
+          --muted: #333333;
+          --panel: #ffffff;
+          --panel-2: #ffffff;
+          --axis: #333333;
+          --dot: #111111;
+          --stem: rgba(0, 0, 0, 0.35);
+          --card-border: rgba(0, 0, 0, 0.25);
+          --shadow: none;
+        }
+
+        body {
+          background: #ffffff !important;
+          color: #111111 !important;
+        }
+
+        .canvas {
+          box-shadow: none !important;
+          background: #ffffff !important;
+        }
+
+        .card {
+          box-shadow: none !important;
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
+        }
+
+        a {
+          color: #111111 !important;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <header>
+      <h1>Hub↔Node Bringup & Refactor Timeline (Jan 2026)</h1>
+      <p class="sub">
+        Single-axis timeline with alternating callouts. Time range: 1 Jan → 14 Jan. Events are evenly spaced for
+        readability (not time-scaled). Sources include claude-mem entries and local git history (Lightwave-Ledstrip,
+        K1.LightwaveOS, LWLS_AP_Redesign). <em>All times are Perth / AWST (UTC+8).</em>
+      </p>
+    </header>
+
+    <div class="wrap">
+      <div class="scroller">
+        <div
+          class="canvas"
+          role="img"
+          aria-label="Forensic timeline of hub-node bringup and stabilisation milestones"
+          aria-describedby="timeline-text"
+        >
+          <div class="eras">
+            <div class="era foundation" style="grid-column: 1 / span 13">Precursor <small>Jan 1–11</small></div>
+            <div class="era planning" style="grid-column: 14 / span 2">Planning <small>Jan 12</small></div>
+            <div class="era split" style="grid-column: 16 / span 9">Wireless architecture <small>Jan 12–13</small></div>
+            <div class="era bringup" style="grid-column: 25 / span 8">Bringup <small>Jan 13</small></div>
+            <div class="era stabilise" style="grid-column: 33 / span 12">Stabilise <small>late Jan 13 → early Jan 14</small></div>
+            <div class="era consolidate" style="grid-column: 45 / span 1">Consolidate <small>Jan 14</small></div>
+          </div>
+
+          <div class="axis"></div>
+
+          <div class="grid">
+            <!-- 1 -->
+            <div class="event top phase-foundation" style="grid-column: 1">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/observation/10039" target="_blank" rel="noopener noreferrer">
+                <div class="date">1 Jan 2026 • 19:35</div>
+                <div class="title">TempoTracker + WebServer</div>
+                <div class="one">Beat detection + modular handlers</div>
+              </a>
+            </div>
+
+            <!-- 2 -->
+            <div class="event bottom phase-foundation" style="grid-column: 2">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/observation/10121" target="_blank" rel="noopener noreferrer">
+                <div class="date">1 Jan 2026 • 21:56</div>
+                <div class="title">Keystroke regression</div>
+                <div class="one">Serial control broke after debug changes</div>
+              </a>
+            </div>
+
+            <!-- 3 -->
+            <div class="event top phase-foundation" style="grid-column: 3">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/observation/10420" target="_blank" rel="noopener noreferrer">
+                <div class="date">2 Jan 2026 • 18:51</div>
+                <div class="title">Tab5.encoder flashed</div>
+                <div class="one">First successful hardware upload</div>
+              </a>
+            </div>
+
+            <!-- 4 -->
+            <div class="event bottom phase-foundation" style="grid-column: 4">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="#ref-lwls-dcf5834">
+                <div class="date">2 Jan 2026 • 18:56</div>
+                <div class="title">Firmware relocated</div>
+                <div class="one">Move to firmware/v2 layout</div>
+              </a>
+            </div>
+
+            <!-- 5 -->
+            <div class="event top phase-foundation" style="grid-column: 5">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="#ref-lwls-c4c74be">
+                <div class="date">2 Jan 2026 • 18:57</div>
+                <div class="title">Tab5.encoder created</div>
+                <div class="one">ESP32-P4 encoder controller</div>
+              </a>
+            </div>
+
+            <!-- 6 -->
+            <div class="event bottom phase-foundation" style="grid-column: 6">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/observation/10466" target="_blank" rel="noopener noreferrer">
+                <div class="date">2 Jan 2026 • 19:08</div>
+                <div class="title">WS client core</div>
+                <div class="one">Reconnect + rate limiting</div>
+              </a>
+            </div>
+
+            <!-- 7 -->
+            <div class="event top phase-foundation" style="grid-column: 7">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/observation/10509" target="_blank" rel="noopener noreferrer">
+                <div class="date">2 Jan 2026 • 19:19</div>
+                <div class="title">WS message router</div>
+                <div class="one">Type dispatch for protocol</div>
+              </a>
+            </div>
+
+            <!-- 8 -->
+            <div class="event bottom phase-foundation" style="grid-column: 8">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/observation/10537" target="_blank" rel="noopener noreferrer">
+                <div class="date">2 Jan 2026 • 19:22</div>
+                <div class="title">WS client ported</div>
+                <div class="one">Tab5.encoder integration</div>
+              </a>
+            </div>
+
+            <!-- 9 -->
+            <div class="event top phase-foundation" style="grid-column: 9">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/observation/10597" target="_blank" rel="noopener noreferrer">
+                <div class="date">2 Jan 2026 • 20:26</div>
+                <div class="title">ParameterHandler sync</div>
+                <div class="one">Dual units + WS synchronisation</div>
+              </a>
+            </div>
+
+            <!-- 10 -->
+            <div class="event bottom phase-foundation" style="grid-column: 10">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/observation/11124" target="_blank" rel="noopener noreferrer">
+                <div class="date">3 Jan 2026 • 04:58</div>
+                <div class="title">WiFi+WS milestone</div>
+                <div class="one">Integration committed</div>
+              </a>
+            </div>
+
+            <!-- 11 -->
+            <div class="event top phase-foundation" style="grid-column: 11">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="#ref-lwls-c93124e">
+                <div class="date">3 Jan 2026 • 14:09</div>
+                <div class="title">Tab5 build hook</div>
+                <div class="one">Pre-build toolchain wiring</div>
+              </a>
+            </div>
+
+            <!-- 12 -->
+            <div class="event bottom phase-foundation" style="grid-column: 12">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/observation/12595" target="_blank" rel="noopener noreferrer">
+                <div class="date">8 Jan 2026 • 18:40</div>
+                <div class="title">TempoTracker logging</div>
+                <div class="one">Native-safe debug counters</div>
+              </a>
+            </div>
+
+            <!-- 13 -->
+            <div class="event top phase-foundation" style="grid-column: 13">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="#ref-lwls-78fbeab">
+                <div class="date">11 Jan 2026 • 00:45</div>
+                <div class="title">Dither bench</div>
+                <div class="one">Comparative dithering report tool</div>
+              </a>
+            </div>
+
+            <!-- 14 -->
+            <div class="event bottom phase-planning" style="grid-column: 14">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/prompt/1190" target="_blank" rel="noopener noreferrer">
+                <div class="date">12 Jan 2026 • 03:51</div>
+                <div class="title">Refactor planning</div>
+                <div class="one">Plan legacy→modern pipeline</div>
+              </a>
+            </div>
+
+            <!-- 15 -->
+            <div class="event top phase-planning" style="grid-column: 15">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/prompt/1191" target="_blank" rel="noopener noreferrer">
+                <div class="date">12 Jan 2026 • 03:52</div>
+                <div class="title">MCP setup</div>
+                <div class="one">Context-Engineer wired in</div>
+              </a>
+            </div>
+
+            <!-- 16 -->
+            <div class="event bottom phase-split" style="grid-column: 16">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="#ref-k1-1de6457">
+                <div class="date">12 Jan 2026 • 06:40</div>
+                <div class="title">K1.LightwaveOS created</div>
+                <div class="one">Hub↔node architecture lands</div>
+              </a>
+            </div>
+
+            <!-- 17 -->
+            <div class="event top phase-split" style="grid-column: 17">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/prompt/1209" target="_blank" rel="noopener noreferrer">
+                <div class="date">12 Jan 2026 • 08:27</div>
+                <div class="title">Hardware correction</div>
+                <div class="one">SPH0645 is I2S (not PDM)</div>
+              </a>
+            </div>
+
+            <!-- 18 -->
+            <div class="event bottom phase-split" style="grid-column: 18">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="#ref-k1-3abef3b">
+                <div class="date">12 Jan 2026 • 08:56</div>
+                <div class="title">WS server switch</div>
+                <div class="one">Native server on Tab5</div>
+              </a>
+            </div>
+
+            <!-- 19 -->
+            <div class="event top phase-split" style="grid-column: 19">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="#ref-k1-08a8060">
+                <div class="date">12 Jan 2026 • 16:46</div>
+                <div class="title">Tab5 pure Arduino</div>
+                <div class="one">Migrate off ESP-IDF mix</div>
+              </a>
+            </div>
+
+            <!-- 20 -->
+            <div class="event bottom phase-split" style="grid-column: 20">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="#ref-redesign-54a387c">
+                <div class="date">13 Jan 2026 • 00:01</div>
+                <div class="title">LWLS_AP_Redesign split</div>
+                <div class="one">Clean audio pipeline branch</div>
+              </a>
+            </div>
+
+            <!-- 21 -->
+            <div class="event top phase-split" style="grid-column: 21">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="#ref-k1-66f3a06">
+                <div class="date">13 Jan 2026 • 01:05</div>
+                <div class="title">UDP time-sync</div>
+                <div class="one">Dedicated time-sync protocol</div>
+              </a>
+            </div>
+
+            <!-- 22 -->
+            <div class="event bottom phase-split" style="grid-column: 22">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="#ref-k1-62f2658">
+                <div class="date">13 Jan 2026 • 01:05</div>
+                <div class="title">Fanout disarm</div>
+                <div class="one">Disarm on WS disconnect</div>
+              </a>
+            </div>
+
+            <!-- 23 -->
+            <div class="event top phase-split" style="grid-column: 23">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="#ref-k1-fb2815e">
+                <div class="date">13 Jan 2026 • 13:46</div>
+                <div class="title">Registry callbacks</div>
+                <div class="one">State transition events</div>
+              </a>
+            </div>
+
+            <!-- 24 -->
+            <div class="event bottom phase-split" style="grid-column: 24">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="#ref-k1-047cc5c">
+                <div class="date">13 Jan 2026 • 13:50</div>
+                <div class="title">Hub dashboard</div>
+                <div class="one">Unified LVGL monitoring UI</div>
+              </a>
+            </div>
+
+            <!-- 25 -->
+            <div class="event top phase-bringup" style="grid-column: 25">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/prompt/1226" target="_blank" rel="noopener noreferrer">
+                <div class="date">13 Jan 2026 • 16:24</div>
+                <div class="title">Phase 1 start</div>
+                <div class="one">PRD/Blueprint drive work</div>
+              </a>
+            </div>
+
+            <!-- 26 -->
+            <div class="event bottom phase-bringup" style="grid-column: 26">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/observation/13675" target="_blank" rel="noopener noreferrer">
+                <div class="date">13 Jan 2026 • 17:16</div>
+                <div class="title">Phase 1 implemented</div>
+                <div class="one">HubState + batching live</div>
+              </a>
+            </div>
+
+            <!-- 27 -->
+            <div class="event top phase-bringup" style="grid-column: 27">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/observation/13676" target="_blank" rel="noopener noreferrer">
+                <div class="date">13 Jan 2026 • 17:56</div>
+                <div class="title">Encoders wired</div>
+                <div class="one">UI→HubState runtime set</div>
+              </a>
+            </div>
+
+            <!-- 28 -->
+            <div class="event bottom phase-bringup" style="grid-column: 28">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/observation/13677" target="_blank" rel="noopener noreferrer">
+                <div class="date">13 Jan 2026 • 18:14</div>
+                <div class="title">Encoder mapping fixed</div>
+                <div class="one">Legacy index order restored</div>
+              </a>
+            </div>
+
+            <!-- 29 -->
+            <div class="event top phase-bringup" style="grid-column: 29">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/observation/13678" target="_blank" rel="noopener noreferrer">
+                <div class="date">13 Jan 2026 • 18:48</div>
+                <div class="title">Hub→node wired</div>
+                <div class="one">First end-to-end validation</div>
+              </a>
+            </div>
+
+            <!-- 30 -->
+            <div class="event bottom phase-bringup" style="grid-column: 30">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/prompt/1233" target="_blank" rel="noopener noreferrer">
+                <div class="date">13 Jan 2026 • 19:04</div>
+                <div class="title">Reconnect failure</div>
+                <div class="one">KA timeout, node lost</div>
+              </a>
+            </div>
+
+            <!-- 31 -->
+            <div class="event top phase-bringup" style="grid-column: 31">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/prompt/1234" target="_blank" rel="noopener noreferrer">
+                <div class="date">13 Jan 2026 • 19:43</div>
+                <div class="title">End-to-end trace</div>
+                <div class="one">Hub sends, node lags</div>
+              </a>
+            </div>
+
+            <!-- 32 -->
+            <div class="event bottom phase-bringup" style="grid-column: 32">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/observation/13690" target="_blank" rel="noopener noreferrer">
+                <div class="date">13 Jan 2026 • 20:46</div>
+                <div class="title">TS/UDP log gate</div>
+                <div class="one">Stop serial flooding</div>
+              </a>
+            </div>
+
+            <!-- 33 -->
+            <div class="event top phase-stabilise" style="grid-column: 33">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/prompt/1247" target="_blank" rel="noopener noreferrer">
+                <div class="date">13 Jan 2026 • 21:28</div>
+                <div class="title">Zones override</div>
+                <div class="one">ZONES mode masks globals</div>
+              </a>
+            </div>
+
+            <!-- 34 -->
+            <div class="event bottom phase-stabilise" style="grid-column: 34">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/observation/13693" target="_blank" rel="noopener noreferrer">
+                <div class="date">13 Jan 2026 • 21:33</div>
+                <div class="title">Time-sync sign fixed</div>
+                <div class="one">applyAt no longer +29s</div>
+              </a>
+            </div>
+
+            <!-- 35 -->
+            <div class="event top phase-stabilise" style="grid-column: 35">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/observation/13696" target="_blank" rel="noopener noreferrer">
+                <div class="date">13 Jan 2026 • 22:30</div>
+                <div class="title">WDT mitigation</div>
+                <div class="one">Move work off async</div>
+              </a>
+            </div>
+
+            <!-- 36 -->
+            <div class="event bottom phase-stabilise" style="grid-column: 36">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/observation/13697" target="_blank" rel="noopener noreferrer">
+                <div class="date">13 Jan 2026 • 22:39</div>
+                <div class="title">Stack mapped</div>
+                <div class="one">WDT traced to LVGL</div>
+              </a>
+            </div>
+
+            <!-- 37 -->
+            <div class="event top phase-stabilise" style="grid-column: 37">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/observation/13698" target="_blank" rel="noopener noreferrer">
+                <div class="date">13 Jan 2026 • 23:40</div>
+                <div class="title">Audit written</div>
+                <div class="one">Breakpoints documented</div>
+              </a>
+            </div>
+
+            <!-- 38 -->
+            <div class="event bottom phase-stabilise" style="grid-column: 38">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/observation/13699" target="_blank" rel="noopener noreferrer">
+                <div class="date">14 Jan 2026 • 00:27</div>
+                <div class="title">Legacy paths back</div>
+                <div class="one">Presets/storage included</div>
+              </a>
+            </div>
+
+            <!-- 39 -->
+            <div class="event top phase-stabilise" style="grid-column: 39">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/observation/13701" target="_blank" rel="noopener noreferrer">
+                <div class="date">14 Jan 2026 • 04:19</div>
+                <div class="title">WS queue overflow</div>
+                <div class="one">Socket closed on flood</div>
+              </a>
+            </div>
+
+            <!-- 40 -->
+            <div class="event bottom phase-stabilise" style="grid-column: 40">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/observation/13702" target="_blank" rel="noopener noreferrer">
+                <div class="date">14 Jan 2026 • 04:36</div>
+                <div class="title">Backpressure fix</div>
+                <div class="one">Drop instead of close</div>
+              </a>
+            </div>
+
+            <!-- 41 -->
+            <div class="event top phase-stabilise" style="grid-column: 41">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/observation/13703" target="_blank" rel="noopener noreferrer">
+                <div class="date">14 Jan 2026 • 04:42</div>
+                <div class="title">Hub flashed</div>
+                <div class="one">WS headroom increased</div>
+              </a>
+            </div>
+
+            <!-- 42 -->
+            <div class="event bottom phase-stabilise" style="grid-column: 42">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/observation/13704" target="_blank" rel="noopener noreferrer">
+                <div class="date">14 Jan 2026 • 05:12</div>
+                <div class="title">Zones opt-in</div>
+                <div class="one">Snapshot gated by flag</div>
+              </a>
+            </div>
+
+            <!-- 43 -->
+            <div class="event top phase-stabilise" style="grid-column: 43">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/observation/13705" target="_blank" rel="noopener noreferrer">
+                <div class="date">14 Jan 2026 • 05:22</div>
+                <div class="title">Both reflashed</div>
+                <div class="one">Hub+Node sync baseline</div>
+              </a>
+            </div>
+
+            <!-- 44 -->
+            <div class="event bottom phase-stabilise" style="grid-column: 44">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/observation/13706" target="_blank" rel="noopener noreferrer">
+                <div class="date">14 Jan 2026 • 05:25</div>
+                <div class="title">Local cycle bug</div>
+                <div class="one">Invalid effect ID spam</div>
+              </a>
+            </div>
+
+            <!-- 45 -->
+            <div class="event top phase-consolidate" style="grid-column: 45">
+              <div class="dot"></div>
+              <div class="stem"></div>
+              <a class="card" href="http://127.0.0.1:37777/api/prompt/1274" target="_blank" rel="noopener noreferrer">
+                <div class="date">14 Jan 2026 • 15:04</div>
+                <div class="title">Memory pipeline</div>
+                <div class="one">Import + gem promotion</div>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <details id="timeline-text">
+        <summary>Complete event list (text alternative)</summary>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>When</th>
+              <th>Event</th>
+              <th>Link</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td>1 Jan 19:35</td>
+              <td>TempoTracker + WebServer — Beat detection + modular handlers</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/10039" target="_blank" rel="noopener noreferrer"><code>obs#10039</code></a></td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>1 Jan 21:56</td>
+              <td>Keystroke regression — Serial control broke after debug changes</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/10121" target="_blank" rel="noopener noreferrer"><code>obs#10121</code></a></td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td>2 Jan 18:51</td>
+              <td>Tab5.encoder flashed — First successful hardware upload</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/10420" target="_blank" rel="noopener noreferrer"><code>obs#10420</code></a></td>
+            </tr>
+            <tr>
+              <td>4</td>
+              <td>2 Jan 18:56</td>
+              <td>Firmware relocated — Move to firmware/v2 layout</td>
+              <td><a href="#ref-lwls-dcf5834"><code>Lightwave-Ledstrip@dcf5834</code></a></td>
+            </tr>
+            <tr>
+              <td>5</td>
+              <td>2 Jan 18:57</td>
+              <td>Tab5.encoder created — ESP32-P4 encoder controller</td>
+              <td><a href="#ref-lwls-c4c74be"><code>Lightwave-Ledstrip@c4c74be</code></a></td>
+            </tr>
+            <tr>
+              <td>6</td>
+              <td>2 Jan 19:08</td>
+              <td>WS client core — Reconnect + rate limiting</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/10466" target="_blank" rel="noopener noreferrer"><code>obs#10466</code></a></td>
+            </tr>
+            <tr>
+              <td>7</td>
+              <td>2 Jan 19:19</td>
+              <td>WS message router — Type dispatch for protocol</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/10509" target="_blank" rel="noopener noreferrer"><code>obs#10509</code></a></td>
+            </tr>
+            <tr>
+              <td>8</td>
+              <td>2 Jan 19:22</td>
+              <td>WS client ported — Tab5.encoder integration</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/10537" target="_blank" rel="noopener noreferrer"><code>obs#10537</code></a></td>
+            </tr>
+            <tr>
+              <td>9</td>
+              <td>2 Jan 20:26</td>
+              <td>ParameterHandler sync — Dual units + WS synchronisation</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/10597" target="_blank" rel="noopener noreferrer"><code>obs#10597</code></a></td>
+            </tr>
+            <tr>
+              <td>10</td>
+              <td>3 Jan 04:58</td>
+              <td>WiFi+WS milestone — Integration committed</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/11124" target="_blank" rel="noopener noreferrer"><code>obs#11124</code></a></td>
+            </tr>
+            <tr>
+              <td>11</td>
+              <td>3 Jan 14:09</td>
+              <td>Tab5 build hook — Pre-build toolchain wiring</td>
+              <td><a href="#ref-lwls-c93124e"><code>Lightwave-Ledstrip@c93124e</code></a></td>
+            </tr>
+            <tr>
+              <td>12</td>
+              <td>8 Jan 18:40</td>
+              <td>TempoTracker logging — Native-safe debug counters</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/12595" target="_blank" rel="noopener noreferrer"><code>obs#12595</code></a></td>
+            </tr>
+            <tr>
+              <td>13</td>
+              <td>11 Jan 00:45</td>
+              <td>Dither bench — Comparative dithering report tool</td>
+              <td><a href="#ref-lwls-78fbeab"><code>Lightwave-Ledstrip@78fbeab</code></a></td>
+            </tr>
+            <tr>
+              <td>14</td>
+              <td>12 Jan 03:51</td>
+              <td>Refactor planning — Plan legacy→modern pipeline</td>
+              <td><a href="http://127.0.0.1:37777/api/prompt/1190" target="_blank" rel="noopener noreferrer"><code>prompt#1190</code></a></td>
+            </tr>
+            <tr>
+              <td>15</td>
+              <td>12 Jan 03:52</td>
+              <td>MCP setup — Context-Engineer wired in</td>
+              <td><a href="http://127.0.0.1:37777/api/prompt/1191" target="_blank" rel="noopener noreferrer"><code>prompt#1191</code></a></td>
+            </tr>
+            <tr>
+              <td>16</td>
+              <td>12 Jan 06:40</td>
+              <td>K1.LightwaveOS created — Hub↔node architecture lands</td>
+              <td><a href="#ref-k1-1de6457"><code>K1.LightwaveOS@1de6457</code></a></td>
+            </tr>
+            <tr>
+              <td>17</td>
+              <td>12 Jan 08:27</td>
+              <td>Hardware correction — SPH0645 is I2S (not PDM)</td>
+              <td><a href="http://127.0.0.1:37777/api/prompt/1209" target="_blank" rel="noopener noreferrer"><code>prompt#1209</code></a></td>
+            </tr>
+            <tr>
+              <td>18</td>
+              <td>12 Jan 08:56</td>
+              <td>WS server switch — Native server on Tab5</td>
+              <td><a href="#ref-k1-3abef3b"><code>K1.LightwaveOS@3abef3b</code></a></td>
+            </tr>
+            <tr>
+              <td>19</td>
+              <td>12 Jan 16:46</td>
+              <td>Tab5 pure Arduino — Migrate off ESP-IDF mix</td>
+              <td><a href="#ref-k1-08a8060"><code>K1.LightwaveOS@08a8060</code></a></td>
+            </tr>
+            <tr>
+              <td>20</td>
+              <td>13 Jan 00:01</td>
+              <td>LWLS_AP_Redesign split — Clean audio pipeline branch</td>
+              <td><a href="#ref-redesign-54a387c"><code>LWLS_AP_Redesign@54a387c</code></a></td>
+            </tr>
+            <tr>
+              <td>21</td>
+              <td>13 Jan 01:05</td>
+              <td>UDP time-sync — Dedicated time-sync protocol</td>
+              <td><a href="#ref-k1-66f3a06"><code>K1.LightwaveOS@66f3a06</code></a></td>
+            </tr>
+            <tr>
+              <td>22</td>
+              <td>13 Jan 01:05</td>
+              <td>Fanout disarm — Disarm on WS disconnect</td>
+              <td><a href="#ref-k1-62f2658"><code>K1.LightwaveOS@62f2658</code></a></td>
+            </tr>
+            <tr>
+              <td>23</td>
+              <td>13 Jan 13:46</td>
+              <td>Registry callbacks — State transition events</td>
+              <td><a href="#ref-k1-fb2815e"><code>K1.LightwaveOS@fb2815e</code></a></td>
+            </tr>
+            <tr>
+              <td>24</td>
+              <td>13 Jan 13:50</td>
+              <td>Hub dashboard — Unified LVGL monitoring UI</td>
+              <td><a href="#ref-k1-047cc5c"><code>K1.LightwaveOS@047cc5c</code></a></td>
+            </tr>
+            <tr>
+              <td>25</td>
+              <td>13 Jan 16:24</td>
+              <td>Phase 1 start — PRD/Blueprint drive work</td>
+              <td><a href="http://127.0.0.1:37777/api/prompt/1226" target="_blank" rel="noopener noreferrer"><code>prompt#1226</code></a></td>
+            </tr>
+            <tr>
+              <td>26</td>
+              <td>13 Jan 17:16</td>
+              <td>Phase 1 implemented — HubState + batching live</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/13675" target="_blank" rel="noopener noreferrer"><code>obs#13675</code></a></td>
+            </tr>
+            <tr>
+              <td>27</td>
+              <td>13 Jan 17:56</td>
+              <td>Encoders wired — UI→HubState runtime set</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/13676" target="_blank" rel="noopener noreferrer"><code>obs#13676</code></a></td>
+            </tr>
+            <tr>
+              <td>28</td>
+              <td>13 Jan 18:14</td>
+              <td>Encoder mapping fixed — Legacy index order restored</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/13677" target="_blank" rel="noopener noreferrer"><code>obs#13677</code></a></td>
+            </tr>
+            <tr>
+              <td>29</td>
+              <td>13 Jan 18:48</td>
+              <td>Hub→node wired — First end-to-end validation</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/13678" target="_blank" rel="noopener noreferrer"><code>obs#13678</code></a></td>
+            </tr>
+            <tr>
+              <td>30</td>
+              <td>13 Jan 19:04</td>
+              <td>Reconnect failure — KA timeout, node lost</td>
+              <td><a href="http://127.0.0.1:37777/api/prompt/1233" target="_blank" rel="noopener noreferrer"><code>prompt#1233</code></a></td>
+            </tr>
+            <tr>
+              <td>31</td>
+              <td>13 Jan 19:43</td>
+              <td>End-to-end trace — Hub sends, node lags</td>
+              <td><a href="http://127.0.0.1:37777/api/prompt/1234" target="_blank" rel="noopener noreferrer"><code>prompt#1234</code></a></td>
+            </tr>
+            <tr>
+              <td>32</td>
+              <td>13 Jan 20:46</td>
+              <td>TS/UDP log gate — Stop serial flooding</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/13690" target="_blank" rel="noopener noreferrer"><code>obs#13690</code></a></td>
+            </tr>
+            <tr>
+              <td>33</td>
+              <td>13 Jan 21:28</td>
+              <td>Zones override — ZONES mode masks globals</td>
+              <td><a href="http://127.0.0.1:37777/api/prompt/1247" target="_blank" rel="noopener noreferrer"><code>prompt#1247</code></a></td>
+            </tr>
+            <tr>
+              <td>34</td>
+              <td>13 Jan 21:33</td>
+              <td>Time-sync sign fixed — applyAt no longer +29s</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/13693" target="_blank" rel="noopener noreferrer"><code>obs#13693</code></a></td>
+            </tr>
+            <tr>
+              <td>35</td>
+              <td>13 Jan 22:30</td>
+              <td>WDT mitigation — Move work off async</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/13696" target="_blank" rel="noopener noreferrer"><code>obs#13696</code></a></td>
+            </tr>
+            <tr>
+              <td>36</td>
+              <td>13 Jan 22:39</td>
+              <td>Stack mapped — WDT traced to LVGL</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/13697" target="_blank" rel="noopener noreferrer"><code>obs#13697</code></a></td>
+            </tr>
+            <tr>
+              <td>37</td>
+              <td>13 Jan 23:40</td>
+              <td>Audit written — Breakpoints documented</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/13698" target="_blank" rel="noopener noreferrer"><code>obs#13698</code></a></td>
+            </tr>
+            <tr>
+              <td>38</td>
+              <td>14 Jan 00:27</td>
+              <td>Legacy paths back — Presets/storage included</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/13699" target="_blank" rel="noopener noreferrer"><code>obs#13699</code></a></td>
+            </tr>
+            <tr>
+              <td>39</td>
+              <td>14 Jan 04:19</td>
+              <td>WS queue overflow — Socket closed on flood</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/13701" target="_blank" rel="noopener noreferrer"><code>obs#13701</code></a></td>
+            </tr>
+            <tr>
+              <td>40</td>
+              <td>14 Jan 04:36</td>
+              <td>Backpressure fix — Drop instead of close</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/13702" target="_blank" rel="noopener noreferrer"><code>obs#13702</code></a></td>
+            </tr>
+            <tr>
+              <td>41</td>
+              <td>14 Jan 04:42</td>
+              <td>Hub flashed — WS headroom increased</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/13703" target="_blank" rel="noopener noreferrer"><code>obs#13703</code></a></td>
+            </tr>
+            <tr>
+              <td>42</td>
+              <td>14 Jan 05:12</td>
+              <td>Zones opt-in — Snapshot gated by flag</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/13704" target="_blank" rel="noopener noreferrer"><code>obs#13704</code></a></td>
+            </tr>
+            <tr>
+              <td>43</td>
+              <td>14 Jan 05:22</td>
+              <td>Both reflashed — Hub+Node sync baseline</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/13705" target="_blank" rel="noopener noreferrer"><code>obs#13705</code></a></td>
+            </tr>
+            <tr>
+              <td>44</td>
+              <td>14 Jan 05:25</td>
+              <td>Local cycle bug — Invalid effect ID spam</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/13706" target="_blank" rel="noopener noreferrer"><code>obs#13706</code></a></td>
+            </tr>
+            <tr>
+              <td>45</td>
+              <td>14 Jan 15:04</td>
+              <td>Memory pipeline — Import + gem promotion</td>
+              <td><a href="http://127.0.0.1:37777/api/prompt/1274" target="_blank" rel="noopener noreferrer"><code>prompt#1274</code></a></td>
+            </tr>
+          </tbody>
+        </table>
+      </details>
+
+      <details>
+        <summary>Appendix: WebSocket control-path milestones (Jan 2–3)</summary>
+        <p class="sub" style="padding: 0 10px">
+          High-signal claude-mem entries related to Tab5.encoder WebSocket reliability, routing, and encoder parameter synchronisation.
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th>When</th>
+              <th>Topic</th>
+              <th>Link</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>2 Jan 19:08</td>
+              <td>WS client core: reconnection + rate limiting</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/10466" target="_blank" rel="noopener noreferrer"><code>obs#10466</code></a></td>
+            </tr>
+            <tr>
+              <td>2 Jan 19:19</td>
+              <td>WS router: protocol type dispatch</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/10509" target="_blank" rel="noopener noreferrer"><code>obs#10509</code></a></td>
+            </tr>
+            <tr>
+              <td>2 Jan 19:21</td>
+              <td>Tab5.encoder WS client rate limiting</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/10533" target="_blank" rel="noopener noreferrer"><code>obs#10533</code></a></td>
+            </tr>
+            <tr>
+              <td>2 Jan 19:22</td>
+              <td>WebSocketClient ported to Tab5.encoder</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/10537" target="_blank" rel="noopener noreferrer"><code>obs#10537</code></a></td>
+            </tr>
+            <tr>
+              <td>2 Jan 19:22</td>
+              <td>Tab5.encoder message routing layer</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/10539" target="_blank" rel="noopener noreferrer"><code>obs#10539</code></a></td>
+            </tr>
+            <tr>
+              <td>2 Jan 19:55</td>
+              <td>ParameterHandler: encoder→WS synchronisation</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/10556" target="_blank" rel="noopener noreferrer"><code>obs#10556</code></a></td>
+            </tr>
+            <tr>
+              <td>2 Jan 20:26</td>
+              <td>ParameterHandler: dual-unit + sync implementation</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/10597" target="_blank" rel="noopener noreferrer"><code>obs#10597</code></a></td>
+            </tr>
+            <tr>
+              <td>3 Jan 04:58</td>
+              <td>Milestone F: WiFi + WebSocket integration</td>
+              <td><a href="http://127.0.0.1:37777/api/observation/11124" target="_blank" rel="noopener noreferrer"><code>obs#11124</code></a></td>
+            </tr>
+          </tbody>
+        </table>
+      </details>
+
+      <details>
+        <summary>Repo evidence (git commits)</summary>
+        <p class="sub" style="padding: 0 10px">
+          These events were not present in Codex chat logs; they are sourced from local git history in related repos.
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th>Ref</th>
+              <th>Repo</th>
+              <th>Commit</th>
+              <th>When</th>
+              <th>Subject</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr id="ref-lwls-dcf5834">
+              <td><code>ref-lwls-dcf5834</code></td>
+              <td><code>Lightwave-Ledstrip</code></td>
+              <td><code>dcf5834</code></td>
+              <td>2 Jan 2026 • 18:56</td>
+              <td>refactor(project): relocate v2/ firmware to firmware/v2/</td>
+            </tr>
+            <tr id="ref-lwls-c4c74be">
+              <td><code>ref-lwls-c4c74be</code></td>
+              <td><code>Lightwave-Ledstrip</code></td>
+              <td><code>c4c74be</code></td>
+              <td>2 Jan 2026 • 18:57</td>
+              <td>feat(Tab5.encoder): M5Stack Tab5 ESP32-P4 encoder controller</td>
+            </tr>
+            <tr id="ref-lwls-c93124e">
+              <td><code>ref-lwls-c93124e</code></td>
+              <td><code>Lightwave-Ledstrip</code></td>
+              <td><code>c93124e</code></td>
+              <td>3 Jan 2026 • 14:09</td>
+              <td>docs(Tab5): fix build instructions + add pre-build hook</td>
+            </tr>
+            <tr id="ref-lwls-78fbeab">
+              <td><code>ref-lwls-78fbeab</code></td>
+              <td><code>Lightwave-Ledstrip</code></td>
+              <td><code>78fbeab</code></td>
+              <td>11 Jan 2026 • 00:45</td>
+              <td>feat(tools): Complete dither_bench implementation with comparative report</td>
+            </tr>
+            <tr id="ref-k1-1de6457">
+              <td><code>ref-k1-1de6457</code></td>
+              <td><code>K1.LightwaveOS</code></td>
+              <td><code>1de6457</code></td>
+              <td>12 Jan 2026 • 06:40</td>
+              <td>feat: Complete LightwaveOS Hub/Node Architecture Implementation</td>
+            </tr>
+            <tr id="ref-k1-3abef3b">
+              <td><code>ref-k1-3abef3b</code></td>
+              <td><code>K1.LightwaveOS</code></td>
+              <td><code>3abef3b</code></td>
+              <td>12 Jan 2026 • 08:56</td>
+              <td>feat(hub): Switch Tab5 to ESP-IDF native WebSocket server</td>
+            </tr>
+            <tr id="ref-k1-08a8060">
+              <td><code>ref-k1-08a8060</code></td>
+              <td><code>K1.LightwaveOS</code></td>
+              <td><code>08a8060</code></td>
+              <td>12 Jan 2026 • 16:46</td>
+              <td>refactor(Tab5): migrate from ESP-IDF+Arduino to pure Arduino framework</td>
+            </tr>
+            <tr id="ref-k1-66f3a06">
+              <td><code>ref-k1-66f3a06</code></td>
+              <td><code>K1.LightwaveOS</code></td>
+              <td><code>66f3a06</code></td>
+              <td>13 Jan 2026 • 01:05</td>
+              <td>feat(network): add dedicated UDP time-sync protocol</td>
+            </tr>
+            <tr id="ref-k1-62f2658">
+              <td><code>ref-k1-62f2658</code></td>
+              <td><code>K1.LightwaveOS</code></td>
+              <td><code>62f2658</code></td>
+              <td>13 Jan 2026 • 01:05</td>
+              <td>fix(network): disarm UDP fanout on WebSocket disconnect</td>
+            </tr>
+            <tr id="ref-k1-fb2815e">
+              <td><code>ref-k1-fb2815e</code></td>
+              <td><code>K1.LightwaveOS</code></td>
+              <td><code>fb2815e</code></td>
+              <td>13 Jan 2026 • 13:46</td>
+              <td>feat(hub-registry): add event callback system for state transitions</td>
+            </tr>
+            <tr id="ref-k1-047cc5c">
+              <td><code>ref-k1-047cc5c</code></td>
+              <td><code>K1.LightwaveOS</code></td>
+              <td><code>047cc5c</code></td>
+              <td>13 Jan 2026 • 13:50</td>
+              <td>feat(hub-ui): implement unified LVGL dashboard for real-time monitoring</td>
+            </tr>
+            <tr id="ref-redesign-54a387c">
+              <td><code>ref-redesign-54a387c</code></td>
+              <td><code>LWLS_AP_Redesign</code></td>
+              <td><code>54a387c</code></td>
+              <td>13 Jan 2026 • 00:01</td>
+              <td>Initial commit: Clean audio pipeline redesign project</td>
+            </tr>
+          </tbody>
+        </table>
+      </details>
+
+      <details>
+        <summary>Footnotes (IDs & evidence pointers)</summary>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Event</th>
+              <th>claude-mem pointers</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>26</td>
+              <td>Encoders wired</td>
+              <td>
+                <a href="http://127.0.0.1:37777/api/observation/13676" target="_blank" rel="noopener noreferrer"><code>obs#13676</code></a>
+                (Tab5 UI→HubState wired, Tab5 flashed)
+              </td>
+            </tr>
+            <tr>
+              <td>27</td>
+              <td>Reconnect failure</td>
+              <td>
+                <a href="http://127.0.0.1:37777/api/prompt/1233" target="_blank" rel="noopener noreferrer"><code>prompt#1233</code></a>
+                (KA timeout → LOST + WDT crash context)
+              </td>
+            </tr>
+            <tr>
+              <td>28</td>
+              <td>End-to-end trace</td>
+              <td>
+                <a href="http://127.0.0.1:37777/api/prompt/1234" target="_blank" rel="noopener noreferrer"><code>prompt#1234</code></a>
+                (Hub sends effectId, node responds late)
+              </td>
+            </tr>
+            <tr>
+              <td>29</td>
+              <td>TS/UDP log gate</td>
+              <td>
+                <a href="http://127.0.0.1:37777/api/observation/13690" target="_blank" rel="noopener noreferrer"><code>obs#13690</code></a>,
+                <a href="http://127.0.0.1:37777/api/observation/13692" target="_blank" rel="noopener noreferrer"><code>obs#13692</code></a>
+                (log flood silenced/gated)
+              </td>
+            </tr>
+            <tr>
+              <td>31</td>
+              <td>WDT mitigation</td>
+              <td>
+                <a href="http://127.0.0.1:37777/api/observation/13696" target="_blank" rel="noopener noreferrer"><code>obs#13696</code></a>
+                (move work off async_tcp callback)
+              </td>
+            </tr>
+            <tr>
+              <td>32</td>
+              <td>Stack mapped</td>
+              <td>
+                <a href="http://127.0.0.1:37777/api/observation/13697" target="_blank" rel="noopener noreferrer"><code>obs#13697</code></a>
+                (mapped WDT to LVGL call sites)
+              </td>
+            </tr>
+            <tr>
+              <td>34</td>
+              <td>Legacy paths back</td>
+              <td>
+                <a href="http://127.0.0.1:37777/api/observation/13699" target="_blank" rel="noopener noreferrer"><code>obs#13699</code></a>
+                (presets/storage re-enabled in build)
+              </td>
+            </tr>
+            <tr>
+              <td>33</td>
+              <td>Audit written</td>
+              <td>
+                <a href="http://127.0.0.1:37777/api/observation/13698" target="_blank" rel="noopener noreferrer"><code>obs#13698</code></a>
+                (system audit + root causes)
+              </td>
+            </tr>
+            <tr>
+              <td>35–37</td>
+              <td>WS backpressure</td>
+              <td>
+                <a href="http://127.0.0.1:37777/api/observation/13701" target="_blank" rel="noopener noreferrer"><code>obs#13701</code></a>
+                (queue overflow),
+                <a href="http://127.0.0.1:37777/api/observation/13702" target="_blank" rel="noopener noreferrer"><code>obs#13702</code></a>
+                (fix plan),
+                <a href="http://127.0.0.1:37777/api/observation/13703" target="_blank" rel="noopener noreferrer"><code>obs#13703</code></a>
+                (hub flashed)
+              </td>
+            </tr>
+            <tr>
+              <td>30, 38–39</td>
+              <td>Zones override &amp; opt-in</td>
+              <td>
+                <a href="http://127.0.0.1:37777/api/prompt/1247" target="_blank" rel="noopener noreferrer"><code>prompt#1247</code></a>
+                (ZONES evidence),
+                <a href="http://127.0.0.1:37777/api/observation/13704" target="_blank" rel="noopener noreferrer"><code>obs#13704</code></a>
+                (zonesEnabled + snapshot gating),
+                <a href="http://127.0.0.1:37777/api/observation/13705" target="_blank" rel="noopener noreferrer"><code>obs#13705</code></a>
+                (both firmwares reflashed)
+              </td>
+            </tr>
+            <tr>
+              <td>40</td>
+              <td>Local cycle bug</td>
+              <td>
+                <a href="http://127.0.0.1:37777/api/observation/13706" target="_blank" rel="noopener noreferrer"><code>obs#13706</code></a>
+                (diagnosis),
+                <a href="http://127.0.0.1:37777/api/observation/13707" target="_blank" rel="noopener noreferrer"><code>obs#13707</code></a>
+                (fixed + reflashed)
+              </td>
+            </tr>
+            <tr>
+              <td>41</td>
+              <td>Memory pipeline</td>
+              <td>
+                <a href="http://127.0.0.1:37777/api/prompt/1274" target="_blank" rel="noopener noreferrer"><code>prompt#1274</code></a>
+                (Codex→claude-mem import request),
+                <code>tools/claude_mem/import_codex_sessions.py</code>,
+                <code>tools/claude_mem/extract_codex_gems.py</code>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </details>
+    </footer>
+  </body>
+</html>

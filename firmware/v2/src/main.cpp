@@ -42,6 +42,18 @@
 #include "core/system/MemoryLeakDetector.h"
 #include "core/system/ValidationProfiler.h"
 
+// Effect Modifiers
+#include "effects/modifiers/ModifierStack.h"
+#include "effects/modifiers/SpeedModifier.h"
+#include "effects/modifiers/IntensityModifier.h"
+#include "effects/modifiers/ColorShiftModifier.h"
+#include "effects/modifiers/MirrorModifier.h"
+#include "effects/modifiers/GlitchModifier.h"
+#include "effects/modifiers/BlurModifier.h"
+#include "effects/modifiers/TrailModifier.h"
+#include "effects/modifiers/SaturationModifier.h"
+#include "effects/modifiers/StrobeModifier.h"
+
 // TempoTracker debug included via AudioNode.h
 
 #if FEATURE_AUDIO_SYNC
@@ -66,6 +78,19 @@ using namespace lightwaveos::zones;
 using namespace lightwaveos::transitions;
 using namespace lightwaveos::narrative;
 using namespace lightwaveos::plugins;
+using namespace lightwaveos::effects::modifiers;
+
+// ==================== Global Modifier Instances (ownership retained by main) ====================
+// These static instances are reused by the modifier stack (ownership NOT transferred)
+static SpeedModifier* s_speedModifier = nullptr;
+static IntensityModifier* s_intensityModifier = nullptr;
+static ColorShiftModifier* s_colorShiftModifier = nullptr;
+static MirrorModifier* s_mirrorModifier = nullptr;
+static GlitchModifier* s_glitchModifier = nullptr;
+static BlurModifier* s_blurModifier = nullptr;
+static TrailModifier* s_trailModifier = nullptr;
+static SaturationModifier* s_saturationModifier = nullptr;
+static StrobeModifier* s_strobeModifier = nullptr;
 
 // ==================== Global Zone Composer ====================
 
@@ -82,6 +107,44 @@ RendererNode* renderer = nullptr;
 
 // Current show index for serial navigation
 static uint8_t currentShowIndex = 0;
+
+// ==================== Helper Functions ====================
+
+/**
+ * @brief Ensure LittleFS is mounted for preset saves
+ * @return true if LittleFS is mounted and ready
+ */
+static bool ensureLittleFSMounted() {
+#if FEATURE_WEB_SERVER
+    // If WebServer exists and is running, use its mount management
+    if (webServerInstance) {
+        if (webServerInstance->isLittleFSMounted()) {
+            return true;
+        }
+        // Try to mount via WebServer
+        if (webServerInstance->mountLittleFS()) {
+            Serial.println("  LittleFS mounted via WebServer");
+            return true;
+        }
+    }
+#endif
+    
+    // Fallback: Try direct mount (when WebServer is disabled or not running)
+    if (LittleFS.begin(false)) {
+        Serial.println("  LittleFS mounted directly");
+        return true;
+    }
+    
+    // If mount failed, try formatting (handles corrupted filesystem)
+    Serial.println("  LittleFS mount failed, attempting format...");
+    if (LittleFS.begin(true)) {  // true = format if mount fails
+        Serial.println("  LittleFS formatted and mounted successfully");
+        return true;
+    }
+    
+    Serial.println("  LittleFS format failed - filesystem unavailable");
+    return false;
+}
 
 // ==================== Setup ====================
 
@@ -164,6 +227,13 @@ void setup() {
         }
     }
 
+    // Load narrative configuration from NVS
+    if (NARRATIVE.loadFromNVS()) {
+        LW_LOGI("Narrative Engine: Configuration loaded from NVS");
+    } else {
+        LW_LOGI("Narrative Engine: Using default configuration");
+    }
+
     // Start all nodes (RendererNode runs on Core 1 at 120 FPS)
     LW_LOGI("Starting Node Orchestrator...");
     if (!orchestrator.start()) {
@@ -193,15 +263,14 @@ void setup() {
 
     // Initialize Network (if enabled)
 #if FEATURE_WEB_SERVER
-    // Start WiFiManager BEFORE WebServer
+    // Start WiFiManager BEFORE WebServer (pattern from working commit 3c94ff7)
     LW_LOGI("Initializing WiFiManager...");
     WIFI_MANAGER.setCredentials(
         NetworkConfig::WIFI_SSID_VALUE,
         NetworkConfig::WIFI_PASSWORD_VALUE
     );
-    // Enable STA+AP mode: STA connects to network, AP provides fallback access
-    // AP SSID matches Tab5.encoder default: "LightwaveOS"
-    WIFI_MANAGER.enableSoftAP("LightwaveOS", "lightwave123", 1);
+    // STA-only: do not enable SoftAP fallback here.
+    // If you want AP provisioning, explicitly re-enable this call.
 
     if (!WIFI_MANAGER.begin()) {
         LW_LOGE("WiFiManager failed to start!");
@@ -220,25 +289,29 @@ void setup() {
         }
 
         if (WIFI_MANAGER.isConnected()) {
-            LW_LOGI("WiFi: CONNECTED to %s", NetworkConfig::WIFI_SSID_VALUE);
-            LW_LOGI("STA IP: %s", WiFi.localIP().toString().c_str());
-            if (WiFi.getMode() == WIFI_MODE_APSTA) {
-                LW_LOGI("AP IP: %s", WiFi.softAPIP().toString().c_str());
-            }
+            LW_LOGI("WiFi CONNECTED: %s (IP: %s)",
+                    WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
         } else if (WIFI_MANAGER.isAPMode()) {
-            LW_LOGI("WiFi: AP MODE (connect to LightwaveOS-Setup)");
-            LW_LOGI("AP IP: %s", WiFi.softAPIP().toString().c_str());
+            LW_LOGI("WiFi in AP mode: %s", WiFi.softAPIP().toString().c_str());
         }
     }
 
     // Start WebServer
+    // NOTE: Give WiFi stack time to stabilize and release temporary buffers.
+    // AsyncTCP creates a 8KB task (CONFIG_ASYNC_TCP_STACK_SIZE) which can fail
+    // if heap is fragmented from WiFi initialization.
+    delay(500);
     LW_LOGI("Starting Web Server...");
+    LW_LOGI("  Heap before WebServer: %lu bytes, largest block: %lu bytes",
+            ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 
     // Instantiate WebServer with dependencies
     webServerInstance = new WebServer(orchestrator, renderer);
 
     if (!webServerInstance->begin()) {
-        LW_LOGW("Web Server failed to start!");
+        LW_LOGE("Web Server failed to start! Check heap fragmentation.");
+        LW_LOGE("  Heap after failure: %lu bytes, largest block: %lu bytes",
+                ESP.getFreeHeap(), ESP.getMaxAllocHeap());
     } else {
         LW_LOGI("Web Server: RUNNING");
         LW_LOGI("REST API: http://lightwaveos.local/api/v1/");
@@ -255,6 +328,8 @@ void setup() {
     Serial.println("  n/N     - Next/Prev effect");
     Serial.println("  +/-     - Adjust brightness");
     Serial.println("  [/]     - Adjust speed");
+    Serial.println("  {/}     - Adjust mood (0=reactive, 255=smooth)");
+    Serial.println("  (/)     - Adjust saturation (0=grayscale, 255=vivid)");
     Serial.println("  ,/.     - Prev/Next palette (75 total)");
     Serial.println("  l       - List effects");
     Serial.println("  P       - List palettes");
@@ -280,8 +355,7 @@ void setup() {
     Serial.println("\nShow Playback Commands:");
     Serial.println("  W       - List all shows (10 presets)");
     Serial.println("  w       - Toggle show playback");
-    Serial.println("  </>     - Previous/Next show");
-    Serial.println("  {/}     - Seek backward/forward 30s");
+    Serial.println("  </>     - Previous/Next show (also seek when playing)");
     Serial.println("  #       - Print show status");
     Serial.println("\nColor Correction Commands:");
     Serial.println("  c       - Cycle correction mode (OFF→HSV→RGB→BOTH→OFF)");
@@ -376,7 +450,13 @@ void loop() {
                 case '[': case ']':  // Speed
                 case ',': case '.':  // Palette
                 case '<': case '>':  // Show navigation
-                case '{': case '}':  // Seek
+                case '{': case '}':  // Mood
+                case '(': case ')':  // Saturation
+                case 'M':  // Toggle Mirror modifier
+                case 'G':  // Toggle Glitch modifier
+                case 'F':  // Toggle Trail modifier (Fade)
+                case 'X':  // Toggle Strobe modifier
+                case '~':  // Clear all modifiers
                     isImmediate = true;
                     break;
             }
@@ -1118,8 +1198,10 @@ void loop() {
 
                 if (args.length() == 0 || args == "help") {
                     Serial.println("net status");
-                    Serial.println("net sta [seconds]   (seconds implies auto-revert to AP-only)");
-                    Serial.println("net ap");
+                    Serial.println("net sta [seconds]   - Enable STA (APSTA window if heap allows, then STA-only)");
+                    Serial.println("                      seconds: APSTA window duration (30-300s, default 60s)");
+                    Serial.println("                      Note: AP may be dropped to reclaim heap");
+                    Serial.println("net ap              - Force AP-only mode");
                 } else if (args == "status") {
                     Serial.printf("WiFi state: %s\n", WIFI_MANAGER.getStateString().c_str());
                     Serial.printf("AP IP: %s (clients=%d)\n",
@@ -1136,12 +1218,13 @@ void loop() {
 
                     if (rest.length() == 0) {
                         WIFI_MANAGER.requestSTAEnable(0, false);
-                        Serial.println("Requested: STA (no auto-revert)");
+                        Serial.println("Requested: STA (APSTA window: 60s if heap allows, then STA-only)");
                     } else {
                         uint32_t seconds = (uint32_t)rest.toInt();
                         WIFI_MANAGER.requestSTAEnable(seconds * 1000u, true);
-                        Serial.printf("Requested: STA window %lu seconds (auto-revert to AP-only)\n",
+                        Serial.printf("Requested: STA with APSTA window %lu seconds (auto-revert to AP-only after disconnect)\n",
                                       (unsigned long)seconds);
+                        Serial.println("Note: AP may be dropped if heap pressure detected or window expires");
                     }
                 } else if (args == "ap") {
                     WIFI_MANAGER.requestAPOnly();
@@ -1156,6 +1239,213 @@ void loop() {
                 Serial.println("Network disabled (FEATURE_WEB_SERVER=0)");
             }
 #endif
+        }
+
+        // -----------------------------------------------------------------
+        // Effect Modifier Commands: mod
+        // -----------------------------------------------------------------
+        else if (peekChar == 'm' && inputLower.startsWith("mod")) {
+            handledMulti = true;
+
+            String args = input.substring(3);
+            args.trim();
+
+            auto* modStack = renderer->getModifierStack();
+            if (!modStack) {
+                Serial.println("ERROR: Modifier stack not available");
+            } else if (args.length() == 0 || args == "help") {
+                // mod help
+                Serial.println("\n=== Effect Modifiers ===");
+                Serial.println("mod list              - List active modifiers");
+                Serial.println("mod add <type>        - Add modifier (default params)");
+                Serial.println("mod remove <type>     - Remove modifier");
+                Serial.println("mod clear             - Remove all modifiers");
+                Serial.println("\nTypes: speed, intensity, color_shift, mirror, glitch,");
+                Serial.println("       blur, trail, saturation, strobe");
+                Serial.println();
+            } else if (args == "list") {
+                // mod list
+                uint8_t count = modStack->getCount();
+                Serial.printf("\n=== Active Modifiers (%d/%d) ===\n", count, ModifierStack::MAX_MODIFIERS);
+                if (count == 0) {
+                    Serial.println("  (none)");
+                } else {
+                    for (uint8_t i = 0; i < count; i++) {
+                        auto* mod = modStack->getModifier(i);
+                        if (mod) {
+                            const auto& meta = mod->getMetadata();
+                            Serial.printf("  [%d] %s (%s)\n", i, meta.name,
+                                          mod->isEnabled() ? "enabled" : "disabled");
+                        }
+                    }
+                }
+                Serial.println();
+            } else if (args == "clear") {
+                // mod clear
+                modStack->clear();
+                Serial.println("All modifiers cleared");
+            } else if (args.startsWith("add ")) {
+                // mod add <type>
+                String typeStr = args.substring(4);
+                typeStr.trim();
+                typeStr.toLowerCase();
+
+                if (modStack->isFull()) {
+                    Serial.printf("ERROR: Modifier stack full (%d/%d)\n",
+                                  modStack->getCount(), ModifierStack::MAX_MODIFIERS);
+                } else {
+                    // Create dummy context for init
+                    lightwaveos::plugins::EffectContext ctx;
+                    ctx.leds = nullptr;
+                    ctx.ledCount = 320;
+                    ctx.brightness = renderer->getBrightness();
+                    ctx.speed = renderer->getSpeed();
+
+                    bool added = false;
+                    const char* modName = "unknown";
+
+                    if (typeStr == "speed") {
+                        if (!s_speedModifier) s_speedModifier = new SpeedModifier(1.5f);
+                        if (modStack->findByType(ModifierType::SPEED)) {
+                            Serial.println("ERROR: Speed modifier already active");
+                        } else if (modStack->add(s_speedModifier, ctx)) {
+                            added = true;
+                            modName = "Speed (1.5x)";
+                        }
+                    } else if (typeStr == "intensity") {
+                        if (!s_intensityModifier) s_intensityModifier = new IntensityModifier(
+                            IntensitySource::AUDIO_BEAT_PHASE, 1.0f, 0.5f);
+                        if (modStack->findByType(ModifierType::INTENSITY)) {
+                            Serial.println("ERROR: Intensity modifier already active");
+                        } else if (modStack->add(s_intensityModifier, ctx)) {
+                            added = true;
+                            modName = "Intensity (beat-phase)";
+                        }
+                    } else if (typeStr == "color_shift") {
+                        if (!s_colorShiftModifier) s_colorShiftModifier = new ColorShiftModifier(
+                            ColorShiftMode::AUTO_ROTATE, 0, 30.0f);
+                        if (modStack->findByType(ModifierType::COLOR_SHIFT)) {
+                            Serial.println("ERROR: ColorShift modifier already active");
+                        } else if (modStack->add(s_colorShiftModifier, ctx)) {
+                            added = true;
+                            modName = "ColorShift (auto-rotate 30/sec)";
+                        }
+                    } else if (typeStr == "mirror") {
+                        if (!s_mirrorModifier) s_mirrorModifier = new MirrorModifier(MirrorMode::LEFT_TO_RIGHT);
+                        if (modStack->findByType(ModifierType::MIRROR)) {
+                            Serial.println("ERROR: Mirror modifier already active");
+                        } else if (modStack->add(s_mirrorModifier, ctx)) {
+                            added = true;
+                            modName = "Mirror (left-to-right)";
+                        }
+                    } else if (typeStr == "glitch") {
+                        if (!s_glitchModifier) s_glitchModifier = new GlitchModifier(GlitchMode::PIXEL_FLIP, 0.1f);
+                        if (modStack->findByType(ModifierType::GLITCH)) {
+                            Serial.println("ERROR: Glitch modifier already active");
+                        } else if (modStack->add(s_glitchModifier, ctx)) {
+                            added = true;
+                            modName = "Glitch (pixel-flip 10%)";
+                        }
+                    } else if (typeStr == "blur") {
+                        if (!s_blurModifier) s_blurModifier = new BlurModifier(BlurMode::BOX, 2, 0.8f);
+                        if (modStack->findByType(ModifierType::BLUR)) {
+                            Serial.println("ERROR: Blur modifier already active");
+                        } else if (modStack->add(s_blurModifier, ctx)) {
+                            added = true;
+                            modName = "Blur (box, radius=2)";
+                        }
+                    } else if (typeStr == "trail") {
+                        if (!s_trailModifier) s_trailModifier = new TrailModifier(TrailMode::CONSTANT, 20, 5, 50);
+                        if (modStack->findByType(ModifierType::TRAIL)) {
+                            Serial.println("ERROR: Trail modifier already active");
+                        } else if (modStack->add(s_trailModifier, ctx)) {
+                            added = true;
+                            modName = "Trail (fade=20)";
+                        }
+                    } else if (typeStr == "saturation") {
+                        if (!s_saturationModifier) s_saturationModifier = new SaturationModifier(
+                            SatMode::VIBRANCE, 64, true);
+                        if (modStack->findByType(ModifierType::SATURATION)) {
+                            Serial.println("ERROR: Saturation modifier already active");
+                        } else if (modStack->add(s_saturationModifier, ctx)) {
+                            added = true;
+                            modName = "Saturation (vibrance +64)";
+                        }
+                    } else if (typeStr == "strobe") {
+                        if (!s_strobeModifier) s_strobeModifier = new StrobeModifier(
+                            StrobeMode::BEAT_SYNC, 1, 0.3f, 1.0f, 4.0f);
+                        if (modStack->findByType(ModifierType::STROBE)) {
+                            Serial.println("ERROR: Strobe modifier already active");
+                        } else if (modStack->add(s_strobeModifier, ctx)) {
+                            added = true;
+                            modName = "Strobe (beat-sync)";
+                        }
+                    } else {
+                        Serial.printf("ERROR: Unknown modifier type '%s'\n", typeStr.c_str());
+                        Serial.println("Valid types: speed, intensity, color_shift, mirror, glitch,");
+                        Serial.println("             blur, trail, saturation, strobe");
+                    }
+
+                    if (added) {
+                        Serial.printf("Added modifier: %s\n", modName);
+                        Serial.printf("Active modifiers: %d/%d\n", modStack->getCount(), ModifierStack::MAX_MODIFIERS);
+                    }
+                }
+            } else if (args.startsWith("remove ")) {
+                // mod remove <type>
+                String typeStr = args.substring(7);
+                typeStr.trim();
+                typeStr.toLowerCase();
+
+                ModifierType targetType;
+                bool validType = true;
+                const char* typeName = "unknown";
+
+                if (typeStr == "speed") {
+                    targetType = ModifierType::SPEED;
+                    typeName = "Speed";
+                } else if (typeStr == "intensity") {
+                    targetType = ModifierType::INTENSITY;
+                    typeName = "Intensity";
+                } else if (typeStr == "color_shift") {
+                    targetType = ModifierType::COLOR_SHIFT;
+                    typeName = "ColorShift";
+                } else if (typeStr == "mirror") {
+                    targetType = ModifierType::MIRROR;
+                    typeName = "Mirror";
+                } else if (typeStr == "glitch") {
+                    targetType = ModifierType::GLITCH;
+                    typeName = "Glitch";
+                } else if (typeStr == "blur") {
+                    targetType = ModifierType::BLUR;
+                    typeName = "Blur";
+                } else if (typeStr == "trail") {
+                    targetType = ModifierType::TRAIL;
+                    typeName = "Trail";
+                } else if (typeStr == "saturation") {
+                    targetType = ModifierType::SATURATION;
+                    typeName = "Saturation";
+                } else if (typeStr == "strobe") {
+                    targetType = ModifierType::STROBE;
+                    typeName = "Strobe";
+                } else {
+                    validType = false;
+                    Serial.printf("ERROR: Unknown modifier type '%s'\n", typeStr.c_str());
+                    Serial.println("Valid types: speed, intensity, color_shift, mirror, glitch,");
+                    Serial.println("             blur, trail, saturation, strobe");
+                }
+
+                if (validType) {
+                    if (modStack->removeByType(targetType)) {
+                        Serial.printf("Removed modifier: %s\n", typeName);
+                        Serial.printf("Active modifiers: %d/%d\n", modStack->getCount(), ModifierStack::MAX_MODIFIERS);
+                    } else {
+                        Serial.printf("ERROR: %s modifier not found in stack\n", typeName);
+                    }
+                }
+            } else {
+                Serial.println("Unknown mod command. Type 'mod' for help.");
+            }
         }
 
         if (handledMulti) {
@@ -1249,28 +1539,35 @@ void loop() {
                         
                         // Also save to preset library with timestamp name
                         if (presetMgr && zoneOk) {
-                            ZoneConfigData config;
-                            zoneConfigMgr->exportConfig(config);
-                            
-                            // Generate timestamp name
-                            struct tm timeinfo;
-                            char presetName[32];
-                            bool timeValid = false;
-                            
-                            // Try to get local time (requires NTP sync)
-                            if (getLocalTime(&timeinfo)) {
-                                strftime(presetName, sizeof(presetName), "preset-%Y%m%d-%H%M%S", &timeinfo);
-                                timeValid = true;
+                            // Ensure LittleFS is mounted before attempting preset save
+                            if (ensureLittleFSMounted()) {
+                                ZoneConfigData config;
+                                zoneConfigMgr->exportConfig(config);
+                                
+                                // Generate timestamp name
+                                struct tm timeinfo;
+                                char presetName[32];
+                                bool timeValid = false;
+                                
+                                // Try to get local time (requires NTP sync)
+                                if (getLocalTime(&timeinfo)) {
+                                    strftime(presetName, sizeof(presetName), "preset-%Y%m%d-%H%M%S", &timeinfo);
+                                    timeValid = true;
+                                } else {
+                                    // Fallback: use millis-based name if time not available
+                                    uint32_t millisNow = millis();
+                                    snprintf(presetName, sizeof(presetName), "preset-%lu", millisNow);
+                                }
+                                
+                                // Attempt preset save
+                                if (presetMgr->savePreset(presetName, config)) {
+                                    Serial.printf("  Preset saved: %s\n", presetName);
+                                } else {
+                                    // PresetManager::savePreset() already logs warnings
+                                    Serial.println("  Preset save failed (check logs above)");
+                                }
                             } else {
-                                // Fallback: use millis-based name if time not available
-                                uint32_t millisNow = millis();
-                                snprintf(presetName, sizeof(presetName), "preset-%lu", millisNow);
-                            }
-                            
-                            if (presetMgr->savePreset(presetName, config)) {
-                                Serial.printf("  Preset saved: %s\n", presetName);
-                            } else {
-                                Serial.printf("  Preset save failed: %s\n", presetName);
+                                Serial.println("  Preset save skipped: LittleFS not available");
                             }
                         }
                         
@@ -1700,34 +1997,49 @@ void loop() {
                     break;
 
                 case '{':
-                    // Seek backward 30s
+                    // Mood down (more reactive)
                     {
-                        ShowNode* showDir = orchestrator.getShowDirector();
-                        if (showDir && showDir->isPlaying()) {
-                            uint32_t elapsed = showDir->getElapsedMs();
-                            uint32_t newTime = (elapsed > 30000) ? (elapsed - 30000) : 0;
-                            Message seekMsg(MessageType::SHOW_SEEK, 0, 0, 0, newTime);
-                            showDir->send(seekMsg);
-                            Serial.printf("Seek: %d:%02d\n", newTime / 60000, (newTime % 60000) / 1000);
-                        } else {
-                            Serial.println("No show playing");
+                        uint8_t m = renderer->getMood();
+                        if (m > 0) {
+                            m = (m > 16) ? (m - 16) : 0;
+                            orchestrator.setMood(m);
+                            Serial.printf("Mood: %d (reactive)\n", m);
                         }
                     }
                     break;
 
                 case '}':
-                    // Seek forward 30s
+                    // Mood up (more smooth)
                     {
-                        ShowNode* showDir = orchestrator.getShowDirector();
-                        if (showDir && showDir->isPlaying()) {
-                            uint32_t elapsed = showDir->getElapsedMs();
-                            uint32_t remaining = showDir->getRemainingMs();
-                            uint32_t newTime = (remaining > 30000) ? (elapsed + 30000) : (elapsed + remaining);
-                            Message seekMsg(MessageType::SHOW_SEEK, 0, 0, 0, newTime);
-                            showDir->send(seekMsg);
-                            Serial.printf("Seek: %d:%02d\n", newTime / 60000, (newTime % 60000) / 1000);
-                        } else {
-                            Serial.println("No show playing");
+                        uint8_t m = renderer->getMood();
+                        if (m < 255) {
+                            m = (m < 239) ? (m + 16) : 255;
+                            orchestrator.setMood(m);
+                            Serial.printf("Mood: %d (smooth)\n", m);
+                        }
+                    }
+                    break;
+
+                case '(':
+                    // Saturation down (more grayscale)
+                    {
+                        uint8_t sat = renderer->getSaturation();
+                        if (sat > 0) {
+                            sat = (sat > 16) ? (sat - 16) : 0;
+                            orchestrator.setSaturation(sat);
+                            Serial.printf("Saturation: %d (grayscale)\n", sat);
+                        }
+                    }
+                    break;
+
+                case ')':
+                    // Saturation up (more vivid)
+                    {
+                        uint8_t sat = renderer->getSaturation();
+                        if (sat < 255) {
+                            sat = (sat < 239) ? (sat + 16) : 255;
+                            orchestrator.setSaturation(sat);
+                            Serial.printf("Saturation: %d (vivid)\n", sat);
                         }
                     }
                     break;
@@ -1900,6 +2212,111 @@ void loop() {
                             Serial.printf("  Version: %d\n", meta.version);
                         }
                         Serial.println();
+                    }
+                    break;
+
+                // ========== Effect Modifier Shortcuts ==========
+
+                case 'M':
+                    // Toggle Mirror modifier
+                    {
+                        using namespace lightwaveos::effects::modifiers;
+                        auto* stack = renderer->getModifierStack();
+                        auto* existing = stack->findByType(ModifierType::MIRROR);
+                        if (existing) {
+                            stack->removeByType(ModifierType::MIRROR);
+                            delete existing;
+                            Serial.println("Mirror: OFF");
+                        } else {
+                            auto* mirror = new MirrorModifier();
+                            lightwaveos::plugins::EffectContext ctx;
+                            ctx.leds = renderer->getLedBuffer();
+                            ctx.ledCount = LedConfig::TOTAL_LEDS;
+                            stack->add(mirror, ctx);
+                            Serial.println("Mirror: ON");
+                        }
+                    }
+                    break;
+
+                case 'G':
+                    // Toggle Glitch modifier
+                    {
+                        using namespace lightwaveos::effects::modifiers;
+                        auto* stack = renderer->getModifierStack();
+                        auto* existing = stack->findByType(ModifierType::GLITCH);
+                        if (existing) {
+                            stack->removeByType(ModifierType::GLITCH);
+                            delete existing;
+                            Serial.println("Glitch: OFF");
+                        } else {
+                            auto* glitch = new GlitchModifier(GlitchMode::PIXEL_FLIP, 0.3f);
+                            lightwaveos::plugins::EffectContext ctx;
+                            ctx.leds = renderer->getLedBuffer();
+                            ctx.ledCount = LedConfig::TOTAL_LEDS;
+                            stack->add(glitch, ctx);
+                            Serial.println("Glitch: ON (30%)");
+                        }
+                    }
+                    break;
+
+                case 'F':
+                    // Toggle Trail (Fade) modifier
+                    {
+                        using namespace lightwaveos::effects::modifiers;
+                        auto* stack = renderer->getModifierStack();
+                        auto* existing = stack->findByType(ModifierType::TRAIL);
+                        if (existing) {
+                            stack->removeByType(ModifierType::TRAIL);
+                            delete existing;
+                            Serial.println("Trail: OFF");
+                        } else {
+                            auto* trail = new TrailModifier(TrailMode::CONSTANT, 25);
+                            lightwaveos::plugins::EffectContext ctx;
+                            ctx.leds = renderer->getLedBuffer();
+                            ctx.ledCount = LedConfig::TOTAL_LEDS;
+                            stack->add(trail, ctx);
+                            Serial.println("Trail: ON (fade 25)");
+                        }
+                    }
+                    break;
+
+                case 'X':
+                    // Toggle Strobe modifier
+                    {
+                        using namespace lightwaveos::effects::modifiers;
+                        auto* stack = renderer->getModifierStack();
+                        auto* existing = stack->findByType(ModifierType::STROBE);
+                        if (existing) {
+                            stack->removeByType(ModifierType::STROBE);
+                            delete existing;
+                            Serial.println("Strobe: OFF");
+                        } else {
+                            auto* strobe = new StrobeModifier(StrobeMode::BEAT_SYNC, 4, 0.3f, 1.0f);
+                            lightwaveos::plugins::EffectContext ctx;
+                            ctx.leds = renderer->getLedBuffer();
+                            ctx.ledCount = LedConfig::TOTAL_LEDS;
+                            stack->add(strobe, ctx);
+                            Serial.println("Strobe: ON (beat-sync)");
+                        }
+                    }
+                    break;
+
+                case '~':
+                    // Clear all modifiers
+                    {
+                        using namespace lightwaveos::effects::modifiers;
+                        auto* stack = renderer->getModifierStack();
+                        // Get count before clearing
+                        uint8_t count = stack->getCount();
+                        // Delete all modifiers first
+                        for (uint8_t i = 0; i < count; i++) {
+                            IEffectModifier* mod = stack->getModifier(i);
+                            if (mod) {
+                                delete mod;
+                            }
+                        }
+                        stack->clear();
+                        Serial.printf("All modifiers cleared (%d removed)\n", count);
                     }
                     break;
             }

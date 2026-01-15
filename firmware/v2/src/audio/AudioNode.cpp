@@ -36,6 +36,10 @@
 #define LW_LOG_TAG "Audio"
 #include "utils/Log.h"
 
+// K1 front-end
+#include "k1/K1AudioFrontEnd.h"
+#include "k1/FeatureBus.h"
+
 // Runtime-configurable audio debug verbosity
 #include "AudioDebugConfig.h"
 
@@ -43,20 +47,21 @@
 // #include "tempo/TempoTracker.h" (Removed - Phase 2 cleanup)
 
 // Perceptual band weights for spectral flux calculation (derived from K1 research)
-// Bass bands weighted higher for better kick detection
+// Reduced disparity to detect weak beats (hi-hats, snares) - matches TempoTracker weights
+// Reduced from 4.67x to 2.4x disparity per research document recommendation
 namespace {
     constexpr float PERCEPTUAL_BAND_WEIGHTS[8] = {
-        1.4f,   // Band 0: Sub-bass (20-40Hz) - critical for kick drums
-        1.3f,   // Band 1: Bass (40-80Hz) - fundamental bass notes
+        1.2f,   // Band 0: Sub-bass (20-40Hz) - critical for kick drums
+        1.1f,   // Band 1: Bass (40-80Hz) - fundamental bass notes
         1.0f,   // Band 2: Low-mid (80-160Hz) - bass harmonics
-        0.9f,   // Band 3: Mid (160-320Hz) - lower vocals, snare body
-        0.8f,   // Band 4: Upper-mid (320-640Hz) - vocals, instruments
-        0.6f,   // Band 5: Presence (640-1280Hz) - clarity frequencies
-        0.4f,   // Band 6: Brilliance (1280-2560Hz) - sibilance, hi-hats
-        0.3f    // Band 7: Air (2560-5120Hz) - sparkle, treble transients
+        0.8f,   // Band 3: Mid (160-320Hz) - lower vocals, snare body
+        0.7f,   // Band 4: Upper-mid (320-640Hz) - vocals, instruments
+        0.5f,   // Band 5: Presence (640-1280Hz) - clarity frequencies
+        0.5f,   // Band 6: Brilliance (1280-2560Hz) - sibilance, hi-hats
+        0.5f    // Band 7: Air (2560-5120Hz) - sparkle, treble transients
     };
     constexpr float PERCEPTUAL_BAND_WEIGHT_SUM =
-        1.4f + 1.3f + 1.0f + 0.9f + 0.8f + 0.6f + 0.4f + 0.3f;  // 6.7f
+        1.2f + 1.1f + 1.0f + 0.8f + 0.7f + 0.5f + 0.5f + 0.5f;  // 6.3f
 }
 
 #ifndef NATIVE_BUILD
@@ -162,14 +167,17 @@ void AudioNode::setContractTuning(const AudioContractTuning& tuning)
     m_contractTuning = clamped;
     m_contractTuningSeq.store(v + 2U, std::memory_order_release);
 
-    // Apply tuning to TempoTracker
-    TempoTrackerTuning tt;
-    tt.hysteresisThreshold = clamped.tempoHysteresisThreshold;
-    tt.hysteresisFrames = clamped.tempoHysteresisFrames;
-    tt.magnitudeAlpha = clamped.tempoMagnitudeAlpha;
-    tt.silentDecay = clamped.tempoSilentDecay;
-    tt.silenceThreshold = clamped.tempoSilenceThreshold;
-    m_tempo.setTuning(tt);
+    // TempoTracker: DISABLED - replaced by Emotiscope tempo detection
+    // TempoTrackerTuning tt;
+    // tt.minBpm = clamped.bpmMin;
+    // tt.maxBpm = clamped.bpmMax;
+    // tt.lockStrength = clamped.phaseCorrectionGain;
+    // tt.confRise = 0.4f;
+    // tt.confFall = 0.2f;
+    // tt.onsetThreshK = 1.8f;
+    // tt.refractoryMs = 100;
+    // tt.baselineAlpha = 0.22f;
+    // m_tempo.setTuning(tt);
 }
 
 void AudioNode::resetDspState()
@@ -231,12 +239,24 @@ void AudioNode::onStart()
         return;
     }
 
+    // K1 Dual-Bank Goertzel Front-End: DISABLED - replaced by Emotiscope pipeline
+    // if (!m_k1FrontEnd.init()) {
+    //     LW_LOGE("Failed to initialize K1 front-end");
+    //     m_state = AudioNodeState::ERROR;
+    //     m_stats.state = m_state;
+    //     return;
+    // }
+
+    // Initialize Emotiscope Audio Pipeline
+    m_emotiscope.init();
+    LW_LOGI("Emotiscope audio pipeline initialized (64-bin Goertzel, 96-bin tempo)");
+
     m_state = AudioNodeState::RUNNING;
     m_stats.state = m_state;
 
-    // Initialize TempoTracker
-    m_tempo.init();
-    m_lastTempoOutput = m_tempo.getOutput();
+    // TempoTracker: DISABLED - replaced by Emotiscope tempo detection
+    // m_tempo.init();
+    // m_lastTempoOutput = m_tempo.getOutput();
 
     LW_LOGI("AudioNode started (tick=%dms, hop=%d, rate=%.1fHz)",
              AUDIO_ACTOR_TICK_MS, HOP_SIZE, HOP_RATE_HZ);
@@ -286,24 +306,22 @@ void AudioNode::onTick()
 
     m_stats.tickCount++;
 
-    // Record tick start time
-    uint64_t tickStart = esp_timer_get_time();
-
     // Capture one hop of audio
     captureHop();
 
     // Advance tempo phase every hop (audio-thread-owned) to avoid cross-core races with the renderer
-    float delta_sec = static_cast<float>(HOP_SIZE) / static_cast<float>(SAMPLE_RATE);
-    m_tempo.advancePhase(delta_sec);
-    m_lastTempoOutput = m_tempo.getOutput();
+    // TempoTracker advancePhase: DISABLED - replaced by Emotiscope tempo detection
+    // float delta_sec = static_cast<float>(HOP_SIZE) / static_cast<float>(SAMPLE_RATE);
+    // uint64_t t_samples_phase = m_sampleIndex;
+    // m_tempo.advancePhase(delta_sec, t_samples_phase);
+    // m_lastTempoOutput = m_tempo.getOutput();
 
-    // Record tick time
-    uint64_t tickEnd = esp_timer_get_time();
-    m_stats.lastTickTimeUs = tickEnd - tickStart;
-
-    // Log periodically (every 620 ticks = ~10 seconds) - gated by verbosity >= 2
+    // Log periodically - gated by verbosity >= 2, time-based rate limiting (2 seconds minimum)
     auto& dbgCfg = getAudioDebugConfig();
-    if (dbgCfg.verbosity >= 2 && (m_stats.tickCount % 620) == 0) {
+    static uint32_t s_lastStatusLogMs = 0;
+    uint32_t nowMs = millis();
+    if (dbgCfg.verbosity >= 2 && (nowMs - s_lastStatusLogMs >= 2000)) {
+        s_lastStatusLogMs = nowMs;
         const CaptureStats& cstats = m_capture.getStats();
         const ControlBusFrame& frame = m_controlBus.GetFrame();
         // Calculate mic level in dB from pre-gain RMS
@@ -346,10 +364,17 @@ void AudioNode::onTick()
                  styleClass.styleWeights[4]);
 #endif
 
-        // Log TempoTracker beat tracking metrics
-        LW_LOGI(LW_CLR_MAGENTA "Beat:" LW_ANSI_RESET " BPM=%.1f conf=%.2f phase=%.2f lock=%s",
-                 m_lastTempoOutput.bpm, m_lastTempoOutput.confidence,
-                 m_lastTempoOutput.phase01, m_lastTempoOutput.locked ? "YES" : "no");
+        // Log Emotiscope beat tracking metrics
+        {
+            const auto& emoOut = m_emotiscope.getOutput();
+            uint8_t topIdx = emoOut.top_bpm_index;
+            float bpm = emotiscope::TEMPO_LOW + topIdx;
+            float phase01 = (emoOut.tempi_phase[topIdx] + M_PI) / (2.0f * M_PI);
+            float beatStrength = (emoOut.tempi_beat[topIdx] + 1.0f) / 2.0f;
+            bool locked = (emoOut.tempo_confidence > 0.25f);
+            LW_LOGI(LW_CLR_MAGENTA "Beat:" LW_ANSI_RESET " BPM=%.1f conf=%.2f phase=%.2f beat=%.2f lock=%s",
+                     bpm, emoOut.tempo_confidence, phase01, beatStrength, locked ? "YES" : "no");
+        }
     }
 }
 
@@ -443,13 +468,14 @@ void AudioNode::processHop()
 #endif
         m_prevChordRoot = 0;
         m_controlBus.Reset();
-        // TempoTracker reset
-        m_tempo.init();
-        m_lastTempoOutput = m_tempo.getOutput();
+        // TempoTracker reset: DISABLED - replaced by Emotiscope
+        // m_tempo.init();
+        // m_lastTempoOutput = m_tempo.getOutput();
     }
 
     // 1. Build AudioTime for this hop
-    uint64_t now_us = esp_timer_get_time();
+    // Use sample counter as single timebase (deterministic, native-safe)
+    uint64_t now_us = (m_sampleIndex * 1000000ULL) / SAMPLE_RATE;
     AudioTime now(m_sampleIndex, SAMPLE_RATE, now_us);
 
     // Update monotonic counters
@@ -487,6 +513,56 @@ void AudioNode::processHop()
 
     // === Phase: DC/AGC Loop ===
     BENCH_START_PHASE();
+
+    // ========================================================================
+    // Phase 2 Integration: Populate Ring Buffer for Dual-Bank Processing
+    // ========================================================================
+    // Convert int16_t samples to float and push into ring buffer
+    // This feeds both RhythmBank (24 bins) and HarmonyBank (64 bins)
+    for (size_t i = 0; i < HOP_SIZE; ++i) {
+        // Normalize int16_t → float [-1.0, 1.0]
+        float sample = static_cast<float>(m_hopBuffer[i]) / 32768.0f;
+        m_ringBuffer.push(sample);
+        m_hopBufferFloat[i] = sample;  // Also store for Emotiscope
+    }
+
+    // ========================================================================
+    // Emotiscope Audio Processing (64-bin Goertzel, VU, Chroma, Tempo)
+    // ========================================================================
+    m_emotiscope.process(m_hopBufferFloat, HOP_SIZE);
+
+    // Emotiscope GPU-side updates
+    // updateNovelty() must run at NOVELTY_LOG_HZ (50Hz), not audio rate (200Hz)
+    // At 200Hz, spectral flux values would be ~4x too small
+    // HOP_RATE = SAMPLE_RATE/HOP_SIZE = 12800/64 = 200Hz
+    // Decimation = 200Hz / 50Hz = 4
+    constexpr uint8_t NOVELTY_DECIMATION = 4;
+    if ((m_hopCount % NOVELTY_DECIMATION) == 0) {
+        m_emotiscope.updateNovelty();  // Populates novelty_curve for tempo detection
+    }
+
+    // Tempo phase advance - runs every hop for smooth phase tracking
+    // delta = hop duration in reference frames
+    // HOP_SIZE=64, SAMPLE_RATE=12800 -> 5ms per hop
+    // REFERENCE_FPS=120 -> 1 frame = 8.33ms
+    // delta = 5ms / 8.33ms = 0.6 reference frames per hop
+    constexpr float HOP_DURATION_SEC = static_cast<float>(HOP_SIZE) / static_cast<float>(SAMPLE_RATE);
+    constexpr float DELTA_FRAMES = HOP_DURATION_SEC * emotiscope::REFERENCE_FPS;
+    m_emotiscope.updateTempiPhase(DELTA_FRAMES);
+
+    // K1 Front-End: DISABLED - replaced by Emotiscope pipeline
+    // k1::AudioFeatureFrame k1Frame;
+    // if (m_k1FrontEnd.isInitialized()) {
+    //     k1::AudioChunk chunk;
+    //     memcpy(chunk.samples, m_hopBuffer, HOP_SIZE * sizeof(int16_t));
+    //     chunk.n = HOP_SIZE;
+    //     chunk.sample_counter_end = m_sampleIndex;
+    //
+    //     bool is_clipping = (maxRaw > 30000 || minRaw < -30000);
+    //     k1Frame = m_k1FrontEnd.processHop(chunk, is_clipping);
+    //     m_featureBus.publish(k1Frame);
+    // }
+    k1::AudioFeatureFrame k1Frame;  // Keep empty frame for compatibility
 
     int32_t minC = 32767;
     int32_t maxC = -32768;
@@ -745,10 +821,39 @@ void AudioNode::processHop()
                 bandsPre[i] = bandMappedPre * activity;
             }
 
+            // === Phase 2: 64-bin FFT Analysis ===
+            // Call analyze64() to populate raw.bins64[] with semitone-spaced frequency data
+            // (55 Hz - 2093 Hz, A1 - C7, 5.25 octaves)
+            if (m_analyzer.analyze64(m_bins64Raw)) {
+                // Fresh 64-bin data available - apply same processing as 8-band
+                for (int i = 0; i < 64; ++i) {
+                    float binVal = mapLevelDb(m_bins64Raw[i], tuning.bandDbFloor, tuning.bandDbCeil);
+
+                    // Apply activity gate (consistency with 8-band processing)
+                    binVal *= activity;
+
+                    // Clamp to [0, 1]
+                    if (binVal > 1.0f) binVal = 1.0f;
+
+                    // Cache for next hop when analysis isn't ready
+                    m_bins64Cached[i] = binVal;
+                    raw.bins64[i] = binVal;
+                }
+            } else {
+                // No new 64-bin analysis this hop - reuse cached values
+                // (prevents "picket fence" dropouts in FFT data)
+                for (int i = 0; i < 64; ++i) {
+                    raw.bins64[i] = m_bins64Cached[i] * activity;
+                }
+            }
+
             // Throttle 8-band Goertzel debug logging - gated by verbosity >= 5
+            // Use time-based rate limiting (1 second minimum) to prevent serial spam
             auto& dbgCfg8 = getAudioDebugConfig();
-            if (dbgCfg8.verbosity >= 5 && ++m_goertzelLogCounter >= dbgCfg8.interval8Band()) {
-                m_goertzelLogCounter = 0;
+            static uint32_t s_last8BandLogMs = 0;
+            uint32_t nowMs = millis();
+            if (dbgCfg8.verbosity >= 5 && (nowMs - s_last8BandLogMs >= 1000)) {
+                s_last8BandLogMs = nowMs;
                 // Calculate TRUE mic level in dB from pre-gain RMS (0dB = full scale, silence floor at -60dB)
                 float micLevelDb = (m_lastRmsPreGain > 0.0001f) ? (20.0f * log10f(m_lastRmsPreGain)) : -80.0f;
                 // Bold cyan title, bold yellow for mic dB level, rest uncolored
@@ -804,28 +909,27 @@ void AudioNode::processHop()
     }
 
     // ========================================================================
-    // TempoTracker Beat Tracker Processing
+    // Phase 2 Integration: Use K1 Front-End Output
     // ========================================================================
-    // Dual-rate novelty input:
-    // - Spectral flux from 8-band Goertzel when ready (31.25 Hz)
-    // - VU derivative from RMS every hop (62.5 Hz)
-    // goertzelTriggered fires when 8-band analysis completes (every 512 samples)
-    // CRITICAL FIX: Use Pre-AGC signals for beat tracking!
-    // AGC flattens dynamics, making onset detection impossible.
-    // We use reconstructed Pre-AGC bands and Pre-AGC RMS.
-    m_tempo.updateNovelty(
-        goertzelTriggered ? bandsPre : nullptr,    // Pre-AGC 8-band magnitudes
-        8,                                         // num_bands
-        rmsPre,                                    // Pre-AGC RMS for VU calculation
-        goertzelTriggered                          // bands_ready flag
-    );
+    // Convert K1's AudioFeatureFrame to AudioNode's AudioFeatureFrame
+    // K1 produces rhythm_novelty (~2.5) which is ~32x stronger than old flux (~0.08)
+    m_latestFrame.rhythmFlux = k1Frame.rhythm_novelty;
+    m_latestFrame.harmonyFlux = k1Frame.harmony_valid ? k1Frame.chroma_stability : 0.0f;
+    memcpy(m_latestFrame.chroma, k1Frame.chroma12, 12 * sizeof(float));
+    m_latestFrame.chromaStability = k1Frame.chroma_stability;
+    m_latestFrame.timestamp = m_sampleIndex;
 
-    // Update tempo detection (interleaved Goertzel computation)
-    float delta_sec = static_cast<float>(HOP_SIZE) / static_cast<float>(SAMPLE_RATE);
-    m_tempo.updateTempo(delta_sec);
-    
-    // Store for change detection (used by getTempo() diagnostics)
-    m_lastTempoOutput = m_tempo.getOutput();
+    // ========================================================================
+    // TempoTracker Beat Tracker Processing (Phase 2 Integration)
+    // ========================================================================
+    // Pass unified onset strength to tempo tracker (70% rhythm + 30% harmony)
+    float onsetStrength = m_latestFrame.getOnsetStrength();
+
+    // TempoTracker: DISABLED - replaced by Emotiscope tempo detection
+    // m_tempo.updateNovelty(onsetStrength, m_sampleIndex);
+    // float delta_sec = static_cast<float>(HOP_SIZE) / static_cast<float>(SAMPLE_RATE);
+    // m_tempo.updateTempo(m_latestFrame, m_sampleIndex);
+    // m_lastTempoOutput = m_tempo.getOutput();
 
 
 
@@ -889,17 +993,110 @@ void AudioNode::processHop()
         processNoiseCalibration(rmsMapped, raw.bands, raw.chroma, nowMs);
     }
 
+    // ========================================================================
+    // Emotiscope Integration: Override raw inputs with Emotiscope outputs
+    // ========================================================================
+    {
+        const auto& emoOut = m_emotiscope.getOutput();
+
+        // Copy 64-bin spectrogram directly (Emotiscope's native output)
+        for (int i = 0; i < 64; ++i) {
+            raw.bins64[i] = emoOut.spectrogram[i];
+        }
+
+        // Aggregate 64 bins into 8 bands (matching plan's band mapping)
+        // Band 0: bins 0-3   (sub-bass, A1-C2)
+        // Band 1: bins 4-11  (bass, C#2-G2)
+        // Band 2: bins 12-19 (low-mid, G#2-D#3)
+        // Band 3: bins 20-31 (mid, E3-B3)
+        // Band 4: bins 32-43 (high-mid, C4-G4)
+        // Band 5: bins 44-51 (presence, G#4-D#5)
+        // Band 6: bins 52-59 (brilliance, E5-B5)
+        // Band 7: bins 60-63 (air, C6-C7)
+        raw.bands[0] = (emoOut.spectrogram[0] + emoOut.spectrogram[1] +
+                        emoOut.spectrogram[2] + emoOut.spectrogram[3]) / 4.0f;
+        float band1 = 0.0f;
+        for (int i = 4; i <= 11; ++i) band1 += emoOut.spectrogram[i];
+        raw.bands[1] = band1 / 8.0f;
+        float band2 = 0.0f;
+        for (int i = 12; i <= 19; ++i) band2 += emoOut.spectrogram[i];
+        raw.bands[2] = band2 / 8.0f;
+        float band3 = 0.0f;
+        for (int i = 20; i <= 31; ++i) band3 += emoOut.spectrogram[i];
+        raw.bands[3] = band3 / 12.0f;
+        float band4 = 0.0f;
+        for (int i = 32; i <= 43; ++i) band4 += emoOut.spectrogram[i];
+        raw.bands[4] = band4 / 12.0f;
+        float band5 = 0.0f;
+        for (int i = 44; i <= 51; ++i) band5 += emoOut.spectrogram[i];
+        raw.bands[5] = band5 / 8.0f;
+        float band6 = 0.0f;
+        for (int i = 52; i <= 59; ++i) band6 += emoOut.spectrogram[i];
+        raw.bands[6] = band6 / 8.0f;
+        raw.bands[7] = (emoOut.spectrogram[60] + emoOut.spectrogram[61] +
+                        emoOut.spectrogram[62] + emoOut.spectrogram[63]) / 4.0f;
+
+        // Use Emotiscope's VU level for RMS
+        raw.rms = emoOut.vu_level;
+
+        // Use Emotiscope's novelty for flux
+        raw.flux = std::min(1.0f, emoOut.current_novelty * 10.0f);  // Scale to 0-1 range
+
+        // Copy chromagram
+        for (int i = 0; i < 12; ++i) {
+            raw.chroma[i] = emoOut.chromagram[i];
+        }
+
+        // Log Emotiscope outputs periodically (verbosity >= 3)
+        auto& dbgCfgEmo = getAudioDebugConfig();
+        static uint32_t s_lastEmoLogMs = 0;
+        uint32_t nowMs = millis();
+        if (dbgCfgEmo.verbosity >= 3 && (nowMs - s_lastEmoLogMs >= 2000)) {
+            s_lastEmoLogMs = nowMs;
+            float topBpm = emotiscope::TEMPO_LOW + emoOut.top_bpm_index;
+            LW_LOGI(LW_CLR_GREEN "Emotiscope:" LW_ANSI_RESET " vu=%.3f novelty=%.4f silence=%s "
+                     "BPM=%.1f(idx=%u) conf=%.2f bands=[%.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f]",
+                     emoOut.vu_level, emoOut.current_novelty,
+                     emoOut.silence_detected ? "YES" : "no",
+                     topBpm, emoOut.top_bpm_index, emoOut.tempo_confidence,
+                     raw.bands[0], raw.bands[1], raw.bands[2], raw.bands[3],
+                     raw.bands[4], raw.bands[5], raw.bands[6], raw.bands[7]);
+        }
+    }
 
     // === Phase: ControlBus Update ===
     BENCH_START_PHASE();
 
-        // 7a. Populate beat tracker state for rhythmic saliency (using TempoTracker output)
-    // Field names kept as k1* for backward compatibility with effects
-    raw.tempo.locked = m_lastTempoOutput.locked;
-    raw.tempo.confidence = m_lastTempoOutput.confidence;
-    raw.tempo.beat_tick = m_lastTempoOutput.beat_tick && m_lastTempoOutput.locked;
-    // Copy full tempo object for effects
-    raw.tempo = m_lastTempoOutput;
+    // 7a. Populate beat tracker state using EMOTISCOPE tempo (replaces TempoTracker)
+    // Emotiscope uses Goertzel on the novelty curve for robust tempo detection
+    {
+        const auto& emoOut = m_emotiscope.getOutput();
+        uint8_t topIdx = emoOut.top_bpm_index;
+
+        // BPM: 48 + index (range 48-143 BPM)
+        raw.tempo.bpm = emotiscope::TEMPO_LOW + topIdx;
+
+        // Phase: convert from radians [-PI, PI] to [0, 1)
+        float phaseRad = emoOut.tempi_phase[topIdx];
+        raw.tempo.phase01 = (phaseRad + M_PI) / (2.0f * M_PI);
+
+        // Confidence from Emotiscope's tempo analysis
+        raw.tempo.confidence = emoOut.tempo_confidence;
+
+        // Locked when confidence exceeds threshold
+        raw.tempo.locked = (emoOut.tempo_confidence > 0.25f);
+
+        // Beat strength: convert from [-1, 1] to [0, 1]
+        float beatSignal = emoOut.tempi_beat[topIdx];
+        raw.tempo.beat_strength = (beatSignal + 1.0f) / 2.0f;
+
+        // Beat tick: rising edge detection (beat crosses 0.8 threshold from below)
+        const float BEAT_THRESHOLD = 0.8f;
+        bool beatHigh = (raw.tempo.beat_strength > BEAT_THRESHOLD);
+        bool prevBeatHigh = (m_prevEmoBeat > BEAT_THRESHOLD);
+        raw.tempo.beat_tick = beatHigh && !prevBeatHigh && raw.tempo.locked;
+        m_prevEmoBeat = raw.tempo.beat_strength;
+    }
 
     // 7. Update ControlBus with attack/release smoothing
     m_controlBus.setSmoothing(tuning.controlBusAlphaFast, tuning.controlBusAlphaSlow);
@@ -914,8 +1111,8 @@ void AudioNode::processHop()
     {
         bool chordChanged = (m_controlBus.GetFrame().chordState.rootNote != m_prevChordRoot);
         m_prevChordRoot = m_controlBus.GetFrame().chordState.rootNote;
-        // Use TempoTracker beat tracker confidence for style detection
-        float beatConfidence = m_lastTempoOutput.locked ? m_lastTempoOutput.confidence : 0.0f;
+        // Use Emotiscope beat tracker confidence for style detection
+        float beatConfidence = raw.tempo.locked ? raw.tempo.confidence : 0.0f;
         m_styleDetector.update(
             rmsMapped,
             fluxMapped,

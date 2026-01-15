@@ -1,0 +1,430 @@
+/**
+ * Example usage of LightwaveOS v2 CQRS State Store
+ *
+ * This file demonstrates:
+ * - Basic command dispatch
+ * - Lock-free queries
+ * - State subscriptions
+ * - Batch operations
+ * - Zone management
+ *
+ * Compile with: g++ -std=c++17 -I../../.. example_usage.cpp SystemState.cpp StateStore.cpp
+ * (ESP32 build handles this automatically)
+ */
+
+#include "StateStore.h"
+#include "Commands.h"
+
+using namespace lightwaveos::state;
+
+// ==================== Example: Basic Usage ====================
+
+void example_basic_usage() {
+    // Create state store
+    StateStore store;
+
+    // Query initial state (lock-free)
+    const SystemState& state = store.getState();
+    // state.currentEffectId == 0
+    // state.brightness == 128
+    // state.version == 0
+
+    // Dispatch command to change effect
+    SetEffectCommand setEffect(5);
+    store.dispatch(setEffect);
+
+    // Query new state
+    uint8_t effectId = store.getCurrentEffect();  // Returns 5
+    uint32_t version = store.getVersion();        // Returns 1
+
+    // Dispatch brightness command
+    SetBrightnessCommand setBrightness(255);
+    store.dispatch(setBrightness);
+
+    // State updated
+    // store.getBrightness() == 255
+    // store.getVersion() == 2
+}
+
+// ==================== Example: State Subscription ====================
+
+// Global subscriber (keep FAST - called within write lock)
+void onStateChange(const SystemState& newState) {
+    // Called after every state change
+    // Use for:
+    // - Logging state changes
+    // - Updating UI
+    // - Triggering side effects
+    // - NVS persistence
+
+    // Example: Log to serial
+    // Serial.printf("State changed: effect=%d, brightness=%d, version=%d\n",
+    //               newState.currentEffectId, newState.brightness, newState.version);
+}
+
+void example_subscription() {
+    StateStore store;
+
+    // Subscribe to state changes
+    store.subscribe(onStateChange);
+
+    // Now every dispatch triggers onStateChange
+    SetEffectCommand cmd(3);
+    store.dispatch(cmd);  // onStateChange called with new state
+
+    // Unsubscribe when done
+    store.unsubscribe(onStateChange);
+}
+
+// ==================== Example: Zone Management ====================
+
+void example_zone_management() {
+    StateStore store;
+
+    // Enable zone mode with 4 zones
+    SetZoneModeCommand enableZones(true, 4);
+    store.dispatch(enableZones);
+
+    // Configure zone 0
+    ZoneEnableCommand enableZone0(0, true);
+    store.dispatch(enableZone0);
+
+    ZoneSetEffectCommand setZone0Effect(0, 5);
+    store.dispatch(setZone0Effect);
+
+    ZoneSetBrightnessCommand setZone0Brightness(0, 200);
+    store.dispatch(setZone0Brightness);
+
+    // Query zone configuration
+    ZoneState zone = store.getZoneConfig(0);
+    // zone.effectId == 5
+    // zone.brightness == 200
+    // zone.enabled == true
+
+    // Configure multiple zones atomically
+    ZoneSetEffectCommand zone1(1, 7);
+    ZoneSetEffectCommand zone2(2, 9);
+    ZoneSetEffectCommand zone3(3, 11);
+
+    const ICommand* commands[] = { &zone1, &zone2, &zone3 };
+    store.dispatchBatch(commands, 3);
+
+    // All zones updated in single atomic operation
+}
+
+// ==================== Example: Transitions ====================
+
+void example_transitions() {
+    StateStore store;
+
+    // Start transition (type 3 = CrossFade)
+    TriggerTransitionCommand start(3);
+    store.dispatch(start);
+
+    // Check if transition active
+    bool active = store.isTransitionActive();  // Returns true
+
+    // Update transition progress (called from animation loop)
+    for (uint8_t progress = 0; progress <= 255; progress += 5) {
+        UpdateTransitionCommand update(3, progress);
+        store.dispatch(update);
+
+        // Query state to render
+        const SystemState& state = store.getState();
+        // Render transition at state.transitionProgress
+    }
+
+    // Complete transition
+    CompleteTransitionCommand complete;
+    store.dispatch(complete);
+
+    // Transition no longer active
+    // store.isTransitionActive() == false
+}
+
+// ==================== Example: Batch Operations ====================
+
+void example_batch_operations() {
+    StateStore store;
+
+    // Apply multiple commands atomically
+    SetEffectCommand effect(10);
+    SetBrightnessCommand brightness(255);
+    SetPaletteCommand palette(5);
+    SetSpeedCommand speed(25);
+
+    const ICommand* commands[] = {
+        &effect,
+        &brightness,
+        &palette,
+        &speed
+    };
+
+    bool success = store.dispatchBatch(commands, 4);
+
+    if (success) {
+        // All commands applied atomically
+        // State version incremented by 4
+        // Subscribers called once with final state
+    }
+}
+
+// ==================== Example: Visual Parameters ====================
+
+void example_visual_parameters() {
+    StateStore store;
+
+    // Set individual parameters
+    SetIntensityCommand intensity(200);
+    store.dispatch(intensity);
+
+    SetSaturationCommand saturation(255);
+    store.dispatch(saturation);
+
+    SetComplexityCommand complexity(100);
+    store.dispatch(complexity);
+
+    SetVariationCommand variation(150);
+    store.dispatch(variation);
+
+    // Or set all at once
+    SetVisualParamsCommand allParams(200, 255, 100, 150);
+    store.dispatch(allParams);
+
+    // Query parameters
+    const SystemState& state = store.getState();
+    // state.intensity == 200
+    // state.saturation == 255
+    // state.complexity == 100
+    // state.variation == 150
+}
+
+// ==================== Example: Custom Command ====================
+
+// Create domain-specific command
+class CycleEffectCommand : public ICommand {
+public:
+    CycleEffectCommand(uint8_t maxEffects)
+        : m_maxEffects(maxEffects) {}
+
+    SystemState apply(const SystemState& current) const override {
+        uint8_t nextEffect = (current.currentEffectId + 1) % m_maxEffects;
+        return current.withEffect(nextEffect);
+    }
+
+    const char* getName() const override {
+        return "CycleEffect";
+    }
+
+private:
+    uint8_t m_maxEffects;
+};
+
+void example_custom_command() {
+    StateStore store;
+
+    // Set initial effect
+    SetEffectCommand setEffect(0);
+    store.dispatch(setEffect);
+
+    // Cycle through effects
+    CycleEffectCommand cycle(45);  // 45 effects in v1
+    store.dispatch(cycle);  // Effect is now 1
+    store.dispatch(cycle);  // Effect is now 2
+    store.dispatch(cycle);  // Effect is now 3
+}
+
+// ==================== Example: Optimistic Concurrency ====================
+
+void example_optimistic_concurrency() {
+    StateStore store;
+
+    // Get current version
+    uint32_t expectedVersion = store.getVersion();
+
+    // Simulate user interaction delay
+    // ... user selects effect ...
+
+    // Before applying, verify no concurrent modifications
+    const SystemState& state = store.getState();
+
+    if (state.version == expectedVersion) {
+        // No concurrent changes, safe to apply
+        SetEffectCommand cmd(7);
+        store.dispatch(cmd);
+    } else {
+        // State was modified by another thread
+        // Handle conflict (e.g., ask user to confirm)
+    }
+}
+
+// ==================== Example: Performance Monitoring ====================
+
+void example_performance_monitoring() {
+    StateStore store;
+
+    // Dispatch some commands
+    for (int i = 0; i < 100; i++) {
+        SetEffectCommand cmd(i % 45);
+        store.dispatch(cmd);
+    }
+
+    // Get statistics
+    uint32_t commandCount;
+    uint32_t lastDuration;
+    store.getStats(commandCount, lastDuration);
+
+    // commandCount == 100
+    // lastDuration == ~500-1000 microseconds
+}
+
+// ==================== Example: State Reset ====================
+
+void example_state_reset() {
+    StateStore store;
+
+    // Modify state
+    SetEffectCommand effect(10);
+    store.dispatch(effect);
+
+    SetBrightnessCommand brightness(255);
+    store.dispatch(brightness);
+
+    // Reset to defaults
+    store.reset();
+
+    // State restored to initial values
+    // store.getCurrentEffect() == 0
+    // store.getBrightness() == 128
+}
+
+// ==================== Integration Example: Render Loop ====================
+
+class RenderLoop {
+public:
+    RenderLoop(StateStore& store) : m_store(store) {}
+
+    void render() {
+        // Lock-free state access (safe at 120 FPS)
+        const SystemState& state = m_store.getState();
+
+        // Use state for rendering
+        uint8_t effectId = state.currentEffectId;
+        uint8_t brightness = state.brightness;
+        uint8_t speed = state.speed;
+
+        // Render effect...
+        // applyEffect(effectId, brightness, speed);
+    }
+
+private:
+    StateStore& m_store;
+};
+
+// ==================== Integration Example: Web Server ====================
+
+class WebServer {
+public:
+    WebServer(StateStore& store) : m_store(store) {}
+
+    void handleSetEffect(uint8_t effectId) {
+        SetEffectCommand cmd(effectId);
+        bool success = m_store.dispatch(cmd);
+
+        if (success) {
+            // Send success response
+        } else {
+            // Send error response
+        }
+    }
+
+    void handleSetBrightness(uint8_t brightness) {
+        SetBrightnessCommand cmd(brightness);
+        m_store.dispatch(cmd);
+    }
+
+    void handleGetState() {
+        // Lock-free state query
+        const SystemState& state = m_store.getState();
+
+        // Serialize to JSON and send
+        // {
+        //   "effect": state.currentEffectId,
+        //   "brightness": state.brightness,
+        //   "version": state.version
+        // }
+    }
+
+private:
+    StateStore& m_store;
+};
+
+// ==================== Integration Example: NVS Persistence ====================
+
+class StatePersistence {
+public:
+    StatePersistence(StateStore& store) : m_store(store) {
+        // Subscribe to state changes
+        m_store.subscribe(onStateChange);
+    }
+
+    static void onStateChange(const SystemState& newState) {
+        // Save to NVS on every change
+        // (In practice, you'd debounce this)
+        // nvs.setUInt8("effect", newState.currentEffectId);
+        // nvs.setUInt8("brightness", newState.brightness);
+        // ...
+    }
+
+    void loadFromNVS() {
+        // Load saved state
+        // uint8_t effect = nvs.getUInt8("effect", 0);
+        // uint8_t brightness = nvs.getUInt8("brightness", 128);
+
+        // Restore via commands
+        // m_store.dispatch(SetEffectCommand(effect));
+        // m_store.dispatch(SetBrightnessCommand(brightness));
+    }
+
+private:
+    StateStore& m_store;
+};
+
+// ==================== Main Example ====================
+
+#ifndef UNIT_TEST
+// Only compile main if not running unit tests
+
+void setup() {
+    // Initialize state store
+    StateStore store;
+
+    // Subscribe to changes
+    store.subscribe(onStateChange);
+
+    // Load saved state from NVS
+    StatePersistence persistence(store);
+    persistence.loadFromNVS();
+
+    // Set up web server
+    WebServer webServer(store);
+
+    // Set up render loop
+    RenderLoop renderLoop(store);
+
+    // Application ready
+}
+
+void loop() {
+    // Render at 120 FPS
+    // renderLoop.render();
+
+    // Handle web requests
+    // webServer.handleRequests();
+
+    // Auto-increment hue for effects
+    // IncrementHueCommand cmd;
+    // store.dispatch(cmd);
+}
+
+#endif  // UNIT_TEST

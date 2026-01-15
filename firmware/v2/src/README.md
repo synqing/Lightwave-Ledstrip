@@ -424,16 +424,16 @@ cd firmware/v2
 pio run -t upload
 ```
 
-### WiFi-Enabled Build
-
-```bash
-pio run -e esp32dev_wifi -t upload
-```
-
-### Audio-Enabled Build
+### Main Build (WiFi + Audio)
 
 ```bash
 pio run -e esp32dev_audio -t upload
+```
+
+### No-WiFi Build (Audio only, smaller footprint)
+
+```bash
+pio run -e esp32dev_audio_nowifi -t upload
 ```
 
 ### Monitor Serial Output
@@ -445,7 +445,7 @@ pio device monitor -b 115200
 ### Clean Build
 
 ```bash
-pio run -t clean && pio run -e esp32dev_wifi -t upload
+pio run -t clean && pio run -e esp32dev_audio -t upload
 ```
 
 ### Run Native Tests

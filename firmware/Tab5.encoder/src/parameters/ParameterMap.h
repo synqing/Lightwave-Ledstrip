@@ -6,18 +6,16 @@
 // Maps encoder indices to parameter IDs, field names, and validation ranges.
 // Eliminates duplicated mapping logic across encoder and WebSocket handlers.
 //
-// Supports 8 parameters from Unit A only:
+// Supports 16 parameters across dual M5ROTATE8 units:
 // - Unit A (indices 0-7): Core LightwaveOS parameters
-// - Unit B (indices 8-15): Encoders disabled, buttons used for preset management
+// - Unit B (indices 8-15): Placeholder parameters (TBD)
 //
 // Ported from K1.8encoderS3, extended for dual-unit support.
 // ============================================================================
 
 #include <cstdint>
 
-// Total number of encoder slots (16 total, but only 8 have parameters)
-// Unit A (0-7): Has parameters
-// Unit B (8-15): No parameters, but buttons/LEDs still work
+// Total number of parameters (dual M5ROTATE8 = 16 encoders)
 constexpr uint8_t PARAMETER_COUNT = 16;
 
 /**
@@ -25,17 +23,26 @@ constexpr uint8_t PARAMETER_COUNT = 16;
  */
 enum class ParameterId : uint8_t {
     // Unit A (0-7) - Global LightwaveOS parameters
-    EffectId = 0,
-    Brightness = 1,
-    PaletteId = 2,
-    Speed = 3,
-    Mood = 4,
-    FadeAmount = 5,
-    Complexity = 6,
-    Variation = 7,
-    // Unit B (8-15) - No parameters assigned (encoders disabled)
-    // Zone parameters have been removed from Unit B
-    // Unit B buttons are still used for preset management
+    // Note: Enum values match encoder indices for direct mapping
+    EffectId = 0,     // Encoder 0
+    PaletteId = 1,    // Encoder 1
+    Speed = 2,        // Encoder 2
+    Mood = 3,         // Encoder 3
+    FadeAmount = 4,   // Encoder 4
+    Complexity = 5,   // Encoder 5
+    Variation = 6,    // Encoder 6
+    Brightness = 7,   // Encoder 7
+    // Unit B (8-15) - Zone parameters
+    // Pattern: [Zone N Effect, Zone N Speed/Palette] pairs
+    // Note: Encoders 9, 11, 13, 15 toggle between Speed and Palette via button
+    Zone0Effect = 8,
+    Zone0Speed = 9,      // Also Zone0Palette when button toggled
+    Zone1Effect = 10,
+    Zone1Speed = 11,     // Also Zone1Palette when button toggled
+    Zone2Effect = 12,
+    Zone2Speed = 13,     // Also Zone2Palette when button toggled
+    Zone3Effect = 14,
+    Zone3Speed = 15     // Also Zone3Palette when button toggled
 };
 
 /**
@@ -73,8 +80,8 @@ const ParameterDef* getParameterById(ParameterId id);
 const ParameterDef* getParameterByField(const char* fieldName);
 
 /**
- * Get total number of encoder slots
- * @return Number of encoder slots (16 total, but only 8 have parameters)
+ * Get total number of parameters
+ * @return Number of parameters (16)
  */
 constexpr uint8_t getParameterCount() { return PARAMETER_COUNT; }
 

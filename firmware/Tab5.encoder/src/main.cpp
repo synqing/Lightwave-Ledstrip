@@ -300,6 +300,11 @@ void setup() {
 
     Serial.println("\n[INIT] M5Stack Tab5 initialized");
 
+    // Initialize external I2C bus (Grove Port.A) - MUST be called before accessing Ex_I2C
+    // This enables power to the Grove port and initializes the I2C peripheral
+    M5.Ex_I2C.begin();
+    Serial.println("[INIT] M5.Ex_I2C.begin() called - external I2C bus enabled");
+
     // Get external I2C pin configuration from M5Unified
     // Tab5 Grove Port.A: SDA=GPIO53, SCL=GPIO54
     int8_t extSDA = M5.Ex_I2C.getSDA();

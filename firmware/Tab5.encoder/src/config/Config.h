@@ -7,10 +7,35 @@
 // Feature Flags
 // ============================================================================
 
+// ==========================================================================
 // Tab5 WiFi: ESP32-C6 co-processor via SDIO with custom pins
-// WiFi.setPins() must be called BEFORE WiFi.begin() or M5.begin()
-// See: https://github.com/nikthefix/M5stack_Tab5_Arduino_Wifi_Example
-#define ENABLE_WIFI 1
+// ==========================================================================
+// ⚠️ KNOWN REGRESSION - WiFi DISABLED (January 2026)
+//
+// PROBLEM: Arduino-ESP32's pre-compiled ESP-Hosted library uses WRONG SDIO
+// pin mappings. The library defaults conflict with Tab5's actual hardware:
+//
+//   Tab5 Actual Pins:       Library Default Pins:
+//     CLK = GPIO 12           CLK = GPIO 14 ❌
+//     CMD = GPIO 13           CMD = GPIO 15 ❌
+//     D0  = GPIO 11           D0  = GPIO 2  ❌
+//     ...etc
+//
+// SYMPTOM: Boot crash with "sdmmc_init_ocr: send_op_cond (1) returned 0x107"
+//
+// BLOCKER: WiFi.setPins() requires Arduino-ESP32 v3.3.0+ which is NOT YET
+// RELEASED. The pin mapping is compiled into the library binary.
+//
+// WORKAROUND: Set ENABLE_WIFI=0 to disable WiFi entirely.
+// Tab5 operates as local-only encoder controller without network connectivity.
+//
+// FUTURE FIX: When Arduino-ESP32 v3.3.0+ releases, re-enable and call:
+//   WiFi.setPins(TAB5_WIFI_SDIO_CLK, TAB5_WIFI_SDIO_CMD, TAB5_WIFI_SDIO_D0,
+//                TAB5_WIFI_SDIO_D1, TAB5_WIFI_SDIO_D2, TAB5_WIFI_SDIO_D3);
+//
+// Reference: https://github.com/nikthefix/M5stack_Tab5_Arduino_Wifi_Example
+// ==========================================================================
+#define ENABLE_WIFI 0  // DISABLED - See regression note above
 
 // Tab5 WiFi SDIO pin definitions (ESP32-C6 co-processor)
 #define TAB5_WIFI_SDIO_CLK   12

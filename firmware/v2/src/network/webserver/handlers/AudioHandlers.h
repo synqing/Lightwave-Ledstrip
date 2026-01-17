@@ -16,10 +16,10 @@ namespace actors {
 class ActorSystem;
 class RendererActor;
 }
-namespace audio {
-class AudioActor;
 }
-}
+
+// Include AudioActor header for namespace alias (cannot forward-declare using alias)
+#include "../../../audio/AudioActor.h"
 
 namespace lightwaveos {
 namespace network {

@@ -96,7 +96,7 @@ uint8_t ShowDirectorActor::getParamValue(ParamId param, uint8_t zone) {
 ShowDirectorActor::ShowDirectorActor()
     : Actor(ActorConfig(
           "ShowDirector",  // name
-          4096,            // stackSize (16KB) - increased from 2048 due to PROGMEM copy operations
+          3072,            // stackSize (12KB) - reduced for memory constraints
           2,               // priority
           0,                // coreId (Core 0)
           16,               // queueSize

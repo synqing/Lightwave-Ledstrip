@@ -162,8 +162,8 @@ public:
      *
      * Returns nullptr if not initialized or FEATURE_AUDIO_SYNC disabled.
      */
-    audio::AudioActor* getAudio() { return m_audio.get(); }
-    const audio::AudioActor* getAudio() const { return m_audio.get(); }
+    lightwaveos::audio::AudioActor* getAudio() { return m_audio.get(); }
+    const lightwaveos::audio::AudioActor* getAudio() const { return m_audio.get(); }
 #endif
 
     // Future: getNetwork(), getHmi(), getStateStore(), etc.
@@ -281,7 +281,7 @@ private:
     std::unique_ptr<RendererActor> m_renderer;
     std::unique_ptr<ShowDirectorActor> m_showDirector;
 #if FEATURE_AUDIO_SYNC
-    std::unique_ptr<audio::AudioActor> m_audio;  // Phase 2: Audio capture and DSP
+    std::unique_ptr<lightwaveos::audio::AudioActor> m_audio;  // Phase 2: Audio capture and DSP
 #endif
     // Future: std::unique_ptr<NetworkActor> m_network;
     // Future: std::unique_ptr<HmiActor> m_hmi;

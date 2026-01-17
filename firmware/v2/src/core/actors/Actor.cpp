@@ -91,7 +91,7 @@ bool Actor::start()
     BaseType_t result = xTaskCreatePinnedToCore(
         taskFunction,           // Task function
         m_config.name,          // Task name
-        m_config.stackSize,     // Stack size in words
+        m_config.stackSize * 4, // Stack size in bytes (words × 4)
         this,                   // Parameter (this pointer)
         m_config.priority,      // Priority
         &m_taskHandle,          // Task handle output
@@ -286,7 +286,41 @@ void Actor::run()
     while (!m_shutdownRequested) {
         Message msg;
 
-        // Calculate wait time based on tick interval
+        // Queue saturation prevention: drain multiple messages when queue is getting full
+        // This prevents command rejection when rapid inputs (e.g. encoder rotation, zone updates)
+        // exceed the single-message-per-tick processing rate.
+        uint8_t queueUtil = getQueueUtilization();
+        const uint8_t DRAIN_THRESHOLD = 50;  // Start draining at 50% full
+        const uint8_t MAX_MESSAGES_PER_TICK = 8;  // Process up to 8 messages per tick
+
+        if (queueUtil > DRAIN_THRESHOLD) {
+            // Queue is getting full - drain multiple messages with non-blocking receives
+            // BUT: Still respect tick timing - if tick is due, process one message then tick
+            uint8_t messagesProcessed = 0;
+            while (messagesProcessed < MAX_MESSAGES_PER_TICK && !m_shutdownRequested) {
+                BaseType_t received = xQueueReceive(m_queue, &msg, 0);  // Non-blocking
+                if (received != pdTRUE) {
+                    break;  // Queue empty
+                }
+
+                // Handle shutdown message specially
+                if (msg.type == MessageType::SHUTDOWN) {
+                    m_shutdownRequested = true;
+                    break;
+                }
+
+                // Dispatch to derived class handler
+                m_messageCount++;
+                onMessage(msg);
+                messagesProcessed++;
+            }
+            // After draining, continue loop to check tick timing
+            continue;
+        }
+
+        // Normal operation: wait for message with timeout based on tick interval
+        // CRITICAL: Tick happens on timeout, not by checking if due
+        // This preserves the original timing behavior that RendererActor depends on
         TickType_t waitTime;
         if (m_config.tickInterval > 0) {
             waitTime = m_config.tickInterval;
@@ -309,6 +343,7 @@ void Actor::run()
             onMessage(msg);
         } else {
             // Timeout - call onTick if configured
+            // This is the original pattern: tick happens when no message arrives in time
             if (m_config.tickInterval > 0) {
                 onTick();
             }

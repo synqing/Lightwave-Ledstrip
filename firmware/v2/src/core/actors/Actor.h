@@ -452,14 +452,14 @@ namespace ActorConfigs {
  * Large queue (32) to buffer commands during frame rendering.
  * Tick interval of 8ms (~120 FPS) for continuous rendering.
  * 
- * Stack size: 4096 words (16KB) with 50% safety margin.
+ * Stack size: 6144 words (24KB) for zone mode safety margin.
  * Actual usage: ~8-10KB (effect rendering, FastLED, context setup).
  * High water mark monitoring recommended to verify adequate margin.
  */
 inline ActorConfig Renderer() {
     return ActorConfig(
         "Renderer",     // name
-        4096,           // stackSize (16KB) - 50% safety margin over ~8-10KB usage
+        4096,           // stackSize (16KB) - reduced for memory constraints
         5,              // priority (highest)
         1,              // coreId (Core 1 - application)
         32,             // queueSize

@@ -96,7 +96,7 @@ bool ActorSystem::init()
 
 #if FEATURE_AUDIO_SYNC
         // Create AudioActor (Phase 2)
-        m_audio = std::make_unique<audio::AudioActor>();
+        m_audio = std::make_unique<lightwaveos::audio::AudioActor>();
 
         if (m_audio == nullptr) {
 #ifndef NATIVE_BUILD

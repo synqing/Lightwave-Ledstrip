@@ -57,9 +57,8 @@
 namespace lightwaveos { namespace zones { class ZoneComposer; } }
 namespace lightwaveos { namespace transitions { class TransitionEngine; enum class TransitionType : uint8_t; } }
 namespace lightwaveos { namespace plugins { class IEffect; namespace runtime { class LegacyEffectAdapter; } } }
-#if FEATURE_AUDIO_SYNC
-namespace lightwaveos { namespace audio { class AudioActor; } }
-#endif
+// Note: AudioActor forward declaration removed - use #include "../../audio/AudioActor.h" instead
+// to avoid conflict between class forward declaration and using-alias in lightwaveos::audio namespace
 
 namespace lightwaveos {
 namespace actors {
@@ -531,6 +530,7 @@ private:
 
     // Current state
     uint8_t m_currentEffect;
+    bool m_effectInitialized;  // Track if current effect has been init()'d
     uint8_t m_brightness;
     uint8_t m_speed;
     uint8_t m_paletteIndex;

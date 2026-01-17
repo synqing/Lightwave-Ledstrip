@@ -43,21 +43,21 @@ constexpr gpio_num_t I2S_LRCL_PIN = GPIO_NUM_12;  // Left/Right Clock (Word Sele
 // ============================================================================
 
 /**
- * Tab5 beat tracker timing: 16kHz / FFT_N=512 / HOP_N=256 = 62.5 Hz frames
+ * Audio timing: 12.8kHz / HOP_N=256 = 50 Hz frames
  *
  * DO NOT change hop size without updating:
  * - Filter constants in ControlBus
- * - Resonator Q values in beat tracker
+ * - Resonator Q values in beat tracker (TempoTracker SPECTRAL_LOG_HZ, VU_LOG_HZ)
  * - Attack/release envelope timing
  */
-constexpr uint16_t SAMPLE_RATE = 16000;       // 16 kHz (Tab5 standard)
-constexpr uint16_t HOP_SIZE = 256;            // 16ms hop @ 16kHz = 62.5 Hz frames
+constexpr uint16_t SAMPLE_RATE = 12800;       // 12.8 kHz (Emotiscope match)
+constexpr uint16_t HOP_SIZE = 256;            // 20ms hop @ 12.8kHz = 50 Hz frames
 constexpr uint16_t FFT_SIZE = 512;            // For beat tracker spectral analysis
 constexpr uint16_t GOERTZEL_WINDOW = 512;     // 32ms window for bass coherence
 
 // Derived timing constants
-constexpr float HOP_DURATION_MS = (HOP_SIZE * 1000.0f) / SAMPLE_RATE;  // 16ms
-constexpr float HOP_RATE_HZ = SAMPLE_RATE / static_cast<float>(HOP_SIZE);  // 62.5 Hz
+constexpr float HOP_DURATION_MS = (HOP_SIZE * 1000.0f) / SAMPLE_RATE;  // 20ms @ 12.8kHz
+constexpr float HOP_RATE_HZ = SAMPLE_RATE / static_cast<float>(HOP_SIZE);  // 50 Hz @ 12.8kHz
 
 // ============================================================================
 // I2S DMA Configuration
@@ -124,7 +124,7 @@ constexpr uint16_t BAND_CENTER_FREQUENCIES[NUM_BANDS] = {
  * Audio data is considered "fresh" if less than this many ms old.
  * When stale, effects should fall back to time-based animation.
  */
-constexpr float STALENESS_THRESHOLD_MS = 100.0f;  // 100ms = 6 frames @ 62.5 Hz
+constexpr float STALENESS_THRESHOLD_MS = 100.0f;  // 100ms = 5 frames @ 50 Hz
 
 // ============================================================================
 // Actor Configuration
@@ -132,12 +132,12 @@ constexpr float STALENESS_THRESHOLD_MS = 100.0f;  // 100ms = 6 frames @ 62.5 Hz
 
 /**
  * AudioActor runs on Core 0 at priority 4 (below Renderer at 5).
- * 16ms tick interval matches hop size for precise timing.
+ * 20ms tick interval matches hop size for precise timing.
  */
 constexpr uint8_t AUDIO_ACTOR_PRIORITY = 4;
 constexpr uint8_t AUDIO_ACTOR_CORE = 0;
-constexpr uint16_t AUDIO_ACTOR_STACK_WORDS = 8192;  // 32KB stack (Increased from 4096 for safety)
-constexpr uint16_t AUDIO_ACTOR_TICK_MS = 16;        // Match hop duration
+constexpr uint16_t AUDIO_ACTOR_STACK_WORDS = 4096;  // 16KB stack (reverted from 32KB - original was 3072)
+constexpr uint16_t AUDIO_ACTOR_TICK_MS = 20;        // Match hop duration (20ms @ 12.8kHz)
 
 } // namespace audio
 } // namespace lightwaveos

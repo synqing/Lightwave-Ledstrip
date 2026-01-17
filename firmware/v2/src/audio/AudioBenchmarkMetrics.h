@@ -52,11 +52,11 @@ struct AudioBenchmarkSample {
 static_assert(sizeof(AudioBenchmarkSample) == 32, "Sample must be 32 bytes for ring buffer efficiency");
 
 /// Ring buffer configuration
-constexpr size_t BENCHMARK_RING_SIZE = 64;  ///< ~1 second at 62.5 Hz hop rate
+constexpr size_t BENCHMARK_RING_SIZE = 64;  ///< ~1.3 seconds at 50 Hz hop rate @ 12.8kHz
 constexpr size_t BENCHMARK_RING_MASK = BENCHMARK_RING_SIZE - 1;
 
-/// Frame budget for CPU load calculation (16ms = 16000us)
-constexpr uint32_t HOP_BUDGET_US = 16000;
+/// Frame budget for CPU load calculation (20ms = 20000us @ 12.8kHz)
+constexpr uint32_t HOP_BUDGET_US = 20000;
 
 /// Histogram bin edges for latency distribution (microseconds)
 constexpr uint16_t HISTOGRAM_BIN_EDGES[8] = {
@@ -66,7 +66,7 @@ constexpr uint16_t HISTOGRAM_BIN_EDGES[8] = {
 /**
  * @brief Aggregated statistics computed from ring buffer samples
  *
- * Updated periodically (every ~62 hops = 1 second) to minimize overhead.
+ * Updated periodically (every ~50 hops = 1 second @ 12.8kHz) to minimize overhead.
  * Published via separate SnapshotBuffer for WebSocket streaming.
  */
 struct AudioBenchmarkStats {

@@ -12,7 +12,7 @@ namespace lightwaveos::audio {
  */
 struct AudioTime {
     uint64_t sample_index = 0;
-    uint32_t sample_rate_hz = 16000;
+    uint32_t sample_rate_hz = 12800;  // Match I2S sample rate (Emotiscope)
     uint64_t monotonic_us = 0;
 
     AudioTime() = default;

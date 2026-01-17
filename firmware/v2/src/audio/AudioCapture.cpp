@@ -1,18 +1,12 @@
 /**
  * @file AudioCapture.cpp
- * @brief I2S audio capture implementation for SPH0645 MEMS microphone
+ * @brief I2S audio capture with LEGACY driver and CORRECT bit shift
  *
- * Uses ESP-IDF legacy I2S driver with ESP32-S3 register fixes for SPH0645.
+ * CRITICAL FIX: Legacy driver bit alignment is different from NEW driver.
+ * - NEW driver (Emotiscope): data in bits [31:14], use >>14
+ * - LEGACY driver: data in bits [31:10], use >>10
  *
- * SPH0645 Sample Format:
- * - Outputs 18-bit data, MSB-first, in 32-bit I2S slots
- * - I2S configured for 32-bit samples, RIGHT slot on ESP32-S3 (SEL=GND wiring)
- * - Register fixes: MSB shift enabled, timing delay (BIT(9)), WS polarity inverted
- * - Conversion: >>14 shift with bias/clip, then scale to 16-bit
- * - DC removal handled in AudioActor
- *
- * @author LightwaveOS Team
- * @version 2.2.0
+ * @version 4.1.0 - Legacy driver with >>10 bit shift
  */
 
 #include "AudioCapture.h"
@@ -21,34 +15,29 @@
 
 #include <cstring>
 #include <cmath>
+#include <algorithm>
 #include <esp_timer.h>
 
-// Unified logging system (preserves colored output conventions)
 #define LW_LOG_TAG "AudioCapture"
 #include "utils/Log.h"
-
-// Runtime-configurable audio debug verbosity
 #include "AudioDebugConfig.h"
 
-// ESP32-S3 register access for WS polarity fix (SPH0645 requirement)
-// The legacy I2S driver doesn't expose WS polarity, so we set the register directly
 #include "soc/i2s_reg.h"
 
 namespace lightwaveos {
 namespace audio {
 
-// Proven sample conversion constants
-static constexpr int32_t DC_BIAS_ADD = 7000;       // Pre-clip bias adjustment
-static constexpr int32_t DC_BIAS_SUB = 360;        // Post-clip DC removal
-static constexpr int32_t CLIP_MAX = 131071;        // 18-bit max value (2^17 - 1)
-static constexpr int32_t CLIP_MIN = -131072;       // 18-bit min value
+static constexpr float RECIP_SCALE = 1.0f / 131072.0f;
 
-// ============================================================================
-// Constructor / Destructor
-// ============================================================================
+// DC-blocking high-pass filter coefficient
+// alpha = 1 - (2 * pi * fc / fs), fc=10Hz, fs=12800Hz
+// Removes DC drift while preserving audio content
+static constexpr float DC_BLOCK_ALPHA = 0.9951f;
 
 AudioCapture::AudioCapture()
     : m_initialized(false)
+    , m_dcPrevInput(0.0f)
+    , m_dcPrevOutput(0.0f)
 {
     m_stats.reset();
     memset(m_dmaBuffer, 0, sizeof(m_dmaBuffer));
@@ -59,10 +48,6 @@ AudioCapture::~AudioCapture()
     deinit();
 }
 
-// ============================================================================
-// Lifecycle
-// ============================================================================
-
 bool AudioCapture::init()
 {
     if (m_initialized) {
@@ -70,22 +55,13 @@ bool AudioCapture::init()
         return true;
     }
 
-    LW_LOGI("Initializing I2S for SPH0645 (RIGHT channel)");
+    LW_LOGI("Initializing I2S (legacy driver with >>10 shift)");
 
-    // Configure I2S driver
     if (!configureI2S()) {
         LW_LOGE("Failed to configure I2S driver");
         return false;
     }
 
-    // Set pin configuration
-    if (!configurePins()) {
-        LW_LOGE("Failed to configure I2S pins");
-        i2s_driver_uninstall(I2S_PORT);
-        return false;
-    }
-
-    // Start I2S
     esp_err_t err = i2s_start(I2S_PORT);
     if (err != ESP_OK) {
         LW_LOGE("Failed to start I2S: %s", esp_err_to_name(err));
@@ -94,80 +70,44 @@ bool AudioCapture::init()
     }
 
     m_initialized = true;
-    LW_LOGI("I2S initialized successfully");
+    LW_LOGI("I2S initialized (legacy driver, >>10 shift)");
     LW_LOGI("  Sample rate: %d Hz", SAMPLE_RATE);
     LW_LOGI("  Hop size: %d samples (%.1f ms)", HOP_SIZE, HOP_DURATION_MS);
     LW_LOGI("  Pins: BCLK=%d WS=%d DIN=%d", I2S_BCLK_PIN, I2S_LRCL_PIN, I2S_DOUT_PIN);
-    LW_LOGI("  Channel: RIGHT slot (ESP32-S3 reads SEL=GND as RIGHT)");
 
     return true;
 }
 
 void AudioCapture::deinit()
 {
-    if (!m_initialized) {
-        return;
-    }
-
+    if (!m_initialized) return;
     LW_LOGI("Deinitializing I2S");
-
-    // Stop I2S
-    esp_err_t err = i2s_stop(I2S_PORT);
-    if (err != ESP_OK) {
-        LW_LOGW("Failed to stop I2S: %s", esp_err_to_name(err));
-    }
-
-    // Uninstall driver
-    err = i2s_driver_uninstall(I2S_PORT);
-    if (err != ESP_OK) {
-        LW_LOGW("Failed to uninstall I2S driver: %s", esp_err_to_name(err));
-    }
-
+    i2s_stop(I2S_PORT);
+    i2s_driver_uninstall(I2S_PORT);
     m_initialized = false;
-    LW_LOGI("I2S deinitialized");
 }
-
-// ============================================================================
-// Audio Capture
-// ============================================================================
 
 CaptureResult AudioCapture::captureHop(int16_t* buffer)
 {
-    if (!m_initialized) {
-        return CaptureResult::NOT_INITIALIZED;
-    }
+    if (!m_initialized) return CaptureResult::NOT_INITIALIZED;
+    if (buffer == nullptr) return CaptureResult::READ_ERROR;
 
-    if (buffer == nullptr) {
-        return CaptureResult::READ_ERROR;
-    }
-
-    // Calculate expected bytes: HOP_SIZE samples x 4 bytes/sample
-    const size_t expectedBytes = HOP_SIZE * sizeof(int32_t);
+    const size_t expectedBytes = HOP_SIZE * 2 * sizeof(int32_t);
     size_t bytesRead = 0;
 
-    // Record start time for statistics (microseconds)
     uint64_t startTime = esp_timer_get_time();
 
-    // Read from I2S DMA buffer
-    // Timeout: 2x hop duration to allow some slack
     const TickType_t timeout = pdMS_TO_TICKS(static_cast<uint32_t>(HOP_DURATION_MS * 2));
-
     esp_err_t err = i2s_read(I2S_PORT, m_dmaBuffer, expectedBytes, &bytesRead, timeout);
 
     uint64_t endTime = esp_timer_get_time();
     uint32_t readTimeUs = static_cast<uint32_t>(endTime - startTime);
 
-    // Update timing statistics
-    if (readTimeUs > m_stats.maxReadTimeUs) {
-        m_stats.maxReadTimeUs = readTimeUs;
-    }
-    // Simple rolling average
+    if (readTimeUs > m_stats.maxReadTimeUs) m_stats.maxReadTimeUs = readTimeUs;
     m_stats.avgReadTimeUs = (m_stats.avgReadTimeUs * 7 + readTimeUs) / 8;
 
-    // Handle errors
     if (err == ESP_ERR_TIMEOUT) {
         m_stats.dmaTimeouts++;
-        LW_LOGD("DMA timeout after %lu us", (unsigned long)readTimeUs);
         return CaptureResult::DMA_TIMEOUT;
     }
 
@@ -177,119 +117,84 @@ CaptureResult AudioCapture::captureHop(int16_t* buffer)
         return CaptureResult::READ_ERROR;
     }
 
-    // Verify we got the expected amount
-    // DEFENSIVE CHECK: Validate samplesRead doesn't exceed HOP_SIZE before array access
-    const size_t samplesRead = bytesRead / sizeof(int32_t);
-    if (samplesRead < HOP_SIZE) {
-        LW_LOGW("Partial read: %zu/%d samples", samplesRead, HOP_SIZE);
-        // DEFENSIVE CHECK: Ensure samplesRead is within bounds before memset
-        if (samplesRead < HOP_SIZE) {
-            memset(&buffer[samplesRead], 0, (HOP_SIZE - samplesRead) * sizeof(int16_t));
-        }
-    } else if (samplesRead > HOP_SIZE) {
-        // DEFENSIVE CHECK: Clamp samplesRead to HOP_SIZE if corrupted
-        LW_LOGW("Oversized read: %zu/%d samples, clamping", samplesRead, HOP_SIZE);
-        // Process only HOP_SIZE samples
+    const size_t monoSamplesRead = bytesRead / sizeof(int32_t) / 2;
+    if (monoSamplesRead < HOP_SIZE) {
+        memset(&buffer[monoSamplesRead], 0, (HOP_SIZE - monoSamplesRead) * sizeof(int16_t));
     }
 
+    // Debug logging
     static uint32_t s_dbgHop = 0;
     static bool s_firstPrint = true;
     s_dbgHop++;
 
-    // DMA debug log - gated by verbosity >= 3, configurable interval
-    auto& dbgCfgDMA = getAudioDebugConfig();
-    if (dbgCfgDMA.verbosity >= 3 && (s_firstPrint || (s_dbgHop % dbgCfgDMA.intervalDMA()) == 0)) {
+    auto& dbgCfg = getAudioDebugConfig();
+    if (dbgCfg.verbosity >= 3 && (s_firstPrint || (s_dbgHop % dbgCfg.intervalDMA()) == 0)) {
         s_firstPrint = false;
-        int32_t rawMin = INT32_MAX;
-        int32_t rawMax = INT32_MIN;
-        for (size_t i = 0; i < HOP_SIZE; ++i) {
+        int32_t rawMin = INT32_MAX, rawMax = INT32_MIN;
+        for (size_t i = 1; i < HOP_SIZE * 2; i += 2) {
             int32_t v = m_dmaBuffer[i];
             if (v < rawMin) rawMin = v;
             if (v > rawMax) rawMax = v;
         }
-
-        auto peakShift = [&](int shift) -> int32_t {
-            int32_t pk = 0;
-            for (size_t i = 0; i < HOP_SIZE; ++i) {
-                int32_t s = (m_dmaBuffer[i] >> shift);
-                int32_t a = (s < 0) ? -s : s;
-                if (a > pk) pk = a;
-            }
-            return pk;
-        };
-
-        // Check MSB shift register state for diagnostic
-        bool msbShiftEnabled = (REG_GET_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_MSB_SHIFT) != 0);
-        const char* channelFmt = "RIGHT";  // Current config uses RIGHT channel
-
-        // Title-only coloring: color resets before values for readability at 62.5Hz
-        LW_LOGI(LW_CLR_YELLOW "DMA dbg:" LW_ANSI_RESET " hop=%lu ch=%s msb_shift=%s raw0=%08X raw1=%08X min=%ld max=%ld "
-                 "pk>>8=%ld pk>>10=%ld pk>>12=%ld pk>>14=%ld pk>>16=%ld",
-                 (unsigned long)s_dbgHop, channelFmt, msbShiftEnabled ? "ON" : "OFF",
-                 (uint32_t)m_dmaBuffer[0], (uint32_t)m_dmaBuffer[1],
-                 (long)rawMin, (long)rawMax,
-                 (long)peakShift(8), (long)peakShift(10), (long)peakShift(12),
-                 (long)peakShift(14), (long)peakShift(16));
+        LW_LOGI(LW_CLR_YELLOW "DMA:" LW_ANSI_RESET " hop=%lu R=[%08X..%08X] >>10=[%ld..%ld]",
+                (unsigned long)s_dbgHop,
+                (uint32_t)rawMin, (uint32_t)rawMax,
+                (long)(rawMin >> 10), (long)(rawMax >> 10));
     }
 
-    // Convert samples from 32-bit I2S slots to 16-bit signed samples
-    // SPH0645 outputs 18-bit data, MSB-aligned in 32-bit slot.
-    // With MSB shift enabled, hardware aligns data; >>14 typically extracts 18-bit value.
-    // NOTE: Validate shift against DMA dbg output (pk>>N values) - the diagnostic
-    //       shows which shift produces the largest peak, indicating correct alignment.
-    // 1. Shift right by 14 to extract 18-bit value (may need adjustment based on diagnostics)
-    // 2. Clip to 18-bit range (safety)
-    // 3. Scale to 16-bit (>> 2)
-    // 4. DC removal is handled in AudioActor
-    
+    // =========================================================================
+    // SAMPLE CONVERSION WITH DC-BLOCKING FILTER
+    // =========================================================================
+    // 1. >>10 shift (legacy driver bit alignment)
+    // 2. DC-blocking high-pass filter (removes DC drift, no magic bias needed)
+    // 3. Clamp and normalize to int16
+    // =========================================================================
     int16_t peak = 0;
     for (size_t i = 0; i < HOP_SIZE; i++) {
-        // Step 1: Shift by 14 to get 18-bit value with sign preserved
-        // If DMA dbg shows pk>>12 or pk>>16 is much larger, adjust this shift accordingly
-        int32_t raw = (m_dmaBuffer[i] >> 14);
-        raw += DC_BIAS_ADD;
-        if (raw < CLIP_MIN) raw = CLIP_MIN;
-        if (raw > CLIP_MAX) raw = CLIP_MAX;
-        raw -= DC_BIAS_SUB;
-        int16_t sample = static_cast<int16_t>(raw >> 2);
+        int32_t rawSample = m_dmaBuffer[i * 2 + 1];  // RIGHT channel
+
+        // Step 1: >>10 shift (legacy driver alignment)
+        float input = static_cast<float>(rawSample >> 10);
+
+        // Step 2: DC-blocking high-pass filter
+        // y[n] = x[n] - x[n-1] + alpha * y[n-1]
+        float dcBlocked = input - m_dcPrevInput + DC_BLOCK_ALPHA * m_dcPrevOutput;
+        m_dcPrevInput = input;
+        m_dcPrevOutput = dcBlocked;
+
+        // Step 3: Clamp to ±131072 range, normalize to [-1, 1], then to int16
+        float clamped = std::max(-131072.0f, std::min(131072.0f, dcBlocked));
+        float normalized = clamped * RECIP_SCALE;
+        int16_t sample = static_cast<int16_t>(normalized * 32767.0f);
+
         buffer[i] = sample;
 
-        // Track peak for level metering
         int16_t absSample = (sample < 0) ? -sample : sample;
-        if (absSample > peak) {
-            peak = absSample;
-        }
+        if (absSample > peak) peak = absSample;
     }
 
-    // Update statistics
     m_stats.hopsCapured++;
     m_stats.peakSample = peak;
 
     return CaptureResult::SUCCESS;
 }
 
-// ============================================================================
-// Internal Methods
-// ============================================================================
-
 bool AudioCapture::configureI2S()
 {
-    // I2S driver configuration for SPH0645
-    // ESP32-S3 quirk: SPH0645 SEL=GND outputs LEFT per I2S spec, but ESP32-S3 reads it as RIGHT
     i2s_config_t i2sConfig = {
         .mode = static_cast<i2s_mode_t>(I2S_MODE_MASTER | I2S_MODE_RX),
         .sample_rate = SAMPLE_RATE,
-        .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,  // 32-bit slots for SPH0645
-        .channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT,   // ESP32-S3: RIGHT slot for SEL=GND mic
-        .communication_format = I2S_COMM_FORMAT_STAND_I2S,  // Standard I2S format
+        .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,
+        .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
+        .communication_format = I2S_COMM_FORMAT_STAND_MSB,
         .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
         .dma_buf_count = static_cast<int>(DMA_BUFFER_COUNT),
-        .dma_buf_len = static_cast<int>(DMA_BUFFER_SAMPLES),
-        .use_apll = false,                             // Use PLL clock
-        .tx_desc_auto_clear = false,                   // RX only
-        .fixed_mclk = 0,                               // No fixed MCLK
-        .mclk_multiple = I2S_MCLK_MULTIPLE_256,        // MCLK = 256 * Fs
-        .bits_per_chan = I2S_BITS_PER_CHAN_32BIT,      // 32-bit channel width
+        .dma_buf_len = static_cast<int>(DMA_BUFFER_SAMPLES * 2),
+        .use_apll = false,
+        .tx_desc_auto_clear = false,
+        .fixed_mclk = 0,
+        .mclk_multiple = I2S_MCLK_MULTIPLE_256,
+        .bits_per_chan = I2S_BITS_PER_CHAN_32BIT,
     };
 
     esp_err_t err = i2s_driver_install(I2S_PORT, &i2sConfig, 0, nullptr);
@@ -298,43 +203,28 @@ bool AudioCapture::configureI2S()
         return false;
     }
 
-    // =========================================================================
-    // CRITICAL: SPH0645 Timing Fixes (ESP32-S3 + SPH0645 alignment)
-    // =========================================================================
-    // SPH0645 requires:
-    // 1. REG_SET_BIT(I2S_RX_TIMING_REG(I2S_PORT), BIT(9)); -> Delay sampling by 1 BCLK
-    // 2. REG_SET_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_MSB_SHIFT); -> Enable MSB shift
-    //    (SPH0645 outputs MSB-first with 1 BCLK delay after WS, MSB shift aligns data)
-    // =========================================================================
-
-    // ESP32-S3 Specific Fixes for SPH0645
-    REG_SET_BIT(I2S_RX_TIMING_REG(I2S_PORT), BIT(9));
-    REG_SET_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_MSB_SHIFT);
-    REG_SET_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_WS_IDLE_POL);
-
-    LW_LOGI("I2S driver installed (RIGHT slot, WS inverted, MSB shift, timing delay for SPH0645)");
-    return true;
-}
-
-bool AudioCapture::configurePins()
-{
     i2s_pin_config_t pinConfig = {
-        .mck_io_num = I2S_PIN_NO_CHANGE,  // SPH0645 doesn't need MCLK
-        .bck_io_num = static_cast<int>(I2S_BCLK_PIN),   // GPIO 14 - Bit Clock
-        .ws_io_num = static_cast<int>(I2S_LRCL_PIN),    // GPIO 12 - Word Select (LRCLK)
-        .data_out_num = I2S_PIN_NO_CHANGE,              // Not transmitting
-        .data_in_num = static_cast<int>(I2S_DOUT_PIN),  // GPIO 13 - Data from mic
+        .mck_io_num = I2S_PIN_NO_CHANGE,
+        .bck_io_num = static_cast<int>(I2S_BCLK_PIN),
+        .ws_io_num = static_cast<int>(I2S_LRCL_PIN),
+        .data_out_num = I2S_PIN_NO_CHANGE,
+        .data_in_num = static_cast<int>(I2S_DOUT_PIN),
     };
 
-    esp_err_t err = i2s_set_pin(I2S_PORT, &pinConfig);
+    err = i2s_set_pin(I2S_PORT, &pinConfig);
     if (err != ESP_OK) {
         LW_LOGE("Failed to set I2S pins: %s", esp_err_to_name(err));
+        i2s_driver_uninstall(I2S_PORT);
         return false;
     }
 
-    LW_LOGI("I2S pins: BCLK=%d WS=%d DIN=%d",
-             I2S_BCLK_PIN, I2S_LRCL_PIN, I2S_DOUT_PIN);
+    // Register settings AFTER i2s_set_pin()
+    REG_CLR_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_MSB_SHIFT);
+    REG_CLR_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_WS_IDLE_POL);  // NO WS inversion - data in RIGHT channel
+    REG_SET_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_LEFT_ALIGN);
+    REG_SET_BIT(I2S_RX_TIMING_REG(I2S_PORT), BIT(9));
 
+    LW_LOGI("I2S configured: STEREO, MSB format, >>10 shift");
     return true;
 }
 

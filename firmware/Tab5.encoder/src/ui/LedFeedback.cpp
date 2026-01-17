@@ -2,7 +2,8 @@
 // LedFeedback - Connection Status LED Feedback for Tab5.encoder
 // ============================================================================
 // Implementation: Non-blocking breathing LED animations for connection status.
-// Uses sine wave for smooth breathing effect on BOTH Unit A and Unit B.
+// Uses sine wave for smooth breathing effect on Unit A LED 8.
+// Note: Unit B LED 8 is now used for palette display.
 // ============================================================================
 
 #include "LedFeedback.h"
@@ -171,16 +172,14 @@ void LedFeedback::applyColorToBothUnits(const StatusLedColor& color) {
     if (!m_encoders) return;
 
     // Set LED 8 (status LED) on Unit A (unit index 0)
+    // Note: Unit B LED 8 is now used for palette display, so we only set Unit A
     m_encoders->setStatusLed(0, color.r, color.g, color.b);
-
-    // Set LED 8 (status LED) on Unit B (unit index 1)
-    m_encoders->setStatusLed(1, color.r, color.g, color.b);
 }
 
 void LedFeedback::allOff() {
     if (!m_encoders) return;
 
-    // Turn off status LEDs on both units
+    // Turn off status LED on Unit A
+    // Note: Unit B LED 8 is now used for palette display, so we only turn off Unit A
     m_encoders->setStatusLed(0, 0, 0, 0);
-    m_encoders->setStatusLed(1, 0, 0, 0);
 }

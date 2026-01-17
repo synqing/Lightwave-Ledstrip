@@ -90,6 +90,31 @@ public:
     // Get status as human-readable string
     const char* getStatusString() const;
 
+    // ========================================================================
+    // Stub API for compatibility with main.cpp (features not implemented)
+    // ========================================================================
+
+    // Trigger connection retry (no-op in simple mode)
+    void triggerRetry() { reconnect(); }
+
+    // Check if manual IP should be used (always false)
+    bool shouldUseManualIP() const { return false; }
+
+    // Get manual IP address (returns INADDR_NONE)
+    IPAddress getManualIP() const { return IPAddress(INADDR_NONE); }
+
+    // Check if mDNS timeout exceeded (always false - use isMDNSResolved instead)
+    bool isMDNSTimeoutExceeded() const { return false; }
+
+    // Check if retry button should be shown (show when not connected or resolving)
+    bool shouldShowRetryButton() const {
+        return _status == WiFiConnectionStatus::DISCONNECTED ||
+               _status == WiFiConnectionStatus::ERROR;
+    }
+
+    // Get mDNS attempt count
+    uint8_t getMDNSAttemptCount() const { return _mdnsRetryCount; }
+
 private:
     const char* _ssid;
     const char* _password;
@@ -140,6 +165,15 @@ public:
     bool isMDNSResolved() const { return false; }
     void reconnect() {}
     const char* getStatusString() const { return "WiFi Disabled"; }
+
+    // Stub API for compatibility
+    void triggerRetry() {}
+    bool shouldUseManualIP() const { return false; }
+    IPAddress getManualIP() const { return IPAddress(INADDR_NONE); }
+    bool isMDNSTimeoutExceeded() const { return false; }
+    bool shouldShowRetryButton() const { return false; }
+    uint8_t getMDNSAttemptCount() const { return 0; }
+    IPAddress getResolvedIP() const { return IPAddress(INADDR_NONE); }
 };
 
 #endif // ENABLE_WIFI

@@ -30,6 +30,7 @@
 #include <Arduino.h>
 #include <M5Unified.h>
 #include <functional>
+#include "../ui/Theme.h"
 
 // Forward declaration
 class DualEncoderService;
@@ -49,6 +50,7 @@ enum class TouchZone : uint8_t {
     NONE = 0,
     STATUS_BAR,       // y=0-199 (title area)
     PARAMETER_GRID,   // y=200-480 (parameter cells)
+    ACTION_ROW,       // Touch buttons row
     NAVIGATION        // Reserved for future use
 };
 
@@ -58,20 +60,30 @@ enum class TouchZone : uint8_t {
 
 namespace TouchConfig {
     // Display dimensions (Tab5 5" LCD in landscape)
-    constexpr int16_t SCREEN_WIDTH = 800;
-    constexpr int16_t SCREEN_HEIGHT = 480;
+    constexpr int16_t SCREEN_WIDTH = Theme::SCREEN_W;
+    constexpr int16_t SCREEN_HEIGHT = Theme::SCREEN_H;
 
     // Status bar zone
     constexpr int16_t STATUS_BAR_Y_START = 0;
-    constexpr int16_t STATUS_BAR_Y_END = 199;
+    constexpr int16_t STATUS_BAR_Y_END = Theme::STATUS_BAR_H - 1;
 
-    // Parameter grid layout (matches main.cpp drawCell)
-    constexpr int16_t GRID_Y_START = 200;        // yStart in main.cpp
-    constexpr int16_t CELL_HEIGHT = 35;          // cellHeight in main.cpp
-    constexpr int16_t COL_WIDTH = 320;           // colWidth in main.cpp
-    constexpr int16_t COL0_X_START = 20;         // Left column start
-    constexpr int16_t COL1_X_START = 340;        // Right column start (20 + 320)
-    constexpr int16_t CELL_WIDTH = 300;          // colWidth - 20 padding
+    // Parameter grid layout (disabled by default for Tab5 touch)
+    constexpr int16_t GRID_Y_START = Theme::SCREEN_H + 1;
+    constexpr int16_t CELL_HEIGHT = 35;
+    constexpr int16_t COL_WIDTH = 320;
+    constexpr int16_t COL0_X_START = 20;
+    constexpr int16_t COL1_X_START = 340;
+    constexpr int16_t CELL_WIDTH = 300;
+
+    // Action row layout (third row)
+    constexpr int16_t ACTION_ROW_Y_START = Theme::ACTION_ROW_Y;
+    constexpr int16_t ACTION_ROW_Y_END = Theme::ACTION_ROW_Y + Theme::ACTION_ROW_H - 1;
+    
+    // Debug: Log action row bounds at compile time (visible in serial)
+    // ACTION_ROW_Y = PRESET_ROW_Y + PRESET_SLOT_H + 20 = 240 + 144 + 20 = 404
+    // ACTION_ROW_Y_END = 404 + 120 - 1 = 523
+    constexpr uint8_t ACTION_BUTTONS = 4;
+    constexpr int16_t ACTION_BUTTON_W = Theme::ACTION_BTN_W;
 
     // Number of rows per column
     constexpr uint8_t ROWS_PER_COLUMN = 8;
@@ -96,6 +108,7 @@ public:
     using TapCallback = std::function<void(uint8_t paramIndex)>;
     using LongPressCallback = std::function<void(uint8_t paramIndex)>;
     using StatusBarCallback = std::function<void(int16_t x, int16_t y)>;
+    using ActionButtonCallback = std::function<void(uint8_t buttonIndex)>;
 
     /**
      * Constructor
@@ -144,6 +157,12 @@ public:
      */
     void onStatusBarTouch(StatusBarCallback callback);
 
+    /**
+     * Register callback for action row button taps
+     * @param callback Function called with button index (0-3)
+     */
+    void onActionButton(ActionButtonCallback callback);
+
     // ========================================================================
     // State Query
     // ========================================================================
@@ -188,6 +207,14 @@ public:
      */
     static int8_t hitTestParameter(int16_t x, int16_t y);
 
+    /**
+     * Hit test to determine which action button was touched
+     * @param x Touch X coordinate
+     * @param y Touch Y coordinate
+     * @return Button index (0-3) or -1 if none
+     */
+    static int8_t hitTestActionButton(int16_t x, int16_t y);
+
 private:
     // ========================================================================
     // Internal State
@@ -200,6 +227,7 @@ private:
     int16_t m_touchY;                // Current/last touch Y
     uint32_t m_touchStartTime;       // When touch began
     int8_t m_touchedParam;           // Parameter being touched (-1 if none)
+    int8_t m_touchedAction;          // Action button being touched (-1 if none)
     bool m_longPressTriggered;       // Long press already triggered this touch
 
     // Debounce
@@ -212,6 +240,7 @@ private:
     TapCallback m_tapCallback;
     LongPressCallback m_longPressCallback;
     StatusBarCallback m_statusBarCallback;
+    ActionButtonCallback m_actionButtonCallback;
 
     // ========================================================================
     // Internal Methods
@@ -256,12 +285,14 @@ inline TouchHandler::TouchHandler()
     , m_touchY(0)
     , m_touchStartTime(0)
     , m_touchedParam(-1)
+    , m_touchedAction(-1)
     , m_longPressTriggered(false)
     , m_lastEventTime(0)
     , m_encoderService(nullptr)
     , m_tapCallback(nullptr)
     , m_longPressCallback(nullptr)
     , m_statusBarCallback(nullptr)
+    , m_actionButtonCallback(nullptr)
 {
 }
 
@@ -292,6 +323,10 @@ inline void TouchHandler::onStatusBarTouch(StatusBarCallback callback) {
     m_statusBarCallback = callback;
 }
 
+inline void TouchHandler::onActionButton(ActionButtonCallback callback) {
+    m_actionButtonCallback = callback;
+}
+
 inline bool TouchHandler::isTouching() const {
     return m_touching;
 }
@@ -308,16 +343,36 @@ inline int8_t TouchHandler::getLastTouchedParam() const {
 }
 
 inline TouchZone TouchHandler::hitTestZone(int16_t x, int16_t y) {
+    // #region agent log
+    Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1,H3\",\"location\":\"TouchHandler.h:341\",\"message\":\"hitTestZone.entry\",\"data\":{\"x\":%d,\"y\":%d,\"statusBarYEnd\":%d,\"actionRowYStart\":%d,\"actionRowYEnd\":%d,\"gridYStart\":%d,\"screenH\":%d},\"timestamp\":%lu}\n", x, y, TouchConfig::STATUS_BAR_Y_END, TouchConfig::ACTION_ROW_Y_START, TouchConfig::ACTION_ROW_Y_END, TouchConfig::GRID_Y_START, TouchConfig::SCREEN_HEIGHT, (unsigned long)millis());
+    // #endregion
     // Status bar zone
     if (y >= TouchConfig::STATUS_BAR_Y_START && y <= TouchConfig::STATUS_BAR_Y_END) {
+        // #region agent log
+        Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\",\"location\":\"TouchHandler.h:344\",\"message\":\"hitTestZone.statusBar\",\"data\":{\"x\":%d,\"y\":%d},\"timestamp\":%lu}\n", x, y, (unsigned long)millis());
+        // #endregion
         return TouchZone::STATUS_BAR;
+    }
+
+    // Action row zone (check BEFORE parameter grid to avoid conflicts)
+    if (y >= TouchConfig::ACTION_ROW_Y_START && y <= TouchConfig::ACTION_ROW_Y_END) {
+        // #region agent log
+        Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\",\"location\":\"TouchHandler.h:352\",\"message\":\"hitTestZone.actionRow\",\"data\":{\"x\":%d,\"y\":%d,\"yStart\":%d,\"yEnd\":%d},\"timestamp\":%lu}\n", x, y, TouchConfig::ACTION_ROW_Y_START, TouchConfig::ACTION_ROW_Y_END, (unsigned long)millis());
+        // #endregion
+        return TouchZone::ACTION_ROW;
     }
 
     // Parameter grid zone
     if (y >= TouchConfig::GRID_Y_START && y < TouchConfig::SCREEN_HEIGHT) {
+        // #region agent log
+        Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\",\"location\":\"TouchHandler.h:359\",\"message\":\"hitTestZone.parameterGrid\",\"data\":{\"x\":%d,\"y\":%d},\"timestamp\":%lu}\n", x, y, (unsigned long)millis());
+        // #endregion
         return TouchZone::PARAMETER_GRID;
     }
 
+    // #region agent log
+    Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\",\"location\":\"TouchHandler.h:365\",\"message\":\"hitTestZone.none\",\"data\":{\"x\":%d,\"y\":%d},\"timestamp\":%lu}\n", x, y, (unsigned long)millis());
+    // #endregion
     return TouchZone::NONE;
 }
 
@@ -362,4 +417,39 @@ inline int8_t TouchHandler::hitTestParameter(int16_t x, int16_t y) {
     }
 
     return paramIndex;
+}
+
+inline int8_t TouchHandler::hitTestActionButton(int16_t x, int16_t y) {
+    // #region agent log
+    Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H2\",\"location\":\"TouchHandler.h:403\",\"message\":\"hitTestActionButton.entry\",\"data\":{\"x\":%d,\"y\":%d,\"yStart\":%d,\"yEnd\":%d,\"screenW\":%d,\"buttonW\":%d},\"timestamp\":%lu}\n", x, y, TouchConfig::ACTION_ROW_Y_START, TouchConfig::ACTION_ROW_Y_END, TouchConfig::SCREEN_WIDTH, TouchConfig::ACTION_BUTTON_W, (unsigned long)millis());
+    // #endregion
+    if (y < TouchConfig::ACTION_ROW_Y_START || y > TouchConfig::ACTION_ROW_Y_END) {
+        // #region agent log
+        Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H2\",\"location\":\"TouchHandler.h:405\",\"message\":\"hitTestActionButton.yOutOfRange\",\"data\":{\"x\":%d,\"y\":%d,\"yStart\":%d,\"yEnd\":%d},\"timestamp\":%lu}\n", x, y, TouchConfig::ACTION_ROW_Y_START, TouchConfig::ACTION_ROW_Y_END, (unsigned long)millis());
+        // #endregion
+        return -1;
+    }
+
+    if (x < 0 || x >= TouchConfig::SCREEN_WIDTH) {
+        // #region agent log
+        Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H2\",\"location\":\"TouchHandler.h:410\",\"message\":\"hitTestActionButton.xOutOfRange\",\"data\":{\"x\":%d,\"screenW\":%d},\"timestamp\":%lu}\n", x, TouchConfig::SCREEN_WIDTH, (unsigned long)millis());
+        // #endregion
+        return -1;
+    }
+
+    int8_t idx = x / TouchConfig::ACTION_BUTTON_W;
+    // #region agent log
+    Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H2\",\"location\":\"TouchHandler.h:415\",\"message\":\"hitTestActionButton.calculated\",\"data\":{\"x\":%d,\"buttonW\":%d,\"calculatedIdx\":%d,\"maxButtons\":%d},\"timestamp\":%lu}\n", x, TouchConfig::ACTION_BUTTON_W, idx, TouchConfig::ACTION_BUTTONS, (unsigned long)millis());
+    // #endregion
+    if (idx < 0 || idx >= TouchConfig::ACTION_BUTTONS) {
+        // #region agent log
+        Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H2\",\"location\":\"TouchHandler.h:417\",\"message\":\"hitTestActionButton.idxOutOfRange\",\"data\":{\"idx\":%d,\"maxButtons\":%d},\"timestamp\":%lu}\n", idx, TouchConfig::ACTION_BUTTONS, (unsigned long)millis());
+        // #endregion
+        return -1;
+    }
+
+    // #region agent log
+    Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H2\",\"location\":\"TouchHandler.h:422\",\"message\":\"hitTestActionButton.success\",\"data\":{\"idx\":%d},\"timestamp\":%lu}\n", idx, (unsigned long)millis());
+    // #endregion
+    return idx;
 }

@@ -8,9 +8,11 @@
 #include "ParameterHandler.h"
 #include "ParameterMap.h"
 #include "../input/DualEncoderService.h"
+#include "../input/ButtonHandler.h"
 #include "../network/WebSocketClient.h"
 #include <Arduino.h>
 #include <cstring>
+
 
 ParameterHandler::ParameterHandler(
     DualEncoderService* encoderService,
@@ -20,13 +22,15 @@ ParameterHandler::ParameterHandler(
     , m_wsClient(wsClient)
     , m_displayCallback(nullptr)
 {
-    // Initialize with default values for all 16 parameters
+    // Sync cache with encoder service values (which have NVS-restored data)
+    // This ensures ParameterHandler cache matches hardware state from startup.
     for (uint8_t i = 0; i < PARAMETER_COUNT; i++) {
-        const ParameterDef* param = getParameterByIndex(i);
-        if (param) {
-            m_values[i] = param->defaultValue;
+        if (m_encoderService) {
+            m_values[i] = m_encoderService->getValue(i);
         } else {
-            m_values[i] = 128;  // Fallback default
+            // Fallback to defaults if encoder service not available
+            const ParameterDef* param = getParameterByIndex(i);
+            m_values[i] = param ? param->defaultValue : 128;
         }
     }
 }
@@ -36,6 +40,10 @@ void ParameterHandler::onEncoderChanged(uint8_t index, uint16_t value, bool wasR
     if (!param || !m_wsClient) {
         return;
     }
+
+    // Mark this parameter as locally “authoritative” for a short window to prevent
+    // server status echo from snapping the UI/encoder back and forth.
+    m_lastLocalChangeMs[index] = millis();
 
     // Clamp value to valid range
     uint8_t clampedValue = clampValue(param, static_cast<uint8_t>(value));
@@ -65,11 +73,18 @@ bool ParameterHandler::applyStatus(JsonDocument& doc) {
     }
 
     bool updated = false;
+    uint32_t nowMs = millis();
 
     // Apply each parameter from status message
     for (uint8_t i = 0; i < getParameterCount(); i++) {
         const ParameterDef* param = getParameterByIndex(i);
         if (!param) continue;
+
+        // If this parameter was just changed locally, ignore server status for a short time.
+        // This prevents snapback/jitter when LightwaveOS broadcasts status slightly behind.
+        if (m_lastLocalChangeMs[i] != 0 && (nowMs - m_lastLocalChangeMs[i] < LOCAL_OVERRIDE_HOLDOFF_MS)) {
+            continue;  // Holdoff active - anti-snapback protection
+        }
 
         // Check if this field exists in the status message (ArduinoJson 7 pattern)
         if (doc[param->statusField].is<int>() || doc[param->statusField].is<uint8_t>()) {
@@ -144,12 +159,9 @@ void ParameterHandler::sendParameterChange(const ParameterDef* param, uint8_t va
 
     // Send command based on parameter type using existing methods
     switch (param->id) {
-        // Unit A (0-7) - Core parameters with dedicated methods
+        // Unit A (0-7) - Global parameters with dedicated methods
         case ParameterId::EffectId:
             m_wsClient->sendEffectChange(value);
-            break;
-        case ParameterId::Brightness:
-            m_wsClient->sendBrightnessChange(value);
             break;
         case ParameterId::PaletteId:
             m_wsClient->sendPaletteChange(value);
@@ -157,11 +169,14 @@ void ParameterHandler::sendParameterChange(const ParameterDef* param, uint8_t va
         case ParameterId::Speed:
             m_wsClient->sendSpeedChange(value);
             break;
-        case ParameterId::Intensity:
-            m_wsClient->sendIntensityChange(value);
+        case ParameterId::Mood:
+            m_wsClient->sendMoodChange(value);
             break;
-        case ParameterId::Saturation:
-            m_wsClient->sendSaturationChange(value);
+        case ParameterId::FadeAmount:
+            m_wsClient->sendFadeAmountChange(value);
+            break;
+        case ParameterId::Brightness:
+            m_wsClient->sendBrightnessChange(value);
             break;
         case ParameterId::Complexity:
             m_wsClient->sendComplexityChange(value);
@@ -171,30 +186,51 @@ void ParameterHandler::sendParameterChange(const ParameterDef* param, uint8_t va
             break;
 
         // Unit B (8-15) - Zone parameters
-        // These use generic parameter.set with field name
+        // Zone effects use zone.setEffect
+        // Zone speeds use zone.setSpeed (can toggle to zone.setPalette via button)
         case ParameterId::Zone0Effect:
-            m_wsClient->sendGenericParameter("zone0Effect", value);
+            m_wsClient->sendZoneEffect(0, value);
             break;
-        case ParameterId::Zone0Brightness:
-            m_wsClient->sendGenericParameter("zone0Brightness", value);
+        case ParameterId::Zone0Speed:
+            // Check if button toggled to palette mode
+            if (m_buttonHandler && m_buttonHandler->getZoneEncoderMode(0) == SpeedPaletteMode::PALETTE) {
+                m_wsClient->sendZonePalette(0, value);
+            } else {
+                m_wsClient->sendZoneSpeed(0, value);
+            }
             break;
         case ParameterId::Zone1Effect:
-            m_wsClient->sendGenericParameter("zone1Effect", value);
+            m_wsClient->sendZoneEffect(1, value);
             break;
-        case ParameterId::Zone1Brightness:
-            m_wsClient->sendGenericParameter("zone1Brightness", value);
+        case ParameterId::Zone1Speed:
+            // Check if button toggled to palette mode
+            if (m_buttonHandler && m_buttonHandler->getZoneEncoderMode(1) == SpeedPaletteMode::PALETTE) {
+                m_wsClient->sendZonePalette(1, value);
+            } else {
+                m_wsClient->sendZoneSpeed(1, value);
+            }
             break;
         case ParameterId::Zone2Effect:
-            m_wsClient->sendGenericParameter("zone2Effect", value);
+            m_wsClient->sendZoneEffect(2, value);
             break;
-        case ParameterId::Zone2Brightness:
-            m_wsClient->sendGenericParameter("zone2Brightness", value);
+        case ParameterId::Zone2Speed:
+            // Check if button toggled to palette mode
+            if (m_buttonHandler && m_buttonHandler->getZoneEncoderMode(2) == SpeedPaletteMode::PALETTE) {
+                m_wsClient->sendZonePalette(2, value);
+            } else {
+                m_wsClient->sendZoneSpeed(2, value);
+            }
             break;
         case ParameterId::Zone3Effect:
-            m_wsClient->sendGenericParameter("zone3Effect", value);
+            m_wsClient->sendZoneEffect(3, value);
             break;
-        case ParameterId::Zone3Brightness:
-            m_wsClient->sendGenericParameter("zone3Brightness", value);
+        case ParameterId::Zone3Speed:
+            // Check if button toggled to palette mode
+            if (m_buttonHandler && m_buttonHandler->getZoneEncoderMode(3) == SpeedPaletteMode::PALETTE) {
+                m_wsClient->sendZonePalette(3, value);
+            } else {
+                m_wsClient->sendZoneSpeed(3, value);
+            }
             break;
     }
 }
@@ -204,11 +240,15 @@ uint8_t ParameterHandler::clampValue(const ParameterDef* param, uint8_t value) c
         return value;
     }
 
-    if (value < param->min) {
-        return param->min;
+    // Use dynamic min/max from ParameterMap (falls back to hardcoded if not available)
+    uint8_t min = getParameterMin(param->encoderIndex);
+    uint8_t max = getParameterMax(param->encoderIndex);
+
+    if (value < min) {
+        return min;
     }
-    if (value > param->max) {
-        return param->max;
+    if (value > max) {
+        return max;
     }
     return value;
 }

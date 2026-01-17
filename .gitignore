@@ -112,3 +112,15 @@ z.md
 
 # Development dashboard (separate build project)
 # lightwave-dashboard/ -> Now tracked
+
+# ==========================================
+# LOCAL DEVELOPMENT ARTIFACTS
+# ==========================================
+# Tool/IDE configuration directories
+.nimbalyst/
+
+# Temporary working files
+LightwaveOS_Temp_Files/
+
+# Roadmap planning (local development notes)
+roadmap/

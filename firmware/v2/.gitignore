@@ -51,3 +51,19 @@ Thumbs.db
 test_goertzel
 audio_audit_bundle/
 audio_audit_bundle.zip
+
+# =============================================================================
+# Arduino IDE Build Artifacts
+# =============================================================================
+arduino_build/
+
+# =============================================================================
+# Planning / Development Notes (local only)
+# =============================================================================
+planning/
+
+# =============================================================================
+# Duplicate/Orphan Files
+# =============================================================================
+# Example file that was deleted but recreated without .example extension
+src/core/actors/example_actor_usage.cpp

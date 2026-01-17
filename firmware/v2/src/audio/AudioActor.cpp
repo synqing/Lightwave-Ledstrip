@@ -489,7 +489,16 @@ void AudioActor::processHop()
     if (rmsPre < m_noiseFloor) {
         m_noiseFloor += noiseFloorFall * (rmsPre - m_noiseFloor);
     } else {
-        m_noiseFloor += noiseFloorRise * (rmsPre - m_noiseFloor);
+        // SNR-based rise guard: freeze floor when signal clearly present
+        const float snr = rmsPre / std::max(m_noiseFloor, 0.0001f);
+        const bool measuringAmbient =
+            (rmsPre <= tuning.silenceThreshold) ||
+            (snr < 2.0f);
+
+        if (measuringAmbient) {
+            m_noiseFloor += 0.005f * (rmsPre - m_noiseFloor);
+        }
+        // SNR >= 2: signal present, freeze floor (no rise)
     }
     if (m_noiseFloor < noiseFloorMin) {
         m_noiseFloor = noiseFloorMin;
@@ -841,7 +850,8 @@ void AudioActor::processHop()
     // Process noise calibration state machine if active
     {
         uint32_t nowMs = (uint32_t)(now_us / 1000);
-        processNoiseCalibration(rmsMapped, raw.bands, raw.chroma, nowMs);
+        // Use pre-gate RMS to avoid calibrating on gated (zeroed) signal
+        processNoiseCalibration(m_lastRmsPreGain, raw.bands, raw.chroma, nowMs);
     }
 
 

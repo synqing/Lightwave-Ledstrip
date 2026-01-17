@@ -816,6 +816,7 @@ void WebServer::doBroadcastStatus() {
     doc["brightness"] = cached.brightness;
     doc["speed"] = cached.speed;
     doc["paletteId"] = cached.paletteIndex;
+    doc["paletteName"] = MasterPaletteNames[cached.paletteIndex];
     doc["hue"] = cached.hue;
     doc["intensity"] = cached.intensity;
     doc["saturation"] = cached.saturation;

@@ -144,10 +144,10 @@ struct ControlBusRawInput {
     // bins64[63] = C7 (2093 Hz)
     // Each bin is one semitone apart: freq = 55 * 2^(bin/12)
 
-    // === K1 Beat Tracker State ===
-    bool k1Locked = false;                    // True if phase-locked to beat
-    float k1Confidence = 0.0f;                // 0-1 lock confidence
-    bool k1BeatTick = false;                  // Single-frame pulse on beat
+    // === Tempo Tracker State (for saliency computation; effects use MusicalGrid) ===
+    bool tempoLocked = false;                 // True if phase-locked to beat
+    float tempoConfidence = 0.0f;             // 0-1 lock confidence
+    bool tempoBeatTick = false;               // Single-frame pulse on beat
 };
 ```
 
@@ -202,10 +202,10 @@ struct ControlBusFrame {
     // === 64-Bin Spectrum ===
     float bins64[64] = {0};                   // Full Goertzel spectrum
 
-    // === K1 Beat Tracker ===
-    bool k1Locked = false;
-    float k1Confidence = 0.0f;
-    bool k1BeatTick = false;
+    // === Tempo Tracker (for saliency; effects use MusicalGrid via ctx.audio.*) ===
+    bool tempoLocked = false;
+    float tempoConfidence = 0.0f;
+    bool tempoBeatTick = false;
 
     // === Silence Detection ===
     float silentScale = 1.0f;                 // 0.0=silent, 1.0=active (multiply with brightness)
@@ -527,10 +527,10 @@ void computeSaliency() {
     sal.dynamicNovelty = clamp01(rmsDelta / m_saliencyTuning.rmsDerivativeThreshold);
     sal.prevRms = m_frame.rms;
 
-    // === Rhythmic Novelty (K1 beat tracker) ===
-    if (m_frame.k1Locked) {
-        float baseRhythmic = m_frame.k1Confidence * 0.8f;
-        if (m_frame.k1BeatTick) {
+    // === Rhythmic Novelty (Tempo tracker integration) ===
+    if (m_frame.tempoLocked) {
+        float baseRhythmic = m_frame.tempoConfidence * 0.8f;
+        if (m_frame.tempoBeatTick) {
             sal.rhythmicNovelty = clamp01(baseRhythmic + 0.5f);  // Spike on beat
         } else {
             sal.rhythmicNovelty = baseRhythmic;

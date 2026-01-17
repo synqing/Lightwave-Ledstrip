@@ -66,10 +66,10 @@ struct ControlBusRawInput {
     static constexpr uint8_t BINS_64_COUNT = 64;
     float bins64[BINS_64_COUNT] = {0};  // 0..1 normalized magnitudes
 
-    // Phase 2: K1 Beat Tracker Output (for rhythmic saliency)
-    bool k1Locked = false;          // True if K1 beat tracker is phase-locked
-    float k1Confidence = 0.0f;      // K1 confidence (0-1), high = strong beat lock
-    bool k1BeatTick = false;        // True on beat frame (when k1Locked)
+    // Tempo tracker output (saliency computation ONLY - effects read MusicalGrid)
+    bool tempoLocked = false;       ///< TempoTracker lock state (saliency; effects read MusicalGrid)
+    float tempoConfidence = 0.0f;   ///< TempoTracker confidence (saliency; effects read MusicalGrid.confidence)
+    bool tempoBeatTick = false;     ///< TempoTracker beat tick gated by lock (saliency support)
 };
 
 /**
@@ -108,10 +108,10 @@ struct ControlBusFrame {
     static constexpr uint8_t BINS_64_COUNT = 64;
     float bins64[BINS_64_COUNT] = {0};  // 0..1 normalized magnitudes
 
-    // Phase 2: K1 Beat Tracker Output (stored for saliency computation)
-    bool k1Locked = false;          // True if K1 beat tracker is phase-locked
-    float k1Confidence = 0.0f;      // K1 confidence (0-1), high = strong beat lock
-    bool k1BeatTick = false;        // True on beat frame (when k1Locked)
+    // Tempo tracker output (saliency computation ONLY - effects read MusicalGrid)
+    bool tempoLocked = false;       ///< TempoTracker lock state (saliency; effects read MusicalGrid)
+    float tempoConfidence = 0.0f;   ///< TempoTracker confidence (saliency; effects read MusicalGrid.confidence)
+    bool tempoBeatTick = false;     ///< TempoTracker beat tick gated by lock (saliency support)
 
     // Silence detection (Sensory Bridge pattern)
     // silentScale fades from 1.0 to 0.0 after silenceHysteresisMs of silence

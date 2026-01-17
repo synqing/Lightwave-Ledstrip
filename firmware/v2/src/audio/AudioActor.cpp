@@ -704,19 +704,22 @@ void AudioActor::processHop()
     // ========================================================================
     // TempoTracker Beat Tracker Processing
     // ========================================================================
-    // Dual-rate novelty input:
-    // - Spectral flux from 8-band Goertzel when ready (31.25 Hz)
-    // - VU derivative from RMS every hop (62.5 Hz)
-    // goertzelTriggered fires when 8-band analysis completes (every 512 samples)
+    // EMOTISCOPE PARITY: Use full 64-bin spectrum for novelty detection
+    // - Spectral flux from 64-bin Goertzel when ready (~10 Hz @ 12.8kHz)
+    // - VU derivative from RMS every hop (50 Hz @ 12.8kHz)
+    // 64-bin analysis fires when analyze64() completes (every 1500 samples)
     m_tempo.updateNovelty(
-        goertzelTriggered ? raw.bands : nullptr,  // 8-band magnitudes or nullptr
-        8,                                         // num_bands
-        rmsRaw,                                    // RMS for VU calculation
-        goertzelTriggered                          // bands_ready flag
+        m_analyze64Ready ? m_bins64Cached : nullptr,  // 64-bin magnitudes or nullptr
+        audio::NUM_FREQS,                              // num_bins = 64 (Emotiscope parity)
+        rmsRaw,                                        // RMS for VU calculation
+        m_analyze64Ready                               // bins_ready flag
     );
+    m_analyze64Ready = false;  // Reset flag after use
 
     // Update tempo detection (interleaved Goertzel computation)
-    float delta_sec = 0.016f;  // ~16ms per hop
+    // CRITICAL: delta_sec must match actual hop duration (HOP_SIZE / SAMPLE_RATE)
+    // At 12800 Hz with HOP_SIZE=256: 256/12800 = 0.020 sec = 20ms
+    float delta_sec = HOP_DURATION_MS / 1000.0f;  // 20ms per hop
     m_tempo.updateTempo(delta_sec);
 
     // Store for change detection (used by getTempo() diagnostics)
@@ -724,7 +727,7 @@ void AudioActor::processHop()
 
     // Note: advancePhase() is called by RendererActor at 120 FPS
     // This separation allows smooth beat tracking at render rate
-    // while novelty and tempo updates happen at audio rate (~62.5 Hz)
+    // while novelty and tempo updates happen at audio rate (~50 Hz @ 12.8kHz)
 
     // ========================================================================
     // 64-bin Goertzel Analysis (Sensory Bridge parity)
@@ -845,11 +848,11 @@ void AudioActor::processHop()
     // === Phase: ControlBus Update ===
     BENCH_START_PHASE();
 
-        // 7a. Populate beat tracker state for rhythmic saliency (using TempoTracker output)
-    // Field names kept as k1* for backward compatibility with effects
-    raw.k1Locked = m_lastTempoOutput.locked;
-    raw.k1Confidence = m_lastTempoOutput.confidence;
-    raw.k1BeatTick = m_lastTempoOutput.beat_tick && m_lastTempoOutput.locked;
+        // 7a. Populate tempo tracker state for rhythmic saliency
+    // Effects use MusicalGrid via ctx.audio.*, not these fields directly
+    raw.tempoLocked = m_lastTempoOutput.locked;
+    raw.tempoConfidence = m_lastTempoOutput.confidence;
+    raw.tempoBeatTick = m_lastTempoOutput.beat_tick && m_lastTempoOutput.locked;
 
     // 7. Update ControlBus with attack/release smoothing
     m_controlBus.setSmoothing(tuning.controlBusAlphaFast, tuning.controlBusAlphaSlow);

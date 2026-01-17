@@ -429,11 +429,12 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     }
 
     // ========================================================================
-    // Stage 4c: Store K1 beat tracker state for saliency computation
+    // Stage 4c: Store tempo tracker state for saliency computation
+    // Effects use MusicalGrid via ctx.audio.*, not these fields directly
     // ========================================================================
-    m_frame.k1Locked = raw.k1Locked;
-    m_frame.k1Confidence = raw.k1Confidence;
-    m_frame.k1BeatTick = raw.k1BeatTick;
+    m_frame.tempoLocked = raw.tempoLocked;
+    m_frame.tempoConfidence = raw.tempoConfidence;
+    m_frame.tempoBeatTick = raw.tempoBeatTick;
 
     // ========================================================================
     // Stage 4d: Musical saliency computation (Musical Intelligence System Phase 1)
@@ -643,20 +644,20 @@ void ControlBus::computeSaliency() {
     sal.prevRms = m_frame.rms;
 
     // ========================================================================
-    // Rhythmic Novelty: K1 Beat Tracker Integration (Phase 2)
-    // Use K1 confidence when locked, fall back to flux when unlocked
+    // Rhythmic Novelty: Tempo Tracker Integration
+    // Use tempo confidence when locked, fall back to flux when unlocked
     // ========================================================================
-    if (m_frame.k1Locked) {
-        // K1 is phase-locked: use confidence directly (stronger beat = higher novelty)
+    if (m_frame.tempoLocked) {
+        // Tempo tracker is phase-locked: use confidence directly (stronger beat = higher novelty)
         // Add spike on beat_tick for transient response
-        float baseRhythmic = m_frame.k1Confidence * 0.8f;  // 80% from confidence
-        if (m_frame.k1BeatTick) {
+        float baseRhythmic = m_frame.tempoConfidence * 0.8f;  // 80% from confidence
+        if (m_frame.tempoBeatTick) {
             sal.rhythmicNovelty = clamp01(baseRhythmic + 0.5f);  // Spike on beat
         } else {
             sal.rhythmicNovelty = baseRhythmic;
         }
     } else {
-        // K1 not locked: fall back to flux proxy (reduced weight)
+        // Tempo not locked: fall back to flux proxy (reduced weight)
         sal.rhythmicNovelty = clamp01(m_frame.fast_flux * 0.5f);
     }
 

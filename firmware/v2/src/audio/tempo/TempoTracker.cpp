@@ -91,7 +91,7 @@ void TempoTracker::init() {
     memset(spectral_curve_, 0, sizeof(spectral_curve_));
     memset(vu_curve_, 0, sizeof(vu_curve_));
     memset(tempi_smooth_, 0, sizeof(tempi_smooth_));
-    memset(bands_last_, 0, sizeof(bands_last_));
+    memset(bins_last_, 0, sizeof(bins_last_));
 
     // Initialize state variables
     spectral_index_ = 0;
@@ -126,16 +126,35 @@ void TempoTracker::init() {
     beat_tick_ = false;
     last_tick_ms_ = 0;
     time_ms_ = 0;
+
+    // Initialize exponential decay window LUT (Expert Review FIX #1)
+    initWindowLut();
 }
 
 // ============================================================================
-// Novelty Update (dual-rate: VU every hop, spectral when bands ready)
+// Exponential Decay Window (Expert Review FIX #1)
 // ============================================================================
 
-void TempoTracker::updateNovelty(const float* bands, uint8_t num_bands,
-                                     float rms, bool bands_ready) {
+void TempoTracker::initWindowLut() {
+    // Exponential decay: newest samples weighted highest
+    // i=0 is oldest, i=N-1 is newest
+    for (size_t i = 0; i < SPECTRAL_HISTORY_LENGTH; i++) {
+        float normalizedAge = static_cast<float>(i) / static_cast<float>(SPECTRAL_HISTORY_LENGTH - 1);
+        // normalizedAge: 0.0 (oldest) to 1.0 (newest)
+        // Weight: exp(-rate * (1 - age)) → newest=1.0, oldest≈0.007
+        window_lut_[i] = expf(-WINDOW_DECAY_RATE * (1.0f - normalizedAge));
+    }
+}
+
+// ============================================================================
+// Novelty Update (dual-rate: VU every hop, spectral when bins ready)
+// Emotiscope parity: uses full 64-bin spectrum, no perceptual weighting
+// ============================================================================
+
+void TempoTracker::updateNovelty(const float* bins, uint16_t num_bins,
+                                     float rms, bool bins_ready) {
     // ========================================================================
-    // VU Derivative (62.5 Hz - every call)
+    // VU Derivative (50 Hz @ 12.8kHz - every call)
     // Captures all transients between spectral updates
     // ========================================================================
     float vu_delta = std::max(0.0f, rms - rms_last_);
@@ -157,43 +176,40 @@ void TempoTracker::updateNovelty(const float* bands, uint8_t num_bands,
     if (vu_accum_count_ < 255) vu_accum_count_++;
 
     // ========================================================================
-    // Spectral Flux (31.25 Hz - only when bands ready)
-    // Provides frequency-weighted beat detection
+    // Spectral Flux (25 Hz - only when bins ready)
+    // EMOTISCOPE PARITY: 64-bin novelty, no perceptual weighting
+    // Reference: tempo.h lines 359-371
+    //   current_novelty = sum(max(0, new_mag - last_mag)) / NUM_FREQS
+    //   log_novelty(log1p(current_novelty))
     // ========================================================================
-    if (bands_ready && bands != nullptr && num_bands >= 8) {
-        // Perceptual band weights (bass emphasis for beat detection)
-        static const float WEIGHTS[8] = {1.4f, 1.3f, 1.0f, 0.9f, 0.8f, 0.6f, 0.4f, 0.3f};
-        static const float WEIGHT_SUM = 6.7f;
-
-        float spectral_flux = 0.0f;
-        for (uint8_t i = 0; i < 8; i++) {
-            float delta = bands[i] - bands_last_[i];
-            if (delta > 0.0f) {  // Half-wave rectification (onset only)
-                spectral_flux += delta * WEIGHTS[i];
-            }
-            bands_last_[i] = bands[i];
+    if (bins_ready && bins != nullptr && num_bins >= NUM_FREQS) {
+        // Emotiscope formula: sum of half-wave rectified deltas, averaged
+        float current_novelty = 0.0f;
+        for (uint16_t i = 0; i < NUM_FREQS; i++) {
+            float new_mag = bins[i];
+            float novelty = std::max(0.0f, new_mag - bins_last_[i]);
+            current_novelty += novelty;
+            bins_last_[i] = new_mag;
         }
 
-        // Normalize by weight sum
-        spectral_flux /= WEIGHT_SUM;
+        // Average over all bins (Emotiscope: /= float(NUM_FREQS))
+        current_novelty /= static_cast<float>(NUM_FREQS);
 
-        // Square for dynamic range
-        spectral_flux *= spectral_flux;
+        // log1p transform for dynamic range compression (Emotiscope exact)
+        float spectral_flux = std::log1p(current_novelty);
 
         // Apply decay to spectral history BEFORE writing new value
-        // This ensures new value is not decayed on the same frame
         for (uint16_t i = 0; i < SPECTRAL_HISTORY_LENGTH; i++) {
             spectral_curve_[i] *= NOVELTY_DECAY;
         }
 
-        // Log spectral flux directly to spectral curve (true VU separation)
-        // VU curve is stored separately and combined in computeMagnitude()
+        // Log spectral flux to novelty curve
         spectral_curve_[spectral_index_] = spectral_flux;
         spectral_index_ = (spectral_index_ + 1) % SPECTRAL_HISTORY_LENGTH;
         vu_accum_ = 0.0f;
         vu_accum_count_ = 0;
 
-        // Update spectral scale when spectral data updates (31.25 Hz)
+        // Update spectral scale when spectral data updates (25 Hz)
         // Use counter to update every ~3 spectral updates (~100ms)
         spectral_scale_count_++;
         if (spectral_scale_count_ >= 3) {
@@ -207,11 +223,10 @@ void TempoTracker::updateNovelty(const float* bands, uint8_t num_bands,
     }
 
     // ========================================================================
-    // Dynamic Normalization for VU (62.5 Hz - every call)
+    // Dynamic Normalization for VU (50 Hz @ 12.8kHz - every call)
     // ========================================================================
-    // Update VU scale when VU data updates (faster adaptation for transient detection)
     vu_scale_count_++;
-    if (vu_scale_count_ >= 6) {  // Every ~6 VU updates (~100ms at 62.5 Hz)
+    if (vu_scale_count_ >= 5) {  // Every ~5 VU updates (~100ms at 50 Hz)
         normalizeBuffer(vu_curve_, nullptr,
                         vu_scale_, 0.3f, VU_HISTORY_LENGTH);
         vu_scale_count_ = 0;
@@ -303,22 +318,24 @@ float TempoTracker::computeMagnitude(uint16_t bin) {
         uint16_t vu_idx = (VU_HISTORY_LENGTH + vu_index_ - vu_offset)
                           % VU_HISTORY_LENGTH;
 
-        // True VU separation: combine normalized curves
-        // Spectral: frequency-weighted flux (31.25 Hz)
-        // VU: transient detection (62.5 Hz)
+        // Match Emotiscope: use ONLY spectral novelty curve (not VU hybrid)
+        // Emotiscope's tempo detection uses novelty_curve_normalized without VU mixing
         float spectral_normalized = spectral_curve_[spectral_idx] * novelty_scale_;
-        float vu_normalized = vu_curve_[vu_idx] * vu_scale_;
 
         // Clamp to valid range
         spectral_normalized = std::min(1.0f, std::max(0.0f, spectral_normalized));
-        vu_normalized = std::min(1.0f, std::max(0.0f, vu_normalized));
 
-        // Hybrid input: 50% spectral (transients) + 50% VU (sustained)
-        float sample = 0.5f * spectral_normalized + 0.5f * vu_normalized;
+        // Match Emotiscope: use only spectral novelty (no VU hybrid)
+        float sample = spectral_normalized;
 
-        // Goertzel IIR step: q0 = coeff * q1 - q2 + sample
-        // Window removed - novelty already smoothed
-        float q0 = tempi_[bin].coeff * q1 - q2 + sample;
+        // Apply exponential decay window (Expert Review FIX #1)
+        // i=0 is oldest in this block, need to map to window LUT position
+        // Window LUT: index 0 = oldest (low weight), index N-1 = newest (high weight)
+        uint32_t window_idx = (SPECTRAL_HISTORY_LENGTH - block_size + i);
+        float windowed_sample = sample * window_lut_[window_idx];
+
+        // Goertzel IIR step: q0 = coeff * q1 - q2 + windowed_sample
+        float q0 = tempi_[bin].coeff * q1 - q2 + windowed_sample;
         q2 = q1;
         q1 = q0;
     }
@@ -373,10 +390,9 @@ void TempoTracker::updateTempo(float delta_sec) {
     for (uint16_t i = 0; i < NUM_TEMPI; i++) {
         float scaled = tempi_[i].magnitude_raw * autoranger;
 
-        // Quartic scaling for winner exaggeration
+        // Cubic scaling (matches Emotiscope's approach)
         // Makes dominant tempo stand out more clearly
-        scaled = scaled * scaled;
-        scaled = scaled * scaled;
+        scaled = scaled * scaled * scaled;
         tempi_[i].magnitude = scaled;
 
         // Silent bin suppression
@@ -510,7 +526,8 @@ void TempoTracker::updateWinner() {
         best_bin = NUM_TEMPI / 2;
     }
 
-    // Hysteresis: require 10% advantage for 5 consecutive frames
+    // Hysteresis: require 10% advantage for HYSTERESIS_FRAMES consecutive frames
+    // (Expert Review FIX #3: time-based hysteresis, 200ms constant regardless of rate)
     if (best_bin != winner_bin_) {
         float current_mag = tempi_smooth_[winner_bin_];
 
@@ -519,7 +536,7 @@ void TempoTracker::updateWinner() {
             // Track consecutive frames with this candidate
             if (best_bin == candidate_bin_) {
                 candidate_frames_++;
-                if (candidate_frames_ >= 5) {
+                if (candidate_frames_ >= HYSTERESIS_FRAMES) {
                     // Switch to new winner - ensure it's valid
                     winner_bin_ = best_bin;
                     if (winner_bin_ >= NUM_TEMPI) {

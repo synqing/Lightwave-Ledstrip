@@ -13,13 +13,14 @@
  * - Novelty decay multiplier (0.999 per frame) to fade old beat events
  * - Silence detection to prevent false beats during quiet periods
  * - Window-free Goertzel - novelty already smoothed
- * - Dual-rate architecture: spectral (31.25 Hz) + VU (62.5 Hz)
- * - Dynamic scaling with rate-matched updates (spectral: 31.25 Hz, VU: 62.5 Hz)
+ * - Dual-rate architecture: spectral (25 Hz) + VU (50 Hz) @ 12.8kHz sample rate
+ * - Dynamic scaling with rate-matched updates (spectral: 25 Hz, VU: 50 Hz)
  *
- * Design goals:
- * - 96 bins (60-156 BPM) at 1.0 BPM resolution
- * - ~22 KB total memory footprint
- * - Hysteresis winner selection for stable tempo lock
+ * Design goals (Emotiscope alignment with Expert Review fixes):
+ * - 96 bins (48-143 BPM) at 1.0 BPM probe spacing (~3 BPM resolving power)
+ * - ~28 KB total memory footprint (1024-sample buffer + window LUT)
+ * - Time-based hysteresis (200ms) for stable tempo lock
+ * - Exponential decay window for recency-weighted beat detection
  * - Interleaved Goertzel computation for CPU efficiency
  *
  * @author LightwaveOS Team
@@ -42,22 +43,30 @@ namespace audio {
 /// Number of tempo bins (1 BPM resolution from 48-144)
 constexpr uint16_t NUM_TEMPI = 96;
 
-/// BPM range - covers 95% of music
-constexpr float TEMPO_LOW = 60.0f;
-constexpr float TEMPO_HIGH = TEMPO_LOW + static_cast<float>(NUM_TEMPI);
+/// Number of frequency bins for spectral flux (matches Emotiscope's NUM_FREQS)
+/// 64 semitone-spaced bins from A1 (55 Hz) to C7 (2093 Hz)
+constexpr uint16_t NUM_FREQS = 64;
 
-/// Spectral novelty rate (8-band Goertzel = every 512 samples @ 16kHz)
-/// This is the rate at which we receive fresh band data for spectral flux
-constexpr float SPECTRAL_LOG_HZ = 31.25f;
+/// BPM range - Emotiscope alignment (48-143 BPM)
+/// Covers ambient/downtempo while avoiding octave ambiguity at high tempos
+constexpr float TEMPO_LOW = 48.0f;
+constexpr float TEMPO_HIGH = TEMPO_LOW + static_cast<float>(NUM_TEMPI - 1);  // 143 BPM
 
-/// VU novelty rate (every hop = 256 samples @ 16kHz)
+/// Spectral novelty rate - Emotiscope alignment (50 Hz)
+/// Provides 20ms temporal resolution for transient detection
+/// CRITICAL: Higher rate captures kick/snare attacks better than 25 Hz
+constexpr float SPECTRAL_LOG_HZ = 50.0f;
+
+/// VU novelty rate (every hop = 256 samples @ 12.8kHz)
 /// RMS derivative is computed every audio hop for transient detection
-constexpr float VU_LOG_HZ = 62.5f;
+/// CRITICAL: Must match actual sample rate (12800/256 = 50 Hz)
+constexpr float VU_LOG_HZ = 50.0f;
 
-/// Spectral history length (~16 seconds at 31.25 Hz)
-constexpr uint16_t SPECTRAL_HISTORY_LENGTH = 512;
+/// Spectral history length (~20.48 seconds at 50 Hz)
+/// Emotiscope alignment: 1024 samples provides ~3 BPM resolving power
+constexpr uint16_t SPECTRAL_HISTORY_LENGTH = 1024;
 
-/// VU history length (~8 seconds at 62.5 Hz)
+/// VU history length (~10 seconds at 50 Hz)
 constexpr uint16_t VU_HISTORY_LENGTH = 512;
 
 /// Phase shift for beat alignment (percentage of beat period)
@@ -69,6 +78,15 @@ constexpr float REFERENCE_FPS = 100.0f;
 /// Novelty decay multiplier per frame
 /// Applied to history buffers to fade old beat events
 constexpr float NOVELTY_DECAY = 0.999f;
+
+/// Time-based hysteresis (Expert Review FIX #3)
+/// Preserves consistent 200ms hysteresis regardless of novelty rate
+constexpr float HYSTERESIS_TIME_MS = 200.0f;
+constexpr int HYSTERESIS_FRAMES = static_cast<int>(HYSTERESIS_TIME_MS * SPECTRAL_LOG_HZ / 1000.0f);  // 10 frames at 50 Hz
+
+/// Exponential decay window rate (Expert Review FIX #1)
+/// Controls rolloff steepness for recency-weighted novelty
+constexpr float WINDOW_DECAY_RATE = 5.0f;
 
 // ============================================================================
 // Tempo Bin Structure
@@ -130,7 +148,7 @@ struct TempoOutput {
  *   getOutput() -> TempoOutput for effects
  *
  * Call sequence per audio frame:
- *   1. updateNovelty() - log spectral flux (31.25 Hz) and VU derivative (62.5 Hz)
+ *   1. updateNovelty() - log spectral flux (25 Hz) and VU derivative (50 Hz) @ 12.8kHz
  *   2. updateTempo()   - compute Goertzel magnitudes with hybrid input (interleaved)
  *   3. advancePhase()  - track winner phase
  *   4. getOutput()     - read current state
@@ -151,18 +169,18 @@ public:
     void init();
 
     /**
-     * @brief Update novelty from 8-band Goertzel and RMS
+     * @brief Update novelty from 64-bin Goertzel and RMS (Emotiscope parity)
      *
      * Dual-rate architecture:
-     * - Spectral flux computed from 8-band deltas when bands_ready=true (31.25 Hz)
-     * - VU derivative computed from RMS every call (62.5 Hz)
+     * - Spectral flux computed from 64-bin deltas when bins_ready=true (25 Hz @ 12.8kHz)
+     * - VU derivative computed from RMS every call (50 Hz @ 12.8kHz)
      *
-     * @param bands 8-band Goertzel magnitudes (can be nullptr if not ready)
-     * @param num_bands Number of bands (8)
+     * @param bins 64-bin Goertzel magnitudes (can be nullptr if not ready)
+     * @param num_bins Number of bins (NUM_FREQS = 64)
      * @param rms Current RMS value [0,1]
-     * @param bands_ready True when fresh 8-band data available (31.25 Hz)
+     * @param bins_ready True when fresh 64-bin data available (25 Hz)
      */
-    void updateNovelty(const float* bands, uint8_t num_bands, float rms, bool bands_ready);
+    void updateNovelty(const float* bins, uint16_t num_bins, float rms, bool bins_ready);
 
     /**
      * @brief Update Goertzel magnitudes (interleaved)
@@ -235,6 +253,14 @@ private:
     // ========================================================================
 
     /**
+     * @brief Initialize exponential decay window LUT (Expert Review FIX #1)
+     *
+     * Creates recency-weighted window: newest samples weighted 1.0,
+     * oldest samples weighted ~0.007 (with WINDOW_DECAY_RATE=5.0).
+     */
+    void initWindowLut();
+
+    /**
      * @brief Compute Goertzel magnitude for a single bin
      *
      * Runs Goertzel IIR filter over novelty history and extracts
@@ -286,10 +312,14 @@ private:
     // Smoothed magnitudes for winner selection (96 x 4 bytes = 384 bytes)
     float tempi_smooth_[NUM_TEMPI];
 
-    // Spectral novelty buffers (31.25 Hz, ~8 KB total)
+    // Spectral novelty buffers (50 Hz, ~4 KB for curve + ~4 KB for window LUT)
     float spectral_curve_[SPECTRAL_HISTORY_LENGTH];
     uint16_t spectral_index_;
-    float bands_last_[8];  // Last 8-band values for spectral flux delta
+    float bins_last_[NUM_FREQS];  // Last 64-bin values for spectral flux delta (Emotiscope parity)
+
+    // Exponential decay window LUT (Expert Review FIX #1)
+    // Weights recent samples higher than historical
+    float window_lut_[SPECTRAL_HISTORY_LENGTH];
 
     // VU novelty buffers (62.5 Hz, ~4 KB total)
     float vu_curve_[VU_HISTORY_LENGTH];

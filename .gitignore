@@ -137,3 +137,6 @@ repomix-output.*
 **/_apalache-out/
 **/*.smt
 **/run.txt
+
+# Context engineering / AI tooling runs
+context_engineering_runs/

@@ -1,0 +1,36 @@
+{
+  "version": "1.0.0",
+  "description": "Validated winning tunings from Quint model-based testing sweeps",
+  "tunings": [
+    {
+      "id": "winner_2026_01_18",
+      "name": "Aggressive Lock v1",
+      "date_validated": "2026-01-18",
+      "validation_run": "500 steps, 80 traces",
+      "parameters": {
+        "refractory_ticks": 7,
+        "refractory_ms": 140,
+        "conf_gate": 8,
+        "conf_gate_float": 0.8,
+        "alpha_attack": 20,
+        "alpha_attack_float": 0.20,
+        "alpha_release": 10,
+        "alpha_release_float": 0.10,
+        "hold_ticks": 50,
+        "hold_ms": 1000,
+        "octave_mode": "aggressive",
+        "phase_nudge": 10,
+        "phase_nudge_float": 0.10
+      },
+      "metrics": {
+        "lock_success_rate": 1.0,
+        "time_to_lock_mean_ms": 4428,
+        "post_lock_false_rate": 0.144,
+        "post_lock_mae": 37.67,
+        "score": -17113.86
+      },
+      "notes": "First validated tuning after IOI BPM calculation bug fix. Aggressive octave correction helps with tempo stability."
+    }
+  ],
+  "recommended": "winner_2026_01_18"
+}

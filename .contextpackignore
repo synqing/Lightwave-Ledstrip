@@ -1,0 +1,70 @@
+# Context Pack Ignore File
+# Patterns follow gitignore syntax
+
+# BINARIES
+*.bin
+*.elf
+*.a
+*.o
+*.so
+*.dylib
+*.exe
+*.hex
+
+# MEDIA
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.mp4
+*.mp3
+*.wav
+*.pdf
+
+# ARCHIVES
+*.zip
+*.tar
+*.gz
+*.7z
+
+# BUILD ARTIFACTS
+build/
+dist/
+.pio/
+node_modules/
+__pycache__/
+*.pyc
+
+# DEBUG
+*.map
+*.dSYM/
+
+# SECRETS (CRITICAL)
+*.env
+*.env.*
+*credentials*
+*secret*
+*token*
+*.pem
+*.key
+wifi_credentials.ini
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# LARGE DATA
+*.sqlite
+*.db
+*.log
+
+# LOCK FILES
+package-lock.json
+yarn.lock
+
+# PROJECT-SPECIFIC
+firmware/*/.pio/
+lightwave-dashboard/node_modules/
+contextpack/

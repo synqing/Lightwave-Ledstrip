@@ -82,6 +82,18 @@
                     <button class="control-btn compact" id="zoneModeToggle" aria-label="Toggle zone mode">Toggle</button>
                 </div>
             </section>
+
+            <!-- Plugin Status (hidden by default, shown when plugin data available) -->
+            <section class="control-card full-width" id="pluginSection" style="display: none;">
+                <h2 class="card-header">Plugins</h2>
+                <div class="value-display compact" id="pluginEffectCount">--</div>
+                <div class="value-secondary compact" id="pluginModeStatus">--</div>
+                <div class="value-secondary compact" id="pluginReloadStatus" style="display: none;">--</div>
+                <div id="pluginErrorList" style="display: none; margin-top: var(--space-xs); padding: var(--space-xs); background: rgba(255, 77, 77, 0.1); border-radius: 4px; font-size: 0.7rem;"></div>
+                <div class="button-row">
+                    <button class="control-btn compact" id="pluginReloadBtn" aria-label="Reload plugins">Reload</button>
+                </div>
+            </section>
         </div>
 
         <!-- Row 2: Brightness and Speed sliders side-by-side -->

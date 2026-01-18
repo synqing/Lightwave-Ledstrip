@@ -138,6 +138,9 @@ const state = {
     effectsList: [],   // Array of {id, name, category, ...}
     patternFilter: 'all',  // 'all', 'reactive', 'ambient'
 
+    // Plugin state
+    plugins: null,  // { registeredCount, loadedFromLittleFS, overrideModeEnabled, lastReloadOk, lastReloadMillis, errorCount, lastErrorSummary }
+
     // Beat tracking
     currentBpm: 0,
     bpmConfidence: 0,
@@ -226,6 +229,8 @@ function connect() {
             // Fetch palettes and effects lists for dropdowns
             fetchPalettesList();
             fetchEffectsList();
+            // Fetch plugin stats
+            fetchPluginStats();
         }, 100);
     };
 
@@ -634,6 +639,33 @@ function handleMessage(msg) {
 
         case 'beat.event':
             handleBeatEvent(msgFlat);
+            break;
+
+        case 'plugins.stats':
+        case 'plugins.reload.result':
+            // Plugin stats response
+            if (msgFlat.stats) {
+                // Response from reload has stats nested
+                state.plugins = msgFlat.stats;
+            } else {
+                // Direct stats response
+                state.plugins = {
+                    registeredCount: msgFlat.registeredCount,
+                    loadedFromLittleFS: msgFlat.loadedFromLittleFS,
+                    overrideModeEnabled: msgFlat.overrideModeEnabled,
+                    disabledByOverride: msgFlat.disabledByOverride,
+                    lastReloadOk: msgFlat.lastReloadOk,
+                    lastReloadMillis: msgFlat.lastReloadMillis,
+                    manifestCount: msgFlat.manifestCount,
+                    errorCount: msgFlat.errorCount,
+                    lastErrorSummary: msgFlat.lastErrorSummary
+                };
+            }
+            // Store errors if present
+            if (msgFlat.errors && msgFlat.errors.length > 0) {
+                state.plugins.errors = msgFlat.errors;
+            }
+            updatePluginUI();
             break;
 
         default:
@@ -2126,6 +2158,77 @@ function updateAllUI() {
     updateZonesUI();
     updateZoneModeUI();
     updateZoneEditorUI();
+    updatePluginUI();
+}
+
+// ─────────────────────────────────────────────────────────────
+// Plugin UI
+// ─────────────────────────────────────────────────────────────
+
+function updatePluginUI() {
+    const section = document.getElementById('pluginSection');
+    const effectCount = document.getElementById('pluginEffectCount');
+    const modeStatus = document.getElementById('pluginModeStatus');
+    const reloadStatus = document.getElementById('pluginReloadStatus');
+    const errorList = document.getElementById('pluginErrorList');
+
+    if (!section || !state.plugins) {
+        if (section) section.style.display = 'none';
+        return;
+    }
+
+    // Show the section
+    section.style.display = '';
+
+    // Effect count
+    effectCount.textContent = `${state.plugins.registeredCount || 0} effects`;
+
+    // Mode status
+    if (state.plugins.overrideModeEnabled) {
+        modeStatus.textContent = `Override mode (${state.plugins.disabledByOverride || 0} disabled)`;
+    } else {
+        modeStatus.textContent = `Additive mode (${state.plugins.manifestCount || 0} manifests)`;
+    }
+
+    // Reload status
+    if (state.plugins.lastReloadMillis > 0) {
+        const reloadTime = new Date(state.plugins.lastReloadMillis).toLocaleTimeString();
+        const status = state.plugins.lastReloadOk ? 'OK' : 'FAIL';
+        reloadStatus.textContent = `Last reload: ${status} @ ${reloadTime}`;
+        reloadStatus.style.display = '';
+        reloadStatus.style.color = state.plugins.lastReloadOk ? 'var(--success)' : 'var(--error)';
+    } else {
+        reloadStatus.style.display = 'none';
+    }
+
+    // Error list
+    if (state.plugins.errors && state.plugins.errors.length > 0) {
+        errorList.innerHTML = state.plugins.errors.map(e =>
+            `<div style="color: var(--error); margin-bottom: 4px;">${e.file}: ${e.error}</div>`
+        ).join('');
+        errorList.style.display = '';
+    } else if (state.plugins.errorCount > 0) {
+        errorList.innerHTML = `<div style="color: var(--error);">${state.plugins.errorCount} manifest errors</div>`;
+        if (state.plugins.lastErrorSummary) {
+            errorList.innerHTML += `<div style="color: var(--error); font-size: 0.65rem; margin-top: 2px;">${state.plugins.lastErrorSummary}</div>`;
+        }
+        errorList.style.display = '';
+    } else {
+        errorList.style.display = 'none';
+    }
+}
+
+function fetchPluginStats() {
+    if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+        state.ws.send(JSON.stringify({ type: 'plugins.stats' }));
+    }
+}
+
+function reloadPlugins() {
+    if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+        log('[PLUGINS] Requesting reload...');
+        state.ws.send(JSON.stringify({ type: 'plugins.reload' }));
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -2338,6 +2441,12 @@ function init() {
     }
     if (elements.zoneModeToggle) {
         elements.zoneModeToggle.addEventListener('click', toggleZoneMode);
+    }
+
+    // Plugin reload button
+    const pluginReloadBtn = document.getElementById('pluginReloadBtn');
+    if (pluginReloadBtn) {
+        pluginReloadBtn.addEventListener('click', reloadPlugins);
     }
     
     // Bind slider events

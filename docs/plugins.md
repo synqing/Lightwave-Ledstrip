@@ -1,34 +1,36 @@
 # Plugin System Reference
 
-Complete canonical reference for the LightwaveOS v2 plugin system, manifest schema, SPIFFS layout, and effect registration.
+Complete canonical reference for the LightwaveOS v2 plugin system, manifest schema, LittleFS layout, and effect registration.
 
 ---
 
 ## Table of Contents
 
 1. [Plugin System Architecture](#plugin-system-architecture)
-2. [SPIFFS Filesystem Layout](#spiffs-filesystem-layout)
+2. [LittleFS Filesystem Layout](#littlefs-filesystem-layout)
 3. [Manifest Schema](#manifest-schema)
 4. [Effect ID Reference](#effect-id-reference)
 5. [Registration Modes](#registration-modes)
 6. [Manifest Examples](#manifest-examples)
-7. [SPIFFS Management](#spiffs-management)
+7. [LittleFS Management](#littlefs-management)
 8. [Built-in Effect Registry](#built-in-effect-registry)
 9. [API Integration](#api-integration)
-10. [Troubleshooting](#troubleshooting)
+10. [Atomic Reload](#atomic-reload)
+11. [Troubleshooting](#troubleshooting)
 
 ---
 
 ## Plugin System Architecture
 
-The plugin system provides a unified mechanism for managing IEffect instances with dynamic registration from SPIFFS manifests.
+The plugin system provides a unified mechanism for managing IEffect instances with dynamic registration from LittleFS manifests.
 
 ### Components
 
 **PluginManagerActor**:
-- Central registry manager (Core 0, priority 2)
+- Central registry manager
 - Maintains up to 128 registered IEffect instances
-- Loads plugins from SPIFFS on startup
+- Loads plugins from LittleFS on startup
+- Supports atomic reload at runtime
 - Coordinates effect registration with RendererActor
 
 **BuiltinEffectRegistry**:
@@ -45,43 +47,43 @@ The plugin system provides a unified mechanism for managing IEffect instances wi
 ```
 Built-in Effects → BuiltinEffectRegistry → PluginManagerActor → RendererActor
                                          ↑
-                                    SPIFFS Manifests (optional)
+                                    LittleFS Manifests (optional)
 ```
 
 1. `registerAllEffects()` registers all compiled effects
 2. `BuiltinRegistryAdapter` stores effects in `BuiltinEffectRegistry`
 3. Effects are registered with `PluginManagerActor` (or `RendererActor` directly if `FEATURE_PLUGIN_RUNTIME=0`)
-4. `PluginManagerActor::loadPluginsFromSPIFFS()` scans SPIFFS for manifests
+4. `PluginManagerActor::loadPluginsFromLittleFS()` scans LittleFS for manifests
 5. Manifests reference built-in effects by ID from `BuiltinEffectRegistry`
 6. Plugin effects are forwarded to `RendererActor` for rendering
 
 ---
 
-## SPIFFS Filesystem Layout
+## LittleFS Filesystem Layout
 
-**Base Path**: `/` (SPIFFS root)
+**Base Path**: `/` (LittleFS root)
 
 **Directory Structure**:
 ```
 /
 ├── *.plugin.json          # Plugin manifest files (any name ending in .plugin.json)
-├── /plugins/              # (Optional) Organised plugin directory
-│   └── *.plugin.json      # Plugin manifests in subdirectory
-└── (Web assets on LittleFS, not SPIFFS)
+├── index.html             # Web dashboard
+├── app.js                 # Dashboard JavaScript
+├── styles.css             # Dashboard styles
+└── (other web assets)
 ```
 
 ### Filesystem Notes
 
-- **SPIFFS and LittleFS are separate filesystems** on ESP32-S3
-- **SPIFFS**: Plugin manifests only (`.plugin.json` files)
-- **LittleFS**: Web dashboard assets (`/index.html`, `/app.js`, `/styles.css`)
+- **LittleFS** is used for both plugin manifests and web assets
 - Plugin manifests must end with `.plugin.json` (case-sensitive)
 - Multiple manifests allowed (all are scanned and merged)
-- Max path length: 64 characters (`PluginConfig::SPIFFS_PLUGIN_PATH_MAX`)
+- Max path length: 64 characters (`PluginConfig::LITTLEFS_PLUGIN_PATH_MAX`)
+- Max manifest size: 2048 bytes (`PluginConfig::MANIFEST_CAPACITY`)
 
 ### Mounting
 
-- SPIFFS mounted in `PluginManagerActor::loadPluginsFromSPIFFS()`
+- LittleFS mounted in `PluginManagerActor::loadPluginsFromLittleFS()`
 - Mount point: `/` (root)
 - Auto-format: `false` (preserves existing files)
 
@@ -91,7 +93,14 @@ Built-in Effects → BuiltinEffectRegistry → PluginManagerActor → RendererAc
 
 **Version**: `1.0` (current)
 
-**Complete Schema**:
+### Naming Convention
+
+- Files must end with `.plugin.json` (case-sensitive)
+- Examples: `my-effects.plugin.json`, `override.plugin.json`, `test-additive.plugin.json`
+- Invalid: `plugin.json`, `my-effects.PLUGIN.json`, `my-effects.plugin.JSON`
+
+### Complete Schema
+
 ```json
 {
   "version": "1.0",              // Manifest format version (required)
@@ -105,7 +114,7 @@ Built-in Effects → BuiltinEffectRegistry → PluginManagerActor → RendererAc
   "effects": [                    // Effect list (required, non-empty)
     {
       "id": 42,                   // Effect ID 0-127 (required)
-      "force": false              // Force registration if already registered (optional, default: false)
+      "name": "Effect Name"       // Human-readable name (optional, for documentation)
     }
   ]
 }
@@ -113,22 +122,39 @@ Built-in Effects → BuiltinEffectRegistry → PluginManagerActor → RendererAc
 
 ### Schema Fields
 
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `version` | string | Yes | - | Manifest format version ("1.0") |
-| `plugin.name` | string | Yes | - | Human-readable plugin name (max 64 chars) |
-| `plugin.version` | string | No | "1.0" | Plugin version (semantic versioning) |
-| `plugin.author` | string | No | null | Author name (max 64 chars) |
-| `plugin.description` | string | No | null | Plugin description (max 256 chars) |
-| `mode` | string | No | "additive" | Registration mode: "additive" (add to built-ins) or "override" (whitelist only) |
-| `effects` | array | Yes | - | Non-empty array of effect definitions |
-| `effects[].id` | integer | Yes | - | Effect ID 0-127 (must exist in BuiltinEffectRegistry) |
-| `effects[].force` | boolean | No | false | Overwrite existing registration if true |
+| Field | Type | Required | Default | Constraints | Description |
+|-------|------|----------|---------|-------------|-------------|
+| `version` | string | Yes | - | Must be "1.0" | Manifest format version |
+| `plugin` | object | Yes | - | Must contain `name` | Plugin metadata container |
+| `plugin.name` | string | Yes | - | Max 64 chars, non-empty | Human-readable plugin name |
+| `plugin.version` | string | No | "1.0" | Semantic versioning | Plugin version |
+| `plugin.author` | string | No | null | Max 64 chars | Author name |
+| `plugin.description` | string | No | null | Max 256 chars | Plugin description |
+| `mode` | string | No | "additive" | "additive" or "override" | Registration mode |
+| `effects` | array | Yes | - | Non-empty, max 128 entries | Effect definitions |
+| `effects[].id` | integer | Yes | - | 0-127, must exist in BuiltinEffectRegistry | Effect ID |
+| `effects[].name` | string | No | null | For documentation only | Human-readable effect name |
 
-### Manifest Size
+### Validation Rules
 
-- Max manifest size: 2048 bytes (defined by `kManifestCapacity`)
-- JSON parsing uses `StaticJsonDocument<2048>`
+1. **JSON Syntax**: Must be valid JSON (no trailing commas, proper quoting)
+2. **Version Check**: `version` must be exactly `"1.0"`
+3. **Plugin Object**: Must have a `plugin` object with a non-empty `name`
+4. **Effects Array**: Must have a non-empty `effects` array
+5. **Effect IDs**: Each effect must have an `id` in range 0-127
+6. **Effect Existence**: Each effect ID must exist in `BuiltinEffectRegistry`
+
+### Error Messages
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `JSON parse error: ...` | Invalid JSON syntax | Validate JSON with JSONLint |
+| `Unsupported version: X` | Version not "1.0" | Change version to "1.0" |
+| `Missing 'plugin' object` | No plugin metadata | Add `"plugin": {"name": "..."}` |
+| `Missing plugin name` | Empty or missing name | Add non-empty name |
+| `Missing or empty 'effects' array` | No effects defined | Add at least one effect |
+| `Invalid effect ID: X` | ID < 0 or >= 128 | Use ID in range 0-127 |
+| `Effect ID X not found in built-in registry` | Effect not compiled in | Use valid built-in effect ID |
 
 ---
 
@@ -149,7 +175,7 @@ Built-in Effects → BuiltinEffectRegistry → PluginManagerActor → RendererAc
 }
 ```
 
-**Result**: All 98 built-in effects remain registered. Effects 0 and 42 are explicitly listed but already registered.
+**Result**: All built-in effects remain registered. Effects 0 and 42 are explicitly listed.
 
 ### Override Mode
 
@@ -167,36 +193,14 @@ Built-in Effects → BuiltinEffectRegistry → PluginManagerActor → RendererAc
 }
 ```
 
-**Result**: Only effects 0, 1, and 15 are registered. All other built-ins (2-14, 16-97) are unregistered.
+**Result**: Only effects 0, 1, and 15 are registered. All other built-ins are unregistered.
 
 ### Multiple Manifests
 
 - All `.plugin.json` files are scanned
 - Effects are merged (union) across manifests
 - **Mode conflicts**: If ANY manifest uses `mode: "override"`, override mode is enabled globally
-- **Effect ID conflicts**: Later files win (or `force: true` overwrites)
-
-**Example**: Two manifests, one override:
-```
-/plugin-a.plugin.json:
-{
-  "version": "1.0",
-  "plugin": {"name": "Set A"},
-  "mode": "override",
-  "effects": [{"id": 0}]
-}
-
-/plugin-b.plugin.json:
-{
-  "version": "1.0",
-  "plugin": {"name": "Set B"},
-  "mode": "additive",
-  "effects": [{"id": 1}]
-}
-
-Result: Override mode enabled globally (Set A wins).
-Only effect 0 registered. Effect 1 ignored.
-```
+- **Effect ID conflicts**: All unique effect IDs are combined
 
 ---
 
@@ -235,14 +239,11 @@ Only effect 0 registered. Effect 1 ignored.
     "name": "My Custom Set"
   },
   "effects": [
-    {"id": 0},
-    {"id": 42},
-    {"id": 99}
+    {"id": 0, "name": "Solid"},
+    {"id": 42, "name": "Quantum Tunneling"}
   ]
 }
 ```
-
-**Result**: All 98 built-ins remain registered. Effects 0, 42, and 99 are explicitly listed (99 does not exist in built-ins, so it will fail to register with a warning).
 
 ### Example 2: Override Mode (Whitelist)
 
@@ -257,62 +258,38 @@ Only effect 0 registered. Effect 1 ignored.
   },
   "mode": "override",
   "effects": [
-    {"id": 0, "force": true},
-    {"id": 1, "force": true},
-    {"id": 15, "force": true}
+    {"id": 0, "name": "Solid"},
+    {"id": 1, "name": "Breathing"},
+    {"id": 15, "name": "Interference Scanner"}
   ]
 }
 ```
 
-**Result**: Only effects 0, 1, and 15 are registered. All other built-ins (2-14, 16-97) are unregistered.
+### Example 3: Full Metadata
 
-### Example 3: Multi-Plugin Setup (Additive)
-
-```
-/plugin-a.plugin.json:
+```json
 {
   "version": "1.0",
-  "plugin": {"name": "Core Set"},
-  "effects": [{"id": 0}, {"id": 1}]
-}
-
-/plugin-b.plugin.json:
-{
-  "version": "1.0",
-  "plugin": {"name": "LGP Set"},
-  "effects": [{"id": 13}, {"id": 14}]
-}
-
-Result: All four effects (0, 1, 13, 14) registered additively.
-All 98 built-ins remain registered.
-```
-
-### Example 4: Override Conflict
-
-```
-/plugin-a.plugin.json:
-{
-  "version": "1.0",
-  "plugin": {"name": "Set A"},
-  "mode": "override",
-  "effects": [{"id": 0}]
-}
-
-/plugin-b.plugin.json:
-{
-  "version": "1.0",
-  "plugin": {"name": "Set B"},
+  "plugin": {
+    "name": "LGP Showcase",
+    "version": "2.1.0",
+    "author": "LightwaveOS Team",
+    "description": "Curated selection of Light Guide Plate interference effects"
+  },
   "mode": "additive",
-  "effects": [{"id": 1}]
+  "effects": [
+    {"id": 13, "name": "Box Wave"},
+    {"id": 14, "name": "Holographic"},
+    {"id": 15, "name": "Modal Resonance"},
+    {"id": 16, "name": "Interference Scanner"},
+    {"id": 17, "name": "Wave Collision"}
+  ]
 }
-
-Result: Override mode enabled globally (Set A wins).
-Only effect 0 registered. Effect 1 ignored.
 ```
 
 ---
 
-## SPIFFS Management
+## LittleFS Management
 
 ### File Naming
 
@@ -325,16 +302,19 @@ Only effect 0 registered. Effect 1 ignored.
 **Via PlatformIO**:
 ```bash
 cd firmware/v2
-pio run -e esp32dev_audio -t uploadfs  # Upload SPIFFS image
+# Place manifest files in data/ directory
+pio run -e esp32dev_audio -t uploadfs  # Upload LittleFS image
 ```
 
-**Via Web UI**: (Future: OTA manifest upload endpoint)
-
-**Via Serial Commands**: (Future: `SPIFFS.write` command)
+**Workflow**:
+1. Create your `.plugin.json` file
+2. Place it in `firmware/v2/data/` directory
+3. Run `pio run -e esp32dev_audio -t uploadfs`
+4. Restart device or call reload API
 
 ### Scanning Order
 
-Manifests are scanned in filesystem order (not guaranteed to be alphabetical). If order matters for effect registration, use `force: true` in later manifests.
+Manifests are scanned in filesystem order (not guaranteed to be alphabetical). All valid manifests are merged.
 
 ---
 
@@ -346,12 +326,10 @@ Maps effect IDs to compiled IEffect instances for lookup during plugin manifest 
 
 ### Registration
 
-Automatically populated during `registerAllEffects()` via `BuiltinRegistryAdapter`:
+Automatically populated during `registerAllEffects()`:
 
 ```cpp
-BuiltinRegistryAdapter registryAdapter(registry);
-registryAdapter.registerEffect(id, effect);  // Stores in BuiltinEffectRegistry
-target->registerEffect(id, effect);          // Also forwards to PluginManagerActor
+BuiltinEffectRegistry::registerBuiltin(id, effect);  // Stores in static registry
 ```
 
 ### Lookup
@@ -365,33 +343,110 @@ IEffect* builtin = BuiltinEffectRegistry::getBuiltin(uint8_t id);
 
 - Only compiled-in effects available (no dynamic loading)
 - Effect instances are static singletons (shared across registrations)
-- Future: Support compiled plugin libraries (.so/.dll-style loading)
 
 ---
 
 ## API Integration
 
-### REST API (Future Endpoints)
+### REST API
 
-- `GET /api/v1/plugins` - List loaded plugins
-- `GET /api/v1/plugins/manifests` - List manifest files
-- `POST /api/v1/plugins/reload` - Reload manifests from SPIFFS
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `GET /api/v1/plugins` | GET | List plugin stats (registeredCount, loadedFromLittleFS, overrideModeEnabled, lastReloadOk, errorCount) |
+| `GET /api/v1/plugins/manifests` | GET | List manifest files with validation status (`{file, valid, error?, name?, mode?}`) |
+| `POST /api/v1/plugins/reload` | POST | Trigger atomic reload from LittleFS, returns stats + errors |
 
-### WebSocket Events (Future)
+### WebSocket Commands
 
-- `plugin.loaded` - Plugin manifest loaded
-- `plugin.error` - Plugin load error
-- `effects.changed` - Effect list changed (override mode)
+| Command | Response | Description |
+|---------|----------|-------------|
+| `plugins.list` | `plugins.list` | List registered effect IDs |
+| `plugins.stats` | `plugins.stats` | Get plugin statistics including reload status |
+| `plugins.reload` | `plugins.reload.result` | Trigger atomic reload, returns stats + errors |
 
 ### Statistics
 
 `PluginStats` struct tracks:
 - `registeredCount`: Currently registered effects
-- `loadedFromSPIFFS`: Effects loaded from SPIFFS at startup
+- `loadedFromLittleFS`: Effects loaded from manifests
 - `registrationsFailed`: Failed registration attempts
 - `unregistrations`: Total unregistration count
-- `overrideModeEnabled`: Whether override mode is active (future)
-- `disabledByOverride`: Count of effects disabled by override mode (future)
+- `overrideModeEnabled`: Whether override mode is active
+- `disabledByOverride`: Count of effects disabled by override mode
+- `lastReloadMillis`: Timestamp of last reload attempt
+- `lastReloadOk`: Whether last reload succeeded
+- `manifestCount`: Number of manifest files found
+- `errorCount`: Number of manifests with errors
+- `lastErrorSummary`: Summary of last error (max 128 chars)
+
+---
+
+## Atomic Reload
+
+### Why Atomic?
+
+The plugin system uses atomic reload to ensure consistency:
+- **All-or-nothing**: Either all manifests are valid and applied, or none are
+- **No partial state**: Invalid manifests don't corrupt the active effect set
+- **Safe rollback**: Previous state preserved on any error
+
+### Reload Process
+
+1. **Scan**: Find all `*.plugin.json` files in LittleFS root
+2. **Parse**: Parse each manifest into `ParsedManifest` struct
+3. **Validate**: Check JSON syntax, version, required fields, effect IDs
+4. **Decision**: If ANY manifest is invalid, abort and keep previous state
+5. **Apply**: If ALL valid, atomically swap active manifest set
+6. **Stats**: Record reload timestamp, success/fail, error count
+
+### Error Handling
+
+- **JSON parse error**: Manifest marked invalid, error message stored
+- **Missing fields**: Manifest marked invalid, specific field noted
+- **Invalid effect ID**: Manifest marked invalid, ID noted
+- **Effect not in registry**: Manifest marked invalid, ID noted
+
+### API Response Example
+
+**Success**:
+```json
+{
+  "success": true,
+  "data": {
+    "reloadSuccess": true,
+    "stats": {
+      "registeredCount": 98,
+      "loadedFromLittleFS": 3,
+      "overrideModeEnabled": false,
+      "lastReloadOk": true,
+      "lastReloadMillis": 1705612800000,
+      "manifestCount": 1,
+      "errorCount": 0
+    },
+    "errors": []
+  }
+}
+```
+
+**Failure**:
+```json
+{
+  "success": true,
+  "data": {
+    "reloadSuccess": false,
+    "stats": {
+      "registeredCount": 98,
+      "lastReloadOk": false,
+      "lastReloadMillis": 1705612800000,
+      "manifestCount": 2,
+      "errorCount": 1
+    },
+    "errors": [
+      {"file": "/bad.plugin.json", "error": "Effect ID 999 not found in built-in registry"}
+    ]
+  }
+}
+```
 
 ---
 
@@ -399,59 +454,52 @@ IEffect* builtin = BuiltinEffectRegistry::getBuiltin(uint8_t id);
 
 ### Common Issues
 
-1. **SPIFFS mount fails**
-   - **Symptom**: `LW_LOGW("SPIFFS mount failed - plugin loading skipped")`
-   - **Cause**: SPIFFS partition not configured or corrupted
-   - **Solution**: Check partition table, ensure SPIFFS partition exists (e.g., `platformio.ini` has `board_build.filesystem = spiffs`)
+1. **LittleFS mount fails**
+   - **Symptom**: `LW_LOGW("LittleFS mount failed - plugin loading skipped")`
+   - **Cause**: LittleFS partition not configured or corrupted
+   - **Solution**: Check partition table, ensure LittleFS partition exists
 
 2. **Manifest parse error**
-   - **Symptom**: `LW_LOGW("Plugin manifest parse failed (%s): %s", name, err.c_str())`
+   - **Symptom**: `JSON parse error: ...`
    - **Cause**: Invalid JSON syntax or encoding
-   - **Solution**: Validate JSON syntax (use JSONLint), ensure UTF-8 encoding, check for missing commas or quotes
+   - **Solution**: Validate JSON syntax (use JSONLint), ensure UTF-8 encoding
 
 3. **Effect ID not found**
-   - **Symptom**: `LW_LOGW("Plugin effect id %u not found in built-in registry", id)`
-   - **Cause**: Effect ID out of range (≥98) or not registered in BuiltinEffectRegistry
-   - **Solution**: Verify effect exists in built-in registry (IDs 0-97), check `CoreEffects.cpp` registration order
+   - **Symptom**: `Effect ID X not found in built-in registry`
+   - **Cause**: Effect ID out of range (≥98) or not registered
+   - **Solution**: Verify effect exists (IDs 0-97), check `CoreEffects.cpp`
 
 4. **Override mode not working**
    - **Symptom**: All built-ins still registered after override manifest
-   - **Cause**: Mode spelling ("override", not "overwrite"), or multiple manifests with conflicting modes
-   - **Solution**: Check mode spelling in manifest, verify only one manifest uses override mode (or ensure override wins)
+   - **Cause**: Mode spelling ("override", not "overwrite")
+   - **Solution**: Check mode spelling in manifest
 
 5. **Manifests not scanned**
-   - **Symptom**: No plugins loaded despite SPIFFS files present
+   - **Symptom**: No plugins loaded despite LittleFS files present
    - **Cause**: File suffix mismatch (must be `.plugin.json`, case-sensitive)
-   - **Solution**: Verify file names end with `.plugin.json` exactly (not `.Plugin.json` or `.plugin.JSON`)
+   - **Solution**: Verify file names end with `.plugin.json` exactly
 
-6. **Effect ID out of range**
-   - **Symptom**: `LW_LOGW("Plugin effect id out of range (%u): %s", idValue, name)`
-   - **Cause**: Effect ID ≥ 128 (max is 127)
-   - **Solution**: Use valid effect IDs (0-97 for current built-ins, 98-127 reserved for future)
-
-7. **Empty effects array**
-   - **Symptom**: `LW_LOGW("Plugin manifest missing effects array: %s", name)`
-   - **Cause**: Manifest has empty or missing `effects` array
-   - **Solution**: Ensure `effects` is a non-empty array with at least one `{"id": ...}` entry
+6. **Reload fails with valid manifests**
+   - **Symptom**: Reload returns false but manifests look correct
+   - **Cause**: One manifest has an error that blocks all
+   - **Solution**: Check `GET /api/v1/plugins/manifests` for per-file status
 
 ### Debug Logging
 
 Enable verbose logging to diagnose plugin loading:
 
 ```cpp
-// In PluginManagerActor.cpp, loadPluginsFromSPIFFS():
-LW_LOGD("Scanning SPIFFS for plugin manifests...");
-LW_LOGD("Found manifest: %s", name);
-LW_LOGD("Plugin mode: %s", mode.c_str());
-LW_LOGI("Override mode ENABLED (manifest: %s)", name);
-LW_LOGI("Override mode: %u effects enabled, %u disabled", enabled, disabled);
+// In PluginManagerActor.cpp:
+LW_LOGD("Found manifest: %s", path);
+LW_LOGI("Plugin mode: %s", mode);
+LW_LOGI("Override mode: %u effects allowed, %u disabled", allowed, disabled);
 ```
 
 ---
 
 ## Version History
 
-- **v1.0** (current): Initial manifest format with additive and override modes
+- **v1.0** (current): Initial manifest format with additive and override modes, atomic reload
 
 ---
 

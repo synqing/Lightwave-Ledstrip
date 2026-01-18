@@ -21,6 +21,7 @@
 #include "handlers/BatchHandlers.h"
 #include "handlers/AudioHandlers.h"
 #include "handlers/DebugHandlers.h"
+#include "handlers/PluginHandlers.h"
 #include <ESPAsyncWebServer.h>
 #include <Arduino.h>
 
@@ -730,6 +731,36 @@ void V1ApiRoutes::registerRoutes(
             });
         }
     );
+
+    // ========================================================================
+    // Plugin Routes
+    // ========================================================================
+
+    // Plugin Manifests - GET /api/v1/plugins/manifests
+    // Must be registered BEFORE /api/v1/plugins (more specific first)
+    registry.onGet("/api/v1/plugins/manifests", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::PluginHandlers::handleManifests(request, ctx.pluginManager);
+    });
+
+    // Plugin Reload - POST /api/v1/plugins/reload
+    registry.onPost("/api/v1/plugins/reload",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t*, size_t, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::PluginHandlers::handleReload(request, ctx.pluginManager);
+        }
+    );
+
+    // Plugin List - GET /api/v1/plugins
+    registry.onGet("/api/v1/plugins", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::PluginHandlers::handleList(request, ctx.pluginManager);
+    });
 }
 
 } // namespace webserver

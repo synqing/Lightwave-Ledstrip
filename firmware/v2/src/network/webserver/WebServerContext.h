@@ -23,6 +23,9 @@ namespace lightwaveos {
     namespace zones {
         class ZoneComposer;
     }
+    namespace plugins {
+        class PluginManagerActor;
+    }
     namespace network {
         namespace webserver {
             class RateLimiter;
@@ -55,6 +58,7 @@ struct WebServerContext {
     actors::ActorSystem& actorSystem;
     actors::RendererActor* renderer;
     zones::ZoneComposer* zoneComposer;
+    plugins::PluginManagerActor* pluginManager;
 
     // Cross-cutting concerns
     RateLimiter& rateLimiter;
@@ -95,6 +99,7 @@ struct WebServerContext {
         actors::ActorSystem& actors,
         actors::RendererActor* rendererPtr,
         zones::ZoneComposer* zoneComposerPtr,
+        plugins::PluginManagerActor* pluginMgr,
         RateLimiter& limiter,
         LedStreamBroadcaster* ledBroadcast,
 #if FEATURE_AUDIO_SYNC
@@ -123,6 +128,7 @@ struct WebServerContext {
         : actorSystem(actors)
         , renderer(rendererPtr)
         , zoneComposer(zoneComposerPtr)
+        , pluginManager(pluginMgr)
         , rateLimiter(limiter)
         , ledBroadcaster(ledBroadcast)
 #if FEATURE_AUDIO_SYNC

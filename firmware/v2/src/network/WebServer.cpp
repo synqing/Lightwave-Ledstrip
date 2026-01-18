@@ -47,6 +47,7 @@
 #include "webserver/ws/WsDebugCommands.h"
 #endif
 #include "webserver/ws/WsStreamCommands.h"
+#include "webserver/ws/WsPluginCommands.h"
 #include "../config/network_config.h"
 #include "../core/actors/ActorSystem.h"
 #include "../effects/zones/ZoneDefinition.h"
@@ -130,6 +131,7 @@ WebServer::WebServer(ActorSystem& actors, RendererActor* renderer)
     , m_lastImmediateBroadcast(0)
     , m_broadcastPending(false)
     , m_zoneComposer(nullptr)
+    , m_pluginManager(nullptr)
     , m_lastStateCacheUpdate(0)
     , m_ledBroadcaster(nullptr)
     , m_wsGateway(nullptr)
@@ -490,6 +492,7 @@ void WebServer::setupRoutes() {
         m_actorSystem,
         m_renderer,
         m_zoneComposer,
+        m_pluginManager,
         m_rateLimiter,
         m_ledBroadcaster
 #if FEATURE_AUDIO_SYNC
@@ -523,6 +526,7 @@ void WebServer::setupWebSocket() {
         m_actorSystem,
         m_renderer,
         m_zoneComposer,
+        m_pluginManager,
         m_rateLimiter,
         m_ledBroadcaster
 #if FEATURE_AUDIO_SYNC
@@ -616,6 +620,7 @@ void WebServer::setupWebSocket() {
     webserver::ws::registerWsDebugCommands(ctx);
 #endif
     webserver::ws::registerWsStreamCommands(ctx);
+    webserver::ws::registerWsPluginCommands(ctx);
 }
 
 // ============================================================================

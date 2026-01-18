@@ -67,6 +67,9 @@ namespace lightwaveos {
     namespace zones {
         class ZoneComposer;
     }
+    namespace plugins {
+        class PluginManagerActor;
+    }
 }
 
 namespace lightwaveos {
@@ -198,6 +201,12 @@ public:
     bool isAPMode() const { return m_apMode; }
     size_t getClientCount() const { return m_ws->count(); }
     AsyncWebSocket* getWebSocket() const { return m_ws; }
+
+    /**
+     * @brief Set the PluginManagerActor instance
+     * @param pluginMgr Pointer to PluginManagerActor (must remain valid)
+     */
+    void setPluginManager(plugins::PluginManagerActor* pluginMgr) { m_pluginManager = pluginMgr; }
     
     // ========================================================================
     // Cached Renderer State (thread-safe read-only access from request handlers)
@@ -462,6 +471,7 @@ private:
 
     // Reference to external components (not owned)
     zones::ZoneComposer* m_zoneComposer;
+    plugins::PluginManagerActor* m_pluginManager;
 
     // ========================================================================
     // Cached Renderer State (private implementation)

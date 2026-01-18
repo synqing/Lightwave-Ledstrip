@@ -125,8 +125,8 @@ LightwaveOS_Temp_Files/
 # Roadmap planning (local development notes)
 roadmap/
 
-# Experimental project dependencies
-docs/archive/experimental/**/node_modules/
+# Node.js dependencies (never track)
+**/node_modules/
 
 # Build artifacts & code indexing
 build_output.txt

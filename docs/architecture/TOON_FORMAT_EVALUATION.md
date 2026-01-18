@@ -10,7 +10,27 @@
 
 **Verdict**: TOON (Token-Oriented Object Notation) is **not recommended** for runtime API communication in Lightwave-Ledstrip firmware. The format's primary benefit (token efficiency for LLM input) does not apply to standard REST/WebSocket APIs consumed by React dashboards and encoder controllers.
 
-**Optional Use**: TOON may be useful for development workflows when preparing API examples for Claude agent prompts, using the TOON CLI tool without changing firmware code.
+**Recommended Use**: TOON is best treated as a **prompt codec** for LLM input, not a wire format. Use it upstream when preparing large uniform arrays (effects, zones, palettes) for Claude agent prompts via the TOON CLI tool, without changing firmware code.
+
+---
+
+## Prompt Codec, Not Wire Format
+
+TOON's own documentation frames it as a **translation layer**: keep JSON for machines, encode as TOON for LLM input. This distinction is critical:
+
+| Aspect | Wire Format | Prompt Codec |
+|--------|-------------|--------------|
+| **Purpose** | Machine-to-machine communication | LLM input optimisation |
+| **Consumers** | Browsers, APIs, firmware | Claude, ChatGPT, Cursor agents |
+| **Benefit** | Bandwidth, parsing speed | Token count, retrieval accuracy |
+| **TOON fit** | Poor (adds complexity) | Excellent (40% fewer tokens) |
+
+**Structure-dependent savings**: TOON's token efficiency varies by data shape:
+- **Uniform arrays** (effects lists, palettes, zones): ~40% fewer tokens, best fit
+- **Deeply nested / non-uniform structures**: Savings shrink; compact JSON may be more efficient
+- **Flat tabular data**: CSV can be slightly more token-efficient than TOON, but lacks nesting support
+
+**Rule of thumb**: Use TOON for large uniform arrays in LLM prompts. Use compact JSON for nested configs. Use CSV only for purely flat tables.
 
 ---
 
@@ -184,28 +204,42 @@ written += snprintf(outBuffer + written, bufferSize - written,
 ### Do NOT adopt TOON for runtime APIs
 
 **Reasons**:
-1. **Wrong use case**: TOON optimizes for LLM token efficiency, but firmware APIs serve standard web clients
-2. **No C++ implementation**: TOON lacks official C++ library (would need custom port)
+1. **Wrong use case**: TOON optimises for LLM token efficiency, but firmware APIs serve standard web clients
+2. **C++ implementations exist but not worthwhile**: Community implementations (e.g., `ctoon`) make it *feasible*, but the integration + maintenance + breaking-change surface is not justified for runtime use
 3. **Breaking changes**: Would require updating dashboard, encoder firmware, and all API consumers
 4. **Minimal benefit**: Byte savings don't matter (WiFi bandwidth is sufficient), and token savings only matter for LLM input
 5. **Complexity cost**: ArduinoJson is lightweight, well-integrated, and sufficient
 
-### Optional: Use TOON for Development Workflows
+### Recommended: Use TOON as a Prompt Codec
+
+**Where TOON shines**: Upstream in the LLM prompt pipeline, not in runtime APIs.
 
 **When useful**: Converting JSON API responses to TOON format when:
-- Preparing examples for Claude agent prompts
+- Preparing examples for Claude agent prompts (effects lists, palettes, zones)
 - Documenting API responses in markdown
 - Generating test fixtures from real API responses
+- Stuffing large uniform arrays into LLM context windows
 
 **How**: Use TOON CLI tool (`npx @toon-format/cli`) to convert JSON→TOON for agent/documents, **without changing firmware code**.
+
+**Format selection guide**:
+| Data Shape | Recommended Format | Reason |
+|------------|-------------------|--------|
+| Large uniform arrays | TOON | ~40% fewer tokens, better LLM retrieval |
+| Deeply nested / non-uniform | Compact JSON | TOON savings shrink; JSON may be more efficient |
+| Purely flat tabular | CSV | Slightly more token-efficient than TOON |
+
+**See also**: [`docs/contextpack/README.md`](../contextpack/README.md) for the Context Pack pipeline that integrates TOON fixtures into delta-only prompting workflows.
 
 ---
 
 ## Conclusion
 
-TOON is an excellent format for **LLM input optimization**, but Lightwave-Ledstrip's runtime JSON usage is for **standard web APIs**, not LLM prompts. The token efficiency benefit doesn't translate to runtime value, and adoption would add complexity without meaningful benefit.
+TOON is an excellent format for **LLM input optimisation**, but Lightwave-Ledstrip's runtime JSON usage is for **standard web APIs**, not LLM prompts. The token efficiency benefit doesn't translate to runtime value, and adoption would add complexity without meaningful benefit.
 
-**Final Verdict**: **Not recommended for runtime use**. Optional for development-time agent workflows if preparing API examples for Claude prompts.
+**Final Verdict**:
+- **Runtime APIs**: Not recommended. Keep JSON.
+- **LLM prompts**: Recommended as a prompt codec. Use TOON for large uniform arrays (effects, zones, palettes) via the CLI tool or Context Pack pipeline.
 
 ---
 

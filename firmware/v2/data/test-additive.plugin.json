@@ -1,0 +1,14 @@
+{
+  "version": "1.0",
+  "plugin": {
+    "name": "Test Additive Plugin",
+    "description": "Sample manifest demonstrating additive mode",
+    "author": "LightwaveOS Team"
+  },
+  "mode": "additive",
+  "effects": [
+    { "id": 0, "name": "Solid" },
+    { "id": 1, "name": "Breathing" },
+    { "id": 2, "name": "Spectrum" }
+  ]
+}

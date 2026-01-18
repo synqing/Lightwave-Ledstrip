@@ -139,6 +139,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **UI-First for Web**: When modifying `data/` web interface, build UI first, then add functionality
 - **Test with WiFi build**: `pio run -e esp32dev_wifi -t upload` for web interface testing
 
+### Command Centre
+
+For comprehensive AI agent orchestration, multi-agent coordination, and pair programming modes:
+
+→ **[docs/operations/claude-flow/](docs/operations/claude-flow/overview.md)** — Claude-Flow Strategic Integration
+
+**Quick Links:**
+- [Agent Routing Matrix](docs/operations/claude-flow/agent-routing.md) — Domain-to-agent mapping
+- [Swarm Templates](docs/operations/claude-flow/swarm-templates.md) — Reusable multi-agent workflows
+- [Pair Programming Modes](docs/operations/claude-flow/pair-programming.md) — Navigator, TDD, Switch modes
+- [Validation Checklist](docs/operations/claude-flow/validation-checklist.md) — Setup and runtime verification
+
 ---
 
 ## Critical Constraints

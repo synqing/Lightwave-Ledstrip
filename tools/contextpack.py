@@ -58,6 +58,9 @@ DIFF_SOFT_LIMIT = 100 * 1024  # 100 KB - triggers split
 DIFF_HARD_LIMIT = 200 * 1024  # 200 KB - forces split + index
 DIFF_CHUNK_SIZE = 80 * 1024   # ~80 KB per chunk
 
+# Token savings guardrail
+MIN_TOKEN_SAVINGS_PERCENT = 20.0  # Minimum savings % for TOON conversion to pass lint
+
 # Default exclusion patterns (used if no .contextpackignore exists)
 DEFAULT_EXCLUSIONS = [
     # Binaries
@@ -599,7 +602,7 @@ def run_lint() -> bool:
     print()
     
     # Check 1: Template files exist
-    print("  [1/4] Checking template files...")
+    print("  [1/5] Checking template files...")
     if not PACKET_TEMPLATE.exists():
         errors.append(f"Template not found: {PACKET_TEMPLATE}")
     else:
@@ -616,7 +619,7 @@ def run_lint() -> bool:
         print(f"    OK: {LLM_CONTEXT.relative_to(REPO_ROOT)}")
     
     # Check 2: Ignore file syntax
-    print("  [2/4] Checking .contextpackignore...")
+    print("  [2/5] Checking .contextpackignore...")
     if IGNORE_FILE.exists():
         patterns = load_ignore_patterns()
         print(f"    OK: {len(patterns)} patterns loaded")
@@ -624,14 +627,14 @@ def run_lint() -> bool:
         print(f"    INFO: Using {len(DEFAULT_EXCLUSIONS)} default exclusions")
     
     # Check 3: TOON CLI availability
-    print("  [3/4] Checking TOON CLI...")
+    print("  [3/5] Checking TOON CLI...")
     if check_toon_cli_available():
         print("    OK: TOON CLI available")
     else:
         warnings.append("TOON CLI not available. Run 'npm --prefix tools install'")
     
     # Check 4: Check staged files for secrets
-    print("  [4/4] Checking staged files for secrets...")
+    print("  [4/5] Checking staged files for secrets...")
     try:
         result = subprocess.run(
             ["git", "diff", "--cached", "--name-only"],
@@ -659,6 +662,65 @@ def run_lint() -> bool:
             print(f"    OK: {len(staged_files)} staged files checked, no secrets detected")
     except Exception as e:
         warnings.append(f"Could not check staged files: {e}")
+    
+    # Check 5: Token savings guardrail (if TOON CLI available and fixtures exist)
+    print("  [5/5] Checking token savings guardrail...")
+    if check_toon_cli_available():
+        # Check for generated context pack with fixtures
+        contextpack_dir = REPO_ROOT / "contextpack"
+        fixtures_dir = contextpack_dir / "fixtures"
+        token_report_path = contextpack_dir / "token_report.md"
+        
+        if fixtures_dir.exists():
+            json_files = list(fixtures_dir.glob("*.json"))
+            eligible_files = []
+            
+            for json_path in json_files:
+                try:
+                    with open(json_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    if is_toon_eligible(data):
+                        eligible_files.append(json_path)
+                except (json.JSONDecodeError, IOError):
+                    pass
+            
+            if eligible_files:
+                # Check if token report exists
+                if not token_report_path.exists():
+                    errors.append(f"token_report.md missing: eligible fixtures exist in {fixtures_dir} but no token report generated")
+                else:
+                    # Parse token report to check savings
+                    try:
+                        report_content = token_report_path.read_text(encoding="utf-8")
+                        # Extract savings percentages from report
+                        savings_matches = re.findall(r'\|\s*\w+\.\w+\s*\|\s*\w+\.\w+\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*([\d.]+)%', report_content)
+                        
+                        if savings_matches:
+                            low_savings = []
+                            for json_tok, toon_tok, savings_pct in savings_matches:
+                                try:
+                                    savings = float(savings_pct)
+                                    if savings < MIN_TOKEN_SAVINGS_PERCENT:
+                                        low_savings.append(f"{savings}% (below {MIN_TOKEN_SAVINGS_PERCENT}% threshold)")
+                                except (ValueError, TypeError):
+                                    pass
+                            
+                            if low_savings:
+                                errors.append(f"TOON savings below {MIN_TOKEN_SAVINGS_PERCENT}% threshold: {', '.join(low_savings)}")
+                            else:
+                                avg_savings = sum(float(m[2]) for m in savings_matches) / len(savings_matches)
+                                print(f"    OK: Average savings {avg_savings:.1f}% (threshold: {MIN_TOKEN_SAVINGS_PERCENT}%)")
+                        else:
+                            # Couldn't parse report - warn but don't fail
+                            warnings.append("Could not parse token_report.md to validate savings")
+                    except IOError:
+                        warnings.append(f"Could not read token_report.md: {token_report_path}")
+            else:
+                print(f"    INFO: No eligible fixtures found in {fixtures_dir}")
+        else:
+            print(f"    INFO: No fixtures directory found (checked {fixtures_dir})")
+    else:
+        print(f"    INFO: TOON CLI not available (skipping savings guardrail)")
     
     # Print results
     print()

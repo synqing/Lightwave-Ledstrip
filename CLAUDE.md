@@ -151,6 +151,20 @@ For comprehensive AI agent orchestration, multi-agent coordination, and pair pro
 - [Pair Programming Modes](docs/operations/claude-flow/pair-programming.md) — Navigator, TDD, Switch modes
 - [Validation Checklist](docs/operations/claude-flow/validation-checklist.md) — Setup and runtime verification
 
+### LLM Context and Prompting
+
+For efficient LLM interactions and token-optimised prompting:
+
+→ **[docs/LLM_CONTEXT.md](docs/LLM_CONTEXT.md)** — Stable LLM prefix file (include instead of re-explaining the project)
+
+**Quick Links:**
+- [Context Pack Pipeline](docs/contextpack/README.md) — Delta-only prompting discipline
+- [Packet Template](docs/contextpack/packet.md) — Prompt packet template (goal, symptom, acceptance checks)
+- [Fixture Formats](docs/contextpack/fixtures/README.md) — TOON/CSV/JSON format selection guide
+- [TOON Evaluation](docs/architecture/TOON_FORMAT_EVALUATION.md) — Prompt codec decision document
+
+**Generator Script:** `python tools/contextpack.py` — Generates prompt bundles with diff, logs, and fixtures.
+
 ---
 
 ## Critical Constraints

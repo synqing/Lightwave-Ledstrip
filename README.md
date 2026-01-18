@@ -7,6 +7,17 @@
 - OR move INWARD from edges (0/159) to center (79/80)
 - NO OTHER PROPAGATION PATTERNS ALLOWED
 
+## For AI Agents
+
+| Document | Purpose |
+|----------|---------|
+| [CLAUDE.md](CLAUDE.md) | **MANDATORY** - Claude Code project instructions |
+| [AGENTS.md](AGENTS.md) | Codex agents guide - quick start for automated agents |
+| [docs/LLM_CONTEXT.md](docs/LLM_CONTEXT.md) | Stable LLM prefix - include instead of re-explaining |
+| [docs/contextpack/README.md](docs/contextpack/README.md) | Context Pack pipeline - delta-only prompting |
+
+---
+
 A professional ESP32-S3 based LED control system supporting multiple hardware configurations:
 - **Matrix Mode**: 9x9 matrix (81 LEDs) with button control
 - **Strips Mode**: Dual 160-LED strips (320 LEDs total) with M5Stack 8encoder control

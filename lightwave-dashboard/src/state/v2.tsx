@@ -296,6 +296,46 @@ export const V2Provider: React.FC<React.PropsWithChildren<{ autoConnect?: boolea
     }
   }, [getClient, getWs]);
 
+  const setPalette = useCallback(async (paletteId: number) => {
+    setErrors(prev => ({ ...prev, palettes: undefined }));
+    const api = v2Api(getClient());
+    try {
+      const response = await api.palettesSet(paletteId);
+      // Update current palette from the set response
+      setCurrentPalette({
+        paletteId: response.paletteId,
+        name: response.name,
+        category: response.category,
+      });
+      setConnection(prev => ({ ...prev, httpOk: true, lastOkAt: Date.now(), lastError: undefined }));
+    } catch (err) {
+      const msg = formatErr(err);
+      setErrors(prev => ({ ...prev, palettes: msg }));
+      setConnection(prev => ({ ...prev, httpOk: false, lastError: msg }));
+    }
+  }, [getClient]);
+
+  const refreshPalettes = useCallback(async () => {
+    setLoading(prev => ({ ...prev, palettes: true }));
+    setErrors(prev => ({ ...prev, palettes: undefined }));
+    const api = v2Api(getClient());
+    try {
+      const [palettes, currentPal] = await Promise.all([
+        api.palettesList({ offset: 0, limit: 100 }),
+        api.palettesCurrent(),
+      ]);
+      setPalettesList(palettes);
+      setCurrentPalette(currentPal);
+      setConnection(prev => ({ ...prev, httpOk: true, lastOkAt: Date.now(), lastError: undefined }));
+    } catch (err) {
+      const msg = formatErr(err);
+      setErrors(prev => ({ ...prev, palettes: msg }));
+      setConnection(prev => ({ ...prev, httpOk: false, lastError: msg }));
+    } finally {
+      setLoading(prev => ({ ...prev, palettes: false }));
+    }
+  }, [getClient]);
+
   const refreshZones = useCallback(async () => {
     setLoading(prev => ({ ...prev, zones: true }));
     setErrors(prev => ({ ...prev, zones: undefined }));
@@ -420,7 +460,7 @@ export const V2Provider: React.FC<React.PropsWithChildren<{ autoConnect?: boolea
       reconnectWs,
       getWsClient,
     }),
-    [bootstrap, getWsClient, reconnectWs, refreshEffects, refreshParameters, refreshStatus, refreshZones, setCurrentEffect, setParameters, setZoneSpeed, setZoneLayout, updateSettings]
+    [bootstrap, getWsClient, reconnectWs, refreshEffects, refreshPalettes, refreshParameters, refreshStatus, refreshZones, setCurrentEffect, setPalette, setParameters, setZoneSpeed, setZoneLayout, updateSettings]
   );
 
   return <V2Context.Provider value={{ state, actions }}>{children}</V2Context.Provider>;

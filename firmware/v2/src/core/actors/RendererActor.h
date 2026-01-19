@@ -33,6 +33,7 @@
 #include "../../effects/enhancement/ColorCorrectionEngine.h"
 #include "../../config/features.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../../plugins/api/IEffectRegistry.h"
 
 #include <atomic>
 
@@ -158,7 +159,7 @@ using EffectRenderFn = void (*)(RenderContext& ctx);
  * State changes (effect, brightness, etc.) are received as messages
  * and applied atomically before the next frame.
  */
-class RendererActor : public Actor {
+class RendererActor : public Actor, public plugins::IEffectRegistry {
 public:
     /**
      * @brief Construct the RendererActor
@@ -222,7 +223,31 @@ public:
      * @param effect IEffect instance pointer
      * @return true if registered successfully
      */
-    bool registerEffect(uint8_t id, plugins::IEffect* effect);
+    bool registerEffect(uint8_t id, plugins::IEffect* effect) override;
+
+    // ========================================================================
+    // IEffectRegistry Implementation
+    // ========================================================================
+
+    /**
+     * @brief Unregister an effect by ID
+     * @param id Effect ID to unregister
+     * @return true if effect was registered and is now unregistered
+     */
+    bool unregisterEffect(uint8_t id) override;
+
+    /**
+     * @brief Check if an effect is registered
+     * @param id Effect ID to check
+     * @return true if effect is registered
+     */
+    bool isEffectRegistered(uint8_t id) const override;
+
+    /**
+     * @brief Get registered effect count
+     * @return Number of registered effects
+     */
+    uint8_t getRegisteredCount() const override;
 
     /**
      * @brief Get number of registered effects

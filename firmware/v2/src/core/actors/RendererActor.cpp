@@ -229,6 +229,65 @@ bool RendererActor::registerEffect(uint8_t id, plugins::IEffect* effect)
     return true;
 }
 
+// ============================================================================
+// IEffectRegistry Implementation
+// ============================================================================
+
+bool RendererActor::unregisterEffect(uint8_t id)
+{
+    if (id >= MAX_EFFECTS) {
+        return false;
+    }
+
+    if (m_effects[id].active) {
+        m_effects[id].active = false;
+        m_effects[id].effect = nullptr;
+        m_effects[id].name = nullptr;
+
+        // Clean up legacy adapter if present
+        if (m_legacyAdapters[id] != nullptr) {
+            delete m_legacyAdapters[id];
+            m_legacyAdapters[id] = nullptr;
+        }
+
+        // Update count (recalculate from active effects)
+        // This is safe but may not be exact if effects are unregistered out of order
+        // The count represents the highest registered ID, not the actual active count
+        uint8_t highestActive = 0;
+        for (uint8_t i = 0; i < MAX_EFFECTS; i++) {
+            if (m_effects[i].active && i >= highestActive) {
+                highestActive = i + 1;
+            }
+        }
+        m_effectCount = highestActive;
+
+        LW_LOGD("Unregistered effect %d", id);
+        return true;
+    }
+
+    return false;
+}
+
+bool RendererActor::isEffectRegistered(uint8_t id) const
+{
+    if (id >= MAX_EFFECTS) {
+        return false;
+    }
+    return m_effects[id].active;
+}
+
+uint8_t RendererActor::getRegisteredCount() const
+{
+    // Count actual active effects (not just highest ID)
+    uint8_t count = 0;
+    for (uint8_t i = 0; i < MAX_EFFECTS; i++) {
+        if (m_effects[i].active) {
+            count++;
+        }
+    }
+    return count;
+}
+
 const char* RendererActor::getEffectName(uint8_t id) const
 {
     if (id < MAX_EFFECTS && m_effects[id].active) {

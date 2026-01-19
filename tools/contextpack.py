@@ -41,6 +41,55 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+# Import anchor extractor (handles ImportError if module not found)
+try:
+    from anchor_extractor import extract_anchors, format_anchors_markdown
+except ImportError:
+    # Fallback if anchor_extractor not available
+    extract_anchors = None
+    format_anchors_markdown = None
+
+# Import delta ledger (handles ImportError if module not found)
+try:
+    from delta_ledger import DeltaLedger
+except ImportError:
+    # Fallback if delta_ledger not available
+    DeltaLedger = None
+
+# Import fragment cache (handles ImportError if module not found)
+try:
+    from fragment_cache import FragmentCache
+except ImportError:
+    # Fallback if fragment_cache not available
+    FragmentCache = None
+
+# Import file priority manager (handles ImportError if module not found)
+try:
+    from file_priority import FilePriorityManager
+except ImportError as e:
+    # Fallback if file_priority not available
+    FilePriorityManager = None
+    print("Warning: file_priority module not available - token budget feature disabled", file=sys.stderr)
+    print(f"  Import error: {e}", file=sys.stderr)
+
+# Import lazy context loader (handles ImportError if module not found)
+try:
+    from lazy_context import LazyContextLoader
+except ImportError as e:
+    # Fallback if lazy_context not available
+    LazyContextLoader = None
+    print("Warning: lazy_context module not available - lazy loading feature disabled", file=sys.stderr)
+    print(f"  Import error: {e}", file=sys.stderr)
+
+# Import semantic compressor (handles ImportError if module not found)
+try:
+    from semantic_compress import SemanticCompressor
+except ImportError as e:
+    # Fallback if semantic_compress not available
+    SemanticCompressor = None
+    print("Warning: semantic_compress module not available - document compression feature disabled", file=sys.stderr)
+    print(f"  Import error: {e}", file=sys.stderr)
+
 
 # Template paths relative to repo root
 REPO_ROOT = Path(__file__).parent.parent
@@ -169,8 +218,58 @@ def filter_diff_content(diff_content: str, patterns: List[str]) -> Tuple[str, Li
     return "\n".join(filtered_chunks), sorted(set(excluded_files))
 
 
-def sort_diff_chunks(diff_content: str) -> str:
-    """Sort diff chunks by file path for deterministic output."""
+def filter_diff_by_file_list(diff_content: str, include_files: List[str]) -> Tuple[str, List[str]]:
+    """
+    Filter diff content to include only files in the provided list.
+    Returns (filtered_diff, list_of_excluded_files).
+    """
+    if not diff_content.strip():
+        return diff_content, []
+    
+    include_set = set(include_files)
+    excluded_files = []
+    filtered_chunks = []
+    current_chunk = []
+    current_file = None
+    
+    for line in diff_content.split("\n"):
+        # Detect new file in diff
+        if line.startswith("diff --git"):
+            # Save previous chunk if included
+            if current_chunk and current_file:
+                if current_file in include_set:
+                    filtered_chunks.append("\n".join(current_chunk))
+                else:
+                    excluded_files.append(current_file)
+            
+            # Start new chunk
+            current_chunk = [line]
+            # Extract file path from "diff --git a/path b/path"
+            match = re.search(r'diff --git a/(.+?) b/', line)
+            current_file = match.group(1) if match else None
+        else:
+            current_chunk.append(line)
+    
+    # Handle last chunk
+    if current_chunk and current_file:
+        if current_file in include_set:
+            filtered_chunks.append("\n".join(current_chunk))
+        else:
+            excluded_files.append(current_file)
+    
+    return "\n".join(filtered_chunks), sorted(set(excluded_files))
+
+
+def sort_diff_chunks(diff_content: str, priority_ordered_files: Optional[List[str]] = None) -> str:
+    """
+    Sort diff chunks by file path or priority order.
+    
+    Args:
+        diff_content: Diff content to sort
+        priority_ordered_files: Optional list of file paths in priority order.
+                                If provided, chunks are sorted by this order.
+                                If None, chunks are sorted alphabetically.
+    """
     if not diff_content.strip():
         return diff_content
     
@@ -191,17 +290,140 @@ def sort_diff_chunks(diff_content: str) -> str:
     if current_chunk:
         chunks.append((current_file, "\n".join(current_chunk)))
     
-    # Sort by file path
-    chunks.sort(key=lambda x: x[0])
+    # Sort by priority order or file path
+    if priority_ordered_files:
+        # Sort by priority order (CRITICAL -> HIGH -> MEDIUM -> LOW)
+        priority_map = {path: idx for idx, path in enumerate(priority_ordered_files)}
+        chunks.sort(key=lambda x: priority_map.get(x[0], 9999))  # Unmapped files go last
+    else:
+        # Sort alphabetically (default)
+        chunks.sort(key=lambda x: x[0])
     
     return "\n".join(chunk[1] for chunk in chunks)
 
 
-def split_diff(diff_content: str, chunk_size: int = DIFF_CHUNK_SIZE) -> List[Tuple[str, str]]:
+def split_diff_semantic(diff_content: str, chunk_size: int = DIFF_CHUNK_SIZE) -> List[Tuple[str, str]]:
     """
-    Split diff into chunks of approximately chunk_size bytes.
+    Split diff into chunks using semantic boundaries (file + hunk clusters).
+    Groups related hunks within files to preserve logical cohesion.
     Returns list of (filename, content) tuples.
     """
+    if len(diff_content.encode("utf-8")) <= chunk_size:
+        return [("diff.patch", diff_content)]
+    
+    # Parse diff into file-level structures with hunks
+    file_structures = []
+    current_file = None
+    current_file_lines = []
+    current_hunk = []
+    in_hunk = False
+    
+    for line in diff_content.split("\n"):
+        if line.startswith("diff --git"):
+            # Save previous file if exists
+            if current_file and current_file_lines:
+                file_structures.append({
+                    "path": current_file,
+                    "content": "\n".join(current_file_lines),
+                    "size": len("\n".join(current_file_lines).encode("utf-8"))
+                })
+            
+            # Start new file
+            match = re.search(r'diff --git a/(.+?) b/', line)
+            current_file = match.group(1) if match else "unknown"
+            current_file_lines = [line]
+            current_hunk = []
+            in_hunk = False
+        elif line.startswith("@@") and not in_hunk:
+            # Start of hunk
+            in_hunk = True
+            current_hunk = [line]
+            current_file_lines.append(line)
+        elif line.startswith("@@"):
+            # New hunk within same file - semantic boundary
+            current_hunk = [line]
+            current_file_lines.append(line)
+        else:
+            if in_hunk:
+                current_hunk.append(line)
+            current_file_lines.append(line)
+    
+    # Save last file
+    if current_file and current_file_lines:
+        file_structures.append({
+            "path": current_file,
+            "content": "\n".join(current_file_lines),
+            "size": len("\n".join(current_file_lines).encode("utf-8"))
+        })
+    
+    # Group files by directory for better semantic cohesion
+    # Files in same directory are more likely related
+    file_groups = {}
+    for file_struct in file_structures:
+        path = file_struct["path"]
+        dir_path = os.path.dirname(path) if os.path.dirname(path) else "root"
+        if dir_path not in file_groups:
+            file_groups[dir_path] = []
+        file_groups[dir_path].append(file_struct)
+    
+    # Build chunks preserving semantic groups
+    chunks = []
+    current_chunk = []
+    current_size = 0
+    chunk_num = 1
+    
+    for dir_path in sorted(file_groups.keys()):  # Deterministic ordering
+        dir_files = file_groups[dir_path]
+        
+        for file_struct in dir_files:
+            file_bytes = file_struct["size"]
+            
+            # If this file alone exceeds chunk size, split it
+            if file_bytes > chunk_size:
+                # Save current chunk if it has content
+                if current_chunk:
+                    chunks.append((f"diff_part_{chunk_num:02d}.patch", "\n".join(current_chunk)))
+                    chunk_num += 1
+                    current_chunk = []
+                    current_size = 0
+                
+                # Large file gets its own chunk
+                chunks.append((f"diff_part_{chunk_num:02d}.patch", file_struct["content"]))
+                chunk_num += 1
+            elif current_size + file_bytes > chunk_size and current_chunk:
+                # Current chunk is full, start new one
+                chunks.append((f"diff_part_{chunk_num:02d}.patch", "\n".join(current_chunk)))
+                chunk_num += 1
+                current_chunk = [file_struct["content"]]
+                current_size = file_bytes
+            else:
+                # Add to current chunk
+                current_chunk.append(file_struct["content"])
+                current_size += file_bytes
+    
+    # Save last chunk
+    if current_chunk:
+        chunks.append((f"diff_part_{chunk_num:02d}.patch", "\n".join(current_chunk)))
+    
+    return chunks
+
+
+def split_diff(diff_content: str, chunk_size: int = DIFF_CHUNK_SIZE, strategy: str = "size") -> List[Tuple[str, str]]:
+    """
+    Split diff into chunks of approximately chunk_size bytes.
+    
+    Args:
+        diff_content: Raw diff content
+        chunk_size: Target chunk size in bytes
+        strategy: Chunking strategy - "size" (file boundaries) or "semantic" (file + hunk clusters)
+    
+    Returns:
+        List of (filename, content) tuples.
+    """
+    if strategy == "semantic":
+        return split_diff_semantic(diff_content, chunk_size)
+    
+    # Original size-based strategy
     if len(diff_content.encode("utf-8")) <= chunk_size:
         return [("diff.patch", diff_content)]
     
@@ -602,7 +824,7 @@ def run_lint() -> bool:
     print()
     
     # Check 1: Template files exist
-    print("  [1/5] Checking template files...")
+    print("  [1/7] Checking template files...")
     if not PACKET_TEMPLATE.exists():
         errors.append(f"Template not found: {PACKET_TEMPLATE}")
     else:
@@ -619,7 +841,7 @@ def run_lint() -> bool:
         print(f"    OK: {LLM_CONTEXT.relative_to(REPO_ROOT)}")
     
     # Check 2: Ignore file syntax
-    print("  [2/5] Checking .contextpackignore...")
+    print("  [2/7] Checking .contextpackignore...")
     if IGNORE_FILE.exists():
         patterns = load_ignore_patterns()
         print(f"    OK: {len(patterns)} patterns loaded")
@@ -627,14 +849,14 @@ def run_lint() -> bool:
         print(f"    INFO: Using {len(DEFAULT_EXCLUSIONS)} default exclusions")
     
     # Check 3: TOON CLI availability
-    print("  [3/5] Checking TOON CLI...")
+    print("  [3/7] Checking TOON CLI...")
     if check_toon_cli_available():
         print("    OK: TOON CLI available")
     else:
         warnings.append("TOON CLI not available. Run 'npm --prefix tools install'")
     
     # Check 4: Check staged files for secrets
-    print("  [4/5] Checking staged files for secrets...")
+    print("  [4/7] Checking staged files for secrets...")
     try:
         result = subprocess.run(
             ["git", "diff", "--cached", "--name-only"],
@@ -664,7 +886,7 @@ def run_lint() -> bool:
         warnings.append(f"Could not check staged files: {e}")
     
     # Check 5: Token savings guardrail (if TOON CLI available and fixtures exist)
-    print("  [5/5] Checking token savings guardrail...")
+    print("  [5/7] Checking token savings guardrail...")
     if check_toon_cli_available():
         # Check for generated context pack with fixtures
         contextpack_dir = REPO_ROOT / "contextpack"
@@ -722,6 +944,53 @@ def run_lint() -> bool:
     else:
         print(f"    INFO: TOON CLI not available (skipping savings guardrail)")
     
+    # Check 6: Verify new token-saving outputs (if context pack exists)
+    print("  [6/7] Checking token-saving outputs...")
+    contextpack_dir = REPO_ROOT / "contextpack"
+    
+    if contextpack_dir.exists():
+        # Check for summary ladder files
+        summary_files = ["summary_1line.md", "summary_5line.md", "summary_1para.md"]
+        existing_summaries = [f for f in summary_files if (contextpack_dir / f).exists()]
+        
+        if existing_summaries:
+            print(f"    OK: Summary ladder files present ({len(existing_summaries)}/{len(summary_files)})")
+        
+        # Check for multi-part diff with index
+        diff_parts = list(contextpack_dir.glob("diff_part_*.patch"))
+        diff_index_path = contextpack_dir / "diff_index.md"
+        
+        if len(diff_parts) > 1:
+            if diff_index_path.exists():
+                print(f"    OK: Diff index present for {len(diff_parts)}-part diff")
+            else:
+                # Not an error - index only generated when hard limit exceeded
+                print(f"    INFO: Multi-part diff ({len(diff_parts)} parts) - index generated when needed")
+        
+        # Check for minified prompt (heuristic: check blank line density)
+        prompt_path = contextpack_dir / "prompt.md"
+        if prompt_path.exists():
+            try:
+                content = prompt_path.read_text(encoding="utf-8")
+                blank_line_ratio = content.count("\n\n\n") / max(content.count("\n"), 1)
+                if blank_line_ratio < 0.01:  # Very few triple newlines suggests minification
+                    print("    INFO: Prompt may be minified (low blank-line density)")
+            except IOError:
+                pass
+    else:
+        print("    INFO: Context pack directory not found (skipping output checks)")
+    
+    # Check 7: Validate semantic chunking (if multi-part diff exists)
+    print("  [7/7] Checking chunking strategy...")
+    if contextpack_dir.exists():
+        diff_parts = list(contextpack_dir.glob("diff_part_*.patch"))
+        if len(diff_parts) > 1:
+            # Semantic chunking tends to group files by directory
+            # This is a weak heuristic - actual validation requires diff content analysis
+            print(f"    INFO: Multi-part diff detected ({len(diff_parts)} parts) - chunking strategy applied")
+    else:
+        print("    INFO: Context pack directory not found (skipping chunking check)")
+    
     # Print results
     print()
     if errors:
@@ -740,16 +1009,43 @@ def run_lint() -> bool:
     return len(errors) == 0
 
 
-def generate_prompt_md(out_dir: Path, packet_content: str, diff_size: int, fixtures_count: int) -> Path:
+def generate_prompt_md(out_dir: Path, packet_content: str, diff_size: int, fixtures_count: int, minify: bool = False, cache_mode: str = "openai") -> Tuple[Path, Dict]:
     """
     Generate a cache-friendly prompt.md with stable prefix first.
+    
+    Args:
+        out_dir: Output directory
+        packet_content: Content from packet.md
+        diff_size: Size of diff in bytes
+        fixtures_count: Number of fixture files
+        minify: Whether to minify prompt content
+        cache_mode: Cache mode ("openai" or "anthropic")
+    
+    Returns:
+        Tuple of (prompt_path, stats_dict) with before/after sizes if minified.
     """
     prompt_path = out_dir / "prompt.md"
+    
+    # Provider-specific cache instructions
+    if cache_mode == "openai":
+        cache_hint = (
+            "<!-- OpenAI Prompt Caching: "
+            "Stable prefix (above) cached for ≥1024 tokens. "
+            "Keep prefix unchanged for cache hits. -->"
+        )
+    elif cache_mode == "anthropic":
+        cache_hint = (
+            "<!-- Anthropic Prompt Caching: "
+            "Use cache_control blocks in API for stable prefix. "
+            "Mark cache boundaries explicitly. -->"
+        )
+    else:
+        cache_hint = "<!-- CACHE-FRIENDLY STRUCTURE: Stable content first, volatile content last -->"
     
     lines = [
         "# Context Pack Prompt",
         "",
-        "<!-- CACHE-FRIENDLY STRUCTURE: Stable content first, volatile content last -->",
+        cache_hint,
         "",
         "---",
         "",
@@ -768,6 +1064,8 @@ def generate_prompt_md(out_dir: Path, packet_content: str, diff_size: int, fixtu
         lines.append("*LLM context file not found*")
     
     lines.extend([
+        "",
+        "<!-- DO NOT EDIT ABOVE THIS LINE - CACHE BARRIER -->",
         "",
         "---",
         "",
@@ -800,8 +1098,173 @@ def generate_prompt_md(out_dir: Path, packet_content: str, diff_size: int, fixtu
         "*Generated by `tools/contextpack.py`*",
     ])
     
-    prompt_path.write_text("\n".join(lines), encoding="utf-8")
-    return prompt_path
+    content = "\n".join(lines)
+    stats = {"before_size": len(content.encode("utf-8"))}
+    
+    # Apply minification if requested
+    if minify:
+        content = minify_prompt_content(content)
+        stats["after_size"] = len(content.encode("utf-8"))
+        stats["savings_percent"] = round((1 - stats["after_size"] / stats["before_size"]) * 100, 1) if stats["before_size"] > 0 else 0
+    else:
+        stats["after_size"] = stats["before_size"]
+        stats["savings_percent"] = 0
+    
+    prompt_path.write_text(content, encoding="utf-8")
+    return prompt_path, stats
+
+
+def minify_prompt_content(content: str) -> str:
+    """
+    Minify prompt content by removing redundant whitespace and comment blocks.
+    Only affects generated prompt artefacts, not source diffs.
+    
+    Args:
+        content: Prompt content to minify
+    
+    Returns:
+        Minified content
+    """
+    lines = content.split("\n")
+    minified = []
+    prev_empty = False
+    
+    for line in lines:
+        # Strip trailing whitespace
+        line = line.rstrip()
+        
+        # Skip HTML comment blocks (<!-- ... -->)
+        if re.match(r'^\s*<!--.*?-->\s*$', line):
+            continue
+        if re.match(r'^\s*<!--', line):
+            # Start of multi-line comment - skip until end
+            continue
+        if re.match(r'.*?-->\s*$', line):
+            # End of multi-line comment
+            continue
+        
+        # Normalise multiple blank lines to single blank
+        if not line.strip():
+            if not prev_empty:
+                minified.append("")
+                prev_empty = True
+            continue
+        
+        minified.append(line)
+        prev_empty = False
+    
+    # Remove trailing blank lines
+    while minified and not minified[-1]:
+        minified.pop()
+    
+    return "\n".join(minified)
+
+
+def generate_summary_ladder(
+    out_dir: Path,
+    packet_content: str,
+    diff_size: int,
+    diff_files: int,
+    diff_parts: int,
+    fixtures_count: int,
+) -> List[Path]:
+    """
+    Generate hierarchical summarisation ladder (1-line, 5-line, 1-para).
+    
+    Returns list of generated summary file paths.
+    """
+    summary_paths = []
+    
+    # Extract key info from packet (if filled)
+    goal_match = re.search(r'##\s+Goal\s*\n\n(.+?)(?=\n##|\Z)', packet_content, re.DOTALL)
+    symptom_match = re.search(r'##\s+Symptom\s*\n\n(.+?)(?=\n##|\Z)', packet_content, re.DOTALL)
+    
+    goal = goal_match.group(1).strip() if goal_match else "[Goal not specified]"
+    symptom = symptom_match.group(1).strip() if symptom_match else "[Symptom not specified]"
+    
+    # Truncate for summaries
+    goal_short = goal[:80] + "..." if len(goal) > 80 else goal
+    symptom_short = symptom[:80] + "..." if len(symptom) > 80 else symptom
+    
+    # 1-line summary
+    summary_1line = f"Context pack: {diff_files} file(s), {diff_size/1024:.1f} KB, {fixtures_count} fixture(s). Goal: {goal_short}"
+    path_1line = out_dir / "summary_1line.md"
+    path_1line.write_text(summary_1line, encoding="utf-8")
+    summary_paths.append(path_1line)
+    
+    # 5-line summary
+    summary_5line = f"""# Context Pack Summary
+
+**Goal**: {goal}
+
+**Symptom**: {symptom}
+
+**Changes**: {diff_files} file(s) modified, {diff_size/1024:.1f} KB diff ({diff_parts} part(s))
+
+**Fixtures**: {fixtures_count} file(s)"""
+    
+    path_5line = out_dir / "summary_5line.md"
+    path_5line.write_text(summary_5line, encoding="utf-8")
+    summary_paths.append(path_5line)
+    
+    # 1-paragraph summary
+    summary_1para = f"""Context pack for delta-only LLM prompting. **Goal**: {goal}. **Symptom**: {symptom}. Contains changes to {diff_files} file(s) ({diff_size/1024:.1f} KB total, split into {diff_parts} part(s) for size management) and {fixtures_count} fixture file(s). See `diff.patch` (or `diff_part_*.patch`) for changes, `fixtures/` for data fixtures, and `packet.md` for full goal/symptom/acceptance details."""
+    
+    path_1para = out_dir / "summary_1para.md"
+    path_1para.write_text(summary_1para, encoding="utf-8")
+    summary_paths.append(path_1para)
+    
+    return summary_paths
+
+
+def generate_cache_fingerprint(
+    llm_context_path: Path,
+    prompt_path: Path,
+    stable_prefix_tokens: int = 1024
+) -> Dict:
+    """
+    Generate cache fingerprint from stable prefixes.
+    
+    Args:
+        llm_context_path: Path to LLM_CONTEXT.md
+        prompt_path: Path to generated prompt.md
+        stable_prefix_tokens: Target token count for stable prefix (default: 1024)
+    
+    Returns:
+        Dict with llm_context_hash, prompt_prefix_hash, and token_estimate
+    """
+    fingerprint = {
+        "llm_context_hash": None,
+        "prompt_prefix_hash": None,
+        "stable_prefix_tokens": stable_prefix_tokens,
+        "cache_barrier_position": None,
+    }
+    
+    # Hash first N bytes of LLM_CONTEXT.md (default: entire file if <100KB, else first 50KB)
+    if llm_context_path.exists():
+        content = llm_context_path.read_bytes()
+        hash_size = min(len(content), 50 * 1024)  # First 50KB max
+        fingerprint["llm_context_hash"] = hashlib.sha256(content[:hash_size]).hexdigest()[:16]
+    
+    # Hash first ~1024 tokens of prompt.md stable prefix (~4096 chars = 1024 tokens)
+    if prompt_path.exists():
+        content = prompt_path.read_text(encoding="utf-8")
+        # Find cache barrier position (if exists)
+        barrier_match = re.search(r'<!--\s*DO NOT EDIT ABOVE THIS LINE\s*.*?-->', content)
+        if barrier_match:
+            fingerprint["cache_barrier_position"] = barrier_match.start()
+            stable_content = content[:barrier_match.start()]
+        else:
+            # Estimate stable prefix (before "## 3. Volatile" section)
+            volatile_match = re.search(r'^##\s+3\.\s+Volatile', content, re.MULTILINE)
+            stable_content = content[:volatile_match.start()] if volatile_match else content[:4096]
+        
+        # Hash stable prefix (up to 4096 chars = ~1024 tokens)
+        stable_prefix = stable_content[:4096]
+        fingerprint["prompt_prefix_hash"] = hashlib.sha256(stable_prefix.encode("utf-8")).hexdigest()[:16]
+        fingerprint["stable_prefix_tokens"] = len(stable_prefix.encode("utf-8")) // 4  # ~4 chars/token
+    
+    return fingerprint
 
 
 def generate_cache_notes(out_dir: Path) -> Path:
@@ -852,6 +1315,123 @@ The `prompt.md` file is structured for optimal prompt caching:
     return notes_path
 
 
+def load_policy() -> Dict:
+    """Load policy.yaml and return parsed dict."""
+    policy_path = TOOLS_DIR / "command_centre" / "policy.yaml"
+    if not policy_path.exists():
+        return {}
+    
+    try:
+        import yaml
+        with open(policy_path, "r", encoding="utf-8") as f:
+            return yaml.safe_load(f)
+    except ImportError:
+        print("Warning: PyYAML not available - policy features disabled", file=sys.stderr)
+        return {}
+    except Exception as e:
+        print(f"Warning: Failed to load policy.yaml: {e}", file=sys.stderr)
+        return {}
+
+
+def classify_files_by_domain(file_paths: List[str], policy: Dict) -> Dict[str, List[str]]:
+    """Classify file paths by domain based on policy patterns."""
+    if not policy or "domains" not in policy:
+        return {"unknown": file_paths}
+    
+    classifications = {domain: [] for domain in policy["domains"].keys()}
+    classifications["unknown"] = []
+    
+    for file_path in file_paths:
+        matched = False
+        for domain_name, domain_config in policy["domains"].items():
+            for pattern in domain_config.get("patterns", []):
+                if fnmatch.fnmatch(file_path, pattern) or fnmatch.fnmatch(file_path, f"**/{pattern}"):
+                    classifications[domain_name].append(file_path)
+                    matched = True
+                    break
+            if matched:
+                break
+        
+        if not matched:
+            classifications["unknown"].append(file_path)
+    
+    return classifications
+
+
+def check_protected_files(file_paths: List[str], policy: Dict) -> Tuple[List[str], Dict]:
+    """
+    Check if protected files are in the change set.
+    
+    Returns:
+        Tuple of (protected_files_found, protection_details)
+    """
+    protected = []
+    details = {}
+    
+    if not policy or "protected_files" not in policy:
+        return protected, details
+    
+    for protected_file in policy["protected_files"]:
+        pattern = protected_file["pattern"]
+        for file_path in file_paths:
+            if fnmatch.fnmatch(file_path, pattern) or fnmatch.fnmatch(file_path, f"**/{pattern}"):
+                protected.append(file_path)
+                details[file_path] = {
+                    "level": protected_file["level"],
+                    "checks": protected_file.get("checks", []),
+                }
+    
+    return protected, details
+
+
+def inject_domain_constraints(packet_path: Path, file_paths: List[str], policy: Dict) -> None:
+    """Inject domain constraints block into packet.md based on file classifications."""
+    if not packet_path.exists() or not file_paths:
+        return
+    
+    classifications = classify_files_by_domain(file_paths, policy)
+    active_domains = [d for d, files in classifications.items() if files and d != "unknown"]
+    
+    if not active_domains:
+        return
+    
+    # Build constraints block
+    constraints_block = ["\n## Domain Constraints", ""]
+    
+    for domain_name in active_domains:
+        domain_config = policy.get("domains", {}).get(domain_name, {})
+        constraints = domain_config.get("constraints", [])
+        if constraints:
+            constraints_block.append(f"### {domain_name.replace('_', ' ').title()}")
+            for constraint in constraints:
+                constraints_block.append(f"- {constraint}")
+            constraints_block.append("")
+    
+    # Append to packet.md
+    content = packet_path.read_text(encoding="utf-8")
+    content += "\n" + "\n".join(constraints_block)
+    packet_path.write_text(content, encoding="utf-8")
+
+
+def extract_file_paths_from_diff(diff_content: str) -> List[str]:
+    """
+    Extract file paths from diff output.
+    
+    Args:
+        diff_content: Git diff output
+    
+    Returns:
+        List of file paths (relative to repo root)
+    """
+    file_paths = []
+    for line in diff_content.split("\n"):
+        if line.startswith("diff --git"):
+            match = re.search(r'diff --git a/(.+?) b/', line)
+            if match:
+                file_paths.append(match.group(1))
+    return file_paths
+
+
 def generate_context_pack(
     out_dir: Path,
     diff_command: str = "git diff",
@@ -861,6 +1441,16 @@ def generate_context_pack(
     toon_stats: bool = True,
     toon_min_items: int = TOON_MIN_ITEMS_DEFAULT,
     generate_prompt: bool = True,
+    chunk_strategy: str = "size",
+    minify_prompt: bool = False,
+    generate_summaries: bool = False,
+    extract_anchors_flag: bool = False,
+    session_id: Optional[str] = None,
+    enable_cache: bool = False,
+    enable_lazy: bool = False,
+    token_budget: Optional[int] = None,
+    compress_docs: Optional[str] = None,
+    cache_mode: str = "openai",
 ) -> Dict:
     """
     Generate a context pack in the specified directory.
@@ -890,25 +1480,155 @@ def generate_context_pack(
     copy_template(PACKET_TEMPLATE, packet_dest, {"YYYY-MM-DD": today})
     print(f"  Created: {packet_dest.name}")
     
+    # 1a. Extract anchors if enabled (before diff processing to get file list)
+    diff_files_list = []  # Will be populated from diff
+    
     # 2. Generate diff.patch with filtering and size budgets
     print("  Processing diff...")
     
     # Load exclusion patterns
     patterns = load_ignore_patterns()
     
+    # Initialize delta ledger if session_id provided
+    ledger = None
+    if session_id and DeltaLedger is not None:
+        ledger_path = REPO_ROOT / ".contextpack_ledger.json"
+        try:
+            ledger = DeltaLedger(ledger_path)
+            print(f"  Using delta ledger (session: {session_id})")
+        except Exception as e:
+            print(f"    Warning: Failed to initialize ledger: {e}", file=sys.stderr)
+    
+    # Initialize fragment cache if enabled
+    cache = None
+    if enable_cache and FragmentCache is not None:
+        cache_dir = REPO_ROOT / ".contextpack_cache"
+        try:
+            cache = FragmentCache(cache_dir)
+            print(f"  Using fragment cache ({cache_dir.relative_to(REPO_ROOT)})")
+        except Exception as e:
+            print(f"    Warning: Failed to initialize cache: {e}", file=sys.stderr)
+    elif enable_cache and FragmentCache is None:
+        print("    Warning: fragment_cache module not available", file=sys.stderr)
+    
     # Get raw diff
     diff_output = get_git_diff(diff_command)
     
     if diff_output.strip():
-        # Filter excluded files
+        # Extract file list from diff for anchor extraction
+        for line in diff_output.split("\n"):
+            if line.startswith("diff --git"):
+                match = re.search(r'diff --git a/(.+?) b/', line)
+                if match:
+                    diff_files_list.append(match.group(1))
+        
+        # Apply lazy loading: prioritize file ordering (CRITICAL → HIGH → MEDIUM → LOW)
+        if enable_lazy and LazyContextLoader is not None:
+            try:
+                lazy_loader = LazyContextLoader(REPO_ROOT)
+                diff_files_list = lazy_loader.get_priority_ordered_files(diff_files_list)
+                print(f"    Using lazy loading (priority-ordered {len(diff_files_list)} files)")
+            except Exception as e:
+                print(f"    Warning: Lazy loading failed: {e}", file=sys.stderr)
+        
+        # Apply token budget: enforce token limit by excluding low-priority files
+        excluded_files_budget = []
+        if token_budget and FilePriorityManager is not None:
+            try:
+                priority_manager = FilePriorityManager(REPO_ROOT)
+                included_files, excluded_files_budget, total_tokens = priority_manager.enforce_budget(
+                    diff_files_list, token_budget, include_all_critical=True
+                )
+                
+                if excluded_files_budget:
+                    # Update file list to only include files within budget
+                    diff_files_list = included_files
+                    print(f"    Token budget: {token_budget} tokens, included {len(included_files)} files ({total_tokens} tokens), excluded {len(excluded_files_budget)} files")
+            except Exception as e:
+                print(f"    Warning: Token budget enforcement failed: {e}", file=sys.stderr)
+        
+        # Filter excluded files (by patterns)
         filtered_diff, excluded_files = filter_diff_content(diff_output, patterns)
+        
+        # Apply token budget filtering: if files were excluded by budget, filter diff by included files
+        if excluded_files_budget:
+            # Re-filter diff to only include files within budget
+            filtered_diff, _ = filter_diff_by_file_list(filtered_diff, diff_files_list)
+        
+        # Apply delta ledger filtering if enabled
+        ledger_skipped = []
+        if ledger and session_id:
+            # Extract file hashes from filtered diff
+            file_hashes = {}
+            current_file = None
+            current_file_content = []
+            
+            for line in filtered_diff.split("\n"):
+                if line.startswith("diff --git"):
+                    if current_file and current_file_content:
+                        # Hash previous file's diff content
+                        file_content = "\n".join(current_file_content)
+                        file_hash = ledger.hash_content(file_content)
+                        file_hashes[current_file] = file_hash
+                    # Start new file
+                    match = re.search(r'diff --git a/(.+?) b/', line)
+                    current_file = match.group(1) if match else None
+                    current_file_content = [line]
+                else:
+                    if current_file_content is not None:
+                        current_file_content.append(line)
+            
+            # Hash last file
+            if current_file and current_file_content:
+                file_content = "\n".join(current_file_content)
+                file_hash = ledger.hash_content(file_content)
+                file_hashes[current_file] = file_hash
+            
+            # Get unchanged files
+            unchanged_files = ledger.get_unchanged_files(file_hashes, session_id)
+            
+            if unchanged_files:
+                # Filter out unchanged files from diff
+                filtered_chunks = []
+                current_chunk = []
+                current_file = None
+                
+                for line in filtered_diff.split("\n"):
+                    if line.startswith("diff --git"):
+                        # Save previous chunk if not unchanged
+                        if current_chunk and current_file and current_file not in unchanged_files:
+                            filtered_chunks.append("\n".join(current_chunk))
+                        elif current_file and current_file in unchanged_files:
+                            ledger_skipped.append(current_file)
+                        
+                        # Start new chunk
+                        match = re.search(r'diff --git a/(.+?) b/', line)
+                        current_file = match.group(1) if match else None
+                        current_chunk = [line] if current_file not in unchanged_files else []
+                    else:
+                        if current_file not in unchanged_files:
+                            current_chunk.append(line)
+                
+                # Save last chunk
+                if current_chunk and current_file and current_file not in unchanged_files:
+                    filtered_chunks.append("\n".join(current_chunk))
+                elif current_file and current_file in unchanged_files:
+                    ledger_skipped.append(current_file)
+                
+                filtered_diff = "\n".join(filtered_chunks)
+                
+                if ledger_skipped:
+                    print(f"    Skipped {len(ledger_skipped)} files (unchanged since session {session_id})")
+        
         summary["excluded_files"] = len(excluded_files)
         
         if excluded_files:
             print(f"    Excluded {len(excluded_files)} files by .contextpackignore")
         
         # Sort for deterministic output
-        filtered_diff = sort_diff_chunks(filtered_diff)
+        # If lazy loading is enabled, sort by priority order; otherwise sort alphabetically
+        priority_list = diff_files_list if enable_lazy else None
+        filtered_diff = sort_diff_chunks(filtered_diff, priority_ordered_files=priority_list)
         
         diff_size = len(filtered_diff.encode("utf-8"))
         summary["diff_size"] = diff_size
@@ -916,9 +1636,10 @@ def generate_context_pack(
         
         # Check size budgets
         if diff_size > DIFF_SOFT_LIMIT:
-            print(f"    Diff size ({diff_size / 1024:.1f} KB) exceeds soft limit ({DIFF_SOFT_LIMIT / 1024:.0f} KB), splitting...")
+            strategy_name = "semantic" if chunk_strategy == "semantic" else "size-based"
+            print(f"    Diff size ({diff_size / 1024:.1f} KB) exceeds soft limit ({DIFF_SOFT_LIMIT / 1024:.0f} KB), splitting ({strategy_name})...")
             
-            chunks = split_diff(filtered_diff, DIFF_CHUNK_SIZE)
+            chunks = split_diff(filtered_diff, DIFF_CHUNK_SIZE, strategy=chunk_strategy)
             summary["diff_parts"] = len(chunks)
             
             for filename, content in chunks:
@@ -935,11 +1656,18 @@ def generate_context_pack(
                 print(f"    Created: diff_index.md")
         else:
             # Single diff file
-            diff_dest = out_dir / "diff.patch"
+            diff_filename = "diff_delta.patch" if ledger and session_id else "diff.patch"
+            diff_dest = out_dir / diff_filename
             diff_dest.write_text(filtered_diff, encoding="utf-8")
             print(f"    Created: {diff_dest.name} ({diff_size / 1024:.1f} KB, {summary['diff_files']} files)")
+            
+            # Record file hashes in ledger if enabled
+            if ledger and session_id:
+                diff_hash = ledger.hash_content(filtered_diff)
+                ledger.record(diff_hash, session_id, "diff", diff_filename)
     else:
-        diff_dest = out_dir / "diff.patch"
+        diff_filename = "diff_delta.patch" if ledger and session_id else "diff.patch"
+        diff_dest = out_dir / diff_filename
         diff_dest.write_text("# No changes detected\n", encoding="utf-8")
         print(f"    Created: {diff_dest.name} (empty - no changes)")
     
@@ -954,12 +1682,76 @@ def generate_context_pack(
             logs_dest.write_text("# No logs available\n", encoding="utf-8")
             print(f"  Created: {logs_dest.name} (empty)")
     
-    # 4. Copy fixtures README
+    # 4. Extract and inject semantic anchors if enabled
+    if extract_anchors_flag and extract_anchors is not None:
+        print("  Extracting semantic anchors...")
+        try:
+            # Use cache if enabled (cache key based on diff files list)
+            cache_key = "anchors_markdown"
+            source_paths = [
+                REPO_ROOT / "firmware" / "v2" / "src" / "effects" / "PatternRegistry.cpp",
+                REPO_ROOT / "firmware" / "v2" / "src" / "plugins" / "api" / "IEffect.h",
+                REPO_ROOT / "firmware" / "v2" / "src" / "plugins" / "api" / "EffectContext.h",
+            ]
+            
+            def generate_anchors():
+                anchors = extract_anchors(REPO_ROOT, diff_files_list)
+                return format_anchors_markdown(anchors)
+            
+            if cache:
+                # Check if cache has entry before generating
+                cached_content = cache.get(cache_key, source_paths)
+                if cached_content:
+                    anchors_markdown = cached_content
+                    print(f"    Used cached anchors (cache key: {cache_key})")
+                else:
+                    anchors_markdown = cache.get_or_generate(
+                        cache_key, generate_anchors, source_paths=source_paths, extension=".md"
+                    )
+                    print(f"    Generated and cached anchors (cache key: {cache_key})")
+            else:
+                anchors_markdown = generate_anchors()
+            
+            # Append anchors to packet.md
+            if packet_dest.exists():
+                packet_content = packet_dest.read_text(encoding="utf-8")
+                packet_content = packet_content.rstrip() + "\n\n" + anchors_markdown + "\n"
+                packet_dest.write_text(packet_content, encoding="utf-8")
+                print(f"    Injected semantic anchors into {packet_dest.name}")
+        except Exception as e:
+            print(f"    Warning: Anchor extraction failed: {e}", file=sys.stderr)
+    elif extract_anchors_flag and extract_anchors is None:
+        print("    Warning: anchor_extractor module not available", file=sys.stderr)
+    
+    # 4b. Inject domain constraints if policy available
+    policy = load_policy()
+    if policy and diff_files_list:
+        try:
+            inject_domain_constraints(packet_dest, diff_files_list, policy)
+        except Exception as e:
+            print(f"    Warning: Domain constraints injection failed: {e}", file=sys.stderr)
+    
+    # 4a. Compress packet.md if compression enabled
+    if compress_docs and compress_docs != "none" and SemanticCompressor is not None:
+        if packet_dest.exists():
+            try:
+                compressor = SemanticCompressor()
+                packet_content = packet_dest.read_text(encoding="utf-8")
+                original_size = len(packet_content.encode("utf-8"))
+                compressed_content = compressor.compress(packet_content, compress_docs)
+                packet_dest.write_text(compressed_content, encoding="utf-8")
+                compressed_size = len(compressed_content.encode("utf-8"))
+                savings = ((original_size - compressed_size) / original_size * 100) if original_size > 0 else 0
+                print(f"    Compressed packet.md ({compress_docs}): {savings:.1f}% savings")
+            except Exception as e:
+                print(f"    Warning: Compression failed for packet.md: {e}", file=sys.stderr)
+    
+    # 5. Copy fixtures README
     fixtures_readme_dest = fixtures_dir / "README.md"
     copy_template(FIXTURES_README, fixtures_readme_dest)
     print(f"  Created: fixtures/{fixtures_readme_dest.name}")
     
-    # 5. TOONify JSON fixtures (if enabled)
+    # 6. TOONify JSON fixtures (if enabled)
     stats_list = []
     skipped_list = []
     if toonify:
@@ -976,27 +1768,131 @@ def generate_context_pack(
             total_savings = sum(s.get("savings_percent", 0) for s in stats_list)
             summary["token_savings_percent"] = round(total_savings / len(stats_list), 1)
     
-    # 6. Generate token report (if stats collected)
+    # 7. Generate token report (if stats collected)
     if toon_stats and (stats_list or skipped_list):
         report_path = generate_token_report(out_dir, stats_list, skipped_list)
         if report_path:
             print(f"  Created: {report_path.name}")
     
-    # 7. Generate prompt.md (cache-friendly structure)
+    # 8. Generate prompt.md (cache-friendly structure)
+    cache_fingerprint = None
+    prompt_path = None
     if generate_prompt:
         packet_content = ""
         if packet_dest.exists():
             packet_content = packet_dest.read_text(encoding="utf-8")
         
         fixtures_count = len(list(fixtures_dir.glob("*.toon"))) + len(list(fixtures_dir.glob("*.json")))
-        prompt_path = generate_prompt_md(out_dir, packet_content, summary["diff_size"], fixtures_count)
-        print(f"  Created: {prompt_path.name}")
+        prompt_path, prompt_stats = generate_prompt_md(
+            out_dir, packet_content, summary["diff_size"], fixtures_count, minify=minify_prompt, cache_mode=cache_mode
+        )
+        
+        # Generate cache fingerprint
+        cache_fingerprint = generate_cache_fingerprint(LLM_CONTEXT, prompt_path)
+        fingerprint_path = out_dir / "cache_fingerprint.json"
+        fingerprint_path.write_text(json.dumps(cache_fingerprint, indent=2), encoding="utf-8")
+        print(f"  Created: {fingerprint_path.name}")
+        
+        if minify_prompt and prompt_stats["savings_percent"] > 0:
+            print(f"  Created: {prompt_path.name} (minified: {prompt_stats['savings_percent']}% savings)")
+        else:
+            print(f"  Created: {prompt_path.name}")
+        
+        # Compress prompt.md if compression enabled
+        if compress_docs and compress_docs != "none" and SemanticCompressor is not None:
+            try:
+                compressor = SemanticCompressor()
+                prompt_content = prompt_path.read_text(encoding="utf-8")
+                original_size = len(prompt_content.encode("utf-8"))
+                compressed_content = compressor.compress(prompt_content, compress_docs)
+                prompt_path.write_text(compressed_content, encoding="utf-8")
+                compressed_size = len(compressed_content.encode("utf-8"))
+                savings = ((original_size - compressed_size) / original_size * 100) if original_size > 0 else 0
+                print(f"    Compressed prompt.md ({compress_docs}): {savings:.1f}% savings")
+            except Exception as e:
+                print(f"    Warning: Compression failed for prompt.md: {e}", file=sys.stderr)
         
         # Generate cache notes
         cache_notes_path = generate_cache_notes(out_dir)
         print(f"  Created: {cache_notes_path.name}")
     
-    # 8. Print summary
+    # 9. Generate hierarchical summaries (if enabled)
+    if generate_summaries:
+        packet_content = ""
+        if packet_dest.exists():
+            packet_content = packet_dest.read_text(encoding="utf-8")
+        
+        fixtures_count = len(list(fixtures_dir.glob("*.toon"))) + len(list(fixtures_dir.glob("*.json")))
+        summary_paths = generate_summary_ladder(
+            out_dir,
+            packet_content,
+            summary["diff_size"],
+            summary["diff_files"],
+            summary["diff_parts"],
+            fixtures_count,
+        )
+        
+        for path in summary_paths:
+            print(f"  Created: {path.name}")
+        
+        # Compress summary files if compression enabled
+        if compress_docs and compress_docs != "none" and SemanticCompressor is not None:
+            try:
+                compressor = SemanticCompressor()
+                for summary_path in summary_paths:
+                    summary_content = summary_path.read_text(encoding="utf-8")
+                    compressed_content = compressor.compress(summary_content, compress_docs)
+                    summary_path.write_text(compressed_content, encoding="utf-8")
+            except Exception as e:
+                print(f"    Warning: Compression failed for summaries: {e}", file=sys.stderr)
+    
+    # 10. Enrich summary with additional stats
+    summary["timestamp"] = datetime.now().isoformat()
+    
+    # Add cache fingerprint if prompt was generated
+    if cache_fingerprint:
+        summary["cache_fingerprint"] = cache_fingerprint
+        if prompt_path and prompt_path.exists():
+            prompt_size = prompt_path.stat().st_size
+            summary["estimated_prompt_tokens"] = prompt_size // 4  # ~4 chars/token
+        else:
+            summary["estimated_prompt_tokens"] = 0
+    else:
+        summary["cache_fingerprint"] = None
+        summary["estimated_prompt_tokens"] = 0
+    
+    # Add domain classifications if policy available
+    policy = load_policy()
+    if policy and diff_files_list:
+        classifications = classify_files_by_domain(diff_files_list, policy)
+        protected_files, protection_details = check_protected_files(diff_files_list, policy)
+        summary["domain_classifications"] = {k: len(v) for k, v in classifications.items() if v}
+        summary["protected_files_detected"] = list(protection_details.keys())
+    else:
+        summary["domain_classifications"] = None
+        summary["protected_files_detected"] = []
+    
+    # Add compression savings if enabled
+    if compress_docs and compress_docs != "none":
+        summary["compression_enabled"] = compress_docs
+    else:
+        summary["compression_enabled"] = None
+    
+    # Write pack_stats.json
+    stats_path = out_dir / "pack_stats.json"
+    stats_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    print(f"  Created: {stats_path.name}")
+    
+    # Also store in reports directory for trend tracking
+    if "reports/contextpack" not in str(out_dir):
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        reports_dir = REPO_ROOT / "reports" / "contextpack" / date_str
+        reports_dir.mkdir(parents=True, exist_ok=True)
+        time_str = datetime.now().strftime("%H%M%S")
+        reports_stats_path = reports_dir / f"pack_stats_{time_str}.json"
+        reports_stats_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    
+    # Print summary
     if LLM_CONTEXT.exists():
         print(f"\nStable context file: {LLM_CONTEXT.relative_to(REPO_ROOT)}")
     
@@ -1155,6 +2051,86 @@ See docs/contextpack/README.md for the full Context Pack pipeline.
         help="Skip generating prompt.md and cache_notes.md",
     )
     
+    parser.add_argument(
+        "--chunk-strategy",
+        type=str,
+        choices=["size", "semantic"],
+        default="size",
+        help="Chunking strategy: 'size' (file boundaries) or 'semantic' (file + hunk clusters) (default: size)",
+    )
+    
+    parser.add_argument(
+        "--minify-prompt",
+        action="store_true",
+        help="Minify prompt.md by removing redundant whitespace and comment blocks",
+    )
+    
+    parser.add_argument(
+        "--summaries",
+        action="store_true",
+        help="Generate hierarchical summaries (1-line, 5-line, 1-paragraph)",
+    )
+    
+    parser.add_argument(
+        "--anchors",
+        action="store_true",
+        help="Extract and inject semantic anchors (effect IDs, interfaces, changed modules) into packet.md",
+    )
+    
+    parser.add_argument(
+        "--session",
+        type=str,
+        default=None,
+        help="Session ID for delta ledger tracking (skips unchanged files from previous sessions)",
+    )
+    
+    parser.add_argument(
+        "--cache",
+        action="store_true",
+        help="Enable fragment caching (caches effect registry, metadata, anchors for reuse)",
+    )
+    
+    parser.add_argument(
+        "--lazy",
+        action="store_true",
+        help="Enable lazy context loading (loads files only when needed, priority-based ordering)",
+    )
+    
+    parser.add_argument(
+        "--token-budget",
+        type=int,
+        default=None,
+        help="Token budget limit (truncates low-priority files when exceeded)",
+    )
+    
+    parser.add_argument(
+        "--compress-docs",
+        type=str,
+        choices=["none", "light", "aggressive"],
+        default=None,
+        help="Compression level for documentation (none, light, aggressive). Default: none",
+    )
+    
+    parser.add_argument(
+        "--cache-mode",
+        type=str,
+        choices=["openai", "anthropic"],
+        default="openai",
+        help="Cache mode for prompt generation (openai or anthropic). Default: openai",
+    )
+    
+    parser.add_argument(
+        "--policy-check",
+        action="store_true",
+        help="Check policy: classify diff files by domain and verify protected files",
+    )
+    
+    parser.add_argument(
+        "--ack-protected",
+        action="store_true",
+        help="Acknowledge protected file changes (required when protected files are touched)",
+    )
+    
     # TOON options
     toon_group = parser.add_argument_group("TOON conversion options")
     
@@ -1207,6 +2183,39 @@ See docs/contextpack/README.md for the full Context Pack pipeline.
             sys.exit(1)
         return
     
+    # Policy check mode
+    if args.policy_check:
+        diff_output = get_git_diff(args.diff)
+        file_paths = extract_file_paths_from_diff(diff_output)
+        
+        policy = load_policy()
+        if not policy:
+            print("Warning: policy.yaml not found or failed to load", file=sys.stderr)
+        
+        classifications = classify_files_by_domain(file_paths, policy)
+        protected_files, protection_details = check_protected_files(file_paths, policy)
+        
+        # Print domain classifications
+        print("\nDomain Classifications:")
+        for domain, files in classifications.items():
+            if files:
+                print(f"  {domain}: {len(files)} files")
+        
+        # Check protected files
+        if protected_files and not args.ack_protected:
+            print(f"\nERROR: Protected files detected without --ack-protected flag:")
+            for pf in protected_files:
+                print(f"  {pf} ({protection_details[pf]['level']})")
+            sys.exit(1)
+        elif protected_files:
+            print(f"\nProtected files detected (acknowledged):")
+            for pf in protected_files:
+                print(f"  {pf} ({protection_details[pf]['level']})")
+        
+        # Don't generate pack, just check (unless --out is also specified)
+        if args.policy_check and not args.out:
+            return
+    
     # Handle --no-* flags
     toonify = args.toonify and not args.no_toonify
     toon_stats = args.toon_stats and not args.no_toon_stats
@@ -1221,6 +2230,16 @@ See docs/contextpack/README.md for the full Context Pack pipeline.
         toon_stats=toon_stats,
         toon_min_items=args.toon_min_items,
         generate_prompt=generate_prompt,
+        chunk_strategy=args.chunk_strategy,
+        minify_prompt=args.minify_prompt,
+        generate_summaries=args.summaries,
+        extract_anchors_flag=args.anchors,
+        session_id=args.session,
+        enable_cache=args.cache,
+        enable_lazy=args.lazy,
+        token_budget=args.token_budget,
+        compress_docs=args.compress_docs,
+        cache_mode=args.cache_mode,
     )
     
     # Return summary as JSON for Claude-Flow integration

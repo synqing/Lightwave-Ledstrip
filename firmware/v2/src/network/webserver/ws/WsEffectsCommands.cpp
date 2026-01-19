@@ -128,13 +128,18 @@ static void handleEffectsList(AsyncWebSocketClient* client, JsonDocument& doc, c
     // Collect effect names and categories into arrays
     const char* effectNames[128];
     const char* categories[128];
+    static const char* categoryClassic = "Classic";
+    static const char* categoryWave = "Wave";
+    static const char* categoryPhysics = "Physics";
+    static const char* categoryCustom = "Custom";
+    
     for (uint8_t i = startIdx; i < endIdx; i++) {
         effectNames[i] = ctx.renderer->getEffectName(i);
         if (details) {
-            if (i <= 4) categories[i] = "Classic";
-            else if (i <= 7) categories[i] = "Wave";
-            else if (i <= 12) categories[i] = "Physics";
-            else categories[i] = "Custom";
+            if (i <= 4) categories[i] = categoryClassic;
+            else if (i <= 7) categories[i] = categoryWave;
+            else if (i <= 12) categories[i] = categoryPhysics;
+            else categories[i] = categoryCustom;
         } else {
             categories[i] = nullptr;
         }
@@ -531,26 +536,32 @@ static void handleParametersSet(AsyncWebSocketClient* client, JsonDocument& doc,
 
     if (ctx.broadcastStatus) ctx.broadcastStatus();
 
-    String response = buildWsResponse("parameters.changed", requestId, [&ctx, updatedBrightness, updatedSpeed, updatedPalette, updatedIntensity, updatedSaturation, updatedComplexity, updatedVariation, updatedHue](JsonObject& data) {
-        JsonArray updated = data["updated"].to<JsonArray>();
-        if (updatedBrightness) updated.add("brightness");
-        if (updatedSpeed) updated.add("speed");
-        if (updatedPalette) updated.add("paletteId");
-        if (updatedIntensity) updated.add("intensity");
-        if (updatedSaturation) updated.add("saturation");
-        if (updatedComplexity) updated.add("complexity");
-        if (updatedVariation) updated.add("variation");
-        if (updatedHue) updated.add("hue");
+    // Collect updated keys into array
+    const char* updatedKeys[8];
+    uint8_t updatedCount = 0;
+    if (updatedBrightness && updatedCount < 8) updatedKeys[updatedCount++] = "brightness";
+    if (updatedSpeed && updatedCount < 8) updatedKeys[updatedCount++] = "speed";
+    if (updatedPalette && updatedCount < 8) updatedKeys[updatedCount++] = "paletteId";
+    if (updatedIntensity && updatedCount < 8) updatedKeys[updatedCount++] = "intensity";
+    if (updatedSaturation && updatedCount < 8) updatedKeys[updatedCount++] = "saturation";
+    if (updatedComplexity && updatedCount < 8) updatedKeys[updatedCount++] = "complexity";
+    if (updatedVariation && updatedCount < 8) updatedKeys[updatedCount++] = "variation";
+    if (updatedHue && updatedCount < 8) updatedKeys[updatedCount++] = "hue";
 
-        JsonObject current = data["current"].to<JsonObject>();
-        current["brightness"] = ctx.renderer->getBrightness();
-        current["speed"] = ctx.renderer->getSpeed();
-        current["paletteId"] = ctx.renderer->getPaletteIndex();
-        current["hue"] = ctx.renderer->getHue();
-        current["intensity"] = ctx.renderer->getIntensity();
-        current["saturation"] = ctx.renderer->getSaturation();
-        current["complexity"] = ctx.renderer->getComplexity();
-        current["variation"] = ctx.renderer->getVariation();
+    String response = buildWsResponse("parameters.changed", requestId, [&ctx, updatedKeys, updatedCount](JsonObject& data) {
+        codec::WsEffectsCodec::encodeParametersChanged(
+            updatedKeys,
+            updatedCount,
+            ctx.renderer->getBrightness(),
+            ctx.renderer->getSpeed(),
+            ctx.renderer->getPaletteIndex(),
+            ctx.renderer->getHue(),
+            ctx.renderer->getIntensity(),
+            ctx.renderer->getSaturation(),
+            ctx.renderer->getComplexity(),
+            ctx.renderer->getVariation(),
+            data
+        );
     });
     client->text(response);
 }

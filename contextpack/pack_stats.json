@@ -1,0 +1,26 @@
+{
+  "output_dir": "/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/contextpack",
+  "diff_size": 176599,
+  "diff_files": 40,
+  "diff_parts": 3,
+  "excluded_files": 2,
+  "fixtures_converted": 0,
+  "fixtures_skipped": 0,
+  "token_savings_percent": 0,
+  "timestamp": "2026-01-19T04:44:01.195437",
+  "cache_fingerprint": {
+    "llm_context_hash": "7a816011296e1d6c",
+    "prompt_prefix_hash": "a7cab3c2d068f35f",
+    "stable_prefix_tokens": 1037,
+    "cache_barrier_position": 4134
+  },
+  "estimated_prompt_tokens": 1954,
+  "domain_classifications": {
+    "firmware_effects": 1,
+    "network_api": 11,
+    "documentation": 5,
+    "unknown": 12
+  },
+  "protected_files_detected": [],
+  "compression_enabled": null
+}

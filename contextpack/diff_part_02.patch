@@ -1,0 +1,1030 @@
+diff --git a/firmware/v2/src/network/webserver/ws/WsPluginCommands.cpp b/firmware/v2/src/network/webserver/ws/WsPluginCommands.cpp
+index ff8c6e0..c4bd62a 100644
+--- a/firmware/v2/src/network/webserver/ws/WsPluginCommands.cpp
++++ b/firmware/v2/src/network/webserver/ws/WsPluginCommands.cpp
+@@ -15,7 +15,8 @@
+ #include "../WsCommandRouter.h"
+ #include "../WebServerContext.h"
+ #include "../../ApiResponse.h"
+-#include "../../../plugins/PluginManagerActor.h"
++#include "../../../plugins/PluginManagerActor.h"  // Include full types before codec header
++#include "../../../codec/WsPluginsCodec.h"
+ #include <ESPAsyncWebServer.h>
+ #include <ArduinoJson.h>
+ 
+@@ -37,7 +38,17 @@ static void handlePluginsReload(AsyncWebSocketClient* client, JsonDocument& doc,
+ // ============================================================================
+ 
+ static void handlePluginsList(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    const char* requestId = doc["requestId"] | "";
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::PluginsDecodeResult decodeResult = codec::WsPluginsCodec::decodePluginsList(root);
++    
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
++        return;
++    }
++    
++    const codec::PluginsRequest& req = decodeResult.request;
++    const char* requestId = req.requestId ? req.requestId : "";
+ 
+     if (!ctx.pluginManager) {
+         client->text(buildWsError(ErrorCodes::INTERNAL_ERROR,
+@@ -50,16 +61,7 @@ static void handlePluginsList(AsyncWebSocketClient* client, JsonDocument& doc, c
+     // Build list of registered effect IDs
+     String response = buildWsResponse("plugins.list", requestId,
+         [&ctx, &stats](JsonObject& data) {
+-            data["registeredCount"] = stats.registeredCount;
+-            data["overrideModeEnabled"] = stats.overrideModeEnabled;
+-
+-            // List registered effect IDs
+-            JsonArray effects = data["effects"].to<JsonArray>();
+-            for (uint8_t i = 0; i < plugins::PluginConfig::MAX_EFFECTS; i++) {
+-                if (ctx.pluginManager->isEffectRegistered(i)) {
+-                    effects.add(i);
+-                }
+-            }
++            codec::WsPluginsCodec::encodePluginsList(*ctx.pluginManager, stats, data);
+         });
+     client->text(response);
+ }
+@@ -69,7 +71,17 @@ static void handlePluginsList(AsyncWebSocketClient* client, JsonDocument& doc, c
+ // ============================================================================
+ 
+ static void handlePluginsStats(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    const char* requestId = doc["requestId"] | "";
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::PluginsDecodeResult decodeResult = codec::WsPluginsCodec::decodePluginsStats(root);
++    
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
++        return;
++    }
++    
++    const codec::PluginsRequest& req = decodeResult.request;
++    const char* requestId = req.requestId ? req.requestId : "";
+ 
+     if (!ctx.pluginManager) {
+         client->text(buildWsError(ErrorCodes::INTERNAL_ERROR,
+@@ -81,24 +93,7 @@ static void handlePluginsStats(AsyncWebSocketClient* client, JsonDocument& doc,
+ 
+     String response = buildWsResponse("plugins.stats", requestId,
+         [&stats](JsonObject& data) {
+-            // Core stats
+-            data["registeredCount"] = stats.registeredCount;
+-            data["loadedFromLittleFS"] = stats.loadedFromLittleFS;
+-            data["overrideModeEnabled"] = stats.overrideModeEnabled;
+-            data["disabledByOverride"] = stats.disabledByOverride;
+-            data["registrationsFailed"] = stats.registrationsFailed;
+-            data["unregistrations"] = stats.unregistrations;
+-
+-            // Reload status (Phase 2)
+-            data["lastReloadOk"] = stats.lastReloadOk;
+-            data["lastReloadMillis"] = stats.lastReloadMillis;
+-            data["manifestCount"] = stats.manifestCount;
+-            data["errorCount"] = stats.errorCount;
+-
+-            // Include error summary if present
+-            if (stats.lastErrorSummary[0] != '\0') {
+-                data["lastErrorSummary"] = stats.lastErrorSummary;
+-            }
++            codec::WsPluginsCodec::encodePluginsStats(stats, data);
+         });
+     client->text(response);
+ }
+@@ -108,7 +103,17 @@ static void handlePluginsStats(AsyncWebSocketClient* client, JsonDocument& doc,
+ // ============================================================================
+ 
+ static void handlePluginsReload(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    const char* requestId = doc["requestId"] | "";
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::PluginsDecodeResult decodeResult = codec::WsPluginsCodec::decodePluginsReload(root);
++    
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
++        return;
++    }
++    
++    const codec::PluginsRequest& req = decodeResult.request;
++    const char* requestId = req.requestId ? req.requestId : "";
+ 
+     if (!ctx.pluginManager) {
+         client->text(buildWsError(ErrorCodes::INTERNAL_ERROR,
+@@ -125,28 +130,7 @@ static void handlePluginsReload(AsyncWebSocketClient* client, JsonDocument& doc,
+ 
+     String response = buildWsResponse("plugins.reload.result", requestId,
+         [success, &stats, manifestCount, manifests](JsonObject& data) {
+-            data["reloadSuccess"] = success;
+-
+-            // Stats
+-            JsonObject statsObj = data["stats"].to<JsonObject>();
+-            statsObj["registeredCount"] = stats.registeredCount;
+-            statsObj["loadedFromLittleFS"] = stats.loadedFromLittleFS;
+-            statsObj["overrideModeEnabled"] = stats.overrideModeEnabled;
+-            statsObj["disabledByOverride"] = stats.disabledByOverride;
+-            statsObj["lastReloadOk"] = stats.lastReloadOk;
+-            statsObj["lastReloadMillis"] = stats.lastReloadMillis;
+-            statsObj["manifestCount"] = stats.manifestCount;
+-            statsObj["errorCount"] = stats.errorCount;
+-
+-            // Errors array (only include manifests with errors)
+-            JsonArray errors = data["errors"].to<JsonArray>();
+-            for (uint8_t i = 0; i < manifestCount; i++) {
+-                if (!manifests[i].valid) {
+-                    JsonObject errObj = errors.add<JsonObject>();
+-                    errObj["file"] = manifests[i].filePath;
+-                    errObj["error"] = manifests[i].errorMsg;
+-                }
+-            }
++            codec::WsPluginsCodec::encodePluginsReload(success, stats, manifestCount, manifests, data);
+         });
+     client->text(response);
+ }
+diff --git a/firmware/v2/src/network/webserver/ws/WsTransitionCommands.cpp b/firmware/v2/src/network/webserver/ws/WsTransitionCommands.cpp
+index 952bb2c..6a9f7be 100644
+--- a/firmware/v2/src/network/webserver/ws/WsTransitionCommands.cpp
++++ b/firmware/v2/src/network/webserver/ws/WsTransitionCommands.cpp
+@@ -7,6 +7,7 @@
+ #include "../WsCommandRouter.h"
+ #include "../WebServerContext.h"
+ #include "../../ApiResponse.h"
++#include "../../../codec/WsTransitionCodec.h"
+ #include "../../../core/actors/RendererActor.h"
+ #include "../../../effects/transitions/TransitionTypes.h"
+ #include <ESPAsyncWebServer.h>
+@@ -20,15 +21,23 @@ namespace ws {
+ using namespace lightwaveos::transitions;
+ 
+ static void handleTransitionTrigger(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    uint8_t toEffect = doc["toEffect"] | 0;
+-    uint8_t transType = doc["transitionType"] | 0;
+-    bool random = doc["random"] | false;
++    // Decode using codec (single canonical JSON parser)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::TransitionTriggerDecodeResult decodeResult = codec::WsTransitionCodec::decodeTrigger(root);
++
++    if (!decodeResult.success) {
++        // Legacy command doesn't send errors, just ignore invalid requests
++        return;
++    }
++
++    const codec::TransitionTriggerRequest& req = decodeResult.request;
++    uint8_t toEffect = req.toEffect;
+     
+     if (toEffect < ctx.renderer->getEffectCount()) {
+-        if (random) {
++        if (req.random) {
+             ctx.renderer->startRandomTransition(toEffect);
+         } else {
+-            ctx.renderer->startTransition(toEffect, transType);
++            ctx.renderer->startTransition(toEffect, req.transitionType);
+         }
+         if (ctx.broadcastStatus) ctx.broadcastStatus();
+     }
+@@ -74,9 +83,20 @@ static void handleTransitionConfigGet(AsyncWebSocketClient* client, JsonDocument
+ }
+ 
+ static void handleTransitionConfigSet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    const char* requestId = doc["requestId"] | "";
+-    uint16_t duration = doc["defaultDuration"] | 1000;
+-    uint8_t type = doc["defaultType"] | 0;
++    // Decode using codec (single canonical JSON parser)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::TransitionConfigSetDecodeResult decodeResult = codec::WsTransitionCodec::decodeConfigSet(root);
++
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
++        return;
++    }
++
++    const codec::TransitionConfigSetRequest& req = decodeResult.request;
++    const char* requestId = req.requestId ? req.requestId : "";
++    uint16_t duration = req.defaultDuration;
++    uint8_t type = req.defaultType;
+     
+     if (type >= static_cast<uint8_t>(TransitionType::TYPE_COUNT)) {
+         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid transition type", requestId));
+@@ -121,15 +141,21 @@ static void handleTransitionsList(AsyncWebSocketClient* client, JsonDocument& do
+ }
+ 
+ static void handleTransitionsTrigger(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    const char* requestId = doc["requestId"] | "";
+-    uint8_t toEffect = doc["toEffect"] | 255;
+-    uint8_t transType = doc["type"] | 0;
+-    uint16_t duration = doc["duration"] | 1000;
+-    
+-    if (toEffect == 255) {
+-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "toEffect required", requestId));
++    // Decode using codec (single canonical JSON parser)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::TransitionsTriggerDecodeResult decodeResult = codec::WsTransitionCodec::decodeTransitionsTrigger(root);
++
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
+         return;
+     }
++
++    const codec::TransitionsTriggerRequest& req = decodeResult.request;
++    const char* requestId = req.requestId ? req.requestId : "";
++    uint8_t toEffect = req.toEffect;
++    uint8_t transType = req.type;
++    uint16_t duration = req.duration;
+     
+     if (toEffect >= ctx.renderer->getEffectCount()) {
+         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid toEffect", requestId));
+@@ -140,6 +166,7 @@ static void handleTransitionsTrigger(AsyncWebSocketClient* client, JsonDocument&
+     ctx.renderer->startTransition(toEffect, transType);
+     if (ctx.broadcastStatus) ctx.broadcastStatus();
+     
++    // Use variables from decode result
+     String response = buildWsResponse("transition.started", requestId, [&ctx, fromEffect, toEffect, transType, duration](JsonObject& data) {
+         data["fromEffect"] = fromEffect;
+         data["toEffect"] = toEffect;
+diff --git a/firmware/v2/src/network/webserver/ws/WsZonesCommands.cpp b/firmware/v2/src/network/webserver/ws/WsZonesCommands.cpp
+index d60ed1d..397be0f 100644
+--- a/firmware/v2/src/network/webserver/ws/WsZonesCommands.cpp
++++ b/firmware/v2/src/network/webserver/ws/WsZonesCommands.cpp
+@@ -8,6 +8,7 @@
+ #include "../WebServerContext.h"
+ #include "../../ApiResponse.h"
+ #include "../../RequestValidator.h"
++#include "../../../codec/WsZonesCodec.h"
+ #include "../../../effects/zones/ZoneComposer.h"
+ #include "../../../effects/zones/BlendMode.h"
+ #include <ESPAsyncWebServer.h>
+@@ -25,14 +26,23 @@ static void handleZoneEnable(AsyncWebSocketClient* client, JsonDocument& doc, co
+         return; // Silently ignore if zones not available
+     }
+     
+-    bool enable = doc["enable"] | false;
+-    ctx.zoneComposer->setEnabled(enable);
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::ZoneEnableDecodeResult decodeResult = codec::WsZonesCodec::decodeZoneEnable(root);
++    
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
++        return;
++    }
++    
++    const codec::ZoneEnableRequest& req = decodeResult.request;
++    ctx.zoneComposer->setEnabled(req.enable);
+     
+     // Send immediate zone.enabledChanged event
+     if (ctx.ws) {
+         StaticJsonDocument<128> eventDoc;
+         eventDoc["type"] = "zone.enabledChanged";
+-        eventDoc["enabled"] = enable;
++        eventDoc["enabled"] = req.enable;
+         String eventOutput;
+         serializeJson(eventDoc, eventOutput);
+         ctx.ws->textAll(eventOutput);
+@@ -42,15 +52,31 @@ static void handleZoneEnable(AsyncWebSocketClient* client, JsonDocument& doc, co
+ }
+ 
+ static void handleZoneSetEffect(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::ZoneSetEffectDecodeResult decodeResult = codec::WsZonesCodec::decodeZoneSetEffect(root);
++    
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
++        return;
++    }
++    
+     if (!ctx.zoneComposer) {
+-        const char* requestId = doc["requestId"] | "";
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+         client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
+         return;
+     }
+     
+-    const char* requestId = doc["requestId"] | "";
+-    uint8_t zoneId = doc["zoneId"] | 0;
+-    uint8_t effectId = doc["effectId"] | 0;
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
++        return;
++    }
++    
++    const codec::ZoneSetEffectRequest& req = decodeResult.request;
++    uint8_t zoneId = req.zoneId;
++    uint8_t effectId = req.effectId;
++    const char* requestId = req.requestId ? req.requestId : "";
+     
+     // DEFENSIVE CHECK: Validate zoneId and effectId before array access
+     zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
+@@ -84,17 +110,28 @@ static void handleZoneSetEffect(AsyncWebSocketClient* client, JsonDocument& doc,
+ }
+ 
+ static void handleZoneSetBrightness(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::ZoneSetBrightnessDecodeResult decodeResult = codec::WsZonesCodec::decodeZoneSetBrightness(root);
++    
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
++        return;
++    }
++    
+     if (!ctx.zoneComposer) {
+-        const char* requestId = doc["requestId"] | "";
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+         client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
+         return;
+     }
+     
+-    const char* requestId = doc["requestId"] | "";
+-    uint8_t zoneId = doc["zoneId"] | 0;
++    const codec::ZoneSetBrightnessRequest& req = decodeResult.request;
++    uint8_t zoneId = req.zoneId;
++    uint8_t brightness = req.brightness;
++    const char* requestId = req.requestId ? req.requestId : "";
++    
+     // DEFENSIVE CHECK: Validate zoneId before array access
+     zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
+-    uint8_t brightness = doc["brightness"] | 128;
+     
+     if (zoneId >= ctx.zoneComposer->getZoneCount()) {
+         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid zoneId", requestId));
+@@ -120,28 +157,34 @@ static void handleZoneSetBrightness(AsyncWebSocketClient* client, JsonDocument&
+ }
+ 
+ static void handleZoneSetSpeed(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::ZoneSetSpeedDecodeResult decodeResult = codec::WsZonesCodec::decodeZoneSetSpeed(root);
++    
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
++        return;
++    }
++    
+     if (!ctx.zoneComposer) {
+-        const char* requestId = doc["requestId"] | "";
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+         client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
+         return;
+     }
+     
+-    const char* requestId = doc["requestId"] | "";
+-    uint8_t zoneId = doc["zoneId"] | 0;
++    const codec::ZoneSetSpeedRequest& req = decodeResult.request;
++    uint8_t zoneId = req.zoneId;
++    uint8_t speed = req.speed;
++    const char* requestId = req.requestId ? req.requestId : "";
++    
+     // DEFENSIVE CHECK: Validate zoneId before array access
+     zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
+-    uint8_t speed = doc["speed"] | 15;
+     
+     if (zoneId >= ctx.zoneComposer->getZoneCount()) {
+         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid zoneId", requestId));
+         return;
+     }
+     
+-    if (speed < 1 || speed > 100) {
+-        client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Speed must be 1-100", requestId));
+-        return;
+-    }
+-    
+     ctx.zoneComposer->setZoneSpeed(zoneId, speed);
+     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
+     
+@@ -161,15 +204,25 @@ static void handleZoneSetSpeed(AsyncWebSocketClient* client, JsonDocument& doc,
+ }
+ 
+ static void handleZoneSetPalette(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::ZoneSetPaletteDecodeResult decodeResult = codec::WsZonesCodec::decodeZoneSetPalette(root);
++    
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
++        return;
++    }
++    
+     if (!ctx.zoneComposer) {
+-        const char* requestId = doc["requestId"] | "";
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+         client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
+         return;
+     }
+     
+-    const char* requestId = doc["requestId"] | "";
+-    uint8_t zoneId = doc["zoneId"] | 0;
+-    uint8_t paletteId = doc["paletteId"] | 0;
++    const codec::ZoneSetPaletteRequest& req = decodeResult.request;
++    uint8_t zoneId = req.zoneId;
++    uint8_t paletteId = req.paletteId;
++    const char* requestId = req.requestId ? req.requestId : "";
+     
+     // DEFENSIVE CHECK: Validate zoneId and paletteId before array access
+     zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
+@@ -198,15 +251,25 @@ static void handleZoneSetPalette(AsyncWebSocketClient* client, JsonDocument& doc
+ }
+ 
+ static void handleZoneSetBlend(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::ZoneSetBlendDecodeResult decodeResult = codec::WsZonesCodec::decodeZoneSetBlend(root);
++    
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
++        return;
++    }
++    
+     if (!ctx.zoneComposer) {
+-        const char* requestId = doc["requestId"] | "";
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+         client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
+         return;
+     }
+     
+-    const char* requestId = doc["requestId"] | "";
+-    uint8_t zoneId = doc["zoneId"] | 0;
+-    uint8_t blendModeVal = doc["blendMode"] | 0;
++    const codec::ZoneSetBlendRequest& req = decodeResult.request;
++    uint8_t zoneId = req.zoneId;
++    uint8_t blendModeVal = req.blendMode;
++    const char* requestId = req.requestId ? req.requestId : "";
+     
+     // DEFENSIVE CHECK: Validate zoneId before array access
+     zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
+@@ -216,12 +279,6 @@ static void handleZoneSetBlend(AsyncWebSocketClient* client, JsonDocument& doc,
+         return;
+     }
+     
+-    // Validate blendMode is 0-7
+-    if (blendModeVal > 7) {
+-        client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "BlendMode must be 0-7", requestId));
+-        return;
+-    }
+-    
+     lightwaveos::zones::BlendMode blendMode = static_cast<lightwaveos::zones::BlendMode>(blendModeVal);
+     ctx.zoneComposer->setZoneBlendMode(zoneId, blendMode);
+     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
+@@ -245,13 +302,31 @@ static void handleZoneLoadPreset(AsyncWebSocketClient* client, JsonDocument& doc
+         return; // Silently ignore if zones not available
+     }
+     
+-    uint8_t presetId = doc["presetId"] | 0;
+-    ctx.zoneComposer->loadPreset(presetId);
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::ZoneLoadPresetDecodeResult decodeResult = codec::WsZonesCodec::decodeZoneLoadPreset(root);
++    
++    if (!decodeResult.success) {
++        // Silently ignore decode errors for loadPreset (matches original behavior)
++        return;
++    }
++    
++    const codec::ZoneLoadPresetRequest& req = decodeResult.request;
++    ctx.zoneComposer->loadPreset(req.presetId);
+     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
+ }
+ 
+ static void handleZonesGet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    const char* requestId = doc["requestId"] | "";
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::ZonesGetDecodeResult decodeResult = codec::WsZonesCodec::decodeZonesGet(root);
++    
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
++        return;
++    }
++    
++    const codec::ZonesGetRequest& req = decodeResult.request;
++    const char* requestId = req.requestId ? req.requestId : "";
+     
+     if (!ctx.zoneComposer) {
+         client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
+@@ -259,48 +334,23 @@ static void handleZonesGet(AsyncWebSocketClient* client, JsonDocument& doc, cons
+     }
+     
+     String response = buildWsResponse("zones", requestId, [&ctx](JsonObject& data) {
+-        data["enabled"] = ctx.zoneComposer->isEnabled();
+-        data["zoneCount"] = ctx.zoneComposer->getZoneCount();
+-        
+-        // Include segment definitions
+-        JsonArray segmentsArray = data["segments"].to<JsonArray>();
+-        const ZoneSegment* segments = ctx.zoneComposer->getZoneConfig();
+-        for (uint8_t i = 0; i < ctx.zoneComposer->getZoneCount(); i++) {
+-            JsonObject seg = segmentsArray.add<JsonObject>();
+-            seg["zoneId"] = segments[i].zoneId;
+-            seg["s1LeftStart"] = segments[i].s1LeftStart;
+-            seg["s1LeftEnd"] = segments[i].s1LeftEnd;
+-            seg["s1RightStart"] = segments[i].s1RightStart;
+-            seg["s1RightEnd"] = segments[i].s1RightEnd;
+-            seg["totalLeds"] = segments[i].totalLeds;
+-        }
+-        
+-        JsonArray zones = data["zones"].to<JsonArray>();
+-        for (uint8_t i = 0; i < ctx.zoneComposer->getZoneCount(); i++) {
+-            JsonObject zone = zones.add<JsonObject>();
+-            zone["id"] = i;
+-            zone["enabled"] = ctx.zoneComposer->isZoneEnabled(i);
+-            zone["effectId"] = ctx.zoneComposer->getZoneEffect(i);
+-            zone["effectName"] = ctx.renderer->getEffectName(ctx.zoneComposer->getZoneEffect(i));
+-            zone["brightness"] = ctx.zoneComposer->getZoneBrightness(i);
+-            zone["speed"] = ctx.zoneComposer->getZoneSpeed(i);
+-            zone["paletteId"] = ctx.zoneComposer->getZonePalette(i);
+-            zone["blendMode"] = static_cast<uint8_t>(ctx.zoneComposer->getZoneBlendMode(i));
+-            zone["blendModeName"] = getBlendModeName(ctx.zoneComposer->getZoneBlendMode(i));
+-        }
+-        
+-        JsonArray presets = data["presets"].to<JsonArray>();
+-        for (uint8_t i = 0; i < 5; i++) {
+-            JsonObject preset = presets.add<JsonObject>();
+-            preset["id"] = i;
+-            preset["name"] = ZoneComposer::getPresetName(i);
+-        }
++        codec::WsZonesCodec::encodeZonesGet(*ctx.zoneComposer, ctx.renderer, data);
+     });
+     client->text(response);
+ }
+ 
+ static void handleZonesList(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    const char* requestId = doc["requestId"] | "";
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::ZonesGetDecodeResult decodeResult = codec::WsZonesCodec::decodeZonesGet(root);
++    
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
++        return;
++    }
++    
++    const codec::ZonesGetRequest& req = decodeResult.request;
++    const char* requestId = req.requestId ? req.requestId : "";
+     
+     if (!ctx.zoneComposer) {
+         client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
+@@ -308,61 +358,31 @@ static void handleZonesList(AsyncWebSocketClient* client, JsonDocument& doc, con
+     }
+     
+     String response = buildWsResponse("zones.list", requestId, [&ctx](JsonObject& data) {
+-        data["enabled"] = ctx.zoneComposer->isEnabled();
+-        data["zoneCount"] = ctx.zoneComposer->getZoneCount();
+-        
+-        // Include segment definitions
+-        JsonArray segmentsArray = data["segments"].to<JsonArray>();
+-        const ZoneSegment* segments = ctx.zoneComposer->getZoneConfig();
+-        for (uint8_t i = 0; i < ctx.zoneComposer->getZoneCount(); i++) {
+-            JsonObject seg = segmentsArray.add<JsonObject>();
+-            seg["zoneId"] = segments[i].zoneId;
+-            seg["s1LeftStart"] = segments[i].s1LeftStart;
+-            seg["s1LeftEnd"] = segments[i].s1LeftEnd;
+-            seg["s1RightStart"] = segments[i].s1RightStart;
+-            seg["s1RightEnd"] = segments[i].s1RightEnd;
+-            seg["totalLeds"] = segments[i].totalLeds;
+-        }
+-        
+-        JsonArray zones = data["zones"].to<JsonArray>();
+-        for (uint8_t i = 0; i < ctx.zoneComposer->getZoneCount(); i++) {
+-            JsonObject zone = zones.add<JsonObject>();
+-            zone["id"] = i;
+-            zone["enabled"] = ctx.zoneComposer->isZoneEnabled(i);
+-            zone["effectId"] = ctx.zoneComposer->getZoneEffect(i);
+-            zone["effectName"] = ctx.renderer->getEffectName(ctx.zoneComposer->getZoneEffect(i));
+-            zone["brightness"] = ctx.zoneComposer->getZoneBrightness(i);
+-            zone["speed"] = ctx.zoneComposer->getZoneSpeed(i);
+-            zone["paletteId"] = ctx.zoneComposer->getZonePalette(i);
+-            zone["blendMode"] = static_cast<uint8_t>(ctx.zoneComposer->getZoneBlendMode(i));
+-            zone["blendModeName"] = getBlendModeName(ctx.zoneComposer->getZoneBlendMode(i));
+-        }
+-        
+-        JsonArray presets = data["presets"].to<JsonArray>();
+-        for (uint8_t i = 0; i < 5; i++) {
+-            JsonObject preset = presets.add<JsonObject>();
+-            preset["id"] = i;
+-            preset["name"] = ZoneComposer::getPresetName(i);
+-        }
++        codec::WsZonesCodec::encodeZonesList(*ctx.zoneComposer, ctx.renderer, data);
+     });
+     client->text(response);
+ }
+ 
+ static void handleZonesUpdate(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    if (!ctx.zoneComposer) {
+-        const char* requestId = doc["requestId"] | "";
+-        client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::ZonesUpdateDecodeResult decodeResult = codec::WsZonesCodec::decodeZonesUpdate(root);
++    
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
+         return;
+     }
+     
+-    const char* requestId = doc["requestId"] | "";
+-    uint8_t zoneId = doc["zoneId"] | 255;
+-    
+-    if (zoneId == 255) {
+-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "zoneId required", requestId));
++    if (!ctx.zoneComposer) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
+         return;
+     }
+     
++    const codec::ZonesUpdateRequest& req = decodeResult.request;
++    uint8_t zoneId = req.zoneId;
++    const char* requestId = req.requestId ? req.requestId : "";
++    
+     // DEFENSIVE CHECK: Validate zoneId before array access
+     zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
+     
+@@ -377,8 +397,8 @@ static void handleZonesUpdate(AsyncWebSocketClient* client, JsonDocument& doc, c
+     bool updatedPalette = false;
+     bool updatedBlend = false;
+     
+-    if (doc.containsKey("effectId")) {
+-        uint8_t effectId = doc["effectId"] | 0;
++    if (req.hasEffectId) {
++        uint8_t effectId = req.effectId;
+         // DEFENSIVE CHECK: Validate effectId before array access
+         effectId = lightwaveos::network::validateEffectIdInRequest(effectId);
+         if (effectId < ctx.renderer->getEffectCount()) {
+@@ -387,33 +407,28 @@ static void handleZonesUpdate(AsyncWebSocketClient* client, JsonDocument& doc, c
+         }
+     }
+     
+-    if (doc.containsKey("brightness")) {
+-        uint8_t brightness = doc["brightness"] | 128;
+-        ctx.zoneComposer->setZoneBrightness(zoneId, brightness);
++    if (req.hasBrightness) {
++        ctx.zoneComposer->setZoneBrightness(zoneId, req.brightness);
+         updatedBrightness = true;
+     }
+     
+-    if (doc.containsKey("speed")) {
+-        uint8_t speed = doc["speed"] | 15;
+-        ctx.zoneComposer->setZoneSpeed(zoneId, speed);
++    if (req.hasSpeed) {
++        ctx.zoneComposer->setZoneSpeed(zoneId, req.speed);
+         updatedSpeed = true;
+     }
+     
+-    if (doc.containsKey("paletteId")) {
+-        uint8_t paletteId = doc["paletteId"] | 0;
++    if (req.hasPaletteId) {
++        uint8_t paletteId = req.paletteId;
+         // DEFENSIVE CHECK: Validate paletteId before array access
+         paletteId = lightwaveos::network::validatePaletteIdInRequest(paletteId);
+         ctx.zoneComposer->setZonePalette(zoneId, paletteId);
+         updatedPalette = true;
+     }
+     
+-    if (doc.containsKey("blendMode")) {
+-        uint8_t blendModeVal = doc["blendMode"] | 0;
+-        if (blendModeVal <= 7) {
+-            lightwaveos::zones::BlendMode blendMode = static_cast<lightwaveos::zones::BlendMode>(blendModeVal);
+-            ctx.zoneComposer->setZoneBlendMode(zoneId, blendMode);
+-            updatedBlend = true;
+-        }
++    if (req.hasBlendMode) {
++        lightwaveos::zones::BlendMode blendMode = static_cast<lightwaveos::zones::BlendMode>(req.blendMode);
++        ctx.zoneComposer->setZoneBlendMode(zoneId, blendMode);
++        updatedBlend = true;
+     }
+     
+     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
+@@ -440,26 +455,32 @@ static void handleZonesUpdate(AsyncWebSocketClient* client, JsonDocument& doc, c
+ }
+ 
+ static void handleZonesSetEffect(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    if (!ctx.zoneComposer) {
+-        const char* requestId = doc["requestId"] | "";
+-        client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::ZoneSetEffectDecodeResult decodeResult = codec::WsZonesCodec::decodeZoneSetEffect(root);
++    
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
+         return;
+     }
+     
+-    const char* requestId = doc["requestId"] | "";
+-    uint8_t zoneId = doc["zoneId"] | 255;
+-    uint8_t effectId = doc["effectId"] | 255;
+-    
+-    if (zoneId == 255) {
+-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "zoneId required", requestId));
++    if (!ctx.zoneComposer) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
+         return;
+     }
+     
+-    if (effectId == 255) {
+-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "effectId required", requestId));
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
+         return;
+     }
+     
++    const codec::ZoneSetEffectRequest& req = decodeResult.request;
++    uint8_t zoneId = req.zoneId;
++    uint8_t effectId = req.effectId;
++    const char* requestId = req.requestId ? req.requestId : "";
++    
+     // DEFENSIVE CHECK: Validate zoneId and effectId before array access
+     zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
+     effectId = lightwaveos::network::validateEffectIdInRequest(effectId);
+@@ -469,16 +490,6 @@ static void handleZonesSetEffect(AsyncWebSocketClient* client, JsonDocument& doc
+         return;
+     }
+     
+-    if (effectId >= ctx.renderer->getEffectCount()) {
+-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "effectId required", requestId));
+-        return;
+-    }
+-    
+-    if (zoneId >= ctx.zoneComposer->getZoneCount()) {
+-        client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid zoneId", requestId));
+-        return;
+-    }
+-    
+     if (effectId >= ctx.renderer->getEffectCount()) {
+         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid effectId", requestId));
+         return;
+@@ -506,39 +517,34 @@ static void handleGetZoneState(AsyncWebSocketClient* client, JsonDocument& doc,
+ }
+ 
+ static void handleZonesSetLayout(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::ZonesSetLayoutDecodeResult decodeResult = codec::WsZonesCodec::decodeZonesSetLayout(root);
++    
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
++        return;
++    }
++    
+     if (!ctx.zoneComposer) {
+-        const char* requestId = doc["requestId"] | "";
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+         client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
+         return;
+     }
+     
+-    const char* requestId = doc["requestId"] | "";
++    const codec::ZonesSetLayoutRequest& req = decodeResult.request;
++    const char* requestId = req.requestId ? req.requestId : "";
+     
+-    // Parse zones array
+-    JsonArray zonesArray = doc["zones"];
+-    if (!zonesArray || zonesArray.size() == 0 || zonesArray.size() > MAX_ZONES) {
+-        client->text(buildWsError(ErrorCodes::INVALID_VALUE, "Invalid zones array", requestId));
+-        return;
+-    }
+-
+-    // Convert JSON array to ZoneSegment array
+-    ZoneSegment segments[MAX_ZONES];
+-    uint8_t zoneCount = zonesArray.size();
++    // Convert codec segments to ZoneSegment array
++    ZoneSegment segments[lightwaveos::zones::MAX_ZONES];
++    uint8_t zoneCount = req.zoneCount;
+     
+     for (uint8_t i = 0; i < zoneCount; i++) {
+-        JsonObject zoneObj = zonesArray[i];
+-        if (!zoneObj.containsKey("zoneId") || !zoneObj.containsKey("s1LeftStart") ||
+-            !zoneObj.containsKey("s1LeftEnd") || !zoneObj.containsKey("s1RightStart") ||
+-            !zoneObj.containsKey("s1RightEnd")) {
+-            client->text(buildWsError(ErrorCodes::INVALID_VALUE, "Zone segment missing required fields", requestId));
+-            return;
+-        }
+-        
+-        segments[i].zoneId = zoneObj["zoneId"];
+-        segments[i].s1LeftStart = zoneObj["s1LeftStart"];
+-        segments[i].s1LeftEnd = zoneObj["s1LeftEnd"];
+-        segments[i].s1RightStart = zoneObj["s1RightStart"];
+-        segments[i].s1RightEnd = zoneObj["s1RightEnd"];
++        segments[i].zoneId = req.zones[i].zoneId;
++        segments[i].s1LeftStart = req.zones[i].s1LeftStart;
++        segments[i].s1LeftEnd = req.zones[i].s1LeftEnd;
++        segments[i].s1RightStart = req.zones[i].s1RightStart;
++        segments[i].s1RightEnd = req.zones[i].s1RightEnd;
+         
+         // Calculate totalLeds
+         uint8_t leftSize = segments[i].s1LeftEnd - segments[i].s1LeftStart + 1;
+diff --git a/firmware/v2/src/plugins/PluginManagerActor.cpp b/firmware/v2/src/plugins/PluginManagerActor.cpp
+index 48c2b71..a02b64e 100644
+--- a/firmware/v2/src/plugins/PluginManagerActor.cpp
++++ b/firmware/v2/src/plugins/PluginManagerActor.cpp
+@@ -8,6 +8,7 @@
+ 
+ #include "PluginManagerActor.h"
+ #include "BuiltinEffectRegistry.h"
++#include "../codec/ManifestCodec.h"
+ #include <Arduino.h>
+ #include <ArduinoJson.h>
+ #include <cstring>
+@@ -309,7 +310,7 @@ bool PluginManagerActor::parseManifest(const char* path, ParsedManifest& manifes
+         return false;
+     }
+ 
+-    // Parse JSON - use JsonDocument (dynamic) for reading with pipe operator
++    // Parse JSON using codec (single canonical JSON parser)
+     JsonDocument doc;
+     DeserializationError err = deserializeJson(doc, file);
+     file.close();
+@@ -320,65 +321,24 @@ bool PluginManagerActor::parseManifest(const char* path, ParsedManifest& manifes
+         return false;
+     }
+ 
+-    // Extract version (use pipe operator for default, matching codebase style)
+-    const char* version = doc["version"] | "";
+-    if (strlen(version) == 0 || strcmp(version, "1.0") != 0) {
+-        snprintf(manifest.errorMsg, sizeof(manifest.errorMsg),
+-                 "Unsupported version: %s", strlen(version) ? version : "(null)");
+-        return false;
+-    }
++    // Decode using ManifestCodec (only place JSON keys are read)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::ManifestDecodeResult decodeResult = codec::ManifestCodec::decode(root);
+ 
+-    // Extract plugin metadata
+-    if (!doc["plugin"].is<JsonObject>()) {
+-        snprintf(manifest.errorMsg, sizeof(manifest.errorMsg),
+-                 "Missing 'plugin' object");
++    if (!decodeResult.success) {
++        // Copy error message from codec
++        strncpy(manifest.errorMsg, decodeResult.errorMsg, sizeof(manifest.errorMsg) - 1);
++        manifest.errorMsg[sizeof(manifest.errorMsg) - 1] = '\0';
+         return false;
+     }
+-    JsonObject plugin = doc["plugin"];
+ 
+-    const char* pluginNameStr = plugin["name"] | "";
+-    if (strlen(pluginNameStr) == 0) {
+-        snprintf(manifest.errorMsg, sizeof(manifest.errorMsg),
+-                 "Missing plugin name");
+-        return false;
+-    }
+-    strncpy(manifest.pluginName, pluginNameStr, sizeof(manifest.pluginName) - 1);
+-
+-    // Extract mode
+-    const char* mode = doc["mode"] | "additive";
+-    manifest.overrideMode = (strcmp(mode, "override") == 0);
+-
+-    // Extract effects array
+-    if (!doc["effects"].is<JsonArray>()) {
+-        snprintf(manifest.errorMsg, sizeof(manifest.errorMsg),
+-                 "Missing or empty 'effects' array");
+-        return false;
+-    }
+-    JsonArray effects = doc["effects"];
+-    if (effects.size() == 0) {
+-        snprintf(manifest.errorMsg, sizeof(manifest.errorMsg),
+-                 "Empty 'effects' array");
+-        return false;
+-    }
+-
+-    // Parse effect IDs
+-    manifest.effectCount = 0;
+-    for (JsonObject effect : effects) {
+-        if (manifest.effectCount >= PluginConfig::MAX_EFFECTS) {
+-            snprintf(manifest.errorMsg, sizeof(manifest.errorMsg),
+-                     "Too many effects (max %u)", PluginConfig::MAX_EFFECTS);
+-            return false;
+-        }
+-
+-        int id = effect["id"] | -1;
+-        if (id < 0 || id >= (int)PluginConfig::MAX_EFFECTS) {
+-            snprintf(manifest.errorMsg, sizeof(manifest.errorMsg),
+-                     "Invalid effect ID: %d", id);
+-            return false;
+-        }
+-
+-        manifest.effectIds[manifest.effectCount++] = (uint8_t)id;
+-    }
++    // Copy decoded config to manifest struct
++    strncpy(manifest.pluginName, decodeResult.config.pluginName, sizeof(manifest.pluginName) - 1);
++    manifest.pluginName[sizeof(manifest.pluginName) - 1] = '\0';
++    manifest.overrideMode = decodeResult.config.overrideMode;
++    manifest.effectCount = decodeResult.config.effectCount;
++    memcpy(manifest.effectIds, decodeResult.config.effectIds, 
++           decodeResult.config.effectCount * sizeof(uint8_t));
+ 
+     manifest.valid = true;
+     return true;
+diff --git a/scripts/README.md b/scripts/README.md
+index 67848f3..c6b7f8f 100644
+--- a/scripts/README.md
++++ b/scripts/README.md
+@@ -48,7 +48,7 @@ Uploads the LittleFS filesystem (web interface files) to ESP32.
+ ./scripts/uploadfs.sh
+ ```
+ 
+-- Default port: `/dev/tty.usbmodem21401`
++- Default port: `/dev/cu.usbmodem1101` (v2 ESP32-S3 device)
+ - Uses `esp32dev_audio` environment
+ - Web interface accessible at `http://lightwaveos.local` after upload
+ 
+@@ -80,14 +80,21 @@ Run `k1-pattern-wizard` after installation to create patterns.
+ 
+ ## USB Port Configuration
+ 
+-If your ESP32 appears on a different port, update the port in the script or use PlatformIO directly:
++**Locked-in device ports:**
++- **v2 ESP32-S3 device**: `/dev/cu.usbmodem1101` (used by `upload.sh`, `uploadfs.sh`, `monitor.sh`)
++- **Tab5.encoder device**: `/dev/cu.usbmodem101` (see `firmware/Tab5.encoder/README.md` for upload commands)
++
++If you need to override the port, use PlatformIO directly:
+ 
+ ```bash
+ # Find available ports
+ ls /dev/cu.usb*
+ 
+-# Upload with custom port
++# Upload v2 firmware with custom port
+ cd firmware/v2 && pio run -t upload --upload-port /dev/cu.usbmodemXXXX
++
++# Upload Tab5 firmware with custom port
++cd firmware/Tab5.encoder && pio run -e tab5 -t upload --upload-port /dev/cu.usbmodemXXXX
+ ```
+ 
+ ## PlatformIO Direct Commands
+diff --git a/scripts/uploadfs.sh b/scripts/uploadfs.sh
+index bff9716..d7d3e8b 100755
+--- a/scripts/uploadfs.sh
++++ b/scripts/uploadfs.sh
+@@ -1,7 +1,7 @@
+ #!/bin/bash
+ # Upload LittleFS filesystem to ESP32-S3
+ 
+-PORT="/dev/tty.usbmodem21401"
++PORT="/dev/cu.usbmodem1101"  # v2 ESP32-S3 device
+ echo "Uploading LittleFS filesystem to ESP32-S3..."
+ echo "Port: $PORT"
+ echo ""
+diff --git a/tools/Makefile b/tools/Makefile
+index c9a2bcb..17c581e 100644
+--- a/tools/Makefile
++++ b/tools/Makefile
+@@ -8,7 +8,7 @@
+ #   make test                  - Run unit tests
+ #   make help                  - Show this help
+ 
+-.PHONY: contextpack contextpack-lint contextpack-clean toon-install test help
++.PHONY: contextpack contextpack-semantic contextpack-minify contextpack-summaries contextpack-optimised contextpack-lint contextpack-clean toon-install test help
+ 
+ # Default output directory
+ OUT_DIR ?= ../contextpack
+@@ -17,6 +17,22 @@ OUT_DIR ?= ../contextpack
+ contextpack: toon-install
+ 	@./contextpack_wrapper.sh --out $(OUT_DIR)
+ 
++# Context pack with semantic chunking
++contextpack-semantic: toon-install
++	@./contextpack_wrapper.sh --out $(OUT_DIR) --chunk-strategy semantic
++
++# Context pack with minified prompt
++contextpack-minify: toon-install
++	@./contextpack_wrapper.sh --out $(OUT_DIR) --minify-prompt
++
++# Context pack with hierarchical summaries
++contextpack-summaries: toon-install
++	@./contextpack_wrapper.sh --out $(OUT_DIR) --summaries
++
++# Context pack with all token-saving features
++contextpack-optimised: toon-install
++	@./contextpack_wrapper.sh --out $(OUT_DIR) --chunk-strategy semantic --minify-prompt --summaries
++
+ # Lint mode (validate only)
+ contextpack-lint:
+ 	@python contextpack.py --lint
+@@ -33,9 +49,9 @@ toon-install:
+ 		npm install; \
+ 	fi
+ 
+-# Run unit tests
++# Run unit tests (both suites)
+ test: toon-install
+-	@python test_contextpack.py
++	@python -m pytest -v test_contextpack.py test_contextpack_features.py 2>/dev/null || (python test_contextpack.py && python test_contextpack_features.py)
+ 
+ # Help target
+ help:
+@@ -44,6 +60,10 @@ help:
+ 	@echo "Usage:"
+ 	@echo "  make contextpack           Generate context pack (full pipeline)"
+ 	@echo "  make contextpack OUT_DIR=path  Generate to custom directory"
++	@echo "  make contextpack-semantic  Use semantic chunking (groups by directory)"
++	@echo "  make contextpack-minify    Minify prompt.md (remove whitespace/comments)"
++	@echo "  make contextpack-summaries Generate hierarchical summaries (1-line, 5-line, 1-para)"
++	@echo "  make contextpack-optimised All token-saving features enabled"
+ 	@echo "  make contextpack-lint      Validate config and templates"
+ 	@echo "  make contextpack-clean     Remove generated context pack"
+ 	@echo "  make toon-install          Install TOON CLI dependencies"

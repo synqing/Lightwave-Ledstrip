@@ -7,6 +7,7 @@
 #include "../WsCommandRouter.h"
 #include "../WebServerContext.h"
 #include "../../ApiResponse.h"
+#include "../../../codec/WsTransitionCodec.h"
 #include "../../../core/actors/RendererActor.h"
 #include "../../../effects/transitions/TransitionTypes.h"
 #include <ESPAsyncWebServer.h>
@@ -20,63 +21,67 @@ namespace ws {
 using namespace lightwaveos::transitions;
 
 static void handleTransitionTrigger(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    uint8_t toEffect = doc["toEffect"] | 0;
-    uint8_t transType = doc["transitionType"] | 0;
-    bool random = doc["random"] | false;
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::TransitionTriggerDecodeResult decodeResult = codec::WsTransitionCodec::decodeTrigger(root);
+
+    if (!decodeResult.success) {
+        // Legacy command doesn't send errors, just ignore invalid requests
+        return;
+    }
+
+    const codec::TransitionTriggerRequest& req = decodeResult.request;
+    uint8_t toEffect = req.toEffect;
     
     if (toEffect < ctx.renderer->getEffectCount()) {
-        if (random) {
+        if (req.random) {
             ctx.renderer->startRandomTransition(toEffect);
         } else {
-            ctx.renderer->startTransition(toEffect, transType);
+            ctx.renderer->startTransition(toEffect, req.transitionType);
         }
         if (ctx.broadcastStatus) ctx.broadcastStatus();
     }
 }
 
 static void handleTransitionGetTypes(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::TransitionSimpleDecodeResult decodeResult = codec::WsTransitionCodec::decodeSimple(root);
+    
+    const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
     String response = buildWsResponse("transitions.types", requestId, [](JsonObject& data) {
-        JsonArray types = data["types"].to<JsonArray>();
-        
-        for (uint8_t i = 0; i < static_cast<uint8_t>(TransitionType::TYPE_COUNT); i++) {
-            JsonObject type = types.add<JsonObject>();
-            type["id"] = i;
-            type["name"] = getTransitionName(static_cast<TransitionType>(i));
-        }
-        
-        data["total"] = static_cast<uint8_t>(TransitionType::TYPE_COUNT);
+        codec::WsTransitionCodec::encodeGetTypes(data);
     });
     client->text(response);
 }
 
 static void handleTransitionConfigGet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::TransitionSimpleDecodeResult decodeResult = codec::WsTransitionCodec::decodeSimple(root);
+    
+    const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
     String response = buildWsResponse("transitions.config", requestId, [](JsonObject& data) {
-        data["enabled"] = true;
-        data["defaultDuration"] = 1000;
-        data["defaultType"] = 0;
-        data["defaultTypeName"] = getTransitionName(TransitionType::FADE);
-        
-        JsonArray easings = data["easings"].to<JsonArray>();
-        const char* easingNames[] = {
-            "LINEAR", "IN_QUAD", "OUT_QUAD", "IN_OUT_QUAD",
-            "IN_CUBIC", "OUT_CUBIC", "IN_OUT_CUBIC",
-            "IN_ELASTIC", "OUT_ELASTIC", "IN_OUT_ELASTIC"
-        };
-        for (uint8_t i = 0; i < 10; i++) {
-            JsonObject easing = easings.add<JsonObject>();
-            easing["id"] = i;
-            easing["name"] = easingNames[i];
-        }
+        codec::WsTransitionCodec::encodeConfigGet(data);
     });
     client->text(response);
 }
 
 static void handleTransitionConfigSet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
-    uint16_t duration = doc["defaultDuration"] | 1000;
-    uint8_t type = doc["defaultType"] | 0;
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::TransitionConfigSetDecodeResult decodeResult = codec::WsTransitionCodec::decodeConfigSet(root);
+
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
+        return;
+    }
+
+    const codec::TransitionConfigSetRequest& req = decodeResult.request;
+    const char* requestId = req.requestId ? req.requestId : "";
+    uint16_t duration = req.defaultDuration;
+    uint8_t type = req.defaultType;
     
     if (type >= static_cast<uint8_t>(TransitionType::TYPE_COUNT)) {
         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid transition type", requestId));
@@ -84,52 +89,39 @@ static void handleTransitionConfigSet(AsyncWebSocketClient* client, JsonDocument
     }
     
     String response = buildWsResponse("transitions.config", requestId, [duration, type](JsonObject& data) {
-        data["defaultDuration"] = duration;
-        data["defaultType"] = type;
-        data["defaultTypeName"] = getTransitionName(static_cast<TransitionType>(type));
-        data["message"] = "Transition config updated";
+        codec::WsTransitionCodec::encodeConfigSet(duration, type, data);
     });
     client->text(response);
 }
 
 static void handleTransitionsList(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::TransitionSimpleDecodeResult decodeResult = codec::WsTransitionCodec::decodeSimple(root);
+    
+    const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
     String response = buildWsResponse("transitions.list", requestId, [](JsonObject& data) {
-        JsonArray types = data["types"].to<JsonArray>();
-        
-        for (uint8_t i = 0; i < static_cast<uint8_t>(TransitionType::TYPE_COUNT); i++) {
-            JsonObject type = types.add<JsonObject>();
-            type["id"] = i;
-            type["name"] = getTransitionName(static_cast<TransitionType>(i));
-        }
-        
-        JsonArray easings = data["easingCurves"].to<JsonArray>();
-        const char* easingNames[] = {
-            "LINEAR", "IN_QUAD", "OUT_QUAD", "IN_OUT_QUAD",
-            "IN_CUBIC", "OUT_CUBIC", "IN_OUT_CUBIC",
-            "IN_ELASTIC", "OUT_ELASTIC", "IN_OUT_ELASTIC"
-        };
-        for (uint8_t i = 0; i < 10; i++) {
-            JsonObject easing = easings.add<JsonObject>();
-            easing["id"] = i;
-            easing["name"] = easingNames[i];
-        }
-        
-        data["total"] = static_cast<uint8_t>(TransitionType::TYPE_COUNT);
+        codec::WsTransitionCodec::encodeList(data);
     });
     client->text(response);
 }
 
 static void handleTransitionsTrigger(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
-    uint8_t toEffect = doc["toEffect"] | 255;
-    uint8_t transType = doc["type"] | 0;
-    uint16_t duration = doc["duration"] | 1000;
-    
-    if (toEffect == 255) {
-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "toEffect required", requestId));
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::TransitionsTriggerDecodeResult decodeResult = codec::WsTransitionCodec::decodeTransitionsTrigger(root);
+
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
         return;
     }
+
+    const codec::TransitionsTriggerRequest& req = decodeResult.request;
+    const char* requestId = req.requestId ? req.requestId : "";
+    uint8_t toEffect = req.toEffect;
+    uint8_t transType = req.type;
+    uint16_t duration = req.duration;
     
     if (toEffect >= ctx.renderer->getEffectCount()) {
         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid toEffect", requestId));
@@ -140,13 +132,11 @@ static void handleTransitionsTrigger(AsyncWebSocketClient* client, JsonDocument&
     ctx.renderer->startTransition(toEffect, transType);
     if (ctx.broadcastStatus) ctx.broadcastStatus();
     
-    String response = buildWsResponse("transition.started", requestId, [&ctx, fromEffect, toEffect, transType, duration](JsonObject& data) {
-        data["fromEffect"] = fromEffect;
-        data["toEffect"] = toEffect;
-        data["toEffectName"] = ctx.renderer->getEffectName(toEffect);
-        data["transitionType"] = transType;
-        data["transitionName"] = getTransitionName(static_cast<TransitionType>(transType));
-        data["duration"] = duration;
+    // Use variables from decode result
+    const char* toEffectName = ctx.renderer ? ctx.renderer->getEffectName(toEffect) : "";
+    const char* transitionName = getTransitionName(static_cast<TransitionType>(transType));
+    String response = buildWsResponse("transition.started", requestId, [fromEffect, toEffect, toEffectName, transType, transitionName, duration](JsonObject& data) {
+        codec::WsTransitionCodec::encodeTriggerStarted(fromEffect, toEffect, toEffectName, transType, transitionName, duration, data);
     });
     client->text(response);
 }

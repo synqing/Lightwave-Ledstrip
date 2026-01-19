@@ -7,6 +7,7 @@
 #include "../WsCommandRouter.h"
 #include "../WebServerContext.h"
 #include "../../ApiResponse.h"
+#include "../../../codec/WsColorCodec.h"
 #include "../../../effects/enhancement/ColorEngine.h"
 #include "../../../effects/enhancement/ColorCorrectionEngine.h"
 #include "../../../palettes/Palettes_Master.h"
@@ -42,38 +43,49 @@ static void handleColorGetStatus(AsyncWebSocketClient* client, JsonDocument& doc
         data["diffusionEnabled"] = engine.isDiffusionEnabled();
         data["diffusionAmount"] = engine.getDiffusionAmount();
     });
-    client->text(response);
+    WsTelemetry::sendWithLogging(client, response, "color.getStatus");
 }
 
 static void handleColorEnableBlend(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
-    
-    if (!doc.containsKey("enable")) {
-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "enable required", requestId));
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::ColorEnableBlendDecodeResult decodeResult = codec::WsColorCodec::decodeEnableBlend(root);
+
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
         return;
     }
+
+    const codec::ColorEnableBlendRequest& req = decodeResult.request;
+    const char* requestId = req.requestId ? req.requestId : "";
+    bool enable = req.enable;
     
-    bool enable = doc["enable"] | false;
     auto& engine = ColorEngine::getInstance();
     engine.enableCrossBlend(enable);
     
     String response = buildWsResponse("color.enableBlend", requestId, [enable](JsonObject& data) {
         data["blendEnabled"] = enable;
     });
-    client->text(response);
+    WsTelemetry::sendWithLogging(client, response, "color.enableBlend");
 }
 
 static void handleColorSetBlendPalettes(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
-    
-    if (!doc.containsKey("palette1") || !doc.containsKey("palette2")) {
-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "palette1 and palette2 required", requestId));
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::ColorSetBlendPalettesDecodeResult decodeResult = codec::WsColorCodec::decodeSetBlendPalettes(root);
+
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
         return;
     }
-    
-    uint8_t p1 = doc["palette1"] | 0;
-    uint8_t p2 = doc["palette2"] | 0;
-    uint8_t p3 = doc["palette3"] | 255;
+
+    const codec::ColorSetBlendPalettesRequest& req = decodeResult.request;
+    const char* requestId = req.requestId ? req.requestId : "";
+    uint8_t p1 = req.palette1;
+    uint8_t p2 = req.palette2;
+    uint8_t p3 = req.palette3;
     
     if (p1 >= MASTER_PALETTE_COUNT || p2 >= MASTER_PALETTE_COUNT ||
         (p3 != 255 && p3 >= MASTER_PALETTE_COUNT)) {
@@ -108,16 +120,21 @@ static void handleColorSetBlendPalettes(AsyncWebSocketClient* client, JsonDocume
 }
 
 static void handleColorSetBlendFactors(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
-    
-    if (!doc.containsKey("factor1") || !doc.containsKey("factor2")) {
-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "factor1 and factor2 required", requestId));
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::ColorSetBlendFactorsDecodeResult decodeResult = codec::WsColorCodec::decodeSetBlendFactors(root);
+
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
         return;
     }
-    
-    uint8_t f1 = doc["factor1"] | 0;
-    uint8_t f2 = doc["factor2"] | 0;
-    uint8_t f3 = doc["factor3"] | 0;
+
+    const codec::ColorSetBlendFactorsRequest& req = decodeResult.request;
+    const char* requestId = req.requestId ? req.requestId : "";
+    uint8_t f1 = req.factor1;
+    uint8_t f2 = req.factor2;
+    uint8_t f3 = req.factor3;
     
     auto& engine = ColorEngine::getInstance();
     engine.setBlendFactors(f1, f2, f3);
@@ -132,14 +149,20 @@ static void handleColorSetBlendFactors(AsyncWebSocketClient* client, JsonDocumen
 }
 
 static void handleColorEnableRotation(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
-    
-    if (!doc.containsKey("enable")) {
-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "enable required", requestId));
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::ColorEnableRotationDecodeResult decodeResult = codec::WsColorCodec::decodeEnableRotation(root);
+
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
         return;
     }
+
+    const codec::ColorEnableRotationRequest& req = decodeResult.request;
+    const char* requestId = req.requestId ? req.requestId : "";
+    bool enable = req.enable;
     
-    bool enable = doc["enable"] | false;
     auto& engine = ColorEngine::getInstance();
     engine.enableTemporalRotation(enable);
     
@@ -150,14 +173,20 @@ static void handleColorEnableRotation(AsyncWebSocketClient* client, JsonDocument
 }
 
 static void handleColorSetRotationSpeed(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
-    
-    if (!doc.containsKey("degreesPerFrame")) {
-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "degreesPerFrame required", requestId));
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::ColorSetRotationSpeedDecodeResult decodeResult = codec::WsColorCodec::decodeSetRotationSpeed(root);
+
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
         return;
     }
+
+    const codec::ColorSetRotationSpeedRequest& req = decodeResult.request;
+    const char* requestId = req.requestId ? req.requestId : "";
+    float speed = req.degreesPerFrame;
     
-    float speed = doc["degreesPerFrame"] | 0.0f;
     auto& engine = ColorEngine::getInstance();
     engine.setRotationSpeed(speed);
     
@@ -168,14 +197,20 @@ static void handleColorSetRotationSpeed(AsyncWebSocketClient* client, JsonDocume
 }
 
 static void handleColorEnableDiffusion(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
-    
-    if (!doc.containsKey("enable")) {
-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "enable required", requestId));
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::ColorEnableDiffusionDecodeResult decodeResult = codec::WsColorCodec::decodeEnableDiffusion(root);
+
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
         return;
     }
+
+    const codec::ColorEnableDiffusionRequest& req = decodeResult.request;
+    const char* requestId = req.requestId ? req.requestId : "";
+    bool enable = req.enable;
     
-    bool enable = doc["enable"] | false;
     auto& engine = ColorEngine::getInstance();
     engine.enableDiffusion(enable);
     
@@ -186,14 +221,20 @@ static void handleColorEnableDiffusion(AsyncWebSocketClient* client, JsonDocumen
 }
 
 static void handleColorSetDiffusionAmount(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
-    
-    if (!doc.containsKey("amount")) {
-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "amount required", requestId));
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::ColorSetDiffusionAmountDecodeResult decodeResult = codec::WsColorCodec::decodeSetDiffusionAmount(root);
+
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
         return;
     }
+
+    const codec::ColorSetDiffusionAmountRequest& req = decodeResult.request;
+    const char* requestId = req.requestId ? req.requestId : "";
+    uint8_t amount = req.amount;
     
-    uint8_t amount = doc["amount"] | 0;
     auto& engine = ColorEngine::getInstance();
     engine.setDiffusionAmount(amount);
     
@@ -226,19 +267,21 @@ static void handleColorCorrectionGetConfig(AsyncWebSocketClient* client, JsonDoc
 }
 
 static void handleColorCorrectionSetMode(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
-    
-    if (!doc.containsKey("mode")) {
-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "mode required (0-3)", requestId));
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::ColorCorrectionSetModeDecodeResult decodeResult = codec::WsColorCodec::decodeSetMode(root);
+
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
         return;
     }
+
+    const codec::ColorCorrectionSetModeRequest& req = decodeResult.request;
+    const char* requestId = req.requestId ? req.requestId : "";
+    uint8_t mode = req.mode;
     
-    uint8_t mode = doc["mode"] | 2;
-    if (mode > 3) {
-        client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "mode must be 0-3 (OFF,HSV,RGB,BOTH)", requestId));
-        return;
-    }
-    
+    // Range already validated by codec (0-3)
     auto& engine = ColorCorrectionEngine::getInstance();
     engine.setMode((CorrectionMode)mode);
     
@@ -251,44 +294,54 @@ static void handleColorCorrectionSetMode(AsyncWebSocketClient* client, JsonDocum
 }
 
 static void handleColorCorrectionSetConfig(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::ColorCorrectionSetConfigDecodeResult decodeResult = codec::WsColorCodec::decodeSetConfig(root);
+
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
+        return;
+    }
+
+    const codec::ColorCorrectionSetConfigRequest& req = decodeResult.request;
+    const char* requestId = req.requestId ? req.requestId : "";
     auto& engine = ColorCorrectionEngine::getInstance();
     auto& cfg = engine.getConfig();
     
-    if (doc.containsKey("mode")) {
-        uint8_t mode = doc["mode"];
-        if (mode <= 3) cfg.mode = (CorrectionMode)mode;
+    // Apply changes conditionally using has* flags (codec already validated ranges)
+    if (req.hasMode) {
+        cfg.mode = (CorrectionMode)req.mode;
     }
-    if (doc.containsKey("hsvMinSaturation")) {
-        cfg.hsvMinSaturation = doc["hsvMinSaturation"];
+    if (req.hasHsvMinSaturation) {
+        cfg.hsvMinSaturation = req.hsvMinSaturation;
     }
-    if (doc.containsKey("rgbWhiteThreshold")) {
-        cfg.rgbWhiteThreshold = doc["rgbWhiteThreshold"];
+    if (req.hasRgbWhiteThreshold) {
+        cfg.rgbWhiteThreshold = req.rgbWhiteThreshold;
     }
-    if (doc.containsKey("rgbTargetMin")) {
-        cfg.rgbTargetMin = doc["rgbTargetMin"];
+    if (req.hasRgbTargetMin) {
+        cfg.rgbTargetMin = req.rgbTargetMin;
     }
-    if (doc.containsKey("autoExposureEnabled")) {
-        cfg.autoExposureEnabled = doc["autoExposureEnabled"];
+    if (req.hasAutoExposureEnabled) {
+        cfg.autoExposureEnabled = req.autoExposureEnabled;
     }
-    if (doc.containsKey("autoExposureTarget")) {
-        cfg.autoExposureTarget = doc["autoExposureTarget"];
+    if (req.hasAutoExposureTarget) {
+        cfg.autoExposureTarget = req.autoExposureTarget;
     }
-    if (doc.containsKey("gammaEnabled")) {
-        cfg.gammaEnabled = doc["gammaEnabled"];
+    if (req.hasGammaEnabled) {
+        cfg.gammaEnabled = req.gammaEnabled;
     }
-    if (doc.containsKey("gammaValue")) {
-        float val = doc["gammaValue"];
-        if (val >= 1.0f && val <= 3.0f) cfg.gammaValue = val;
+    if (req.hasGammaValue) {
+        cfg.gammaValue = req.gammaValue;  // Codec already validated 1.0f-3.0f
     }
-    if (doc.containsKey("brownGuardrailEnabled")) {
-        cfg.brownGuardrailEnabled = doc["brownGuardrailEnabled"];
+    if (req.hasBrownGuardrailEnabled) {
+        cfg.brownGuardrailEnabled = req.brownGuardrailEnabled;
     }
-    if (doc.containsKey("maxGreenPercentOfRed")) {
-        cfg.maxGreenPercentOfRed = doc["maxGreenPercentOfRed"];
+    if (req.hasMaxGreenPercentOfRed) {
+        cfg.maxGreenPercentOfRed = req.maxGreenPercentOfRed;
     }
-    if (doc.containsKey("maxBluePercentOfRed")) {
-        cfg.maxBluePercentOfRed = doc["maxBluePercentOfRed"];
+    if (req.hasMaxBluePercentOfRed) {
+        cfg.maxBluePercentOfRed = req.maxBluePercentOfRed;
     }
     
     String response = buildWsResponse("colorCorrection.setConfig", requestId, [&cfg](JsonObject& data) {

@@ -11,6 +11,7 @@
 #include "../WebServerContext.h"
 #include "../../ApiResponse.h"
 #include "../../RequestValidator.h"
+#include "../../../codec/WsEffectsCodec.h"
 #include "../../../core/actors/ActorSystem.h"
 #include "../../../core/actors/RendererActor.h"
 #include "../../../effects/PatternRegistry.h"
@@ -26,8 +27,19 @@ namespace webserver {
 namespace ws {
 
 static void handleEffectsGetMetadata(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
-    uint8_t effectId = doc["effectId"] | 255;
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::EffectsGetMetadataDecodeResult decodeResult = codec::WsEffectsCodec::decodeGetMetadata(root);
+
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
+        return;
+    }
+
+    const codec::EffectsGetMetadataRequest& req = decodeResult.request;
+    const char* requestId = req.requestId ? req.requestId : "";
+    uint8_t effectId = req.effectId;
     
     // DEFENSIVE CHECK: Validate effectId before array access
     if (effectId != 255) {
@@ -91,14 +103,23 @@ static void handleEffectsGetCurrent(AsyncWebSocketClient* client, JsonDocument& 
 }
 
 static void handleEffectsList(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
-    uint8_t page = doc["page"] | 1;
-    uint8_t limit = doc["limit"] | 20;
-    bool details = doc["details"] | false;
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::EffectsListDecodeResult decodeResult = codec::WsEffectsCodec::decodeList(root);
 
-    if (page < 1) page = 1;
-    if (limit < 1) limit = 1;
-    if (limit > 50) limit = 50;
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
+        return;
+    }
+
+    const codec::EffectsListRequest& req = decodeResult.request;
+    const char* requestId = req.requestId ? req.requestId : "";
+    uint8_t page = req.page;
+    uint8_t limit = req.limit;
+    bool details = req.details;
+
+    // Values already validated by codec (page >= 1, limit 1-50)
 
     uint8_t effectCount = ctx.renderer->getEffectCount();
     uint8_t startIdx = (page - 1) * limit;
@@ -127,9 +148,17 @@ static void handleEffectsList(AsyncWebSocketClient* client, JsonDocument& doc, c
 }
 
 static void handleSetEffect(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    uint8_t effectId = doc["effectId"] | 0;
-    // DEFENSIVE CHECK: Validate effectId before array access
-    effectId = lightwaveos::network::validateEffectIdInRequest(effectId);
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::EffectsSetEffectDecodeResult decodeResult = codec::WsEffectsCodec::decodeSetEffect(root);
+
+    if (!decodeResult.success) {
+        // Legacy command doesn't send errors, just ignore invalid requests
+        return;
+    }
+
+    // DEFENSIVE CHECK: Validate effectId against current effect count
+    uint8_t effectId = lightwaveos::network::validateEffectIdInRequest(decodeResult.request.effectId);
     if (effectId < ctx.renderer->getEffectCount()) {
         ctx.actorSystem.setEffect(effectId);
         if (ctx.broadcastStatus) ctx.broadcastStatus();
@@ -151,74 +180,103 @@ static void handlePrevEffect(AsyncWebSocketClient* client, JsonDocument& doc, co
 }
 
 static void handleSetBrightness(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    uint8_t value = doc["value"] | 128;
-    ctx.actorSystem.setBrightness(value);
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::EffectsSetBrightnessDecodeResult decodeResult = codec::WsEffectsCodec::decodeSetBrightness(root);
+
+    if (!decodeResult.success) {
+        // Legacy command doesn't send errors, just ignore invalid requests
+        return;
+    }
+
+    ctx.actorSystem.setBrightness(decodeResult.request.value);
     if (ctx.broadcastStatus) ctx.broadcastStatus();
 }
 
 static void handleSetSpeed(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    uint8_t value = doc["value"] | 15;
-    if (value >= 1 && value <= 50) {
-        ctx.actorSystem.setSpeed(value);
-        if (ctx.broadcastStatus) ctx.broadcastStatus();
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::EffectsSetSpeedDecodeResult decodeResult = codec::WsEffectsCodec::decodeSetSpeed(root);
+
+    if (!decodeResult.success) {
+        // Legacy command doesn't send errors, just ignore invalid requests
+        return;
     }
+
+    // Range already validated by codec (1-50)
+    ctx.actorSystem.setSpeed(decodeResult.request.value);
+    if (ctx.broadcastStatus) ctx.broadcastStatus();
 }
 
 static void handleSetPalette(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    uint8_t paletteId = doc["paletteId"] | 0;
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::EffectsSetPaletteDecodeResult decodeResult = codec::WsEffectsCodec::decodeSetPalette(root);
+
+    if (!decodeResult.success) {
+        // Legacy command doesn't send errors, just ignore invalid requests
+        return;
+    }
+
     // DEFENSIVE CHECK: Validate paletteId before array access
-    paletteId = lightwaveos::network::validatePaletteIdInRequest(paletteId);
+    uint8_t paletteId = lightwaveos::network::validatePaletteIdInRequest(decodeResult.request.paletteId);
     ctx.actorSystem.setPalette(paletteId);
     if (ctx.broadcastStatus) ctx.broadcastStatus();
 }
 
 static void handleEffectsSetCurrent(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
-    uint8_t effectId = doc["effectId"] | 255;
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::EffectsSetCurrentDecodeResult decodeResult = codec::WsEffectsCodec::decodeSetCurrent(root);
 
-    if (effectId == 255) {
-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "effectId required", requestId));
+    if (!decodeResult.success) {
+        // Error: Cannot decode requestId from invalid JSON, use empty string
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, ""));
         return;
     }
-    
-    // DEFENSIVE CHECK: Validate effectId before array access
-    effectId = lightwaveos::network::validateEffectIdInRequest(effectId);
+
+    const codec::EffectsSetCurrentRequest& req = decodeResult.request;
+    const char* requestId = req.requestId ? req.requestId : "";
+
+    // DEFENSIVE CHECK: Validate effectId against current effect count
+    uint8_t effectId = lightwaveos::network::validateEffectIdInRequest(req.effectId);
 
     if (effectId >= ctx.renderer->getEffectCount()) {
         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid effectId", requestId));
         return;
     }
 
-    bool useTransition = false;
-    uint8_t transType = 0;
-    uint16_t duration = 1000;
-
-    if (doc.containsKey("transition")) {
-        JsonObject trans = doc["transition"];
-        useTransition = true;
-        transType = trans["type"] | 0;
-        duration = trans["duration"] | 1000;
-    }
-
-    if (useTransition && transType < static_cast<uint8_t>(lightwaveos::transitions::TransitionType::TYPE_COUNT)) {
-        ctx.renderer->startTransition(effectId, transType);
+    // Apply effect change (with or without transition)
+    if (req.hasTransition && req.transitionType < static_cast<uint8_t>(lightwaveos::transitions::TransitionType::TYPE_COUNT)) {
+        ctx.renderer->startTransition(effectId, req.transitionType);
     } else {
         ctx.actorSystem.setEffect(effectId);
     }
 
     if (ctx.broadcastStatus) ctx.broadcastStatus();
 
-    String response = buildWsResponse("effects.changed", requestId, [&ctx, effectId, useTransition](JsonObject& data) {
+    String response = buildWsResponse("effects.changed", requestId, [&ctx, effectId, req](JsonObject& data) {
         data["effectId"] = effectId;
         data["name"] = ctx.renderer->getEffectName(effectId);
-        data["transitionActive"] = useTransition;
+        data["transitionActive"] = req.hasTransition;
     });
     client->text(response);
 }
 
 static void handleEffectsParametersGet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
-    uint8_t effectId = doc["effectId"] | ctx.renderer->getCurrentEffect();
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::EffectsParametersGetDecodeResult decodeResult = codec::WsEffectsCodec::decodeParametersGet(root);
+
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
+        return;
+    }
+
+    const codec::EffectsParametersGetRequest& req = decodeResult.request;
+    const char* requestId = req.requestId ? req.requestId : "";
+    uint8_t effectId = (req.effectId == 255) ? ctx.renderer->getCurrentEffect() : req.effectId;
 
     if (effectId >= ctx.renderer->getEffectCount()) {
         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid effectId", requestId));
@@ -253,8 +311,19 @@ static void handleEffectsParametersGet(AsyncWebSocketClient* client, JsonDocumen
 }
 
 static void handleEffectsParametersSet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
-    uint8_t effectId = doc["effectId"] | ctx.renderer->getCurrentEffect();
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::EffectsParametersSetDecodeResult decodeResult = codec::WsEffectsCodec::decodeEffectsParametersSet(root);
+
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
+        return;
+    }
+
+    const codec::EffectsParametersSetRequest& req = decodeResult.request;
+    const char* requestId = req.requestId ? req.requestId : "";
+    uint8_t effectId = (req.effectId == 255) ? ctx.renderer->getCurrentEffect() : req.effectId;
 
     if (effectId >= ctx.renderer->getEffectCount()) {
         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid effectId", requestId));
@@ -267,11 +336,14 @@ static void handleEffectsParametersSet(AsyncWebSocketClient* client, JsonDocumen
         return;
     }
 
-    if (!doc.containsKey("parameters") || !doc["parameters"].is<JsonObject>()) {
+    if (!req.hasParameters) {
         client->text(buildWsError(ErrorCodes::MISSING_FIELD, "Missing parameters object", requestId));
         return;
     }
 
+    // Parameters object is validated by codec, but we need JsonObject (mutable) for iteration
+    // Note: JsonObjectConst can't be used in range-for, so we need to cast or handle differently
+    // For now, we'll keep the original doc access for params iteration since codec validated presence
     JsonObject params = doc["parameters"].as<JsonObject>();
     String response = buildWsResponse("effects.parameters.changed", requestId,
                                       [&ctx, effectId, effect, params](JsonObject& data) {
@@ -331,13 +403,21 @@ static void handleEffectsGetCategories(AsyncWebSocketClient* client, JsonDocumen
 }
 
 static void handleEffectsGetByFamily(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
-    uint8_t familyId = doc["familyId"] | 255;
-    
-    if (familyId >= 10) {
-        client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid familyId (0-9)", requestId));
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::EffectsGetByFamilyDecodeResult decodeResult = codec::WsEffectsCodec::decodeGetByFamily(root);
+
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
         return;
     }
+
+    const codec::EffectsGetByFamilyRequest& req = decodeResult.request;
+    const char* requestId = req.requestId ? req.requestId : "";
+    uint8_t familyId = req.familyId;
+
+    // Range already validated by codec (0-9)
     
     PatternFamily family = static_cast<PatternFamily>(familyId);
     uint8_t patternIndices[128];
@@ -376,7 +456,18 @@ static void handleParametersGet(AsyncWebSocketClient* client, JsonDocument& doc,
 }
 
 static void handleParametersSet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::ParametersSetDecodeResult decodeResult = codec::WsEffectsCodec::decodeParametersSet(root);
+
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
+        return;
+    }
+
+    const codec::ParametersSetRequest& req = decodeResult.request;
+    const char* requestId = req.requestId ? req.requestId : "";
 
     bool updatedBrightness = false;
     bool updatedSpeed = false;
@@ -387,53 +478,43 @@ static void handleParametersSet(AsyncWebSocketClient* client, JsonDocument& doc,
     bool updatedVariation = false;
     bool updatedHue = false;
 
-    if (doc.containsKey("brightness")) {
-        uint8_t value = doc["brightness"] | 128;
-        ctx.actorSystem.setBrightness(value);
+    if (req.hasBrightness) {
+        ctx.actorSystem.setBrightness(req.brightness);
         updatedBrightness = true;
     }
 
-    if (doc.containsKey("speed")) {
-        uint8_t value = doc["speed"] | 15;
-        if (value >= 1 && value <= 50) {
-            ctx.actorSystem.setSpeed(value);
-            updatedSpeed = true;
-        }
+    if (req.hasSpeed) {
+        ctx.actorSystem.setSpeed(req.speed);
+        updatedSpeed = true;
     }
 
-    if (doc.containsKey("paletteId")) {
-        uint8_t value = doc["paletteId"] | 0;
-        ctx.actorSystem.setPalette(value);
+    if (req.hasPaletteId) {
+        ctx.actorSystem.setPalette(req.paletteId);
         updatedPalette = true;
     }
 
-    if (doc.containsKey("intensity")) {
-        uint8_t value = doc["intensity"] | 128;
-        ctx.actorSystem.setIntensity(value);
+    if (req.hasIntensity) {
+        ctx.actorSystem.setIntensity(req.intensity);
         updatedIntensity = true;
     }
 
-    if (doc.containsKey("saturation")) {
-        uint8_t value = doc["saturation"] | 255;
-        ctx.actorSystem.setSaturation(value);
+    if (req.hasSaturation) {
+        ctx.actorSystem.setSaturation(req.saturation);
         updatedSaturation = true;
     }
 
-    if (doc.containsKey("complexity")) {
-        uint8_t value = doc["complexity"] | 128;
-        ctx.actorSystem.setComplexity(value);
+    if (req.hasComplexity) {
+        ctx.actorSystem.setComplexity(req.complexity);
         updatedComplexity = true;
     }
 
-    if (doc.containsKey("variation")) {
-        uint8_t value = doc["variation"] | 0;
-        ctx.actorSystem.setVariation(value);
+    if (req.hasVariation) {
+        ctx.actorSystem.setVariation(req.variation);
         updatedVariation = true;
     }
 
-    if (doc.containsKey("hue")) {
-        uint8_t value = doc["hue"] | 0;
-        ctx.actorSystem.setHue(value);
+    if (req.hasHue) {
+        ctx.actorSystem.setHue(req.hue);
         updatedHue = true;
     }
 

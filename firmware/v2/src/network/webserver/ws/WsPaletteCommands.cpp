@@ -7,6 +7,7 @@
 #include "../WsCommandRouter.h"
 #include "../WebServerContext.h"
 #include "../../ApiResponse.h"
+#include "../../../codec/WsPaletteCodec.h"
 #include "../../../core/actors/ActorSystem.h"
 #include "../../../palettes/Palettes_Master.h"
 #include <ESPAsyncWebServer.h>
@@ -20,13 +21,22 @@ namespace ws {
 using namespace lightwaveos::palettes;
 
 static void handlePalettesList(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
-    uint8_t page = doc["page"] | 1;
-    uint8_t limit = doc["limit"] | 20;
-    
-    if (page < 1) page = 1;
-    if (limit < 1) limit = 1;
-    if (limit > 50) limit = 50;
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::PalettesListDecodeResult decodeResult = codec::WsPaletteCodec::decodeList(root);
+
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
+        return;
+    }
+
+    const codec::PalettesListRequest& req = decodeResult.request;
+    const char* requestId = req.requestId ? req.requestId : "";
+    uint8_t page = req.page;
+    uint8_t limit = req.limit;
+
+    // Values already validated by codec (page >= 1, limit 1-50)
     
     uint8_t startIdx = (page - 1) * limit;
     uint8_t endIdx = (startIdx + limit < MASTER_PALETTE_COUNT) ? (startIdx + limit) : MASTER_PALETTE_COUNT;
@@ -85,13 +95,19 @@ static void handlePalettesGet(AsyncWebSocketClient* client, JsonDocument& doc, c
 }
 
 static void handlePalettesSet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
-    uint8_t paletteId = doc["paletteId"] | 255;
-    
-    if (paletteId == 255) {
-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "paletteId required", requestId));
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::PalettesSetDecodeResult decodeResult = codec::WsPaletteCodec::decodeSet(root);
+
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
         return;
     }
+
+    const codec::PalettesSetRequest& req = decodeResult.request;
+    const char* requestId = req.requestId ? req.requestId : "";
+    uint8_t paletteId = req.paletteId;
     
     if (paletteId >= MASTER_PALETTE_COUNT) {
         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Palette ID out of range", requestId));

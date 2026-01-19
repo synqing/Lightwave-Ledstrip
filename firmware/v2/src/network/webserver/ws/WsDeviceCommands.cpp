@@ -7,6 +7,7 @@
 #include "../WsCommandRouter.h"
 #include "../WebServerContext.h"
 #include "../../ApiResponse.h"
+#include "../../../codec/WsDeviceCodec.h"
 #include "../../../core/actors/RendererActor.h"
 #include <ESPAsyncWebServer.h>
 #include <WiFi.h>
@@ -19,17 +20,25 @@ namespace ws {
 // Legacy compatibility: original on-device UI sends {"type":"getStatus"} and expects a "status" event.
 // We keep this as a lightweight alias that triggers the existing status broadcast.
 static void handleLegacyGetStatus(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    (void)doc;
+    // Decode using codec (extracts requestId only)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::DeviceDecodeResult decodeResult = codec::WsDeviceCodec::decode(root);
+    
+    const char* requestId = (decodeResult.success && decodeResult.request.requestId) 
+        ? decodeResult.request.requestId : "";
+    
     if (ctx.broadcastStatus) {
         ctx.broadcastStatus();  // Broadcasts "status" to all clients (includes the requester).
         return;
     }
-    const char* requestId = doc["requestId"] | "";
     client->text(buildWsError(ErrorCodes::SYSTEM_NOT_READY, "Status broadcaster not available", requestId));
 }
 
 static void handleDeviceGetStatus(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
+    // Decode using codec (extracts requestId only)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::DeviceDecodeResult decodeResult = codec::WsDeviceCodec::decode(root);
+    const char* requestId = (decodeResult.request.requestId) ? decodeResult.request.requestId : "";
     String response = buildWsResponse("device.status", requestId, [&ctx](JsonObject& data) {
         data["uptime"] = (millis() - ctx.startTime) / 1000;
         data["freeHeap"] = ESP.getFreeHeap();
@@ -58,7 +67,10 @@ static void handleDeviceGetStatus(AsyncWebSocketClient* client, JsonDocument& do
 }
 
 static void handleDeviceGetInfo(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
+    // Decode using codec (extracts requestId only)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::DeviceDecodeResult decodeResult = codec::WsDeviceCodec::decode(root);
+    const char* requestId = (decodeResult.request.requestId) ? decodeResult.request.requestId : "";
     String response = buildWsResponse("device.info", requestId, [&ctx](JsonObject& data) {
         data["chipModel"] = ESP.getChipModel();
         data["chipRevision"] = ESP.getChipRevision();

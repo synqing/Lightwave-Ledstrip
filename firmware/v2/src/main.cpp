@@ -35,6 +35,7 @@
 #include "core/actors/ShowDirectorActor.h"
 #include "core/shows/BuiltinShows.h"
 #include "plugins/api/IEffect.h"
+#include "plugins/PluginManagerActor.h"
 #include "core/system/StackMonitor.h"
 #include "core/system/HeapMonitor.h"
 #include "core/system/MemoryLeakDetector.h"
@@ -70,6 +71,10 @@ using namespace lightwaveos::plugins;
 ZoneComposer zoneComposer;
 ZoneConfigManager* zoneConfigMgr = nullptr;
 
+// ==================== Global Plugin Manager ====================
+
+PluginManagerActor* pluginManager = nullptr;
+
 // Global Actor System Access
 ActorSystem& actors = ActorSystem::instance();
 RendererActor* renderer = nullptr;
@@ -86,6 +91,9 @@ void setup() {
     // Initialize serial
     Serial.begin(115200);
     delay(1000);
+
+    // Telemetry boot heartbeat (for trace capture verification)
+    Serial.println("{\"event\":\"telemetry.boot\",\"ts_mono_ms\":0,\"version\":\"2.0\"}");
 
     LW_LOGI("==========================================");
     LW_LOGI("LightwaveOS v2 - Actor System + Zones");
@@ -164,6 +172,20 @@ void setup() {
     }
     LW_LOGI("Actor System: RUNNING");
 
+    // Initialize Plugin Manager
+    LW_LOGI("Initializing Plugin Manager...");
+    pluginManager = new PluginManagerActor();
+    
+    // Wire to RendererActor for effect forwarding
+    if (renderer) {
+        pluginManager->setTargetRegistry(renderer);
+        LW_LOGI("Plugin Manager: Target registry set to RendererActor");
+    }
+    
+    // Start plugin manager (loads manifests from LittleFS)
+    pluginManager->onStart();
+    LW_LOGI("Plugin Manager: INITIALIZED");
+
     // Load or set initial state
     LW_LOGI("Loading system state...");
     uint8_t savedEffect, savedBrightness, savedSpeed, savedPalette;
@@ -224,6 +246,12 @@ void setup() {
 
     // Instantiate WebServer with dependencies
     webServerInstance = new WebServer(actors, renderer);
+
+    // Wire PluginManagerActor to WebServer BEFORE begin() (context created during begin)
+    if (pluginManager) {
+        webServerInstance->setPluginManager(pluginManager);
+        LW_LOGI("Plugin Manager: Wired to WebServer");
+    }
 
     if (!webServerInstance->begin()) {
         LW_LOGW("Web Server failed to start!");

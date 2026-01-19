@@ -745,15 +745,11 @@ void V1ApiRoutes::registerRoutes(
     });
 
     // Plugin Reload - POST /api/v1/plugins/reload
-    registry.onPost("/api/v1/plugins/reload",
-        [](AsyncWebServerRequest* request) {},
-        nullptr,
-        [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t*, size_t, size_t, size_t) {
-            if (!checkRateLimit(request)) return;
-            if (!checkAPIKey(request)) return;
-            handlers::PluginHandlers::handleReload(request, ctx.pluginManager);
-        }
-    );
+    registry.onPost("/api/v1/plugins/reload", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::PluginHandlers::handleReload(request, ctx.pluginManager);
+    });
 
     // Plugin List - GET /api/v1/plugins
     registry.onGet("/api/v1/plugins", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {

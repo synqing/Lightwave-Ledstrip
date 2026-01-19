@@ -45,6 +45,11 @@ inline const char* getBlendModeName(BlendMode mode) {
     }
 }
 
+// Overload for uint8_t (convenience for codec usage)
+inline const char* getBlendModeName(uint8_t mode) {
+    return getBlendModeName(static_cast<BlendMode>(mode));
+}
+
 // ==================== Blend Functions ====================
 
 /**

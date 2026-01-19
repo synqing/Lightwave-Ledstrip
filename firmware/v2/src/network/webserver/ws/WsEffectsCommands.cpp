@@ -51,53 +51,53 @@ static void handleEffectsGetMetadata(AsyncWebSocketClient* client, JsonDocument&
         return;
     }
 
-    String response = buildWsResponse("effects.metadata", requestId, [&ctx, effectId](JsonObject& data) {
-        data["id"] = effectId;
-        data["name"] = ctx.renderer->getEffectName(effectId);
-
-        const PatternMetadata* meta = PatternRegistry::getPatternMetadata(effectId);
-        if (meta) {
-            char familyName[32];
-            PatternRegistry::getFamilyName(meta->family, familyName, sizeof(familyName));
-            data["family"] = familyName;
-            data["familyId"] = static_cast<uint8_t>(meta->family);
-            if (meta->story) data["story"] = meta->story;
-            if (meta->opticalIntent) data["opticalIntent"] = meta->opticalIntent;
-            JsonArray tags = data["tags"].to<JsonArray>();
-            if (meta->hasTag(PatternTags::STANDING)) tags.add("STANDING");
-            if (meta->hasTag(PatternTags::TRAVELING)) tags.add("TRAVELING");
-            if (meta->hasTag(PatternTags::MOIRE)) tags.add("MOIRE");
-            if (meta->hasTag(PatternTags::DEPTH)) tags.add("DEPTH");
-            if (meta->hasTag(PatternTags::SPECTRAL)) tags.add("SPECTRAL");
-            if (meta->hasTag(PatternTags::CENTER_ORIGIN)) tags.add("CENTER_ORIGIN");
-            if (meta->hasTag(PatternTags::DUAL_STRIP)) tags.add("DUAL_STRIP");
-            if (meta->hasTag(PatternTags::PHYSICS)) tags.add("PHYSICS");
-        } else {
-            data["family"] = "Unknown";
-            data["familyId"] = 255;
-        }
-        JsonObject properties = data["properties"].to<JsonObject>();
-        properties["centerOrigin"] = true;
-        properties["symmetricStrips"] = true;
-        properties["paletteAware"] = true;
-        properties["speedResponsive"] = true;
+    const PatternMetadata* meta = PatternRegistry::getPatternMetadata(effectId);
+    const char* name = ctx.renderer->getEffectName(effectId);
+    const char* familyName = "Unknown";
+    uint8_t familyId = 255;
+    const char* story = nullptr;
+    const char* opticalIntent = nullptr;
+    uint8_t tags = 0;
+    
+    if (meta) {
+        char familyNameBuf[32];
+        PatternRegistry::getFamilyName(meta->family, familyNameBuf, sizeof(familyNameBuf));
+        familyName = familyNameBuf;
+        familyId = static_cast<uint8_t>(meta->family);
+        story = meta->story;
+        opticalIntent = meta->opticalIntent;
+        tags = meta->tags;
+    }
+    
+    String response = buildWsResponse("effects.metadata", requestId, [effectId, name, familyName, familyId, story, opticalIntent, tags](JsonObject& data) {
+        codec::WsEffectsCodec::encodeMetadata(effectId, name, familyName, familyId, story, opticalIntent, tags, data);
     });
     client->text(response);
 }
 
 static void handleEffectsGetCurrent(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
-    String response = buildWsResponse("effects.current", requestId, [&ctx](JsonObject& data) {
-        data["effectId"] = ctx.renderer->getCurrentEffect();
-        data["name"] = ctx.renderer->getEffectName(ctx.renderer->getCurrentEffect());
-        data["brightness"] = ctx.renderer->getBrightness();
-        data["speed"] = ctx.renderer->getSpeed();
-        data["paletteId"] = ctx.renderer->getPaletteIndex();
-        data["hue"] = ctx.renderer->getHue();
-        data["intensity"] = ctx.renderer->getIntensity();
-        data["saturation"] = ctx.renderer->getSaturation();
-        data["complexity"] = ctx.renderer->getComplexity();
-        data["variation"] = ctx.renderer->getVariation();
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::EffectsSimpleDecodeResult decodeResult = codec::WsEffectsCodec::decodeSimple(root);
+    
+    const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+    uint8_t effectId = ctx.renderer->getCurrentEffect();
+    const char* name = ctx.renderer->getEffectName(effectId);
+    
+    String response = buildWsResponse("effects.current", requestId, [effectId, name, &ctx](JsonObject& data) {
+        codec::WsEffectsCodec::encodeGetCurrent(
+            effectId,
+            name,
+            ctx.renderer->getBrightness(),
+            ctx.renderer->getSpeed(),
+            ctx.renderer->getPaletteIndex(),
+            ctx.renderer->getHue(),
+            ctx.renderer->getIntensity(),
+            ctx.renderer->getSaturation(),
+            ctx.renderer->getComplexity(),
+            ctx.renderer->getVariation(),
+            data
+        );
     });
     client->text(response);
 }
@@ -125,24 +125,23 @@ static void handleEffectsList(AsyncWebSocketClient* client, JsonDocument& doc, c
     uint8_t startIdx = (page - 1) * limit;
     uint8_t endIdx = (startIdx + limit < effectCount) ? (startIdx + limit) : effectCount;
 
-    String response = buildWsResponse("effects.list", requestId, [&ctx, effectCount, startIdx, endIdx, page, limit, details](JsonObject& data) {
-        JsonArray effects = data["effects"].to<JsonArray>();
-        for (uint8_t i = startIdx; i < endIdx; i++) {
-            JsonObject effect = effects.add<JsonObject>();
-            effect["id"] = i;
-            effect["name"] = ctx.renderer->getEffectName(i);
-            if (details) {
-                if (i <= 4) effect["category"] = "Classic";
-                else if (i <= 7) effect["category"] = "Wave";
-                else if (i <= 12) effect["category"] = "Physics";
-                else effect["category"] = "Custom";
-            }
+    // Collect effect names and categories into arrays
+    const char* effectNames[128];
+    const char* categories[128];
+    for (uint8_t i = startIdx; i < endIdx; i++) {
+        effectNames[i] = ctx.renderer->getEffectName(i);
+        if (details) {
+            if (i <= 4) categories[i] = "Classic";
+            else if (i <= 7) categories[i] = "Wave";
+            else if (i <= 12) categories[i] = "Physics";
+            else categories[i] = "Custom";
+        } else {
+            categories[i] = nullptr;
         }
-        JsonObject pagination = data["pagination"].to<JsonObject>();
-        pagination["page"] = page;
-        pagination["limit"] = limit;
-        pagination["total"] = effectCount;
-        pagination["pages"] = (effectCount + limit - 1) / limit;
+    }
+    
+    String response = buildWsResponse("effects.list", requestId, [effectCount, startIdx, endIdx, page, limit, details, effectNames, categories](JsonObject& data) {
+        codec::WsEffectsCodec::encodeList(effectCount, startIdx, endIdx, page, limit, details, effectNames, categories, data);
     });
     client->text(response);
 }
@@ -255,10 +254,9 @@ static void handleEffectsSetCurrent(AsyncWebSocketClient* client, JsonDocument& 
 
     if (ctx.broadcastStatus) ctx.broadcastStatus();
 
-    String response = buildWsResponse("effects.changed", requestId, [&ctx, effectId, req](JsonObject& data) {
-        data["effectId"] = effectId;
-        data["name"] = ctx.renderer->getEffectName(effectId);
-        data["transitionActive"] = req.hasTransition;
+    const char* name = ctx.renderer->getEffectName(effectId);
+    String response = buildWsResponse("effects.changed", requestId, [effectId, name, req](JsonObject& data) {
+        codec::WsEffectsCodec::encodeChanged(effectId, name, req.hasTransition, data);
     });
     client->text(response);
 }
@@ -284,28 +282,34 @@ static void handleEffectsParametersGet(AsyncWebSocketClient* client, JsonDocumen
     }
 
     plugins::IEffect* effect = ctx.renderer->getEffectInstance(effectId);
-    String response = buildWsResponse("effects.parameters", requestId, [&ctx, effectId, effect](JsonObject& data) {
-        data["effectId"] = effectId;
-        data["name"] = ctx.renderer->getEffectName(effectId);
-        data["hasParameters"] = (effect != nullptr && effect->getParameterCount() > 0);
-
-        JsonArray params = data["parameters"].to<JsonArray>();
-        if (!effect) {
-            return;
-        }
-
-        uint8_t count = effect->getParameterCount();
-        for (uint8_t i = 0; i < count; ++i) {
+    const char* name = ctx.renderer->getEffectName(effectId);
+    bool hasParameters = (effect != nullptr && effect->getParameterCount() > 0);
+    
+    // Collect parameter data into arrays
+    const char* paramNames[64];
+    const char* paramDisplayNames[64];
+    float paramMins[64];
+    float paramMaxs[64];
+    float paramDefaults[64];
+    float paramValues[64];
+    uint8_t paramCount = 0;
+    
+    if (effect) {
+        paramCount = effect->getParameterCount();
+        for (uint8_t i = 0; i < paramCount && i < 64; ++i) {
             const plugins::EffectParameter* param = effect->getParameter(i);
             if (!param) continue;
-            JsonObject p = params.add<JsonObject>();
-            p["name"] = param->name;
-            p["displayName"] = param->displayName;
-            p["min"] = param->minValue;
-            p["max"] = param->maxValue;
-            p["default"] = param->defaultValue;
-            p["value"] = effect->getParameter(param->name);
+            paramNames[i] = param->name;
+            paramDisplayNames[i] = param->displayName;
+            paramMins[i] = param->minValue;
+            paramMaxs[i] = param->maxValue;
+            paramDefaults[i] = param->defaultValue;
+            paramValues[i] = effect->getParameter(param->name);
         }
+    }
+    
+    String response = buildWsResponse("effects.parameters", requestId, [effectId, name, hasParameters, paramNames, paramDisplayNames, paramMins, paramMaxs, paramDefaults, paramValues, paramCount](JsonObject& data) {
+        codec::WsEffectsCodec::encodeParametersGet(effectId, name, hasParameters, paramNames, paramDisplayNames, paramMins, paramMaxs, paramDefaults, paramValues, paramCount, data);
     });
     client->text(response);
 }
@@ -341,63 +345,69 @@ static void handleEffectsParametersSet(AsyncWebSocketClient* client, JsonDocumen
         return;
     }
 
-    // Parameters object is validated by codec, but we need JsonObject (mutable) for iteration
-    // Note: JsonObjectConst can't be used in range-for, so we need to cast or handle differently
-    // For now, we'll keep the original doc access for params iteration since codec validated presence
-    JsonObject params = doc["parameters"].as<JsonObject>();
-    String response = buildWsResponse("effects.parameters.changed", requestId,
-                                      [&ctx, effectId, effect, params](JsonObject& data) {
-        data["effectId"] = effectId;
-        data["name"] = ctx.renderer->getEffectName(effectId);
-
-        JsonArray queuedArr = data["queued"].to<JsonArray>();
-        JsonArray failedArr = data["failed"].to<JsonArray>();
-
-        for (JsonPair kv : params) {
-            const char* key = kv.key().c_str();
-            float value = kv.value().as<float>();
-            bool known = false;
-            uint8_t count = effect->getParameterCount();
-            for (uint8_t i = 0; i < count; ++i) {
-                const plugins::EffectParameter* param = effect->getParameter(i);
-                if (param && strcmp(param->name, key) == 0) {
-                    known = true;
-                    break;
-                }
-            }
-            if (!known) {
-                failedArr.add(key);
-                continue;
-            }
-            if (ctx.renderer->enqueueEffectParameterUpdate(effectId, key, value)) {
-                queuedArr.add(key);
-            } else {
-                failedArr.add(key);
+    // Iterate over JsonObjectConst (ArduinoJson v7 supports range-for on JsonObjectConst)
+    const char* queuedKeys[64];
+    const char* failedKeys[64];
+    uint8_t queuedCount = 0;
+    uint8_t failedCount = 0;
+    
+    for (JsonPairConst kv : req.parameters) {
+        const char* key = kv.key().c_str();
+        float value = kv.value().as<float>();
+        bool known = false;
+        uint8_t count = effect->getParameterCount();
+        for (uint8_t i = 0; i < count; ++i) {
+            const plugins::EffectParameter* param = effect->getParameter(i);
+            if (param && strcmp(param->name, key) == 0) {
+                known = true;
+                break;
             }
         }
+        if (!known) {
+            if (failedCount < 64) {
+                failedKeys[failedCount++] = key;
+            }
+            continue;
+        }
+        if (ctx.renderer->enqueueEffectParameterUpdate(effectId, key, value)) {
+            if (queuedCount < 64) {
+                queuedKeys[queuedCount++] = key;
+            }
+        } else {
+            if (failedCount < 64) {
+                failedKeys[failedCount++] = key;
+            }
+        }
+    }
+    
+    const char* name = ctx.renderer->getEffectName(effectId);
+    String response = buildWsResponse("effects.parameters.changed", requestId, [effectId, name, queuedKeys, queuedCount, failedKeys, failedCount](JsonObject& data) {
+        codec::WsEffectsCodec::encodeParametersSetChanged(effectId, name, queuedKeys, queuedCount, failedKeys, failedCount, data);
     });
     client->text(response);
 }
 
 static void handleEffectsGetCategories(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
-    String response = buildWsResponse("effects.categories", requestId, [](JsonObject& data) {
-        JsonArray families = data["categories"].to<JsonArray>();
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::EffectsSimpleDecodeResult decodeResult = codec::WsEffectsCodec::decodeSimple(root);
+    
+    const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+    
+    // Collect family data into arrays
+    const char* familyNames[10];
+    uint8_t familyCounts[10];
+    for (uint8_t i = 0; i < 10; i++) {
+        PatternFamily family = static_cast<PatternFamily>(i);
+        familyCounts[i] = PatternRegistry::getFamilyCount(family);
         
-        for (uint8_t i = 0; i < 10; i++) {
-            PatternFamily family = static_cast<PatternFamily>(i);
-            uint8_t count = PatternRegistry::getFamilyCount(family);
-            
-            JsonObject familyObj = families.add<JsonObject>();
-            familyObj["id"] = i;
-            
-            char familyName[32];
-            PatternRegistry::getFamilyName(family, familyName, sizeof(familyName));
-            familyObj["name"] = familyName;
-            familyObj["count"] = count;
-        }
-        
-        data["total"] = 10;
+        char familyNameBuf[32];
+        PatternRegistry::getFamilyName(family, familyNameBuf, sizeof(familyNameBuf));
+        familyNames[i] = familyNameBuf;
+    }
+    
+    String response = buildWsResponse("effects.categories", requestId, [familyNames, familyCounts](JsonObject& data) {
+        codec::WsEffectsCodec::encodeCategories(familyNames, familyCounts, 10, data);
     });
     client->text(response);
 }
@@ -423,34 +433,35 @@ static void handleEffectsGetByFamily(AsyncWebSocketClient* client, JsonDocument&
     uint8_t patternIndices[128];
     uint8_t count = PatternRegistry::getPatternsByFamily(family, patternIndices, 128);
     
-    String response = buildWsResponse("effects.byFamily", requestId, [familyId, patternIndices, count](JsonObject& data) {
-        data["familyId"] = familyId;
-        
-        char familyName[32];
-        PatternRegistry::getFamilyName(static_cast<PatternFamily>(familyId), familyName, sizeof(familyName));
-        data["familyName"] = familyName;
-        
-        JsonArray effects = data["effects"].to<JsonArray>();
-        for (uint8_t i = 0; i < count; i++) {
-            effects.add(patternIndices[i]);
-        }
-        
-        data["count"] = count;
+    char familyNameBuf[32];
+    PatternRegistry::getFamilyName(static_cast<PatternFamily>(familyId), familyNameBuf, sizeof(familyNameBuf));
+    const char* familyName = familyNameBuf;
+    
+    String response = buildWsResponse("effects.byFamily", requestId, [familyId, familyName, patternIndices, count](JsonObject& data) {
+        codec::WsEffectsCodec::encodeByFamily(familyId, familyName, patternIndices, count, data);
     });
     client->text(response);
 }
 
 static void handleParametersGet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
+    // Decode using codec (single canonical JSON parser)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::EffectsSimpleDecodeResult decodeResult = codec::WsEffectsCodec::decodeSimple(root);
+    
+    const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+    
     String response = buildWsResponse("parameters", requestId, [&ctx](JsonObject& data) {
-        data["brightness"] = ctx.renderer->getBrightness();
-        data["speed"] = ctx.renderer->getSpeed();
-        data["paletteId"] = ctx.renderer->getPaletteIndex();
-        data["hue"] = ctx.renderer->getHue();
-        data["intensity"] = ctx.renderer->getIntensity();
-        data["saturation"] = ctx.renderer->getSaturation();
-        data["complexity"] = ctx.renderer->getComplexity();
-        data["variation"] = ctx.renderer->getVariation();
+        codec::WsEffectsCodec::encodeGlobalParametersGet(
+            ctx.renderer->getBrightness(),
+            ctx.renderer->getSpeed(),
+            ctx.renderer->getPaletteIndex(),
+            ctx.renderer->getHue(),
+            ctx.renderer->getIntensity(),
+            ctx.renderer->getSaturation(),
+            ctx.renderer->getComplexity(),
+            ctx.renderer->getVariation(),
+            data
+        );
     });
     client->text(response);
 }

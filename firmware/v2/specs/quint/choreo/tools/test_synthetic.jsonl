@@ -1,0 +1,3 @@
+{"event":"ws.connect","ts_mono_ms":123,"eventSeq":1,"clientId":"TAB5_NODE","connEpoch":7}
+{"event":"msg.recv","ts_mono_ms":124,"eventSeq":2,"clientId":"TAB5_NODE","connEpoch":7,"msgType":"color.getStatus","result":"ok"}
+{"event":"msg.send","ts_mono_ms":125,"eventSeq":3,"clientId":"TAB5_NODE","connEpoch":7,"msgType":"status","result":"ok"}

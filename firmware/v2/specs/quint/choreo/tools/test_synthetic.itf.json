@@ -1,0 +1,115 @@
+{
+  "format": "ITF",
+  "formatVersion": "1.0",
+  "generatedAt": "2026-01-19T04:24:07.998829",
+  "states": [
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "7"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "123"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "7"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "124"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "7"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "125"
+        }
+      }
+    }
+  ]
+}

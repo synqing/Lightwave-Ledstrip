@@ -1,0 +1,111 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LightwaveOS Telemetry Schema v1.0.0",
+  "version": "1.0.0",
+  "description": "Telemetry schema for LightwaveOS v2 WebSocket protocol traces",
+  "type": "object",
+  "required": ["event", "schemaVersion"],
+  "properties": {
+    "event": {
+      "type": "string",
+      "enum": ["ws.connect", "ws.connected", "ws.disconnect", "msg.recv", "msg.send"]
+    },
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^1\\.0\\.0$",
+      "description": "Schema version (must be '1.0.0' for v1)"
+    },
+    "ts_mono_ms": {
+      "type": "number",
+      "description": "Monotonic timestamp (ms since device boot)"
+    },
+    "connEpoch": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Connection epoch (increments on reconnect)"
+    },
+    "eventSeq": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Monotonic event sequence number"
+    },
+    "clientId": {
+      "type": "number",
+      "minimum": 0,
+      "description": "WebSocket client ID"
+    },
+    "msgType": {
+      "type": "string",
+      "description": "Message type (empty string if unknown/parse-error)"
+    },
+    "result": {
+      "type": "string",
+      "enum": ["ok", "rejected"],
+      "description": "Processing result"
+    },
+    "reason": {
+      "type": "string",
+      "enum": ["", "rate_limit", "size_limit", "parse_error", "auth_failed"],
+      "description": "Rejection reason (empty if result == 'ok')"
+    },
+    "payloadSummary": {
+      "type": "string",
+      "maxLength": 128,
+      "description": "Truncated payload summary (~100 chars max)"
+    },
+    "ip": {
+      "type": "string",
+      "description": "Client IP address"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "const": "msg.recv"
+          }
+        }
+      },
+      "then": {
+        "required": ["ts_mono_ms", "connEpoch", "eventSeq", "clientId", "msgType", "result", "reason"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "const": "ws.connect"
+          }
+        }
+      },
+      "then": {
+        "required": ["ts_mono_ms", "connEpoch", "eventSeq", "clientId"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "const": "ws.connected"
+          }
+        }
+      },
+      "then": {
+        "required": ["ts_mono_ms", "connEpoch", "eventSeq", "clientId"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "const": "ws.disconnect"
+          }
+        }
+      },
+      "then": {
+        "required": ["ts_mono_ms", "connEpoch", "eventSeq", "clientId"]
+      }
+    }
+  ]
+}

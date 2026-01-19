@@ -1,0 +1,311 @@
+{
+  "format": "ITF",
+  "formatVersion": "1.0",
+  "generatedAt": "2026-01-19T04:57:59.695254",
+  "states": [
+    {
+      "state": {
+        "node": {
+          "connState": "CONNECTING",
+          "connEpoch": {
+            "#bigint": "1"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {
+            "Tab5": "CONNECTING"
+          },
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "1"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "1000"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "CONNECTED",
+          "connEpoch": {
+            "#bigint": "1"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {
+            "Tab5": "CONNECTED"
+          },
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "1"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "1005"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "CONNECTED",
+          "connEpoch": {
+            "#bigint": "1"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {
+            "Tab5": "CONNECTED"
+          },
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "1"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "1010"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "CONNECTED",
+          "connEpoch": {
+            "#bigint": "1"
+          },
+          "handshakeComplete": true,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "1015"
+          }
+        },
+        "hub": {
+          "connState": {
+            "Tab5": "CONNECTED"
+          },
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "1"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "1015"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "1015"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "CONNECTED",
+          "connEpoch": {
+            "#bigint": "1"
+          },
+          "handshakeComplete": true,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "1015"
+          }
+        },
+        "hub": {
+          "connState": {
+            "Tab5": "CONNECTED"
+          },
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "1"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "1015"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "1020"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "CONNECTED",
+          "connEpoch": {
+            "#bigint": "1"
+          },
+          "handshakeComplete": true,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "1015"
+          }
+        },
+        "hub": {
+          "connState": {
+            "Tab5": "CONNECTED"
+          },
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "1"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "1015"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "1025"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "CONNECTED",
+          "connEpoch": {
+            "#bigint": "1"
+          },
+          "handshakeComplete": true,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "1015"
+          }
+        },
+        "hub": {
+          "connState": {
+            "Tab5": "CONNECTED"
+          },
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "1"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "1015"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "1030"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "CONNECTED",
+          "connEpoch": {
+            "#bigint": "1"
+          },
+          "handshakeComplete": true,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "1015"
+          }
+        },
+        "hub": {
+          "connState": {
+            "Tab5": "CONNECTED"
+          },
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "1"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "1015"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "1035"
+        }
+      }
+    }
+  ]
+}

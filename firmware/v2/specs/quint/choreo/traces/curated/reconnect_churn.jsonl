@@ -1,0 +1,7 @@
+{"event":"ws.connect","ts_mono_ms":142736,"connEpoch":0,"eventSeq":23,"clientId":5,"ip":"192.168.0.25"}
+{"event":"msg.recv","ts_mono_ms":142737,"connEpoch":0,"eventSeq":24,"clientId":5,"msgType":"","result":"ok","reason":"","payloadSummary":"{\"method\":\"status.get\"}"}
+{"event":"ws.disconnect","ts_mono_ms":143063,"connEpoch":0,"eventSeq":25,"clientId":5,"ip":"0.0.0.0"}
+{"event":"msg.recv","ts_mono_ms":143388,"connEpoch":0,"eventSeq":26,"clientId":6,"msgType":"","result":"ok","reason":"","payloadSummary":"{\"method\":\"status.get\"}"}
+{"event":"ws.disconnect","ts_mono_ms":143396,"connEpoch":0,"eventSeq":27,"clientId":6,"ip":"0.0.0.0"}
+{"event":"msg.recv","ts_mono_ms":144027,"connEpoch":0,"eventSeq":28,"clientId":7,"msgType":"","result":"ok","reason":"","payloadSummary":"{\"method\":\"status.get\"}"}
+{"event":"ws.disconnect","ts_mono_ms":144039,"connEpoch":0,"eventSeq":29,"clientId":7,"ip":"0.0.0.0"}

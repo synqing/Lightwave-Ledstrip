@@ -8,6 +8,7 @@
 #include "../WebServerContext.h"
 #include "../../ApiResponse.h"
 #include "../../RequestValidator.h"
+#include "../../../codec/WsZonesCodec.h"
 #include "../../../effects/zones/ZoneComposer.h"
 #include "../../../effects/zones/BlendMode.h"
 #include <ESPAsyncWebServer.h>
@@ -25,16 +26,23 @@ static void handleZoneEnable(AsyncWebSocketClient* client, JsonDocument& doc, co
         return; // Silently ignore if zones not available
     }
     
-    bool enable = doc["enable"] | false;
-    ctx.zoneComposer->setEnabled(enable);
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::ZoneEnableDecodeResult decodeResult = codec::WsZonesCodec::decodeZoneEnable(root);
+    
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
+        return;
+    }
+    
+    const codec::ZoneEnableRequest& req = decodeResult.request;
+    ctx.zoneComposer->setEnabled(req.enable);
     
     // Send immediate zone.enabledChanged event
     if (ctx.ws) {
-        StaticJsonDocument<128> eventDoc;
-        eventDoc["type"] = "zone.enabledChanged";
-        eventDoc["enabled"] = enable;
-        String eventOutput;
-        serializeJson(eventDoc, eventOutput);
+        String eventOutput = buildWsResponse("zone.enabledChanged", "", [&req](JsonObject& data) {
+            codec::WsZonesCodec::encodeZoneEnabledChanged(req.enable, data);
+        });
         ctx.ws->textAll(eventOutput);
     }
     
@@ -42,15 +50,31 @@ static void handleZoneEnable(AsyncWebSocketClient* client, JsonDocument& doc, co
 }
 
 static void handleZoneSetEffect(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::ZoneSetEffectDecodeResult decodeResult = codec::WsZonesCodec::decodeZoneSetEffect(root);
+    
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
+        return;
+    }
+    
     if (!ctx.zoneComposer) {
-        const char* requestId = doc["requestId"] | "";
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
         client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
         return;
     }
     
-    const char* requestId = doc["requestId"] | "";
-    uint8_t zoneId = doc["zoneId"] | 0;
-    uint8_t effectId = doc["effectId"] | 0;
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
+        return;
+    }
+    
+    const codec::ZoneSetEffectRequest& req = decodeResult.request;
+    uint8_t zoneId = req.zoneId;
+    uint8_t effectId = req.effectId;
+    const char* requestId = req.requestId ? req.requestId : "";
     
     // DEFENSIVE CHECK: Validate zoneId and effectId before array access
     zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
@@ -70,31 +94,34 @@ static void handleZoneSetEffect(AsyncWebSocketClient* client, JsonDocument& doc,
     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
     
     String response = buildWsResponse("zones.effectChanged", requestId, [&ctx, zoneId, effectId](JsonObject& data) {
-        data["zoneId"] = zoneId;
-        JsonObject current = data["current"].to<JsonObject>();
-        current["effectId"] = effectId;
-        current["effectName"] = ctx.renderer->getEffectName(effectId);
-        current["brightness"] = ctx.zoneComposer->getZoneBrightness(zoneId);
-        current["speed"] = ctx.zoneComposer->getZoneSpeed(zoneId);
-        current["paletteId"] = ctx.zoneComposer->getZonePalette(zoneId);
-        current["blendMode"] = static_cast<uint8_t>(ctx.zoneComposer->getZoneBlendMode(zoneId));
-        current["blendModeName"] = getBlendModeName(ctx.zoneComposer->getZoneBlendMode(zoneId));
+        codec::WsZonesCodec::encodeZonesEffectChanged(zoneId, effectId, *ctx.zoneComposer, ctx.renderer, data);
     });
     client->text(response);
 }
 
 static void handleZoneSetBrightness(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::ZoneSetBrightnessDecodeResult decodeResult = codec::WsZonesCodec::decodeZoneSetBrightness(root);
+    
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
+        return;
+    }
+    
     if (!ctx.zoneComposer) {
-        const char* requestId = doc["requestId"] | "";
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
         client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
         return;
     }
     
-    const char* requestId = doc["requestId"] | "";
-    uint8_t zoneId = doc["zoneId"] | 0;
+    const codec::ZoneSetBrightnessRequest& req = decodeResult.request;
+    uint8_t zoneId = req.zoneId;
+    uint8_t brightness = req.brightness;
+    const char* requestId = req.requestId ? req.requestId : "";
+    
     // DEFENSIVE CHECK: Validate zoneId before array access
     zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
-    uint8_t brightness = doc["brightness"] | 128;
     
     if (zoneId >= ctx.zoneComposer->getZoneCount()) {
         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid zoneId", requestId));
@@ -104,72 +131,72 @@ static void handleZoneSetBrightness(AsyncWebSocketClient* client, JsonDocument& 
     ctx.zoneComposer->setZoneBrightness(zoneId, brightness);
     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
     
-    String response = buildWsResponse("zones.changed", requestId, [&ctx, zoneId, brightness](JsonObject& data) {
-        data["zoneId"] = zoneId;
-        JsonArray updated = data["updated"].to<JsonArray>();
-        updated.add("brightness");
-        JsonObject current = data["current"].to<JsonObject>();
-        current["effectId"] = ctx.zoneComposer->getZoneEffect(zoneId);
-        current["brightness"] = brightness;
-        current["speed"] = ctx.zoneComposer->getZoneSpeed(zoneId);
-        current["paletteId"] = ctx.zoneComposer->getZonePalette(zoneId);
-        current["blendMode"] = static_cast<uint8_t>(ctx.zoneComposer->getZoneBlendMode(zoneId));
-        current["blendModeName"] = getBlendModeName(ctx.zoneComposer->getZoneBlendMode(zoneId));
+    const char* updatedFields[] = {"brightness"};
+    String response = buildWsResponse("zones.changed", requestId, [&ctx, zoneId, updatedFields](JsonObject& data) {
+        codec::WsZonesCodec::encodeZonesChanged(zoneId, updatedFields, 1, *ctx.zoneComposer, ctx.renderer, data);
     });
     client->text(response);
 }
 
 static void handleZoneSetSpeed(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::ZoneSetSpeedDecodeResult decodeResult = codec::WsZonesCodec::decodeZoneSetSpeed(root);
+    
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
+        return;
+    }
+    
     if (!ctx.zoneComposer) {
-        const char* requestId = doc["requestId"] | "";
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
         client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
         return;
     }
     
-    const char* requestId = doc["requestId"] | "";
-    uint8_t zoneId = doc["zoneId"] | 0;
+    const codec::ZoneSetSpeedRequest& req = decodeResult.request;
+    uint8_t zoneId = req.zoneId;
+    uint8_t speed = req.speed;
+    const char* requestId = req.requestId ? req.requestId : "";
+    
     // DEFENSIVE CHECK: Validate zoneId before array access
     zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
-    uint8_t speed = doc["speed"] | 15;
     
     if (zoneId >= ctx.zoneComposer->getZoneCount()) {
         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid zoneId", requestId));
         return;
     }
     
-    if (speed < 1 || speed > 100) {
-        client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Speed must be 1-100", requestId));
-        return;
-    }
-    
     ctx.zoneComposer->setZoneSpeed(zoneId, speed);
     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
     
-    String response = buildWsResponse("zones.changed", requestId, [&ctx, zoneId, speed](JsonObject& data) {
-        data["zoneId"] = zoneId;
-        JsonArray updated = data["updated"].to<JsonArray>();
-        updated.add("speed");
-        JsonObject current = data["current"].to<JsonObject>();
-        current["effectId"] = ctx.zoneComposer->getZoneEffect(zoneId);
-        current["brightness"] = ctx.zoneComposer->getZoneBrightness(zoneId);
-        current["speed"] = speed;
-        current["paletteId"] = ctx.zoneComposer->getZonePalette(zoneId);
-        current["blendMode"] = static_cast<uint8_t>(ctx.zoneComposer->getZoneBlendMode(zoneId));
-        current["blendModeName"] = getBlendModeName(ctx.zoneComposer->getZoneBlendMode(zoneId));
+    const char* updatedFields[] = {"speed"};
+    String response = buildWsResponse("zones.changed", requestId, [&ctx, zoneId, updatedFields](JsonObject& data) {
+        codec::WsZonesCodec::encodeZonesChanged(zoneId, updatedFields, 1, *ctx.zoneComposer, ctx.renderer, data);
     });
     client->text(response);
 }
 
 static void handleZoneSetPalette(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::ZoneSetPaletteDecodeResult decodeResult = codec::WsZonesCodec::decodeZoneSetPalette(root);
+    
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
+        return;
+    }
+    
     if (!ctx.zoneComposer) {
-        const char* requestId = doc["requestId"] | "";
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
         client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
         return;
     }
     
-    const char* requestId = doc["requestId"] | "";
-    uint8_t zoneId = doc["zoneId"] | 0;
-    uint8_t paletteId = doc["paletteId"] | 0;
+    const codec::ZoneSetPaletteRequest& req = decodeResult.request;
+    uint8_t zoneId = req.zoneId;
+    uint8_t paletteId = req.paletteId;
+    const char* requestId = req.requestId ? req.requestId : "";
     
     // DEFENSIVE CHECK: Validate zoneId and paletteId before array access
     zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
@@ -184,29 +211,31 @@ static void handleZoneSetPalette(AsyncWebSocketClient* client, JsonDocument& doc
     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
     
     String response = buildWsResponse("zone.paletteChanged", requestId, [&ctx, zoneId, paletteId](JsonObject& data) {
-        data["zoneId"] = zoneId;
-        JsonObject current = data["current"].to<JsonObject>();
-        current["effectId"] = ctx.zoneComposer->getZoneEffect(zoneId);
-        current["effectName"] = ctx.renderer->getEffectName(ctx.zoneComposer->getZoneEffect(zoneId));
-        current["brightness"] = ctx.zoneComposer->getZoneBrightness(zoneId);
-        current["speed"] = ctx.zoneComposer->getZoneSpeed(zoneId);
-        current["paletteId"] = paletteId;
-        current["blendMode"] = static_cast<uint8_t>(ctx.zoneComposer->getZoneBlendMode(zoneId));
-        current["blendModeName"] = getBlendModeName(ctx.zoneComposer->getZoneBlendMode(zoneId));
+        codec::WsZonesCodec::encodeZonePaletteChanged(zoneId, paletteId, *ctx.zoneComposer, ctx.renderer, data);
     });
     client->text(response);
 }
 
 static void handleZoneSetBlend(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::ZoneSetBlendDecodeResult decodeResult = codec::WsZonesCodec::decodeZoneSetBlend(root);
+    
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
+        return;
+    }
+    
     if (!ctx.zoneComposer) {
-        const char* requestId = doc["requestId"] | "";
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
         client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
         return;
     }
     
-    const char* requestId = doc["requestId"] | "";
-    uint8_t zoneId = doc["zoneId"] | 0;
-    uint8_t blendModeVal = doc["blendMode"] | 0;
+    const codec::ZoneSetBlendRequest& req = decodeResult.request;
+    uint8_t zoneId = req.zoneId;
+    uint8_t blendModeVal = req.blendMode;
+    const char* requestId = req.requestId ? req.requestId : "";
     
     // DEFENSIVE CHECK: Validate zoneId before array access
     zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
@@ -216,26 +245,12 @@ static void handleZoneSetBlend(AsyncWebSocketClient* client, JsonDocument& doc, 
         return;
     }
     
-    // Validate blendMode is 0-7
-    if (blendModeVal > 7) {
-        client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "BlendMode must be 0-7", requestId));
-        return;
-    }
-    
     lightwaveos::zones::BlendMode blendMode = static_cast<lightwaveos::zones::BlendMode>(blendModeVal);
     ctx.zoneComposer->setZoneBlendMode(zoneId, blendMode);
     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
     
-    String response = buildWsResponse("zone.blendChanged", requestId, [&ctx, zoneId, blendModeVal, blendMode](JsonObject& data) {
-        data["zoneId"] = zoneId;
-        JsonObject current = data["current"].to<JsonObject>();
-        current["effectId"] = ctx.zoneComposer->getZoneEffect(zoneId);
-        current["effectName"] = ctx.renderer->getEffectName(ctx.zoneComposer->getZoneEffect(zoneId));
-        current["brightness"] = ctx.zoneComposer->getZoneBrightness(zoneId);
-        current["speed"] = ctx.zoneComposer->getZoneSpeed(zoneId);
-        current["paletteId"] = ctx.zoneComposer->getZonePalette(zoneId);
-        current["blendMode"] = blendModeVal;
-        current["blendModeName"] = getBlendModeName(blendMode);
+    String response = buildWsResponse("zone.blendChanged", requestId, [&ctx, zoneId, blendModeVal](JsonObject& data) {
+        codec::WsZonesCodec::encodeZoneBlendChanged(zoneId, blendModeVal, *ctx.zoneComposer, ctx.renderer, data);
     });
     client->text(response);
 }
@@ -245,13 +260,31 @@ static void handleZoneLoadPreset(AsyncWebSocketClient* client, JsonDocument& doc
         return; // Silently ignore if zones not available
     }
     
-    uint8_t presetId = doc["presetId"] | 0;
-    ctx.zoneComposer->loadPreset(presetId);
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::ZoneLoadPresetDecodeResult decodeResult = codec::WsZonesCodec::decodeZoneLoadPreset(root);
+    
+    if (!decodeResult.success) {
+        // Silently ignore decode errors for loadPreset (matches original behavior)
+        return;
+    }
+    
+    const codec::ZoneLoadPresetRequest& req = decodeResult.request;
+    ctx.zoneComposer->loadPreset(req.presetId);
     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
 }
 
 static void handleZonesGet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::ZonesGetDecodeResult decodeResult = codec::WsZonesCodec::decodeZonesGet(root);
+    
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
+        return;
+    }
+    
+    const codec::ZonesGetRequest& req = decodeResult.request;
+    const char* requestId = req.requestId ? req.requestId : "";
     
     if (!ctx.zoneComposer) {
         client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
@@ -259,48 +292,23 @@ static void handleZonesGet(AsyncWebSocketClient* client, JsonDocument& doc, cons
     }
     
     String response = buildWsResponse("zones", requestId, [&ctx](JsonObject& data) {
-        data["enabled"] = ctx.zoneComposer->isEnabled();
-        data["zoneCount"] = ctx.zoneComposer->getZoneCount();
-        
-        // Include segment definitions
-        JsonArray segmentsArray = data["segments"].to<JsonArray>();
-        const ZoneSegment* segments = ctx.zoneComposer->getZoneConfig();
-        for (uint8_t i = 0; i < ctx.zoneComposer->getZoneCount(); i++) {
-            JsonObject seg = segmentsArray.add<JsonObject>();
-            seg["zoneId"] = segments[i].zoneId;
-            seg["s1LeftStart"] = segments[i].s1LeftStart;
-            seg["s1LeftEnd"] = segments[i].s1LeftEnd;
-            seg["s1RightStart"] = segments[i].s1RightStart;
-            seg["s1RightEnd"] = segments[i].s1RightEnd;
-            seg["totalLeds"] = segments[i].totalLeds;
-        }
-        
-        JsonArray zones = data["zones"].to<JsonArray>();
-        for (uint8_t i = 0; i < ctx.zoneComposer->getZoneCount(); i++) {
-            JsonObject zone = zones.add<JsonObject>();
-            zone["id"] = i;
-            zone["enabled"] = ctx.zoneComposer->isZoneEnabled(i);
-            zone["effectId"] = ctx.zoneComposer->getZoneEffect(i);
-            zone["effectName"] = ctx.renderer->getEffectName(ctx.zoneComposer->getZoneEffect(i));
-            zone["brightness"] = ctx.zoneComposer->getZoneBrightness(i);
-            zone["speed"] = ctx.zoneComposer->getZoneSpeed(i);
-            zone["paletteId"] = ctx.zoneComposer->getZonePalette(i);
-            zone["blendMode"] = static_cast<uint8_t>(ctx.zoneComposer->getZoneBlendMode(i));
-            zone["blendModeName"] = getBlendModeName(ctx.zoneComposer->getZoneBlendMode(i));
-        }
-        
-        JsonArray presets = data["presets"].to<JsonArray>();
-        for (uint8_t i = 0; i < 5; i++) {
-            JsonObject preset = presets.add<JsonObject>();
-            preset["id"] = i;
-            preset["name"] = ZoneComposer::getPresetName(i);
-        }
+        codec::WsZonesCodec::encodeZonesGet(*ctx.zoneComposer, ctx.renderer, data);
     });
     client->text(response);
 }
 
 static void handleZonesList(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    const char* requestId = doc["requestId"] | "";
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::ZonesGetDecodeResult decodeResult = codec::WsZonesCodec::decodeZonesGet(root);
+    
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
+        return;
+    }
+    
+    const codec::ZonesGetRequest& req = decodeResult.request;
+    const char* requestId = req.requestId ? req.requestId : "";
     
     if (!ctx.zoneComposer) {
         client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
@@ -308,60 +316,30 @@ static void handleZonesList(AsyncWebSocketClient* client, JsonDocument& doc, con
     }
     
     String response = buildWsResponse("zones.list", requestId, [&ctx](JsonObject& data) {
-        data["enabled"] = ctx.zoneComposer->isEnabled();
-        data["zoneCount"] = ctx.zoneComposer->getZoneCount();
-        
-        // Include segment definitions
-        JsonArray segmentsArray = data["segments"].to<JsonArray>();
-        const ZoneSegment* segments = ctx.zoneComposer->getZoneConfig();
-        for (uint8_t i = 0; i < ctx.zoneComposer->getZoneCount(); i++) {
-            JsonObject seg = segmentsArray.add<JsonObject>();
-            seg["zoneId"] = segments[i].zoneId;
-            seg["s1LeftStart"] = segments[i].s1LeftStart;
-            seg["s1LeftEnd"] = segments[i].s1LeftEnd;
-            seg["s1RightStart"] = segments[i].s1RightStart;
-            seg["s1RightEnd"] = segments[i].s1RightEnd;
-            seg["totalLeds"] = segments[i].totalLeds;
-        }
-        
-        JsonArray zones = data["zones"].to<JsonArray>();
-        for (uint8_t i = 0; i < ctx.zoneComposer->getZoneCount(); i++) {
-            JsonObject zone = zones.add<JsonObject>();
-            zone["id"] = i;
-            zone["enabled"] = ctx.zoneComposer->isZoneEnabled(i);
-            zone["effectId"] = ctx.zoneComposer->getZoneEffect(i);
-            zone["effectName"] = ctx.renderer->getEffectName(ctx.zoneComposer->getZoneEffect(i));
-            zone["brightness"] = ctx.zoneComposer->getZoneBrightness(i);
-            zone["speed"] = ctx.zoneComposer->getZoneSpeed(i);
-            zone["paletteId"] = ctx.zoneComposer->getZonePalette(i);
-            zone["blendMode"] = static_cast<uint8_t>(ctx.zoneComposer->getZoneBlendMode(i));
-            zone["blendModeName"] = getBlendModeName(ctx.zoneComposer->getZoneBlendMode(i));
-        }
-        
-        JsonArray presets = data["presets"].to<JsonArray>();
-        for (uint8_t i = 0; i < 5; i++) {
-            JsonObject preset = presets.add<JsonObject>();
-            preset["id"] = i;
-            preset["name"] = ZoneComposer::getPresetName(i);
-        }
+        codec::WsZonesCodec::encodeZonesList(*ctx.zoneComposer, ctx.renderer, data);
     });
     client->text(response);
 }
 
 static void handleZonesUpdate(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::ZonesUpdateDecodeResult decodeResult = codec::WsZonesCodec::decodeZonesUpdate(root);
+    
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
+        return;
+    }
+    
     if (!ctx.zoneComposer) {
-        const char* requestId = doc["requestId"] | "";
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
         client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
         return;
     }
     
-    const char* requestId = doc["requestId"] | "";
-    uint8_t zoneId = doc["zoneId"] | 255;
-    
-    if (zoneId == 255) {
-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "zoneId required", requestId));
-        return;
-    }
+    const codec::ZonesUpdateRequest& req = decodeResult.request;
+    uint8_t zoneId = req.zoneId;
+    const char* requestId = req.requestId ? req.requestId : "";
     
     // DEFENSIVE CHECK: Validate zoneId before array access
     zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
@@ -377,8 +355,8 @@ static void handleZonesUpdate(AsyncWebSocketClient* client, JsonDocument& doc, c
     bool updatedPalette = false;
     bool updatedBlend = false;
     
-    if (doc.containsKey("effectId")) {
-        uint8_t effectId = doc["effectId"] | 0;
+    if (req.hasEffectId) {
+        uint8_t effectId = req.effectId;
         // DEFENSIVE CHECK: Validate effectId before array access
         effectId = lightwaveos::network::validateEffectIdInRequest(effectId);
         if (effectId < ctx.renderer->getEffectCount()) {
@@ -387,92 +365,76 @@ static void handleZonesUpdate(AsyncWebSocketClient* client, JsonDocument& doc, c
         }
     }
     
-    if (doc.containsKey("brightness")) {
-        uint8_t brightness = doc["brightness"] | 128;
-        ctx.zoneComposer->setZoneBrightness(zoneId, brightness);
+    if (req.hasBrightness) {
+        ctx.zoneComposer->setZoneBrightness(zoneId, req.brightness);
         updatedBrightness = true;
     }
     
-    if (doc.containsKey("speed")) {
-        uint8_t speed = doc["speed"] | 15;
-        ctx.zoneComposer->setZoneSpeed(zoneId, speed);
+    if (req.hasSpeed) {
+        ctx.zoneComposer->setZoneSpeed(zoneId, req.speed);
         updatedSpeed = true;
     }
     
-    if (doc.containsKey("paletteId")) {
-        uint8_t paletteId = doc["paletteId"] | 0;
+    if (req.hasPaletteId) {
+        uint8_t paletteId = req.paletteId;
         // DEFENSIVE CHECK: Validate paletteId before array access
         paletteId = lightwaveos::network::validatePaletteIdInRequest(paletteId);
         ctx.zoneComposer->setZonePalette(zoneId, paletteId);
         updatedPalette = true;
     }
     
-    if (doc.containsKey("blendMode")) {
-        uint8_t blendModeVal = doc["blendMode"] | 0;
-        if (blendModeVal <= 7) {
-            lightwaveos::zones::BlendMode blendMode = static_cast<lightwaveos::zones::BlendMode>(blendModeVal);
-            ctx.zoneComposer->setZoneBlendMode(zoneId, blendMode);
-            updatedBlend = true;
-        }
+    if (req.hasBlendMode) {
+        lightwaveos::zones::BlendMode blendMode = static_cast<lightwaveos::zones::BlendMode>(req.blendMode);
+        ctx.zoneComposer->setZoneBlendMode(zoneId, blendMode);
+        updatedBlend = true;
     }
     
     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
     
-    String response = buildWsResponse("zones.changed", requestId, [&ctx, zoneId, updatedEffect, updatedBrightness, updatedSpeed, updatedPalette, updatedBlend](JsonObject& data) {
-        data["zoneId"] = zoneId;
-        
-        JsonArray updated = data["updated"].to<JsonArray>();
-        if (updatedEffect) updated.add("effectId");
-        if (updatedBrightness) updated.add("brightness");
-        if (updatedSpeed) updated.add("speed");
-        if (updatedPalette) updated.add("paletteId");
-        if (updatedBlend) updated.add("blendMode");
-        
-        JsonObject current = data["current"].to<JsonObject>();
-        current["effectId"] = ctx.zoneComposer->getZoneEffect(zoneId);
-        current["brightness"] = ctx.zoneComposer->getZoneBrightness(zoneId);
-        current["speed"] = ctx.zoneComposer->getZoneSpeed(zoneId);
-        current["paletteId"] = ctx.zoneComposer->getZonePalette(zoneId);
-        current["blendMode"] = static_cast<uint8_t>(ctx.zoneComposer->getZoneBlendMode(zoneId));
-        current["blendModeName"] = getBlendModeName(ctx.zoneComposer->getZoneBlendMode(zoneId));
+    const char* updatedFields[5];
+    uint8_t updatedCount = 0;
+    if (updatedEffect) updatedFields[updatedCount++] = "effectId";
+    if (updatedBrightness) updatedFields[updatedCount++] = "brightness";
+    if (updatedSpeed) updatedFields[updatedCount++] = "speed";
+    if (updatedPalette) updatedFields[updatedCount++] = "paletteId";
+    if (updatedBlend) updatedFields[updatedCount++] = "blendMode";
+    
+    String response = buildWsResponse("zones.changed", requestId, [&ctx, zoneId, updatedFields, updatedCount](JsonObject& data) {
+        codec::WsZonesCodec::encodeZonesChanged(zoneId, updatedFields, updatedCount, *ctx.zoneComposer, ctx.renderer, data);
     });
     client->text(response);
 }
 
 static void handleZonesSetEffect(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::ZoneSetEffectDecodeResult decodeResult = codec::WsZonesCodec::decodeZoneSetEffect(root);
+    
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
+        return;
+    }
+    
     if (!ctx.zoneComposer) {
-        const char* requestId = doc["requestId"] | "";
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
         client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
         return;
     }
     
-    const char* requestId = doc["requestId"] | "";
-    uint8_t zoneId = doc["zoneId"] | 255;
-    uint8_t effectId = doc["effectId"] | 255;
-    
-    if (zoneId == 255) {
-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "zoneId required", requestId));
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
         return;
     }
     
-    if (effectId == 255) {
-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "effectId required", requestId));
-        return;
-    }
+    const codec::ZoneSetEffectRequest& req = decodeResult.request;
+    uint8_t zoneId = req.zoneId;
+    uint8_t effectId = req.effectId;
+    const char* requestId = req.requestId ? req.requestId : "";
     
     // DEFENSIVE CHECK: Validate zoneId and effectId before array access
     zoneId = lightwaveos::network::validateZoneIdInRequest(zoneId);
     effectId = lightwaveos::network::validateEffectIdInRequest(effectId);
-    
-    if (zoneId >= ctx.zoneComposer->getZoneCount()) {
-        client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid zoneId", requestId));
-        return;
-    }
-    
-    if (effectId >= ctx.renderer->getEffectCount()) {
-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "effectId required", requestId));
-        return;
-    }
     
     if (zoneId >= ctx.zoneComposer->getZoneCount()) {
         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid zoneId", requestId));
@@ -488,15 +450,7 @@ static void handleZonesSetEffect(AsyncWebSocketClient* client, JsonDocument& doc
     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
     
     String response = buildWsResponse("zones.effectChanged", requestId, [&ctx, zoneId, effectId](JsonObject& data) {
-        data["zoneId"] = zoneId;
-        JsonObject current = data["current"].to<JsonObject>();
-        current["effectId"] = effectId;
-        current["effectName"] = ctx.renderer->getEffectName(effectId);
-        current["brightness"] = ctx.zoneComposer->getZoneBrightness(zoneId);
-        current["speed"] = ctx.zoneComposer->getZoneSpeed(zoneId);
-        current["paletteId"] = ctx.zoneComposer->getZonePalette(zoneId);
-        current["blendMode"] = static_cast<uint8_t>(ctx.zoneComposer->getZoneBlendMode(zoneId));
-        current["blendModeName"] = getBlendModeName(ctx.zoneComposer->getZoneBlendMode(zoneId));
+        codec::WsZonesCodec::encodeZonesEffectChanged(zoneId, effectId, *ctx.zoneComposer, ctx.renderer, data);
     });
     client->text(response);
 }
@@ -506,39 +460,34 @@ static void handleGetZoneState(AsyncWebSocketClient* client, JsonDocument& doc, 
 }
 
 static void handleZonesSetLayout(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::ZonesSetLayoutDecodeResult decodeResult = codec::WsZonesCodec::decodeZonesSetLayout(root);
+    
+    if (!decodeResult.success) {
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, decodeResult.errorMsg, requestId));
+        return;
+    }
+    
     if (!ctx.zoneComposer) {
-        const char* requestId = doc["requestId"] | "";
+        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
         client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone system not available", requestId));
         return;
     }
     
-    const char* requestId = doc["requestId"] | "";
+    const codec::ZonesSetLayoutRequest& req = decodeResult.request;
+    const char* requestId = req.requestId ? req.requestId : "";
     
-    // Parse zones array
-    JsonArray zonesArray = doc["zones"];
-    if (!zonesArray || zonesArray.size() == 0 || zonesArray.size() > MAX_ZONES) {
-        client->text(buildWsError(ErrorCodes::INVALID_VALUE, "Invalid zones array", requestId));
-        return;
-    }
-
-    // Convert JSON array to ZoneSegment array
-    ZoneSegment segments[MAX_ZONES];
-    uint8_t zoneCount = zonesArray.size();
+    // Convert codec segments to ZoneSegment array
+    ZoneSegment segments[lightwaveos::zones::MAX_ZONES];
+    uint8_t zoneCount = req.zoneCount;
     
     for (uint8_t i = 0; i < zoneCount; i++) {
-        JsonObject zoneObj = zonesArray[i];
-        if (!zoneObj.containsKey("zoneId") || !zoneObj.containsKey("s1LeftStart") ||
-            !zoneObj.containsKey("s1LeftEnd") || !zoneObj.containsKey("s1RightStart") ||
-            !zoneObj.containsKey("s1RightEnd")) {
-            client->text(buildWsError(ErrorCodes::INVALID_VALUE, "Zone segment missing required fields", requestId));
-            return;
-        }
-        
-        segments[i].zoneId = zoneObj["zoneId"];
-        segments[i].s1LeftStart = zoneObj["s1LeftStart"];
-        segments[i].s1LeftEnd = zoneObj["s1LeftEnd"];
-        segments[i].s1RightStart = zoneObj["s1RightStart"];
-        segments[i].s1RightEnd = zoneObj["s1RightEnd"];
+        segments[i].zoneId = req.zones[i].zoneId;
+        segments[i].s1LeftStart = req.zones[i].s1LeftStart;
+        segments[i].s1LeftEnd = req.zones[i].s1LeftEnd;
+        segments[i].s1RightStart = req.zones[i].s1RightStart;
+        segments[i].s1RightEnd = req.zones[i].s1RightEnd;
         
         // Calculate totalLeds
         uint8_t leftSize = segments[i].s1LeftEnd - segments[i].s1LeftStart + 1;
@@ -555,7 +504,7 @@ static void handleZonesSetLayout(AsyncWebSocketClient* client, JsonDocument& doc
     if (ctx.broadcastZoneState) ctx.broadcastZoneState();
     
     String response = buildWsResponse("zones.layoutChanged", requestId, [zoneCount](JsonObject& data) {
-        data["zoneCount"] = zoneCount;
+        codec::WsZonesCodec::encodeZonesLayoutChanged(zoneCount, data);
     });
     client->text(response);
 }

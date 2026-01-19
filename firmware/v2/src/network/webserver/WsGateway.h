@@ -117,6 +117,32 @@ private:
     };
     ClientIpMapEntry m_clientIpMap[CLIENT_IP_MAP_SLOTS] = {};
 
+    // ------------------------------------------------------------------------
+    // Connection epoch tracking (for Choreo telemetry)
+    //
+    // Tracks connection epochs per client ID. Epoch increments on reconnect
+    // to distinguish messages across connection boundaries.
+    // ------------------------------------------------------------------------
+    struct ClientEpochEntry {
+        uint32_t clientId;    // AsyncWebSocketClient ID (0 = empty)
+        uint32_t connEpoch;   // Increments on reconnect (starts at 0)
+        uint32_t connectTs;   // Timestamp of this epoch start (millis)
+    };
+    ClientEpochEntry m_clientEpochs[CLIENT_IP_MAP_SLOTS] = {};
+
+    // ------------------------------------------------------------------------
+    // WebSocket message size limit (OWASP recommendation: 64KB)
+    // ------------------------------------------------------------------------
+    static constexpr size_t MAX_WS_MESSAGE_SIZE = 64 * 1024;  // 64KB
+
+    // ------------------------------------------------------------------------
+    // Monotonic event sequence counter (for telemetry)
+    // ------------------------------------------------------------------------
+    static uint32_t s_eventSeq;
+
+    // Helper to get or increment connection epoch for a client
+    uint32_t getOrIncrementEpoch(uint32_t clientId);
+
     // Static instance pointer for event handler
     static WsGateway* s_instance;
 };

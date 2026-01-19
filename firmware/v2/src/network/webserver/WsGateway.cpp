@@ -21,6 +21,9 @@ namespace webserver {
 // Static instance for event handler
 WsGateway* WsGateway::s_instance = nullptr;
 
+// Monotonic event sequence counter (wraps at UINT32_MAX)
+uint32_t WsGateway::s_eventSeq = 0;
+
 WsGateway::WsGateway(
     AsyncWebSocket* ws,
     const WebServerContext& ctx,
@@ -204,10 +207,59 @@ void WsGateway::handleConnect(AsyncWebSocketClient* client) {
         }
     }
 
+    // Track connection epoch (increments on reconnect)
+    uint32_t clientId = client->id();
+    uint32_t connEpoch = getOrIncrementEpoch(clientId);  // Epoch is set/incremented here
+    uint32_t eventSeq = s_eventSeq++;
+    uint32_t tsMonoms = millis();
+
+    // Structured telemetry: ws.connect event
+    {
+        char buf[512];
+        const int n = snprintf(buf, sizeof(buf),
+            "{\"event\":\"ws.connect\",\"ts_mono_ms\":%lu,\"connEpoch\":%lu,\"eventSeq\":%lu,\"clientId\":%lu,\"ip\":\"%s\",\"schemaVersion\":\"1.0.0\"}",
+            static_cast<unsigned long>(tsMonoms),
+            static_cast<unsigned long>(connEpoch),
+            static_cast<unsigned long>(eventSeq),
+            static_cast<unsigned long>(clientId),
+            ip.toString().c_str()
+        );
+        if (n > 0 && n < static_cast<int>(sizeof(buf))) {
+            Serial.println(buf);
+        }
+    }
+
     // Call connection callback (for status broadcasts, etc.)
     if (m_onConnect) {
         m_onConnect(client);
     }
+}
+
+uint32_t WsGateway::getOrIncrementEpoch(uint32_t clientId) {
+    // Find existing epoch entry or create new one
+    uint8_t epochSlot = 0xFF;
+    for (uint8_t i = 0; i < CLIENT_IP_MAP_SLOTS; i++) {
+        if (m_clientEpochs[i].clientId == clientId) {
+            // Client exists - increment epoch (contract: every connect = new epoch)
+            m_clientEpochs[i].connEpoch++;
+            m_clientEpochs[i].connectTs = millis();
+            return m_clientEpochs[i].connEpoch;
+        }
+        if (epochSlot == 0xFF && m_clientEpochs[i].clientId == 0) {
+            epochSlot = i;  // first empty slot
+        }
+    }
+    
+    // New client - create entry with epoch 0
+    if (epochSlot != 0xFF) {
+        m_clientEpochs[epochSlot].clientId = clientId;
+        m_clientEpochs[epochSlot].connEpoch = 0;
+        m_clientEpochs[epochSlot].connectTs = millis();
+        return 0;
+    }
+    
+    // Table full - return 0 (shouldn't happen with normal client counts)
+    return 0;
 }
 
 void WsGateway::handleDisconnect(AsyncWebSocketClient* client) {
@@ -221,6 +273,37 @@ void WsGateway::handleDisconnect(AsyncWebSocketClient* client) {
         (static_cast<uint32_t>(ip[1]) << 16) |
         (static_cast<uint32_t>(ip[2]) << 8)  |
         (static_cast<uint32_t>(ip[3]) << 0);
+
+    // Lookup connection epoch before cleanup
+    uint32_t connEpoch = 0;
+    for (uint8_t i = 0; i < CLIENT_IP_MAP_SLOTS; i++) {
+        if (m_clientEpochs[i].clientId == clientId) {
+            connEpoch = m_clientEpochs[i].connEpoch;
+            // Clear epoch entry (disconnect cleanup)
+            m_clientEpochs[i].clientId = 0;
+            m_clientEpochs[i].connEpoch = 0;
+            m_clientEpochs[i].connectTs = 0;
+            break;
+        }
+    }
+    
+    uint32_t eventSeq = s_eventSeq++;
+    
+    // Structured telemetry: ws.disconnect event
+    {
+        char buf[512];
+        const int n = snprintf(buf, sizeof(buf),
+            "{\"event\":\"ws.disconnect\",\"ts_mono_ms\":%lu,\"connEpoch\":%lu,\"eventSeq\":%lu,\"clientId\":%lu,\"ip\":\"%s\"}",
+            static_cast<unsigned long>(nowMs),
+            static_cast<unsigned long>(connEpoch),
+            static_cast<unsigned long>(eventSeq),
+            static_cast<unsigned long>(clientId),
+            ip.toString().c_str()
+        );
+        if (n > 0 && n < static_cast<int>(sizeof(buf))) {
+            Serial.println(buf);
+        }
+    }
 
     // If remoteIP() returned 0.0.0.0 (common after disconnect), lookup stored IP
     if (ipKey == 0) {
@@ -282,11 +365,58 @@ void WsGateway::handleDisconnect(AsyncWebSocketClient* client) {
 void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_t len) {
     // Rate limit check
     if (!m_checkRateLimit(client)) {
-        return;  // Rate limiter sends error response
+        // Structured telemetry: msg.recv with result="rejected", reason="rate_limit"
+        uint32_t clientId = client->id();
+        uint32_t connEpoch = 0;
+        for (uint8_t i = 0; i < CLIENT_IP_MAP_SLOTS; i++) {
+            if (m_clientEpochs[i].clientId == clientId) {
+                connEpoch = m_clientEpochs[i].connEpoch;
+                break;
+            }
+        }
+        uint32_t eventSeq = s_eventSeq++;
+        uint32_t tsMonoms = millis();
+        
+        char buf[512];
+        const int n = snprintf(buf, sizeof(buf),
+            "{\"event\":\"msg.recv\",\"ts_mono_ms\":%lu,\"connEpoch\":%lu,\"eventSeq\":%lu,\"clientId\":%lu,\"msgType\":\"\",\"result\":\"rejected\",\"reason\":\"rate_limit\",\"payloadSummary\":\"\",\"schemaVersion\":\"1.0.0\"}",
+            static_cast<unsigned long>(tsMonoms),
+            static_cast<unsigned long>(connEpoch),
+            static_cast<unsigned long>(eventSeq),
+            static_cast<unsigned long>(clientId)
+        );
+        if (n > 0 && n < static_cast<int>(sizeof(buf))) {
+            Serial.println(buf);
+        }
+        return;  // Drop message silently
     }
 
     // Parse message
-    if (len > 1024) {
+    if (len > MAX_WS_MESSAGE_SIZE) {
+        // Log rejected frame (oversize)
+        uint32_t clientId = client->id();
+        uint32_t connEpoch = 0;
+        for (uint8_t i = 0; i < CLIENT_IP_MAP_SLOTS; i++) {
+            if (m_clientEpochs[i].clientId == clientId) {
+                connEpoch = m_clientEpochs[i].connEpoch;
+                break;
+            }
+        }
+        uint32_t eventSeq = s_eventSeq++;
+        uint32_t tsMonoms = millis();
+        
+        char buf[512];
+        const int n = snprintf(buf, sizeof(buf),
+            "{\"event\":\"msg.recv\",\"ts_mono_ms\":%lu,\"connEpoch\":%lu,\"eventSeq\":%lu,\"clientId\":%lu,\"msgType\":\"\",\"result\":\"rejected\",\"reason\":\"size_limit\",\"payloadSummary\":\"\",\"schemaVersion\":\"1.0.0\"}",
+            static_cast<unsigned long>(tsMonoms),
+            static_cast<unsigned long>(connEpoch),
+            static_cast<unsigned long>(eventSeq),
+            static_cast<unsigned long>(clientId)
+        );
+        if (n > 0 && n < static_cast<int>(sizeof(buf))) {
+            Serial.println(buf);
+        }
+        
         client->text(buildWsError(ErrorCodes::INVALID_VALUE, "Message too large"));
         return;
     }
@@ -310,7 +440,29 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
     StaticJsonDocument<512> doc;
     DeserializationError error = deserializeJson(doc, data, len);
 
+    // Structured telemetry: msg.recv event (log ALL inbound frames, before auth check)
+    uint32_t clientId = client->id();
+    uint32_t connEpoch = 0;
+    
+    // Lookup connection epoch for this client
+    for (uint8_t i = 0; i < CLIENT_IP_MAP_SLOTS; i++) {
+        if (m_clientEpochs[i].clientId == clientId) {
+            connEpoch = m_clientEpochs[i].connEpoch;
+            break;
+        }
+    }
+    
+    uint32_t eventSeq = s_eventSeq++;
+    uint32_t tsMonoms = millis();
+    
     if (error) {
+        // Log rejected frame (parse error)
+        // Create bounded payload summary from raw data (~100 chars max)
+        char payloadSummary[128] = {0};
+        size_t copyLen = len < (sizeof(payloadSummary) - 1) ? len : (sizeof(payloadSummary) - 1);
+        memcpy(payloadSummary, data, copyLen);
+        payloadSummary[copyLen] = '\0';
+        
         // #region agent log
         {
             // Hwse2: Prove whether disconnects follow parse errors (invalid JSON / partial frames).
@@ -325,17 +477,62 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
             if (n > 0) Serial.println(buf);
         }
         // #endregion
+        
+        // Structured telemetry: msg.recv with result="rejected"
+        {
+            char buf[512];
+            const int n = snprintf(buf, sizeof(buf),
+                "{\"event\":\"msg.recv\",\"ts_mono_ms\":%lu,\"connEpoch\":%lu,\"eventSeq\":%lu,\"clientId\":%lu,\"msgType\":\"\",\"result\":\"rejected\",\"reason\":\"parse_error\",\"payloadSummary\":\"%.100s\",\"schemaVersion\":\"1.0.0\"}",
+                static_cast<unsigned long>(tsMonoms),
+                static_cast<unsigned long>(connEpoch),
+                static_cast<unsigned long>(eventSeq),
+                static_cast<unsigned long>(clientId),
+                payloadSummary
+            );
+            if (n > 0 && n < static_cast<int>(sizeof(buf))) {
+                Serial.println(buf);
+            }
+        }
+        
         client->text(buildWsError(ErrorCodes::INVALID_JSON, "Parse error"));
         return;
     }
-
-    // Auth check
-    if (!m_checkAuth(client, doc)) {
-        return;  // Auth checker sends error response
+    
+    const char* msgType = doc["type"] | "";
+    
+    // Create bounded payload summary (~100 chars max)
+    char payloadSummary[128] = {0};
+    serializeJson(doc, payloadSummary, sizeof(payloadSummary) - 1);
+    
+    // Auth check (before logging msg.recv to determine result)
+    bool authPassed = m_checkAuth(client, doc);
+    
+    // Log structured msg.recv event (result="ok" if auth passed, "rejected" if auth failed)
+    {
+        char buf[512];
+        const int n = snprintf(buf, sizeof(buf),
+            "{\"event\":\"msg.recv\",\"ts_mono_ms\":%lu,\"connEpoch\":%lu,\"eventSeq\":%lu,\"clientId\":%lu,\"msgType\":\"%s\",\"result\":\"%s\",\"reason\":\"%s\",\"payloadSummary\":\"%.100s\",\"schemaVersion\":\"1.0.0\"}",
+            static_cast<unsigned long>(tsMonoms),
+            static_cast<unsigned long>(connEpoch),
+            static_cast<unsigned long>(eventSeq),
+            static_cast<unsigned long>(clientId),
+            msgType,
+            authPassed ? "ok" : "rejected",
+            authPassed ? "" : "auth_failed",
+            payloadSummary
+        );
+        if (n > 0 && n < static_cast<int>(sizeof(buf))) {
+            Serial.println(buf);
+        }
+    }
+    
+    if (!authPassed) {
+        // Auth failure - error response already sent by auth checker
+        return;
     }
 
     // Route command via WsCommandRouter
-    const char* typeStr = doc["type"] | "";
+    const char* typeStr = msgType;
     bool handled = WsCommandRouter::route(client, doc, m_ctx);
 
     // #region agent log

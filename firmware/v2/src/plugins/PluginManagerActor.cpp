@@ -8,6 +8,7 @@
 
 #include "PluginManagerActor.h"
 #include "BuiltinEffectRegistry.h"
+#include "../codec/ManifestCodec.h"
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <cstring>
@@ -309,7 +310,7 @@ bool PluginManagerActor::parseManifest(const char* path, ParsedManifest& manifes
         return false;
     }
 
-    // Parse JSON - use JsonDocument (dynamic) for reading with pipe operator
+    // Parse JSON using codec (single canonical JSON parser)
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, file);
     file.close();
@@ -320,65 +321,24 @@ bool PluginManagerActor::parseManifest(const char* path, ParsedManifest& manifes
         return false;
     }
 
-    // Extract version (use pipe operator for default, matching codebase style)
-    const char* version = doc["version"] | "";
-    if (strlen(version) == 0 || strcmp(version, "1.0") != 0) {
-        snprintf(manifest.errorMsg, sizeof(manifest.errorMsg),
-                 "Unsupported version: %s", strlen(version) ? version : "(null)");
+    // Decode using ManifestCodec (only place JSON keys are read)
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    codec::ManifestDecodeResult decodeResult = codec::ManifestCodec::decode(root);
+
+    if (!decodeResult.success) {
+        // Copy error message from codec
+        strncpy(manifest.errorMsg, decodeResult.errorMsg, sizeof(manifest.errorMsg) - 1);
+        manifest.errorMsg[sizeof(manifest.errorMsg) - 1] = '\0';
         return false;
     }
 
-    // Extract plugin metadata
-    if (!doc["plugin"].is<JsonObject>()) {
-        snprintf(manifest.errorMsg, sizeof(manifest.errorMsg),
-                 "Missing 'plugin' object");
-        return false;
-    }
-    JsonObject plugin = doc["plugin"];
-
-    const char* pluginNameStr = plugin["name"] | "";
-    if (strlen(pluginNameStr) == 0) {
-        snprintf(manifest.errorMsg, sizeof(manifest.errorMsg),
-                 "Missing plugin name");
-        return false;
-    }
-    strncpy(manifest.pluginName, pluginNameStr, sizeof(manifest.pluginName) - 1);
-
-    // Extract mode
-    const char* mode = doc["mode"] | "additive";
-    manifest.overrideMode = (strcmp(mode, "override") == 0);
-
-    // Extract effects array
-    if (!doc["effects"].is<JsonArray>()) {
-        snprintf(manifest.errorMsg, sizeof(manifest.errorMsg),
-                 "Missing or empty 'effects' array");
-        return false;
-    }
-    JsonArray effects = doc["effects"];
-    if (effects.size() == 0) {
-        snprintf(manifest.errorMsg, sizeof(manifest.errorMsg),
-                 "Empty 'effects' array");
-        return false;
-    }
-
-    // Parse effect IDs
-    manifest.effectCount = 0;
-    for (JsonObject effect : effects) {
-        if (manifest.effectCount >= PluginConfig::MAX_EFFECTS) {
-            snprintf(manifest.errorMsg, sizeof(manifest.errorMsg),
-                     "Too many effects (max %u)", PluginConfig::MAX_EFFECTS);
-            return false;
-        }
-
-        int id = effect["id"] | -1;
-        if (id < 0 || id >= (int)PluginConfig::MAX_EFFECTS) {
-            snprintf(manifest.errorMsg, sizeof(manifest.errorMsg),
-                     "Invalid effect ID: %d", id);
-            return false;
-        }
-
-        manifest.effectIds[manifest.effectCount++] = (uint8_t)id;
-    }
+    // Copy decoded config to manifest struct
+    strncpy(manifest.pluginName, decodeResult.config.pluginName, sizeof(manifest.pluginName) - 1);
+    manifest.pluginName[sizeof(manifest.pluginName) - 1] = '\0';
+    manifest.overrideMode = decodeResult.config.overrideMode;
+    manifest.effectCount = decodeResult.config.effectCount;
+    memcpy(manifest.effectIds, decodeResult.config.effectIds, 
+           decodeResult.config.effectCount * sizeof(uint8_t));
 
     manifest.valid = true;
     return true;

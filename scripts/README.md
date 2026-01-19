@@ -48,7 +48,7 @@ Uploads the LittleFS filesystem (web interface files) to ESP32.
 ./scripts/uploadfs.sh
 ```
 
-- Default port: `/dev/tty.usbmodem21401`
+- Default port: `/dev/cu.usbmodem1101` (v2 ESP32-S3 device)
 - Uses `esp32dev_audio` environment
 - Web interface accessible at `http://lightwaveos.local` after upload
 
@@ -80,14 +80,21 @@ Run `k1-pattern-wizard` after installation to create patterns.
 
 ## USB Port Configuration
 
-If your ESP32 appears on a different port, update the port in the script or use PlatformIO directly:
+**Locked-in device ports:**
+- **v2 ESP32-S3 device**: `/dev/cu.usbmodem1101` (used by `upload.sh`, `uploadfs.sh`, `monitor.sh`)
+- **Tab5.encoder device**: `/dev/cu.usbmodem101` (see `firmware/Tab5.encoder/README.md` for upload commands)
+
+If you need to override the port, use PlatformIO directly:
 
 ```bash
 # Find available ports
 ls /dev/cu.usb*
 
-# Upload with custom port
+# Upload v2 firmware with custom port
 cd firmware/v2 && pio run -t upload --upload-port /dev/cu.usbmodemXXXX
+
+# Upload Tab5 firmware with custom port
+cd firmware/Tab5.encoder && pio run -e tab5 -t upload --upload-port /dev/cu.usbmodemXXXX
 ```
 
 ## PlatformIO Direct Commands

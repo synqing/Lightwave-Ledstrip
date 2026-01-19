@@ -1,11 +1,21 @@
-# USB Setup Guide for Light Crystals
+# USB Setup Guide for LightwaveOS Hardware
+
+## Device Port Mapping
+
+**CRITICAL: Device Port Assignments**
+- **ESP32-S3 (v2 firmware)**: `/dev/cu.usbmodem1101`
+- **Tab5 (encoder firmware)**: `/dev/cu.usbmodem101`
+
+Always use these specific ports for uploads and monitoring.
 
 ## Configuration
 
-### USB Port
-- **Upload Port**: `/dev/cu.usbmodem1101`
-- **Monitor Port**: `/dev/cu.usbmodem1101`
-- **Baud Rate**: 115200
+### USB Ports
+- **ESP32-S3 Upload Port**: `/dev/cu.usbmodem1101`
+- **ESP32-S3 Monitor Port**: `/dev/cu.usbmodem1101`
+- **Tab5 Upload Port**: `/dev/cu.usbmodem101`
+- **Tab5 Monitor Port**: `/dev/cu.usbmodem101`
+- **Baud Rate**: 115200 (both devices)
 
 ### USB CDC Settings
 The project is configured with USB CDC (Communications Device Class) enabled:
@@ -16,21 +26,29 @@ The project is configured with USB CDC (Communications Device Class) enabled:
 ## Quick Commands
 
 ### Upload Firmware
-```bash
-# Using the script
-./scripts/upload.sh
 
-# Or manually
-pio run -t upload
+**ESP32-S3 (v2 firmware)**:
+```bash
+cd firmware/v2
+pio run -e esp32dev_audio -t upload --upload-port /dev/cu.usbmodem1101
+```
+
+**Tab5 (encoder firmware)**:
+```bash
+cd firmware/Tab5.encoder
+pio run -e tab5 -t upload --upload-port /dev/cu.usbmodem101
 ```
 
 ### Monitor Serial Output
-```bash
-# Using the script
-./scripts/monitor.sh
 
-# Or manually
-pio device monitor
+**ESP32-S3**:
+```bash
+pio device monitor -p /dev/cu.usbmodem1101 -b 115200
+```
+
+**Tab5**:
+```bash
+pio device monitor -p /dev/cu.usbmodem101 -b 115200
 ```
 
 ### Clean and Rebuild
@@ -42,15 +60,24 @@ pio run
 ## Troubleshooting
 
 ### Device Not Found
-If `/dev/cu.usbmodem1101` is not found:
 
+**ESP32-S3** - If `/dev/cu.usbmodem1101` is not found:
 1. Check USB cable connection
-2. Verify ESP32 is powered on
+2. Verify ESP32-S3 is powered on
 3. List available devices:
    ```bash
-   ls /dev/cu.usb*
+   pio device list
    ```
-4. Try resetting the ESP32 (press EN/RST button)
+4. Try resetting the device (press EN/RST button)
+
+**Tab5** - If `/dev/cu.usbmodem101` is not found:
+1. Check USB cable connection
+2. Verify Tab5 is powered on
+3. List available devices:
+   ```bash
+   pio device list
+   ```
+4. Try resetting the device (press EN/RST button)
 
 ### Upload Fails
 1. Ensure no other program is using the serial port
@@ -70,10 +97,11 @@ If `/dev/cu.usbmodem1101` is not found:
 - Better reliability for high-speed data
 
 ## Important Notes
-- **NEVER** upload to usbmodem12201 (as specified in user instructions)
-- Always use `/dev/cu.usbmodem1101` for this project
+- **ESP32-S3 (v2 firmware)**: Always use `/dev/cu.usbmodem1101`
+- **Tab5 (encoder firmware)**: Always use `/dev/cu.usbmodem101`
 - USB CDC requires proper initialization delay in setup()
 - Some ESP32 boards may need BOOT button held during upload
+- **NEVER** upload to the wrong device port (always verify with `pio device list` first)
 
 ## Platform-Specific Notes
 

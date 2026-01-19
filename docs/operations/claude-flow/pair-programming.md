@@ -256,6 +256,63 @@ npx claude-flow@v3alpha pair start \
 
 ---
 
+## Progressive Streaming for Large Context
+
+For large context packs or complex multi-file tasks, use progressive streaming to send context incrementally.
+
+### When to Use Progressive Streaming
+
+- Context pack > 100K tokens
+- Multi-part diff (>3 parts)
+- Complex multi-domain tasks (firmware + API + dashboard)
+- Long-running sessions (prevent context bloat)
+
+### Progressive Streaming Pattern
+
+**Turn 1: Minimal Context**
+```
+- Send packet.md + summary_1line.md (or summary_5line.md)
+- Wait for LLM to request specific files/parts
+```
+
+**Turn 2-N: Add Context Incrementally**
+```
+- LLM requests "show me diff_part_02.patch" → Send that part
+- LLM requests "show me fixtures" → Send fixtures/*.toon
+- LLM requests "full diff" → Send all diff_part_*.patch files
+```
+
+### Chunked Response Guidelines
+
+1. **Start with summaries**: Use `summary_1line.md`, `summary_5line.md`, or `summary_1para.md` for initial context
+2. **Diff index first**: If using multi-part diff, send `diff_index.md` before individual parts
+3. **On-demand loading**: Attach large files (fixtures, diff parts) only when LLM requests them
+4. **Resume capability**: LLM can request specific chunks by name from index
+
+### Example Progressive Session
+
+```bash
+# Generate context pack with summaries
+python tools/contextpack.py --summaries
+
+# Turn 1: Send minimal context
+# - packet.md (goal, symptom, acceptance)
+# - summary_5line.md (overview)
+
+# Turn 2: LLM requests diff → Send diff_part_01.patch
+# Turn 3: LLM requests more → Send diff_part_02.patch
+# Turn 4: LLM requests fixtures → Send fixtures/effects.toon
+```
+
+### Benefits
+
+- **Reduced initial token cost**: Start small, add only what's needed
+- **Faster iteration**: LLM processes minimal context first
+- **Context management**: Prevents context bloat in long sessions
+- **Selective detail**: LLM requests specific parts as needed
+
+---
+
 ## Related Documentation
 
 - **[overview.md](./overview.md)** - Strategic integration overview

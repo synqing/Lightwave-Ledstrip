@@ -49,3 +49,14 @@ repos:
       - id: check-yaml
       - id: check-json
         exclude: package-lock.json
+
+  # JSON codec boundary check (firmware/v2 only)
+  - repo: local
+    hooks:
+      - id: json-boundary-check
+        name: JSON Codec Boundary Check
+        entry: bash -c 'TARGET_DIR=firmware/v2 ./tools/check_json_boundary.sh'
+        language: system
+        pass_filenames: false
+        files: ^firmware/v2/.*\.(cpp|h|hpp)$
+        stages: [commit]

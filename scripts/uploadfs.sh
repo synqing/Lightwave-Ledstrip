@@ -1,7 +1,7 @@
 #!/bin/bash
 # Upload LittleFS filesystem to ESP32-S3
 
-PORT="/dev/tty.usbmodem21401"
+PORT="/dev/cu.usbmodem1101"  # v2 ESP32-S3 device
 echo "Uploading LittleFS filesystem to ESP32-S3..."
 echo "Port: $PORT"
 echo ""

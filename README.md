@@ -72,6 +72,14 @@ LC_SelfContained/
 
 ## Building and Flashing
 
+### Device Port Mapping
+
+**CRITICAL: Device Port Assignments**
+- **ESP32-S3 (v2 firmware)**: `/dev/cu.usbmodem1101`
+- **Tab5 (encoder firmware)**: `/dev/cu.usbmodem101`
+
+Always use these specific ports for uploads and monitoring. Verify with `pio device list` before uploading.
+
 ### Prerequisites
 - [PlatformIO](https://platformio.org/) (VS Code extension or CLI)
 - ESP32 board package
@@ -79,12 +87,17 @@ LC_SelfContained/
 
 ### Build Instructions
 
-1. Clone the repository
-2. Open in PlatformIO (VS Code recommended)
-3. Build and upload:
-   ```bash
-   pio run -t upload
-   ```
+**v2 Firmware (ESP32-S3)**:
+```bash
+cd firmware/v2
+pio run -e esp32dev_audio -t upload --upload-port /dev/cu.usbmodem1101
+```
+
+**Tab5 Encoder Firmware**:
+```bash
+# From repository root:
+PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" pio run -e tab5 -t upload --upload-port /dev/cu.usbmodem101 -d firmware/Tab5.encoder
+```
 
 ### Configuration
 

@@ -46,27 +46,38 @@ This repository contains firmware for an ESP32-S3 driving a dual-strip Light Gui
 
 ## Build / Flash / Monitor (PlatformIO)
 
+### Device Port Mapping
+
+**CRITICAL: Device Port Assignments**
+- **ESP32-S3 (v2 firmware)**: `/dev/cu.usbmodem1101`
+- **Tab5 (encoder firmware)**: `/dev/cu.usbmodem101`
+
+Always use these specific ports for uploads and monitoring.
+
 ### LightwaveOS Build Commands
 
 ```bash
 # Build (default, audio-enabled)
 cd firmware/v2 && pio run -e esp32dev_audio
 
-# Build + upload
-cd firmware/v2 && pio run -e esp32dev_audio -t upload
+# Build + upload (ESP32-S3 on usbmodem1101)
+cd firmware/v2 && pio run -e esp32dev_audio -t upload --upload-port /dev/cu.usbmodem1101
 
-# Serial monitor
-pio device monitor -b 115200
+# Serial monitor (ESP32-S3 on usbmodem1101)
+pio device monitor -p /dev/cu.usbmodem1101 -b 115200
 ```
 
 ### Encoder Build Commands
 
 ```bash
 # Build
-cd firmware/Tab5.encoder && pio run -e atoms3
+cd firmware/Tab5.encoder && pio run -e tab5
 
-# Build + upload
-cd firmware/Tab5.encoder && pio run -e atoms3 -t upload
+# Build + upload (Tab5 on usbmodem101)
+cd firmware/Tab5.encoder && pio run -e tab5 -t upload --upload-port /dev/cu.usbmodem101
+
+# Serial monitor (Tab5 on usbmodem101)
+pio device monitor -p /dev/cu.usbmodem101 -b 115200
 ```
 
 ---

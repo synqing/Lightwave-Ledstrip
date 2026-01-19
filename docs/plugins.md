@@ -299,17 +299,21 @@ Built-in Effects → BuiltinEffectRegistry → PluginManagerActor → RendererAc
 
 ### Uploading Manifests
 
-**Via PlatformIO**:
+**Device Port Mapping**:
+- **ESP32-S3 (v2 firmware)**: `/dev/cu.usbmodem1101`
+- **Tab5 (encoder firmware)**: `/dev/cu.usbmodem101`
+
+**Via PlatformIO** (ESP32-S3 on usbmodem1101):
 ```bash
 cd firmware/v2
 # Place manifest files in data/ directory
-pio run -e esp32dev_audio -t uploadfs  # Upload LittleFS image
+pio run -e esp32dev_audio -t uploadfs --upload-port /dev/cu.usbmodem1101  # Upload LittleFS image
 ```
 
 **Workflow**:
 1. Create your `.plugin.json` file
 2. Place it in `firmware/v2/data/` directory
-3. Run `pio run -e esp32dev_audio -t uploadfs`
+3. Run `pio run -e esp32dev_audio -t uploadfs --upload-port /dev/cu.usbmodem1101` (ESP32-S3 on usbmodem1101)
 4. Restart device or call reload API
 
 ### Scanning Order

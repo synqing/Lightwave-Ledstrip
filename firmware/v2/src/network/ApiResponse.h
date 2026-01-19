@@ -239,5 +239,87 @@ inline String buildWsRateLimitError(uint32_t retryAfterSeconds, const char* requ
     return output;
 }
 
+// ============================================================================
+// WebSocket Telemetry Helpers
+// ============================================================================
+
+namespace WsTelemetry {
+
+/**
+ * @brief Log msg.send telemetry event and send response via client->text()
+ *
+ * Extracts msgType and result from response JSON, logs structured JSONL event,
+ * then sends response to client.
+ *
+ * @param client WebSocket client
+ * @param response Response string (JSON)
+ * @param responseType Optional response type (if null, extracted from response JSON)
+ * @param clientId Client ID (from client->id())
+ * @param connEpoch Connection epoch (0 if unknown)
+ * @param eventSeq Event sequence number (monotonic)
+ */
+inline void sendWithLogging(AsyncWebSocketClient* client, const String& response, 
+                            const char* responseType = nullptr,
+                            uint32_t clientId = 0, uint32_t connEpoch = 0, uint32_t eventSeq = 0) {
+    if (!client) return;
+    
+    // Get client ID if not provided
+    if (clientId == 0) {
+        clientId = client->id();
+    }
+    
+    // Parse response to extract type and result
+    const char* msgType = responseType ? responseType : "";
+    const char* result = "ok";
+    
+    StaticJsonDocument<256> respDoc;
+    DeserializationError error = deserializeJson(respDoc, response);
+    if (!error) {
+        if (!msgType || strlen(msgType) == 0) {
+            msgType = respDoc["type"] | "";
+        }
+        
+        if (respDoc.containsKey("error")) {
+            result = "error";
+        } else if (respDoc.containsKey("success")) {
+            result = respDoc["success"].as<bool>() ? "ok" : "error";
+        }
+    }
+    
+    // Create bounded payload summary (~100 chars max)
+    char payloadSummary[128] = {0};
+    size_t len = response.length();
+    if (len > sizeof(payloadSummary) - 1) {
+        len = sizeof(payloadSummary) - 1;
+    }
+    memcpy(payloadSummary, response.c_str(), len);
+    payloadSummary[len] = '\0';
+    
+    // Log structured msg.send event (JSONL)
+    uint32_t tsMonoms = millis();
+    {
+        char buf[512];
+        const int n = snprintf(
+            buf, sizeof(buf),
+            "{\"event\":\"msg.send\",\"ts_mono_ms\":%lu,\"connEpoch\":%lu,\"eventSeq\":%lu,\"clientId\":%lu,\"msgType\":\"%s\",\"result\":\"%s\",\"payloadSummary\":\"%.100s\"}",
+            static_cast<unsigned long>(tsMonoms),
+            static_cast<unsigned long>(connEpoch),
+            static_cast<unsigned long>(eventSeq),
+            static_cast<unsigned long>(clientId),
+            msgType,
+            result,
+            payloadSummary
+        );
+        if (n > 0 && n < static_cast<int>(sizeof(buf))) {
+            Serial.println(buf);
+        }
+    }
+    
+    // Send response
+    client->text(response);
+}
+
+} // namespace WsTelemetry
+
 } // namespace network
 } // namespace lightwaveos

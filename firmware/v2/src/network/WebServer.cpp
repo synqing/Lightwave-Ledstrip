@@ -560,6 +560,20 @@ void WebServer::setupWebSocket() {
         [this](AsyncWebSocketClient* client) {
             IPAddress clientIP = client->remoteIP();
             if (!m_rateLimiter.checkWebSocket(clientIP)) {
+                // Log structured telemetry for rate-limit rejection
+                uint32_t tsMonoms = millis();
+                char buf[256];
+                const int n = snprintf(buf, sizeof(buf),
+                    "{\"event\":\"msg.recv\",\"ts_mono_ms\":%lu,\"clientId\":%lu,"
+                    "\"result\":\"rejected\",\"reason\":\"rate_limit\"}",
+                    static_cast<unsigned long>(tsMonoms),
+                    static_cast<unsigned long>(client->id())
+                );
+                if (n > 0 && n < static_cast<int>(sizeof(buf))) {
+                    Serial.println(buf);
+                }
+                
+                // Existing error response
                 uint32_t retryAfter = m_rateLimiter.getRetryAfterSeconds(clientIP);
                 String errorMsg = buildWsRateLimitError(retryAfter);
                 client->text(errorMsg);

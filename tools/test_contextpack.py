@@ -202,6 +202,7 @@ class TestSecretDetection(unittest.TestCase):
     
     def test_detect_api_key(self):
         """API key patterns should be detected."""
+        # Use clearly fake pattern: TEST_ prefix with repeated characters
         content = 'API_KEY = "TEST_FAKE_KEY_1234567890_ABCDEFGHIJ_abcdefghijklmnop"'
         matches = check_for_secrets(content)
         self.assertGreater(len(matches), 0)

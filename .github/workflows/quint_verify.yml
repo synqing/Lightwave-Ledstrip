@@ -1,0 +1,67 @@
+name: Quint Invariant Check
+
+on:
+  pull_request:
+    branches: [ main, feat/* ]
+    paths:
+      - 'firmware/v2/specs/quint/choreo/*.qnt'
+      - '.github/workflows/quint_verify.yml'
+  push:
+    branches: [ main, feat/* ]
+    paths:
+      - 'firmware/v2/specs/quint/choreo/*.qnt'
+      - '.github/workflows/quint_verify.yml'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install Quint
+        run: npm install -g @informalsystems/quint@0.29.1
+      
+      - name: Check invariants via simulation
+        working-directory: firmware/v2/specs/quint/choreo
+        run: |
+          quint run lightwave_step.qnt \
+            --main=lightwave_step \
+            --invariant=Invariants \
+            --max-steps=50 \
+            --max-samples=10000
+      
+      - name: Verify invariants separately
+        working-directory: firmware/v2/specs/quint/choreo
+        run: |
+          # Run each invariant individually for clearer error messages
+          quint run lightwave_step.qnt \
+            --main=lightwave_step \
+            --invariant=NoEarlyApply \
+            --max-steps=50 \
+            --max-samples=5000 || exit 1
+          
+          quint run lightwave_step.qnt \
+            --main=lightwave_step \
+            --invariant=HandshakeStrict \
+            --max-steps=50 \
+            --max-samples=5000 || exit 1
+          
+          quint run lightwave_step.qnt \
+            --main=lightwave_step \
+            --invariant=ConnEpochMonotonic \
+            --max-steps=50 \
+            --max-samples=5000 || exit 1
+          
+          quint run lightwave_step.qnt \
+            --main=lightwave_step \
+            --invariant=EpochResetsHandshake \
+            --max-steps=50 \
+            --max-samples=5000 || exit 1
+          
+          echo "PASS: All invariants hold"

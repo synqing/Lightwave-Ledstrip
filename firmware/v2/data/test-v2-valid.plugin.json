@@ -1,0 +1,15 @@
+{
+  "schema": 2,
+  "version": "1.0",
+  "plugin": {
+    "name": "Test V2 Valid Manifest",
+    "description": "Valid schema 2 manifest for A4 smoke test",
+    "author": "LightwaveOS Team"
+  },
+  "mode": "additive",
+  "effects": [
+    { "id": 0, "name": "Solid" },
+    { "id": 1, "name": "Breathing" },
+    { "id": 2, "name": "Spectrum" }
+  ]
+}

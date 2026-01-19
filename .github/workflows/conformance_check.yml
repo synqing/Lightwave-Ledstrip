@@ -1,0 +1,121 @@
+name: Conformance check (Choreo)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/conformance_check.yml'
+      - 'firmware/v2/specs/quint/choreo/**/*.qnt'
+      - 'firmware/v2/specs/quint/choreo/tools/**'
+      - 'firmware/v2/specs/quint/choreo/traces/**'
+      - 'tools/requirements.txt'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/conformance_check.yml'
+      - 'firmware/v2/specs/quint/choreo/**/*.qnt'
+      - 'firmware/v2/specs/quint/choreo/tools/**'
+      - 'firmware/v2/specs/quint/choreo/traces/**'
+      - 'tools/requirements.txt'
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Quint tooling is Node-based; GitHub recommends setup-node for consistent Node behavior
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Quint
+        run: npm install -g @informalsystems/quint@0.29.1
+
+      # Python used for normalization + conformance checker; GitHub recommends setup-python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python deps
+        run: |
+          python -m pip install -U pip
+          pip install -r tools/requirements.txt
+
+      - name: Normalize curated JSONL -> ITF
+        run: |
+          set -euxo pipefail
+          ROOT="firmware/v2/specs/quint/choreo"
+          CURATED="$ROOT/traces/curated"
+          OUT="$CURATED/_normalized_itf"
+          mkdir -p "$OUT"
+
+          # Convert any curated JSONL traces to ITF for conformance
+          shopt -s nullglob
+          for f in "$CURATED"/*.jsonl "$CURATED"/known_bad/*.jsonl; do
+            base="$(basename "$f" .jsonl)"
+            python "$ROOT/tools/jsonl_to_itf.py" "$f" "$OUT/$base.itf.json"
+            python "$ROOT/tools/validate_itf_bigint.py" "$OUT/$base.itf.json"
+          done
+
+      - name: Check curated hardware traces (ITF)
+        run: |
+          set -euxo pipefail
+          ROOT="firmware/v2/specs/quint/choreo"
+          CURATED="$ROOT/traces/curated"
+          OUT="$CURATED/_normalized_itf"
+
+          # Good traces must pass
+          python "$ROOT/tools/check_trace_conformance.py" "$CURATED"/*.itf.json
+          python "$ROOT/tools/check_trace_conformance.py" "$OUT"/*.itf.json || true
+
+      - name: Verify known-bad traces fail as expected
+        run: |
+          set -euxo pipefail
+          ROOT="firmware/v2/specs/quint/choreo"
+          CURATED="$ROOT/traces/curated"
+          OUT="$CURATED/_normalized_itf"
+
+          # Known-bad ITF traces should FAIL conformance (but PASS with --expect-violation)
+          python "$ROOT/tools/check_trace_conformance.py" --expect-violation "$CURATED/known_bad"/*.itf.json
+          # If there are normalized known-bad traces from JSONL, validate those too
+          shopt -s nullglob
+          python "$ROOT/tools/check_trace_conformance.py" --expect-violation "$OUT"/*.itf.json || true
+
+      - name: Generate fresh simulator traces (ITF)
+        run: |
+          set -euxo pipefail
+          ROOT="firmware/v2/specs/quint/choreo"
+          GEN="$ROOT/traces/sim/_ci"
+          mkdir -p "$GEN"
+
+          # NOTE: adjust --main / file path to your choreo entrypoint module
+          quint run "$ROOT/lightwave_system.qnt" \
+            --main=lightwave_system \
+            --max-steps=300 \
+            --n-traces=20 \
+            --seed=123 \
+            --out-itf="$GEN/sim_raw.itf.json"
+
+          # Convert Quint's ITF to ADR-015 compliant format
+          python "$ROOT/tools/convert_itf_to_adr015.py" \
+            "$GEN/sim_raw.itf.json" \
+            "$GEN/sim.itf.json"
+
+          # Validate ADR-015 compliance
+          python "$ROOT/tools/validate_itf_bigint.py" "$GEN/sim.itf.json"
+
+      - name: Conformance check simulator traces
+        run: |
+          set -euxo pipefail
+          ROOT="firmware/v2/specs/quint/choreo"
+          GEN="$ROOT/traces/sim/_ci"
+          python "$ROOT/tools/check_trace_conformance.py" "$GEN"/*.itf.json

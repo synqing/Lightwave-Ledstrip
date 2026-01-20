@@ -40,6 +40,10 @@ class HubState:
     # Zones state (Phase: zones slice)
     zoneCount: int = 0
     zones: Dict[int, Dict[str, Any]] = field(default_factory=dict)  # zoneId -> zone state
+    # OTA state (Phase: OTA slice)
+    otaState: str = "Idle"  # "Idle", "InProgress", "Verifying", "Complete", "Failed"
+    otaTotalSize: int = 0
+    otaBytesReceived: int = 0
 
 @dataclass
 class ModelState:
@@ -52,7 +56,11 @@ def initial_state() -> ModelState:
     """Create initial state matching Quint init action."""
     return ModelState(
         node=NodeState(),
-        hub=HubState()
+        hub=HubState(
+            otaState="Idle",
+            otaTotalSize=0,
+            otaBytesReceived=0
+        )
     )
 
 # ============================================================================
@@ -87,11 +95,22 @@ def check_epoch_resets_handshake(state: ModelState) -> bool:
     """Invariant: If connecting/disconnected, handshake must be false."""
     return (state.node.connState == "CONNECTED") or (not state.node.handshakeComplete)
 
+def check_no_ota_before_handshake(state: ModelState) -> bool:
+    """Invariant: OTA state can only transition from Idle if handshake complete."""
+    if state.hub.otaState == "Idle":
+        return True
+    elif state.hub.otaState in ("InProgress", "Verifying", "Complete"):
+        return state.node.handshakeComplete
+    elif state.hub.otaState.startswith("Failed"):
+        return True  # Failures can occur regardless of handshake
+    return True
+
 INVARIANTS = [
     ("NoEarlyApply", check_no_early_apply),
     ("HandshakeStrict", check_handshake_strict),
     ("ConnEpochMonotonic", check_conn_epoch_monotonic),
     ("EpochResetsHandshake", check_epoch_resets_handshake),
+    ("NoOtaBeforeHandshake", check_no_ota_before_handshake),
 ]
 
 # ============================================================================
@@ -191,7 +210,10 @@ def apply_action(state: ModelState, action: Action) -> ModelState:
             activeEffectId=state.hub.activeEffectId,
             lastBroadcastTs=state.hub.lastBroadcastTs,
             zoneCount=state.hub.zoneCount,
-            zones={k: dict(v) for k, v in state.hub.zones.items()}
+            zones={k: dict(v) for k, v in state.hub.zones.items()},
+            otaState=state.hub.otaState,
+            otaTotalSize=state.hub.otaTotalSize,
+            otaBytesReceived=state.hub.otaBytesReceived
         ),
         TAB5_NODE=state.TAB5_NODE
     )
@@ -270,6 +292,56 @@ def apply_action(state: ModelState, action: Action) -> ModelState:
     elif action.action_type == ActionType.NODE_RECEIVE_ZONES_CHANGED:
         # Node receives zones.changed broadcast (simplified - no state change tracked for node)
         pass
+    
+    # OTA actions (Phase: OTA slice)
+    elif action.action_type == ActionType.NODE_SEND_OTA_CHECK:
+        # Node requests OTA status (no state change)
+        pass
+    
+    elif action.action_type == ActionType.HUB_RESPOND_OTA_STATUS:
+        # Hub responds with OTA status (no state change)
+        pass
+    
+    elif action.action_type == ActionType.NODE_SEND_OTA_BEGIN:
+        # Node starts OTA session (no state change yet, hub responds)
+        pass
+    
+    elif action.action_type == ActionType.HUB_RESPOND_OTA_READY:
+        # Hub accepts OTA begin, transitions to InProgress
+        if action.params and "size" in action.params:
+            new_state.hub.otaState = "InProgress"
+            new_state.hub.otaTotalSize = action.params["size"]
+            new_state.hub.otaBytesReceived = 0
+    
+    elif action.action_type == ActionType.NODE_SEND_OTA_CHUNK:
+        # Node sends chunk (no state change yet, hub responds)
+        pass
+    
+    elif action.action_type == ActionType.HUB_RESPOND_OTA_PROGRESS:
+        # Hub processes chunk, updates progress
+        if action.params and "offset" in action.params:
+            new_state.hub.otaBytesReceived = action.params["offset"]
+            # Keep state as InProgress (transition to Complete only on verify)
+            if new_state.hub.otaState != "InProgress":
+                new_state.hub.otaState = "InProgress"
+    
+    elif action.action_type == ActionType.NODE_SEND_OTA_ABORT:
+        # Node aborts OTA (no state change yet, hub applies)
+        pass
+    
+    elif action.action_type == ActionType.HUB_APPLY_OTA_ABORT:
+        # Hub applies abort, resets to Idle
+        new_state.hub.otaState = "Idle"
+        new_state.hub.otaTotalSize = 0
+        new_state.hub.otaBytesReceived = 0
+    
+    elif action.action_type == ActionType.NODE_SEND_OTA_VERIFY:
+        # Node verifies OTA (no state change yet, hub applies)
+        pass
+    
+    elif action.action_type == ActionType.HUB_APPLY_OTA_VERIFY:
+        # Hub applies verify, transitions to Complete
+        new_state.hub.otaState = "Complete"
     
     return new_state
 

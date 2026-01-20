@@ -1,0 +1,13 @@
+{"event": "ota.rest.begin", "ts_mono_ms": 18905, "clientIP": "192.168.0.27", "totalBytes": 1533454, "tokenValid": true, "schemaVersion": "1.0.0"}
+{"event": "ota.rest.progress", "ts_mono_ms": 19720, "bytesWritten": 153502, "totalBytes": 1533454, "percent": 10, "schemaVersion": "1.0.0"}
+{"event": "ota.rest.progress", "ts_mono_ms": 20484, "bytesWritten": 307154, "totalBytes": 1533454, "percent": 20, "schemaVersion": "1.0.0"}
+{"event": "ota.rest.progress", "ts_mono_ms": 21232, "bytesWritten": 460806, "totalBytes": 1533454, "percent": 30, "schemaVersion": "1.0.0"}
+{"event": "ota.rest.progress", "ts_mono_ms": 21992, "bytesWritten": 614458, "totalBytes": 1533454, "percent": 40, "schemaVersion": "1.0.0"}
+{"event": "ota.rest.progress", "ts_mono_ms": 22777, "bytesWritten": 768110, "totalBytes": 1533454, "percent": 50, "schemaVersion": "1.0.0"}
+{"event": "ota.rest.progress", "ts_mono_ms": 23505, "bytesWritten": 920326, "totalBytes": 1533454, "percent": 60, "schemaVersion": "1.0.0"}
+{"event": "ota.rest.progress", "ts_mono_ms": 24235, "bytesWritten": 1073978, "totalBytes": 1533454, "percent": 70, "schemaVersion": "1.0.0"}
+{"event": "ota.rest.progress", "ts_mono_ms": 24983, "bytesWritten": 1227630, "totalBytes": 1533454, "percent": 80, "schemaVersion": "1.0.0"}
+{"event": "ota.rest.progress", "ts_mono_ms": 25942, "bytesWritten": 1381282, "totalBytes": 1533454, "percent": 90, "schemaVersion": "1.0.0"}
+{"event": "ota.rest.progress", "ts_mono_ms": 27067, "bytesWritten": 1533264, "totalBytes": 1533454, "percent": 99, "schemaVersion": "1.0.0"}
+{"event": "ota.rest.complete", "ts_mono_ms": 27334, "duration": 8435, "finalSize": 1533264, "schemaVersion": "1.0.0"}
+{"event": "telemetry.boot", "ts_mono_ms": 0, "version": "2.0"}

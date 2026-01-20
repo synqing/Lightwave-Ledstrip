@@ -1,0 +1,9 @@
+{"event": "ws.connect", "ts_mono_ms": 132853, "connEpoch": 0, "eventSeq": 29, "clientId": 5, "ip": "192.168.0.25", "schemaVersion": "1.0.0"}
+{"event": "msg.recv", "ts_mono_ms": 132854, "connEpoch": 0, "eventSeq": 30, "clientId": 5, "msgType": "getStatus", "result": "ok", "reason": "", "payloadSummary": "{\"type\":\"getStatus\",\"requestId\":\"zones-churn-1\"}", "schemaVersion": "1.0.0"}
+{"event": "msg.recv", "ts_mono_ms": 133657, "connEpoch": 0, "eventSeq": 31, "clientId": 5, "msgType": "zones.get", "result": "ok", "reason": "", "payloadSummary": "{\"type\":\"zones.get\",\"requestId\":\"zones-churn-2\"}", "schemaVersion": "1.0.0"}
+{"event": "ws.disconnect", "ts_mono_ms": 134177, "connEpoch": 0, "eventSeq": 32, "clientId": 5, "ip": "0.0.0.0"}
+{"event": "ws.connect", "ts_mono_ms": 140699, "connEpoch": 0, "eventSeq": 33, "clientId": 6, "ip": "192.168.0.25", "schemaVersion": "1.0.0"}
+{"event": "msg.recv", "ts_mono_ms": 140700, "connEpoch": 0, "eventSeq": 34, "clientId": 6, "msgType": "getStatus", "result": "ok", "reason": "", "payloadSummary": "{\"type\":\"getStatus\",\"requestId\":\"zones-churn-3\"}", "schemaVersion": "1.0.0"}
+{"event": "msg.recv", "ts_mono_ms": 141498, "connEpoch": 0, "eventSeq": 35, "clientId": 6, "msgType": "zones.get", "result": "ok", "reason": "", "payloadSummary": "{\"type\":\"zones.get\",\"requestId\":\"zones-churn-4\"}", "schemaVersion": "1.0.0"}
+{"event": "msg.recv", "ts_mono_ms": 142301, "connEpoch": 0, "eventSeq": 36, "clientId": 6, "msgType": "zones.update", "result": "ok", "reason": "", "payloadSummary": "{\"type\":\"zones.update\",\"requestId\":\"zones-churn-5\",\"zoneId\":1,\"effectId\":5,\"paletteId\":2}", "schemaVersion": "1.0.0"}
+{"event": "ws.disconnect", "ts_mono_ms": 143318, "connEpoch": 0, "eventSeq": 37, "clientId": 6, "ip": "0.0.0.0"}

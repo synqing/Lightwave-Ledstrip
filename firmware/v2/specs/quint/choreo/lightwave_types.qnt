@@ -76,6 +76,41 @@ module lightwave_types {
     | ZonesLayoutChanged({
       zoneCount: int
     })
+  // OTA messages (Phase: OTA slice)
+    | OtaCheck
+    | OtaStatus({
+      version: str,
+      sketchSize: int,
+      freeSpace: int,
+      otaAvailable: bool
+    })
+    | OtaBegin({
+      size: int,
+      md5: str
+    })
+    | OtaReady({
+      totalSize: int
+    })
+    | OtaChunk({
+      offset: int,
+      data: str  // Base64-encoded chunk
+    })
+    | OtaProgress({
+      offset: int,
+      total: int,
+      percent: int
+    })
+    | OtaAbort
+    | OtaVerify({
+      md5: str
+    })
+    | OtaComplete({
+      rebooting: bool
+    })
+    | OtaError({
+      code: str,
+      message: str
+    })
   
   // Zone info structure (for ZonesList)
   type ZoneInfo = {
@@ -145,7 +180,9 @@ module lightwave_types {
     lastBroadcastTs: int,
     // Zones state (Phase: zones slice)
     zoneCount: int,
-    zones: int -> ZoneStateFields  // Map of zoneId to zone state
+    zones: int -> ZoneStateFields,  // Map of zoneId to zone state
+    // OTA state (Phase: OTA slice)
+    otaState: OtaState
   }
   
   type ZoneStateFields = {
@@ -156,6 +193,18 @@ module lightwave_types {
     speed: int,
     blendMode: int
   }
+  
+  // OTA state (Phase: OTA slice)
+  type OtaState = 
+    | Idle
+    | InProgress({
+      totalSize: int,
+      bytesReceived: int,
+      percent: int
+    })
+    | Verifying
+    | Complete
+    | Failed(str)
   
   // Combined state (for Choreo context)
   type LightwaveState = {

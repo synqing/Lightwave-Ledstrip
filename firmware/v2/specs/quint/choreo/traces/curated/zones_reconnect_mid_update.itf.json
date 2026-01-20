@@ -1,0 +1,476 @@
+{
+  "format": "ITF",
+  "formatVersion": "1.0",
+  "generatedAt": "2026-01-19T18:17:01.450382",
+  "states": [
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {}
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "107113"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {}
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "107114"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {}
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "107917"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {
+            "0": {
+              "effectId": {
+                "#bigint": "2"
+              },
+              "brightness": {
+                "#bigint": "150"
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "108718"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {
+            "0": {
+              "effectId": {
+                "#bigint": "2"
+              },
+              "brightness": {
+                "#bigint": "150"
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "109034"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {
+            "0": {
+              "effectId": {
+                "#bigint": "2"
+              },
+              "brightness": {
+                "#bigint": "150"
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "116059"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {
+            "0": {
+              "effectId": {
+                "#bigint": "2"
+              },
+              "brightness": {
+                "#bigint": "150"
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "116069"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {
+            "0": {
+              "effectId": {
+                "#bigint": "2"
+              },
+              "brightness": {
+                "#bigint": "150"
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "116864"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {
+            "0": {
+              "effectId": {
+                "#bigint": "3"
+              },
+              "brightness": {
+                "#bigint": "150"
+              },
+              "speed": {
+                "#bigint": "75"
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "117671"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {
+            "0": {
+              "effectId": {
+                "#bigint": "3"
+              },
+              "brightness": {
+                "#bigint": "150"
+              },
+              "speed": {
+                "#bigint": "75"
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "118684"
+        }
+      }
+    }
+  ]
+}

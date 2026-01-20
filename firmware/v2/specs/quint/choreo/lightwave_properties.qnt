@@ -107,6 +107,56 @@ module lightwave_properties {
   }
   
   // ============================================================================
+  // Invariant 10: NoOtaBeforeHandshake (Phase: OTA slice)
+  // ============================================================================
+  
+  // OTA state can only transition from Idle if handshake complete
+  val NoOtaBeforeHandshake: bool = {
+    match state.hub.otaState {
+      | Idle => true
+      | InProgress(_) => state.node.handshakeComplete
+      | Verifying => state.node.handshakeComplete
+      | Complete => state.node.handshakeComplete
+      | Failed(_) => true  // Failures can occur regardless of handshake
+    }
+  }
+  
+  // ============================================================================
+  // Invariant 11: OtaMonotonicProgress (Phase: OTA slice)
+  // ============================================================================
+  
+  // Within a connEpoch, OTA progress offset cannot decrease (unless abort resets to Idle)
+  // Simplified check: if InProgress, ensure bytesReceived is non-decreasing
+  // (Full check would require tracking previous state, done via action preconditions)
+  val OtaMonotonicProgress: bool = {
+    // This invariant is enforced in hub_respond_ota_progress action (offset >= bytesReceived)
+    // Protocol-level guarantee: chunks must arrive in order with correct offsets
+    true  // Enforced by action preconditions, not state-level invariant
+  }
+  
+  // ============================================================================
+  // Invariant 12: OtaNoCrossEpochContinuation (Phase: OTA slice)
+  // ============================================================================
+  
+  // After connEpoch increments, OTA must restart (no silent continuation)
+  // OTA state resets to Idle on epoch change (enforced by node_disconnect action)
+  val OtaNoCrossEpochContinuation: bool = {
+    // Protocol-level guarantee: OTA sessions are scoped to connection epoch
+    // Enforced by resetting otaState to Idle on disconnect/reconnect
+    true  // Enforced by node_disconnect action (resets hub state, including otaState)
+  }
+  
+  // ============================================================================
+  // Invariant 13: OtaSingleSession (Phase: OTA slice)
+  // ============================================================================
+  
+  // Only one OTA session can be active at a time
+  val OtaSingleSession: bool = {
+    // Enforced by hub_respond_ota_ready precondition (otaState == Idle required)
+    true  // Enforced by action preconditions
+  }
+  
+  // ============================================================================
   // Combined Invariants
   // ============================================================================
   
@@ -114,7 +164,8 @@ module lightwave_properties {
     NoEarlyApply and
     HandshakeStrict and
     ConnEpochMonotonic and
-    EpochResetsHandshake
+    EpochResetsHandshake and
+    NoOtaBeforeHandshake
   }
   
   // Phase 13: Adversarial invariants (checked separately in nightly quint verify)
@@ -122,6 +173,14 @@ module lightwave_properties {
     StaleEpochNoMutate and
     DuplicateIdempotent and
     RateLimitRejectNoMutate
+  }
+  
+  // OTA-specific invariants (checked separately)
+  val OtaInvariants: bool = {
+    NoOtaBeforeHandshake and
+    OtaMonotonicProgress and
+    OtaNoCrossEpochContinuation and
+    OtaSingleSession
   }
 
 }

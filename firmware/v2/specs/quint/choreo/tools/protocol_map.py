@@ -31,6 +31,17 @@ class ActionType(Enum):
     NODE_SEND_ZONES_UPDATE = "node_send_zones_update"
     HUB_APPLY_ZONES_UPDATE = "hub_apply_zones_update"
     NODE_RECEIVE_ZONES_CHANGED = "node_receive_zones_changed"
+    # OTA actions
+    NODE_SEND_OTA_CHECK = "node_send_ota_check"
+    HUB_RESPOND_OTA_STATUS = "hub_respond_ota_status"
+    NODE_SEND_OTA_BEGIN = "node_send_ota_begin"
+    HUB_RESPOND_OTA_READY = "hub_respond_ota_ready"
+    NODE_SEND_OTA_CHUNK = "node_send_ota_chunk"
+    HUB_RESPOND_OTA_PROGRESS = "hub_respond_ota_progress"
+    NODE_SEND_OTA_ABORT = "node_send_ota_abort"
+    HUB_APPLY_OTA_ABORT = "hub_apply_ota_abort"
+    NODE_SEND_OTA_VERIFY = "node_send_ota_verify"
+    HUB_APPLY_OTA_VERIFY = "hub_apply_ota_verify"
 
 @dataclass
 class Action:

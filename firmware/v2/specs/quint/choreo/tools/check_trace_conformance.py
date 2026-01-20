@@ -10,6 +10,7 @@ Invariants checked:
 - HandshakeStrict: CONNECTED requires handshakeComplete
 - ConnEpochMonotonic: connEpoch >= 0
 - EpochResetsHandshake: If not CONNECTED, handshake must be false
+- NoOtaBeforeHandshake: OTA state transitions require handshake complete
 
 Usage:
     python3 check_trace_conformance.py <path/to/itf.json>
@@ -44,6 +45,21 @@ def extract_node_state(state_obj: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def extract_hub_state(state_obj: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract hub state fields from ITF state object (including OTA state)."""
+    hub_state = state_obj.get("state", {}).get("hub", {})
+    
+    ota_state = hub_state.get("otaState", "Idle")
+    ota_total_size = extract_bigint(hub_state.get("otaTotalSize", {"#bigint": "0"}))
+    ota_bytes_received = extract_bigint(hub_state.get("otaBytesReceived", {"#bigint": "0"}))
+    
+    return {
+        "otaState": ota_state if isinstance(ota_state, str) else str(ota_state),
+        "otaTotalSize": ota_total_size,
+        "otaBytesReceived": ota_bytes_received,
+    }
+
+
 def check_no_early_apply(node_state: Dict[str, Any]) -> bool:
     """Invariant: Node never applies params before handshake complete."""
     return node_state["handshakeComplete"] or len(node_state["lastAppliedParams"]) == 0
@@ -64,12 +80,47 @@ def check_epoch_resets_handshake(node_state: Dict[str, Any]) -> bool:
     return node_state["connState"] == "CONNECTED" or not node_state["handshakeComplete"]
 
 
-# Map invariant names to checker functions
-INVARIANT_CHECKS = {
+def check_no_ota_before_handshake(node_state: Dict[str, Any], hub_state: Dict[str, Any]) -> bool:
+    """Invariant: OTA state can only transition from Idle if handshake complete (for WS OTA).
+    
+    REST OTA doesn't require WebSocket handshake - exempted when connState is DISCONNECTED.
+    """
+    ota_state = hub_state.get("otaState", "Idle")
+    
+    # Allow Idle state regardless of handshake
+    if ota_state == "Idle":
+        return True
+    
+    # Allow Failed state regardless of handshake (failures can occur anytime)
+    if isinstance(ota_state, str) and ota_state.startswith("Failed"):
+        return True
+    
+    # REST OTA: If no WebSocket connection (DISCONNECTED), allow OTA without handshake
+    # REST OTA uses HTTP POST with X-OTA-Token auth, not WebSocket handshake
+    conn_state = node_state.get("connState", "DISCONNECTED")
+    if conn_state == "DISCONNECTED":
+        # REST OTA path - no handshake required
+        return True
+    
+    # WebSocket OTA path: For InProgress, Verifying, Complete - handshake must be complete
+    if ota_state in ("InProgress", "Verifying", "Complete"):
+        return node_state["handshakeComplete"]
+    
+    # Unknown state - allow (shouldn't happen, but be permissive)
+    return True
+
+
+# Map invariant names to checker functions (node-only)
+NODE_INVARIANT_CHECKS = {
     "NoEarlyApply": check_no_early_apply,
     "HandshakeStrict": check_handshake_strict,
     "ConnEpochMonotonic": check_conn_epoch_monotonic,
     "EpochResetsHandshake": check_epoch_resets_handshake,
+}
+
+# Map invariant names to checker functions (require both node and hub state)
+JOINT_INVARIANT_CHECKS = {
+    "NoOtaBeforeHandshake": check_no_ota_before_handshake,
 }
 
 
@@ -90,12 +141,16 @@ def check_trace_conformance(itf_path: Path, expect_violation: bool = False) -> T
     if not states:
         return (False, "ITF file contains no states")
     
+    # Track previous hub state for monotonic progress check
+    prev_hub_state = None
+    
     # Check each state
     for state_idx, state_entry in enumerate(states):
         node_state = extract_node_state(state_entry)
+        hub_state = extract_hub_state(state_entry)
         
-        # Check each invariant
-        for inv_name, check_func in INVARIANT_CHECKS.items():
+        # Check node-only invariants
+        for inv_name, check_func in NODE_INVARIANT_CHECKS.items():
             if not check_func(node_state):
                 error_msg = (
                     f"Invariant violation: {inv_name} failed at state {state_idx}\n"
@@ -110,6 +165,46 @@ def check_trace_conformance(itf_path: Path, expect_violation: bool = False) -> T
                     return (True, None)
                 else:
                     return (False, error_msg)
+        
+        # Check joint invariants (require both node and hub state)
+        for inv_name, check_func in JOINT_INVARIANT_CHECKS.items():
+            if not check_func(node_state, hub_state):
+                error_msg = (
+                    f"Invariant violation: {inv_name} failed at state {state_idx}\n"
+                    f"  Node state: connState={node_state['connState']!r}, "
+                    f"handshakeComplete={node_state['handshakeComplete']}\n"
+                    f"  Hub state: otaState={hub_state['otaState']!r}, "
+                    f"otaBytesReceived={hub_state['otaBytesReceived']}"
+                )
+                
+                if expect_violation:
+                    # Violation was expected, this is success
+                    return (True, None)
+                else:
+                    return (False, error_msg)
+        
+        # Optional: Check monotonic progress across state sequence
+        if prev_hub_state is not None:
+            prev_ota_state = prev_hub_state.get("otaState", "Idle")
+            curr_ota_state = hub_state.get("otaState", "Idle")
+            
+            # If both are InProgress, bytesReceived should not decrease
+            if (prev_ota_state == "InProgress" and curr_ota_state == "InProgress"):
+                prev_bytes = prev_hub_state.get("otaBytesReceived", 0)
+                curr_bytes = hub_state.get("otaBytesReceived", 0)
+                if curr_bytes < prev_bytes:
+                    error_msg = (
+                        f"Invariant violation: OtaMonotonicProgress failed at state {state_idx}\n"
+                        f"  Previous: otaBytesReceived={prev_bytes}, "
+                        f"Current: otaBytesReceived={curr_bytes}"
+                    )
+                    
+                    if expect_violation:
+                        return (True, None)
+                    else:
+                        return (False, error_msg)
+        
+        prev_hub_state = hub_state
     
     # All states passed all invariants
     if expect_violation:

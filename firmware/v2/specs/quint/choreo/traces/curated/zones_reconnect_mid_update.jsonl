@@ -1,0 +1,10 @@
+{"event": "ws.connect", "ts_mono_ms": 107113, "connEpoch": 0, "eventSeq": 19, "clientId": 3, "ip": "192.168.0.25", "schemaVersion": "1.0.0"}
+{"event": "msg.recv", "ts_mono_ms": 107114, "connEpoch": 0, "eventSeq": 20, "clientId": 3, "msgType": "getStatus", "result": "ok", "reason": "", "payloadSummary": "{\"type\":\"getStatus\",\"requestId\":\"zones-reconnect-1\"}", "schemaVersion": "1.0.0"}
+{"event": "msg.recv", "ts_mono_ms": 107917, "connEpoch": 0, "eventSeq": 21, "clientId": 3, "msgType": "zones.get", "result": "ok", "reason": "", "payloadSummary": "{\"type\":\"zones.get\",\"requestId\":\"zones-reconnect-2\"}", "schemaVersion": "1.0.0"}
+{"event": "msg.recv", "ts_mono_ms": 108718, "connEpoch": 0, "eventSeq": 22, "clientId": 3, "msgType": "zones.update", "result": "ok", "reason": "", "payloadSummary": "{\"type\":\"zones.update\",\"requestId\":\"zones-reconnect-3\",\"zoneId\":0,\"effectId\":2,\"brightness\":150}", "schemaVersion": "1.0.0"}
+{"event": "ws.disconnect", "ts_mono_ms": 109034, "connEpoch": 0, "eventSeq": 23, "clientId": 3, "ip": "0.0.0.0"}
+{"event": "ws.connect", "ts_mono_ms": 116059, "connEpoch": 0, "eventSeq": 24, "clientId": 4, "ip": "192.168.0.25", "schemaVersion": "1.0.0"}
+{"event": "msg.recv", "ts_mono_ms": 116069, "connEpoch": 0, "eventSeq": 25, "clientId": 4, "msgType": "getStatus", "result": "ok", "reason": "", "payloadSummary": "{\"type\":\"getStatus\",\"requestId\":\"zones-reconnect-4\"}", "schemaVersion": "1.0.0"}
+{"event": "msg.recv", "ts_mono_ms": 116864, "connEpoch": 0, "eventSeq": 26, "clientId": 4, "msgType": "zones.get", "result": "ok", "reason": "", "payloadSummary": "{\"type\":\"zones.get\",\"requestId\":\"zones-reconnect-5\"}", "schemaVersion": "1.0.0"}
+{"event": "msg.recv", "ts_mono_ms": 117671, "connEpoch": 0, "eventSeq": 27, "clientId": 4, "msgType": "zones.update", "result": "ok", "reason": "", "payloadSummary": "{\"type\":\"zones.update\",\"requestId\":\"zones-reconnect-6\",\"zoneId\":0,\"effectId\":3,\"speed\":75}", "schemaVersion": "1.0.0"}
+{"event": "ws.disconnect", "ts_mono_ms": 118684, "connEpoch": 0, "eventSeq": 28, "clientId": 4, "ip": "0.0.0.0"}

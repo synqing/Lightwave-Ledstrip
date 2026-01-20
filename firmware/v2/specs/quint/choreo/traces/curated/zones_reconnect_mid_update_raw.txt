@@ -1,0 +1,91 @@
+[100151][1;32m[INFO][0m[AudioCapture] [1;33mDMA:[0m hop=3100 R=[F9D30000..F9F14000] >>10=[-101184..-99248]
+[100162][1;32m[INFO][0m[Audio] Audio alive: [1;33mmic=-50.4dB[0m cap=3100 pk=247 pkC=4188 rms=0.0510->0.015 pre=0.0030 g=16.80 dc=6.4 clip=0 flux=0.000 min=-3680 max=4188 mean=33.4
+[100163][1;32m[INFO][0m[Audio] Spike stats: frames=3100 detected=12989 corrected=9567 avg/frame=4.579 removed=1187.63
+[100164][1;32m[INFO][0m[Audio] Saliency: overall=0.179 dom=3 H=0.193 R=0.003 T=0.021 D=0.501
+[100164][1;32m[INFO][0m[Audio] Style: 5 conf=0.80 [R=0.30 H=0.50 M=0.00 T=0.47 D=0.80]
+[100164][1;32m[INFO][0m[Audio] [1;35mBeat:[0m BPM=48.0 conf=0.05 phase=0.30 lock=no
+[100377][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.025 0.023 0.013 0.007 0.007 0.013 0.007 0.003]
+[101348][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.018 0.025 0.009 0.012 0.006 0.009 0.009 0.005]
+[102315][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.008 0.009 0.008 0.005 0.005 0.009 0.009 0.002]
+[103275][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.007 0.009 0.007 0.006 0.004 0.005 0.010 0.004]
+[104240][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.009 0.018 0.008 0.006 0.007 0.008 0.006 0.003]
+[105199][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.020 0.016 0.015 0.009 0.010 0.008 0.012 0.006]
+[106163][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.023 0.107 0.069 0.084 0.029 0.024 0.020 0.010]
+[Status] FPS: 139, CPU: 85%, Effect: Fire
+[107112][1;32m[INFO][0m[WsGateway] WS: Upgrade request received from 192.168.0.25 (client ID: 3)
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws1","location":"v2/src/network/webserver/WsGateway.cpp:handleConnect","message":"ws.connect.enter","data":{"clientId":3,"wsCount":2,"wsMax":8,"ip":"192.168.0.25"},"timestamp":107112}
+[107113][1;32m[INFO][0m[WsGateway] WS: Client 3 connected from 192.168.0.25
+{"event":"ws.connect","ts_mono_ms":107113,"connEpoch":0,"eventSeq":19,"clientId":3,"ip":"192.168.0.25","schemaVersion":"1.0.0"}
+[107113][1;32m[INFO][0m[WebServer] WS: Client 3 connected from 192.168.0.25
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":3,"len":55,"ip":"192.168.0.25"},"timestamp":107113}
+{"event":"msg.recv","ts_mono_ms":107114,"connEpoch":0,"eventSeq":20,"clientId":3,"msgType":"getStatus","result":"ok","reason":"","payloadSummary":"{"type":"getStatus","requestId":"zones-reconnect-1"}","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse1","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.route.result","data":{"clientId":3,"type":"getStatus","handled":true},"timestamp":107114}
+[107133][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.030 0.023 0.021 0.012 0.006 0.009 0.008 0.002]
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":3,"len":55,"ip":"192.168.0.25"},"timestamp":107917}
+{"event":"msg.recv","ts_mono_ms":107917,"connEpoch":0,"eventSeq":21,"clientId":3,"msgType":"zones.get","result":"ok","reason":"","payloadSummary":"{"type":"zones.get","requestId":"zones-reconnect-2"}","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse1","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.route.result","data":{"clientId":3,"type":"zones.get","handled":true},"timestamp":107920}
+[108101][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.034 0.030 0.025 0.014 0.022 0.018 0.036 0.021]
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":3,"len":105,"ip":"192.168.0.25"},"timestamp":108717}
+{"event":"msg.recv","ts_mono_ms":108718,"connEpoch":0,"eventSeq":22,"clientId":3,"msgType":"zones.update","result":"ok","reason":"","payloadSummary":"{"type":"zones.update","requestId":"zones-reconnect-3","zoneId":0,"effectId":2,"brightness":150}","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse1","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.route.result","data":{"clientId":3,"type":"zones.update","handled":true},"timestamp":108721}
+[109034][1;32m[INFO][0m[WsGateway] WS: Client 3 disconnected
+{"event":"ws.disconnect","ts_mono_ms":109034,"connEpoch":0,"eventSeq":23,"clientId":3,"ip":"0.0.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleDisconnect","message":"ws.disconnect","data":{"clientId":3,"ip":"0.0.0.0","ipKey":3232235545},"timestamp":109034}
+[109035][1;32m[INFO][0m[WebServer] WS: Client 3 disconnected
+[109035][0;37m[DEBUG][0m[WebServer] Client 3 unsubscribed from LED stream
+[109070][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.025 0.019 0.012 0.024 0.034 0.012 0.009 0.004]
+[109809][1;32m[INFO][0m[AudioCapture] [1;33mDMA:[0m hop=3410 R=[F9C7C000..F9EE4000] >>10=[-101904..-99440]
+[110033][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.013 0.018 0.012 0.014 0.024 0.018 0.014 0.009]
+[110994][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.014 0.020 0.012 0.011 0.012 0.007 0.009 0.002]
+[111952][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.019 0.014 0.021 0.007 0.005 0.010 0.010 0.003]
+[112916][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.019 0.016 0.006 0.007 0.006 0.009 0.006 0.002]
+[113878][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.010 0.016 0.011 0.004 0.006 0.012 0.010 0.007]
+[114839][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.017 0.010 0.013 0.006 0.006 0.006 0.002 0.002]
+
+=== Validation Performance Report ===
+Total calls: 28143
+Total frames: 7000
+Avg time per call: 3.14 us
+Peak time: 107.00 us
+Total overhead per frame: 12.61 us
+CPU overhead: 0.151% (of 8.33ms frame budget)
+Theoretical estimate: 0.1% (actual: 0.151%)
+=======================================
+
+[115801][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.008 0.019 0.012 0.004 0.004 0.006 0.003 0.002]
+[116059][1;32m[INFO][0m[WsGateway] WS: Upgrade request received from 192.168.0.25 (client ID: 4)
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws1","location":"v2/src/network/webserver/WsGateway.cpp:handleConnect","message":"ws.connect.enter","data":{"clientId":4,"wsCount":2,"wsMax":8,"ip":"192.168.0.25"},"timestamp":116059}
+[116059][1;32m[INFO][0m[WsGateway] WS: Client 4 connected from 192.168.0.25
+{"event":"ws.connect","ts_mono_ms":116059,"connEpoch":0,"eventSeq":24,"clientId":4,"ip":"192.168.0.25","schemaVersion":"1.0.0"}
+[116060][1;32m[INFO][0m[WebServer] WS: Client 4 connected from 192.168.0.25
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":55,"ip":"192.168.0.25"},"timestamp":116068}
+{"event":"msg.recv","ts_mono_ms":116069,"connEpoch":0,"eventSeq":25,"clientId":4,"msgType":"getStatus","result":"ok","reason":"","payloadSummary":"{"type":"getStatus","requestId":"zones-reconnect-4"}","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse1","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.route.result","data":{"clientId":4,"type":"getStatus","handled":true},"timestamp":116069}
+[Status] FPS: 134, CPU: 89%, Effect: Fire
+[116773][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.010 0.012 0.014 0.005 0.006 0.006 0.003 0.002]
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":55,"ip":"192.168.0.25"},"timestamp":116864}
+{"event":"msg.recv","ts_mono_ms":116864,"connEpoch":0,"eventSeq":26,"clientId":4,"msgType":"zones.get","result":"ok","reason":"","payloadSummary":"{"type":"zones.get","requestId":"zones-reconnect-5"}","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse1","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.route.result","data":{"clientId":4,"type":"zones.get","handled":true},"timestamp":116867}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":99,"ip":"192.168.0.25"},"timestamp":117671}
+{"event":"msg.recv","ts_mono_ms":117671,"connEpoch":0,"eventSeq":27,"clientId":4,"msgType":"zones.update","result":"ok","reason":"","payloadSummary":"{"type":"zones.update","requestId":"zones-reconnect-6","zoneId":0,"effectId":3,"speed":75}","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse1","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.route.result","data":{"clientId":4,"type":"zones.update","handled":true},"timestamp":117675}
+[117745][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.008 0.008 0.009 0.004 0.004 0.005 0.005 0.003]
+[118684][1;32m[INFO][0m[WsGateway] WS: Client 4 disconnected
+{"event":"ws.disconnect","ts_mono_ms":118684,"connEpoch":0,"eventSeq":28,"clientId":4,"ip":"0.0.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleDisconnect","message":"ws.disconnect","data":{"clientId":4,"ip":"0.0.0.0","ipKey":3232235545},"timestamp":118684}
+[118684][1;32m[INFO][0m[WebServer] WS: Client 4 disconnected
+[118684][0;37m[DEBUG][0m[WebServer] Client 4 unsubscribed from LED stream
+[118713][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.005 0.007 0.005 0.007 0.003 0.004 0.005 0.001]
+[119452][1;32m[INFO][0m[AudioCapture] [1;33mDMA:[0m hop=3720 R=[F9CB0000..FA040000] >>10=[-101696..-98048]
+[119464][1;32m[INFO][0m[Audio] Audio alive: [1;33mmic=-42.5dB[0m cap=3720 pk=550 pkC=2764 rms=0.0371->0.028 pre=0.0075 g=5.78 dc=7.1 clip=0 flux=0.034 min=-2224 max=2764 mean=149.0
+ed=15658 corrected=11629 avg/frame=0.566 removed=1410.09
+[119465][1;32m[INFO][0m[Audio] Saliency: overall=0.085 dom=0 H=0.253 R=0.001 T=0.008 D=0.080
+[119466][1;32m[INFO][0m[Audio] Style: 5 conf=0.80 [R=0.30 H=0.50 M=0.00 T=0.51 D=0.80]
+[119466][1;32m[INFO][0m[Audio] [1;35mBeat:[0m BPM=60.0 conf=0.12 phase=0.82 lock=no
+[119678][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.005 0.005 0.005 0.004 0.003 0.005 0.004 0.001]
+[120272][1;32m[INFO][0m[WiFi] Connected to 'OPTUS_738CC0N', RSSI: -76 dBm, Channel: 6, Uptime: 103s
+[120641][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.005 0.007 0.006 0.004 0.002 0.003 0.005 0.001]
+[121602][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.012 0.006 0.005 0.006 0.005 0.004 0.004 0.003]
+[122562][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.011 0.010 0.010 0.009 0.008 0.005 0.005 0.003]
+[123524][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.021 0.013 0.010 0.010 0.015 0.012 0.009 0.005]
+[124491][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.033 0.014 0.013 0.009 0.009 0.016 0.009 0.005]

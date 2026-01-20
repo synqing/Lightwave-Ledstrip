@@ -84,6 +84,46 @@ module lightwave_step {
     })
   }
   
+  // Check if soup contains an OtaCheck message
+  pure def hasOtaCheckMessage(envs: Set[MsgEnvelope]): bool = {
+    envs.exists(e => match e.msg {
+      | OtaCheck => true
+      | _ => false
+    })
+  }
+  
+  // Check if soup contains an OtaBegin message
+  pure def hasOtaBeginMessage(envs: Set[MsgEnvelope]): bool = {
+    envs.exists(e => match e.msg {
+      | OtaBegin(_) => true
+      | _ => false
+    })
+  }
+  
+  // Check if soup contains an OtaChunk message
+  pure def hasOtaChunkMessage(envs: Set[MsgEnvelope]): bool = {
+    envs.exists(e => match e.msg {
+      | OtaChunk(_) => true
+      | _ => false
+    })
+  }
+  
+  // Check if soup contains an OtaAbort message
+  pure def hasOtaAbortMessage(envs: Set[MsgEnvelope]): bool = {
+    envs.exists(e => match e.msg {
+      | OtaAbort => true
+      | _ => false
+    })
+  }
+  
+  // Check if soup contains an OtaVerify message
+  pure def hasOtaVerifyMessage(envs: Set[MsgEnvelope]): bool = {
+    envs.exists(e => match e.msg {
+      | OtaVerify(_) => true
+      | _ => false
+    })
+  }
+  
   // Extract message type as string (for debug tracking)
   pure def msgTypeToString(m: Message): str = {
     match m {
@@ -99,6 +139,16 @@ module lightwave_step {
       | ZonesChanged(_) => "ZonesChanged"
       | ZonesEffectChanged(_) => "ZonesEffectChanged"
       | ZonesLayoutChanged(_) => "ZonesLayoutChanged"
+      | OtaCheck => "OtaCheck"
+      | OtaStatus(_) => "OtaStatus"
+      | OtaBegin(_) => "OtaBegin"
+      | OtaReady(_) => "OtaReady"
+      | OtaChunk(_) => "OtaChunk"
+      | OtaProgress(_) => "OtaProgress"
+      | OtaAbort => "OtaAbort"
+      | OtaVerify(_) => "OtaVerify"
+      | OtaComplete(_) => "OtaComplete"
+      | OtaError(_) => "OtaError"
     }
   }
   
@@ -139,7 +189,8 @@ module lightwave_step {
           activeEffectId: 0,
           lastBroadcastTs: 0,
           zoneCount: 0,  // Initial zones state
-          zones: Map()   // Empty zones map
+          zones: Map(),   // Empty zones map
+          otaState: Idle  // Initial OTA state
         },
         debug: {
           lastMsgId: 0,
@@ -183,7 +234,8 @@ module lightwave_step {
           activeEffectId: state.hub.activeEffectId,
           lastBroadcastTs: state.hub.lastBroadcastTs,
           zoneCount: state.hub.zoneCount,
-          zones: state.hub.zones
+          zones: state.hub.zones,
+          otaState: state.hub.otaState
         },
         debug: state.debug  // Preserve debug state
       },
@@ -215,7 +267,8 @@ module lightwave_step {
           activeEffectId: state.hub.activeEffectId,
           lastBroadcastTs: state.hub.lastBroadcastTs,
           zoneCount: state.hub.zoneCount,
-          zones: state.hub.zones
+          zones: state.hub.zones,
+          otaState: state.hub.otaState
         },
         debug: state.debug  // Preserve debug state (no protocol mutation yet)
       },
@@ -311,7 +364,8 @@ module lightwave_step {
           activeEffectId: state.hub.activeEffectId,
           lastBroadcastTs: state.hub.lastBroadcastTs,
           zoneCount: state.hub.zoneCount,
-          zones: state.hub.zones
+          zones: state.hub.zones,
+          otaState: state.hub.otaState
         },
         debug: state.debug
       },
@@ -386,7 +440,8 @@ module lightwave_step {
           activeEffectId: 1,  // Simplified - extract from message in full implementation
           lastBroadcastTs: state.hub.lastBroadcastTs,
           zoneCount: state.hub.zoneCount,
-          zones: state.hub.zones
+          zones: state.hub.zones,
+          otaState: state.hub.otaState
         },
         debug: state.debug
       },
@@ -588,7 +643,314 @@ module lightwave_step {
       hub_respond_zones_list,
       node_send_zones_update,
       hub_apply_zones_update,
-      node_receive_zones_changed
+      node_receive_zones_changed,
+      // OTA actions (Phase: OTA slice)
+      node_send_ota_check,
+      hub_respond_ota_status,
+      node_send_ota_begin,
+      hub_respond_ota_ready,
+      node_send_ota_chunk,
+      hub_respond_ota_progress,
+      node_send_ota_abort,
+      hub_apply_ota_abort,
+      node_send_ota_verify,
+      hub_apply_ota_verify
+    }
+  }
+  
+  // ============================================================================
+  // OTA Actions (Phase: OTA slice)
+  // ============================================================================
+  
+  // Node sends ota.check request
+  action node_send_ota_check = {
+    nondet msgId = 1.to(10000).oneOf()
+    all {
+      state.node.handshakeComplete,
+      state.node.connState == "CONNECTED",
+      not(deliveredMsgIds.contains(msgId)),
+      state' = state,
+      pendingMessages' = pendingMessages.union(Set(mkEnvelope(msgId, state.node.connEpoch, "node2hub", OtaCheck))),
+      pendingEvents' = pendingEvents,
+      deliveredMsgIds' = deliveredMsgIds
+    }
+  }
+  
+  // Hub responds to ota.check with ota.status
+  action hub_respond_ota_status = {
+    all {
+      hasOtaCheckMessage(pendingMessages),
+      state.hub.connState.get(TAB5_NODE) == "CONNECTED",
+      state' = {
+        node: state.node,
+        hub: {
+          connState: state.hub.connState,
+          connEpoch: state.hub.connEpoch,
+          activeParams: state.hub.activeParams,
+          activeEffectId: state.hub.activeEffectId,
+          lastBroadcastTs: state.hub.lastBroadcastTs,
+          zoneCount: state.hub.zoneCount,
+          zones: state.hub.zones,
+          otaState: state.hub.otaState
+        },
+        debug: state.debug
+      },
+      pendingMessages' = pendingMessages.filter(e => match e.msg {
+        | OtaCheck => false
+        | _ => true
+      }),
+      pendingEvents' = pendingEvents,
+      deliveredMsgIds' = deliveredMsgIds
+    }
+  }
+  
+  // Node sends ota.begin to start OTA session
+  action node_send_ota_begin = {
+    nondet msgId = 1.to(10000).oneOf()
+    nondet size = 100000.to(2000000).oneOf()
+    nondet md5 = ["", "abc123def456"].oneOf()
+    all {
+      state.node.handshakeComplete,
+      state.node.connState == "CONNECTED",
+      match state.hub.otaState {
+        | Idle => true
+        | _ => false
+      },
+      not(deliveredMsgIds.contains(msgId)),
+      state' = state,
+      pendingMessages' = pendingMessages.union(Set(mkEnvelope(msgId, state.node.connEpoch, "node2hub", OtaBegin({
+        size: size,
+        md5: md5
+      })))),
+      pendingEvents' = pendingEvents,
+      deliveredMsgIds' = deliveredMsgIds
+    }
+  }
+  
+  // Hub responds with ota.ready and transitions OTA to InProgress
+  action hub_respond_ota_ready = {
+    all {
+      hasOtaBeginMessage(pendingMessages),
+      state.hub.connState.get(TAB5_NODE) == "CONNECTED",
+      match state.hub.otaState {
+        | Idle => true
+        | _ => false
+      },
+      // Extract size from first OtaBegin message
+      nondet beginMsg = pendingMessages.oneOf(),
+      match beginMsg.msg {
+        | OtaBegin(fields) => {
+          state' = {
+            node: state.node,
+            hub: {
+              connState: state.hub.connState,
+              connEpoch: state.hub.connEpoch,
+              activeParams: state.hub.activeParams,
+              activeEffectId: state.hub.activeEffectId,
+              lastBroadcastTs: state.hub.lastBroadcastTs,
+              zoneCount: state.hub.zoneCount,
+              zones: state.hub.zones,
+              otaState: InProgress({
+                totalSize: fields.size,
+                bytesReceived: 0,
+                percent: 0
+              })
+            },
+            debug: state.debug
+          },
+          pendingMessages' = pendingMessages.filter(e => match e.msg {
+            | OtaBegin(_) => false
+            | _ => true
+          }),
+          pendingEvents' = pendingEvents,
+          deliveredMsgIds' = deliveredMsgIds
+        }
+        | _ => {
+          state' = state,
+          pendingMessages' = pendingMessages,
+          pendingEvents' = pendingEvents,
+          deliveredMsgIds' = deliveredMsgIds
+        }
+      }
+    }
+  }
+  
+  // Node sends ota.chunk with firmware data
+  action node_send_ota_chunk = {
+    nondet msgId = 1.to(10000).oneOf()
+    nondet offset = 0.to(2000000).oneOf()
+    nondet chunkData = ["base64encodedchunk"].oneOf()
+    all {
+      state.node.handshakeComplete,
+      state.node.connState == "CONNECTED",
+      match state.hub.otaState {
+        | InProgress(_) => true
+        | _ => false
+      },
+      not(deliveredMsgIds.contains(msgId)),
+      state' = state,
+      pendingMessages' = pendingMessages.union(Set(mkEnvelope(msgId, state.node.connEpoch, "node2hub", OtaChunk({
+        offset: offset,
+        data: chunkData
+      })))),
+      pendingEvents' = pendingEvents,
+      deliveredMsgIds' = deliveredMsgIds
+    }
+  }
+  
+  // Hub responds with ota.progress and updates OTA state
+  action hub_respond_ota_progress = {
+    all {
+      hasOtaChunkMessage(pendingMessages),
+      state.hub.connState.get(TAB5_NODE) == "CONNECTED",
+      match state.hub.otaState {
+        | InProgress(currentSession) => {
+          // Extract chunk from message
+          nondet chunkMsg = pendingMessages.oneOf(),
+          match chunkMsg.msg {
+            | OtaChunk(chunkFields) => {
+              // Progress must be monotonic (invariant check)
+              chunkFields.offset >= currentSession.bytesReceived,
+              nondet newPercent = (currentSession.totalSize > 0) ? 
+                ((chunkFields.offset * 100) / currentSession.totalSize) : 0,
+              state' = {
+                node: state.node,
+                hub: {
+                  connState: state.hub.connState,
+                  connEpoch: state.hub.connEpoch,
+                  activeParams: state.hub.activeParams,
+                  activeEffectId: state.hub.activeEffectId,
+                  lastBroadcastTs: state.hub.lastBroadcastTs,
+                  zoneCount: state.hub.zoneCount,
+                  zones: state.hub.zones,
+                  otaState: InProgress({
+                    totalSize: currentSession.totalSize,
+                    bytesReceived: chunkFields.offset,
+                    percent: newPercent
+                  })
+                },
+                debug: state.debug
+              },
+              pendingMessages' = pendingMessages.filter(e => match e.msg {
+                | OtaChunk(_) => false
+                | _ => true
+              }),
+              pendingEvents' = pendingEvents,
+              deliveredMsgIds' = deliveredMsgIds
+            }
+            | _ => {
+              state' = state,
+              pendingMessages' = pendingMessages,
+              pendingEvents' = pendingEvents,
+              deliveredMsgIds' = deliveredMsgIds
+            }
+          }
+        }
+        | _ => false
+      }
+    }
+  }
+  
+  // Node sends ota.abort to cancel OTA
+  action node_send_ota_abort = {
+    nondet msgId = 1.to(10000).oneOf()
+    all {
+      state.node.handshakeComplete,
+      state.node.connState == "CONNECTED",
+      match state.hub.otaState {
+        | InProgress(_) => true
+        | _ => false
+      },
+      not(deliveredMsgIds.contains(msgId)),
+      state' = state,
+      pendingMessages' = pendingMessages.union(Set(mkEnvelope(msgId, state.node.connEpoch, "node2hub", OtaAbort))),
+      pendingEvents' = pendingEvents,
+      deliveredMsgIds' = deliveredMsgIds
+    }
+  }
+  
+  // Hub applies ota.abort and resets OTA state to Idle
+  action hub_apply_ota_abort = {
+    all {
+      hasOtaAbortMessage(pendingMessages),
+      state.hub.connState.get(TAB5_NODE) == "CONNECTED",
+      match state.hub.otaState {
+        | InProgress(_) => true
+        | _ => false
+      },
+      state' = {
+        node: state.node,
+        hub: {
+          connState: state.hub.connState,
+          connEpoch: state.hub.connEpoch,
+          activeParams: state.hub.activeParams,
+          activeEffectId: state.hub.activeEffectId,
+          lastBroadcastTs: state.hub.lastBroadcastTs,
+          zoneCount: state.hub.zoneCount,
+          zones: state.hub.zones,
+          otaState: Idle
+        },
+        debug: state.debug
+      },
+      pendingMessages' = pendingMessages.filter(e => match e.msg {
+        | OtaAbort => false
+        | _ => true
+      }),
+      pendingEvents' = pendingEvents,
+      deliveredMsgIds' = deliveredMsgIds
+    }
+  }
+  
+  // Node sends ota.verify to complete and apply update
+  action node_send_ota_verify = {
+    nondet msgId = 1.to(10000).oneOf()
+    nondet md5 = ["", "abc123def456"].oneOf()
+    all {
+      state.node.handshakeComplete,
+      state.node.connState == "CONNECTED",
+      match state.hub.otaState {
+        | InProgress(session) => session.bytesReceived >= session.totalSize
+        | _ => false
+      },
+      not(deliveredMsgIds.contains(msgId)),
+      state' = state,
+      pendingMessages' = pendingMessages.union(Set(mkEnvelope(msgId, state.node.connEpoch, "node2hub", OtaVerify({
+        md5: md5
+      })))),
+      pendingEvents' = pendingEvents,
+      deliveredMsgIds' = deliveredMsgIds
+    }
+  }
+  
+  // Hub applies ota.verify and transitions to Complete
+  action hub_apply_ota_verify = {
+    all {
+      hasOtaVerifyMessage(pendingMessages),
+      state.hub.connState.get(TAB5_NODE) == "CONNECTED",
+      match state.hub.otaState {
+        | InProgress(session) => session.bytesReceived >= session.totalSize
+        | _ => false
+      },
+      state' = {
+        node: state.node,
+        hub: {
+          connState: state.hub.connState,
+          connEpoch: state.hub.connEpoch,
+          activeParams: state.hub.activeParams,
+          activeEffectId: state.hub.activeEffectId,
+          lastBroadcastTs: state.hub.lastBroadcastTs,
+          zoneCount: state.hub.zoneCount,
+          zones: state.hub.zones,
+          otaState: Complete
+        },
+        debug: state.debug
+      },
+      pendingMessages' = pendingMessages.filter(e => match e.msg {
+        | OtaVerify(_) => false
+        | _ => true
+      }),
+      pendingEvents' = pendingEvents,
+      deliveredMsgIds' = deliveredMsgIds
     }
   }
 

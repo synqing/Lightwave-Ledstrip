@@ -6,8 +6,8 @@ This directory contains real hardware-captured traces from the ESP32-S3 Lightwav
 
 ### happy_path.jsonl / happy_path.itf.json
 - **Scenario:** Connect -> status.get -> parameters.set (brightness) -> parameters.set (speed) -> effects.setCurrent -> status.get -> disconnect
-- **Firmware SHA:** a824c3741b68e8b77341def4364bc2bc95be3544
-- **Spec SHA:** a824c3741b68e8b77341def4364bc2bc95be3544
+- **Firmware SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
+- **Spec SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
 - **Device:** ESP32-S3 LightwaveOS v2
 - **Build Environment:** esp32dev_audio (PlatformIO)
 - **Captured:** 2026-01-19
@@ -19,8 +19,8 @@ This directory contains real hardware-captured traces from the ESP32-S3 Lightwav
 ### validation_negative.jsonl / validation_negative.itf.json
 - **Scenario:** Invalid JSON, oversized payload, unknown method, malformed params
 - **Expected Behaviour:** All msg.recv events have result="rejected" with appropriate reason
-- **Firmware SHA:** a824c3741b68e8b77341def4364bc2bc95be3544
-- **Spec SHA:** a824c3741b68e8b77341def4364bc2bc95be3544
+- **Firmware SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
+- **Spec SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
 - **Device:** ESP32-S3 LightwaveOS v2
 - **Build Environment:** esp32dev_audio (PlatformIO)
 - **Captured:** 2026-01-19
@@ -31,8 +31,8 @@ This directory contains real hardware-captured traces from the ESP32-S3 Lightwav
 
 ### reconnect_churn.jsonl / reconnect_churn.itf.json
 - **Scenario:** 3 rapid connect/disconnect cycles
-- **Firmware SHA:** a824c3741b68e8b77341def4364bc2bc95be3544
-- **Spec SHA:** a824c3741b68e8b77341def4364bc2bc95be3544
+- **Firmware SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
+- **Spec SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
 - **Device:** ESP32-S3 LightwaveOS v2
 - **Build Environment:** esp32dev_audio (PlatformIO)
 - **Captured:** 2026-01-19
@@ -43,39 +43,98 @@ This directory contains real hardware-captured traces from the ESP32-S3 Lightwav
 
 ### zones_happy_path.jsonl / zones_happy_path.itf.json
 - **Scenario:** Connect → getStatus (handshake) → zones.get → zones.update → observe zones.list + zones.changed
-- **Firmware SHA:** *[To be captured]*
-- **Spec SHA:** *[To be captured]*
+- **Firmware SHA:** aaabc3c8373909b1c66fbb4f946325734926581c (to be updated after commit)
+- **Spec SHA:** aaabc3c8373909b1c66fbb4f946325734926581c (to be updated after commit)
 - **Device:** ESP32-S3 LightwaveOS v2
 - **Build Environment:** esp32dev_audio (PlatformIO)
-- **Captured:** *[To be captured]*
-- **Events:** *[To be captured]*
+- **Captured:** 2026-01-19
+- **Events:** 19 (ws.connect x2, msg.recv x16 including zones.get, zones.update, ws.disconnect x1)
 - **Purpose:** Baseline zones protocol flow verification (happy path)
-- **Conformance:** *[To be verified]*
-- **Last Verified:** *[To be verified]*
+- **Conformance:** PASS (verified against lightwave_step.qnt with zones actions)
+- **Last Verified:** 2026-01-19
 
 ### zones_reconnect_mid_update.jsonl / zones_reconnect_mid_update.itf.json
 - **Scenario:** zones.update then disconnect **before** zones.changed, reconnect, complete flow (reconnect-mid-update)
-- **Firmware SHA:** *[To be captured]*
-- **Spec SHA:** *[To be captured]*
+- **Firmware SHA:** aaabc3c8373909b1c66fbb4f946325734926581c (to be updated after commit)
+- **Spec SHA:** aaabc3c8373909b1c66fbb4f946325734926581c (to be updated after commit)
 - **Device:** ESP32-S3 LightwaveOS v2
 - **Build Environment:** esp32dev_audio (PlatformIO)
-- **Captured:** *[To be captured]*
-- **Events:** *[To be captured]*
+- **Captured:** 2026-01-19
+- **Events:** 10 (connect/disconnect cycles with zones.get, zones.update)
 - **Purpose:** Prove idempotency / message-soup tolerance for zones (disconnect before response)
-- **Conformance:** *[To be verified]*
-- **Last Verified:** *[To be verified]*
+- **Conformance:** PASS (verified against lightwave_step.qnt with zones actions)
+- **Last Verified:** 2026-01-19
 
 ### zones_reconnect_churn.jsonl / zones_reconnect_churn.itf.json
 - **Scenario:** Connect → start zones flow → disconnect → reconnect (epoch increments) → complete zones flow
-- **Firmware SHA:** *[To be captured]*
-- **Spec SHA:** *[To be captured]*
+- **Firmware SHA:** aaabc3c8373909b1c66fbb4f946325734926581c (to be updated after commit)
+- **Spec SHA:** aaabc3c8373909b1c66fbb4f946325734926581c (to be updated after commit)
 - **Device:** ESP32-S3 LightwaveOS v2
 - **Build Environment:** esp32dev_audio (PlatformIO)
-- **Captured:** *[To be captured]*
-- **Events:** *[To be captured]*
+- **Captured:** 2026-01-19
+- **Events:** 9 (connect/disconnect/reconnect with zones.get, zones.update)
 - **Purpose:** Prove epoch/handshake discipline holds for zones protocol too
-- **Conformance:** *[To be verified]*
-- **Last Verified:** *[To be verified]*
+- **Conformance:** PASS (verified against lightwave_step.qnt with zones actions)
+- **Last Verified:** 2026-01-19
+
+### ota_ws_happy_path.jsonl / ota_ws_happy_path.itf.json
+- **Scenario:** Connect → getStatus (handshake) → ota.check → ota.begin → stream chunks → ota.verify (device reboots)
+- **Firmware SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
+- **Spec SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
+- **Device:** ESP32-S3 LightwaveOS v2
+- **Build Environment:** esp32dev_audio (PlatformIO)
+- **Captured:** 2026-01-19
+- **Events:** 57 (WebSocket OTA happy path with full upload flow, device rebooted)
+- **Purpose:** Baseline OTA WebSocket protocol flow verification (happy path)
+- **Conformance:** PASS (ADR-015, JSONL conformance, ITF invariants)
+
+### ota_ws_reconnect_mid_transfer.jsonl / ota_ws_reconnect_mid_transfer.itf.json
+- **Scenario:** ota.begin → send some chunks → disconnect WS → reconnect (epoch increments) → restart ota.begin → complete
+- **Firmware SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
+- **Spec SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
+- **Device:** ESP32-S3 LightwaveOS v2
+- **Build Environment:** esp32dev_audio (PlatformIO)
+- **Captured:** 2026-01-19
+- **Events:** 68 (reconnect mid-transfer with epoch-scoping validation)
+- **Purpose:** Prove OTA session epoch-scoping: disconnect aborts session, reconnect requires restart
+- **Conformance:** PASS (ADR-015, JSONL conformance, ITF invariants)
+
+### ota_ws_abort_and_retry.jsonl / ota_ws_abort_and_retry.itf.json
+- **Scenario:** ota.begin → send some chunks → ota.abort → begin again → complete
+- **Firmware SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
+- **Spec SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
+- **Device:** ESP32-S3 LightwaveOS v2
+- **Build Environment:** esp32dev_audio (PlatformIO)
+- **Captured:** 2026-01-19
+- **Events:** 56 (abort and retry flow validation)
+- **Purpose:** Prove explicit abort and retry flow works correctly
+- **Conformance:** PASS (ADR-015, JSONL conformance, ITF invariants)
+
+### ota_rest_happy_path.jsonl / ota_rest_happy_path.itf.json
+- **Scenario:** POST /api/v1/ota/upload with valid X-OTA-Token header → full upload completes → device reboots → new firmware running
+- **Firmware SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
+- **Spec SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
+- **Device:** ESP32-S3 LightwaveOS v2
+- **Build Environment:** esp32dev_audio (PlatformIO)
+- **Captured:** 2026-01-19
+- **Events:** 13 (ota.rest.begin, ota.rest.progress x10, ota.rest.complete, telemetry.boot - complete successful OTA flow)
+- **Purpose:** Baseline OTA REST endpoint flow verification (true happy path with auth) - validates dual-bucket rate limiting + Update API fixes (aligned maxSketchSpace, error diagnostics)
+- **Conformance:** PASS (ADR-015, JSONL conformance, ITF invariants - REST OTA exempted from handshake requirement)
+- **Notes:** 
+  - Complete successful OTA upload (1,533,264 bytes) with progress events (10% increments)
+  - Update API fixes: aligned maxSketchSpace calculation, Update.printError() diagnostics, partition/flash context logging
+  - Dual-bucket rate limiting validated: no 429 errors, auth passed, bucket separation confirmed
+
+### ota_rest_invalid_token.jsonl / ota_rest_invalid_token.itf.json
+- **Scenario:** POST /api/v1/ota/upload with invalid/missing X-OTA-Token header → expect 401/403 + ota.rest.failed telemetry
+- **Firmware SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
+- **Spec SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
+- **Device:** ESP32-S3 LightwaveOS v2
+- **Build Environment:** esp32dev_audio (PlatformIO)
+- **Captured:** 2026-01-19
+- **Events:** 1 (ota.rest.failed with Unauthorized - validates auth_fail bucket)
+- **Purpose:** Verify auth correctness: invalid token produces correct HTTP status and telemetry
+- **Conformance:** PASS (ADR-015, JSONL conformance, ITF invariants - REST OTA exempted from handshake requirement)
 
 ## Capture Process
 
@@ -115,6 +174,36 @@ The capture script:
 2. Validate ADR-015: `python3 tools/validate_itf_bigint.py traces/curated/zones_*.itf.json`
 3. Check conformance: `python3 tools/check_conformance.py traces/curated/zones_*.jsonl`
 
+### OTA traces (ota.* flow)
+
+**WS capture script:** `tools/capture_ota_ws_trace_direct.py`
+
+**REST capture script:** `tools/capture_ota_rest_trace_direct.py`
+
+**Usage:**
+```bash
+# Capture WS OTA traces
+python3 tools/capture_ota_ws_trace_direct.py ota_ws_happy_path traces/curated/
+python3 tools/capture_ota_ws_trace_direct.py ota_ws_reconnect_mid_transfer traces/curated/
+python3 tools/capture_ota_ws_trace_direct.py ota_ws_abort_and_retry traces/curated/
+
+# Capture REST OTA traces
+python3 tools/capture_ota_rest_trace_direct.py ota_rest_happy_path traces/curated/ lightwaveos.local LW-OTA-2024-SecureUpdate
+python3 tools/capture_ota_rest_trace_direct.py ota_rest_invalid_token traces/curated/ lightwaveos.local LW-OTA-2024-SecureUpdate
+```
+
+The capture scripts:
+1. Capture raw serial output (with ESP_LOG prefixes) from `/dev/cu.usbmodem1101` at 115200 baud
+2. Run OTA scenarios via WebSocket (`ws://lightwaveos.local/ws`) or HTTP POST (`http://lightwaveos.local/api/v1/ota/upload`)
+3. Post-process raw capture through `tools/extract_jsonl.py` to extract clean JSONL
+4. Output `ota_*.jsonl` files ready for ITF conversion and conformance checking
+
+**Post-capture steps (per trace):**
+1. Convert to ITF: `python3 tools/jsonl_to_itf.py traces/curated/ota_*.jsonl traces/curated/ota_*.itf.json`
+2. Validate ADR-015: `python3 tools/validate_itf_bigint.py traces/curated/ota_*.itf.json`
+3. Check legality: `python3 tools/check_conformance.py traces/curated/ota_*.jsonl`
+4. Check ITF invariants: `python3 tools/check_trace_conformance.py traces/curated/ota_*.itf.json`
+
 ## Validation
 
 All ITF files in this directory pass ADR-015 compliance checks (bigint encoding required for all integers).
@@ -129,6 +218,8 @@ Traces are checked for model conformance using `tools/check_trace_conformance.py
   - `EpochResetsHandshake`: If not CONNECTED, handshake must be false
   - `ZonesNoEarlyApply`: *(After first zones trace)* Node never applies zones before handshake complete
   - `ZonesIdempotentUnderDup`: *(After first zones trace)* Identical zone updates do not change resulting zone state on replay
+  - `NoOtaBeforeHandshake`: *(After first OTA trace)* OTA state transitions require handshake complete (WebSocket OTA only; REST OTA exempted)
+  - `OtaMonotonicProgress`: *(After first OTA trace)* OTA progress bytesReceived does not decrease within a session
 
 Conformance status is verified automatically in CI (see `.github/workflows/conformance_check.yml`).
 

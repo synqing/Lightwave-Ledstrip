@@ -45,6 +45,10 @@ class HubState:
     # Zones state (Phase: zones slice)
     zoneCount: int = 0
     zones: Dict[int, Dict[str, Any]] = field(default_factory=dict)  # zoneId -> zone state
+    # OTA state (Phase: OTA slice)
+    otaState: str = "Idle"
+    otaTotalSize: int = 0
+    otaBytesReceived: int = 0
 
 # ============================================================================
 # ITF Integer Encoding Helper (ADR-015 #bigint format)
@@ -243,7 +247,81 @@ class StateBuilder:
                             self.hub_state.zones[zone_id]["paletteId"] = msg_payload["paletteId"]
                         if "blendMode" in msg_payload:
                             self.hub_state.zones[zone_id]["blendMode"] = msg_payload["blendMode"]
+                
+                # OTA messages (WebSocket protocol)
+                elif msg_type in ("ota.check", "otaCheck"):
+                    # OTA check request (no state change)
+                    pass
+                
+                elif msg_type in ("ota.status", "otaStatus"):
+                    # OTA status response (no state change, just informational)
+                    pass
+                
+                elif msg_type in ("ota.begin", "otaBegin"):
+                    # OTA begin request - Hub will respond with ota.ready
+                    if "size" in msg_payload:
+                        # Transition to InProgress will happen on ota.ready response
+                        pass
+                
+                elif msg_type in ("ota.ready", "otaReady"):
+                    # Hub responds to ota.begin, starting OTA session
+                    if "totalSize" in msg_payload:
+                        self.hub_state.otaState = "InProgress"
+                        self.hub_state.otaTotalSize = msg_payload["totalSize"]
+                        self.hub_state.otaBytesReceived = 0
+                
+                elif msg_type in ("ota.chunk", "otaChunk"):
+                    # OTA chunk received - progress tracked via ota.progress response
+                    pass
+                
+                elif msg_type in ("ota.progress", "otaProgress"):
+                    # OTA progress update
+                    if "offset" in msg_payload:
+                        self.hub_state.otaBytesReceived = msg_payload["offset"]
+                        # Keep state as InProgress (Complete only on verify)
+                        if self.hub_state.otaState != "InProgress":
+                            self.hub_state.otaState = "InProgress"
+                
+                elif msg_type in ("ota.abort", "otaAbort"):
+                    # OTA abort request - Hub will reset state
+                    pass
+                
+                elif msg_type in ("ota.verify", "otaVerify"):
+                    # OTA verify request - Hub will complete
+                    if self.hub_state.otaBytesReceived >= self.hub_state.otaTotalSize:
+                        self.hub_state.otaState = "Complete"
             
+            self._snapshot_state(ts_ms)
+        
+        # OTA telemetry events (REST and WebSocket)
+        elif event_type in ("ota.ws.begin", "ota.rest.begin"):
+            # OTA session started
+            if "totalBytes" in event:
+                self.hub_state.otaState = "InProgress"
+                self.hub_state.otaTotalSize = event["totalBytes"]
+                self.hub_state.otaBytesReceived = 0
+            self._snapshot_state(ts_ms)
+        
+        elif event_type in ("ota.ws.chunk", "ota.rest.progress"):
+            # OTA progress update
+            if "offset" in event:
+                self.hub_state.otaBytesReceived = event["offset"]
+                if self.hub_state.otaState != "InProgress":
+                    self.hub_state.otaState = "InProgress"
+            self._snapshot_state(ts_ms)
+        
+        elif event_type in ("ota.ws.complete", "ota.rest.complete"):
+            # OTA completed successfully
+            self.hub_state.otaState = "Complete"
+            if "finalSize" in event:
+                self.hub_state.otaBytesReceived = event["finalSize"]
+            self._snapshot_state(ts_ms)
+        
+        elif event_type in ("ota.ws.abort", "ota.ws.failed", "ota.rest.failed"):
+            # OTA aborted or failed - reset to Idle
+            self.hub_state.otaState = "Idle"
+            self.hub_state.otaTotalSize = 0
+            self.hub_state.otaBytesReceived = 0
             self._snapshot_state(ts_ms)
         
         # Timer events (timeouts, reconnects)
@@ -297,7 +375,10 @@ class StateBuilder:
                 "activeEffectId": wrap_bigint(self.hub_state.activeEffectId),
                 "lastBroadcastTs": wrap_bigint(self.hub_state.lastBroadcastTs),
                 "zoneCount": wrap_bigint(self.hub_state.zoneCount),
-                "zones": zones_bigint
+                "zones": zones_bigint,
+                "otaState": self.hub_state.otaState,  # String enum, no bigint wrapping
+                "otaTotalSize": wrap_bigint(self.hub_state.otaTotalSize),
+                "otaBytesReceived": wrap_bigint(self.hub_state.otaBytesReceived)
             }
         }
         

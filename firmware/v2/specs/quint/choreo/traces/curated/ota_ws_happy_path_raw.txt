@@ -1,0 +1,274 @@
+[301287][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.004 0.003 0.004 0.003 0.002 0.004 0.002 0.002]
+[Status] FPS: 137, CPU: 87%, Effect: Fire
+[302021][1;32m[INFO][0m[AudioCapture] [1;33mDMA:[0m hop=9610 R=[F9DFC000..F9EFC000] >>10=[-100368..-99344]
+[302248][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.005 0.002 0.005 0.002 0.003 0.003 0.001 0.001]
+[303205][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.006 0.003 0.003 0.005 0.004 0.003 0.003 0.001]
+[304164][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.004 0.002 0.006 0.004 0.002 0.002 0.003 0.001]
+[305126][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.005 0.004 0.005 0.005 0.003 0.006 0.006 0.001]
+[306088][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.009 0.005 0.009 0.003 0.002 0.003 0.004 0.002]
+[307046][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.009 0.007 0.005 0.003 0.004 0.004 0.005 0.001]
+[307891][1;32m[INFO][0m[WsGateway] WS: Upgrade request received from 192.168.0.25 (client ID: 4)
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws1","location":"v2/src/network/webserver/WsGateway.cpp:handleConnect","message":"ws.connect.enter","data":{"clientId":4,"wsCount":1,"wsMax":8,"ip":"192.168.0.25"},"timestamp":307891}
+[307892][1;32m[INFO][0m[WsGateway] WS: Client 4 connected from 192.168.0.25
+{"event":"ws.connect","ts_mono_ms":307892,"connEpoch":0,"eventSeq":126,"clientId":4,"ip":"192.168.0.25","result":"ok","schemaVersion":"1.0.0"}
+[307892][1;32m[INFO][0m[WebServer] WS: Client 4 connected from 192.168.0.25
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":52,"ip":"192.168.0.25"},"timestamp":307892}
+{"event":"msg.recv","ts_mono_ms":307893,"connEpoch":0,"eventSeq":127,"clientId":4,"msgType":"getStatus","result":"ok","reason":"","payloadSummary":"{\"type\":\"getStatus\",\"requestId\":\"ota-ws-happy-1\"}","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse1","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.route.result","data":{"clientId":4,"type":"getStatus","handled":true},"timestamp":307893}
+[308008][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.013 0.008 0.008 0.006 0.006 0.004 0.006 0.002]
+
+=== Validation Performance Report ===
+Total calls: 76604
+Total frames: 19000
+Avg time per call: 3.46 us
+Peak time: 163.00 us
+Total overhead per frame: 13.96 us
+CPU overhead: 0.167% (of 8.33ms frame budget)
+Theoretical estimate: 0.1% (actual: 0.167%)
+=======================================
+
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":52,"ip":"192.168.0.25"},"timestamp":308695}
+{"event":"msg.recv","ts_mono_ms":308696,"connEpoch":0,"eventSeq":128,"clientId":4,"msgType":"ota.check","result":"ok","reason":"","payloadSummary":"{\"type\":\"ota.check\",\"requestId\":\"ota-ws-happy-2\"}","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse1","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.route.result","data":{"clientId":4,"type":"ota.check","handled":false},"timestamp":308699}
+[308972][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.008 0.005 0.005 0.005 0.003 0.005 0.005 0.001]
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":67,"ip":"192.168.0.25"},"timestamp":309200}
+{"event":"msg.recv","ts_mono_ms":309201,"connEpoch":0,"eventSeq":129,"clientId":4,"msgType":"ota.begin","result":"ok","reason":"","payloadSummary":"{\"type\":\"ota.begin\",\"requestId\":\"ota-ws-happy-3\",\"size\":50000}","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse1","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.route.result","data":{"clientId":4,"type":"ota.begin","handled":false},"timestamp":309203}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1428,"ip":"192.168.0.25"},"timestamp":309713}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1428},"timestamp":309715}
+{"event":"msg.recv","ts_mono_ms":309715,"connEpoch":0,"eventSeq":130,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"{\"type\": \"ota.chunk\", \"requestId\": \"ota-ws-happy-chunk-0\", \"offset\": 0, \"data\": \"AAECAwABAgMAAQIDAAECAwABAgMAAQIDAAECAwABAgMAAQ","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":309720}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":309720}
+{"event":"msg.recv","ts_mono_ms":309720,"connEpoch":0,"eventSeq":131,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":309723}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":309723}
+{"event":"msg.recv","ts_mono_ms":309723,"connEpoch":0,"eventSeq":132,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1067,"ip":"192.168.0.25"},"timestamp":309732}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1067},"timestamp":309733}
+{"event":"msg.recv","ts_mono_ms":309733,"connEpoch":0,"eventSeq":133,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":309734}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":309735}
+{"event":"msg.recv","ts_mono_ms":309735,"connEpoch":0,"eventSeq":134,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":309739}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":309740}
+{"event":"msg.recv","ts_mono_ms":309740,"connEpoch":0,"eventSeq":135,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":309742}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":309743}
+{"event":"msg.recv","ts_mono_ms":309743,"connEpoch":0,"eventSeq":136,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":377,"ip":"192.168.0.25"},"timestamp":309749}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":377},"timestamp":309749}
+{"event":"msg.recv","ts_mono_ms":309749,"connEpoch":0,"eventSeq":137,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":943,"ip":"192.168.0.25"},"timestamp":309753}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":943},"timestamp":309753}
+{"event":"msg.recv","ts_mono_ms":309753,"connEpoch":0,"eventSeq":138,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":309809}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":309810}
+{"event":"msg.recv","ts_mono_ms":309810,"connEpoch":0,"eventSeq":139,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"on\\L%fOL(@4","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":309814}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":309814}
+{"event":"msg.recv","ts_mono_ms":309814,"connEpoch":0,"eventSeq":140,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":309816}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":309816}
+{"event":"msg.recv","ts_mono_ms":309816,"connEpoch":0,"eventSeq":141,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":120,"ip":"192.168.0.25"},"timestamp":309823}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":120},"timestamp":309823}
+{"event":"msg.recv","ts_mono_ms":309823,"connEpoch":0,"eventSeq":142,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":309827}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":309828}
+{"event":"msg.recv","ts_mono_ms":309827,"connEpoch":0,"eventSeq":143,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":309833}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":309833}
+{"event":"msg.recv","ts_mono_ms":309833,"connEpoch":0,"eventSeq":144,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":309836}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":309836}
+{"event":"msg.recv","ts_mono_ms":309836,"connEpoch":0,"eventSeq":145,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1324,"ip":"192.168.0.25"},"timestamp":309843}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1324},"timestamp":309843}
+{"event":"msg.recv","ts_mono_ms":309843,"connEpoch":0,"eventSeq":146,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":946,"ip":"192.168.0.25"},"timestamp":309848}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":946},"timestamp":309848}
+{"event":"msg.recv","ts_mono_ms":309848,"connEpoch":0,"eventSeq":147,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":309920}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":309920}
+{"event":"msg.recv","ts_mono_ms":309920,"connEpoch":0,"eventSeq":148,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"qsSx(Si_}$Qm","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":309923}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":309923}
+{"event":"msg.recv","ts_mono_ms":309923,"connEpoch":0,"eventSeq":149,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":309928}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":309929}
+{"event":"msg.recv","ts_mono_ms":309929,"connEpoch":0,"eventSeq":150,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":309931}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":309932}
+{"event":"msg.recv","ts_mono_ms":309932,"connEpoch":0,"eventSeq":151,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":12,"ip":"192.168.0.25"},"timestamp":309940}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":12},"timestamp":309940}
+{"event":"msg.recv","ts_mono_ms":309940,"connEpoch":0,"eventSeq":152,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":309945}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":309945}
+{"event":"msg.recv","ts_mono_ms":309945,"connEpoch":0,"eventSeq":153,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":309950}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":309950}
+{"event":"msg.recv","ts_mono_ms":309950,"connEpoch":0,"eventSeq":154,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":309953}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":309954}
+{"event":"msg.recv","ts_mono_ms":309954,"connEpoch":0,"eventSeq":155,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":947,"ip":"192.168.0.25"},"timestamp":309958}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":947},"timestamp":309959}
+{"event":"msg.recv","ts_mono_ms":309959,"connEpoch":0,"eventSeq":156,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+[310013][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.007 0.008 0.008 0.007 0.005 0.006 0.005 0.003]
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":310024}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":310024}
+{"event":"msg.recv","ts_mono_ms":310024,"connEpoch":0,"eventSeq":157,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":310028}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":310029}
+{"event":"msg.recv","ts_mono_ms":310029,"connEpoch":0,"eventSeq":158,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":310031}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":310031}
+{"event":"msg.recv","ts_mono_ms":310031,"connEpoch":0,"eventSeq":159,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":310039}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":310039}
+{"event":"msg.recv","ts_mono_ms":310039,"connEpoch":0,"eventSeq":160,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":310045}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":310045}
+{"event":"msg.recv","ts_mono_ms":310045,"connEpoch":0,"eventSeq":161,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":310049}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":310049}
+{"event":"msg.recv","ts_mono_ms":310049,"connEpoch":0,"eventSeq":162,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":310051}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":310051}
+{"event":"msg.recv","ts_mono_ms":310051,"connEpoch":0,"eventSeq":163,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":963,"ip":"192.168.0.25"},"timestamp":310058}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":963},"timestamp":310059}
+{"event":"msg.recv","ts_mono_ms":310059,"connEpoch":0,"eventSeq":164,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":310126}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":310126}
+{"event":"msg.recv","ts_mono_ms":310126,"connEpoch":0,"eventSeq":165,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"J3p>\"h8/.hg\"3?~h9p}j>j","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":310131}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":310131}
+{"event":"msg.recv","ts_mono_ms":310131,"connEpoch":0,"eventSeq":166,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":310134}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":310135}
+{"event":"msg.recv","ts_mono_ms":310134,"connEpoch":0,"eventSeq":167,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":310142}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":310142}
+{"event":"msg.recv","ts_mono_ms":310142,"connEpoch":0,"eventSeq":168,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":310144}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":310145}
+{"event":"msg.recv","ts_mono_ms":310144,"connEpoch":0,"eventSeq":169,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":310148}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":310148}
+{"event":"msg.recv","ts_mono_ms":310148,"connEpoch":0,"eventSeq":170,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":310152}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":310152}
+{"event":"msg.recv","ts_mono_ms":310152,"connEpoch":0,"eventSeq":171,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":963,"ip":"192.168.0.25"},"timestamp":310158}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":963},"timestamp":310158}
+{"event":"msg.recv","ts_mono_ms":310158,"connEpoch":0,"eventSeq":172,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":310227}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":310228}
+{"event":"msg.recv","ts_mono_ms":310228,"connEpoch":0,"eventSeq":173,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"S'cq <n0r88qh&~s827~r#c;o~/s85iq c#:2ni:_$[4WS_$[4WS_$","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":310231}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":310232}
+{"event":"msg.recv","ts_mono_ms":310232,"connEpoch":0,"eventSeq":174,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":310234}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":310234}
+{"event":"msg.recv","ts_mono_ms":310234,"connEpoch":0,"eventSeq":175,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":310243}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":310244}
+{"event":"msg.recv","ts_mono_ms":310244,"connEpoch":0,"eventSeq":176,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":310248}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":310248}
+{"event":"msg.recv","ts_mono_ms":310248,"connEpoch":0,"eventSeq":177,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":310251}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":310251}
+{"event":"msg.recv","ts_mono_ms":310251,"connEpoch":0,"eventSeq":178,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1432,"ip":"192.168.0.25"},"timestamp":310254}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1432},"timestamp":310255}
+{"event":"msg.recv","ts_mono_ms":310255,"connEpoch":0,"eventSeq":179,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":963,"ip":"192.168.0.25"},"timestamp":310261}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":963},"timestamp":310262}
+{"event":"msg.recv","ts_mono_ms":310262,"connEpoch":0,"eventSeq":180,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":1223,"ip":"192.168.0.25"},"timestamp":310329}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":1223},"timestamp":310330}
+{"event":"msg.recv","ts_mono_ms":310329,"connEpoch":0,"eventSeq":181,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"y|","schemaVersion":"1.0.0"}
+{"sessionId":"debug-session","runId":"ws-guard-pre","hypothesisId":"Hws3","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.message.recv","data":{"clientId":4,"len":55,"ip":"192.168.0.25"},"timestamp":310433}
+{"sessionId":"debug-session","runId":"ws-drop-pre","hypothesisId":"Hwse2","location":"v2/src/network/webserver/WsGateway.cpp:handleMessage","message":"ws.json.parse_error","data":{"clientId":4,"len":55},"timestamp":310433}
+{"event":"msg.recv","ts_mono_ms":310433,"connEpoch":0,"eventSeq":182,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"{\"pe \"a.ri\",reesd\"\"o-whay-}","schemaVersion":"1.0.0"}
+[311064][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.006 0.006 0.005 0.005 0.004 0.004 0.002 0.003]
+[311798][1;32m[INFO][0m[AudioCapture] [1;33mDMA:[0m hop=9920 R=[F9DE8000..F9FA8000] >>10=[-100448..-98656]
+[311809][1;32m[INFO][0m[Audio] Audio alive: [1;33mmic=-47.1dB[0m cap=9920 pk=333 pkC=2797 rms=0.0378->0.030 pre=0.0044 g=9.55 dc=6.8 clip=0 flux=0.027 min=-1352 max=2797 mean=55.1
+[311810][1;32m[INFO][0m[Audio] Spike stats: frames=9920 detected=39689 corrected=29084 avg/frame=1.142 removed=3146.86
+[311810][1;32m[INFO][0m[Audio] Saliency: overall=0.111 dom=3 H=0.189 R=0.002 T=0.021 D=0.238
+[311810][1;32m[INFO][0m[Audio] Style: 5 conf=0.76 [R=0.30 H=0.50 M=0.00 T=0.45 D=0.76]
+[311811][1;32m[INFO][0m[Audio] [1;35mBeat:[0m BPM=87.0 conf=0.04 phase=0.79 lock=no
+[Status] FPS: 137, CPU: 86%, Effect: Fire
+[312026][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.006 0.010 0.010 0.008 0.006 0.005 0.005 0.003]
+[312989][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.025 0.026 0.012 0.006 0.009 0.010 0.008 0.003]
+[313945][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.011 0.015 0.018 0.009 0.016 0.015 0.006 0.003]
+[314906][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.040 0.033 0.034 0.014 0.011 0.012 0.008 0.004]
+[315865][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.027 0.021 0.030 0.029 0.024 0.016 0.010 0.007]
+[316826][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.025 0.020 0.010 0.008 0.018 0.018 0.005 0.004]
+[317789][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.010 0.009 0.015 0.013 0.011 0.015 0.003 0.003]
+[318749][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.011 0.011 0.006 0.005 0.004 0.004 0.006 0.003]
+[319715][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.025 0.020 0.043 0.033 0.020 0.010 0.037 0.013]
+[320678][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.025 0.050 0.031 0.027 0.017 0.011 0.008 0.007]
+[321409][1;32m[INFO][0m[AudioCapture] [1;33mDMA:[0m hop=10230 R=[F9C80000..F9F80000] >>10=[-101888..-98816]
+[321634][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.035 0.036 0.014 0.006 0.005 0.010 0.012 0.005]
+[Status] FPS: 138, CPU: 86%, Effect: Fire
+[322592][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.010 0.007 0.010 0.010 0.006 0.003 0.005 0.003]
+[323551][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.012 0.022 0.018 0.013 0.020 0.018 0.013 0.002]
+
+=== Validation Performance Report ===
+Total calls: 80636
+Total frames: 20000
+Avg time per call: 3.46 us
+Peak time: 163.00 us
+Total overhead per frame: 13.96 us
+CPU overhead: 0.168% (of 8.33ms frame budget)
+Theoretical estimate: 0.1% (actual: 0.168%)
+=======================================
+
+[324510][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.008 0.014 0.013 0.006 0.006 0.008 0.003 0.001]
+[325470][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.015 0.025 0.023 0.016 0.017 0.014 0.005 0.003]
+[326430][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.009 0.010 0.008 0.006 0.003 0.007 0.003 0.002]
+[327391][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.016 0.021 0.020 0.005 0.005 0.005 0.005 0.003]
+[328353][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.012 0.010 0.014 0.012 0.014 0.013 0.011 0.006]
+[329313][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.024 0.016 0.013 0.008 0.008 0.011 0.003 0.003]
+[330275][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.008 0.007 0.014 0.013 0.008 0.008 0.006 0.002]
+[330632][1;32m[INFO][0m[WiFi] Connected to 'OPTUS_738CC0N', RSSI: -77 dBm, Channel: 6, Uptime: 318s
+[331016][1;32m[INFO][0m[AudioCapture] [1;33mDMA:[0m hop=10540 R=[F9D94000..F9EB8000] >>10=[-100784..-99616]
+[331027][1;32m[INFO][0m[Audio] Audio alive: [1;33mmic=-54.2dB[0m cap=10540 pk=147 pkC=1470 rms=0.0189->0.000 pre=0.0019 g=9.63 dc=-0.8 clip=0 flux=0.000 min=-1306 max=1470 mean=-1.4
+[331028][1;32m[INFO][0m[Audio] Spike stats: frames=10540 detected=43055 corrected=31848 avg/frame=0.693 removed=3456.38
+[331028][1;32m[INFO][0m[Audio] Saliency: overall=0.047 dom=0 H=0.188 R=0.000 T=0.001 D=0.000
+[331028][1;32m[INFO][0m[Audio] Style: 5 conf=0.80 [R=0.30 H=0.50 M=0.00 T=0.51 D=0.80]
+[331029][1;32m[INFO][0m[Audio] [1;35mBeat:[0m BPM=62.0 conf=0.06 phase=0.36 lock=no
+[331245][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.009 0.011 0.010 0.004 0.005 0.003 0.003 0.002]
+[Status] FPS: 135, CPU: 88%, Effect: Fire
+[332205][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.008 0.015 0.020 0.028 0.016 0.016 0.006 0.003]
+[333162][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.011 0.010 0.017 0.011 0.004 0.004 0.004 0.002]
+[334123][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.018 0.016 0.015 0.016 0.016 0.008 0.003 0.001]
+[335087][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.018 0.009 0.010 0.013 0.018 0.005 0.005 0.003]
+[336050][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.033 0.023 0.016 0.020 0.017 0.014 0.010 0.004]
+[337009][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.019 0.015 0.015 0.011 0.010 0.007 0.007 0.005]
+[337973][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.024 0.018 0.031 0.016 0.028 0.019 0.005 0.011]
+[338934][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.019 0.014 0.018 0.013 0.004 0.007 0.009 0.005]
+[339895][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.017 0.023 0.024 0.011 0.021 0.006 0.004 0.003]
+
+=== Validation Performance Report ===
+Total calls: 84672
+Total frames: 21000
+Avg time per call: 3.46 us
+Peak time: 163.00 us
+Total overhead per frame: 13.96 us
+CPU overhead: 0.168% (of 8.33ms frame budget)
+Theoretical estimate: 0.1% (actual: 0.168%)
+=======================================
+
+[340630][1;32m[INFO][0m[AudioCapture] [1;33mDMA:[0m hop=10850 R=[F9D10000..F9FE8000] >>10=[-101312..-98400]
+[340854][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.017 0.014 0.024 0.011 0.004 0.008 0.011 0.004]
+[341817][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.012 0.009 0.013 0.013 0.008 0.007 0.007 0.004]
+[Status] FPS: 135, CPU: 88%, Effect: Fire
+[342776][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.013 0.016 0.019 0.015 0.008 0.010 0.004 0.004]
+[343742][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.016 0.012 0.015 0.015 0.010 0.010 0.005 0.002]
+[344702][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.018 0.017 0.026 0.014 0.011 0.010 0.005 0.002]
+[345661][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.020 0.015 0.009 0.004 0.004 0.005 0.003 0.004]

@@ -316,16 +316,16 @@ inline DualEncoderService::DualEncoderService(TwoWire* wire, uint8_t addressA, u
 {
     // Initialize values to defaults
     // Unit A (indices 0-7): Global parameters
-    // CRITICAL: Order must match Parameter enum and ParameterMap!
-    // Index 0=Effect, 1=Brightness, 2=Palette, 3=Speed, 4=Mood, 5=FadeAmount, 6=Complexity, 7=Variation
-    _values[0] = ParamDefault::EFFECT;
-    _values[1] = ParamDefault::BRIGHTNESS;   // Index 1 = Brightness (128)
-    _values[2] = ParamDefault::PALETTE;      // Index 2 = Palette (0)
-    _values[3] = ParamDefault::SPEED;        // Index 3 = Speed (25)
-    _values[4] = ParamDefault::MOOD;         // Index 4 = Mood (0)
-    _values[5] = ParamDefault::FADEAMOUNT;   // Index 5 = FadeAmount (0)
-    _values[6] = ParamDefault::COMPLEXITY;
-    _values[7] = ParamDefault::VARIATION;
+    // CRITICAL: Order must match Parameter enum and PARAMETER_TABLE!
+    // Index 0=Effect, 1=Palette, 2=Speed, 3=Mood, 4=FadeAmount, 5=Complexity, 6=Variation, 7=Brightness
+    _values[0] = ParamDefault::EFFECT;       // Index 0 = Effect (0)
+    _values[1] = ParamDefault::PALETTE;      // Index 1 = Palette (0, wraps 0-74)
+    _values[2] = ParamDefault::SPEED;        // Index 2 = Speed (25)
+    _values[3] = ParamDefault::MOOD;         // Index 3 = Mood (0)
+    _values[4] = ParamDefault::FADEAMOUNT;   // Index 4 = FadeAmount (0)
+    _values[5] = ParamDefault::COMPLEXITY;   // Index 5 = Complexity (128)
+    _values[6] = ParamDefault::VARIATION;    // Index 6 = Variation (0)
+    _values[7] = ParamDefault::BRIGHTNESS;   // Index 7 = Brightness (128)
 
     // Unit B (indices 8-15): Zone parameters
     _values[8] = ParamDefault::ZONE0_EFFECT;
@@ -345,18 +345,18 @@ inline bool DualEncoderService::begin() {
     // Set status LEDs to indicate unit availability
     if (unitAOk) {
         // Unit A status LED: dim green
-        // #region agent log
-        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"boot\",\"hypothesisId\":\"H1\",\"location\":\"DualEncoderService.h:begin\",\"message\":\"statusLed.unitA.set\",\"data\":{\"channel\":8,\"r\":0,\"g\":32,\"b\":0},\"timestamp\":%lu}\n",
-                      static_cast<unsigned long>(millis()));
-        // #endregion
+        // #region agent log (DISABLED)
+        // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"boot\",\"hypothesisId\":\"H1\",\"location\":\"DualEncoderService.h:begin\",\"message\":\"statusLed.unitA.set\",\"data\":{\"channel\":8,\"r\":0,\"g\":32,\"b\":0},\"timestamp\":%lu}\n",
+                      // static_cast<unsigned long>(millis()));
+                // #endregion
         _transportA.setLED(8, 0, 32, 0);
     }
     if (unitBOk) {
         // Unit B status LED: dim blue (to differentiate from Unit A)
-        // #region agent log
-        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"boot\",\"hypothesisId\":\"H1\",\"location\":\"DualEncoderService.h:begin\",\"message\":\"statusLed.unitB.set\",\"data\":{\"channel\":8,\"r\":0,\"g\":0,\"b\":32},\"timestamp\":%lu}\n",
-                      static_cast<unsigned long>(millis()));
-        // #endregion
+        // #region agent log (DISABLED)
+        // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"boot\",\"hypothesisId\":\"H1\",\"location\":\"DualEncoderService.h:begin\",\"message\":\"statusLed.unitB.set\",\"data\":{\"channel\":8,\"r\":0,\"g\":0,\"b\":32},\"timestamp\":%lu}\n",
+                      // static_cast<unsigned long>(millis()));
+                // #endregion
         _transportB.setLED(8, 0, 0, 32);
     }
 
@@ -425,15 +425,16 @@ inline void DualEncoderService::getAllValues(uint16_t values[TOTAL_ENCODERS]) co
 
 inline void DualEncoderService::resetToDefaults(bool triggerCallbacks) {
     // Reset Unit A parameters (0-7)
-    // CRITICAL: Order must match Parameter enum and ParameterMap!
-    _values[0] = ParamDefault::EFFECT;
-    _values[1] = ParamDefault::BRIGHTNESS;   // Index 1 = Brightness (128)
-    _values[2] = ParamDefault::PALETTE;      // Index 2 = Palette (0)
-    _values[3] = ParamDefault::SPEED;        // Index 3 = Speed (25)
-    _values[4] = ParamDefault::MOOD;         // Index 4 = Mood (0)
-    _values[5] = ParamDefault::FADEAMOUNT;   // Index 5 = FadeAmount (0)
-    _values[6] = ParamDefault::COMPLEXITY;
-    _values[7] = ParamDefault::VARIATION;
+    // CRITICAL: Order must match Parameter enum and PARAMETER_TABLE!
+    // Index 0=Effect, 1=Palette, 2=Speed, 3=Mood, 4=FadeAmount, 5=Complexity, 6=Variation, 7=Brightness
+    _values[0] = ParamDefault::EFFECT;       // Index 0 = Effect (0)
+    _values[1] = ParamDefault::PALETTE;      // Index 1 = Palette (0, wraps 0-74)
+    _values[2] = ParamDefault::SPEED;        // Index 2 = Speed (25)
+    _values[3] = ParamDefault::MOOD;         // Index 3 = Mood (0)
+    _values[4] = ParamDefault::FADEAMOUNT;   // Index 4 = FadeAmount (0)
+    _values[5] = ParamDefault::COMPLEXITY;   // Index 5 = Complexity (128)
+    _values[6] = ParamDefault::VARIATION;    // Index 6 = Variation (0)
+    _values[7] = ParamDefault::BRIGHTNESS;   // Index 7 = Brightness (128)
 
     // Reset Unit B parameters (8-15) to zone defaults
     _values[8] = ParamDefault::ZONE0_EFFECT;
@@ -532,9 +533,9 @@ inline void DualEncoderService::processEncoderDelta(uint8_t globalIdx, int32_t r
             int32_t newValue = static_cast<int32_t>(_values[globalIdx]) + normalizedDelta;
             _values[globalIdx] = applyRangeConstraint(globalIdx, newValue);
 
-            // #region agent log
-            Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"WRAP2\",\"location\":\"DualEncoderService.h:503\",\"message\":\"processEncoderDelta\",\"data\":{\"globalIdx\":%d,\"oldValue\":%d,\"normalizedDelta\":%ld,\"newValueBeforeConstraint\":%ld,\"newValueAfterConstraint\":%d,\"shouldWrap\":%d},\"timestamp\":%lu}\n", globalIdx, oldValue, (long)normalizedDelta, (long)newValue, _values[globalIdx], shouldWrapGlobal(globalIdx) ? 1 : 0, (unsigned long)now);
-            // #endregion
+            // #region agent log (DISABLED)
+            // Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"WRAP2\",\"location\":\"DualEncoderService.h:503\",\"message\":\"processEncoderDelta\",\"data\":{\"globalIdx\":%d,\"oldValue\":%d,\"normalizedDelta\":%ld,\"newValueBeforeConstraint\":%ld,\"newValueAfterConstraint\":%d,\"shouldWrap\":%d},\"timestamp\":%lu}\n", globalIdx, oldValue, (long)normalizedDelta, (long)newValue, _values[globalIdx], shouldWrapGlobal(globalIdx) ? 1 : 0, (unsigned long)now);
+                        // #endregion
 
             // Flash LED for activity feedback (bright green)
             flashLed(globalIdx, 0, 255, 0);

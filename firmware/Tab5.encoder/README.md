@@ -259,14 +259,14 @@ src/ui/
 ### Unit A (0x42) - Global Parameters
 | Encoder | Parameter   | Range    | Default | Behavior |
 |---------|-------------|----------|---------|----------|
-| 0       | Effect      | 0-95     | 0       | Wraps    |
-| 1       | Brightness  | 0-255    | 128     | Clamps   |
-| 2       | Palette     | 0-74     | 0       | Wraps    |
-| 3       | Speed       | 1-100    | 25      | Clamps   |
-| 4       | Mood        | 0-255    | 0       | Clamps   |
-| 5       | Fade Amount | 0-255    | 0       | Clamps   |
-| 6       | Complexity  | 0-255    | 128     | Clamps   |
-| 7       | Variation   | 0-255    | 0       | Clamps   |
+| 0       | Effect      | 0-87     | 0       | Wraps    |
+| 1       | Palette     | 0-74     | 0       | Wraps    |
+| 2       | Speed       | 1-100    | 25      | Clamps   |
+| 3       | Mood        | 0-255    | 0       | Clamps   |
+| 4       | Fade Amount | 0-255    | 0       | Clamps   |
+| 5       | Complexity  | 0-255    | 128     | Clamps   |
+| 6       | Variation   | 0-255    | 0       | Clamps   |
+| 7       | Brightness  | 0-255    | 128     | Clamps   |
 
 ### Unit B (0x41) - Preset Management
 | Button  | Function                    |

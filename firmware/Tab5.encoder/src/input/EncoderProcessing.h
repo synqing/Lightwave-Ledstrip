@@ -246,10 +246,6 @@ inline uint16_t wrapValue(uint8_t param, int32_t value) {
     uint8_t maxVal = getParameterMax(p);
     int32_t range = (maxVal - minVal) + 1;
 
-    // #region agent log
-    int32_t originalValue = value;
-    // #endregion
-
     // Normalize value to range using modulo for efficiency and correctness
     // Handle negative values correctly with overflow protection
     if (value < minVal) {
@@ -279,12 +275,6 @@ inline uint16_t wrapValue(uint8_t param, int32_t value) {
         }
     }
 
-    // #region agent log
-    if (originalValue != value) {
-        Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"WRAP1\",\"location\":\"EncoderProcessing.h:238\",\"message\":\"wrapValue.wrapped\",\"data\":{\"param\":%d,\"originalValue\":%ld,\"wrappedValue\":%ld,\"minVal\":%d,\"maxVal\":%d,\"range\":%ld},\"timestamp\":%lu}\n", param, (long)originalValue, (long)value, minVal, maxVal, (long)range, (unsigned long)millis());
-    }
-    // #endregion
-
     return static_cast<uint16_t>(value);
 }
 
@@ -294,8 +284,9 @@ inline uint16_t wrapValue(uint8_t param, int32_t value) {
  * @return true if parameter wraps, false if it clamps
  */
 inline bool shouldWrap(uint8_t param) {
-    // Encoder index mapping: 0=Effect, 1=Palette, 2=Speed, 3=Mood, 4=FadeAmount, 5=Complexity, 6=Variation, 7=Brightness
-    // Effect (0) and Palette (1) wrap; Speed (2) and others clamp
+    // Parameter enum order (matches PARAMETER_TABLE):
+    // 0=Effect, 1=Palette, 2=Speed, 3=Mood, 4=FadeAmount, 5=Complexity, 6=Variation, 7=Brightness
+    // Effect (0) and Palette (1) wrap; others clamp
     return (param == 0 || param == 1);
 }
 

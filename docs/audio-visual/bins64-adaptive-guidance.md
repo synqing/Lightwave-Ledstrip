@@ -208,3 +208,9 @@ If effect authors keep mixing semantics, consider a naming convention:
 - `binShape(i)` → adaptive `bins64Adaptive` (shape semantics)
 
 This is purely a readability upgrade; the underlying signals already exist.
+
+---
+
+## Related Documentation
+
+- [Audio Gate Responsiveness Fix](./audio-gate-fix-2025-01.md) - Fix for gate closure blocking audio reactivity (gateStartFactor default changed from 1.5 to 1.0)

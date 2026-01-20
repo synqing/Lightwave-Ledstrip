@@ -131,7 +131,12 @@ enum class MessageType : uint8_t {
     AUDIO_TEMPO_ESTIMATE   = 0xC0,  // param4 = bpm * 100 (fixed point)
     AUDIO_BEAT_OBSERVATION = 0xC1,  // param1 = strength (0-255), param2 = is_downbeat
     AUDIO_BANDS_UPDATED    = 0xC2,  // Notification that band analysis completed
-    AUDIO_ERROR            = 0xC3   // param1 = error code
+    AUDIO_ERROR            = 0xC3,  // param1 = error code
+
+    // Trinity sync commands (0xD0-0xDF)
+    TRINITY_BEAT  = 0xD0,  // param1=bpm_hi, param2=bpm_lo, param3=phase, param4=flags
+    TRINITY_MACRO = 0xD1,  // param1-4 = packed macro values
+    TRINITY_SYNC  = 0xD2   // param1=action, param4=position_ms
 };
 
 // ============================================================================

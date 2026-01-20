@@ -319,7 +319,7 @@ plugins::IEffect* RendererActor::getEffectInstance(uint8_t id) const
  * 
  * DEFENSIVE CHECK: Prevents LoadProhibited crashes from corrupted effect ID.
  * 
- * RendererActor uses m_effects[MAX_EFFECTS] array where MAX_EFFECTS = 96. If
+ * RendererActor uses m_effects[MAX_EFFECTS] array where MAX_EFFECTS = 98. If
  * effectId is corrupted (e.g., by memory corruption, invalid input, or race
  * condition), accessing m_effects[effectId] would cause out-of-bounds access
  * and crash.
@@ -479,7 +479,8 @@ void RendererActor::onTick()
     // Post-render color correction pipeline (skip for sensitive effects)
     // Includes: LGP-sensitive, stateful, PHYSICS_BASED, MATHEMATICAL families
     // See PatternRegistry::shouldSkipColorCorrection() for full list
-    if (!::PatternRegistry::shouldSkipColorCorrection(m_currentEffect)) {
+    uint8_t safeEffect = validateEffectId(m_currentEffect);
+    if (!::PatternRegistry::shouldSkipColorCorrection(safeEffect)) {
         enhancement::ColorCorrectionEngine::getInstance().processBuffer(m_leds, LedConfig::TOTAL_LEDS);
         m_correctionApplyCount++;
     } else {
@@ -894,6 +895,11 @@ void RendererActor::renderFrame()
     }
 
     // IEffect-only path (all effects are IEffect instances)
+    //
+    // IMPORTANT: Always use the validated/clamped `safeEffect` for both:
+    // - indexing m_effects[]
+    // - passing effectId into any downstream subsystems (e.g. audio mapping)
+    // Using m_currentEffect directly here is unsafe if it ever gets corrupted.
     if (m_effects[safeEffect].effect != nullptr) {
         plugins::EffectContext& ctx = m_effectContext;
         ctx.leds = m_leds;
@@ -944,7 +950,7 @@ void RendererActor::renderFrame()
             uint8_t mappedHue = ctx.gHue;
 
             audio::AudioMappingRegistry::instance().applyMappings(
-                m_currentEffect,
+                safeEffect,
                 m_lastControlBus,
                 m_lastMusicalGrid,
                 ctx.audio.available,
@@ -968,7 +974,7 @@ void RendererActor::renderFrame()
         }
 #endif
 
-        m_effects[m_currentEffect].effect->render(ctx);
+        m_effects[safeEffect].effect->render(ctx);
     }
 
     // Increment hue for effects that use it
@@ -1251,11 +1257,13 @@ void RendererActor::handleStartTransition(uint8_t newEffectId, uint8_t transitio
         transitionType = 0;  // Default to FADE
     }
 
+    uint8_t oldEffect = validateEffectId(m_currentEffect);
+
     // Copy current LED state as source
     memcpy(m_transitionSourceBuffer, m_leds, sizeof(m_transitionSourceBuffer));
 
     // Switch to new effect
-    m_currentEffect = newEffectId;
+    m_currentEffect = safeEffectId;
 
     // Render one frame of new effect to get target
     renderFrame();
@@ -1270,8 +1278,8 @@ void RendererActor::handleStartTransition(uint8_t newEffectId, uint8_t transitio
     );
 
     LW_LOGI("Transition started: %s -> %s (%s)",
-             getEffectName(m_currentEffect),
-             getEffectName(newEffectId),
+             getEffectName(oldEffect),
+             getEffectName(safeEffectId),
              getTransitionName(type));
 }
 

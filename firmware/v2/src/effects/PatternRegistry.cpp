@@ -130,7 +130,19 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
     // --- Perlin Backend Test Effects (85-87) - A/B/C comparison harness ---
     {PM_STR("Perlin Test: FastLED"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("FastLED inoise8 baseline test (TEST)"), PM_STR("FastLED noise, centre-origin mapping, seed + advection"), PM_STR("")},
     {PM_STR("Perlin Test: Emotiscope2 Full"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Emotiscope 2.0 Perlin full-res per-frame test (TEST)"), PM_STR("Seedable Perlin noise, hash-based gradients, octaves, full resolution"), PM_STR("")},
-    {PM_STR("Perlin Test: Emotiscope2 Quarter"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Emotiscope 2.0 Perlin quarter-res + interpolation test (TEST)"), PM_STR("Seedable Perlin noise, quarter resolution, periodic refresh, linear interpolation"), PM_STR("")}
+    {PM_STR("Perlin Test: Emotiscope2 Quarter"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Emotiscope 2.0 Perlin quarter-res + interpolation test (TEST)"), PM_STR("Seedable Perlin noise, quarter resolution, periodic refresh, linear interpolation"), PM_STR("")},
+
+    // --- Enhanced Audio-Reactive Effects (88-97) - Beat-sync, musical intelligence ---
+    {PM_STR("BPM Enhanced"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Tempo-locked pulse rings with beat-phase sync"), PM_STR("Beat phase, sub-bass reinforcement, spring speed"), PM_STR("BPM")},
+    {PM_STR("Breathing Enhanced"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Style-adaptive breathing with harmonic saliency"), PM_STR("RMS breathing, saliency-aware pacing"), PM_STR("Breathing")},
+    {PM_STR("LGP Chevron Waves Enhanced"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Beat-synced chevron propagation with chroma detail"), PM_STR("Chroma mapping, beat phase, wave sharpening"), PM_STR("LGP Chevron Waves")},
+    {PM_STR("LGP Interference Scanner Enhanced"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::TRAVELING, PM_STR("Audio-reactive scan speed with interference fringes"), PM_STR("Phase scanning, snare emphasis"), PM_STR("LGP Interference Scanner")},
+    {PM_STR("LGP Photonic Crystal Enhanced"), PatternFamily::ADVANCED_OPTICAL, PatternTags::CENTER_ORIGIN, PM_STR("Harmonic lattice modulation with saliency weighting"), PM_STR("Harmonic saliency, lattice shimmer"), PM_STR("LGP Photonic Crystal")},
+    {PM_STR("LGP Spectrum Detail"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("64-bin spectrum detail, bass at centre and treble at edges"), PM_STR("Logarithmic bin mapping, palette bands"), PM_STR("Spectrum Bars")},
+    {PM_STR("LGP Spectrum Detail Enhanced"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Saliency-weighted spectrum detail with adaptive emphasis"), PM_STR("Musical saliency, adaptive spectrum weighting"), PM_STR("LGP Spectrum Detail")},
+    {PM_STR("LGP Star Burst Enhanced"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN, PM_STR("Beat-triggered star bursts with sub-bass boost"), PM_STR("Beat phase, sub-bass burst, chroma colour"), PM_STR("LGP Star Burst")},
+    {PM_STR("LGP Wave Collision Enhanced"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::TRAVELING, PM_STR("Audio-driven wave collision with sub-bass boost"), PM_STR("Snare collisions, beat phase, chroma weighting"), PM_STR("LGP Wave Collision")},
+    {PM_STR("Ripple Enhanced"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Beat-sync ripple propagation with musical intelligence"), PM_STR("Beat sync, style-adaptive, harmonic saliency, centre-origin"), PM_STR("Ripple")}
 };
 
 const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(PatternMetadata);
@@ -140,7 +152,7 @@ const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(Pattern
 // ============================================================================
 
 // Expected number of implemented effects (must match registerAllEffects() return value)
-constexpr uint8_t EXPECTED_EFFECT_COUNT = 88;  // 85 base + 3 Perlin backend tests
+constexpr uint8_t EXPECTED_EFFECT_COUNT = 98;  // 88 base + 10 enhanced
 
 // Compile-time assertion: metadata must have at least as many entries as implemented effects
 // This ensures we can always map effect IDs to metadata (allows for future effects in metadata)
@@ -381,7 +393,18 @@ static const uint8_t REACTIVE_EFFECT_IDS[] PROGMEM = {
     77,  // Perlin Veil - audio-driven advection
     78,  // Perlin Shocklines - beat-driven ridges
     79,  // Perlin Caustics - treble/bass modulation
-    80   // Perlin Interference Weave - dual-strip moiré
+    80,  // Perlin Interference Weave - dual-strip moiré
+    // Enhanced Audio-Reactive Effects (88-97)
+    88,  // BPM Enhanced - tempo-locked pulse rings
+    89,  // Breathing Enhanced - style-adaptive breathing
+    90,  // Chevron Waves Enhanced - beat-synced chevrons
+    91,  // Interference Scanner Enhanced - audio-reactive scanning
+    92,  // Photonic Crystal Enhanced - harmonic lattice modulation
+    93,  // Spectrum Detail - 64-bin spectrum detail
+    94,  // Spectrum Detail Enhanced - saliency-weighted spectrum
+    95,  // LGP Star Burst Enhanced - beat-triggered bursts
+    96,  // LGP Wave Collision Enhanced - audio-driven collisions
+    97   // Ripple Enhanced - beat-sync propagation
 };
 static constexpr uint8_t REACTIVE_EFFECT_COUNT = sizeof(REACTIVE_EFFECT_IDS);
 

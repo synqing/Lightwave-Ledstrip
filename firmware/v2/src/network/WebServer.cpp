@@ -370,12 +370,14 @@ void WebServer::updateCachedRendererState() {
     
     // Cache effect names (pointers to stable strings in RendererActor)
     uint8_t count = m_cachedRendererState.effectCount;
-    if (count > 96) count = 96;  // Safety: MAX_EFFECTS
+    constexpr uint8_t maxEffects = sizeof(m_cachedRendererState.effectNames) /
+                                   sizeof(m_cachedRendererState.effectNames[0]);
+    if (count > maxEffects) count = maxEffects;  // Safety: MAX_EFFECTS
     for (uint8_t i = 0; i < count; ++i) {
         m_cachedRendererState.effectNames[i] = m_renderer->getEffectName(i);
     }
     // Clear remaining slots
-    for (uint8_t i = count; i < 96; ++i) {
+    for (uint8_t i = count; i < maxEffects; ++i) {
         m_cachedRendererState.effectNames[i] = nullptr;
     }
     

@@ -190,7 +190,7 @@ struct CachedRendererState {
     uint8_t speed;
     uint8_t paletteIndex;
     // ... additional fields
-    const char* effectNames[96];  // Pointers to stable strings
+    const char* effectNames[98];  // Pointers to stable strings
 };
 ```
 

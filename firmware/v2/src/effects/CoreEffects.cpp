@@ -106,6 +106,16 @@
 #include "ieffect/LGPPerlinShocklinesAmbientEffect.h"
 #include "ieffect/LGPPerlinCausticsAmbientEffect.h"
 #include "ieffect/LGPPerlinInterferenceWeaveAmbientEffect.h"
+#include "ieffect/BPMEnhancedEffect.h"
+#include "ieffect/BreathingEnhancedEffect.h"
+#include "ieffect/ChevronWavesEffectEnhanced.h"
+#include "ieffect/LGPInterferenceScannerEffectEnhanced.h"
+#include "ieffect/LGPPhotonicCrystalEffectEnhanced.h"
+#include "ieffect/LGPSpectrumDetailEffect.h"
+#include "ieffect/LGPSpectrumDetailEnhancedEffect.h"
+#include "ieffect/LGPStarBurstEffectEnhanced.h"
+#include "ieffect/LGPWaveCollisionEffectEnhanced.h"
+#include "ieffect/RippleEnhancedEffect.h"
 #include "utils/FastLEDOptim.h"
 #include "../core/narrative/NarrativeEngine.h"
 #include <FastLED.h>
@@ -869,9 +879,71 @@ uint8_t registerAllEffects(RendererActor* renderer) {
         total++;
     }
 
+    // =============== ENHANCED AUDIO-REACTIVE EFFECTS (88-97) ===============
+
+    // BPM Enhanced (ID 88) - Tempo-locked pulse rings
+    static ieffect::BPMEnhancedEffect bpmEnhancedInstance;
+    if (renderer->registerEffect(total, &bpmEnhancedInstance)) {
+        total++;
+    }
+
+    // Breathing Enhanced (ID 89) - Style-adaptive breathing
+    static ieffect::BreathingEnhancedEffect breathingEnhancedInstance;
+    if (renderer->registerEffect(total, &breathingEnhancedInstance)) {
+        total++;
+    }
+
+    // Chevron Waves Enhanced (ID 90) - Beat-synced chevron propagation
+    static ieffect::ChevronWavesEnhancedEffect chevronWavesEnhancedInstance;
+    if (renderer->registerEffect(total, &chevronWavesEnhancedInstance)) {
+        total++;
+    }
+
+    // LGP Interference Scanner Enhanced (ID 91) - Audio-reactive scan speed
+    static ieffect::LGPInterferenceScannerEnhancedEffect interferenceScannerEnhancedInstance;
+    if (renderer->registerEffect(total, &interferenceScannerEnhancedInstance)) {
+        total++;
+    }
+
+    // LGP Photonic Crystal Enhanced (ID 92) - Harmonic lattice modulation
+    static ieffect::LGPPhotonicCrystalEnhancedEffect photonicCrystalEnhancedInstance;
+    if (renderer->registerEffect(total, &photonicCrystalEnhancedInstance)) {
+        total++;
+    }
+
+    // LGP Spectrum Detail (ID 93) - 64-bin FFT direct visualisation
+    static ieffect::LGPSpectrumDetailEffect spectrumDetailInstance;
+    if (renderer->registerEffect(total, &spectrumDetailInstance)) {
+        total++;
+    }
+
+    // LGP Spectrum Detail Enhanced (ID 94) - Saliency-weighted spectrum
+    static ieffect::LGPSpectrumDetailEnhancedEffect spectrumDetailEnhancedInstance;
+    if (renderer->registerEffect(total, &spectrumDetailEnhancedInstance)) {
+        total++;
+    }
+
+    // LGP Star Burst Enhanced (ID 95) - Beat-triggered bursts
+    static ieffect::LGPStarBurstEnhancedEffect starBurstEnhancedInstance;
+    if (renderer->registerEffect(total, &starBurstEnhancedInstance)) {
+        total++;
+    }
+
+    // LGP Wave Collision Enhanced (ID 96) - Audio-driven wave interference
+    static ieffect::LGPWaveCollisionEnhancedEffect waveCollisionEnhancedInstance;
+    if (renderer->registerEffect(total, &waveCollisionEnhancedInstance)) {
+        total++;
+    }
+
+    // Ripple Enhanced (ID 97) - Beat-synced ripple propagation
+    static ieffect::RippleEnhancedEffect rippleEnhancedInstance;
+    if (renderer->registerEffect(total, &rippleEnhancedInstance)) {
+        total++;
+    }
+
     // =============== EFFECT COUNT PARITY VALIDATION ===============
     // Runtime validation: ensure registered count matches expected
-    constexpr uint8_t EXPECTED_EFFECT_COUNT = 88;  // 85 base + 3 Perlin backend tests
+    constexpr uint8_t EXPECTED_EFFECT_COUNT = 98;  // 88 base + 10 enhanced
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

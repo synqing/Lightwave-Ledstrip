@@ -99,7 +99,7 @@ AudioParametersSetDecodeResult WsAudioCodec::decodeParametersSet(JsonObjectConst
         }
         if (pipeline.containsKey("gateStartFactor")) {
             result.request.pipeline.hasGateStartFactor = true;
-            result.request.pipeline.gateStartFactor = pipeline["gateStartFactor"] | 1.5f;
+            result.request.pipeline.gateStartFactor = pipeline["gateStartFactor"] | 1.0f;  // Updated default
         }
         if (pipeline.containsKey("gateRangeFactor")) {
             result.request.pipeline.hasGateRangeFactor = true;

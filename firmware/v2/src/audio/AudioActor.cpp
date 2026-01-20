@@ -402,6 +402,7 @@ void AudioActor::processHop()
         // TempoTracker reset
         m_tempo.init();
         m_lastTempoOutput = m_tempo.getOutput();
+        m_bins64AdaptiveMax = 0.0001f;
     }
 
     // 1. Build AudioTime for this hop
@@ -493,12 +494,13 @@ void AudioActor::processHop()
         const float snr = rmsPre / std::max(m_noiseFloor, 0.0001f);
         const bool measuringAmbient =
             (rmsPre <= tuning.silenceThreshold) ||
-            (snr < 2.0f);
+            (snr < 3.0f);  // Increased from 2.0: more aggressive freeze to prevent drift
 
         if (measuringAmbient) {
-            m_noiseFloor += 0.005f * (rmsPre - m_noiseFloor);
+            // Use configured noiseFloorRise instead of hardcoded value
+            m_noiseFloor += noiseFloorRise * (rmsPre - m_noiseFloor);
         }
-        // SNR >= 2: signal present, freeze floor (no rise)
+        // SNR >= 3.0: signal clearly present, freeze floor (no rise)
     }
     if (m_noiseFloor < noiseFloorMin) {
         m_noiseFloor = noiseFloorMin;
@@ -507,6 +509,19 @@ void AudioActor::processHop()
     float gateStart = m_noiseFloor * gateStartFactor;
     float gateRange = std::max(gateRangeMin, m_noiseFloor * gateRangeFactor);
     float activity = clamp01((rmsPre - gateStart) / gateRange);
+
+    // Recovery: If gate is closed but signal is clearly present, force noise floor down
+    // This prevents the floor from getting stuck above valid audio signals
+    const float MIN_SIGNAL_THRESHOLD = noiseFloorMin * 3.0f;  // Signal must be at least 3x minimum floor
+    if (activity < 0.01f && rmsPre > MIN_SIGNAL_THRESHOLD && rmsPre > m_noiseFloor) {
+        // Signal is present but gate is closed - noise floor is too high
+        // Force it down aggressively (10x faster than normal fall)
+        m_noiseFloor += (noiseFloorFall * 10.0f) * (rmsPre * 0.8f - m_noiseFloor);
+        // Recalculate gate with corrected floor
+        gateStart = m_noiseFloor * gateStartFactor;
+        gateRange = std::max(gateRangeMin, m_noiseFloor * gateRangeFactor);
+        activity = clamp01((rmsPre - gateStart) / gateRange);
+    }
 
     if (clipCount > 0) {
         m_agcGain *= tuning.agcClipReduce;
@@ -529,14 +544,14 @@ void AudioActor::processHop()
     BENCH_START_PHASE();
 
     float rmsRaw = computeRMS(m_hopBufferCentered, HOP_SIZE);
-    float rmsMapped = mapLevelDb(rmsRaw, tuning.rmsDbFloor, tuning.rmsDbCeil);
-    rmsMapped *= activity;
+    const float rmsMappedUngated = mapLevelDb(rmsRaw, tuning.rmsDbFloor, tuning.rmsDbCeil);
+    float rmsMapped = rmsMappedUngated * activity;
     m_lastRmsRaw = rmsRaw;
     m_lastRmsMapped = rmsMapped;
 
     // Flux placeholder - will be computed after Goertzel if useSpectralFlux is enabled
     float fluxMapped = 0.0f;
-    if (!m_noveltyTuning.useSpectralFlux) {
+    if (!tuning.noveltyUseSpectralFlux) {
         // Legacy RMS-based flux (computed here since it only needs RMS)
         float spectralFlux = std::max(0.0f, rmsMapped - m_prevRMS);
         m_prevRMS = rmsMapped;
@@ -594,6 +609,7 @@ void AudioActor::processHop()
 
     // 5. Build ControlBusRawInput
     ControlBusRawInput raw;
+    raw.rmsUngated = rmsMappedUngated;
     raw.rms = rmsMapped;
     raw.flux = fluxMapped;
 
@@ -686,7 +702,7 @@ void AudioActor::processHop()
     // Bass bands weighted higher to improve kick detection and reduce
     // false triggers from hi-hats and treble transients.
     float unclippedFlux = 0.0f;
-    if (m_noveltyTuning.useSpectralFlux) {
+    if (tuning.noveltyUseSpectralFlux) {
         float spectralFlux = 0.0f;
         for (int i = 0; i < NUM_BANDS; ++i) {
             float delta = raw.bands[i] - m_prevBands[i];
@@ -701,7 +717,7 @@ void AudioActor::processHop()
         }
         // Normalize by weight sum for consistent scaling across all band configurations
         spectralFlux /= PERCEPTUAL_BAND_WEIGHT_SUM;
-        spectralFlux *= m_noveltyTuning.spectralFluxScale;
+        spectralFlux *= tuning.noveltySpectralFluxScale;
         unclippedFlux = spectralFlux * tuning.fluxScale;
         fluxMapped = std::min(1.0f, unclippedFlux);  // Hard clamp for UI/effects
         m_lastFluxMapped = fluxMapped;
@@ -746,7 +762,8 @@ void AudioActor::processHop()
     memset(m_bins64Raw, 0, sizeof(m_bins64Raw));
     memset(m_bands64Folded, 0, sizeof(m_bands64Folded));
     
-    if (m_analyzer.analyze64(m_bins64Raw)) {
+    const bool bins64Ready = m_analyzer.analyze64(m_bins64Raw);
+    if (bins64Ready) {
         TRACE_BEGIN("goertzel64_fold");
 
         // Fold 64 bins -> 8 bands (8 bins per band, take max)
@@ -792,6 +809,48 @@ void AudioActor::processHop()
         }
 
         TRACE_END();
+    }
+
+    // Persist 64-bin spectrum between analysis triggers (avoid "picket fence" zeros).
+    // analyze64() completes every ~94ms; effects render every frame and expect stable bins.
+    if (!bins64Ready) {
+        for (size_t i = 0; i < GoertzelAnalyzer::NUM_BINS; ++i) {
+            raw.bins64[i] = m_bins64Cached[i] * activity;
+        }
+    }
+
+    // Sensory Bridge adaptive normalisation (max follower)
+    // Always compute per-hop (even when bins are stale) to keep decay behaviour consistent.
+    const float sbScale = tuning.bins64AdaptiveScale;
+    const float sbFloor = tuning.bins64AdaptiveFloor;
+    const float sbDecay = tuning.bins64AdaptiveDecay;
+    const float sbRise = tuning.bins64AdaptiveRise;
+    const float sbFall = tuning.bins64AdaptiveFall;
+
+    float max_value = 0.00001f;
+    for (size_t i = 0; i < GoertzelAnalyzer::NUM_BINS; ++i) {
+        float scaled = raw.bins64[i] * sbScale;
+        if (scaled > max_value) {
+            max_value = scaled;
+        }
+    }
+    max_value *= sbDecay;
+
+    if (max_value > m_bins64AdaptiveMax) {
+        float delta = max_value - m_bins64AdaptiveMax;
+        m_bins64AdaptiveMax += delta * sbRise;
+    } else if (m_bins64AdaptiveMax > max_value) {
+        float delta = m_bins64AdaptiveMax - max_value;
+        m_bins64AdaptiveMax -= delta * sbFall;
+    }
+
+    if (m_bins64AdaptiveMax < sbFloor) {
+        m_bins64AdaptiveMax = sbFloor;
+    }
+
+    float multiplier = 1.0f / m_bins64AdaptiveMax;
+    for (size_t i = 0; i < GoertzelAnalyzer::NUM_BINS; ++i) {
+        raw.bins64Adaptive[i] = (raw.bins64[i] * sbScale) * multiplier;
     }
 
     // MabuTrace: Detect false trigger - activity gated but no significant band energy

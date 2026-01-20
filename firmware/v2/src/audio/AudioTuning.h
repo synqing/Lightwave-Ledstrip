@@ -112,7 +112,7 @@ struct AudioPipelineTuning {
     float noiseFloorRise = 0.0005f;
     float noiseFloorFall = 0.01f;
 
-    float gateStartFactor = 1.5f;
+    float gateStartFactor = 1.0f;  // Reduced from 1.5: more permissive gate to prevent false closures
     float gateRangeFactor = 1.5f;
     float gateRangeMin = 0.0005f;
 
@@ -145,6 +145,17 @@ struct AudioPipelineTuning {
     // Silence detection (fade to black after sustained silence)
     float silenceHysteresisMs = 5000.0f;  ///< 5s default (user-approved), 0 = disabled
     float silenceThreshold = 0.01f;       ///< RMS below this is considered silence
+
+    // Goertzel novelty tuning (runtime adjustable)
+    bool noveltyUseSpectralFlux = true;   ///< Use per-band flux instead of RMS-based
+    float noveltySpectralFluxScale = 1.0f; ///< Additional scaling before fluxScale
+
+    // Adaptive 64-bin normalisation (Sensory Bridge max follower)
+    float bins64AdaptiveScale = 200.0f;   ///< Scale normalised bins into SB magnitude space
+    float bins64AdaptiveFloor = 4.0f;     ///< Minimum max follower value (SB parity)
+    float bins64AdaptiveRise = 0.0050f;   ///< Max follower rise rate
+    float bins64AdaptiveFall = 0.0025f;   ///< Max follower fall rate
+    float bins64AdaptiveDecay = 0.995f;   ///< Per-frame decay on max_value
 };
 
 struct AudioContractTuning {
@@ -237,6 +248,14 @@ inline AudioPipelineTuning clampAudioPipelineTuning(const AudioPipelineTuning& i
 
     out.silenceHysteresisMs = clampf(out.silenceHysteresisMs, 0.0f, 60000.0f);
     out.silenceThreshold = clampf(out.silenceThreshold, 0.0f, 1.0f);
+
+    out.noveltySpectralFluxScale = clampf(out.noveltySpectralFluxScale, 0.1f, 10.0f);
+
+    out.bins64AdaptiveScale = clampf(out.bins64AdaptiveScale, 0.1f, 1000.0f);
+    out.bins64AdaptiveFloor = clampf(out.bins64AdaptiveFloor, 0.01f, 1000.0f);
+    out.bins64AdaptiveRise = clampf(out.bins64AdaptiveRise, 0.0f, 1.0f);
+    out.bins64AdaptiveFall = clampf(out.bins64AdaptiveFall, 0.0f, 1.0f);
+    out.bins64AdaptiveDecay = clampf(out.bins64AdaptiveDecay, 0.0f, 1.0f);
 
     return out;
 }

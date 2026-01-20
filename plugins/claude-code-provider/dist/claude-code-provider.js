@@ -17,20 +17,22 @@ import { EventEmitter } from 'node:events';
 export class ClaudeCodeProvider extends EventEmitter {
     name = 'claude-code';
     capabilities = {
-        supportedModels: ['sonnet', 'opus', 'haiku', 'claude-sonnet-4-5-20250929', 'claude-opus-4-5-20251101'],
+        supportedModels: ['sonnet', 'opus', 'haiku', 'claude-sonnet-4-5-20250929', 'claude-opus-4-5-20251101', 'claude-haiku-3-5-20241022'],
         maxContextLength: {
             sonnet: 200000,
             opus: 200000,
             haiku: 200000,
             'claude-sonnet-4-5-20250929': 200000,
             'claude-opus-4-5-20251101': 200000,
+            'claude-haiku-3-5-20241022': 200000,
         },
         maxOutputTokens: {
-            sonnet: 8192,
-            opus: 8192,
+            sonnet: 64000,
+            opus: 64000,
             haiku: 8192,
-            'claude-sonnet-4-5-20250929': 8192,
-            'claude-opus-4-5-20251101': 8192,
+            'claude-sonnet-4-5-20250929': 64000,
+            'claude-opus-4-5-20251101': 64000,
+            'claude-haiku-3-5-20241022': 8192,
         },
         supportsStreaming: true,
         supportsToolCalling: true,
@@ -82,8 +84,15 @@ export class ClaudeCodeProvider extends EventEmitter {
         if (!this.initialized) {
             await this.initialize();
         }
+        // Validate request
+        if (!request.messages || request.messages.length === 0) {
+            throw new Error('Request must contain at least one message');
+        }
         const startTime = Date.now();
         const prompt = this.buildPrompt(request);
+        if (!prompt.trim()) {
+            throw new Error('Built prompt is empty - ensure messages have content');
+        }
         const model = request.model || this.config.model || 'sonnet';
         const args = this.buildArgs(prompt, model, request);
         args.push('--output-format', 'json');
@@ -113,7 +122,14 @@ export class ClaudeCodeProvider extends EventEmitter {
         if (!this.initialized) {
             await this.initialize();
         }
+        // Validate request
+        if (!request.messages || request.messages.length === 0) {
+            throw new Error('Request must contain at least one message');
+        }
         const prompt = this.buildPrompt(request);
+        if (!prompt.trim()) {
+            throw new Error('Built prompt is empty - ensure messages have content');
+        }
         const model = request.model || this.config.model || 'sonnet';
         const args = this.buildArgs(prompt, model, request);
         args.push('--output-format', 'stream-json');
@@ -177,6 +193,11 @@ export class ClaudeCodeProvider extends EventEmitter {
             else if (msg.role === 'assistant') {
                 parts.push(`[Assistant]: ${msg.content}`);
             }
+            else if (msg.role === 'tool') {
+                // Tool results - include tool name if available
+                const toolName = msg.name ? ` (${msg.name})` : '';
+                parts.push(`[Tool Result${toolName}]: ${msg.content}`);
+            }
         }
         return parts.join('\n\n');
     }
@@ -208,11 +229,22 @@ export class ClaudeCodeProvider extends EventEmitter {
     execClaude(args) {
         return new Promise((resolve, reject) => {
             const proc = spawn(this.claudePath, args, {
-                timeout: this.timeout,
+                stdio: ['pipe', 'pipe', 'pipe'],
                 env: { ...process.env },
             });
+            // CRITICAL: Close stdin immediately - claude CLI waits for stdin to close
+            proc.stdin.end();
             let stdout = '';
             let stderr = '';
+            let settled = false;
+            // Manual timeout handling (spawn timeout option doesn't work reliably)
+            const timeoutId = setTimeout(() => {
+                if (!settled) {
+                    settled = true;
+                    proc.kill('SIGTERM');
+                    reject(new Error(`Claude CLI timed out after ${this.timeout}ms`));
+                }
+            }, this.timeout);
             proc.stdout.on('data', (data) => {
                 stdout += data.toString();
             });
@@ -220,14 +252,22 @@ export class ClaudeCodeProvider extends EventEmitter {
                 stderr += data.toString();
             });
             proc.on('close', (code) => {
-                resolve({
-                    success: code === 0,
-                    stdout,
-                    stderr,
-                });
+                if (!settled) {
+                    settled = true;
+                    clearTimeout(timeoutId);
+                    resolve({
+                        success: code === 0,
+                        stdout,
+                        stderr,
+                    });
+                }
             });
             proc.on('error', (error) => {
-                reject(error);
+                if (!settled) {
+                    settled = true;
+                    clearTimeout(timeoutId);
+                    reject(error);
+                }
             });
         });
     }
@@ -236,23 +276,40 @@ export class ClaudeCodeProvider extends EventEmitter {
      */
     async *execClaudeStream(args) {
         const proc = spawn(this.claudePath, args, {
+            stdio: ['pipe', 'pipe', 'pipe'],
             env: { ...process.env },
         });
+        // CRITICAL: Close stdin immediately
+        proc.stdin.end();
         let buffer = '';
-        for await (const chunk of proc.stdout) {
-            buffer += chunk.toString();
-            // Process complete lines
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
-            for (const line of lines) {
-                if (line.trim()) {
-                    yield line;
+        let timedOut = false;
+        // Set up timeout for streaming
+        const timeoutId = setTimeout(() => {
+            timedOut = true;
+            proc.kill('SIGTERM');
+        }, this.timeout);
+        try {
+            for await (const chunk of proc.stdout) {
+                if (timedOut) {
+                    throw new Error(`Claude CLI streaming timed out after ${this.timeout}ms`);
+                }
+                buffer += chunk.toString();
+                // Process complete lines
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+                for (const line of lines) {
+                    if (line.trim()) {
+                        yield line;
+                    }
                 }
             }
+            // Process remaining buffer
+            if (buffer.trim()) {
+                yield buffer;
+            }
         }
-        // Process remaining buffer
-        if (buffer.trim()) {
-            yield buffer;
+        finally {
+            clearTimeout(timeoutId);
         }
     }
     /**

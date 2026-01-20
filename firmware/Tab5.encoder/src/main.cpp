@@ -216,15 +216,15 @@ static void handleActionButton(uint8_t buttonIndex) {
     }
     s_lastActionTime[buttonIndex] = now;
     
-    // #region agent log
-    Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1,H2,H5\",\"location\":\"main.cpp:200\",\"message\":\"handleActionButton.entry\",\"data\":{\"buttonIndex\":%d,\"wsConnected\":%d,\"wsStatus\":%d},\"timestamp\":%lu}\n",
-                  buttonIndex, g_wsClient.isConnected() ? 1 : 0, (int)g_wsClient.getStatus(), (unsigned long)now);
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1,H2,H5\",\"location\":\"main.cpp:200\",\"message\":\"handleActionButton.entry\",\"data\":{\"buttonIndex\":%d,\"wsConnected\":%d,\"wsStatus\":%d},\"timestamp\":%lu}\n",
+                  // buttonIndex, g_wsClient.isConnected() ? 1 : 0, (int)g_wsClient.getStatus(), (unsigned long)now);
+        // #endregion
     
     // Get current state (use defaults if not valid)
     ColorCorrectionState cc = g_wsClient.getColorCorrectionState();
     
-    // #region agent log
+    // #region agent log (DISABLED)
     // FILE* logFile = fopen("/Users/spectrasynq/Workspace_Management/Software/PRISM.tab5/.cursor/debug.log", "a");
     // if (logFile != nullptr) {
     //     fprintf(logFile, "{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H5\",\"location\":\"main.cpp:215\",\"message\":\"handleActionButton.stateBefore\",\"data\":{\"buttonIndex\":%d,\"gammaEnabled\":%d,\"gammaValue\":%.1f,\"aeEnabled\":%d,\"aeTarget\":%d,\"brownEnabled\":%d,\"mode\":%d,\"valid\":%d},\"timestamp\":%lu}\n",
@@ -232,7 +232,7 @@ static void handleActionButton(uint8_t buttonIndex) {
     //             cc.autoExposureTarget, cc.brownGuardrailEnabled ? 1 : 0, cc.mode, cc.valid ? 1 : 0, (unsigned long)millis());
     //     fclose(logFile);
     // }
-    // #endregion
+        // #endregion
     if (!cc.valid) {
         // Initialize with defaults if not synced yet
         cc.valid = true;
@@ -294,20 +294,20 @@ static void handleActionButton(uint8_t buttonIndex) {
         // Update UI immediately (optimistic update)
         syncColourCorrectionUi();
         
-        // #region agent log
-        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H5\",\"location\":\"main.cpp:269\",\"message\":\"handleActionButton.stateAfter\",\"data\":{\"buttonIndex\":%d,\"gammaEnabled\":%d,\"gammaValue\":%.1f,\"aeEnabled\":%d,\"aeTarget\":%d,\"brownEnabled\":%d,\"mode\":%d},\"timestamp\":%lu}\n",
-                      buttonIndex, cc.gammaEnabled ? 1 : 0, cc.gammaValue, cc.autoExposureEnabled ? 1 : 0,
-                      cc.autoExposureTarget, cc.brownGuardrailEnabled ? 1 : 0, cc.mode, (unsigned long)millis());
-        // #endregion
+        // #region agent log (DISABLED)
+        // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H5\",\"location\":\"main.cpp:269\",\"message\":\"handleActionButton.stateAfter\",\"data\":{\"buttonIndex\":%d,\"gammaEnabled\":%d,\"gammaValue\":%.1f,\"aeEnabled\":%d,\"aeTarget\":%d,\"brownEnabled\":%d,\"mode\":%d},\"timestamp\":%lu}\n",
+                      // buttonIndex, cc.gammaEnabled ? 1 : 0, cc.gammaValue, cc.autoExposureEnabled ? 1 : 0,
+                      // cc.autoExposureTarget, cc.brownGuardrailEnabled ? 1 : 0, cc.mode, (unsigned long)millis());
+                // #endregion
         
         // Try to send command to server (if connected)
         if (g_wsClient.isConnected()) {
-            // #region agent log
-            Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1,H2\",\"location\":\"main.cpp:277\",\"message\":\"handleActionButton.sendingCommand\",\"data\":{\"buttonIndex\":%d,\"commandType\":\"%s\"},\"timestamp\":%lu}\n",
-                          buttonIndex, 
-                          buttonIndex == 0 ? "setConfig" : (buttonIndex == 1 ? "setMode" : (buttonIndex == 2 ? "setConfig" : "setConfig")),
-                          (unsigned long)millis());
-            // #endregion
+            // #region agent log (DISABLED)
+            // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1,H2\",\"location\":\"main.cpp:277\",\"message\":\"handleActionButton.sendingCommand\",\"data\":{\"buttonIndex\":%d,\"commandType\":\"%s\"},\"timestamp\":%lu}\n",
+                          // buttonIndex, 
+                          // buttonIndex == 0 ? "setConfig" : (buttonIndex == 1 ? "setMode" : (buttonIndex == 2 ? "setConfig" : "setConfig")),
+                          // (unsigned long)millis());
+                        // #endregion
             
             switch (buttonIndex) {
                 case 0:
@@ -344,10 +344,10 @@ static void handleActionButton(uint8_t buttonIndex) {
                     break;
             }
         } else {
-            // #region agent log
-            Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H2\",\"location\":\"main.cpp:304\",\"message\":\"handleActionButton.wsNotConnected\",\"data\":{\"buttonIndex\":%d,\"wsStatus\":%d},\"timestamp\":%lu}\n",
-                          buttonIndex, (int)g_wsClient.getStatus(), (unsigned long)millis());
-            // #endregion
+            // #region agent log (DISABLED)
+            // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H2\",\"location\":\"main.cpp:304\",\"message\":\"handleActionButton.wsNotConnected\",\"data\":{\"buttonIndex\":%d,\"wsStatus\":%d},\"timestamp\":%lu}\n",
+                          // buttonIndex, (int)g_wsClient.getStatus(), (unsigned long)millis());
+                        // #endregion
             Serial.println("[TOUCH] WS not connected - UI updated optimistically, command will sync when connected");
         }
     }
@@ -754,17 +754,17 @@ void onEncoderChange(uint8_t index, uint16_t value, bool wasReset) {
     // Update palette LED display when palette parameter changes (index 1)
     /*
     if (index == 1) {  // Palette parameter
-        // #region agent log
-        bool enabled = g_paletteLedDisplay.isEnabled();
-        bool available = g_encoders ? g_encoders->isUnitBAvailable() : false;
-        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"palette-latch\",\"hypothesisId\":\"A,B,E\",\"location\":\"main.cpp:onEncoderChange\",\"message\":\"palette.change.trigger\",\"data\":{\"paletteId\":%u,\"enabled\":%d,\"unitBAvailable\":%d,\"uiInit\":%d,\"timestamp\":%lu}}\n",
-            value, enabled ? 1 : 0, available ? 1 : 0, s_uiInitialized ? 1 : 0, static_cast<unsigned long>(millis()));
-        // #endregion
+        // #region agent log (DISABLED)
+        // bool enabled = g_paletteLedDisplay.isEnabled();
+        // bool available = g_encoders ? g_encoders->isUnitBAvailable() : false;
+        // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"palette-latch\",\"hypothesisId\":\"A,B,E\",\"location\":\"main.cpp:onEncoderChange\",\"message\":\"palette.change.trigger\",\"data\":{\"paletteId\":%u,\"enabled\":%d,\"unitBAvailable\":%d,\"uiInit\":%d,\"timestamp\":%lu}}\n",
+            // value, enabled ? 1 : 0, available ? 1 : 0, s_uiInitialized ? 1 : 0, static_cast<unsigned long>(millis()));
+                // #endregion
         bool result = g_paletteLedDisplay.update(static_cast<uint8_t>(value));
-        // #region agent log
-        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"palette-latch\",\"hypothesisId\":\"A\",\"location\":\"main.cpp:onEncoderChange\",\"message\":\"palette.update.result\",\"data\":{\"result\":%d,\"timestamp\":%lu}}\n",
-            result ? 1 : 0, static_cast<unsigned long>(millis()));
-        // #endregion
+        // #region agent log (DISABLED)
+        // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"palette-latch\",\"hypothesisId\":\"A\",\"location\":\"main.cpp:onEncoderChange\",\"message\":\"palette.update.result\",\"data\":{\"result\":%d,\"timestamp\":%lu}}\n",
+            // result ? 1 : 0, static_cast<unsigned long>(millis()));
+                // #endregion
     }
     */
 
@@ -790,10 +790,10 @@ void onEncoderChange(uint8_t index, uint16_t value, bool wasReset) {
         // Unit B (8-15): Zone parameters
         // Note: Encoder 15 (index 15) is handled specially above for animation mode cycling
         else if (index < 15) {  // Only process 8-14 as zone parameters
-            // #region agent log
-            Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"D\",\"location\":\"main.cpp:648\",\"message\":\"onEncoderChange.encB\",\"data\":{\"index\":%u,\"value\":%u,\"unit\":\"B\",\"localIdx\":%u,\"timestamp\":%lu}\n",
-                index, value, index % 8, static_cast<unsigned long>(millis()));
-            // #endregion
+            // #region agent log (DISABLED)
+            // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"D\",\"location\":\"main.cpp:648\",\"message\":\"onEncoderChange.encB\",\"data\":{\"index\":%u,\"value\":%u,\"unit\":\"B\",\"localIdx\":%u,\"timestamp\":%lu}\n",
+                // index, value, index % 8, static_cast<unsigned long>(millis()));
+                        // #endregion
             
             uint8_t zoneId = ZoneParam::getZoneId(index);
             if (ZoneParam::isZoneEffect(index)) {
@@ -933,65 +933,65 @@ void setup() {
     // This MUST be called before M5.begin() or WiFi.begin().
     // See: https://github.com/nikthefix/M5stack_Tab5_Arduino_Wifi_Example
 #if ENABLE_WIFI
-    // #region agent log
-    Serial.printf("[DEBUG] Before WiFi.setPins - Heap: free=%u minFree=%u largest=%u\n",
-                  ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-    Serial.printf("[DEBUG] WiFi pins: CLK=%d CMD=%d D0=%d D1=%d D2=%d D3=%d RST=%d\n",
-                  TAB5_WIFI_SDIO_CLK, TAB5_WIFI_SDIO_CMD, TAB5_WIFI_SDIO_D0,
-                  TAB5_WIFI_SDIO_D1, TAB5_WIFI_SDIO_D2, TAB5_WIFI_SDIO_D3, TAB5_WIFI_SDIO_RST);
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] Before WiFi.setPins - Heap: free=%u minFree=%u largest=%u\n",
+                  // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+    // Serial.printf("[DEBUG] WiFi pins: CLK=%d CMD=%d D0=%d D1=%d D2=%d D3=%d RST=%d\n",
+                  // TAB5_WIFI_SDIO_CLK, TAB5_WIFI_SDIO_CMD, TAB5_WIFI_SDIO_D0,
+                  // TAB5_WIFI_SDIO_D1, TAB5_WIFI_SDIO_D2, TAB5_WIFI_SDIO_D3, TAB5_WIFI_SDIO_RST);
+        // #endregion
     Serial.println("[WIFI] Configuring Tab5 SDIO pins for ESP32-C6 co-processor...");
     WiFi.setPins(TAB5_WIFI_SDIO_CLK, TAB5_WIFI_SDIO_CMD,
                  TAB5_WIFI_SDIO_D0, TAB5_WIFI_SDIO_D1,
                  TAB5_WIFI_SDIO_D2, TAB5_WIFI_SDIO_D3,
                  TAB5_WIFI_SDIO_RST);
-    // #region agent log
-    Serial.printf("[DEBUG] After WiFi.setPins - Heap: free=%u minFree=%u largest=%u\n",
-                  ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-    delay(50);  // Allow SDIO pin configuration to stabilize
-    Serial.printf("[DEBUG] After 50ms delay - Heap: free=%u minFree=%u\n",
-                  ESP.getFreeHeap(), ESP.getMinFreeHeap());
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] After WiFi.setPins - Heap: free=%u minFree=%u largest=%u\n",
+                  // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+    // delay(50);  // Allow SDIO pin configuration to stabilize
+    // Serial.printf("[DEBUG] After 50ms delay - Heap: free=%u minFree=%u\n",
+                  // ESP.getFreeHeap(), ESP.getMinFreeHeap());
+        // #endregion
     Serial.println("[WIFI] SDIO pins configured");
 #endif
 
     // Initialize M5Stack Tab5
-    // #region agent log
-#if ENABLE_WIFI
-    Serial.printf("[DEBUG] Before M5.begin - Heap: free=%u minFree=%u largest=%u\n",
-                  ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-#endif
-    // #endregion
+    // #region agent log (DISABLED)
+// #if ENABLE_WIFI
+    // Serial.printf("[DEBUG] Before M5.begin - Heap: free=%u minFree=%u largest=%u\n",
+                  // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+// #endif
+        // #endregion
     auto cfg = M5.config();
     cfg.external_spk = true;
     M5.begin(cfg);
-    // #region agent log
-#if ENABLE_WIFI
-    Serial.printf("[DEBUG] After M5.begin - Heap: free=%u minFree=%u largest=%u\n",
-                  ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-    delay(100);  // Allow M5 initialization to complete
-    Serial.printf("[DEBUG] After 100ms delay - Heap: free=%u minFree=%u\n",
-                  ESP.getFreeHeap(), ESP.getMinFreeHeap());
-#endif
-    // #endregion
+    // #region agent log (DISABLED)
+// #if ENABLE_WIFI
+    // Serial.printf("[DEBUG] After M5.begin - Heap: free=%u minFree=%u largest=%u\n",
+                  // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+    // delay(100);  // Allow M5 initialization to complete
+    // Serial.printf("[DEBUG] After 100ms delay - Heap: free=%u minFree=%u\n",
+                  // ESP.getFreeHeap(), ESP.getMinFreeHeap());
+// #endif
+        // #endregion
 
     // Set display orientation (landscape, USB on left)
     M5.Display.setRotation(3);
     
-    // #region agent log
-    Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H3\",\"location\":\"main.cpp:688\",\"message\":\"before.setSwapBytes\",\"data\":{\"rotation\":3},\"timestamp\":%lu}\n", (unsigned long)millis());
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H3\",\"location\":\"main.cpp:688\",\"message\":\"before.setSwapBytes\",\"data\":{\"rotation\":3},\"timestamp\":%lu}\n", (unsigned long)millis());
+        // #endregion
     
     // CRITICAL: Set byte swapping for BGR565 format BEFORE LVGL initialization
     // This must match the working implementation in src/src/main.cpp:352
     M5.Display.setSwapBytes(true);  // Swap bytes for BGR565 format
     delay(50);  // Allow display configuration to stabilize (matches working impl)
     
-    // #region agent log
-    Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H3\",\"location\":\"main.cpp:696\",\"message\":\"after.setSwapBytes\",\"data\":{\"swapBytes\":true,\"delay\":50},\"timestamp\":%lu}\n", (unsigned long)millis());
-    Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H3\",\"location\":\"main.cpp:699\",\"message\":\"display.dimensions\",\"data\":{\"width\":%d,\"height\":%d},\"timestamp\":%lu}\n", 
-                  M5.Display.width(), M5.Display.height(), (unsigned long)millis());
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H3\",\"location\":\"main.cpp:696\",\"message\":\"after.setSwapBytes\",\"data\":{\"swapBytes\":true,\"delay\":50},\"timestamp\":%lu}\n", (unsigned long)millis());
+    // Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H3\",\"location\":\"main.cpp:699\",\"message\":\"display.dimensions\",\"data\":{\"width\":%d,\"height\":%d},\"timestamp\":%lu}\n", 
+                  // M5.Display.width(), M5.Display.height(), (unsigned long)millis());
+        // #endregion
 
 #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
     if (!LVGLBridge::init()) {
@@ -1124,18 +1124,18 @@ void setup() {
         Serial.println("[OK] Milestone E: Dual encoder service active");
 
         // Flash all LEDs green briefly to indicate success
-        // #region agent log
-        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"boot\",\"hypothesisId\":\"H2\",\"location\":\"main.cpp:flash\",\"message\":\"flashGreen.start\",\"data\":{\"unitA\":true,\"unitB\":true},\"timestamp\":%lu}\n",
-                      static_cast<unsigned long>(millis()));
-        // #endregion
+        // #region agent log (DISABLED)
+        // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"boot\",\"hypothesisId\":\"H2\",\"location\":\"main.cpp:flash\",\"message\":\"flashGreen.start\",\"data\":{\"unitA\":true,\"unitB\":true},\"timestamp\":%lu}\n",
+                      // static_cast<unsigned long>(millis()));
+                // #endregion
         g_encoders->transportA().setAllLEDs(0, 64, 0);
         g_encoders->transportB().setAllLEDs(0, 64, 0);
         delay(200);
         g_encoders->allLedsOff();
-        // #region agent log
-        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"boot\",\"hypothesisId\":\"H2\",\"location\":\"main.cpp:flash\",\"message\":\"flashGreen.cleared\",\"data\":{},\"timestamp\":%lu}\n",
-                      static_cast<unsigned long>(millis()));
-        // #endregion
+        // #region agent log (DISABLED)
+        // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"boot\",\"hypothesisId\":\"H2\",\"location\":\"main.cpp:flash\",\"message\":\"flashGreen.cleared\",\"data\":{},\"timestamp\":%lu}\n",
+                      // static_cast<unsigned long>(millis()));
+                // #endregion
 
         // Set status LEDs (both green for connected)
         updateConnectionLeds();
@@ -1281,8 +1281,11 @@ void setup() {
                 JsonObject data = doc["data"].as<JsonObject>();
                 JsonArray effects = data["effects"].as<JsonArray>();
                 for (JsonObject e : effects) {
-                    if (!e["id"].is<uint8_t>() || !e["name"].is<const char*>()) continue;
-                    uint8_t id = e["id"].as<uint8_t>();
+                    // ArduinoJson stores small integers as int - use is<int>()
+                    if (!e["id"].is<int>() || !e["name"].is<const char*>()) continue;
+                    int idInt = e["id"].as<int>();
+                    if (idInt < 0 || idInt > 255) continue;  // Invalid ID range
+                    uint8_t id = static_cast<uint8_t>(idInt);
                     const char* name = e["name"].as<const char*>();
                     // CRITICAL FIX: Stricter bounds check - enforce actual effect range (0-87)
                     if (id < MAX_EFFECTS && id <= 87 && name) {
@@ -1295,12 +1298,16 @@ void setup() {
                 }
 
                 JsonObject pagination = data["pagination"].as<JsonObject>();
-                if (pagination["pages"].is<uint8_t>()) {
-                    s_effectPages = pagination["pages"].as<uint8_t>();
+                // ArduinoJson stores small integers as int, not uint8_t - use is<int>()
+                if (pagination["pages"].is<int>()) {
+                    int pages = pagination["pages"].as<int>();
+                    if (pages > 0 && pages <= 255) s_effectPages = static_cast<uint8_t>(pages);
                 }
-                if (pagination["page"].is<uint8_t>()) {
-                    uint8_t page = pagination["page"].as<uint8_t>();
-                    if (page >= s_effectNextPage) s_effectNextPage = page + 1;
+                if (pagination["page"].is<int>()) {
+                    int page = pagination["page"].as<int>();
+                    if (page > 0 && page <= 255 && static_cast<uint8_t>(page) >= s_effectNextPage) {
+                        s_effectNextPage = static_cast<uint8_t>(page) + 1;
+                    }
                 }
 
                 // Extract total effect count and update ParameterMap metadata
@@ -1336,8 +1343,11 @@ void setup() {
                 JsonObject data = doc["data"].as<JsonObject>();
                 JsonArray palettes = data["palettes"].as<JsonArray>();
                 for (JsonObject p : palettes) {
-                    if (!p["id"].is<uint8_t>() || !p["name"].is<const char*>()) continue;
-                    uint8_t id = p["id"].as<uint8_t>();
+                    // ArduinoJson stores small integers as int - use is<int>()
+                    if (!p["id"].is<int>() || !p["name"].is<const char*>()) continue;
+                    int idInt = p["id"].as<int>();
+                    if (idInt < 0 || idInt > 255) continue;  // Invalid ID range
+                    uint8_t id = static_cast<uint8_t>(idInt);
                     const char* name = p["name"].as<const char*>();
                     if (id < MAX_PALETTES && name) {
                         strncpy(s_paletteNames[id], name, PALETTE_NAME_MAX - 1);
@@ -1347,20 +1357,24 @@ void setup() {
                 }
 
                 JsonObject pagination = data["pagination"].as<JsonObject>();
-                if (pagination["pages"].is<uint8_t>()) {
-                    s_palettePages = pagination["pages"].as<uint8_t>();
+                // ArduinoJson stores small integers as int, not uint8_t - use is<int>()
+                if (pagination["pages"].is<int>()) {
+                    int pages = pagination["pages"].as<int>();
+                    if (pages > 0 && pages <= 255) s_palettePages = static_cast<uint8_t>(pages);
                 }
-                if (pagination["page"].is<uint8_t>()) {
-                    uint8_t page = pagination["page"].as<uint8_t>();
-                    if (page >= s_paletteNextPage) s_paletteNextPage = page + 1;
+                if (pagination["page"].is<int>()) {
+                    int page = pagination["page"].as<int>();
+                    if (page > 0 && page <= 255 && static_cast<uint8_t>(page) >= s_paletteNextPage) {
+                        s_paletteNextPage = static_cast<uint8_t>(page) + 1;
+                    }
                 }
 
                 // Extract total palette count and update ParameterMap metadata
                 // Palette max = total - 1 (0-indexed)
-                // #region agent log
-                Serial.printf("[DEBUG] Before palette metadata update - Heap: free=%u minFree=%u largest=%u\n",
-                              ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-                // #endregion
+                // #region agent log (DISABLED)
+                // Serial.printf("[DEBUG] Before palette metadata update - Heap: free=%u minFree=%u largest=%u\n",
+                              // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+                                // #endregion
                 if (pagination["total"].is<uint16_t>()) {
                     uint16_t total = pagination["total"].as<uint16_t>();
                     if (total > 0) {
@@ -1377,10 +1391,10 @@ void setup() {
                         Serial.printf("[ParamMap] Updated Palette max from palettes.list: %u (total=%u)\n", paletteMax, total);
                     }
                 }
-                // #region agent log
-                Serial.printf("[DEBUG] After palette metadata update - Heap: free=%u minFree=%u largest=%u\n",
-                              ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-                // #endregion
+                // #region agent log (DISABLED)
+                // Serial.printf("[DEBUG] After palette metadata update - Heap: free=%u minFree=%u largest=%u\n",
+                              // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+                                // #endregion
 
                 updateUiEffectPaletteLabels();
                 return;
@@ -1429,12 +1443,12 @@ void setup() {
 
             // CRITICAL FIX: Handle colorCorrection.setConfig response (confirmation)
             if (type && strcmp(type, "colorCorrection.setConfig") == 0) {
-                // #region agent log
-                bool hasSuccess = doc["success"].is<bool>();
-                bool success = hasSuccess && doc["success"].as<bool>();
-                Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H4\",\"location\":\"main.cpp:1202\",\"message\":\"response.colorCorrection.setConfig\",\"data\":{\"hasSuccess\":%d,\"success\":%d},\"timestamp\":%lu}\n",
-                              hasSuccess ? 1 : 0, success ? 1 : 0, (unsigned long)millis());
-                // #endregion
+                // #region agent log (DISABLED)
+                // bool hasSuccess = doc["success"].is<bool>();
+                // bool success = hasSuccess && doc["success"].as<bool>();
+                // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H4\",\"location\":\"main.cpp:1202\",\"message\":\"response.colorCorrection.setConfig\",\"data\":{\"hasSuccess\":%d,\"success\":%d},\"timestamp\":%lu}\n",
+                              // hasSuccess ? 1 : 0, success ? 1 : 0, (unsigned long)millis());
+                                // #endregion
                 if (doc["success"].is<bool>() && doc["success"].as<bool>()) {
                     // Update local cache from response if provided
                     JsonObject data = doc["data"].is<JsonObject>() ? doc["data"].as<JsonObject>() : doc.as<JsonObject>();
@@ -1480,9 +1494,12 @@ void setup() {
                 const char* errorCode = doc["error"]["code"] | "UNKNOWN";
                 const char* errorMsg = doc["error"]["message"] | "Unknown error";
                 const char* requestId = doc["requestId"] | "";
-                Serial.printf("[WS ERROR] Code: %s, Message: %s, RequestId: %s\n", 
+                Serial.printf("[WS ERROR] Code: %s, Message: %s, RequestId: %s\n",
                               errorCode, errorMsg, requestId);
-                // TODO: Could flash LED or show error on display
+                // Visual feedback: Flash LED 0 red to indicate error
+                if (g_encoders) {
+                    g_encoders->flashLed(0, 255, 0, 0);  // Red for error
+                }
                 return;
             }
 
@@ -1556,10 +1573,10 @@ void setup() {
                         }
                     }
                     bool holdoff = (g_paramHandler && g_paramHandler->isInLocalHoldoff(1)); // index 1 = Palette
-                    // #region agent log
-                    Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"palette-latch\",\"hypothesisId\":\"A\",\"location\":\"main.cpp:wsStatus\",\"message\":\"status.palette.update\",\"data\":{\"paletteId\":%u,\"holdoff\":%d,\"timestamp\":%lu}}\n",
-                                  paletteId, holdoff ? 1 : 0, static_cast<unsigned long>(millis()));
-                    // #endregion
+                    // #region agent log (DISABLED)
+                    // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"palette-latch\",\"hypothesisId\":\"A\",\"location\":\"main.cpp:wsStatus\",\"message\":\"status.palette.update\",\"data\":{\"paletteId\":%u,\"holdoff\":%d,\"timestamp\":%lu}}\n",
+                                  // paletteId, holdoff ? 1 : 0, static_cast<unsigned long>(millis()));
+                                        // #endregion
                     if (!holdoff) {
                         g_paletteLedDisplay.update(paletteId);
                     }
@@ -1572,18 +1589,18 @@ void setup() {
     });
 
     // Start WiFi connection
-    // #region agent log
-    Serial.printf("[DEBUG] Before WiFiManager::begin() - Heap: free=%u minFree=%u largest=%u\n",
-                  ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] Before WiFiManager::begin() - Heap: free=%u minFree=%u largest=%u\n",
+                  // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+        // #endregion
     
     // Begin WiFi - connect to home WiFi (same network as v2)
     g_wifiManager.begin(WIFI_SSID, WIFI_PASSWORD);
     
-    // #region agent log
-    Serial.printf("[DEBUG] After WiFiManager::begin() - Heap: free=%u minFree=%u largest=%u\n",
-                  ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] After WiFiManager::begin() - Heap: free=%u minFree=%u largest=%u\n",
+                  // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+        // #endregion
     // Note: WiFiManager::begin() starts a scan first - connection happens after scan completes
 #else
     // WiFi disabled on ESP32-P4 due to SDIO pin configuration issues
@@ -1716,26 +1733,26 @@ void loop() {
     // =========================================================================
     // NETWORK: Service WebSocket EARLY to prevent TCP timeouts (K1 pattern)
     // =========================================================================
-    // #region agent log
-#if ENABLE_WS_DIAGNOSTICS
-    static uint32_t s_lastWsUpdateLog = 0;
-    if ((uint32_t)(millis() - s_lastWsUpdateLog) >= 1000) {  // Log every 1s
-        Serial.printf("[DEBUG] Before wsClient.update() - Heap: free=%u minFree=%u largest=%u\n",
-                      ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-        s_lastWsUpdateLog = millis();
-    }
-#endif
-    // #endregion
+    // #region agent log (DISABLED)
+// #if ENABLE_WS_DIAGNOSTICS
+    // static uint32_t s_lastWsUpdateLog = 0;
+    // if ((uint32_t)(millis() - s_lastWsUpdateLog) >= 1000) {  // Log every 1s
+        // Serial.printf("[DEBUG] Before wsClient.update() - Heap: free=%u minFree=%u largest=%u\n",
+                      // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+        // s_lastWsUpdateLog = millis();
+    // }
+// #endif
+        // #endregion
     g_wsClient.update();
     esp_task_wdt_reset();  // Reset after WebSocket (can block on network I/O)
-    // #region agent log
-#if ENABLE_WS_DIAGNOSTICS
-    if ((uint32_t)(millis() - s_lastWsUpdateLog) >= 1000) {
-        Serial.printf("[DEBUG] After wsClient.update() - Heap: free=%u minFree=%u largest=%u\n",
-                      ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-    }
-#endif
-    // #endregion
+    // #region agent log (DISABLED)
+// #if ENABLE_WS_DIAGNOSTICS
+    // if ((uint32_t)(millis() - s_lastWsUpdateLog) >= 1000) {
+        // Serial.printf("[DEBUG] After wsClient.update() - Heap: free=%u minFree=%u largest=%u\n",
+                      // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+    // }
+// #endif
+        // #endregion
 
     // =========================================================================
     // NETWORK: Update WiFi state machine
@@ -1770,15 +1787,15 @@ void loop() {
     // This prevents LEDs from activating during boot sequence
     /*
     if (s_uiInitialized) {
-        // #region agent log
-        static uint32_t s_lastLoopLog = 0;
-        uint32_t loopNow = millis();
-        if (loopNow - s_lastLoopLog >= 1000) {  // Log every 1s to track call frequency
-            Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\",\"location\":\"main.cpp:1503\",\"message\":\"loop.updateAnimation.call\",\"data\":{\"loopTime\":%lu},\"timestamp\":%lu}\n",
-                static_cast<unsigned long>(loopNow), static_cast<unsigned long>(loopNow));
-            s_lastLoopLog = loopNow;
-        }
-        // #endregion
+        // #region agent log (DISABLED)
+        // static uint32_t s_lastLoopLog = 0;
+        // uint32_t loopNow = millis();
+        // if (loopNow - s_lastLoopLog >= 1000) {  // Log every 1s to track call frequency
+            // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\",\"location\":\"main.cpp:1503\",\"message\":\"loop.updateAnimation.call\",\"data\":{\"loopTime\":%lu},\"timestamp\":%lu}\n",
+                // static_cast<unsigned long>(loopNow), static_cast<unsigned long>(loopNow));
+            // s_lastLoopLog = loopNow;
+        // }
+                // #endregion
         g_paletteLedDisplay.updateAnimation();
     }
     */
@@ -1796,10 +1813,10 @@ void loop() {
         {
 #endif
             // WiFi is connected (or WiFi disabled) - safe to initialize UI now
-            // #region agent log
-            Serial.printf("[DEBUG] WiFi connected, initialising UI - Heap: free=%u minFree=%u largest=%u\n",
-                          ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-            // #endregion
+            // #region agent log (DISABLED)
+            // Serial.printf("[DEBUG] WiFi connected, initialising UI - Heap: free=%u minFree=%u largest=%u\n",
+                          // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+                        // #endregion
             
             // Show UI initialization message before hiding loading screen
             bool unitA = g_encoders ? g_encoders->isUnitAAvailable() : false;
@@ -1816,10 +1833,10 @@ void loop() {
             g_ui->begin();
             Serial.printf("[MAIN_TRACE] After g_ui->begin() @ %lu ms\n", millis());
             esp_task_wdt_reset();
-            // #region agent log
-            Serial.printf("[DEBUG] After DisplayUI::begin() - Heap: free=%u minFree=%u largest=%u\n",
-                          ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-            // #endregion
+            // #region agent log (DISABLED)
+            // Serial.printf("[DEBUG] After DisplayUI::begin() - Heap: free=%u minFree=%u largest=%u\n",
+                          // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+                        // #endregion
             
             // Wire up action button callback for LVGL
             #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
@@ -2134,7 +2151,7 @@ void loop() {
 
             // Rate-limit list requests to avoid spamming the server
             if (nowMs - s_lastListRequestMs >= 250) {
-                // Request palettes first (small, deterministic: 64 -> 4 pages @ 20/page)
+                // Request palettes first (75 palettes -> 4 pages @ 20/page)
                 if (s_palettePages == 0 || s_paletteNextPage <= s_palettePages) {
                     g_wsClient.requestPalettesList(s_paletteNextPage, 20, "tab5.palettes");
                     s_lastListRequestMs = nowMs;

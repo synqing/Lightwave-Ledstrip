@@ -1,20 +1,58 @@
 # MCP Configuration Setup
 
-**Version:** 1.0  
-**Last Updated:** 2026-01-18  
+**Version:** 2.0
+**Last Updated:** 2026-01-20
 **Status:** Setup Guide
 
-This document provides step-by-step instructions for configuring Claude-Flow MCP server integration in Cursor or Claude Desktop.
+This document provides step-by-step instructions for configuring Claude-Flow MCP server integration with Claude Code, Cursor, or Claude Desktop.
+
+---
+
+## Integration Modes
+
+Claude-Flow supports two integration modes:
+
+| Mode | Description | API Keys Required? |
+|------|-------------|-------------------|
+| **MCP Server Mode** | Claude-Flow provides orchestration tools (swarm, memory, routing) while Claude Code handles LLM calls | **No** |
+| **Standalone Mode** | Claude-Flow runs as a daemon with its own LLM provider | Yes (or use claude-code-provider) |
+
+**Recommended:** MCP Server Mode with Claude Code - simplest setup, no API keys needed.
+
+---
+
+## Quick Start (Claude Code)
+
+If you're using Claude Code CLI with a Max subscription, setup is simple:
+
+```bash
+# 1. Verify Claude-Flow is available
+npx claude-flow@v3alpha --version
+
+# 2. Run health check
+npx claude-flow@v3alpha doctor
+
+# 3. Add MCP server to ~/.claude/settings.json (see Configuration below)
+
+# 4. Restart terminal/IDE
+```
+
+That's it. No API keys required - Claude Code uses your existing subscription.
 
 ---
 
 ## MCP Configuration Location
 
+### Claude Code CLI
+
+**Global Config** (Recommended):
+- Path: `~/.claude/settings.json`
+- MCP servers defined in `mcpServers` object
+
 ### Cursor IDE
 
 **Repository-Local Config** (Preferred):
 - Path: `.cursor/mcp.json` (in project root)
-- Note: This path may be filtered by `.gitignore` - create manually if needed
 
 **Global Config** (Alternative):
 - macOS: `~/Library/Application Support/Cursor/User/globalStorage/.../mcp.json`
@@ -30,18 +68,47 @@ This document provides step-by-step instructions for configuring Claude-Flow MCP
 
 ---
 
-## Configuration Steps
+## Configuration Options
 
-### Step 1: Create MCP Config File
+### Option A: Claude Code (No API Keys - Recommended)
 
-**For Cursor (Repository-Local)**:
+Claude Code uses your existing Claude Max subscription via OAuth. No separate API keys required.
 
-1. Create `.cursor/` directory if it doesn't exist:
-   ```bash
-   mkdir -p .cursor
-   ```
+**Step 1: Add to Claude Code Settings**
 
-2. Create `.cursor/mcp.json` with the following content:
+Edit `~/.claude/settings.json` and add the `claude-flow` MCP server:
+
+```json
+{
+  "mcpServers": {
+    "claude-flow": {
+      "command": "npx",
+      "args": ["claude-flow@v3alpha", "mcp", "start"]
+    }
+  }
+}
+```
+
+**Step 2: Restart Claude Code**
+
+Restart your terminal session or Claude Code IDE extension.
+
+**Step 3: Verify**
+
+```bash
+npx claude-flow@v3alpha doctor
+# Should show: ✓ Claude Code CLI: vX.X.X
+```
+
+---
+
+### Option B: Cursor/Claude Desktop (API Keys Required)
+
+If using Cursor or Claude Desktop without Claude Code, API keys are required.
+
+**Step 1: Create MCP Config File**
+
+For Cursor, create `.cursor/mcp.json`:
 
 ```json
 {
@@ -52,76 +119,70 @@ This document provides step-by-step instructions for configuring Claude-Flow MCP
       "env": {
         "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}",
         "OPENAI_API_KEY": "${OPENAI_API_KEY}",
-        "GEMINI_API_KEY": "${GEMINI_API_KEY}",
-        "CLAUDE_FLOW_PROJECT_ROOT": "${PROJECT_ROOT}"
+        "GEMINI_API_KEY": "${GEMINI_API_KEY}"
       }
     }
   }
 }
 ```
 
-**Security Note**: API keys sourced from environment variables only (never committed to repository).
-
----
-
-### Step 2: Set Environment Variables
-
-Set at least one LLM provider API key:
-
-**macOS/Linux**:
+**Step 2: Set Environment Variables**
 
 ```bash
 # Add to ~/.zshrc or ~/.bashrc
 export ANTHROPIC_API_KEY="sk-ant-..."
 export OPENAI_API_KEY="sk-..."
 export GEMINI_API_KEY="..."
-
-# Or use .env file (if supported by Cursor)
-echo "ANTHROPIC_API_KEY=sk-ant-..." >> .env
-echo "OPENAI_API_KEY=sk-..." >> .env
 ```
 
-**Windows**:
+**Step 3: Restart IDE**
 
-```powershell
-# Set environment variables (User or System level)
-[System.Environment]::SetEnvironmentVariable("ANTHROPIC_API_KEY", "sk-ant-...", "User")
-[System.Environment]::SetEnvironmentVariable("OPENAI_API_KEY", "sk-...", "User")
-```
+Restart Cursor or Claude Desktop for changes to take effect.
 
-**Verify Environment Variables**:
-
-```bash
-# Check if API keys are set
-echo $ANTHROPIC_API_KEY  # Should output key (or empty)
-echo $OPENAI_API_KEY     # Should output key (or empty)
-```
+**Security Note**: API keys sourced from environment variables only (never committed to repository).
 
 ---
 
-### Step 3: Verify Claude-Flow Installation
+### Option C: Standalone Mode with Claude Code Provider
 
-**Using npx** (No global install needed):
+For running Claude-Flow as a daemon while using your Claude Max subscription (without separate API keys):
+
+**Step 1: Build the Claude Code Provider Plugin**
+
+```bash
+cd plugins/claude-code-provider
+npm install
+npm run build
+```
+
+**Step 2: Test the Provider**
+
+```bash
+node test-provider.mjs
+```
+
+**Step 3: Configure Claude-Flow**
+
+See [plugins/claude-code-provider/README.md](../../../plugins/claude-code-provider/README.md) for integration details.
+
+This approach enables full swarm features without separate API billing.
+
+---
+
+## Verification
+
+### Verify Claude-Flow Installation
 
 ```bash
 # Test Claude-Flow availability
 npx claude-flow@v3alpha --version
-# Expected: v3alpha or higher
+# Expected: v3.0.0-alpha.125 (or higher)
+
+# Run diagnostics
+npx claude-flow@v3alpha doctor
 ```
 
-**Global Install** (Optional):
-
-```bash
-# Install Claude-Flow globally
-npm install -g claude-flow@v3alpha
-
-# Verify installation
-claude-flow --version
-```
-
----
-
-### Step 4: Test MCP Server
+### Verify MCP Server
 
 **Manual Test**:
 
@@ -133,60 +194,27 @@ npx claude-flow@v3alpha mcp start
 # Press Ctrl+C to stop
 ```
 
-**Via Cursor/Claude Desktop**:
-
-1. **Cursor**: Open Settings → MCP → Verify `claude-flow` server appears in list
-2. **Claude Desktop**: Open Settings → Developers → MCP → Verify `claude-flow` server appears
-
 **Check Tool Availability**:
 
-Once MCP server is connected, verify tools are available:
-- `swarm_init`
-- `agent_spawn`
-- `memory_search`
-- `hooks_route`
-- (170+ more tools)
+```bash
+# List available MCP tools
+npx claude-flow@v3alpha mcp tools
+```
 
----
+Once MCP server is connected, these tools are available:
+- `agent/spawn`, `agent/list`, `agent/status`
+- `swarm/init`, `swarm/status`, `swarm/shutdown`
+- `memory/store`, `memory/search`, `memory/retrieve`
+- `hooks/route`, `hooks/pre-edit`, `hooks/post-edit`
+- 27+ orchestration tools total
 
-### Step 5: Restart IDE/Desktop
-
-After creating MCP config:
-
-1. **Cursor**: Restart Cursor IDE (File → Quit, then reopen)
-2. **Claude Desktop**: Restart Claude Desktop (Quit and reopen)
-
-MCP servers are loaded at startup, so restart is required for config changes to take effect.
-
----
-
-## Verification
-
-### Verify MCP Server Connection
+### Verify in IDE
 
 **In Cursor**:
-- Settings → MCP → Check `claude-flow` server status (should be "Connected" or "Running")
+- Settings → MCP → Check `claude-flow` server status (should be "Connected")
 
 **In Claude Desktop**:
 - Settings → Developers → MCP → Check `claude-flow` server status
-
-### Verify Tool Access
-
-**Test Tool Execution**:
-
-```bash
-# Via MCP client (Cursor/Claude Desktop), test tools:
-# - swarm_init --help
-# - agent_spawn --help
-# - memory_search "test"
-# - hooks_route --status
-```
-
-If tools are not accessible, check:
-1. MCP config file syntax (valid JSON)
-2. Environment variables are set
-3. Claude-Flow installation (npx or global)
-4. IDE/Desktop was restarted after config changes
 
 ---
 
@@ -197,51 +225,45 @@ If tools are not accessible, check:
 **Symptom**: `claude-flow` server not appearing in MCP server list
 
 **Resolution**:
-- Verify config file location (`.cursor/mcp.json` or global config path)
+- Verify config file location (`~/.claude/settings.json` or `.cursor/mcp.json`)
 - Check JSON syntax (valid JSON, no trailing commas)
-- Restart IDE/Desktop after creating config
+- Restart IDE/terminal after creating config
 
----
-
-### Environment Variables Not Resolved
+### Environment Variables Not Resolved (Option B only)
 
 **Symptom**: MCP server fails to start (API key missing)
 
 **Resolution**:
 - Verify environment variables are set: `echo $ANTHROPIC_API_KEY`
-- Check variable names match config (`ANTHROPIC_API_KEY`, not `ANTHROPIC_KEY`)
-- Set at least one LLM provider API key (Anthropic, OpenAI, or Gemini)
-
----
+- Check variable names match config
+- Set at least one LLM provider API key
 
 ### npx Command Not Found
 
 **Symptom**: MCP server fails to start (`npx: command not found`)
 
 **Resolution**:
-- Install Node.js 18+ (includes npm and npx)
+- Install Node.js 20+ (includes npm and npx)
 - Verify npx availability: `npx --version`
-- Use global install as fallback: `npm install -g claude-flow@v3alpha` (then update config to use `claude-flow` command instead of `npx`)
-
----
+- Use global install as fallback: `npm install -g claude-flow@v3alpha`
 
 ### Tools Not Accessible
 
 **Symptom**: Tools not visible in tool picker or tool execution fails
 
 **Resolution**:
-- Verify MCP server is connected (check server status in Settings)
-- Check tool names are correct (swarm_init, agent_spawn, etc.)
-- Review MCP server logs (Cursor/Claude Desktop console or logs)
+- Verify MCP server is connected (check server status)
+- Check tool names are correct (`agent/spawn`, not `agent_spawn`)
+- Review MCP server logs
 
 ---
 
 ## Security Best Practices
 
-1. **Never Commit API Keys**: Use environment variables only, never hardcode keys in config files
-2. **Use .gitignore**: Ensure `.cursor/mcp.json` (if local) is in `.gitignore` if it contains any sensitive paths
+1. **Never Commit API Keys**: Use environment variables only
+2. **Use .gitignore**: Ensure local config files with sensitive data are ignored
 3. **Restrict API Key Permissions**: Use API keys with minimal required permissions
-4. **Rotate Keys Regularly**: Update API keys periodically for security
+4. **Rotate Keys Regularly**: Update API keys periodically
 
 ---
 
@@ -249,7 +271,8 @@ If tools are not accessible, check:
 
 - **[validation-checklist.md](./validation-checklist.md)** - Setup and runtime verification
 - **[overview.md](./overview.md)** - Strategic integration overview
+- **[../../../plugins/claude-code-provider/README.md](../../../plugins/claude-code-provider/README.md)** - Claude Code Provider plugin
 
 ---
 
-*This setup guide ensures Claude-Flow MCP integration is correctly configured with secure API key handling and proper IDE/Desktop restart procedures.*
+*This setup guide ensures Claude-Flow MCP integration is correctly configured. For Claude Code users, no API keys are required - just add the MCP server config and restart.*

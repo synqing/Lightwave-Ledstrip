@@ -159,6 +159,7 @@ The firmware provides a serial command interface (115200 baud). Useful checks:
 
 - **Palette staleness**: Do not cache palette pointers across frames
 - **Centre mapping errors**: Centre is between LEDs 79 and 80, not at LED 80
+- **Arduino macro collisions**: Avoid using Arduino-core macro identifiers as variable or field names in codecs/handlers. Common no-fly examples: `degrees`, `radians`, `min`, `max`, `abs`, `round`, `sq`, `constrain`, `map`, `pow`, `sqrt`. These are defined as macros in Arduino headers and can cause silent compilation failures or unexpected behaviour. Use descriptive alternatives (e.g., `degreesValue`, `minValue`, `maxValue`) instead.
 - **ZoneComposer buffer sizes**: Don't assume global `ledCount` inside effects
 - **Build paths**: Always `cd` into `firmware/v2` before running PlatformIO commands
 

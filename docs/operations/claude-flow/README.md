@@ -1,31 +1,47 @@
 # Claude-Flow Integration Documentation
 
-**Version:** 1.0  
-**Last Updated:** 2026-01-18  
+**Version:** 2.0
+**Last Updated:** 2026-01-20
 **Status:** Operational
 
 This directory contains comprehensive documentation for Claude-Flow v3 (RuVector) strategic integration with the Lightwave-Ledstrip project.
 
 ---
 
-## Quick Start
+## Quick Start (No API Keys Required)
 
-### 1. Setup MCP Configuration
+**If using Claude Code with Max subscription, no API keys are needed.**
 
-See **[MCP_SETUP.md](./MCP_SETUP.md)** for step-by-step configuration:
-- Create `.cursor/mcp.json` (or global config)
-- Set environment variables (ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY)
-- Verify Claude-Flow installation (`npx claude-flow@v3alpha --version`)
-- Restart Cursor/Claude Desktop
+```bash
+# 1. Verify Claude-Flow
+npx claude-flow@v3alpha doctor
 
-### 2. Verify Integration
+# 2. Add to ~/.claude/settings.json
+{
+  "mcpServers": {
+    "claude-flow": {
+      "command": "npx",
+      "args": ["claude-flow@v3alpha", "mcp", "start"]
+    }
+  }
+}
 
-See **[validation-checklist.md](./validation-checklist.md)** for verification steps:
-- Check MCP server connection (Cursor/Claude Desktop Settings → MCP)
-- Test tool access (`swarm_init`, `agent_spawn`, `memory_search`, `hooks_route`)
-- Verify agent routing (`hooks_route --status`)
+# 3. Restart terminal/IDE - done!
+```
 
-### 3. Start Using
+See **[MCP_SETUP.md](./MCP_SETUP.md)** for detailed configuration options (including API key setup for Cursor/Claude Desktop).
+
+### Verify Integration
+
+```bash
+# Check available tools (27+ orchestration tools)
+npx claude-flow@v3alpha mcp tools
+
+# Run health check
+npx claude-flow@v3alpha doctor
+```
+
+### Start Using
 
 See **[swarm-templates.md](./swarm-templates.md)** for reusable workflows:
 - Effect migration: IEffect class + PatternRegistry + docs

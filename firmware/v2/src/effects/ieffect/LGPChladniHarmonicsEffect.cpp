@@ -68,12 +68,15 @@ void LGPChladniHarmonicsEffect::render(plugins::EffectContext& ctx) {
         uint8_t hue1 = (uint8_t)(ctx.gHue + (uint8_t)(plateDisplacement * 30.0f));
         uint8_t hue2 = (uint8_t)(ctx.gHue + 128 + (uint8_t)(plateDisplacement * 30.0f));
 
-        ctx.leds[i] = CHSV(hue1, ctx.saturation, brightness);
+        uint8_t brightU8 = (uint8_t)((brightness * ctx.brightness) / 255);
+        ctx.leds[i] = ctx.palette.getColor(hue1, brightU8);
 
         if (i + STRIP_LENGTH < ctx.ledCount) {
             float bottomDisplacement = -plateDisplacement;
             float bottomBrightness = (particleBrightness + fabsf(bottomDisplacement) * intensity) * 255.0f;
-            ctx.leds[i + STRIP_LENGTH] = CHSV(hue2, ctx.saturation, (uint8_t)constrain(bottomBrightness, 20.0f, 255.0f));
+            uint8_t bottomBrightU8 = (uint8_t)constrain(bottomBrightness, 20.0f, 255.0f);
+            bottomBrightU8 = (uint8_t)((bottomBrightU8 * ctx.brightness) / 255);
+            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor(hue2, bottomBrightU8);
         }
     }
 }

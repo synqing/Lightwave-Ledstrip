@@ -49,12 +49,12 @@ void OceanEffect::render(plugins::EffectContext& ctx) {
         // Apply narrative intensity modulation to wave amplitude
         combinedWave = (uint8_t)(combinedWave * narrativeIntensity);
 
-        // Ocean colors from deep blue to cyan
+        // Ocean colors from deep blue to cyan - use palette system
         uint8_t hue = 160 + (combinedWave >> 3);
         uint8_t brightness = 100 + (uint8_t)((combinedWave >> 1) * narrativeIntensity);
-        uint8_t saturation = 255 - (combinedWave >> 2);
-
-        CRGB color = CHSV(hue, saturation, brightness);
+        uint8_t brightU8 = (uint8_t)((brightness * ctx.brightness) / 255);
+        uint8_t paletteIdx = (uint8_t)(hue + ctx.gHue);
+        CRGB color = ctx.palette.getColor(paletteIdx, brightU8);
 
         // Both strips
         ctx.leds[i] = color;
@@ -81,4 +81,3 @@ const plugins::EffectMetadata& OceanEffect::getMetadata() const {
 } // namespace ieffect
 } // namespace effects
 } // namespace lightwaveos
-

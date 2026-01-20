@@ -46,19 +46,23 @@ static constexpr float FALLBACK_BREATH_RATE = 0.02f;  // ~1.5 second period
 // ============================================================================
 // Helper: Compute Chromatic Color from 12-bin Chromagram (Sensory Bridge Pattern)
 // ============================================================================
-static CRGB computeChromaticColor(const float chroma[12]) {
+static CRGB computeChromaticColor(const float chroma[12], const plugins::EffectContext& ctx) {
     CRGB sum = CRGB::Black;
     float share = 1.0f / 6.0f;  // Divide brightness among notes (Sensory Bridge uses 1/6.0)
     
     for (int i = 0; i < 12; i++) {
-        float hue = i / 12.0f;  // 0.0 to 0.917 (0° to 330°)
+        float prog = i / 12.0f;  // 0.0 to 0.917 (0° to 330°)
         float brightness = chroma[i] * chroma[i] * share;  // Quadratic contrast (like Sensory Bridge)
         
         // Clamp brightness to valid range
         if (brightness > 1.0f) brightness = 1.0f;
         
-        CRGB noteColor;
-        hsv2rgb_spectrum(CHSV((uint8_t)(hue * 255), 255, (uint8_t)(brightness * 255)), noteColor);
+        // Use palette system (matches WaveformEffect/SnapwaveEffect pattern)
+        uint8_t paletteIdx = (uint8_t)(prog * 255.0f + ctx.gHue);
+        uint8_t brightU8 = (uint8_t)(brightness * 255.0f);
+        // Apply brightness scaling
+        brightU8 = (uint8_t)((brightU8 * ctx.brightness) / 255);
+        CRGB noteColor = ctx.palette.getColor(paletteIdx, brightU8);
 
         // PRE-SCALE: Prevent white accumulation from 12-bin chromagram sum
         // With 12 bins at full intensity, worst case is 12 * 255 = 3060
@@ -218,7 +222,7 @@ void BreathingEffect::renderBreathing(plugins::EffectContext& ctx) {
         // ====================================================================
         // Compute Chromatic Color from Smoothed Chromagram
         // ====================================================================
-        chromaticColor = computeChromaticColor(m_chromaSmoothed);
+        chromaticColor = computeChromaticColor(m_chromaSmoothed, ctx);
         
         // ====================================================================
         // Compute Energy Envelope for Brightness Modulation

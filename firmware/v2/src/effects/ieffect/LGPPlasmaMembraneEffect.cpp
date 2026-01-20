@@ -38,8 +38,10 @@ void LGPPlasmaMembraneEffect::render(plugins::EffectContext& ctx) {
         uint8_t sat = (uint8_t)(200 + (membrane >> 2));
         uint8_t brightness = scale8((uint8_t)membrane, ctx.brightness);
 
-        CRGB inner = CHSV(hue, sat, brightness);
-        CRGB outer = CHSV((uint8_t)(hue + 10), (uint8_t)(sat - 50), scale8(brightness, 200));
+        CRGB inner = ctx.palette.getColor(hue, brightness);
+        uint8_t outerBright = scale8(brightness, 200);
+        outerBright = (uint8_t)((outerBright * ctx.brightness) / 255);
+        CRGB outer = ctx.palette.getColor((uint8_t)(hue + 10), outerBright);
 
         ctx.leds[i] = inner;
         if (i + STRIP_LENGTH < ctx.ledCount) {

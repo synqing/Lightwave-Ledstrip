@@ -65,9 +65,11 @@ void LGPAnisotropicCloakEffect::render(plugins::EffectContext& ctx) {
 
         uint8_t hue = (uint8_t)(ctx.gHue + (uint8_t)(sample) + (uint8_t)(sideBias * 20.0f));
 
-        ctx.leds[i] = CHSV(hue, ctx.saturation, (uint8_t)constrain(brightnessF, 0.0f, 255.0f));
+        uint8_t brightU8 = (uint8_t)constrain(brightnessF, 0.0f, 255.0f);
+        brightU8 = (uint8_t)((brightU8 * ctx.brightness) / 255);
+        ctx.leds[i] = ctx.palette.getColor(hue, brightU8);
         if (i + STRIP_LENGTH < ctx.ledCount) {
-            ctx.leds[i + STRIP_LENGTH] = CHSV((uint8_t)(hue + 128), ctx.saturation, (uint8_t)constrain(brightnessF, 0.0f, 255.0f));
+            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(hue + 128), brightU8);
         }
     }
 }

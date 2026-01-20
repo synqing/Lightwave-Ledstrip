@@ -120,9 +120,11 @@ void LGPGravitationalWaveChirpEffect::render(plugins::EffectContext& ctx) {
         if (m_merging) baseHue = 40;
         else if (m_ringdown) baseHue = 160;
 
-        ctx.leds[i] = CHSV((uint8_t)(baseHue + ctx.gHue), ctx.saturation, brightness1);
+        uint8_t brightU8_1 = (uint8_t)((brightness1 * ctx.brightness) / 255);
+        ctx.leds[i] = ctx.palette.getColor((uint8_t)(baseHue + ctx.gHue), brightU8_1);
         if (i + STRIP_LENGTH < ctx.ledCount) {
-            ctx.leds[i + STRIP_LENGTH] = CHSV((uint8_t)(baseHue + ctx.gHue + 30), ctx.saturation, brightness2);
+            uint8_t brightU8_2 = (uint8_t)((brightness2 * ctx.brightness) / 255);
+            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(baseHue + ctx.gHue + 30), brightU8_2);
         }
     }
 }

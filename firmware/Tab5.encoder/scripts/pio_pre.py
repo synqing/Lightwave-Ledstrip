@@ -132,6 +132,11 @@ _ndjson(
     {"includeDirs": include_dirs},
 )
 
+# Suppress noisy upstream warnings from framework/IDF headers without changing vendor code.
+# Keep this targeted to avoid masking warnings in our own sources.
+env.Append(CCFLAGS=["-Wno-deprecated-declarations"])
+env.Append(CXXFLAGS=["-Wno-literal-suffix"])
+
 # LVGL Helium/NEON ASM Exclusion for RISC-V
 # The ESP32-P4 is RISC-V and cannot link ARM Helium/NEON assembly files.
 # Remove these files before compilation to prevent linker errors.

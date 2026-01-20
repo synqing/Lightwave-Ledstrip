@@ -104,9 +104,9 @@ void DisplayUI::begin() {
     lv_obj_set_style_pad_all(_screen_global, 0, LV_PART_MAIN);
 
     _header = lv_obj_create(_screen_global);
-    // #region agent log
-    Serial.printf("[DEBUG] Header creation - screen width=1280, border_width=2, margin=7px\n");
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] Header creation - screen width=1280, border_width=2, margin=7px\n");
+        // #endregion
     // CRITICAL FIX: Use very conservative width to prevent right-side clipping
     // Screen width = 1280px, border = 2px, need margin on both sides
     // Maximum safe width = 1280 - left_margin - right_margin
@@ -114,20 +114,20 @@ void DisplayUI::begin() {
     lv_obj_set_size(_header, 1260, TAB5_STATUSBAR_HEIGHT);
     // Position with 10px margin from left edge (more than 7px to ensure no clipping)
     lv_obj_set_pos(_header, 10, 7);
-    // #region agent log
-    Serial.printf("[DEBUG] Header: pos=(%d,%d), size=(%d,%d), right_edge=%d, margin_left=10, margin_right=%d\n", 
-                  10, 7, 1260, TAB5_STATUSBAR_HEIGHT, 10 + 1260, 1280 - (10 + 1260));
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] Header: pos=(%d,%d), size=(%d,%d), right_edge=%d, margin_left=10, margin_right=%d\n", 
+                  // 10, 7, 1260, TAB5_STATUSBAR_HEIGHT, 10 + 1260, 1280 - (10 + 1260));
+        // #endregion
     lv_obj_set_style_bg_color(_header, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
     // White border and rounded corners matching src/src/deck_ui.cpp (2px instead of 3px)
     lv_obj_set_style_border_width(_header, 2, LV_PART_MAIN);
     lv_obj_set_style_border_color(_header, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
     lv_obj_set_style_radius(_header, 14, LV_PART_MAIN);
-    // #region agent log
-    Serial.printf("[DEBUG] Header after styling: actual_width=%d, actual_height=%d, border_width=%d\n",
-                  (int)lv_obj_get_width(_header), (int)lv_obj_get_height(_header),
-                  (int)lv_obj_get_style_border_width(_header, LV_PART_MAIN));
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] Header after styling: actual_width=%d, actual_height=%d, border_width=%d\n",
+                  // (int)lv_obj_get_width(_header), (int)lv_obj_get_height(_header),
+                  // (int)lv_obj_get_style_border_width(_header, LV_PART_MAIN));
+        // #endregion
     lv_obj_set_style_pad_left(_header, TAB5_GRID_MARGIN, LV_PART_MAIN);
     lv_obj_set_style_pad_right(_header, TAB5_GRID_MARGIN, LV_PART_MAIN);
     lv_obj_set_style_pad_top(_header, 16, LV_PART_MAIN);  // Equal top and bottom padding for proper centering
@@ -159,30 +159,30 @@ void DisplayUI::begin() {
     lv_label_set_text(_header_effect, "--");
     lv_obj_set_style_text_font(_header_effect, &bebas_neue_24px, LV_PART_MAIN);
     lv_obj_set_style_text_color(_header_effect, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
-    // #region agent log
-    Serial.printf("[DEBUG] Pattern label created, checking styles before clear\n");
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] Pattern label created, checking styles before clear\n");
+        // #endregion
     // Clear borders, text decoration, outline, and shadow
     lv_obj_set_style_border_width(_header_effect, 0, LV_PART_MAIN);
     lv_obj_set_style_text_decor(_header_effect, LV_TEXT_DECOR_NONE, LV_PART_MAIN);
     lv_obj_set_style_outline_width(_header_effect, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(_header_effect, 0, LV_PART_MAIN);
-    // #region agent log
-    Serial.printf("[DEBUG] Pattern label: AFTER clear - border=%d, text_decor=%d, outline=%d, shadow=%d\n", 
-                  (int)lv_obj_get_style_border_width(_header_effect, LV_PART_MAIN),
-                  (int)lv_obj_get_style_text_decor(_header_effect, LV_PART_MAIN),
-                  (int)lv_obj_get_style_outline_width(_header_effect, LV_PART_MAIN),
-                  (int)lv_obj_get_style_shadow_width(_header_effect, LV_PART_MAIN));
-    // #endregion
-    // #region agent log
-    Serial.printf("[DEBUG] Pattern label: BEFORE setting long_mode, checking if LV_LABEL_LONG_DOT causes underline\n");
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] Pattern label: AFTER clear - border=%d, text_decor=%d, outline=%d, shadow=%d\n", 
+                  // (int)lv_obj_get_style_border_width(_header_effect, LV_PART_MAIN),
+                  // (int)lv_obj_get_style_text_decor(_header_effect, LV_PART_MAIN),
+                  // (int)lv_obj_get_style_outline_width(_header_effect, LV_PART_MAIN),
+                  // (int)lv_obj_get_style_shadow_width(_header_effect, LV_PART_MAIN));
+        // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] Pattern label: BEFORE setting long_mode, checking if LV_LABEL_LONG_DOT causes underline\n");
+        // #endregion
     // Try LV_LABEL_LONG_SCROLL instead of LV_LABEL_LONG_DOT to see if that's causing the line
     lv_label_set_long_mode(_header_effect, LV_LABEL_LONG_SCROLL_CIRCULAR);
-    // #region agent log
-    Serial.printf("[DEBUG] Pattern label: Changed to LV_LABEL_LONG_SCROLL_CIRCULAR, checking text_decor=%d\n", 
-                  (int)lv_obj_get_style_text_decor(_header_effect, LV_PART_MAIN));
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] Pattern label: Changed to LV_LABEL_LONG_SCROLL_CIRCULAR, checking text_decor=%d\n", 
+                  // (int)lv_obj_get_style_text_decor(_header_effect, LV_PART_MAIN));
+        // #endregion
     lv_obj_set_width(_header_effect, 220);
 
     // Palette container (fixed width to prevent shifting) - moved to second position
@@ -204,12 +204,12 @@ void DisplayUI::begin() {
     lv_obj_set_style_pad_left(_header_palette_container, 10, LV_PART_MAIN); // 10px gap after Effect container
 
     _header_palette = lv_label_create(_header_palette_container);
-    // #region agent log
-    Serial.printf("[DEBUG] Palette label created - checking default styles: border=%d, text_decor=%d, outline_width=%d\n", 
-                  (int)lv_obj_get_style_border_width(_header_palette, LV_PART_MAIN),
-                  (int)lv_obj_get_style_text_decor(_header_palette, LV_PART_MAIN),
-                  (int)lv_obj_get_style_outline_width(_header_palette, LV_PART_MAIN));
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] Palette label created - checking default styles: border=%d, text_decor=%d, outline_width=%d\n", 
+                  // (int)lv_obj_get_style_border_width(_header_palette, LV_PART_MAIN),
+                  // (int)lv_obj_get_style_text_decor(_header_palette, LV_PART_MAIN),
+                  // (int)lv_obj_get_style_outline_width(_header_palette, LV_PART_MAIN));
+        // #endregion
     lv_label_set_text(_header_palette, "--");
     lv_obj_set_style_text_font(_header_palette, &bebas_neue_24px, LV_PART_MAIN);
     lv_obj_set_style_text_color(_header_palette, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
@@ -218,22 +218,22 @@ void DisplayUI::begin() {
     lv_obj_set_style_text_decor(_header_palette, LV_TEXT_DECOR_NONE, LV_PART_MAIN);
     lv_obj_set_style_outline_width(_header_palette, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(_header_palette, 0, LV_PART_MAIN);
-    // #region agent log
-    Serial.printf("[DEBUG] Palette label: AFTER clear - border=%d, text_decor=%d, outline=%d, shadow=%d\n", 
-                  (int)lv_obj_get_style_border_width(_header_palette, LV_PART_MAIN),
-                  (int)lv_obj_get_style_text_decor(_header_palette, LV_PART_MAIN),
-                  (int)lv_obj_get_style_outline_width(_header_palette, LV_PART_MAIN),
-                  (int)lv_obj_get_style_shadow_width(_header_palette, LV_PART_MAIN));
-    // #endregion
-    // #region agent log
-    Serial.printf("[DEBUG] Palette label: BEFORE setting long_mode, checking if LV_LABEL_LONG_DOT causes underline\n");
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] Palette label: AFTER clear - border=%d, text_decor=%d, outline=%d, shadow=%d\n", 
+                  // (int)lv_obj_get_style_border_width(_header_palette, LV_PART_MAIN),
+                  // (int)lv_obj_get_style_text_decor(_header_palette, LV_PART_MAIN),
+                  // (int)lv_obj_get_style_outline_width(_header_palette, LV_PART_MAIN),
+                  // (int)lv_obj_get_style_shadow_width(_header_palette, LV_PART_MAIN));
+        // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] Palette label: BEFORE setting long_mode, checking if LV_LABEL_LONG_DOT causes underline\n");
+        // #endregion
     // Try LV_LABEL_LONG_SCROLL instead of LV_LABEL_LONG_DOT to see if that's causing the line
     lv_label_set_long_mode(_header_palette, LV_LABEL_LONG_SCROLL_CIRCULAR);
-    // #region agent log
-    Serial.printf("[DEBUG] Palette label: Changed to LV_LABEL_LONG_SCROLL_CIRCULAR, checking text_decor=%d\n", 
-                  (int)lv_obj_get_style_text_decor(_header_palette, LV_PART_MAIN));
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] Palette label: Changed to LV_LABEL_LONG_SCROLL_CIRCULAR, checking text_decor=%d\n", 
+                  // (int)lv_obj_get_style_text_decor(_header_palette, LV_PART_MAIN));
+        // #endregion
     lv_obj_set_width(_header_palette, 220);
 
     // Title container - use absolute centering for true center position
@@ -1065,9 +1065,9 @@ void DisplayUI::updateAudioMetrics(float bpm, const char* key, float micLevel) {
 
 void DisplayUI::updateHostUptime(uint32_t uptimeSeconds) {
     _hostUptime = uptimeSeconds;
-    // #region agent log
-    Serial.printf("[DisplayUI] updateHostUptime called: %lu seconds\n", uptimeSeconds);
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DisplayUI] updateHostUptime called: %lu seconds\n", uptimeSeconds);
+        // #endregion
     // Format will be updated in loop() with throttling
 }
 
@@ -1218,17 +1218,17 @@ DisplayUI::~DisplayUI() {
 }
 
 void DisplayUI::begin() {
-    // #region agent log
-    EspHal::log("[DEBUG] DisplayUI::begin entry - Heap: free=%u minFree=%u largest=%u\n",
-                  EspHal::getFreeHeap(), EspHal::getMinFreeHeap(), EspHal::getMaxAllocHeap());
-    EspHal::log("[DEBUG] Sprite memory estimate: %u gauges * %dx%d + %u slots * %dx%d + header %dx%d = ~%u KB\n",
-                  8, Theme::CELL_W, Theme::CELL_H,
-                  8, Theme::PRESET_SLOT_W, Theme::PRESET_SLOT_H,
-                  Theme::SCREEN_W, Theme::STATUS_BAR_H,
-                  ((8 * Theme::CELL_W * Theme::CELL_H * 2) + 
-                   (8 * Theme::PRESET_SLOT_W * Theme::PRESET_SLOT_H * 2) +
-                   (Theme::SCREEN_W * Theme::STATUS_BAR_H * 2)) / 1024);
-    // #endregion
+    // #region agent log (DISABLED)
+    // EspHal::log("[DEBUG] DisplayUI::begin entry - Heap: free=%u minFree=%u largest=%u\n",
+                  // EspHal::getFreeHeap(), EspHal::getMinFreeHeap(), EspHal::getMaxAllocHeap());
+    // EspHal::log("[DEBUG] Sprite memory estimate: %u gauges * %dx%d + %u slots * %dx%d + header %dx%d = ~%u KB\n",
+                  // 8, Theme::CELL_W, Theme::CELL_H,
+                  // 8, Theme::PRESET_SLOT_W, Theme::PRESET_SLOT_H,
+                  // Theme::SCREEN_W, Theme::STATUS_BAR_H,
+                  // ((8 * Theme::CELL_W * Theme::CELL_H * 2) + 
+                   // (8 * Theme::PRESET_SLOT_W * Theme::PRESET_SLOT_H * 2) +
+                   // (Theme::SCREEN_W * Theme::STATUS_BAR_H * 2)) / 1024);
+        // #endregion
 #if ENABLE_UI_DIAGNOSTICS
     EspHal::log("[DBG] begin_start cols=%d rows=%d cellW=%d cellH=%d\n", Theme::GRID_COLS, Theme::GRID_ROWS, Theme::CELL_W, Theme::CELL_H);
 #endif
@@ -1236,15 +1236,15 @@ void DisplayUI::begin() {
     _display.fillScreen(Theme::BG_DARK);
 
     // Create header
-    // #region agent log
-    EspHal::log("[DEBUG] Before UIHeader creation - Heap: free=%u minFree=%u\n",
-                  EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
-    // #endregion
+    // #region agent log (DISABLED)
+    // EspHal::log("[DEBUG] Before UIHeader creation - Heap: free=%u minFree=%u\n",
+                  // EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
+        // #endregion
     _header = new UIHeader(&_display);
-    // #region agent log
-    EspHal::log("[DEBUG] After UIHeader creation - Heap: free=%u minFree=%u\n",
-                  EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
-    // #endregion
+    // #region agent log (DISABLED)
+    // EspHal::log("[DEBUG] After UIHeader creation - Heap: free=%u minFree=%u\n",
+                  // EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
+        // #endregion
 #if ENABLE_UI_DIAGNOSTICS
     EspHal::log("[DBG] header_created ptr=%p\n", _header);
 #endif
@@ -1263,19 +1263,19 @@ void DisplayUI::begin() {
         EspHal::log("[DBG] creating_gauge i=%d x=%d y=%d w=%d h=%d\n", i, x, y, Theme::CELL_W, Theme::CELL_H);
 #endif
 
-        // #region agent log
-        if (i == 0 || i == 7) {  // Log first and last gauge creation
-            EspHal::log("[DEBUG] Creating gauge %d - Heap before: free=%u minFree=%u\n",
-                          i, EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
-        }
-        // #endregion
+        // #region agent log (DISABLED)
+        // if (i == 0 || i == 7) {  // Log first and last gauge creation
+            // EspHal::log("[DEBUG] Creating gauge %d - Heap before: free=%u minFree=%u\n",
+                          // i, EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
+        // }
+                // #endregion
         _gauges[i] = new GaugeWidget(&_display, x, y, Theme::CELL_W, Theme::CELL_H, i);
-        // #region agent log
-        if (i == 0 || i == 7) {
-            EspHal::log("[DEBUG] Gauge %d created - Heap after: free=%u minFree=%u\n",
-                          i, EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
-        }
-        // #endregion
+        // #region agent log (DISABLED)
+        // if (i == 0 || i == 7) {
+            // EspHal::log("[DEBUG] Gauge %d created - Heap after: free=%u minFree=%u\n",
+                          // i, EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
+        // }
+                // #endregion
         
         // Set initial max value from ParameterMap
         #ifdef SIMULATOR_BUILD
@@ -1286,10 +1286,10 @@ void DisplayUI::begin() {
         _gauges[i]->setMaxValue(maxValue);
     }
     
-    // #region agent log
-    EspHal::log("[DEBUG] All 8 gauges created - Heap: free=%u minFree=%u largest=%u\n",
-                  EspHal::getFreeHeap(), EspHal::getMinFreeHeap(), EspHal::getMaxAllocHeap());
-    // #endregion
+    // #region agent log (DISABLED)
+    // EspHal::log("[DEBUG] All 8 gauges created - Heap: free=%u minFree=%u largest=%u\n",
+                  // EspHal::getFreeHeap(), EspHal::getMinFreeHeap(), EspHal::getMaxAllocHeap());
+        // #endregion
 #if ENABLE_UI_DIAGNOSTICS
     EspHal::log("[DBG] gauges_created count=8\n");
 #endif
@@ -1300,10 +1300,10 @@ void DisplayUI::begin() {
     }
 
     // Create 8 preset slot widgets below gauge row
-    // #region agent log
-    EspHal::log("[DEBUG] Before preset slots creation - Heap: free=%u minFree=%u\n",
-                  EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
-    // #endregion
+    // #region agent log (DISABLED)
+    // EspHal::log("[DEBUG] Before preset slots creation - Heap: free=%u minFree=%u\n",
+                  // EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
+        // #endregion
     for (int i = 0; i < 8; i++) {
         int x = i * Theme::PRESET_SLOT_W;
         int y = Theme::PRESET_ROW_Y;
@@ -1314,10 +1314,10 @@ void DisplayUI::begin() {
             EspHal::log("[ERROR] Failed to create preset slot %d!\n", i);
         }
     }
-    // #region agent log
-    EspHal::log("[DEBUG] All 8 preset slots created - Heap: free=%u minFree=%u largest=%u\n",
-                  EspHal::getFreeHeap(), EspHal::getMinFreeHeap(), EspHal::getMaxAllocHeap());
-    // #endregion
+    // #region agent log (DISABLED)
+    // EspHal::log("[DEBUG] All 8 preset slots created - Heap: free=%u minFree=%u largest=%u\n",
+                  // EspHal::getFreeHeap(), EspHal::getMinFreeHeap(), EspHal::getMaxAllocHeap());
+        // #endregion
 #if ENABLE_UI_DIAGNOSTICS
     EspHal::log("[DBG] preset_slots_created count=8\n");
 #endif

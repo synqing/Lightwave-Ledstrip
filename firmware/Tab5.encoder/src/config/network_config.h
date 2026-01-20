@@ -14,10 +14,10 @@
 
 // WiFi Station Credentials (defaults, overridden by build flags)
 #ifndef WIFI_SSID
-#define WIFI_SSID "OPTUS_738CC0N"
+#define WIFI_SSID "VX220-013F"
 #endif
 #ifndef WIFI_PASSWORD
-#define WIFI_PASSWORD "parrs45432vw"
+#define WIFI_PASSWORD "3232AA90E0F24"
 #endif
 
 // Secondary WiFi Network (fallback)

@@ -124,16 +124,16 @@ void WebSocketClient::update() {
     esp_task_wdt_reset();
 
     // Process WebSocket events
-    // #region agent log
-#if ENABLE_WS_DIAGNOSTICS
-    static uint32_t s_lastLoopLog = 0;
-    if ((uint32_t)(millis() - s_lastLoopLog) >= 500) {  // Log every 500ms
-        Serial.printf("[DEBUG] WebSocketClient::update before loop - Heap: free=%u minFree=%u largest=%u status=%d\n",
-                      ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap(), (int)_status);
-        s_lastLoopLog = millis();
-    }
-#endif
-    // #endregion
+    // #region agent log (DISABLED)
+// #if ENABLE_WS_DIAGNOSTICS
+    // static uint32_t s_lastLoopLog = 0;
+    // if ((uint32_t)(millis() - s_lastLoopLog) >= 500) {  // Log every 500ms
+        // Serial.printf("[DEBUG] WebSocketClient::update before loop - Heap: free=%u minFree=%u largest=%u status=%d\n",
+                      // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap(), (int)_status);
+        // s_lastLoopLog = millis();
+    // }
+// #endif
+        // #endregion
     
     // CRITICAL FIX: The third-party WebSocketsClient::loop() can block for >5s during
     // connection attempts (DNS resolution, TCP connect, SSL handshake, etc).
@@ -156,14 +156,14 @@ void WebSocketClient::update() {
     
     esp_task_wdt_reset();  // Extra reset after potentially-blocking _ws.loop()
     
-    // #region agent log
-#if ENABLE_WS_DIAGNOSTICS
-    if ((uint32_t)(millis() - s_lastLoopLog) >= 500) {
-        Serial.printf("[DEBUG] WebSocketClient::update after loop - Heap: free=%u minFree=%u largest=%u\n",
-                      ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-    }
-#endif
-    // #endregion
+    // #region agent log (DISABLED)
+// #if ENABLE_WS_DIAGNOSTICS
+    // if ((uint32_t)(millis() - s_lastLoopLog) >= 500) {
+        // Serial.printf("[DEBUG] WebSocketClient::update after loop - Heap: free=%u minFree=%u largest=%u\n",
+                      // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+    // }
+// #endif
+        // #endregion
 
     // Reset watchdog after WebSocket loop
     esp_task_wdt_reset();
@@ -642,7 +642,7 @@ void WebSocketClient::sendZoneBrightness(uint8_t zoneId, uint8_t value) {
 
     JsonDocument doc;
     doc["zoneId"] = zoneId;
-    doc["value"] = value;
+    doc["brightness"] = value;
     sendJSON("zone.setBrightness", doc);
 }
 
@@ -705,21 +705,21 @@ void WebSocketClient::sendZoneBlend(uint8_t zoneId, uint8_t blendMode) {
 
 void WebSocketClient::sendZonesSetLayout(const struct zones::ZoneSegment* segments, uint8_t zoneCount) {
     if (!isConnected() || !segments || zoneCount == 0 || zoneCount > zones::MAX_ZONES) {
-        // #region agent log
-        {
+        // #region agent log (DISABLED)
+        // {
             // HWS4: Prove layout pushes are being skipped due to connection/state gating.
-            char buf[240];
-            const int n = snprintf(
-                buf, sizeof(buf),
-                "{\"sessionId\":\"debug-session\",\"runId\":\"tab5-zone-ui-pre\",\"hypothesisId\":\"HWS4\",\"location\":\"Tab5.encoder/src/network/WebSocketClient.cpp:sendZonesSetLayout\",\"message\":\"ws.zonesSetLayout.skipped\",\"data\":{\"connected\":%s,\"segmentsNull\":%s,\"zoneCount\":%u},\"timestamp\":%lu}",
-                isConnected() ? "true" : "false",
-                segments ? "false" : "true",
-                static_cast<unsigned>(zoneCount),
-                static_cast<unsigned long>(millis())
-            );
-            if (n > 0) Serial.println(buf);
-        }
-        // #endregion
+            // char buf[240];
+            // const int n = snprintf(
+                // buf, sizeof(buf),
+                // "{\"sessionId\":\"debug-session\",\"runId\":\"tab5-zone-ui-pre\",\"hypothesisId\":\"HWS4\",\"location\":\"Tab5.encoder/src/network/WebSocketClient.cpp:sendZonesSetLayout\",\"message\":\"ws.zonesSetLayout.skipped\",\"data\":{\"connected\":%s,\"segmentsNull\":%s,\"zoneCount\":%u},\"timestamp\":%lu}",
+                // isConnected() ? "true" : "false",
+                // segments ? "false" : "true",
+                // static_cast<unsigned>(zoneCount),
+                // static_cast<unsigned long>(millis())
+            // );
+            // if (n > 0) Serial.println(buf);
+        // }
+                // #endregion
         return;
     }
 
@@ -734,8 +734,6 @@ void WebSocketClient::sendZonesSetLayout(const struct zones::ZoneSegment* segmen
         zoneObj["s1LeftEnd"] = segments[i].s1LeftEnd;
         zoneObj["s1RightStart"] = segments[i].s1RightStart;
         zoneObj["s1RightEnd"] = segments[i].s1RightEnd;
-        // Note: totalLeds is calculated by server, but we can include it for validation
-        zoneObj["totalLeds"] = segments[i].totalLeds;
     }
 
     sendJSON("zones.setLayout", doc);
@@ -758,18 +756,18 @@ void WebSocketClient::requestColorCorrectionConfig() {
 void WebSocketClient::sendColorCorrectionConfig(bool gammaEnabled, float gammaValue,
                                bool autoExposureEnabled, uint8_t autoExposureTarget,
                                bool brownGuardrailEnabled, uint8_t mode) {
-    // #region agent log
+    // #region agent log (DISABLED)
     // NOTE: Do NOT write to host filesystem paths from firmware. Serial-only tracing is safe.
-    Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1,H2\",\"location\":\"WebSocketClient.cpp:sendColorCorrectionConfig\",\"message\":\"entry\",\"data\":{\"connected\":%d,\"gammaEnabled\":%d,\"gammaValue\":%.1f,\"aeEnabled\":%d,\"aeTarget\":%d,\"brownEnabled\":%d,\"mode\":%d},\"timestamp\":%lu}\n",
-                  isConnected() ? 1 : 0, gammaEnabled ? 1 : 0, gammaValue, autoExposureEnabled ? 1 : 0,
-                  autoExposureTarget, brownGuardrailEnabled ? 1 : 0, mode, (unsigned long)millis());
-    // #endregion
+    // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1,H2\",\"location\":\"WebSocketClient.cpp:sendColorCorrectionConfig\",\"message\":\"entry\",\"data\":{\"connected\":%d,\"gammaEnabled\":%d,\"gammaValue\":%.1f,\"aeEnabled\":%d,\"aeTarget\":%d,\"brownEnabled\":%d,\"mode\":%d},\"timestamp\":%lu}\n",
+                  // isConnected() ? 1 : 0, gammaEnabled ? 1 : 0, gammaValue, autoExposureEnabled ? 1 : 0,
+                  // autoExposureTarget, brownGuardrailEnabled ? 1 : 0, mode, (unsigned long)millis());
+        // #endregion
     
     if (!isConnected()) {
-        // #region agent log
-        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H2\",\"location\":\"WebSocketClient.cpp:594\",\"message\":\"sendColorCorrectionConfig.notConnected\",\"data\":{\"status\":%d},\"timestamp\":%lu}\n",
-                      (int)_status, (unsigned long)millis());
-        // #endregion
+        // #region agent log (DISABLED)
+        // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H2\",\"location\":\"WebSocketClient.cpp:594\",\"message\":\"sendColorCorrectionConfig.notConnected\",\"data\":{\"status\":%d},\"timestamp\":%lu}\n",
+                      // (int)_status, (unsigned long)millis());
+                // #endregion
         return;
     }
 
@@ -781,10 +779,10 @@ void WebSocketClient::sendColorCorrectionConfig(bool gammaEnabled, float gammaVa
     doc["brownGuardrailEnabled"] = brownGuardrailEnabled;
     doc["mode"] = mode;  // Include mode field - server requires all fields in setConfig
     
-    // #region agent log
-    Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H3\",\"location\":\"WebSocketClient.cpp:606\",\"message\":\"sendColorCorrectionConfig.jsonPrepared\",\"data\":{\"command\":\"colorCorrection.setConfig\"},\"timestamp\":%lu}\n",
-                  (unsigned long)millis());
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H3\",\"location\":\"WebSocketClient.cpp:606\",\"message\":\"sendColorCorrectionConfig.jsonPrepared\",\"data\":{\"command\":\"colorCorrection.setConfig\"},\"timestamp\":%lu}\n",
+                  // (unsigned long)millis());
+        // #endregion
     
     Serial.printf("[WS] Sending colorCorrection.setConfig: gamma=%s(%.1f) ae=%s brown=%s mode=%d\n",
                   gammaEnabled ? "ON" : "OFF", gammaValue,

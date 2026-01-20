@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LV_CONF_H
+#define LV_CONF_H
 
 #define LV_CONF_INCLUDE_SIMPLE 1
 
@@ -13,8 +14,6 @@
 #define LV_USE_PERF_MONITOR 0
 #define LV_USE_MEM_MONITOR 0
 #define LV_USE_REFR_DEBUG 0
-
-#define LV_USE_DRAW_SW_ASM LV_DRAW_SW_ASM_NONE
 
 #define LV_FONT_MONTSERRAT_8  0
 #define LV_FONT_MONTSERRAT_10 0
@@ -99,3 +98,4 @@
 #define LV_USE_DRAW_PXP 0
 #define LV_USE_DRAW_VG_LITE 0
 
+#endif /*LV_CONF_H*/

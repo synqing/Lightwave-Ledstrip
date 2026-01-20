@@ -735,24 +735,30 @@ void ZoneComposerUI::clearSelection() {
     for (int i = 0; i < 4; i++) {
         if (_zoneEffectLabels[i]) {
             lv_obj_remove_style(_zoneEffectLabels[i], &_styleSelected, 0);
+            lv_obj_invalidate(_zoneEffectLabels[i]);
         }
         if (_zonePaletteLabels[i]) {
             lv_obj_remove_style(_zonePaletteLabels[i], &_styleSelected, 0);
+            lv_obj_invalidate(_zonePaletteLabels[i]);
         }
         if (_zoneSpeedLabels[i]) {
             lv_obj_remove_style(_zoneSpeedLabels[i], &_styleSelected, 0);
+            lv_obj_invalidate(_zoneSpeedLabels[i]);
         }
         if (_zoneBrightnessLabels[i]) {
             lv_obj_remove_style(_zoneBrightnessLabels[i], &_styleSelected, 0);
+            lv_obj_invalidate(_zoneBrightnessLabels[i]);
         }
     }
 
     // Remove highlighting from zone count and preset rows
     if (_zoneCountRow) {
         lv_obj_remove_style(_zoneCountRow, &_styleSelected, 0);
+        lv_obj_invalidate(_zoneCountRow);
     }
     if (_presetRow) {
         lv_obj_remove_style(_presetRow, &_styleSelected, 0);
+        lv_obj_invalidate(_presetRow);
     }
 
     _currentSelection.type = SelectionType::NONE;
@@ -766,6 +772,7 @@ void ZoneComposerUI::applySelectionHighlight() {
 
             if (target) {
                 lv_obj_add_style(target, &_styleSelected, 0);
+                lv_obj_invalidate(target);
             }
             break;
         }
@@ -773,12 +780,14 @@ void ZoneComposerUI::applySelectionHighlight() {
         case SelectionType::ZONE_COUNT:
             if (_zoneCountRow) {
                 lv_obj_add_style(_zoneCountRow, &_styleSelected, 0);
+                lv_obj_invalidate(_zoneCountRow);
             }
             break;
 
         case SelectionType::PRESET:
             if (_presetRow) {
                 lv_obj_add_style(_presetRow, &_styleSelected, 0);
+                lv_obj_invalidate(_presetRow);
             }
             break;
 
@@ -843,8 +852,8 @@ void ZoneComposerUI::adjustZoneParameter(uint8_t zoneIndex, int32_t delta) {
 
     switch (_activeMode) {
         case ZoneParameterMode::EFFECT: {
-            // Max effect ID from LightwaveOS v2 firmware (76 effects, IDs 0-75 standard + extras up to 87)
-            constexpr int MAX_EFFECT_ID = 87;
+            // Max effect ID from LightwaveOS v2 firmware (98 effects, IDs 0-97)
+            constexpr int MAX_EFFECT_ID = 97;
             int newVal = _zoneEffects[zoneIndex] + delta;
             if (newVal < 0) newVal = MAX_EFFECT_ID;
             if (newVal > MAX_EFFECT_ID) newVal = 0;
@@ -862,8 +871,8 @@ void ZoneComposerUI::adjustZoneParameter(uint8_t zoneIndex, int32_t delta) {
         }
 
         case ZoneParameterMode::PALETTE: {
-            // Max palette ID from LightwaveOS v2 firmware (64 palettes, IDs 0-63)
-            constexpr int MAX_PALETTE_ID = 63;
+            // Max palette ID from LightwaveOS v2 firmware (75 palettes, IDs 0-74)
+            constexpr int MAX_PALETTE_ID = 74;
             int newVal = _zonePalettes[zoneIndex] + delta;
             if (newVal < 0) newVal = MAX_PALETTE_ID;
             if (newVal > MAX_PALETTE_ID) newVal = 0;
@@ -1438,10 +1447,16 @@ void ZoneComposerUI::zoneEnableButtonCb(lv_event_t* e) {
         lv_obj_set_style_text_color(ui->_zoneEnableLabel,
                                     lv_color_hex(ui->_zonesEnabled ? 0x00FF00 : 0xFFFFFF),
                                     LV_PART_MAIN);
+        lv_obj_invalidate(ui->_zoneEnableLabel);
     }
 
     // Send WebSocket command to LightwaveOS v2 firmware
     if (ui->_wsClient && ui->_wsClient->isConnected()) {
+        Serial.printf("[ZoneComposer] Sending WS: zone.enable=%s\n", ui->_zonesEnabled ? "true" : "false");
         ui->_wsClient->sendZoneEnable(ui->_zonesEnabled);
+    } else {
+        Serial.printf("[ZoneComposer] WS not connected - cannot send zone.enable (wsClient=%d connected=%d)\n",
+                      ui->_wsClient ? 1 : 0,
+                      (ui->_wsClient && ui->_wsClient->isConnected()) ? 1 : 0);
     }
 }

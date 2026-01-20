@@ -355,8 +355,8 @@ static void handleActionButton(uint8_t buttonIndex) {
 
 const char* lookupEffectName(uint8_t id) {
     // Note: id is uint8_t (0-255), MAX_EFFECTS is 256, so id < MAX_EFFECTS is always true
-    // But we also check id <= 87 to enforce actual effect range
-    if (id <= 87 && s_effectKnown[id] && s_effectNames[id][0]) return s_effectNames[id];
+    // But we also check id <= 97 to enforce actual effect range
+    if (id <= 97 && s_effectKnown[id] && s_effectNames[id][0]) return s_effectNames[id];
     return nullptr;
 }
 
@@ -1280,6 +1280,8 @@ void setup() {
             if (type && strcmp(type, "effects.list") == 0 && doc["success"].is<bool>() && doc["success"].as<bool>()) {
                 JsonObject data = doc["data"].as<JsonObject>();
                 JsonArray effects = data["effects"].as<JsonArray>();
+                uint8_t effectsOnPage = 0;
+                uint8_t highestEffectId = 0;
                 for (JsonObject e : effects) {
                     // ArduinoJson stores small integers as int - use is<int>()
                     if (!e["id"].is<int>() || !e["name"].is<const char*>()) continue;
@@ -1287,15 +1289,18 @@ void setup() {
                     if (idInt < 0 || idInt > 255) continue;  // Invalid ID range
                     uint8_t id = static_cast<uint8_t>(idInt);
                     const char* name = e["name"].as<const char*>();
-                    // CRITICAL FIX: Stricter bounds check - enforce actual effect range (0-87)
-                    if (id < MAX_EFFECTS && id <= 87 && name) {
+                    // Store effect if within range (0-87 for 88 effects)
+                    if (id < MAX_EFFECTS && id <= 97 && name) {
                         strncpy(s_effectNames[id], name, EFFECT_NAME_MAX - 1);
                         s_effectNames[id][EFFECT_NAME_MAX - 1] = '\0';
                         s_effectKnown[id] = true;
+                        effectsOnPage++;
+                        if (id > highestEffectId) highestEffectId = id;
                     } else if (id >= MAX_EFFECTS) {
                         Serial.printf("[WARN] Invalid effect ID %u (max=%u), ignoring\n", id, MAX_EFFECTS - 1);
                     }
                 }
+                Serial.printf("[Effects] Page received: %u effects stored, highest ID=%u\n", effectsOnPage, highestEffectId);
 
                 JsonObject pagination = data["pagination"].as<JsonObject>();
                 // ArduinoJson stores small integers as int, not uint8_t - use is<int>()
@@ -1312,20 +1317,21 @@ void setup() {
 
                 // Extract total effect count and update ParameterMap metadata
                 // Effect max = total - 1 (0-indexed)
-                if (pagination["total"].is<uint16_t>()) {
-                    uint16_t total = pagination["total"].as<uint16_t>();
-                    if (total > 0) {
-                        uint8_t effectMax = (total > 1) ? (total - 1) : 0;  // 0-indexed, clamp to 0
+                // ArduinoJson stores integers as int, not uint16_t - use is<int>()
+                if (pagination["total"].is<int>()) {
+                    int totalInt = pagination["total"].as<int>();
+                    if (totalInt > 0 && totalInt <= 256) {
+                        uint8_t effectMax = (totalInt > 1) ? static_cast<uint8_t>(totalInt - 1) : 0;
                         updateParameterMetadata(0, 0, effectMax);  // EffectId is index 0
-                        Serial.printf("[ParamMap] Updated Effect max from effects.list: %u (total=%u)\n", effectMax, total);
+                        Serial.printf("[ParamMap] Updated Effect max from effects.list: %u (total=%d)\n", effectMax, totalInt);
                     }
-                } else if (data["total"].is<uint16_t>()) {
+                } else if (data["total"].is<int>()) {
                     // Some API versions put total at data level
-                    uint16_t total = data["total"].as<uint16_t>();
-                    if (total > 0) {
-                        uint8_t effectMax = (total > 1) ? (total - 1) : 0;
+                    int totalInt = data["total"].as<int>();
+                    if (totalInt > 0 && totalInt <= 256) {
+                        uint8_t effectMax = (totalInt > 1) ? static_cast<uint8_t>(totalInt - 1) : 0;
                         updateParameterMetadata(0, 0, effectMax);
-                        Serial.printf("[ParamMap] Updated Effect max from effects.list: %u (total=%u)\n", effectMax, total);
+                        Serial.printf("[ParamMap] Updated Effect max from effects.list: %u (total=%d)\n", effectMax, totalInt);
                     }
                 }
 
@@ -1371,24 +1377,21 @@ void setup() {
 
                 // Extract total palette count and update ParameterMap metadata
                 // Palette max = total - 1 (0-indexed)
-                // #region agent log (DISABLED)
-                // Serial.printf("[DEBUG] Before palette metadata update - Heap: free=%u minFree=%u largest=%u\n",
-                              // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
-                                // #endregion
-                if (pagination["total"].is<uint16_t>()) {
-                    uint16_t total = pagination["total"].as<uint16_t>();
-                    if (total > 0) {
-                        uint8_t paletteMax = (total > 1) ? (total - 1) : 0;  // 0-indexed, clamp to 0
+                // ArduinoJson stores integers as int, not uint16_t - use is<int>()
+                if (pagination["total"].is<int>()) {
+                    int totalInt = pagination["total"].as<int>();
+                    if (totalInt > 0 && totalInt <= 256) {
+                        uint8_t paletteMax = (totalInt > 1) ? static_cast<uint8_t>(totalInt - 1) : 0;
                         updateParameterMetadata(1, 0, paletteMax);  // PaletteId is now index 1
-                        Serial.printf("[ParamMap] Updated Palette max from palettes.list: %u (total=%u)\n", paletteMax, total);
+                        Serial.printf("[ParamMap] Updated Palette max from palettes.list: %u (total=%d)\n", paletteMax, totalInt);
                     }
-                } else if (data["total"].is<uint16_t>()) {
+                } else if (data["total"].is<int>()) {
                     // Some API versions put total at data level
-                    uint16_t total = data["total"].as<uint16_t>();
-                    if (total > 0) {
-                        uint8_t paletteMax = (total > 1) ? (total - 1) : 0;  // 0-indexed, clamp to 0
+                    int totalInt = data["total"].as<int>();
+                    if (totalInt > 0 && totalInt <= 256) {
+                        uint8_t paletteMax = (totalInt > 1) ? static_cast<uint8_t>(totalInt - 1) : 0;
                         updateParameterMetadata(1, 0, paletteMax);  // PaletteId is now index 1
-                        Serial.printf("[ParamMap] Updated Palette max from palettes.list: %u (total=%u)\n", paletteMax, total);
+                        Serial.printf("[ParamMap] Updated Palette max from palettes.list: %u (total=%d)\n", paletteMax, totalInt);
                     }
                 }
                 // #region agent log (DISABLED)

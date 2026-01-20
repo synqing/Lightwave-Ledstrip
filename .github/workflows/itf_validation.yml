@@ -14,11 +14,15 @@ on:
       - 'firmware/v2/specs/quint/choreo/**/*.itf.json'
       - 'firmware/v2/specs/quint/choreo/tools/validate_itf_bigint.py'
       - 'firmware/v2/specs/quint/choreo/tools/jsonl_to_itf.py'
+      - '.github/workflows/itf_validation.yml'
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
   validate-itf:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v3
       
@@ -45,19 +49,22 @@ jobs:
       - name: Validate ITF files (ADR-015 compliance)
         working-directory: firmware/v2/specs/quint/choreo
         run: |
+          set -euo pipefail
+          
           if [ "${{ steps.find-itf.outputs.count }}" == "0" ]; then
             echo "No ITF files to validate (skipping)"
             exit 0
           fi
           
           FAILED=0
-          for itf_file in ${{ steps.find-itf.outputs.files }}; do
+          while IFS= read -r itf_file; do
+            [ -z "$itf_file" ] && continue
             echo "Validating: $itf_file"
             if ! python3 tools/validate_itf_bigint.py "$itf_file"; then
               echo "ERROR: $itf_file contains raw numbers (ADR-015 violation)"
               FAILED=1
             fi
-          done
+          done <<< "${{ steps.find-itf.outputs.files }}"
           
           if [ "$FAILED" -eq 1 ]; then
             echo "FAILED: One or more ITF files contain raw integers/floats"

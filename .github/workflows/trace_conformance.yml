@@ -20,6 +20,9 @@ on:
 jobs:
   conformance:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       
@@ -31,15 +34,13 @@ jobs:
       - name: Convert JSONL to ITF and check conformance
         working-directory: firmware/v2/specs/quint/choreo
         run: |
+          set -euo pipefail
           echo "Converting JSONL traces to ITF and checking conformance..."
           mkdir -p traces/temp_itf
           FAILED=0
           
+          shopt -s nullglob
           for jsonl_file in traces/curated/*.jsonl; do
-            if [ ! -f "$jsonl_file" ]; then
-              continue
-            fi
-            
             # Extract base name
             base_name=$(basename "$jsonl_file" .jsonl)
             itf_file="traces/temp_itf/${base_name}_legacy.itf.json"

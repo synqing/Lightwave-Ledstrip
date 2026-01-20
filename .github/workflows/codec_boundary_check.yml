@@ -34,7 +34,8 @@ jobs:
           
           BASELINE_FILE="tools/json_boundary_baseline_firmware_v2.txt"
           if [ ! -f "$BASELINE_FILE" ]; then
-            echo "Baseline file not found (first baseline creation is OK)"
+            echo "✓ Baseline file deleted - all violations must be fixed (hard-fail mode)"
+            echo "Any violations found will cause CI to fail"
             exit 0
           fi
           
@@ -75,7 +76,18 @@ jobs:
         uses: platformio/platformio-action@v1
       
       - name: Check JSON Boundary (firmware/v2)
-        run: TARGET_DIR=firmware/v2 ./tools/check_json_boundary.sh --check-baseline
+        run: |
+          # If baseline exists, check against it. If not, hard-fail on any violations.
+          if [ -f "tools/json_boundary_baseline_firmware_v2.txt" ]; then
+            TARGET_DIR=firmware/v2 ./tools/check_json_boundary.sh --check-baseline
+          else
+            echo "Baseline file deleted - running in strict mode (any violation fails)"
+            TARGET_DIR=firmware/v2 ./tools/check_json_boundary.sh || {
+              echo "✗ JSON boundary violations found - all violations must be fixed"
+              echo "Move JSON parsing/encoding to codec modules (firmware/v2/src/codec/)"
+              exit 1
+            }
+          fi
       
       - name: Run Codec Tests
         working-directory: firmware/v2

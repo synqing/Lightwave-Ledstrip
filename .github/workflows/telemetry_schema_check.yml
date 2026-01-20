@@ -16,11 +16,15 @@ on:
       - 'firmware/v2/specs/quint/choreo/**/*.jsonl'
       - 'firmware/v2/specs/quint/choreo/tools/validate_telemetry_schema.py'
       - 'firmware/v2/specs/quint/choreo/telemetry/**'
+      - '.github/workflows/telemetry_schema_check.yml'
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
   validate-schema:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       
@@ -32,15 +36,15 @@ jobs:
       - name: Validate curated telemetry traces
         working-directory: firmware/v2/specs/quint/choreo
         run: |
+          set -euo pipefail
           echo "Validating curated telemetry traces against schema v1.0.0..."
           FAILED=0
+          shopt -s nullglob
           for jsonl_file in traces/curated/*.jsonl; do
-            if [ -f "$jsonl_file" ]; then
-              echo "Validating: $jsonl_file"
-              if ! python3 tools/validate_telemetry_schema.py "$jsonl_file"; then
-                echo "ERROR: $jsonl_file failed schema validation"
-                FAILED=1
-              fi
+            echo "Validating: $jsonl_file"
+            if ! python3 tools/validate_telemetry_schema.py "$jsonl_file"; then
+              echo "ERROR: $jsonl_file failed schema validation"
+              FAILED=1
             fi
           done
           
@@ -53,8 +57,10 @@ jobs:
       
       - name: Check for missing schemaVersion in firmware
         run: |
+          set -euo pipefail
           echo "Checking WsGateway.cpp for schemaVersion in telemetry logs..."
-          if grep -q '"event":"ws\.connect"' firmware/v2/src/network/webserver/WsGateway.cpp | grep -v schemaVersion; then
+          # Find ws.connect telemetry lines that don't include schemaVersion
+          if grep -n '"event":"ws\.connect"' firmware/v2/src/network/webserver/WsGateway.cpp | grep -v 'schemaVersion' >/dev/null; then
             echo "WARNING: Some telemetry logs in WsGateway.cpp may be missing 'schemaVersion' field"
             echo "All telemetry events must include 'schemaVersion' field per TELEMETRY_REGISTRY.md"
             # Non-blocking for now, but should be fixed

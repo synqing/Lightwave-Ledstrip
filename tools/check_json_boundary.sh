@@ -101,6 +101,8 @@ JSON_WRITE_PATTERN='\b(data|obj|response|eventDoc)\s*\[\s*"[^"]*"\s*\]\s*='
 ALLOWED_PATHS=(
     "firmware/v2/src/codec"
     "firmware/Tab5.encoder/src/codec"
+    # ApiResponse.h is allowed as it's a response-building utility (not a request parser)
+    "firmware/v2/src/network/ApiResponse.h"
     # RequestValidator.h is allowed as it's a boundary tool (if kept)
     # Uncomment if RequestValidator is retained:
     # "firmware/v2/src/network/RequestValidator.h"

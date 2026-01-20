@@ -7,9 +7,14 @@
 #include "WsCommandRouter.h"
 #include "../WebServer.h"
 #include "../ApiResponse.h"
+#include "../../codec/WsCommonCodec.h"
 #include "../../utils/Log.h"
+#include "../../config/network_config.h"
+#include "ws/WsOtaCommands.h"
 #include <cstring>
 #include <Arduino.h>
+#include <WiFi.h>
+#include <ESPAsyncWebServer.h>
 
 #undef LW_LOG_TAG
 #define LW_LOG_TAG "WsGateway"
@@ -17,6 +22,69 @@
 namespace lightwaveos {
 namespace network {
 namespace webserver {
+
+// ============================================================================
+// Helper: Escape JSON string for embedding in telemetry payloadSummary
+// ============================================================================
+static void escapeJsonString(const char* input, char* output, size_t outputSize) {
+    if (!input || !output || outputSize == 0) {
+        if (output && outputSize > 0) {
+            output[0] = '\0';
+        }
+        return;
+    }
+    
+    size_t outIdx = 0;
+    for (size_t i = 0; input[i] != '\0' && outIdx < outputSize - 1; i++) {
+        char c = input[i];
+        
+        // Escape special characters per JSON spec
+        if (c == '"') {
+            if (outIdx < outputSize - 2) {
+                output[outIdx++] = '\\';
+                output[outIdx++] = '"';
+            } else {
+                break;
+            }
+        } else if (c == '\\') {
+            if (outIdx < outputSize - 2) {
+                output[outIdx++] = '\\';
+                output[outIdx++] = '\\';
+            } else {
+                break;
+            }
+        } else if (c == '\n') {
+            if (outIdx < outputSize - 2) {
+                output[outIdx++] = '\\';
+                output[outIdx++] = 'n';
+            } else {
+                break;
+            }
+        } else if (c == '\r') {
+            if (outIdx < outputSize - 2) {
+                output[outIdx++] = '\\';
+                output[outIdx++] = 'r';
+            } else {
+                break;
+            }
+        } else if (c == '\t') {
+            if (outIdx < outputSize - 2) {
+                output[outIdx++] = '\\';
+                output[outIdx++] = 't';
+            } else {
+                break;
+            }
+        } else if (c >= 32 && c < 127) {
+            // Printable ASCII
+            output[outIdx++] = c;
+        } else {
+            // Non-printable or high-byte: skip (can't easily encode in JSON string)
+            continue;
+        }
+    }
+    
+    output[outIdx] = '\0';
+}
 
 // Static instance for event handler
 WsGateway* WsGateway::s_instance = nullptr;
@@ -87,21 +155,21 @@ void WsGateway::handleConnect(AsyncWebSocketClient* client) {
         (static_cast<uint32_t>(ip[2]) << 8)  |
         (static_cast<uint32_t>(ip[3]) << 0);
 
-    // #region agent log
-    {
-        // Hws1: Confirm connect thrash + measure reject causes (max clients vs cooldown).
-        char buf[320];
-        const int n = snprintf(
-            buf, sizeof(buf),
-            "{\"sessionId\":\"debug-session\",\"runId\":\"ws-guard-pre\",\"hypothesisId\":\"Hws1\",\"location\":\"v2/src/network/webserver/WsGateway.cpp:handleConnect\",\"message\":\"ws.connect.enter\",\"data\":{\"clientId\":%lu,\"wsCount\":%u,\"wsMax\":%u,\"ip\":\"%s\"},\"timestamp\":%lu}",
-            static_cast<unsigned long>(client->id()),
-            static_cast<unsigned>(m_ws->count()),
-            static_cast<unsigned>(lightwaveos::network::WebServerConfig::MAX_WS_CLIENTS),
-            ip.toString().c_str(),
-            static_cast<unsigned long>(nowMs)
-        );
-        if (n > 0) Serial.println(buf);
-    }
+    // #region agent log (DISABLED)
+    // {
+    //     // Hws1: Confirm connect thrash + measure reject causes (max clients vs cooldown).
+    //     char buf[320];
+    //     const int n = snprintf(
+    //         buf, sizeof(buf),
+    //         "{\"sessionId\":\"debug-session\",\"runId\":\"ws-guard-pre\",\"hypothesisId\":\"Hws1\",\"location\":\"v2/src/network/webserver/WsGateway.cpp:handleConnect\",\"message\":\"ws.connect.enter\",\"data\":{\"clientId\":%lu,\"wsCount\":%u,\"wsMax\":%u,\"ip\":\"%s\"},\"timestamp\":%lu}",
+    //         static_cast<unsigned long>(client->id()),
+    //         static_cast<unsigned>(m_ws->count()),
+    //         static_cast<unsigned>(lightwaveos::network::WebServerConfig::MAX_WS_CLIENTS),
+    //         ip.toString().c_str(),
+    //         static_cast<unsigned long>(nowMs)
+    //     );
+    //     if (n > 0) Serial.println(buf);
+    // }
     // #endregion
 
     // Per-IP connection cooldown + single-session guard (reduces reconnect storms / overlap)
@@ -122,19 +190,19 @@ void WsGateway::handleConnect(AsyncWebSocketClient* client) {
             m_connectGuard[slot].ipKey = ipKey;
             m_connectGuard[slot].lastMs = nowMs;
             if (tooSoon) {
-                // #region agent log
-                {
-                    char buf[320];
-                    const int n = snprintf(
-                        buf, sizeof(buf),
-                        "{\"sessionId\":\"debug-session\",\"runId\":\"ws-guard-pre\",\"hypothesisId\":\"Hws1\",\"location\":\"v2/src/network/webserver/WsGateway.cpp:handleConnect\",\"message\":\"ws.connect.reject.cooldown\",\"data\":{\"clientId\":%lu,\"ip\":\"%s\",\"cooldownMs\":%lu},\"timestamp\":%lu}",
-                        static_cast<unsigned long>(client->id()),
-                        ip.toString().c_str(),
-                        static_cast<unsigned long>(CONNECT_COOLDOWN_MS),
-                        static_cast<unsigned long>(nowMs)
-                    );
-                    if (n > 0) Serial.println(buf);
-                }
+                // #region agent log (DISABLED)
+                // {
+                //     char buf[320];
+                //     const int n = snprintf(
+                //         buf, sizeof(buf),
+                //         "{\"sessionId\":\"debug-session\",\"runId\":\"ws-guard-pre\",\"hypothesisId\":\"Hws1\",\"location\":\"v2/src/network/webserver/WsGateway.cpp:handleConnect\",\"message\":\"ws.connect.reject.cooldown\",\"data\":{\"clientId\":%lu,\"ip\":\"%s\",\"cooldownMs\":%lu},\"timestamp\":%lu}",
+                //         static_cast<unsigned long>(client->id()),
+                //         ip.toString().c_str(),
+                //         static_cast<unsigned long>(CONNECT_COOLDOWN_MS),
+                //         static_cast<unsigned long>(nowMs)
+                //     );
+                //     if (n > 0) Serial.println(buf);
+                // }
                 // #endregion
                 client->close(1013, "Reconnect too fast");
                 return;
@@ -144,19 +212,19 @@ void WsGateway::handleConnect(AsyncWebSocketClient* client) {
             // This protects the device from clients that repeatedly call connect() without
             // closing the previous connection or without servicing the socket.
             if (m_connectGuard[slot].active >= 1) {
-                // #region agent log
-                {
-                    char buf[320];
-                    const int n = snprintf(
-                        buf, sizeof(buf),
-                        "{\"sessionId\":\"debug-session\",\"runId\":\"ws-guard-pre\",\"hypothesisId\":\"Hws2\",\"location\":\"v2/src/network/webserver/WsGateway.cpp:handleConnect\",\"message\":\"ws.connect.reject.overlap\",\"data\":{\"clientId\":%lu,\"ip\":\"%s\",\"active\":%u},\"timestamp\":%lu}",
-                        static_cast<unsigned long>(client->id()),
-                        ip.toString().c_str(),
-                        static_cast<unsigned>(m_connectGuard[slot].active),
-                        static_cast<unsigned long>(nowMs)
-                    );
-                    if (n > 0) Serial.println(buf);
-                }
+                // #region agent log (DISABLED)
+                // {
+                //     char buf[320];
+                //     const int n = snprintf(
+                //         buf, sizeof(buf),
+                //         "{\"sessionId\":\"debug-session\",\"runId\":\"ws-guard-pre\",\"hypothesisId\":\"Hws2\",\"location\":\"v2/src/network/webserver/WsGateway.cpp:handleConnect\",\"message\":\"ws.connect.reject.overlap\",\"data\":{\"clientId\":%lu,\"ip\":\"%s\",\"active\":%u},\"timestamp\":%lu}",
+                //         static_cast<unsigned long>(client->id()),
+                //         ip.toString().c_str(),
+                //         static_cast<unsigned>(m_connectGuard[slot].active),
+                //         static_cast<unsigned long>(nowMs)
+                //     );
+                //     if (n > 0) Serial.println(buf);
+                // }
                 // #endregion
                 client->close(1008, "Only one session per device");
                 return;
@@ -204,6 +272,13 @@ void WsGateway::handleConnect(AsyncWebSocketClient* client) {
             // Store new mapping
             m_clientIpMap[mapSlot].clientId = clientId;
             m_clientIpMap[mapSlot].ipKey = ipKey;
+        } else if (mapSlot == 0xFF) {
+            // CRITICAL FIX: Table is full - evict slot 0 (LRU approximation) to ensure
+            // we always have a mapping for disconnect cleanup. Without this, the active
+            // counter can become permanently stuck.
+            LW_LOGW("WS: IP mapping table full, evicting slot 0 for client %u", clientId);
+            m_clientIpMap[0].clientId = clientId;
+            m_clientIpMap[0].ipKey = ipKey;
         }
     }
 
@@ -217,7 +292,7 @@ void WsGateway::handleConnect(AsyncWebSocketClient* client) {
     {
         char buf[512];
         const int n = snprintf(buf, sizeof(buf),
-            "{\"event\":\"ws.connect\",\"ts_mono_ms\":%lu,\"connEpoch\":%lu,\"eventSeq\":%lu,\"clientId\":%lu,\"ip\":\"%s\",\"schemaVersion\":\"1.0.0\"}",
+            "{\"event\":\"ws.connect\",\"ts_mono_ms\":%lu,\"connEpoch\":%lu,\"eventSeq\":%lu,\"clientId\":%lu,\"ip\":\"%s\",\"result\":\"ok\",\"schemaVersion\":\"1.0.0\"}",
             static_cast<unsigned long>(tsMonoms),
             static_cast<unsigned long>(connEpoch),
             static_cast<unsigned long>(eventSeq),
@@ -305,29 +380,25 @@ void WsGateway::handleDisconnect(AsyncWebSocketClient* client) {
         }
     }
 
-    // If remoteIP() returned 0.0.0.0 (common after disconnect), lookup stored IP
-    if (ipKey == 0) {
-        for (uint8_t i = 0; i < CLIENT_IP_MAP_SLOTS; i++) {
-            if (m_clientIpMap[i].clientId == clientId) {
-                ipKey = m_clientIpMap[i].ipKey;
-                // Clear the mapping entry (will be removed after cleanup)
-                m_clientIpMap[i].clientId = 0;
-                m_clientIpMap[i].ipKey = 0;
-                break;
-            }
+    // CRITICAL FIX: Always search mapping table FIRST before relying on remoteIP().
+    // remoteIP() often returns 0.0.0.0 after disconnect, and the mapping table is our
+    // reliable fallback. Clear the entry regardless to prevent stale mappings.
+    uint32_t mappedIpKey = 0;
+    for (uint8_t i = 0; i < CLIENT_IP_MAP_SLOTS; i++) {
+        if (m_clientIpMap[i].clientId == clientId) {
+            mappedIpKey = m_clientIpMap[i].ipKey;
+            // Clear the mapping entry
+            m_clientIpMap[i].clientId = 0;
+            m_clientIpMap[i].ipKey = 0;
+            break;
         }
-        if (ipKey == 0) {
-            LW_LOGW("WS: Client %u disconnected but no IP mapping found", clientId);
-        }
-    } else {
-        // Remove mapping entry if IP was valid (cleanup)
-        for (uint8_t i = 0; i < CLIENT_IP_MAP_SLOTS; i++) {
-            if (m_clientIpMap[i].clientId == clientId) {
-                m_clientIpMap[i].clientId = 0;
-                m_clientIpMap[i].ipKey = 0;
-                break;
-            }
-        }
+    }
+
+    // Prefer mapped IP over remoteIP() (which may be 0.0.0.0 after disconnect)
+    if (ipKey == 0 && mappedIpKey != 0) {
+        ipKey = mappedIpKey;
+    } else if (ipKey == 0 && mappedIpKey == 0) {
+        LW_LOGW("WS: Client %u disconnected but no IP found (remoteIP=0, no mapping)", clientId);
     }
 
     // Mark inactive for this IP (best-effort)
@@ -340,26 +411,122 @@ void WsGateway::handleDisconnect(AsyncWebSocketClient* client) {
         }
     }
 
-    // #region agent log
-    {
-        // Hws3: Confirm whether disconnects correlate with zero messages received.
-        char buf[320];
-        const int n = snprintf(
-            buf, sizeof(buf),
-            "{\"sessionId\":\"debug-session\",\"runId\":\"ws-guard-pre\",\"hypothesisId\":\"Hws3\",\"location\":\"v2/src/network/webserver/WsGateway.cpp:handleDisconnect\",\"message\":\"ws.disconnect\",\"data\":{\"clientId\":%lu,\"ip\":\"%s\",\"ipKey\":%lu},\"timestamp\":%lu}",
-            static_cast<unsigned long>(clientId),
-            ip.toString().c_str(),
-            static_cast<unsigned long>(ipKey),
-            static_cast<unsigned long>(nowMs)
-        );
-        if (n > 0) Serial.println(buf);
-    }
+    // #region agent log (DISABLED)
+    // {
+    //     // Hws3: Confirm whether disconnects correlate with zero messages received.
+    //     char buf[320];
+    //     const int n = snprintf(
+    //         buf, sizeof(buf),
+    //         "{\"sessionId\":\"debug-session\",\"runId\":\"ws-guard-pre\",\"hypothesisId\":\"Hws3\",\"location\":\"v2/src/network/webserver/WsGateway.cpp:handleDisconnect\",\"message\":\"ws.disconnect\",\"data\":{\"clientId\":%lu,\"ip\":\"%s\",\"ipKey\":%lu},\"timestamp\":%lu}",
+    //         static_cast<unsigned long>(clientId),
+    //         ip.toString().c_str(),
+    //         static_cast<unsigned long>(ipKey),
+    //         static_cast<unsigned long>(nowMs)
+    //     );
+    //     if (n > 0) Serial.println(buf);
+    // }
     // #endregion
+
+    // Abort any OTA session owned by this client (epoch-scoping: disconnect resets OTA state)
+#if FEATURE_OTA_UPDATE
+    webserver::ws::handleOtaClientDisconnect(clientId);
+#endif
 
     // Call disconnection callback (for cleanup)
     if (m_onDisconnect) {
         m_onDisconnect(client);
     }
+}
+
+bool WsGateway::validateOrigin(AsyncWebServerRequest* request) {
+    // Policy A: Allow empty/missing Origin (non-browser clients) + allowlist local origins
+    // OWASP guidance: validate Origin during handshake to prevent CSWSH
+    
+    String origin = request->header("Origin");
+    
+    // Allow: missing/empty Origin (non-browser clients commonly omit it)
+    if (origin.length() == 0) {
+        return true;
+    }
+    
+    // Parse Origin URL to extract host
+    // Origin format: "scheme://host[:port]"
+    int schemeEnd = origin.indexOf("://");
+    if (schemeEnd < 0) {
+        // Malformed Origin - reject (but log it)
+        uint32_t tsMonoms = millis();
+        char originEscaped[128] = {0};
+        escapeJsonString(origin.c_str(), originEscaped, sizeof(originEscaped));
+        char buf[512];
+        const int n = snprintf(buf, sizeof(buf),
+            "{\"event\":\"ws.connect\",\"ts_mono_ms\":%lu,\"eventSeq\":%lu,\"ip\":\"%s\","
+            "\"result\":\"rejected\",\"reason\":\"origin_not_allowed\","
+            "\"origin\":\"%s\",\"schemaVersion\":\"1.0.0\"}",
+            static_cast<unsigned long>(tsMonoms),
+            static_cast<unsigned long>(s_eventSeq++),
+            request->client()->remoteIP().toString().c_str(),
+            originEscaped
+        );
+        if (n > 0 && n < static_cast<int>(sizeof(buf))) {
+            Serial.println(buf);
+        }
+        return false;
+    }
+    
+    int hostStart = schemeEnd + 3;
+    int hostEnd = origin.indexOf(":", hostStart);
+    if (hostEnd < 0) {
+        hostEnd = origin.indexOf("/", hostStart);
+    }
+    if (hostEnd < 0) {
+        hostEnd = origin.length();
+    }
+    
+    String host = origin.substring(hostStart, hostEnd);
+    
+    // Allow: lightwaveos.local (mDNS hostname)
+    if (host == "lightwaveos.local" || host == "lightwaveos") {
+        return true;
+    }
+    
+    // Allow: device IP addresses (http://192.168.x.x or https://192.168.x.x)
+    // Check if host is an IP address (simplified: check for dots and numeric pattern)
+    IPAddress deviceIP = WiFi.localIP();
+    if (deviceIP != IPAddress(0, 0, 0, 0)) {  // Valid IP (not 0.0.0.0)
+        String ipStr = deviceIP.toString();
+        if (host == ipStr) {
+            return true;
+        }
+    }
+    
+    // Also check AP IP if in AP mode
+    IPAddress apIP = WiFi.softAPIP();
+    if (apIP != IPAddress(0, 0, 0, 0)) {  // Valid IP (not 0.0.0.0)
+        String apIpStr = apIP.toString();
+        if (host == apIpStr) {
+            return true;
+        }
+    }
+    
+    // Reject: Origin not in allowlist
+    uint32_t tsMonoms = millis();
+    char originEscaped[128] = {0};
+    escapeJsonString(origin.c_str(), originEscaped, sizeof(originEscaped));
+    char buf[512];
+    const int n = snprintf(buf, sizeof(buf),
+        "{\"event\":\"ws.connect\",\"ts_mono_ms\":%lu,\"eventSeq\":%lu,\"ip\":\"%s\","
+        "\"result\":\"rejected\",\"reason\":\"origin_not_allowed\","
+        "\"origin\":\"%s\",\"schemaVersion\":\"1.0.0\"}",
+        static_cast<unsigned long>(tsMonoms),
+        static_cast<unsigned long>(s_eventSeq++),
+        request->client()->remoteIP().toString().c_str(),
+        originEscaped
+    );
+    if (n > 0 && n < static_cast<int>(sizeof(buf))) {
+        Serial.println(buf);
+    }
+    
+    return false;
 }
 
 void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_t len) {
@@ -421,23 +588,23 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
         return;
     }
 
-    // #region agent log
-    {
-        // Hws3: Prove whether the encoder ever sends WS data before ack timeouts.
-        char buf[320];
-        const int n = snprintf(
-            buf, sizeof(buf),
-            "{\"sessionId\":\"debug-session\",\"runId\":\"ws-guard-pre\",\"hypothesisId\":\"Hws3\",\"location\":\"v2/src/network/webserver/WsGateway.cpp:handleMessage\",\"message\":\"ws.message.recv\",\"data\":{\"clientId\":%lu,\"len\":%u,\"ip\":\"%s\"},\"timestamp\":%lu}",
-            static_cast<unsigned long>(client->id()),
-            static_cast<unsigned>(len),
-            client->remoteIP().toString().c_str(),
-            static_cast<unsigned long>(millis())
-        );
-        if (n > 0) Serial.println(buf);
-    }
+    // #region agent log (DISABLED)
+    // {
+    //     // Hws3: Prove whether the encoder ever sends WS data before ack timeouts.
+    //     char buf[320];
+    //     const int n = snprintf(
+    //         buf, sizeof(buf),
+    //         "{\"sessionId\":\"debug-session\",\"runId\":\"ws-guard-pre\",\"hypothesisId\":\"Hws3\",\"location\":\"v2/src/network/webserver/WsGateway.cpp:handleMessage\",\"message\":\"ws.message.recv\",\"data\":{\"clientId\":%lu,\"len\":%u,\"ip\":\"%s\"},\"timestamp\":%lu}",
+    //         static_cast<unsigned long>(client->id()),
+    //         static_cast<unsigned>(len),
+    //         client->remoteIP().toString().c_str(),
+    //         static_cast<unsigned long>(millis())
+    //     );
+    //     if (n > 0) Serial.println(buf);
+    // }
     // #endregion
 
-    StaticJsonDocument<512> doc;
+    JsonDocument doc;
     DeserializationError error = deserializeJson(doc, data, len);
 
     // Structured telemetry: msg.recv event (log ALL inbound frames, before auth check)
@@ -457,74 +624,85 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
     
     if (error) {
         // Log rejected frame (parse error)
-        // Create bounded payload summary from raw data (~100 chars max)
-        char payloadSummary[128] = {0};
-        size_t copyLen = len < (sizeof(payloadSummary) - 1) ? len : (sizeof(payloadSummary) - 1);
-        memcpy(payloadSummary, data, copyLen);
-        payloadSummary[copyLen] = '\0';
+        // Create bounded payload summary from raw data (~100 chars max, escaped for JSON)
+        char payloadSummaryRaw[128] = {0};
+        size_t copyLen = len < (sizeof(payloadSummaryRaw) - 1) ? len : (sizeof(payloadSummaryRaw) - 1);
+        memcpy(payloadSummaryRaw, data, copyLen);
+        payloadSummaryRaw[copyLen] = '\0';
         
-        // #region agent log
-        {
-            // Hwse2: Prove whether disconnects follow parse errors (invalid JSON / partial frames).
-            char buf[360];
-            const int n = snprintf(
-                buf, sizeof(buf),
-                "{\"sessionId\":\"debug-session\",\"runId\":\"ws-drop-pre\",\"hypothesisId\":\"Hwse2\",\"location\":\"v2/src/network/webserver/WsGateway.cpp:handleMessage\",\"message\":\"ws.json.parse_error\",\"data\":{\"clientId\":%lu,\"len\":%u},\"timestamp\":%lu}",
-                static_cast<unsigned long>(client->id()),
-                static_cast<unsigned>(len),
-                static_cast<unsigned long>(millis())
-            );
-            if (n > 0) Serial.println(buf);
-        }
+        // Escape for JSON embedding
+        char payloadSummaryEscaped[256] = {0};  // Larger buffer for escaped content
+        escapeJsonString(payloadSummaryRaw, payloadSummaryEscaped, sizeof(payloadSummaryEscaped));
+        
+        // #region agent log (DISABLED)
+        // {
+        //     // Hwse2: Prove whether disconnects follow parse errors (invalid JSON / partial frames).
+        //     char buf[360];
+        //     const int n = snprintf(
+        //         buf, sizeof(buf),
+        //         "{\"sessionId\":\"debug-session\",\"runId\":\"ws-drop-pre\",\"hypothesisId\":\"Hwse2\",\"location\":\"v2/src/network/webserver/WsGateway.cpp:handleMessage\",\"message\":\"ws.json.parse_error\",\"data\":{\"clientId\":%lu,\"len\":%u},\"timestamp\":%lu}",
+        //         static_cast<unsigned long>(client->id()),
+        //         static_cast<unsigned>(len),
+        //         static_cast<unsigned long>(millis())
+        //     );
+        //     if (n > 0) Serial.println(buf);
+        // }
         // #endregion
         
-        // Structured telemetry: msg.recv with result="rejected"
-        {
-            char buf[512];
-            const int n = snprintf(buf, sizeof(buf),
-                "{\"event\":\"msg.recv\",\"ts_mono_ms\":%lu,\"connEpoch\":%lu,\"eventSeq\":%lu,\"clientId\":%lu,\"msgType\":\"\",\"result\":\"rejected\",\"reason\":\"parse_error\",\"payloadSummary\":\"%.100s\",\"schemaVersion\":\"1.0.0\"}",
-                static_cast<unsigned long>(tsMonoms),
-                static_cast<unsigned long>(connEpoch),
-                static_cast<unsigned long>(eventSeq),
-                static_cast<unsigned long>(clientId),
-                payloadSummary
-            );
-            if (n > 0 && n < static_cast<int>(sizeof(buf))) {
-                Serial.println(buf);
-            }
-        }
+        // Structured telemetry: msg.recv with result="rejected" (DISABLED - verbose)
+        // {
+        //     char buf[512];
+        //     const int n = snprintf(buf, sizeof(buf),
+        //         "{\"event\":\"msg.recv\",\"ts_mono_ms\":%lu,\"connEpoch\":%lu,\"eventSeq\":%lu,\"clientId\":%lu,\"msgType\":\"\",\"result\":\"rejected\",\"reason\":\"parse_error\",\"payloadSummary\":\"%.200s\",\"schemaVersion\":\"1.0.0\"}",
+        //         static_cast<unsigned long>(tsMonoms),
+        //         static_cast<unsigned long>(connEpoch),
+        //         static_cast<unsigned long>(eventSeq),
+        //         static_cast<unsigned long>(clientId),
+        //         payloadSummaryEscaped
+        //     );
+        //     if (n > 0 && n < static_cast<int>(sizeof(buf))) {
+        //         Serial.println(buf);
+        //     }
+        // }
         
         client->text(buildWsError(ErrorCodes::INVALID_JSON, "Parse error"));
         return;
     }
     
-    const char* msgType = doc["type"] | "";
+    using namespace lightwaveos::codec;
+    JsonObjectConst root = doc.as<JsonObjectConst>();
+    TypeDecodeResult typeResult = WsCommonCodec::decodeType(root);
+    const char* msgType = typeResult.type;
     
     // Create bounded payload summary (~100 chars max)
-    char payloadSummary[128] = {0};
-    serializeJson(doc, payloadSummary, sizeof(payloadSummary) - 1);
+    char payloadSummaryRaw[128] = {0};
+    serializeJson(doc, payloadSummaryRaw, sizeof(payloadSummaryRaw) - 1);
+    
+    // Escape for JSON embedding (payloadSummary contains JSON that needs escaping)
+    char payloadSummaryEscaped[256] = {0};  // Larger buffer for escaped content
+    escapeJsonString(payloadSummaryRaw, payloadSummaryEscaped, sizeof(payloadSummaryEscaped));
     
     // Auth check (before logging msg.recv to determine result)
     bool authPassed = m_checkAuth(client, doc);
     
-    // Log structured msg.recv event (result="ok" if auth passed, "rejected" if auth failed)
-    {
-        char buf[512];
-        const int n = snprintf(buf, sizeof(buf),
-            "{\"event\":\"msg.recv\",\"ts_mono_ms\":%lu,\"connEpoch\":%lu,\"eventSeq\":%lu,\"clientId\":%lu,\"msgType\":\"%s\",\"result\":\"%s\",\"reason\":\"%s\",\"payloadSummary\":\"%.100s\",\"schemaVersion\":\"1.0.0\"}",
-            static_cast<unsigned long>(tsMonoms),
-            static_cast<unsigned long>(connEpoch),
-            static_cast<unsigned long>(eventSeq),
-            static_cast<unsigned long>(clientId),
-            msgType,
-            authPassed ? "ok" : "rejected",
-            authPassed ? "" : "auth_failed",
-            payloadSummary
-        );
-        if (n > 0 && n < static_cast<int>(sizeof(buf))) {
-            Serial.println(buf);
-        }
-    }
+    // Log structured msg.recv event (DISABLED - verbose, logs every WS message)
+    // {
+    //     char buf[512];
+    //     const int n = snprintf(buf, sizeof(buf),
+    //         "{\"event\":\"msg.recv\",\"ts_mono_ms\":%lu,\"connEpoch\":%lu,\"eventSeq\":%lu,\"clientId\":%lu,\"msgType\":\"%s\",\"result\":\"%s\",\"reason\":\"%s\",\"payloadSummary\":\"%.200s\",\"schemaVersion\":\"1.0.0\"}",
+    //         static_cast<unsigned long>(tsMonoms),
+    //         static_cast<unsigned long>(connEpoch),
+    //         static_cast<unsigned long>(eventSeq),
+    //         static_cast<unsigned long>(clientId),
+    //         msgType,
+    //         authPassed ? "ok" : "rejected",
+    //         authPassed ? "" : "auth_failed",
+    //         payloadSummaryEscaped
+    //     );
+    //     if (n > 0 && n < static_cast<int>(sizeof(buf))) {
+    //         Serial.println(buf);
+    //     }
+    // }
     
     if (!authPassed) {
         // Auth failure - error response already sent by auth checker
@@ -535,26 +713,26 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
     const char* typeStr = msgType;
     bool handled = WsCommandRouter::route(client, doc, m_ctx);
 
-    // #region agent log
-    {
-        // Hwse1: Determine whether encoder sends unknown command types that trigger errors/closures.
-        char buf[380];
-        const int n = snprintf(
-            buf, sizeof(buf),
-            "{\"sessionId\":\"debug-session\",\"runId\":\"ws-drop-pre\",\"hypothesisId\":\"Hwse1\",\"location\":\"v2/src/network/webserver/WsGateway.cpp:handleMessage\",\"message\":\"ws.route.result\",\"data\":{\"clientId\":%lu,\"type\":\"%s\",\"handled\":%s},\"timestamp\":%lu}",
-            static_cast<unsigned long>(client->id()),
-            typeStr,
-            handled ? "true" : "false",
-            static_cast<unsigned long>(millis())
-        );
-        if (n > 0) Serial.println(buf);
-    }
+    // #region agent log (DISABLED)
+    // {
+    //     // Hwse1: Determine whether encoder sends unknown command types that trigger errors/closures.
+    //     char buf[380];
+    //     const int n = snprintf(
+    //         buf, sizeof(buf),
+    //         "{\"sessionId\":\"debug-session\",\"runId\":\"ws-drop-pre\",\"hypothesisId\":\"Hwse1\",\"location\":\"v2/src/network/webserver/WsGateway.cpp:handleMessage\",\"message\":\"ws.route.result\",\"data\":{\"clientId\":%lu,\"type\":\"%s\",\"handled\":%s},\"timestamp\":%lu}",
+    //         static_cast<unsigned long>(client->id()),
+    //         typeStr,
+    //         handled ? "true" : "false",
+    //         static_cast<unsigned long>(millis())
+    //     );
+    //     if (n > 0) Serial.println(buf);
+    // }
     // #endregion
     
     // If not handled by router, send error (all commands should be registered)
     if (!handled) {
-        const char* requestId = doc["requestId"] | "";
-        client->text(buildWsError(ErrorCodes::INVALID_VALUE, "Unknown command type", requestId));
+        RequestIdDecodeResult requestIdResult = WsCommonCodec::decodeRequestId(root);
+        client->text(buildWsError(ErrorCodes::INVALID_VALUE, "Unknown command type", requestIdResult.requestId));
     }
 }
 

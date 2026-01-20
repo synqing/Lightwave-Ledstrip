@@ -461,7 +461,7 @@ void WsEffectsCodec::encodeMetadata(uint8_t effectId, const char* name, const ch
     properties["speedResponsive"] = true;
 }
 
-void WsEffectsCodec::encodeList(uint8_t effectCount, uint8_t startIdx, uint8_t endIdx, uint8_t page, uint8_t limit, bool details, const char* effectNames[], const char* categories[], JsonObject& data) {
+void WsEffectsCodec::encodeList(uint8_t effectCount, uint8_t startIdx, uint8_t endIdx, uint8_t page, uint8_t limit, bool details, const char* const effectNames[], const char* const categories[], JsonObject& data) {
     JsonArray effects = data["effects"].to<JsonArray>();
     for (uint8_t i = startIdx; i < endIdx; i++) {
         JsonObject effect = effects.add<JsonObject>();
@@ -491,7 +491,7 @@ void WsEffectsCodec::encodeByFamily(uint8_t familyId, const char* familyName, co
     data["count"] = count;
 }
 
-void WsEffectsCodec::encodeCategories(const char* familyNames[], const uint8_t familyCounts[], uint8_t total, JsonObject& data) {
+void WsEffectsCodec::encodeCategories(const char* const familyNames[], const uint8_t familyCounts[], uint8_t total, JsonObject& data) {
     JsonArray families = data["categories"].to<JsonArray>();
     for (uint8_t i = 0; i < total; i++) {
         JsonObject familyObj = families.add<JsonObject>();
@@ -502,7 +502,7 @@ void WsEffectsCodec::encodeCategories(const char* familyNames[], const uint8_t f
     data["total"] = total;
 }
 
-void WsEffectsCodec::encodeParametersGet(uint8_t effectId, const char* name, bool hasParameters, const char* paramNames[], const char* paramDisplayNames[], const float paramMins[], const float paramMaxs[], const float paramDefaults[], const float paramValues[], uint8_t paramCount, JsonObject& data) {
+void WsEffectsCodec::encodeParametersGet(uint8_t effectId, const char* name, bool hasParameters, const char* const paramNames[], const char* const paramDisplayNames[], const float paramMins[], const float paramMaxs[], const float paramDefaults[], const float paramValues[], uint8_t paramCount, JsonObject& data) {
     data["effectId"] = effectId;
     data["name"] = name ? name : "";
     data["hasParameters"] = hasParameters;
@@ -519,7 +519,7 @@ void WsEffectsCodec::encodeParametersGet(uint8_t effectId, const char* name, boo
     }
 }
 
-void WsEffectsCodec::encodeParametersSetChanged(uint8_t effectId, const char* name, const char* queuedKeys[], uint8_t queuedCount, const char* failedKeys[], uint8_t failedCount, JsonObject& data) {
+void WsEffectsCodec::encodeParametersSetChanged(uint8_t effectId, const char* name, const char* const queuedKeys[], uint8_t queuedCount, const char* const failedKeys[], uint8_t failedCount, JsonObject& data) {
     data["effectId"] = effectId;
     data["name"] = name ? name : "";
     
@@ -545,7 +545,7 @@ void WsEffectsCodec::encodeGlobalParametersGet(uint8_t brightness, uint8_t speed
     data["variation"] = variation;
 }
 
-void WsEffectsCodec::encodeParametersChanged(const char* updatedKeys[], uint8_t updatedCount, uint8_t brightness, uint8_t speed, uint8_t paletteId, uint8_t hue, uint8_t intensity, uint8_t saturation, uint8_t complexity, uint8_t variation, JsonObject& data) {
+void WsEffectsCodec::encodeParametersChanged(const char* const updatedKeys[], uint8_t updatedCount, uint8_t brightness, uint8_t speed, uint8_t paletteId, uint8_t hue, uint8_t intensity, uint8_t saturation, uint8_t complexity, uint8_t variation, JsonObject& data) {
     JsonArray updated = data["updated"].to<JsonArray>();
     for (uint8_t i = 0; i < updatedCount; i++) {
         updated.add(updatedKeys[i] ? updatedKeys[i] : "");

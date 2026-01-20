@@ -337,15 +337,15 @@ public:
     static void encodeGetCurrent(uint8_t effectId, const char* name, uint8_t brightness, uint8_t speed, uint8_t paletteId, uint8_t hue, uint8_t intensity, uint8_t saturation, uint8_t complexity, uint8_t variation, JsonObject& data);
     static void encodeChanged(uint8_t effectId, const char* name, bool transitionActive, JsonObject& data);
     static void encodeMetadata(uint8_t effectId, const char* name, const char* familyName, uint8_t familyId, const char* story, const char* opticalIntent, uint8_t tags, JsonObject& data);
-    static void encodeList(uint8_t effectCount, uint8_t startIdx, uint8_t endIdx, uint8_t page, uint8_t limit, bool details, const char* effectNames[], const char* categories[], JsonObject& data);
+    static void encodeList(uint8_t effectCount, uint8_t startIdx, uint8_t endIdx, uint8_t page, uint8_t limit, bool details, const char* const effectNames[], const char* const categories[], JsonObject& data);
     static void encodeByFamily(uint8_t familyId, const char* familyName, const uint8_t patternIndices[], uint8_t count, JsonObject& data);
-    static void encodeCategories(const char* familyNames[], const uint8_t familyCounts[], uint8_t total, JsonObject& data);
+    static void encodeCategories(const char* const familyNames[], const uint8_t familyCounts[], uint8_t total, JsonObject& data);
     
     // Parameters encoders
-    static void encodeParametersGet(uint8_t effectId, const char* name, bool hasParameters, const char* paramNames[], const char* paramDisplayNames[], const float paramMins[], const float paramMaxs[], const float paramDefaults[], const float paramValues[], uint8_t paramCount, JsonObject& data);
-    static void encodeParametersSetChanged(uint8_t effectId, const char* name, const char* queuedKeys[], uint8_t queuedCount, const char* failedKeys[], uint8_t failedCount, JsonObject& data);
+    static void encodeParametersGet(uint8_t effectId, const char* name, bool hasParameters, const char* const paramNames[], const char* const paramDisplayNames[], const float paramMins[], const float paramMaxs[], const float paramDefaults[], const float paramValues[], uint8_t paramCount, JsonObject& data);
+    static void encodeParametersSetChanged(uint8_t effectId, const char* name, const char* const queuedKeys[], uint8_t queuedCount, const char* const failedKeys[], uint8_t failedCount, JsonObject& data);
     static void encodeGlobalParametersGet(uint8_t brightness, uint8_t speed, uint8_t paletteId, uint8_t hue, uint8_t intensity, uint8_t saturation, uint8_t complexity, uint8_t variation, JsonObject& data);
-    static void encodeParametersChanged(const char* updatedKeys[], uint8_t updatedCount, uint8_t brightness, uint8_t speed, uint8_t paletteId, uint8_t hue, uint8_t intensity, uint8_t saturation, uint8_t complexity, uint8_t variation, JsonObject& data);
+    static void encodeParametersChanged(const char* const updatedKeys[], uint8_t updatedCount, uint8_t brightness, uint8_t speed, uint8_t paletteId, uint8_t hue, uint8_t intensity, uint8_t saturation, uint8_t complexity, uint8_t variation, JsonObject& data);
 };
 
 } // namespace codec

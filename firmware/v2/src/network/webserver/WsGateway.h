@@ -143,6 +143,9 @@ private:
     // Helper to get or increment connection epoch for a client
     uint32_t getOrIncrementEpoch(uint32_t clientId);
 
+    // Validate WebSocket handshake Origin header (browser CSWSH protection)
+    bool validateOrigin(AsyncWebServerRequest* request);
+
     // Static instance pointer for event handler
     static WsGateway* s_instance;
 };
@@ -150,4 +153,3 @@ private:
 } // namespace webserver
 } // namespace network
 } // namespace lightwaveos
-

@@ -35,7 +35,7 @@ void tearDown(void) {
 // ============================================================================
 
 void test_effects_set_current_valid_with_transition() {
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     doc["effectId"] = 42;
     doc["requestId"] = "test-123";
     doc["transition"]["type"] = 1;
@@ -57,7 +57,7 @@ void test_effects_set_current_valid_with_transition() {
 // ============================================================================
 
 void test_effects_set_current_missing_required() {
-    StaticJsonDocument<128> doc;
+    JsonDocument doc;
     doc["requestId"] = "test-456";
     
     JsonObjectConst root = doc.as<JsonObjectConst>();
@@ -72,7 +72,7 @@ void test_effects_set_current_missing_required() {
 // ============================================================================
 
 void test_effects_set_current_wrong_type() {
-    StaticJsonDocument<128> doc;
+    JsonDocument doc;
     doc["effectId"] = "not-a-number";  // Should be int
     doc["requestId"] = "test-789";
     
@@ -88,7 +88,7 @@ void test_effects_set_current_wrong_type() {
 // ============================================================================
 
 void test_effects_set_current_out_of_range() {
-    StaticJsonDocument<128> doc;
+    JsonDocument doc;
     doc["effectId"] = 255;  // Max is 127
     
     JsonObjectConst root = doc.as<JsonObjectConst>();
@@ -103,7 +103,7 @@ void test_effects_set_current_out_of_range() {
 // ============================================================================
 
 void test_effects_set_current_minimal() {
-    StaticJsonDocument<64> doc;
+    JsonDocument doc;
     doc["effectId"] = 5;
     
     JsonObjectConst root = doc.as<JsonObjectConst>();

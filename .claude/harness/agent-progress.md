@@ -45,7 +45,7 @@ N/A (Initializer mode - creating harness)
 
 ### Actions Taken
 - Explored repo structure: src/, data/, test/, tools/, docs/
-- Read platformio.ini - identified 4 build environments (esp32dev, memory_debug, esp32dev_debug, esp32dev_wifi)
+- Read platformio.ini - identified 4 build environments (esp32dev, memory_debug, esp32dev_debug, esp32dev_audio)
 - Read README.md and CLAUDE.md - understood project purpose and constraints
 - Verified PlatformIO installed (v6.1.18)
 - Ran default build (esp32dev) - SUCCESS in 17.47s
@@ -82,7 +82,7 @@ pio run -e esp32dev
 `76d304a` - chore: Add domain memory harness for persistent agent progress
 
 ### Next Recommended Action
-Run WORKER MODE to verify esp32dev_wifi build (item VERIFY-WIFI-BUILD, priority 1).
+Run WORKER MODE to verify esp32dev_audio build (item VERIFY-WIFI-BUILD, priority 1).
 
 ---
 
@@ -101,7 +101,7 @@ Run WORKER MODE to verify esp32dev_wifi build (item VERIFY-WIFI-BUILD, priority 
 **VERIFY-WIFI-BUILD** (priority 1, no dependencies, status was FAILING)
 
 ### Plan
-1. Run `pio run -e esp32dev_wifi`
+1. Run `pio run -e esp32dev_audio`
 2. Verify no compilation errors
 3. Check flash usage < 80%
 4. Update feature_list.json
@@ -116,7 +116,7 @@ Run WORKER MODE to verify esp32dev_wifi build (item VERIFY-WIFI-BUILD, priority 
 ### Commands Executed
 ```bash
 ./init.sh
-pio run -e esp32dev_wifi
+pio run -e esp32dev_audio
 ```
 
 ### Verification Results

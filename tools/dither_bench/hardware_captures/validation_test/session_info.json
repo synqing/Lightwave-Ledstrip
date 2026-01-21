@@ -1,0 +1,12 @@
+{
+  "port": "/dev/cu.usbmodem212401",
+  "baudrate": 115200,
+  "duration_sec": 5.0,
+  "frames_captured": 0,
+  "stats": {
+    "frames_received": 0,
+    "sync_errors": 1,
+    "checksum_errors": 0
+  },
+  "timestamp": "2026-01-11T01:40:01.619952"
+}

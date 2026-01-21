@@ -1,0 +1,5 @@
+beat_time_sec,expected_bpm
+# SPECIAL CASE: Silence should NOT produce beat detections
+# This file exists for testing AC-10: "Silence causes confidence to decay below 0.1"
+# Ground truth: NO BEATS EXPECTED
+# Expected behavior: confidence decays < 0.1 within 3s and stays there

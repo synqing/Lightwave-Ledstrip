@@ -20,30 +20,32 @@ static const ParameterDef PARAMETER_TABLE[] = {
     // id, encoderIndex, statusField, wsCommandType, min, max, defaultValue
 
     // Unit A (0-7) - Global LightwaveOS parameters
-    // Note: Effect max=95 (0-95 = 96 effects, safe default for future expansion)
-    // Actual max is dynamically updated from v2 server (currently 92 effects, max=91)
-    // v2 firmware: EXPECTED_EFFECT_COUNT = 92 (see CoreEffects.cpp)
-    // Note: Palette max=74 (0-74 = 75 palettes, matches v2 MASTER_PALETTE_COUNT=75)
-    {ParameterId::EffectId,   0, "effectId",   "effects.setCurrent", 0,   95,  0},
-    {ParameterId::Brightness, 1, "brightness", "parameters.set",     0,   255, 128},
-    {ParameterId::PaletteId,  2, "paletteId",  "parameters.set",     0,   74,  0},
-    {ParameterId::Speed,      3, "speed",      "parameters.set",     1,   100, 25},
-    {ParameterId::Mood,       4, "mood",       "parameters.set",     0,   255, 0},
-    {ParameterId::FadeAmount, 5, "fadeAmount", "parameters.set",     0,   255, 0},
-    {ParameterId::Complexity, 6, "complexity", "parameters.set",     0,   255, 128},
-    {ParameterId::Variation,  7, "variation",  "parameters.set",     0,   255, 0},
+    // New order: Effect, Palette, Speed, Mood, Fade, Complexity, Variation, Brightness
+    {ParameterId::EffectId,   0, "effectId",   "effects.setCurrent", 0,   87,  0},  // Encoder 0: Effect (88 effects 0-87)
+    {ParameterId::PaletteId,  1, "paletteId",  "parameters.set",     0,   74,  0},  // Encoder 1: Palette (75 palettes 0-74)
+    {ParameterId::Speed,      2, "speed",      "parameters.set",     1,   100, 25}, // Encoder 2: Speed
+    {ParameterId::Mood,       3, "mood",       "parameters.set",     0,   255, 0},  // Encoder 3: Mood
+    {ParameterId::FadeAmount, 4, "fadeAmount", "parameters.set",     0,   255, 0},  // Encoder 4: Fade
+    {ParameterId::Complexity, 5, "complexity", "parameters.set",     0,   255, 128}, // Encoder 5: Complexity
+    {ParameterId::Variation,  6, "variation",  "parameters.set",     0,   255, 0},  // Encoder 6: Variation
+    {ParameterId::Brightness, 7, "brightness", "parameters.set",     0,   255, 128}, // Encoder 7: Brightness
 
-    // Unit B (8-15) - No parameters assigned (encoders disabled/unused)
-    // Zone parameters have been removed from Unit B
-    // Unit B buttons are still used for preset management
+    // Unit B (8-15) - Zone parameters
+    // Pattern: [Zone N Effect, Zone N Speed/Palette] pairs
+    // Note: Encoders 9, 11, 13, 15 can toggle between Speed and Palette via button
+    // Default mode is Speed; when toggled, encoder controls Palette instead
+    {ParameterId::Zone0Effect, 8,  "zone0Effect", "zone.setEffect",   0,   87,  0},  // 88 effects (0-87)
+    {ParameterId::Zone0Speed,  9,  "zone0Speed",  "zone.setSpeed",    1,   100, 25},  // Also zone0Palette when toggled
+    {ParameterId::Zone1Effect, 10, "zone1Effect", "zone.setEffect",   0,   87,  0},  // 88 effects (0-87)
+    {ParameterId::Zone1Speed,  11, "zone1Speed",  "zone.setSpeed",    1,   100, 25},  // Also zone1Palette when toggled
+    {ParameterId::Zone2Effect, 12, "zone2Effect", "zone.setEffect",   0,   87,  0},  // 88 effects (0-87)
+    {ParameterId::Zone2Speed,  13, "zone2Speed",  "zone.setSpeed",    1,   100, 25},  // Also zone2Palette when toggled
+    {ParameterId::Zone3Effect, 14, "zone3Effect", "zone.setEffect",   0,   87,  0},  // 88 effects (0-87)
+    {ParameterId::Zone3Speed,  15, "zone3Speed",  "zone.setSpeed",    1,   100, 25}   // Also zone3Palette when toggled
 };
 
 const ParameterDef* getParameterByIndex(uint8_t index) {
     if (index >= getParameterCount()) {
-        return nullptr;
-    }
-    // Unit B (8-15) no longer has parameters assigned
-    if (index >= 8) {
         return nullptr;
     }
     return &PARAMETER_TABLE[index];
@@ -52,10 +54,6 @@ const ParameterDef* getParameterByIndex(uint8_t index) {
 const ParameterDef* getParameterById(ParameterId id) {
     uint8_t index = static_cast<uint8_t>(id);
     if (index >= getParameterCount()) {
-        return nullptr;
-    }
-    // Unit B (8-15) no longer has parameters assigned
-    if (index >= 8) {
         return nullptr;
     }
     return &PARAMETER_TABLE[index];
@@ -81,18 +79,11 @@ static void initializeMetadata() {
         return;
     }
 
-    // Only initialize metadata for Unit A (0-7) - Unit B (8-15) has no parameters
-    for (uint8_t i = 0; i < 8; i++) {
+    for (uint8_t i = 0; i < PARAMETER_COUNT; i++) {
         const ParameterDef* param = &PARAMETER_TABLE[i];
         s_parameterMetadata[i].min = param->min;
         s_parameterMetadata[i].max = param->max;
         s_parameterMetadata[i].isDynamic = false;  // Start with hardcoded defaults
-    }
-    // Unit B (8-15): Initialize with safe defaults (no parameters assigned)
-    for (uint8_t i = 8; i < PARAMETER_COUNT; i++) {
-        s_parameterMetadata[i].min = 0;
-        s_parameterMetadata[i].max = 255;
-        s_parameterMetadata[i].isDynamic = false;
     }
 
     s_metadataInitialized = true;

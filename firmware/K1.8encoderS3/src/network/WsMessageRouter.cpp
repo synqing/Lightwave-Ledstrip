@@ -9,32 +9,56 @@ void WsMessageRouter::init(ParameterHandler* paramHandler) {
 }
 
 bool WsMessageRouter::route(StaticJsonDocument<512>& doc) {
-    // Must have "type" field (LightwaveOS protocol)
-    if (!doc.containsKey("type")) {
-        return false; // Ignore messages without type
+    // 1. Dual Key Support (FR-1)
+    const char* type = nullptr;
+    if (doc.containsKey("type")) {
+        type = doc["type"];
+    } else if (doc.containsKey("t")) {
+        type = doc["t"];
     }
 
-    const char* type = doc["type"];
     if (!type) {
+        // FR-4: Log error on missing type
+        Serial.println("[WS] Error: Missing 'type' or 't' key");
         return false;
     }
 
-    // Route by message type
+    // 2. Command Aliasing (FR-2)
+    // Legacy Hub uses "effects.setCurrent" -> Map to "effects.changed"
+    if (strcmp(type, "effects.setCurrent") == 0) {
+        type = "effects.changed";
+    }
+    // Legacy Hub uses "parameters.set" -> Map to "parameters.changed"
+    else if (strcmp(type, "parameters.set") == 0) {
+        type = "parameters.changed";
+    }
+    // Legacy Hub uses "state.snapshot" -> Map to "status"
+    else if (strcmp(type, "state.snapshot") == 0) {
+        type = "status";
+    }
+
+    // 3. Routing
     if (strcmp(type, "status") == 0) {
         handleStatus(doc);
         return true;
     } else if (strcmp(type, "device.status") == 0) {
         handleDeviceStatus(doc);
-        return true; // Handled (even if we ignore it)
+        return true; 
     } else if (strcmp(type, "parameters.changed") == 0) {
         handleParametersChanged(doc);
-        return true; // Handled (even if we ignore it)
+        return true; 
     } else if (strcmp(type, "effects.changed") == 0) {
         handleEffectsChanged(doc);
-        return true; // Handled (even if we ignore it)
+        return true; 
     }
 
-    // Unknown message type - ignore silently (rate-limited logging could go here)
+    // 4. Rate-Limited Logging (NFR-1)
+    static unsigned long lastLogTime = 0;
+    if (millis() - lastLogTime > 2000) {
+        Serial.printf("[WS] Ignored unknown type: %s\n", type);
+        lastLogTime = millis();
+    }
+    
     return false;
 }
 

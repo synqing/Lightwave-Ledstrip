@@ -1,0 +1,1045 @@
+// ============================================================================
+// WebSocketClient Implementation - Tab5.encoder
+// ============================================================================
+// Bidirectional WebSocket client for LightwaveOS communication.
+// Ported from K1.8encoderS3 with Tab5-specific extensions (zone support).
+//
+// NOTE: WiFi is currently DISABLED on Tab5 (ESP32-P4) due to SDIO pin
+// configuration issues with the ESP32-C6 WiFi co-processor.
+// See Config.h ENABLE_WIFI flag for details.
+// ============================================================================
+
+#include "WebSocketClient.h"
+
+// External debug flag from main.cpp
+extern bool g_debugEnabled;
+
+#if ENABLE_WIFI
+
+#include <ESP.h>  // For heap monitoring
+#include <esp_task_wdt.h>  // For watchdog reset
+#include <cstring>
+#include "../zones/ZoneDefinition.h"
+#include "../config/AnsiColors.h"  // ANSI color codes for debug output
+
+WebSocketClient::WebSocketClient()
+    : _status(WebSocketStatus::DISCONNECTED)
+    , _messageCallback(nullptr)
+    , _lastReconnectAttempt(0)
+    , _reconnectDelay(NetworkConfig::WS_INITIAL_RECONNECT_MS)
+    , _shouldReconnect(false)
+    , _serverIP(INADDR_NONE)
+    , _serverHost(nullptr)
+    , _serverPort(80)
+    , _serverPath("/ws")
+    , _useIP(false)
+    , _pendingHello(false)
+    , _consecutiveSendFailures(0)
+    , _sendDegraded(false)
+    , _sendMutex(nullptr)
+    , _sendAttemptStartTime(0)
+{
+    // Initialize rate limiter (all parameters start at 0)
+    for (int i = 0; i < 16; i++) {
+        _rateLimiter.lastSend[i] = 0;
+    }
+
+    // Initialize send queue
+    for (int i = 0; i < SEND_QUEUE_SIZE; i++) {
+        _sendQueue[i].reset();
+    }
+
+    // Create mutex for send protection (binary semaphore)
+    _sendMutex = xSemaphoreCreateMutex();
+    if (_sendMutex == nullptr) {
+        Serial.println(COLOR_WEBSOCKET "[WS]" ANSI_RESET " ERROR: Failed to create send mutex!");
+    }
+
+    // Set WebSocket event handler using lambda
+    _ws.onEvent([this](WStype_t type, uint8_t* payload, size_t length) {
+        handleEvent(type, payload, length);
+    });
+}
+
+void WebSocketClient::begin(const char* host, uint16_t port, const char* path) {
+    // Prevent overlapping connect attempts
+    if (_status == WebSocketStatus::CONNECTING || _status == WebSocketStatus::CONNECTED) {
+        Serial.println(COLOR_WEBSOCKET "[WS]" ANSI_RESET " Already connected/connecting, ignoring begin()");
+        return;
+    }
+
+    _serverHost = host;
+    _serverPort = port;
+    _serverPath = path;
+    _useIP = false;
+    _shouldReconnect = true;
+
+    _status = WebSocketStatus::CONNECTING;
+
+    Serial.printf(COLOR_WEBSOCKET "[WS]" ANSI_RESET " Connecting to ws://%s:%d%s...\n", host, port, path);
+
+    // Configure connection timeout
+    // links2004/WebSockets uses setReconnectInterval for both reconnect and initial timeout
+    _ws.setReconnectInterval(NetworkConfig::WS_CONNECTION_TIMEOUT_MS);
+
+    // CRITICAL FIX: Feed watchdog before begin() which can trigger DNS resolution
+    esp_task_wdt_reset();
+    
+    _ws.begin(host, port, path);
+    
+    // CRITICAL FIX: Feed watchdog after begin() returns
+    esp_task_wdt_reset();
+}
+
+void WebSocketClient::begin(IPAddress ip, uint16_t port, const char* path) {
+    // Prevent overlapping connect attempts
+    if (_status == WebSocketStatus::CONNECTING || _status == WebSocketStatus::CONNECTED) {
+        Serial.println(COLOR_WEBSOCKET "[WS]" ANSI_RESET " Already connected/connecting, ignoring begin()");
+        return;
+    }
+
+    _serverIP = ip;
+    _serverPort = port;
+    _serverPath = path;
+    _useIP = true;
+    _shouldReconnect = true;
+
+    _status = WebSocketStatus::CONNECTING;
+
+    Serial.printf(COLOR_WEBSOCKET "[WS]" ANSI_RESET " Connecting to ws://%s:%d%s...\n",
+                  ip.toString().c_str(), port, path);
+    Serial.printf(COLOR_WEBSOCKET "[WS]" ANSI_RESET " Connection timeout: %lu ms\n", NetworkConfig::WS_CONNECTION_TIMEOUT_MS);
+    Serial.printf(COLOR_WEBSOCKET "[WS]" ANSI_RESET " Local IP: %s\n", WiFi.localIP().toString().c_str());
+
+    // Configure connection timeout
+    _ws.setReconnectInterval(NetworkConfig::WS_CONNECTION_TIMEOUT_MS);
+
+    // CRITICAL FIX: Feed watchdog before begin() which can trigger TCP connection
+    esp_task_wdt_reset();
+    
+    _ws.begin(ip, port, path);
+    
+    // CRITICAL FIX: Feed watchdog after begin() returns
+    esp_task_wdt_reset();
+}
+
+void WebSocketClient::update() {
+    // Reset watchdog before potentially blocking operations
+    esp_task_wdt_reset();
+
+    // Process WebSocket events
+    // #region agent log
+#if ENABLE_WS_DIAGNOSTICS
+    static uint32_t s_lastLoopLog = 0;
+    if (g_debugEnabled && (uint32_t)(millis() - s_lastLoopLog) >= 500) {  // Log every 500ms
+        Serial.printf(COLOR_DEBUG "[DEBUG]" ANSI_RESET " WebSocketClient::update before loop - Heap: free=%u minFree=%u largest=%u status=%d\n",
+                      ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap(), (int)_status);
+        s_lastLoopLog = millis();
+    }
+#endif
+    // #endregion
+    
+    // CRITICAL FIX: The third-party WebSocketsClient::loop() can block for >5s during
+    // connection attempts (DNS resolution, TCP connect, SSL handshake, etc).
+    // To prevent watchdog timeouts, we:
+    // 1. Add an extra WDT reset immediately before the call
+    // 2. Track execution time and log warnings if it exceeds threshold
+    // 3. Add another WDT reset immediately after
+    
+    esp_task_wdt_reset();  // Extra reset before potentially-blocking _ws.loop()
+    
+    uint32_t loopStartMs = millis();
+    _ws.loop();
+    uint32_t loopDurationMs = millis() - loopStartMs;
+    
+    // Warn if _ws.loop() took >1s (normal is <10ms)
+    if (loopDurationMs > 1000) {
+        Serial.printf(COLOR_WEBSOCKET "[WS]" ANSI_RESET " WARNING: _ws.loop() took %lu ms (status=%d)\n", 
+                      loopDurationMs, (int)_status);
+    }
+    
+    esp_task_wdt_reset();  // Extra reset after potentially-blocking _ws.loop()
+    
+    // #region agent log
+#if ENABLE_WS_DIAGNOSTICS
+    if (g_debugEnabled && (uint32_t)(millis() - s_lastLoopLog) >= 500) {
+        Serial.printf(COLOR_DEBUG "[DEBUG]" ANSI_RESET " WebSocketClient::update after loop - Heap: free=%u minFree=%u largest=%u\n",
+                      ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+    }
+#endif
+    // #endregion
+
+    // Reset watchdog after WebSocket loop
+    esp_task_wdt_reset();
+
+    // Process send queue (non-blocking, handles rapid encoder changes)
+    processSendQueue();
+
+    // Send pending hello message (deferred from connect event to ensure connection is ready)
+    if (_pendingHello && _status == WebSocketStatus::CONNECTED) {
+        _pendingHello = false;
+        sendHelloMessage();
+    }
+
+    // Check if stuck in CONNECTING state too long (timeout protection)
+    static uint32_t s_connectingStartTime = 0;
+    if (_status == WebSocketStatus::CONNECTING) {
+        if (s_connectingStartTime == 0) {
+            s_connectingStartTime = millis();
+        } else if ((millis() - s_connectingStartTime) > NetworkConfig::WS_CONNECTION_TIMEOUT_MS) {
+            // Stuck in CONNECTING too long, reset state to allow retry
+            Serial.println(COLOR_WEBSOCKET "[WS]" ANSI_RESET " Connection timeout, resetting state");
+            _status = WebSocketStatus::DISCONNECTED;
+            s_connectingStartTime = 0;
+            increaseReconnectBackoff();
+        }
+    } else {
+        s_connectingStartTime = 0;  // Reset when not connecting
+    }
+
+    // Handle reconnection logic
+    if (_status == WebSocketStatus::DISCONNECTED && _shouldReconnect) {
+        attemptReconnect();
+    }
+
+    // Reset watchdog at end of update
+    esp_task_wdt_reset();
+}
+
+void WebSocketClient::disconnect() {
+    Serial.println(COLOR_WEBSOCKET "[WS]" ANSI_RESET " Disconnecting...");
+    _shouldReconnect = false;
+    _ws.disconnect();
+    _status = WebSocketStatus::DISCONNECTED;
+    _pendingHello = false;
+}
+
+void WebSocketClient::handleEvent(WStype_t type, uint8_t* payload, size_t length) {
+    switch (type) {
+        case WStype_DISCONNECTED:
+            {
+                // Extract disconnect reason (if available)
+                char reason[64];
+                reason[0] = '\0';
+                if (payload && length > 0) {
+                    const size_t n = (length < (sizeof(reason) - 1)) ? length : (sizeof(reason) - 1);
+                    memcpy(reason, payload, n);
+                    reason[n] = '\0';
+                }
+                Serial.printf(COLOR_WEBSOCKET "[WS]" ANSI_RESET " Disconnected (reason: \"%s\", delay: %lu ms)\n",
+                              reason, _reconnectDelay);
+            }
+            _status = WebSocketStatus::DISCONNECTED;
+            _pendingHello = false;  // Clear pending hello on disconnect
+            increaseReconnectBackoff();
+            break;
+
+        case WStype_CONNECTED:
+            {
+                Serial.println(COLOR_WEBSOCKET "[WS]" ANSI_RESET " Connected to server");
+                Serial.printf(COLOR_WEBSOCKET "[WS]" ANSI_RESET " Server IP: %s:%d%s\n", 
+                              _useIP ? _serverIP.toString().c_str() : (_serverHost ? _serverHost : "unknown"),
+                              _serverPort, _serverPath);
+                Serial.printf(COLOR_WEBSOCKET "[WS]" ANSI_RESET " Local IP: %s\n", WiFi.localIP().toString().c_str());
+            }
+            _status = WebSocketStatus::CONNECTED;
+            resetReconnectBackoff();
+            // Defer hello message to next update() to ensure connection is fully ready
+            _pendingHello = true;
+            break;
+
+        case WStype_TEXT:
+            {
+                // Parse JSON message
+                if (_messageCallback) {
+                    JsonDocument doc;
+                    DeserializationError error = deserializeJson(doc, payload, length);
+
+                    if (!error) {
+                        _messageCallback(doc);
+                    } else {
+                        Serial.printf(COLOR_WEBSOCKET "[WS]" ANSI_RESET " JSON parse error: %s\n", error.c_str());
+                    }
+                }
+            }
+            break;
+
+        case WStype_ERROR:
+            {
+                Serial.printf(COLOR_WEBSOCKET "[WS]" ANSI_RESET " Error occurred (delay: %lu ms)\n", _reconnectDelay);
+                Serial.printf(COLOR_WEBSOCKET "[WS]" ANSI_RESET " Target: ws://%s:%d%s\n",
+                              _useIP ? _serverIP.toString().c_str() : (_serverHost ? _serverHost : "unknown"),
+                              _serverPort, _serverPath);
+                Serial.printf(COLOR_WEBSOCKET "[WS]" ANSI_RESET " Local IP: %s, WiFi Status: %d\n", 
+                              WiFi.localIP().toString().c_str(), (int)WiFi.status());
+            }
+            _status = WebSocketStatus::ERROR;
+            increaseReconnectBackoff();
+            break;
+
+        case WStype_BIN:
+        case WStype_FRAGMENT_TEXT_START:
+        case WStype_FRAGMENT_BIN_START:
+        case WStype_FRAGMENT:
+        case WStype_FRAGMENT_FIN:
+        case WStype_PING:
+        case WStype_PONG:
+            // Ignore these for now
+            break;
+    }
+}
+
+void WebSocketClient::attemptReconnect() {
+    unsigned long now = millis();
+
+    if (now - _lastReconnectAttempt >= _reconnectDelay) {
+        _lastReconnectAttempt = now;
+        _status = WebSocketStatus::CONNECTING;
+
+        Serial.printf(COLOR_WEBSOCKET "[WS]" ANSI_RESET " Reconnecting (delay was: %lu ms)...\n", _reconnectDelay);
+
+        // CRITICAL FIX: Feed watchdog before reconnect attempt
+        esp_task_wdt_reset();
+        
+        if (_useIP) {
+            _ws.begin(_serverIP, _serverPort, _serverPath);
+        } else {
+            _ws.begin(_serverHost, _serverPort, _serverPath);
+        }
+        
+        // CRITICAL FIX: Feed watchdog after reconnect attempt
+        esp_task_wdt_reset();
+    }
+}
+
+void WebSocketClient::resetReconnectBackoff() {
+    _reconnectDelay = NetworkConfig::WS_INITIAL_RECONNECT_MS;
+}
+
+void WebSocketClient::increaseReconnectBackoff() {
+    _reconnectDelay = min(_reconnectDelay * 2, (unsigned long)NetworkConfig::WS_MAX_RECONNECT_MS);
+}
+
+bool WebSocketClient::canSend(uint8_t paramIndex) {
+    if (paramIndex >= 16) return false;
+
+    unsigned long now = millis();
+    if (now - _rateLimiter.lastSend[paramIndex] >= NetworkConfig::PARAM_THROTTLE_MS) {
+        _rateLimiter.lastSend[paramIndex] = now;
+        return true;
+    }
+    return false;
+}
+
+void WebSocketClient::sendJSON(const char* type, JsonDocument& doc) {
+    if (!isConnected()) {
+        #ifdef ENABLE_VERBOSE_DEBUG
+        Serial.printf(COLOR_WEBSOCKET "[WS]" ANSI_RESET " Drop: not connected (type=%s, status=%d)\n", 
+                      type ? type : "null", static_cast<int>(_status));
+        #endif
+        return;
+    }
+
+    // CRITICAL: Take mutex BEFORE accessing _jsonBuffer (prevents concurrent corruption)
+    if (!takeSendLock(SEND_MUTEX_TIMEOUT_MS)) {
+        // Mutex busy - drop message to prevent blocking (queue will retry)
+        #ifdef ENABLE_VERBOSE_DEBUG
+        Serial.printf(COLOR_WEBSOCKET "[WS]" ANSI_RESET " Drop: send mutex busy (type=%s)\n", type ? type : "null");
+        #endif
+        _consecutiveSendFailures++;
+        if (_consecutiveSendFailures > 3) {
+            _sendDegraded = true;
+            Serial.println(COLOR_WEBSOCKET "[WS]" ANSI_RESET " WARNING: Multiple send failures, marking as degraded");
+        }
+        return;
+    }
+
+    // Reset watchdog before potentially blocking operations
+    esp_task_wdt_reset();
+
+    // Track send attempt start time for timeout detection
+    _sendAttemptStartTime = millis();
+
+    // Create message with type field (LightwaveOS protocol: {"type": "...", ...})
+    JsonDocument message;
+    JsonObject msgObj = message.to<JsonObject>();
+    msgObj["type"] = type;
+
+    // Merge payload fields directly into message (not nested)
+    JsonObject docObj = doc.as<JsonObject>();
+    for (JsonPair kv : docObj) {
+        msgObj[kv.key().c_str()] = kv.value();
+    }
+
+    // Serialize to fixed buffer (drop if too large to prevent fragmentation)
+    #ifdef ENABLE_VERBOSE_DEBUG
+    if (g_debugEnabled) {
+        Serial.printf(COLOR_DEBUG "[DEBUG]" ANSI_RESET " sendJSON before serialize - Heap: free=%u minFree=%u largest=%u type=%s\n",
+                      ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap(), type ? type : "null");
+    }
+    #endif
+    size_t len = serializeJson(message, _jsonBuffer, JSON_BUFFER_SIZE - 1);
+    #ifdef ENABLE_VERBOSE_DEBUG
+    if (g_debugEnabled) {
+        Serial.printf(COLOR_DEBUG "[DEBUG]" ANSI_RESET " sendJSON after serialize - len=%u bufferSize=%u Heap: free=%u minFree=%u\n",
+                      len, JSON_BUFFER_SIZE, ESP.getFreeHeap(), ESP.getMinFreeHeap());
+    }
+    #endif
+    
+    if (len == 0 || len >= JSON_BUFFER_SIZE) {
+        #ifdef ENABLE_VERBOSE_DEBUG
+        Serial.printf(COLOR_WEBSOCKET "[WS]" ANSI_RESET " Message too large, dropping (type=%s, len=%u, max=%u)\n",
+                      type ? type : "null", (unsigned)len, JSON_BUFFER_SIZE);
+        #endif
+        releaseSendLock();
+        return;
+    }
+    _jsonBuffer[len] = '\0';  // Ensure null termination
+
+    // Send via WebSocket (non-blocking, but check for timeout)
+    esp_task_wdt_reset();  // Reset before send
+    
+    bool sendResult = _ws.sendTXT(_jsonBuffer);
+    
+    // Check send duration for timeout detection
+    uint32_t sendDuration = millis() - _sendAttemptStartTime;
+    if (sendDuration > SEND_TIMEOUT_MS) {
+        Serial.printf(COLOR_WEBSOCKET "[WS]" ANSI_RESET " WARNING: Send took %lu ms (threshold: %lu ms, type=%s)\n",
+                      sendDuration, SEND_TIMEOUT_MS, type ? type : "null");
+    }
+
+    // Track consecutive failures for graceful degradation
+    if (sendResult) {
+        _consecutiveSendFailures = 0;
+        if (_sendDegraded) {
+            Serial.println(COLOR_WEBSOCKET "[WS]" ANSI_RESET " Send succeeded, clearing degraded state");
+            _sendDegraded = false;
+        }
+    } else {
+        _consecutiveSendFailures++;
+        if (_consecutiveSendFailures > 3) {
+            _sendDegraded = true;
+            Serial.printf(COLOR_WEBSOCKET "[WS]" ANSI_RESET " WARNING: %u consecutive send failures, marking as degraded\n",
+                          _consecutiveSendFailures);
+        }
+    }
+
+    // Reset watchdog after send
+    esp_task_wdt_reset();
+
+    // Release mutex AFTER send completes
+    releaseSendLock();
+
+    #ifdef ENABLE_VERBOSE_DEBUG
+    if (g_debugEnabled) {
+        Serial.printf(COLOR_DEBUG "[DEBUG]" ANSI_RESET " sendJSON after sendTXT - Heap: free=%u minFree=%u largest=%u sendResult=%d duration=%lu\n",
+                      ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap(), 
+                      sendResult ? 1 : 0, sendDuration);
+    }
+    #endif
+}
+
+void WebSocketClient::sendHelloMessage() {
+    // On connect, request current status from LightwaveOS
+    // This triggers a "status" broadcast that syncs our local state
+    Serial.println(COLOR_WEBSOCKET "[WS]" ANSI_RESET " Sending hello (getStatus)");
+    JsonDocument doc;
+    // Empty payload - getStatus doesn't need parameters
+    sendJSON("getStatus", doc);
+
+    // Also request zone state
+    requestZonesState();
+
+    // Request color correction state (for presets)
+    requestColorCorrectionConfig();
+}
+
+void WebSocketClient::requestEffectsList(uint8_t page, uint8_t limit, const char* requestId) {
+    if (!isConnected()) return;
+    JsonDocument doc;
+    doc["page"] = page;
+    doc["limit"] = limit;
+    doc["details"] = false;
+    if (requestId && *requestId) doc["requestId"] = requestId;
+    sendJSON("effects.list", doc);
+}
+
+void WebSocketClient::requestPalettesList(uint8_t page, uint8_t limit, const char* requestId) {
+    if (!isConnected()) return;
+    JsonDocument doc;
+    doc["page"] = page;
+    doc["limit"] = limit;
+    if (requestId && *requestId) doc["requestId"] = requestId;
+    sendJSON("palettes.list", doc);
+}
+
+void WebSocketClient::requestZonesState() {
+    if (!isConnected()) return;
+    Serial.println(COLOR_WEBSOCKET "[WS]" ANSI_RESET " Requesting zone state (zones.get)");
+    JsonDocument doc;
+    // Empty payload - zones.get doesn't need parameters
+    sendJSON("zones.get", doc);
+}
+
+// ============================================================================
+// Global Parameter Commands (Unit A, encoders 0-7)
+// ============================================================================
+
+void WebSocketClient::sendEffectChange(uint8_t effectId) {
+    if (!isConnected()) {
+        return;
+    }
+
+    // Queue if throttled, send immediately if allowed
+    if (!canSend(ParamIndex::EFFECT)) {
+        queueParameterChange(ParamIndex::EFFECT, effectId, "effects.setCurrent");
+        return;
+    }
+
+    JsonDocument doc;
+    doc["effectId"] = effectId;
+    sendJSON("effects.setCurrent", doc);
+}
+
+void WebSocketClient::sendBrightnessChange(uint8_t brightness) {
+    if (!isConnected()) {
+        return;
+    }
+
+    if (!canSend(ParamIndex::BRIGHTNESS)) {
+        queueParameterChange(ParamIndex::BRIGHTNESS, brightness, "parameters.set");
+        return;
+    }
+
+    JsonDocument doc;
+    doc["brightness"] = brightness;
+    sendJSON("parameters.set", doc);
+}
+
+void WebSocketClient::sendPaletteChange(uint8_t paletteId) {
+    if (!isConnected()) {
+        return;
+    }
+
+    if (!canSend(ParamIndex::PALETTE)) {
+        queueParameterChange(ParamIndex::PALETTE, paletteId, "parameters.set");
+        return;
+    }
+
+    JsonDocument doc;
+    doc["paletteId"] = paletteId;
+    sendJSON("parameters.set", doc);
+}
+
+void WebSocketClient::sendSpeedChange(uint8_t speed) {
+    if (!isConnected()) {
+        return;
+    }
+
+    if (!canSend(ParamIndex::SPEED)) {
+        queueParameterChange(ParamIndex::SPEED, speed, "parameters.set");
+        return;
+    }
+
+    JsonDocument doc;
+    doc["speed"] = speed;
+    sendJSON("parameters.set", doc);
+}
+
+void WebSocketClient::sendMoodChange(uint8_t mood) {
+    if (!isConnected()) {
+        return;
+    }
+
+    if (!canSend(ParamIndex::MOOD)) {
+        queueParameterChange(ParamIndex::MOOD, mood, "parameters.set");
+        return;
+    }
+
+    JsonDocument doc;
+    doc["mood"] = mood;
+    sendJSON("parameters.set", doc);
+}
+
+void WebSocketClient::sendFadeAmountChange(uint8_t fadeAmount) {
+    if (!isConnected()) {
+        return;
+    }
+
+    if (!canSend(ParamIndex::FADEAMOUNT)) {
+        queueParameterChange(ParamIndex::FADEAMOUNT, fadeAmount, "parameters.set");
+        return;
+    }
+
+    JsonDocument doc;
+    doc["fadeAmount"] = fadeAmount;
+    sendJSON("parameters.set", doc);
+}
+
+void WebSocketClient::sendComplexityChange(uint8_t complexity) {
+    if (!isConnected()) {
+        return;
+    }
+
+    if (!canSend(ParamIndex::COMPLEXITY)) {
+        queueParameterChange(ParamIndex::COMPLEXITY, complexity, "parameters.set");
+        return;
+    }
+
+    JsonDocument doc;
+    doc["complexity"] = complexity;
+    sendJSON("parameters.set", doc);
+}
+
+void WebSocketClient::sendVariationChange(uint8_t variation) {
+    if (!isConnected()) {
+        return;
+    }
+
+    if (!canSend(ParamIndex::VARIATION)) {
+        queueParameterChange(ParamIndex::VARIATION, variation, "parameters.set");
+        return;
+    }
+
+    JsonDocument doc;
+    doc["variation"] = variation;
+    sendJSON("parameters.set", doc);
+}
+
+// ============================================================================
+// Zone Commands (Tab5 extension for Unit B, encoders 8-15)
+// ============================================================================
+
+void WebSocketClient::sendZoneEnable(bool enable) {
+    if (!isConnected()) {
+        return;
+    }
+
+    JsonDocument doc;
+    doc["enable"] = enable;
+    sendJSON("zone.enable", doc);
+}
+
+void WebSocketClient::sendZoneEffect(uint8_t zoneId, uint8_t effectId) {
+    if (!isConnected()) {
+        return;
+    }
+
+    // Map zoneId to rate limiter index
+    uint8_t paramIndex = ParamIndex::ZONE0_EFFECT + (zoneId * 2);
+    if (zoneId > 3) {
+        return;
+    }
+
+    if (!canSend(paramIndex)) {
+        queueParameterChange(paramIndex, effectId, "zones.setEffect", zoneId);
+        return;
+    }
+
+    JsonDocument doc;
+    doc["zoneId"] = zoneId;
+    doc["effectId"] = effectId;
+    sendJSON("zones.setEffect", doc);
+}
+
+void WebSocketClient::sendZoneBrightness(uint8_t zoneId, uint8_t value) {
+    // Zone brightness uses rate limiter slot for zone effect (same encoder pair)
+    // Note: Brightness is no longer a parameter in new layout, but API still supports it
+    uint8_t paramIndex = ParamIndex::ZONE0_EFFECT + (zoneId * 2);
+    if (zoneId > 3) {
+        return;
+    }
+
+    if (!canSend(paramIndex)) {
+        queueParameterChange(paramIndex, value, "zones.setBrightness", zoneId);
+        return;
+    }
+
+    JsonDocument doc;
+    doc["zoneId"] = zoneId;
+    doc["brightness"] = value;
+    sendJSON("zones.update", doc);
+}
+
+void WebSocketClient::sendZoneSpeed(uint8_t zoneId, uint8_t value) {
+    if (!isConnected()) {
+        return;
+    }
+
+    // Zone speed uses rate limiter slots (indices 9, 11, 13, 15)
+    uint8_t paramIndex = ParamIndex::ZONE0_SPEED + (zoneId * 2);
+    if (zoneId > 3) {
+        return;
+    }
+
+    if (!canSend(paramIndex)) {
+        queueParameterChange(paramIndex, value, "zones.setSpeed", zoneId);
+        return;
+    }
+
+    JsonDocument doc;
+    doc["zoneId"] = zoneId;
+    doc["speed"] = value;
+    sendJSON("zones.update", doc);
+}
+
+void WebSocketClient::sendZonePalette(uint8_t zoneId, uint8_t paletteId) {
+    if (!isConnected()) {
+        return;
+    }
+
+    // Zone palette shares rate limit with zone effect (same encoder)
+    uint8_t paramIndex = ParamIndex::ZONE0_EFFECT + (zoneId * 2);
+    if (zoneId > 3) {
+        return;
+    }
+
+    if (!canSend(paramIndex)) {
+        queueParameterChange(paramIndex, paletteId, "zones.setPalette", zoneId);
+        return;
+    }
+
+    JsonDocument doc;
+    doc["zoneId"] = zoneId;
+    doc["paletteId"] = paletteId;
+    sendJSON("zones.update", doc);
+}
+
+void WebSocketClient::sendZoneBlend(uint8_t zoneId, uint8_t blendMode) {
+    // Zone blend uses rate limiter slot for zone effect (same encoder pair)
+    uint8_t paramIndex = ParamIndex::ZONE0_EFFECT + (zoneId * 2);
+    if (zoneId > 3 || blendMode > 7) {
+        return;
+    }
+
+    if (!canSend(paramIndex)) {
+        queueParameterChange(paramIndex, blendMode, "zones.setBlend", zoneId);
+        return;
+    }
+
+    JsonDocument doc;
+    doc["zoneId"] = zoneId;
+    doc["blendMode"] = blendMode;
+    sendJSON("zones.update", doc);
+}
+
+void WebSocketClient::sendZonesSetLayout(const struct zones::ZoneSegment* segments, uint8_t zoneCount) {
+    if (!isConnected() || !segments || zoneCount == 0 || zoneCount > zones::MAX_ZONES) {
+        // #region agent log
+        {
+            // HWS4: Prove layout pushes are being skipped due to connection/state gating.
+            char buf[240];
+            const int n = snprintf(
+                buf, sizeof(buf),
+                "{\"sessionId\":\"debug-session\",\"runId\":\"tab5-zone-ui-pre\",\"hypothesisId\":\"HWS4\",\"location\":\"Tab5.encoder/src/network/WebSocketClient.cpp:sendZonesSetLayout\",\"message\":\"ws.zonesSetLayout.skipped\",\"data\":{\"connected\":%s,\"segmentsNull\":%s,\"zoneCount\":%u},\"timestamp\":%lu}",
+                isConnected() ? "true" : "false",
+                segments ? "false" : "true",
+                static_cast<unsigned>(zoneCount),
+                static_cast<unsigned long>(millis())
+            );
+            if (n > 0) Serial.println(buf);
+        }
+        // #endregion
+        return;
+    }
+
+    // Serialize segments array to JSON
+    JsonDocument doc;
+    JsonArray zonesArray = doc["zones"].to<JsonArray>();
+
+    for (uint8_t i = 0; i < zoneCount; i++) {
+        JsonObject zoneObj = zonesArray.add<JsonObject>();
+        zoneObj["zoneId"] = segments[i].zoneId;
+        zoneObj["s1LeftStart"] = segments[i].s1LeftStart;
+        zoneObj["s1LeftEnd"] = segments[i].s1LeftEnd;
+        zoneObj["s1RightStart"] = segments[i].s1RightStart;
+        zoneObj["s1RightEnd"] = segments[i].s1RightEnd;
+        // Note: totalLeds is calculated by server, but we can include it for validation
+        zoneObj["totalLeds"] = segments[i].totalLeds;
+    }
+
+    sendJSON("zones.setLayout", doc);
+}
+
+// ============================================================================
+// Color Correction Commands
+// ============================================================================
+
+void WebSocketClient::requestColorCorrectionConfig() {
+    if (!isConnected()) {
+        return;
+    }
+
+    JsonDocument doc;
+    // Empty payload
+    sendJSON("colorCorrection.getConfig", doc);
+}
+
+void WebSocketClient::sendColorCorrectionConfig(bool gammaEnabled, float gammaValue,
+                               bool autoExposureEnabled, uint8_t autoExposureTarget,
+                               bool brownGuardrailEnabled, uint8_t mode) {
+    // #region agent log
+    // NOTE: Do NOT write to host filesystem paths from firmware. Serial-only tracing is safe.
+    Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1,H2\",\"location\":\"WebSocketClient.cpp:sendColorCorrectionConfig\",\"message\":\"entry\",\"data\":{\"connected\":%d,\"gammaEnabled\":%d,\"gammaValue\":%.1f,\"aeEnabled\":%d,\"aeTarget\":%d,\"brownEnabled\":%d,\"mode\":%d},\"timestamp\":%lu}\n",
+                  isConnected() ? 1 : 0, gammaEnabled ? 1 : 0, gammaValue, autoExposureEnabled ? 1 : 0,
+                  autoExposureTarget, brownGuardrailEnabled ? 1 : 0, mode, (unsigned long)millis());
+    // #endregion
+    
+    if (!isConnected()) {
+        // #region agent log
+        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H2\",\"location\":\"WebSocketClient.cpp:594\",\"message\":\"sendColorCorrectionConfig.notConnected\",\"data\":{\"status\":%d},\"timestamp\":%lu}\n",
+                      (int)_status, (unsigned long)millis());
+        // #endregion
+        return;
+    }
+
+    JsonDocument doc;
+    doc["gammaEnabled"] = gammaEnabled;
+    doc["gammaValue"] = gammaValue;
+    doc["autoExposureEnabled"] = autoExposureEnabled;
+    doc["autoExposureTarget"] = autoExposureTarget;
+    doc["brownGuardrailEnabled"] = brownGuardrailEnabled;
+    doc["mode"] = mode;  // Include mode field - server requires all fields in setConfig
+    
+    // #region agent log
+    Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H3\",\"location\":\"WebSocketClient.cpp:606\",\"message\":\"sendColorCorrectionConfig.jsonPrepared\",\"data\":{\"command\":\"colorCorrection.setConfig\"},\"timestamp\":%lu}\n",
+                  (unsigned long)millis());
+    // #endregion
+    
+    Serial.printf(COLOR_WEBSOCKET "[WS]" ANSI_RESET " Sending colorCorrection.setConfig: gamma=%s(%.1f) ae=%s brown=%s mode=%d\n",
+                  gammaEnabled ? "ON" : "OFF", gammaValue,
+                  autoExposureEnabled ? "ON" : "OFF",
+                  brownGuardrailEnabled ? "ON" : "OFF",
+                  mode);
+    
+    sendJSON("colorCorrection.setConfig", doc);
+}
+
+void WebSocketClient::sendGammaChange(bool enabled, float value) {
+    if (!isConnected()) {
+        return;
+    }
+    
+    JsonDocument doc;
+    doc["enabled"] = enabled;
+    doc["value"] = value;
+    sendJSON("colorCorrection.setGamma", doc);
+}
+
+void WebSocketClient::sendAutoExposureChange(bool enabled, uint8_t target) {
+    if (!isConnected()) {
+        return;
+    }
+    
+    JsonDocument doc;
+    doc["enabled"] = enabled;
+    doc["target"] = target;
+    sendJSON("colorCorrection.setAutoExposure", doc);
+}
+
+void WebSocketClient::sendBrownGuardrailChange(bool enabled) {
+    if (!isConnected()) {
+        return;
+    }
+    
+    JsonDocument doc;
+    doc["enabled"] = enabled;
+    sendJSON("colorCorrection.setBrownGuardrail", doc);
+}
+
+void WebSocketClient::sendColourCorrectionMode(uint8_t mode) {
+    if (!isConnected()) {
+        return;
+    }
+    
+    JsonDocument doc;
+    doc["mode"] = mode;
+    sendJSON("colorCorrection.setMode", doc);
+}
+
+// ============================================================================
+// Send Queue Management (non-blocking, prevents freeze on rapid encoder changes)
+// ============================================================================
+
+bool WebSocketClient::takeSendLock(uint32_t timeoutMs) {
+    if (_sendMutex == nullptr) {
+        return false;
+    }
+    
+    TickType_t timeoutTicks = (timeoutMs == 0) ? 0 : pdMS_TO_TICKS(timeoutMs);
+    return xSemaphoreTake(_sendMutex, timeoutTicks) == pdTRUE;
+}
+
+void WebSocketClient::releaseSendLock() {
+    if (_sendMutex != nullptr) {
+        xSemaphoreGive(_sendMutex);
+    }
+}
+
+void WebSocketClient::queueParameterChange(uint8_t paramIndex, uint8_t value, const char* type, uint8_t zoneId) {
+    if (paramIndex >= SEND_QUEUE_SIZE) {
+        return;
+    }
+
+    // Drop-oldest strategy: simply update the queue entry for this parameter
+    // If a send is in progress, this value will be sent next time
+    _sendQueue[paramIndex].paramIndex = paramIndex;
+    _sendQueue[paramIndex].value = value;
+    _sendQueue[paramIndex].zoneId = zoneId;  // 255 = not a zone parameter
+    _sendQueue[paramIndex].timestamp = millis();
+    _sendQueue[paramIndex].type = type;
+    _sendQueue[paramIndex].valid = true;
+}
+
+void WebSocketClient::processSendQueue() {
+    if (!isConnected() || _sendDegraded) {
+        // Clear queue if WebSocket unavailable
+        for (size_t i = 0; i < SEND_QUEUE_SIZE; i++) {
+            _sendQueue[i].reset();
+        }
+        return;
+    }
+
+    uint32_t now = millis();
+
+    // Process queue entries
+    for (size_t i = 0; i < SEND_QUEUE_SIZE; i++) {
+        if (!_sendQueue[i].valid) {
+            continue;
+        }
+
+        // Drop stale messages (older than 500ms)
+        if (now - _sendQueue[i].timestamp > NetworkConfig::SEND_QUEUE_STALE_TIMEOUT_MS) {
+            _sendQueue[i].reset();
+            continue;
+        }
+
+        // Check if throttle allows this send
+        if (!canSend(_sendQueue[i].paramIndex)) {
+            continue;  // Skip for now, will retry next update
+        }
+
+        // Try to send (non-blocking)
+        if (takeSendLock(0)) {  // Try lock, don't wait
+            // Reset watchdog before send attempt
+            esp_task_wdt_reset();
+
+            // Create JSON document with parameter value
+            JsonDocument doc;
+            const char* sendType = _sendQueue[i].type;  // Default to stored type
+            
+            // Handle zone parameters vs global parameters
+            if (_sendQueue[i].zoneId < 4) {
+                // Zone parameter
+                doc["zoneId"] = _sendQueue[i].zoneId;
+                // Extract field name from type (e.g., "zones.setEffect" -> "effectId")
+                if (strstr(_sendQueue[i].type, "setEffect") != nullptr) {
+                    doc["effectId"] = _sendQueue[i].value;
+                    sendType = "zones.setEffect";
+                } else if (strstr(_sendQueue[i].type, "setSpeed") != nullptr) {
+                    doc["speed"] = _sendQueue[i].value;
+                    sendType = "zones.update";
+                } else if (strstr(_sendQueue[i].type, "setPalette") != nullptr) {
+                    doc["paletteId"] = _sendQueue[i].value;
+                    sendType = "zones.update";
+                } else if (strstr(_sendQueue[i].type, "setBrightness") != nullptr) {
+                    doc["brightness"] = _sendQueue[i].value;
+                    sendType = "zones.update";
+                } else if (strstr(_sendQueue[i].type, "setBlend") != nullptr) {
+                    doc["blendMode"] = _sendQueue[i].value;
+                    sendType = "zones.update";
+                } else {
+                    doc["value"] = _sendQueue[i].value;
+                }
+            } else {
+                // Global parameter - map paramIndex to field name
+                switch (_sendQueue[i].paramIndex) {
+                    case ParamIndex::EFFECT:
+                        doc["effectId"] = _sendQueue[i].value;
+                        sendType = "effects.setCurrent";
+                        break;
+                    case ParamIndex::BRIGHTNESS:
+                        doc["brightness"] = _sendQueue[i].value;
+                        sendType = "parameters.set";
+                        break;
+                    case ParamIndex::PALETTE:
+                        doc["paletteId"] = _sendQueue[i].value;
+                        sendType = "parameters.set";
+                        break;
+                    case ParamIndex::SPEED:
+                        doc["speed"] = _sendQueue[i].value;
+                        sendType = "parameters.set";
+                        break;
+                    case ParamIndex::MOOD:
+                        doc["mood"] = _sendQueue[i].value;
+                        sendType = "parameters.set";
+                        break;
+                    case ParamIndex::FADEAMOUNT:
+                        doc["fadeAmount"] = _sendQueue[i].value;
+                        sendType = "parameters.set";
+                        break;
+                    case ParamIndex::COMPLEXITY:
+                        doc["complexity"] = _sendQueue[i].value;
+                        sendType = "parameters.set";
+                        break;
+                    case ParamIndex::VARIATION:
+                        doc["variation"] = _sendQueue[i].value;
+                        sendType = "parameters.set";
+                        break;
+                    default:
+                        // Unknown parameter - drop
+                        _sendQueue[i].reset();
+                        releaseSendLock();
+                        continue;
+                }
+            }
+            
+            // Send (non-blocking, protected by mutex)
+            _sendAttemptStartTime = millis();
+            sendJSON(sendType, doc);
+            
+            // Check timeout after send
+            uint32_t sendDuration = millis() - _sendAttemptStartTime;
+            if (sendDuration > SEND_TIMEOUT_MS) {
+                Serial.printf(COLOR_WEBSOCKET "[WS]" ANSI_RESET " WARNING: Send took %lu ms (threshold: %lu ms)\n", 
+                              sendDuration, SEND_TIMEOUT_MS);
+            }
+
+            // Reset watchdog after send
+            esp_task_wdt_reset();
+
+            // Mark queue entry as sent
+            _sendQueue[i].reset();
+
+            releaseSendLock();
+            break;  // Only send one message per update() call to prevent blocking
+        }
+        // If lock not available, try again next update
+    }
+}
+
+// ============================================================================
+// Generic Commands
+// ============================================================================
+
+void WebSocketClient::sendGenericParameter(const char* fieldName, uint8_t value) {
+    if (!isConnected()) {
+        return;
+    }
+
+    JsonDocument doc;
+    doc[fieldName] = value;
+    sendJSON("parameters.set", doc);
+}
+
+const char* WebSocketClient::getStatusString() const {
+    switch (_status) {
+        case WebSocketStatus::DISCONNECTED: return "Disconnected";
+        case WebSocketStatus::CONNECTING:   return "Connecting";
+        case WebSocketStatus::CONNECTED:    return "Connected";
+        case WebSocketStatus::ERROR:        return "Error";
+        default:                            return "Unknown";
+    }
+}
+
+#endif // ENABLE_WIFI

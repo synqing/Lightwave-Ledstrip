@@ -41,12 +41,20 @@
 #include "AudioTuning.h"
 #include "GoertzelAnalyzer.h"
 #include "ChromaAnalyzer.h"
+#include "emotiscope/EmotiscopeAudio.h"
 #if FEATURE_STYLE_DETECTION
 #include "StyleDetector.h"
 #endif
+#include "k1/K1AudioFrontEnd.h"
+#include "k1/FeatureBus.h"
 #include "contracts/AudioTime.h"
 #include "contracts/ControlBus.h"
 #include "contracts/SnapshotBuffer.h"
+
+// Phase 2 Integration: Dual-bank architecture
+#include "AudioRingBuffer.h"
+#include "RhythmBank.h"
+#include "HarmonyBank.h"
 
 // Tempo tracker
 #include "tempo/TempoTracker.h"
@@ -107,6 +115,30 @@ struct AudioDspState {
     int16_t peakCentered = 0;
     float meanSample = 0.0f;
     uint16_t clipCount = 0;
+};
+
+/**
+ * @brief Unified audio feature frame from dual-bank analysis
+ *
+ * Phase 2 Integration: Combines RhythmBank and HarmonyBank outputs
+ * into a unified structure for TempoTracker and effects.
+ */
+struct AudioFeatureFrame {
+    float rhythmFlux;           ///< RhythmBank onset strength
+    float harmonyFlux;          ///< HarmonyBank onset strength
+    float chroma[12];           ///< 12-bin chroma (A-G#)
+    float chromaStability;      ///< [0,1] harmonic stability
+    uint64_t timestamp;         ///< Sample counter
+
+    /**
+     * @brief Get unified onset strength (weighted combination)
+     *
+     * 70% rhythm (kick/snare transients) + 30% harmony (chord changes)
+     * Matches perceptual importance of rhythm vs harmony for beat detection.
+     */
+    float getOnsetStrength() const {
+        return 0.7f * rhythmFlux + 0.3f * harmonyFlux;
+    }
 };
 
 /**
@@ -447,6 +479,16 @@ private:
     // Phase 2: DSP Processing State
     // ========================================================================
 
+    // Emotiscope Audio Pipeline (64-bin Goertzel, tempo, VU)
+    emotiscope::EmotiscopeAudio m_emotiscope;
+
+    // Float buffer for EmotiscopeAudio input (HOP_SIZE samples)
+    float m_hopBufferFloat[HOP_SIZE] = {0};
+
+    // Beat tracking state for rising edge detection (Emotiscope beat_tick)
+    float m_prevEmoBeat = -1.0f;
+
+    // Legacy analyzers (kept for compatibility, may be removed in Phase 6)
     // Goertzel frequency analyzer (8 bands, 512-sample window)
     GoertzelAnalyzer m_analyzer;
 
@@ -466,6 +508,24 @@ private:
 
     // Lock-free buffer for cross-core sharing with RendererActor
     SnapshotBuffer<ControlBusFrame> m_controlBusBuffer;
+
+    // K1 Dual-Bank Goertzel Front-End
+    k1::K1AudioFrontEnd m_k1FrontEnd;
+    k1::FeatureBus m_featureBus;
+
+    // ========================================================================
+    // Phase 2 Integration: Dual-Bank Architecture + Ring Buffer
+    // ========================================================================
+
+    // Ring buffer for audio samples (required for variable-window Goertzel)
+    AudioRingBuffer<float, 2048> m_ringBuffer;
+
+    // Dual-bank Goertzel analyzers
+    RhythmBank m_rhythmBank;    // 24 bins, 60-600 Hz (kick, snare, toms)
+    HarmonyBank m_harmonyBank;  // 64 bins, 200-2000 Hz (chroma, stability)
+
+    // Latest feature frame from dual-bank analysis
+    AudioFeatureFrame m_latestFrame;
 
     // Monotonic sample counter (64-bit for no overflow)
     uint64_t m_sampleIndex = 0;

@@ -1,0 +1,74 @@
+/**
+ * @file BPMEffect.h
+ * @brief BPM - Dual-layer beat-synced effect with traveling waves and expanding rings
+ *
+ * Effect ID: 6
+ * Family: GEOMETRIC
+ * Tags: CENTER_ORIGIN | TRAVELING | AUDIO_REACTIVE
+ *
+ * v2 REWRITE - Fixes fundamental design flaw (no wave propagation)
+ *
+ * Dual-Layer Architecture:
+ * - LAYER 1: Background traveling sine wave from center (continuous)
+ * - LAYER 2: Beat-triggered expanding rings (on each beat)
+ *
+ * Audio Integration (v8 pattern):
+ * - heavy_bands → Spring → wave speed modulation
+ * - beatStrength → ring intensity
+ * - tempoConfidence → ring expansion rate
+ * - Palette-based colors (NO chromagram - causes muddy colors)
+ */
+
+#pragma once
+
+#include "../../plugins/api/IEffect.h"
+#include "../../plugins/api/EffectContext.h"
+#include "../../effects/enhancement/SmoothingEngine.h"
+#include <FastLED.h>
+
+namespace lightwaveos {
+namespace effects {
+namespace ieffect {
+
+class BPMEffect : public plugins::IEffect {
+public:
+    BPMEffect();
+    ~BPMEffect() override = default;
+
+    // IEffect interface
+    bool init(plugins::EffectContext& ctx) override;
+    void render(plugins::EffectContext& ctx) override;
+    void cleanup() override;
+    const plugins::EffectMetadata& getMetadata() const override;
+
+private:
+    // v2: Wave phase accumulator (was missing - caused static gradient!)
+    float m_phase = 0.0f;
+
+    // v2: Spring for smooth speed modulation (v8 pattern)
+    enhancement::Spring m_speedSpring;
+    
+    // Audio smoothing (AsymmetricFollower for natural attack/release)
+    enhancement::AsymmetricFollower m_heavyEnergyFollower{0.0f, 0.05f, 0.30f};
+    enhancement::AsymmetricFollower m_beatStrengthFollower{0.0f, 0.05f, 0.30f};
+    enhancement::AsymmetricFollower m_tempoConfFollower{0.0f, 0.05f, 0.30f};
+    
+    // Hop sequence tracking
+    uint32_t m_lastHopSeq = 0;
+    float m_targetHeavyEnergy = 0.0f;
+    float m_targetBeatStrength = 0.0f;
+    float m_targetTempoConf = 0.0f;
+
+    // v2: Ring buffer for beat-triggered expanding rings
+    static constexpr int MAX_RINGS = 4;
+    float m_ringRadius[MAX_RINGS] = {0};
+    float m_ringIntensity[MAX_RINGS] = {0};
+    uint8_t m_nextRing = 0;
+
+    // Tempo lock hysteresis
+    bool m_tempoLocked = false;
+};
+
+} // namespace ieffect
+} // namespace effects
+} // namespace lightwaveos

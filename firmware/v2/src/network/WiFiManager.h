@@ -49,6 +49,7 @@
 #include <freertos/semphr.h>
 
 #include "../config/network_config.h"
+#include "WiFiCredentialsStorage.h"
 
 namespace lightwaveos {
 namespace network {
@@ -294,35 +295,66 @@ public:
     void scanNetworks();
 
     // ========================================================================
-    // OTA / Mode Override Control
+    // Stubs for API compatibility (features not in this version)
     // ========================================================================
 
     /**
-     * @brief Temporarily enable STA mode (for OTA without AP-only lock-in)
-     *
-     * This requests the WiFi task to switch to STA mode and attempt to connect
-     * using the configured credentials. Optionally, it can revert back to
-     * AP-only mode after a timeout.
-     *
-     * Notes:
-     * - This does NOT attempt AP+STA dual-mode (historically unreliable).
-     * - If AP-only is forced at compile time, this override is temporary and
-     *   will not survive reboot unless FORCE_AP_MODE is disabled in build flags.
-     *
-     * @param durationMs If >0 and revertToApOnly is true, revert after this duration.
-     * @param revertToApOnly If true, revert to AP-only mode when duration expires.
+     * @brief Request STA mode enable (stub)
      */
-    void requestSTAEnable(uint32_t durationMs = 0, bool revertToApOnly = false);
+    bool requestSTAEnable(uint32_t timeoutMs = 0, bool autoRevert = false) { 
+        (void)timeoutMs; (void)autoRevert; 
+        return false; 
+    }
 
     /**
-     * @brief Force AP-only mode immediately (cancels any STA window)
+     * @brief Request AP-only mode (stub)
      */
-    void requestAPOnly();
+    bool requestAPOnly() { return false; }
 
     /**
-     * @brief Check if a runtime AP-only override is currently active
+     * @brief Check if force AP-only mode is active (stub)
      */
-    bool isForceApOnlyRuntime() const { return m_forceApModeRuntime; }
+    bool isForceApOnlyRuntime() const { return false; }
+
+    /**
+     * @brief Get saved networks (stub - returns 0)
+     */
+    uint8_t getSavedNetworks(WiFiCredentialsStorage::NetworkCredential* out, uint8_t maxNetworks) const {
+        (void)out; (void)maxNetworks;
+        return 0;
+    }
+
+    /**
+     * @brief Add network to saved list (stub)
+     */
+    bool addNetwork(const String& ssid, const String& password) {
+        (void)ssid; (void)password;
+        return false;
+    }
+
+    /**
+     * @brief Delete saved network (stub)
+     */
+    bool deleteSavedNetwork(const String& ssid) {
+        (void)ssid;
+        return false;
+    }
+
+    /**
+     * @brief Connect to network (stub)
+     */
+    bool connectToNetwork(const String& ssid, const String& password) {
+        (void)ssid; (void)password;
+        return false;
+    }
+
+    /**
+     * @brief Connect to saved network (stub)
+     */
+    bool connectToSavedNetwork(const String& ssid) {
+        (void)ssid;
+        return false;
+    }
 
 private:
     // ========================================================================
@@ -378,7 +410,6 @@ private:
     void setState(WiFiState newState);
     void switchToNextNetwork();
     bool hasSecondaryNetwork() const;
-    void applyPendingModeChange();
 
     // ========================================================================
     // Event Handler
@@ -456,21 +487,9 @@ private:
     // ========================================================================
 
     bool m_apEnabled = false;
-    bool m_apStarted = false;
     String m_apSSID = "LightwaveOS-AP";
     String m_apPassword = "lightwave123";
     uint8_t m_apChannel = 1;
-
-    // ========================================================================
-    // Runtime Mode Overrides (used for OTA workflows)
-    // ========================================================================
-
-    bool m_forceApModeRuntime = config::NetworkConfig::FORCE_AP_MODE;
-    bool m_pendingModeChange = false;
-    bool m_pendingForceApModeRuntime = config::NetworkConfig::FORCE_AP_MODE;
-    bool m_pendingRevertToApOnly = false;
-    uint32_t m_staWindowEndMs = 0;
-    uint32_t m_pendingApplyAtMs = 0;
 };
 
 // ============================================================================

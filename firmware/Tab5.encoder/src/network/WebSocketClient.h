@@ -16,6 +16,8 @@
 #include <WebSocketsClient.h>
 #include <ArduinoJson.h>
 #include <functional>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include "config/network_config.h"
 #include "../zones/ZoneDefinition.h"
 
@@ -136,7 +138,7 @@ public:
     void requestColorCorrectionConfig();
     void sendColorCorrectionConfig(bool gammaEnabled, float gammaValue,
                                    bool autoExposureEnabled, uint8_t autoExposureTarget,
-                                   bool brownGuardrailEnabled);
+                                   bool brownGuardrailEnabled, uint8_t mode = 2);
     void sendGammaChange(bool enabled, float value);
     void sendAutoExposureChange(bool enabled, uint8_t target);
     void sendBrownGuardrailChange(bool enabled);
@@ -194,12 +196,40 @@ private:
     };
     RateLimiter _rateLimiter;
 
+    // Send queue for parameter changes (prevents blocking on rapid encoder changes)
+    struct PendingMessage {
+        uint8_t paramIndex;
+        uint8_t value;
+        uint8_t zoneId;  // For zone parameters (0-3), unused for global params
+        uint32_t timestamp;
+        const char* type;
+        bool valid;
+        
+        void reset() {
+            valid = false;
+            paramIndex = 0;
+            value = 0;
+            zoneId = 0;
+            timestamp = 0;
+            type = nullptr;
+        }
+    };
+    static constexpr size_t SEND_QUEUE_SIZE = 16;  // One per parameter
+    PendingMessage _sendQueue[SEND_QUEUE_SIZE];
+    uint32_t _consecutiveSendFailures;
+    bool _sendDegraded;
+
+    // Mutex protection for _jsonBuffer (prevents concurrent access corruption)
+    SemaphoreHandle_t _sendMutex;
+    static constexpr uint32_t SEND_MUTEX_TIMEOUT_MS = 10;  // 10ms max wait
+    static constexpr uint32_t SEND_TIMEOUT_MS = 50;  // 50ms max send time
+    uint32_t _sendAttemptStartTime;
+
     // Parameter indices for rate limiting
     // Note: Unit B (8-15) encoders are disabled, but zone functions may still be called from UI
     enum ParamIndex : uint8_t {
         EFFECT = 0, BRIGHTNESS = 1, PALETTE = 2, SPEED = 3,
         MOOD = 4, FADEAMOUNT = 5, COMPLEXITY = 6, VARIATION = 7,
-        // Unit B (8-15) - Rate limiter indices for zone functions (not encoder parameters)
         ZONE0_EFFECT = 8, ZONE0_SPEED = 9,
         ZONE1_EFFECT = 10, ZONE1_SPEED = 11,
         ZONE2_EFFECT = 12, ZONE2_SPEED = 13,
@@ -210,74 +240,27 @@ private:
     static constexpr size_t JSON_BUFFER_SIZE = 256;
     char _jsonBuffer[JSON_BUFFER_SIZE];
 
-    // Internal methods
     void handleEvent(WStype_t type, uint8_t* payload, size_t length);
     void attemptReconnect();
     void resetReconnectBackoff();
     void increaseReconnectBackoff();
-    bool canSend(uint8_t paramIndex);
-    void sendJSON(const char* type, JsonDocument& doc);
     void sendHelloMessage();
-};
-
-#else // ENABLE_WIFI == 0
-
-// Stub class when WiFi is disabled
-enum class WebSocketStatus {
-    DISCONNECTED,
-    ERROR
-};
-
-// Stub ColorCorrectionState for non-WiFi builds
-struct ColorCorrectionState {
-    bool gammaEnabled = true;
-    float gammaValue = 2.2f;
-    bool autoExposureEnabled = false;
-    uint8_t autoExposureTarget = 110;
-    bool brownGuardrailEnabled = false;
-    uint8_t maxGreenPercentOfRed = 28;
-    uint8_t maxBluePercentOfRed = 8;
-    uint8_t mode = 2;
-    bool valid = false;
-};
-
-class WebSocketClient {
-public:
-    WebSocketClient() {}
-    void begin(const char*, uint16_t = 80, const char* = "/ws") {}
-    // Note: begin(IPAddress, ...) omitted - not needed when WiFi disabled
-    void update() {}
-    WebSocketStatus getStatus() const { return WebSocketStatus::DISCONNECTED; }
-    bool isConnected() const { return false; }
-    bool isConnecting() const { return false; }
-    unsigned long getReconnectDelay() const { return 0; }
-    template<typename F> void onMessage(F) {}  // Accept any callback, do nothing
-    void sendEffectChange(uint8_t) {}
-    void sendPaletteChange(uint8_t) {}
-    void sendSpeedChange(uint8_t) {}
-    void sendMoodChange(uint8_t) {}
-    void sendFadeAmountChange(uint8_t) {}
-    void sendBrightnessChange(uint8_t) {}
-    void sendComplexityChange(uint8_t) {}
-    void sendVariationChange(uint8_t) {}
-    void sendZoneEnable(bool) {}
-    void sendZoneEffect(uint8_t, uint8_t) {}
-    void sendZoneBrightness(uint8_t, uint8_t) {}
-    void sendZoneSpeed(uint8_t, uint8_t) {}
-    void sendZonePalette(uint8_t, uint8_t) {}
-    void sendZoneBlend(uint8_t, uint8_t) {}
-    void sendZonesSetLayout(const struct zones::ZoneSegment*, uint8_t) {}
-    void sendGenericParameter(const char*, uint8_t) {}
-    // Color correction stubs
-    void requestColorCorrectionConfig() {}
-    void sendColorCorrectionConfig(bool, float, bool, uint8_t, bool) {}
-    void sendGammaChange(bool, float) {}
-    void sendAutoExposureChange(bool, uint8_t) {}
-    void sendBrownGuardrailChange(bool) {}
-    const ColorCorrectionState& getColorCorrectionState() const { static ColorCorrectionState s; return s; }
-    void setColorCorrectionState(const ColorCorrectionState&) {}
-    void disconnect() {}
-    const char* getStatusString() const { return "WiFi Disabled"; }
+    
+    // Check if parameter send is allowed (rate limiting)
+    bool canSend(uint8_t paramIndex);
+    
+    // Send JSON message (non-blocking, protected by mutex)
+    void sendJSON(const char* type, JsonDocument& doc);
+    
+    // Queue parameter change for later sending (prevents blocking)
+    void queueParameterChange(uint8_t paramIndex, uint8_t value, const char* type, uint8_t zoneId = 255);
+    
+    // Process send queue (called from update())
+    void processSendQueue();
+    
+    // Mutex helpers
+    bool takeSendLock(uint32_t timeoutMs = SEND_MUTEX_TIMEOUT_MS);
+    void releaseSendLock();
 };
 
 #endif // ENABLE_WIFI

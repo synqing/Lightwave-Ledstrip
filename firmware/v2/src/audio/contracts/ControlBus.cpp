@@ -20,6 +20,9 @@ void ControlBus::Reset() {
     m_frame = ControlBusFrame{};
     m_rms_s = 0.0f;
     m_flux_s = 0.0f;
+    m_liveliness_s = 0.0f;
+    m_last_time = AudioTime{};
+    m_time_valid = false;
     for (uint8_t i = 0; i < CONTROLBUS_NUM_BANDS; ++i) {
         m_bands_s[i] = 0.0f;
         m_heavy_bands_s[i] = 0.0f;
@@ -262,6 +265,18 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     m_frame.t = now;
     m_frame.hop_seq++;
 
+    // Estimate hop delta time for frame-rate independent smoothing
+    float dt = 0.016f;  // Fallback ~60 FPS
+    const bool had_time = m_time_valid;
+    if (had_time) {
+        float dt_s = AudioTime_SecondsBetween(m_last_time, now);
+        if (dt_s > 0.0f && dt_s < 1.0f) {
+            dt = dt_s;
+        }
+    }
+    m_last_time = now;
+    m_time_valid = true;
+
     // ========================================================================
     // Stage 1: Clamp raw inputs to 0..1
     // ========================================================================
@@ -435,6 +450,23 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     m_frame.tempoLocked = raw.tempoLocked;
     m_frame.tempoConfidence = raw.tempoConfidence;
     m_frame.tempoBeatTick = raw.tempoBeatTick;
+
+    // ========================================================================
+    // Stage 4c.1: Liveliness (tempo + spectral flux) for global speed trim
+    // ========================================================================
+    const float tempoConf = clamp01(m_frame.tempoConfidence);
+    const float fluxNow = clamp01(m_frame.fast_flux);
+    float rawLiveliness = clamp01(tempoConf * 0.6f + fluxNow * 0.4f);
+
+    // Exponential smoothing with time-constant mapping
+    const float tau = 0.30f;
+    const float alpha = 1.0f - expf(-dt / tau);
+    if (!had_time) {
+        m_liveliness_s = rawLiveliness;
+    } else {
+        m_liveliness_s = lerp(m_liveliness_s, rawLiveliness, alpha);
+    }
+    m_frame.liveliness = clamp01(m_liveliness_s);
 
     // ========================================================================
     // Stage 4d: Musical saliency computation (Musical Intelligence System Phase 1)

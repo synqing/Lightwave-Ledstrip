@@ -1,16 +1,16 @@
 /**
  * @file RippleEnhancedEffect.h
- * @brief Beat-synchronized ripple effect with musical intelligence
- *
- * Enhanced version of RippleEffect with:
- * - Beat-sync ripple spawning (ripples spawn ON the beat)
- * - Downbeat emphasis (stronger ripples on beat 1)
- * - Style-adaptive response (EDM=fast, ambient=slow)
- * - Harmonic saliency for color shifts
+ * @brief Ripple Enhanced - improved thresholds, snare triggers, treble shimmer
  *
  * Effect ID: 97
  * Family: FLUID_PLASMA
- * Tags: CENTER_ORIGIN | TRAVELING | AUDIO_SYNC
+ * Tags: CENTER_ORIGIN | TRAVELING
+ *
+ * Enhancements over RippleEffect (ID 8):
+ * - Improved 64-bin kick threshold (0.4f instead of 0.5f)
+ * - Enhanced treble shimmer threshold (0.08f instead of 0.1f)
+ * - Guaranteed snare hit ripple spawn
+ * - Beat/downbeat edge spawn (latched, not hop-gated)
  */
 
 #pragma once
@@ -18,6 +18,7 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../CoreEffects.h"
+#include "../enhancement/SmoothingEngine.h"
 #include <FastLED.h>
 
 namespace lightwaveos {
@@ -29,6 +30,7 @@ public:
     RippleEnhancedEffect();
     ~RippleEnhancedEffect() override = default;
 
+    // IEffect interface
     bool init(plugins::EffectContext& ctx) override;
     void render(plugins::EffectContext& ctx) override;
     void cleanup() override;
@@ -41,24 +43,39 @@ private:
         uint8_t hue;
         uint8_t intensity;
         bool active;
-        bool isDownbeat;  // True if spawned on downbeat (stronger)
     };
-
-    static constexpr uint8_t MAX_RIPPLES = 6;
+    static constexpr uint8_t MAX_RIPPLES = 5;
     Ripple m_ripples[MAX_RIPPLES];
+    uint32_t m_lastHopSeq = 0;
+    uint8_t m_spawnCooldown = 0;
+    float m_lastChromaEnergy = 0.0f;
+    static constexpr uint8_t CHROMA_HISTORY = 4;
+    float m_chromaEnergyHist[CHROMA_HISTORY] = {0.0f};
+    float m_chromaEnergySum = 0.0f;
+    uint8_t m_chromaHistIdx = 0;
 
-    // Beat tracking
+    // Beat tracking (edge-latched, not hop-gated)
     bool m_lastBeatState = false;
     bool m_lastDownbeatState = false;
-    float m_beatPhaseAccum = 0.0f;
-    uint32_t m_lastHopSeq = 0;  // Track audio hop sequence for spawn gating
 
-    // Style-adaptive parameters (updated each frame)
-    float m_styleSpeedMult = 1.0f;
-    float m_styleIntensityMult = 1.0f;
-
-    // Radial LED buffer (center-origin)
+    // Radial LED history buffer (centre-out)
     CRGB m_radial[HALF_LENGTH];
+    CRGB m_radialAux[HALF_LENGTH];
+
+    // Audio smoothing (AsymmetricFollower for natural attack/release)
+    enhancement::AsymmetricFollower m_chromaFollowers[12];
+    enhancement::AsymmetricFollower m_kickFollower{0.0f, 0.05f, 0.30f};
+    enhancement::AsymmetricFollower m_trebleFollower{0.0f, 0.05f, 0.30f};
+
+    // Chromagram smoothing state
+    float m_chromaSmoothed[12] = {0.0f};
+    float m_chromaTargets[12] = {0.0f};
+
+    // 64-bin spectrum tracking for enhanced audio response
+    float m_kickPulse = 0.0f;
+    float m_trebleShimmer = 0.0f;
+    float m_targetKick = 0.0f;
+    float m_targetTreble = 0.0f;
 };
 
 } // namespace ieffect

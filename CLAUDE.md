@@ -494,6 +494,23 @@ Connect at 115200 baud. Key commands:
 - `s <1-50>` - Set speed
 - `h` - Help menu
 
+### Debug System (Unified)
+
+Per-domain debug control with on-demand diagnostics. **Full docs:** [firmware/v2/docs/debugging/DEBUG_SYSTEM.md](firmware/v2/docs/debugging/DEBUG_SYSTEM.md)
+
+```
+dbg                  - Show current debug config
+dbg <0-5>            - Set global level (0=OFF, 2=WARN default, 5=TRACE)
+dbg audio <0-5>      - Set audio domain level
+dbg render <0-5>     - Set render domain level
+dbg status           - Print audio health NOW (one-shot)
+dbg spectrum         - Print 64-bin FFT NOW (one-shot)
+dbg memory           - Print heap/stack NOW (one-shot)
+dbg interval status <N>    - Auto-print every N seconds (0=off)
+```
+
+**Legacy `adbg` still works:** `adbg` / `adbg <0-5>` / `adbg status` equivalent to `dbg audio`.
+
 ## Dependencies
 
 - `FastLED@3.10.0` - LED control with ESP32 RMT driver

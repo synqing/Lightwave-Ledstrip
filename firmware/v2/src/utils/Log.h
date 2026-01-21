@@ -53,6 +53,7 @@
 #define LW_CLR_WARN        LW_CLR_MAGENTA
 #define LW_CLR_INFO        LW_CLR_GREEN
 #define LW_CLR_DEBUG       LW_CLR_GRAY
+#define LW_CLR_VERBOSE     LW_CLR_GRAY    // Alias for domain-aware macros
 
 // ============================================================================
 // Log Level Configuration
@@ -208,3 +209,89 @@
 // Legacy patterns still supported:
 //   Serial.printf("Effect %d: \033[1;32m%s\033[0m\n", id, name);  // Still works
 //   Serial.printf("Effect %d: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n", id, name);  // New style
+
+// ============================================================================
+// Domain-Aware Logging Macros (Unified Debug System)
+// ============================================================================
+// These macros check the runtime DebugConfig to determine if logging should occur.
+// They provide per-domain verbosity control without breaking the existing macros above.
+//
+// Usage:
+//   LW_AUDIO_LOGI("Calibration complete: noise=%d", noiseFloor);
+//   LW_RENDER_LOGW("Slow frame: %lu ms", frameTime);
+//   LW_NET_LOGD("WebSocket message: %s", msg);
+//
+// Levels:
+//   E = ERROR   (1) - Actual failures
+//   W = WARN    (2) - Actionable warnings
+//   I = INFO    (3) - Significant events
+//   D = VERBOSE (4) - Diagnostic values (named VERBOSE to avoid DEBUG macro conflict)
+//   T = TRACE   (5) - Everything (per-frame, raw samples)
+//
+// Configuration via serial:
+//   dbg 3              - Set global level to INFO
+//   dbg audio 5        - Set audio domain to TRACE
+//   dbg render 2       - Set render domain to WARN only
+
+#include "config/DebugConfig.h"
+
+// Domain-aware logging - checks DebugConfig at runtime
+#define LW_DOMAIN_LOG(domain, level, fmt, ...) \
+    do { \
+        if (lightwaveos::config::getDebugConfig().shouldLog( \
+                lightwaveos::config::DebugDomain::domain, \
+                lightwaveos::config::DebugLevel::level)) { \
+            LW_LOG_PRINTF(LW_LOG_FORMAT(#level, LW_CLR_##level, fmt), \
+                          (unsigned long)LW_LOG_MILLIS(), ##__VA_ARGS__); \
+        } \
+    } while(0)
+
+// ----------------------------------------------------------------------------
+// Audio Domain Logging
+// ----------------------------------------------------------------------------
+// Use for: audio capture, DSP, AGC, calibration, beat tracking, spectrum analysis
+#define LW_AUDIO_LOGE(fmt, ...) LW_DOMAIN_LOG(AUDIO, ERROR, fmt, ##__VA_ARGS__)
+#define LW_AUDIO_LOGW(fmt, ...) LW_DOMAIN_LOG(AUDIO, WARN, fmt, ##__VA_ARGS__)
+#define LW_AUDIO_LOGI(fmt, ...) LW_DOMAIN_LOG(AUDIO, INFO, fmt, ##__VA_ARGS__)
+#define LW_AUDIO_LOGD(fmt, ...) LW_DOMAIN_LOG(AUDIO, VERBOSE, fmt, ##__VA_ARGS__)
+#define LW_AUDIO_LOGT(fmt, ...) LW_DOMAIN_LOG(AUDIO, TRACE, fmt, ##__VA_ARGS__)
+
+// ----------------------------------------------------------------------------
+// Render Domain Logging
+// ----------------------------------------------------------------------------
+// Use for: effect rendering, FastLED, frame timing, transitions, zones
+#define LW_RENDER_LOGE(fmt, ...) LW_DOMAIN_LOG(RENDER, ERROR, fmt, ##__VA_ARGS__)
+#define LW_RENDER_LOGW(fmt, ...) LW_DOMAIN_LOG(RENDER, WARN, fmt, ##__VA_ARGS__)
+#define LW_RENDER_LOGI(fmt, ...) LW_DOMAIN_LOG(RENDER, INFO, fmt, ##__VA_ARGS__)
+#define LW_RENDER_LOGD(fmt, ...) LW_DOMAIN_LOG(RENDER, VERBOSE, fmt, ##__VA_ARGS__)
+#define LW_RENDER_LOGT(fmt, ...) LW_DOMAIN_LOG(RENDER, TRACE, fmt, ##__VA_ARGS__)
+
+// ----------------------------------------------------------------------------
+// Network Domain Logging
+// ----------------------------------------------------------------------------
+// Use for: WiFi, WebSocket, REST API, HTTP, mDNS
+#define LW_NET_LOGE(fmt, ...) LW_DOMAIN_LOG(NETWORK, ERROR, fmt, ##__VA_ARGS__)
+#define LW_NET_LOGW(fmt, ...) LW_DOMAIN_LOG(NETWORK, WARN, fmt, ##__VA_ARGS__)
+#define LW_NET_LOGI(fmt, ...) LW_DOMAIN_LOG(NETWORK, INFO, fmt, ##__VA_ARGS__)
+#define LW_NET_LOGD(fmt, ...) LW_DOMAIN_LOG(NETWORK, VERBOSE, fmt, ##__VA_ARGS__)
+#define LW_NET_LOGT(fmt, ...) LW_DOMAIN_LOG(NETWORK, TRACE, fmt, ##__VA_ARGS__)
+
+// ----------------------------------------------------------------------------
+// Actor Domain Logging
+// ----------------------------------------------------------------------------
+// Use for: actor system, message queues, FreeRTOS tasks, inter-actor communication
+#define LW_ACTOR_LOGE(fmt, ...) LW_DOMAIN_LOG(ACTOR, ERROR, fmt, ##__VA_ARGS__)
+#define LW_ACTOR_LOGW(fmt, ...) LW_DOMAIN_LOG(ACTOR, WARN, fmt, ##__VA_ARGS__)
+#define LW_ACTOR_LOGI(fmt, ...) LW_DOMAIN_LOG(ACTOR, INFO, fmt, ##__VA_ARGS__)
+#define LW_ACTOR_LOGD(fmt, ...) LW_DOMAIN_LOG(ACTOR, VERBOSE, fmt, ##__VA_ARGS__)
+#define LW_ACTOR_LOGT(fmt, ...) LW_DOMAIN_LOG(ACTOR, TRACE, fmt, ##__VA_ARGS__)
+
+// ----------------------------------------------------------------------------
+// System Domain Logging
+// ----------------------------------------------------------------------------
+// Use for: boot, init, memory management, general system diagnostics
+#define LW_SYS_LOGE(fmt, ...) LW_DOMAIN_LOG(SYSTEM, ERROR, fmt, ##__VA_ARGS__)
+#define LW_SYS_LOGW(fmt, ...) LW_DOMAIN_LOG(SYSTEM, WARN, fmt, ##__VA_ARGS__)
+#define LW_SYS_LOGI(fmt, ...) LW_DOMAIN_LOG(SYSTEM, INFO, fmt, ##__VA_ARGS__)
+#define LW_SYS_LOGD(fmt, ...) LW_DOMAIN_LOG(SYSTEM, VERBOSE, fmt, ##__VA_ARGS__)
+#define LW_SYS_LOGT(fmt, ...) LW_DOMAIN_LOG(SYSTEM, TRACE, fmt, ##__VA_ARGS__)

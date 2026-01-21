@@ -508,6 +508,32 @@ void V1ApiRoutes::registerRoutes(
         }
     );
 
+    // Unified Debug Config routes (always available)
+    // GET /api/v1/debug/config - Returns full debug configuration
+    registry.onGet("/api/v1/debug/config", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::DebugHandlers::handleDebugConfigGet(request);
+    });
+
+    // POST /api/v1/debug/config - Update debug configuration
+    registry.onPost("/api/v1/debug/config",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::DebugHandlers::handleDebugConfigSet(request, data, len);
+        }
+    );
+
+    // POST /api/v1/debug/status - Trigger one-shot status print and return JSON
+    registry.onPost("/api/v1/debug/status", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::DebugHandlers::handleDebugStatus(request, ctx.actorSystem);
+    });
+
     // Transition routes
     registry.onGet("/api/v1/transitions/types", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;

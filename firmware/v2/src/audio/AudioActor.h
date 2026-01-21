@@ -186,6 +186,34 @@ public:
      */
     void resetStats();
 
+    // ========================================================================
+    // One-Shot Debug Output Methods (called by serial commands)
+    // ========================================================================
+
+    /**
+     * @brief Print health summary (mic level, RMS, AGC state)
+     *
+     * Called by 'dbg status' or 'adbg status' serial command.
+     * Prints regardless of verbosity level (user-triggered).
+     */
+    void printStatus();
+
+    /**
+     * @brief Print current 8-band and 64-bin spectrum
+     *
+     * Called by 'dbg spectrum' or 'adbg spectrum' serial command.
+     * Prints regardless of verbosity level (user-triggered).
+     */
+    void printSpectrum();
+
+    /**
+     * @brief Print beat tracking state (BPM, phase, confidence)
+     *
+     * Called by 'dbg beat' or 'adbg beat' serial command.
+     * Prints regardless of verbosity level (user-triggered).
+     */
+    void printBeat();
+
 
     // ========================================================================
     // Buffer Access (for Phase 2 processing)

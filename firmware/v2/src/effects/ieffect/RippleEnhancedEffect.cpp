@@ -1,10 +1,11 @@
 /**
  * @file RippleEnhancedEffect.cpp
- * @brief Beat-synchronized ripple effect with musical intelligence
+ * @brief Ripple Enhanced effect - Enhanced version with improved thresholds and snare triggers
  */
 
 #include "RippleEnhancedEffect.h"
 #include "../CoreEffects.h"
+#include "../enhancement/SmoothingEngine.h"
 #include "../../config/features.h"
 #include <FastLED.h>
 #include <cmath>
@@ -14,195 +15,331 @@ namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
-RippleEnhancedEffect::RippleEnhancedEffect() {
+RippleEnhancedEffect::RippleEnhancedEffect()
+{
+    // Initialize all ripples as inactive
     for (uint8_t i = 0; i < MAX_RIPPLES; i++) {
         m_ripples[i].active = false;
-        m_ripples[i].radius = 0.0f;
-        m_ripples[i].speed = 0.0f;
+        m_ripples[i].radius = 0;
+        m_ripples[i].speed = 0;
         m_ripples[i].hue = 0;
         m_ripples[i].intensity = 255;
-        m_ripples[i].isDownbeat = false;
     }
     memset(m_radial, 0, sizeof(m_radial));
+    memset(m_radialAux, 0, sizeof(m_radialAux));
 }
 
 bool RippleEnhancedEffect::init(plugins::EffectContext& ctx) {
-    (void)ctx;
+    // Reset all ripples
     for (uint8_t i = 0; i < MAX_RIPPLES; i++) {
         m_ripples[i].active = false;
+        m_ripples[i].radius = 0;
+        m_ripples[i].intensity = 255;
+    }
+    m_lastHopSeq = 0;
+    m_spawnCooldown = 0;
+    m_lastChromaEnergy = 0.0f;
+    m_chromaEnergySum = 0.0f;
+    m_chromaHistIdx = 0;
+    for (uint8_t i = 0; i < CHROMA_HISTORY; ++i) {
+        m_chromaEnergyHist[i] = 0.0f;
     }
     m_lastBeatState = false;
     m_lastDownbeatState = false;
-    m_beatPhaseAccum = 0.0f;
-    m_lastHopSeq = 0;
-    m_styleSpeedMult = 1.0f;
-    m_styleIntensityMult = 1.0f;
     memset(m_radial, 0, sizeof(m_radial));
+    memset(m_radialAux, 0, sizeof(m_radialAux));
+    // Initialize smoothing followers
+    m_kickFollower.reset(0.0f);
+    m_trebleFollower.reset(0.0f);
+    for (uint8_t i = 0; i < 12; i++) {
+        m_chromaFollowers[i].reset(0.0f);
+        m_chromaSmoothed[i] = 0.0f;
+        m_chromaTargets[i] = 0.0f;
+    }
+    m_kickPulse = 0.0f;
+    m_trebleShimmer = 0.0f;
+    m_targetKick = 0.0f;
+    m_targetTreble = 0.0f;
     return true;
 }
 
 void RippleEnhancedEffect::render(plugins::EffectContext& ctx) {
-    // =========================================================================
-    // CENTER ORIGIN RIPPLE ENHANCED
-    // Beat-synchronized ripples expanding from center with musical intelligence
-    // =========================================================================
+    // CENTER ORIGIN RIPPLE - Ripples expand from center
+    //
+    // STATEFUL EFFECT: This effect maintains ripple state (position, speed, hue) across frames
+    // in the m_ripples[] array. Ripples spawn at center and expand outward. Identified
+    // in PatternRegistry::isStatefulEffect().
 
-    // Fade previous frame
-    fadeToBlackBy(m_radial, HALF_LENGTH, 40);
+    // Fade radial buffer using fadeAmount parameter
+    fadeToBlackBy(m_radial, HALF_LENGTH, ctx.fadeAmount);
 
     const bool hasAudio = ctx.audio.available;
+    bool newHop = false;
+    bool beatOnset = false;
+    bool downbeatOnset = false;
+    float dt = ctx.getSafeDeltaSeconds();
+    float moodNorm = ctx.getMoodNormalized();
 
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
-        // =================================================================
-        // STYLE-ADAPTIVE PARAMETERS
-        // Adjust ripple behavior based on detected music style
-        // =================================================================
-        if (ctx.audio.isRhythmicMusic()) {
-            // EDM/Hip-hop: Fast, punchy ripples
-            m_styleSpeedMult = 1.5f;
-            m_styleIntensityMult = 1.2f;
-        } else if (ctx.audio.isHarmonicMusic()) {
-            // Jazz/Classical: Moderate speed, focus on color
-            m_styleSpeedMult = 1.0f;
-            m_styleIntensityMult = 1.0f;
-        } else if (ctx.audio.isTextureMusic()) {
-            // Ambient/Drone: Slow, gentle ripples
-            m_styleSpeedMult = 0.6f;
-            m_styleIntensityMult = 0.8f;
-        } else if (ctx.audio.isMelodicMusic()) {
-            // Vocal pop: Medium speed, melodic color shifts
-            m_styleSpeedMult = 1.1f;
-            m_styleIntensityMult = 1.0f;
-        } else {
-            // Default/Unknown
-            m_styleSpeedMult = 1.0f;
-            m_styleIntensityMult = 1.0f;
-        }
+        // Beat/downbeat edge detection (not hop-gated)
+        const bool currentBeat = ctx.audio.isOnBeat();
+        const bool currentDownbeat = ctx.audio.isOnDownbeat();
+        beatOnset = currentBeat && !m_lastBeatState;
+        downbeatOnset = currentDownbeat && !m_lastDownbeatState;
+        m_lastBeatState = currentBeat;
+        m_lastDownbeatState = currentDownbeat;
 
-        // =================================================================
-        // BEAT-SYNC RIPPLE SPAWNING
-        // Spawn ripples ON the beat for tight sync
-        // Gate to audio hop rate (not every render frame)
-        // =================================================================
-        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+        newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
         if (newHop) {
             m_lastHopSeq = ctx.audio.controlBus.hop_seq;
-            
-            bool currentBeat = ctx.audio.isOnBeat();
-            bool currentDownbeat = ctx.audio.isOnDownbeat();
 
-            // Edge detection: spawn only on beat onset (not while held)
-            bool beatOnset = currentBeat && !m_lastBeatState;
-            bool downbeatOnset = currentDownbeat && !m_lastDownbeatState;
-            m_lastBeatState = currentBeat;
-            m_lastDownbeatState = currentDownbeat;
-
-            if (beatOnset || downbeatOnset) {
-            // Find inactive ripple slot
-            for (uint8_t r = 0; r < MAX_RIPPLES; r++) {
-                if (!m_ripples[r].active) {
-                    m_ripples[r].radius = 0.0f;
-                    m_ripples[r].active = true;
-                    m_ripples[r].isDownbeat = downbeatOnset;
-
-                    // Base speed from user slider, modified by style
-                    float baseSpeed = 1.0f + 2.0f * (ctx.speed / 50.0f);
-                    m_ripples[r].speed = baseSpeed * m_styleSpeedMult;
-
-                    // Intensity: downbeats are stronger
-                    float intensityBase = 200.0f;
-                    if (downbeatOnset) {
-                        intensityBase = 255.0f;
-                        m_ripples[r].speed *= 1.2f;  // Downbeat ripples move faster
-                    }
-                    intensityBase *= m_styleIntensityMult;
-                    if (intensityBase > 255.0f) intensityBase = 255.0f;
-                    m_ripples[r].intensity = (uint8_t)intensityBase;
-
-                    // Hue: base from gHue, shift by harmonic saliency
-                    float harmonicShift = ctx.audio.harmonicSaliency() * 40.0f;
-                    m_ripples[r].hue = ctx.gHue + (uint8_t)harmonicShift;
-
-                    // Add chord-based warmth
-                    if (ctx.audio.chordConfidence() > 0.3f) {
-                        if (ctx.audio.isMajor()) {
-                            m_ripples[r].hue += 20;  // Warm shift
-                        } else if (ctx.audio.isMinor()) {
-                            m_ripples[r].hue -= 20;  // Cool shift
-                        }
-                    }
-
-                    break;  // Only spawn one ripple per beat
-                }
+            // =====================================================================
+            // 64-bin Sub-Bass Kick Detection (bins 0-5 = 110-155 Hz)
+            // Deep kick drums that the 12-bin chromagram misses entirely.
+            // =====================================================================
+            float kickSum = 0.0f;
+            for (uint8_t i = 0; i < 6; ++i) {
+                kickSum += ctx.audio.bin(i);
             }
+            m_targetKick = kickSum / 6.0f;
+
+            // =====================================================================
+            // 64-bin Treble Shimmer (bins 48-63 = 1.3-4.2 kHz)
+            // Hi-hat and cymbal energy for wavefront sparkle enhancement.
+            // =====================================================================
+            float trebleSum = 0.0f;
+            for (uint8_t i = 48; i < 64; ++i) {
+                trebleSum += ctx.audio.bin(i);
+            }
+            m_targetTreble = trebleSum / 16.0f;
+
+            // Update chromagram targets
+            for (uint8_t i = 0; i < 12; i++) {
+                m_chromaTargets[i] = ctx.audio.controlBus.heavy_chroma[i];
             }
         }
 
-        // =================================================================
-        // BEAT PHASE MODULATION
-        // Smooth ripple expansion synced to beat phase
-        // =================================================================
-        float beatPhase = ctx.audio.beatPhase();
-        m_beatPhaseAccum = beatPhase;
+        // Smooth toward targets every frame with MOOD-adjusted smoothing
+        m_kickPulse = m_kickFollower.updateWithMood(m_targetKick, dt, moodNorm);
+        m_trebleShimmer = m_trebleFollower.updateWithMood(m_targetTreble, dt, moodNorm);
+
+        // Smooth chromagram with AsymmetricFollower
+        for (uint8_t i = 0; i < 12; i++) {
+            m_chromaSmoothed[i] = m_chromaFollowers[i].updateWithMood(
+                m_chromaTargets[i], dt, moodNorm);
+        }
+    } else {
+        m_lastBeatState = false;
+        m_lastDownbeatState = false;
+    }
+#endif
+
+    uint8_t spawnChance = 0;
+    float energyNorm = 0.0f;
+    float energyDelta = 0.0f;
+    uint8_t dominantBin = 0;
+    float energyAvg = 0.0f;
+#if FEATURE_AUDIO_SYNC
+    if (hasAudio && newHop) {
+        const float led_share = 255.0f / 12.0f;
+        float chromaEnergy = 0.0f;
+        float maxBinVal = 0.0f;
+        for (uint8_t i = 0; i < 12; ++i) {
+            float bin = m_chromaSmoothed[i];  // Use smoothed chromagram
+            // FIX: Use sqrt scaling instead of squaring to preserve low-level signals
+            float bright = sqrtf(bin) * 1.5f;
+            if (bright > 1.0f) bright = 1.0f;
+            if (bright > maxBinVal) {
+                maxBinVal = bright;
+                dominantBin = i;
+            }
+            chromaEnergy += bright * led_share;
+        }
+        energyNorm = chromaEnergy / 255.0f;
+        if (energyNorm < 0.0f) energyNorm = 0.0f;
+        if (energyNorm > 1.0f) energyNorm = 1.0f;
+
+        m_chromaEnergySum -= m_chromaEnergyHist[m_chromaHistIdx];
+        m_chromaEnergyHist[m_chromaHistIdx] = energyNorm;
+        m_chromaEnergySum += energyNorm;
+        m_chromaHistIdx = (m_chromaHistIdx + 1) % CHROMA_HISTORY;
+        energyAvg = m_chromaEnergySum / CHROMA_HISTORY;
+
+        energyDelta = energyNorm - energyAvg;
+        // FIX: Allow small negative delta to still contribute (halve threshold)
+        if (energyDelta < -0.1f) energyDelta = 0.0f;
+        else if (energyDelta < 0.0f) energyDelta = 0.0f;  // Clamp to zero but don't skip
+        m_lastChromaEnergy = energyNorm;
+
+        // FIX: Lower spawn threshold multipliers for more activity
+        float chanceF = energyDelta * 400.0f + energyAvg * 120.0f;
+        if (chanceF > 255.0f) chanceF = 255.0f;
+        spawnChance = (uint8_t)chanceF;
+    } else
+#endif
+    if (!hasAudio) {
+        spawnChance = 0;  // No ripples without audio - was 10, causing animation without audio
+    }
+
+    if (m_spawnCooldown > 0) {
+        m_spawnCooldown--;
+    }
+
+    // Spawn new ripples at centre (audio-reactive when available)
+    if (hasAudio && !newHop) {
+        spawnChance = 0;
+    }
+
+    // Enhanced: No chord reactivity (removed - not proven feature)
+
+    // =========================================================================
+    // UNIFIED SPEED SCALING - all ripple types use ctx.speed
+    // Range: 1.0 (slow) to 3.0 (fast) based on speed slider
+    // =========================================================================
+    const float speedScale = 1.0f + 2.0f * (ctx.speed / 50.0f);
+
+    // =========================================================================
+    // BEAT/DOWNBEAT EDGE RIPPLE (latched, not hop-gated)
+    // =========================================================================
+#if FEATURE_AUDIO_SYNC
+    if (hasAudio && (beatOnset || downbeatOnset)) {
+        for (uint8_t r = 0; r < MAX_RIPPLES; ++r) {
+            if (!m_ripples[r].active) {
+                m_ripples[r].radius = 0.0f;
+                m_ripples[r].intensity = downbeatOnset ? 255 : 210;
+                m_ripples[r].speed = speedScale * (downbeatOnset ? 1.2f : 1.0f);
+                float harmonicShift = ctx.audio.harmonicSaliency() * 40.0f;
+                m_ripples[r].hue = ctx.gHue + (uint8_t)harmonicShift;
+                m_ripples[r].active = true;
+                m_spawnCooldown = 1;
+                break;
+            }
+        }
     }
 #endif
 
     // =========================================================================
-    // UPDATE AND RENDER RIPPLES
+    // 64-bin KICK-TRIGGERED RIPPLE (sub-bass bins 0-5)
+    // Most powerful ripple spawn - deep bass drops that chromagram misses.
+    // Bypasses normal spawn chance for immediate punchy response.
     // =========================================================================
-    float dt = ctx.getSafeDeltaSeconds();
-
-    for (uint8_t r = 0; r < MAX_RIPPLES; r++) {
-        if (!m_ripples[r].active) continue;
-
-        // Expand ripple
-        m_ripples[r].radius += m_ripples[r].speed * dt * 60.0f;  // 60 = base FPS normalization
-
-        // Deactivate when past edge
-        if (m_ripples[r].radius > HALF_LENGTH + 3.0f) {
-            m_ripples[r].active = false;
-            continue;
+#if FEATURE_AUDIO_SYNC
+    if (hasAudio && m_kickPulse > 0.4f && m_spawnCooldown == 0) {  // Enhanced: Lower threshold (0.4f instead of 0.5f)
+        for (uint8_t r = 0; r < MAX_RIPPLES; ++r) {
+            if (!m_ripples[r].active) {
+                m_ripples[r].radius = 0.0f;      // Start at center
+                m_ripples[r].intensity = 255;    // Max intensity for bass punch
+                m_ripples[r].speed = speedScale; // Uses unified speed from slider
+                // Bass-driven warm hue (palette index based on kick intensity)
+                m_ripples[r].hue = ctx.gHue + (uint8_t)(m_kickPulse * 30.0f);
+                m_ripples[r].active = true;
+                m_spawnCooldown = 2;             // Prevent overlapping bass ripples
+                break;
+            }
         }
+    }
+#endif
 
-        // Draw ripple wavefront
-        for (uint16_t dist = 0; dist < HALF_LENGTH; dist++) {
-            float wavePos = (float)dist - m_ripples[r].radius;
-            float waveAbs = fabsf(wavePos);
+    // Force ripple spawn on snare hit (percussion trigger)
+#if FEATURE_AUDIO_SYNC
+    if (hasAudio && ctx.audio.isSnareHit()) {
+        for (uint8_t r = 0; r < MAX_RIPPLES; ++r) {
+            if (!m_ripples[r].active) {
+                m_ripples[r].radius = 0.0f;      // Reset at center
+                m_ripples[r].intensity = 255;    // Max intensity for snare burst
+                m_ripples[r].speed = speedScale; // Uses unified speed from slider
+                // Enhanced: Use dominant chroma bin for hue (no chord reactivity)
+                m_ripples[r].hue = ctx.gHue + (uint8_t)(dominantBin * (255.0f / 12.0f));
+                m_ripples[r].active = true;
+                m_spawnCooldown = 1;             // Brief cooldown
+                break;
+            }
+        }
+    }
+#endif
 
-            // Wavefront width: 3 LEDs for normal, 5 for downbeat
-            float width = m_ripples[r].isDownbeat ? 5.0f : 3.0f;
+    if (spawnChance > 0 && m_spawnCooldown == 0 && random8() < spawnChance) {
+        for (int i = 0; i < MAX_RIPPLES; i++) {
+            if (!m_ripples[i].active) {
+                // Random variation around speedScale (0.5 to 1.5x speedScale)
+                float speedVariation = 0.5f + (random8() / 255.0f);
+                uint8_t intensity = 180;
+                if (hasAudio) {
+                    float energy = energyAvg;
+                    // Energy boost adds 0 to 0.5x variation
+                    speedVariation += (energy * 0.3f + energyDelta * 0.2f);
+                    float intensityF = 100.0f + energy * 155.0f + energyDelta * 100.0f;
+                    if (intensityF > 255.0f) intensityF = 255.0f;
+                    intensity = (uint8_t)intensityF;
+                }
 
-            if (waveAbs < width) {
-                // Brightness falls off from wavefront center
-                float falloff = 1.0f - (waveAbs / width);
-                uint8_t brightness = (uint8_t)(falloff * 255.0f);
-
-                // Edge fade: ripples dim as they approach edge
-                float edgeFade = 1.0f - (m_ripples[r].radius / (float)HALF_LENGTH);
-                if (edgeFade < 0.0f) edgeFade = 0.0f;
-                brightness = scale8(brightness, (uint8_t)(edgeFade * 255.0f));
-
-                // Apply ripple intensity
-                brightness = scale8(brightness, m_ripples[r].intensity);
-
-                // Get color from palette
-                uint8_t paletteIdx = m_ripples[r].hue + (uint8_t)(dist * 0.5f);
-                CRGB color = ctx.palette.getColor(paletteIdx, brightness);
-
-                // Additive blend to radial buffer
-                m_radial[dist].r = qadd8(m_radial[dist].r, color.r);
-                m_radial[dist].g = qadd8(m_radial[dist].g, color.g);
-                m_radial[dist].b = qadd8(m_radial[dist].b, color.b);
+                m_ripples[i].radius = 0;
+                m_ripples[i].speed = speedScale * speedVariation;
+                if (m_ripples[i].speed > speedScale * 1.5f) m_ripples[i].speed = speedScale * 1.5f;
+                if (hasAudio) {
+                    // Enhanced: Use chroma-based hue (no chord reactivity)
+                    float hueBase = (dominantBin * (255.0f / 12.0f)) + ctx.gHue;
+                    m_ripples[i].hue = (uint8_t)hueBase;
+                } else {
+                    m_ripples[i].hue = random8();
+                }
+                m_ripples[i].intensity = intensity;
+                m_ripples[i].active = true;
+                m_spawnCooldown = hasAudio ? 1 : 4;
+                break;
             }
         }
     }
 
-    // =========================================================================
-    // OUTPUT TO LED STRIP (CENTER ORIGIN)
-    // =========================================================================
-    for (uint16_t dist = 0; dist < HALF_LENGTH; dist++) {
-        SET_CENTER_PAIR(ctx, dist, m_radial[dist]);
+    // Update and render ripples
+    for (int r = 0; r < MAX_RIPPLES; r++) {
+        if (!m_ripples[r].active) continue;
+
+        m_ripples[r].radius += m_ripples[r].speed * (ctx.speed / 10.0f);
+
+        if (m_ripples[r].radius > HALF_LENGTH) {
+            m_ripples[r].active = false;
+            continue;
+        }
+
+        // Draw ripple into radial history buffer
+        for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
+            float wavePos = (float)dist - m_ripples[r].radius;
+            float waveAbs = fabsf(wavePos);
+            if (waveAbs < 3.0f) {
+                uint8_t brightness = 255 - (uint8_t)(waveAbs * 85.0f);
+                uint8_t edgeFade = (uint8_t)((HALF_LENGTH - m_ripples[r].radius) * 255.0f / HALF_LENGTH);
+                brightness = scale8(brightness, edgeFade);
+                brightness = scale8(brightness, m_ripples[r].intensity);
+
+                // =========================================================
+                // 64-bin TREBLE SHIMMER on wavefront (bins 48-63)
+                // Hi-hat/cymbal energy adds sparkle to the leading edge.
+                // Stronger at wavefront (waveAbs~0), fades toward trailing edge.
+                // =========================================================
+                if (m_trebleShimmer > 0.08f) {  // Enhanced: Lower threshold (0.08f instead of 0.1f)
+                    float shimmerFade = 1.0f - (waveAbs / 3.0f);  // 1.0 at front, 0.0 at back
+                    uint8_t shimmerBoost = (uint8_t)(m_trebleShimmer * shimmerFade * 60.0f);
+                    brightness = qadd8(brightness, shimmerBoost);
+                }
+
+                CRGB color = ctx.palette.getColor(
+                    m_ripples[r].hue + (uint8_t)dist,
+                    brightness);
+                // Keep colours within palette: select brightest contributor.
+                if (brightness > m_radial[dist].getAverageLight()) {
+                    m_radial[dist] = color;
+                }
+            }
+        }
+    }
+
+    memcpy(m_radialAux, m_radial, sizeof(m_radial));
+
+    // Render radial history buffer to LEDs (centre-origin)
+    for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
+        SET_CENTER_PAIR(ctx, dist, m_radialAux[dist]);
     }
 }
 
@@ -213,10 +350,9 @@ void RippleEnhancedEffect::cleanup() {
 const plugins::EffectMetadata& RippleEnhancedEffect::getMetadata() const {
     static plugins::EffectMetadata meta{
         "Ripple Enhanced",
-        "Beat-synchronized ripples with musical intelligence",
+        "Enhanced: Improved 64-bin thresholds, snare triggers, treble shimmer",
         plugins::EffectCategory::WATER,
-        1,
-        "LightwaveOS"
+        1
     };
     return meta;
 }

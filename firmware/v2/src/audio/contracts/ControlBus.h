@@ -86,6 +86,9 @@ struct ControlBusFrame {
     float fast_rms = 0.0f;
     float fast_flux = 0.0f;
 
+    // Audio-driven liveliness scalar for global speed trim (0..1)
+    float liveliness = 0.0f;
+
     float bands[CONTROLBUS_NUM_BANDS] = {0};
     float chroma[CONTROLBUS_NUM_CHROMA] = {0};
     float heavy_bands[CONTROLBUS_NUM_BANDS] = {0};
@@ -305,6 +308,11 @@ public:
 
 private:
     ControlBusFrame m_frame{};
+
+    // Liveliness smoothing state
+    float m_liveliness_s = 0.0f;
+    AudioTime m_last_time{};
+    bool m_time_valid = false;
 
     // One-pole smoothing state
     float m_rms_s = 0.0f;

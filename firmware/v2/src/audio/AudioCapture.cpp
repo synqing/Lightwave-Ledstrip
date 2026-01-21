@@ -122,13 +122,15 @@ CaptureResult AudioCapture::captureHop(int16_t* buffer)
         memset(&buffer[monoSamplesRead], 0, (HOP_SIZE - monoSamplesRead) * sizeof(int16_t));
     }
 
-    // Debug logging
+    // DMA Debug logging - Level 5 (TRACE) only
+    // This is deep debugging info, not needed for normal operation
+    // Use 'adbg 5' to enable, or 'adbg status' for one-shot info
     static uint32_t s_dbgHop = 0;
     static bool s_firstPrint = true;
     s_dbgHop++;
 
     auto& dbgCfg = getAudioDebugConfig();
-    if (dbgCfg.verbosity >= 3 && (s_firstPrint || (s_dbgHop % dbgCfg.intervalDMA()) == 0)) {
+    if (dbgCfg.verbosity >= 5 && (s_firstPrint || (s_dbgHop % dbgCfg.intervalDMA()) == 0)) {
         s_firstPrint = false;
         int32_t rawMin = INT32_MAX, rawMax = INT32_MIN;
         for (size_t i = 1; i < HOP_SIZE * 2; i += 2) {
@@ -136,7 +138,7 @@ CaptureResult AudioCapture::captureHop(int16_t* buffer)
             if (v < rawMin) rawMin = v;
             if (v > rawMax) rawMax = v;
         }
-        LW_LOGI(LW_CLR_YELLOW "DMA:" LW_ANSI_RESET " hop=%lu R=[%08X..%08X] >>10=[%ld..%ld]",
+        LW_LOGD(LW_CLR_YELLOW "DMA:" LW_ANSI_RESET " hop=%lu R=[%08X..%08X] >>10=[%ld..%ld]",
                 (unsigned long)s_dbgHop,
                 (uint32_t)rawMin, (uint32_t)rawMax,
                 (long)(rawMin >> 10), (long)(rawMax >> 10));

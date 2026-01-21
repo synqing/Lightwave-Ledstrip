@@ -21,6 +21,7 @@
 #include <algorithm>
 
 #ifndef NATIVE_BUILD
+#include <Arduino.h>  // For Serial in one-shot debug methods
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #endif
@@ -114,6 +115,103 @@ void AudioActor::resetStats()
 {
     m_stats.reset();
     m_capture.resetStats();
+}
+
+// ============================================================================
+// One-Shot Debug Output Methods
+// ============================================================================
+
+void AudioActor::printStatus()
+{
+#ifndef NATIVE_BUILD
+    const CaptureStats& cstats = m_capture.getStats();
+    const ControlBusFrame& frame = m_controlBus.GetFrame();
+    float micLevelDb = (m_lastRmsPreGain > 0.0001f) ? (20.0f * log10f(m_lastRmsPreGain)) : -80.0f;
+
+    Serial.println("=== Audio Status ===");
+    Serial.printf("  Mic Level: %.1f dB\n", micLevelDb);
+    Serial.printf("  RMS: %.4f -> %.3f (pre-gain: %.4f)\n", m_lastRmsRaw, frame.rms, m_lastRmsPreGain);
+    Serial.printf("  AGC Gain: %.2f\n", m_lastAgcGain);
+    Serial.printf("  DC Estimate: %.1f\n", m_lastDcEstimate);
+    Serial.printf("  Noise Floor: %.5f\n", m_noiseFloor);
+    Serial.printf("  Clips: %u\n", (unsigned)m_lastClipCount);
+    Serial.printf("  Captures: %lu (failed: %lu)\n", cstats.hopsCapured, m_stats.captureFailCount);
+    Serial.printf("  Peak: %d (centered: %d)\n", cstats.peakSample, m_lastPeakCentered);
+
+    // Spike stats
+    auto spikeStats = m_controlBus.getSpikeStats();
+    Serial.printf("  Spikes: detected=%lu corrected=%lu avg/frame=%.3f\n",
+                  spikeStats.spikesDetectedBands + spikeStats.spikesDetectedChroma,
+                  spikeStats.spikesCorrected,
+                  spikeStats.avgSpikesPerFrame);
+
+#if FEATURE_MUSICAL_SALIENCY
+    // Saliency metrics
+    Serial.printf("  Saliency: overall=%.3f dom=%u H=%.3f R=%.3f T=%.3f D=%.3f\n",
+                  frame.saliency.overallSaliency,
+                  frame.saliency.dominantType,
+                  frame.saliency.harmonicNoveltySmooth,
+                  frame.saliency.rhythmicNoveltySmooth,
+                  frame.saliency.timbralNoveltySmooth,
+                  frame.saliency.dynamicNoveltySmooth);
+#endif
+
+#if FEATURE_STYLE_DETECTION
+    // Style detection
+    const StyleClassification& styleClass = m_styleDetector.getClassification();
+    Serial.printf("  Style: %u conf=%.2f [R=%.2f H=%.2f M=%.2f T=%.2f D=%.2f]\n",
+                  static_cast<uint8_t>(m_styleDetector.getStyle()),
+                  m_styleDetector.getConfidence(),
+                  styleClass.styleWeights[0],
+                  styleClass.styleWeights[1],
+                  styleClass.styleWeights[2],
+                  styleClass.styleWeights[3],
+                  styleClass.styleWeights[4]);
+#endif
+#endif // NATIVE_BUILD
+}
+
+void AudioActor::printSpectrum()
+{
+#ifndef NATIVE_BUILD
+    Serial.println("=== Audio Spectrum ===");
+
+    // 8-band spectrum
+    Serial.print("  8-band: [");
+    for (int i = 0; i < 8; i++) {
+        Serial.printf("%.3f%s", m_lastBands[i], (i < 7) ? " " : "");
+    }
+    Serial.println("]");
+
+    // 64-bin folded to 8 bands
+    Serial.print("  64-bin (folded): [");
+    for (int i = 0; i < 8; i++) {
+        Serial.printf("%.3f%s", m_bands64Folded[i], (i < 7) ? " " : "");
+    }
+    Serial.println("]");
+
+    Serial.printf("  Spectral Flux: %.3f\n", m_lastFluxMapped);
+
+    // Chroma (12 pitch classes)
+    const ControlBusFrame& frame = m_controlBus.GetFrame();
+    Serial.print("  Chroma: [");
+    for (int i = 0; i < 12; i++) {
+        Serial.printf("%.2f%s", frame.chroma[i], (i < 11) ? " " : "");
+    }
+    Serial.println("]");
+#endif // NATIVE_BUILD
+}
+
+void AudioActor::printBeat()
+{
+#ifndef NATIVE_BUILD
+    Serial.println("=== Beat Tracking ===");
+    Serial.printf("  BPM: %.1f\n", m_lastTempoOutput.bpm);
+    Serial.printf("  Confidence: %.2f\n", m_lastTempoOutput.confidence);
+    Serial.printf("  Phase: %.2f\n", m_lastTempoOutput.phase01);
+    Serial.printf("  Locked: %s\n", m_lastTempoOutput.locked ? "YES" : "no");
+    Serial.printf("  Beat Tick: %s\n", m_lastTempoOutput.beat_tick ? "YES" : "no");
+#endif // NATIVE_BUILD
 }
 
 AudioPipelineTuning AudioActor::getPipelineTuning() const
@@ -257,55 +355,37 @@ void AudioActor::onTick()
     // Record tick time
     m_stats.lastTickTimeUs = esp_timer_get_time() - tickStart;
 
-    // Log periodically (every 620 ticks = ~10 seconds) - gated by verbosity >= 2
+    // ========================================================================
+    // Periodic Debug Logging (Refactored: opt-in via verbosity level 5)
+    // ========================================================================
+    // REMOVED: The old verbose periodic logging (5 lines every 10 seconds).
+    // Status/spectrum/beat info is now available via one-shot commands:
+    //   - adbg status   -> printStatus()
+    //   - adbg spectrum -> printSpectrum()
+    //   - adbg beat     -> printBeat()
+    //
+    // Periodic logging is now condensed to a single line at level 5 (TRACE).
+    // Use 'adbg 5' to enable, or keep 'adbg 0-4' for silence.
+    // ========================================================================
     auto& dbgCfg = getAudioDebugConfig();
-    if (dbgCfg.verbosity >= 2 && (m_stats.tickCount % 620) == 0) {
-        const CaptureStats& cstats = m_capture.getStats();
-        const ControlBusFrame& frame = m_controlBus.GetFrame();
-        // Calculate mic level in dB from pre-gain RMS
+
+    // Level 5 (TRACE): Single-line condensed status every ~10 seconds
+    // This replaces the old 5-line verbose output at level 2
+    if (dbgCfg.verbosity >= 5 && (m_stats.tickCount % 620) == 0) {
         float micLevelDb = (m_lastRmsPreGain > 0.0001f) ? (20.0f * log10f(m_lastRmsPreGain)) : -80.0f;
-        LW_LOGI("Audio alive: " LW_CLR_YELLOW "mic=%.1fdB" LW_ANSI_RESET " cap=%lu pk=%d pkC=%d rms=%.4f->%.3f pre=%.4f g=%.2f dc=%.1f clip=%u flux=%.3f min=%d max=%d mean=%.1f",
-                 micLevelDb, cstats.hopsCapured, cstats.peakSample, m_lastPeakCentered, m_lastRmsRaw, frame.rms,
-                 m_lastRmsPreGain, m_lastAgcGain, m_lastDcEstimate, (unsigned)m_lastClipCount, m_lastFluxMapped,
-                 m_lastMinSample, m_lastMaxSample, m_lastMeanSample);
+        LW_LOGD("Audio: mic=%.1fdB rms=%.3f agc=%.2f bpm=%.1f lock=%s",
+                micLevelDb, m_controlBus.GetFrame().rms, m_lastAgcGain,
+                m_lastTempoOutput.bpm, m_lastTempoOutput.locked ? "Y" : "n");
+    }
 
-        // Log spike detection stats (get from ControlBus)
-        auto spikeStats = m_controlBus.getSpikeStats();
-        LW_LOGI("Spike stats: frames=%lu detected=%lu corrected=%lu avg/frame=%.3f removed=%.2f",
-                 spikeStats.totalFrames,
-                 spikeStats.spikesDetectedBands + spikeStats.spikesDetectedChroma,
-                 spikeStats.spikesCorrected,
-                 spikeStats.avgSpikesPerFrame,
-                 spikeStats.totalEnergyRemoved);
-
-        // Log saliency detection metrics
-#if FEATURE_MUSICAL_SALIENCY
-        LW_LOGI("Saliency: overall=%.3f dom=%u H=%.3f R=%.3f T=%.3f D=%.3f",
-                 frame.saliency.overallSaliency,
-                 frame.saliency.dominantType,
-                 frame.saliency.harmonicNoveltySmooth,
-                 frame.saliency.rhythmicNoveltySmooth,
-                 frame.saliency.timbralNoveltySmooth,
-                 frame.saliency.dynamicNoveltySmooth);
-#endif
-
-        // Log style detection metrics (MIS Phase 2)
-#if FEATURE_STYLE_DETECTION
-        const StyleClassification& styleClass = m_styleDetector.getClassification();
-        LW_LOGI("Style: %u conf=%.2f [R=%.2f H=%.2f M=%.2f T=%.2f D=%.2f]",
-                 static_cast<uint8_t>(m_styleDetector.getStyle()),
-                 m_styleDetector.getConfidence(),
-                 styleClass.styleWeights[0],
-                 styleClass.styleWeights[1],
-                 styleClass.styleWeights[2],
-                 styleClass.styleWeights[3],
-                 styleClass.styleWeights[4]);
-#endif
-
-        // Log TempoTracker beat tracking metrics
-        LW_LOGI(LW_CLR_MAGENTA "Beat:" LW_ANSI_RESET " BPM=%.1f conf=%.2f phase=%.2f lock=%s",
-                 m_lastTempoOutput.bpm, m_lastTempoOutput.confidence,
-                 m_lastTempoOutput.phase01, m_lastTempoOutput.locked ? "YES" : "no");
+    // Level 2+ (WARNING): Log warnings when they actually happen (not periodic)
+    // Example: High spike rate warning
+    auto spikeStats = m_controlBus.getSpikeStats();
+    static uint32_t lastSpikeWarningTick = 0;
+    if (dbgCfg.verbosity >= 2 && spikeStats.avgSpikesPerFrame > 5.0f &&
+        (m_stats.tickCount - lastSpikeWarningTick) > 620) {
+        LW_LOGW("High spike rate: avg=%.1f/frame", spikeStats.avgSpikesPerFrame);
+        lastSpikeWarningTick = m_stats.tickCount;
     }
 }
 
@@ -668,21 +748,16 @@ void AudioActor::processHop()
             raw.bands[i] = band * activity;
         }
 
-        // Throttle 8-band Goertzel debug logging - gated by verbosity >= 5
+        // Throttle 8-band Goertzel debug logging - gated by verbosity >= 5 (TRACE)
+        // NOTE: This is now TRACE level - only shows with 'adbg 5'
+        // For one-shot spectrum info, use 'adbg spectrum' command
         auto& dbgCfg8 = getAudioDebugConfig();
         if (dbgCfg8.verbosity >= 5 && ++m_goertzelLogCounter >= dbgCfg8.interval8Band()) {
             m_goertzelLogCounter = 0;
-            // Calculate TRUE mic level in dB from pre-gain RMS (0dB = full scale, silence floor at -60dB)
-            float micLevelDb = (m_lastRmsPreGain > 0.0001f) ? (20.0f * log10f(m_lastRmsPreGain)) : -80.0f;
-            // Bold cyan title, bold yellow for mic dB level, rest uncolored
-            LW_LOGD(LW_CLR_CYAN "Goertzel:" LW_ANSI_RESET " " LW_CLR_YELLOW "%.1fdB" LW_ANSI_RESET " raw=[%.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f] "
-                     "map=[%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f] "
-                     "rms=%.4f->%.3f pre=%.4f g=%.2f dc=%.1f clip=%u pk=%d pkC=%d min=%d max=%d mean=%.1f",
-                     micLevelDb,
-                     bandsRaw[0], bandsRaw[1], bandsRaw[2], bandsRaw[3], bandsRaw[4], bandsRaw[5], bandsRaw[6], bandsRaw[7],
-                     raw.bands[0], raw.bands[1], raw.bands[2], raw.bands[3], raw.bands[4], raw.bands[5], raw.bands[6], raw.bands[7],
-                     rmsRaw, rmsMapped, m_lastRmsPreGain, m_lastAgcGain, m_lastDcEstimate, (unsigned)m_lastClipCount,
-                     m_capture.getStats().peakSample, m_lastPeakCentered, m_lastMinSample, m_lastMaxSample, m_lastMeanSample);
+            // Condensed format: just the mapped band values (most useful for tuning)
+            LW_LOGD(LW_CLR_CYAN "8-band:" LW_ANSI_RESET " [%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f]",
+                     raw.bands[0], raw.bands[1], raw.bands[2], raw.bands[3],
+                     raw.bands[4], raw.bands[5], raw.bands[6], raw.bands[7]);
         }
 
         // Persisted bands updated above (unscaled)
@@ -791,19 +866,20 @@ void AudioActor::processHop()
             raw.bins64[i] = m_bins64Raw[i] * activity;
         }
 
-        // Throttled 64-bin logging - gated by verbosity >= 4
+        // Throttled 64-bin logging - gated by verbosity >= 5 (TRACE)
+        // NOTE: Elevated from level 4 to level 5 to reduce default noise
+        // For one-shot spectrum info, use 'adbg spectrum' command
         auto& dbgCfg64 = getAudioDebugConfig();
         // DEFENSIVE: Validate interval to prevent division by zero or invalid access
         uint16_t interval = dbgCfg64.interval64Bin();
         if (interval == 0) {
             interval = 1;  // Safety fallback: prevent division by zero
         }
-        
-        if (dbgCfg64.verbosity >= 4 && ++m_goertzel64LogCounter >= interval) {
+
+        if (dbgCfg64.verbosity >= 5 && ++m_goertzel64LogCounter >= interval) {
             m_goertzel64LogCounter = 0;
-            // DEFENSIVE: Validate array bounds before logging
-            // Cyan for 64-bin spectral analysis (title-only coloring)
-            LW_LOGD(LW_CLR_CYAN_DIM "64-bin Goertzel:" LW_ANSI_RESET " [%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f]",
+            // Condensed format: 64-bin folded to 8 bands
+            LW_LOGD(LW_CLR_CYAN_DIM "64-bin:" LW_ANSI_RESET " [%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f]",
                      m_bands64Folded[0], m_bands64Folded[1], m_bands64Folded[2], m_bands64Folded[3],
                      m_bands64Folded[4], m_bands64Folded[5], m_bands64Folded[6], m_bands64Folded[7]);
         }

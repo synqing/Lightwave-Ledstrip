@@ -47,6 +47,8 @@
 #include "audio/AudioDebugConfig.h"
 #endif
 
+#include "config/DebugConfig.h"
+
 #if FEATURE_WEB_SERVER
 #include "network/WiFiManager.h"
 #include "network/WebServer.h"
@@ -319,10 +321,26 @@ void setup() {
 #endif
 #if FEATURE_AUDIO_SYNC
     Serial.println("\nAudio Debug Verbosity:");
-    Serial.println("  adbg         - Show current level and intervals");
-    Serial.println("  adbg <0-5>   - Set level (0=off, 2=status, 4=medium, 5=verbose)");
+    Serial.println("  adbg           - Show current level");
+    Serial.println("  adbg <0-5>     - Set level (0=off, 2=warnings, 5=trace)");
+    Serial.println("  adbg status    - Print health summary (one-shot)");
+    Serial.println("  adbg spectrum  - Print 8-band + 64-bin spectrum (one-shot)");
+    Serial.println("  adbg beat      - Print BPM, phase, confidence (one-shot)");
     Serial.println("  adbg interval <N> - Set base interval in frames");
 #endif
+    Serial.println("\nDebug Commands (unified):");
+    Serial.println("  dbg           - Show debug config");
+    Serial.println("  dbg <0-5>     - Set global level (0=off,2=warn,3=info,4=debug,5=trace)");
+    Serial.println("  dbg audio <0-5>   - Set audio domain level");
+    Serial.println("  dbg render <0-5>  - Set render domain level");
+    Serial.println("  dbg network <0-5> - Set network domain level");
+    Serial.println("  dbg actor <0-5>   - Set actor domain level");
+    Serial.println("  dbg status    - Print audio health NOW");
+    Serial.println("  dbg spectrum  - Print 64-bin spectrum NOW");
+    Serial.println("  dbg beat      - Print beat tracking NOW");
+    Serial.println("  dbg memory    - Print heap/stack NOW");
+    Serial.println("  dbg interval status <N>  - Auto status every N sec (0=off)");
+    Serial.println("  dbg interval spectrum <N>- Auto spectrum every N sec (0=off)");
 #if FEATURE_WEB_SERVER
     Serial.println("\nWeb API:");
     Serial.println("  GET  /api/v1/effects - List effects");
@@ -636,17 +654,48 @@ void loop() {
                 }
             }
 #if FEATURE_AUDIO_SYNC
-            // Audio Debug Verbosity: adbg, adbg <0-5>, adbg interval <N>
+            // Audio Debug Verbosity: adbg (backwards-compatible alias for dbg audio)
+            // adbg        -> show audio debug config
+            // adbg <0-5>  -> set audio domain level
+            // adbg status -> one-shot health summary
+            // adbg spectrum -> one-shot spectrum
+            // adbg beat -> one-shot beat tracking
+            // adbg interval <N> -> set base interval (legacy)
             else if (inputLower.startsWith("adbg")) {
                 handledMulti = true;
                 auto& dbgCfg = lightwaveos::audio::getAudioDebugConfig();
+                auto& unifiedCfg = lightwaveos::config::getDebugConfig();
 
                 if (inputLower == "adbg") {
                     // Show current settings
-                    Serial.printf("Audio debug: level=%d interval=%d (8band=%d, 64bin=%d, dma=%d)\n",
-                                  dbgCfg.verbosity, dbgCfg.baseInterval,
-                                  dbgCfg.interval8Band(), dbgCfg.interval64Bin(), dbgCfg.intervalDMA());
-                    Serial.println("Levels: 0=off, 1=errors, 2=status(10s), 3=+DMA, 4=+64bin, 5=+8band");
+                    Serial.printf("Audio debug: level=%d interval=%d frames\n",
+                                  dbgCfg.verbosity, dbgCfg.baseInterval);
+                    Serial.println("Levels: 0=off, 1=errors, 2=warnings, 3=info, 4=debug, 5=trace");
+                    Serial.println("One-shot: adbg status | adbg spectrum | adbg beat");
+                } else if (inputLower == "adbg status") {
+                    // One-shot status via AudioActor method
+                    auto* audio = actors.getAudio();
+                    if (audio) {
+                        audio->printStatus();
+                    } else {
+                        Serial.println("Audio not available");
+                    }
+                } else if (inputLower == "adbg spectrum") {
+                    // One-shot spectrum via AudioActor method
+                    auto* audio = actors.getAudio();
+                    if (audio) {
+                        audio->printSpectrum();
+                    } else {
+                        Serial.println("Audio not available");
+                    }
+                } else if (inputLower == "adbg beat") {
+                    // One-shot beat tracking via AudioActor method
+                    auto* audio = actors.getAudio();
+                    if (audio) {
+                        audio->printBeat();
+                    } else {
+                        Serial.println("Audio not available");
+                    }
                 } else if (inputLower.startsWith("adbg interval ")) {
                     int val = inputLower.substring(14).toInt();
                     if (val > 0 && val < 1000) {
@@ -666,10 +715,12 @@ void loop() {
                     }
                     if (level >= 0 && level <= 5) {
                         dbgCfg.verbosity = level;
-                        const char* names[] = {"off", "errors", "status", "low(+DMA)", "medium(+64bin)", "high(+8band)"};
+                        // Also sync with unified DebugConfig
+                        unifiedCfg.setDomainLevel(lightwaveos::config::DebugDomain::AUDIO, level);
+                        const char* names[] = {"off", "errors", "warnings", "info", "debug", "trace"};
                         Serial.printf("Audio debug level: %d (%s)\n", level, names[level]);
                     } else {
-                        Serial.println("Usage: adbg [0-5] | adbg interval <frames>");
+                        Serial.println("Usage: adbg [0-5] | adbg status | adbg spectrum | adbg beat | adbg interval <N>");
                     }
                 }
             }
@@ -704,6 +755,166 @@ void loop() {
                             Serial.println("Invalid gamma. Use 0 (off) or 1.0-3.0");
                         }
                     }
+                }
+            }
+        }
+        // -----------------------------------------------------------------
+        // Debug Commands: dbg
+        // -----------------------------------------------------------------
+        else if (peekChar == 'd' && input.length() >= 3) {
+            if (inputLower.startsWith("dbg")) {
+                handledMulti = true;
+                auto& cfg = lightwaveos::config::getDebugConfig();
+                String subcmd = inputLower.substring(3);
+                subcmd.trim();
+
+                if (subcmd.length() == 0) {
+                    // dbg - show config
+                    lightwaveos::config::printDebugConfig();
+                }
+                else if (subcmd.length() == 1 && subcmd[0] >= '0' && subcmd[0] <= '5') {
+                    // dbg <0-5> - set global level
+                    cfg.globalLevel = subcmd[0] - '0';
+                    Serial.printf("Global debug level: %d (%s)\n",
+                                  cfg.globalLevel,
+                                  lightwaveos::config::DebugConfig::levelName(cfg.globalLevel));
+                }
+                else if (subcmd.startsWith("audio ")) {
+                    // dbg audio <0-5>
+                    int level = subcmd.substring(6).toInt();
+                    if (level >= 0 && level <= 5) {
+                        cfg.setDomainLevel(lightwaveos::config::DebugDomain::AUDIO, level);
+                        Serial.printf("Audio debug level: %d (%s)\n", level,
+                                      lightwaveos::config::DebugConfig::levelName((uint8_t)level));
+#if FEATURE_AUDIO_SYNC
+                        // Also sync with legacy AudioDebugConfig for backwards compatibility
+                        lightwaveos::audio::getAudioDebugConfig().verbosity = level;
+#endif
+                    } else {
+                        Serial.println("Invalid level. Use 0-5.");
+                    }
+                }
+                else if (subcmd.startsWith("render ")) {
+                    // dbg render <0-5>
+                    int level = subcmd.substring(7).toInt();
+                    if (level >= 0 && level <= 5) {
+                        cfg.setDomainLevel(lightwaveos::config::DebugDomain::RENDER, level);
+                        Serial.printf("Render debug level: %d (%s)\n", level,
+                                      lightwaveos::config::DebugConfig::levelName((uint8_t)level));
+                    } else {
+                        Serial.println("Invalid level. Use 0-5.");
+                    }
+                }
+                else if (subcmd.startsWith("network ")) {
+                    // dbg network <0-5>
+                    int level = subcmd.substring(8).toInt();
+                    if (level >= 0 && level <= 5) {
+                        cfg.setDomainLevel(lightwaveos::config::DebugDomain::NETWORK, level);
+                        Serial.printf("Network debug level: %d (%s)\n", level,
+                                      lightwaveos::config::DebugConfig::levelName((uint8_t)level));
+                    } else {
+                        Serial.println("Invalid level. Use 0-5.");
+                    }
+                }
+                else if (subcmd.startsWith("actor ")) {
+                    // dbg actor <0-5>
+                    int level = subcmd.substring(6).toInt();
+                    if (level >= 0 && level <= 5) {
+                        cfg.setDomainLevel(lightwaveos::config::DebugDomain::ACTOR, level);
+                        Serial.printf("Actor debug level: %d (%s)\n", level,
+                                      lightwaveos::config::DebugConfig::levelName((uint8_t)level));
+                    } else {
+                        Serial.println("Invalid level. Use 0-5.");
+                    }
+                }
+                else if (subcmd == "status") {
+                    // One-shot status print - use AudioActor's printStatus() method
+#if FEATURE_AUDIO_SYNC
+                    auto* audio = actors.getAudio();
+                    if (audio) {
+                        audio->printStatus();
+                    } else {
+                        Serial.println("[DBG] Audio not available");
+                    }
+#else
+                    Serial.println("[DBG] Audio not enabled in this build");
+#endif
+                }
+                else if (subcmd == "spectrum") {
+                    // One-shot spectrum print - use AudioActor's printSpectrum() method
+#if FEATURE_AUDIO_SYNC
+                    auto* audio = actors.getAudio();
+                    if (audio) {
+                        audio->printSpectrum();
+                    } else {
+                        Serial.println("[DBG] Audio not available");
+                    }
+#else
+                    Serial.println("[DBG] Audio not enabled in this build");
+#endif
+                }
+                else if (subcmd == "beat") {
+                    // One-shot beat print - use AudioActor's printBeat() method
+#if FEATURE_AUDIO_SYNC
+                    auto* audio = actors.getAudio();
+                    if (audio) {
+                        audio->printBeat();
+                    } else {
+                        Serial.println("[DBG] Audio not available");
+                    }
+#else
+                    Serial.println("[DBG] Audio not enabled in this build");
+#endif
+                }
+                else if (subcmd == "memory") {
+                    // One-shot memory print
+                    Serial.println("\n=== Memory Status ===");
+                    Serial.printf("  Free heap: %lu bytes\n", ESP.getFreeHeap());
+                    Serial.printf("  Min free heap: %lu bytes\n", ESP.getMinFreeHeap());
+                    Serial.printf("  Max alloc heap: %lu bytes\n", ESP.getMaxAllocHeap());
+#ifdef CONFIG_SPIRAM_SUPPORT
+                    Serial.printf("  Free PSRAM: %lu bytes\n", ESP.getFreePsram());
+#endif
+                    Serial.println();
+                }
+                else if (subcmd.startsWith("interval ")) {
+                    // dbg interval status <N> or dbg interval spectrum <N>
+                    String rest = subcmd.substring(9);
+                    rest.trim();
+                    if (rest.startsWith("status ")) {
+                        cfg.statusIntervalSec = rest.substring(7).toInt();
+                        if (cfg.statusIntervalSec > 0) {
+                            Serial.printf("Status interval: %u seconds\n", cfg.statusIntervalSec);
+                        } else {
+                            Serial.println("Status interval: disabled");
+                        }
+                    }
+                    else if (rest.startsWith("spectrum ")) {
+                        cfg.spectrumIntervalSec = rest.substring(9).toInt();
+                        if (cfg.spectrumIntervalSec > 0) {
+                            Serial.printf("Spectrum interval: %u seconds\n", cfg.spectrumIntervalSec);
+                        } else {
+                            Serial.println("Spectrum interval: disabled");
+                        }
+                    }
+                    else {
+                        Serial.println("Usage: dbg interval <status|spectrum> <seconds>");
+                    }
+                }
+                else {
+                    Serial.println("Usage: dbg [0-5|audio|render|network|actor|status|spectrum|beat|memory|interval]");
+                    Serial.println("  dbg           - Show debug config");
+                    Serial.println("  dbg <0-5>     - Set global level");
+                    Serial.println("  dbg audio <0-5>   - Set audio domain level");
+                    Serial.println("  dbg render <0-5>  - Set render domain level");
+                    Serial.println("  dbg network <0-5> - Set network domain level");
+                    Serial.println("  dbg actor <0-5>   - Set actor domain level");
+                    Serial.println("  dbg status    - Print audio health NOW");
+                    Serial.println("  dbg spectrum  - Print spectrum NOW");
+                    Serial.println("  dbg beat      - Print beat tracking NOW");
+                    Serial.println("  dbg memory    - Print heap/stack NOW");
+                    Serial.println("  dbg interval status <N>   - Auto status every N sec (0=off)");
+                    Serial.println("  dbg interval spectrum <N> - Auto spectrum every N sec (0=off)");
                 }
             }
         }

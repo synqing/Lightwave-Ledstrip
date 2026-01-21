@@ -1,20 +1,283 @@
 /**
  * @file DebugHandlers.cpp
  * @brief Debug handlers implementation
+ *
+ * Implements both unified debug config endpoints and legacy audio debug endpoints.
  */
 
 #include "DebugHandlers.h"
 #include "../../ApiResponse.h"
+#include "../../../config/DebugConfig.h"
+#include "../../../core/actors/ActorSystem.h"
 #include <ArduinoJson.h>
+#include <esp_system.h>
+#include <cmath>  // for log10f
 
 #if FEATURE_AUDIO_SYNC
 #include "../../../audio/AudioDebugConfig.h"
+#include "../../../audio/AudioActor.h"
 #endif
 
 namespace lightwaveos {
 namespace network {
 namespace webserver {
 namespace handlers {
+
+// ============================================================================
+// Unified Debug Config Handlers (always available)
+// ============================================================================
+
+void DebugHandlers::handleDebugConfigGet(AsyncWebServerRequest* request) {
+    auto& cfg = config::getDebugConfig();
+
+    sendSuccessResponse(request, [&cfg](JsonObject& data) {
+        // Global level
+        data["globalLevel"] = cfg.globalLevel;
+
+        // Domain-specific levels (raw values, -1 = use global)
+        JsonObject domains = data["domains"].to<JsonObject>();
+        domains["audio"] = cfg.audioLevel;
+        domains["render"] = cfg.renderLevel;
+        domains["network"] = cfg.networkLevel;
+        domains["actor"] = cfg.actorLevel;
+        domains["system"] = cfg.systemLevel;
+
+        // Periodic intervals
+        JsonObject intervals = data["intervals"].to<JsonObject>();
+        intervals["status"] = cfg.statusIntervalSec;
+        intervals["spectrum"] = cfg.spectrumIntervalSec;
+
+        // Computed effective levels for each domain
+        JsonObject effectiveLevels = data["effectiveLevels"].to<JsonObject>();
+        effectiveLevels["audio"] = cfg.effectiveLevel(config::DebugDomain::AUDIO);
+        effectiveLevels["render"] = cfg.effectiveLevel(config::DebugDomain::RENDER);
+        effectiveLevels["network"] = cfg.effectiveLevel(config::DebugDomain::NETWORK);
+        effectiveLevels["actor"] = cfg.effectiveLevel(config::DebugDomain::ACTOR);
+        effectiveLevels["system"] = cfg.effectiveLevel(config::DebugDomain::SYSTEM);
+
+        // Level names for UI reference
+        JsonArray levels = data["levels"].to<JsonArray>();
+        for (uint8_t i = 0; i <= 5; i++) {
+            levels.add(config::DebugConfig::levelName(i));
+        }
+    });
+}
+
+void DebugHandlers::handleDebugConfigSet(AsyncWebServerRequest* request,
+                                          uint8_t* data, size_t len) {
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, data, len);
+    if (error) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::INVALID_JSON, "Invalid JSON payload");
+        return;
+    }
+
+    auto& cfg = config::getDebugConfig();
+    bool updated = false;
+
+    // Update global level
+    if (doc.containsKey("globalLevel")) {
+        int level = doc["globalLevel"].as<int>();
+        if (level < 0 || level > 5) {
+            sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                              ErrorCodes::OUT_OF_RANGE,
+                              "globalLevel must be 0-5", "globalLevel");
+            return;
+        }
+        cfg.globalLevel = static_cast<uint8_t>(level);
+        updated = true;
+    }
+
+    // Update domain-specific levels
+    auto updateDomainLevel = [&doc, &cfg, &updated](const char* key, int8_t& target) {
+        if (doc.containsKey(key)) {
+            int level = doc[key].as<int>();
+            if (level < -1 || level > 5) {
+                return false;  // Invalid
+            }
+            target = static_cast<int8_t>(level);
+            updated = true;
+        }
+        return true;  // Valid or not present
+    };
+
+    if (!updateDomainLevel("audio", cfg.audioLevel)) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::OUT_OF_RANGE,
+                          "audio level must be -1 to 5", "audio");
+        return;
+    }
+    if (!updateDomainLevel("render", cfg.renderLevel)) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::OUT_OF_RANGE,
+                          "render level must be -1 to 5", "render");
+        return;
+    }
+    if (!updateDomainLevel("network", cfg.networkLevel)) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::OUT_OF_RANGE,
+                          "network level must be -1 to 5", "network");
+        return;
+    }
+    if (!updateDomainLevel("actor", cfg.actorLevel)) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::OUT_OF_RANGE,
+                          "actor level must be -1 to 5", "actor");
+        return;
+    }
+    if (!updateDomainLevel("system", cfg.systemLevel)) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::OUT_OF_RANGE,
+                          "system level must be -1 to 5", "system");
+        return;
+    }
+
+    // Update periodic intervals
+    if (doc.containsKey("statusInterval")) {
+        int interval = doc["statusInterval"].as<int>();
+        if (interval < 0 || interval > 3600) {
+            sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                              ErrorCodes::OUT_OF_RANGE,
+                              "statusInterval must be 0-3600 seconds", "statusInterval");
+            return;
+        }
+        cfg.statusIntervalSec = static_cast<uint16_t>(interval);
+        updated = true;
+    }
+
+    if (doc.containsKey("spectrumInterval")) {
+        int interval = doc["spectrumInterval"].as<int>();
+        if (interval < 0 || interval > 3600) {
+            sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                              ErrorCodes::OUT_OF_RANGE,
+                              "spectrumInterval must be 0-3600 seconds", "spectrumInterval");
+            return;
+        }
+        cfg.spectrumIntervalSec = static_cast<uint16_t>(interval);
+        updated = true;
+    }
+
+    if (!updated) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::MISSING_FIELD,
+                          "At least one configuration field required");
+        return;
+    }
+
+    // Print to serial for visibility
+    config::printDebugConfig();
+
+    // Return updated config
+    sendSuccessResponse(request, [&cfg](JsonObject& data) {
+        data["globalLevel"] = cfg.globalLevel;
+
+        JsonObject domains = data["domains"].to<JsonObject>();
+        domains["audio"] = cfg.audioLevel;
+        domains["render"] = cfg.renderLevel;
+        domains["network"] = cfg.networkLevel;
+        domains["actor"] = cfg.actorLevel;
+        domains["system"] = cfg.systemLevel;
+
+        JsonObject intervals = data["intervals"].to<JsonObject>();
+        intervals["status"] = cfg.statusIntervalSec;
+        intervals["spectrum"] = cfg.spectrumIntervalSec;
+
+        JsonObject effectiveLevels = data["effectiveLevels"].to<JsonObject>();
+        effectiveLevels["audio"] = cfg.effectiveLevel(config::DebugDomain::AUDIO);
+        effectiveLevels["render"] = cfg.effectiveLevel(config::DebugDomain::RENDER);
+        effectiveLevels["network"] = cfg.effectiveLevel(config::DebugDomain::NETWORK);
+        effectiveLevels["actor"] = cfg.effectiveLevel(config::DebugDomain::ACTOR);
+        effectiveLevels["system"] = cfg.effectiveLevel(config::DebugDomain::SYSTEM);
+    });
+}
+
+void DebugHandlers::handleDebugStatus(AsyncWebServerRequest* request,
+                                       actors::ActorSystem& actorSystem) {
+#if FEATURE_AUDIO_SYNC
+    // Get audio actor reference once, use in both lambda and serial output
+    auto* audioActor = actorSystem.getAudio();
+    audio::AudioDspState dspState;
+    audio::AudioActorStats actorStats;
+    bool hasAudio = false;
+
+    if (audioActor) {
+        dspState = audioActor->getDspState();
+        actorStats = audioActor->getStats();
+        hasAudio = true;
+    }
+#endif
+
+    // Collect system status data
+    sendSuccessResponse(request, [
+#if FEATURE_AUDIO_SYNC
+        &dspState, &actorStats, hasAudio
+#endif
+    ](JsonObject& data) {
+        // Memory status (always available)
+        JsonObject memory = data["memory"].to<JsonObject>();
+        memory["heapFree"] = esp_get_free_heap_size();
+        memory["heapMin"] = esp_get_minimum_free_heap_size();
+        memory["heapMaxBlock"] = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+
+#if FEATURE_AUDIO_SYNC
+        // Audio status (when audio is enabled)
+        JsonObject audio = data["audio"].to<JsonObject>();
+
+        if (hasAudio) {
+            // From DSP state
+            audio["rms"] = dspState.rmsMapped;
+            audio["rmsPreGain"] = dspState.rmsPreGain;
+            audio["agcGain"] = dspState.agcGain;
+            audio["dcEstimate"] = dspState.dcEstimate;
+            audio["noiseFloor"] = dspState.noiseFloor;
+            audio["clips"] = dspState.clipCount;
+
+            // From actor stats
+            audio["captures"] = actorStats.captureSuccessCount;
+            audio["capturesFailed"] = actorStats.captureFailCount;
+            audio["tickCount"] = actorStats.tickCount;
+
+            // Compute mic level in dB from RMS (approximate)
+            float micLevelDb = (dspState.rmsMapped > 0.0001f)
+                ? 20.0f * log10f(dspState.rmsMapped)
+                : -60.0f;  // Floor at -60 dB
+            audio["micLevelDb"] = micLevelDb;
+        } else {
+            audio["error"] = "AudioActor not initialized";
+        }
+#endif
+
+        // System info
+        JsonObject system = data["system"].to<JsonObject>();
+        system["uptimeMs"] = millis();
+        system["cpuFreqMHz"] = ESP.getCpuFreqMHz();
+    });
+
+    // Also print to serial as one-shot output
+    Serial.println(F("\n=== Debug Status (one-shot) ==="));
+    Serial.printf("Heap: %lu free, %lu min, %lu max block\n",
+                  (unsigned long)esp_get_free_heap_size(),
+                  (unsigned long)esp_get_minimum_free_heap_size(),
+                  (unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+    Serial.printf("Uptime: %lu ms\n", (unsigned long)millis());
+
+#if FEATURE_AUDIO_SYNC
+    if (hasAudio) {
+        Serial.printf("Audio: RMS=%.3f, AGC=%.2f, DC=%.1f, clips=%u\n",
+                      dspState.rmsMapped, dspState.agcGain,
+                      dspState.dcEstimate, dspState.clipCount);
+        Serial.printf("Captures: %lu success, %lu failed\n",
+                      (unsigned long)actorStats.captureSuccessCount,
+                      (unsigned long)actorStats.captureFailCount);
+    }
+#endif
+    Serial.println(F("===============================\n"));
+}
+
+// ============================================================================
+// Legacy Audio Debug Handlers (backward compatibility)
+// ============================================================================
 
 #if FEATURE_AUDIO_SYNC
 

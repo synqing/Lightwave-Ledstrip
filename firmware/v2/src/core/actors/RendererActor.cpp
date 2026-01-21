@@ -1097,6 +1097,27 @@ void RendererActor::renderFrame()
         }
 #endif
 
+        // =====================================================================
+        // Global auto-speed trim (tempo + spectral flux liveliness)
+        // User SPEED acts as trim; audio drives base rate
+        // =====================================================================
+        float liveliness = 0.5f;
+#if FEATURE_AUDIO_SYNC
+        if (ctx.audio.available) {
+            liveliness = m_lastControlBus.liveliness;
+        }
+#endif
+        // User trim from speed knob (1..50 -> 0.0..1.0)
+        float speedKnobNorm = (ctx.speed <= 1) ? 0.0f : (static_cast<float>(ctx.speed - 1) / 49.0f);
+        float userTrim = 0.7f + 0.6f * speedKnobNorm;  // 0.7..1.3
+
+        // Audio-driven base speed (10..40) scaled by liveliness
+        float autoBase = 10.0f + (40.0f - 10.0f) * liveliness;
+        float finalSpeed = autoBase * userTrim;
+        if (finalSpeed < 1.0f) finalSpeed = 1.0f;
+        if (finalSpeed > 50.0f) finalSpeed = 50.0f;
+        ctx.speed = static_cast<uint8_t>(finalSpeed + 0.5f);
+
         m_effects[safeEffect].effect->render(ctx);
     }
 

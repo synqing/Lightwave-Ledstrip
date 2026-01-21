@@ -12,6 +12,10 @@
 #include "../../../palettes/Palettes_Master.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
+#include <cstdio>
+#ifndef NATIVE_BUILD
+#include <Arduino.h>
+#endif
 
 namespace lightwaveos {
 namespace network {
@@ -19,6 +23,14 @@ namespace webserver {
 namespace ws {
 
 using namespace lightwaveos::palettes;
+
+static uint32_t debugNowMs() {
+#ifndef NATIVE_BUILD
+    return millis();
+#else
+    return 0;
+#endif
+}
 
 static void handlePalettesList(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     // Decode using codec (single canonical JSON parser)
@@ -113,7 +125,24 @@ static void handlePalettesSet(AsyncWebSocketClient* client, JsonDocument& doc, c
         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Palette ID out of range", requestId));
         return;
     }
-    
+
+    // #region agent log
+    {
+        FILE* f = fopen("/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/.cursor/debug.log", "a");
+        if (f) {
+            fprintf(f,
+                    "{\"sessionId\":\"debug-session\",\"runId\":\"palette-loop-1\",\"hypothesisId\":\"H1\","
+                    "\"location\":\"WsPaletteCommands.cpp:handlePalettesSet\",\"message\":\"palettes.set received\","
+                    "\"data\":{\"clientId\":%lu,\"paletteId\":%u,\"requestId\":\"%s\"},\"timestamp\":%lu}\n",
+                    static_cast<unsigned long>(client ? client->id() : 0UL),
+                    static_cast<unsigned>(paletteId),
+                    requestId ? requestId : "",
+                    static_cast<unsigned long>(debugNowMs()));
+            fclose(f);
+        }
+    }
+    // #endregion
+
     // Set palette via ActorSystem
     ctx.actorSystem.setPalette(paletteId);
     

@@ -1,0 +1,212 @@
+UNIT TEST RESULTS - BUILD FAILURE ANALYSIS
+==========================================
+Execution Time: $(date)
+Environment: native_test
+PlatformIO Version: Latest
+
+TEST SUMMARY
+============
+Total Test Suites: 4
+Passed: 0 ❌
+Failed: 4 ❌
+Build Errors: 4 ❌
+
+DETAILED FAILURE ANALYSIS
+=========================
+
+1. test_k1_fft - ERRORED (0.34s)
+   ❌ Build Error: Missing include path for K1FFTConfig.h
+
+   Error: test/test_k1_fft/test_k1_fft_analyzer.cpp:13:10:
+   fatal error: 'K1FFTConfig.h' file not found
+
+   Root Cause:
+   - K1FFTConfig.h exists at: src/audio/k1/K1FFTConfig.h
+   - native_test environment missing include path: -I src/audio/k1
+
+   Resolution Required:
+   - Add K1 audio include paths to native_test build_flags
+   - Align with native_test_k1_fft environment configuration
+
+
+2. test_native - ERRORED (0.76s)
+   ❌ Build Error: Multiple missing dependencies
+
+   Errors:
+   a) BlendMode.h:15:10: fatal error: 'FastLED.h' file not found
+   b) test_actor.cpp:17:10: fatal error: '../../src/core/actors/Actor.h' file not found
+   c) Multiple source files cannot compile due to missing FastLED mock
+
+   Root Cause:
+   - native_test environment missing FastLED dependency
+   - Mock system not properly integrated into build
+   - Include paths incomplete for core components
+
+   Resolution Required:
+   - Add FastLED lib_deps OR configure mock includes
+   - Verify mock system integration (test/test_native/mocks/fastled_mock.h exists)
+   - Add comprehensive include paths for src/ hierarchy
+
+
+3. test_audio - ERRORED (0.38s)
+   ❌ Build Error: API signature mismatch in TempoTracker
+
+   Errors:
+   test_goertzel_basic.cpp:175: no matching member function for call to 'updateNovelty'
+   - Expected: updateNovelty(bands, num_bands, rms, bands_ready, tMicros)
+   - Called with: updateNovelty(bands, num_bands, rms, bands_ready)
+
+   test_goertzel_basic.cpp:176: no matching member function for call to 'updateTempo'
+   - Expected: updateTempo(delta_sec, t_samples)
+   - Called with: updateTempo(hopSec)
+
+   test_goertzel_basic.cpp:177: too few arguments to 'advancePhase'
+   - Expected: advancePhase(delta_sec, t_samples)
+   - Called with: advancePhase(hopSec)
+
+   Root Cause:
+   - TempoTracker API evolved to require timestamp parameters
+   - Test code not updated after API changes
+   - Missing uint64_t t_samples / tMicros parameters in all calls
+
+   Resolution Required:
+   - Update test_goertzel_basic.cpp to match current TempoTracker API
+   - Add timestamp tracking to test fixture
+   - Review TempoTracker.h signature changes (lines 423, 444, 458, 470)
+
+
+4. test_audio_benchmark - ERRORED (0.38s)
+   ❌ Build Error: Missing include path for TestSignalGenerator.h
+
+   Error: test/test_audio_benchmark/test_pipeline_benchmark.cpp:19:10:
+   fatal error: 'TestSignalGenerator.h' file not found
+
+   Root Cause:
+   - TestSignalGenerator.h exists at: test/test_audio/TestSignalGenerator.h
+   - native_audio_benchmark missing include path: -I test/test_audio
+
+   Resolution Required:
+   - Add to native_audio_benchmark build_flags: -I test/test_audio
+   - Verify test_audio shared utilities directory structure
+
+
+CONFIGURATION ANALYSIS
+=======================
+
+Working Environments (for reference):
+--------------------------------------
+native_test_k1_fft:
+  ✅ Includes: -I src/audio/k1
+  ✅ Includes: -I .pio/libdeps/.../FastLED/src/third_party/cq_kernel
+  ✅ lib_deps: fastled/FastLED@3.10.0
+
+native_test_audio:
+  ✅ Includes: -I src
+  ✅ test_build_src: yes
+  ✅ Selective source filter
+
+Broken Environments:
+--------------------
+native_test:
+  ❌ Missing: FastLED dependency or mock configuration
+  ❌ Missing: -I src/audio/k1
+  ❌ build_src_filter may be too restrictive
+
+native_audio_benchmark:
+  ❌ Missing: -I test/test_audio
+
+
+RECOMMENDED FIXES
+=================
+
+Priority 1: Fix native_test environment
+---------------------------------------
+Add to platformio.ini [env:native_test]:
+
+build_flags =
+    ${common.native_test_flags}  # Existing flags
+    -I src/audio/k1              # K1 FFT includes
+    -I test/test_audio           # Test utilities
+    -I test/test_native/mocks    # Mock system
+
+lib_deps =
+    throwtheswitch/Unity@^2.5.2
+    fastled/FastLED@3.10.0       # Add FastLED for builds
+
+
+Priority 2: Update test_audio API calls
+---------------------------------------
+File: test/test_audio/test_goertzel_basic.cpp
+
+Add timestamp tracking to test fixture:
+    uint64_t t_samples = 0;
+    const uint64_t hop_samples = /* calculate based on sample rate */;
+
+Update TempoTracker calls:
+    Line 175: tempo.updateNovelty(bands, 8, rms01, bandsReady, t_samples);
+    Line 176: tempo.updateTempo(hopSec, t_samples);
+    Line 177: tempo.advancePhase(hopSec, t_samples);
+
+    After each call: t_samples += hop_samples;
+
+
+Priority 3: Fix test_audio_benchmark includes
+--------------------------------------------
+Add to platformio.ini [env:native_audio_benchmark]:
+
+build_flags =
+    ${existing_flags}
+    -I test/test_audio          # Shared test utilities
+
+
+IMPACT ASSESSMENT
+=================
+Current State:
+- 0 tests executable
+- No validation of audio pipeline
+- No validation of K1 FFT accuracy
+- No validation of core system state
+- No regression detection capability
+
+Estimated Fix Time: 2-3 hours
+Priority: CRITICAL - Blocks quality verification
+
+
+NEXT STEPS
+==========
+1. ✅ Generate this failure analysis report
+2. ⏳ Fix platformio.ini native_test configuration
+3. ⏳ Update TempoTracker test API calls
+4. ⏳ Verify mock system integration
+5. ⏳ Re-run test suite and validate all tests pass
+6. ⏳ Document expected test results and benchmarks
+
+
+TEST INVENTORY
+==============
+Available Test Files:
+- test_k1_fft/test_k1_fft_analyzer.cpp (FFT accuracy tests)
+- test_audio/test_goertzel_basic.cpp (Goertzel + tempo tests)
+- test_audio_benchmark/test_pipeline_benchmark.cpp (Performance tests)
+- test_native/test_*.cpp (18 unit test files for core systems)
+
+Expected Test Coverage (when working):
+- FFT Analyzer: ~6 tests
+- Hann Window: ~4 tests
+- Spectral Flux: ~5 tests
+- Frequency Bands: ~6 tests
+- Core State: ~15 tests
+- WebSocket Router: ~8 tests
+- Actor System: ~5 tests
+- Total: ~50+ unit tests
+
+
+HARDWARE TEST STATUS
+====================
+ESP32 Device Tests: SKIPPED (native environment only)
+Integration Tests: Not executed (build failures)
+Hardware Validation: Not executed (build failures)
+
+
+This report generated by: Claude Code Test Automation Expert
+Report Location: test_logs/unit_test_summary_[timestamp].txt

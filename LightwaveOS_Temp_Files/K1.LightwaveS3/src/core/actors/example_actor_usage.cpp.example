@@ -1,0 +1,407 @@
+/**
+ * @file example_actor_usage.cpp
+ * @brief Example usage of the LightwaveOS v2 Actor System
+ *
+ * This file demonstrates how to:
+ * 1. Initialize the ActorSystem
+ * 2. Register effects with the RendererActor
+ * 3. Send commands to change effects, brightness, etc.
+ * 4. Subscribe to events via the MessageBus
+ *
+ * To use this example, rename this file to main.cpp or include it
+ * from main.cpp.
+ *
+ * @author LightwaveOS Team
+ * @version 2.0.0
+ */
+
+#include "NodeOrchestrator.h"
+#include "RendererActor.h"
+#include "../bus/MessageBus.h"
+
+#ifndef NATIVE_BUILD
+#include <Arduino.h>
+#endif
+
+using namespace lightwaveos::actors;
+using namespace lightwaveos::bus;
+
+// ============================================================================
+// Example Effects (CENTER ORIGIN compliant)
+// ============================================================================
+
+/**
+ * @brief Solid color effect - fills all LEDs with palette color
+ */
+void effectSolid(RenderContext& ctx)
+{
+    CRGB color = ColorFromPalette(*ctx.palette, ctx.hue);
+    fill_solid(ctx.leds, ctx.numLeds, color);
+}
+
+/**
+ * @brief Center pulse - radiates from center (LED 79/80) outward
+ *
+ * CENTER ORIGIN: Effect originates from LED 79/80 and expands outward.
+ */
+void effectCenterPulse(RenderContext& ctx)
+{
+    static uint8_t pulse = 0;
+    pulse += ctx.speed / 2;
+
+    // Center point for each strip (LED 79 in 0-159 range)
+    const uint16_t center = 79;
+    const uint16_t stripLen = 160;
+
+    // Clear buffer
+    fill_solid(ctx.leds, ctx.numLeds, CRGB::Black);
+
+    // Calculate pulse radius (0 to 80 LEDs)
+    uint8_t radius = scale8(triwave8(pulse), center + 1);
+
+    // Get color from palette
+    CRGB color = ColorFromPalette(*ctx.palette, ctx.hue);
+
+    // Draw pulse on Strip 1 (LEDs 0-159)
+    for (int i = 0; i <= radius; i++) {
+        uint8_t brightness = 255 - (i * 255 / (center + 1));
+
+        // Left side of center (79 going down to 0)
+        int leftIdx = center - i;
+        if (leftIdx >= 0) {
+            ctx.leds[leftIdx] = color;
+            ctx.leds[leftIdx].nscale8(brightness);
+        }
+
+        // Right side of center (80 going up to 159)
+        int rightIdx = center + 1 + i;
+        if (rightIdx < stripLen) {
+            ctx.leds[rightIdx] = color;
+            ctx.leds[rightIdx].nscale8(brightness);
+        }
+    }
+
+    // Mirror to Strip 2 (LEDs 160-319)
+    memcpy(&ctx.leds[160], &ctx.leds[0], sizeof(CRGB) * 160);
+}
+
+/**
+ * @brief Breathing effect - smooth brightness oscillation from center
+ *
+ * CENTER ORIGIN: Brightness gradient from center outward.
+ */
+void effectBreathing(RenderContext& ctx)
+{
+    // Breathing wave
+    uint8_t breath = beatsin8(ctx.speed / 2, 32, 255);
+
+    // Center point
+    const uint16_t center = 79;
+    const uint16_t stripLen = 160;
+
+    // Base color
+    CRGB color = ColorFromPalette(*ctx.palette, ctx.hue);
+
+    for (uint16_t i = 0; i < stripLen; i++) {
+        // Distance from center
+        int dist = abs((int)i - (int)center);
+
+        // Brightness decreases with distance from center
+        uint8_t distBright = 255 - (dist * 2);
+        if (distBright < 32) distBright = 32;
+
+        // Combine with breathing
+        uint8_t finalBright = scale8(breath, distBright);
+
+        ctx.leds[i] = color;
+        ctx.leds[i].nscale8(finalBright);
+
+        // Mirror to Strip 2
+        ctx.leds[i + 160] = ctx.leds[i];
+    }
+}
+
+/**
+ * @brief Wave effect - sinusoidal wave emanating from center
+ *
+ * CENTER ORIGIN: Waves propagate outward from LED 79/80.
+ */
+void effectCenterWave(RenderContext& ctx)
+{
+    static uint16_t phase = 0;
+    phase += ctx.speed * 32;
+
+    const uint16_t center = 79;
+    const uint16_t stripLen = 160;
+
+    for (uint16_t i = 0; i < stripLen; i++) {
+        // Distance from center
+        int dist = abs((int)i - (int)center);
+
+        // Wave equation: sin(distance * frequency - time)
+        uint16_t angle = (dist * 1024) - (phase >> 4);
+        uint8_t wave = sin8(angle >> 2);
+
+        // Color from palette, indexed by wave value
+        CRGB color = ColorFromPalette(*ctx.palette, wave + ctx.hue);
+
+        ctx.leds[i] = color;
+        ctx.leds[i + 160] = color;  // Mirror to Strip 2
+    }
+}
+
+/**
+ * @brief Confetti effect - random sparkles across both strips
+ */
+void effectConfetti(RenderContext& ctx)
+{
+    // Fade all LEDs
+    fadeToBlackBy(ctx.leds, ctx.numLeds, 10);
+
+    // Add random sparkles
+    for (uint8_t i = 0; i < 4; i++) {
+        uint16_t pos = random16(ctx.numLeds);
+        ctx.leds[pos] += ColorFromPalette(*ctx.palette, ctx.hue + random8(64));
+    }
+}
+
+/**
+ * @brief Fire effect from center - flames emanate from center outward
+ *
+ * CENTER ORIGIN: Fire sources at LED 79/80, flames spread outward.
+ */
+void effectCenterFire(RenderContext& ctx)
+{
+    // Heat buffer (static to persist between frames)
+    static uint8_t heat[160];
+    const uint16_t center = 79;
+    const uint16_t stripLen = 160;
+
+    // Cooling
+    for (uint16_t i = 0; i < stripLen; i++) {
+        heat[i] = qsub8(heat[i], random8(0, ((ctx.speed * 10) / stripLen) + 2));
+    }
+
+    // Sparking at center
+    if (random8() < 120) {
+        // Left side of center
+        int y = center - random8(7);
+        if (y >= 0) {
+            heat[y] = qadd8(heat[y], random8(160, 255));
+        }
+
+        // Right side of center
+        y = center + 1 + random8(7);
+        if (y < stripLen) {
+            heat[y] = qadd8(heat[y], random8(160, 255));
+        }
+    }
+
+    // Heat diffusion outward from center
+    for (int i = center - 1; i >= 2; i--) {
+        heat[i] = (heat[i + 1] + heat[i + 1] + heat[i + 2]) / 3;
+    }
+    for (int i = center + 2; i < stripLen - 2; i++) {
+        heat[i] = (heat[i - 1] + heat[i - 1] + heat[i - 2]) / 3;
+    }
+
+    // Map heat to color
+    for (uint16_t i = 0; i < stripLen; i++) {
+        CRGB color = HeatColor(heat[i]);
+        ctx.leds[i] = color;
+        ctx.leds[i + 160] = color;  // Mirror to Strip 2
+    }
+}
+
+// ============================================================================
+// Effect Registration
+// ============================================================================
+
+void registerBuiltinEffects(RendererActor* renderer)
+{
+    if (renderer == nullptr) return;
+
+    renderer->registerEffect(0, "Solid", effectSolid);
+    renderer->registerEffect(1, "Center Pulse", effectCenterPulse);
+    renderer->registerEffect(2, "Breathing", effectBreathing);
+    renderer->registerEffect(3, "Center Wave", effectCenterWave);
+    renderer->registerEffect(4, "Confetti", effectConfetti);
+    renderer->registerEffect(5, "Center Fire", effectCenterFire);
+
+    Serial.printf("Registered %d effects\n", renderer->getEffectCount());
+}
+
+// ============================================================================
+// Example: Event Subscriber Actor
+// ============================================================================
+
+/**
+ * @brief Example Actor that subscribes to and logs events
+ *
+ * This demonstrates how to create a custom Actor that listens for
+ * events from other Actors via the MessageBus.
+ */
+class LoggerActor : public Actor {
+public:
+    LoggerActor() : Actor(ActorConfig("Logger", 2048, 1, 0, 16, 0)) {}
+
+protected:
+    void onStart() override {
+        // Subscribe to events we care about
+        MSG_BUS.subscribe(MessageType::EFFECT_CHANGED, this);
+        MSG_BUS.subscribe(MessageType::FRAME_RENDERED, this);
+        Serial.println("[Logger] Started and subscribed to events");
+    }
+
+    void onMessage(const Message& msg) override {
+        switch (msg.type) {
+            case MessageType::EFFECT_CHANGED:
+                Serial.printf("[Logger] Effect changed: %d -> %d\n",
+                              msg.param2, msg.param1);
+                break;
+
+            case MessageType::FRAME_RENDERED:
+                // Only log every 100th frame to avoid spam
+                if (msg.param4 % 100 == 0) {
+                    Serial.printf("[Logger] Frame %lu, FPS=%d\n",
+                                  msg.param4, msg.param2);
+                }
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    void onStop() override {
+        MSG_BUS.unsubscribeAll(this);
+        Serial.println("[Logger] Stopped");
+    }
+};
+
+// ============================================================================
+// Setup Function (call from main setup())
+// ============================================================================
+
+void exampleActorSetup()
+{
+    Serial.begin(115200);
+    delay(1000);
+
+    Serial.println(F("\n\n"));
+    Serial.println(F("===================================="));
+    Serial.println(F("     LightwaveOS v2 Actor Demo"));
+    Serial.println(F("===================================="));
+    Serial.println();
+
+    // Print system info
+    Serial.printf("ESP32-S3 running at %lu MHz\n", getCpuFrequencyMhz());
+    Serial.printf("Free heap: %lu bytes\n", ESP.getFreeHeap());
+    Serial.println();
+
+    // Initialize the Actor system
+    Serial.println(F("Initializing Actor System..."));
+
+    ActorSystem& actors = ActorSystem::instance();
+    if (!actors.init()) {
+        Serial.println(F("ERROR: Failed to initialize Actor System!"));
+        return;
+    }
+
+    // Register effects BEFORE starting
+    registerBuiltinEffects(actors.getRenderer());
+
+    // Start all actors
+    Serial.println(F("Starting Actors..."));
+
+    if (!actors.start()) {
+        Serial.println(F("ERROR: Failed to start Actor System!"));
+        return;
+    }
+
+    // Create and start a logger actor (optional)
+    static LoggerActor logger;
+    logger.start();
+
+    Serial.println(F("\nSystem ready!"));
+    Serial.println(F("Commands: e<N> = effect, b<N> = brightness, s<N> = speed"));
+    Serial.println(F("          ? = status, h = help"));
+    Serial.println();
+
+    // Set initial effect
+    actors.setEffect(1);  // Center Pulse
+}
+
+// ============================================================================
+// Loop Function (call from main loop())
+// ============================================================================
+
+void exampleActorLoop()
+{
+    ActorSystem& actors = ActorSystem::instance();
+
+    // Handle serial commands
+    if (Serial.available()) {
+        String cmd = Serial.readStringUntil('\n');
+        cmd.trim();
+
+        if (cmd.length() == 0) return;
+
+        char c = cmd.charAt(0);
+
+        switch (c) {
+            case 'e': {
+                int effectId = cmd.substring(1).toInt();
+                if (actors.setEffect(effectId)) {
+                    Serial.printf("Effect set to %d\n", effectId);
+                }
+                break;
+            }
+
+            case 'b': {
+                int brightness = cmd.substring(1).toInt();
+                if (actors.setBrightness(brightness)) {
+                    Serial.printf("Brightness set to %d\n", brightness);
+                }
+                break;
+            }
+
+            case 's': {
+                int speed = cmd.substring(1).toInt();
+                if (actors.setSpeed(speed)) {
+                    Serial.printf("Speed set to %d\n", speed);
+                }
+                break;
+            }
+
+            case 'p': {
+                int palette = cmd.substring(1).toInt();
+                if (actors.setPalette(palette)) {
+                    Serial.printf("Palette set to %d\n", palette);
+                }
+                break;
+            }
+
+            case '?':
+                actors.printStatus();
+                break;
+
+            case 'h':
+                Serial.println(F("\n=== Commands ==="));
+                Serial.println(F("e<N>  - Set effect (0-5)"));
+                Serial.println(F("b<N>  - Set brightness (0-255)"));
+                Serial.println(F("s<N>  - Set speed (1-50)"));
+                Serial.println(F("p<N>  - Set palette (0-7)"));
+                Serial.println(F("?     - Print status"));
+                Serial.println(F("h     - This help"));
+                Serial.println();
+                break;
+
+            default:
+                Serial.println(F("Unknown command. Type 'h' for help."));
+                break;
+        }
+    }
+
+    delay(10);
+}

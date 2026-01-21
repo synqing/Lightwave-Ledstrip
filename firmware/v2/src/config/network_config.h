@@ -134,6 +134,16 @@ namespace NetworkConfig {
     constexpr uint32_t RECONNECT_DELAY_MS = 5000;       // 5s between reconnect attempts
     constexpr uint32_t MAX_RECONNECT_DELAY_MS = 60000;  // Max 1 minute backoff
 
+    // ========================================================================
+    // Force AP Mode (from build flag)
+    // ========================================================================
+
+    #ifdef LW_FORCE_AP_MODE
+        constexpr bool FORCE_AP_MODE = (LW_FORCE_AP_MODE != 0);
+    #else
+        constexpr bool FORCE_AP_MODE = false;  // Default: STA mode
+    #endif
+
 } // namespace NetworkConfig
 
 } // namespace config

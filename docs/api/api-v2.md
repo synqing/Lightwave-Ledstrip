@@ -15,7 +15,7 @@
    - [Effects](#effects-endpoints-5)
    - [Parameters](#parameters-endpoints-4)
    - [Transitions](#transitions-endpoints-4)
-   - [Zones](#zones-endpoints-10)
+   - [Zones](#zones-endpoints-12)
    - [Enhancements](#enhancement-endpoints-8)
    - [Batch](#batch-endpoints-1)
 6. [WebSocket Commands](#websocket-commands)
@@ -945,7 +945,7 @@ curl -X POST http://lightwaveos.local/api/v2/transitions/trigger \
 
 ---
 
-### Zones Endpoints (10)
+### Zones Endpoints (12)
 
 #### `GET /api/v2/zones`
 
@@ -1460,6 +1460,120 @@ curl -X POST http://lightwaveos.local/api/v2/zones/presets/3/load
 
 # Load user preset
 curl -X POST "http://lightwaveos.local/api/v2/zones/presets/0/load?type=user"
+```
+
+---
+
+#### `GET /api/v2/zones/{id}/audio`
+
+Get audio configuration for a specific zone. (Phase 2b.3: Zone Audio Routing)
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | uint8 | Zone ID (0-3) |
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "zoneId": 0,
+    "tempoSync": false,
+    "beatModulation": 0,
+    "tempoSpeedScale": 0,
+    "beatDecay": 128,
+    "audioBand": 0,
+    "audioBandName": "Full"
+  },
+  "timestamp": 123456789,
+  "version": "2.0.0"
+}
+```
+
+**Audio Band Values:**
+
+| Value | Name | Frequency Range | Description |
+|-------|------|-----------------|-------------|
+| 0 | Full | All frequencies | No filtering (default) |
+| 1 | Bass | 20-250 Hz | Kick drums, bass guitar, sub |
+| 2 | Mid | 250-2000 Hz | Vocals, guitars, snare |
+| 3 | High | 2000+ Hz | Hi-hats, cymbals, presence |
+
+**cURL Example:**
+```bash
+curl http://lightwaveos.local/api/v2/zones/0/audio
+```
+
+---
+
+#### `PATCH /api/v2/zones/{id}/audio`
+
+Update audio configuration for a specific zone. Enables per-zone frequency band routing so different zones can respond to different frequency ranges.
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `id` | uint8 | Zone ID (0-3) |
+
+**Request Body:**
+```json
+{
+  "tempoSync": true,
+  "beatModulation": 128,
+  "audioBand": 1
+}
+```
+
+**Request Fields:**
+
+| Field | Type | Range | Description |
+|-------|------|-------|-------------|
+| `tempoSync` | bool | - | Enable tempo/beat synchronization |
+| `beatModulation` | uint8 | 0-255 | How much beat affects brightness |
+| `tempoSpeedScale` | uint8 | 0-255 | How much BPM affects animation speed |
+| `beatDecay` | uint8 | 0-255 | Beat pulse decay rate (higher = faster) |
+| `audioBand` | uint8 | 0-3 | Frequency band filter |
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "zoneId": 0,
+    "tempoSync": true,
+    "beatModulation": 128,
+    "tempoSpeedScale": 0,
+    "beatDecay": 128,
+    "audioBand": 1,
+    "audioBandName": "Bass"
+  },
+  "timestamp": 123456789,
+  "version": "2.0.0"
+}
+```
+
+**Example: Multi-Zone Frequency Separation**
+
+Configure zones to respond to different frequency bands for a frequency-reactive display:
+
+```bash
+# Zone 0 (center): Bass only - kicks and sub
+curl -X PATCH http://lightwaveos.local/api/v2/zones/0/audio \
+  -H "Content-Type: application/json" \
+  -d '{"audioBand": 1}'
+
+# Zone 1 (middle): Mid only - vocals and snare
+curl -X PATCH http://lightwaveos.local/api/v2/zones/1/audio \
+  -H "Content-Type: application/json" \
+  -d '{"audioBand": 2}'
+
+# Zone 2 (outer): High only - hi-hats and cymbals
+curl -X PATCH http://lightwaveos.local/api/v2/zones/2/audio \
+  -H "Content-Type: application/json" \
+  -d '{"audioBand": 3}'
 ```
 
 ---

@@ -100,6 +100,8 @@ struct NoiseCalibrationState {
 struct AudioPipelineTuning {
     float dcAlpha = 0.001f;
 
+    bool agcEnabled = false;  ///< Enable/disable AGC (false = fixed 4x gain like Emotiscope)
+
     float agcTargetRms = 0.25f;
     float agcMinGain = 1.0f;
     float agcMaxGain = 40.0f;      // Was 100.0 - cap to prevent runaway amplification
@@ -167,6 +169,13 @@ struct AudioContractTuning {
     float confidenceTau = 1.00f;
     float phaseCorrectionGain = 0.35f;
     float barCorrectionGain = 0.20f;
+
+    // TempoTracker Goertzel Tuning
+    float tempoHysteresisThreshold = 1.1f; // Ratio (e.g., 1.1 = 10% advantage required)
+    uint8_t tempoHysteresisFrames = 5;     // Consecutive frames to switch
+    float tempoMagnitudeAlpha = 0.025f;    // Smoothing factor for magnitudes (0.0-1.0)
+    float tempoSilentDecay = 0.995f;       // Decay factor for silent bins
+    float tempoSilenceThreshold = 0.5f;    // 0.0-1.0 (higher = more sensitive)
 
     uint8_t beatsPerBar = 4;
     uint8_t beatUnit = 4;
@@ -275,6 +284,13 @@ inline AudioContractTuning clampAudioContractTuning(const AudioContractTuning& i
     out.confidenceTau = clampf(out.confidenceTau, 0.01f, 10.0f);
     out.phaseCorrectionGain = clampf(out.phaseCorrectionGain, 0.0f, 1.0f);
     out.barCorrectionGain = clampf(out.barCorrectionGain, 0.0f, 1.0f);
+
+    out.tempoHysteresisThreshold = clampf(out.tempoHysteresisThreshold, 1.0f, 2.0f);
+    if (out.tempoHysteresisFrames < 1) out.tempoHysteresisFrames = 1;
+    if (out.tempoHysteresisFrames > 60) out.tempoHysteresisFrames = 60;
+    out.tempoMagnitudeAlpha = clampf(out.tempoMagnitudeAlpha, 0.001f, 1.0f);
+    out.tempoSilentDecay = clampf(out.tempoSilentDecay, 0.0f, 1.0f);
+    out.tempoSilenceThreshold = clampf(out.tempoSilenceThreshold, 0.0f, 1.0f);
 
     if (out.beatsPerBar == 0) out.beatsPerBar = 4;
     if (out.beatUnit == 0) out.beatUnit = 4;

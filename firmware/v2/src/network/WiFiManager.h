@@ -49,6 +49,7 @@
 #include <freertos/semphr.h>
 
 #include "../config/network_config.h"
+#include "WiFiCredentialsStorage.h"
 
 namespace lightwaveos {
 namespace network {
@@ -292,6 +293,68 @@ public:
      * @brief Trigger network scan
      */
     void scanNetworks();
+
+    // ========================================================================
+    // Stubs for API compatibility (features not in this version)
+    // ========================================================================
+
+    /**
+     * @brief Request STA mode enable (stub)
+     */
+    bool requestSTAEnable(uint32_t timeoutMs = 0, bool autoRevert = false) { 
+        (void)timeoutMs; (void)autoRevert; 
+        return false; 
+    }
+
+    /**
+     * @brief Request AP-only mode (stub)
+     */
+    bool requestAPOnly() { return false; }
+
+    /**
+     * @brief Check if force AP-only mode is active (stub)
+     */
+    bool isForceApOnlyRuntime() const { return false; }
+
+    /**
+     * @brief Get saved networks (stub - returns 0)
+     */
+    uint8_t getSavedNetworks(WiFiCredentialsStorage::NetworkCredential* out, uint8_t maxNetworks) const {
+        (void)out; (void)maxNetworks;
+        return 0;
+    }
+
+    /**
+     * @brief Add network to saved list (stub)
+     */
+    bool addNetwork(const String& ssid, const String& password) {
+        (void)ssid; (void)password;
+        return false;
+    }
+
+    /**
+     * @brief Delete saved network (stub)
+     */
+    bool deleteSavedNetwork(const String& ssid) {
+        (void)ssid;
+        return false;
+    }
+
+    /**
+     * @brief Connect to network (stub)
+     */
+    bool connectToNetwork(const String& ssid, const String& password) {
+        (void)ssid; (void)password;
+        return false;
+    }
+
+    /**
+     * @brief Connect to saved network (stub)
+     */
+    bool connectToSavedNetwork(const String& ssid) {
+        (void)ssid;
+        return false;
+    }
 
 private:
     // ========================================================================

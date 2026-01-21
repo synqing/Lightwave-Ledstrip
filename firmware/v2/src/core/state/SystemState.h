@@ -2,6 +2,8 @@
 
 #include <cstdint>
 #include <array>
+#include "../../effects/zones/BlendMode.h"
+#include "../../effects/zones/ZoneComposer.h"
 
 namespace lightwaveos {
 namespace state {
@@ -16,6 +18,9 @@ constexpr uint8_t MAX_EFFECT_COUNT = 98;
 /**
  * Zone configuration state
  * Represents the state of a single zone in multi-zone mode
+ * 
+ * Note: This structure aligns with ZoneComposer::ZoneState to ensure
+ * state synchronization consistency across the system.
  */
 struct ZoneState {
     uint8_t effectId;       // Current effect ID for this zone
@@ -23,6 +28,8 @@ struct ZoneState {
     uint8_t brightness;     // Zone-specific brightness (0-255)
     uint8_t speed;          // Zone-specific animation speed (1-100)
     bool enabled;           // Whether this zone is active
+    zones::BlendMode blendMode;  // Compositing mode (aligns with ZoneComposer)
+    zones::ZoneAudioConfig audio; // Audio-reactive settings (aligns with ZoneComposer)
 
     // Default constructor with safe initial values
     ZoneState()
@@ -31,6 +38,8 @@ struct ZoneState {
         , brightness(255)
         , speed(15)
         , enabled(false)
+        , blendMode(zones::BlendMode::OVERWRITE)
+        , audio()  // ZoneAudioConfig has default constructor
     {}
 
     // Copy constructor

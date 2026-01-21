@@ -71,6 +71,11 @@ export class V2Client {
     return this.request<T>('POST', path, { body });
   }
 
+  async delete<T>(path: string) {
+    this.invalidateGetCache();
+    return this.request<T>('DELETE', path);
+  }
+
   private invalidateGetCache() {
     for (const key of this.cache.keys()) {
       if (key.startsWith('GET ')) this.cache.delete(key);
@@ -229,4 +234,3 @@ export class V2Client {
     return new Promise<void>(resolve => window.setTimeout(resolve, ms));
   }
 }
-

@@ -42,6 +42,11 @@ private:
     float m_dominantBinSmooth = 0.0f;
     float m_collisionBoost = 0.0f;
 
+    // Chromagram smoothing (AsymmetricFollower for natural attack/release)
+    enhancement::AsymmetricFollower m_chromaFollowers[12];
+    float m_chromaSmoothed[12] = {0.0f};
+    float m_chromaTargets[12] = {0.0f};
+    
     // Enhancement utilities (Spring + AsymmetricFollower)
     enhancement::Spring m_speedSpring;                                        // Natural momentum for speed
     enhancement::AsymmetricFollower m_energyAvgFollower{0.0f, 0.20f, 0.50f};  // 200ms rise, 500ms fall

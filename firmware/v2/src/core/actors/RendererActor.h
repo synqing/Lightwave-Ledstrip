@@ -49,6 +49,7 @@
 #include "../../audio/contracts/MusicalGrid.h"
 #include "../../audio/contracts/SnapshotBuffer.h"
 #include "../../audio/contracts/AudioEffectMapping.h"
+#include "../../audio/TrinityControlBusProxy.h"
 // TempoTracker integration (replaces K1)
 #include "../../audio/tempo/TempoTracker.h"
 #include "../../utils/LockFreeQueue.h"
@@ -668,6 +669,16 @@ private:
 
     /// Sequence number from last SnapshotBuffer read (for change detection)
     uint32_t m_lastControlBusSeq = 0;
+
+#if FEATURE_AUDIO_SYNC
+    /// Trinity ControlBus proxy for offline ML analysis sync
+    audio::TrinityControlBusProxy m_trinityProxy;
+
+    /// Trinity sync state
+    bool m_trinitySyncActive = false;
+    bool m_trinitySyncPaused = false;
+    float m_trinitySyncPosition = 0.0f;
+#endif
 
     // Audio availability latch (hysteresis) removed: keep simple gate based on
     // sequence_changed || age_within_tolerance for predictability.

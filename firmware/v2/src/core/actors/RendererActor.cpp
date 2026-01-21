@@ -45,6 +45,7 @@ namespace lightwaveos { namespace actors {
 }}
 
 #include <cstring>
+#include <cstdio>
 
 #ifndef NATIVE_BUILD
 #include <Arduino.h>
@@ -397,6 +398,21 @@ void RendererActor::onMessage(const Message& msg)
             break;
 
         case MessageType::SET_PALETTE:
+            // #region agent log
+            {
+                FILE* f = fopen("/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/.cursor/debug.log", "a");
+                if (f) {
+                    fprintf(f,
+                            "{\"sessionId\":\"debug-session\",\"runId\":\"palette-loop-1\",\"hypothesisId\":\"H2\","
+                            "\"location\":\"RendererActor.cpp:onMessage\",\"message\":\"SET_PALETTE received\","
+                            "\"data\":{\"paletteIndex\":%u,\"currentPalette\":%u},\"timestamp\":%lu}\n",
+                            static_cast<unsigned>(msg.param1),
+                            static_cast<unsigned>(m_paletteIndex),
+                            static_cast<unsigned long>(millis()));
+                    fclose(f);
+                }
+            }
+            // #endregion
             handleSetPalette(msg.param1);
             break;
 
@@ -446,6 +462,21 @@ void RendererActor::onMessage(const Message& msg)
 
         case MessageType::PALETTE_CHANGED:
             // External palette change notification
+            // #region agent log
+            {
+                FILE* f = fopen("/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/.cursor/debug.log", "a");
+                if (f) {
+                    fprintf(f,
+                            "{\"sessionId\":\"debug-session\",\"runId\":\"palette-loop-1\",\"hypothesisId\":\"H2\","
+                            "\"location\":\"RendererActor.cpp:onMessage\",\"message\":\"PALETTE_CHANGED received\","
+                            "\"data\":{\"paletteIndex\":%u,\"currentPalette\":%u},\"timestamp\":%lu}\n",
+                            static_cast<unsigned>(msg.param1),
+                            static_cast<unsigned>(m_paletteIndex),
+                            static_cast<unsigned long>(millis()));
+                    fclose(f);
+                }
+            }
+            // #endregion
             handleSetPalette(msg.param1);
             break;
 
@@ -457,6 +488,79 @@ void RendererActor::onMessage(const Message& msg)
                 bus::MessageBus::instance().publish(pong);
             }
             break;
+
+#if FEATURE_AUDIO_SYNC
+        case MessageType::TRINITY_BEAT:
+            {
+                // Unpack BPM (param1=hi, param2=lo)
+                uint16_t bpmFixed = ((uint16_t)msg.param1 << 8) | msg.param2;
+                float bpm = (float)bpmFixed / 100.0f;
+                
+                // Unpack phase (param3)
+                float phase01 = (float)msg.param3 / 255.0f;
+                
+                // Unpack flags (param4)
+                bool tick = (msg.param4 & 0x01) != 0;
+                bool downbeat = (msg.param4 & 0x02) != 0;
+                int beatInBar = (int)((msg.param4 >> 2) & 0x03);
+                
+                m_musicalGrid.injectExternalBeat(bpm, phase01, tick, downbeat, beatInBar);
+            }
+            break;
+
+        case MessageType::TRINITY_MACRO:
+            {
+                // Unpack macro values (all uint8_t, convert to float)
+                float energy = (float)msg.param1 / 255.0f;
+                float vocal = (float)msg.param2 / 255.0f;
+                float bass = (float)msg.param3 / 255.0f;
+                float perc = (float)((msg.param4 >> 24) & 0xFF) / 255.0f;
+                float bright = (float)((msg.param4 >> 16) & 0xFF) / 255.0f;
+                
+                m_trinityProxy.setMacros(energy, vocal, bass, perc, bright);
+            }
+            break;
+
+        case MessageType::TRINITY_SYNC:
+            {
+                uint8_t action = msg.param1;
+                float positionSec = (float)msg.param4 / 1000.0f;
+                uint16_t bpmFixed = ((uint16_t)msg.param2 << 8) | msg.param3;
+                float bpm = (float)bpmFixed / 100.0f;
+                
+                switch (action) {
+                    case 0: // start
+                        m_trinitySyncActive = true;
+                        m_trinitySyncPaused = false;
+                        m_trinitySyncPosition = positionSec;
+                        m_musicalGrid.setExternalSyncMode(true);
+                        if (bpm > 0.0f) {
+                            m_musicalGrid.injectExternalBeat(bpm, 0.0f, false, false, 0);
+                        }
+                        break;
+                    case 1: // stop
+                        m_trinitySyncActive = false;
+                        m_trinitySyncPaused = false;
+                        m_trinitySyncPosition = 0.0f;
+                        m_musicalGrid.setExternalSyncMode(false);
+                        m_trinityProxy.reset();
+                        break;
+                    case 2: // pause
+                        m_trinitySyncPaused = true;
+                        break;
+                    case 3: // resume
+                        m_trinitySyncPaused = false;
+                        break;
+                    case 4: // seek
+                        m_trinitySyncPosition = positionSec;
+                        if (bpm > 0.0f) {
+                            m_musicalGrid.injectExternalBeat(bpm, 0.0f, false, false, 0);
+                        }
+                        break;
+                }
+            }
+            break;
+#endif
 
         default:
             // Unknown message - ignore
@@ -854,11 +958,30 @@ void RendererActor::renderFrame()
         audioAvailable = sequence_changed || age_within_tolerance;
 
         // 6. Populate shared AudioContext (member, reused across zone + single-effect mode)
-        m_sharedAudioCtx.controlBus = m_lastControlBus;
-        m_sharedAudioCtx.musicalGrid = m_lastMusicalGrid;
-        m_sharedAudioCtx.available = audioAvailable;
+        // Check if Trinity sync is active and proxy is fresh
+        bool trinityActive = (m_trinitySyncActive && m_trinityProxy.isActive() && !m_trinitySyncPaused);
+        
+        if (trinityActive) {
+            // Use Trinity proxy for offline ML analysis sync
+            m_sharedAudioCtx.controlBus = m_trinityProxy.getFrame();
+            m_sharedAudioCtx.musicalGrid = m_lastMusicalGrid;
+            m_sharedAudioCtx.available = true;
+        } else {
+            // Use live audio data
+            m_sharedAudioCtx.controlBus = m_lastControlBus;
+            m_sharedAudioCtx.musicalGrid = m_lastMusicalGrid;
+            m_sharedAudioCtx.available = audioAvailable;
+        }
     } else {
-        m_sharedAudioCtx.available = false;
+        // No audio buffer - check Trinity proxy as fallback
+        bool trinityActive = (m_trinitySyncActive && m_trinityProxy.isActive() && !m_trinitySyncPaused);
+        if (trinityActive) {
+            m_sharedAudioCtx.controlBus = m_trinityProxy.getFrame();
+            m_sharedAudioCtx.musicalGrid = m_lastMusicalGrid;
+            m_sharedAudioCtx.available = true;
+        } else {
+            m_sharedAudioCtx.available = false;
+        }
     }
 #endif
 
@@ -1168,6 +1291,22 @@ void RendererActor::handleSetPalette(uint8_t paletteIndex)
     uint8_t safe_palette = lightwaveos::palettes::validatePaletteId(paletteIndex);
 
     if (m_paletteIndex != safe_palette) {
+        // #region agent log
+        {
+            FILE* f = fopen("/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/.cursor/debug.log", "a");
+            if (f) {
+                fprintf(f,
+                        "{\"sessionId\":\"debug-session\",\"runId\":\"palette-loop-1\",\"hypothesisId\":\"H3\","
+                        "\"location\":\"RendererActor.cpp:handleSetPalette\",\"message\":\"palette update\","
+                        "\"data\":{\"incoming\":%u,\"safe\":%u,\"previous\":%u},\"timestamp\":%lu}\n",
+                        static_cast<unsigned>(paletteIndex),
+                        static_cast<unsigned>(safe_palette),
+                        static_cast<unsigned>(m_paletteIndex),
+                        static_cast<unsigned long>(millis()));
+                fclose(f);
+            }
+        }
+        // #endregion
         m_paletteIndex = safe_palette;
 
         // Load palette from master palette array (75 palettes)

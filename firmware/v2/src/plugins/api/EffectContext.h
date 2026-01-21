@@ -221,6 +221,17 @@ struct AudioContext {
     /// Get pointer to full 64-bin array (for efficient iteration)
     const float* bins64() const { return controlBus.bins64; }
 
+    /// Get single bin value from adaptive 64-bin FFT (0.0-1.0)
+    float binAdaptive(uint8_t index) const {
+        if (index < audio::ControlBusFrame::BINS_64_COUNT) {
+            return controlBus.bins64Adaptive[index];
+        }
+        return 0.0f;
+    }
+
+    /// Get pointer to adaptive 64-bin array (Sensory Bridge normalisation)
+    const float* bins64Adaptive() const { return controlBus.bins64Adaptive; }
+
     // ========================================================================
     // Musical Saliency Accessors (MIS Phase 1: Adaptive audio-visual intelligence)
     // ========================================================================
@@ -385,6 +396,8 @@ struct AudioContext {
     static constexpr uint8_t bins64Count() { return 64; }
     float bin(uint8_t) const { return 0.0f; }
     const float* bins64() const { return nullptr; }
+    float binAdaptive(uint8_t) const { return 0.0f; }
+    const float* bins64Adaptive() const { return nullptr; }
 
     // Musical saliency stubs (always return "not salient")
     struct StubSaliencyFrame {

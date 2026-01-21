@@ -36,7 +36,7 @@ namespace persistence {
  * @brief Serializable audio tuning preset for NVS storage
  */
 struct AudioTuningPreset {
-    static constexpr uint8_t CURRENT_VERSION = 1;
+    static constexpr uint8_t CURRENT_VERSION = 2;
     static constexpr size_t NAME_MAX_LEN = 32;
 
     uint8_t version = CURRENT_VERSION;

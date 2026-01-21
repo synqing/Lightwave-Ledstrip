@@ -70,6 +70,9 @@ private:
     
     // Enhanced: Snare sharpness boost
     float m_snareSharpness = 0.0f;
+    
+    // Tempo lock hysteresis (Schmitt trigger: 0.6 lock / 0.4 unlock)
+    bool m_tempoLocked = false;
 };
 
 } // namespace ieffect

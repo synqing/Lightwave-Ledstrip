@@ -56,6 +56,10 @@ private:
 
     // Tempo lock hysteresis
     bool m_tempoLocked = false;
+    
+    // EMA smoothing for heavyEnergy (prevents pops)
+    float m_heavyEnergySmooth = 0.0f;
+    bool m_heavyEnergySmoothInitialized = false;
 };
 
 } // namespace ieffect

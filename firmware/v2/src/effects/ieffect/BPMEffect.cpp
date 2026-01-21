@@ -37,6 +37,10 @@ bool BPMEffect::init(plugins::EffectContext& ctx) {
 
     // Initialize phase
     m_phase = 0.0f;
+    
+    // Initialize smoothing
+    m_heavyEnergySmooth = 0.0f;
+    m_heavyEnergySmoothInitialized = false;
 
     // Initialize Spring with stiffness=50, critically damped (matches v8 pattern)
     m_speedSpring.init(50.0f, 1.0f);
@@ -68,10 +72,24 @@ void BPMEffect::render(plugins::EffectContext& ctx) {
 #if FEATURE_AUDIO_SYNC
     if (ctx.audio.available) {
         // =====================================================================
-        // v8 SPEED MODULATION: heavy_bands → Spring (NO stacked smoothing!)
+        // v8 SPEED MODULATION: heavy_bands → EMA smoothing → Spring
         // =====================================================================
-        float heavyEnergy = (ctx.audio.controlBus.heavy_bands[1] +
-                             ctx.audio.controlBus.heavy_bands[2]) / 2.0f;
+        float rawHeavyEnergy = (ctx.audio.controlBus.heavy_bands[1] +
+                                 ctx.audio.controlBus.heavy_bands[2]) / 2.0f;
+        
+        // EMA smoothing with frame-rate-independent alpha (tau = 50ms)
+        const float tau = 0.05f;
+        float alpha = 1.0f - expf(-dt / tau);
+        
+        // CRITICAL: Initialize to raw value on first frame (no ramp-from-zero)
+        if (!m_heavyEnergySmoothInitialized) {
+            m_heavyEnergySmooth = rawHeavyEnergy;
+            m_heavyEnergySmoothInitialized = true;
+        } else {
+            m_heavyEnergySmooth += (rawHeavyEnergy - m_heavyEnergySmooth) * alpha;
+        }
+        
+        float heavyEnergy = m_heavyEnergySmooth;
         float targetSpeed = 0.6f + 0.8f * heavyEnergy;  // 0.6-1.4x range
         speedMult = m_speedSpring.update(targetSpeed, dt);
         if (speedMult > 1.6f) speedMult = 1.6f;

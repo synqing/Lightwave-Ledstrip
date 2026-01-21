@@ -45,6 +45,7 @@
 #if FEATURE_AUDIO_SYNC
 #include "webserver/ws/WsAudioCommands.h"
 #include "webserver/ws/WsDebugCommands.h"
+#include "webserver/ws/WsTrinityCommands.h"
 #endif
 #include "webserver/ws/WsStreamCommands.h"
 #include "webserver/ws/WsPluginCommands.h"
@@ -634,6 +635,7 @@ void WebServer::setupWebSocket() {
 #if FEATURE_AUDIO_SYNC
     webserver::ws::registerWsAudioCommands(ctx);
     webserver::ws::registerWsDebugCommands(ctx);
+    webserver::ws::registerWsTrinityCommands(ctx);
 #endif
     webserver::ws::registerWsStreamCommands(ctx);
     webserver::ws::registerWsPluginCommands(ctx);

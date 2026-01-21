@@ -72,6 +72,34 @@ void AudioHandlers::handleParametersGet(AsyncWebServerRequest* request,
         pipelineObj["chromaDbFloor"] = pipeline.chromaDbFloor;
         pipelineObj["chromaDbCeil"] = pipeline.chromaDbCeil;
         pipelineObj["fluxScale"] = pipeline.fluxScale;
+        pipelineObj["bandAttack"] = pipeline.bandAttack;
+        pipelineObj["bandRelease"] = pipeline.bandRelease;
+        pipelineObj["heavyBandAttack"] = pipeline.heavyBandAttack;
+        pipelineObj["heavyBandRelease"] = pipeline.heavyBandRelease;
+        pipelineObj["usePerBandNoiseFloor"] = pipeline.usePerBandNoiseFloor;
+        pipelineObj["silenceHysteresisMs"] = pipeline.silenceHysteresisMs;
+        pipelineObj["silenceThreshold"] = pipeline.silenceThreshold;
+
+        JsonArray perBandGains = pipelineObj["perBandGains"].to<JsonArray>();
+        for (uint8_t i = 0; i < 8; ++i) {
+            perBandGains.add(pipeline.perBandGains[i]);
+        }
+
+        JsonArray perBandNoiseFloors = pipelineObj["perBandNoiseFloors"].to<JsonArray>();
+        for (uint8_t i = 0; i < 8; ++i) {
+            perBandNoiseFloors.add(pipeline.perBandNoiseFloors[i]);
+        }
+
+        JsonObject bins64Adaptive = pipelineObj["bins64Adaptive"].to<JsonObject>();
+        bins64Adaptive["scale"] = pipeline.bins64AdaptiveScale;
+        bins64Adaptive["floor"] = pipeline.bins64AdaptiveFloor;
+        bins64Adaptive["rise"] = pipeline.bins64AdaptiveRise;
+        bins64Adaptive["fall"] = pipeline.bins64AdaptiveFall;
+        bins64Adaptive["decay"] = pipeline.bins64AdaptiveDecay;
+
+        JsonObject novelty = pipelineObj["novelty"].to<JsonObject>();
+        novelty["useSpectralFlux"] = pipeline.noveltyUseSpectralFlux;
+        novelty["spectralFluxScale"] = pipeline.noveltySpectralFluxScale;
 
         JsonObject controlBus = data["controlBus"].to<JsonObject>();
         controlBus["alphaFast"] = pipeline.controlBusAlphaFast;
@@ -124,7 +152,7 @@ void AudioHandlers::handleParametersSet(AsyncWebServerRequest* request,
         return;
     }
 
-    StaticJsonDocument<512> doc;
+    StaticJsonDocument<1024> doc;
     DeserializationError error = deserializeJson(doc, data, len);
     if (error) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
@@ -155,6 +183,27 @@ void AudioHandlers::handleParametersSet(AsyncWebServerRequest* request,
             updated = true;
         }
     };
+    auto applyBool = [](JsonVariant source, const char* key, bool& target, bool& updated) {
+        if (!source.is<JsonObject>()) return;
+        if (source.containsKey(key)) {
+            target = source[key].as<bool>();
+            updated = true;
+        }
+    };
+    auto applyFloatArray = [](JsonVariant source, const char* key, float* target, size_t count, bool& updated) {
+        if (!source.is<JsonObject>()) return;
+        if (!source.containsKey(key)) return;
+        JsonArray values = source[key].as<JsonArray>();
+        if (!values) return;
+        size_t idx = 0;
+        for (JsonVariant v : values) {
+            if (idx >= count) break;
+            target[idx++] = v.as<float>();
+        }
+        if (idx > 0) {
+            updated = true;
+        }
+    };
 
     JsonVariant pipelineSrc = doc.as<JsonVariant>();
     if (doc.containsKey("pipeline")) {
@@ -181,6 +230,36 @@ void AudioHandlers::handleParametersSet(AsyncWebServerRequest* request,
     applyFloat(pipelineSrc, "chromaDbFloor", pipeline.chromaDbFloor, updatedPipeline);
     applyFloat(pipelineSrc, "chromaDbCeil", pipeline.chromaDbCeil, updatedPipeline);
     applyFloat(pipelineSrc, "fluxScale", pipeline.fluxScale, updatedPipeline);
+    applyFloat(pipelineSrc, "bandAttack", pipeline.bandAttack, updatedPipeline);
+    applyFloat(pipelineSrc, "bandRelease", pipeline.bandRelease, updatedPipeline);
+    applyFloat(pipelineSrc, "heavyBandAttack", pipeline.heavyBandAttack, updatedPipeline);
+    applyFloat(pipelineSrc, "heavyBandRelease", pipeline.heavyBandRelease, updatedPipeline);
+    applyBool(pipelineSrc, "usePerBandNoiseFloor", pipeline.usePerBandNoiseFloor, updatedPipeline);
+    applyFloat(pipelineSrc, "silenceHysteresisMs", pipeline.silenceHysteresisMs, updatedPipeline);
+    applyFloat(pipelineSrc, "silenceThreshold", pipeline.silenceThreshold, updatedPipeline);
+    applyFloatArray(pipelineSrc, "perBandGains", pipeline.perBandGains, 8, updatedPipeline);
+    applyFloatArray(pipelineSrc, "perBandNoiseFloors", pipeline.perBandNoiseFloors, 8, updatedPipeline);
+
+    JsonVariant bins64AdaptiveSrc = doc.as<JsonVariant>();
+    if (pipelineSrc.is<JsonObject>() && pipelineSrc.containsKey("bins64Adaptive")) {
+        bins64AdaptiveSrc = pipelineSrc["bins64Adaptive"];
+    } else if (doc.containsKey("bins64Adaptive")) {
+        bins64AdaptiveSrc = doc["bins64Adaptive"];
+    }
+    applyFloat(bins64AdaptiveSrc, "scale", pipeline.bins64AdaptiveScale, updatedPipeline);
+    applyFloat(bins64AdaptiveSrc, "floor", pipeline.bins64AdaptiveFloor, updatedPipeline);
+    applyFloat(bins64AdaptiveSrc, "rise", pipeline.bins64AdaptiveRise, updatedPipeline);
+    applyFloat(bins64AdaptiveSrc, "fall", pipeline.bins64AdaptiveFall, updatedPipeline);
+    applyFloat(bins64AdaptiveSrc, "decay", pipeline.bins64AdaptiveDecay, updatedPipeline);
+
+    JsonVariant noveltySrc = doc.as<JsonVariant>();
+    if (pipelineSrc.is<JsonObject>() && pipelineSrc.containsKey("novelty")) {
+        noveltySrc = pipelineSrc["novelty"];
+    } else if (doc.containsKey("novelty")) {
+        noveltySrc = doc["novelty"];
+    }
+    applyBool(noveltySrc, "useSpectralFlux", pipeline.noveltyUseSpectralFlux, updatedPipeline);
+    applyFloat(noveltySrc, "spectralFluxScale", pipeline.noveltySpectralFluxScale, updatedPipeline);
 
     JsonVariant controlBusSrc = doc.as<JsonVariant>();
     if (doc.containsKey("controlBus")) {
@@ -270,6 +349,7 @@ void AudioHandlers::handleStateGet(AsyncWebServerRequest* request,
         return;
     }
 
+    auto* renderer = actorSystem.getRenderer();
     audio::AudioActorState state = audio->getState();
     const audio::AudioActorStats& stats = audio->getStats();
 
@@ -282,7 +362,7 @@ void AudioHandlers::handleStateGet(AsyncWebServerRequest* request,
         case audio::AudioActorState::ERROR:         stateStr = "ERROR"; break;
     }
 
-    sendSuccessResponse(request, [stateStr, &stats, audio](JsonObject& d) {
+    sendSuccessResponse(request, [stateStr, &stats, audio, renderer](JsonObject& d) {
         d["state"] = stateStr;
         d["capturing"] = audio->isCapturing();
         d["hopCount"] = audio->getHopCount();
@@ -291,6 +371,19 @@ void AudioHandlers::handleStateGet(AsyncWebServerRequest* request,
         statsObj["tickCount"] = stats.tickCount;
         statsObj["captureSuccess"] = stats.captureSuccessCount;
         statsObj["captureFail"] = stats.captureFailCount;
+
+#if FEATURE_AUDIO_SYNC
+        if (renderer && renderer->isAudioEnabled()) {
+            const audio::ControlBusFrame& frame = renderer->getCachedAudioFrame();
+            JsonObject cb = d["controlBus"].to<JsonObject>();
+            cb["silentScale"] = frame.silentScale;
+            cb["isSilent"] = frame.isSilent;
+            cb["tempoLocked"] = frame.tempoLocked;
+            cb["tempoConfidence"] = frame.tempoConfidence;
+            cb["style"] = static_cast<uint8_t>(frame.currentStyle);
+            cb["styleConfidence"] = frame.styleConfidence;
+        }
+#endif
     });
 }
 
@@ -383,6 +476,34 @@ void AudioHandlers::handlePresetGet(AsyncWebServerRequest* request, uint8_t pres
         p["fluxScale"] = pipeline.fluxScale;
         p["controlBusAlphaFast"] = pipeline.controlBusAlphaFast;
         p["controlBusAlphaSlow"] = pipeline.controlBusAlphaSlow;
+        p["bandAttack"] = pipeline.bandAttack;
+        p["bandRelease"] = pipeline.bandRelease;
+        p["heavyBandAttack"] = pipeline.heavyBandAttack;
+        p["heavyBandRelease"] = pipeline.heavyBandRelease;
+        p["usePerBandNoiseFloor"] = pipeline.usePerBandNoiseFloor;
+        p["silenceHysteresisMs"] = pipeline.silenceHysteresisMs;
+        p["silenceThreshold"] = pipeline.silenceThreshold;
+
+        JsonArray perBandGains = p["perBandGains"].to<JsonArray>();
+        for (uint8_t i = 0; i < 8; ++i) {
+            perBandGains.add(pipeline.perBandGains[i]);
+        }
+
+        JsonArray perBandNoiseFloors = p["perBandNoiseFloors"].to<JsonArray>();
+        for (uint8_t i = 0; i < 8; ++i) {
+            perBandNoiseFloors.add(pipeline.perBandNoiseFloors[i]);
+        }
+
+        JsonObject bins64Adaptive = p["bins64Adaptive"].to<JsonObject>();
+        bins64Adaptive["scale"] = pipeline.bins64AdaptiveScale;
+        bins64Adaptive["floor"] = pipeline.bins64AdaptiveFloor;
+        bins64Adaptive["rise"] = pipeline.bins64AdaptiveRise;
+        bins64Adaptive["fall"] = pipeline.bins64AdaptiveFall;
+        bins64Adaptive["decay"] = pipeline.bins64AdaptiveDecay;
+
+        JsonObject novelty = p["novelty"].to<JsonObject>();
+        novelty["useSpectralFlux"] = pipeline.noveltyUseSpectralFlux;
+        novelty["spectralFluxScale"] = pipeline.noveltySpectralFluxScale;
 
         // Contract tuning (tempo/beat parameters)
         JsonObject c = d["contract"].to<JsonObject>();
@@ -1340,4 +1461,3 @@ void AudioHandlers::handleCalibrateApply(AsyncWebServerRequest* request, ActorSy
 } // namespace webserver
 } // namespace network
 } // namespace lightwaveos
-

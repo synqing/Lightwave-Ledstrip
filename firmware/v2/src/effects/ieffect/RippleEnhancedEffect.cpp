@@ -34,6 +34,7 @@ bool RippleEnhancedEffect::init(plugins::EffectContext& ctx) {
     m_lastBeatState = false;
     m_lastDownbeatState = false;
     m_beatPhaseAccum = 0.0f;
+    m_lastHopSeq = 0;
     m_styleSpeedMult = 1.0f;
     m_styleIntensityMult = 1.0f;
     memset(m_radial, 0, sizeof(m_radial));
@@ -82,17 +83,22 @@ void RippleEnhancedEffect::render(plugins::EffectContext& ctx) {
         // =================================================================
         // BEAT-SYNC RIPPLE SPAWNING
         // Spawn ripples ON the beat for tight sync
+        // Gate to audio hop rate (not every render frame)
         // =================================================================
-        bool currentBeat = ctx.audio.isOnBeat();
-        bool currentDownbeat = ctx.audio.isOnDownbeat();
+        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+        if (newHop) {
+            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+            
+            bool currentBeat = ctx.audio.isOnBeat();
+            bool currentDownbeat = ctx.audio.isOnDownbeat();
 
-        // Edge detection: spawn only on beat onset (not while held)
-        bool beatOnset = currentBeat && !m_lastBeatState;
-        bool downbeatOnset = currentDownbeat && !m_lastDownbeatState;
-        m_lastBeatState = currentBeat;
-        m_lastDownbeatState = currentDownbeat;
+            // Edge detection: spawn only on beat onset (not while held)
+            bool beatOnset = currentBeat && !m_lastBeatState;
+            bool downbeatOnset = currentDownbeat && !m_lastDownbeatState;
+            m_lastBeatState = currentBeat;
+            m_lastDownbeatState = currentDownbeat;
 
-        if (beatOnset || downbeatOnset) {
+            if (beatOnset || downbeatOnset) {
             // Find inactive ripple slot
             for (uint8_t r = 0; r < MAX_RIPPLES; r++) {
                 if (!m_ripples[r].active) {
@@ -129,6 +135,7 @@ void RippleEnhancedEffect::render(plugins::EffectContext& ctx) {
 
                     break;  // Only spawn one ripple per beat
                 }
+            }
             }
         }
 

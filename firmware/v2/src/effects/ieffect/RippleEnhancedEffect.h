@@ -51,6 +51,7 @@ private:
     bool m_lastBeatState = false;
     bool m_lastDownbeatState = false;
     float m_beatPhaseAccum = 0.0f;
+    uint32_t m_lastHopSeq = 0;  // Track audio hop sequence for spawn gating
 
     // Style-adaptive parameters (updated each frame)
     float m_styleSpeedMult = 1.0f;

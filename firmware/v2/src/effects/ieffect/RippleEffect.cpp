@@ -209,7 +209,9 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
     }
 #endif
 
-    if (spawnChance > 0 && m_spawnCooldown == 0 && random8() < spawnChance) {
+    // Gate spawn check to audio hop rate (not every render frame)
+    // This makes spawn rate consistent across devices regardless of FPS
+    if (newHop && spawnChance > 0 && m_spawnCooldown == 0 && random8() < spawnChance) {
         for (int i = 0; i < MAX_RIPPLES; i++) {
             if (!m_ripples[i].active) {
                 // Random variation around speedScale (0.5 to 1.5x speedScale)

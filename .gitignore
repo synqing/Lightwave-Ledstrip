@@ -143,4 +143,4 @@ context_engineering_runs/
 
 # Context Pack cache and ledger
 .contextpack_ledger.json
-.contextpack_cache/
+.contextpack_cache/z_temp/

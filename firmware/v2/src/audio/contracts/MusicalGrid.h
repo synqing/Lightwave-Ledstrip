@@ -96,6 +96,35 @@ public:
      */
     void onK1Beat(int beat_in_bar, bool is_downbeat, float strength);
 
+    // ========================================================================
+    // Trinity External Sync (Offline ML Analysis)
+    // ========================================================================
+
+    /**
+     * @brief Inject external beat from Trinity offline analysis
+     *
+     * Called when firmware is in Trinity sync mode. Bypasses internal PLL
+     * and directly sets BPM, phase, and beat state from pre-computed analysis.
+     *
+     * @param bpm BPM from Trinity analysis
+     * @param phase01 Beat phase [0,1) from Trinity
+     * @param isTick True if this is a beat boundary (tick event)
+     * @param isDownbeat True if this is a downbeat
+     * @param beatInBar Position in bar (0-3 for 4/4)
+     */
+    void injectExternalBeat(float bpm, float phase01, bool isTick, bool isDownbeat, int beatInBar);
+
+    /**
+     * @brief Enable/disable external sync mode
+     * @param enabled If true, Tick() bypasses PLL and uses injected state
+     */
+    void setExternalSyncMode(bool enabled);
+
+    /**
+     * @brief Check if external sync mode is active
+     */
+    bool isExternalSyncMode() const { return m_externalSyncMode; }
+
     // Render-domain update (120 FPS)
     void Tick(const AudioTime& render_now);
 
@@ -129,6 +158,14 @@ private:
     float m_lastBeatStrength = 0.0f;  ///< Last beat strength, decays over time
 
     MusicalGridTuning m_tuning;
+
+    // External sync state (Trinity offline analysis)
+    bool m_externalSyncMode = false;
+    float m_externalBpm = 120.0f;
+    float m_externalPhase01 = 0.0f;
+    bool m_externalBeatTick = false;
+    bool m_externalDownbeatTick = false;
+    int m_externalBeatInBar = 0;
 
 private:
     static float clamp01(float x);

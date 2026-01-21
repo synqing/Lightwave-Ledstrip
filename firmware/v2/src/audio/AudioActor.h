@@ -514,13 +514,6 @@ private:
     static constexpr uint32_t GOERTZEL64_LOG_INTERVAL = 62;  // ~2 seconds @ 31 Hz
 
     // ========================================================================
-    // Phase 2C: Goertzel Novelty Tuning
-    // ========================================================================
-
-    // Goertzel novelty tuning (runtime adjustable)
-    GoertzelNoveltyTuning m_noveltyTuning;
-
-    // ========================================================================
     // TempoTracker Beat Tracker
     // ========================================================================
 
@@ -533,6 +526,7 @@ private:
     /// Cached 64-bin spectrum for tempo tracker novelty input
     /// Updated every ~94ms when 64-bin analysis completes, used every hop
     float m_bins64Cached[64] = {0};
+    float m_bins64AdaptiveMax = 0.0001f;  // Sensory Bridge adaptive normalisation follower
 
     // ========================================================================
     // Stack Reduction: Large arrays moved from stack to class members

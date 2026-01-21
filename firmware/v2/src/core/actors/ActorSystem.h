@@ -253,6 +253,43 @@ public:
      */
     bool setFadeAmount(uint8_t fadeAmount);
 
+#if FEATURE_AUDIO_SYNC
+    // ========================================================================
+    // Trinity Sync Commands (Offline ML Analysis)
+    // ========================================================================
+
+    /**
+     * @brief Inject Trinity beat event
+     * @param bpm BPM from Trinity analysis
+     * @param phase01 Beat phase [0,1)
+     * @param tick True if this is a beat boundary
+     * @param downbeat True if this is a downbeat
+     * @param beatInBar Position in bar (0-3 for 4/4)
+     * @return true if message was sent
+     */
+    bool trinityBeat(float bpm, float phase01, bool tick, bool downbeat, int beatInBar);
+
+    /**
+     * @brief Update Trinity macro values
+     * @param energy Overall energy (0-1)
+     * @param vocal Vocal presence (0-1)
+     * @param bass Bass weight (0-1)
+     * @param perc Percussiveness (0-1)
+     * @param bright Brightness (0-1)
+     * @return true if message was sent
+     */
+    bool trinityMacro(float energy, float vocal, float bass, float perc, float bright);
+
+    /**
+     * @brief Trinity sync control (start/stop/pause/resume/seek)
+     * @param action 0=start, 1=stop, 2=pause, 3=resume, 4=seek
+     * @param positionSec Position in seconds
+     * @param bpm BPM (optional, used for start/seek)
+     * @return true if message was sent
+     */
+    bool trinitySync(uint8_t action, float positionSec, float bpm = 120.0f);
+#endif
+
     // ========================================================================
     // Diagnostics
     // ========================================================================

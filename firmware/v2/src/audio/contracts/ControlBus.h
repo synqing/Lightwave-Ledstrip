@@ -50,6 +50,7 @@ struct ChordState {
  */
 struct ControlBusRawInput {
     float rms = 0.0f;   // 0..1
+    float rmsUngated = 0.0f;  // 0..1 (mapped RMS before activity gate; used for silence detection)
     float flux = 0.0f;  // 0..1 (novelty proxy)
 
     float bands[CONTROLBUS_NUM_BANDS] = {0};     // 0..1
@@ -65,6 +66,7 @@ struct ControlBusRawInput {
     // Phase 2: Full 64-bin Goertzel spectrum (110 Hz - 4186 Hz)
     static constexpr uint8_t BINS_64_COUNT = 64;
     float bins64[BINS_64_COUNT] = {0};  // 0..1 normalized magnitudes
+    float bins64Adaptive[BINS_64_COUNT] = {0};  // 0..1 adaptive normalised (Sensory Bridge max follower)
 
     // Tempo tracker output (saliency computation ONLY - effects read MusicalGrid)
     bool tempoLocked = false;       ///< TempoTracker lock state (saliency; effects read MusicalGrid)
@@ -107,6 +109,7 @@ struct ControlBusFrame {
     // Phase 2: Full 64-bin Goertzel spectrum (110 Hz - 4186 Hz)
     static constexpr uint8_t BINS_64_COUNT = 64;
     float bins64[BINS_64_COUNT] = {0};  // 0..1 normalized magnitudes
+    float bins64Adaptive[BINS_64_COUNT] = {0};  // 0..1 adaptive normalised (Sensory Bridge max follower)
 
     // Tempo tracker output (saliency computation ONLY - effects read MusicalGrid)
     bool tempoLocked = false;       ///< TempoTracker lock state (saliency; effects read MusicalGrid)

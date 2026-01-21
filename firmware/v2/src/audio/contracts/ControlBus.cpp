@@ -470,6 +470,9 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     for (uint8_t i = 0; i < ControlBusRawInput::BINS_64_COUNT; ++i) {
         m_frame.bins64[i] = clamp01(raw.bins64[i]);
     }
+    for (uint8_t i = 0; i < ControlBusRawInput::BINS_64_COUNT; ++i) {
+        m_frame.bins64Adaptive[i] = clamp01(raw.bins64Adaptive[i]);
+    }
 
     // ========================================================================
     // Stage 6: Update spike detection telemetry frame counter
@@ -486,7 +489,9 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
         m_frame.isSilent = false;
     } else {
         uint32_t now_ms = now.monotonic_us / 1000;  // Convert AudioTime to milliseconds
-        bool currently_silent = (m_frame.fast_rms < m_silence_threshold);
+        // Use the pre-gate RMS so the activity gate does not accidentally
+        // force the entire system into "silence" on quiet but real audio.
+        bool currently_silent = (clamp01(raw.rmsUngated) < m_silence_threshold);
 
         if (currently_silent && !m_silence_triggered) {
             // Start silence timer if not already started

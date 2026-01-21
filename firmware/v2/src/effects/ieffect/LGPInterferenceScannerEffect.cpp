@@ -82,7 +82,7 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
             // =================================================================
             float bassSum = 0.0f;
             for (uint8_t i = 0; i < 6; ++i) {
-                bassSum += ctx.audio.bin(i);
+                bassSum += ctx.audio.binAdaptive(i);
             }
             float bassNorm = bassSum / 6.0f;
             // Smooth with fast attack, slower decay for punchy response
@@ -99,7 +99,7 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
             // =================================================================
             float trebleSum = 0.0f;
             for (uint8_t i = 48; i < 64; ++i) {
-                trebleSum += ctx.audio.bin(i);
+                trebleSum += ctx.audio.binAdaptive(i);
             }
             m_trebleOverlay = trebleSum / 16.0f;
 

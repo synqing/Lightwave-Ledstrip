@@ -70,8 +70,11 @@ void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
         return;
     }
 
-    // Get 64-bin spectrum
-    const float* bins64 = ctx.audio.bins64();
+    // Prefer adaptive normalisation (Sensory Bridge max follower); fall back to raw bins if unavailable.
+    const float* bins64 = ctx.audio.bins64Adaptive();
+    if (!bins64) {
+        bins64 = ctx.audio.bins64();
+    }
     constexpr uint8_t NUM_BINS = 64;
     
     float dt = ctx.getSafeDeltaSeconds();
@@ -244,4 +247,3 @@ const plugins::EffectMetadata& LGPSpectrumDetailEffect::getMetadata() const {
 } // namespace ieffect
 } // namespace effects
 } // namespace lightwaveos
-

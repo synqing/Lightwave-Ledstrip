@@ -331,7 +331,7 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
         // =====================================================================
         float trebleSum = 0.0f;
         for (uint8_t i = 48; i < 64; ++i) {
-            trebleSum += ctx.audio.bin(i);
+            trebleSum += ctx.audio.binAdaptive(i);
         }
         m_trebleShimmerIntensity = trebleSum / 16.0f;
 

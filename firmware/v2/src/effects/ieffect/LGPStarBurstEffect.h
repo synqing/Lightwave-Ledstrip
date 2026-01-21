@@ -43,6 +43,10 @@ private:
 
     // Speed state (Spring physics for natural momentum)
     enhancement::Spring m_phaseSpeedSpring;  // Critically damped - no overshoot
+    
+    // EMA smoothing for heavyBass (prevents pops)
+    float m_heavyBassSmooth = 0.0f;
+    bool m_heavyBassSmoothInitialized = false;
 };
 
 } // namespace ieffect

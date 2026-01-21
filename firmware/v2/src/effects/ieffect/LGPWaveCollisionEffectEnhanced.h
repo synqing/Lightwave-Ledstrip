@@ -69,6 +69,9 @@ private:
 
     // Validation instrumentation
     float m_prevPhaseDelta = 0.0f;    // Previous frame phase delta for reversal detection
+    
+    // Tempo lock hysteresis (Schmitt trigger: 0.6 lock / 0.4 unlock)
+    bool m_tempoLocked = false;
 };
 
 } // namespace ieffect

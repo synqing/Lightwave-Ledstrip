@@ -52,6 +52,10 @@ private:
 
     // Validation instrumentation
     float m_prevPhaseDelta = 0.0f;    // Previous frame phase delta for reversal detection
+    
+    // EMA smoothing for energyDelta (prevents pops)
+    float m_energyDeltaEMASmooth = 0.0f;
+    bool m_energyDeltaEMAInitialized = false;
 };
 
 } // namespace ieffect

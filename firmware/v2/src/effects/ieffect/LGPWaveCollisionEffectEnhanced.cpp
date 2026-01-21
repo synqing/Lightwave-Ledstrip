@@ -43,6 +43,7 @@ bool LGPWaveCollisionEnhancedEffect::init(plugins::EffectContext& ctx) {
     m_speedSpring.reset(1.0f);         // Start at base speed
     m_energyAvgFollower.reset(0.0f);
     m_energyDeltaFollower.reset(0.0f);
+    m_tempoLocked = false;
     return true;
 }
 
@@ -171,19 +172,48 @@ void LGPWaveCollisionEnhancedEffect::render(plugins::EffectContext& ctx) {
     if (smoothedSpeed > 1.6f) smoothedSpeed = 1.6f;  // Hard clamp
     if (smoothedSpeed < 0.3f) smoothedSpeed = 0.3f;  // Prevent stalling
 
-    // Enhanced: Use beatPhase for synchronization when tempo confidence high
-    float prevPhase = m_phase;
-    float tempoConf = hasAudio ? ctx.audio.tempoConfidence() : 0.0f;
-    
-    if (hasAudio && tempoConf > 0.6f) {
-        // High tempo confidence: sync phase to beat
-        float beatPhase = ctx.audio.beatPhase();
-        m_phase = beatPhase * 628.3f;  // Map 0-1 to 0-100*2π
+    // Enhanced: Use beatPhase for synchronization when tempo confidence high (PLL-style correction)
+    // Domain constants (compute once, use consistently)
+    const float PHASE_DOMAIN = 628.3f;      // 100 * 2 * PI
+    const float HALF_DOMAIN = 314.15f;     // PHASE_DOMAIN / 2
+
+    // Tempo lock hysteresis (Schmitt trigger: prevents chatter near threshold)
+    if (!hasAudio) {
+        m_tempoLocked = false;  // Clear lock when audio drops (prevents ghost lock)
     } else {
-        // Low confidence or no audio: standard phase accumulation
-        m_phase += speedNorm * 240.0f * smoothedSpeed * dt;
-        if (m_phase > 628.3f) m_phase -= 628.3f;  // Wrap at 100*2π
+        float tempoConf = ctx.audio.tempoConfidence();
+        
+        // Update lock state with hysteresis (0.6 lock / 0.4 unlock)
+        if (tempoConf > 0.6f) m_tempoLocked = true;
+        else if (tempoConf < 0.4f) m_tempoLocked = false;
     }
+
+    float prevPhase = m_phase;
+    
+    // Always advance phase (free-run oscillator)
+    m_phase += speedNorm * 240.0f * smoothedSpeed * dt;
+    
+    // Apply phase correction when tempo-locked (PLL-style P-only correction)
+    if (hasAudio && m_tempoLocked) {
+        float beatPhase = ctx.audio.beatPhase();
+        float targetPhase = beatPhase * PHASE_DOMAIN;
+        
+        // Compute wrapped error (shortest path to target)
+        float phaseError = targetPhase - m_phase;
+        if (phaseError > HALF_DOMAIN) phaseError -= PHASE_DOMAIN;
+        if (phaseError < -HALF_DOMAIN) phaseError += PHASE_DOMAIN;
+        
+        // Proportional correction (tau ~100ms gives smooth lock)
+        // Compute ONCE per frame, not per pixel
+        const float tau = 0.1f;
+        const float correctionAlpha = 1.0f - expf(-dt / tau);
+        m_phase += phaseError * correctionAlpha;
+    }
+    
+    // CRITICAL: Wrap phase AFTER correction (handles negative and overflow)
+    while (m_phase >= PHASE_DOMAIN) m_phase -= PHASE_DOMAIN;
+    while (m_phase < 0.0f) m_phase += PHASE_DOMAIN;
+    
     float phaseDelta = m_phase - prevPhase;
 
     // Validation instrumentation
@@ -246,10 +276,15 @@ void LGPWaveCollisionEnhancedEffect::render(plugins::EffectContext& ctx) {
         uint8_t paletteIndex = (uint8_t)(distFromCenter * 2.0f + interference * 50.0f);
         uint8_t baseHue = (uint8_t)(ctx.gHue + (uint8_t)(m_dominantBinSmooth * (255.0f / 12.0f)));
 
-        ctx.leds[i] = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex), brightness);
+        // Blend with existing pixel (preserves trails from fadeToBlackBy)
+        // nblend uses 8-bit amount: 0=keep existing, 255=full replace
+        CRGB newColor = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex), brightness);
+        nblend(ctx.leds[i], newColor, 180);  // ~70% new, ~30% existing
+        
         if (i + STRIP_LENGTH < ctx.ledCount) {
             // FIX: Hue offset +90 matches ChevronWaves pattern (was +128)
-            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex + 90), brightness);
+            CRGB newColor2 = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex + 90), brightness);
+            nblend(ctx.leds[i + STRIP_LENGTH], newColor2, 180);  // Apply same blend to BOTH strips
         }
     }
 }

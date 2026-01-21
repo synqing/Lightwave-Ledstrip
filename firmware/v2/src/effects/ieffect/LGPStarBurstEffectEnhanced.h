@@ -61,6 +61,9 @@ private:
     
     // Enhanced: Hi-hat sparkle burst
     float m_hihatSparkle = 0.0f;
+    
+    // Tempo lock hysteresis (Schmitt trigger: 0.6 lock / 0.4 unlock)
+    bool m_tempoLocked = false;
 };
 
 } // namespace ieffect

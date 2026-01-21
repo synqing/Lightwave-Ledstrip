@@ -39,6 +39,10 @@ bool LGPStarBurstEffect::init(plugins::EffectContext& ctx) {
     // Initialize spring physics for natural speed momentum
     m_phaseSpeedSpring.init(50.0f, 1.0f);  // stiffness=50, mass=1 (critically damped)
     m_phaseSpeedSpring.reset(1.0f);        // Start at base speed
+    
+    // Initialize smoothing
+    m_heavyBassSmooth = 0.0f;
+    m_heavyBassSmoothInitialized = false;
 
     return true;
 }
@@ -88,11 +92,25 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
     if (m_dominantBinSmooth < 0.0f) m_dominantBinSmooth = 0.0f;
     if (m_dominantBinSmooth > 11.0f) m_dominantBinSmooth = 11.0f;
 
-    // Use heavy_bands for speed (like Wave Collision)
+    // Use heavy_bands for speed (like Wave Collision) with EMA smoothing
     float heavyEnergy = 0.0f;
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
-        heavyEnergy = ctx.audio.heavyBass();
+        float rawHeavyBass = ctx.audio.heavyBass();
+        
+        // EMA smoothing with frame-rate-independent alpha (tau = 50ms)
+        const float tau = 0.05f;
+        float alpha = 1.0f - expf(-dt / tau);
+        
+        // CRITICAL: Initialize to raw value on first frame (no ramp-from-zero)
+        if (!m_heavyBassSmoothInitialized) {
+            m_heavyBassSmooth = rawHeavyBass;
+            m_heavyBassSmoothInitialized = true;
+        } else {
+            m_heavyBassSmooth += (rawHeavyBass - m_heavyBassSmooth) * alpha;
+        }
+        
+        heavyEnergy = m_heavyBassSmooth;
     }
 #endif
 

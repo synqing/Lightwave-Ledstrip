@@ -36,6 +36,10 @@ bool LGPWaveCollisionEffect::init(plugins::EffectContext& ctx) {
     m_speedSpring.reset(1.0f);         // Start at base speed
     m_energyAvgFollower.reset(0.0f);
     m_energyDeltaFollower.reset(0.0f);
+    
+    // Initialize EMA smoothing
+    m_energyDeltaEMASmooth = 0.0f;
+    m_energyDeltaEMAInitialized = false;
     return true;
 }
 
@@ -90,10 +94,25 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
 
     float dt = enhancement::getSafeDeltaSeconds(ctx.deltaTimeMs);
 
+    // EMA smoothing for energyDelta (prevents pops from spiky audio features)
+    const float tau = 0.05f;  // 50ms time constant
+    float alpha = 1.0f - expf(-dt / tau);
+    
+    // CRITICAL: Initialize to raw value on first frame (no ramp-from-zero)
+    if (!m_energyDeltaEMAInitialized && ctx.audio.available) {
+        m_energyDeltaEMASmooth = m_energyDelta;
+        m_energyDeltaEMAInitialized = true;
+    } else {
+        m_energyDeltaEMASmooth += (m_energyDelta - m_energyDeltaEMASmooth) * alpha;
+    }
+    
+    // Use EMA-smoothed energyDelta for further processing
+    float energyDeltaForSmoothing = m_energyDeltaEMASmooth;
+
     // True exponential smoothing with AsymmetricFollower (frame-rate independent)
     float moodNorm = ctx.mood / 255.0f;  // 0=reactive, 1=smooth
     float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, dt, moodNorm);
-    float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, dt, moodNorm);
+    float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(energyDeltaForSmoothing, dt, moodNorm);
 
     // Dominant bin smoothing
     float alphaBin = 1.0f - expf(-dt / 0.25f);  // True exponential, 250ms time constant
@@ -206,10 +225,15 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
         uint8_t paletteIndex = (uint8_t)(distFromCenter * 2.0f + interference * 50.0f);
         uint8_t baseHue = (uint8_t)(ctx.gHue + (uint8_t)(m_dominantBinSmooth * (255.0f / 12.0f)));
 
-        ctx.leds[i] = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex), brightness);
+        // Blend with existing pixel (preserves trails from fadeToBlackBy)
+        // nblend uses 8-bit amount: 0=keep existing, 255=full replace
+        CRGB newColor = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex), brightness);
+        nblend(ctx.leds[i], newColor, 180);  // ~70% new, ~30% existing
+        
         if (i + STRIP_LENGTH < ctx.ledCount) {
             // FIX: Hue offset +90 matches ChevronWaves pattern (was +128)
-            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex + 90), brightness);
+            CRGB newColor2 = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex + 90), brightness);
+            nblend(ctx.leds[i + STRIP_LENGTH], newColor2, 180);  // Apply same blend to BOTH strips
         }
     }
 }

@@ -90,6 +90,9 @@ private:
     enhancement::AsymmetricFollower m_subBassFollower{0.0f, 0.05f, 0.30f};
     float m_subBassEnergy = 0.0f;
     float m_targetSubBass = 0.0f;
+    
+    // Tempo lock hysteresis (Schmitt trigger: 0.6 lock / 0.4 unlock)
+    bool m_tempoLocked = false;
 };
 
 } // namespace ieffect

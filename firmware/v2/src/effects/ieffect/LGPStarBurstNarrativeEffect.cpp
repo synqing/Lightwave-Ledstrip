@@ -87,17 +87,6 @@ static inline float lerp(float a, float b, float t) {
     return a + (b - a) * clamp01(t);
 }
 
-// Priority 3: Helper to detect and handle chord changes
-static void handleChordChange(uint8_t& prevRootBin, bool& prevMinor, 
-                              uint8_t newRootBin, bool newMinor,
-                              float& transitionProgress) {
-    if (prevRootBin != newRootBin || prevMinor != newMinor) {
-        prevRootBin = newRootBin;
-        prevMinor = newMinor;
-        transitionProgress = 0.0f;  // Start transition
-    }
-}
-
 LGPStarBurstNarrativeEffect::LGPStarBurstNarrativeEffect()
     : m_phase(0.0f)
 {
@@ -173,33 +162,6 @@ bool LGPStarBurstNarrativeEffect::init(plugins::EffectContext& ctx) {
     // -----------------------------------------
     m_kickBurst = 0.0f;
     m_trebleShimmerIntensity = 0.0f;
-    
-    // Initialize audio smoothing
-    m_targetRms = 0.0f;
-    m_rmsFollower.reset(0.0f);
-    
-    // Priority 1: Initialize mood-adjusted followers
-    m_targetEnergyDelta = 0.0f;
-    m_targetFlux = 0.0f;
-    m_targetKickBurst = 0.0f;
-    m_energyDeltaFollower.reset(0.0f);
-    m_fluxFollower.reset(0.0f);
-    m_kickBurstFollower.reset(0.0f);
-    
-    // Priority 3: Initialize chord progression tracking
-    m_prevKeyRootBin = 0;
-    m_prevKeyMinor = false;
-    m_chordTransitionProgress = 1.0f;
-    
-    // Priority 2: Initialize ray count
-    m_rayCount = 2.0f;
-    
-    // Priority 4: Initialize beat alignment
-    m_beatAlignedPhaseOffset = 0.0f;
-    m_beatAlignmentActive = false;
-    
-    // Priority 6: Initialize burst shape
-    m_burstShape = BurstShape::EXPONENTIAL;
 
     return true;
 }
@@ -252,9 +214,7 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
         // -----------------------------------------
         // Enhancement 1: DYNAMIC COLOR WARMTH
         // -----------------------------------------
-        // Smooth RMS with mood-adjusted smoothing
-        float moodNorm = ctx.getMoodNormalized();
-        float rmsNorm = m_rmsFollower.updateWithMood(m_targetRms, dt, moodNorm);
+        float rmsNorm = ctx.audio.rms();
         float targetWarmth = (rmsNorm - 0.5f) * 60.0f;  // Map 0-1 to -30..+30
 
         // Style-aware scaling: strongest for DYNAMIC, subtle for RHYTHMIC
@@ -299,7 +259,6 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
     // -----------------------------------------
     if (hasAudio && newHop) {
         m_lastHopSeq = ctx.audio.controlBus.hop_seq;
-        m_targetRms = ctx.audio.rms();
 
         // Transform chroma into a stable "brightness proxy"
         float maxBinVal = 0.0f;
@@ -349,19 +308,17 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
         // BYPASSES story conductor for immediate sub-bass response.
         // Deep kick drums trigger instant starburst expansion regardless of
         // what phase the story conductor is in. This gives punchy response.
-        // Priority 1: Now uses mood-adjusted smoothing
         // =====================================================================
         float kickSum = 0.0f;
         for (uint8_t i = 0; i < 6; ++i) {
             kickSum += ctx.audio.bin(i);
         }
         float kickAvg = kickSum / 6.0f;
-        m_targetKickBurst = kickAvg;  // Update target every hop
-        
-        // Priority 1: Smooth with mood-adjusted follower (fast attack, fast decay)
-        float moodNorm = ctx.getMoodNormalized();
-        float dt = ctx.deltaTimeMs * 0.001f;
-        m_kickBurst = m_kickBurstFollower.updateWithMood(m_targetKickBurst, dt, moodNorm);
+        if (kickAvg > m_kickBurst) {
+            m_kickBurst = kickAvg;  // Instant attack
+        } else {
+            m_kickBurst *= 0.75f;   // Fast decay (~60ms) for punchy response
+        }
 
         // Direct burst injection when kick is strong (bypasses story conductor)
         if (m_kickBurst > 0.4f) {
@@ -398,10 +355,6 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
             case plugins::PaletteStrategy::RHYTHMIC_SNAP:
                 // Commit on beat during HOLD phase
                 if (ctx.audio.isOnBeat() && m_storyPhase == StoryPhase::HOLD) {
-                    // Priority 3: Detect chord change
-                    handleChordChange(m_prevKeyRootBin, m_prevKeyMinor, 
-                                     m_candidateRootBin, m_candidateMinor,
-                                     m_chordTransitionProgress);
                     m_keyRootBin = m_candidateRootBin;
                     m_keyMinor = m_candidateMinor;
                     m_phraseHoldS = 0.0f;
@@ -427,10 +380,6 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
             case plugins::PaletteStrategy::TEXTURE_EVOLVE:
                 // Very slow evolution, based on flux
                 if (ctx.audio.flux() > 0.3f && m_phraseHoldS > m_styleTiming.phraseGateDuration) {
-                    // Priority 3: Detect chord change
-                    handleChordChange(m_prevKeyRootBin, m_prevKeyMinor, 
-                                     m_candidateRootBin, m_candidateMinor,
-                                     m_chordTransitionProgress);
                     m_keyRootBin = m_candidateRootBin;
                     m_keyMinor = m_candidateMinor;
                     m_phraseHoldS = 0.0f;
@@ -440,10 +389,6 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
             case plugins::PaletteStrategy::DYNAMIC_WARMTH:
                 // Commit on dynamic peaks
                 if (ctx.audio.rms() > 0.6f && m_phraseHoldS > m_styleTiming.phraseGateDuration * 0.5f) {
-                    // Priority 3: Detect chord change
-                    handleChordChange(m_prevKeyRootBin, m_prevKeyMinor, 
-                                     m_candidateRootBin, m_candidateMinor,
-                                     m_chordTransitionProgress);
                     m_keyRootBin = m_candidateRootBin;
                     m_keyMinor = m_candidateMinor;
                     m_phraseHoldS = 0.0f;
@@ -460,18 +405,15 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
 
     // -----------------------------------------
     // SMOOTHING (dt-aware, asymmetric)
-    // Priority 1: Use mood-adjusted smoothing for energyDelta
     // -----------------------------------------
     const float riseAvg  = dt / (0.20f + dt);
     const float fallAvg  = dt / (0.50f + dt);
+    const float riseDel  = dt / (0.08f + dt);
+    const float fallDel  = dt / (0.25f + dt);
     const float alphaBin = dt / (0.25f + dt);
 
     m_energyAvgSmooth   = smoothValue(m_energyAvgSmooth,   m_energyAvg,   riseAvg, fallAvg);
-    
-    // Priority 1: Replace manual smoothing with mood-adjusted follower
-    float moodNorm = ctx.getMoodNormalized();
-    m_energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_targetEnergyDelta, dt, moodNorm);
-    if (m_energyDeltaSmooth < 0.0f) m_energyDeltaSmooth = 0.0f;  // Clamp negative values
+    m_energyDeltaSmooth = smoothValue(m_energyDeltaSmooth, m_energyDelta, riseDel, fallDel);
 
     m_dominantBinSmooth += ((float)m_dominantBin - m_dominantBinSmooth) * alphaBin;
     if (m_dominantBinSmooth < 0.0f) m_dominantBinSmooth = 0.0f;
@@ -528,10 +470,6 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
                 // Commit palette on phrase gate (HARMONIC_COMMIT strategy default)
                 if (m_paletteStrategy == plugins::PaletteStrategy::HARMONIC_COMMIT &&
                     m_phraseHoldS > phraseGate) {
-                    // Priority 3: Detect chord change
-                    handleChordChange(m_prevKeyRootBin, m_prevKeyMinor, 
-                                     m_candidateRootBin, m_candidateMinor,
-                                     m_chordTransitionProgress);
                     m_keyRootBin = m_candidateRootBin;
                     m_keyMinor   = m_candidateMinor;
                     m_phraseHoldS = 0.0f;
@@ -583,13 +521,6 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
             break;
     }
 
-    // Priority 3: Update chord transition progress
-    if (m_chordTransitionProgress < 1.0f) {
-        // Transition duration: 0.5-1.0 seconds based on style
-        float transitionDuration = 0.5f + 0.5f * (1.0f - m_styleTiming.colorTransitionSpeed);
-        m_chordTransitionProgress = clamp01(m_chordTransitionProgress + dt / transitionDuration);
-    }
-    
     // Smooth committed root bin - rate adapts to style
     // RHYTHMIC: faster color changes (colorTransitionSpeed = 0.8)
     // HARMONIC: slower, more intentional (colorTransitionSpeed = 0.3)
@@ -649,28 +580,7 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
 
     // Phase accumulation: monotonic, dt-corrected
     // FIX: Wrap EVERY frame to prevent discontinuity at wrap point
-    // Priority 4: Beat alignment for rhythmic styles
-    float phaseIncrement = speedNorm * 240.0f * m_speedSmooth * dt;
-#if FEATURE_AUDIO_SYNC
-    if (hasAudio) {
-        audio::MusicStyle style = ctx.audio.musicStyle();
-        float styleConf = ctx.audio.styleConfidence();
-        m_beatAlignmentActive = (style == audio::MusicStyle::RHYTHMIC_DRIVEN && styleConf > 0.6f);
-        
-        if (m_beatAlignmentActive && ctx.audio.isOnBeat()) {
-            // Snap phase offset to beat-synchronized value
-            // Align to 0, π/2, π, or 3π/2 based on beat position
-            float beatPhase = fmodf(m_phase, 1.5708f);  // π/2
-            m_beatAlignedPhaseOffset = -beatPhase;  // Snap to beat boundary
-        }
-        
-        // Blend between free-running and beat-aligned
-        float beatBlend = m_beatAlignmentActive ? (0.3f + 0.4f * styleConf) : 0.0f;
-        phaseIncrement += m_beatAlignedPhaseOffset * beatBlend * dt * 2.0f;
-        m_beatAlignedPhaseOffset *= (1.0f - dt * 5.0f);  // Decay offset
-    }
-#endif
-    m_phase += phaseIncrement;
+    m_phase += speedNorm * 240.0f * m_speedSmooth * dt;
     m_phase = fmodf(m_phase, 6.2831853f);
 
     // Shimmer phase for SHIMMER_WITH_MELODY behavior
@@ -680,19 +590,13 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
 
     // -----------------------------------------
     // Enhancement 3: TEXTURE FLOW LAYER
-    // Priority 1: Use mood-adjusted smoothing for flux
     // -----------------------------------------
 #if FEATURE_AUDIO_SYNC
     const float rawFlux = hasAudio ? ctx.audio.flux() : 0.0f;
-    // Priority 1: Update target and smooth with mood-adjusted follower
-    m_targetFlux = rawFlux;
-    // Reuse moodNorm from above (line 472)
-    m_fluxSmooth = m_fluxFollower.updateWithMood(m_targetFlux, dt, moodNorm);
 #else
     const float rawFlux = 0.0f;
-    m_targetFlux = 0.0f;
-    m_fluxSmooth = 0.0f;
 #endif
+    m_fluxSmooth = smoothValue(m_fluxSmooth, rawFlux, dt / (0.25f + dt), dt / (0.80f + dt));
 
     // Texture phase accumulator - rate modulated by flux
     const float textureRate = 3.0f * (0.5f + m_fluxSmooth);
@@ -710,30 +614,6 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
     // Attack/decay multipliers adapt burst to music style
     const float attackMult = m_styleTiming.attackMultiplier;
     const float decayMult = m_styleTiming.decayMultiplier;
-    
-    // Priority 6: Select burst shape based on behavior
-    switch (m_currentBehavior) {
-        case plugins::VisualBehavior::PULSE_ON_BEAT:
-            m_burstShape = BurstShape::GAUSSIAN;  // Tight, focused
-            break;
-        case plugins::VisualBehavior::TEXTURE_FLOW:
-            m_burstShape = BurstShape::LINEAR;  // Soft, diffuse
-            break;
-        case plugins::VisualBehavior::DRIFT_WITH_HARMONY:
-            m_burstShape = BurstShape::EXPONENTIAL;  // Natural, current
-            break;
-        default:
-            m_burstShape = BurstShape::EXPONENTIAL;
-            break;
-    }
-    
-    // Priority 2: Modulate ray count based on audio complexity
-    // Higher harmonic saliency → more rays (harmonic series visualization)
-    // Higher energy → more complex ray patterns
-    float harmonicWeight = m_saliencyEmphasis.colorEmphasis;  // 0-1
-    float energyWeight = clamp01(m_energyAvgSmooth * 2.0f);  // 0-1
-    m_rayCount = 1.0f + 3.0f * (harmonicWeight * 0.6f + energyWeight * 0.4f);
-    if (m_rayCount > 4.0f) m_rayCount = 4.0f;
 
     // Burst accumulation - sharper for RHYTHMIC, softer for HARMONIC
     // Enhancement 2: Use blended burst multiplier for smooth behavior transitions
@@ -759,13 +639,10 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
                 }
                 break;
 
-            case plugins::VisualBehavior::BREATHE_WITH_DYNAMICS: {
-                // Modulate burst with smoothed RMS for organic breathing
-                // RMS is already smoothed above (in warmth calculation)
-                float smoothedRms = m_rmsFollower.getCurrent();
-                m_burst = lerp(m_burst, smoothedRms * 0.7f, dt * 2.0f);
+            case plugins::VisualBehavior::BREATHE_WITH_DYNAMICS:
+                // Modulate burst with RMS for organic breathing
+                m_burst = lerp(m_burst, ctx.audio.rms() * 0.7f, dt * 2.0f);
                 break;
-            }
 
             case plugins::VisualBehavior::TEXTURE_FLOW:
                 // Modulate with flux for organic texture
@@ -779,9 +656,10 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
 #endif
 
     // -----------------------------------------
-    // TRAILS
+    // TRAILS (dt-correct)
     // -----------------------------------------
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    const int fadeAmt = (int)roundf(20.0f * (dt * 60.0f));
+    fadeToBlackBy(ctx.leds, ctx.ledCount, clampU8(fadeAmt));
 
     // -----------------------------------------
     // RENDER (center-origin, saliency-weighted emphasis)
@@ -796,24 +674,9 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
     const float textureWeight = m_saliencyEmphasis.textureEmphasis;
     const float intensityWeight = m_saliencyEmphasis.intensityEmphasis;
 
-    // Priority 3: Blend between old and new chord during transition
-    float transitionT = smoothstepDur(m_chordTransitionProgress, 1.0f);
-    uint8_t blendRootBin = (uint8_t)lerp((float)m_prevKeyRootBin, (float)m_keyRootBin, transitionT);
-    bool blendMinor = (transitionT > 0.5f) ? m_keyMinor : m_prevKeyMinor;
-    
     const uint8_t rootBin  = (uint8_t)roundf(m_keyRootBinSmooth);
-    const uint8_t thirdBin = (uint8_t)((rootBin + (blendMinor ? 3 : 4)) % 12);
+    const uint8_t thirdBin = (uint8_t)((rootBin + (m_keyMinor ? 3 : 4)) % 12);
     const uint8_t fifthBin = (uint8_t)((rootBin + 7) % 12);
-    
-    // Priority 5: Harmonic series visualization (7th and 9th when harmonic saliency is high)
-    uint8_t seventhBin = 0;
-    uint8_t ninthBin = 0;
-    float harmonicSeriesWeight = 0.0f;
-    if (m_saliencyEmphasis.colorEmphasis > 0.6f) {
-        harmonicSeriesWeight = (m_saliencyEmphasis.colorEmphasis - 0.6f) * 2.5f;  // 0-1 range
-        seventhBin = (uint8_t)((rootBin + (blendMinor ? 10 : 11)) % 12);  // Minor 7th or Major 7th
-        ninthBin = (uint8_t)((rootBin + 2) % 12);  // Major 9th
-    }
 
     const uint8_t binStep  = (uint8_t)(255.0f / 12.0f);
     // Enhancement 1: Apply dynamic color warmth offset to all hues
@@ -821,8 +684,6 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
     const uint8_t hueRoot  = (uint8_t)((int16_t)ctx.gHue + rootBin  * binStep + warmthInt);
     const uint8_t hueThird = (uint8_t)((int16_t)ctx.gHue + thirdBin * binStep + warmthInt);
     const uint8_t hueFifth = (uint8_t)((int16_t)ctx.gHue + fifthBin * binStep + warmthInt);
-    const uint8_t hueSeventh = (uint8_t)((int16_t)ctx.gHue + seventhBin * binStep + warmthInt);
-    const uint8_t hueNinth = (uint8_t)((int16_t)ctx.gHue + ninthBin * binStep + warmthInt);
 
     // Motion-weighted frequency and falloff
     const float freqBase   = 0.18f + 0.30f * env * (0.5f + 0.5f * motionWeight);
@@ -837,50 +698,19 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
         const float distFromCenter = (float)centerPairDistance((uint16_t)i);
         const float normalizedDist = distFromCenter / (float)HALF_LENGTH;
 
-        // Priority 2: Dynamic ray count with harmonic series frequencies
-        float raySum = 0.0f;
-        int rayCountInt = (int)m_rayCount;
-        for (int r = 0; r < rayCountInt; r++) {
-            float rayFreq = freqBase * (1.0f + (float)r);  // Harmonic series: 1x, 2x, 3x, 4x
-            float rayPhase = m_phase * (1.0f + (float)r * 0.3f);  // Slight phase offset per ray
-            float rayAmp = (r == 0) ? 1.0f : (0.35f / (float)(r + 1));  // Decreasing amplitude
-            raySum += rayAmp * sinf(distFromCenter * rayFreq - rayPhase);
-        }
-        // Blend fractional ray count
-        if (rayCountInt < 4) {
-            float fract = m_rayCount - (float)rayCountInt;
-            float rayFreq = freqBase * (1.0f + (float)rayCountInt);
-            float rayPhase = m_phase * (1.0f + (float)rayCountInt * 0.3f);
-            float rayAmp = 0.35f / (float)(rayCountInt + 2);
-            raySum += fract * rayAmp * sinf(distFromCenter * rayFreq - rayPhase);
-        }
-        
+        const float ray1 = sinf(distFromCenter * freqBase - m_phase);
+        const float ray2 = 0.35f * env * sinf(distFromCenter * (freqBase * 2.0f) - (m_phase * 1.3f));
+
         const float spatial = expf(-normalizedDist * falloff);
         const float pulse   = 0.35f + 0.65f * (0.5f + 0.5f * sinf(m_phase * pulseRate));
 
-        float field = 0.5f + 0.5f * raySum;
+        float field = 0.5f + 0.5f * (ray1 + ray2);
         field *= spatial;
         field *= pulse;
 
-        // Motion-weighted burst contribution with Priority 6: Burst shape variation
+        // Motion-weighted burst contribution
         if (env > 0.02f) {
-            float burstDist = normalizedDist * (falloff + 0.6f);
-            float burstFalloff = 0.0f;
-            switch (m_burstShape) {
-                case BurstShape::EXPONENTIAL:
-                    burstFalloff = expf(-burstDist);
-                    break;
-                case BurstShape::LINEAR:
-                    burstFalloff = fmaxf(0.0f, 1.0f - burstDist);
-                    break;
-                case BurstShape::POWER_LAW:
-                    burstFalloff = 1.0f / (1.0f + burstDist * burstDist);
-                    break;
-                case BurstShape::GAUSSIAN:
-                    burstFalloff = expf(-burstDist * burstDist * 2.0f);
-                    break;
-            }
-            field += m_burst * env * (0.5f + 0.5f * motionWeight) * burstFalloff;
+            field += m_burst * env * (0.5f + 0.5f * motionWeight) * expf(-normalizedDist * (falloff + 0.6f));
         }
 
         field = clamp01(field);
@@ -909,37 +739,22 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
         float wRoot  = clamp01(1.15f - 1.65f * t);
         float wFifth = clamp01(0.35f + 0.95f * t);
         float wThird = env * clamp01(1.0f - fabsf(t - 0.35f) * 3.0f) * (0.8f + 0.4f * colorWeight);
-        
-        // Priority 5: Add harmonic series weights (7th and 9th) when harmonic saliency is high
-        float wSeventh = 0.0f;
-        float wNinth = 0.0f;
-        if (harmonicSeriesWeight > 0.0f) {
-            // 7th appears at mid-distance, 9th at outer edge
-            wSeventh = harmonicSeriesWeight * env * clamp01(1.0f - fabsf(t - 0.5f) * 2.5f) * 0.25f;
-            wNinth = harmonicSeriesWeight * env * clamp01(t - 0.6f) * 0.20f;
-        }
 
-        const float wSum = (wRoot + wThird + wFifth + wSeventh + wNinth);
+        const float wSum = (wRoot + wThird + wFifth);
         if (wSum > 0.0001f) {
             wRoot  /= wSum;
             wThird /= wSum;
             wFifth /= wSum;
-            wSeventh /= wSum;
-            wNinth /= wSum;
         }
 
         const uint8_t bRoot  = clampU8((int)roundf(brightness * wRoot));
         const uint8_t bThird = clampU8((int)roundf(brightness * wThird));
         const uint8_t bFifth = clampU8((int)roundf(brightness * wFifth));
-        const uint8_t bSeventh = clampU8((int)roundf(brightness * wSeventh));
-        const uint8_t bNinth = clampU8((int)roundf(brightness * wNinth));
 
         CRGB c = CRGB::Black;
         if (bRoot)  c += ctx.palette.getColor((uint8_t)(hueRoot  + paletteIndex), bRoot);
         if (bThird) c += ctx.palette.getColor((uint8_t)(hueThird + paletteIndex), bThird);
         if (bFifth) c += ctx.palette.getColor((uint8_t)(hueFifth + paletteIndex), bFifth);
-        if (bSeventh) c += ctx.palette.getColor((uint8_t)(hueSeventh + paletteIndex), bSeventh);
-        if (bNinth) c += ctx.palette.getColor((uint8_t)(hueNinth + paletteIndex), bNinth);
 
         // Motion-weighted burst accent
         if (m_burst > 0.20f && env > 0.25f) {
@@ -999,9 +814,6 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
             if (bRoot)  c2 += ctx.palette.getColor((uint8_t)(hueRoot  + harmonyShift + paletteIndex), bRoot);
             if (bThird) c2 += ctx.palette.getColor((uint8_t)(hueThird + harmonyShift + paletteIndex), bThird);
             if (bFifth) c2 += ctx.palette.getColor((uint8_t)(hueFifth + harmonyShift + paletteIndex), bFifth);
-            // Priority 5: Add harmonic series colors to Strip 2
-            if (bSeventh) c2 += ctx.palette.getColor((uint8_t)(hueSeventh + harmonyShift + paletteIndex), bSeventh);
-            if (bNinth) c2 += ctx.palette.getColor((uint8_t)(hueNinth + harmonyShift + paletteIndex), bNinth);
 
             if (m_burst > 0.20f && env > 0.25f) {
                 const uint8_t accentB = clampU8((int)roundf(brightness * m_burst * 0.55f * (0.7f + 0.6f * motionWeight)));

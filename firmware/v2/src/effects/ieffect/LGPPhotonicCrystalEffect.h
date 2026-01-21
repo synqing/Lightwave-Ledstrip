@@ -86,11 +86,6 @@ private:
     // =========================================================================
     // CHROMA DOMINANT BIN (smoothed over 250ms for color offset)
     // =========================================================================
-    // Chromagram smoothing (AsymmetricFollower for natural attack/release)
-    enhancement::AsymmetricFollower m_chromaFollowers[12];
-    float m_chromaSmoothed[12] = {0.0f};
-    float m_chromaTargets[12] = {0.0f};
-    
     uint8_t m_dominantBin = 0;
     float m_dominantBinSmooth = 0.0f;
 };

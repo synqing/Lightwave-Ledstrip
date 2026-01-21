@@ -11,7 +11,6 @@
 
 #include "LGPPerlinShocklinesEffect.h"
 #include "../CoreEffects.h"
-#include "../enhancement/SmoothingEngine.h"
 #include "../../config/features.h"
 #include <FastLED.h>
 #include <cmath>
@@ -40,17 +39,6 @@ bool LGPPerlinShocklinesEffect::init(plugins::EffectContext& ctx) {
     m_time = 0;
     m_momentum = 0.0f;
     m_lastHopSeq = 0;
-    
-    // Initialize smoothing followers
-    m_fluxFollower.reset(0.0f);
-    m_beatFollower.reset(0.0f);
-    m_trebleFollower.reset(0.0f);
-    m_rmsFollower.reset(0.0f);
-    m_targetFlux = 0.0f;
-    m_targetBeat = 0.0f;
-    m_targetTreble = 0.0f;
-    m_targetRms = 0.0f;
-    
     return true;
 }
 
@@ -64,36 +52,22 @@ void LGPPerlinShocklinesEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     // Audio Analysis - Inject Shockwaves
     // =========================================================================
-    float moodNorm = ctx.getMoodNormalized();
-    
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
         bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
         if (newHop) {
             m_lastHopSeq = ctx.audio.controlBus.hop_seq;
             
-            // Update targets only on new hops
-            m_targetFlux = ctx.audio.flux();
-            m_targetBeat = ctx.audio.beatStrength();
-            m_targetTreble = ctx.audio.treble();
-            m_targetRms = ctx.audio.rms();
-        }
-        
-        // Smooth toward targets every frame with MOOD-adjusted smoothing
-        float flux = m_fluxFollower.updateWithMood(m_targetFlux, dt, moodNorm);
-        float beat = m_beatFollower.updateWithMood(m_targetBeat, dt, moodNorm);
-        float treble = m_trebleFollower.updateWithMood(m_targetTreble, dt, moodNorm);
-        float rms = m_rmsFollower.updateWithMood(m_targetRms, dt, moodNorm);
-        
-        // Beat/flux → inject shockwave at centre (using smoothed values)
-        float trigger = flux * 0.5f + beat * 0.5f;
-        if (trigger > 0.3f) {
-            // Start a new travelling ridge from the centre.
-            // Keep it stable and predictable (no accumulating buffer explosion).
-            m_waveFront = 0;
-            float shockEnergy = trigger * trigger; // emphasise strong events
-            if (shockEnergy > m_waveEnergy) {
-                m_waveEnergy = shockEnergy;
+            // Beat/flux → inject shockwave at centre
+            float trigger = ctx.audio.flux() * 0.5f + ctx.audio.beatStrength() * 0.5f;
+            if (trigger > 0.3f) {
+                // Start a new travelling ridge from the centre.
+                // Keep it stable and predictable (no accumulating buffer explosion).
+                m_waveFront = 0;
+                float shockEnergy = trigger * trigger; // emphasise strong events
+                if (shockEnergy > m_waveEnergy) {
+                    m_waveEnergy = shockEnergy;
+                }
             }
         }
     }
@@ -121,8 +95,7 @@ void LGPPerlinShocklinesEffect::render(plugins::EffectContext& ctx) {
     float push = 0.0f;
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
-        // Use smoothed RMS for momentum
-        float energy = m_rmsFollower.getCurrent();
+        float energy = ctx.audio.rms();
         push = energy * energy * energy * energy * speedNorm * 0.1f; // Heavy emphasis on loud
     }
 #endif
@@ -150,11 +123,11 @@ void LGPPerlinShocklinesEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
-    // Get treble for ridge sharpness (use smoothed value)
+    // Get treble for ridge sharpness
     float trebleNorm = 0.0f;
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
-        trebleNorm = m_trebleFollower.getCurrent();
+        trebleNorm = ctx.audio.treble();
     }
 #endif
     float sharpness = 0.3f + trebleNorm * 0.7f; // 0.3-1.0
@@ -169,19 +142,15 @@ void LGPPerlinShocklinesEffect::render(plugins::EffectContext& ctx) {
         uint8_t baseNoise = inoise8((uint16_t)(m_noiseX + dist * 23), (uint16_t)(m_time));
 
         // Travelling ridge at the wavefront (simple, fast profile)
-        // 2x brightness boost for ridge visibility
         uint8_t ridge = qsub8(255, (uint8_t)(abs((int16_t)dist8 - (int16_t)m_waveFront) * 9));
         ridge = scale8(ridge, (uint8_t)(m_waveEnergy * 255.0f));
-        ridge = qadd8(ridge, ridge); // Double the ridge brightness
 
-        // Combine noise + ridge (boosted noise base)
-        uint8_t combined8 = qadd8((uint8_t)(baseNoise >> 1) + 32, scale8(ridge, (uint8_t)(220 + sharpness * 35.0f)));
-
-        // Map to palette and brightness - 2x boost with minimum floor
+        // Combine noise + ridge
+        uint8_t combined8 = qadd8((uint8_t)(baseNoise >> 1), scale8(ridge, (uint8_t)(180 + sharpness * 75.0f)));
+        
+        // Map to palette and brightness
         uint8_t paletteIndex = combined8 + ctx.gHue;
-        uint8_t baseBright = qadd8(80, combined8); // Higher base (was 48)
-        uint8_t brightness = scale8(baseBright, (uint8_t)(255.0f * intensityNorm));
-        brightness = (brightness < 50) ? 50 : brightness; // Minimum floor
+        uint8_t brightness = scale8(qadd8(48, combined8), (uint8_t)(255.0f * intensityNorm));
         
         CRGB color = ctx.palette.getColor(paletteIndex, brightness);
         

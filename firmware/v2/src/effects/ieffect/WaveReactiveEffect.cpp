@@ -16,7 +16,6 @@
 
 #include "WaveReactiveEffect.h"
 #include "../CoreEffects.h"
-#include "../enhancement/SmoothingEngine.h"
 #include <FastLED.h>
 #include <cmath>
 
@@ -45,13 +44,6 @@ WaveReactiveEffect::WaveReactiveEffect()
 
 bool WaveReactiveEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
-    // Initialize smoothing followers
-    m_rmsFollower.reset(0.0f);
-    m_fluxFollower.reset(0.0f);
-    m_lastHopSeq = 0;
-    m_targetRms = 0.0f;
-    m_targetFlux = 0.0f;
-    
     m_waveOffset = 0;
     m_energyAccum = 0.0f;
     m_lastFlux = 0.0f;
@@ -69,31 +61,18 @@ void WaveReactiveEffect::render(plugins::EffectContext& ctx) {
 
 #if FEATURE_AUDIO_SYNC
     if (ctx.audio.available) {
-        float dt = ctx.getSafeDeltaSeconds();
-        float moodNorm = ctx.getMoodNormalized();
-        
-        // Hop-based updates: update targets only on new hops
-        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
-        if (newHop) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
-            m_targetRms = ctx.audio.rms();
-            m_targetFlux = ctx.audio.flux();
-        }
-        
-        // Smooth toward targets every frame with MOOD-adjusted smoothing
-        float rms = m_rmsFollower.updateWithMood(m_targetRms, dt, moodNorm);
-        float flux = m_fluxFollower.updateWithMood(m_targetFlux, dt, moodNorm);
-        
         // REACTIVE pattern: Audio drives motion through ACCUMULATION
         // This is the key insight from Sensory Bridge Kaleidoscope
 
-        // Step 1: Accumulate energy from smoothed RMS
+        // Step 1: Accumulate energy from RMS
+        float rms = ctx.audio.rms();
         m_energyAccum += rms * ENERGY_ACCUMULATION_RATE;
 
         // Step 2: Decay accumulated energy (prevents runaway, creates smoothness)
         m_energyAccum *= ENERGY_DECAY_RATE;
 
         // Step 3: Flux transient detection (brightness boost)
+        float flux = ctx.audio.flux();
         float fluxDelta = flux - m_lastFlux;
         if (fluxDelta > FLUX_THRESHOLD && flux > FLUX_MIN_LEVEL) {
             m_fluxBoost = fmaxf(m_fluxBoost, flux);
@@ -113,7 +92,7 @@ void WaveReactiveEffect::render(plugins::EffectContext& ctx) {
     if (m_fluxBoost < 0.01f) m_fluxBoost = 0.0f;
 
     // Gentle fade for smooth trails
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackBy(ctx.leds, ctx.ledCount, 12);
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         float distFromCenter = (float)centerPairDistance((uint16_t)i);

@@ -21,7 +21,6 @@ extern void run_transition_tests();
 extern void run_integration_tests();
 extern void run_sync_tests();
 extern void run_subscription_manager_tests();
-extern void run_color_correction_tests();
 
 // Unity setUp/tearDown (required but can be empty)
 void setUp(void) {
@@ -93,11 +92,6 @@ int main(int argc, char** argv) {
     printf("  Subscription Manager Tests (WebSocket)\n");
     printf("───────────────────────────────────────────────────────────────\n");
     run_subscription_manager_tests();
-
-    printf("\n───────────────────────────────────────────────────────────────\n");
-    printf("  Color Correction Engine Tests\n");
-    printf("───────────────────────────────────────────────────────────────\n");
-    run_color_correction_tests();
 
     printf("\n═══════════════════════════════════════════════════════════════\n");
     int result = UNITY_END();

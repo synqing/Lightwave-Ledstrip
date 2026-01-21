@@ -15,7 +15,6 @@
 
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
-#include "../enhancement/SmoothingEngine.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -32,18 +31,6 @@ public:
     const plugins::EffectMetadata& getMetadata() const override;
 
 private:
-    // Audio smoothing (AsymmetricFollower for natural attack/release)
-    enhancement::AsymmetricFollower m_bassFollower{0.0f, 0.05f, 0.30f};
-    enhancement::AsymmetricFollower m_midFollower{0.0f, 0.05f, 0.30f};
-    enhancement::AsymmetricFollower m_trebleFollower{0.0f, 0.05f, 0.30f};
-    enhancement::AsymmetricFollower m_breathFollower{0.0f, 0.05f, 0.30f};  // For breath level smoothing
-    
-    // Hop sequence tracking
-    uint32_t m_lastHopSeq = 0;
-    float m_targetBass = 0.0f;
-    float m_targetMid = 0.0f;
-    float m_targetTreble = 0.0f;
-    
     float m_breathLevel = 0.0f;  // Current "breath" intensity
     float m_hueShift = 0.0f;     // Accumulated hue from treble
 };

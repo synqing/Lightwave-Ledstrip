@@ -40,12 +40,8 @@ struct MusicalGridTuning {
     float bpmMin = 30.0f;
     float bpmMax = 300.0f;
     float bpmTau = 0.50f;
-    // A1 Optimization: Reduced from 1.00f to 0.75f for faster confidence response
-    // Allows quicker adaptation to tempo changes while maintaining stability
-    float confidenceTau = 0.75f;
-    // A1 Optimization: Increased from 0.35f to 0.40f for stronger phase correction
-    // Improves beat alignment accuracy
-    float phaseCorrectionGain = 0.40f;
+    float confidenceTau = 1.00f;
+    float phaseCorrectionGain = 0.35f;
     float barCorrectionGain = 0.20f;
 };
 

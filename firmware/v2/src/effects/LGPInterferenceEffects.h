@@ -8,12 +8,12 @@
 
 #pragma once
 
-#include "../core/actors/RendererNode.h"
+#include "../core/actors/RendererActor.h"
 
 namespace lightwaveos {
 namespace effects {
 
-using namespace lightwaveos::nodes;
+using namespace lightwaveos::actors;
 
 // ==================== CENTER PAIR Constants ====================
 // Imported from CoreEffects.h for consistency
@@ -33,12 +33,12 @@ void effectWaveCollision(RenderContext& ctx);
 // ==================== Effect Registration ====================
 
 /**
- * @brief Register all LGP Interference effects with RendererNode
- * @param renderer Pointer to RendererNode
+ * @brief Register all LGP Interference effects with RendererActor
+ * @param renderer Pointer to RendererActor
  * @param startId Starting effect ID
  * @return Number of effects registered
  */
-uint8_t registerLGPInterferenceEffects(RendererNode* renderer, uint8_t startId);
+uint8_t registerLGPInterferenceEffects(RendererActor* renderer, uint8_t startId);
 
 } // namespace effects
 } // namespace lightwaveos

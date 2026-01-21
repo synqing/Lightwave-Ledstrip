@@ -54,19 +54,6 @@ struct ZoneConfigData {
     uint8_t zonePalette[MAX_ZONES];     // Palette ID per zone (0=global)
     uint8_t zoneBlendMode[MAX_ZONES];   // Blend mode per zone
 
-    // Audio config per zone (v3)
-    bool zoneTempoSync[MAX_ZONES];         // Tempo synchronization enabled
-    uint8_t zoneBeatModulation[MAX_ZONES]; // Beat modulation amount (0-255)
-    uint8_t zoneTempoSpeedScale[MAX_ZONES];// Tempo speed scale (0-200)
-    uint8_t zoneBeatDecay[MAX_ZONES];      // Beat decay rate (0-255)
-    uint8_t zoneAudioBand[MAX_ZONES];      // Audio band filter (0-3)
-
-    // Beat trigger config per zone (v3)
-    bool zoneBeatTriggerEnabled[MAX_ZONES];   // Beat trigger enabled
-    uint8_t zoneBeatTriggerInterval[MAX_ZONES]; // Beat interval (1,2,4,8)
-    uint8_t zoneEffectListSize[MAX_ZONES];    // Effect rotation list size (0-8)
-    uint8_t zoneEffectList[MAX_ZONES][8];     // Effect rotation lists
-
     // Checksum for data integrity
     uint32_t checksum;
 
@@ -237,13 +224,13 @@ private:
     static constexpr const char* NVS_KEY_STATE = "state";
 
     // Config version for future compatibility
-    static constexpr uint8_t CONFIG_VERSION = 3;  // v3: Added audio config fields
+    static constexpr uint8_t CONFIG_VERSION = 2;
 
     // Effect limits (should match RendererActor upper bound)
     static constexpr uint8_t MAX_EFFECT_ID = 98;
     static constexpr uint8_t MIN_SPEED = 1;
-    static constexpr uint8_t MAX_SPEED = 100;
-    // Palette validation: use palettes::validatePaletteId() or MASTER_PALETTE_COUNT (75 palettes: 0-74)
+    static constexpr uint8_t MAX_SPEED = 50;
+    static constexpr uint8_t MAX_PALETTE_ID = 36;
 };
 
 } // namespace persistence

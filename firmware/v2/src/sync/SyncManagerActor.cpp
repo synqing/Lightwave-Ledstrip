@@ -19,7 +19,7 @@ namespace sync {
 SyncManagerActor* SyncManagerActor::s_instance = nullptr;
 
 SyncManagerActor::SyncManagerActor(state::StateStore& stateStore)
-    : Node(nodes::NodeConfigs::SyncManager())
+    : Actor(actors::ActorConfigs::SyncManager())
     , m_stateStore(stateStore)
     , m_syncState(SyncState::INITIALIZING)
     , m_stateEnterTime(0)
@@ -61,8 +61,8 @@ void SyncManagerActor::onStart() {
     transitionTo(SyncState::DISCOVERING);
 }
 
-void SyncManagerActor::onMessage(const nodes::Message& msg) {
-    using nodes::MessageType;
+void SyncManagerActor::onMessage(const actors::Message& msg) {
+    using actors::MessageType;
 
     switch (msg.type) {
         case MessageType::STATE_UPDATED:
@@ -295,7 +295,7 @@ void SyncManagerActor::handleReconnecting() {
 // Message Handlers
 // ============================================================================
 
-void SyncManagerActor::handleStateUpdated(const nodes::Message& msg) {
+void SyncManagerActor::handleStateUpdated(const actors::Message& msg) {
     (void)msg;
 
     if (m_election.isLeader()) {
@@ -311,37 +311,21 @@ void SyncManagerActor::handleIncomingMessage(
 ) {
     if (!message || length == 0) return;
 
-    if (length > MAX_MESSAGE_SIZE) return;
-
-    const auto containsToken = [](const char* haystack, size_t haystackLen, const char* needle) -> bool {
-        if (!haystack || !needle) return false;
-        const size_t needleLen = strlen(needle);
-        if (needleLen == 0 || haystackLen < needleLen) return false;
-        for (size_t i = 0; i + needleLen <= haystackLen; ++i) {
-            if (memcmp(haystack + i, needle, needleLen) == 0) {
-                return true;
-            }
-        }
-        return false;
-    };
-
     // Determine message type
-    if (containsToken(message, length, "sync.state")) {
+    if (strstr(message, "sync.state")) {
         handleRemoteState(message, length);
-    } else if (containsToken(message, length, "sync.cmd")) {
+    } else if (strstr(message, "sync.cmd")) {
         handleRemoteCommand(message, length);
-    } else if (containsToken(message, length, "sync.hello")) {
+    } else if (strstr(message, "sync.hello")) {
         handleHello(message, length);
-    } else if (containsToken(message, length, "sync.ping")) {
+    } else if (strstr(message, "sync.ping")) {
         handlePing(senderUuid);
-    } else if (containsToken(message, length, "sync.pong")) {
+    } else if (strstr(message, "sync.pong")) {
         handlePong(senderUuid);
     }
 
     // Update peer last seen time
-    if (senderUuid) {
-        m_discovery.touchPeer(senderUuid, millis());
-    }
+    m_discovery.touchPeer(senderUuid, millis());
 }
 
 void SyncManagerActor::handleSyncRequest(const char* senderUuid) {

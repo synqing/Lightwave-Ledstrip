@@ -44,7 +44,6 @@ namespace ErrorCodes {
     constexpr const char* INVALID_ACTION = "INVALID_ACTION";
     constexpr const char* STORAGE_FULL = "STORAGE_FULL";
     constexpr const char* INVALID_PARAMETER = "INVALID_PARAMETER";
-    constexpr const char* OPERATION_FAILED = "OPERATION_FAILED";
 }
 
 // HTTP Status Codes
@@ -61,7 +60,6 @@ namespace HttpStatus {
     constexpr uint16_t INTERNAL_ERROR = 500;
     constexpr uint16_t SERVICE_UNAVAILABLE = 503;
     constexpr uint16_t INSUFFICIENT_STORAGE = 507;
-    constexpr uint16_t REQUEST_TIMEOUT = 408;
 }
 
 // ============================================================================

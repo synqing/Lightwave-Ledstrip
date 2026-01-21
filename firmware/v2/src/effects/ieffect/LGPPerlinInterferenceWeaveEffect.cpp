@@ -11,7 +11,6 @@
 
 #include "LGPPerlinInterferenceWeaveEffect.h"
 #include "../CoreEffects.h"
-#include "../enhancement/SmoothingEngine.h"
 #include "../../config/features.h"
 #include <FastLED.h>
 #include <cmath>
@@ -38,18 +37,6 @@ bool LGPPerlinInterferenceWeaveEffect::init(plugins::EffectContext& ctx) {
     m_time = 0;
     m_lastHopSeq = 0;
     m_dominantChromaBin = 0;
-    
-    // Initialize smoothing followers
-    m_beatFollower.reset(0.0f);
-    m_fluxFollower.reset(0.0f);
-    for (uint8_t i = 0; i < 12; i++) {
-        m_chromaFollowers[i].reset(0.0f);
-        m_chromaSmoothed[i] = 0.0f;
-        m_chromaTargets[i] = 0.0f;
-    }
-    m_targetBeat = 0.0f;
-    m_targetFlux = 0.0f;
-    
     return true;
 }
 
@@ -63,7 +50,6 @@ void LGPPerlinInterferenceWeaveEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     // Audio Analysis
     // =========================================================================
-    float moodNorm = ctx.getMoodNormalized();
     float beatMod = 0.0f;
     float fluxNorm = 0.0f;
     
@@ -73,19 +59,10 @@ void LGPPerlinInterferenceWeaveEffect::render(plugins::EffectContext& ctx) {
         if (newHop) {
             m_lastHopSeq = ctx.audio.controlBus.hop_seq;
             
-            // Update targets only on new hops
-            m_targetBeat = ctx.audio.beatStrength();
-            m_targetFlux = ctx.audio.flux();
-            
-            // Update chromagram targets
-            for (uint8_t i = 0; i < 12; i++) {
-                m_chromaTargets[i] = ctx.audio.controlBus.heavy_chroma[i];
-            }
-            
-            // Chroma analysis for colour offset (use smoothed values)
+            // Chroma analysis for colour offset
             float maxBinVal = 0.0f;
             for (uint8_t i = 0; i < 12; ++i) {
-                float bin = m_chromaSmoothed[i];
+                float bin = ctx.audio.controlBus.chroma[i];
                 if (bin > maxBinVal) {
                     maxBinVal = bin;
                     m_dominantChromaBin = i;
@@ -93,15 +70,11 @@ void LGPPerlinInterferenceWeaveEffect::render(plugins::EffectContext& ctx) {
             }
         }
         
-        // Smooth toward targets every frame with MOOD-adjusted smoothing
-        beatMod = m_beatFollower.updateWithMood(m_targetBeat, dt, moodNorm);
-        fluxNorm = m_fluxFollower.updateWithMood(m_targetFlux, dt, moodNorm);
+        // Beat → phase separation modulation
+        beatMod = ctx.audio.beatStrength();
         
-        // Smooth chromagram with AsymmetricFollower (every frame)
-        for (uint8_t i = 0; i < 12; i++) {
-            m_chromaSmoothed[i] = m_chromaFollowers[i].updateWithMood(
-                m_chromaTargets[i], dt, moodNorm);
-        }
+        // Flux → weave intensity
+        fluxNorm = ctx.audio.flux();
     }
 #endif
 

@@ -35,11 +35,6 @@ bool LGPPerlinBackendFastLEDEffect::init(plugins::EffectContext& ctx) {
     m_momentum = 0.0f;
     m_time = 0;
     
-    // Initialize audio smoothing
-    m_lastHopSeq = 0;
-    m_targetRms = 0.0f;
-    m_rmsFollower.reset(0.0f);
-    
     return true;
 }
 
@@ -55,18 +50,7 @@ void LGPPerlinBackendFastLEDEffect::render(plugins::EffectContext& ctx) {
     float push = 0.0f;
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
-        float dt = ctx.getSafeDeltaSeconds();
-        float moodNorm = ctx.getMoodNormalized();
-        
-        // Hop-based updates: update targets only on new hops
-        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
-        if (newHop) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
-            m_targetRms = ctx.audio.rms();
-        }
-        
-        // Smooth toward targets every frame with MOOD-adjusted smoothing
-        float energy = m_rmsFollower.updateWithMood(m_targetRms, dt, moodNorm);
+        float energy = ctx.audio.rms();
         push = energy * energy * energy * energy * speedNorm * 0.1f; // Heavy emphasis on loud
     }
 #endif

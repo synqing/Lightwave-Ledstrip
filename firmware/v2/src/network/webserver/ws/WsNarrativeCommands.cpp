@@ -127,11 +127,6 @@ static void handleNarrativeConfig(AsyncWebSocketClient* client, JsonDocument& do
             updated = true;
         }
         
-        // Persist to NVS if configuration was updated
-        if (updated) {
-            narrative.saveToNVS();
-        }
-        
         String response = buildWsResponse("narrative.config", requestId, [updated](JsonObject& data) {
             codec::WsNarrativeCodec::encodeConfigSetResult(updated, data);
         });

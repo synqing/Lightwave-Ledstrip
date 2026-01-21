@@ -22,6 +22,7 @@ namespace enhancement {
 // ============================================================================
 
 uint8_t ColorCorrectionEngine::s_gammaLUT[256] = {0};
+uint8_t ColorCorrectionEngine::s_srgbLinearLUT[256] = {0};
 bool ColorCorrectionEngine::s_lutsInitialized = false;
 
 // ============================================================================
@@ -56,8 +57,20 @@ void ColorCorrectionEngine::initLUTs() {
         s_gammaLUT[i] = (uint8_t)(gammaCorrected * 255.0f + 0.5f);
     }
 
+    // Generate sRGB to linear conversion LUT
+    for (uint16_t i = 0; i < 256; ++i) {
+        float srgb = (float)i / 255.0f;
+        float linear;
+        if (srgb <= 0.04045f) {
+            linear = srgb / 12.92f;
+        } else {
+            linear = powf((srgb + 0.055f) / 1.055f, 2.4f);
+        }
+        s_srgbLinearLUT[i] = (uint8_t)(linear * 255.0f + 0.5f);
+    }
+
     s_lutsInitialized = true;
-    ESP_LOGI(TAG, "Gamma LUT initialized (gamma=%.1f)", m_config.gammaValue);
+    ESP_LOGI(TAG, "LUTs initialized (gamma=%.1f)", m_config.gammaValue);
 }
 
 // ============================================================================
@@ -123,14 +136,6 @@ void ColorCorrectionEngine::correctPalette(CRGBPalette16& palette, uint8_t palet
 
 void ColorCorrectionEngine::applyHSVSaturationBoost(CRGBPalette16& palette, uint8_t minSat) {
     for (int i = 0; i < 16; i++) {
-        // GUARD: Skip very dark colors where rgb2hsv_approximate() fails
-        // FastLED's hue approximation is unreliable on low RGB sums (e.g., RGB(18,0,0))
-        // This prevents dark reds from being corrupted to green/blue
-        uint16_t rgbSum = (uint16_t)palette[i].r + palette[i].g + palette[i].b;
-        if (rgbSum < 48) {
-            continue;  // Don't touch very dark colors
-        }
-
         CHSV hsv = rgb2hsv_approximate(palette[i]);
 
         // Only boost if below minimum saturation and not too dark
@@ -173,16 +178,13 @@ void ColorCorrectionEngine::applyRGBWhiteCuration(CRGBPalette16& palette,
 // ============================================================================
 
 void ColorCorrectionEngine::processBuffer(CRGB* buffer, uint16_t count) {
-    // Pipeline order (updated for Phase 3 features):
+    // Pipeline order (updated for white accumulation prevention):
     // 1. Auto-Exposure (if enabled)
-    // 2. V-Clamping (prevents white accumulation from qadd8)
-    // 3. Saturation Boost (restores chromaticity after V-clamp)
+    // 2. V-Clamping (NEW - prevents white accumulation from qadd8)
+    // 3. Saturation Boost (NEW - restores chromaticity after V-clamp)
     // 4. White Guardrail (if mode != OFF)
     // 5. Brown Guardrail (if enabled)
     // 6. Gamma Correction (if enabled)
-    // 7. Bayer Dithering (Phase 3 - reduces 8-bit banding)
-    // 8. LED Spectral Correction (Phase 3 - WS2812 compensation)
-    // 9. LACE (Phase 3 - Local Adaptive Contrast Enhancement)
 
     if (m_config.autoExposureEnabled) {
         applyAutoExposure(buffer, count);
@@ -208,21 +210,6 @@ void ColorCorrectionEngine::processBuffer(CRGB* buffer, uint16_t count) {
 
     if (m_config.gammaEnabled) {
         applyGamma(buffer, count);
-    }
-
-    // Phase 3: Bayer Dithering (after gamma to break up resulting banding)
-    if (m_config.ditheringEnabled) {
-        applyDithering(buffer, count);
-    }
-
-    // Phase 3: LED Spectral Correction (near end of pipeline)
-    if (m_config.spectralCorrectionEnabled) {
-        applyLEDSpectralCorrection(buffer, count);
-    }
-
-    // Phase 3: LACE (last, operates on final color values)
-    if (m_config.laceEnabled) {
-        applyLACE(buffer, count);
     }
 }
 
@@ -268,10 +255,6 @@ void ColorCorrectionEngine::applyWhiteGuardrail(CRGB* buffer, uint16_t count) {
         if (!isWhitish(c, m_config.rgbWhiteThreshold)) continue;
 
         if (m_config.mode == CorrectionMode::HSV || m_config.mode == CorrectionMode::BOTH) {
-            // GUARD: Skip very dark pixels where rgb2hsv_approximate() fails
-            uint8_t maxChannel = max(c.r, max(c.g, c.b));
-            if (maxChannel < 16) continue;
-
             // HSV: Boost saturation of desaturated pixels
             CHSV hsv = rgb2hsv_approximate(c);
             if (hsv.s < m_config.hsvMinSaturation && hsv.v > 64) {
@@ -326,114 +309,6 @@ void ColorCorrectionEngine::applyGamma(CRGB* buffer, uint16_t count) {
         buffer[i].r = s_gammaLUT[buffer[i].r];
         buffer[i].g = s_gammaLUT[buffer[i].g];
         buffer[i].b = s_gammaLUT[buffer[i].b];
-    }
-}
-
-// ============================================================================
-// BAYER DITHERING (Reduces 8-bit Banding)
-// ============================================================================
-
-// 4x4 Bayer matrix for ordered dithering (values 0-15 scaled to threshold)
-static const uint8_t BAYER_4X4[4][4] = {
-    { 0,  8,  2, 10},
-    {12,  4, 14,  6},
-    { 3, 11,  1,  9},
-    {15,  7, 13,  5}
-};
-
-void ColorCorrectionEngine::applyDithering(CRGB* buffer, uint16_t count) {
-    if (!m_config.ditheringEnabled) return;
-
-    for (uint16_t i = 0; i < count; i++) {
-        CRGB& c = buffer[i];
-
-        // Get Bayer threshold based on LED position (creates 4x4 pattern)
-        uint8_t threshold = BAYER_4X4[i % 4][(i / 4) % 4];
-
-        // Apply ordered dithering: if low nibble exceeds threshold, round up
-        // This breaks up banding without adding visible noise
-        if ((c.r & 0x0F) > threshold && c.r < 255) c.r++;
-        if ((c.g & 0x0F) > threshold && c.g < 255) c.g++;
-        if ((c.b & 0x0F) > threshold && c.b < 255) c.b++;
-    }
-}
-
-// ============================================================================
-// LED SPECTRAL CORRECTION (WS2812 Compensation)
-// ============================================================================
-
-// WS2812 LEDs have slightly non-linear spectral response
-// These factors compensate to make whites appear neutral
-static constexpr uint8_t LED_R_FACTOR = 255;  // Red: no adjustment (reference)
-static constexpr uint8_t LED_G_FACTOR = 255;  // Green: no adjustment (balanced)
-static constexpr uint8_t LED_B_FACTOR = 242;  // Blue: reduce ~5% (slightly strong)
-
-void ColorCorrectionEngine::applyLEDSpectralCorrection(CRGB* buffer, uint16_t count) {
-    if (!m_config.spectralCorrectionEnabled) return;
-
-    for (uint16_t i = 0; i < count; i++) {
-        CRGB& c = buffer[i];
-        // Apply channel-specific scaling (using fixed-point math)
-        c.r = (uint8_t)(((uint16_t)c.r * LED_R_FACTOR) >> 8);
-        c.g = (uint8_t)(((uint16_t)c.g * LED_G_FACTOR) >> 8);
-        c.b = (uint8_t)(((uint16_t)c.b * LED_B_FACTOR) >> 8);
-    }
-}
-
-// ============================================================================
-// LOCAL ADAPTIVE CONTRAST ENHANCEMENT (LACE)
-// ============================================================================
-
-void ColorCorrectionEngine::applyLACE(CRGB* buffer, uint16_t count) {
-    if (!m_config.laceEnabled || m_config.laceStrength == 0) return;
-
-    // Temporary buffer for neighborhood averaging (avoid modifying while reading)
-    static uint8_t avgLuma[320];  // Static to avoid stack allocation
-    if (count > 320) return;  // Safety check
-
-    const uint8_t halfWindow = m_config.laceWindowSize / 2;
-
-    // Pass 1: Calculate neighborhood average luminance for each LED
-    for (uint16_t i = 0; i < count; i++) {
-        uint32_t lumaSum = 0;
-        uint8_t neighborCount = 0;
-
-        int16_t start = (int16_t)i - halfWindow;
-        int16_t end = (int16_t)i + halfWindow;
-
-        for (int16_t j = start; j <= end; j++) {
-            if (j >= 0 && j < (int16_t)count) {
-                lumaSum += calculateLuma(buffer[j]);
-                neighborCount++;
-            }
-        }
-
-        avgLuma[i] = (neighborCount > 0) ? (lumaSum / neighborCount) : 0;
-    }
-
-    // Pass 2: Apply contrast enhancement
-    float strengthScale = m_config.laceStrength / 100.0f;
-
-    for (uint16_t i = 0; i < count; i++) {
-        CRGB& c = buffer[i];
-        uint8_t localAvg = avgLuma[i];
-
-        if (localAvg < 8) continue;  // Skip very dark neighborhoods
-
-        uint8_t pixelLuma = calculateLuma(c);
-
-        // Calculate local contrast: (pixel - avg) / avg
-        // Positive = pixel brighter than neighborhood
-        // Negative = pixel darker than neighborhood
-        int16_t diff = (int16_t)pixelLuma - (int16_t)localAvg;
-
-        // Scale contrast boost by strength (max +/-30 per channel)
-        int8_t boost = (int8_t)(diff * strengthScale * 30 / 128);
-
-        // Apply boost to all channels proportionally
-        c.r = (uint8_t)constrain((int16_t)c.r + boost, 0, 255);
-        c.g = (uint8_t)constrain((int16_t)c.g + boost, 0, 255);
-        c.b = (uint8_t)constrain((int16_t)c.b + boost, 0, 255);
     }
 }
 
@@ -530,14 +405,6 @@ void ColorCorrectionEngine::saveToNVS() {
         prefs.putBool("vClampEn", m_config.vClampEnabled);
         prefs.putUChar("maxBright", m_config.maxBrightness);
         prefs.putUChar("satBoost", m_config.saturationBoostAmount);
-        // Phase 3: Bayer Dithering
-        prefs.putBool("ditherEn", m_config.ditheringEnabled);
-        // Phase 3: LED Spectral Correction
-        prefs.putBool("spectrEn", m_config.spectralCorrectionEnabled);
-        // Phase 3: LACE (Local Adaptive Contrast Enhancement)
-        prefs.putBool("laceEn", m_config.laceEnabled);
-        prefs.putUChar("laceWin", m_config.laceWindowSize);
-        prefs.putUChar("laceStr", m_config.laceStrength);
         prefs.end();
         ESP_LOGI(TAG, "Settings saved to NVS");
     } else {
@@ -552,29 +419,20 @@ void ColorCorrectionEngine::loadFromNVS() {
         m_config.hsvMinSaturation = prefs.getUChar("hsvMinSat", 120);
         m_config.rgbWhiteThreshold = prefs.getUChar("rgbThresh", 150);
         m_config.rgbTargetMin = prefs.getUChar("rgbTarget", 100);
-        m_config.autoExposureEnabled = prefs.getBool("aeEnabled", true);  // Default: ENABLED
+        m_config.autoExposureEnabled = prefs.getBool("aeEnabled", false);
         m_config.autoExposureTarget = prefs.getUChar("aeTarget", 110);
         m_config.gammaEnabled = prefs.getBool("gammaEn", true);
         m_config.gammaValue = prefs.getFloat("gammaVal", 2.2f);
-        m_config.brownGuardrailEnabled = prefs.getBool("brownEn", true);  // Default: ENABLED
+        m_config.brownGuardrailEnabled = prefs.getBool("brownEn", false);
         m_config.maxGreenPercentOfRed = prefs.getUChar("brownG", 28);
         m_config.maxBluePercentOfRed = prefs.getUChar("brownB", 8);
         // V-Clamping settings (white accumulation prevention)
         m_config.vClampEnabled = prefs.getBool("vClampEn", true);
         m_config.maxBrightness = prefs.getUChar("maxBright", 200);
         m_config.saturationBoostAmount = prefs.getUChar("satBoost", 25);
-        // Phase 3: Bayer Dithering
-        m_config.ditheringEnabled = prefs.getBool("ditherEn", true);
-        // Phase 3: LED Spectral Correction
-        m_config.spectralCorrectionEnabled = prefs.getBool("spectrEn", true);
-        // Phase 3: LACE (Local Adaptive Contrast Enhancement)
-        m_config.laceEnabled = prefs.getBool("laceEn", false);
-        m_config.laceWindowSize = prefs.getUChar("laceWin", 5);
-        m_config.laceStrength = prefs.getUChar("laceStr", 50);
         prefs.end();
-        ESP_LOGI(TAG, "Settings loaded from NVS (mode=%d, vClamp=%d, dither=%d, spectral=%d, lace=%d)",
-                 (int)m_config.mode, m_config.vClampEnabled,
-                 m_config.ditheringEnabled, m_config.spectralCorrectionEnabled, m_config.laceEnabled);
+        ESP_LOGI(TAG, "Settings loaded from NVS (mode=%d, vClamp=%d)",
+                 (int)m_config.mode, m_config.vClampEnabled);
     } else {
         ESP_LOGW(TAG, "NVS not found, using defaults");
     }

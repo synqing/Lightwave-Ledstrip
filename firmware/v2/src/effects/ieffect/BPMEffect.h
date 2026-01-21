@@ -47,17 +47,6 @@ private:
 
     // v2: Spring for smooth speed modulation (v8 pattern)
     enhancement::Spring m_speedSpring;
-    
-    // Audio smoothing (AsymmetricFollower for natural attack/release)
-    enhancement::AsymmetricFollower m_heavyEnergyFollower{0.0f, 0.05f, 0.30f};
-    enhancement::AsymmetricFollower m_beatStrengthFollower{0.0f, 0.05f, 0.30f};
-    enhancement::AsymmetricFollower m_tempoConfFollower{0.0f, 0.05f, 0.30f};
-    
-    // Hop sequence tracking
-    uint32_t m_lastHopSeq = 0;
-    float m_targetHeavyEnergy = 0.0f;
-    float m_targetBeatStrength = 0.0f;
-    float m_targetTempoConf = 0.0f;
 
     // v2: Ring buffer for beat-triggered expanding rings
     static constexpr int MAX_RINGS = 4;

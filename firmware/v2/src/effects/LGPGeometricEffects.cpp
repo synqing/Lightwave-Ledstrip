@@ -21,7 +21,7 @@
 namespace lightwaveos {
 namespace effects {
 
-using namespace lightwaveos::nodes;
+using namespace lightwaveos::actors;
 
 // NOTE: Effects migrated to IEffect classes; legacy stubs kept for reference.
 
@@ -83,7 +83,7 @@ void effectMeshNetwork(RenderContext& ctx) {
 
 // ==================== EFFECT REGISTRATION ====================
 
-uint8_t registerLGPGeometricEffects(RendererNode* renderer, uint8_t startId) {
+uint8_t registerLGPGeometricEffects(RendererActor* renderer, uint8_t startId) {
     if (!renderer) return 0;
 
     uint8_t count = 0;

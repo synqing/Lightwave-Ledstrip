@@ -62,7 +62,7 @@ struct ColorCorrectionConfig {
     uint8_t rgbTargetMin = 100;       ///< Target minimum RGB after correction
 
     // === Auto-Exposure Parameters ===
-    bool autoExposureEnabled = true;   ///< ENABLED by default (was false)
+    bool autoExposureEnabled = false;
     uint8_t autoExposureTarget = 110;  ///< Target average luma (BT.601)
 
     // === Gamma Correction ===
@@ -70,7 +70,7 @@ struct ColorCorrectionConfig {
     float gammaValue = 2.2f;  ///< Standard gamma (1.0-3.0)
 
     // === Brown Guardrail (LC_SelfContained pattern) ===
-    bool brownGuardrailEnabled = true;  ///< ENABLED by default (was false)
+    bool brownGuardrailEnabled = false;
     uint8_t maxGreenPercentOfRed = 28;  ///< Max G as % of R for browns
     uint8_t maxBluePercentOfRed = 8;    ///< Max B as % of R for browns
 
@@ -78,17 +78,6 @@ struct ColorCorrectionConfig {
     bool vClampEnabled = true;          ///< Enable brightness V-clamping
     uint8_t maxBrightness = 200;        ///< Max brightness (0-255, conservative 200)
     uint8_t saturationBoostAmount = 25; ///< Saturation boost after V-clamp (0-255)
-
-    // === Phase 3: Bayer Dithering ===
-    bool ditheringEnabled = true;       ///< Enable Bayer dithering to reduce banding
-
-    // === Phase 3: LED Spectral Correction ===
-    bool spectralCorrectionEnabled = true;  ///< Enable WS2812 spectral compensation
-
-    // === Phase 3: Local Adaptive Contrast Enhancement (LACE) ===
-    bool laceEnabled = false;           ///< Enable Local Adaptive Contrast Enhancement
-    uint8_t laceWindowSize = 5;         ///< LACE neighborhood window size (odd number)
-    uint8_t laceStrength = 50;          ///< LACE strength (0-100%)
 };
 
 /**
@@ -226,41 +215,6 @@ public:
      */
     void applySaturationBoost(CRGB* buffer, uint16_t count, uint8_t boostAmount);
 
-    /**
-     * @brief Apply Bayer dithering to reduce 8-bit color banding
-     *
-     * Uses a 4x4 ordered dithering matrix to break up gradient banding
-     * without adding visible noise. Particularly effective for smooth
-     * color transitions on LED strips.
-     *
-     * @param buffer LED buffer to process
-     * @param count Number of LEDs
-     */
-    void applyDithering(CRGB* buffer, uint16_t count);
-
-    /**
-     * @brief Apply LED spectral correction for WS2812 compensation
-     *
-     * WS2812 LEDs have slightly non-linear spectral response.
-     * This applies channel-specific scaling to make whites appear neutral.
-     *
-     * @param buffer LED buffer to process
-     * @param count Number of LEDs
-     */
-    void applyLEDSpectralCorrection(CRGB* buffer, uint16_t count);
-
-    /**
-     * @brief Apply Local Adaptive Contrast Enhancement (LACE)
-     *
-     * Boosts local contrast to make interference patterns more visible.
-     * Uses neighborhood averaging to enhance pixels that differ from
-     * their local environment.
-     *
-     * @param buffer LED buffer to process
-     * @param count Number of LEDs
-     */
-    void applyLACE(CRGB* buffer, uint16_t count);
-
     // ========================================================================
     // STATIC PALETTE CORRECTION METHODS
     // ========================================================================
@@ -308,6 +262,7 @@ private:
     // ========================================================================
 
     static uint8_t s_gammaLUT[256];       ///< Gamma correction table
+    static uint8_t s_srgbLinearLUT[256];  ///< sRGB to linear conversion
     static bool s_lutsInitialized;
 
     /**

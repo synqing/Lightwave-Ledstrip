@@ -36,13 +36,6 @@ bool LGPStarBurstEffect::init(plugins::EffectContext& ctx) {
     m_dominantBin = 0;
     m_dominantBinSmooth = 0.0f;
 
-    // Initialize chromagram smoothing
-    for (uint8_t i = 0; i < 12; i++) {
-        m_chromaFollowers[i].reset(0.0f);
-        m_chromaSmoothed[i] = 0.0f;
-        m_chromaTargets[i] = 0.0f;
-    }
-    
     // Initialize spring physics for natural speed momentum
     m_phaseSpeedSpring.init(50.0f, 1.0f);  // stiffness=50, mass=1 (critically damped)
     m_phaseSpeedSpring.reset(1.0f);        // Start at base speed
@@ -68,16 +61,11 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
         bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
         if (newHop) {
             m_lastHopSeq = ctx.audio.controlBus.hop_seq;
-            
-            // Update chromagram targets
-            for (uint8_t i = 0; i < 12; i++) {
-                m_chromaTargets[i] = ctx.audio.controlBus.heavy_chroma[i];
-            }
 
-            // Simple chroma analysis for color (dominant bin only) - use smoothed values
+            // Simple chroma analysis for color (dominant bin only)
             float maxBinVal = 0.0f;
             for (uint8_t i = 0; i < 12; ++i) {
-                float bin = m_chromaSmoothed[i];
+                float bin = ctx.audio.controlBus.chroma[i];
                 if (bin > maxBinVal) {
                     maxBinVal = bin;
                     m_dominantBin = i;
@@ -95,16 +83,8 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     // Per-frame Updates (smooth animation)
     // =========================================================================
-    float dt = ctx.getSafeDeltaSeconds();
-    float moodNorm = ctx.getMoodNormalized();
-    
-    // Smooth chromagram with AsymmetricFollower (every frame)
-    if (hasAudio) {
-        for (uint8_t i = 0; i < 12; i++) {
-            m_chromaSmoothed[i] = m_chromaFollowers[i].updateWithMood(
-                m_chromaTargets[i], dt, moodNorm);
-        }
-    }
+    float dt = ctx.deltaTimeMs * 0.001f;
+    if (dt > 0.1f) dt = 0.1f;  // Clamp for safety
 
     // Smooth dominant bin (for color stability)
     float alphaBin = dt / (0.25f + dt);

@@ -4,7 +4,6 @@
 #include "AudioTime.h"
 #include "MusicalSaliency.h"
 #include "StyleDetector.h"
-#include "TempoOutput.h"
 
 namespace lightwaveos::audio {
 
@@ -69,8 +68,10 @@ struct ControlBusRawInput {
     float bins64[BINS_64_COUNT] = {0};  // 0..1 normalized magnitudes
     float bins64Adaptive[BINS_64_COUNT] = {0};  // 0..1 adaptive normalised (Sensory Bridge max follower)
 
-    // Phase 2: Tempo Output (TempoTracker)
-    TempoOutput tempo = {0};
+    // Tempo tracker output (saliency computation ONLY - effects read MusicalGrid)
+    bool tempoLocked = false;       ///< TempoTracker lock state (saliency; effects read MusicalGrid)
+    float tempoConfidence = 0.0f;   ///< TempoTracker confidence (saliency; effects read MusicalGrid.confidence)
+    bool tempoBeatTick = false;     ///< TempoTracker beat tick gated by lock (saliency support)
 };
 
 /**
@@ -110,8 +111,10 @@ struct ControlBusFrame {
     float bins64[BINS_64_COUNT] = {0};  // 0..1 normalized magnitudes
     float bins64Adaptive[BINS_64_COUNT] = {0};  // 0..1 adaptive normalised (Sensory Bridge max follower)
 
-    // Phase 2: Tempo Output (TempoTracker)
-    TempoOutput tempo = {0};
+    // Tempo tracker output (saliency computation ONLY - effects read MusicalGrid)
+    bool tempoLocked = false;       ///< TempoTracker lock state (saliency; effects read MusicalGrid)
+    float tempoConfidence = 0.0f;   ///< TempoTracker confidence (saliency; effects read MusicalGrid.confidence)
+    bool tempoBeatTick = false;     ///< TempoTracker beat tick gated by lock (saliency support)
 
     // Silence detection (Sensory Bridge pattern)
     // silentScale fades from 1.0 to 0.0 after silenceHysteresisMs of silence
@@ -325,11 +328,10 @@ private:
     float m_alpha_slow = 0.12f;  // slower response
 
     // LGP_SMOOTH: Asymmetric attack/release for bands
-    // A1 Optimization: Adjusted for smoother feature transitions
-    float m_band_attack = 0.18f;       // Slightly slower rise (was 0.15f) - smoother onset
-    float m_band_release = 0.04f;      // Slightly faster fall (was 0.03f) - faster decay
-    float m_heavy_band_attack = 0.10f; // Slightly faster rise (was 0.08f) - more responsive
-    float m_heavy_band_release = 0.020f; // Slightly faster fall (was 0.015f) - cleaner fade
+    float m_band_attack = 0.15f;       // Fast rise for transients
+    float m_band_release = 0.03f;      // Slow fall for LGP viewing
+    float m_heavy_band_attack = 0.08f; // Extra slow rise
+    float m_heavy_band_release = 0.015f; // Ultra slow fall
 
     // Zone AGC state (Sensory Bridge pattern: 4 zones)
     bool m_zone_agc_enabled = true;  // Enabled by default for balanced frequency response

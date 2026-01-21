@@ -3,7 +3,7 @@
  * @brief Per-hop timing metrics for audio pipeline performance analysis
  *
  * Provides low-overhead instrumentation for measuring processing times
- * within AudioNode::processHop(). Designed for ESP32-S3 with:
+ * within AudioActor::processHop(). Designed for ESP32-S3 with:
  * - 32-byte packed samples for cache efficiency
  * - Lock-free ring buffer for cross-core access
  * - <0.02% CPU overhead target

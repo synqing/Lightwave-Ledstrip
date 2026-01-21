@@ -6,9 +6,9 @@
  * for zero runtime cost. When enabled, they provide microsecond-precision
  * timing with ~3.2us overhead per processHop() call.
  *
- * Usage pattern in AudioNode::processHop():
+ * Usage pattern in AudioActor::processHop():
  * @code
- *   void AudioNode::processHop() {
+ *   void AudioActor::processHop() {
  *       BENCH_DECL_TIMING();
  *       BENCH_START_FRAME();
  *
@@ -29,7 +29,6 @@
 
 #pragma once
 
-#include <cstdint>
 #include "../config/features.h"
 
 #if FEATURE_AUDIO_BENCHMARK

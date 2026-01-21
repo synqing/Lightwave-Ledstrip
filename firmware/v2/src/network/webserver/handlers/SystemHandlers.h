@@ -9,8 +9,8 @@
 #include <ArduinoJson.h>
 
 namespace lightwaveos {
-namespace nodes {
-class RendererNode;
+namespace actors {
+class RendererActor;
 }
 namespace network {
 class WebServer;
@@ -25,7 +25,7 @@ namespace handlers {
 class SystemHandlers {
 public:
     static void handleHealth(AsyncWebServerRequest* request,
-                              lightwaveos::nodes::RendererNode* renderer,
+                              lightwaveos::actors::RendererActor* renderer,
                               AsyncWebSocket* ws);
     
     static void handleApiDiscovery(AsyncWebServerRequest* request);

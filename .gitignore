@@ -48,13 +48,6 @@ wifi_credentials.ini
 # Claude / local agent tooling (keep folder structure tracked via .claude/.gitkeep)
 .claude/**
 !.claude/.gitkeep
-!.claude/harness
-!.claude/harness/**
-!.claude/prd
-!.claude/prd/**
-!.claude/skills
-!.claude/skills/ralph-loop
-!.claude/skills/ralph-loop/**
 
 # Local semantic tooling / MCP manifests (environment-specific)
 .code-context/

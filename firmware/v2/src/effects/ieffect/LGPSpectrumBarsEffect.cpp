@@ -5,7 +5,6 @@
 
 #include "LGPSpectrumBarsEffect.h"
 #include "../CoreEffects.h"
-#include "../enhancement/SmoothingEngine.h"
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
@@ -20,40 +19,19 @@ namespace ieffect {
 
 bool LGPSpectrumBarsEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
-    // Initialize smoothing followers
-    for (int i = 0; i < 8; i++) {
-        m_bandFollowers[i].reset(0.0f);
-        m_targetBands[i] = 0.0f;
-        m_smoothedBands[i] = 0.0f;
-    }
-    m_lastHopSeq = 0;
+    memset(m_smoothedBands, 0, sizeof(m_smoothedBands));
     return true;
 }
 
 void LGPSpectrumBarsEffect::render(plugins::EffectContext& ctx) {
-    float dt = ctx.getSafeDeltaSeconds();
-    float moodNorm = ctx.getMoodNormalized();
-    
-    // Hop-based updates: update targets only on new hops
-    bool newHop = false;
-    if (ctx.audio.available) {
-        newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
-        if (newHop) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
-            for (int i = 0; i < 8; ++i) {
-                m_targetBands[i] = ctx.audio.getBand(i);
-            }
-        }
-    } else {
-        // Fallback: use default values
-        for (int i = 0; i < 8; ++i) {
-            m_targetBands[i] = 0.3f;
-        }
-    }
-    
-    // Smooth toward targets every frame with MOOD-adjusted smoothing
+    // Update smoothed bands (fast attack, slow decay)
     for (int i = 0; i < 8; ++i) {
-        m_smoothedBands[i] = m_bandFollowers[i].updateWithMood(m_targetBands[i], dt, moodNorm);
+        float target = ctx.audio.available ? ctx.audio.getBand(i) : 0.3f;
+        if (target > m_smoothedBands[i]) {
+            m_smoothedBands[i] = target;  // Instant attack
+        } else {
+            m_smoothedBands[i] *= 0.92f;  // Slow decay (~200ms)
+        }
     }
 
     // Clear buffer
@@ -69,9 +47,6 @@ void LGPSpectrumBarsEffect::render(plugins::EffectContext& ctx) {
         if (bandIdx > 7) bandIdx = 7;
 
         float bandEnergy = m_smoothedBands[bandIdx];
-
-        // VISIBILITY FIX: Add minimum bar height floor to prevent invisible bars
-        bandEnergy = fmaxf(0.1f, bandEnergy);
 
         // Position within band (0-1)
         int posInBand = dist % LEDS_PER_BAND;

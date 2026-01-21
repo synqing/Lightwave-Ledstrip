@@ -9,9 +9,9 @@
 #include <ArduinoJson.h>
 
 namespace lightwaveos {
-namespace nodes {
-class NodeOrchestrator;
-class RendererNode;
+namespace actors {
+class ActorSystem;
+class RendererActor;
 }
 }
 
@@ -23,14 +23,14 @@ namespace handlers {
 class PaletteHandlers {
 public:
     static void handleList(AsyncWebServerRequest* request,
-                           lightwaveos::nodes::RendererNode* renderer);
+                           lightwaveos::actors::RendererActor* renderer);
     
     static void handleCurrent(AsyncWebServerRequest* request,
-                               lightwaveos::nodes::RendererNode* renderer);
+                               lightwaveos::actors::RendererActor* renderer);
     
     static void handleSet(AsyncWebServerRequest* request,
                           uint8_t* data, size_t len,
-                          lightwaveos::nodes::NodeOrchestrator& orchestrator,
+                          lightwaveos::actors::ActorSystem& actorSystem,
                           std::function<void()> broadcastStatus);
 };
 

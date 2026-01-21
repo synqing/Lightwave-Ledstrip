@@ -22,7 +22,7 @@
 namespace lightwaveos {
 namespace effects {
 
-using namespace lightwaveos::nodes;
+using namespace lightwaveos::actors;
 
 // NOTE: Effects migrated to IEffect classes; legacy stubs kept for reference.
 
@@ -84,7 +84,7 @@ void effectPhotonicCrystal(RenderContext& ctx) {
 
 // ==================== EFFECT REGISTRATION ====================
 
-uint8_t registerLGPAdvancedEffects(RendererNode* renderer, uint8_t startId) {
+uint8_t registerLGPAdvancedEffects(RendererActor* renderer, uint8_t startId) {
     if (!renderer) return 0;
 
     uint8_t count = 0;

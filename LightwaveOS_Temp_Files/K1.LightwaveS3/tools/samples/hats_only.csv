@@ -1,5 +1,0 @@
-beat_time_sec,expected_bpm
-# SPECIAL CASE: Hat-only loop should NOT produce beat detections
-# This file exists for testing AC-3: "Hat-only audio loop produces zero beat-candidate intervals"
-# Ground truth: NO BEATS EXPECTED
-# Expected behavior: confidence < 0.1, zero intervals accepted

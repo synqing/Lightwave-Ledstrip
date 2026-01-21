@@ -377,64 +377,6 @@ bool handled = WsCommandRouter::route(client, doc, ctx);
 
 **Optimization:** Uses string length + first character for fast filtering.
 
-#### Handler Capacity
-
-- **Maximum handlers**: 128 (defined as `MAX_HANDLERS` in `WsCommandRouter.h`)
-- **Current registrations**: 109 commands
-- **Memory usage**: ~2.05 KB (128 entries × ~16 bytes per entry)
-- **Boot-time logging**: Shows "WebSocket commands registered: 109/128 handlers"
-
-If handler count exceeds `MAX_HANDLERS`, registration fails with error:
-```
-[WsCommandRouter] ERROR: Handler table full (128/128), cannot register 'command.name'
-```
-
-#### Handler Registration Process
-
-Handlers are registered during WebServer initialization in this order:
-
-| Order | Module | Handler Count | Conditional |
-|-------|--------|---------------|-------------|
-| 1 | Device commands | 3 | Always |
-| 2 | Effects commands | 16 | Always |
-| 3 | Zones commands | 18 | Always |
-| 4 | Transition commands | 5 | Always |
-| 5 | Narrative commands | 2 | Always |
-| 6 | Motion commands | 13 | Always |
-| 7 | Color commands | 12 | Always |
-| 8 | Palette commands | 3 | Always |
-| 9 | Preset commands | 5 | Always |
-| 10 | Zone preset commands | 5 | Always |
-| 11 | Batch commands | 1 | Always |
-| 12 | Audio commands | 8 | `FEATURE_AUDIO_SYNC` |
-| 13 | Debug commands | 2 | `FEATURE_AUDIO_SYNC` |
-| 14 | Stream commands | 9 | Always |
-| 15 | Show commands | 6 | Always (static initializer) |
-
-**Total**: 109 commands (when `FEATURE_AUDIO_SYNC` is enabled)
-
-#### Handler Diagnostics
-
-The `WsCommandRouter` provides diagnostic methods:
-
-```cpp
-// Get current handler count
-size_t count = WsCommandRouter::getHandlerCount();  // Returns 109
-
-// Get maximum handler capacity
-size_t max = WsCommandRouter::getMaxHandlers();     // Returns 128
-```
-
-Boot logs include handler registration summary:
-```
-[INFO][WebServer] WebSocket commands registered: 109/128 handlers
-```
-
-**Troubleshooting:**
-- If you see "Handler table full" errors, increase `MAX_HANDLERS` in `WsCommandRouter.h`
-- Check boot logs for handler count to verify all commands registered
-- Use `getHandlerCount()` to query current usage at runtime
-
 ### Command Categories
 
 | Category | Commands |
@@ -585,8 +527,8 @@ When WiFi connection fails, device enters AP mode:
 
 | Setting | Value |
 |---------|-------|
-| SSID | `LightwaveOS-AP` (matches Tab5.encoder expectation) |
-| Password | `SpectraSynq` (matches Tab5.encoder expectation) |
+| SSID | `LightwaveOS-XXXX` (last 4 of MAC) |
+| Password | `lightwave123` |
 | IP | `192.168.4.1` |
 | Channel | Auto-selected (least congested) |
 
@@ -854,9 +796,9 @@ uint8_t effect = renderer->getCurrentEffect();  // BAD!
 | `RequestValidator.h` | ~832 | Schema validation |
 | `RateLimiter.h` | ~280 | Rate limiting |
 | `WsGateway.cpp` | ~200 | WebSocket gateway |
-| `WsCommandRouter.cpp` | ~100 | Command dispatch (128 handler capacity) |
+| `WsCommandRouter.cpp` | ~100 | Command dispatch |
 
 ---
 
-**Last Updated:** 2025-01-07
+**Last Updated:** 2025-01-02
 **Subsystem Version:** 2.0.0

@@ -69,6 +69,9 @@ private:
     float m_radiusTargetHist[HISTORY_SIZE];
     float m_radiusTargetSum;
     uint8_t m_histIdx;
+    
+    // Tempo lock hysteresis (Schmitt trigger: 0.6 lock / 0.4 unlock)
+    bool m_tempoLocked = false;
 };
 
 } // namespace ieffect

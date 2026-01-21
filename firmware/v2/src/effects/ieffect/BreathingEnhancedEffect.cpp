@@ -94,6 +94,8 @@ bool BreathingEnhancedEffect::init(plugins::EffectContext& ctx) {
     for (uint8_t i = 0; i < 12; ++i) {
         m_chromaSmoothed[i] = 0.0f;
     }
+    
+    m_tempoLocked = false;
 
     return true;
 }
@@ -109,21 +111,49 @@ void BreathingEnhancedEffect::render(plugins::EffectContext& ctx) {
     float dt = ctx.deltaTimeMs * 0.001f;
     float baseSpeed = ctx.speed / 200.0f;
     
-    // Enhanced: Use beatPhase for sync when tempo confidence high
+    // Enhanced: Use beatPhase for sync when tempo confidence high (PLL-style correction)
     float tempoConf = 0.0f;
     float beatPhase = 0.0f;
 #if FEATURE_AUDIO_SYNC
-    if (ctx.audio.available) {
+    // Domain constants (2*PI domain for BreathingEnhanced)
+    const float PHASE_DOMAIN = 2.0f * 3.14159f;  // 2*PI
+    const float HALF_DOMAIN = 3.14159f;          // PI
+
+    // Tempo lock hysteresis (Schmitt trigger: prevents chatter near threshold)
+    if (!ctx.audio.available) {
+        m_tempoLocked = false;  // Clear lock when audio drops (prevents ghost lock)
+    } else {
         tempoConf = ctx.audio.tempoConfidence();
         beatPhase = ctx.audio.beatPhase();
         
-        if (tempoConf > 0.6f) {
-            // High tempo confidence: sync phase to beat
-            m_phase = beatPhase * 2.0f * 3.14159f;
-        } else {
-            // Low confidence: time-based accumulation
-            m_phase += baseSpeed * dt;
+        // Update lock state with hysteresis (0.6 lock / 0.4 unlock)
+        if (tempoConf > 0.6f) m_tempoLocked = true;
+        else if (tempoConf < 0.4f) m_tempoLocked = false;
+    }
+
+    if (ctx.audio.available) {
+        // Always advance phase (free-run oscillator)
+        m_phase += baseSpeed * dt;
+        
+        // Apply phase correction when tempo-locked (PLL-style P-only correction)
+        if (m_tempoLocked) {
+            float targetPhase = beatPhase * PHASE_DOMAIN;
+            
+            // Compute wrapped error (shortest path to target)
+            float phaseError = targetPhase - m_phase;
+            if (phaseError > HALF_DOMAIN) phaseError -= PHASE_DOMAIN;
+            if (phaseError < -HALF_DOMAIN) phaseError += PHASE_DOMAIN;
+            
+            // Proportional correction (tau ~100ms gives smooth lock)
+            // Compute ONCE per frame, not per pixel
+            const float tau = 0.1f;
+            const float correctionAlpha = 1.0f - expf(-dt / tau);
+            m_phase += phaseError * correctionAlpha;
         }
+        
+        // CRITICAL: Wrap phase AFTER correction (handles negative and overflow)
+        while (m_phase >= PHASE_DOMAIN) m_phase -= PHASE_DOMAIN;
+        while (m_phase < 0.0f) m_phase += PHASE_DOMAIN;
     } else {
         // No audio: fallback slow animation
         m_fallbackPhase += baseSpeed * 0.3f * dt;

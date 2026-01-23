@@ -641,6 +641,45 @@ private:
      * @param nowMs Current time in milliseconds
      */
     void processNoiseCalibration(float rms, const float* bands, const float* chroma, uint32_t nowMs);
+
+    // ========================================================================
+    // Sensory Bridge parity side-car pipeline (3.1.0 + 4.1.1)
+    // ========================================================================
+    void processSbWaveformSidecar(const ControlBusRawInput& raw);
+    void processSbBloomSidecar(const ControlBusRawInput& raw);
+    void updateSbNoveltyAndHueShift();
+
+    // Parity buffers/state (3.1.0 waveform)
+    static constexpr uint8_t SB_WAVEFORM_POINTS = CONTROLBUS_WAVEFORM_N;
+    static constexpr uint8_t SB_WAVEFORM_HISTORY = 4;
+    int16_t m_sbWaveformHistory[SB_WAVEFORM_HISTORY][SB_WAVEFORM_POINTS] = {{0}};
+    uint8_t m_sbWaveformHistoryIndex = 0;
+    float m_sbMaxWaveformValFollower = 750.0f;  // Sensory Bridge sweet spot min level
+    float m_sbWaveformPeakScaled = 0.0f;
+    float m_sbWaveformPeakScaledLast = 0.0f;
+    float m_sbNoteChroma[CONTROLBUS_NUM_CHROMA] = {0};
+    float m_sbChromaMaxVal = 0.0f;
+
+    // Parity buffers/state (4.1.1 bloom)
+    static constexpr uint8_t SB_NUM_FREQS = 64;
+    static constexpr uint8_t SB_SPECTRAL_HISTORY = 5;
+    float m_sbSpectrogram[SB_NUM_FREQS] = {0};
+    float m_sbSpectrogramSmooth[SB_NUM_FREQS] = {0};
+    float m_sbChromagramSmooth[CONTROLBUS_NUM_CHROMA] = {0};
+    float m_sbChromagramMaxPeak = 0.001f;
+    int16_t m_sbWaveform[SB_WAVEFORM_POINTS] = {0};
+    float m_sbSpectralHistory[SB_SPECTRAL_HISTORY][SB_NUM_FREQS] = {{0}};
+    float m_sbNoveltyCurve[SB_SPECTRAL_HISTORY] = {0};
+    uint8_t m_sbSpectralHistoryIndex = 0;
+
+    // Auto colour shift (4.1.1)
+    float m_sbHuePosition = 0.0f;
+    float m_sbHueShiftSpeed = 0.0f;
+    float m_sbHuePushDirection = -1.0f;
+    float m_sbHueDestination = 0.0f;
+    float m_sbHueShiftingMix = -0.35f;
+    float m_sbHueShiftingMixTarget = 1.0f;
+    uint32_t m_sbRand = 0x12345678u;
 };
 
 // ============================================================================

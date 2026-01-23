@@ -81,6 +81,8 @@ struct ControlBusFrame {
     AudioTime t;
     uint32_t hop_seq = 0;
 
+    static constexpr uint8_t BINS_64_COUNT = ControlBusRawInput::BINS_64_COUNT;
+
     float rms = 0.0f;
     float flux = 0.0f;
     float fast_rms = 0.0f;
@@ -94,6 +96,21 @@ struct ControlBusFrame {
     float heavy_bands[CONTROLBUS_NUM_BANDS] = {0};
     float heavy_chroma[CONTROLBUS_NUM_CHROMA] = {0};
     int16_t waveform[CONTROLBUS_WAVEFORM_N] = {0};  // Time-domain samples (int16_t range: -32768 to 32767)
+
+    // -----------------------------------------------------------------------
+    // Sensory Bridge parity fields (side-car pipeline)
+    // -----------------------------------------------------------------------
+    int16_t sb_waveform[CONTROLBUS_WAVEFORM_N] = {0};  // 3.1.0 waveform (post capture scaling)
+    float sb_waveform_peak_scaled = 0.0f;
+    float sb_waveform_peak_scaled_last = 0.0f;
+    float sb_note_chromagram[CONTROLBUS_NUM_CHROMA] = {0};  // 3.1.0 chroma
+    float sb_chromagram_max_val = 0.0f;
+
+    float sb_spectrogram[BINS_64_COUNT] = {0};        // 4.1.1 spectrogram (normalised)
+    float sb_spectrogram_smooth[BINS_64_COUNT] = {0}; // 4.1.1 smoothed spectrogram
+    float sb_chromagram_smooth[CONTROLBUS_NUM_CHROMA] = {0}; // 4.1.1 chroma
+    float sb_hue_position = 0.0f;
+    float sb_hue_shifting_mix = -0.35f;
 
     ChordState chordState;  // Chord detection results (root, type, confidence)
 
@@ -110,7 +127,6 @@ struct ControlBusFrame {
     bool hihatTrigger = false;      // True on hi-hat onset frame
 
     // Phase 2: Full 64-bin Goertzel spectrum (110 Hz - 4186 Hz)
-    static constexpr uint8_t BINS_64_COUNT = 64;
     float bins64[BINS_64_COUNT] = {0};  // 0..1 normalized magnitudes
     float bins64Adaptive[BINS_64_COUNT] = {0};  // 0..1 adaptive normalised (Sensory Bridge max follower)
 

@@ -929,6 +929,10 @@ void AudioActor::processHop()
         raw.bins64Adaptive[i] = (raw.bins64[i] * sbScale) * multiplier;
     }
 
+    // === Phase: Sensory Bridge parity side-car ===
+    processSbWaveformSidecar(raw);
+    processSbBloomSidecar(raw);
+
     // MabuTrace: Detect false trigger - activity gated but no significant band energy
     // This helps identify noise floor calibration issues
     if (goertzelTriggered && activity > 0.1f) {
@@ -1038,6 +1042,17 @@ void AudioActor::processHop()
         frameToPublish.currentStyle = MusicStyle::UNKNOWN;
         frameToPublish.styleConfidence = 0.0f;
 #endif
+        // Sensory Bridge parity fields (side-car pipeline)
+        std::memcpy(frameToPublish.sb_waveform, m_sbWaveform, sizeof(m_sbWaveform));
+        frameToPublish.sb_waveform_peak_scaled = m_sbWaveformPeakScaled;
+        frameToPublish.sb_waveform_peak_scaled_last = m_sbWaveformPeakScaledLast;
+        std::memcpy(frameToPublish.sb_note_chromagram, m_sbNoteChroma, sizeof(m_sbNoteChroma));
+        frameToPublish.sb_chromagram_max_val = m_sbChromaMaxVal;
+        std::memcpy(frameToPublish.sb_spectrogram, m_sbSpectrogram, sizeof(m_sbSpectrogram));
+        std::memcpy(frameToPublish.sb_spectrogram_smooth, m_sbSpectrogramSmooth, sizeof(m_sbSpectrogramSmooth));
+        std::memcpy(frameToPublish.sb_chromagram_smooth, m_sbChromagramSmooth, sizeof(m_sbChromagramSmooth));
+        frameToPublish.sb_hue_position = m_sbHuePosition;
+        frameToPublish.sb_hue_shifting_mix = m_sbHueShiftingMix;
         m_controlBusBuffer.Publish(frameToPublish);
     }
 
@@ -1053,6 +1068,216 @@ void AudioActor::processHop()
         m_benchmarkAggregateCounter = 0;
     }
 #endif
+}
+
+void AudioActor::processSbWaveformSidecar(const ControlBusRawInput& raw)
+{
+    // Store latest waveform and push into 4-frame history (3.1.0 parity)
+    for (uint8_t i = 0; i < SB_WAVEFORM_POINTS; ++i) {
+        int16_t sample = raw.waveform[i];
+        m_sbWaveform[i] = sample;
+        m_sbWaveformHistory[m_sbWaveformHistoryIndex][i] = sample;
+    }
+    m_sbWaveformHistoryIndex++;
+    if (m_sbWaveformHistoryIndex >= SB_WAVEFORM_HISTORY) {
+        m_sbWaveformHistoryIndex = 0;
+    }
+
+    // Peak follower (3.1.0 parity)
+    float maxWaveformValRaw = 0.0f;
+    for (uint8_t i = 0; i < SB_WAVEFORM_POINTS; ++i) {
+        int16_t sample = m_sbWaveform[i];
+        int16_t absSample = (sample < 0) ? -sample : sample;
+        if (absSample > maxWaveformValRaw) {
+            maxWaveformValRaw = static_cast<float>(absSample);
+        }
+    }
+
+    float maxWaveformVal = maxWaveformValRaw - 750.0f;  // Sweet spot min level
+    if (maxWaveformVal < 0.0f) {
+        maxWaveformVal = 0.0f;
+    }
+
+    if (maxWaveformVal > m_sbMaxWaveformValFollower) {
+        float delta = maxWaveformVal - m_sbMaxWaveformValFollower;
+        m_sbMaxWaveformValFollower += delta * 0.25f;
+    } else if (maxWaveformVal < m_sbMaxWaveformValFollower) {
+        float delta = m_sbMaxWaveformValFollower - maxWaveformVal;
+        m_sbMaxWaveformValFollower -= delta * 0.005f;
+        if (m_sbMaxWaveformValFollower < 750.0f) {
+            m_sbMaxWaveformValFollower = 750.0f;
+        }
+    }
+
+    float waveformPeakScaledRaw = 0.0f;
+    if (m_sbMaxWaveformValFollower > 0.0f) {
+        waveformPeakScaledRaw = maxWaveformVal / m_sbMaxWaveformValFollower;
+    }
+
+    if (waveformPeakScaledRaw > m_sbWaveformPeakScaled) {
+        float delta = waveformPeakScaledRaw - m_sbWaveformPeakScaled;
+        m_sbWaveformPeakScaled += delta * 0.25f;
+    } else if (waveformPeakScaledRaw < m_sbWaveformPeakScaled) {
+        float delta = m_sbWaveformPeakScaled - waveformPeakScaledRaw;
+        m_sbWaveformPeakScaled -= delta * 0.25f;
+    }
+
+    m_sbWaveformPeakScaledLast =
+        (m_sbWaveformPeakScaled * 0.05f) + (m_sbWaveformPeakScaledLast * 0.95f);
+
+    // 3.1.0 chromagram (note_spectrogram -> note_chromagram)
+    m_sbChromaMaxVal = 0.0f;
+    for (uint8_t i = 0; i < CONTROLBUS_NUM_CHROMA; ++i) {
+        m_sbNoteChroma[i] = 0.0f;
+    }
+    for (uint8_t octave = 0; octave < 6; ++octave) {
+        for (uint8_t note = 0; note < CONTROLBUS_NUM_CHROMA; ++note) {
+            uint16_t noteIndex = static_cast<uint16_t>(12 * octave + note);
+            if (noteIndex < SB_NUM_FREQS) {
+                float val = raw.bins64Adaptive[noteIndex];
+                m_sbNoteChroma[note] += val;
+                if (m_sbNoteChroma[note] > 1.0f) {
+                    m_sbNoteChroma[note] = 1.0f;
+                }
+                if (m_sbNoteChroma[note] > m_sbChromaMaxVal) {
+                    m_sbChromaMaxVal = m_sbNoteChroma[note];
+                }
+            }
+        }
+    }
+    if (m_sbChromaMaxVal < 0.0001f) {
+        m_sbChromaMaxVal = 0.0001f;
+    }
+}
+
+void AudioActor::processSbBloomSidecar(const ControlBusRawInput& raw)
+{
+    // 4.1.1 spectrogram smoothing (low-pass with mood influence)
+    float moodNorm = static_cast<float>(m_controlBus.getMood()) / 255.0f;
+    float smoothingRate = 1.0f + (10.0f * moodNorm);
+    float alpha = 1.0f - std::exp(-smoothingRate * (HOP_DURATION_MS * 0.001f));
+
+    for (uint8_t i = 0; i < SB_NUM_FREQS; ++i) {
+        float target = raw.bins64Adaptive[i];
+        m_sbSpectrogram[i] = m_sbSpectrogram[i] + (target - m_sbSpectrogram[i]) * alpha;
+    }
+
+    // 4.1.1 get_smooth_spectrogram follower
+    for (uint8_t i = 0; i < SB_NUM_FREQS; ++i) {
+        float noteBrightness = m_sbSpectrogram[i];
+        if (m_sbSpectrogramSmooth[i] < noteBrightness) {
+            float distance = noteBrightness - m_sbSpectrogramSmooth[i];
+            m_sbSpectrogramSmooth[i] += distance * 0.75f;
+        } else if (m_sbSpectrogramSmooth[i] > noteBrightness) {
+            float distance = m_sbSpectrogramSmooth[i] - noteBrightness;
+            m_sbSpectrogramSmooth[i] -= distance * 0.75f;
+        }
+        if (m_sbSpectrogramSmooth[i] < 0.0f) m_sbSpectrogramSmooth[i] = 0.0f;
+        if (m_sbSpectrogramSmooth[i] > 1.0f) m_sbSpectrogramSmooth[i] = 1.0f;
+    }
+
+    // 4.1.1 make_smooth_chromagram
+    for (uint8_t i = 0; i < CONTROLBUS_NUM_CHROMA; ++i) {
+        m_sbChromagramSmooth[i] = 0.0f;
+    }
+    const float chromaDiv = 64.0f / 12.0f;
+    for (uint8_t i = 0; i < SB_NUM_FREQS; ++i) {
+        float noteMagnitude = m_sbSpectrogramSmooth[i];
+        if (noteMagnitude < 0.0f) noteMagnitude = 0.0f;
+        if (noteMagnitude > 1.0f) noteMagnitude = 1.0f;
+        uint8_t chromaBin = static_cast<uint8_t>(i % 12);
+        m_sbChromagramSmooth[chromaBin] += noteMagnitude / chromaDiv;
+    }
+
+    m_sbChromagramMaxPeak *= 0.999f;
+    if (m_sbChromagramMaxPeak < 0.01f) {
+        m_sbChromagramMaxPeak = 0.01f;
+    }
+    for (uint8_t i = 0; i < CONTROLBUS_NUM_CHROMA; ++i) {
+        if (m_sbChromagramSmooth[i] > m_sbChromagramMaxPeak) {
+            float distance = m_sbChromagramSmooth[i] - m_sbChromagramMaxPeak;
+            m_sbChromagramMaxPeak += distance * 0.05f;
+        }
+    }
+    float multiplier = 1.0f / m_sbChromagramMaxPeak;
+    for (uint8_t i = 0; i < CONTROLBUS_NUM_CHROMA; ++i) {
+        m_sbChromagramSmooth[i] *= multiplier;
+        if (m_sbChromagramSmooth[i] > 1.0f) m_sbChromagramSmooth[i] = 1.0f;
+    }
+
+    updateSbNoveltyAndHueShift();
+}
+
+void AudioActor::updateSbNoveltyAndHueShift()
+{
+    // Calculate novelty (4.1.1 calculate_novelty)
+    int16_t roundedIndex = static_cast<int16_t>(m_sbSpectralHistoryIndex) - 1;
+    while (roundedIndex < 0) {
+        roundedIndex += SB_SPECTRAL_HISTORY;
+    }
+
+    float noveltyNow = 0.0f;
+    for (uint8_t i = 0; i < SB_NUM_FREQS; ++i) {
+        float noveltyBin = m_sbSpectrogram[i] - m_sbSpectralHistory[roundedIndex][i];
+        if (noveltyBin < 0.0f) noveltyBin = 0.0f;
+        noveltyNow += noveltyBin;
+    }
+    noveltyNow /= SB_NUM_FREQS;
+
+    for (uint8_t i = 0; i < SB_NUM_FREQS; ++i) {
+        m_sbSpectralHistory[m_sbSpectralHistoryIndex][i] = m_sbSpectrogram[i];
+    }
+    m_sbNoveltyCurve[m_sbSpectralHistoryIndex] = std::sqrt(noveltyNow);
+
+    m_sbSpectralHistoryIndex++;
+    if (m_sbSpectralHistoryIndex >= SB_SPECTRAL_HISTORY) {
+        m_sbSpectralHistoryIndex = 0;
+    }
+
+    // Process colour shift (4.1.1 process_color_shift)
+    int16_t noveltyIndex = static_cast<int16_t>(m_sbSpectralHistoryIndex) - 1;
+    while (noveltyIndex < 0) {
+        noveltyIndex += SB_SPECTRAL_HISTORY;
+    }
+    float noveltyVal = m_sbNoveltyCurve[noveltyIndex];
+
+    noveltyVal -= 0.10f;
+    if (noveltyVal < 0.0f) {
+        noveltyVal = 0.0f;
+    }
+    noveltyVal *= 1.111111f;
+    noveltyVal = noveltyVal * noveltyVal * noveltyVal;
+    if (noveltyVal > 0.05f) {
+        noveltyVal = 0.05f;
+    }
+
+    if (noveltyVal > m_sbHueShiftSpeed) {
+        m_sbHueShiftSpeed = noveltyVal * 0.75f;
+    } else {
+        m_sbHueShiftSpeed *= 0.99f;
+    }
+
+    m_sbHuePosition += (m_sbHueShiftSpeed * m_sbHuePushDirection);
+    while (m_sbHuePosition < 0.0f) {
+        m_sbHuePosition += 1.0f;
+    }
+    while (m_sbHuePosition >= 1.0f) {
+        m_sbHuePosition -= 1.0f;
+    }
+
+    if (std::fabs(m_sbHuePosition - m_sbHueDestination) <= 0.01f) {
+        m_sbHuePushDirection *= -1.0f;
+        m_sbHueShiftingMixTarget *= -1.0f;
+        m_sbRand = m_sbRand * 1664525u + 1013904223u;
+        m_sbHueDestination = static_cast<float>(m_sbRand) / 4294967295.0f;
+    }
+
+    float hueMixDistance = std::fabs(m_sbHueShiftingMix - m_sbHueShiftingMixTarget);
+    if (m_sbHueShiftingMix < m_sbHueShiftingMixTarget) {
+        m_sbHueShiftingMix += hueMixDistance * 0.01f;
+    } else if (m_sbHueShiftingMix > m_sbHueShiftingMixTarget) {
+        m_sbHueShiftingMix -= hueMixDistance * 0.01f;
+    }
 }
 
 float AudioActor::computeRMS(const int16_t* samples, size_t count)

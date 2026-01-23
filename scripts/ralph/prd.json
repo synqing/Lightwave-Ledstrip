@@ -91,8 +91,8 @@
         "pio run -e esp32dev_wifi compiles"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Completed: WsAuthCommands.h/cpp with auth.status (public) and auth.rotate (requires auth) commands. WebServer.h added isClientAuthenticated() and getApiKeyManager() methods. Commands registered with FEATURE_API_AUTH guards."
     },
     {
       "id": "US-007",
@@ -108,8 +108,8 @@
         "UI renders correctly in browser"
       ],
       "priority": 7,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Completed: Security section added to index.html with auth status badges, API key input with show/hide toggle, key save/clear buttons, and Rotate Key button. app.js updated with auth state management, localStorage persistence (lightwaveApiKey), WebSocket handlers for auth.status/auth/auth.rotate, and automatic authentication on connection when key is stored."
     },
     {
       "id": "US-008",

@@ -66,3 +66,70 @@ Feature: API Authentication with NVS persistence and web UI
   - Public endpoints skip checkAPIKey() call, auth endpoints include it before handler
 ---
 
+## 2025-01-24 - US-005
+- Created AuthRateLimiter class for brute force protection
+- New file: firmware/v2/src/network/webserver/AuthRateLimiter.h (header-only, follows RateLimiter pattern)
+- Configuration: 5 failed attempts / 60 seconds triggers 5-minute block
+- Integrated into WebServer checkAPIKey() for REST endpoints
+- Integrated into WsGateway auth lambda for WebSocket connections
+- Added sendAuthRateLimitError() and buildWsAuthRateLimitError() helpers to ApiResponse.h
+- Files changed: WebServer.h, WebServer.cpp, ApiResponse.h, AuthRateLimiter.h
+- **Learnings for future iterations:**
+  - AuthRateLimiter follows same ITimeSource pattern as RateLimiter for testability
+  - Entry struct: {ip, windowStart, failureCount, blockedUntil} ~24 bytes each
+  - LRU eviction when tracking table full (8 IPs max)
+  - recordFailure() returns bool to indicate if threshold just exceeded
+  - recordSuccess() resets failure count but doesn't clear block (wait until expiry)
+  - Both REST and WebSocket share same m_authRateLimiter instance
+  - Use FEATURE_WEB_SERVER && FEATURE_API_AUTH guards for conditional compilation
+---
+
+## 2025-01-24 - US-006
+- Created WebSocket auth commands for key management
+- WsAuthCommands.h/cpp in src/network/webserver/ws/
+- auth.status: Returns {enabled: true, keyConfigured: bool} (public command)
+- auth.rotate: Generates new key and returns it (requires authenticated client)
+- Added WebServer::isClientAuthenticated() to check if WS client is authenticated
+- Added WebServer::getApiKeyManager() to access ApiKeyManager from WS commands
+- Registered commands in WebServer::setupWebSocket() with FEATURE_API_AUTH guards
+- Files changed: WebServer.h, WebServer.cpp, WsAuthCommands.h, WsAuthCommands.cpp
+- **Learnings for future iterations:**
+  - WebSocket command handlers receive WebServerContext& ctx
+  - ctx.server->isClientAuthenticated(client->id()) checks auth status
+  - ctx.server->getApiKeyManager() provides access to ApiKeyManager
+  - buildWsResponse() and buildWsError() from ApiResponse.h for WS responses
+  - All WS auth commands guarded by #if FEATURE_WEB_SERVER && FEATURE_API_AUTH
+  - Handler pattern: static void handler(AsyncWebSocketClient*, JsonDocument&, const WebServerContext&)
+---
+
+## 2025-01-24 - US-007
+- Added Security section to web dashboard for authentication management
+- index.html: Added Security card after Color Correction section with:
+  - Auth status badges (Authentication: Enabled/Disabled, Custom Key: Yes/Default)
+  - API key input field with show/hide toggle button
+  - Save Key and Clear buttons for key management
+  - Rotate API Key button (gold, prominent styling)
+  - New key display container with copy-to-clipboard functionality
+- app.js: Added complete authentication state management:
+  - state.auth object: {enabled, keyConfigured, authenticated, apiKey}
+  - loadAuthKey(): Loads API key from localStorage('lightwaveApiKey')
+  - saveAuthKey(): Saves API key to localStorage
+  - clearAuthKey(): Clears stored API key
+  - fetchAuthStatus(): Sends auth.status WebSocket command
+  - authenticateWithDevice(): Sends auth message with stored key
+  - rotateApiKey(): Sends auth.rotate WebSocket command
+  - handleAuthStatusResponse(), handleAuthResponse(), handleAuthRotateResponse(): Message handlers
+  - updateAuthUI(): Updates UI based on auth state
+- WebSocket integration:
+  - fetchAuthStatus() called on connection (after 100ms delay)
+  - Auto-authenticate when auth.status response indicates auth enabled and key available
+  - Reset auth.authenticated on disconnect
+- Files changed: firmware/v2/data/index.html, firmware/v2/data/app.js
+- **Learnings for future iterations:**
+  - localStorage keys: 'lightwaveHost' (device IP), 'lightwaveApiKey' (API key)
+  - Auth flow: connect → auth.status → if enabled && key stored → auth message → authenticated
+  - UI pattern: Show key input when not authenticated, show management when authenticated
+  - Copy to clipboard uses navigator.clipboard.writeText() with visual feedback
+  - Always reset auth.authenticated on WebSocket disconnect (needs re-auth on reconnect)
+---
+

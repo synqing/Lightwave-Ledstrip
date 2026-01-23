@@ -397,6 +397,57 @@
             </section>
         </div>
 
+        <!-- Row: Security Settings -->
+        <div class="controls-row" id="securityRow">
+            <section class="control-card full-width" id="securityCard">
+                <h2 class="card-header">Security</h2>
+
+                <!-- Auth Status -->
+                <div id="authStatusContainer" style="margin-bottom: var(--space-md);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-xs);">
+                        <span class="value-secondary compact">Authentication</span>
+                        <span id="authStatusBadge" class="value-secondary compact" style="padding: 2px 8px; border-radius: 4px; background: rgba(255,255,255,0.1);">Checking...</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span class="value-secondary compact">Custom Key</span>
+                        <span id="authKeyConfiguredBadge" class="value-secondary compact" style="padding: 2px 8px; border-radius: 4px; background: rgba(255,255,255,0.1);">--</span>
+                    </div>
+                </div>
+
+                <!-- API Key Input (shown when auth enabled) -->
+                <div id="authKeyInputContainer" style="margin-bottom: var(--space-md); display: none;">
+                    <label style="font-size: 0.75rem; display: block; margin-bottom: var(--space-xs);">API Key</label>
+                    <div style="display: flex; gap: var(--space-xs);">
+                        <input type="password" id="authKeyInput" placeholder="Enter API key" class="control-btn compact" style="flex: 1; text-align: left; padding: var(--space-xs) var(--space-sm); font-family: monospace;">
+                        <button id="authKeyToggleBtn" class="control-btn compact" style="width: 40px;" aria-label="Toggle key visibility">Show</button>
+                    </div>
+                    <div style="display: flex; gap: var(--space-xs); margin-top: var(--space-xs);">
+                        <button id="authKeySaveBtn" class="control-btn compact" style="flex: 1;">Save Key</button>
+                        <button id="authKeyClearBtn" class="control-btn compact" style="flex: 1; background: rgba(255,77,77,0.2);">Clear</button>
+                    </div>
+                </div>
+
+                <!-- Key Management (shown when auth enabled and authenticated) -->
+                <div id="authKeyManageContainer" style="display: none;">
+                    <div class="value-secondary compact" style="text-align: center; margin-bottom: var(--space-sm);">Authenticated</div>
+                    <button id="authRotateBtn" class="control-btn compact" style="width: 100%; background: var(--gold); color: var(--bg-base);">Rotate API Key</button>
+                    <div class="value-secondary compact" style="font-size: 0.625rem; text-align: center; margin-top: var(--space-xs); color: var(--text-tertiary);">
+                        Generates a new key. Current key will be invalidated.
+                    </div>
+                </div>
+
+                <!-- New Key Display (shown after rotation) -->
+                <div id="authNewKeyContainer" style="display: none; margin-top: var(--space-md); padding: var(--space-sm); background: rgba(255,184,77,0.1); border: 1px solid rgba(255,184,77,0.3); border-radius: 8px;">
+                    <div class="card-header" style="color: var(--gold); text-align: left; margin-bottom: var(--space-xs);">New API Key</div>
+                    <div id="authNewKeyDisplay" style="font-family: monospace; font-size: 0.75rem; word-break: break-all; padding: var(--space-xs); background: var(--bg-elevated); border-radius: 4px; margin-bottom: var(--space-xs);">--</div>
+                    <div class="value-secondary compact" style="font-size: 0.625rem; color: var(--warning);">
+                        Copy this key now! It will not be shown again.
+                    </div>
+                    <button id="authCopyKeyBtn" class="control-btn compact" style="width: 100%; margin-top: var(--space-xs);">Copy to Clipboard</button>
+                </div>
+            </section>
+        </div>
+
         <!-- Row 8: Shows Tab (Timeline Editor) -->
         <div class="controls-row" id="showsTabRow" style="display: none;">
             <section class="control-card full-width" id="showsTab">

@@ -190,6 +190,14 @@ const state = {
         currentPreset: 2            // 0=Off, 1=Subtle, 2=Balanced, 3=Aggressive
     },
 
+    // Authentication state
+    auth: {
+        enabled: false,             // Whether auth is enabled on device
+        keyConfigured: false,       // Whether a custom key is configured (vs default)
+        authenticated: false,       // Whether current session is authenticated
+        apiKey: null                // Current API key (from localStorage)
+    },
+
     // Limits
     PALETTE_COUNT: 75,  // 0-74
     BRIGHTNESS_MIN: 0,
@@ -293,13 +301,18 @@ function connect() {
             fetchModifiersList();
             // Fetch color correction config
             fetchColorCorrectionConfig();
+            // Fetch auth status (will auto-authenticate if key is stored)
+            fetchAuthStatus();
         }, 100);
     };
 
     state.ws.onclose = (e) => {
         log(`[WS] Disconnected: code ${e.code}${e.reason ? ', reason: ' + e.reason : ''}`);
         state.connected = false;
+        // Reset auth state on disconnect (need to re-authenticate on reconnect)
+        state.auth.authenticated = false;
         updateConnectionUI();
+        updateAuthUI();
         if (e.code !== 1000) {  // Only reconnect if not a normal close
             scheduleReconnect();
         }
@@ -942,6 +955,20 @@ function handleMessage(msg) {
                 updateColorCorrectionUI();
                 log(`[WS] Current preset: ${msgFlat.currentPresetName || msgFlat.currentPreset}`);
             }
+            break;
+
+        // Authentication responses
+        case 'auth.status':
+            handleAuthStatusResponse(msgFlat);
+            break;
+
+        case 'auth':
+            // Response to auth message (login attempt)
+            handleAuthResponse(msg);  // Use original msg to check success/error
+            break;
+
+        case 'auth.rotate':
+            handleAuthRotateResponse(msgFlat);
             break;
 
         default:
@@ -4569,6 +4596,222 @@ function fetchColorCorrectionPresets() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Authentication API Functions
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Fetch authentication status from device via WebSocket
+ */
+function fetchAuthStatus() {
+    send({ type: 'auth.status' });
+}
+
+/**
+ * Update the authentication UI to reflect current state
+ */
+function updateAuthUI() {
+    const auth = state.auth;
+
+    const statusBadge = document.getElementById('authStatusBadge');
+    const keyConfiguredBadge = document.getElementById('authKeyConfiguredBadge');
+    const keyInputContainer = document.getElementById('authKeyInputContainer');
+    const keyManageContainer = document.getElementById('authKeyManageContainer');
+    const newKeyContainer = document.getElementById('authNewKeyContainer');
+    const keyInput = document.getElementById('authKeyInput');
+
+    // Update status badges
+    if (statusBadge) {
+        if (auth.enabled) {
+            statusBadge.textContent = 'Enabled';
+            statusBadge.style.background = 'rgba(77, 255, 77, 0.2)';
+            statusBadge.style.color = '#4dff4d';
+        } else {
+            statusBadge.textContent = 'Disabled';
+            statusBadge.style.background = 'rgba(255, 255, 255, 0.1)';
+            statusBadge.style.color = 'inherit';
+        }
+    }
+
+    if (keyConfiguredBadge) {
+        if (auth.keyConfigured) {
+            keyConfiguredBadge.textContent = 'Yes';
+            keyConfiguredBadge.style.background = 'rgba(77, 255, 77, 0.2)';
+            keyConfiguredBadge.style.color = '#4dff4d';
+        } else {
+            keyConfiguredBadge.textContent = 'Default';
+            keyConfiguredBadge.style.background = 'rgba(255, 184, 77, 0.2)';
+            keyConfiguredBadge.style.color = '#ffb84d';
+        }
+    }
+
+    // Show/hide containers based on auth state
+    if (auth.enabled) {
+        if (auth.authenticated) {
+            // Authenticated - show key management
+            if (keyInputContainer) keyInputContainer.style.display = 'none';
+            if (keyManageContainer) keyManageContainer.style.display = 'block';
+        } else {
+            // Not authenticated - show key input
+            if (keyInputContainer) keyInputContainer.style.display = 'block';
+            if (keyManageContainer) keyManageContainer.style.display = 'none';
+            // Pre-fill with stored key if available
+            if (keyInput && auth.apiKey) {
+                keyInput.value = auth.apiKey;
+            }
+        }
+    } else {
+        // Auth disabled - hide both
+        if (keyInputContainer) keyInputContainer.style.display = 'none';
+        if (keyManageContainer) keyManageContainer.style.display = 'none';
+    }
+}
+
+/**
+ * Load API key from localStorage
+ */
+function loadAuthKey() {
+    const savedKey = localStorage.getItem('lightwaveApiKey');
+    if (savedKey) {
+        state.auth.apiKey = savedKey;
+        log('[AUTH] Loaded API key from localStorage');
+    }
+}
+
+/**
+ * Save API key to localStorage
+ * @param {string} key - The API key to save
+ */
+function saveAuthKey(key) {
+    if (key && key.trim()) {
+        localStorage.setItem('lightwaveApiKey', key.trim());
+        state.auth.apiKey = key.trim();
+        log('[AUTH] Saved API key to localStorage');
+    }
+}
+
+/**
+ * Clear API key from localStorage
+ */
+function clearAuthKey() {
+    localStorage.removeItem('lightwaveApiKey');
+    state.auth.apiKey = null;
+    state.auth.authenticated = false;
+    log('[AUTH] Cleared API key from localStorage');
+    updateAuthUI();
+}
+
+/**
+ * Authenticate with the device using stored API key
+ * Called automatically after WebSocket connection when auth is enabled
+ */
+function authenticateWithDevice() {
+    if (!state.auth.apiKey) {
+        log('[AUTH] No API key available for authentication');
+        return;
+    }
+
+    log('[AUTH] Attempting authentication...');
+    send({ type: 'auth', key: state.auth.apiKey });
+}
+
+/**
+ * Rotate the API key (requires authenticated session)
+ */
+function rotateApiKey() {
+    if (!state.auth.authenticated) {
+        log('[AUTH] Cannot rotate key - not authenticated');
+        return;
+    }
+
+    log('[AUTH] Requesting key rotation...');
+    send({ type: 'auth.rotate' });
+}
+
+/**
+ * Display the new API key after rotation
+ * @param {string} newKey - The newly generated key
+ */
+function displayNewApiKey(newKey) {
+    const newKeyContainer = document.getElementById('authNewKeyContainer');
+    const newKeyDisplay = document.getElementById('authNewKeyDisplay');
+
+    if (newKeyContainer && newKeyDisplay) {
+        newKeyDisplay.textContent = newKey;
+        newKeyContainer.style.display = 'block';
+
+        // Auto-save the new key
+        saveAuthKey(newKey);
+        state.auth.authenticated = true;
+        updateAuthUI();
+    }
+}
+
+/**
+ * Copy the new API key to clipboard
+ */
+function copyNewApiKey() {
+    const newKeyDisplay = document.getElementById('authNewKeyDisplay');
+    if (newKeyDisplay && newKeyDisplay.textContent && newKeyDisplay.textContent !== '--') {
+        navigator.clipboard.writeText(newKeyDisplay.textContent).then(() => {
+            log('[AUTH] API key copied to clipboard');
+            const copyBtn = document.getElementById('authCopyKeyBtn');
+            if (copyBtn) {
+                const originalText = copyBtn.textContent;
+                copyBtn.textContent = 'Copied!';
+                setTimeout(() => { copyBtn.textContent = originalText; }, 1500);
+            }
+        }).catch(err => {
+            log('[AUTH] Failed to copy: ' + err.message);
+        });
+    }
+}
+
+/**
+ * Handle auth.status response from WebSocket
+ * @param {Object} msg - The response message
+ */
+function handleAuthStatusResponse(msg) {
+    state.auth.enabled = msg.enabled === true;
+    state.auth.keyConfigured = msg.keyConfigured === true;
+    log(`[AUTH] Status: enabled=${state.auth.enabled}, keyConfigured=${state.auth.keyConfigured}`);
+
+    // If auth is enabled and we have a stored key, try to authenticate
+    if (state.auth.enabled && state.auth.apiKey && !state.auth.authenticated) {
+        authenticateWithDevice();
+    }
+
+    updateAuthUI();
+}
+
+/**
+ * Handle authentication response
+ * @param {Object} msg - The response message
+ */
+function handleAuthResponse(msg) {
+    if (msg.success) {
+        state.auth.authenticated = true;
+        log('[AUTH] Authentication successful');
+    } else {
+        state.auth.authenticated = false;
+        log('[AUTH] Authentication failed: ' + (msg.error?.message || msg.message || 'Unknown error'));
+    }
+    updateAuthUI();
+}
+
+/**
+ * Handle auth.rotate response
+ * @param {Object} msg - The response message
+ */
+function handleAuthRotateResponse(msg) {
+    if (msg.success && msg.newKey) {
+        log('[AUTH] Key rotation successful');
+        displayNewApiKey(msg.newKey);
+    } else {
+        log('[AUTH] Key rotation failed: ' + (msg.error?.message || msg.message || 'Unknown error'));
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
 // Initialization
 // ─────────────────────────────────────────────────────────────
 
@@ -4921,6 +5164,52 @@ function init() {
     if (ccSaveBtn) {
         ccSaveBtn.addEventListener('click', saveColorCorrection);
     }
+
+    // Bind authentication events
+    const authKeyInput = document.getElementById('authKeyInput');
+    const authKeyToggleBtn = document.getElementById('authKeyToggleBtn');
+    const authKeySaveBtn = document.getElementById('authKeySaveBtn');
+    const authKeyClearBtn = document.getElementById('authKeyClearBtn');
+    const authRotateBtn = document.getElementById('authRotateBtn');
+    const authCopyKeyBtn = document.getElementById('authCopyKeyBtn');
+
+    if (authKeyToggleBtn && authKeyInput) {
+        authKeyToggleBtn.addEventListener('click', () => {
+            if (authKeyInput.type === 'password') {
+                authKeyInput.type = 'text';
+                authKeyToggleBtn.textContent = 'Hide';
+            } else {
+                authKeyInput.type = 'password';
+                authKeyToggleBtn.textContent = 'Show';
+            }
+        });
+    }
+
+    if (authKeySaveBtn && authKeyInput) {
+        authKeySaveBtn.addEventListener('click', () => {
+            const key = authKeyInput.value.trim();
+            if (key) {
+                saveAuthKey(key);
+                // Try to authenticate immediately
+                authenticateWithDevice();
+            }
+        });
+    }
+
+    if (authKeyClearBtn) {
+        authKeyClearBtn.addEventListener('click', clearAuthKey);
+    }
+
+    if (authRotateBtn) {
+        authRotateBtn.addEventListener('click', rotateApiKey);
+    }
+
+    if (authCopyKeyBtn) {
+        authCopyKeyBtn.addEventListener('click', copyNewApiKey);
+    }
+
+    // Load saved API key from localStorage
+    loadAuthKey();
 
     // Check if we're running on the device or remotely
     // Only hide config bar if we're actually ON the device (192.168.0.16 or lightwaveos.local)

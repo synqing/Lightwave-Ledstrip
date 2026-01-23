@@ -51,6 +51,7 @@
 
 #if FEATURE_WEB_SERVER
 #include "network/WiFiManager.h"
+#include "network/WiFiCredentialManager.h"
 #include "network/WebServer.h"
 using namespace lightwaveos::network;
 using namespace lightwaveos::config;
@@ -240,6 +241,11 @@ void setup() {
         } else if (WIFI_MANAGER.isAPMode()) {
             LW_LOGI("WiFi: AP MODE (connect to LightwaveOS-Setup)");
             LW_LOGI("IP: %s", WiFi.softAPIP().toString().c_str());
+        }
+
+        // Initialize WiFi Credential Manager (for saved networks)
+        if (!WIFI_CREDENTIALS.begin()) {
+            LW_LOGW("WiFiCredentialManager failed to initialize");
         }
     }
 

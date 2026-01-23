@@ -133,3 +133,23 @@ Feature: API Authentication with NVS persistence and web UI
   - Always reset auth.authenticated on WebSocket disconnect (needs re-auth on reconnect)
 ---
 
+## 2025-01-24 - US-008
+- Added comprehensive Authentication documentation to docs/api/api-v1.md
+- Updated Table of Contents with Authentication section (section 5)
+- Added sections:
+  - Enabling Authentication: Build flags and default key
+  - REST API Authentication: X-API-Key header format, public vs protected endpoints
+  - WebSocket Authentication: Connection flow and session management
+  - Key Management Endpoints: auth/status, auth/rotate, auth/key with cURL examples
+  - Authentication Rate Limiting: 5 attempts/60s window, 5-minute block
+  - WebSocket Authentication Commands: auth.status, auth, auth.rotate with JS examples
+- Updated documentation version to 1.2.0, date to 2026-01-24
+- Files changed: docs/api/api-v1.md
+- **Learnings for future iterations:**
+  - API documentation lives in docs/api/api-v1.md (not firmware/v2/docs/)
+  - Table of Contents numbering must be updated when adding sections
+  - WebSocket command sections group related commands together
+  - Documentation should include both REST and WebSocket equivalents
+  - Version/date footer at bottom of api-v1.md tracks documentation changes
+---
+

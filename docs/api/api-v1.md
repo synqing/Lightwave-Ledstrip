@@ -10,7 +10,13 @@
 2. [Response Format](#response-format)
 3. [Error Codes](#error-codes)
 4. [Rate Limiting](#rate-limiting)
-5. [REST API Endpoints](#rest-api-endpoints)
+5. [Authentication](#authentication)
+   - [Enabling Authentication](#enabling-authentication)
+   - [REST API Authentication](#rest-api-authentication)
+   - [WebSocket Authentication](#websocket-authentication)
+   - [Key Management Endpoints](#key-management-endpoints)
+   - [Authentication Rate Limiting](#authentication-rate-limiting)
+6. [REST API Endpoints](#rest-api-endpoints)
    - [Device Endpoints](#device-endpoints)
    - [Network Endpoints](#network-endpoints)
    - [Effects Endpoints](#effects-endpoints)
@@ -20,11 +26,12 @@
    - [Effect Presets Endpoints](#effect-presets-endpoints)
    - [Audio Endpoints](#audio-endpoints)
    - [Batch Operations](#batch-operations)
-6. [WebSocket Commands](#websocket-commands)
+7. [WebSocket Commands](#websocket-commands)
    - [Audio Commands](#command-audioparametersget)
-7. [Effect Metadata](#effect-metadata)
-8. [Examples](#examples)
-9. [Related Documentation](#related-documentation)
+   - [Authentication Commands](#websocket-authentication-commands)
+8. [Effect Metadata](#effect-metadata)
+9. [Examples](#examples)
+10. [Related Documentation](#related-documentation)
 
 ---
 
@@ -109,6 +116,262 @@ To protect device stability, the API enforces rate limits per client IP address.
 - Use WebSocket for real-time updates (higher rate limit)
 - Use batch operations to reduce request count
 - Implement client-side debouncing for UI controls
+
+---
+
+## Authentication
+
+API authentication is optional and disabled by default. When enabled (via the `FEATURE_API_AUTH=1` build flag), all state-modifying API endpoints require authentication.
+
+### Enabling Authentication
+
+Authentication is enabled at compile time by building the `esp32dev_wifi` environment:
+
+```bash
+# Build with authentication enabled
+pio run -e esp32dev_wifi
+
+# Build without authentication (default audio build)
+pio run -e esp32dev_audio
+```
+
+When enabled, the device initializes with a default API key (`LW-DEFAULT-KEY-CHANGE-ME`). This should be rotated to a secure key on first use.
+
+### REST API Authentication
+
+All state-modifying REST endpoints require the `X-API-Key` header when authentication is enabled.
+
+**Header Format:**
+```
+X-API-Key: <your-api-key>
+```
+
+**Example Request:**
+```bash
+curl -X POST http://lightwaveos.local/api/v1/effects/set \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: LW-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX" \
+  -d '{"effectId": 12}'
+```
+
+**Public Endpoints (No Auth Required):**
+- `GET /api/v1/` - API discovery
+- `GET /api/v1/device/status` - Device status
+- `GET /api/v1/device/info` - Device info
+- `GET /api/v1/effects` - List effects
+- `GET /api/v1/effects/current` - Current effect
+- `GET /api/v1/effects/metadata` - Effect metadata
+- `GET /api/v1/transitions/types` - Transition types
+- `GET /api/v1/zones` - Zone configuration
+- `GET /api/v1/auth/status` - Auth status
+
+**Protected Endpoints (Auth Required):**
+- All `POST`, `PUT`, `DELETE` endpoints that modify state
+- `POST /api/v1/auth/rotate` - Rotate API key
+- `DELETE /api/v1/auth/key` - Clear custom key
+
+**Error Response (Missing or Invalid Key):**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "Invalid or missing API key"
+  },
+  "timestamp": 123456789,
+  "version": "1.0.0"
+}
+```
+
+### WebSocket Authentication
+
+WebSocket connections can authenticate to access protected commands.
+
+**Authentication Flow:**
+
+1. Connect to WebSocket: `ws://lightwaveos.local/ws`
+2. Send authentication message with API key
+3. Receive success/failure response
+4. Session remains authenticated until disconnect
+
+**Authentication Message:**
+```json
+{
+  "type": "auth",
+  "key": "LW-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
+}
+```
+
+**Success Response:**
+```json
+{
+  "type": "auth",
+  "success": true,
+  "message": "Authentication successful"
+}
+```
+
+**Failure Response:**
+```json
+{
+  "type": "auth",
+  "success": false,
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "Invalid API key"
+  }
+}
+```
+
+**JavaScript Example:**
+```javascript
+const ws = new WebSocket('ws://lightwaveos.local/ws');
+
+ws.onopen = () => {
+  // Authenticate after connection
+  ws.send(JSON.stringify({
+    type: 'auth',
+    key: localStorage.getItem('lightwaveApiKey')
+  }));
+};
+
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+
+  if (data.type === 'auth') {
+    if (data.success) {
+      console.log('Authenticated successfully');
+    } else {
+      console.error('Authentication failed:', data.error.message);
+    }
+  }
+};
+```
+
+### Key Management Endpoints
+
+#### `GET /api/v1/auth/status`
+
+Get authentication status. This is a public endpoint.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "enabled": true,
+    "keyConfigured": true
+  },
+  "timestamp": 123456789,
+  "version": "1.0.0"
+}
+```
+
+**Fields:**
+- `enabled` - Whether authentication is enabled (compile-time flag)
+- `keyConfigured` - Whether a custom key has been set (vs default key)
+
+**cURL Example:**
+```bash
+curl http://lightwaveos.local/api/v1/auth/status
+```
+
+---
+
+#### `POST /api/v1/auth/rotate`
+
+Generate a new API key. Requires authentication with current valid key.
+
+**Request Headers:**
+- `X-API-Key`: Current valid API key (required)
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "newKey": "LW-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX",
+    "message": "API key rotated successfully"
+  },
+  "timestamp": 123456789,
+  "version": "1.0.0"
+}
+```
+
+**Important:** The new key is only shown once. Store it securely immediately. The previous key is invalidated.
+
+**cURL Example:**
+```bash
+curl -X POST http://lightwaveos.local/api/v1/auth/rotate \
+  -H "X-API-Key: your-current-key"
+```
+
+---
+
+#### `DELETE /api/v1/auth/key`
+
+Clear custom key and revert to compile-time default. Requires authentication.
+
+**Request Headers:**
+- `X-API-Key`: Current valid API key (required)
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "message": "API key cleared, reverted to default"
+  },
+  "timestamp": 123456789,
+  "version": "1.0.0"
+}
+```
+
+**cURL Example:**
+```bash
+curl -X DELETE http://lightwaveos.local/api/v1/auth/key \
+  -H "X-API-Key: your-current-key"
+```
+
+### Authentication Rate Limiting
+
+To prevent brute-force attacks, failed authentication attempts are rate limited per IP address.
+
+| Metric | Value |
+|--------|-------|
+| **Window** | 60 seconds |
+| **Max Failures** | 5 attempts |
+| **Block Duration** | 5 minutes |
+
+**Behavior:**
+1. Each failed auth attempt is recorded per IP
+2. After 5 failures within 60 seconds, the IP is blocked
+3. Blocked IPs receive 429 responses for 5 minutes
+4. Successful authentication resets the failure counter
+
+**Rate Limit Error Response:**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "RATE_LIMITED",
+    "message": "Too many failed authentication attempts"
+  },
+  "retryAfter": 300,
+  "timestamp": 123456789,
+  "version": "1.0.0"
+}
+```
+
+**HTTP Response:**
+- Status: `429 Too Many Requests`
+- Header: `Retry-After: 300`
+
+**Best Practices:**
+- Store API keys in localStorage for persistent sessions
+- Implement exponential backoff on auth failures
+- Use the web dashboard's key rotation feature for secure key management
+- Never share API keys in client-side code or version control
 
 ---
 
@@ -2334,6 +2597,153 @@ Delete a saved preset by ID.
 
 ---
 
+### WebSocket Authentication Commands
+
+These commands are available when `FEATURE_API_AUTH=1` is enabled.
+
+#### Command: `auth.status`
+
+Get authentication status (public command - no auth required).
+
+**Send:**
+```json
+{
+  "type": "auth.status"
+}
+```
+
+**Receive:**
+```json
+{
+  "type": "auth.status",
+  "success": true,
+  "enabled": true,
+  "keyConfigured": true
+}
+```
+
+**Fields:**
+- `enabled` - Whether authentication is enabled (compile-time)
+- `keyConfigured` - Whether a custom key has been set (vs default)
+
+**JavaScript Example:**
+```javascript
+ws.send(JSON.stringify({
+  type: "auth.status"
+}));
+```
+
+---
+
+#### Command: `auth`
+
+Authenticate the WebSocket session. Required before using protected commands.
+
+**Send:**
+```json
+{
+  "type": "auth",
+  "key": "LW-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
+}
+```
+
+**Success Response:**
+```json
+{
+  "type": "auth",
+  "success": true,
+  "message": "Authentication successful"
+}
+```
+
+**Failure Response:**
+```json
+{
+  "type": "auth",
+  "success": false,
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "Invalid API key"
+  }
+}
+```
+
+**JavaScript Example:**
+```javascript
+// Authenticate with stored key
+ws.send(JSON.stringify({
+  type: "auth",
+  key: localStorage.getItem('lightwaveApiKey')
+}));
+
+// Handle response
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  if (data.type === 'auth') {
+    if (data.success) {
+      console.log('Session authenticated');
+    } else {
+      console.error('Auth failed:', data.error.message);
+    }
+  }
+};
+```
+
+---
+
+#### Command: `auth.rotate`
+
+Generate a new API key. Requires authenticated session.
+
+**Send:**
+```json
+{
+  "type": "auth.rotate"
+}
+```
+
+**Success Response:**
+```json
+{
+  "type": "auth.rotate",
+  "success": true,
+  "newKey": "LW-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
+}
+```
+
+**Failure Response (Not Authenticated):**
+```json
+{
+  "type": "auth.rotate",
+  "success": false,
+  "error": {
+    "code": "UNAUTHORIZED",
+    "message": "Authentication required"
+  }
+}
+```
+
+**Important:** The new key is only shown once. Store it securely. The previous key is immediately invalidated.
+
+**JavaScript Example:**
+```javascript
+// Must be authenticated first
+ws.send(JSON.stringify({
+  type: "auth.rotate"
+}));
+
+// Handle response and save new key
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  if (data.type === 'auth.rotate' && data.success) {
+    localStorage.setItem('lightwaveApiKey', data.newKey);
+    console.log('New key saved:', data.newKey);
+  }
+};
+```
+
+---
+
 ## Effect Metadata
 
 ### Effect Categories
@@ -2538,6 +2948,6 @@ For audio-specific APIs (requires `esp32dev_audio` build):
 
 ---
 
-**Documentation Version:** 1.1.0
-**Last Updated:** 2026-01-03
+**Documentation Version:** 1.2.0
+**Last Updated:** 2026-01-24
 **API Base:** LightwaveOS v2.0.0

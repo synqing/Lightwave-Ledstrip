@@ -124,8 +124,8 @@
         "pio run -e esp32dev_wifi compiles"
       ],
       "priority": 8,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Completed: Added comprehensive Authentication section to docs/api/api-v1.md including: enabling authentication, REST API authentication with X-API-Key header, WebSocket auth flow, key management endpoints (auth/status, auth/rotate, auth/key), auth rate limiting (5 attempts/60s, 5min block), and WebSocket authentication commands (auth.status, auth, auth.rotate). Documentation version updated to 1.2.0."
     }
   ]
 }

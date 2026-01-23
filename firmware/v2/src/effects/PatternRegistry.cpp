@@ -1,7 +1,7 @@
 /**
  * Pattern Registry Implementation
  *
- * Provides metadata for all 68 registered patterns.
+ * Provides metadata for all registered patterns.
  * Pattern indices match effect IDs exactly (stable ID mapping).
  */
 
@@ -142,7 +142,9 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
     {PM_STR("LGP Spectrum Detail Enhanced"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Saliency-weighted spectrum detail with adaptive emphasis"), PM_STR("Musical saliency, adaptive spectrum weighting"), PM_STR("LGP Spectrum Detail")},
     {PM_STR("LGP Star Burst Enhanced"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN, PM_STR("Beat-triggered star bursts with sub-bass boost"), PM_STR("Beat phase, sub-bass burst, chroma colour"), PM_STR("LGP Star Burst")},
     {PM_STR("LGP Wave Collision Enhanced"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::TRAVELING, PM_STR("Audio-driven wave collision with sub-bass boost"), PM_STR("Snare collisions, beat phase, chroma weighting"), PM_STR("LGP Wave Collision")},
-    {PM_STR("Ripple Enhanced"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Beat-sync ripple propagation with musical intelligence"), PM_STR("Beat sync, style-adaptive, harmonic saliency, centre-origin"), PM_STR("Ripple")}
+    {PM_STR("Ripple Enhanced"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Beat-sync ripple propagation with musical intelligence"), PM_STR("Beat sync, style-adaptive, harmonic saliency, centre-origin"), PM_STR("Ripple")},
+    {PM_STR("Audio Bloom Parity"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("SB 4.1.1 bloom parity with centre smear"), PM_STR("Chroma-weighted palette hue, centre smear, edge fade"), PM_STR("Audio Bloom")},
+    {PM_STR("Audio Waveform Parity"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("SB 3.1.0 waveform parity with MOOD smoothing"), PM_STR("Waveform history, palette chroma hue, centre-origin"), PM_STR("Audio Waveform")}
 };
 
 const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(PatternMetadata);
@@ -152,7 +154,7 @@ const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(Pattern
 // ============================================================================
 
 // Expected number of implemented effects (must match registerAllEffects() return value)
-constexpr uint8_t EXPECTED_EFFECT_COUNT = 98;  // 88 base + 10 enhanced
+constexpr uint8_t EXPECTED_EFFECT_COUNT = 100;  // 88 base + 12 enhanced
 
 // Compile-time assertion: metadata must have at least as many entries as implemented effects
 // This ensures we can always map effect IDs to metadata (allows for future effects in metadata)
@@ -394,7 +396,7 @@ static const uint8_t REACTIVE_EFFECT_IDS[] PROGMEM = {
     78,  // Perlin Shocklines - beat-driven ridges
     79,  // Perlin Caustics - treble/bass modulation
     80,  // Perlin Interference Weave - dual-strip moiré
-    // Enhanced Audio-Reactive Effects (88-97)
+    // Enhanced Audio-Reactive Effects (88-99)
     88,  // BPM Enhanced - tempo-locked pulse rings
     89,  // Breathing Enhanced - style-adaptive breathing
     90,  // Chevron Waves Enhanced - beat-synced chevrons
@@ -404,7 +406,9 @@ static const uint8_t REACTIVE_EFFECT_IDS[] PROGMEM = {
     94,  // Spectrum Detail Enhanced - saliency-weighted spectrum
     95,  // LGP Star Burst Enhanced - beat-triggered bursts
     96,  // LGP Wave Collision Enhanced - audio-driven collisions
-    97   // Ripple Enhanced - beat-sync propagation
+    97,  // Ripple Enhanced - beat-sync propagation
+    98,  // Audio Bloom Parity - SB 4.1.1 bloom parity
+    99   // Audio Waveform Parity - SB 3.1.0 waveform parity
 };
 static constexpr uint8_t REACTIVE_EFFECT_COUNT = sizeof(REACTIVE_EFFECT_IDS);
 

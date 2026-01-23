@@ -93,6 +93,7 @@
 #include "ieffect/LGPBassBreathEffect.h"
 #include "ieffect/AudioWaveformEffect.h"
 #include "ieffect/AudioBloomEffect.h"
+#include "ieffect/SnapwaveLinearEffect.h"
 #include "ieffect/LGPStarBurstNarrativeEffect.h"
 #include "ieffect/LGPChordGlowEffect.h"
 #include "ieffect/LGPPerlinVeilEffect.h"
@@ -879,7 +880,7 @@ uint8_t registerAllEffects(RendererActor* renderer) {
         total++;
     }
 
-    // =============== ENHANCED AUDIO-REACTIVE EFFECTS (88-97) ===============
+    // =============== ENHANCED AUDIO-REACTIVE EFFECTS (88-99) ===============
 
     // BPM Enhanced (ID 88) - Tempo-locked pulse rings
     static ieffect::BPMEnhancedEffect bpmEnhancedInstance;
@@ -941,9 +942,15 @@ uint8_t registerAllEffects(RendererActor* renderer) {
         total++;
     }
 
+    // Snapwave Linear (ID 98) - v1 parity, LINEAR exempt from CENTER_ORIGIN
+    static ieffect::SnapwaveLinearEffect snapwaveLinearInstance;
+    if (renderer->registerEffect(total, &snapwaveLinearInstance)) {
+        total++;
+    }
+
     // =============== EFFECT COUNT PARITY VALIDATION ===============
     // Runtime validation: ensure registered count matches expected
-    constexpr uint8_t EXPECTED_EFFECT_COUNT = 98;  // 88 base + 10 enhanced
+    constexpr uint8_t EXPECTED_EFFECT_COUNT = 99;  // 86 base + 12 enhanced + 1 snapwave
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

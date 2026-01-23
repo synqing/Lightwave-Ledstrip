@@ -58,7 +58,8 @@ enum class EffectCategory : uint8_t {
     SHOCKWAVE,      // Pulse, burst, explosion
     AMBIENT,        // Subtle, background, mood
     PARTY,          // Fast, dynamic, music-reactive
-    CUSTOM          // User-created via designer
+    CUSTOM,         // User-created via designer
+    LEGACY_LINEAR   // LINEAR patterns EXEMPT from CENTER_ORIGIN (v1 parity)
 };
 
 /**

@@ -219,7 +219,22 @@ public:
      * @return true if unmount succeeded
      */
     bool unmountLittleFS();
-    
+
+#if FEATURE_API_AUTH
+    /**
+     * @brief Check if a WebSocket client is authenticated
+     * @param clientId The WebSocket client ID
+     * @return true if client is authenticated, false otherwise
+     */
+    bool isClientAuthenticated(uint32_t clientId) const;
+
+    /**
+     * @brief Get the API key manager (for WebSocket auth commands)
+     * @return Reference to the ApiKeyManager instance
+     */
+    ApiKeyManager& getApiKeyManager() { return m_apiKeyManager; }
+#endif
+
     // ========================================================================
     // Cached Renderer State (thread-safe read-only access from request handlers)
     // ========================================================================

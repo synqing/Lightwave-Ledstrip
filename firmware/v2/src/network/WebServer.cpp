@@ -53,6 +53,9 @@
 #endif
 #include "webserver/ws/WsStreamCommands.h"
 #include "webserver/ws/WsModifierCommands.h"
+#if FEATURE_API_AUTH
+#include "webserver/ws/WsAuthCommands.h"
+#endif
 #include "../config/network_config.h"
 #include "../core/actors/NodeOrchestrator.h"
 #include "../effects/zones/ZoneDefinition.h"
@@ -359,6 +362,12 @@ bool WebServer::unmountLittleFS() {
     LW_LOGI("LittleFS unmounted");
     return true;
 }
+
+#if FEATURE_API_AUTH
+bool WebServer::isClientAuthenticated(uint32_t clientId) const {
+    return m_authenticatedClients.find(clientId) != m_authenticatedClients.end();
+}
+#endif
 
 void WebServer::update() {
     if (!m_running) return;
@@ -730,6 +739,9 @@ void WebServer::setupWebSocket() {
 #endif
     webserver::ws::registerWsStreamCommands(ctx);
     webserver::ws::registerWsModifierCommands(ctx);
+#if FEATURE_API_AUTH
+    webserver::ws::registerWsAuthCommands(ctx);
+#endif
 
     // Log handler registration summary
     size_t handlerCount = webserver::WsCommandRouter::getHandlerCount();

@@ -76,8 +76,8 @@
         "pio run -e esp32dev_wifi compiles"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Completed: Created AuthRateLimiter class in src/network/webserver/AuthRateLimiter.h. Integrated into WebServer checkAPIKey() for REST and WebSocket auth. Uses 5 attempts/60sec window with 5-minute block. Returns 429 with Retry-After header. Successful auth resets failure counter."
     },
     {
       "id": "US-006",

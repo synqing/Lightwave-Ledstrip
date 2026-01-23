@@ -658,6 +658,15 @@ void WebServer::setupWebSocket() {
             // Get current API key from ApiKeyManager (NVS or compile-time default)
             String currentKey = m_apiKeyManager.getKey();
             if (currentKey.length() > 0) {
+                IPAddress clientIP = client->remoteIP();
+
+                // Check if IP is blocked due to too many failed attempts
+                if (m_authRateLimiter.isBlocked(clientIP)) {
+                    uint32_t retryAfter = m_authRateLimiter.getRetryAfterSeconds(clientIP);
+                    client->text(buildWsAuthRateLimitError(retryAfter));
+                    return false;
+                }
+
                 if (m_authenticatedClients.find(client->id()) == m_authenticatedClients.end()) {
                     const char* msgType = doc["type"] | "";
                     if (strcmp(msgType, "auth") == 0) {
@@ -665,11 +674,21 @@ void WebServer::setupWebSocket() {
                         // Use ApiKeyManager's constant-time validation
                         if (m_apiKeyManager.validateKey(String(providedKey))) {
                             m_authenticatedClients.insert(client->id());
+                            m_authRateLimiter.recordSuccess(clientIP);
                             client->text("{\"type\":\"auth\",\"success\":true}");
                         } else {
-                            client->text(buildWsError(ErrorCodes::UNAUTHORIZED, "Invalid API key").c_str());
+                            // Record failure and check if now blocked
+                            bool nowBlocked = m_authRateLimiter.recordFailure(clientIP);
+                            if (nowBlocked) {
+                                uint32_t retryAfter = m_authRateLimiter.getRetryAfterSeconds(clientIP);
+                                client->text(buildWsAuthRateLimitError(retryAfter));
+                            } else {
+                                client->text(buildWsError(ErrorCodes::UNAUTHORIZED, "Invalid API key").c_str());
+                            }
                         }
                     } else {
+                        // Non-auth message from unauthenticated client - also counts as failure
+                        m_authRateLimiter.recordFailure(clientIP);
                         client->text("{\"type\":\"error\",\"error\":{\"code\":\"UNAUTHORIZED\",\"message\":\"Authentication required. Send {\\\"type\\\":\\\"auth\\\",\\\"apiKey\\\":\\\"...\\\"}\"}}\n");
                     }
                     return false;
@@ -1390,18 +1409,44 @@ bool WebServer::checkAPIKey(AsyncWebServerRequest* request) {
         return true;
     }
 
+    IPAddress clientIP = request->client()->remoteIP();
+
+    // Check if IP is blocked due to too many failed attempts
+    if (m_authRateLimiter.isBlocked(clientIP)) {
+        uint32_t retryAfter = m_authRateLimiter.getRetryAfterSeconds(clientIP);
+        sendAuthRateLimitError(request, retryAfter);
+        return false;
+    }
+
     if (!request->hasHeader("X-API-Key")) {
-        sendErrorResponse(request, HttpStatus::UNAUTHORIZED,
-                          ErrorCodes::UNAUTHORIZED, "Missing X-API-Key header");
+        // Record failure and check if now blocked
+        bool nowBlocked = m_authRateLimiter.recordFailure(clientIP);
+        if (nowBlocked) {
+            uint32_t retryAfter = m_authRateLimiter.getRetryAfterSeconds(clientIP);
+            sendAuthRateLimitError(request, retryAfter);
+        } else {
+            sendErrorResponse(request, HttpStatus::UNAUTHORIZED,
+                              ErrorCodes::UNAUTHORIZED, "Missing X-API-Key header");
+        }
         return false;
     }
 
     // Use ApiKeyManager's constant-time validation
     if (!m_apiKeyManager.validateKey(request->header("X-API-Key"))) {
-        sendErrorResponse(request, HttpStatus::UNAUTHORIZED,
-                          ErrorCodes::UNAUTHORIZED, "Invalid API key");
+        // Record failure and check if now blocked
+        bool nowBlocked = m_authRateLimiter.recordFailure(clientIP);
+        if (nowBlocked) {
+            uint32_t retryAfter = m_authRateLimiter.getRetryAfterSeconds(clientIP);
+            sendAuthRateLimitError(request, retryAfter);
+        } else {
+            sendErrorResponse(request, HttpStatus::UNAUTHORIZED,
+                              ErrorCodes::UNAUTHORIZED, "Invalid API key");
+        }
         return false;
     }
+
+    // Successful auth - reset failure counter
+    m_authRateLimiter.recordSuccess(clientIP);
 #endif
     return true;
 }

@@ -37,6 +37,7 @@
 #if FEATURE_API_AUTH
 #include <set>
 #include "ApiKeyManager.h"
+#include "webserver/AuthRateLimiter.h"
 #endif
 
 #if defined(ESP32)
@@ -520,6 +521,9 @@ private:
 
     // API key manager (NVS persistence)
     ApiKeyManager m_apiKeyManager;
+
+    // Auth rate limiter (brute force protection)
+    webserver::AuthRateLimiter m_authRateLimiter;
 #endif
 
     // Reference to external components (not owned)

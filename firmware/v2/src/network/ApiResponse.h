@@ -241,5 +241,54 @@ inline String buildWsRateLimitError(uint32_t retryAfterSeconds, const char* requ
     return output;
 }
 
+/**
+ * @brief Send an authentication rate limit exceeded (429) error response
+ * @param request The HTTP request
+ * @param retryAfterSeconds Seconds until client should retry (sent in Retry-After header)
+ */
+inline void sendAuthRateLimitError(AsyncWebServerRequest* request, uint32_t retryAfterSeconds) {
+    JsonDocument response;
+    response["success"] = false;
+
+    JsonObject error = response["error"].to<JsonObject>();
+    error["code"] = ErrorCodes::RATE_LIMITED;
+    error["message"] = "Too many failed authentication attempts. Please wait before retrying.";
+    error["retryAfter"] = retryAfterSeconds;
+
+    response["timestamp"] = millis();
+    response["version"] = API_VERSION;
+
+    String output;
+    serializeJson(response, output);
+
+    // Create response with Retry-After header
+    AsyncWebServerResponse* resp = request->beginResponse(HttpStatus::TOO_MANY_REQUESTS,
+                                                           "application/json", output);
+    char retryHeader[16];
+    snprintf(retryHeader, sizeof(retryHeader), "%lu", (unsigned long)retryAfterSeconds);
+    resp->addHeader("Retry-After", retryHeader);
+    request->send(resp);
+}
+
+/**
+ * @brief Build a WebSocket auth rate limit error response
+ */
+inline String buildWsAuthRateLimitError(uint32_t retryAfterSeconds, const char* requestId = nullptr) {
+    JsonDocument response;
+    response["type"] = "error";
+    if (requestId != nullptr && strlen(requestId) > 0) {
+        response["requestId"] = requestId;
+    }
+    response["success"] = false;
+    JsonObject error = response["error"].to<JsonObject>();
+    error["code"] = ErrorCodes::RATE_LIMITED;
+    error["message"] = "Too many failed authentication attempts. Please wait before retrying.";
+    error["retryAfter"] = retryAfterSeconds;
+
+    String output;
+    serializeJson(response, output);
+    return output;
+}
+
 } // namespace network
 } // namespace lightwaveos

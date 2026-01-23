@@ -36,6 +36,7 @@
 
 #if FEATURE_API_AUTH
 #include <set>
+#include "ApiKeyManager.h"
 #endif
 
 #if defined(ESP32)
@@ -516,6 +517,9 @@ private:
 #if FEATURE_API_AUTH
     // Authenticated WebSocket clients (by client ID)
     std::set<uint32_t> m_authenticatedClients;
+
+    // API key manager (NVS persistence)
+    ApiKeyManager m_apiKeyManager;
 #endif
 
     // Reference to external components (not owned)

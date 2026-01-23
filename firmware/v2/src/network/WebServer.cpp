@@ -237,6 +237,13 @@ bool WebServer::begin() {
     initValidationEncoder();
 #endif
 
+#if FEATURE_API_AUTH
+    // Initialize API key manager (NVS persistence)
+    if (!m_apiKeyManager.begin()) {
+        LW_LOGW("ApiKeyManager initialization failed - using compile-time default key");
+    }
+#endif
+
     // AP-first architecture: WiFiManager always starts in AP mode
     // Check current WiFi state
     if (WIFI_MANAGER.isAPMode()) {
@@ -648,13 +655,15 @@ void WebServer::setupWebSocket() {
         [this](AsyncWebSocketClient* client, JsonDocument& doc) {
             // Auth check (moved from handleWsMessage)
 #if FEATURE_API_AUTH
-            const char* key = config::NetworkConfig::API_KEY_VALUE;
-            if (key != nullptr && key[0] != '\0') {
+            // Get current API key from ApiKeyManager (NVS or compile-time default)
+            String currentKey = m_apiKeyManager.getKey();
+            if (currentKey.length() > 0) {
                 if (m_authenticatedClients.find(client->id()) == m_authenticatedClients.end()) {
                     const char* msgType = doc["type"] | "";
                     if (strcmp(msgType, "auth") == 0) {
                         const char* providedKey = doc["apiKey"] | "";
-                        if (strcmp(providedKey, key) == 0) {
+                        // Use ApiKeyManager's constant-time validation
+                        if (m_apiKeyManager.validateKey(String(providedKey))) {
                             m_authenticatedClients.insert(client->id());
                             client->text("{\"type\":\"auth\",\"success\":true}");
                         } else {
@@ -1373,9 +1382,11 @@ bool WebServer::checkWsRateLimit(AsyncWebSocketClient* client) {
 
 bool WebServer::checkAPIKey(AsyncWebServerRequest* request) {
 #if FEATURE_API_AUTH
-    const char* key = config::NetworkConfig::API_KEY_VALUE;
+    // Get current API key from ApiKeyManager (NVS or compile-time default)
+    String currentKey = m_apiKeyManager.getKey();
+
     // If no API key configured, auth is disabled
-    if (key == nullptr || key[0] == '\0') {
+    if (currentKey.length() == 0) {
         return true;
     }
 
@@ -1385,7 +1396,8 @@ bool WebServer::checkAPIKey(AsyncWebServerRequest* request) {
         return false;
     }
 
-    if (request->header("X-API-Key") != key) {
+    // Use ApiKeyManager's constant-time validation
+    if (!m_apiKeyManager.validateKey(request->header("X-API-Key"))) {
         sendErrorResponse(request, HttpStatus::UNAUTHORIZED,
                           ErrorCodes::UNAUTHORIZED, "Invalid API key");
         return false;

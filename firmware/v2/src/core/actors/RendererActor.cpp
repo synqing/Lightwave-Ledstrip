@@ -320,7 +320,7 @@ plugins::IEffect* RendererActor::getEffectInstance(uint8_t id) const
  * 
  * DEFENSIVE CHECK: Prevents LoadProhibited crashes from corrupted effect ID.
  * 
- * RendererActor uses m_effects[MAX_EFFECTS] array where MAX_EFFECTS = 98. If
+ * RendererActor uses m_effects[MAX_EFFECTS] array where MAX_EFFECTS = 100. If
  * effectId is corrupted (e.g., by memory corruption, invalid input, or race
  * condition), accessing m_effects[effectId] would cause out-of-bounds access
  * and crash.

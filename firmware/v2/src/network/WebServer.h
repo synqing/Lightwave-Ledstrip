@@ -241,7 +241,7 @@ public:
             uint32_t framesRendered;
         } stats;
         // Effect names - pointers to stable strings in RendererActor (valid until next cache update)
-        const char* effectNames[98];  // MAX_EFFECTS (keep in sync with RendererActor::MAX_EFFECTS)
+        const char* effectNames[100];  // MAX_EFFECTS (keep in sync with RendererActor::MAX_EFFECTS)
         // Audio tuning (if available) - simplified to avoid include dependency
 #if FEATURE_AUDIO_SYNC
         struct {

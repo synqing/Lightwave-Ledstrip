@@ -852,8 +852,8 @@ void ZoneComposerUI::adjustZoneParameter(uint8_t zoneIndex, int32_t delta) {
 
     switch (_activeMode) {
         case ZoneParameterMode::EFFECT: {
-            // Max effect ID from LightwaveOS v2 firmware (98 effects, IDs 0-97)
-            constexpr int MAX_EFFECT_ID = 97;
+            // Max effect ID from LightwaveOS v2 firmware (100 effects, IDs 0-99)
+            constexpr int MAX_EFFECT_ID = 99;
             int newVal = _zoneEffects[zoneIndex] + delta;
             if (newVal < 0) newVal = MAX_EFFECT_ID;
             if (newVal > MAX_EFFECT_ID) newVal = 0;

@@ -355,8 +355,8 @@ static void handleActionButton(uint8_t buttonIndex) {
 
 const char* lookupEffectName(uint8_t id) {
     // Note: id is uint8_t (0-255), MAX_EFFECTS is 256, so id < MAX_EFFECTS is always true
-    // But we also check id <= 97 to enforce actual effect range
-    if (id <= 97 && s_effectKnown[id] && s_effectNames[id][0]) return s_effectNames[id];
+    // But we also check id <= 99 to enforce actual effect range
+    if (id <= 99 && s_effectKnown[id] && s_effectNames[id][0]) return s_effectNames[id];
     return nullptr;
 }
 
@@ -1290,7 +1290,7 @@ void setup() {
                     uint8_t id = static_cast<uint8_t>(idInt);
                     const char* name = e["name"].as<const char*>();
                     // Store effect if within range (0-87 for 88 effects)
-                    if (id < MAX_EFFECTS && id <= 97 && name) {
+                    if (id < MAX_EFFECTS && id <= 99 && name) {
                         strncpy(s_effectNames[id], name, EFFECT_NAME_MAX - 1);
                         s_effectNames[id][EFFECT_NAME_MAX - 1] = '\0';
                         s_effectKnown[id] = true;

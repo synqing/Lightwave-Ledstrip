@@ -30,6 +30,9 @@
 #include "handlers/ShowHandlers.h"
 #include "handlers/ModifierHandlers.h"
 #include "handlers/ColorCorrectionHandlers.h"
+#if FEATURE_API_AUTH
+#include "handlers/AuthHandlers.h"
+#endif
 #include <ESPAsyncWebServer.h>
 #include <Arduino.h>
 
@@ -1443,6 +1446,31 @@ void V1ApiRoutes::registerRoutes(
             handlers::ColorCorrectionHandlers::handleSetPreset(request, data, len);
         }
     );
+
+#if FEATURE_API_AUTH
+    // ==================== Authentication Management Routes ====================
+
+    // GET /api/v1/auth/status - Public endpoint (no auth required)
+    registry.onGet("/api/v1/auth/status", [server, checkRateLimit](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        // Public endpoint - no checkAPIKey
+        handlers::AuthHandlers::handleStatus(request, server->m_apiKeyManager);
+    });
+
+    // POST /api/v1/auth/rotate - Generate new API key (requires valid key)
+    registry.onPost("/api/v1/auth/rotate", [server, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::AuthHandlers::handleRotate(request, server->m_apiKeyManager);
+    });
+
+    // DELETE /api/v1/auth/key - Clear NVS key (requires valid key)
+    registry.onDelete("/api/v1/auth/key", [server, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::AuthHandlers::handleClear(request, server->m_apiKeyManager);
+    });
+#endif // FEATURE_API_AUTH
 }
 
 } // namespace webserver

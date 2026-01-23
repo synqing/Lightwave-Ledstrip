@@ -1,0 +1,68 @@
+## Codebase Patterns
+- NVS persistence uses Preferences library (see WiFiCredentialManager for pattern)
+- REST responses use ApiResponse:: helpers
+- WebSocket commands go in src/network/webserver/ws/Ws*Commands.cpp
+- Rate limiting uses RateLimiter class
+- Logging uses LW_LOGI, LW_LOGW, LW_LOGE macros from utils/Log.h
+---
+
+# Ralph Progress Log
+Started: 2025-01-24
+Branch: ralph/api-authentication
+Feature: API Authentication with NVS persistence and web UI
+---
+
+## 2025-01-24 - US-001
+- Added `esp32dev_wifi` environment to platformio.ini
+- Enabled FEATURE_API_AUTH=1 with default key placeholder
+- Files changed: firmware/v2/platformio.ini
+- **Learnings for future iterations:**
+  - platformio.ini uses extends= to inherit from base environment
+  - FastLED include path needs `-I.pio/libdeps/<env>/FastLED/src/third_party/cq_kernel` per environment
+  - wifi_credentials.ini provides WiFi credentials separately (gitignored)
+---
+
+## 2025-01-24 - US-002
+- Created ApiKeyManager.h/cpp with NVS persistence
+- Methods: getKey(), setKey(), generateKey(), clearKey(), validateKey(), hasCustomKey()
+- NVS namespace 'auth' with key 'api_key'
+- generateKey() creates LW-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX format (37 chars)
+- Falls back to compile-time API_KEY if NVS is empty
+- Files changed: firmware/v2/src/network/ApiKeyManager.h, ApiKeyManager.cpp
+- **Learnings for future iterations:**
+  - NVS pattern: Preferences.begin(namespace, false), getString/putString, end()
+  - Use esp_random() for secure random number generation
+  - Constant-time comparison prevents timing attacks: XOR all bytes, check result == 0
+  - Cache NVS values in memory to avoid repeated reads
+  - Pattern: FEATURE_WEB_SERVER && FEATURE_API_AUTH for conditional compilation
+---
+
+## 2025-01-24 - US-003
+- Integrated ApiKeyManager into WebServer
+- WebServer.h: Added #include "ApiKeyManager.h" and m_apiKeyManager member
+- WebServer.cpp: Initialize m_apiKeyManager.begin() in WebServer::begin()
+- checkAPIKey(): Now uses m_apiKeyManager.getKey() and validateKey()
+- WebSocket auth: Lambda uses m_apiKeyManager.validateKey() instead of strcmp
+- Files changed: firmware/v2/src/network/WebServer.h, WebServer.cpp
+- **Learnings for future iterations:**
+  - The WsGateway auth lambda captures `this` - m_apiKeyManager is accessible
+  - validateKey() does constant-time comparison to prevent timing attacks
+  - When NVS is empty, ApiKeyManager automatically falls back to compile-time key
+  - Both REST and WebSocket use same ApiKeyManager instance for consistency
+---
+
+## 2025-01-24 - US-004
+- REST endpoints for key management already implemented
+- AuthHandlers.h/cpp provides three static methods:
+  - handleStatus(): GET /api/v1/auth/status (public) - returns {enabled: true, keyConfigured: bool}
+  - handleRotate(): POST /api/v1/auth/rotate (requires auth) - generates new key, returns it
+  - handleClear(): DELETE /api/v1/auth/key (requires auth) - clears NVS, reverts to default
+- V1ApiRoutes.cpp registers routes with proper auth checks (lines 1450-1473)
+- Files: firmware/v2/src/network/webserver/handlers/AuthHandlers.h, AuthHandlers.cpp
+- **Learnings for future iterations:**
+  - WebServer declares V1ApiRoutes as friend class to allow access to m_apiKeyManager
+  - sendSuccessResponse() helper auto-wraps data in standard API response
+  - sendErrorResponse() helper with ErrorCodes:: enum for consistent error handling
+  - Public endpoints skip checkAPIKey() call, auth endpoints include it before handler
+---
+

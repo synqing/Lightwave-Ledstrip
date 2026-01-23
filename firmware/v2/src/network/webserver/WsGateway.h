@@ -77,6 +77,15 @@ public:
      */
     void handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_t len);
 
+    /**
+     * @brief Cleanup stale guard entries that have been idle too long
+     *
+     * Called from WebServer::update() to clear guard entries for connections
+     * that haven't sent any messages within IDLE_TIMEOUT_MS. This prevents
+     * zombie entries from blocking new connections from the same IP.
+     */
+    void cleanupStaleConnections();
+
 private:
     AsyncWebSocket* m_ws;
     WebServerContext m_ctx;
@@ -95,10 +104,12 @@ private:
     // ------------------------------------------------------------------------
     static constexpr uint8_t CONNECT_GUARD_SLOTS = 8;
     static constexpr uint32_t CONNECT_COOLDOWN_MS = 2000;
+    static constexpr uint32_t IDLE_TIMEOUT_MS = 30000;  // Clear stale entries after 30s of inactivity
     struct ConnectGuardEntry {
-        uint32_t ipKey;      // Packed IPv4 (0 = empty)
-        uint32_t lastMs;     // Last connect attempt time (millis)
-        uint8_t active;      // Active WS connections from this IP (best-effort)
+        uint32_t ipKey;          // Packed IPv4 (0 = empty)
+        uint32_t lastMs;         // Last connect attempt time (millis)
+        uint32_t lastActivityMs; // Last message activity time (millis) - for idle timeout
+        uint8_t active;          // Active WS connections from this IP (best-effort)
         uint8_t _pad[3];
     };
     ConnectGuardEntry m_connectGuard[CONNECT_GUARD_SLOTS] = {};

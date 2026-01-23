@@ -241,11 +241,12 @@ void WsGateway::handleConnect(AsyncWebSocketClient* client) {
 
     LW_LOGI("WS: Client %u connected from %s", client->id(), client->remoteIP().toString().c_str());
 
-    // Mark active for this IP (best-effort)
+    // Mark active for this IP (best-effort) and set initial activity timestamp
     if (ipKey != 0) {
         for (uint8_t i = 0; i < CONNECT_GUARD_SLOTS; i++) {
             if (m_connectGuard[i].ipKey == ipKey) {
                 if (m_connectGuard[i].active < 255) m_connectGuard[i].active++;
+                m_connectGuard[i].lastActivityMs = nowMs;  // Set initial activity time
                 break;
             }
         }
@@ -558,6 +559,25 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
         return;  // Drop message silently
     }
 
+    // Update activity timestamp for idle timeout tracking
+    {
+        const uint32_t nowMs = millis();
+        const IPAddress ip = client->remoteIP();
+        const uint32_t ipKey =
+            (static_cast<uint32_t>(ip[0]) << 24) |
+            (static_cast<uint32_t>(ip[1]) << 16) |
+            (static_cast<uint32_t>(ip[2]) << 8)  |
+            (static_cast<uint32_t>(ip[3]) << 0);
+        if (ipKey != 0) {
+            for (uint8_t i = 0; i < CONNECT_GUARD_SLOTS; i++) {
+                if (m_connectGuard[i].ipKey == ipKey) {
+                    m_connectGuard[i].lastActivityMs = nowMs;
+                    break;
+                }
+            }
+        }
+    }
+
     // Parse message
     if (len > MAX_WS_MESSAGE_SIZE) {
         // Log rejected frame (oversize)
@@ -733,6 +753,25 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
     if (!handled) {
         RequestIdDecodeResult requestIdResult = WsCommonCodec::decodeRequestId(root);
         client->text(buildWsError(ErrorCodes::INVALID_VALUE, "Unknown command type", requestIdResult.requestId));
+    }
+}
+
+void WsGateway::cleanupStaleConnections() {
+    const uint32_t nowMs = millis();
+    for (uint8_t i = 0; i < CONNECT_GUARD_SLOTS; i++) {
+        if (m_connectGuard[i].active > 0 && m_connectGuard[i].ipKey != 0) {
+            const uint32_t idleMs = nowMs - m_connectGuard[i].lastActivityMs;
+            if (idleMs > IDLE_TIMEOUT_MS) {
+                LW_LOGW("WS: Clearing stale guard entry slot %u (idle %lu ms)", i, idleMs);
+                m_connectGuard[i].active = 0;
+                // Structured telemetry: ws.stale_cleanup event
+                char buf[256];
+                snprintf(buf, sizeof(buf),
+                    "{\"event\":\"ws.stale_cleanup\",\"ts_mono_ms\":%lu,\"ipSlot\":%u,\"idleMs\":%lu}",
+                    static_cast<unsigned long>(nowMs), static_cast<unsigned>(i), static_cast<unsigned long>(idleMs));
+                Serial.println(buf);
+            }
+        }
     }
 }
 

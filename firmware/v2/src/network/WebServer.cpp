@@ -49,6 +49,7 @@
 #endif
 #include "webserver/ws/WsStreamCommands.h"
 #include "webserver/ws/WsPluginCommands.h"
+#include "webserver/ws/WsSysCommands.h"
 #include "../config/network_config.h"
 #include "../core/actors/ActorSystem.h"
 #include "../effects/zones/ZoneDefinition.h"
@@ -260,6 +261,11 @@ void WebServer::update() {
 
     // Cleanup disconnected WebSocket clients
     m_ws->cleanupClients();
+
+    // Cleanup stale guard entries (prevents zombie entries from blocking reconnects)
+    if (m_wsGateway) {
+        m_wsGateway->cleanupStaleConnections();
+    }
 
     // WebSocket keepalive ping - prevents mobile network timeouts
     static uint32_t lastPingMs = 0;
@@ -639,6 +645,7 @@ void WebServer::setupWebSocket() {
 #endif
     webserver::ws::registerWsStreamCommands(ctx);
     webserver::ws::registerWsPluginCommands(ctx);
+    webserver::ws::registerWsSysCommands(ctx);
 }
 
 // ============================================================================

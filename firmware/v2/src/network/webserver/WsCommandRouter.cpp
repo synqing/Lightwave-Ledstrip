@@ -39,6 +39,10 @@ bool WsCommandRouter::route(AsyncWebSocketClient* client, JsonDocument& doc, con
     const char* type = typeStr.c_str();
     uint8_t typeLen = typeStr.length();
     char firstChar = type[0];
+
+    // Strip message envelope field before passing to handlers
+    // Codecs validate payload fields only - 'type' is protocol envelope
+    doc.remove("type");
     
     // DEFENSIVE CHECK: Validate handler count before array access
     size_t safe_handler_count = s_handlerCount;

@@ -56,8 +56,10 @@ namespace HttpStatus {
     constexpr uint16_t UNAUTHORIZED = 401;
     constexpr uint16_t FORBIDDEN = 403;
     constexpr uint16_t NOT_FOUND = 404;
+    constexpr uint16_t CONFLICT = 409;
     constexpr uint16_t TOO_MANY_REQUESTS = 429;
     constexpr uint16_t INTERNAL_ERROR = 500;
+    constexpr uint16_t INTERNAL_SERVER_ERROR = 500;  // Alias
     constexpr uint16_t SERVICE_UNAVAILABLE = 503;
     constexpr uint16_t INSUFFICIENT_STORAGE = 507;
 }
@@ -95,6 +97,24 @@ inline void sendSuccessResponse(AsyncWebServerRequest* request,
     String output;
     serializeJson(response, output);
     request->send(HttpStatus::OK, "application/json", output);
+}
+
+/**
+ * @brief Send a standardized success response with custom HTTP status code
+ */
+inline void sendSuccessResponse(AsyncWebServerRequest* request,
+                                 std::function<void(JsonObject&)> builder,
+                                 uint16_t statusCode) {
+    JsonDocument response;
+    response["success"] = true;
+    JsonObject data = response["data"].to<JsonObject>();
+    builder(data);
+    response["timestamp"] = millis();
+    response["version"] = API_VERSION;
+
+    String output;
+    serializeJson(response, output);
+    request->send(statusCode, "application/json", output);
 }
 
 /**

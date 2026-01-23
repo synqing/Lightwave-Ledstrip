@@ -22,6 +22,7 @@
 #include "handlers/AudioHandlers.h"
 #include "handlers/DebugHandlers.h"
 #include "handlers/PluginHandlers.h"
+#include "handlers/NetworkHandlers.h"
 #include <ESPAsyncWebServer.h>
 #include <Arduino.h>
 
@@ -782,6 +783,68 @@ void V1ApiRoutes::registerRoutes(
         if (!checkRateLimit(request)) return;
         if (!checkAPIKey(request)) return;
         handlers::PluginHandlers::handleList(request, ctx.pluginManager);
+    });
+
+    // ========================================================================
+    // Network Routes
+    // ========================================================================
+
+    // Network Status - GET /api/v1/network/status
+    registry.onGet("/api/v1/network/status", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::NetworkHandlers::handleStatus(request);
+    });
+
+    // Network Scan - GET /api/v1/network/scan
+    registry.onGet("/api/v1/network/scan", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::NetworkHandlers::handleScan(request);
+    });
+
+    // Network Connect - POST /api/v1/network/connect
+    registry.onPost("/api/v1/network/connect",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::NetworkHandlers::handleConnect(request, data, len);
+        }
+    );
+
+    // Network Disconnect - POST /api/v1/network/disconnect
+    registry.onPost("/api/v1/network/disconnect", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::NetworkHandlers::handleDisconnect(request);
+    });
+
+    // Saved Networks List - GET /api/v1/network/saved
+    registry.onGet("/api/v1/network/saved", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::NetworkHandlers::handleSavedList(request);
+    });
+
+    // Save Network - POST /api/v1/network/saved
+    registry.onPost("/api/v1/network/saved",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::NetworkHandlers::handleSavedAdd(request, data, len);
+        }
+    );
+
+    // Delete Saved Network - DELETE /api/v1/network/saved/{ssid}
+    // Uses regex to match URL-encoded SSID in path
+    registry.onDeleteRegex("^\\/api\\/v1\\/network\\/saved\\/.+$", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::NetworkHandlers::handleSavedDelete(request);
     });
 }
 

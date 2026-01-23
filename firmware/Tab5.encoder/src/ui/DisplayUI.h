@@ -143,9 +143,10 @@ private:
     lv_obj_t* _header_effect = nullptr;
     lv_obj_t* _header_palette_container = nullptr;
     lv_obj_t* _header_palette = nullptr;
-            lv_obj_t* _header_net_ip = nullptr;
-            lv_obj_t* _header_net_ssid = nullptr;
-            lv_obj_t* _header_net_rssi = nullptr;
+    lv_obj_t* _header_net_container = nullptr;  // Clickable container for network info
+    lv_obj_t* _header_net_ip = nullptr;
+    lv_obj_t* _header_net_ssid = nullptr;
+    lv_obj_t* _header_net_rssi = nullptr;
 
     lv_obj_t* _gauges_container = nullptr;
     lv_obj_t* _gauge_cards[8] = {nullptr};

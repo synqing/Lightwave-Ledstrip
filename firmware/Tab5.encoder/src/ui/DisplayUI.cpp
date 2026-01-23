@@ -274,23 +274,57 @@ void DisplayUI::begin() {
     lv_obj_set_style_border_width(right_spacer, 0, LV_PART_MAIN);
     lv_obj_set_flex_grow(right_spacer, 1);
 
-    // Network info: SSID (RSSI) IP - create in display order
-    _header_net_ssid = lv_label_create(_header);
+    // Network info: SSID (RSSI) IP - wrapped in clickable container for navigation
+    _header_net_container = lv_obj_create(_header);
+    lv_obj_set_size(_header_net_container, LV_SIZE_CONTENT, LV_SIZE_CONTENT);  // CRITICAL: fit content only
+    lv_obj_set_style_bg_opa(_header_net_container, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(_header_net_container, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(_header_net_container, LV_OBJ_FLAG_SCROLLABLE);  // CRITICAL: disable scrolling
+    lv_obj_add_flag(_header_net_container, LV_OBJ_FLAG_CLICKABLE);
+
+    // Touch target accessibility: 44-48px minimum (add vertical padding)
+    lv_obj_set_style_pad_top(_header_net_container, 8, LV_PART_MAIN);
+    lv_obj_set_style_pad_bottom(_header_net_container, 8, LV_PART_MAIN);
+    lv_obj_set_style_pad_left(_header_net_container, 8, LV_PART_MAIN);
+    lv_obj_set_style_pad_right(_header_net_container, 8, LV_PART_MAIN);
+
+    // Visual feedback on press
+    lv_obj_set_style_bg_opa(_header_net_container, LV_OPA_20, LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(_header_net_container, lv_color_hex(0xFFFFFF), LV_STATE_PRESSED);
+    lv_obj_set_style_radius(_header_net_container, 8, LV_PART_MAIN);
+
+    // Flex layout for horizontal arrangement
+    lv_obj_set_layout(_header_net_container, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(_header_net_container, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(_header_net_container, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    // SSID label (inside container)
+    _header_net_ssid = lv_label_create(_header_net_container);
     lv_label_set_text(_header_net_ssid, "--");
     lv_obj_set_style_text_font(_header_net_ssid, &bebas_neue_24px, LV_PART_MAIN);
     lv_obj_set_style_text_color(_header_net_ssid, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
-    lv_obj_set_style_pad_left(_header_net_ssid, 18, LV_PART_MAIN);
 
-    _header_net_rssi = lv_label_create(_header);
+    // RSSI label (inside container)
+    _header_net_rssi = lv_label_create(_header_net_container);
     lv_label_set_text(_header_net_rssi, "");
     lv_obj_set_style_text_font(_header_net_rssi, &bebas_neue_24px, LV_PART_MAIN);
     lv_obj_set_style_pad_left(_header_net_rssi, 4, LV_PART_MAIN);
 
-    _header_net_ip = lv_label_create(_header);
+    // IP label (inside container)
+    _header_net_ip = lv_label_create(_header_net_container);
     lv_label_set_text(_header_net_ip, "--");
     lv_obj_set_style_text_font(_header_net_ip, &bebas_neue_24px, LV_PART_MAIN);
     lv_obj_set_style_text_color(_header_net_ip, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
-    lv_obj_set_style_pad_left(_header_net_ip, 8, LV_PART_MAIN);  // 8px gap after RSSI
+    lv_obj_set_style_pad_left(_header_net_ip, 8, LV_PART_MAIN);
+
+    // Click handler: navigate to ConnectivityTab
+    lv_obj_add_event_cb(_header_net_container, [](lv_event_t* e) {
+        DisplayUI* ui = static_cast<DisplayUI*>(lv_event_get_user_data(e));
+        if (ui) {
+            Serial.println("[DisplayUI] Network info tapped - switching to Connectivity");
+            ui->setScreen(UIScreen::CONNECTIVITY);
+        }
+    }, LV_EVENT_CLICKED, reinterpret_cast<void*>(this));
 
     // Create retry button (initially hidden) - moved to last position
     _header_retry_button = lv_label_create(_header);

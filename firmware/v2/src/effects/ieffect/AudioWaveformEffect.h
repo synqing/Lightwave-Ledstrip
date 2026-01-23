@@ -1,13 +1,16 @@
 /**
  * @file AudioWaveformEffect.h
- * @brief Sensory Bridge-style waveform visualization
+ * @brief Scrolling waveform visualization with trails and chromagram color
  *
- * Uses waveform history, follower smoothing, and chromagram-driven colour.
- * Centre-origin mirrored mapping.
+ * CENTER ORIGIN compliant adaptation of SensoryBridge waveform mode.
+ * Shows scrolling waveform emanating from center with dynamic trails.
  *
  * Effect ID: 72
  * Family: PARTY
  * Tags: CENTER_ORIGIN | AUDIO_SYNC | WAVEFORM
+ *
+ * @author LightwaveOS Team
+ * @version 3.0.0 - Added trails via dynamic fading and shift
  */
 
 #pragma once
@@ -34,30 +37,55 @@ public:
     const plugins::EffectMetadata& getMetadata() const override;
 
 private:
-    static constexpr uint8_t WAVEFORM_HISTORY_SIZE = 4;
-    static constexpr uint8_t WAVEFORM_SIZE = 128;  // CONTROLBUS_WAVEFORM_N
-    static constexpr float SWEET_SPOT_MIN_LEVEL = 750.0f;
-    static constexpr float PEAK_FOLLOW_ATTACK = 0.12f;   // Reduced from 0.25 for LGP smoothing
-    static constexpr float PEAK_FOLLOW_RELEASE = 0.005f;
-    static constexpr float PEAK_SCALE_ATTACK = 0.15f;    // Reduced from 0.25
-    
-    // Waveform history ring buffer (4 frames)
-    int16_t m_waveformHistory[WAVEFORM_HISTORY_SIZE][WAVEFORM_SIZE];
-    uint8_t m_historyIndex = 0;
-    
-    // Follower smoothing state
-    float m_waveformLast[WAVEFORM_SIZE] = {0.0f};
-    
-    // Peak scaling state
-    float m_maxWaveformValFollower = SWEET_SPOT_MIN_LEVEL;
-    float m_waveformPeakScaled = 0.0f;
-    float m_waveformPeakScaledLast = 0.0f;
-    
+    // ============================================================================
+    // Algorithm Constants (matched to original SensoryBridge)
+    // ============================================================================
+
+    // Peak smoothing: 5% new, 95% old (original ratio)
+    static constexpr float PEAK_SMOOTH_NEW = 0.05f;
+    static constexpr float PEAK_SMOOTH_OLD = 0.95f;
+
+    // Color smoothing: 5% new, 95% old (original ratio)
+    static constexpr float COLOR_SMOOTH_NEW = 0.05f;
+    static constexpr float COLOR_SMOOTH_OLD = 0.95f;
+
+    // Brightness threshold for chromagram bins
+    static constexpr float CHROMA_THRESHOLD = 0.05f;
+
+    // Brightness boost for chromagram (original uses 1.5x)
+    static constexpr float CHROMA_BOOST = 1.5f;
+
+    // ============================================================================
+    // TRAIL CONSTANTS (from original SensoryBridge)
+    // ============================================================================
+
+    // Base fade amount per frame (0.90 = 10% fade per frame)
+    static constexpr float BASE_FADE = 0.90f;
+
+    // Maximum fade reduction based on amplitude (original: 0.10)
+    // Higher amplitude = less fade = longer trails
+    static constexpr float MAX_FADE_REDUCTION = 0.10f;
+
+    // ============================================================================
+    // State Variables
+    // ============================================================================
+
+    // Smoothed peak amplitude (0.0 to 1.0)
+    float m_peakSmoothed = 0.0f;
+
     // Sum colour state (RGB smoothing)
     float m_sumColorLast[3] = {0.0f, 0.0f, 0.0f};
-    
-    // Track hop sequence for updates
-    uint32_t m_lastHopSeq = 0;
+
+    // Flag for first frame (need to clear buffer once)
+    bool m_initialized = false;
+
+    // ============================================================================
+    // Helper Methods
+    // ============================================================================
+
+    CRGB computeChromaColor(const plugins::EffectContext& ctx);
+    void applyDynamicFade(plugins::EffectContext& ctx, float amplitude);
+    void shiftLedsOutward(plugins::EffectContext& ctx);
 };
 
 } // namespace ieffect

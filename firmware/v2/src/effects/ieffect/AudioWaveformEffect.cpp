@@ -1,15 +1,22 @@
 /**
  * @file AudioWaveformEffect.cpp
- * @brief Sensory Bridge-style waveform implementation
+ * @brief Scrolling waveform visualization with trails and chromagram color
+ *
+ * CENTER ORIGIN compliant adaptation of SensoryBridge waveform mode.
+ * Shows scrolling waveform emanating from center with dynamic trails.
+ *
+ * Algorithm (original SensoryBridge adapted for CENTER ORIGIN):
+ * 1. Apply DYNAMIC FADE to all existing LEDs (creates trails)
+ * 2. SHIFT LEDs outward from center (scrolling effect)
+ * 3. Get waveform peak amplitude
+ * 4. Smooth the peak (5% new, 95% old)
+ * 5. Compute color from chromagram
+ * 6. Draw new dot at CENTER based on amplitude brightness
  */
 
 #include "AudioWaveformEffect.h"
 #include "../CoreEffects.h"
 #include "../../config/features.h"
-
-#ifdef FEATURE_EFFECT_VALIDATION
-#include "../../validation/EffectValidationMacros.h"
-#endif
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
@@ -24,196 +31,192 @@ namespace ieffect {
 
 bool AudioWaveformEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
-    memset(m_waveformHistory, 0, sizeof(m_waveformHistory));
-    memset(m_waveformLast, 0, sizeof(m_waveformLast));
-    m_maxWaveformValFollower = SWEET_SPOT_MIN_LEVEL;
-    m_waveformPeakScaled = 0.0f;
-    m_waveformPeakScaledLast = 0.0f;
+    m_peakSmoothed = 0.0f;
     m_sumColorLast[0] = 0.0f;
     m_sumColorLast[1] = 0.0f;
     m_sumColorLast[2] = 0.0f;
-    m_historyIndex = 0;
-    m_lastHopSeq = 0;
+    m_initialized = false;
     return true;
 }
 
+void AudioWaveformEffect::applyDynamicFade(plugins::EffectContext& ctx, float amplitude) {
+    // Original SensoryBridge formula:
+    // dynamic_fade_amount = 1.0 - (max_fade_reduction * abs_amp)
+    // When amplitude is HIGH: less fade (longer trails)
+    // When amplitude is LOW: more fade (shorter trails)
+
+    float absAmp = fabsf(amplitude);
+    if (absAmp > 1.0f) absAmp = 1.0f;
+
+    // Calculate dynamic fade: base fade reduced by amplitude
+    float fadeAmount = BASE_FADE - (MAX_FADE_REDUCTION * absAmp);
+    if (fadeAmount < 0.80f) fadeAmount = 0.80f;  // Don't fade too fast
+    if (fadeAmount > 0.98f) fadeAmount = 0.98f;  // Always fade a little
+
+    uint8_t fadeScale = (uint8_t)(fadeAmount * 255.0f);
+
+    // Apply fade to ALL LEDs (both strips)
+    for (uint16_t i = 0; i < ctx.ledCount; ++i) {
+        ctx.leds[i].nscale8(fadeScale);
+    }
+}
+
+void AudioWaveformEffect::shiftLedsOutward(plugins::EffectContext& ctx) {
+    // CENTER ORIGIN shift: LEDs move OUTWARD from center (79/80)
+    // This creates the scrolling waveform effect
+
+    uint16_t stripLen = (ctx.ledCount > 160) ? 160 : ctx.ledCount;
+    uint16_t center = stripLen / 2;  // 80 for 160 LEDs
+
+    // === STRIP 1: Shift outward from center ===
+
+    // Left half (79 down to 0): shift LEFT (toward 0)
+    // LED 0 falls off, LED 1→0, LED 2→1, ..., LED 79→78
+    for (uint16_t i = 0; i < center - 1; ++i) {
+        ctx.leds[i] = ctx.leds[i + 1];
+    }
+
+    // Right half (80 up to 159): shift RIGHT (toward 159)
+    // LED 159 falls off, LED 158→159, ..., LED 80→81
+    for (uint16_t i = stripLen - 1; i > center; --i) {
+        ctx.leds[i] = ctx.leds[i - 1];
+    }
+
+    // Clear center pixels (79 and 80) - new data will be drawn here
+    ctx.leds[center - 1] = CRGB::Black;  // LED 79
+    ctx.leds[center] = CRGB::Black;      // LED 80
+
+    // === STRIP 2: Same pattern if present ===
+    if (ctx.ledCount > 160) {
+        uint16_t strip2Start = 160;
+        uint16_t strip2Center = strip2Start + center;  // 240
+
+        // Left half of strip 2
+        for (uint16_t i = strip2Start; i < strip2Center - 1; ++i) {
+            ctx.leds[i] = ctx.leds[i + 1];
+        }
+
+        // Right half of strip 2
+        for (uint16_t i = ctx.ledCount - 1; i > strip2Center; --i) {
+            ctx.leds[i] = ctx.leds[i - 1];
+        }
+
+        // Clear center pixels for strip 2
+        ctx.leds[strip2Center - 1] = CRGB::Black;  // LED 239
+        ctx.leds[strip2Center] = CRGB::Black;      // LED 240
+    }
+}
+
 void AudioWaveformEffect::render(plugins::EffectContext& ctx) {
-    // Clear buffer
-    memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+    // First frame only: clear buffer
+    if (!m_initialized) {
+        memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
+        m_initialized = true;
+    }
 
 #if !FEATURE_AUDIO_SYNC
     (void)ctx;
     return;
 #else
     if (!ctx.audio.available) {
+        // No audio: just fade existing trails
+        applyDynamicFade(ctx, 0.0f);
         return;
     }
 
-    // Check if we have a new hop
-    bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
-    if (newHop) {
-        m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+    // =========================================
+    // STEP 1: Get current audio amplitude (use RMS like Snapwave)
+    // =========================================
+    float currentAmp = ctx.audio.rms();
 
-        float maxWaveformValRaw = 0.0f;
+    // =========================================
+    // STEP 2: Smooth the peak (5%/95% - original)
+    // =========================================
+    m_peakSmoothed = currentAmp * PEAK_SMOOTH_NEW + m_peakSmoothed * PEAK_SMOOTH_OLD;
 
-        // Push current waveform into history ring buffer
-        for (uint8_t i = 0; i < WAVEFORM_SIZE; ++i) {
-            int16_t sample = ctx.audio.getWaveformSample(i);
-            m_waveformHistory[m_historyIndex][i] = sample;
-            int32_t absSample = (sample < 0) ? -sample : sample;
-            if (absSample > maxWaveformValRaw) {
-                maxWaveformValRaw = (float)absSample;
-            }
-        }
-        m_historyIndex = (m_historyIndex + 1) % WAVEFORM_HISTORY_SIZE;
+    // =========================================
+    // STEP 3: Apply DYNAMIC FADE (creates trails)
+    // =========================================
+    applyDynamicFade(ctx, m_peakSmoothed);
 
-        float maxWaveformVal = maxWaveformValRaw - SWEET_SPOT_MIN_LEVEL;
-        if (maxWaveformVal > m_maxWaveformValFollower) {
-            float delta = maxWaveformVal - m_maxWaveformValFollower;
-            m_maxWaveformValFollower += delta * PEAK_FOLLOW_ATTACK;
-        } else if (maxWaveformVal < m_maxWaveformValFollower) {
-            float delta = m_maxWaveformValFollower - maxWaveformVal;
-            m_maxWaveformValFollower -= delta * PEAK_FOLLOW_RELEASE;
-            if (m_maxWaveformValFollower < SWEET_SPOT_MIN_LEVEL) {
-                m_maxWaveformValFollower = SWEET_SPOT_MIN_LEVEL;
-            }
-        }
+    // =========================================
+    // STEP 4: SHIFT LEDs outward from center
+    // =========================================
+    shiftLedsOutward(ctx);
 
-        float waveformPeakScaledRaw = 0.0f;
-        if (m_maxWaveformValFollower > 0.0f) {
-            waveformPeakScaledRaw = maxWaveformVal / m_maxWaveformValFollower;
-        }
+    // =========================================
+    // STEP 5: Compute color from chromagram
+    // =========================================
+    CRGB dotColor = computeChromaColor(ctx);
 
-        if (waveformPeakScaledRaw > m_waveformPeakScaled) {
-            float delta = waveformPeakScaledRaw - m_waveformPeakScaled;
-            m_waveformPeakScaled += delta * PEAK_SCALE_ATTACK;
-        } else if (waveformPeakScaledRaw < m_waveformPeakScaled) {
-            float delta = m_waveformPeakScaled - waveformPeakScaledRaw;
-            m_waveformPeakScaled -= delta * PEAK_SCALE_ATTACK;
-        }
+    // Scale by smoothed peak amplitude
+    uint8_t brightness = (uint8_t)(m_peakSmoothed * 255.0f);
+    dotColor.nscale8(brightness);
+
+    // Apply global brightness
+    dotColor.nscale8(ctx.brightness);
+
+    // =========================================
+    // STEP 6: Draw new dot at CENTER
+    // =========================================
+    uint16_t stripLen = (ctx.ledCount > 160) ? 160 : ctx.ledCount;
+    uint16_t center = stripLen / 2;  // 80
+
+    // Draw at center pair (79 and 80)
+    ctx.leds[center - 1] = dotColor;  // LED 79
+    ctx.leds[center] = dotColor;      // LED 80
+
+    // Strip 2 center if present
+    if (ctx.ledCount > 160) {
+        uint16_t strip2Center = 160 + center;  // 240
+        ctx.leds[strip2Center - 1] = dotColor;  // LED 239
+        ctx.leds[strip2Center] = dotColor;      // LED 240
     }
+#endif
+}
 
-    // Smooth waveform_peak_scaled (0.03/0.97 tuned for LGP)
-    m_waveformPeakScaledLast = m_waveformPeakScaled * 0.03f + m_waveformPeakScaledLast * 0.97f;
+CRGB AudioWaveformEffect::computeChromaColor(const plugins::EffectContext& ctx) {
+    float sumR = 0.0f, sumG = 0.0f, sumB = 0.0f;
 
-    // Compute sum_colour from chromagram (matching Sensory Bridge light_mode_waveform)
-    float chromaMax = 0.0f;
+#if FEATURE_AUDIO_SYNC
+    // Accumulate color from all chromagram bins
     for (uint8_t c = 0; c < 12; ++c) {
-        float v = ctx.audio.controlBus.chroma[c];
-        if (v > chromaMax) chromaMax = v;
-    }
+        float prog = c / 12.0f;  // 0.0 to 0.917
+        float bin = ctx.audio.controlBus.chroma[c];
 
-    const float chromaNorm = (chromaMax > 0.0f) ? (1.0f / chromaMax) : 0.0f;
-    const float led_share = 255.0f / 12.0f;
-    CRGB sum_color = CRGB(0, 0, 0);
-    float brightness_sum = 0.0f;
-    const bool chromaticMode = (ctx.saturation >= 128);
-
-    for (uint8_t c = 0; c < 12; ++c) {
-        float prog = c / 12.0f;
-        float bin = ctx.audio.controlBus.chroma[c] * chromaNorm;
-
-        // Apply squaring and gain
-        float bright = bin;
-        bright = bright * bright;  // Square once
-        bright *= 1.5f;
+        // Square for contrast, then boost (original algorithm)
+        float bright = bin * bin * CHROMA_BOOST;
         if (bright > 1.0f) bright = 1.0f;
 
-        bright *= led_share;
+        // Only contribute if above threshold
+        if (bright > CHROMA_THRESHOLD) {
+            // Pure HSV spectrum mapping (original chromatic mode)
+            // Note C (prog=0) → Hue 0 (red)
+            // Note G (prog=0.583) → Hue ~149 (cyan)
+            uint8_t hue = (uint8_t)(prog * 255.0f);
+            uint8_t brightU8 = (uint8_t)(bright * 255.0f);
 
-        if (chromaticMode) {
-            uint8_t paletteIdx = (uint8_t)(prog * 255.0f + ctx.gHue);
-            uint8_t brightU8 = (uint8_t)bright;
-            brightU8 = (uint8_t)((brightU8 * ctx.brightness) / 255);
-            CRGB out_col = ctx.palette.getColor(paletteIdx, brightU8);
-            sum_color += out_col;
-        } else {
-            brightness_sum += bright;
+            CRGB noteColor;
+            hsv2rgb_spectrum(CHSV(hue, 255, brightU8), noteColor);
+
+            sumR += noteColor.r;
+            sumG += noteColor.g;
+            sumB += noteColor.b;
         }
     }
-
-    if (!chromaticMode) {
-        uint8_t brightU8 = (uint8_t)brightness_sum;
-        brightU8 = (uint8_t)((brightU8 * ctx.brightness) / 255);
-        sum_color = ctx.palette.getColor(ctx.gHue, brightU8);
-    }
-
-    // Smooth sum_colour (0.04/0.96 tuned for LGP)
-    float sum_color_float[3] = {
-        (float)sum_color.r,
-        (float)sum_color.g,
-        (float)sum_color.b
-    };
-
-    sum_color_float[0] = sum_color_float[0] * 0.04f + m_sumColorLast[0] * 0.96f;
-    sum_color_float[1] = sum_color_float[1] * 0.04f + m_sumColorLast[1] * 0.96f;
-    sum_color_float[2] = sum_color_float[2] * 0.04f + m_sumColorLast[2] * 0.96f;
-
-    m_sumColorLast[0] = sum_color_float[0];
-    m_sumColorLast[1] = sum_color_float[1];
-    m_sumColorLast[2] = sum_color_float[2];
-
-    // Render waveform (matching Sensory Bridge algorithm)
-    // Map ctx.speed to smoothing rate (MOOD equivalent)
-    // Speed 1-50 maps to smoothing 0.1-1.0 range
-    float speedNorm = ctx.speed / 50.0f;  // 0.02 to 1.0
-    float smoothing = (0.1f + speedNorm * 0.9f) * 0.035f;  // 0.0035 to 0.035 (tuned for LGP)
-
-    // Compute peak scaling
-    float peak = m_waveformPeakScaledLast * 4.0f;
-    if (peak > 1.0f) peak = 1.0f;
-
-#ifdef FEATURE_EFFECT_VALIDATION
-    VALIDATION_INIT(20);  // Effect ID for AudioWaveform
-    VALIDATION_PHASE(0.0f, 0.0f);  // No phase for waveform effect
-    VALIDATION_SPEED(0.0f, 0.0f);  // No speed scaling
-    VALIDATION_AUDIO(0.0f, m_waveformPeakScaledLast, 0.0f);  // Use peakScaled as energy proxy
-    VALIDATION_SUBMIT(::lightwaveos::validation::g_validationRing);
 #endif
 
-    for (uint8_t i = 0; i < WAVEFORM_SIZE; ++i) {
-        // Average waveform history (4 frames)
-        float waveform_sample = 0.0f;
-        for (uint8_t s = 0; s < WAVEFORM_HISTORY_SIZE; ++s) {
-            waveform_sample += (float)m_waveformHistory[s][i];
-        }
-        waveform_sample /= (float)WAVEFORM_HISTORY_SIZE;
+    // Smooth color (5% new, 95% old - original ratio)
+    m_sumColorLast[0] = sumR * COLOR_SMOOTH_NEW + m_sumColorLast[0] * COLOR_SMOOTH_OLD;
+    m_sumColorLast[1] = sumG * COLOR_SMOOTH_NEW + m_sumColorLast[1] * COLOR_SMOOTH_OLD;
+    m_sumColorLast[2] = sumB * COLOR_SMOOTH_NEW + m_sumColorLast[2] * COLOR_SMOOTH_OLD;
 
-        // Normalise to Sensory Bridge scale
-        float input_wave_sample = waveform_sample / 128.0f;
-
-        // Apply follower smoothing (matching Sensory Bridge)
-        m_waveformLast[i] = input_wave_sample * smoothing + m_waveformLast[i] * (1.0f - smoothing);
-
-        // Apply brightness shaping (matching Sensory Bridge)
-        float output_brightness = m_waveformLast[i];
-        if (output_brightness > 1.0f) output_brightness = 1.0f;
-        if (output_brightness < -1.0f) output_brightness = -1.0f;
-
-        // Lift: 0.5 + x * 0.5 (maps [-1,1] to [0,1])
-        output_brightness = 0.5f + output_brightness * 0.5f;
-        if (output_brightness > 1.0f) output_brightness = 1.0f;
-        if (output_brightness < 0.0f) output_brightness = 0.0f;
-
-        // Scale by peak
-        output_brightness *= peak;
-
-        // Map waveform index to radial distance (centre-origin)
-        // Waveform index 0 = centre, index 127 = edge
-        float distF = ((float)i / (float)(WAVEFORM_SIZE - 1)) * (float)(HALF_LENGTH - 1);
-        uint16_t dist = (uint16_t)distF;
-
-        // Compute final colour (sum_color * brightness)
-        CRGB color = CRGB(
-            (uint8_t)(m_sumColorLast[0] * output_brightness),
-            (uint8_t)(m_sumColorLast[1] * output_brightness),
-            (uint8_t)(m_sumColorLast[2] * output_brightness)
-        );
-
-        // Render symmetric about centre pair
-        SET_CENTER_PAIR(ctx, dist, color);
-    }
-#endif  // FEATURE_AUDIO_SYNC
+    // Clamp to valid RGB range
+    return CRGB(
+        (uint8_t)fminf(m_sumColorLast[0], 255.0f),
+        (uint8_t)fminf(m_sumColorLast[1], 255.0f),
+        (uint8_t)fminf(m_sumColorLast[2], 255.0f)
+    );
 }
 
 void AudioWaveformEffect::cleanup() {
@@ -223,7 +226,7 @@ void AudioWaveformEffect::cleanup() {
 const plugins::EffectMetadata& AudioWaveformEffect::getMetadata() const {
     static plugins::EffectMetadata meta{
         "Audio Waveform",
-        "Time-domain waveform with history smoothing and chromagram colour, centre-origin mirrored",
+        "Scrolling waveform from center with dynamic trails - amplitude drives brightness",
         plugins::EffectCategory::PARTY,
         1,
         "LightwaveOS"

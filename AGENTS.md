@@ -1,6 +1,6 @@
-# Codex Agents Guide (Lightwave-Ledstrip / LightwaveOS)
+# AI Agents Guide (Lightwave-Ledstrip / LightwaveOS)
 
-This repository contains firmware for an ESP32‑S3 driving a dual‑strip Light Guide Plate (LGP) system, plus a web dashboard. This file is written for automated coding agents (Codex Agents) to work productively and safely in this codebase.
+This repository contains firmware for an ESP32‑S3 driving a dual‑strip Light Guide Plate (LGP) system, plus a web dashboard. This file is written for automated AI coding agents (Claude Code, Cursor, Trae, etc.) to work productively and safely in this codebase.
 
 ## Non‑Negotiable Invariants
 

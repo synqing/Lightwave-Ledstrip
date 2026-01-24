@@ -376,6 +376,31 @@ void WiFiCredentialsStorage::updateNetworkCount() {
     }
 }
 
+void WiFiCredentialsStorage::setLastConnectedSSID(const String& ssid) {
+    if (!m_initialized) {
+        LW_LOGE("WiFiCredentialsStorage not initialized");
+        return;
+    }
+
+    if (ssid.length() == 0 || ssid.length() > 32) {
+        LW_LOGW("Invalid SSID for last connected: length %d", ssid.length());
+        return;
+    }
+
+    m_prefs.putString("last_ssid", ssid);
+    LW_LOGI("Last connected SSID saved: %s", ssid.c_str());
+}
+
+String WiFiCredentialsStorage::getLastConnectedSSID() const {
+    if (!m_initialized) {
+        return String("");
+    }
+
+    // Need to cast away const for Preferences (it's safe, getString doesn't modify state)
+    Preferences& prefs = const_cast<Preferences&>(m_prefs);
+    return prefs.getString("last_ssid", "");
+}
+
 } // namespace network
 } // namespace lightwaveos
 

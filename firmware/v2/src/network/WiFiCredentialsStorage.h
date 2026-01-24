@@ -132,6 +132,18 @@ public:
      */
     size_t getAvailableSpace() const;
 
+    /**
+     * @brief Set the last successfully connected SSID
+     * @param ssid The SSID that was successfully connected
+     */
+    void setLastConnectedSSID(const String& ssid);
+
+    /**
+     * @brief Get the last successfully connected SSID
+     * @return The last connected SSID, or empty string if none
+     */
+    String getLastConnectedSSID() const;
+
 private:
     Preferences m_prefs;
     bool m_initialized;

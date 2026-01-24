@@ -242,6 +242,17 @@ public:
     };
 
     /**
+     * @brief Result of smart network selection
+     */
+    struct BestNetworkResult {
+        String ssid;                    ///< Selected network SSID
+        String password;                ///< Network password
+        uint8_t channel;                ///< WiFi channel for faster connection
+        int32_t rssi;                   ///< Signal strength (dBm)
+        bool found;                     ///< true if a matching network was found
+    };
+
+    /**
      * @brief Get cached scan results
      * @return Vector of scan results
      */
@@ -317,27 +328,33 @@ public:
     bool isForceApOnlyRuntime() const { return false; }
 
     /**
-     * @brief Get saved networks (stub - returns 0)
+     * @brief Get saved networks from NVS storage
      */
     uint8_t getSavedNetworks(WiFiCredentialsStorage::NetworkCredential* out, uint8_t maxNetworks) const {
-        (void)out; (void)maxNetworks;
-        return 0;
+        // Cast away const for loadNetworks (it's safe, no state modification)
+        WiFiCredentialsStorage& storage = const_cast<WiFiCredentialsStorage&>(m_credentialsStorage);
+        return storage.loadNetworks(out, maxNetworks);
     }
 
     /**
-     * @brief Add network to saved list (stub)
+     * @brief Add network to NVS storage
      */
     bool addNetwork(const String& ssid, const String& password) {
-        (void)ssid; (void)password;
-        return false;
+        return const_cast<WiFiCredentialsStorage&>(m_credentialsStorage).saveNetwork(ssid, password);
     }
 
     /**
-     * @brief Delete saved network (stub)
+     * @brief Delete saved network from NVS storage
      */
     bool deleteSavedNetwork(const String& ssid) {
-        (void)ssid;
-        return false;
+        return const_cast<WiFiCredentialsStorage&>(m_credentialsStorage).deleteNetwork(ssid);
+    }
+
+    /**
+     * @brief Get the last successfully connected SSID
+     */
+    String getLastConnectedSSID() const {
+        return m_credentialsStorage.getLastConnectedSSID();
     }
 
     /**
@@ -410,6 +427,17 @@ private:
     void setState(WiFiState newState);
     void switchToNextNetwork();
     bool hasSecondaryNetwork() const;
+
+    /**
+     * @brief Find the best available network from scan results
+     *
+     * Searches through all credential sources (config primary, config secondary,
+     * and NVS-saved networks) and matches against scan results. Returns the
+     * network with the best RSSI, with priority given to last-connected network.
+     *
+     * @return BestNetworkResult with found=true if a known network is available
+     */
+    BestNetworkResult findBestAvailableNetwork();
 
     // ========================================================================
     // Event Handler
@@ -490,6 +518,13 @@ private:
     String m_apSSID = "LightwaveOS-AP";
     String m_apPassword = "lightwave123";
     uint8_t m_apChannel = 1;
+
+    // ========================================================================
+    // Credential Storage
+    // ========================================================================
+
+    WiFiCredentialsStorage m_credentialsStorage;
+    bool m_credentialsSaved = false;  ///< Track if current credentials were saved this session
 };
 
 // ============================================================================

@@ -401,6 +401,25 @@ String WiFiCredentialsStorage::getLastConnectedSSID() const {
     return prefs.getString("last_ssid", "");
 }
 
+bool WiFiCredentialsStorage::getCredentialsForSSID(const String& ssid, String& outPassword) {
+    if (!m_initialized) {
+        return false;
+    }
+
+    uint8_t index = findNetworkIndex(ssid);
+    if (index == 255) {
+        return false;  // Network not found
+    }
+
+    NetworkCredential cred;
+    if (getNetwork(index, cred)) {
+        outPassword = cred.password;
+        return true;
+    }
+
+    return false;
+}
+
 } // namespace network
 } // namespace lightwaveos
 

@@ -144,6 +144,14 @@ public:
      */
     String getLastConnectedSSID() const;
 
+    /**
+     * @brief Get credentials (password) for a specific SSID
+     * @param ssid Network SSID to look up
+     * @param outPassword Output parameter for the password
+     * @return true if SSID found and password retrieved, false otherwise
+     */
+    bool getCredentialsForSSID(const String& ssid, String& outPassword);
+
 private:
     Preferences m_prefs;
     bool m_initialized;

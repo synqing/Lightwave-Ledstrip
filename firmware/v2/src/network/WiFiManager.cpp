@@ -56,6 +56,12 @@ bool WiFiManager::begin() {
         return false;
     }
 
+    // Initialize credential storage (NVS-based)
+    if (!m_credentialsStorage.begin()) {
+        LW_LOGW("WiFiCredentialsStorage init failed - saved networks unavailable");
+        // Non-fatal: continue without NVS storage
+    }
+
     // Register WiFi event handler
     WiFi.onEvent(onWiFiEvent);
 
@@ -168,6 +174,9 @@ void WiFiManager::wifiTask(void* parameter) {
 void WiFiManager::handleStateInit() {
     LW_LOGD("STATE: INIT");
 
+    // Reset credential save flag for new connection attempt
+    m_credentialsSaved = false;
+
     // Check if we have credentials
     if (m_ssid.isEmpty()) {
         LW_LOGW("No credentials configured, switching to AP mode");
@@ -212,13 +221,25 @@ void WiFiManager::handleStateScanning() {
 
     if (bits & EVENT_SCAN_COMPLETE) {
         m_scanStarted = false;
+
+        // Cache scan results first (updateBestChannel populates m_cachedScanResults)
         updateBestChannel();
 
-        if (m_bestChannel > 0) {
-            LW_LOGI("Best channel for '%s': %d", m_ssid.c_str(), m_bestChannel);
+        // Smart network selection: find best available network from all credential sources
+        BestNetworkResult best = findBestAvailableNetwork();
+
+        if (best.found) {
+            // Update active credentials to selected network
+            m_ssid = best.ssid;
+            m_password = best.password;
+            m_bestChannel = best.channel;
+
+            LW_LOGI("Smart selection: '%s' (RSSI: %d dBm, Channel: %d)",
+                    best.ssid.c_str(), best.rssi, best.channel);
             setState(STATE_WIFI_CONNECTING);
         } else {
-            LW_LOGW("Network '%s' not found", m_ssid.c_str());
+            LW_LOGW("No known networks found in %d scan results",
+                    m_cachedScanResults.size());
             setState(STATE_WIFI_FAILED);
         }
     }
@@ -313,6 +334,19 @@ void WiFiManager::handleStateConnected() {
         esp_wifi_set_ps(WIFI_PS_NONE);  // ESP-IDF level disable
         m_sleepSettingsApplied = true;
         LW_LOGD("Applied WiFi stability settings in connected state");
+    }
+
+    // Auto-save credentials to NVS on successful connection (once per session)
+    if (!m_credentialsSaved && m_ssid.length() > 0) {
+        // Save network if not already in storage
+        if (!m_credentialsStorage.hasNetwork(m_ssid)) {
+            if (m_credentialsStorage.saveNetwork(m_ssid, m_password)) {
+                LW_LOGI("Auto-saved network '%s' to NVS", m_ssid.c_str());
+            }
+        }
+        // Always update last-connected SSID for priority boost
+        m_credentialsStorage.setLastConnectedSSID(m_ssid);
+        m_credentialsSaved = true;
     }
 
     // Grace period: ignore disconnect flaps immediately after connect.
@@ -530,6 +564,112 @@ void WiFiManager::updateBestChannel() {
     LW_LOGD("Found %d networks", n);
 }
 
+WiFiManager::BestNetworkResult WiFiManager::findBestAvailableNetwork() {
+    BestNetworkResult result = {"", "", 0, -127, false};
+    BestNetworkResult lastConnectedResult = {"", "", 0, -127, false};
+
+    // Get last connected SSID for priority boost
+    String lastConnected = m_credentialsStorage.getLastConnectedSSID();
+
+    // Build credential pool: config primary, config secondary, NVS networks
+    // Use a simple struct to track known networks
+    struct KnownNetwork {
+        String ssid;
+        String password;
+        bool isLastConnected;
+    };
+
+    // Estimate max networks: 2 config + 10 NVS = 12
+    static constexpr uint8_t MAX_KNOWN = 12;
+    KnownNetwork knownNetworks[MAX_KNOWN];
+    uint8_t knownCount = 0;
+
+    // Add config primary (if valid)
+    String configPrimarySsid = NetworkConfig::WIFI_SSID_VALUE;
+    String configPrimaryPass = NetworkConfig::WIFI_PASSWORD_VALUE;
+    if (configPrimarySsid.length() > 0 && configPrimarySsid != "CONFIGURE_ME") {
+        knownNetworks[knownCount++] = {configPrimarySsid, configPrimaryPass,
+                                        configPrimarySsid == lastConnected};
+    }
+
+    // Add config secondary (if valid)
+    String configSecondarySsid = NetworkConfig::WIFI_SSID_2_VALUE;
+    String configSecondaryPass = NetworkConfig::WIFI_PASSWORD_2_VALUE;
+    if (configSecondarySsid.length() > 0 && knownCount < MAX_KNOWN) {
+        // Check for duplicate
+        bool isDupe = false;
+        for (uint8_t i = 0; i < knownCount; i++) {
+            if (knownNetworks[i].ssid == configSecondarySsid) {
+                isDupe = true;
+                break;
+            }
+        }
+        if (!isDupe) {
+            knownNetworks[knownCount++] = {configSecondarySsid, configSecondaryPass,
+                                            configSecondarySsid == lastConnected};
+        }
+    }
+
+    // Add NVS-saved networks (skip duplicates)
+    WiFiCredentialsStorage::NetworkCredential nvsNets[WiFiCredentialsStorage::MAX_NETWORKS];
+    uint8_t nvsCount = m_credentialsStorage.loadNetworks(nvsNets, WiFiCredentialsStorage::MAX_NETWORKS);
+
+    for (uint8_t i = 0; i < nvsCount && knownCount < MAX_KNOWN; i++) {
+        bool isDupe = false;
+        for (uint8_t j = 0; j < knownCount; j++) {
+            if (knownNetworks[j].ssid == nvsNets[i].ssid) {
+                isDupe = true;
+                break;
+            }
+        }
+        if (!isDupe) {
+            knownNetworks[knownCount++] = {nvsNets[i].ssid, nvsNets[i].password,
+                                            nvsNets[i].ssid == lastConnected};
+        }
+    }
+
+    LW_LOGD("Credential pool: %d config + %d NVS = %d known networks",
+            (configPrimarySsid.length() > 0 ? 1 : 0) + (configSecondarySsid.length() > 0 ? 1 : 0),
+            nvsCount, knownCount);
+
+    // Match scan results against known networks
+    for (const auto& scan : m_cachedScanResults) {
+        for (uint8_t i = 0; i < knownCount; i++) {
+            if (scan.ssid == knownNetworks[i].ssid) {
+                // Found a match!
+                // Track last-connected network separately
+                if (knownNetworks[i].isLastConnected && scan.rssi > lastConnectedResult.rssi) {
+                    lastConnectedResult = {scan.ssid, knownNetworks[i].password,
+                                            scan.channel, scan.rssi, true};
+                }
+                // Track best RSSI overall
+                if (scan.rssi > result.rssi) {
+                    result = {scan.ssid, knownNetworks[i].password,
+                              scan.channel, scan.rssi, true};
+                }
+                break;  // Found match for this scan result, move to next
+            }
+        }
+    }
+
+    // Prefer last-connected if signal is reasonable (> -75 dBm)
+    // This provides "stickiness" to avoid unnecessary network switching
+    if (lastConnectedResult.found && lastConnectedResult.rssi > -75) {
+        LW_LOGI("Preferring last-connected '%s' (RSSI: %d dBm)",
+                lastConnectedResult.ssid.c_str(), lastConnectedResult.rssi);
+        return lastConnectedResult;
+    }
+
+    if (result.found) {
+        LW_LOGI("Selected best network '%s' (RSSI: %d dBm, Channel: %d)",
+                result.ssid.c_str(), result.rssi, result.channel);
+    } else {
+        LW_LOGW("No known networks found in %d scan results", m_cachedScanResults.size());
+    }
+
+    return result;
+}
+
 void WiFiManager::setState(WiFiState newState) {
     if (xSemaphoreTake(m_stateMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         // Reset connected-state bookkeeping when leaving CONNECTED.
@@ -546,6 +686,15 @@ void WiFiManager::setState(WiFiState newState) {
         } else if (newState == STATE_WIFI_CONNECTING) {
             m_connectStarted = false;
             m_connectStartTime = 0;
+
+            // CRITICAL FIX: Clear stale event bits to avoid false-positive connects.
+            // EventGroup bits persist across interrupted connections, which can cause
+            // the "Connected! IP: 0.0.0.0" bug when bits from a previous attempt
+            // are still set. This fix is documented in CLAUDE.md as LOAD-BEARING.
+            if (m_wifiEventGroup) {
+                xEventGroupClearBits(m_wifiEventGroup,
+                    EVENT_CONNECTED | EVENT_GOT_IP | EVENT_CONNECTION_FAILED);
+            }
         }
 
         m_currentState = newState;

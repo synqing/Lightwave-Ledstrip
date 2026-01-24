@@ -1,0 +1,71 @@
+name: Contextpack Tests
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'tools/contextpack.py'
+      - 'tools/test_*.py'
+      - 'tools/file_priority.py'
+      - 'tools/lazy_context.py'
+      - 'tools/semantic_compress.py'
+      - 'tools/command_centre/**'
+  push:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v3
+      - name: Lint workflows
+        uses: rhymedcode/actionlint-action@v1
+        with:
+          paths: .github/workflows/*.yml
+          fail_on_error: true
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          python -m pip install -U pip
+          pip install pytest
+      - name: Run contextpack tests
+        run: |
+          cd tools
+          python -m pytest -v test_contextpack.py test_contextpack_features.py command_centre/test_mcp_safety.py
+      
+      - name: Redact artifacts before upload
+        if: always()
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          from tools.command_centre.mcp_safety import AuditRedactor
+          
+          redactor = AuditRedactor()
+          for f in Path("reports").rglob("*.json"):
+              try:
+                  data = json.loads(f.read_text(encoding="utf-8"))
+              except Exception:
+                  continue
+              f.write_text(json.dumps(redactor.redact(data), indent=2), encoding="utf-8")
+          PY
+      - name: Verify redaction (no secrets leaked)
+        if: always()
+        run: |
+          cd tools
+          python command_centre/verify_redaction.py || exit 1
+      - name: Archive pack stats
+        # Explicit retention: 30 days (matches security policy)
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: pack_stats
+          path: reports/contextpack/**/pack_stats*.json
+          retention-days: 30

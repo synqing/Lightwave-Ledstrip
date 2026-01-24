@@ -251,27 +251,6 @@ export const V2Provider: React.FC<React.PropsWithChildren<{ autoConnect?: boolea
     }
   }, [getClient]);
 
-  const refreshPalettes = useCallback(async () => {
-    setLoading(prev => ({ ...prev, palettes: true }));
-    setErrors(prev => ({ ...prev, palettes: undefined }));
-    const api = v2Api(getClient());
-    try {
-      const [list, current] = await Promise.all([
-        api.palettesList({ offset: 0, limit: 100 }),
-        api.palettesCurrent().catch(() => null),
-      ]);
-      setPalettesList(list);
-      if (current) setCurrentPalette(current);
-      setConnection(prev => ({ ...prev, httpOk: true, lastOkAt: Date.now(), lastError: undefined }));
-    } catch (err) {
-      const msg = formatErr(err);
-      setErrors(prev => ({ ...prev, palettes: msg }));
-      setConnection(prev => ({ ...prev, httpOk: false, lastError: msg }));
-    } finally {
-      setLoading(prev => ({ ...prev, palettes: false }));
-    }
-  }, [getClient]);
-
   const flushPatch = useCallback(async () => {
     const toSend = { ...pendingPatch.current };
     pendingPatch.current = {};
@@ -321,19 +300,41 @@ export const V2Provider: React.FC<React.PropsWithChildren<{ autoConnect?: boolea
     setErrors(prev => ({ ...prev, palettes: undefined }));
     const api = v2Api(getClient());
     try {
-      await api.palettesSet(paletteId);
-      // Refresh parameters + palette details to keep UI in sync.
-      await Promise.all([
-        refreshParameters(),
-        api.palettesCurrent().then(pal => setCurrentPalette(pal)).catch(() => {}),
-      ]);
+      const response = await api.palettesSet(paletteId);
+      // Update current palette from the set response
+      setCurrentPalette({
+        paletteId: response.paletteId,
+        name: response.name,
+        category: response.category,
+      });
       setConnection(prev => ({ ...prev, httpOk: true, lastOkAt: Date.now(), lastError: undefined }));
     } catch (err) {
       const msg = formatErr(err);
       setErrors(prev => ({ ...prev, palettes: msg }));
       setConnection(prev => ({ ...prev, httpOk: false, lastError: msg }));
     }
-  }, [getClient, refreshParameters]);
+  }, [getClient]);
+
+  const refreshPalettes = useCallback(async () => {
+    setLoading(prev => ({ ...prev, palettes: true }));
+    setErrors(prev => ({ ...prev, palettes: undefined }));
+    const api = v2Api(getClient());
+    try {
+      const [palettes, currentPal] = await Promise.all([
+        api.palettesList({ offset: 0, limit: 100 }),
+        api.palettesCurrent(),
+      ]);
+      setPalettesList(palettes);
+      setCurrentPalette(currentPal);
+      setConnection(prev => ({ ...prev, httpOk: true, lastOkAt: Date.now(), lastError: undefined }));
+    } catch (err) {
+      const msg = formatErr(err);
+      setErrors(prev => ({ ...prev, palettes: msg }));
+      setConnection(prev => ({ ...prev, httpOk: false, lastError: msg }));
+    } finally {
+      setLoading(prev => ({ ...prev, palettes: false }));
+    }
+  }, [getClient]);
 
   const refreshZones = useCallback(async () => {
     setLoading(prev => ({ ...prev, zones: true }));
@@ -470,3 +471,4 @@ export const useV2 = () => {
   if (!ctx) throw new Error('useV2 must be used within V2Provider');
   return ctx;
 };
+

@@ -1,0 +1,259 @@
+{
+  "format": "ITF",
+  "formatVersion": "1.0",
+  "generatedAt": "2026-01-19T05:31:32.122685",
+  "states": [
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "60835"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "60839"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "61354"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "61862"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "62366"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "62865"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "63382"
+        }
+      }
+    }
+  ]
+}

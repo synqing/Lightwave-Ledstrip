@@ -9,13 +9,23 @@ This documentation suite provides comprehensive coverage of the audio-visual pro
 ## Quick Start
 
 If you're new to the codebase:
-1. Start with [IMPLEMENTATION_PATTERNS.md](IMPLEMENTATION_PATTERNS.md) - copy-paste ready code
-2. Reference [TROUBLESHOOTING.md](TROUBLESHOOTING.md) when issues arise
-3. Deep-dive into specifications as needed
+1. **Visual learners:** Start with [interactive-architecture.html](interactive-architecture.html) - open in browser for animated visualizations
+2. **Quick overview:** Read [AUDIO_SYSTEM_ARCHITECTURE_VISUAL.md](AUDIO_SYSTEM_ARCHITECTURE_VISUAL.md) - diagrams and examples
+3. **Implementation:** Use [IMPLEMENTATION_PATTERNS.md](IMPLEMENTATION_PATTERNS.md) - copy-paste ready code
+4. **Reference:** Check [TROUBLESHOOTING.md](TROUBLESHOOTING.md) when issues arise
+5. **Deep-dive:** Consult specifications as needed
 
 ---
 
 ## Document Index
+
+### Learning & Visualization
+
+| Document | Type | Purpose | When to Read |
+|----------|------|---------|--------------|
+| [interactive-architecture.html](interactive-architecture.html) | 🎮 Interactive | Real-time animated visualizations | First-time learning, presentations, understanding timing |
+| [AUDIO_SYSTEM_ARCHITECTURE_VISUAL.md](AUDIO_SYSTEM_ARCHITECTURE_VISUAL.md) | 📊 Visual Guide | Mermaid diagrams, code examples, analogies | Quick understanding, visual learning |
+| [AUDIO_SYSTEM_ARCHITECTURE.md](AUDIO_SYSTEM_ARCHITECTURE.md) | 📖 Technical Spec | Complete architecture reference | Deep technical understanding, debugging |
 
 ### Core Specifications
 

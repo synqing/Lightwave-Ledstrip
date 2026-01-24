@@ -138,11 +138,6 @@ bool LGPPerlinBackendEmotiscopeFullEffect::init(plugins::EffectContext& ctx) {
     // Initialize timing (use ctx.totalTimeMs for consistency)
     m_lastUpdateMs = ctx.totalTimeMs;
     
-    // Initialize audio smoothing
-    m_lastHopSeq = 0;
-    m_targetRms = 0.0f;
-    m_rmsFollower.reset(0.0f);
-    
     // Pre-compute initial noise array
     generateNoiseArray();
     normalizeNoiseArray();
@@ -188,18 +183,7 @@ void LGPPerlinBackendEmotiscopeFullEffect::render(plugins::EffectContext& ctx) {
     float push = 0.0f;
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
-        float dt = ctx.getSafeDeltaSeconds();
-        float moodNorm = ctx.getMoodNormalized();
-        
-        // Hop-based updates: update targets only on new hops
-        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
-        if (newHop) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
-            m_targetRms = ctx.audio.rms();
-        }
-        
-        // Smooth toward targets every frame with MOOD-adjusted smoothing
-        float energy = m_rmsFollower.updateWithMood(m_targetRms, dt, moodNorm);
+        float energy = ctx.audio.rms();
         push = energy * energy * energy * energy * speedNorm * 0.1f; // Heavy emphasis on loud
     }
 #endif
@@ -237,18 +221,12 @@ void LGPPerlinBackendEmotiscopeFullEffect::render(plugins::EffectContext& ctx) {
         
         // Array lookup (not recomputation!)
         float noiseNorm = m_noiseArray[dist];
-
-        // Visibility fix: replace squaring with sqrt for better dynamic range
-        // Old: noiseNorm * noiseNorm (crushes mid-values to near-zero)
-        // New: sqrt for gentler curve + 1.5x boost
-        noiseNorm = sqrtf(noiseNorm) * 1.5f;
-        noiseNorm = fminf(1.0f, noiseNorm); // Clamp to valid range
-
-        // Global brightness boost (1.5x) with minimum floor
-        float brightnessNorm = fmaxf(0.2f, 0.3f + noiseNorm * 0.7f) * 1.5f;
-        brightnessNorm = fminf(1.0f, brightnessNorm); // Clamp after boost
+        
+        // Same shaping as FastLED test (for fair comparison)
+        noiseNorm = noiseNorm * noiseNorm; // Bias toward darker, stronger highlights
+        float brightnessNorm = 0.2f + noiseNorm * 0.8f;
         uint8_t brightness = (uint8_t)(brightnessNorm * 255.0f * intensityNorm);
-        uint8_t paletteIndex = (uint8_t)(noiseNorm * 170.0f) + ctx.gHue; // Adjusted for new range
+        uint8_t paletteIndex = (uint8_t)(noiseNorm * 255.0f) + ctx.gHue;
         
         CRGB color = ctx.palette.getColor(paletteIndex, brightness);
         ctx.leds[i] = color;

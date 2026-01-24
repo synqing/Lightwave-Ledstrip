@@ -1,372 +1,287 @@
 /**
  * @file NetworkHandlers.cpp
- * @brief Network mode/status handlers implementation
+ * @brief Network management HTTP handlers implementation
+ *
+ * LightwaveOS v2 - Network Subsystem
  */
 
 #include "NetworkHandlers.h"
-
 #include "../../WiFiManager.h"
-#include "../../WiFiCredentialsStorage.h"
-#include "../../../config/network_config.h"
+#include "../../WiFiCredentialManager.h"
 #include "../../RequestValidator.h"
 #include "../../ApiResponse.h"
-
-#define LW_LOG_TAG "Network"
-#include "utils/Log.h"
+#include <WiFi.h>
+#include <ArduinoJson.h>
 
 namespace lightwaveos {
 namespace network {
 namespace webserver {
 namespace handlers {
 
-using namespace lightwaveos::config;
+// ============================================================================
+// Route Registration
+// ============================================================================
 
-// Static scan job tracking
-uint32_t NetworkHandlers::s_scanJobId = 0;
-uint32_t NetworkHandlers::s_scanStartTime = 0;
-bool NetworkHandlers::s_scanInProgress = false;
-
-bool NetworkHandlers::checkOTAToken(AsyncWebServerRequest* request) {
-    const char* expectedToken = NetworkConfig::OTA_UPDATE_TOKEN;
-
-    if (!request->hasHeader("X-OTA-Token")) {
-        sendErrorResponse(request, HttpStatus::UNAUTHORIZED,
-                          ErrorCodes::UNAUTHORIZED, "Missing X-OTA-Token header");
-        return false;
-    }
-
-    String providedToken = request->header("X-OTA-Token");
-    if (providedToken != expectedToken) {
-        sendErrorResponse(request, HttpStatus::UNAUTHORIZED,
-                          ErrorCodes::UNAUTHORIZED, "Invalid OTA token");
-        return false;
-    }
-
-    return true;
+void NetworkHandlers::registerRoutes(HttpRouteRegistry& registry) {
+    // Routes are registered in V1ApiRoutes.cpp with rate limiting wrappers
+    (void)registry;
 }
+
+// ============================================================================
+// Status & Scanning
+// ============================================================================
 
 void NetworkHandlers::handleStatus(AsyncWebServerRequest* request) {
-    sendSuccessResponse(request, [](JsonObject& data) {
-        data["compiledForceApMode"] = NetworkConfig::FORCE_AP_MODE;
-        data["runtimeForceApMode"] = WIFI_MANAGER.isForceApOnlyRuntime();
+    WiFiManager& wm = WIFI_MANAGER;
 
-        data["state"] = WIFI_MANAGER.getStateString();
+    sendSuccessResponse(request, [&wm](JsonObject& data) {
+        bool connected = wm.isConnected();
+        bool apMode = wm.isAPMode();
 
-        JsonObject ap = data["ap"].to<JsonObject>();
-        ap["ssid"] = NetworkConfig::AP_SSID;
-        ap["ip"] = WIFI_MANAGER.getAPIP().toString();
-        ap["clients"] = WiFi.softAPgetStationNum();
+        data["connected"] = connected;
+        data["state"] = wm.getStateString();
+        data["apMode"] = apMode;
 
-        JsonObject sta = data["sta"].to<JsonObject>();
-        sta["connected"] = WIFI_MANAGER.isConnected();
-        sta["ssid"] = WIFI_MANAGER.getSSID();
-        sta["ip"] = WIFI_MANAGER.getLocalIP().toString();
-        sta["rssi"] = WIFI_MANAGER.isConnected() ? WIFI_MANAGER.getRSSI() : 0;
-        sta["channel"] = WIFI_MANAGER.getChannel();
+        if (connected) {
+            data["ssid"] = wm.getSSID();
+            data["ip"] = wm.getLocalIP().toString();
+            data["rssi"] = wm.getRSSI();
+            data["channel"] = wm.getChannel();
+        } else if (apMode) {
+            data["apIP"] = wm.getAPIP().toString();
+        }
 
-        JsonObject ota = data["ota"].to<JsonObject>();
-        ota["enabled"] = true;
-        ota["tokenConfigured"] = (NetworkConfig::OTA_UPDATE_TOKEN && NetworkConfig::OTA_UPDATE_TOKEN[0] != '\0');
+        // Connection statistics
+        JsonObject stats = data["stats"].to<JsonObject>();
+        stats["connectionAttempts"] = wm.getConnectionAttempts();
+        stats["successfulConnections"] = wm.getSuccessfulConnections();
+        stats["uptimeSeconds"] = wm.getUptimeSeconds();
     });
 }
 
-void NetworkHandlers::handleEnableSTA(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    if (!checkOTAToken(request)) return;
+void NetworkHandlers::handleScan(AsyncWebServerRequest* request) {
+    WiFiManager& wm = WIFI_MANAGER;
 
-    // Defaults: stay on STA until reboot (or explicit AP-only call).
-    uint32_t durationSeconds = 0;
-    bool revertToApOnly = false;
-    String ssidOverride = "";
-    String passwordOverride = "";
+    // Trigger a fresh scan
+    wm.scanNetworks();
 
-    if (data && len > 0) {
-        JsonDocument doc;
-        VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::NetworkStaEnable, request);
-        if (doc.containsKey("durationSeconds")) {
-            durationSeconds = doc["durationSeconds"].as<uint32_t>();
-        }
-        if (doc.containsKey("revertToApOnly")) {
-            revertToApOnly = doc["revertToApOnly"].as<bool>();
-        }
-        if (doc.containsKey("ssid")) {
-            ssidOverride = doc["ssid"].as<String>();
-        }
-        if (doc.containsKey("password")) {
-            passwordOverride = doc["password"].as<String>();
-        }
+    // Get cached scan results
+    // Note: WiFi scan takes 2-5 seconds. In practice, you may want to:
+    // 1. Return cached results immediately
+    // 2. Start async scan and return 202 with scan ID
+    // For simplicity, we return cached results from last scan
+    const auto& results = wm.getScanResults();
 
-        if (!passwordOverride.isEmpty() && ssidOverride.isEmpty()) {
-            sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                              ErrorCodes::INVALID_VALUE, "password requires ssid");
-            return;
-        }
-    }
-
-    if (!ssidOverride.isEmpty()) {
-        WIFI_MANAGER.setCredentials(ssidOverride, passwordOverride);
-    }
-
-    uint32_t durationMs = durationSeconds * 1000u;
-    WIFI_MANAGER.requestSTAEnable(durationMs, revertToApOnly);
-
-    sendSuccessResponse(request, [durationSeconds, revertToApOnly, ssidOverride](JsonObject& resp) {
-        resp["requested"] = "sta";
-        resp["durationSeconds"] = durationSeconds;
-        resp["revertToApOnly"] = revertToApOnly;
-        if (!ssidOverride.isEmpty()) {
-            resp["ssid"] = ssidOverride;
-        }
-        resp["note"] = "APSTA window active (if heap allows) then STA-only. AP clients may be dropped to reclaim heap.";
-    });
-}
-
-void NetworkHandlers::handleEnableAPOnly(AsyncWebServerRequest* request) {
-    if (!checkOTAToken(request)) return;
-
-    WIFI_MANAGER.requestAPOnly();
-
-    sendSuccessResponse(request, [](JsonObject& resp) {
-        resp["requested"] = "ap_only";
-    });
-}
-
-// ============================================================================
-// Network Management (AP-first architecture)
-// ============================================================================
-
-void NetworkHandlers::handleListNetworks(AsyncWebServerRequest* request) {
-    sendSuccessResponse(request, [](JsonObject& data) {
+    sendSuccessResponse(request, [&results, &wm](JsonObject& data) {
         JsonArray networks = data["networks"].to<JsonArray>();
-        
-        WiFiCredentialsStorage::NetworkCredential savedNetworks[WiFiCredentialsStorage::MAX_NETWORKS];
-        uint8_t count = WIFI_MANAGER.getSavedNetworks(savedNetworks, WiFiCredentialsStorage::MAX_NETWORKS);
-        
-        data["count"] = count;
-        data["maxNetworks"] = WiFiCredentialsStorage::MAX_NETWORKS;
-        
-        for (uint8_t i = 0; i < count; i++) {
-            JsonObject network = networks.add<JsonObject>();
-            network["ssid"] = savedNetworks[i].ssid;
-            // Don't send password for security (only indicate if password is set)
-            network["hasPassword"] = savedNetworks[i].password.length() > 0;
+
+        for (const auto& net : results) {
+            JsonObject entry = networks.add<JsonObject>();
+            entry["ssid"] = net.ssid;
+            entry["rssi"] = net.rssi;
+            entry["channel"] = net.channel;
+            entry["encryption"] = authModeToString(static_cast<uint8_t>(net.encryption));
+
+            // Format BSSID as MAC address string
+            char bssid[18];
+            snprintf(bssid, sizeof(bssid), "%02X:%02X:%02X:%02X:%02X:%02X",
+                     net.bssid[0], net.bssid[1], net.bssid[2],
+                     net.bssid[3], net.bssid[4], net.bssid[5]);
+            entry["bssid"] = bssid;
         }
+
+        data["count"] = results.size();
+        data["lastScanTime"] = wm.getLastScanTime();
     });
 }
 
-void NetworkHandlers::handleAddNetwork(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    if (!data || len == 0) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::INVALID_VALUE, "Request body required");
-        return;
-    }
-
-    JsonDocument doc;
-    DeserializationError error = deserializeJson(doc, (const char*)data, len);
-    
-    if (error) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::INVALID_VALUE, "Invalid JSON");
-        return;
-    }
-
-    const char* ssid = doc["ssid"];
-    const char* password = doc["password"];
-
-    if (!ssid || strlen(ssid) == 0) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::INVALID_VALUE, "SSID required");
-        return;
-    }
-
-    // Password is optional (for open networks)
-    String passwordStr = password ? String(password) : String("");
-    
-    if (WIFI_MANAGER.addNetwork(String(ssid), passwordStr)) {
-        sendSuccessResponse(request, [ssid](JsonObject& resp) {
-            resp["ssid"] = ssid;
-            resp["saved"] = true;
-            resp["message"] = "Network saved to storage";
-        });
-    } else {
-        sendErrorResponse(request, HttpStatus::INSUFFICIENT_STORAGE,
-                          ErrorCodes::STORAGE_FULL, "Failed to save network (storage full or invalid)");
-    }
-}
-
-void NetworkHandlers::handleDeleteNetwork(AsyncWebServerRequest* request, const String& ssid) {
-    if (ssid.length() == 0) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::INVALID_VALUE, "SSID required");
-        return;
-    }
-
-    if (WIFI_MANAGER.deleteSavedNetwork(ssid)) {
-        sendSuccessResponse(request, [ssid](JsonObject& resp) {
-            resp["ssid"] = ssid;
-            resp["deleted"] = true;
-            resp["message"] = "Network deleted from storage";
-        });
-    } else {
-        sendErrorResponse(request, HttpStatus::NOT_FOUND,
-                          ErrorCodes::NOT_FOUND, "Network not found in storage");
-    }
-}
+// ============================================================================
+// Connection Management
+// ============================================================================
 
 void NetworkHandlers::handleConnect(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
-    if (!data || len == 0) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::INVALID_VALUE, "Request body required");
-        return;
-    }
-
     JsonDocument doc;
-    DeserializationError error = deserializeJson(doc, (const char*)data, len);
-    
-    if (error) {
+
+    // Validate request using existing schema
+    auto result = RequestValidator::parseAndValidate(data, len, doc,
+                                                      RequestSchemas::NetworkConnect);
+    if (!result.valid) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::INVALID_VALUE, "Invalid JSON");
+                          result.errorCode, result.errorMessage, result.fieldName);
         return;
     }
 
-    const char* ssid = doc["ssid"];
-    const char* password = doc["password"];
+    const char* ssid = doc["ssid"].as<const char*>();
+    const char* password = doc["password"] | "";  // Empty string for open networks
+    bool saveNetwork = doc["save"] | false;
 
-    if (!ssid || strlen(ssid) == 0) {
+    // Input validation
+    if (strlen(ssid) == 0 || strlen(ssid) > 32) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::INVALID_VALUE, "SSID required");
+                          ErrorCodes::OUT_OF_RANGE, "SSID must be 1-32 characters");
         return;
     }
 
-    String ssidStr = String(ssid);
-    String passwordStr = password ? String(password) : String("");
-
-    // If password provided, use connectToNetwork (saves if new)
-    // If no password, try connectToSavedNetwork (uses stored password)
-    bool initiated = false;
-    if (passwordStr.length() > 0) {
-        initiated = WIFI_MANAGER.connectToNetwork(ssidStr, passwordStr);
-    } else {
-        initiated = WIFI_MANAGER.connectToSavedNetwork(ssidStr);
+    // Password validation for secured networks (WPA2 min 8 chars)
+    // Allow empty password for open networks
+    size_t passLen = strlen(password);
+    if (passLen > 0 && passLen < 8) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::OUT_OF_RANGE, "Password must be at least 8 characters");
+        return;
     }
 
-    if (initiated) {
-        sendSuccessResponse(request, [ssidStr](JsonObject& resp) {
-            resp["ssid"] = ssidStr;
-            resp["connecting"] = true;
-            resp["message"] = "Connection attempt initiated (switching to STA mode)";
-        });
-    } else {
-        sendErrorResponse(request, HttpStatus::NOT_FOUND,
-                          ErrorCodes::NOT_FOUND, "Network not found in saved networks. Provide password or save network first.");
+    // Save to credential manager if requested
+    if (saveNetwork && passLen > 0) {
+        WIFI_CREDENTIALS.addNetwork(ssid, password);
     }
+
+    // Initiate connection via WiFiManager
+    WIFI_MANAGER.setCredentials(ssid, password);
+    WIFI_MANAGER.reconnect();
+
+    // Return 202 Accepted - connection happens asynchronously
+    sendSuccessResponse(request, [ssid](JsonObject& data) {
+        data["message"] = "Connection attempt initiated";
+        data["ssid"] = ssid;
+    }, HttpStatus::ACCEPTED);
 }
 
 void NetworkHandlers::handleDisconnect(AsyncWebServerRequest* request) {
     WIFI_MANAGER.disconnect();
-    
-    sendSuccessResponse(request, [](JsonObject& resp) {
-        resp["disconnected"] = true;
-        resp["message"] = "STA disconnected, returning to AP-only mode";
+
+    sendSuccessResponse(request, [](JsonObject& data) {
+        data["message"] = "Disconnected";
     });
 }
 
 // ============================================================================
-// Network Scanning
+// Saved Networks
 // ============================================================================
 
-void NetworkHandlers::handleScanNetworks(AsyncWebServerRequest* request) {
-    // Start async scan (if not already in progress)
-    if (s_scanInProgress) {
-        sendSuccessResponse(request, [](JsonObject& resp) {
-            resp["jobId"] = s_scanJobId;
-            resp["status"] = "in_progress";
-            resp["message"] = "Scan already in progress";
-        });
-        return;
-    }
+void NetworkHandlers::handleSavedList(AsyncWebServerRequest* request) {
+    auto ssids = WIFI_CREDENTIALS.getSavedSSIDs();
 
-    // Trigger scan
-    WIFI_MANAGER.scanNetworks();
-
-    // Generate job ID and track scan start
-    s_scanJobId = millis();  // Use timestamp as job ID
-    s_scanStartTime = millis();
-    s_scanInProgress = true;
-
-    sendSuccessResponse(request, [](JsonObject& resp) {
-        resp["jobId"] = s_scanJobId;
-        resp["status"] = "started";
-        resp["message"] = "Network scan initiated (check status endpoint for results)";
-    });
-}
-
-void NetworkHandlers::handleScanStatus(AsyncWebServerRequest* request) {
-    // Check scan completion by comparing lastScanTime with scan start time
-    uint32_t lastScanTime = WIFI_MANAGER.getLastScanTime();
-    uint32_t elapsed = millis() - s_scanStartTime;
-    
-    // Scan is complete if lastScanTime was updated after scan started
-    // OR if scan was started more than 10 seconds ago (timeout)
-    bool scanComplete = (lastScanTime > s_scanStartTime && lastScanTime < millis()) || 
-                        (elapsed > 10000);
-    
-    if (s_scanInProgress && !scanComplete && elapsed < 10000) {
-        // Scan still in progress
-        sendSuccessResponse(request, [elapsed](JsonObject& resp) {
-            resp["jobId"] = s_scanJobId;
-            resp["status"] = "in_progress";
-            resp["elapsedMs"] = elapsed;
-            resp["message"] = "Scan in progress, check again in a few seconds";
-        });
-        return;
-    }
-    
-    // Scan complete or timed out - mark as complete
-    if (s_scanInProgress) {
-        s_scanInProgress = false;
-    }
-    
-    if (elapsed > 10000 && lastScanTime < s_scanStartTime) {
-        // Scan timeout (no results yet)
-        sendErrorResponse(request, HttpStatus::REQUEST_TIMEOUT,
-                          ErrorCodes::BUSY, "Scan timeout - no results available");
-        return;
-    }
-
-    // Scan complete - return results
-    sendSuccessResponse(request, [lastScanTime, elapsed](JsonObject& data) {
-        data["jobId"] = s_scanJobId;
-        data["status"] = "complete";
-        
-        const auto& scanResults = WIFI_MANAGER.getScanResults();
-        
-        data["lastScanTime"] = lastScanTime;
-        data["age"] = millis() - lastScanTime;
-        data["scanDurationMs"] = elapsed;
-        
+    sendSuccessResponse(request, [&ssids](JsonObject& data) {
         JsonArray networks = data["networks"].to<JsonArray>();
-        
-        for (const auto& result : scanResults) {
-            JsonObject network = networks.add<JsonObject>();
-            network["ssid"] = result.ssid;
-            network["rssi"] = result.rssi;
-            network["channel"] = result.channel;
-            network["encryption"] = (uint8_t)result.encryption;
-            
-            // Format BSSID as hex string
-            char bssidStr[18];
-            snprintf(bssidStr, sizeof(bssidStr), "%02X:%02X:%02X:%02X:%02X:%02X",
-                     result.bssid[0], result.bssid[1], result.bssid[2],
-                     result.bssid[3], result.bssid[4], result.bssid[5]);
-            network["bssid"] = bssidStr;
+        for (const auto& ssid : ssids) {
+            networks.add(ssid);
         }
-        
-        data["count"] = scanResults.size();
+        data["count"] = ssids.size();
+        data["maxNetworks"] = MAX_SAVED_NETWORKS;
     });
+}
+
+void NetworkHandlers::handleSavedAdd(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
+    JsonDocument doc;
+
+    // Use centralized schema from RequestSchemas::NetworkSave
+    auto result = RequestValidator::parseAndValidate(data, len, doc,
+                                                      RequestSchemas::NetworkSave);
+    if (!result.valid) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          result.errorCode, result.errorMessage, result.fieldName);
+        return;
+    }
+
+    const char* ssid = doc["ssid"].as<const char*>();
+    const char* password = doc["password"].as<const char*>();
+
+    // Check if we have room
+    if (WIFI_CREDENTIALS.getNetworkCount() >= MAX_SAVED_NETWORKS &&
+        !WIFI_CREDENTIALS.hasNetwork(ssid)) {
+        sendErrorResponse(request, HttpStatus::CONFLICT,
+                          "NETWORK_LIMIT_REACHED",
+                          "Maximum saved networks reached (8). Remove a network first.");
+        return;
+    }
+
+    // Add/update network
+    if (!WIFI_CREDENTIALS.addNetwork(ssid, password)) {
+        sendErrorResponse(request, HttpStatus::INTERNAL_SERVER_ERROR,
+                          ErrorCodes::INTERNAL_ERROR, "Failed to save network");
+        return;
+    }
+
+    sendSuccessResponse(request, [ssid](JsonObject& data) {
+        data["message"] = "Network saved";
+        data["ssid"] = ssid;
+    }, HttpStatus::CREATED);
+}
+
+void NetworkHandlers::handleSavedDelete(AsyncWebServerRequest* request) {
+    // Extract SSID from URL path: /api/v1/network/saved/{ssid}
+    String url = request->url();
+
+    // Find the SSID after /saved/
+    int savedIdx = url.indexOf("/saved/");
+    if (savedIdx < 0) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::MISSING_FIELD, "SSID required in path");
+        return;
+    }
+
+    String ssidEncoded = url.substring(savedIdx + 7);  // Length of "/saved/"
+    if (ssidEncoded.isEmpty()) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::MISSING_FIELD, "SSID required in path");
+        return;
+    }
+
+    // URL-decode the SSID
+    String ssid = "";
+    for (size_t i = 0; i < ssidEncoded.length(); i++) {
+        char c = ssidEncoded[i];
+        if (c == '%' && i + 2 < ssidEncoded.length()) {
+            // Decode percent-encoded character
+            char hex[3] = { ssidEncoded[i+1], ssidEncoded[i+2], '\0' };
+            ssid += (char)strtol(hex, nullptr, 16);
+            i += 2;
+        } else if (c == '+') {
+            ssid += ' ';
+        } else {
+            ssid += c;
+        }
+    }
+
+    // Attempt to remove
+    if (!WIFI_CREDENTIALS.hasNetwork(ssid.c_str())) {
+        sendErrorResponse(request, HttpStatus::NOT_FOUND,
+                          ErrorCodes::NOT_FOUND, "Network not found");
+        return;
+    }
+
+    if (!WIFI_CREDENTIALS.removeNetwork(ssid.c_str())) {
+        sendErrorResponse(request, HttpStatus::INTERNAL_SERVER_ERROR,
+                          ErrorCodes::INTERNAL_ERROR, "Failed to remove network");
+        return;
+    }
+
+    sendSuccessResponse(request, [&ssid](JsonObject& data) {
+        data["message"] = "Network removed";
+        data["ssid"] = ssid;
+    });
+}
+
+// ============================================================================
+// Utility
+// ============================================================================
+
+const char* NetworkHandlers::authModeToString(uint8_t authMode) {
+    switch (static_cast<wifi_auth_mode_t>(authMode)) {
+        case WIFI_AUTH_OPEN:            return "OPEN";
+        case WIFI_AUTH_WEP:             return "WEP";
+        case WIFI_AUTH_WPA_PSK:         return "WPA";
+        case WIFI_AUTH_WPA2_PSK:        return "WPA2";
+        case WIFI_AUTH_WPA_WPA2_PSK:    return "WPA/WPA2";
+        case WIFI_AUTH_WPA2_ENTERPRISE: return "WPA2-ENT";
+        case WIFI_AUTH_WPA3_PSK:        return "WPA3";
+        case WIFI_AUTH_WPA2_WPA3_PSK:   return "WPA2/WPA3";
+        default:                        return "UNKNOWN";
+    }
 }
 
 } // namespace handlers
 } // namespace webserver
 } // namespace network
 } // namespace lightwaveos
-

@@ -47,7 +47,7 @@ public:
 
     // Sensory Bridge parity: 64 semitone bins
     static constexpr size_t NUM_BINS = 64;          // A1 (55 Hz) to C7 (2093 Hz) = 5.25 octaves
-    static constexpr uint32_t SAMPLE_RATE_HZ = 16000;
+    static constexpr uint32_t SAMPLE_RATE_HZ = 12800;  // FIX: Match I2S sample rate (was 16000!)
 
     // Adaptive window sizing (Sensory Bridge v4.1.0 algorithm)
     static constexpr size_t MAX_BLOCK_SIZE = 2000;  // Max samples for lowest freq (capped)

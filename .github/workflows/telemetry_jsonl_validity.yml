@@ -1,0 +1,124 @@
+name: Telemetry JSONL Validity Check
+
+on:
+  pull_request:
+    branches: [ main, feat/* ]
+    paths:
+      - 'firmware/v2/specs/quint/choreo/traces/curated/**/*_raw.txt'
+      - 'firmware/v2/specs/quint/choreo/tools/extract_jsonl.py'
+      - 'firmware/v2/src/network/**/*.cpp'
+      - 'firmware/v2/src/network/**/*.h'
+      - '.github/workflows/telemetry_jsonl_validity.yml'
+  push:
+    branches: [ main, feat/* ]
+    paths:
+      - 'firmware/v2/specs/quint/choreo/traces/curated/**/*_raw.txt'
+      - 'firmware/v2/specs/quint/choreo/tools/extract_jsonl.py'
+      - 'firmware/v2/src/network/**/*.cpp'
+      - 'firmware/v2/src/network/**/*.h'
+      - '.github/workflows/telemetry_jsonl_validity.yml'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  validate-jsonl-validity:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Find raw capture files
+        id: find-raw
+        working-directory: firmware/v2/specs/quint/choreo
+        run: |
+          RAW_FILES=$(find traces/curated -name "*_raw.txt" -type f | sort)
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          echo "$RAW_FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          if [ -z "$RAW_FILES" ]; then
+            echo "No raw capture files found (this is OK if no traces exist yet)"
+            echo "count=0" >> $GITHUB_OUTPUT
+          else
+            echo "$RAW_FILES" | wc -l | xargs echo "count=" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Validate JSONL extraction (no parse errors allowed)
+        working-directory: firmware/v2/specs/quint/choreo
+        run: |
+          set -euo pipefail
+          
+          if [ "${{ steps.find-raw.outputs.count }}" == "0" ]; then
+            echo "No raw capture files to validate (skipping)"
+            exit 0
+          fi
+          
+          FAILED=0
+          while IFS= read -r raw_file; do
+            [ -z "$raw_file" ] && continue
+            
+            echo "Extracting JSONL from: $raw_file"
+            TMP_JSONL=$(mktemp)
+            
+            # Run extractor once - it writes events to stdout, stats to stderr
+            # Redirect stderr away so it doesn't contaminate the JSONL file
+            if ! python3 tools/extract_jsonl.py "$raw_file" > "$TMP_JSONL" 2>/dev/null; then
+              echo "ERROR: $raw_file produced JSON parse errors during extraction"
+              echo "  Firmware must emit valid JSONL; extractor does not repair malformed telemetry"
+              rm -f "$TMP_JSONL"
+              FAILED=1
+              continue
+            fi
+            
+            # Validate that extracted JSONL lines are valid JSON using Python (avoids shell quoting issues)
+            if [ ! -s "$TMP_JSONL" ]; then
+              echo "WARNING: $raw_file produced no JSONL events (may be empty capture)"
+              rm -f "$TMP_JSONL"
+              continue
+            fi
+            
+            # Check each extracted line is valid JSON (Python reads file directly, avoiding shell quoting)
+            export VALIDATE_FILE="$TMP_JSONL"
+            export VALIDATE_RAW_FILE="$raw_file"
+            if ! python3 <<'PYEOF'; then
+import json
+import os
+import sys
+
+validate_file = os.environ['VALIDATE_FILE']
+raw_file = os.environ['VALIDATE_RAW_FILE']
+
+with open(validate_file, 'r') as f:
+    for line_num, line in enumerate(f, start=1):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            json.loads(line)
+        except json.JSONDecodeError as e:
+            print(f"ERROR: {raw_file} line {line_num} is not valid JSON: {e}", file=sys.stderr)
+            print(f"  Line: {line[:200]}", file=sys.stderr)  # Truncate for readability
+            sys.exit(1)
+sys.exit(0)
+PYEOF
+              echo "ERROR: $raw_file contains invalid JSON lines"
+              rm -f "$TMP_JSONL"
+              FAILED=1
+              continue
+            fi
+            
+            rm -f "$TMP_JSONL"
+          done <<< "${{ steps.find-raw.outputs.files }}"
+          
+          if [ "$FAILED" -eq 1 ]; then
+            echo "FAILED: One or more raw captures produced invalid JSONL"
+            echo "  Firmware telemetry must always emit valid JSONL (no repair fallback)"
+            exit 1
+          fi
+          
+          echo "PASS: All raw captures produce valid JSONL (0 parse errors)"

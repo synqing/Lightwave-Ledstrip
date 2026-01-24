@@ -25,7 +25,36 @@ ZoneComposerUI::ZoneComposerUI(M5GFX& display)
 }
 
 ZoneComposerUI::~ZoneComposerUI() {
-    // Cleanup handled by display
+    // CRITICAL FIX: Free ParameterMetadata allocations to prevent memory leak
+    // Each zone (4) has 4 parameters = 16 total allocations
+    for (uint8_t z = 0; z < 4; z++) {
+        // Free Effect parameter metadata
+        if (_zoneEffectLabels[z]) {
+            ParameterMetadata* meta = (ParameterMetadata*)lv_obj_get_user_data(_zoneEffectLabels[z]);
+            if (meta) delete meta;
+        }
+
+        // Free Palette parameter metadata
+        if (_zonePaletteLabels[z]) {
+            ParameterMetadata* meta = (ParameterMetadata*)lv_obj_get_user_data(_zonePaletteLabels[z]);
+            if (meta) delete meta;
+        }
+
+        // Free Speed parameter metadata
+        if (_zoneSpeedLabels[z]) {
+            ParameterMetadata* meta = (ParameterMetadata*)lv_obj_get_user_data(_zoneSpeedLabels[z]);
+            if (meta) delete meta;
+        }
+
+        // Free Brightness parameter metadata
+        if (_zoneBrightnessLabels[z]) {
+            ParameterMetadata* meta = (ParameterMetadata*)lv_obj_get_user_data(_zoneBrightnessLabels[z]);
+            if (meta) delete meta;
+        }
+    }
+
+    // LVGL widgets are automatically cleaned up by LVGL when parent screen is deleted
+    Serial.println("[ZoneComposer] Destructor - cleaned up 16 ParameterMetadata allocations");
 }
 
 void ZoneComposerUI::begin(lv_obj_t* parent) {
@@ -706,24 +735,30 @@ void ZoneComposerUI::clearSelection() {
     for (int i = 0; i < 4; i++) {
         if (_zoneEffectLabels[i]) {
             lv_obj_remove_style(_zoneEffectLabels[i], &_styleSelected, 0);
+            lv_obj_invalidate(_zoneEffectLabels[i]);
         }
         if (_zonePaletteLabels[i]) {
             lv_obj_remove_style(_zonePaletteLabels[i], &_styleSelected, 0);
+            lv_obj_invalidate(_zonePaletteLabels[i]);
         }
         if (_zoneSpeedLabels[i]) {
             lv_obj_remove_style(_zoneSpeedLabels[i], &_styleSelected, 0);
+            lv_obj_invalidate(_zoneSpeedLabels[i]);
         }
         if (_zoneBrightnessLabels[i]) {
             lv_obj_remove_style(_zoneBrightnessLabels[i], &_styleSelected, 0);
+            lv_obj_invalidate(_zoneBrightnessLabels[i]);
         }
     }
 
     // Remove highlighting from zone count and preset rows
     if (_zoneCountRow) {
         lv_obj_remove_style(_zoneCountRow, &_styleSelected, 0);
+        lv_obj_invalidate(_zoneCountRow);
     }
     if (_presetRow) {
         lv_obj_remove_style(_presetRow, &_styleSelected, 0);
+        lv_obj_invalidate(_presetRow);
     }
 
     _currentSelection.type = SelectionType::NONE;
@@ -737,6 +772,7 @@ void ZoneComposerUI::applySelectionHighlight() {
 
             if (target) {
                 lv_obj_add_style(target, &_styleSelected, 0);
+                lv_obj_invalidate(target);
             }
             break;
         }
@@ -744,12 +780,14 @@ void ZoneComposerUI::applySelectionHighlight() {
         case SelectionType::ZONE_COUNT:
             if (_zoneCountRow) {
                 lv_obj_add_style(_zoneCountRow, &_styleSelected, 0);
+                lv_obj_invalidate(_zoneCountRow);
             }
             break;
 
         case SelectionType::PRESET:
             if (_presetRow) {
                 lv_obj_add_style(_presetRow, &_styleSelected, 0);
+                lv_obj_invalidate(_presetRow);
             }
             break;
 
@@ -814,8 +852,8 @@ void ZoneComposerUI::adjustZoneParameter(uint8_t zoneIndex, int32_t delta) {
 
     switch (_activeMode) {
         case ZoneParameterMode::EFFECT: {
-            // TODO: Get max effect ID from effect list
-            constexpr int MAX_EFFECT_ID = 75;  // Placeholder
+            // Max effect ID from LightwaveOS v2 firmware (100 effects, IDs 0-99)
+            constexpr int MAX_EFFECT_ID = 99;
             int newVal = _zoneEffects[zoneIndex] + delta;
             if (newVal < 0) newVal = MAX_EFFECT_ID;
             if (newVal > MAX_EFFECT_ID) newVal = 0;
@@ -833,8 +871,8 @@ void ZoneComposerUI::adjustZoneParameter(uint8_t zoneIndex, int32_t delta) {
         }
 
         case ZoneParameterMode::PALETTE: {
-            // TODO: Get max palette ID from palette list
-            constexpr int MAX_PALETTE_ID = 23;  // Placeholder
+            // Max palette ID from LightwaveOS v2 firmware (75 palettes, IDs 0-74)
+            constexpr int MAX_PALETTE_ID = 74;
             int newVal = _zonePalettes[zoneIndex] + delta;
             if (newVal < 0) newVal = MAX_PALETTE_ID;
             if (newVal > MAX_PALETTE_ID) newVal = 0;
@@ -931,41 +969,63 @@ void ZoneComposerUI::adjustPreset(int32_t delta) {
     Serial.printf("[ZoneComposer] Preset → %s (%u zones)\n", _presetName, _editingZoneCount);
 }
 
-// Label update helpers (Phase 1 stubs - will be fully implemented in Phase 2)
+// Label update helpers (Phase 2 implementation)
 void ZoneComposerUI::updateEffectLabel(uint8_t zoneIndex) {
     if (zoneIndex >= 4 || !_zoneEffectLabels[zoneIndex]) return;
-    // TODO: Update LVGL label text in Phase 2
-    Serial.printf("[ZoneComposer] updateEffectLabel(%u) - stub\n", zoneIndex);
+
+    const char* effectName = lookupEffectName(_zoneEffects[zoneIndex]);
+    if (effectName) {
+        lv_label_set_text(_zoneEffectLabels[zoneIndex], effectName);
+    } else {
+        // Fallback to ID if name not cached
+        char buf[24];
+        snprintf(buf, sizeof(buf), "Effect #%u", _zoneEffects[zoneIndex]);
+        lv_label_set_text(_zoneEffectLabels[zoneIndex], buf);
+    }
 }
 
 void ZoneComposerUI::updatePaletteLabel(uint8_t zoneIndex) {
     if (zoneIndex >= 4 || !_zonePaletteLabels[zoneIndex]) return;
-    // TODO: Update LVGL label text in Phase 2
-    Serial.printf("[ZoneComposer] updatePaletteLabel(%u) - stub\n", zoneIndex);
+
+    const char* paletteName = lookupPaletteName(_zonePalettes[zoneIndex]);
+    if (paletteName) {
+        lv_label_set_text(_zonePaletteLabels[zoneIndex], paletteName);
+    } else {
+        // Fallback to ID if name not cached
+        char buf[24];
+        snprintf(buf, sizeof(buf), "Palette #%u", _zonePalettes[zoneIndex]);
+        lv_label_set_text(_zonePaletteLabels[zoneIndex], buf);
+    }
 }
 
 void ZoneComposerUI::updateSpeedLabel(uint8_t zoneIndex) {
     if (zoneIndex >= 4 || !_zoneSpeedLabels[zoneIndex]) return;
-    // TODO: Update LVGL label text in Phase 2
-    Serial.printf("[ZoneComposer] updateSpeedLabel(%u) - stub\n", zoneIndex);
+
+    char buf[16];
+    snprintf(buf, sizeof(buf), "SPD: %u", _zoneSpeeds[zoneIndex]);
+    lv_label_set_text(_zoneSpeedLabels[zoneIndex], buf);
 }
 
 void ZoneComposerUI::updateBrightnessLabel(uint8_t zoneIndex) {
     if (zoneIndex >= 4 || !_zoneBrightnessLabels[zoneIndex]) return;
-    // TODO: Update LVGL label text in Phase 2
-    Serial.printf("[ZoneComposer] updateBrightnessLabel(%u) - stub\n", zoneIndex);
+
+    char buf[16];
+    snprintf(buf, sizeof(buf), "BRI: %u", _zoneBrightness[zoneIndex]);
+    lv_label_set_text(_zoneBrightnessLabels[zoneIndex], buf);
 }
 
 void ZoneComposerUI::updateZoneCountLabel() {
     if (!_zoneCountValueLabel) return;
-    // TODO: Update LVGL label text in Phase 2
-    Serial.printf("[ZoneComposer] updateZoneCountLabel() - stub\n");
+
+    char buf[8];
+    snprintf(buf, sizeof(buf), "%u", _zoneCount);
+    lv_label_set_text(_zoneCountValueLabel, buf);
 }
 
 void ZoneComposerUI::updatePresetLabel() {
     if (!_presetValueLabel) return;
-    // TODO: Update LVGL label text in Phase 2
-    Serial.printf("[ZoneComposer] updatePresetLabel() - stub\n");
+
+    lv_label_set_text(_presetValueLabel, _presetName ? _presetName : "--");
 }
 
 // ============================================================================
@@ -1049,11 +1109,23 @@ void ZoneComposerUI::createInteractiveUI(lv_obj_t* parent) {
     lv_obj_set_style_text_font(title, BEBAS_BOLD_40, LV_PART_MAIN);
     lv_obj_set_style_text_color(title, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
 
-    // Spacer (right side to balance)
-    lv_obj_t* spacer = lv_obj_create(header);
-    lv_obj_set_size(spacer, 120, 44);
-    lv_obj_set_style_bg_opa(spacer, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_border_width(spacer, 0, LV_PART_MAIN);
+    // Zone Enable Toggle Button (right side)
+    _zoneEnableButton = make_zone_card(header, true);
+    lv_obj_set_size(_zoneEnableButton, 160, 44);
+    lv_obj_set_style_border_width(_zoneEnableButton, 2, LV_PART_MAIN);
+    lv_obj_set_style_border_color(_zoneEnableButton,
+                                  lv_color_hex(_zonesEnabled ? 0x00FF00 : 0xFF0000),
+                                  LV_PART_MAIN);
+    lv_obj_add_flag(_zoneEnableButton, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(_zoneEnableButton, zoneEnableButtonCb, LV_EVENT_CLICKED, this);
+
+    _zoneEnableLabel = lv_label_create(_zoneEnableButton);
+    lv_label_set_text(_zoneEnableLabel, _zonesEnabled ? "ZONES: ON" : "ZONES: OFF");
+    lv_obj_set_style_text_font(_zoneEnableLabel, RAJDHANI_BOLD_24, LV_PART_MAIN);
+    lv_obj_set_style_text_color(_zoneEnableLabel,
+                                lv_color_hex(_zonesEnabled ? 0x00FF00 : 0xFFFFFF),
+                                LV_PART_MAIN);
+    lv_obj_center(_zoneEnableLabel);
 
     uint32_t t2 = millis();
     Serial.printf("[ZC_TRACE] before controls row @ %lu ms (delta=%lu)\n", t2, t2-t1);
@@ -1352,5 +1424,39 @@ void ZoneComposerUI::backButtonCb(lv_event_t* e) {
     Serial.println("[ZoneComposer] Back button pressed - returning to GLOBAL screen");
     if (ui->_backButtonCallback) {
         ui->_backButtonCallback();
+    }
+}
+
+void ZoneComposerUI::zoneEnableButtonCb(lv_event_t* e) {
+    ZoneComposerUI* ui = (ZoneComposerUI*)lv_event_get_user_data(e);
+
+    // Toggle state
+    ui->_zonesEnabled = !ui->_zonesEnabled;
+
+    Serial.printf("[ZoneComposer] Zones %s\n", ui->_zonesEnabled ? "ENABLED" : "DISABLED");
+
+    // Update visual state
+    if (ui->_zoneEnableButton) {
+        lv_obj_set_style_border_color(ui->_zoneEnableButton,
+                                      lv_color_hex(ui->_zonesEnabled ? 0x00FF00 : 0xFF0000),
+                                      LV_PART_MAIN);
+    }
+
+    if (ui->_zoneEnableLabel) {
+        lv_label_set_text(ui->_zoneEnableLabel, ui->_zonesEnabled ? "ZONES: ON" : "ZONES: OFF");
+        lv_obj_set_style_text_color(ui->_zoneEnableLabel,
+                                    lv_color_hex(ui->_zonesEnabled ? 0x00FF00 : 0xFFFFFF),
+                                    LV_PART_MAIN);
+        lv_obj_invalidate(ui->_zoneEnableLabel);
+    }
+
+    // Send WebSocket command to LightwaveOS v2 firmware
+    if (ui->_wsClient && ui->_wsClient->isConnected()) {
+        Serial.printf("[ZoneComposer] Sending WS: zone.enable=%s\n", ui->_zonesEnabled ? "true" : "false");
+        ui->_wsClient->sendZoneEnable(ui->_zonesEnabled);
+    } else {
+        Serial.printf("[ZoneComposer] WS not connected - cannot send zone.enable (wsClient=%d connected=%d)\n",
+                      ui->_wsClient ? 1 : 0,
+                      (ui->_wsClient && ui->_wsClient->isConnected()) ? 1 : 0);
     }
 }

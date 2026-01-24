@@ -1,0 +1,2639 @@
+{
+  "format": "ITF",
+  "formatVersion": "1.0",
+  "generatedAt": "2026-01-19T20:58:04.215966",
+  "states": [
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "173767"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "173769"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "174574"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "175080"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "175088"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "175090"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "175096"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "175099"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "175106"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "175111"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "175113"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "175182"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "175190"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "175195"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "175199"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "175203"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "175209"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "175216"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "175219"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "175222"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "175309"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "175791"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176306"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176311"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176313"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176323"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176326"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176332"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176334"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176342"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176345"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176404"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176407"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176410"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176415"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176420"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176423"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176427"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176431"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176437"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176509"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176513"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176515"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176521"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176525"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176530"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176535"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176539"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176543"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176611"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176617"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176619"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176627"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176630"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176634"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {},
+          "otaState": "Idle",
+          "otaTotalSize": {
+            "#bigint": "0"
+          },
+          "otaBytesReceived": {
+            "#bigint": "0"
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "176711"
+        }
+      }
+    }
+  ]
+}

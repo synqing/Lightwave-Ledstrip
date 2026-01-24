@@ -6,7 +6,7 @@
  * Logarithmic mapping places low frequencies at center, high frequencies at edges.
  * Center-origin pattern: bass at center (LEDs 79/80), treble at edges.
  *
- * Effect ID: TBD (will be assigned in CoreEffects.cpp)
+ * Effect ID: 93
  * Family: AUDIO_REACTIVE
  * Tags: CENTER_ORIGIN | AUDIO_SYNC | SPECTRUM
  */
@@ -54,4 +54,3 @@ private:
 } // namespace ieffect
 } // namespace effects
 } // namespace lightwaveos
-

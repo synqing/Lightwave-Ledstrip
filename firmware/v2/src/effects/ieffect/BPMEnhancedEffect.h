@@ -2,7 +2,7 @@
  * @file BPMEnhancedEffect.h
  * @brief BPM Enhanced - Enhanced version with 64-bin spectrum, heavy_chroma, beatPhase sync, snare triggers
  *
- * Effect ID: 93
+ * Effect ID: 88
  * Family: GEOMETRIC
  * Tags: CENTER_ORIGIN | TRAVELING | AUDIO_REACTIVE
  *
@@ -78,4 +78,3 @@ private:
 } // namespace ieffect
 } // namespace effects
 } // namespace lightwaveos
-

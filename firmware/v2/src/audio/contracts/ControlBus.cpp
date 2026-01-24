@@ -20,6 +20,9 @@ void ControlBus::Reset() {
     m_frame = ControlBusFrame{};
     m_rms_s = 0.0f;
     m_flux_s = 0.0f;
+    m_liveliness_s = 0.0f;
+    m_last_time = AudioTime{};
+    m_time_valid = false;
     for (uint8_t i = 0; i < CONTROLBUS_NUM_BANDS; ++i) {
         m_bands_s[i] = 0.0f;
         m_heavy_bands_s[i] = 0.0f;
@@ -208,10 +211,10 @@ void ControlBus::detectAndRemoveSpikes(LookaheadBuffer& buffer,
             const float deviation = (middle_val > expected) ?
                                     (middle_val - expected) : (expected - middle_val);
 
-            // Threshold: 25% of expected value, with floor to handle near-zero values
-            const float threshold_floor = 0.05f;  // Minimum threshold (increased from 0.02)
-            const float threshold = (expected * 0.25f > threshold_floor) ?
-                                    expected * 0.25f : threshold_floor;
+            // Threshold: 15% of expected value, with floor to handle near-zero values
+            const float threshold_floor = 0.02f;  // Minimum threshold
+            const float threshold = (expected * 0.15f > threshold_floor) ?
+                                    expected * 0.15f : threshold_floor;
 
             if (deviation > threshold) {
                 // Replace spike with average of neighbors
@@ -261,6 +264,18 @@ void ControlBus::detectAndRemoveSpikes(LookaheadBuffer& buffer,
 void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& raw) {
     m_frame.t = now;
     m_frame.hop_seq++;
+
+    // Estimate hop delta time for frame-rate independent smoothing
+    float dt = 0.016f;  // Fallback ~60 FPS
+    const bool had_time = m_time_valid;
+    if (had_time) {
+        float dt_s = AudioTime_SecondsBetween(m_last_time, now);
+        if (dt_s > 0.0f && dt_s < 1.0f) {
+            dt = dt_s;
+        }
+    }
+    m_last_time = now;
+    m_time_valid = true;
 
     // ========================================================================
     // Stage 1: Clamp raw inputs to 0..1
@@ -429,13 +444,29 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     }
 
     // ========================================================================
-    // Stage 4c: Store K1 beat tracker state for saliency computation
+    // Stage 4c: Store tempo tracker state for saliency computation
+    // Effects use MusicalGrid via ctx.audio.*, not these fields directly
     // ========================================================================
-    m_frame.tempo.locked = raw.tempo.locked;
-    m_frame.tempo.confidence = raw.tempo.confidence;
-    m_frame.tempo.beat_tick = raw.tempo.beat_tick;
-    // Copy full tempo object for effects
-    m_frame.tempo = raw.tempo;
+    m_frame.tempoLocked = raw.tempoLocked;
+    m_frame.tempoConfidence = raw.tempoConfidence;
+    m_frame.tempoBeatTick = raw.tempoBeatTick;
+
+    // ========================================================================
+    // Stage 4c.1: Liveliness (tempo + spectral flux) for global speed trim
+    // ========================================================================
+    const float tempoConf = clamp01(m_frame.tempoConfidence);
+    const float fluxNow = clamp01(m_frame.fast_flux);
+    float rawLiveliness = clamp01(tempoConf * 0.6f + fluxNow * 0.4f);
+
+    // Exponential smoothing with time-constant mapping
+    const float tau = 0.30f;
+    const float alpha = 1.0f - expf(-dt / tau);
+    if (!had_time) {
+        m_liveliness_s = rawLiveliness;
+    } else {
+        m_liveliness_s = lerp(m_liveliness_s, rawLiveliness, alpha);
+    }
+    m_frame.liveliness = clamp01(m_liveliness_s);
 
     // ========================================================================
     // Stage 4d: Musical saliency computation (Musical Intelligence System Phase 1)
@@ -471,6 +502,9 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
     for (uint8_t i = 0; i < ControlBusRawInput::BINS_64_COUNT; ++i) {
         m_frame.bins64[i] = clamp01(raw.bins64[i]);
     }
+    for (uint8_t i = 0; i < ControlBusRawInput::BINS_64_COUNT; ++i) {
+        m_frame.bins64Adaptive[i] = clamp01(raw.bins64Adaptive[i]);
+    }
 
     // ========================================================================
     // Stage 6: Update spike detection telemetry frame counter
@@ -487,7 +521,9 @@ void ControlBus::UpdateFromHop(const AudioTime& now, const ControlBusRawInput& r
         m_frame.isSilent = false;
     } else {
         uint32_t now_ms = now.monotonic_us / 1000;  // Convert AudioTime to milliseconds
-        bool currently_silent = (m_frame.fast_rms < m_silence_threshold);
+        // Use the pre-gate RMS so the activity gate does not accidentally
+        // force the entire system into "silence" on quiet but real audio.
+        bool currently_silent = (clamp01(raw.rmsUngated) < m_silence_threshold);
 
         if (currently_silent && !m_silence_triggered) {
             // Start silence timer if not already started
@@ -645,20 +681,20 @@ void ControlBus::computeSaliency() {
     sal.prevRms = m_frame.rms;
 
     // ========================================================================
-    // Rhythmic Novelty: K1 Beat Tracker Integration (Phase 2)
-    // Use K1 confidence when locked, fall back to flux when unlocked
+    // Rhythmic Novelty: Tempo Tracker Integration
+    // Use tempo confidence when locked, fall back to flux when unlocked
     // ========================================================================
-    if (m_frame.tempo.locked) {
-        // K1 is phase-locked: use confidence directly (stronger beat = higher novelty)
+    if (m_frame.tempoLocked) {
+        // Tempo tracker is phase-locked: use confidence directly (stronger beat = higher novelty)
         // Add spike on beat_tick for transient response
-        float baseRhythmic = m_frame.tempo.confidence * 0.8f;  // 80% from confidence
-        if (m_frame.tempo.beat_tick) {
+        float baseRhythmic = m_frame.tempoConfidence * 0.8f;  // 80% from confidence
+        if (m_frame.tempoBeatTick) {
             sal.rhythmicNovelty = clamp01(baseRhythmic + 0.5f);  // Spike on beat
         } else {
             sal.rhythmicNovelty = baseRhythmic;
         }
     } else {
-        // K1 not locked: fall back to flux proxy (reduced weight)
+        // Tempo not locked: fall back to flux proxy (reduced weight)
         sal.rhythmicNovelty = clamp01(m_frame.fast_flux * 0.5f);
     }
 

@@ -195,18 +195,36 @@ void BPMEnhancedEffect::render(plugins::EffectContext& ctx) {
 #endif
 
     // =========================================================================
-    // PHASE ACCUMULATION (use beatPhase for sync when available)
+    // PHASE ACCUMULATION (PLL-style correction for smooth lock)
     // =========================================================================
 #if FEATURE_AUDIO_SYNC
+    // Domain constants (compute once, use consistently)
+    const float PHASE_DOMAIN = 628.3f;      // 100 * 2 * PI
+    const float HALF_DOMAIN = 314.15f;      // PHASE_DOMAIN / 2
+
+    // Always advance phase (free-run oscillator)
+    m_phase += speedNorm * 240.0f * speedMult * dt;
+
+    // Apply phase correction when tempo-locked (PLL-style P-only correction)
     if (ctx.audio.available && m_tempoLocked) {
-        // Use beatPhase for synchronization when tempo is locked
         float beatPhase = ctx.audio.beatPhase();
-        m_phase = beatPhase * 628.3f;  // Map 0-1 to 0-100*2π
-    } else {
-        // Standard phase accumulation
-        m_phase += speedNorm * 240.0f * speedMult * dt;
-        if (m_phase > 628.3f) m_phase -= 628.3f;  // Wrap at ~100*2π
+        float targetPhase = beatPhase * PHASE_DOMAIN;
+        
+        // Compute wrapped error (shortest path to target)
+        float phaseError = targetPhase - m_phase;
+        if (phaseError > HALF_DOMAIN) phaseError -= PHASE_DOMAIN;
+        if (phaseError < -HALF_DOMAIN) phaseError += PHASE_DOMAIN;
+        
+        // Proportional correction (tau ~100ms gives smooth lock)
+        // Compute ONCE per frame, not per pixel
+        const float tau = 0.1f;
+        const float correctionAlpha = 1.0f - expf(-dt / tau);
+        m_phase += phaseError * correctionAlpha;
     }
+
+    // CRITICAL: Wrap phase AFTER correction (handles negative and overflow)
+    while (m_phase >= PHASE_DOMAIN) m_phase -= PHASE_DOMAIN;
+    while (m_phase < 0.0f) m_phase += PHASE_DOMAIN;
 #else
     // Fallback: use fallback phase
     m_phase = m_fallbackPhase;

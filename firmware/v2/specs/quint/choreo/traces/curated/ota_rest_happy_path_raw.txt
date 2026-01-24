@@ -1,0 +1,519 @@
+[12058][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.017 0.024 0.015 0.009 0.012 0.006 0.005 0.003]
+[12787][1;32m[INFO][0m[AudioCapture] [1;33mDMA:[0m hop=310 R=[F9C70000..F9EFC000] >>10=[-101952..-99344]
+[13015][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.021 0.019 0.016 0.007 0.006 0.007 0.007 0.003]
+[13971][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.012 0.018 0.016 0.009 0.010 0.005 0.006 0.003]
+[ 14416][D][WiFiGeneric.cpp:1040] _eventCallback(): Arduino Event: 5 - STA_DISCONNECTED
+[ 14424][W][WiFiGeneric.cpp:1062] _eventCallback(): Reason: 2 - AUTH_EXPIRE
+[ 14431][D][WiFiGeneric.cpp:1082] _eventCallback(): WiFi Reconnect Running
+[14444][1;35m[WARN][0m[WiFi] Event: Disconnected from AP
+[ 15237][D][WiFiGeneric.cpp:1040] _eventCallback(): Arduino Event: 4 - STA_CONNECTED
+[15245][1;32m[INFO][0m[WiFi] Event: Connected to AP
+[15623][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.021 0.024 0.017 0.010 0.005 0.006 0.008 0.002]
+[16586][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.016 0.015 0.014 0.012 0.009 0.005 0.005 0.001]
+[ 16746][D][WiFiGeneric.cpp:1040] _eventCallback(): Arduino Event: 7 - STA_GOT_IP
+[ 16754][D][WiFiGeneric.cpp:1103] _eventCallback(): STA IP: 192.168.0.27, MASK: 255.255.255.0, GW: 192.168.0.1
+[16764][1;32m[INFO][0m[WiFi] Event: Got IP - 192.168.0.27
+[16765][0;37m[DEBUG][0m[WiFi] WiFi sleep disabled after GOT_IP (prevents ASSOC_LEAVE)
+[16780][1;32m[INFO][0m[WiFi] Connected! IP: 192.168.0.27, RSSI: -65 dBm
+[16877][1;32m[INFO][0m[Main] WiFi: CONNECTED to OPTUS_738CC0N
+[16877][1;32m[INFO][0m[Main] IP: 192.168.0.27
+[16877][1;32m[INFO][0m[Main] Starting Web Server...
+[16877][1;32m[INFO][0m[Main] Plugin Manager: Wired to WebServer
+[16877][1;32m[INFO][0m[WebServer] Starting v2 WebServer...
+[ 16878][W][LittleFS.cpp:77] begin(): LittleFS Already Mounted!
+[16880][0;37m[DEBUG][0m[WiFi] Applied WiFi stability settings in connected state
+[16883][1;32m[INFO][0m[WebServer] LittleFS mounted
+[16884][1;32m[INFO][0m[WebServer] WiFi already connected via WiFiManager
+[16884][1;32m[INFO][0m[V1Api] V1ApiRoutes::registerRoutes() called
+[16900][1;32m[INFO][0m[WebServer] WebSocket handler registered at /ws (max clients: 8)
+[WsCommandRouter] ERROR: Handler table full, cannot register 'ledStream.unsubscribe'
+[WsCommandRouter] ERROR: Handler table full, cannot register 'plugins.list'
+[WsCommandRouter] ERROR: Handler table full, cannot register 'plugins.stats'
+[WsCommandRouter] ERROR: Handler table full, cannot register 'plugins.reload'
+[WsCommandRouter] ERROR: Handler table full, cannot register 'ota.check'
+[WsCommandRouter] ERROR: Handler table full, cannot register 'ota.begin'
+[WsCommandRouter] ERROR: Handler table full, cannot register 'ota.chunk'
+[WsCommandRouter] ERROR: Handler table full, cannot register 'ota.abort'
+[WsCommandRouter] ERROR: Handler table full, cannot register 'ota.verify'
+[16927][1;32m[INFO][0m[WebServer] Sync UUID: LW-B43A45A589B4
+[16928][1;32m[INFO][0m[WebServer] mDNS started: http://lightwaveos.local
+[16929][1;32m[INFO][0m[WebServer] Server running on port 80
+[16929][1;32m[INFO][0m[WebServer] Connected - IP: 192.168.0.27
+[16930][1;32m[INFO][0m[Main] Web Server: RUNNING
+[16930][1;32m[INFO][0m[Main] REST API: http://lightwaveos.local/api/v1/
+[16930][1;32m[INFO][0m[Main] WebSocket: ws://lightwaveos.local/ws
+[16930][1;32m[INFO][0m[Main] ==========================================
+[16931][1;32m[INFO][0m[Main] ACTOR SYSTEM: OPERATIONAL
+[16931][1;32m[INFO][0m[Main] ==========================================
+
+Commands:
+  SPACE   - Next effect (quick tap)
+  0-9/a-k - Select effect by key
+  n/N     - Next/Prev effect
+  +/-     - Adjust brightness
+  [/]     - Adjust speed
+  ,/.     - Prev/Next palette (75 total)
+  l       - List effects
+  P       - List palettes
+  s       - Print status
+
+Effect Registers:
+  r       - Reactive effects only (audio-responsive)
+  m       - Ambient effects only (time-based)
+  *       - All effects (default)
+
+Zone Commands:
+  z       - Toggle zone mode
+  Z       - Print zone status
+  zs      - Set zone speed: zs <zoneId> <speed> OR zs <speed0> <speed1> <speed2>
+  1-5     - Load zone preset (in zone mode)
+  S       - Save all settings to NVS
+
+Transition Commands:
+  t       - Transition to next effect (random type)
+  T       - Transition to next effect (fade)
+  !       - List transition types
+
+Auto-Play (Narrative) Commands:
+  A       - Toggle auto-play mode
+  @       - Print narrative status
+
+Show Playback Commands:
+  W       - List all shows (10 presets)
+  w       - Toggle show playback
+  </>     - Previous/Next show
+  {/}     - Seek backward/forward 30s
+  #       - Print show status
+
+Color Correction Commands:
+  c       - Cycle correction mode (OFF→HSV→RGB→BOTH→OFF)
+  C       - Show color correction status
+  e       - Toggle auto-exposure
+  g       - Toggle/cycle gamma (off→2.2→2.5→2.8→off)
+  B       - Toggle brown guardrail
+  cc      - Show correction mode (0=OFF,1=HSV,2=RGB,3=BOTH)
+  cc N    - Set correction mode (0-3, accepts 'cc1' or 'cc 1')
+  ae      - Show auto-exposure status
+  ae 0/1  - Disable/enable auto-exposure (accepts 'ae0' or 'ae 0')
+  gamma   - Show gamma status
+  gamma N - Set gamma (0=off, 1.0-3.0, accepts 'gamma1.5' or 'gamma 1.5')
+  brown   - Show brown guardrail status
+  brown 0/1 - Disable/enable brown guardrail (accepts 'brown0' or 'brown 0')
+  Csave   - Save color settings to NVS
+
+TempoTracker Debug:
+  tempo   - Show BPM, confidence, phase, lock state
+
+Audio Debug Verbosity:
+  adbg         - Show current level and intervals
+  adbg <0-5>   - Set level (0=off, 2=status, 4=medium, 5=verbose)
+  adbg interval <N> - Set base interval in frames
+
+Web API:
+  GET  /api/v1/effects - List effects
+  POST /api/v1/effects/set - Set effect
+  WS   /ws - Real-time control
+
+[16934][1;32m[INFO][0m[Main] Effect registers: 22 reactive, 66 ambient, 88 total
+[Status] FPS: 138, CPU: 86%, Effect: Fire
+[17557][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.008 0.016 0.017 0.012 0.013 0.008 0.009 0.002]
+[18520][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.010 0.016 0.015 0.004 0.003 0.004 0.005 0.002]
+
+=== Validation Performance Report ===
+Total calls: 3945
+Total frames: 1000
+Avg time per call: 3.37 us
+Peak time: 69.00 us
+Total overhead per frame: 13.30 us
+CPU overhead: 0.160% (of 8.33ms frame budget)
+Theoretical estimate: 0.1% (actual: 0.160%)
+=======================================
+
+[18898][1;32m[INFO][0m[OtaHandlers] OTA: Upload starting: firmware.bin
+[18899][1;32m[INFO][0m[OtaHandlers] OTA: Firmware size: 1533454 bytes
+[18899][1;32m[INFO][0m[OtaHandlers] OTA: Free sketch space: 3342336 bytes, maxSketchSpace (aligned): 3338240 bytes
+[ 18899][D][Updater.cpp:139] begin(): OTA Partition: app1
+[18905][1;32m[INFO][0m[OtaHandlers] OTA: Update started, expecting 1533454 bytes (max OTA space: 3338240 bytes)
+[18905][1;32m[INFO][0m[OtaHandlers] OTA: Partition info - Free space: 3342336 bytes, Firmware size: 1533454 bytes, Max OTA space: 3338240 bytes
+{"event":"ota.rest.begin","ts_mono_ms":18905,"clientIP":"192.168.0.27","totalBytes":1533454,"tokenValid":true,"schemaVersion":"1.0.0"}
+{"event":"ota.rest.progress","ts_mono_ms":19720,"bytesWritten":153502,"totalBytes":1533454,"percent":10,"schemaVersion":"1.0.0"}
+{"event":"ota.rest.progress","ts_mono_ms":20484,"bytesWritten":307154,"totalBytes":1533454,"percent":20,"schemaVersion":"1.0.0"}
+[20523][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.010 0.007 0.005 0.007 0.002 0.003 0.003 0.001]
+{"event":"ota.rest.progress","ts_mono_ms":21232,"bytesWritten":460806,"totalBytes":1533454,"percent":30,"schemaVersion":"1.0.0"}
+{"event":"ota.rest.progress","ts_mono_ms":21992,"bytesWritten":614458,"totalBytes":1533454,"percent":40,"schemaVersion":"1.0.0"}
+{"event":"ota.rest.progress","ts_mono_ms":22777,"bytesWritten":768110,"totalBytes":1533454,"percent":50,"schemaVersion":"1.0.0"}
+[23339][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.009 0.008 0.005 0.005 0.003 0.003 0.003 0.002]
+{"event":"ota.rest.progress","ts_mono_ms":23505,"bytesWritten":920326,"totalBytes":1533454,"percent":60,"schemaVersion":"1.0.0"}
+{"event":"ota.rest.progress","ts_mono_ms":24235,"bytesWritten":1073978,"totalBytes":1533454,"percent":70,"schemaVersion":"1.0.0"}
+{"event":"ota.rest.progress","ts_mono_ms":24983,"bytesWritten":1227630,"totalBytes":1533454,"percent":80,"schemaVersion":"1.0.0"}
+{"event":"ota.rest.progress","ts_mono_ms":25942,"bytesWritten":1381282,"totalBytes":1533454,"percent":90,"schemaVersion":"1.0.0"}
+[26070][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.012 0.007 0.007 0.006 0.003 0.003 0.004 0.002]
+[Status] FPS: 62, CPU: 100%, Effect: Fire
+{"event":"ota.rest.progress","ts_mono_ms":27067,"bytesWritten":1533264,"totalBytes":1533454,"percent":99,"schemaVersion":"1.0.0"}
+[27067][1;32m[INFO][0m[OtaHandlers] OTA: Upload complete, 1533264 bytes written
+[27333][1;32m[INFO][0m[OtaHandlers] OTA: Update complete, rebooting...
+{"event":"ota.rest.complete","ts_mono_ms":27334,"duration":8435,"finalSize":1533264,"schemaVersion":"1.0.0"}
+[27557][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.014 0.010 0.018 0.007 0.003 0.006 0.003 0.001]
+[ 27836][D][WiFiGeneric.cpp:1040] _eventCallback(): Arduino Event: 5 - STA_DISCONNECTED
+[ 27844][W][WiFiGeneric.cpp:1062] _eventCallback(): Reason: 8 - ASSOC_LEAVE
+[27852][1;35m[WARN][0m[WiFi] Event: Disconnected from AP
+[ 27852][D][WiFiGeneric.cpp:1040] _eventCallback(): Arduino Event: 3 - STA_STOP
+ESP-ROM:esp32s3-20210327
+Build:Mar 27 2021
+rst:0xc (RTC_SW_CPU_RST),boot:0x8 (SPI_FAST_FLASH_BOOT)
+Saved PC:0x420fe706
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fce3808,len:0x41c
+load:0x403c9700,len:0x9a8
+load:0x403cc700,len:0x28ac
+entry 0x403c98b8
+{"event":"telemetry.boot","ts_mono_ms":0,"version":"2.0"}
+[1519][1;32m[INFO][0m[Main] ==========================================
+[1519][1;32m[INFO][0m[Main] LightwaveOS v2 - Actor System + Zones
+[1519][1;32m[INFO][0m[Main] ==========================================
+[1519][1;32m[INFO][0m[StackMonitor] Initialized (overflow detection enabled)
+[1519][1;32m[INFO][0m[StackMonitor] Warning threshold: 80%
+[1520][1;32m[INFO][0m[Main] Stack Monitor: INITIALIZED
+[1520][1;32m[INFO][0m[StackMonitor] Stack profiling started
+[1520][1;32m[INFO][0m[Main] Stack Profiling: STARTED
+[1520][1;32m[INFO][0m[HeapMonitor] Initialized (heap corruption detection enabled)
+[1520][1;32m[INFO][0m[HeapMonitor] Initial free heap: 8659707 bytes
+[1520][1;32m[INFO][0m[HeapMonitor] Largest free block: 8257524 bytes
+[1520][1;32m[INFO][0m[Main] Heap Monitor: INITIALIZED
+[1520][1;32m[INFO][0m[LeakDetector] Initialized (leak detection enabled)
+[1520][1;32m[INFO][0m[LeakDetector] Leak threshold: 30 seconds
+[1520][1;32m[INFO][0m[LeakDetector] Baseline heap: 8659707 bytes
+[1520][1;32m[INFO][0m[Main] Memory Leak Detector: INITIALIZED
+[1520][1;32m[INFO][0m[ValProfiler] Initialized (validation profiling enabled)
+[1520][1;32m[INFO][0m[Main] Validation Profiler: INITIALIZED
+[2521][1;32m[INFO][0m[LeakDetector] Baseline heap reset to: 8659707 bytes
+[2521][1;32m[INFO][0m[Main] Initializing Actor System...
+[  2521][I][ActorSystem.cpp:63] init(): [ActorSystem] Initializing Actor System...
+[  2529][I][ActorSystem.cpp:64] init(): [ActorSystem] Free heap: 8659707 bytes
+[  2582][I][ActorSystem.cpp:109] init(): [ActorSystem] AudioActor created (Phase 2 audio sync enabled)
+[  2591][I][ActorSystem.cpp:114] init(): [ActorSystem] Actors created successfully
+[  2598][I][ActorSystem.cpp:115] init(): [ActorSystem] Free heap after init: 8601851 bytes
+[2606][1;32m[INFO][0m[Main] Actor System: INITIALIZED
+[2606][1;32m[INFO][0m[Main] Registering effects...
+[2607][0;37m[DEBUG][0m[Renderer] Registered effect 0: Fire (IEffect native)
+[2607][0;37m[DEBUG][0m[Renderer] Registered effect 1: Ocean (IEffect native)
+[2607][0;37m[DEBUG][0m[Renderer] Registered effect 2: Plasma (IEffect native)
+[2607][0;37m[DEBUG][0m[Renderer] Registered effect 3: Confetti (IEffect native)
+[2607][0;37m[DEBUG][0m[Renderer] Registered effect 4: Sinelon (IEffect native)
+[2607][0;37m[DEBUG][0m[Renderer] Registered effect 5: Juggle (IEffect native)
+[2607][0;37m[DEBUG][0m[Renderer] Registered effect 6: BPM (IEffect native)
+[2607][0;37m[DEBUG][0m[Renderer] Registered effect 7: Wave Ambient (IEffect native)
+[2608][0;37m[DEBUG][0m[Renderer] Registered effect 8: Ripple (IEffect native)
+[2608][0;37m[DEBUG][0m[Renderer] Registered effect 9: Heartbeat (IEffect native)
+[2608][0;37m[DEBUG][0m[Renderer] Registered effect 10: Interference (IEffect native)
+[2608][0;37m[DEBUG][0m[Renderer] Registered effect 11: Breathing (IEffect native)
+[2608][0;37m[DEBUG][0m[Renderer] Registered effect 12: Pulse (IEffect native)
+[2608][0;37m[DEBUG][0m[Renderer] Registered effect 13: LGP Box Wave (IEffect native)
+[2608][0;37m[DEBUG][0m[Renderer] Registered effect 14: LGP Holographic (IEffect native)
+[2608][0;37m[DEBUG][0m[Renderer] Registered effect 15: LGP Modal Resonance (IEffect native)
+[2609][0;37m[DEBUG][0m[Renderer] Registered effect 16: LGP Interference Scanner (IEffect native)
+[2609][0;37m[DEBUG][0m[Renderer] Registered effect 17: LGP Wave Collision (IEffect native)
+[2609][0;37m[DEBUG][0m[Renderer] Registered effect 18: LGP Diamond Lattice (IEffect native)
+[2609][0;37m[DEBUG][0m[Renderer] Registered effect 19: LGP Hexagonal Grid (IEffect native)
+[2609][0;37m[DEBUG][0m[Renderer] Registered effect 20: LGP Spiral Vortex (IEffect native)
+[2609][0;37m[DEBUG][0m[Renderer] Registered effect 21: LGP Sierpinski (IEffect native)
+[2609][0;37m[DEBUG][0m[Renderer] Registered effect 22: LGP Chevron Waves (IEffect native)
+[2610][0;37m[DEBUG][0m[Renderer] Registered effect 23: LGP Concentric Rings (IEffect native)
+[2610][0;37m[DEBUG][0m[Renderer] Registered effect 24: LGP Star Burst (IEffect native)
+[2610][0;37m[DEBUG][0m[Renderer] Registered effect 25: LGP Mesh Network (IEffect native)
+[2610][0;37m[DEBUG][0m[Renderer] Registered effect 26: LGP Moire Curtains (IEffect native)
+[2610][0;37m[DEBUG][0m[Renderer] Registered effect 27: LGP Radial Ripple (IEffect native)
+[2610][0;37m[DEBUG][0m[Renderer] Registered effect 28: LGP Holographic Vortex (IEffect native)
+[2610][0;37m[DEBUG][0m[Renderer] Registered effect 29: LGP Evanescent Drift (IEffect native)
+[2610][0;37m[DEBUG][0m[Renderer] Registered effect 30: LGP Chromatic Shear (IEffect native)
+[2611][0;37m[DEBUG][0m[Renderer] Registered effect 31: LGP Modal Cavity (IEffect native)
+[2611][0;37m[DEBUG][0m[Renderer] Registered effect 32: LGP Fresnel Zones (IEffect native)
+[2611][0;37m[DEBUG][0m[Renderer] Registered effect 33: LGP Photonic Crystal (IEffect native)
+[2611][0;37m[DEBUG][0m[Renderer] Registered effect 34: LGP Aurora Borealis (IEffect native)
+[2611][0;37m[DEBUG][0m[Renderer] Registered effect 35: LGP Bioluminescent Waves (IEffect native)
+[2611][0;37m[DEBUG][0m[Renderer] Registered effect 36: LGP Plasma Membrane (IEffect native)
+[2611][0;37m[DEBUG][0m[Renderer] Registered effect 37: LGP Neural Network (IEffect native)
+[2612][0;37m[DEBUG][0m[Renderer] Registered effect 38: LGP Crystalline Growth (IEffect native)
+[2612][0;37m[DEBUG][0m[Renderer] Registered effect 39: LGP Fluid Dynamics (IEffect native)
+[2612][0;37m[DEBUG][0m[Renderer] Registered effect 40: LGP Quantum Tunneling (IEffect native)
+[2612][0;37m[DEBUG][0m[Renderer] Registered effect 41: LGP Gravitational Lensing (IEffect native)
+[2612][0;37m[DEBUG][0m[Renderer] Registered effect 42: LGP Time Crystal (IEffect native)
+[2612][0;37m[DEBUG][0m[Renderer] Registered effect 43: LGP Soliton Waves (IEffect native)
+[2612][0;37m[DEBUG][0m[Renderer] Registered effect 44: LGP Metamaterial Cloak (IEffect native)
+[2613][0;37m[DEBUG][0m[Renderer] Registered effect 45: LGP GRIN Cloak (IEffect native)
+[2613][0;37m[DEBUG][0m[Renderer] Registered effect 46: LGP Caustic Fan (IEffect native)
+[2613][0;37m[DEBUG][0m[Renderer] Registered effect 47: LGP Birefringent Shear (IEffect native)
+[2613][0;37m[DEBUG][0m[Renderer] Registered effect 48: LGP Anisotropic Cloak (IEffect native)
+[2613][0;37m[DEBUG][0m[Renderer] Registered effect 49: LGP Evanescent Skin (IEffect native)
+[2613][0;37m[DEBUG][0m[Renderer] Registered effect 50: LGP Color Temperature (IEffect native)
+[2613][0;37m[DEBUG][0m[Renderer] Registered effect 51: LGP RGB Prism (IEffect native)
+[2613][0;37m[DEBUG][0m[Renderer] Registered effect 52: LGP Complementary Mixing (IEffect native)
+[2614][0;37m[DEBUG][0m[Renderer] Registered effect 53: LGP Quantum Colors (IEffect native)
+[2614][0;37m[DEBUG][0m[Renderer] Registered effect 54: LGP Doppler Shift (IEffect native)
+[2614][0;37m[DEBUG][0m[Renderer] Registered effect 55: LGP Color Accelerator (IEffect native)
+[2614][0;37m[DEBUG][0m[Renderer] Registered effect 56: LGP DNA Helix (IEffect native)
+[2614][0;37m[DEBUG][0m[Renderer] Registered effect 57: LGP Phase Transition (IEffect native)
+[2614][0;37m[DEBUG][0m[Renderer] Registered effect 58: LGP Chromatic Aberration (IEffect native)
+[2614][0;37m[DEBUG][0m[Renderer] Registered effect 59: LGP Perceptual Blend (IEffect native)
+[2615][0;37m[DEBUG][0m[Renderer] Registered effect 60: LGP Chladni Harmonics (IEffect native)
+[2615][0;37m[DEBUG][0m[Renderer] Registered effect 61: LGP Gravitational Wave Chirp (IEffect native)
+[2615][0;37m[DEBUG][0m[Renderer] Registered effect 62: LGP Quantum Entanglement (IEffect native)
+[2615][0;37m[DEBUG][0m[Renderer] Registered effect 63: LGP Mycelial Network (IEffect native)
+[2615][0;37m[DEBUG][0m[Renderer] Registered effect 64: LGP Riley Dissonance (IEffect native)
+[2615][0;37m[DEBUG][0m[Renderer] Registered effect 65: LGP Chromatic Lens (IEffect native)
+[2615][0;37m[DEBUG][0m[Renderer] Registered effect 66: LGP Chromatic Pulse (IEffect native)
+[2615][0;37m[DEBUG][0m[Renderer] Registered effect 67: LGP Chromatic Interference (IEffect native)
+[2616][0;37m[DEBUG][0m[Renderer] Registered effect 68: Audio Test (IEffect native)
+[2616][0;37m[DEBUG][0m[Renderer] Registered effect 69: Beat Pulse (IEffect native)
+[2616][0;37m[DEBUG][0m[Renderer] Registered effect 70: Spectrum Bars (IEffect native)
+[2616][0;37m[DEBUG][0m[Renderer] Registered effect 71: Bass Breath (IEffect native)
+[2616][0;37m[DEBUG][0m[Renderer] Registered effect 72: Audio Waveform (IEffect native)
+[2616][0;37m[DEBUG][0m[Renderer] Registered effect 73: Audio Bloom (IEffect native)
+[2616][0;37m[DEBUG][0m[Renderer] Registered effect 74: LGP Star Burst (Narrative) (IEffect native)
+[2617][0;37m[DEBUG][0m[Renderer] Registered effect 75: LGP Chord Glow (IEffect native)
+[2617][0;37m[DEBUG][0m[Renderer] Registered effect 76: Wave Reactive (IEffect native)
+[2617][0;37m[DEBUG][0m[Renderer] Registered effect 77: LGP Perlin Veil (IEffect native)
+[2617][0;37m[DEBUG][0m[Renderer] Registered effect 78: LGP Perlin Shocklines (IEffect native)
+[2617][0;37m[DEBUG][0m[Renderer] Registered effect 79: LGP Perlin Caustics (IEffect native)
+[2617][0;37m[DEBUG][0m[Renderer] Registered effect 80: LGP Perlin Interference Weave (IEffect native)
+[2617][0;37m[DEBUG][0m[Renderer] Registered effect 81: LGP Perlin Veil Ambient (IEffect native)
+[2617][0;37m[DEBUG][0m[Renderer] Registered effect 82: LGP Perlin Shocklines Ambient (IEffect native)
+[2618][0;37m[DEBUG][0m[Renderer] Registered effect 83: LGP Perlin Caustics Ambient (IEffect native)
+[2618][0;37m[DEBUG][0m[Renderer] Registered effect 84: LGP Perlin Interference Weave Ambient (IEffect native)
+[2618][0;37m[DEBUG][0m[Renderer] Registered effect 85: Perlin Test: FastLED (IEffect native)
+[2618][0;37m[DEBUG][0m[Renderer] Registered effect 86: Perlin Test: Emotiscope2 Full (IEffect native)
+[2618][0;37m[DEBUG][0m[Renderer] Registered effect 87: Perlin Test: Emotiscope2 Quarter (IEffect native)
+[OK] Effect count validated: 88 effects registered (matches expected)
+[2618][1;32m[INFO][0m[Main] Effects registered: 88
+[2618][1;32m[INFO][0m[Main] Initializing NVS...
+[NVS] Initializing NVS flash...
+[NVS] NVS flash initialized successfully
+[NVS] Partition stats: 128 entries used, 502 entries free
+[2619][1;32m[INFO][0m[Main] NVS: INITIALIZED
+[2619][1;32m[INFO][0m[Main] Initializing Zone Composer...
+[ZoneComposer] Initialized
+[ZoneConfig] No saved configuration found (first boot)
+[ZoneComposer] Layout set to 3 zones
+[ZoneComposer] Loaded preset: Triple Rings
+[2619][1;32m[INFO][0m[Main] Zone Composer: INITIALIZED
+[2619][1;32m[INFO][0m[Main] Preset: Triple Rings (default)
+[2619][1;32m[INFO][0m[Main] Starting Actor System...
+[  2619][I][ActorSystem.cpp:146] start(): [ActorSystem] Starting actors...
+[  2626][D][Actor.cpp:279] run(): [Actor] [Renderer] Task started, calling onStart()
+[2634][1;32m[INFO][0m[Renderer] Initializing LEDs on Core 1
+[  2639][I][Actor.cpp:113] start(): [Actor] [Renderer] Started on core 1 (priority=5, stack=16384)
+[2644][1;32m[INFO][0m[Renderer] FastLED initialized: 2x160 LEDs on pins 4/5
+[  2644][I][MessageBus.cpp:60] MessageBus(): [MessageBus] MessageBus initialized (max 32 types, 8 subs/type)
+[  2658][D][MessageBus.cpp:112] subscribe(): [MessageBus] Actor 'Renderer' subscribed to type 0x83 (now 1 subs)
+[2668][1;32m[INFO][0m[Renderer] Ready - 88 effects, brightness=96, target=120 FPS
+[  2668][D][Actor.[c p p2:626789]][ Ir]u[nA(c)t:o r[.Accptpo:r1]1 3[]S hsotwaDritr(e)c:t o[rA]c tToars]k  [sSthaorwtDeidr,e cctaolr]l iStngar otnedSt aornt c(o)r
+ 0 (priority=2, stack=12288)
+[  2678][I][ColorCorrectionEngine.cpp:73] initLUTs(): [ColorCorrection] LUTs initialized (gamma=2.2)
+[  2693][I][ShowDirectorActor.cpp:124] onStart(): [ShowDirector] ShowDirec[t o r2A6c9t3o]r[ Es]t[aPrrteifnegr eonnc eCso.rcep p0:
+0] begin(): nvs_open failed: NOT_FOUND
+[  2708[] [ I2]7[0S8h]o[wWD]i[rCeocltoorrCAocrtroerc.tcipopn:E1ng9i]n eo.ncSptpa:r4t3(7)]:  l[oSahdoFwrDoimrNeVcSt(o)r:]  [SChoowlDoirreCcortorercActtioor n]re NadVSy 
+ot found, using defaults
+[  2725][D][Actor.cpp:279] run(): [Actor] [Audio] Task started, calling onStart()
+[  2725][I][Actor.cpp:113] start(): [Actor] [Audio] Started on core 0 (priority=4, stack=16384)
+[2741][1;32m[INFO][0m[Audio] AudioActor starting on Core 0
+[2741][1;32m[INFO][0m[AudioCapture] Initializing I2S (legacy driver with >>10 shift)
+[  2741][I][ActorSystem.cpp:191] start(): [ActorSystem] Audio integration enabled - ControlBus + TempoTracker
+[2742][1;32m[INFO][0m[AudioCapture] I2S configured: STEREO, MSB format, >>10 shift
+[2742][1;32m[INFO][0m[AudioCapture] I2S initialized (legacy driver, >>10 shift)
+[2743][1;32m[INFO][0m[AudioCapture]   Sample rate: 12800 Hz
+[2743][1;32m[INFO][0m[AudioCapture]   Hop size: 256 samples (2=12 DIN=13
+[2745][1;32m[INFO][0m[Audio] TempoTracker initialized
+[2745][1;32m[INFO][0m[Audio] AudioActor started (tick=20ms, hop=256, rate=50.0Hz)
+[  2751][I][ActorSystem.cpp:201] start(): [ActorSystem] All actors started successfully
+[  2759][I][ActorSystem.cpp:202] start(): [ActorSystem] Free heap: 8413727 bytes
+[2766][1;32m[INFO][0m[Main] Actor System: RUNNING
+[2766][1;32m[INFO][0m[Main] Initializing Plugin Manager...
+[2767][0;37m[DEBUG][0m[PluginMgr] PluginManagerActor constructed
+[2767][1;32m[INFO][0m[Main] Plugin Manager: Target registry set to RendererActor
+[2767][1;32m[INFO][0m[PluginMgr] PluginManagerActor starting...
+[2767][1;32m[INFO][0m[PluginMgr] Loading plugins from LittleFS...
+[2783][1;32m[INFO][0m[AudioCapture] [1;33mDMA:[0m hop=1 R=[80000000..7FFFFFFF] >>10=[-2097152..2097151]
+[2856][0;37m[DEBUG][0m[PluginMgr] Found manifest: /test-additive.plugin.json
+[2917][0;37m[DEBUG][0m[PluginMgr] Found manifest: /test-schema3-invalid.plugin.json
+[2969][0;37m[DEBUG][0m[PluginMgr] Found manifest: /test-schema3.plugin.json
+[3044][0;37m[DEBUG][0m[PluginMgr] Found manifest: /test-unknown-key-v2.plugin.json
+[3113][0;37m[DEBUG][0m[PluginMgr] Found manifest: /test-unknown.plugin.json
+[3157][0;37m[DEBUG][0m[PluginMgr] Found manifest: /test-v2-valid.plugin.json
+[3187][1;32m[INFO][0m[PluginMgr] Plugin manifests applied: 0 effects from 6 manifests
+[3187][1;32m[INFO][0m[Main] Plugin Manager: INITIALIZED
+[3187][1;32m[INFO][0m[Main] Loading system state...
+[ZoneConfig] No saved system state (first boot)
+[3188][0;37m[DEBUG][0m[Renderer] Brightness: 128
+[3189][0;37m[DEBUG][0m[Renderer] Speed: 15
+[3190][1;32m[INFO][0m[Main] Using defaults (first boot)
+[3190][1;32m[INFO][0m[Main] Initializing WiFiManager...
+[3190][1;32m[INFO][0m[WiFi] Configured networks: OPTUS_738CC0N (primary), VX220-013F (fallback)
+[3190][1;32m[INFO][0m[WiFi] Starting non-blocking WiFi management
+[  3205][D][WiFiGeneric.cpp:1040] _eventCallback(): Arduino Event: 0 - WIFI_READY
+[  3249][D][WiFiGeneric.cpp:1040] _eventCallback(): Arduino Event: 2 - STA_START
+[3253][1;32m[INFO][0m[WiFi] Task started
+[3254][1;32m[INFO][0m[WiFi] Starting network scan...
+[3259][1;32m[INFO][0m[WiFi] Task created on Core 0 (stack: 4096 bytes)
+[3259][1;32m[INFO][0m[Main] WiFiManager: STARTED
+[3259][1;32m[INFO][0m[Main] Connecting to WiFi...
+[3354][0;37m[DEBUG][0m[WiFi] STATE: SCANNING
+[4061][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000]
+[5028][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000]
+[5986][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000]
+[6949][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000]
+[7906][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000]
+[8854][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000]
+[9804][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000]
+[ 10169][D][WiFiGeneric.cpp:1040] _eventCallback(): Arduino Event: 1 - SCAN_DONE
+[10177][0;37m[DEBUG][0m[WiFi] Event: Scan complete
+[10178][0;37m[DEBUG][0m[WiFi] Found 10 networks
+[10178][1;32m[INFO][0m[WiFi] Best channel for 'OPTUS_738CC0N': 6
+[10278][0;37m[DEBUG][0m[WiFi] STATE: CONNECTING
+[10278][1;32m[INFO][0m[WiFi] Connecting to 'OPTUS_738CC0N' on channel 6
+[10287][0;37m[DEBUG][0m[WiFi] WiFi sleep disabled, auto-reconnect enabled
+[ 11076][D][WiFiGeneric.cpp:1040] _eventCallback(): Arduino Event: 4 - STA_CONNECTED
+[11085][1;32m[INFO][0m[WiFi] Event: Connected to AP
+[11452][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000]
+[ 11587][D][WiFiGeneric.cpp:1040] _eventCallback(): Arduino Event: 7 - STA_GOT_IP
+[ 11595][D][WiFiGeneric.cpp:1103] _eventCallback(): STA IP: 192.168.0.27, MASK: 255.255.255.0, GW: 192.168.0.1
+[11605][1;32m[INFO][0m[WiFi] Event: Got IP - 192.168.0.27
+[11606][0;37m[DEBUG][0m[WiFi] WiFi sleep disabled after GOT_IP (prevents ASSOC_LEAVE)
+[11656][1;32m[INFO][0m[WiFi] Connected! IP: 192.168.0.27, RSSI: -66 dBm
+[11709][1;32m[INFO][0m[Main] WiFi: CONNECTED to OPTUS_738CC0N
+[11709][1;32m[INFO][0m[Main] IP: 192.168.0.27
+[11710][1;32m[INFO][0m[Main] Starting Web Server...
+[11710][1;32m[INFO][0m[Main] Plugin Manager: Wired to WebServer
+[11711][1;32m[INFO][0m[WebServer] Starting v2 WebServer...
+[ 11711][W][LittleFS.cpp:77] begin(): LittleFS Already Mounted!
+[11716][1;32m[INFO][0m[WebServer] LittleFS mounted
+[11717][1;32m[INFO][0m[WebServer] WiFi already connected via WiFiManager
+[11717][1;32m[INFO][0m[V1Api] V1ApiRoutes::registerRoutes() called
+[11733][1;32m[INFO][0m[WebServer] WebSocket handler registered at /ws (max clients: 8)
+[WsCommandRouter] ERROR: Handler table full, cannot register 'ledStream.unsubscribe'
+[WsCommandRouter] ERROR: Handler table full, cannot register 'plugins.list'
+[WsCommandRouter] ERROR: Handler table full, cannot register 'plugins.stats'
+[WsCommandRouter] ERROR: Handler table full, cannot register 'plugins.reload'
+[WsCommandRouter] ERROR: Handler table full, cannot register 'ota.check'
+[WsCommandRouter] ERROR: Handler table full, cannot register 'ota.begin'
+[WsCommandRouter] ERROR: Handler table full, cannot register 'ota.chunk'
+[WsCommandRouter] ERROR: Handler table full, cannot register 'ota.abort'
+[WsCommandRouter] ERROR: Handler table full, cannot register 'ota.verify'
+[11756][0;37m[DEBUG][0m[WiFi] Applied WiFi stability settings in connected state
+[11764][1;32m[INFO][0m[WebServer] Sync UUID: LW-B43A45A589B4
+[11764][1;32m[INFO][0m[WebServer] mDNS started: http://lightwaveos.local
+[11764][1;32m[INFO][0m[WebServer] Server running on port 80
+[11765][1;32m[INFO][0m[WebServer] Connected - IP: 192.168.0.27
+[11765][1;32m[INFO][0m[Main] Web Server: RUNNING
+[11765][1;32m[INFO][0m[Main] REST API: http://lightwaveos.local/api/v1/
+[11765][1;32m[INFO][0m[Main] WebSocket: ws://lightwaveos.local/ws
+[11765][1;32m[INFO][0m[Main] ==========================================
+[11765][1;32m[INFO][0m[Main] ACTOR SYSTEM: OPERATIONAL
+[11765][1;32m[INFO][0m[Main] ==========================================
+
+Commands:
+  SPACE   - Next effect (quick tap)
+  0-9/a-k - Select effect by key
+  n/N     - Next/Prev effect
+  +/-     - Adjust brightness
+  [/]     - Adjust speed
+  ,/.     - Prev/Next palette (75 total)
+  l       - List effects
+  P       - List palettes
+  s       - Print status
+
+Effect Registers:
+  r       - Reactive effects only (audio-responsive)
+  m       - Ambient effects only (time-based)
+  *       - All effects (default)
+
+Zone Commands:
+  z       - Toggle zone mode
+  Z       - Print zone status
+  zs      - Set zone speed: zs <zoneId> <speed> OR zs <speed0> <speed1> <speed2>
+  1-5     - Load zone preset (in zone mode)
+  S       - Save all settings to NVS
+
+Transition Commands:
+  t       - Transition to next effect (random type)
+  T       - Transition to next effect (fade)
+  !       - List transition types
+
+Auto-Play (Narrative) Commands:
+  A       - Toggle auto-play mode
+  @       - Print narrative status
+
+Show Playback Commands:
+  W       - List all shows (10 presets)
+  w       - Toggle show playback
+  </>     - Previous/Next show
+  {/}     - Seek backward/forward 30s
+  #       - Print show status
+
+Color Correction Commands:
+  c       - Cycle correction mode (OFF→HSV→RGB→BOTH→OFF)
+  C       - Show color correction status
+  e       - Toggle auto-exposure
+  g       - Toggle/cycle gamma (off→2.2→2.5→2.8→off)
+  B       - Toggle brown guardrail
+  cc      - Show correction mode (0=OFF,1=HSV,2=RGB,3=BOTH)
+  cc N    - Set correction mode (0-3, accepts 'cc1' or 'cc 1')
+  ae      - Show auto-exposure status
+  ae 0/1  - Disable/enable auto-exposure (accepts 'ae0' or 'ae 0')
+  gamma   - Show gamma status
+  gamma N - Set gamma (0=off, 1.0-3.0, accepts 'gamma1.5' or 'gamma 1.5')
+  brown   - Show brown guardrail status
+  brown 0/1 - Disable/enable brown guardrail (accepts 'brown0' or 'brown 0')
+  Csave   - Save color settings to NVS
+
+TempoTracker Debug:
+  tempo   - Show BPM, confidence, phase, lock state
+
+Audio Debug Verbosity:
+  adbg         - Show current level and intervals
+  adbg <0-5>   - Set level (0=off, 2=status, 4=medium, 5=verbose)
+  adbg interval <N> - Set base interval in frames
+
+Web API:
+  GET  /api/v1/effects - List effects
+  POST /api/v1/effects/set - Set effect
+  WS   /ws - Real-time control
+
+[11771][1;32m[INFO][0m[Main] Effect registers: 22 reactive, 66 ambient, 88 total
+[Status] FPS: 132, CPU: 90%, Effect: Fire
+[12424][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000]
+[13155][1;32m[INFO][0m[AudioCapture] [1;33mDMA:[0m hop=310 R=[00000000..00000000] >>10=[0..0]
+[13377][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000]
+[14334][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000]
+[15287][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000]
+[16243][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000]
+[17200][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000]
+[18155][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000]
+
+=== Validation Performance Report ===
+Total calls: 3975
+Total frames: 1000
+Avg time per call: 3.37 us
+Peak time: 17.00 us
+Total overhead per frame: 13.41 us
+CPU overhead: 0.161% (of 8.33ms frame budget)
+Theoretical estimate: 0.1% (actual: 0.161%)
+=======================================
+
+[19112][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000]
+[20069][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000]
+[21027][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000]
+[Status] FPS: 136, CPU: 87%, Effect: Fire
+[21984][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000]
+[22717][1;32m[INFO][0m[AudioCapture] [1;33mDMA:[0m hop=620 R=[00000000..00000000] >>10=[0..0]
+[22728][1;32m[INFO][0m[Audio] Audio alive: [1;33mmic=-80.0dB[0m cap=620 pk=0 pkC=0 rms=0.0000->0.000 pre=0.0000 g=1.03 dc=0.0 clip=0 flux=0.000 min=0 max=0 mean=0.0
+[22729][1;32m[INFO][0m[Audio] Spike stats: frames=620 detected=57 corrected=21 avg/frame=0.000 removed=2.98
+[22729][1;32m[INFO][0m[Audio] Saliency: overall=0.000 dom=2 H=0.000 R=0.000 T=0.000 D=0.000
+[22730][1;32m[INFO][0m[Audio] Style: 5 conf=0.60 [R=0.30 H=0.20 M=0.00 T=0.49 D=0.60]
+[22730][1;32m[INFO][0m[Audio] [1;35mBeat:[0m BPM=92.0 conf=0.00 phase=0.70 lock=no
+[22942][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000]
+[23906][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000]
+[24863][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000]
+[25816][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000]
+[26773][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000]
+[27729][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000]

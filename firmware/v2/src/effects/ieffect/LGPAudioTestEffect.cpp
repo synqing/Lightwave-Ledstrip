@@ -10,7 +10,6 @@
 
 #include "LGPAudioTestEffect.h"
 #include "../CoreEffects.h"
-#include "../enhancement/SmoothingEngine.h"
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
@@ -24,16 +23,6 @@ namespace ieffect {
 
 bool LGPAudioTestEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
-    // Initialize smoothing followers
-    m_rmsFollower.reset(0.0f);
-    for (int i = 0; i < 8; i++) {
-        m_bandFollowers[i].reset(0.0f);
-        m_smoothedBands[i] = 0.0f;
-        m_targetBands[i] = 0.0f;
-    }
-    m_lastHopSeq = 0;
-    m_targetRms = 0.0f;
-    
     m_beatDecay = 0.0f;
     m_lastBeatPhase = 0.0f;
     m_fallbackPhase = 0.0f;
@@ -51,28 +40,15 @@ void LGPAudioTestEffect::render(plugins::EffectContext& ctx) {
     float bands[8] = {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f};
 
     if (ctx.audio.available) {
-        float dt = ctx.getSafeDeltaSeconds();
-        float moodNorm = ctx.getMoodNormalized();
-        
-        // Hop-based updates: update targets only on new hops
-        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
-        if (newHop) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
-            m_targetRms = ctx.audio.rms();
-            for (int i = 0; i < 8; ++i) {
-                m_targetBands[i] = ctx.audio.getBand(i);
-            }
-        }
-        
-        // Smooth toward targets every frame with MOOD-adjusted smoothing
-        rms = m_rmsFollower.updateWithMood(m_targetRms, dt, moodNorm);
-        for (int i = 0; i < 8; ++i) {
-            m_smoothedBands[i] = m_bandFollowers[i].updateWithMood(m_targetBands[i], dt, moodNorm);
-            bands[i] = m_smoothedBands[i];
-        }
-        
+        // Real audio data from AudioActor
+        rms = ctx.audio.rms();
         beatPhase = ctx.audio.beatPhase();
         onBeat = ctx.audio.isOnBeat();
+
+        // Get all 8 bands
+        for (int i = 0; i < 8; ++i) {
+            bands[i] = ctx.audio.getBand(i);
+        }
     } else {
         // Fallback: fake 120 BPM beat
         m_fallbackPhase += (ctx.deltaTimeMs / 500.0f);  // 500ms per beat = 120 BPM

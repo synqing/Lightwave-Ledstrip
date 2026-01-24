@@ -20,7 +20,6 @@
 #include "fonts/experimental_fonts.h"
 #include "ZoneComposerUI.h"
 #include "ConnectivityTab.h"
-#include "DemoModeUI.h"
 
 // Forward declaration - WiFiManager instance is in main.cpp
 extern WiFiManager g_wifiManager;
@@ -105,9 +104,9 @@ void DisplayUI::begin() {
     lv_obj_set_style_pad_all(_screen_global, 0, LV_PART_MAIN);
 
     _header = lv_obj_create(_screen_global);
-    // #region agent log
-    Serial.printf("[DEBUG] Header creation - screen width=1280, border_width=2, margin=7px\n");
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] Header creation - screen width=1280, border_width=2, margin=7px\n");
+        // #endregion
     // CRITICAL FIX: Use very conservative width to prevent right-side clipping
     // Screen width = 1280px, border = 2px, need margin on both sides
     // Maximum safe width = 1280 - left_margin - right_margin
@@ -115,20 +114,20 @@ void DisplayUI::begin() {
     lv_obj_set_size(_header, 1260, TAB5_STATUSBAR_HEIGHT);
     // Position with 10px margin from left edge (more than 7px to ensure no clipping)
     lv_obj_set_pos(_header, 10, 7);
-    // #region agent log
-    Serial.printf("[DEBUG] Header: pos=(%d,%d), size=(%d,%d), right_edge=%d, margin_left=10, margin_right=%d\n", 
-                  10, 7, 1260, TAB5_STATUSBAR_HEIGHT, 10 + 1260, 1280 - (10 + 1260));
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] Header: pos=(%d,%d), size=(%d,%d), right_edge=%d, margin_left=10, margin_right=%d\n", 
+                  // 10, 7, 1260, TAB5_STATUSBAR_HEIGHT, 10 + 1260, 1280 - (10 + 1260));
+        // #endregion
     lv_obj_set_style_bg_color(_header, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
     // White border and rounded corners matching src/src/deck_ui.cpp (2px instead of 3px)
     lv_obj_set_style_border_width(_header, 2, LV_PART_MAIN);
     lv_obj_set_style_border_color(_header, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
     lv_obj_set_style_radius(_header, 14, LV_PART_MAIN);
-    // #region agent log
-    Serial.printf("[DEBUG] Header after styling: actual_width=%d, actual_height=%d, border_width=%d\n",
-                  (int)lv_obj_get_width(_header), (int)lv_obj_get_height(_header),
-                  (int)lv_obj_get_style_border_width(_header, LV_PART_MAIN));
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] Header after styling: actual_width=%d, actual_height=%d, border_width=%d\n",
+                  // (int)lv_obj_get_width(_header), (int)lv_obj_get_height(_header),
+                  // (int)lv_obj_get_style_border_width(_header, LV_PART_MAIN));
+        // #endregion
     lv_obj_set_style_pad_left(_header, TAB5_GRID_MARGIN, LV_PART_MAIN);
     lv_obj_set_style_pad_right(_header, TAB5_GRID_MARGIN, LV_PART_MAIN);
     lv_obj_set_style_pad_top(_header, 16, LV_PART_MAIN);  // Equal top and bottom padding for proper centering
@@ -140,7 +139,7 @@ void DisplayUI::begin() {
     // Pattern container (fixed width to prevent shifting) - moved to first position
     _header_effect_container = lv_obj_create(_header);
     // Set height explicitly to font size (24px) instead of line height (26px) to prevent extra space at bottom
-    lv_obj_set_size(_header_effect_container, 300, 24);
+    lv_obj_set_size(_header_effect_container, 220, 24);
     // Explicitly set background color to match header (not just opacity) to prevent any default color rendering
     lv_obj_set_style_bg_color(_header_effect_container, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(_header_effect_container, LV_OPA_TRANSP, LV_PART_MAIN);
@@ -160,36 +159,36 @@ void DisplayUI::begin() {
     lv_label_set_text(_header_effect, "--");
     lv_obj_set_style_text_font(_header_effect, &bebas_neue_24px, LV_PART_MAIN);
     lv_obj_set_style_text_color(_header_effect, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
-    // #region agent log
-    Serial.printf("[DEBUG] Pattern label created, checking styles before clear\n");
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] Pattern label created, checking styles before clear\n");
+        // #endregion
     // Clear borders, text decoration, outline, and shadow
     lv_obj_set_style_border_width(_header_effect, 0, LV_PART_MAIN);
     lv_obj_set_style_text_decor(_header_effect, LV_TEXT_DECOR_NONE, LV_PART_MAIN);
     lv_obj_set_style_outline_width(_header_effect, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(_header_effect, 0, LV_PART_MAIN);
-    // #region agent log
-    Serial.printf("[DEBUG] Pattern label: AFTER clear - border=%d, text_decor=%d, outline=%d, shadow=%d\n", 
-                  (int)lv_obj_get_style_border_width(_header_effect, LV_PART_MAIN),
-                  (int)lv_obj_get_style_text_decor(_header_effect, LV_PART_MAIN),
-                  (int)lv_obj_get_style_outline_width(_header_effect, LV_PART_MAIN),
-                  (int)lv_obj_get_style_shadow_width(_header_effect, LV_PART_MAIN));
-    // #endregion
-    // #region agent log
-    Serial.printf("[DEBUG] Pattern label: BEFORE setting long_mode, checking if LV_LABEL_LONG_DOT causes underline\n");
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] Pattern label: AFTER clear - border=%d, text_decor=%d, outline=%d, shadow=%d\n", 
+                  // (int)lv_obj_get_style_border_width(_header_effect, LV_PART_MAIN),
+                  // (int)lv_obj_get_style_text_decor(_header_effect, LV_PART_MAIN),
+                  // (int)lv_obj_get_style_outline_width(_header_effect, LV_PART_MAIN),
+                  // (int)lv_obj_get_style_shadow_width(_header_effect, LV_PART_MAIN));
+        // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] Pattern label: BEFORE setting long_mode, checking if LV_LABEL_LONG_DOT causes underline\n");
+        // #endregion
     // Try LV_LABEL_LONG_SCROLL instead of LV_LABEL_LONG_DOT to see if that's causing the line
     lv_label_set_long_mode(_header_effect, LV_LABEL_LONG_SCROLL_CIRCULAR);
-    // #region agent log
-    Serial.printf("[DEBUG] Pattern label: Changed to LV_LABEL_LONG_SCROLL_CIRCULAR, checking text_decor=%d\n", 
-                  (int)lv_obj_get_style_text_decor(_header_effect, LV_PART_MAIN));
-    // #endregion
-    lv_obj_set_width(_header_effect, 300);
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] Pattern label: Changed to LV_LABEL_LONG_SCROLL_CIRCULAR, checking text_decor=%d\n", 
+                  // (int)lv_obj_get_style_text_decor(_header_effect, LV_PART_MAIN));
+        // #endregion
+    lv_obj_set_width(_header_effect, 220);
 
     // Palette container (fixed width to prevent shifting) - moved to second position
     _header_palette_container = lv_obj_create(_header);
     // Set height explicitly to font size (24px) instead of line height (26px) to prevent extra space at bottom
-    lv_obj_set_size(_header_palette_container, 280, 24);
+    lv_obj_set_size(_header_palette_container, 220, 24);
     // Explicitly set background color to match header (not just opacity) to prevent any default color rendering
     lv_obj_set_style_bg_color(_header_palette_container, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(_header_palette_container, LV_OPA_TRANSP, LV_PART_MAIN);
@@ -202,15 +201,15 @@ void DisplayUI::begin() {
     lv_obj_set_style_bg_opa(_header_palette_container, LV_OPA_TRANSP, LV_PART_SCROLLBAR);
     lv_obj_set_style_bg_opa(_header_palette_container, LV_OPA_TRANSP, LV_PART_INDICATOR);
     lv_obj_set_style_pad_all(_header_palette_container, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_left(_header_palette_container, 20, LV_PART_MAIN); // 20px gap after Effect container
+    lv_obj_set_style_pad_left(_header_palette_container, 10, LV_PART_MAIN); // 10px gap after Effect container
 
     _header_palette = lv_label_create(_header_palette_container);
-    // #region agent log
-    Serial.printf("[DEBUG] Palette label created - checking default styles: border=%d, text_decor=%d, outline_width=%d\n", 
-                  (int)lv_obj_get_style_border_width(_header_palette, LV_PART_MAIN),
-                  (int)lv_obj_get_style_text_decor(_header_palette, LV_PART_MAIN),
-                  (int)lv_obj_get_style_outline_width(_header_palette, LV_PART_MAIN));
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] Palette label created - checking default styles: border=%d, text_decor=%d, outline_width=%d\n", 
+                  // (int)lv_obj_get_style_border_width(_header_palette, LV_PART_MAIN),
+                  // (int)lv_obj_get_style_text_decor(_header_palette, LV_PART_MAIN),
+                  // (int)lv_obj_get_style_outline_width(_header_palette, LV_PART_MAIN));
+        // #endregion
     lv_label_set_text(_header_palette, "--");
     lv_obj_set_style_text_font(_header_palette, &bebas_neue_24px, LV_PART_MAIN);
     lv_obj_set_style_text_color(_header_palette, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
@@ -219,31 +218,39 @@ void DisplayUI::begin() {
     lv_obj_set_style_text_decor(_header_palette, LV_TEXT_DECOR_NONE, LV_PART_MAIN);
     lv_obj_set_style_outline_width(_header_palette, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(_header_palette, 0, LV_PART_MAIN);
-    // #region agent log
-    Serial.printf("[DEBUG] Palette label: AFTER clear - border=%d, text_decor=%d, outline=%d, shadow=%d\n", 
-                  (int)lv_obj_get_style_border_width(_header_palette, LV_PART_MAIN),
-                  (int)lv_obj_get_style_text_decor(_header_palette, LV_PART_MAIN),
-                  (int)lv_obj_get_style_outline_width(_header_palette, LV_PART_MAIN),
-                  (int)lv_obj_get_style_shadow_width(_header_palette, LV_PART_MAIN));
-    // #endregion
-    // #region agent log
-    Serial.printf("[DEBUG] Palette label: BEFORE setting long_mode, checking if LV_LABEL_LONG_DOT causes underline\n");
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] Palette label: AFTER clear - border=%d, text_decor=%d, outline=%d, shadow=%d\n", 
+                  // (int)lv_obj_get_style_border_width(_header_palette, LV_PART_MAIN),
+                  // (int)lv_obj_get_style_text_decor(_header_palette, LV_PART_MAIN),
+                  // (int)lv_obj_get_style_outline_width(_header_palette, LV_PART_MAIN),
+                  // (int)lv_obj_get_style_shadow_width(_header_palette, LV_PART_MAIN));
+        // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] Palette label: BEFORE setting long_mode, checking if LV_LABEL_LONG_DOT causes underline\n");
+        // #endregion
     // Try LV_LABEL_LONG_SCROLL instead of LV_LABEL_LONG_DOT to see if that's causing the line
     lv_label_set_long_mode(_header_palette, LV_LABEL_LONG_SCROLL_CIRCULAR);
-    // #region agent log
-    Serial.printf("[DEBUG] Palette label: Changed to LV_LABEL_LONG_SCROLL_CIRCULAR, checking text_decor=%d\n", 
-                  (int)lv_obj_get_style_text_decor(_header_palette, LV_PART_MAIN));
-    // #endregion
-    lv_obj_set_width(_header_palette, 280);
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] Palette label: Changed to LV_LABEL_LONG_SCROLL_CIRCULAR, checking text_decor=%d\n", 
+                  // (int)lv_obj_get_style_text_decor(_header_palette, LV_PART_MAIN));
+        // #endregion
+    lv_obj_set_width(_header_palette, 220);
 
-    // Left spacer to push LIGHTWAVEOS title toward center
-    lv_obj_t* left_spacer = lv_obj_create(_header);
-    lv_obj_set_style_bg_opa(left_spacer, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_flex_grow(left_spacer, 1);
+    // Title container - use absolute centering for true center position
+    // This ensures the title stays centered regardless of left/right content changes
+    lv_obj_t* title_container = lv_obj_create(_header);
+    lv_obj_remove_flag(title_container, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(title_container, LV_OBJ_FLAG_IGNORE_LAYOUT);  // Break out of flex, use absolute position
+    lv_obj_set_style_bg_opa(title_container, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(title_container, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(title_container, 0, LV_PART_MAIN);
+    lv_obj_set_size(title_container, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_layout(title_container, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(title_container, LV_FLEX_FLOW_ROW);
+    lv_obj_align(title_container, LV_ALIGN_CENTER, 0, 0);  // TRUE CENTER (absolute)
 
-    // LIGHTWAVEOS title - moved to center position
-    _header_title_main = lv_label_create(_header);
+    // LIGHTWAVEOS title inside centered container
+    _header_title_main = lv_label_create(title_container);
     lv_label_set_text(_header_title_main, "LIGHTWAVE");
     lv_obj_set_style_text_font(_header_title_main, &bebas_neue_40px, LV_PART_MAIN);
     lv_obj_set_style_text_color(_header_title_main, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
@@ -252,7 +259,7 @@ void DisplayUI::begin() {
     lv_obj_set_style_pad_top(_header_title_main, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_bottom(_header_title_main, 0, LV_PART_MAIN);
 
-    _header_title_os = lv_label_create(_header);
+    _header_title_os = lv_label_create(title_container);
     lv_label_set_text(_header_title_os, "OS");
     lv_obj_set_style_text_font(_header_title_os, &bebas_neue_40px, LV_PART_MAIN);
     lv_obj_set_style_text_color(_header_title_os, lv_color_hex(TAB5_COLOR_BRAND_PRIMARY), LV_PART_MAIN);
@@ -261,28 +268,63 @@ void DisplayUI::begin() {
     lv_obj_set_style_pad_top(_header_title_os, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_bottom(_header_title_os, 0, LV_PART_MAIN);
 
-    // Right spacer to keep LIGHTWAVEOS centered and push network info to the right
+    // Spacer to push network info to the right
     lv_obj_t* right_spacer = lv_obj_create(_header);
     lv_obj_set_style_bg_opa(right_spacer, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(right_spacer, 0, LV_PART_MAIN);
     lv_obj_set_flex_grow(right_spacer, 1);
 
-    // Network info: SSID (RSSI) IP - create in display order
-    _header_net_ssid = lv_label_create(_header);
+    // Network info: SSID (RSSI) IP - wrapped in clickable container for navigation
+    _header_net_container = lv_obj_create(_header);
+    lv_obj_set_size(_header_net_container, LV_SIZE_CONTENT, LV_SIZE_CONTENT);  // CRITICAL: fit content only
+    lv_obj_set_style_bg_opa(_header_net_container, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(_header_net_container, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(_header_net_container, LV_OBJ_FLAG_SCROLLABLE);  // CRITICAL: disable scrolling
+    lv_obj_add_flag(_header_net_container, LV_OBJ_FLAG_CLICKABLE);
+
+    // Touch target accessibility: 44-48px minimum (add vertical padding)
+    lv_obj_set_style_pad_top(_header_net_container, 8, LV_PART_MAIN);
+    lv_obj_set_style_pad_bottom(_header_net_container, 8, LV_PART_MAIN);
+    lv_obj_set_style_pad_left(_header_net_container, 8, LV_PART_MAIN);
+    lv_obj_set_style_pad_right(_header_net_container, 8, LV_PART_MAIN);
+
+    // Visual feedback on press
+    lv_obj_set_style_bg_opa(_header_net_container, LV_OPA_20, LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(_header_net_container, lv_color_hex(0xFFFFFF), LV_STATE_PRESSED);
+    lv_obj_set_style_radius(_header_net_container, 8, LV_PART_MAIN);
+
+    // Flex layout for horizontal arrangement
+    lv_obj_set_layout(_header_net_container, LV_LAYOUT_FLEX);
+    lv_obj_set_flex_flow(_header_net_container, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(_header_net_container, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    // SSID label (inside container)
+    _header_net_ssid = lv_label_create(_header_net_container);
     lv_label_set_text(_header_net_ssid, "--");
     lv_obj_set_style_text_font(_header_net_ssid, &bebas_neue_24px, LV_PART_MAIN);
     lv_obj_set_style_text_color(_header_net_ssid, lv_color_hex(TAB5_COLOR_FG_SECONDARY), LV_PART_MAIN);
-    lv_obj_set_style_pad_left(_header_net_ssid, 18, LV_PART_MAIN);
 
-    _header_net_rssi = lv_label_create(_header);
+    // RSSI label (inside container)
+    _header_net_rssi = lv_label_create(_header_net_container);
     lv_label_set_text(_header_net_rssi, "");
     lv_obj_set_style_text_font(_header_net_rssi, &bebas_neue_24px, LV_PART_MAIN);
     lv_obj_set_style_pad_left(_header_net_rssi, 4, LV_PART_MAIN);
 
-    _header_net_ip = lv_label_create(_header);
+    // IP label (inside container)
+    _header_net_ip = lv_label_create(_header_net_container);
     lv_label_set_text(_header_net_ip, "--");
     lv_obj_set_style_text_font(_header_net_ip, &bebas_neue_24px, LV_PART_MAIN);
     lv_obj_set_style_text_color(_header_net_ip, lv_color_hex(TAB5_COLOR_FG_PRIMARY), LV_PART_MAIN);
-    lv_obj_set_style_pad_left(_header_net_ip, 8, LV_PART_MAIN);  // 8px gap after RSSI
+    lv_obj_set_style_pad_left(_header_net_ip, 8, LV_PART_MAIN);
+
+    // Click handler: navigate to ConnectivityTab
+    lv_obj_add_event_cb(_header_net_container, [](lv_event_t* e) {
+        DisplayUI* ui = static_cast<DisplayUI*>(lv_event_get_user_data(e));
+        if (ui) {
+            Serial.println("[DisplayUI] Network info tapped - switching to Connectivity");
+            ui->setScreen(UIScreen::CONNECTIVITY);
+        }
+    }, LV_EVENT_CLICKED, reinterpret_cast<void*>(this));
 
     // Create retry button (initially hidden) - moved to last position
     _header_retry_button = lv_label_create(_header);
@@ -683,20 +725,6 @@ void DisplayUI::begin() {
     Serial.println("[DisplayUI_TRACE] ENABLE_WIFI not defined - skipping ConnectivityTab");
 #endif
 
-    // Create demo mode screen
-    Serial.printf("[DisplayUI_TRACE] Creating demo screen @ %lu ms\n", millis());
-    esp_task_wdt_reset();
-
-    _screen_demo = lv_obj_create(nullptr);
-    lv_obj_set_style_bg_color(_screen_demo, lv_color_hex(TAB5_COLOR_BG_PAGE), LV_PART_MAIN);
-    lv_obj_set_style_pad_all(_screen_demo, 0, LV_PART_MAIN);
-
-    // Create DemoModeUI and initialize with demo screen as parent
-    _demoMode = new DemoModeUI(_display);
-    _demoMode->setBackButtonCallback(onDemoModeBackButton);  // Wire Back button
-    _demoMode->begin(_screen_demo);  // Create LVGL widgets on demo screen
-    Serial.println("[DisplayUI] Demo Mode UI initialized");
-
     Serial.printf("[DisplayUI_TRACE] Before lv_scr_load @ %lu ms\n", millis());
     esp_task_wdt_reset();
     lv_scr_load(_screen_global);
@@ -898,7 +926,7 @@ void DisplayUI::updateRetryButton(bool shouldShow) {
 void DisplayUI::setScreen(UIScreen screen) {
     if (screen == _currentScreen) return;
     _currentScreen = screen;
-
+    
     lv_obj_t* targetScreen = _screen_global;
     switch (screen) {
         case UIScreen::GLOBAL:
@@ -910,23 +938,8 @@ void DisplayUI::setScreen(UIScreen screen) {
         case UIScreen::CONNECTIVITY:
             targetScreen = _screen_connectivity;
             break;
-        case UIScreen::DEMO_MODE:
-            targetScreen = _screen_demo;
-            break;
     }
     lv_scr_load(targetScreen);
-}
-
-void DisplayUI::onDemoModeBackButton() {
-    if (s_instance) {
-        s_instance->setScreen(UIScreen::GLOBAL);
-    }
-}
-
-void DisplayUI::setWebSocketClientForDemo(WebSocketClient* wsClient) {
-    if (_demoMode) {
-        _demoMode->setWebSocketClient(wsClient);
-    }
 }
 
 void DisplayUI::onZoneComposerBackButton() {
@@ -1086,9 +1099,9 @@ void DisplayUI::updateAudioMetrics(float bpm, const char* key, float micLevel) {
 
 void DisplayUI::updateHostUptime(uint32_t uptimeSeconds) {
     _hostUptime = uptimeSeconds;
-    // #region agent log
-    Serial.printf("[DisplayUI] updateHostUptime called: %lu seconds\n", uptimeSeconds);
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DisplayUI] updateHostUptime called: %lu seconds\n", uptimeSeconds);
+        // #endregion
     // Format will be updated in loop() with throttling
 }
 
@@ -1239,17 +1252,17 @@ DisplayUI::~DisplayUI() {
 }
 
 void DisplayUI::begin() {
-    // #region agent log
-    EspHal::log("[DEBUG] DisplayUI::begin entry - Heap: free=%u minFree=%u largest=%u\n",
-                  EspHal::getFreeHeap(), EspHal::getMinFreeHeap(), EspHal::getMaxAllocHeap());
-    EspHal::log("[DEBUG] Sprite memory estimate: %u gauges * %dx%d + %u slots * %dx%d + header %dx%d = ~%u KB\n",
-                  8, Theme::CELL_W, Theme::CELL_H,
-                  8, Theme::PRESET_SLOT_W, Theme::PRESET_SLOT_H,
-                  Theme::SCREEN_W, Theme::STATUS_BAR_H,
-                  ((8 * Theme::CELL_W * Theme::CELL_H * 2) + 
-                   (8 * Theme::PRESET_SLOT_W * Theme::PRESET_SLOT_H * 2) +
-                   (Theme::SCREEN_W * Theme::STATUS_BAR_H * 2)) / 1024);
-    // #endregion
+    // #region agent log (DISABLED)
+    // EspHal::log("[DEBUG] DisplayUI::begin entry - Heap: free=%u minFree=%u largest=%u\n",
+                  // EspHal::getFreeHeap(), EspHal::getMinFreeHeap(), EspHal::getMaxAllocHeap());
+    // EspHal::log("[DEBUG] Sprite memory estimate: %u gauges * %dx%d + %u slots * %dx%d + header %dx%d = ~%u KB\n",
+                  // 8, Theme::CELL_W, Theme::CELL_H,
+                  // 8, Theme::PRESET_SLOT_W, Theme::PRESET_SLOT_H,
+                  // Theme::SCREEN_W, Theme::STATUS_BAR_H,
+                  // ((8 * Theme::CELL_W * Theme::CELL_H * 2) + 
+                   // (8 * Theme::PRESET_SLOT_W * Theme::PRESET_SLOT_H * 2) +
+                   // (Theme::SCREEN_W * Theme::STATUS_BAR_H * 2)) / 1024);
+        // #endregion
 #if ENABLE_UI_DIAGNOSTICS
     EspHal::log("[DBG] begin_start cols=%d rows=%d cellW=%d cellH=%d\n", Theme::GRID_COLS, Theme::GRID_ROWS, Theme::CELL_W, Theme::CELL_H);
 #endif
@@ -1257,15 +1270,15 @@ void DisplayUI::begin() {
     _display.fillScreen(Theme::BG_DARK);
 
     // Create header
-    // #region agent log
-    EspHal::log("[DEBUG] Before UIHeader creation - Heap: free=%u minFree=%u\n",
-                  EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
-    // #endregion
+    // #region agent log (DISABLED)
+    // EspHal::log("[DEBUG] Before UIHeader creation - Heap: free=%u minFree=%u\n",
+                  // EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
+        // #endregion
     _header = new UIHeader(&_display);
-    // #region agent log
-    EspHal::log("[DEBUG] After UIHeader creation - Heap: free=%u minFree=%u\n",
-                  EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
-    // #endregion
+    // #region agent log (DISABLED)
+    // EspHal::log("[DEBUG] After UIHeader creation - Heap: free=%u minFree=%u\n",
+                  // EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
+        // #endregion
 #if ENABLE_UI_DIAGNOSTICS
     EspHal::log("[DBG] header_created ptr=%p\n", _header);
 #endif
@@ -1284,19 +1297,19 @@ void DisplayUI::begin() {
         EspHal::log("[DBG] creating_gauge i=%d x=%d y=%d w=%d h=%d\n", i, x, y, Theme::CELL_W, Theme::CELL_H);
 #endif
 
-        // #region agent log
-        if (i == 0 || i == 7) {  // Log first and last gauge creation
-            EspHal::log("[DEBUG] Creating gauge %d - Heap before: free=%u minFree=%u\n",
-                          i, EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
-        }
-        // #endregion
+        // #region agent log (DISABLED)
+        // if (i == 0 || i == 7) {  // Log first and last gauge creation
+            // EspHal::log("[DEBUG] Creating gauge %d - Heap before: free=%u minFree=%u\n",
+                          // i, EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
+        // }
+                // #endregion
         _gauges[i] = new GaugeWidget(&_display, x, y, Theme::CELL_W, Theme::CELL_H, i);
-        // #region agent log
-        if (i == 0 || i == 7) {
-            EspHal::log("[DEBUG] Gauge %d created - Heap after: free=%u minFree=%u\n",
-                          i, EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
-        }
-        // #endregion
+        // #region agent log (DISABLED)
+        // if (i == 0 || i == 7) {
+            // EspHal::log("[DEBUG] Gauge %d created - Heap after: free=%u minFree=%u\n",
+                          // i, EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
+        // }
+                // #endregion
         
         // Set initial max value from ParameterMap
         #ifdef SIMULATOR_BUILD
@@ -1307,10 +1320,10 @@ void DisplayUI::begin() {
         _gauges[i]->setMaxValue(maxValue);
     }
     
-    // #region agent log
-    EspHal::log("[DEBUG] All 8 gauges created - Heap: free=%u minFree=%u largest=%u\n",
-                  EspHal::getFreeHeap(), EspHal::getMinFreeHeap(), EspHal::getMaxAllocHeap());
-    // #endregion
+    // #region agent log (DISABLED)
+    // EspHal::log("[DEBUG] All 8 gauges created - Heap: free=%u minFree=%u largest=%u\n",
+                  // EspHal::getFreeHeap(), EspHal::getMinFreeHeap(), EspHal::getMaxAllocHeap());
+        // #endregion
 #if ENABLE_UI_DIAGNOSTICS
     EspHal::log("[DBG] gauges_created count=8\n");
 #endif
@@ -1321,10 +1334,10 @@ void DisplayUI::begin() {
     }
 
     // Create 8 preset slot widgets below gauge row
-    // #region agent log
-    EspHal::log("[DEBUG] Before preset slots creation - Heap: free=%u minFree=%u\n",
-                  EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
-    // #endregion
+    // #region agent log (DISABLED)
+    // EspHal::log("[DEBUG] Before preset slots creation - Heap: free=%u minFree=%u\n",
+                  // EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
+        // #endregion
     for (int i = 0; i < 8; i++) {
         int x = i * Theme::PRESET_SLOT_W;
         int y = Theme::PRESET_ROW_Y;
@@ -1335,10 +1348,10 @@ void DisplayUI::begin() {
             EspHal::log("[ERROR] Failed to create preset slot %d!\n", i);
         }
     }
-    // #region agent log
-    EspHal::log("[DEBUG] All 8 preset slots created - Heap: free=%u minFree=%u largest=%u\n",
-                  EspHal::getFreeHeap(), EspHal::getMinFreeHeap(), EspHal::getMaxAllocHeap());
-    // #endregion
+    // #region agent log (DISABLED)
+    // EspHal::log("[DEBUG] All 8 preset slots created - Heap: free=%u minFree=%u largest=%u\n",
+                  // EspHal::getFreeHeap(), EspHal::getMinFreeHeap(), EspHal::getMaxAllocHeap());
+        // #endregion
 #if ENABLE_UI_DIAGNOSTICS
     EspHal::log("[DBG] preset_slots_created count=8\n");
 #endif
@@ -1633,22 +1646,29 @@ void DisplayUI::setColourCorrectionState(const ColorCorrectionState& state) {
 // ============================================================================
 
 void DisplayUI::setCurrentEffect(uint8_t id, const char* name) {
-    // TODO: Display current effect name in status bar or dedicated area
-    (void)id;
-    (void)name;
+    (void)id;  // ID available if needed for future use
+    if (_header_effect) {
+        lv_label_set_text(_header_effect, name ? name : "--");
+    }
 }
 
 void DisplayUI::setCurrentPalette(uint8_t id, const char* name) {
-    // TODO: Display current palette name in status bar or dedicated area
-    (void)id;
-    (void)name;
+    (void)id;  // ID available if needed for future use
+    if (_header_palette) {
+        lv_label_set_text(_header_palette, name ? name : "--");
+    }
 }
 
 void DisplayUI::setWiFiInfo(const char* ip, const char* ssid, int32_t rssi) {
-    // TODO: Display WiFi info in status bar
-    (void)ip;
-    (void)ssid;
-    (void)rssi;
+    if (_header_net_ip) {
+        lv_label_set_text(_header_net_ip, ip ? ip : "--");
+    }
+    if (_header_net_ssid) {
+        lv_label_set_text(_header_net_ssid, ssid ? ssid : "--");
+    }
+    if (_header_net_rssi) {
+        lv_label_set_text_fmt(_header_net_rssi, "%d dBm", rssi);
+    }
 }
 
 // ============================================================================

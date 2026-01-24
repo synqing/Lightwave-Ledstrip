@@ -62,10 +62,10 @@
 //  3. Or connect to v2's AP (LightwaveOS-AP) - gateway IP is 192.168.4.1
 //
 // Example for v2 device on local network (replace with actual IP):
-#define LIGHTWAVE_IP "192.168.1.102"
+// #define LIGHTWAVE_IP "192.168.1.102"
 //
 // Example for v2 device's AP fallback:
-// #define LIGHTWAVE_IP "192.168.4.1"
+#define LIGHTWAVE_IP "192.168.4.1"
 
 // Connection Timeouts (milliseconds)
 namespace NetworkConfig {

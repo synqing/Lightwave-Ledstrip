@@ -1,13 +1,20 @@
 /**
  * @file NetworkHandlers.h
- * @brief Network mode/status handlers (AP/STA) for LightwaveOS v2
+ * @brief Network management HTTP handlers for LightwaveOS v2
  *
- * Purpose:
- * - Allow temporarily enabling STA mode for OTA updates while AP-only is the default.
- * - Expose network status (AP IP, STA IP, connection state).
+ * Provides REST API endpoints for WiFi network management:
+ * - GET  /api/v1/network/status     - Current WiFi state
+ * - GET  /api/v1/network/scan       - Scan for networks
+ * - POST /api/v1/network/connect    - Connect to network
+ * - POST /api/v1/network/disconnect - Disconnect from WiFi
+ * - GET  /api/v1/network/saved      - List saved networks (no passwords)
+ * - POST /api/v1/network/saved      - Add saved network
+ * - DELETE /api/v1/network/saved/*  - Remove saved network
  *
  * Security:
- * - Mode-changing endpoints require X-OTA-Token header (same as OTA update endpoints).
+ * - Passwords are never returned via API
+ * - Rate limiting applied at route registration level
+ * - API key authentication if FEATURE_API_AUTH enabled
  */
 
 #pragma once
@@ -21,39 +28,160 @@ namespace network {
 namespace webserver {
 namespace handlers {
 
+/**
+ * @brief Network management HTTP handlers
+ */
 class NetworkHandlers {
 public:
-    // Network status
+    /**
+     * @brief Register network routes
+     * @param registry Route registry
+     *
+     * Note: Routes are registered in V1ApiRoutes.cpp with rate limiting wrappers.
+     */
+    static void registerRoutes(HttpRouteRegistry& registry);
+
+    // ========================================================================
+    // Status & Scanning
+    // ========================================================================
+
+    /**
+     * @brief Handle GET /api/v1/network/status
+     *
+     * Returns current WiFi state, SSID, IP, RSSI.
+     *
+     * Response:
+     * {
+     *   "connected": true,
+     *   "ssid": "MyNetwork",
+     *   "ip": "192.168.1.100",
+     *   "rssi": -45,
+     *   "channel": 6,
+     *   "state": "CONNECTED",
+     *   "apMode": false
+     * }
+     */
     static void handleStatus(AsyncWebServerRequest* request);
 
-    // Network management (AP-first architecture)
-    static void handleListNetworks(AsyncWebServerRequest* request);
-    static void handleAddNetwork(AsyncWebServerRequest* request, uint8_t* data, size_t len);
-    static void handleDeleteNetwork(AsyncWebServerRequest* request, const String& ssid);
-    static void handleConnect(AsyncWebServerRequest* request, uint8_t* data, size_t len);
-    static void handleDisconnect(AsyncWebServerRequest* request);
-    
-    // Network scanning
-    static void handleScanNetworks(AsyncWebServerRequest* request);
-    static void handleScanStatus(AsyncWebServerRequest* request);
+    /**
+     * @brief Handle GET /api/v1/network/scan
+     *
+     * Performs synchronous WiFi scan and returns results.
+     * May take 2-5 seconds.
+     *
+     * Response:
+     * {
+     *   "networks": [
+     *     {
+     *       "ssid": "Network1",
+     *       "rssi": -45,
+     *       "channel": 6,
+     *       "encryption": "WPA2",
+     *       "bssid": "AA:BB:CC:DD:EE:FF"
+     *     }
+     *   ],
+     *   "count": 5
+     * }
+     */
+    static void handleScan(AsyncWebServerRequest* request);
 
-    // Legacy OTA endpoints (POST bodies are handled in V1ApiRoutes via raw body callback)
-    static void handleEnableSTA(AsyncWebServerRequest* request, uint8_t* data, size_t len);
-    static void handleEnableAPOnly(AsyncWebServerRequest* request);
+    // ========================================================================
+    // Connection Management
+    // ========================================================================
+
+    /**
+     * @brief Handle POST /api/v1/network/connect
+     *
+     * Initiates WiFi connection. Returns 202 Accepted immediately.
+     * Client should poll /status for connection result.
+     *
+     * Request body:
+     * {
+     *   "ssid": "NetworkName",
+     *   "password": "password123",  // Optional for open networks
+     *   "save": true                // Optional: save to NVS
+     * }
+     *
+     * Response: 202 Accepted
+     * {
+     *   "message": "Connection attempt initiated",
+     *   "ssid": "NetworkName"
+     * }
+     */
+    static void handleConnect(AsyncWebServerRequest* request, uint8_t* data, size_t len);
+
+    /**
+     * @brief Handle POST /api/v1/network/disconnect
+     *
+     * Disconnects from current WiFi network.
+     *
+     * Response:
+     * {
+     *   "message": "Disconnected"
+     * }
+     */
+    static void handleDisconnect(AsyncWebServerRequest* request);
+
+    // ========================================================================
+    // Saved Networks
+    // ========================================================================
+
+    /**
+     * @brief Handle GET /api/v1/network/saved
+     *
+     * Returns list of saved networks (SSIDs only, NO passwords).
+     *
+     * Response:
+     * {
+     *   "networks": ["Network1", "Network2"],
+     *   "count": 2,
+     *   "maxNetworks": 8
+     * }
+     */
+    static void handleSavedList(AsyncWebServerRequest* request);
+
+    /**
+     * @brief Handle POST /api/v1/network/saved
+     *
+     * Adds or updates a saved network.
+     *
+     * Request body:
+     * {
+     *   "ssid": "NetworkName",
+     *   "password": "password123"  // Required (min 8 chars for WPA2)
+     * }
+     *
+     * Response:
+     * {
+     *   "message": "Network saved",
+     *   "ssid": "NetworkName"
+     * }
+     */
+    static void handleSavedAdd(AsyncWebServerRequest* request, uint8_t* data, size_t len);
+
+    /**
+     * @brief Handle DELETE /api/v1/network/saved/:ssid
+     *
+     * Removes a saved network by SSID (URL-encoded in path).
+     *
+     * Response:
+     * {
+     *   "message": "Network removed",
+     *   "ssid": "NetworkName"
+     * }
+     */
+    static void handleSavedDelete(AsyncWebServerRequest* request);
 
 private:
-    static bool checkOTAToken(AsyncWebServerRequest* request);
-    
-    // Scan job tracking (static storage for scan results)
-    // Scan job tracking (static storage for scan results)
-    // NOTE: These are set in handleScanNetworks() and checked in handleScanStatus()
-    static uint32_t s_scanJobId;
-    static uint32_t s_scanStartTime;
-    static bool s_scanInProgress;
+    /**
+     * @brief Convert WiFi auth mode to string
+     * @param authMode ESP32 wifi_auth_mode_t
+     * @return Human-readable encryption type
+     */
+    static const char* authModeToString(uint8_t authMode);
 };
 
 } // namespace handlers
 } // namespace webserver
 } // namespace network
 } // namespace lightwaveos
-

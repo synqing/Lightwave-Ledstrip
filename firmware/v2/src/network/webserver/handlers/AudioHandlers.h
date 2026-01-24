@@ -12,21 +12,14 @@
 
 // Forward declarations
 namespace lightwaveos {
-namespace nodes {
-class NodeOrchestrator;
-class RendererNode;
+namespace actors {
+class ActorSystem;
+class RendererActor;
 }
-namespace audio {
-class AudioNode;
 }
-namespace network {
-namespace webserver {
-#if FEATURE_AUDIO_BENCHMARK
-class BenchmarkStreamBroadcaster;
-#endif
-} // namespace webserver
-} // namespace network
-}
+
+// Include AudioActor header for namespace alias (cannot forward-declare using alias)
+#include "../../../audio/AudioActor.h"
 
 namespace lightwaveos {
 namespace network {
@@ -40,35 +33,26 @@ class AudioHandlers {
 public:
     // Audio Parameters
     static void handleParametersGet(AsyncWebServerRequest* request,
-                                    lightwaveos::nodes::NodeOrchestrator& orchestrator,
-                                    lightwaveos::nodes::RendererNode* renderer);
+                                    lightwaveos::actors::ActorSystem& actorSystem,
+                                    lightwaveos::actors::RendererActor* renderer);
     
     static void handleParametersSet(AsyncWebServerRequest* request,
                                     uint8_t* data, size_t len,
-                                    lightwaveos::nodes::NodeOrchestrator& orchestrator,
-                                    lightwaveos::nodes::RendererNode* renderer);
+                                    lightwaveos::actors::ActorSystem& actorSystem,
+                                    lightwaveos::actors::RendererActor* renderer);
 
     // Audio Control
     static void handleControl(AsyncWebServerRequest* request,
                               uint8_t* data, size_t len,
-                              lightwaveos::nodes::NodeOrchestrator& orchestrator);
-    
-    // AGC Toggle
-    static void handleAGCToggle(AsyncWebServerRequest* request,
-                                uint8_t* data, size_t len,
-                                lightwaveos::nodes::NodeOrchestrator& orchestrator);
+                              lightwaveos::actors::ActorSystem& actorSystem);
 
     // Audio State
     static void handleStateGet(AsyncWebServerRequest* request,
-                               lightwaveos::nodes::NodeOrchestrator& orchestrator);
+                               lightwaveos::actors::ActorSystem& actorSystem);
 
     // Audio Tempo
     static void handleTempoGet(AsyncWebServerRequest* request,
-                                lightwaveos::nodes::NodeOrchestrator& orchestrator);
-
-    // Audio FFT Spectrum
-    static void handleFftGet(AsyncWebServerRequest* request,
-                             lightwaveos::nodes::NodeOrchestrator& orchestrator);
+                                lightwaveos::actors::ActorSystem& actorSystem);
 
     // Audio Presets
     static void handlePresetsList(AsyncWebServerRequest* request);
@@ -77,12 +61,12 @@ public:
     
     static void handlePresetSave(AsyncWebServerRequest* request,
                                   uint8_t* data, size_t len,
-                                  lightwaveos::nodes::NodeOrchestrator& orchestrator,
-                                  lightwaveos::nodes::RendererNode* renderer);
+                                  lightwaveos::actors::ActorSystem& actorSystem,
+                                  lightwaveos::actors::RendererActor* renderer);
     
     static void handlePresetApply(AsyncWebServerRequest* request, uint8_t presetId,
-                                   lightwaveos::nodes::NodeOrchestrator& orchestrator,
-                                   lightwaveos::nodes::RendererNode* renderer);
+                                   lightwaveos::actors::ActorSystem& actorSystem,
+                                   lightwaveos::actors::RendererActor* renderer);
     
     static void handlePresetDelete(AsyncWebServerRequest* request, uint8_t presetId);
 
@@ -94,14 +78,14 @@ public:
     static void handleMappingsListCurves(AsyncWebServerRequest* request);
     
     static void handleMappingsList(AsyncWebServerRequest* request,
-                                    lightwaveos::nodes::RendererNode* renderer);
+                                    lightwaveos::actors::RendererActor* renderer);
     
     static void handleMappingsGet(AsyncWebServerRequest* request, uint8_t effectId,
-                                   lightwaveos::nodes::RendererNode* renderer);
+                                   lightwaveos::actors::RendererActor* renderer);
     
     static void handleMappingsSet(AsyncWebServerRequest* request, uint8_t effectId,
                                   uint8_t* data, size_t len,
-                                  lightwaveos::nodes::RendererNode* renderer);
+                                  lightwaveos::actors::RendererActor* renderer);
     
     static void handleMappingsDelete(AsyncWebServerRequest* request, uint8_t effectId);
     
@@ -111,49 +95,49 @@ public:
 
     // Zone AGC
     static void handleZoneAGCGet(AsyncWebServerRequest* request,
-                                  lightwaveos::nodes::NodeOrchestrator& orchestrator);
+                                  lightwaveos::actors::ActorSystem& actorSystem);
     
     static void handleZoneAGCSet(AsyncWebServerRequest* request,
                                   uint8_t* data, size_t len,
-                                  lightwaveos::nodes::NodeOrchestrator& orchestrator);
+                                  lightwaveos::actors::ActorSystem& actorSystem);
 
     // Spike Detection
     static void handleSpikeDetectionGet(AsyncWebServerRequest* request,
-                                         lightwaveos::nodes::NodeOrchestrator& orchestrator);
+                                         lightwaveos::actors::ActorSystem& actorSystem);
     
     static void handleSpikeDetectionReset(AsyncWebServerRequest* request,
-                                           lightwaveos::nodes::NodeOrchestrator& orchestrator);
+                                           lightwaveos::actors::ActorSystem& actorSystem);
 
     // Noise Calibration
     static void handleCalibrateStatus(AsyncWebServerRequest* request,
-                                       lightwaveos::nodes::NodeOrchestrator& orchestrator);
+                                       lightwaveos::actors::ActorSystem& actorSystem);
     
     static void handleCalibrateStart(AsyncWebServerRequest* request,
                                       uint8_t* data, size_t len,
-                                      lightwaveos::nodes::NodeOrchestrator& orchestrator);
+                                      lightwaveos::actors::ActorSystem& actorSystem);
     
     static void handleCalibrateCancel(AsyncWebServerRequest* request,
-                                       lightwaveos::nodes::NodeOrchestrator& orchestrator);
+                                       lightwaveos::actors::ActorSystem& actorSystem);
     
     static void handleCalibrateApply(AsyncWebServerRequest* request,
-                                      lightwaveos::nodes::NodeOrchestrator& orchestrator);
+                                      lightwaveos::actors::ActorSystem& actorSystem);
 
 #if FEATURE_AUDIO_BENCHMARK
     // Benchmark
     static void handleBenchmarkGet(AsyncWebServerRequest* request,
-                                    lightwaveos::nodes::NodeOrchestrator& orchestrator,
-                                    lightwaveos::network::webserver::BenchmarkStreamBroadcaster* broadcaster);
+                                    lightwaveos::actors::ActorSystem& actorSystem,
+                                    std::function<bool()> hasSubscribers);
     
     static void handleBenchmarkStart(AsyncWebServerRequest* request,
-                                      lightwaveos::nodes::NodeOrchestrator& orchestrator,
-                                      lightwaveos::network::webserver::BenchmarkStreamBroadcaster* broadcaster);
+                                      lightwaveos::actors::ActorSystem& actorSystem,
+                                      std::function<void(bool)> setStreamingActive);
     
     static void handleBenchmarkStop(AsyncWebServerRequest* request,
-                                     lightwaveos::nodes::NodeOrchestrator& orchestrator,
-                                     lightwaveos::network::webserver::BenchmarkStreamBroadcaster* broadcaster);
+                                     lightwaveos::actors::ActorSystem& actorSystem,
+                                     std::function<void(bool)> setStreamingActive);
     
     static void handleBenchmarkHistory(AsyncWebServerRequest* request,
-                                        lightwaveos::nodes::NodeOrchestrator& orchestrator);
+                                        lightwaveos::actors::ActorSystem& actorSystem);
 #endif
 };
 
@@ -161,3 +145,4 @@ public:
 } // namespace webserver
 } // namespace network
 } // namespace lightwaveos
+

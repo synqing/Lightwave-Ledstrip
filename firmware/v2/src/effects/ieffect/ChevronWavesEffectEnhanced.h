@@ -2,7 +2,7 @@
  * @file ChevronWavesEnhancedEffect.h
  * @brief LGP Chevron Waves Enhanced - Enhanced version with heavy_chroma, 64-bin sub-bass, snare sharpness boost
  *
- * Effect ID: 99
+ * Effect ID: 90
  * Family: GEOMETRIC
  * Tags: CENTER_ORIGIN | TRAVELING
  *
@@ -70,6 +70,9 @@ private:
     
     // Enhanced: Snare sharpness boost
     float m_snareSharpness = 0.0f;
+    
+    // Tempo lock hysteresis (Schmitt trigger: 0.6 lock / 0.4 unlock)
+    bool m_tempoLocked = false;
 };
 
 } // namespace ieffect

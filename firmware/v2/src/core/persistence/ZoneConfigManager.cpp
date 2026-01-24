@@ -9,7 +9,6 @@
 #include <Arduino.h>
 #include <cstring>
 #include "../../effects/zones/ZoneDefinition.h"
-#include "../../palettes/Palettes_Master.h"
 
 using namespace lightwaveos::zones;
 
@@ -243,62 +242,34 @@ bool ZoneConfigManager::loadFromNVS() {
 
     // Check version compatibility and migrate if needed
     if (config.version == 1) {
-        Serial.println("[ZoneConfig] Migrating from version 1 to version 3");
+        Serial.println("[ZoneConfig] Migrating from version 1 to version 2");
         // Load as V1 struct
         ZoneConfigDataV1 v1Config;
         memcpy(&v1Config, &config, sizeof(ZoneConfigDataV1));
-
-        // Convert to V3 format
-        ZoneConfigData v3Config = {};  // Zero-initialize all fields
-        v3Config.version = CONFIG_VERSION;
-        v3Config.systemEnabled = v1Config.systemEnabled;
-        v3Config.zoneCount = (v1Config.layout == ZoneLayout::QUAD) ? 4 : 3;
-
+        
+        // Convert to V2 format
+        ZoneConfigData v2Config;
+        v2Config.version = CONFIG_VERSION;
+        v2Config.systemEnabled = v1Config.systemEnabled;
+        v2Config.zoneCount = (v1Config.layout == ZoneLayout::QUAD) ? 4 : 3;
+        
         // Convert layout enum to segments
         if (v1Config.layout == ZoneLayout::QUAD) {
-            memcpy(v3Config.segments, ZONE_4_CONFIG, sizeof(ZONE_4_CONFIG));
+            memcpy(v2Config.segments, ZONE_4_CONFIG, sizeof(ZONE_4_CONFIG));
         } else {
-            memcpy(v3Config.segments, ZONE_3_CONFIG, sizeof(ZONE_3_CONFIG));
+            memcpy(v2Config.segments, ZONE_3_CONFIG, sizeof(ZONE_3_CONFIG));
         }
-
+        
         // Copy zone settings
-        memcpy(v3Config.zoneEffects, v1Config.zoneEffects, sizeof(v1Config.zoneEffects));
-        memcpy(v3Config.zoneEnabled, v1Config.zoneEnabled, sizeof(v1Config.zoneEnabled));
-        memcpy(v3Config.zoneBrightness, v1Config.zoneBrightness, sizeof(v1Config.zoneBrightness));
-        memcpy(v3Config.zoneSpeed, v1Config.zoneSpeed, sizeof(v1Config.zoneSpeed));
-        memcpy(v3Config.zonePalette, v1Config.zonePalette, sizeof(v1Config.zonePalette));
-        memcpy(v3Config.zoneBlendMode, v1Config.zoneBlendMode, sizeof(v1Config.zoneBlendMode));
-
-        // Audio fields stay at defaults (zero-initialized)
-        for (uint8_t i = 0; i < MAX_ZONES; i++) {
-            v3Config.zoneBeatTriggerInterval[i] = 4;  // Default to 4-beat interval
-        }
-
+        memcpy(v2Config.zoneEffects, v1Config.zoneEffects, sizeof(v1Config.zoneEffects));
+        memcpy(v2Config.zoneEnabled, v1Config.zoneEnabled, sizeof(v1Config.zoneEnabled));
+        memcpy(v2Config.zoneBrightness, v1Config.zoneBrightness, sizeof(v1Config.zoneBrightness));
+        memcpy(v2Config.zoneSpeed, v1Config.zoneSpeed, sizeof(v1Config.zoneSpeed));
+        memcpy(v2Config.zonePalette, v1Config.zonePalette, sizeof(v1Config.zonePalette));
+        memcpy(v2Config.zoneBlendMode, v1Config.zoneBlendMode, sizeof(v1Config.zoneBlendMode));
+        
         // Apply migrated configuration
-        importConfig(v3Config);
-    } else if (config.version == 2) {
-        Serial.println("[ZoneConfig] Migrating from version 2 to version 3");
-        // V2 has same base fields as V3, just missing audio config
-        // Zero-initialize audio fields and copy the rest
-        ZoneConfigData v3Config = {};
-        v3Config.version = CONFIG_VERSION;
-        v3Config.systemEnabled = config.systemEnabled;
-        v3Config.zoneCount = config.zoneCount;
-        memcpy(v3Config.segments, config.segments, sizeof(config.segments));
-        memcpy(v3Config.zoneEffects, config.zoneEffects, sizeof(config.zoneEffects));
-        memcpy(v3Config.zoneEnabled, config.zoneEnabled, sizeof(config.zoneEnabled));
-        memcpy(v3Config.zoneBrightness, config.zoneBrightness, sizeof(config.zoneBrightness));
-        memcpy(v3Config.zoneSpeed, config.zoneSpeed, sizeof(config.zoneSpeed));
-        memcpy(v3Config.zonePalette, config.zonePalette, sizeof(config.zonePalette));
-        memcpy(v3Config.zoneBlendMode, config.zoneBlendMode, sizeof(config.zoneBlendMode));
-
-        // Audio fields stay at defaults (zero-initialized)
-        for (uint8_t i = 0; i < MAX_ZONES; i++) {
-            v3Config.zoneBeatTriggerInterval[i] = 4;  // Default to 4-beat interval
-        }
-
-        // Apply migrated configuration
-        importConfig(v3Config);
+        importConfig(v2Config);
     } else if (config.version == CONFIG_VERSION) {
         // Apply configuration
         importConfig(config);
@@ -379,7 +350,7 @@ bool ZoneConfigManager::loadSystemState(uint8_t& effectId, uint8_t& brightness,
     effectId = (config.effectId < MAX_EFFECT_ID) ? config.effectId : 0;
     brightness = config.brightness;  // Full range 0-255 is valid
     speed = (config.speed >= MIN_SPEED && config.speed <= MAX_SPEED) ? config.speed : 25;
-    paletteId = lightwaveos::palettes::validatePaletteId(config.paletteId);  // Clamp to [0, 74]
+    paletteId = (config.paletteId <= MAX_PALETTE_ID) ? config.paletteId : 0;
 
     Serial.println("[ZoneConfig] System state loaded from NVS");
     return true;
@@ -445,28 +416,6 @@ void ZoneConfigManager::exportConfig(ZoneConfigData& config) {
         config.zoneSpeed[i] = m_composer->getZoneSpeed(i);
         config.zonePalette[i] = m_composer->getZonePalette(i);
         config.zoneBlendMode[i] = static_cast<uint8_t>(m_composer->getZoneBlendMode(i));
-
-        // Export audio config (v3)
-        ZoneAudioConfig audioConfig = m_composer->getZoneAudioConfig(i);
-        config.zoneTempoSync[i] = audioConfig.tempoSync;
-        config.zoneBeatModulation[i] = audioConfig.beatModulation;
-        config.zoneTempoSpeedScale[i] = audioConfig.tempoSpeedScale;
-        config.zoneBeatDecay[i] = audioConfig.beatDecay;
-        config.zoneAudioBand[i] = audioConfig.audioBand;
-
-        // Export beat trigger config (v3)
-        bool beatEnabled = false;
-        uint8_t beatInterval = 4;
-        uint8_t effectList[8] = {0};
-        uint8_t effectCount = 0;
-        uint8_t currentIndex = 0;  // Not persisted (runtime state)
-        m_composer->getZoneBeatTriggerConfig(i, beatEnabled, beatInterval, effectList, effectCount, currentIndex);
-        config.zoneBeatTriggerEnabled[i] = beatEnabled;
-        config.zoneBeatTriggerInterval[i] = beatInterval;
-        config.zoneEffectListSize[i] = effectCount;
-        for (uint8_t j = 0; j < 8; j++) {
-            config.zoneEffectList[i][j] = (j < effectCount) ? effectList[j] : 0;
-        }
     }
 }
 
@@ -487,21 +436,6 @@ void ZoneConfigManager::importConfig(const ZoneConfigData& config) {
         m_composer->setZoneSpeed(i, config.zoneSpeed[i]);
         m_composer->setZonePalette(i, config.zonePalette[i]);
         m_composer->setZoneBlendMode(i, static_cast<BlendMode>(config.zoneBlendMode[i]));
-
-        // Import audio config (v3)
-        m_composer->setZoneTempoSync(i, config.zoneTempoSync[i]);
-        m_composer->setZoneBeatModulation(i, config.zoneBeatModulation[i]);
-        m_composer->setZoneTempoSpeedScale(i, config.zoneTempoSpeedScale[i]);
-        m_composer->setZoneBeatDecay(i, config.zoneBeatDecay[i]);
-        m_composer->setZoneAudioBand(i, config.zoneAudioBand[i]);
-
-        // Import beat trigger config (v3)
-        m_composer->setZoneBeatTriggerEnabled(i, config.zoneBeatTriggerEnabled[i]);
-        m_composer->setZoneBeatTriggerInterval(i, config.zoneBeatTriggerInterval[i]);
-        if (config.zoneEffectListSize[i] > 0) {
-            m_composer->setZoneBeatTriggerEffectList(i, config.zoneEffectList[i],
-                                                     config.zoneEffectListSize[i]);
-        }
     }
 
     // Apply system enabled state
@@ -539,8 +473,8 @@ bool ZoneConfigManager::validateConfig(const ZoneConfigData& config) const {
             return false;
         }
 
-        // Palette range - validate against actual palette count (0-74)
-        if (config.zonePalette[i] >= lightwaveos::palettes::MASTER_PALETTE_COUNT) {
+        // Palette range
+        if (config.zonePalette[i] > MAX_PALETTE_ID) {
             return false;
         }
 
@@ -550,23 +484,6 @@ bool ZoneConfigManager::validateConfig(const ZoneConfigData& config) const {
         }
 
         // Brightness 0-255 is always valid
-
-        // Audio config validation (v3)
-        if (config.zoneTempoSpeedScale[i] > 200) {
-            return false;
-        }
-        if (config.zoneAudioBand[i] > 3) {
-            return false;
-        }
-
-        // Beat trigger validation (v3)
-        uint8_t interval = config.zoneBeatTriggerInterval[i];
-        if (interval != 1 && interval != 2 && interval != 4 && interval != 8) {
-            return false;
-        }
-        if (config.zoneEffectListSize[i] > 8) {
-            return false;
-        }
     }
 
     return true;

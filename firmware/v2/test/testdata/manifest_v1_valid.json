@@ -1,0 +1,13 @@
+{
+  "version": "1.0",
+  "plugin": {
+    "name": "Test Plugin V1",
+    "description": "Valid schema 1 manifest",
+    "author": "LightwaveOS Team"
+  },
+  "mode": "additive",
+  "effects": [
+    { "id": 0, "name": "Solid" },
+    { "id": 1, "name": "Breathing" }
+  ]
+}

@@ -1,0 +1,56 @@
+[16262][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.025 0.012 0.014 0.014 0.008 0.010 0.005 0.003]
+[17220][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.032 0.013 0.008 0.007 0.003 0.009 0.006 0.003]
+[18184][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.023 0.013 0.011 0.013 0.008 0.005 0.006 0.002]
+
+=== Validation Performance Report ===
+Total calls: 3969
+Total frames: 1000
+Avg time per call: 3.52 us
+Peak time: 107.00 us
+Total overhead per frame: 13.97 us
+CPU overhead: 0.168% (of 8.33ms frame budget)
+Theoretical estimate: 0.1% (actual: 0.168%)
+=======================================
+
+[19143][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.015 0.006 0.009 0.009 0.004 0.006 0.004 0.002]
+[20099][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.030 0.016 0.009 0.008 0.005 0.007 0.009 0.004]
+[21057][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.017 0.011 0.011 0.010 0.004 0.005 0.005 0.004]
+[Status] FPS: 137, CPU: 87%, Effect: Fire
+[22016][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.013 0.011 0.014 0.010 0.004 0.007 0.004 0.002]
+[22725][1;32m[INFO][0m[OtaHandlers] OTA: Upload starting: firmware.bin
+[22726][1;35m[WARN][0m[OtaHandlers] OTA: Invalid token (expected: LW-OTA-2024-SecureUpdate)
+{"event":"ota.rest.failed","ts_mono_ms":22726,"reason":"Unauthorized","bytesWritten":0,"schemaVersion":"1.0.0"}
+[22769][1;32m[INFO][0m[AudioCapture] [1;33mDMA:[0m hop=620 R=[F9CA8000..F9F88000] >>10=[-101728..-98784]
+[22779][1;32m[INFO][0m[Audio] Audio alive: [1;33mmic=-45.4dB[0m cap=620 pk=442 pkC=5169 rms=0.0657->0.001 pre=0.0054 g=12.14 dc=17.9 clip=0 flux=0.000 min=-2842 max=5169 mean=46.2
+[22781][1;32m[INFO][0m[Audio] Spike stats: frames=620 detected=4849 corrected=3822 avg/frame=1.607 removed=595.34
+[22781][1;32m[INFO][0m[Audio] Saliency: overall=0.063 dom=0 H=0.206 R=0.000 T=0.006 D=0.042
+[22781][1;32m[INFO][0m[Audio] Style: 5 conf=0.80 [R=0.30 H=0.50 M=0.00 T=0.52 D=0.80]
+[22781][1;32m[INFO][0m[Audio] [1;35mBeat:[0m BPM=98.0 conf=0.03 phase=0.78 lock=no
+[22999][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.014 0.013 0.022 0.006 0.006 0.008 0.009 0.002]
+[23964][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.012 0.016 0.015 0.010 0.006 0.006 0.004 0.002]
+[24924][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.015 0.010 0.009 0.006 0.004 0.008 0.005 0.002]
+[25881][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.011 0.005 0.003 0.003 0.004 0.003 0.001 0.001]
+[26840][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.014 0.013 0.010 0.005 0.006 0.004 0.003 0.001]
+[27799][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.012 0.006 0.007 0.007 0.003 0.003 0.004 0.001]
+[28757][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.015 0.009 0.007 0.006 0.005 0.006 0.004 0.002]
+[29717][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.010 0.005 0.007 0.008 0.002 0.002 0.003 0.001]
+[30044][1;32m[INFO][0m[WiFi] Connected to 'OPTUS_738CC0N', RSSI: -75 dBm, Channel: 6, Uptime: 18s
+[30677][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.013 0.005 0.006 0.005 0.003 0.003 0.004 0.001]
+[31635][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.011 0.003 0.004 0.005 0.002 0.003 0.003 0.001]
+[Status] FPS: 137, CPU: 86%, Effect: Fire
+[32368][1;32m[INFO][0m[AudioCapture] [1;33mDMA:[0m hop=930 R=[F9C80000..F9ECC000] >>10=[-101888..-99536]
+[32592][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.006 0.005 0.008 0.002 0.005 0.006 0.001 0.001]
+[33551][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.007 0.005 0.005 0.003 0.002 0.002 0.003 0.002]
+[34510][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.010 0.011 0.007 0.007 0.006 0.003 0.004 0.001]
+
+=== Validation Performance Report ===
+Total calls: 8006
+Total frames: 2000
+Avg time per call: 3.49 us
+Peak time: 107.00 us
+Total overhead per frame: 13.96 us
+CPU overhead: 0.168% (of 8.33ms frame budget)
+Theoretical estimate: 0.1% (actual: 0.168%)
+=======================================
+
+[35473][0;37m[DEBUG][0m[Audio] [36m64-bin Goertzel:[0m [0.016 0.012 0.008 0.007 0.033 0.013 0.004 0.003]

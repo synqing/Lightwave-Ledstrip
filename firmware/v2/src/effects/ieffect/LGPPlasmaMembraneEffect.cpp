@@ -38,7 +38,6 @@ void LGPPlasmaMembraneEffect::render(plugins::EffectContext& ctx) {
         uint8_t sat = (uint8_t)(200 + (membrane >> 2));
         uint8_t brightness = scale8((uint8_t)membrane, ctx.brightness);
 
-        // Use palette system - brightness already scaled by ctx.brightness in line 39
         CRGB inner = ctx.palette.getColor(hue, brightness);
         uint8_t outerBright = scale8(brightness, 200);
         outerBright = (uint8_t)((outerBright * ctx.brightness) / 255);

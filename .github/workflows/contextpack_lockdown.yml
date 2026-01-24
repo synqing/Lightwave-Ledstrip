@@ -1,0 +1,38 @@
+name: Context Pack Lockdown
+
+on:
+  pull_request:
+    branches: [ main, feat/*, develop ]
+  push:
+    branches: [ main, feat/*, develop ]
+
+jobs:
+  contextpack-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Install pre-commit
+        run: pip install pre-commit
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      
+      - name: Install TOON CLI dependencies
+        run: npm --prefix tools install
+      
+      - name: Run pre-commit hooks
+        run: pre-commit run --all-files
+      
+      - name: Run contextpack lint
+        run: cd tools && make contextpack-lint
+      
+      - name: Run contextpack tests
+        run: cd tools && make test

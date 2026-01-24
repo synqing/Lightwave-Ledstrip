@@ -1,0 +1,75 @@
+name: ITF ADR-015 Validation
+
+on:
+  pull_request:
+    branches: [ main, feat/* ]
+    paths:
+      - 'firmware/v2/specs/quint/choreo/**/*.itf.json'
+      - 'firmware/v2/specs/quint/choreo/tools/validate_itf_bigint.py'
+      - 'firmware/v2/specs/quint/choreo/tools/jsonl_to_itf.py'
+      - '.github/workflows/itf_validation.yml'
+  push:
+    branches: [ main, feat/* ]
+    paths:
+      - 'firmware/v2/specs/quint/choreo/**/*.itf.json'
+      - 'firmware/v2/specs/quint/choreo/tools/validate_itf_bigint.py'
+      - 'firmware/v2/specs/quint/choreo/tools/jsonl_to_itf.py'
+      - '.github/workflows/itf_validation.yml'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  validate-itf:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Find all ITF files
+        id: find-itf
+        run: |
+          cd firmware/v2/specs/quint/choreo
+          ITF_FILES=$(find . -name "*.itf.json" -type f | sort)
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          echo "$ITF_FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          if [ -z "$ITF_FILES" ]; then
+            echo "No ITF files found (this is OK if no traces exist yet)"
+            echo "count=0" >> $GITHUB_OUTPUT
+          else
+            echo "$ITF_FILES" | wc -l | xargs echo "count=" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Validate ITF files (ADR-015 compliance)
+        working-directory: firmware/v2/specs/quint/choreo
+        run: |
+          set -euo pipefail
+          
+          if [ "${{ steps.find-itf.outputs.count }}" == "0" ]; then
+            echo "No ITF files to validate (skipping)"
+            exit 0
+          fi
+          
+          FAILED=0
+          while IFS= read -r itf_file; do
+            [ -z "$itf_file" ] && continue
+            echo "Validating: $itf_file"
+            if ! python3 tools/validate_itf_bigint.py "$itf_file"; then
+              echo "ERROR: $itf_file contains raw numbers (ADR-015 violation)"
+              FAILED=1
+            fi
+          done <<< "${{ steps.find-itf.outputs.files }}"
+          
+          if [ "$FAILED" -eq 1 ]; then
+            echo "FAILED: One or more ITF files contain raw integers/floats"
+            echo "All integers must be encoded as {\"#bigint\": \"num\"} per ADR-015"
+            exit 1
+          fi
+          
+          echo "PASS: All ITF files are ADR-015 compliant"

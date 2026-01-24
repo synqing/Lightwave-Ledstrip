@@ -43,21 +43,10 @@ private:
     uint8_t m_dominantBin = 0;
     float m_dominantBinSmooth = 0.0f;
 
-    // Chromagram smoothing (AsymmetricFollower for natural attack/release)
-    enhancement::AsymmetricFollower m_chromaFollowers[12];
-    float m_chromaSmoothed[12] = {0.0f};
-    float m_chromaTargets[12] = {0.0f};
-    
     // Enhancement utilities (Spring + AsymmetricFollower)
     enhancement::Spring m_speedSpring;                                        // Natural momentum for speed
     enhancement::AsymmetricFollower m_energyAvgFollower{0.0f, 0.20f, 0.50f};  // 200ms rise, 500ms fall
     enhancement::AsymmetricFollower m_energyDeltaFollower{0.0f, 0.25f, 0.40f}; // 250ms rise, 400ms fall
-    enhancement::AsymmetricFollower m_bassFollower{0.0f, 0.05f, 0.30f};
-    enhancement::AsymmetricFollower m_trebleFollower{0.0f, 0.05f, 0.30f};
-    
-    // Hop sequence tracking
-    float m_targetBass = 0.0f;
-    float m_targetTreble = 0.0f;
 
     // Validation instrumentation
     float m_prevPhaseDelta = 0.0f;    // Previous frame phase delta for reversal detection

@@ -5,7 +5,6 @@
 
 #include "RippleEffect.h"
 #include "../CoreEffects.h"
-#include "../enhancement/SmoothingEngine.h"
 #include "../../config/features.h"
 #include <FastLED.h>
 #include <cmath>
@@ -45,18 +44,8 @@ bool RippleEffect::init(plugins::EffectContext& ctx) {
     }
     memset(m_radial, 0, sizeof(m_radial));
     memset(m_radialAux, 0, sizeof(m_radialAux));
-    // Initialize smoothing followers
-    m_kickFollower.reset(0.0f);
-    m_trebleFollower.reset(0.0f);
-    for (uint8_t i = 0; i < 12; i++) {
-        m_chromaFollowers[i].reset(0.0f);
-        m_chromaSmoothed[i] = 0.0f;
-        m_chromaTargets[i] = 0.0f;
-    }
     m_kickPulse = 0.0f;
     m_trebleShimmer = 0.0f;
-    m_targetKick = 0.0f;
-    m_targetTreble = 0.0f;
     return true;
 }
 
@@ -67,14 +56,12 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
     // in the m_ripples[] array. Ripples spawn at center and expand outward. Identified
     // in PatternRegistry::isStatefulEffect().
 
-    // Fade radial buffer using fadeAmount parameter
-    fadeToBlackBy(m_radial, HALF_LENGTH, ctx.fadeAmount);
+    // INCREASED DECAY: Faster fade (20→45) prevents white accumulation from
+    // overlapping ripples with WHITE_HEAVY palettes. ~2.25x faster decay.
+    fadeToBlackBy(m_radial, HALF_LENGTH, 45);
 
     const bool hasAudio = ctx.audio.available;
     bool newHop = false;
-    float dt = ctx.getSafeDeltaSeconds();
-    float moodNorm = ctx.getMoodNormalized();
-    
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
         newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
@@ -84,12 +71,18 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
             // =====================================================================
             // 64-bin Sub-Bass Kick Detection (bins 0-5 = 110-155 Hz)
             // Deep kick drums that the 12-bin chromagram misses entirely.
+            // Gives powerful punch on bass drops - instant attack, fast decay.
             // =====================================================================
             float kickSum = 0.0f;
             for (uint8_t i = 0; i < 6; ++i) {
                 kickSum += ctx.audio.bin(i);
             }
-            m_targetKick = kickSum / 6.0f;
+            float kickAvg = kickSum / 6.0f;
+            if (kickAvg > m_kickPulse) {
+                m_kickPulse = kickAvg;  // Instant attack
+            } else {
+                m_kickPulse *= 0.80f;   // ~80ms decay at 60fps for punchy response
+            }
 
             // =====================================================================
             // 64-bin Treble Shimmer (bins 48-63 = 1.3-4.2 kHz)
@@ -99,22 +92,7 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
             for (uint8_t i = 48; i < 64; ++i) {
                 trebleSum += ctx.audio.bin(i);
             }
-            m_targetTreble = trebleSum / 16.0f;
-            
-            // Update chromagram targets
-            for (uint8_t i = 0; i < 12; i++) {
-                m_chromaTargets[i] = ctx.audio.controlBus.heavy_chroma[i];
-            }
-        }
-        
-        // Smooth toward targets every frame with MOOD-adjusted smoothing
-        m_kickPulse = m_kickFollower.updateWithMood(m_targetKick, dt, moodNorm);
-        m_trebleShimmer = m_trebleFollower.updateWithMood(m_targetTreble, dt, moodNorm);
-        
-        // Smooth chromagram with AsymmetricFollower
-        for (uint8_t i = 0; i < 12; i++) {
-            m_chromaSmoothed[i] = m_chromaFollowers[i].updateWithMood(
-                m_chromaTargets[i], dt, moodNorm);
+            m_trebleShimmer = trebleSum / 16.0f;
         }
     }
 #endif
@@ -130,9 +108,10 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
         float chromaEnergy = 0.0f;
         float maxBinVal = 0.0f;
         for (uint8_t i = 0; i < 12; ++i) {
-            float bin = m_chromaSmoothed[i];  // Use smoothed chromagram
-            // FIX: Use sqrt scaling instead of squaring to preserve low-level signals
-            float bright = sqrtf(bin) * 1.5f;
+            float bin = ctx.audio.controlBus.chroma[i];
+            float bright = bin;
+            bright = bright * bright;
+            bright *= 1.5f;
             if (bright > 1.0f) bright = 1.0f;
             if (bright > maxBinVal) {
                 maxBinVal = bright;
@@ -151,13 +130,10 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
         energyAvg = m_chromaEnergySum / CHROMA_HISTORY;
 
         energyDelta = energyNorm - energyAvg;
-        // FIX: Allow small negative delta to still contribute (halve threshold)
-        if (energyDelta < -0.1f) energyDelta = 0.0f;
-        else if (energyDelta < 0.0f) energyDelta = 0.0f;  // Clamp to zero but don't skip
+        if (energyDelta < 0.0f) energyDelta = 0.0f;
         m_lastChromaEnergy = energyNorm;
 
-        // FIX: Lower spawn threshold multipliers for more activity
-        float chanceF = energyDelta * 400.0f + energyAvg * 120.0f;
+        float chanceF = energyDelta * 510.0f + energyAvg * 80.0f;
         if (chanceF > 255.0f) chanceF = 255.0f;
         spawnChance = (uint8_t)chanceF;
     } else
@@ -233,7 +209,9 @@ void RippleEffect::render(plugins::EffectContext& ctx) {
     }
 #endif
 
-    if (spawnChance > 0 && m_spawnCooldown == 0 && random8() < spawnChance) {
+    // Gate spawn check to audio hop rate (not every render frame)
+    // This makes spawn rate consistent across devices regardless of FPS
+    if (newHop && spawnChance > 0 && m_spawnCooldown == 0 && random8() < spawnChance) {
         for (int i = 0; i < MAX_RIPPLES; i++) {
             if (!m_ripples[i].active) {
                 // Random variation around speedScale (0.5 to 1.5x speedScale)

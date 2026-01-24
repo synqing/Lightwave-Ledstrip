@@ -36,7 +36,6 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../../plugins/api/BehaviorSelection.h"
-#include "../enhancement/SmoothingEngine.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -125,34 +124,6 @@ private:
     // -----------------------------------------
     float m_kickBurst = 0.0f;           ///< Sub-bass energy (bins 0-5) for instant burst
     float m_trebleShimmerIntensity = 0.0f;  ///< Treble energy (bins 48-63) for shimmer boost
-    
-    // Audio smoothing (AsymmetricFollower for mood-adjusted smoothing)
-    enhancement::AsymmetricFollower m_rmsFollower{0.0f, 0.05f, 0.30f};
-    float m_targetRms = 0.0f;
-    
-    // Priority 1: Mood-adjusted smoothing for additional audio features
-    enhancement::AsymmetricFollower m_energyDeltaFollower{0.0f, 0.08f, 0.25f};
-    enhancement::AsymmetricFollower m_fluxFollower{0.0f, 0.25f, 0.80f};
-    enhancement::AsymmetricFollower m_kickBurstFollower{0.0f, 0.01f, 0.06f};  // Fast attack, fast decay for punchy response
-    float m_targetEnergyDelta = 0.0f;
-    float m_targetFlux = 0.0f;
-    float m_targetKickBurst = 0.0f;
-    
-    // Priority 3: Chord progression tracking
-    uint8_t m_prevKeyRootBin = 0;
-    bool m_prevKeyMinor = false;
-    float m_chordTransitionProgress = 1.0f;  // 0.0 = old chord, 1.0 = new chord
-    
-    // Priority 2: Ray count modulation
-    float m_rayCount = 2.0f;  // 1-4 rays, modulated by audio complexity
-    
-    // Priority 4: Beat alignment state
-    float m_beatAlignedPhaseOffset = 0.0f;
-    bool m_beatAlignmentActive = false;
-    
-    // Priority 6: Burst shape
-    enum class BurstShape { EXPONENTIAL, LINEAR, POWER_LAW, GAUSSIAN };
-    BurstShape m_burstShape = BurstShape::EXPONENTIAL;
 };
 
 } // namespace ieffect

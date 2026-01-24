@@ -10,7 +10,7 @@
 
 #include "../api/IEffect.h"
 #include "../api/EffectContext.h"
-#include "../../core/actors/RendererNode.h"
+#include "../../core/actors/RendererActor.h"
 
 namespace lightwaveos {
 namespace plugins {
@@ -26,7 +26,7 @@ public:
      * @param name Effect name
      * @param fn Legacy function pointer
      */
-    LegacyEffectAdapter(const char* name, nodes::EffectRenderFn fn);
+    LegacyEffectAdapter(const char* name, actors::EffectRenderFn fn);
     
     ~LegacyEffectAdapter() override = default;
 
@@ -38,12 +38,12 @@ public:
 
 private:
     const char* m_name;
-    nodes::EffectRenderFn m_fn;
+    actors::EffectRenderFn m_fn;
     mutable EffectMetadata m_metadata;
     
     // Temporary RenderContext for conversion
     // Note: palette pointer is set directly from EffectContext each frame
-    nodes::RenderContext m_tempRenderContext;
+    actors::RenderContext m_tempRenderContext;
 };
 
 } // namespace runtime

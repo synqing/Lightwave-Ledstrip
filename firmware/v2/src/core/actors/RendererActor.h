@@ -1,8 +1,8 @@
 /**
- * @file RendererNode.h
- * @brief Node responsible for LED rendering at 120 FPS
+ * @file RendererActor.h
+ * @brief Actor responsible for LED rendering at 120 FPS
  *
- * The RendererNode is the heart of the visual system. It:
+ * The RendererActor is the heart of the visual system. It:
  * - Runs on Core 1 at highest priority for deterministic timing
  * - Maintains the LED buffer state
  * - Executes effect render functions at 120 FPS
@@ -10,7 +10,7 @@
  * - Publishes FRAME_RENDERED events for synchronization
  *
  * Architecture:
- *   Commands (from other nodes/cores):
+ *   Commands (from other actors/cores):
  *     SET_EFFECT, SET_BRIGHTNESS, SET_SPEED, SET_PALETTE, etc.
  *
  *   Events (published to MessageBus):
@@ -18,8 +18,8 @@
  *     EFFECT_CHANGED - When effect changes
  *
  * Thread Safety:
- *   The RendererNode owns the LED buffer exclusively.
- *   Other nodes must NOT directly access leds[] or call FastLED.
+ *   The RendererActor owns the LED buffer exclusively.
+ *   Other actors must NOT directly access leds[] or call FastLED.
  *   Use messages to request state changes.
  *
  * @author LightwaveOS Team
@@ -28,11 +28,12 @@
 
 #pragma once
 
-#include "Node.h"
+#include "Actor.h"
 #include "../bus/MessageBus.h"
 #include "../../effects/enhancement/ColorCorrectionEngine.h"
 #include "../../config/features.h"
 #include "../../plugins/api/EffectContext.h"
+#include "../../plugins/api/IEffectRegistry.h"
 
 #include <atomic>
 
@@ -48,6 +49,7 @@
 #include "../../audio/contracts/MusicalGrid.h"
 #include "../../audio/contracts/SnapshotBuffer.h"
 #include "../../audio/contracts/AudioEffectMapping.h"
+#include "../../audio/TrinityControlBusProxy.h"
 // TempoTracker integration (replaces K1)
 #include "../../audio/tempo/TempoTracker.h"
 #include "../../utils/LockFreeQueue.h"
@@ -57,12 +59,11 @@
 namespace lightwaveos { namespace zones { class ZoneComposer; } }
 namespace lightwaveos { namespace transitions { class TransitionEngine; enum class TransitionType : uint8_t; } }
 namespace lightwaveos { namespace plugins { class IEffect; namespace runtime { class LegacyEffectAdapter; } } }
-#if FEATURE_AUDIO_SYNC
-namespace lightwaveos { namespace audio { class AudioActor; } }
-#endif
+// Note: AudioActor forward declaration removed - use #include "../../audio/AudioActor.h" instead
+// to avoid conflict between class forward declaration and using-alias in lightwaveos::audio namespace
 
 namespace lightwaveos {
-namespace nodes {
+namespace actors {
 
 // ============================================================================
 // Configuration
@@ -147,7 +148,7 @@ struct RenderContext {
 using EffectRenderFn = void (*)(RenderContext& ctx);
 
 // ============================================================================
-// RendererNode Class
+// RendererActor Class
 // ============================================================================
 
 /**
@@ -159,19 +160,19 @@ using EffectRenderFn = void (*)(RenderContext& ctx);
  * State changes (effect, brightness, etc.) are received as messages
  * and applied atomically before the next frame.
  */
-class RendererNode : public Node {
+class RendererActor : public Actor, public plugins::IEffectRegistry {
 public:
     /**
-     * @brief Construct the RendererNode
+     * @brief Construct the RendererActor
      *
-     * Uses the predefined Renderer configuration from NodeConfigs.
+     * Uses the predefined Renderer configuration from ActorConfigs.
      */
-    RendererNode();
+    RendererActor();
 
     /**
      * @brief Destructor
      */
-    ~RendererNode() override;
+    ~RendererActor() override;
 
     // ========================================================================
     // State Accessors (read-only, for diagnostics)
@@ -223,7 +224,31 @@ public:
      * @param effect IEffect instance pointer
      * @return true if registered successfully
      */
-    bool registerEffect(uint8_t id, plugins::IEffect* effect);
+    bool registerEffect(uint8_t id, plugins::IEffect* effect) override;
+
+    // ========================================================================
+    // IEffectRegistry Implementation
+    // ========================================================================
+
+    /**
+     * @brief Unregister an effect by ID
+     * @param id Effect ID to unregister
+     * @return true if effect was registered and is now unregistered
+     */
+    bool unregisterEffect(uint8_t id) override;
+
+    /**
+     * @brief Check if an effect is registered
+     * @param id Effect ID to check
+     * @return true if effect is registered
+     */
+    bool isEffectRegistered(uint8_t id) const override;
+
+    /**
+     * @brief Get registered effect count
+     * @return Number of registered effects
+     */
+    uint8_t getRegisteredCount() const override;
 
     /**
      * @brief Get number of registered effects
@@ -453,7 +478,7 @@ public:
 
 protected:
     // ========================================================================
-    // Node Overrides
+    // Actor Overrides
     // ========================================================================
 
     void onStart() override;
@@ -531,6 +556,7 @@ private:
 
     // Current state
     uint8_t m_currentEffect;
+    bool m_effectInitialized;  // Track if current effect has been init()'d
     uint8_t m_brightness;
     uint8_t m_speed;
     uint8_t m_paletteIndex;
@@ -550,7 +576,7 @@ private:
     // IMPORTANT: This value must be >= the number of registered effects.
     // It is referenced (sometimes duplicated) across networking/state/persistence.
     // If you add effects beyond this limit, registration and/or selection will fail.
-    static constexpr uint8_t MAX_EFFECTS = 110;  // Updated: 101 + 4 ambient + headroom
+    static constexpr uint8_t MAX_EFFECTS = 100;
     struct EffectEntry {
         const char* name;
         plugins::IEffect* effect;   // All effects are IEffect instances (native or adapter)
@@ -560,7 +586,7 @@ private:
     uint8_t m_effectCount;
     
     // Storage for LegacyEffectAdapter instances (one per legacy effect)
-    // These are allocated during registration and owned by RendererNode
+    // These are allocated during registration and owned by RendererActor
     plugins::runtime::LegacyEffectAdapter* m_legacyAdapters[MAX_EFFECTS];
 
     struct EffectParamUpdate {
@@ -644,6 +670,16 @@ private:
     /// Sequence number from last SnapshotBuffer read (for change detection)
     uint32_t m_lastControlBusSeq = 0;
 
+#if FEATURE_AUDIO_SYNC
+    /// Trinity ControlBus proxy for offline ML analysis sync
+    audio::TrinityControlBusProxy m_trinityProxy;
+
+    /// Trinity sync state
+    bool m_trinitySyncActive = false;
+    bool m_trinitySyncPaused = false;
+    float m_trinitySyncPosition = 0.0f;
+#endif
+
     // Audio availability latch (hysteresis) removed: keep simple gate based on
     // sequence_changed || age_within_tolerance for predictability.
 
@@ -692,5 +728,5 @@ private:
     void captureFrame(CaptureTap tap, const CRGB* sourceBuffer);
 };
 
-} // namespace nodes
+} // namespace actors
 } // namespace lightwaveos

@@ -6,9 +6,9 @@
 #include "BatchHandlers.h"
 #include "../../ApiResponse.h"
 #include "../../RequestValidator.h"
-#include "../../../core/actors/NodeOrchestrator.h"
+#include "../../../core/actors/ActorSystem.h"
 
-using namespace lightwaveos::nodes;
+using namespace lightwaveos::actors;
 using namespace lightwaveos::network;
 
 namespace lightwaveos {
@@ -18,7 +18,7 @@ namespace handlers {
 
 void BatchHandlers::handleExecute(AsyncWebServerRequest* request,
                                     uint8_t* data, size_t len,
-                                    NodeOrchestrator& orchestrator,
+                                    ActorSystem& actorSystem,
                                     std::function<bool(const String&, JsonVariant)> executeBatchAction,
                                     std::function<void()> broadcastStatus) {
     StaticJsonDocument<512> doc;

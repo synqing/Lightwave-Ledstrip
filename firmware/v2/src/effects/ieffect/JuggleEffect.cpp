@@ -34,8 +34,8 @@ void JuggleEffect::render(plugins::EffectContext& ctx) {
         int pos1 = CENTER_RIGHT + distFromCenter;
         int pos2 = CENTER_LEFT - distFromCenter;
 
-        // Use palette system - apply brightness scaling
-        uint8_t brightU8 = (uint8_t)((255 * ctx.brightness) / 255);
+        // Respect active palette and brightness scaling
+        uint8_t brightU8 = ctx.brightness;
         CRGB color = ctx.palette.getColor(dothue, brightU8);
 
         if (pos1 < STRIP_LENGTH) {
@@ -74,4 +74,3 @@ const plugins::EffectMetadata& JuggleEffect::getMetadata() const {
 } // namespace ieffect
 } // namespace effects
 } // namespace lightwaveos
-

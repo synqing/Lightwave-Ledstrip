@@ -80,6 +80,7 @@ bool LGPPhotonicCrystalEnhancedEffect::init(plugins::EffectContext& ctx) {
     // Chroma tracking
     m_dominantBin = 0;
     m_dominantBinSmooth = 0.0f;
+    m_tempoLocked = false;
 
     return true;
 }
@@ -189,17 +190,49 @@ void LGPPhotonicCrystalEnhancedEffect::render(plugins::EffectContext& ctx) {
     }
 #endif
 
-    // Enhanced: Use beatPhase for synchronization when tempo confidence high
-    // VISIBILITY FIX: Lower threshold from 0.6f to 0.2f for ambient/sparse music
+    // Enhanced: Use beatPhase for synchronization when tempo confidence high (PLL-style correction)
+    // Domain constants (compute once, use consistently)
+    const float PHASE_DOMAIN = 628.3f;      // 100 * 2 * PI
+    const float HALF_DOMAIN = 314.15f;     // PHASE_DOMAIN / 2
+
     float speedNorm = ctx.speed / 50.0f;
-    float tempoConf = ctx.audio.available ? ctx.audio.tempoConfidence() : 0.0f;
-    if (ctx.audio.available && tempoConf > 0.2f) {
-        float beatPhase = ctx.audio.beatPhase();
-        m_phase = beatPhase * 628.3f;  // Map 0-1 to 0-100*2π
+    
+    // Tempo lock hysteresis (Schmitt trigger: prevents chatter near threshold)
+    // Note: Reverted from 0.2f "visibility fix" - using beatPhase when confidence
+    // is low injects wobble rather than coherence (unreliable reference)
+    if (!ctx.audio.available) {
+        m_tempoLocked = false;  // Clear lock when audio drops (prevents ghost lock)
     } else {
-        m_phase += speedNorm * 240.0f * speedMult * dt;
-        if (m_phase > 628.3f) m_phase -= 628.3f;  // Wrap at ~2*PI*100
+        float tempoConf = ctx.audio.tempoConfidence();
+        
+        // Update lock state with hysteresis (0.6 lock / 0.4 unlock)
+        if (tempoConf > 0.6f) m_tempoLocked = true;
+        else if (tempoConf < 0.4f) m_tempoLocked = false;
     }
+    
+    // Always advance phase (free-run oscillator)
+    m_phase += speedNorm * 240.0f * speedMult * dt;
+    
+    // Apply phase correction when tempo-locked (PLL-style P-only correction)
+    if (ctx.audio.available && m_tempoLocked) {
+        float beatPhase = ctx.audio.beatPhase();
+        float targetPhase = beatPhase * PHASE_DOMAIN;
+        
+        // Compute wrapped error (shortest path to target)
+        float phaseError = targetPhase - m_phase;
+        if (phaseError > HALF_DOMAIN) phaseError -= PHASE_DOMAIN;
+        if (phaseError < -HALF_DOMAIN) phaseError += PHASE_DOMAIN;
+        
+        // Proportional correction (tau ~100ms gives smooth lock)
+        // Compute ONCE per frame, not per pixel
+        const float tau = 0.1f;
+        const float correctionAlpha = 1.0f - expf(-dt / tau);
+        m_phase += phaseError * correctionAlpha;
+    }
+    
+    // CRITICAL: Wrap phase AFTER correction (handles negative and overflow)
+    while (m_phase >= PHASE_DOMAIN) m_phase -= PHASE_DOMAIN;
+    while (m_phase < 0.0f) m_phase += PHASE_DOMAIN;
 
     // Convert to integer phase for sin8 compatibility
     uint16_t phaseInt = (uint16_t)(m_phase * 0.408f);  // Scale to 0-256

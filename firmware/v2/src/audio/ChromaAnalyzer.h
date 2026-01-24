@@ -31,7 +31,7 @@ public:
     static constexpr size_t WINDOW_SIZE = 512;
     static constexpr uint8_t NUM_CHROMA = 12;
     static constexpr uint8_t NUM_OCTAVES = 4;  // Analyze 4 octaves (48 notes total)
-    static constexpr uint32_t SAMPLE_RATE_HZ = 16000;
+    static constexpr uint32_t SAMPLE_RATE_HZ = 12800;  // FIX: Match I2S sample rate (was 16000!)
 
     /**
      * @brief Constructor - precomputes Goertzel coefficients for note frequencies

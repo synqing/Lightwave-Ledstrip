@@ -1,0 +1,75 @@
+name: Trace Conformance Check (Legacy - Migrating to ITF Pipeline)
+
+# NOTE: This workflow is being migrated to use the ITF pipeline.
+# It now converts JSONL→ITF and uses check_trace_conformance.py instead of check_conformance.py.
+# Eventually this workflow will be removed once all traces use ITF natively.
+
+on:
+  pull_request:
+    branches: [ main, feat/* ]
+    paths:
+      - 'firmware/v2/specs/quint/choreo/**'
+      - '.github/workflows/trace_conformance.yml'
+  push:
+    branches: [ main, feat/* ]
+    paths:
+      - 'firmware/v2/specs/quint/choreo/**'
+      - '.github/workflows/trace_conformance.yml'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Convert JSONL to ITF and check conformance
+        working-directory: firmware/v2/specs/quint/choreo
+        run: |
+          set -euo pipefail
+          echo "Converting JSONL traces to ITF and checking conformance..."
+          mkdir -p traces/temp_itf
+          FAILED=0
+          
+          shopt -s nullglob
+          for jsonl_file in traces/curated/*.jsonl; do
+            # Extract base name
+            base_name=$(basename "$jsonl_file" .jsonl)
+            itf_file="traces/temp_itf/${base_name}_legacy.itf.json"
+            
+            echo "Converting JSONL→ITF: $jsonl_file"
+            if ! python3 tools/jsonl_to_itf.py "$jsonl_file" "$itf_file"; then
+              echo "ERROR: Failed to convert $jsonl_file to ITF"
+              FAILED=1
+              continue
+            fi
+            
+            # Validate ADR-015
+            if ! python3 tools/validate_itf_bigint.py "$itf_file"; then
+              echo "ERROR: $itf_file failed ADR-015 validation"
+              FAILED=1
+              continue
+            fi
+            
+            # Check conformance using ITF checker
+            echo "Checking conformance (ITF pipeline): $itf_file"
+            if ! python3 tools/check_trace_conformance.py "$itf_file"; then
+              echo "ERROR: $itf_file failed conformance check"
+              FAILED=1
+            fi
+          done
+          
+          if [ "$FAILED" -eq 1 ]; then
+            echo "FAILED: One or more traces are not model-conformant"
+            exit 1
+          fi
+          
+          echo "PASS: All curated traces are model-conformant (via ITF pipeline)"

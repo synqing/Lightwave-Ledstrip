@@ -13,9 +13,9 @@
 
 // Forward declarations
 namespace lightwaveos {
-namespace nodes {
-class RendererNode;
-class NodeOrchestrator;
+namespace actors {
+class RendererActor;
+class ActorSystem;
 }
 }
 
@@ -41,16 +41,16 @@ public:
      * @brief Handle GET /api/v1/device/status
      */
     static void handleStatus(AsyncWebServerRequest* request, 
-                             lightwaveos::nodes::NodeOrchestrator& orchestrator, 
-                             lightwaveos::nodes::RendererNode* renderer,
+                             lightwaveos::actors::ActorSystem& actors, 
+                             lightwaveos::actors::RendererActor* renderer,
                              uint32_t startTime, bool apMode, size_t wsClientCount);
     
     /**
      * @brief Handle GET /api/v1/device/info
      */
     static void handleInfo(AsyncWebServerRequest* request, 
-                           lightwaveos::nodes::NodeOrchestrator& orchestrator, 
-                           lightwaveos::nodes::RendererNode* renderer);
+                           lightwaveos::actors::ActorSystem& actors, 
+                           lightwaveos::actors::RendererActor* renderer);
 };
 
 } // namespace handlers

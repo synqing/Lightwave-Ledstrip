@@ -1,0 +1,62 @@
+# Pre-commit hooks for LightwaveOS
+# Install: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  # Context Pack lint
+  - repo: local
+    hooks:
+      - id: contextpack-lint
+        name: Context Pack Lint
+        entry: python tools/contextpack.py --lint
+        language: python
+        pass_filenames: false
+        always_run: true
+        stages: [commit]
+
+  # Secret detection
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: package-lock.json
+
+  # Python formatting (optional)
+  - repo: https://github.com/psf/black
+    rev: 23.12.1
+    hooks:
+      - id: black
+        language_version: python3
+        files: ^tools/.*\.py$
+
+  # YAML lint
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.33.0
+    hooks:
+      - id: yamllint
+        args: ['-d', '{extends: relaxed, rules: {line-length: disable}}']
+        files: \.(yaml|yml)$
+
+  # Trailing whitespace
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: \.patch$
+      - id: end-of-file-fixer
+        exclude: \.patch$
+      - id: check-yaml
+      - id: check-json
+        exclude: package-lock.json
+
+  # JSON codec boundary check (firmware/v2 only)
+  - repo: local
+    hooks:
+      - id: json-boundary-check
+        name: JSON Codec Boundary Check
+        entry: bash -c 'TARGET_DIR=firmware/v2 ./tools/check_json_boundary.sh'
+        language: system
+        pass_filenames: false
+        files: ^firmware/v2/.*\.(cpp|h|hpp)$
+        stages: [commit]

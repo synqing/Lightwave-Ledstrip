@@ -48,13 +48,6 @@ wifi_credentials.ini
 # Claude / local agent tooling (keep folder structure tracked via .claude/.gitkeep)
 .claude/**
 !.claude/.gitkeep
-!.claude/harness
-!.claude/harness/**
-!.claude/prd
-!.claude/prd/**
-!.claude/skills
-!.claude/skills/ralph-loop
-!.claude/skills/ralph-loop/**
 
 # Local semantic tooling / MCP manifests (environment-specific)
 .code-context/
@@ -119,3 +112,35 @@ z.md
 
 # Development dashboard (separate build project)
 # lightwave-dashboard/ -> Now tracked
+
+# ==========================================
+# LOCAL DEVELOPMENT ARTIFACTS
+# ==========================================
+# Tool/IDE configuration directories
+.nimbalyst/
+
+# Temporary working files
+LightwaveOS_Temp_Files/
+
+# Roadmap planning (local development notes)
+roadmap/
+
+# Node.js dependencies (never track)
+**/node_modules/
+
+# Build artifacts & code indexing
+build_output.txt
+repomix-output.*
+*.xml
+
+# Quint model checker outputs
+**/_apalache-out/
+**/*.smt
+**/run.txt
+
+# Context engineering / AI tooling runs
+context_engineering_runs/
+
+# Context Pack cache and ledger
+.contextpack_ledger.json
+.contextpack_cache/z_temp/

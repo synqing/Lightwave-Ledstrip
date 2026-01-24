@@ -21,7 +21,7 @@
 namespace lightwaveos {
 namespace effects {
 
-using namespace lightwaveos::nodes;
+using namespace lightwaveos::actors;
 
 // NOTE: Effects migrated to IEffect classes; legacy stubs kept for reference.
 
@@ -97,7 +97,7 @@ void effectEvanescentSkin(RenderContext& ctx) {
 
 // ==================== EFFECT REGISTRATION ====================
 
-uint8_t registerLGPQuantumEffects(RendererNode* renderer, uint8_t startId) {
+uint8_t registerLGPQuantumEffects(RendererActor* renderer, uint8_t startId) {
     if (!renderer) return 0;
 
     uint8_t count = 0;

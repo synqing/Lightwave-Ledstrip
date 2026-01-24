@@ -62,6 +62,16 @@ The Tab5 uses **ESP32-P4 (RISC-V architecture)**. You MUST use the exact build c
 
 ---
 
+### Device Port Mapping
+
+**CRITICAL: Device Port Assignments**
+- **ESP32-S3 (v2 firmware)**: `/dev/cu.usbmodem1101`
+- **Tab5 (encoder firmware)**: `/dev/cu.usbmodem101`
+
+Always use these specific ports for uploads and monitoring.
+
+---
+
 ### ⛔ FORBIDDEN - These Commands WILL FAIL:
 
 ```bash
@@ -74,8 +84,8 @@ cd firmware/Tab5.encoder && pio run -e tab5
 # ❌ WRONG - Never add hardcoded toolchain paths
 PATH="...:$HOME/.platformio/packages/toolchain-riscv32-esp/..." pio run ...
 
-# ❌ WRONG - Never specify upload port manually (use auto-detect)
-pio run -e tab5 -t upload --upload-port /dev/cu.usbmodem21401 ...
+# ❌ WRONG - Never specify wrong upload port (Tab5 is usbmodem101, NOT usbmodem1101)
+pio run -e tab5 -t upload --upload-port /dev/cu.usbmodem1101
 ```
 
 ---
@@ -88,11 +98,11 @@ pio run -e tab5 -t upload --upload-port /dev/cu.usbmodem21401 ...
 # Build only:
 PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" pio run -e tab5 -d firmware/Tab5.encoder
 
-# Build + Upload (auto-detect port):
-PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" pio run -e tab5 -t upload -d firmware/Tab5.encoder
+# Build + Upload (Tab5 on usbmodem101):
+PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" pio run -e tab5 -t upload --upload-port /dev/cu.usbmodem101 -d firmware/Tab5.encoder
 
-# Monitor serial output:
-pio device monitor -d firmware/Tab5.encoder -b 115200
+# Monitor serial output (Tab5 on usbmodem101):
+pio device monitor -p /dev/cu.usbmodem101 -d firmware/Tab5.encoder -b 115200
 ```
 
 ---
@@ -103,7 +113,7 @@ pio device monitor -d firmware/Tab5.encoder -b 115200
 
 2. **`-d firmware/Tab5.encoder`** - Tells PlatformIO where the project is WITHOUT changing directory.
 
-3. **No `--upload-port`** - Let PlatformIO auto-detect the port.
+3. **`--upload-port /dev/cu.usbmodem101`** - Tab5 device port (use explicit port to avoid uploading to wrong device).
 
 4. **Pre-build hook** (`scripts/pio_pre.py`) automatically:
    - Finds the RISC-V toolchain (`toolchain-riscv32-esp`)
@@ -249,14 +259,14 @@ src/ui/
 ### Unit A (0x42) - Global Parameters
 | Encoder | Parameter   | Range    | Default | Behavior |
 |---------|-------------|----------|---------|----------|
-| 0       | Effect      | 0-95     | 0       | Wraps    |
-| 1       | Brightness  | 0-255    | 128     | Clamps   |
-| 2       | Palette     | 0-74     | 0       | Wraps    |
-| 3       | Speed       | 1-100    | 25      | Clamps   |
-| 4       | Mood        | 0-255    | 0       | Clamps   |
-| 5       | Fade Amount | 0-255    | 0       | Clamps   |
-| 6       | Complexity  | 0-255    | 128     | Clamps   |
-| 7       | Variation   | 0-255    | 0       | Clamps   |
+| 0       | Effect      | 0-87     | 0       | Wraps    |
+| 1       | Palette     | 0-74     | 0       | Wraps    |
+| 2       | Speed       | 1-100    | 25      | Clamps   |
+| 3       | Mood        | 0-255    | 0       | Clamps   |
+| 4       | Fade Amount | 0-255    | 0       | Clamps   |
+| 5       | Complexity  | 0-255    | 128     | Clamps   |
+| 6       | Variation   | 0-255    | 0       | Clamps   |
+| 7       | Brightness  | 0-255    | 128     | Clamps   |
 
 ### Unit B (0x41) - Preset Management
 | Button  | Function                    |

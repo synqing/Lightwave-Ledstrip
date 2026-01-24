@@ -9,12 +9,12 @@
 
 #pragma once
 
-#include "../core/actors/RendererNode.h"
+#include "../core/actors/RendererActor.h"
 
 namespace lightwaveos {
 namespace effects {
 
-using namespace lightwaveos::nodes;
+using namespace lightwaveos::actors;
 
 // ==================== LGP Organic Effects ====================
 
@@ -28,12 +28,12 @@ void effectFluidDynamics(RenderContext& ctx);
 // ==================== Effect Registration ====================
 
 /**
- * @brief Register all LGP Organic effects with RendererNode
- * @param renderer Pointer to RendererNode
+ * @brief Register all LGP Organic effects with RendererActor
+ * @param renderer Pointer to RendererActor
  * @param startId Starting effect ID
  * @return Number of effects registered
  */
-uint8_t registerLGPOrganicEffects(RendererNode* renderer, uint8_t startId);
+uint8_t registerLGPOrganicEffects(RendererActor* renderer, uint8_t startId);
 
 } // namespace effects
 } // namespace lightwaveos

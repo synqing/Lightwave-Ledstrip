@@ -1,0 +1,68 @@
+name: Quint Adversarial Invariant Check
+
+on:
+  schedule:
+    # Run nightly at 02:00 UTC (allows time for merges to settle)
+    - cron: '0 2 * * *'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  verify-adversary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Set up Java (required for Apalache)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+      
+      - name: Install Quint
+        run: npm install -g @informalsystems/quint@0.29.1
+      
+      - name: Verify adversarial invariants
+        working-directory: firmware/v2/specs/quint/choreo
+        run: |
+          echo "Verifying adversarial invariants with message soup semantics..."
+          
+          # Verify each adversarial invariant separately for clearer error messages
+          quint verify lightwave_system.qnt \
+            --main=lightwave_system \
+            --init=init \
+            --step=step \
+            --invariant=StaleEpochNoMutate \
+            --max-steps=25 \
+            --verbosity=2 || exit 1
+          
+          quint verify lightwave_system.qnt \
+            --main=lightwave_system \
+            --init=init \
+            --step=step \
+            --invariant=DuplicateIdempotent \
+            --max-steps=25 \
+            --verbosity=2 || exit 1
+          
+          quint verify lightwave_system.qnt \
+            --main=lightwave_system \
+            --init=init \
+            --step=step \
+            --invariant=RateLimitRejectNoMutate \
+            --max-steps=25 \
+            --verbosity=2 || exit 1
+          
+          echo "PASS: All adversarial invariants hold under message soup semantics"
+      
+      - name: Upload counterexample (if any)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quint-counterexample
+          path: firmware/v2/specs/quint/choreo/*.itf.json
+          retention-days: 7
+        continue-on-error: true

@@ -312,10 +312,9 @@ float GoertzelAnalyzer::computeGoertzel(const int16_t* buffer, size_t N, float c
     float s2 = 0.0f; // Previous state 2
 
     // Process all samples in the window
-    const float norm = 1.0f / 32768.0f;
     for (size_t n = 0; n < N; ++n) {
         // Convert int16 to float and normalize to [-1, 1]
-        float sample = static_cast<float>(buffer[n]) * norm;
+        float sample = static_cast<float>(buffer[n]) / 32768.0f;
 
         // Goertzel recursion: s[n] = sample[n] + coeff * s[n-1] - s[n-2]
         s0 = sample + coeff * s1 - s2;

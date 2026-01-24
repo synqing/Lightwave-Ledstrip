@@ -7,10 +7,10 @@
 #include "../../ApiResponse.h"
 #include "../../RequestValidator.h"
 #include "../../WebServer.h"  // For CachedRendererState
-#include "../../../core/actors/NodeOrchestrator.h"
-#include "../../../core/actors/RendererNode.h"
+#include "../../../core/actors/ActorSystem.h"
+#include "../../../core/actors/RendererActor.h"
 
-using namespace lightwaveos::nodes;
+using namespace lightwaveos::actors;
 using namespace lightwaveos::network;
 
 namespace lightwaveos {
@@ -37,7 +37,7 @@ void ParameterHandlers::handleGet(AsyncWebServerRequest* request,
 
 void ParameterHandlers::handleSet(AsyncWebServerRequest* request,
                                      uint8_t* data, size_t len,
-                                     NodeOrchestrator& orchestrator,
+                                     ActorSystem& actorSystem,
                                      std::function<void()> broadcastStatus) {
     StaticJsonDocument<512> doc;
     // Parse and validate - all fields are optional but must be valid if present
@@ -52,62 +52,62 @@ void ParameterHandlers::handleSet(AsyncWebServerRequest* request,
 
     if (doc.containsKey("brightness")) {
         uint8_t val = doc["brightness"];
-        orchestrator.setBrightness(val);
+        actorSystem.setBrightness(val);
         updated = true;
     }
 
     if (doc.containsKey("speed")) {
         uint8_t val = doc["speed"];
         // Range already validated by schema (1-100)
-        orchestrator.setSpeed(val);
+        actorSystem.setSpeed(val);
         updated = true;
     }
 
     if (doc.containsKey("paletteId")) {
         uint8_t val = doc["paletteId"];
-        orchestrator.setPalette(val);
+        actorSystem.setPalette(val);
         updated = true;
     }
 
     if (doc.containsKey("intensity")) {
         uint8_t val = doc["intensity"];
-        orchestrator.setIntensity(val);
+        actorSystem.setIntensity(val);
         updated = true;
     }
 
     if (doc.containsKey("saturation")) {
         uint8_t val = doc["saturation"];
-        orchestrator.setSaturation(val);
+        actorSystem.setSaturation(val);
         updated = true;
     }
 
     if (doc.containsKey("complexity")) {
         uint8_t val = doc["complexity"];
-        orchestrator.setComplexity(val);
+        actorSystem.setComplexity(val);
         updated = true;
     }
 
     if (doc.containsKey("variation")) {
         uint8_t val = doc["variation"];
-        orchestrator.setVariation(val);
+        actorSystem.setVariation(val);
         updated = true;
     }
 
     if (doc.containsKey("hue")) {
         uint8_t val = doc["hue"];
-        orchestrator.setHue(val);
+        actorSystem.setHue(val);
         updated = true;
     }
 
     if (doc.containsKey("mood")) {
         uint8_t val = doc["mood"];
-        orchestrator.setMood(val);  // Sensory Bridge: 0=reactive, 255=smooth
+        actorSystem.setMood(val);  // Sensory Bridge: 0=reactive, 255=smooth
         updated = true;
     }
 
     if (doc.containsKey("fadeAmount")) {
         uint8_t val = doc["fadeAmount"];
-        orchestrator.setFadeAmount(val);
+        actorSystem.setFadeAmount(val);
         updated = true;
     }
 

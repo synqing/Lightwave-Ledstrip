@@ -129,7 +129,6 @@ void LGPMycelialNetworkEffect::render(plugins::EffectContext& ctx) {
             brightness2 = fminf(255.0f, brightness2 * 1.3f);
         }
 
-        // Use palette system - apply brightness scaling
         uint8_t brightU8_1 = (uint8_t)constrain(brightness1, 0.0f, 255.0f);
         brightU8_1 = (uint8_t)((brightU8_1 * ctx.brightness) / 255);
         ctx.leds[i] = ctx.palette.getColor(hue1, brightU8_1);

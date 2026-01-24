@@ -56,28 +56,28 @@ void PaletteLedDisplay::begin() {
 // ============================================================================
 
 bool PaletteLedDisplay::update(uint8_t paletteId) {
-    // #region agent log
-    uint32_t now = millis();
-    Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A,B,E\",\"location\":\"PaletteLedDisplay.cpp:51\",\"message\":\"update.entry\",\"data\":{\"paletteId\":%u,\"currentPaletteId\":%u,\"mode\":%u,\"available\":%d,\"timestamp\":%lu}\n",
-        paletteId, m_currentPaletteId, static_cast<uint8_t>(m_animationMode),
-        isAvailable() ? 1 : 0, static_cast<unsigned long>(now));
-    // #endregion
+    // #region agent log (DISABLED)
+    // uint32_t now = millis();
+    // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A,B,E\",\"location\":\"PaletteLedDisplay.cpp:51\",\"message\":\"update.entry\",\"data\":{\"paletteId\":%u,\"currentPaletteId\":%u,\"mode\":%u,\"available\":%d,\"timestamp\":%lu}\n",
+        // paletteId, m_currentPaletteId, static_cast<uint8_t>(m_animationMode),
+        // isAvailable() ? 1 : 0, static_cast<unsigned long>(now));
+        // #endregion
     
     // Validate palette ID
     if (paletteId >= PALETTE_LED_COUNT) {
-        // #region agent log
-        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A\",\"location\":\"PaletteLedDisplay.cpp:59\",\"message\":\"update.invalidPalette\",\"data\":{\"paletteId\":%u,\"max\":%u,\"timestamp\":%lu}\n",
-            paletteId, PALETTE_LED_COUNT, static_cast<unsigned long>(millis()));
-        // #endregion
+        // #region agent log (DISABLED)
+        // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A\",\"location\":\"PaletteLedDisplay.cpp:59\",\"message\":\"update.invalidPalette\",\"data\":{\"paletteId\":%u,\"max\":%u,\"timestamp\":%lu}\n",
+            // paletteId, PALETTE_LED_COUNT, static_cast<unsigned long>(millis()));
+                // #endregion
         return false;
     }
 
     // Check if Unit B is available
     if (!isAvailable()) {
-        // #region agent log
-        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A\",\"location\":\"PaletteLedDisplay.cpp:65\",\"message\":\"update.unavailable\",\"data\":{\"timestamp\":%lu}\n",
-            static_cast<unsigned long>(millis()));
-        // #endregion
+        // #region agent log (DISABLED)
+        // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A\",\"location\":\"PaletteLedDisplay.cpp:65\",\"message\":\"update.unavailable\",\"data\":{\"timestamp\":%lu}\n",
+            // static_cast<unsigned long>(millis()));
+                // #endregion
         return false;
     }
 
@@ -88,11 +88,11 @@ bool PaletteLedDisplay::update(uint8_t paletteId) {
     // Reset animation start time when palette changes
     m_animationStartTime = millis();
 
-    // #region agent log
-    Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A,B\",\"location\":\"PaletteLedDisplay.cpp:75\",\"message\":\"update.beforeRender\",\"data\":{\"paletteChanged\":%d,\"mode\":%u,\"willRenderStatic\":%d,\"timestamp\":%lu}\n",
-        paletteChanged ? 1 : 0, static_cast<uint8_t>(m_animationMode),
-        (m_animationMode == AnimationMode::STATIC) ? 1 : 0, static_cast<unsigned long>(millis()));
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A,B\",\"location\":\"PaletteLedDisplay.cpp:75\",\"message\":\"update.beforeRender\",\"data\":{\"paletteChanged\":%d,\"mode\":%u,\"willRenderStatic\":%d,\"timestamp\":%lu}\n",
+        // paletteChanged ? 1 : 0, static_cast<uint8_t>(m_animationMode),
+        // (m_animationMode == AnimationMode::STATIC) ? 1 : 0, static_cast<unsigned long>(millis()));
+        // #endregion
 
     // CRITICAL FIX: Always render immediately when palette changes, regardless of mode
     // This ensures palette changes "latch" immediately instead of waiting for next animation cycle
@@ -117,20 +117,20 @@ bool PaletteLedDisplay::update(uint8_t paletteId) {
                 renderStatic();
                 break;
         }
-        // #region agent log
-        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A\",\"location\":\"PaletteLedDisplay.cpp:100\",\"message\":\"update.renderedImmediate\",\"data\":{\"mode\":%u,\"timestamp\":%lu}\n",
-            static_cast<uint8_t>(m_animationMode), static_cast<unsigned long>(millis()));
-        // #endregion
+        // #region agent log (DISABLED)
+        // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A\",\"location\":\"PaletteLedDisplay.cpp:100\",\"message\":\"update.renderedImmediate\",\"data\":{\"mode\":%u,\"timestamp\":%lu}\n",
+            // static_cast<uint8_t>(m_animationMode), static_cast<unsigned long>(millis()));
+                // #endregion
     } else if (m_animationMode == AnimationMode::STATIC) {
         // Only render static if palette didn't change (refresh static display)
         renderStatic();
     }
     // Otherwise, animation will be handled by updateAnimation() (but only when needed)
 
-    // #region agent log
-    Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A\",\"location\":\"PaletteLedDisplay.cpp:84\",\"message\":\"update.exit\",\"data\":{\"timestamp\":%lu}\n",
-        static_cast<unsigned long>(millis()));
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A\",\"location\":\"PaletteLedDisplay.cpp:84\",\"message\":\"update.exit\",\"data\":{\"timestamp\":%lu}\n",
+        // static_cast<unsigned long>(millis()));
+        // #endregion
 
     return true;
 }
@@ -161,10 +161,10 @@ void PaletteLedDisplay::clear() {
 // ============================================================================
 
 void PaletteLedDisplay::setEnabled(bool enabled) {
-    // #region agent log
-    Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"palette-latch\",\"hypothesisId\":\"B\",\"location\":\"PaletteLedDisplay.cpp:setEnabled\",\"message\":\"enable.change\",\"data\":{\"wasEnabled\":%d,\"nowEnabled\":%d,\"timestamp\":%lu}}\n",
-        m_enabled ? 1 : 0, enabled ? 1 : 0, static_cast<unsigned long>(millis()));
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"palette-latch\",\"hypothesisId\":\"B\",\"location\":\"PaletteLedDisplay.cpp:setEnabled\",\"message\":\"enable.change\",\"data\":{\"wasEnabled\":%d,\"nowEnabled\":%d,\"timestamp\":%lu}}\n",
+        // m_enabled ? 1 : 0, enabled ? 1 : 0, static_cast<unsigned long>(millis()));
+        // #endregion
     m_enabled = enabled;
     if (!enabled) {
         // When disabled, turn off all LEDs
@@ -213,11 +213,11 @@ bool PaletteLedDisplay::isAvailable() const {
 // ============================================================================
 
 void PaletteLedDisplay::setAnimationMode(AnimationMode mode) {
-    // #region agent log
-    Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\",\"location\":\"PaletteLedDisplay.cpp:130\",\"message\":\"setAnimationMode\",\"data\":{\"oldMode\":%u,\"newMode\":%u,\"startTimeReset\":%lu},\"timestamp\":%lu}\n",
-        static_cast<uint8_t>(m_animationMode), static_cast<uint8_t>(mode),
-        static_cast<unsigned long>(millis()), static_cast<unsigned long>(millis()));
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\",\"location\":\"PaletteLedDisplay.cpp:130\",\"message\":\"setAnimationMode\",\"data\":{\"oldMode\":%u,\"newMode\":%u,\"startTimeReset\":%lu},\"timestamp\":%lu}\n",
+        // static_cast<uint8_t>(m_animationMode), static_cast<uint8_t>(mode),
+        // static_cast<unsigned long>(millis()), static_cast<unsigned long>(millis()));
+        // #endregion
     
     if (mode == m_animationMode) {
         return;  // No change
@@ -248,66 +248,68 @@ void PaletteLedDisplay::updateAnimation() {
     if (!m_enabled) {
         return;
     }
-    
-    // #region agent log
-    uint32_t now = millis();
-    static uint32_t s_lastLogTime = 0;
-    static uint32_t s_callCount = 0;
-    s_callCount++;
-    if (now - s_lastLogTime >= 100) {  // Log every 100ms
-        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A,C,E\",\"location\":\"PaletteLedDisplay.cpp:200\",\"message\":\"updateAnimation.entry\",\"data\":{\"available\":%d,\"paletteId\":%u,\"mode\":%u,\"callsSinceLastLog\":%lu,\"timestamp\":%lu}\n",
-            isAvailable() ? 1 : 0, m_currentPaletteId, static_cast<uint8_t>(m_animationMode),
-            static_cast<unsigned long>(s_callCount), static_cast<unsigned long>(now));
-        s_callCount = 0;
-        s_lastLogTime = now;
-    }
-    // #endregion
+
+    uint32_t now = millis();  // Needed for throttling logic below
+
+    // #region agent log (DISABLED)
+    // (now variable moved outside debug region)
+    // static uint32_t s_lastLogTime = 0;
+    // static uint32_t s_callCount = 0;
+    // s_callCount++;
+    // if (now - s_lastLogTime >= 100) {  // Log every 100ms
+        // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A,C,E\",\"location\":\"PaletteLedDisplay.cpp:200\",\"message\":\"updateAnimation.entry\",\"data\":{\"available\":%d,\"paletteId\":%u,\"mode\":%u,\"callsSinceLastLog\":%lu,\"timestamp\":%lu}\n",
+            // isAvailable() ? 1 : 0, m_currentPaletteId, static_cast<uint8_t>(m_animationMode),
+            // static_cast<unsigned long>(s_callCount), static_cast<unsigned long>(now));
+        // s_callCount = 0;
+        // s_lastLogTime = now;
+    // }
+        // #endregion
     
     if (!isAvailable() || m_currentPaletteId >= PALETTE_LED_COUNT) {
-        // #region agent log
-        static uint32_t s_lastSkipLog = 0;
-        if (now - s_lastSkipLog >= 500) {
-            Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"E\",\"location\":\"PaletteLedDisplay.cpp:214\",\"message\":\"updateAnimation.skipped\",\"data\":{\"available\":%d,\"paletteId\":%u,\"timestamp\":%lu}\n",
-                isAvailable() ? 1 : 0, m_currentPaletteId, static_cast<unsigned long>(now));
-            s_lastSkipLog = now;
-        }
-        // #endregion
+        // #region agent log (DISABLED)
+        // static uint32_t s_lastSkipLog = 0;
+        // if (now - s_lastSkipLog >= 500) {
+            // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"E\",\"location\":\"PaletteLedDisplay.cpp:214\",\"message\":\"updateAnimation.skipped\",\"data\":{\"available\":%d,\"paletteId\":%u,\"timestamp\":%lu}\n",
+                // isAvailable() ? 1 : 0, m_currentPaletteId, static_cast<unsigned long>(now));
+            // s_lastSkipLog = now;
+        // }
+                // #endregion
         return;  // No palette to animate
     }
     
     // Only animate if not in static mode
     if (m_animationMode == AnimationMode::STATIC) {
-        // #region agent log
-        static uint32_t s_lastStaticSkipLog = 0;
-        if (now - s_lastStaticSkipLog >= 1000) {
-            Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"B\",\"location\":\"PaletteLedDisplay.cpp:225\",\"message\":\"updateAnimation.skippedStatic\",\"data\":{\"timestamp\":%lu}\n",
-                static_cast<unsigned long>(now));
-            s_lastStaticSkipLog = now;
-        }
-        // #endregion
+        // #region agent log (DISABLED)
+        // static uint32_t s_lastStaticSkipLog = 0;
+        // if (now - s_lastStaticSkipLog >= 1000) {
+            // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"B\",\"location\":\"PaletteLedDisplay.cpp:225\",\"message\":\"updateAnimation.skippedStatic\",\"data\":{\"timestamp\":%lu}\n",
+                // static_cast<unsigned long>(now));
+            // s_lastStaticSkipLog = now;
+        // }
+                // #endregion
         return;
     }
     
     // CRITICAL FIX: Throttle animation updates to prevent excessive LED writes
     // Only update if enough time has passed since last update (rate limit to ~30 FPS)
     if (now - m_lastAnimationUpdate < ANIMATION_UPDATE_INTERVAL_MS) {
-        // #region agent log
-        static uint32_t s_lastThrottleLog = 0;
-        if (now - s_lastThrottleLog >= 1000) {
-            Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"C\",\"location\":\"PaletteLedDisplay.cpp:235\",\"message\":\"updateAnimation.throttled\",\"data\":{\"timeSinceLastUpdate\":%lu,\"timestamp\":%lu}\n",
-                static_cast<unsigned long>(now - m_lastAnimationUpdate), static_cast<unsigned long>(now));
-            s_lastThrottleLog = now;
-        }
-        // #endregion
+        // #region agent log (DISABLED)
+        // static uint32_t s_lastThrottleLog = 0;
+        // if (now - s_lastThrottleLog >= 1000) {
+            // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"C\",\"location\":\"PaletteLedDisplay.cpp:235\",\"message\":\"updateAnimation.throttled\",\"data\":{\"timeSinceLastUpdate\":%lu,\"timestamp\":%lu}\n",
+                // static_cast<unsigned long>(now - m_lastAnimationUpdate), static_cast<unsigned long>(now));
+            // s_lastThrottleLog = now;
+        // }
+                // #endregion
         return;  // Too soon, skip this update
     }
     
     m_lastAnimationUpdate = now;
     
-    // #region agent log
-    Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A,C\",\"location\":\"PaletteLedDisplay.cpp:245\",\"message\":\"updateAnimation.rendering\",\"data\":{\"mode\":%u,\"timestamp\":%lu}\n",
-        static_cast<uint8_t>(m_animationMode), static_cast<unsigned long>(now));
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A,C\",\"location\":\"PaletteLedDisplay.cpp:245\",\"message\":\"updateAnimation.rendering\",\"data\":{\"mode\":%u,\"timestamp\":%lu}\n",
+        // static_cast<uint8_t>(m_animationMode), static_cast<unsigned long>(now));
+        // #endregion
     
     // Route to appropriate animation renderer
     switch (m_animationMode) {
@@ -328,10 +330,10 @@ void PaletteLedDisplay::updateAnimation() {
             break;
     }
     
-    // #region agent log
-    Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A,C\",\"location\":\"PaletteLedDisplay.cpp:265\",\"message\":\"updateAnimation.exit\",\"data\":{\"timestamp\":%lu}\n",
-        static_cast<unsigned long>(millis()));
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"A,C\",\"location\":\"PaletteLedDisplay.cpp:265\",\"message\":\"updateAnimation.exit\",\"data\":{\"timestamp\":%lu}\n",
+        // static_cast<unsigned long>(millis()));
+        // #endregion
 }
 
 // ============================================================================
@@ -339,17 +341,17 @@ void PaletteLedDisplay::updateAnimation() {
 // ============================================================================
 
 void PaletteLedDisplay::renderStatic() {
-    // #region agent log
-    Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"palette-latch\",\"hypothesisId\":\"B,E\",\"location\":\"PaletteLedDisplay.cpp:renderStatic\",\"message\":\"render.entry\",\"data\":{\"enabled\":%d,\"available\":%d,\"paletteId\":%u,\"timestamp\":%lu}}\n",
-        m_enabled ? 1 : 0, isAvailable() ? 1 : 0, m_currentPaletteId, static_cast<unsigned long>(millis()));
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"palette-latch\",\"hypothesisId\":\"B,E\",\"location\":\"PaletteLedDisplay.cpp:renderStatic\",\"message\":\"render.entry\",\"data\":{\"enabled\":%d,\"available\":%d,\"paletteId\":%u,\"timestamp\":%lu}}\n",
+        // m_enabled ? 1 : 0, isAvailable() ? 1 : 0, m_currentPaletteId, static_cast<unsigned long>(millis()));
+        // #endregion
     
     // Early exit if disabled or unavailable
     if (!m_enabled || !isAvailable() || m_currentPaletteId >= PALETTE_LED_COUNT) {
-        // #region agent log
-        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"palette-latch\",\"hypothesisId\":\"B,E\",\"location\":\"PaletteLedDisplay.cpp:renderStatic\",\"message\":\"render.early_exit\",\"data\":{\"reason\":\"%s\",\"timestamp\":%lu}}\n",
-            !m_enabled ? "disabled" : (!isAvailable() ? "unavailable" : "invalid_palette"), static_cast<unsigned long>(millis()));
-        // #endregion
+        // #region agent log (DISABLED)
+        // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"palette-latch\",\"hypothesisId\":\"B,E\",\"location\":\"PaletteLedDisplay.cpp:renderStatic\",\"message\":\"render.early_exit\",\"data\":{\"reason\":\"%s\",\"timestamp\":%lu}}\n",
+            // !m_enabled ? "disabled" : (!isAvailable() ? "unavailable" : "invalid_palette"), static_cast<unsigned long>(millis()));
+                // #endregion
         return;
     }
     
@@ -363,21 +365,21 @@ void PaletteLedDisplay::renderStatic() {
         // Apply brightness scaling
         applyBrightness(r, g, b);
         
-        // #region agent log
-        if (ledIndex == 0 || ledIndex == 8) {  // Log first and last LED
-            Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"palette-latch\",\"hypothesisId\":\"F\",\"location\":\"PaletteLedDisplay.cpp:renderStatic\",\"message\":\"led.write\",\"data\":{\"led\":%u,\"r\":%u,\"g\":%u,\"b\":%u,\"timestamp\":%lu}}\n",
-                ledIndex, r, g, b, static_cast<unsigned long>(millis()));
-        }
-        // #endregion
+        // #region agent log (DISABLED)
+        // if (ledIndex == 0 || ledIndex == 8) {  // Log first and last LED
+            // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"palette-latch\",\"hypothesisId\":\"F\",\"location\":\"PaletteLedDisplay.cpp:renderStatic\",\"message\":\"led.write\",\"data\":{\"led\":%u,\"r\":%u,\"g\":%u,\"b\":%u,\"timestamp\":%lu}}\n",
+                // ledIndex, r, g, b, static_cast<unsigned long>(millis()));
+        // }
+                // #endregion
         
         // Set LED on Unit B (LEDs 0-8)
         transportB.setLED(ledIndex, r, g, b);
     }
     
-    // #region agent log
-    Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"palette-latch\",\"hypothesisId\":\"F\",\"location\":\"PaletteLedDisplay.cpp:renderStatic\",\"message\":\"render.complete\",\"data\":{\"timestamp\":%lu}}\n",
-        static_cast<unsigned long>(millis()));
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"palette-latch\",\"hypothesisId\":\"F\",\"location\":\"PaletteLedDisplay.cpp:renderStatic\",\"message\":\"render.complete\",\"data\":{\"timestamp\":%lu}}\n",
+        // static_cast<unsigned long>(millis()));
+        // #endregion
 }
 
 void PaletteLedDisplay::renderRotate() {
@@ -392,15 +394,15 @@ void PaletteLedDisplay::renderRotate() {
     // Calculate time offset (0-255) that cycles through palette
     uint8_t timeOffset = ((elapsed / ANIMATION_SPEED_MS) * 256) % 256;
     
-    // #region agent log
-    static uint32_t s_lastRotateLog = 0;
-    if (millis() - s_lastRotateLog >= 500) {  // Log every 500ms
-        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1,H4\",\"location\":\"PaletteLedDisplay.cpp:217\",\"message\":\"renderRotate.timing\",\"data\":{\"elapsed\":%lu,\"timeOffset\":%u,\"speedMs\":%lu},\"timestamp\":%lu}\n",
-            static_cast<unsigned long>(elapsed), timeOffset, static_cast<unsigned long>(ANIMATION_SPEED_MS),
-            static_cast<unsigned long>(millis()));
-        s_lastRotateLog = millis();
-    }
-    // #endregion
+    // #region agent log (DISABLED)
+    // static uint32_t s_lastRotateLog = 0;
+    // if (millis() - s_lastRotateLog >= 500) {  // Log every 500ms
+        // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1,H4\",\"location\":\"PaletteLedDisplay.cpp:217\",\"message\":\"renderRotate.timing\",\"data\":{\"elapsed\":%lu,\"timeOffset\":%u,\"speedMs\":%lu},\"timestamp\":%lu}\n",
+            // static_cast<unsigned long>(elapsed), timeOffset, static_cast<unsigned long>(ANIMATION_SPEED_MS),
+            // static_cast<unsigned long>(millis()));
+        // s_lastRotateLog = millis();
+    // }
+        // #endregion
     
     // Update each LED with rotated palette position
     for (uint8_t ledIndex = 0; ledIndex < PALETTE_COLORS_PER_PALETTE; ledIndex++) {
@@ -454,16 +456,16 @@ void PaletteLedDisplay::renderRotate() {
         // Apply brightness scaling
         applyBrightness(r, g, b);
         
-        // #region agent log
-        if (ledIndex == 0) {  // Log first LED only to avoid spam
-            static uint32_t s_lastLedLog = 0;
-            if (millis() - s_lastLedLog >= 500) {
-                Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H2,H4\",\"location\":\"PaletteLedDisplay.cpp:281\",\"message\":\"renderRotate.ledUpdate\",\"data\":{\"ledIndex\":%u,\"basePos\":%u,\"palettePos\":%u,\"r\":%u,\"g\":%u,\"b\":%u},\"timestamp\":%lu}\n",
-                    ledIndex, basePos, palettePos, r, g, b, static_cast<unsigned long>(millis()));
-                s_lastLedLog = millis();
-            }
-        }
-        // #endregion
+        // #region agent log (DISABLED)
+        // if (ledIndex == 0) {  // Log first LED only to avoid spam
+            // static uint32_t s_lastLedLog = 0;
+            // if (millis() - s_lastLedLog >= 500) {
+                // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H2,H4\",\"location\":\"PaletteLedDisplay.cpp:281\",\"message\":\"renderRotate.ledUpdate\",\"data\":{\"ledIndex\":%u,\"basePos\":%u,\"palettePos\":%u,\"r\":%u,\"g\":%u,\"b\":%u},\"timestamp\":%lu}\n",
+                    // ledIndex, basePos, palettePos, r, g, b, static_cast<unsigned long>(millis()));
+                // s_lastLedLog = millis();
+            // }
+        // }
+                // #endregion
         
         
         // Set LED on Unit B
@@ -561,14 +563,14 @@ void PaletteLedDisplay::renderScroll() {
     // Calculate scroll offset (0-7) that cycles through LED positions
     uint8_t offset = ((elapsed / ANIMATION_SPEED_MS) * 8) % 8;
     
-    // #region agent log
-    static uint32_t s_lastScrollLog = 0;
-    if (millis() - s_lastScrollLog >= 500) {
-        Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1,H4\",\"location\":\"PaletteLedDisplay.cpp:410\",\"message\":\"renderScroll.timing\",\"data\":{\"elapsed\":%lu,\"offset\":%u},\"timestamp\":%lu}\n",
-            static_cast<unsigned long>(elapsed), offset, static_cast<unsigned long>(millis()));
-        s_lastScrollLog = millis();
-    }
-    // #endregion
+    // #region agent log (DISABLED)
+    // static uint32_t s_lastScrollLog = 0;
+    // if (millis() - s_lastScrollLog >= 500) {
+        // Serial.printf("{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1,H4\",\"location\":\"PaletteLedDisplay.cpp:410\",\"message\":\"renderScroll.timing\",\"data\":{\"elapsed\":%lu,\"offset\":%u},\"timestamp\":%lu}\n",
+            // static_cast<unsigned long>(elapsed), offset, static_cast<unsigned long>(millis()));
+        // s_lastScrollLog = millis();
+    // }
+        // #endregion
     
     // Update each LED with scrolled color assignment
     for (uint8_t ledIndex = 0; ledIndex < PALETTE_COLORS_PER_PALETTE; ledIndex++) {

@@ -52,6 +52,7 @@ bool ChevronWavesEnhancedEffect::init(plugins::EffectContext& ctx) {
     m_subBassEnergy = 0.0f;
     m_targetSubBass = 0.0f;
     m_snareSharpness = 0.0f;
+    m_tempoLocked = false;
 
     return true;
 }
@@ -157,14 +158,45 @@ void ChevronWavesEnhancedEffect::render(plugins::EffectContext& ctx) {
     if (smoothedSpeed > 2.0f) smoothedSpeed = 2.0f;  // Hard clamp
     if (smoothedSpeed < 0.3f) smoothedSpeed = 0.3f;  // Prevent stalling
     
-    // Enhanced: Use beatPhase for synchronization when tempo confidence high
-    float tempoConf = hasAudio ? ctx.audio.tempoConfidence() : 0.0f;
-    if (hasAudio && tempoConf > 0.6f) {
-        float beatPhase = ctx.audio.beatPhase();
-        m_chevronPos = beatPhase * 628.3f;  // Map 0-1 to 0-100*2π
+    // Enhanced: Use beatPhase for synchronization when tempo confidence high (PLL-style correction)
+    // Domain constants (compute once, use consistently)
+    const float PHASE_DOMAIN = 628.3f;      // 100 * 2 * PI
+    const float HALF_DOMAIN = 314.15f;      // PHASE_DOMAIN / 2
+
+    // Tempo lock hysteresis (Schmitt trigger: prevents chatter near threshold)
+    if (!hasAudio) {
+        m_tempoLocked = false;  // Clear lock when audio drops (prevents ghost lock)
     } else {
-        m_chevronPos += speedNorm * 240.0f * smoothedSpeed * dt;
+        float tempoConf = ctx.audio.tempoConfidence();
+        
+        // Update lock state with hysteresis (0.6 lock / 0.4 unlock)
+        if (tempoConf > 0.6f) m_tempoLocked = true;
+        else if (tempoConf < 0.4f) m_tempoLocked = false;
     }
+    
+    // Always advance phase (free-run oscillator)
+    m_chevronPos += speedNorm * 240.0f * smoothedSpeed * dt;
+    
+    // Apply phase correction when tempo-locked (PLL-style P-only correction)
+    if (hasAudio && m_tempoLocked) {
+        float beatPhase = ctx.audio.beatPhase();
+        float targetPhase = beatPhase * PHASE_DOMAIN;
+        
+        // Compute wrapped error (shortest path to target)
+        float phaseError = targetPhase - m_chevronPos;
+        if (phaseError > HALF_DOMAIN) phaseError -= PHASE_DOMAIN;
+        if (phaseError < -HALF_DOMAIN) phaseError += PHASE_DOMAIN;
+        
+        // Proportional correction (tau ~100ms gives smooth lock)
+        // Compute ONCE per frame, not per pixel
+        const float tau = 0.1f;
+        const float correctionAlpha = 1.0f - expf(-dt / tau);
+        m_chevronPos += phaseError * correctionAlpha;
+    }
+    
+    // CRITICAL: Wrap phase AFTER correction (handles negative and overflow)
+    while (m_chevronPos >= PHASE_DOMAIN) m_chevronPos -= PHASE_DOMAIN;
+    while (m_chevronPos < 0.0f) m_chevronPos += PHASE_DOMAIN;
 
     fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 

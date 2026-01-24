@@ -13,19 +13,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Current Focus
 
 - **Branch**: `main`
-- **Active Work**: Security hardening, performance optimization, Tab5 LVGL UI controller
-- **Recent** (2026-01-07):
-  - **Effect Modifiers System** completed (71% → 100%): 5 composable modifiers (Speed, Intensity, ColorShift, Mirror, Glitch) with REST API control
-  - **64-bin FFT exposure** completed: Effects can now access detailed frequency spectrum (55Hz-2093Hz, semitone-spaced) via `ctx.audio.bin(index)`
-  - Tab5.encoder migrated to LVGL 9.3.0 UI framework (from PRISM.tab5)
-  - WiFi credentials externalized, CORS headers added, TrigLookup optimization
-  - Dual M5ROTATE8 encoder support (16 encoders + 8-bank preset system)
+- **Active Work**: Security hardening, performance optimization, encoder support
+- **Recent**: WiFi credentials externalized, CORS headers added, TrigLookup optimization, M5ROTATE8 encoder support
 
 ## First Steps for New Agents
 
 1. Read this entire file
 2. **MANDATORY:** Complete Pre-Task Agent Selection Protocol (see below)
-3. Build: `pio run -e esp32dev_audio -t upload`
+3. Build: `pio run -e esp32dev_wifi -t upload`
 4. Access web UI at `http://lightwaveos.local`
 
 ---
@@ -65,8 +60,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    - Network/API → `network-api-engineer`
    - Serial interface → `serial-interface-engineer`
    - Color/palettes → `palette-specialist`
-   - Web development → `agent-nextjs`
-   - Tab5 LVGL UI → `agent-lvgl-uiux`
+   - Web development → `agent-nextjs`, `agent-lvgl-uiux`
    - Backend → `agent-convex`, `agent-vercel`, `agent-clerk`
 
 2. **Determine if multiple agents are needed:**
@@ -143,7 +137,57 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Best Practices
 - **Modular Code**: Write focused, reusable code to optimize token usage
 - **UI-First for Web**: When modifying `data/` web interface, build UI first, then add functionality
-- **Test with audio build**: `pio run -e esp32dev_audio -t upload` for web interface testing
+- **Test with WiFi build**: `pio run -e esp32dev_wifi -t upload` for web interface testing
+
+### Command Centre — Claude-Flow Integration
+
+For comprehensive AI agent orchestration, multi-agent coordination, and pair programming modes:
+
+→ **[docs/operations/claude-flow/](docs/operations/claude-flow/README.md)** — Claude-Flow Strategic Integration
+
+**Quick Start (No API Keys Required):**
+```bash
+# Verify Claude-Flow is available
+npx claude-flow@v3alpha doctor
+
+# Check MCP tools (27+ orchestration tools)
+npx claude-flow@v3alpha mcp tools
+```
+
+**Configuration:** Add to `~/.claude/settings.json`:
+```json
+{
+  "mcpServers": {
+    "claude-flow": {
+      "command": "npx",
+      "args": ["claude-flow@v3alpha", "mcp", "start"]
+    }
+  }
+}
+```
+
+**Quick Links:**
+- [MCP Setup Guide](docs/operations/claude-flow/MCP_SETUP.md) — Configuration for Claude Code, Cursor, Claude Desktop
+- [Agent Routing Matrix](docs/operations/claude-flow/agent-routing.md) — Domain-to-agent mapping
+- [Swarm Templates](docs/operations/claude-flow/swarm-templates.md) — Reusable multi-agent workflows
+- [Pair Programming Modes](docs/operations/claude-flow/pair-programming.md) — Navigator, TDD, Switch modes
+- [Validation Checklist](docs/operations/claude-flow/validation-checklist.md) — Setup and runtime verification
+
+**Claude-Code Provider Plugin:** For standalone Claude-Flow daemon mode without API keys, see [plugins/claude-code-provider/](plugins/claude-code-provider/README.md)
+
+### LLM Context and Prompting
+
+For efficient LLM interactions and token-optimised prompting:
+
+→ **[docs/LLM_CONTEXT.md](docs/LLM_CONTEXT.md)** — Stable LLM prefix file (include instead of re-explaining the project)
+
+**Quick Links:**
+- [Context Pack Pipeline](docs/contextpack/README.md) — Delta-only prompting discipline
+- [Packet Template](docs/contextpack/packet.md) — Prompt packet template (goal, symptom, acceptance checks)
+- [Fixture Formats](docs/contextpack/fixtures/README.md) — TOON/CSV/JSON format selection guide
+- [TOON Evaluation](docs/architecture/TOON_FORMAT_EVALUATION.md) — Prompt codec decision document
+
+**Generator Script:** `python tools/contextpack.py` — Generates prompt bundles with diff, logs, and fixtures.
 
 ---
 
@@ -207,7 +251,7 @@ if (newState == STATE_WIFI_CONNECTING) {
 
 **Required Test Before Commit:**
 ```bash
-pio run -e esp32dev_audio -t upload
+pio run -e esp32dev_wifi -t upload
 # Then verify: WiFi connects WITHOUT "IP: 0.0.0.0" appearing first
 ```
 
@@ -240,7 +284,7 @@ pio run -e esp32dev_audio -t upload
 
 ### Modify Web Interface
 1. Edit files in `data/` (index.html, app.js, styles.css)
-2. Build: `pio run -e esp32dev_audio -t upload`
+2. Build: `pio run -e esp32dev_wifi -t upload`
 3. Access: `http://lightwaveos.local`
 
 ### Add a Zone Effect
@@ -260,17 +304,15 @@ pio run -e esp32dev_audio -t upload
 
 ## Build Commands
 
-### LightwaveOS v2 (ESP32-S3)
-
 ```bash
-# Default build (WiFi + Audio enabled)
+# Default build (no WiFi)
 pio run -t upload
 
-# Explicit audio build (same as default)
-pio run -e esp32dev_audio -t upload
+# WiFi-enabled build
+pio run -e esp32dev_wifi -t upload
 
-# Audio build without WiFi
-pio run -e esp32dev_audio_nowifi -t upload
+# Memory debug build
+pio run -e memory_debug -t upload
 
 # Monitor serial (115200 baud)
 pio device monitor -b 115200
@@ -279,61 +321,13 @@ pio device monitor -b 115200
 pio run -t clean
 ```
 
-### Tab5 Encoder (ESP32-P4) - CRITICAL BUILD REQUIREMENTS
-
-**⚠️ Tab5 uses ESP32-P4 (RISC-V). It requires a SPECIFIC build invocation.**
-
-#### ⛔ FORBIDDEN - These commands WILL FAIL:
-
-```bash
-# ❌ WRONG - Missing PATH isolation
-pio run -e tab5 -d firmware/Tab5.encoder
-
-# ❌ WRONG - Never cd into directory
-cd firmware/Tab5.encoder && pio run -e tab5
-
-# ❌ WRONG - Never add hardcoded toolchain paths
-PATH="...:$HOME/.platformio/packages/toolchain-riscv32-esp/..." pio run ...
-
-# ❌ WRONG - Never specify upload port manually
-pio run -e tab5 -t upload --upload-port /dev/cu.usbmodem21401 ...
-```
-
-#### ✅ CORRECT - Run from repository root:
-
-```bash
-# Build:
-PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" pio run -e tab5 -d firmware/Tab5.encoder
-
-# Build + Upload (auto-detect port):
-PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" pio run -e tab5 -t upload -d firmware/Tab5.encoder
-
-# Monitor:
-pio device monitor -d firmware/Tab5.encoder -b 115200
-```
-
-**Why:** The pre-build hook (`scripts/pio_pre.py`) injects the RISC-V toolchain. A clean PATH lets it work correctly.
-
-**See:** `firmware/Tab5.encoder/README.md` for full details.
-
 ## Hardware Configuration
 
-### LightwaveOS v2 (Main Controller)
 - **ESP32-S3-DevKitC-1** @ 240MHz, 8MB flash
 - **Dual WS2812 strips**: GPIO 4 (Strip 1), GPIO 5 (Strip 2)
 - **160 LEDs per strip** = 320 total
 - **Center point**: LED 79/80 (effects originate here)
 - **Optional HMI**: M5ROTATE8 8-encoder unit via I2C (enable with `FEATURE_ROTATE8_ENCODER`)
-
-### Tab5.encoder (External Controller)
-- **M5Stack Tab5** (ESP32-P4 RISC-V) @ 360MHz, 500KB RAM, 16MB flash
-- **5" Display** (800x480, ILI9881C or ST7123 auto-detected)
-- **Dual M5ROTATE8 units**: 16 rotary encoders total (Grove Port.A, I2C)
-  - Unit A (0x42): Encoders 0-7 for global parameters
-  - Unit B (0x41): Encoders 8-15 buttons for 8-bank preset system
-- **LVGL 9.3.0 UI**: Professional widget-based interface
-- **WebSocket client**: Bidirectional sync with LightwaveOS v2
-- **WiFi**: ESP32-C6 co-processor via SDIO (custom pins)
 
 ## Architecture Overview
 
@@ -410,7 +404,7 @@ Set in `platformio.ini` or `src/config/features.h`:
 
 | Flag | Purpose |
 |------|---------|
-| `FEATURE_WEB_SERVER` | Enable WiFi/WebServer (enabled by default in `esp32dev_audio`) |
+| `FEATURE_WEB_SERVER` | Enable WiFi/WebServer (use `esp32dev_wifi` env) |
 | `FEATURE_SERIAL_MENU` | Serial command interface |
 | `FEATURE_PERFORMANCE_MONITOR` | FPS/memory tracking |
 | `FEATURE_INTERFERENCE_CALC` | Wave physics calculations |
@@ -430,133 +424,6 @@ These features compute musical context for audio-reactive effects. They default 
 **When to disable:** If no effects use `ctx.audio.harmonicSaliency()`, `ctx.audio.musicStyle()`, etc.
 
 **Effects using these features:** BreathingEffect, LGPPhotonicCrystalEffect, LGPStarBurstNarrativeEffect (3 of 76 effects)
-
-## Effect Modifiers System (v2 Only)
-
-**New in 2026-01-07**: Composable post-processing layer for real-time effect transformations.
-
-### Overview
-
-The Effect Modifiers System provides 8 modifier slots that apply transformations to effect output without modifying effect code. Modifiers execute in two phases:
-- **Pre-render modifiers** (e.g., SpeedModifier) execute BEFORE `effect->render()` - modify timing/parameters
-- **Post-render modifiers** (e.g., visual transforms) execute AFTER `effect->render()` - modify pixel data
-
-### Available Modifiers
-
-| Modifier | Type | Description | Parameters |
-|----------|------|-------------|------------|
-| **SpeedModifier** | Pre-render | Time dilation (0.1x-3.0x animation speed) | `multiplier: float` |
-| **IntensityModifier** | Post-render | Brightness scaling (constant or audio-reactive) | `baseIntensity: float`, `source: CONSTANT\|BEAT_PHASE` |
-| **ColorShiftModifier** | Post-render | HSV hue rotation | `hueOffset: 0-255` |
-| **MirrorModifier** | Post-render | Symmetry around center (LED 79/80) | None |
-| **GlitchModifier** | Post-render | Deterministic pixel randomization | `intensity: 0.0-1.0` |
-
-### Memory & Performance
-
-- **Memory:** <2KB total (8 modifiers × ~250 bytes)
-- **CPU:** ~50-100µs per modifier @ 120 FPS
-- **Stack limit:** 8 modifiers maximum
-- **Thread safety:** Mutex-protected add/remove (Core 0), lock-free apply (Core 1)
-
-### Usage Examples
-
-```bash
-# Add SpeedModifier (2x speed)
-curl -X POST http://lightwaveos.local/api/v1/modifiers/add \
-  -H "Content-Type: application/json" \
-  -d '{"type":"speed", "multiplier":2.0}'
-
-# Add ColorShiftModifier (hue rotate +128)
-curl -X POST http://lightwaveos.local/api/v1/modifiers/add \
-  -d '{"type":"color_shift", "hueOffset":128}'
-
-# Stack modifiers: Speed → Mirror → Glitch
-# (Modifiers apply in FIFO order - insertion order preserved)
-
-# Update SpeedModifier to 0.5x (slow motion)
-curl -X POST http://lightwaveos.local/api/v1/modifiers/update \
-  -d '{"type":"speed", "multiplier":0.5}'
-
-# Remove SpeedModifier
-curl -X POST http://lightwaveos.local/api/v1/modifiers/remove \
-  -d '{"type":"speed"}'
-
-# Clear all modifiers
-curl -X POST http://lightwaveos.local/api/v1/modifiers/clear
-```
-
-### Implementation Details
-
-- **RendererNode integration:** `firmware/v2/src/core/actors/RendererNode.cpp` (lines 907-932)
-- **ModifierStack:** `firmware/v2/src/effects/modifiers/ModifierStack.h`
-- **REST API:** `firmware/v2/src/network/webserver/handlers/ModifierHandlers.cpp`
-
-## 64-Bin FFT Exposure (v2 Only)
-
-**New in 2026-01-07**: Effects can now access detailed frequency spectrum data.
-
-### Overview
-
-The AudioNode already computes 64-bin FFT (Goertzel analysis) every 512 samples. This data is now exposed via `ctx.audio.bin(index)` and `ctx.audio.bins64()` for effects to use.
-
-### Frequency Mapping
-
-- **Bins:** 64 (semitone-spaced from 55 Hz to 2093 Hz, A1 to C7)
-- **Update rate:** 31.25 Hz (every 512 samples @ 16 kHz)
-- **Latency:** ~32 ms (AudioNode → RendererNode via SnapshotBuffer)
-- **Dynamic range:** 0.0 (silence) to 1.0 (full scale)
-
-| Bin Range | Frequency (Hz) | Musical Range | Description |
-|-----------|----------------|---------------|-------------|
-| 0-7       | 55-82          | A1-E2         | Sub-bass / kick fundamentals |
-| 8-15      | 87-123         | F2-B2         | Bass / bass guitar |
-| 16-23     | 131-185        | C3-F#3        | Low-mids / male vocals |
-| 24-31     | 196-277        | G3-C#4        | Mids / snare fundamentals |
-| 32-39     | 294-415        | D4-G#4        | Upper mids / female vocals |
-| 40-47     | 440-622        | A4-D#5        | Presence / cymbals |
-| 48-55     | 659-932        | E5-A#5        | Treble / hihat |
-| 56-63     | 988-2093       | B5-C7         | Air / shimmer |
-
-### Usage in Effects
-
-```cpp
-void MyEffect::render(plugins::EffectContext& ctx) {
-    // CRITICAL: Always check musical saliency first!
-    // Read: docs/audio-visual/AUDIO_VISUAL_SEMANTIC_MAPPING.md
-
-    if (ctx.audio.harmonicSaliency() > 0.5f) {
-        // Average bass bins (0-15) for robust detection
-        float bass = 0.0f;
-        for (uint8_t i = 0; i < 16; i++) {
-            bass += ctx.audio.bin(i);
-        }
-        bass /= 16.0f;
-
-        // Use bass to modulate effect parameter
-        float rippleHz = 2.0f + bass * 3.0f;
-    }
-}
-```
-
-### Critical Guidelines
-
-1. **Musical Saliency First:** NEVER use FFT data without checking `ctx.audio.harmonicSaliency()` / `rhythmicSaliency()` first. Raw frequency data without musical context leads to amateur visualizations.
-
-2. **Avoid Single-Bin Decisions:** Single bins are noisy. Always average 3-5 adjacent bins for robust detection.
-
-3. **Style-Adaptive Processing:** Different music styles need different FFT smoothing:
-   - **RHYTHMIC_DRIVEN** (EDM/hip-hop): Raw FFT (preserve transients)
-   - **HARMONIC_DRIVEN** (classical/jazz): 300ms EMA smoothing
-   - **MELODIC_DRIVEN** (pop/vocal): 150ms EMA smoothing
-   - **TEXTURE_DRIVEN** (ambient): 500ms EMA smoothing
-
-4. **Temporal Context:** Use delta detection for onset triggering, not instantaneous values.
-
-### Documentation
-
-Complete FFT usage guide with examples: `firmware/v2/docs/audio-visual/FFT_FREQUENCY_MAPPING.md`
-
-Musical saliency principles: `firmware/v2/docs/audio-visual/AUDIO_VISUAL_SEMANTIC_MAPPING.md`
 
 ## Web API
 
@@ -580,16 +447,6 @@ The v1 API provides standardized responses, rate limiting, and rich metadata.
 | `/api/v1/transitions/types` | GET | 12 transition types |
 | `/api/v1/transitions/trigger` | POST | Trigger transition |
 | `/api/v1/batch` | POST | Batch operations (max 10) |
-| `/api/v1/debug/memory/zones` | GET | Zone system memory stats (debug) |
-| `/api/v1/audio/agc` | PUT | Toggle AGC (Automatic Gain Control) `{enabled: true/false}` |
-| `/api/v1/network/status` | GET | Network status (AP/STA mode, IP addresses, RSSI) |
-| `/api/v1/network/sta/enable` | POST | Enable STA mode with optional auto-revert `{durationSeconds: N, revertToApOnly: true}` |
-| `/api/v1/network/ap/enable` | POST | Force AP-only mode |
-| `/api/v1/modifiers/add` | POST | Add effect modifier `{type: "speed\|intensity\|color_shift\|mirror\|glitch", ...params}` |
-| `/api/v1/modifiers/remove` | POST | Remove modifier `{type: "speed"}` |
-| `/api/v1/modifiers/list` | GET | List all active modifiers |
-| `/api/v1/modifiers/clear` | POST | Clear all modifiers |
-| `/api/v1/modifiers/update` | POST | Update modifier parameters `{type: "speed", ...newParams}` |
 
 **Response Format**:
 ```json
@@ -619,12 +476,6 @@ Connect to `ws://lightwaveos.local/ws`
 
 **Legacy Commands**: `setEffect`, `setBrightness`, `setZoneEffect`, etc.
 
-**Audio Commands** (requires `esp32dev_audio` build):
-- `audio.parameters.get` - Get audio pipeline tuning parameters (including `agcEnabled`)
-- `audio.parameters.set` - Set audio pipeline parameters (including `agcEnabled`)
-- `audio.zone-agc.get` - Get zone AGC state
-- `audio.zone-agc.set` - Configure zone AGC parameters
-
 ## Zone System
 
 The Zone Composer (`src/effects/zones/`) provides independent effect control:
@@ -642,9 +493,23 @@ Connect at 115200 baud. Key commands:
 - `b <0-255>` - Set brightness
 - `s <1-50>` - Set speed
 - `h` - Help menu
-- `net status` - Show WiFi status (AP/STA mode, IP addresses, RSSI)
-- `net sta [seconds]` - Enable STA mode (optional auto-revert to AP-only after seconds)
-- `net ap` - Force AP-only mode
+
+### Debug System (Unified)
+
+Per-domain debug control with on-demand diagnostics. **Full docs:** [firmware/v2/docs/debugging/DEBUG_SYSTEM.md](firmware/v2/docs/debugging/DEBUG_SYSTEM.md)
+
+```
+dbg                  - Show current debug config
+dbg <0-5>            - Set global level (0=OFF, 2=WARN default, 5=TRACE)
+dbg audio <0-5>      - Set audio domain level
+dbg render <0-5>     - Set render domain level
+dbg status           - Print audio health NOW (one-shot)
+dbg spectrum         - Print 64-bin FFT NOW (one-shot)
+dbg memory           - Print heap/stack NOW (one-shot)
+dbg interval status <N>    - Auto-print every N seconds (0=off)
+```
+
+**Legacy `adbg` still works:** `adbg` / `adbg <0-5>` / `adbg status` equivalent to `dbg audio`.
 
 ## Dependencies
 
@@ -691,7 +556,7 @@ This project includes a domain memory harness for persistent agent progress acro
 ### Verification Commands
 ```bash
 .claude/harness/init.sh             # Boot ritual
-pio run -e esp32dev_audio           # Full build with WiFi + Audio
+pio run -e esp32dev_wifi            # Full build with WiFi
 git status --porcelain | wc -l      # Check uncommitted changes
 ```
 
@@ -705,39 +570,3 @@ git status --porcelain | wc -l      # Check uncommitted changes
 - `override_reason` field in .claude/harness/feature_list.json items
 - `--force` flags in harness.py (when implemented)
 - Document why if bypassing rules
-
----
-
-## Ralph Loop Autonomous Workflow
-
-The Ralph Loop is an autonomous workflow executor that allows agents to work through feature backlog items one at a time, self-managing iteration and convergence.
-
-**What it is**: A single-item-per-invocation autonomous executor that reads PRD requirements, implements features, verifies results, and records progress without human intervention.
-
-**When to use**: Feature items in `feature_list.json` with `ralph_loop.enabled=true` are eligible for autonomous execution. The system handles iterative refinement until convergence criteria are met.
-
-**How to invoke**: Run the skill with `/ralph-loop` command or use the Skill tool:
-```
-/ralph-loop
-```
-
-**Workflow summary**:
-1. **Boot** - Run `.claude/harness/init.sh` to verify project health
-2. **Select** - Choose ONE item with `ralph_loop.enabled=true` (highest priority FAILING)
-3. **Read PRD** - Load requirements from `prd_reference.file` if specified
-4. **Implement** - Make targeted changes following all project constraints
-5. **Verify** - Run acceptance criteria checks and convergence tests
-6. **Record** - Update `attempts[]`, `current_iteration`, and status
-7. **Iterate or STOP** - Continue until `max_iterations` reached or convergence criteria met
-
-**Convergence criteria** (defined per-item):
-- `build_passes`: Compilation succeeds without errors
-- `tests_pass`: All test commands return 0
-- `acceptance_met`: All acceptance criteria verified
-
-**Safety limits**:
-- `max_iterations`: Prevents infinite loops (typically 5-10)
-- `current_iteration`: Tracks progress toward limit
-- Automatic BLOCKING when max iterations exceeded without convergence
-
-**Full protocol documentation**: See `.claude/skills/ralph-loop/SKILL.md` for complete workflow, error handling, and advanced features.

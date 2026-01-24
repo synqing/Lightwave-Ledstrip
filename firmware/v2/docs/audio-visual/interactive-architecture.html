@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LightwaveOS Audio Architecture - Interactive</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            color: #fff;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            margin: 30px 0;
+            font-size: 2.5em;
+            text-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+        }
+
+        .section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 30px;
+            margin: 30px 0;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .section h2 {
+            color: #00ffff;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+        }
+
+        .viz-container {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        canvas {
+            display: block;
+            border-radius: 8px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin: 20px 0;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .slider-container {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .slider-container label {
+            display: block;
+            margin-bottom: 8px;
+            color: #00ffff;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.2);
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #00ffff;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #00ffff;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+            border: none;
+        }
+
+        .value-display {
+            display: inline-block;
+            margin-left: 10px;
+            color: #fff;
+            font-weight: bold;
+        }
+
+        .legend {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin: 20px 0;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .legend-color {
+            width: 30px;
+            height: 20px;
+            border-radius: 4px;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            color: #00ffff;
+            font-weight: bold;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            color: rgba(255, 255, 255, 0.7);
+            margin-top: 5px;
+        }
+
+        .mermaid-container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎵 LightwaveOS Audio Architecture</h1>
+        <p style="text-align: center; margin-bottom: 40px; font-size: 1.2em; color: rgba(255, 255, 255, 0.8);">
+            Interactive visualization of the audio processing pipeline
+        </p>
+
+        <!-- Data Flow Animation -->
+        <div class="section">
+            <h2>📊 Real-Time Data Flow</h2>
+            <p style="margin-bottom: 20px;">Watch audio data flow from microphone through analysis to visual effects</p>
+            <div class="viz-container">
+                <canvas id="dataFlowCanvas" width="1200" height="400"></canvas>
+            </div>
+            <div class="controls">
+                <button id="toggleFlow">Pause</button>
+                <button id="simulateBeat">Simulate Beat</button>
+                <button id="simulateChordChange">Simulate Chord Change</button>
+            </div>
+        </div>
+
+        <!-- Frequency Analysis -->
+        <div class="section">
+            <h2>🎼 Frequency Analysis (8-Band Goertzel)</h2>
+            <p style="margin-bottom: 20px;">Real-time frequency spectrum analysis with smoothing</p>
+            <div class="viz-container">
+                <canvas id="frequencyCanvas" width="1200" height="300"></canvas>
+            </div>
+            <div class="controls">
+                <div class="slider-container">
+                    <label>Smoothing: <span class="value-display" id="smoothingValue">0.15</span></label>
+                    <input type="range" id="smoothingSlider" min="0" max="0.5" step="0.01" value="0.15">
+                </div>
+                <div class="slider-container">
+                    <label>Input Energy: <span class="value-display" id="energyValue">0.5</span></label>
+                    <input type="range" id="energySlider" min="0" max="1" step="0.01" value="0.5">
+                </div>
+                <button id="playBass">Bass Drop</button>
+                <button id="playTreble">Treble Peak</button>
+            </div>
+        </div>
+
+        <!-- Tempo Tracking -->
+        <div class="section">
+            <h2>🥁 Tempo Tracker</h2>
+            <p style="margin-bottom: 20px;">Beat detection and tempo locking visualization</p>
+            <div class="viz-container">
+                <canvas id="tempoCanvas" width="1200" height="250"></canvas>
+            </div>
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-value" id="bpmDisplay">120</div>
+                    <div class="stat-label">BPM</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="confidenceDisplay">87%</div>
+                    <div class="stat-label">Confidence</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="beatDisplay">0</div>
+                    <div class="stat-label">Beat Count</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="phaseDisplay">0.00</div>
+                    <div class="stat-label">Beat Phase</div>
+                </div>
+            </div>
+            <div class="controls">
+                <div class="slider-container">
+                    <label>BPM: <span class="value-display" id="bpmValue">120</span></label>
+                    <input type="range" id="bpmSlider" min="60" max="180" step="1" value="120">
+                </div>
+                <button id="tapBeat">Tap Beat</button>
+            </div>
+        </div>
+
+        <!-- Snapshot Buffer -->
+        <div class="section">
+            <h2>🔄 Lock-Free Snapshot Buffer</h2>
+            <p style="margin-bottom: 20px;">Double-buffer swapping between Core 0 (writer) and Core 1 (reader)</p>
+            <div class="viz-container">
+                <canvas id="bufferCanvas" width="1200" height="300"></canvas>
+            </div>
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-value" id="swapCount">0</div>
+                    <div class="stat-label">Buffer Swaps</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="writeRate">50 Hz</div>
+                    <div class="stat-label">Write Rate</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="readRate">120 Hz</div>
+                    <div class="stat-label">Read Rate</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="collisions">0</div>
+                    <div class="stat-label">Collisions</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Latency Timeline -->
+        <div class="section">
+            <h2>⏱️ Latency & Timing Budget</h2>
+            <p style="margin-bottom: 20px;">End-to-end latency from microphone to LED output</p>
+            <div class="viz-container">
+                <canvas id="latencyCanvas" width="1200" height="400"></canvas>
+            </div>
+        </div>
+
+        <!-- Musical Saliency -->
+        <div class="section">
+            <h2>🎨 Musical Saliency</h2>
+            <p style="margin-bottom: 20px;">What's musically important right now?</p>
+            <div class="viz-container">
+                <canvas id="saliencyCanvas" width="1200" height="300"></canvas>
+            </div>
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ff6b6b;"></div>
+                    <span>Harmonic (chord changes)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #4ecdc4;"></div>
+                    <span>Rhythmic (beat patterns)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ffe66d;"></div>
+                    <span>Timbral (texture)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #a8e6cf;"></div>
+                    <span>Dynamic (loudness)</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Effect Examples -->
+        <div class="section">
+            <h2>💡 Effect Response Examples</h2>
+            <p style="margin-bottom: 20px;">See how different effects respond to audio data</p>
+            <div class="viz-container">
+                <canvas id="effectCanvas" width="1200" height="400"></canvas>
+            </div>
+            <div class="controls">
+                <button id="effectEnergy">Energy-Driven</button>
+                <button id="effectBeat">Beat-Sync</button>
+                <button id="effectFreq">Frequency-Zone</button>
+                <button id="effectChord">Chord-Aware</button>
+                <button id="effectSaliency">Saliency-Adaptive</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // Data Flow Animation
+        // ============================================
+        const dataFlowCanvas = document.getElementById('dataFlowCanvas');
+        const dfCtx = dataFlowCanvas.getContext('2d');
+        let flowRunning = true;
+        let flowTime = 0;
+
+        const stages = [
+            { x: 100, y: 200, label: '🎤\nMicrophone', color: '#ff6b6b' },
+            { x: 300, y: 200, label: 'I2S\nCapture', color: '#4ecdc4' },
+            { x: 500, y: 200, label: 'DC + AGC\nClean', color: '#ffe66d' },
+            { x: 700, y: 100, label: 'Energy\nAnalysis', color: '#a8e6cf' },
+            { x: 700, y: 200, label: '8-Band\nGoertzel', color: '#95e1d3' },
+            { x: 700, y: 300, label: 'Tempo\nTracker', color: '#f38181' },
+            { x: 900, y: 200, label: 'Smoothing\n& Publish', color: '#aa96da' },
+            { x: 1100, y: 200, label: '🎨\nEffects', color: '#fcbad3' }
+        ];
+
+        const dataPackets = [];
+
+        class DataPacket {
+            constructor() {
+                this.x = 100;
+                this.y = 200;
+                this.stage = 0;
+                this.size = 8;
+                this.hue = Math.random() * 360;
+            }
+
+            update() {
+                if (this.stage < stages.length - 1) {
+                    const current = stages[this.stage];
+                    const next = stages[this.stage + 1];
+                    const dx = next.x - current.x;
+                    const dy = next.y - current.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    const speed = 3;
+
+                    this.x += (dx / dist) * speed;
+                    this.y += (dy / dist) * speed;
+
+                    if (Math.abs(this.x - next.x) < 5 && Math.abs(this.y - next.y) < 5) {
+                        this.stage++;
+                        this.x = next.x;
+                        this.y = next.y;
+                    }
+                }
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.fillStyle = `hsl(${this.hue}, 70%, 60%)`;
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = ctx.fillStyle;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        function drawDataFlow() {
+            dfCtx.fillStyle = 'rgba(15, 12, 41, 0.3)';
+            dfCtx.fillRect(0, 0, dataFlowCanvas.width, dataFlowCanvas.height);
+
+            // Draw connections
+            dfCtx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            dfCtx.lineWidth = 2;
+            for (let i = 0; i < stages.length - 1; i++) {
+                const current = stages[i];
+                const next = stages[i + 1];
+                dfCtx.beginPath();
+                dfCtx.moveTo(current.x, current.y);
+                dfCtx.lineTo(next.x, next.y);
+                dfCtx.stroke();
+            }
+
+            // Draw stages
+            stages.forEach(stage => {
+                dfCtx.fillStyle = stage.color;
+                dfCtx.shadowBlur = 20;
+                dfCtx.shadowColor = stage.color;
+                dfCtx.beginPath();
+                dfCtx.arc(stage.x, stage.y, 30, 0, Math.PI * 2);
+                dfCtx.fill();
+                dfCtx.shadowBlur = 0;
+
+                dfCtx.fillStyle = '#fff';
+                dfCtx.font = 'bold 12px sans-serif';
+                dfCtx.textAlign = 'center';
+                const lines = stage.label.split('\n');
+                lines.forEach((line, i) => {
+                    dfCtx.fillText(line, stage.x, stage.y - 10 + i * 15);
+                });
+            });
+
+            // Update and draw packets
+            if (flowRunning) {
+                dataPackets.forEach(packet => {
+                    packet.update();
+                    packet.draw(dfCtx);
+                });
+
+                // Remove completed packets
+                for (let i = dataPackets.length - 1; i >= 0; i--) {
+                    if (dataPackets[i].stage >= stages.length - 1) {
+                        dataPackets.splice(i, 1);
+                    }
+                }
+
+                // Add new packets
+                if (flowTime % 30 === 0) {
+                    dataPackets.push(new DataPacket());
+                }
+                flowTime++;
+            }
+
+            requestAnimationFrame(drawDataFlow);
+        }
+
+        document.getElementById('toggleFlow').addEventListener('click', function() {
+            flowRunning = !flowRunning;
+            this.textContent = flowRunning ? 'Pause' : 'Resume';
+        });
+
+        document.getElementById('simulateBeat').addEventListener('click', () => {
+            for (let i = 0; i < 5; i++) {
+                setTimeout(() => dataPackets.push(new DataPacket()), i * 50);
+            }
+        });
+
+        drawDataFlow();
+
+        // ============================================
+        // Frequency Analysis
+        // ============================================
+        const frequencyCanvas = document.getElementById('frequencyCanvas');
+        const fqCtx = frequencyCanvas.getContext('2d');
+        const bandCount = 8;
+        const bandLabels = ['Bass', 'Low Mid', 'Mid', 'High Mid', 'Upper Mid', 'Presence', 'Brilliance', 'Treble'];
+        let bandValues = new Array(bandCount).fill(0);
+        let targetBandValues = new Array(bandCount).fill(0);
+        let smoothingFactor = 0.15;
+
+        function generateRandomBands() {
+            return Array.from({ length: bandCount }, (_, i) => {
+                const base = Math.random() * 0.8;
+                if (i < 2) return base * 1.2; // Bass heavy
+                if (i > 5) return base * 0.8; // Treble lighter
+                return base;
+            });
+        }
+
+        function drawFrequencyBands() {
+            fqCtx.fillStyle = 'rgba(15, 12, 41, 1)';
+            fqCtx.fillRect(0, 0, frequencyCanvas.width, frequencyCanvas.height);
+
+            const barWidth = (frequencyCanvas.width - 80) / bandCount;
+            const maxHeight = frequencyCanvas.height - 80;
+
+            bandValues.forEach((value, i) => {
+                const x = 40 + i * barWidth;
+                const height = value * maxHeight;
+                const y = frequencyCanvas.height - 40 - height;
+
+                // Gradient
+                const gradient = fqCtx.createLinearGradient(x, y + height, x, y);
+                const hue = (i / bandCount) * 280;
+                gradient.addColorStop(0, `hsl(${hue}, 70%, 40%)`);
+                gradient.addColorStop(1, `hsl(${hue}, 70%, 70%)`);
+
+                fqCtx.fillStyle = gradient;
+                fqCtx.shadowBlur = 20;
+                fqCtx.shadowColor = `hsl(${hue}, 70%, 60%)`;
+                fqCtx.fillRect(x, y, barWidth - 10, height);
+                fqCtx.shadowBlur = 0;
+
+                // Label
+                fqCtx.fillStyle = '#fff';
+                fqCtx.font = '11px sans-serif';
+                fqCtx.textAlign = 'center';
+                fqCtx.fillText(bandLabels[i], x + barWidth / 2 - 5, frequencyCanvas.height - 20);
+
+                // Value
+                fqCtx.fillStyle = '#00ffff';
+                fqCtx.font = 'bold 12px sans-serif';
+                fqCtx.fillText((value * 100).toFixed(0) + '%', x + barWidth / 2 - 5, y - 10);
+            });
+
+            // Smooth interpolation
+            bandValues = bandValues.map((val, i) => {
+                return val + (targetBandValues[i] - val) * smoothingFactor;
+            });
+
+            requestAnimationFrame(drawFrequencyBands);
+        }
+
+        setInterval(() => {
+            targetBandValues = generateRandomBands();
+        }, 100);
+
+        document.getElementById('smoothingSlider').addEventListener('input', function() {
+            smoothingFactor = parseFloat(this.value);
+            document.getElementById('smoothingValue').textContent = smoothingFactor.toFixed(2);
+        });
+
+        document.getElementById('playBass').addEventListener('click', () => {
+            targetBandValues[0] = 1.0;
+            targetBandValues[1] = 0.9;
+        });
+
+        document.getElementById('playTreble').addEventListener('click', () => {
+            targetBandValues[6] = 1.0;
+            targetBandValues[7] = 0.95;
+        });
+
+        drawFrequencyBands();
+
+        // ============================================
+        // Tempo Tracker
+        // ============================================
+        const tempoCanvas = document.getElementById('tempoCanvas');
+        const tpCtx = tempoCanvas.getContext('2d');
+        let bpm = 120;
+        let beatPhase = 0;
+        let beatCount = 0;
+        let confidence = 0.87;
+        const beatHistory = [];
+
+        function drawTempoTracker() {
+            tpCtx.fillStyle = 'rgba(15, 12, 41, 1)';
+            tpCtx.fillRect(0, 0, tempoCanvas.width, tempoCanvas.height);
+
+            // Beat phase circle
+            const centerX = 150;
+            const centerY = 125;
+            const radius = 80;
+
+            // Outer ring
+            tpCtx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            tpCtx.lineWidth = 3;
+            tpCtx.beginPath();
+            tpCtx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            tpCtx.stroke();
+
+            // Phase indicator
+            const angle = beatPhase * Math.PI * 2 - Math.PI / 2;
+            const indicatorX = centerX + Math.cos(angle) * radius;
+            const indicatorY = centerY + Math.sin(angle) * radius;
+
+            tpCtx.strokeStyle = '#00ffff';
+            tpCtx.lineWidth = 4;
+            tpCtx.shadowBlur = 20;
+            tpCtx.shadowColor = '#00ffff';
+            tpCtx.beginPath();
+            tpCtx.moveTo(centerX, centerY);
+            tpCtx.lineTo(indicatorX, indicatorY);
+            tpCtx.stroke();
+
+            tpCtx.fillStyle = '#00ffff';
+            tpCtx.beginPath();
+            tpCtx.arc(indicatorX, indicatorY, 8, 0, Math.PI * 2);
+            tpCtx.fill();
+            tpCtx.shadowBlur = 0;
+
+            // Beat flash
+            if (Math.abs(beatPhase - 0) < 0.05 || Math.abs(beatPhase - 1) < 0.05) {
+                tpCtx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                tpCtx.beginPath();
+                tpCtx.arc(centerX, centerY, radius + 20, 0, Math.PI * 2);
+                tpCtx.fill();
+            }
+
+            // Beat waveform
+            const waveStartX = 300;
+            const waveY = 125;
+            const waveWidth = 800;
+            const waveHeight = 150;
+
+            tpCtx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            tpCtx.lineWidth = 1;
+            tpCtx.beginPath();
+            tpCtx.moveTo(waveStartX, waveY);
+            tpCtx.lineTo(waveStartX + waveWidth, waveY);
+            tpCtx.stroke();
+
+            // Draw beat history
+            const barWidth = waveWidth / 32;
+            beatHistory.forEach((beat, i) => {
+                const x = waveStartX + i * barWidth;
+                const height = beat.strength * waveHeight / 2;
+                const alpha = 1 - (i / beatHistory.length) * 0.7;
+
+                tpCtx.fillStyle = `rgba(0, 255, 255, ${alpha})`;
+                tpCtx.fillRect(x, waveY - height / 2, barWidth - 2, height);
+            });
+
+            // Update phase
+            beatPhase += (bpm / 60) / 60; // 60 FPS
+            if (beatPhase >= 1) {
+                beatPhase = 0;
+                beatCount++;
+                beatHistory.push({ strength: 0.8 + Math.random() * 0.4 });
+                if (beatHistory.length > 32) beatHistory.shift();
+
+                document.getElementById('beatDisplay').textContent = beatCount;
+            }
+
+            document.getElementById('bpmDisplay').textContent = bpm;
+            document.getElementById('phaseDisplay').textContent = beatPhase.toFixed(2);
+            document.getElementById('confidenceDisplay').textContent = (confidence * 100).toFixed(0) + '%';
+
+            requestAnimationFrame(drawTempoTracker);
+        }
+
+        document.getElementById('bpmSlider').addEventListener('input', function() {
+            bpm = parseInt(this.value);
+            document.getElementById('bpmValue').textContent = bpm;
+        });
+
+        let lastTapTime = 0;
+        document.getElementById('tapBeat').addEventListener('click', function() {
+            const now = Date.now();
+            if (lastTapTime > 0) {
+                const interval = (now - lastTapTime) / 1000;
+                bpm = Math.round(60 / interval);
+                document.getElementById('bpmSlider').value = bpm;
+                document.getElementById('bpmValue').textContent = bpm;
+            }
+            lastTapTime = now;
+            beatPhase = 0;
+        });
+
+        drawTempoTracker();
+
+        // ============================================
+        // Snapshot Buffer
+        // ============================================
+        const bufferCanvas = document.getElementById('bufferCanvas');
+        const bufCtx = bufferCanvas.getContext('2d');
+        let swapCount = 0;
+        let writeBuffer = 0; // 0 or 1
+        let readBuffer = 1;
+        let writeProgress = 0;
+        let readProgress = 0;
+
+        function drawSnapshotBuffer() {
+            bufCtx.fillStyle = 'rgba(15, 12, 41, 1)';
+            bufCtx.fillRect(0, 0, bufferCanvas.width, bufferCanvas.height);
+
+            const bufferWidth = 300;
+            const bufferHeight = 120;
+            const buffer0X = 200;
+            const buffer1X = 700;
+            const bufferY = 90;
+
+            // Core 0 (Writer)
+            bufCtx.fillStyle = 'rgba(255, 107, 107, 0.3)';
+            bufCtx.strokeStyle = '#ff6b6b';
+            bufCtx.lineWidth = 3;
+            bufCtx.fillRect(buffer0X, 30, 150, 40);
+            bufCtx.strokeRect(buffer0X, 30, 150, 40);
+            bufCtx.fillStyle = '#fff';
+            bufCtx.font = 'bold 16px sans-serif';
+            bufCtx.textAlign = 'center';
+            bufCtx.fillText('Core 0 (Writer)', buffer0X + 75, 55);
+
+            // Core 1 (Reader)
+            bufCtx.fillStyle = 'rgba(78, 205, 196, 0.3)';
+            bufCtx.strokeStyle = '#4ecdc4';
+            bufCtx.fillRect(buffer1X, 30, 150, 40);
+            bufCtx.strokeRect(buffer1X, 30, 150, 40);
+            bufCtx.fillStyle = '#fff';
+            bufCtx.fillText('Core 1 (Reader)', buffer1X + 75, 55);
+
+            // Buffer A
+            const bufferAActive = writeBuffer === 0;
+            bufCtx.fillStyle = bufferAActive ? 'rgba(255, 107, 107, 0.5)' : 'rgba(78, 205, 196, 0.5)';
+            bufCtx.strokeStyle = bufferAActive ? '#ff6b6b' : '#4ecdc4';
+            bufCtx.lineWidth = bufferAActive ? 4 : 2;
+            bufCtx.fillRect(buffer0X, bufferY, bufferWidth, bufferHeight);
+            bufCtx.strokeRect(buffer0X, bufferY, bufferWidth, bufferHeight);
+
+            bufCtx.fillStyle = '#fff';
+            bufCtx.font = 'bold 20px sans-serif';
+            bufCtx.fillText('Buffer A', buffer0X + bufferWidth / 2, bufferY + 30);
+            bufCtx.font = '14px sans-serif';
+            bufCtx.fillText(bufferAActive ? 'WRITING' : 'READING', buffer0X + bufferWidth / 2, bufferY + 55);
+
+            // Progress bar for Buffer A
+            const progressA = bufferAActive ? writeProgress : readProgress;
+            bufCtx.fillStyle = bufferAActive ? '#ff6b6b' : '#4ecdc4';
+            bufCtx.fillRect(buffer0X + 10, bufferY + 80, (bufferWidth - 20) * progressA, 20);
+
+            // Buffer B
+            const bufferBActive = writeBuffer === 1;
+            bufCtx.fillStyle = bufferBActive ? 'rgba(255, 107, 107, 0.5)' : 'rgba(78, 205, 196, 0.5)';
+            bufCtx.strokeStyle = bufferBActive ? '#ff6b6b' : '#4ecdc4';
+            bufCtx.lineWidth = bufferBActive ? 4 : 2;
+            bufCtx.fillRect(buffer1X, bufferY, bufferWidth, bufferHeight);
+            bufCtx.strokeRect(buffer1X, bufferY, bufferWidth, bufferHeight);
+
+            bufCtx.fillStyle = '#fff';
+            bufCtx.font = 'bold 20px sans-serif';
+            bufCtx.fillText('Buffer B', buffer1X + bufferWidth / 2, bufferY + 30);
+            bufCtx.font = '14px sans-serif';
+            bufCtx.fillText(bufferBActive ? 'WRITING' : 'READING', buffer1X + bufferWidth / 2, bufferY + 55);
+
+            // Progress bar for Buffer B
+            const progressB = bufferBActive ? writeProgress : readProgress;
+            bufCtx.fillStyle = bufferBActive ? '#ff6b6b' : '#4ecdc4';
+            bufCtx.fillRect(buffer1X + 10, bufferY + 80, (bufferWidth - 20) * progressB, 20);
+
+            // Arrows
+            const arrowY = bufferY + bufferHeight / 2;
+            bufCtx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+            bufCtx.lineWidth = 2;
+            bufCtx.setLineDash([5, 5]);
+
+            if (writeBuffer === 0) {
+                bufCtx.beginPath();
+                bufCtx.moveTo(buffer0X + 75, 70);
+                bufCtx.lineTo(buffer0X + 75, bufferY);
+                bufCtx.stroke();
+            } else {
+                bufCtx.beginPath();
+                bufCtx.moveTo(buffer0X + 75, 70);
+                bufCtx.lineTo(buffer1X + 75, bufferY);
+                bufCtx.stroke();
+            }
+
+            if (readBuffer === 0) {
+                bufCtx.beginPath();
+                bufCtx.moveTo(buffer0X + 150, bufferY + 60);
+                bufCtx.lineTo(buffer1X + 75, 70);
+                bufCtx.stroke();
+            } else {
+                bufCtx.beginPath();
+                bufCtx.moveTo(buffer1X + 150, bufferY + 60);
+                bufCtx.lineTo(buffer1X + 75, 70);
+                bufCtx.stroke();
+            }
+
+            bufCtx.setLineDash([]);
+
+            // Update progress
+            writeProgress += 0.02;
+            readProgress += 0.033; // Faster read rate
+
+            if (writeProgress >= 1) {
+                writeProgress = 0;
+                writeBuffer = 1 - writeBuffer;
+                readBuffer = 1 - readBuffer;
+                swapCount++;
+                document.getElementById('swapCount').textContent = swapCount;
+            }
+
+            if (readProgress >= 1) {
+                readProgress = 0;
+            }
+
+            requestAnimationFrame(drawSnapshotBuffer);
+        }
+
+        drawSnapshotBuffer();
+
+        // ============================================
+        // Latency Timeline
+        // ============================================
+        const latencyCanvas = document.getElementById('latencyCanvas');
+        const ltCtx = latencyCanvas.getContext('2d');
+
+        const latencyStages = [
+            { name: 'I2S Capture', time: 0.5, color: '#ff6b6b' },
+            { name: 'DC Removal', time: 1.0, color: '#4ecdc4' },
+            { name: 'AGC', time: 0.5, color: '#ffe66d' },
+            { name: '8 Analysis Paths', time: 3.0, color: '#a8e6cf' },
+            { name: 'Smoothing', time: 2.0, color: '#95e1d3' },
+            { name: 'Publish', time: 0.1, color: '#aa96da' },
+            { name: 'Snapshot Read', time: 0.02, color: '#fcbad3' },
+            { name: 'Effect Render', time: 2.0, color: '#ffd3b6' }
+        ];
+
+        function drawLatencyTimeline() {
+            ltCtx.fillStyle = 'rgba(15, 12, 41, 1)';
+            ltCtx.fillRect(0, 0, latencyCanvas.width, latencyCanvas.height);
+
+            const startX = 50;
+            const startY = 100;
+            const maxWidth = latencyCanvas.width - 100;
+            const totalTime = latencyStages.reduce((sum, stage) => sum + stage.time, 0);
+
+            let currentX = startX;
+
+            latencyStages.forEach(stage => {
+                const width = (stage.time / totalTime) * maxWidth;
+
+                ltCtx.fillStyle = stage.color;
+                ltCtx.shadowBlur = 15;
+                ltCtx.shadowColor = stage.color;
+                ltCtx.fillRect(currentX, startY, width, 80);
+                ltCtx.shadowBlur = 0;
+
+                ltCtx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                ltCtx.lineWidth = 2;
+                ltCtx.strokeRect(currentX, startY, width, 80);
+
+                ltCtx.fillStyle = '#fff';
+                ltCtx.font = 'bold 12px sans-serif';
+                ltCtx.textAlign = 'center';
+                ltCtx.fillText(stage.name, currentX + width / 2, startY + 35);
+
+                ltCtx.font = '16px sans-serif';
+                ltCtx.fillStyle = '#00ffff';
+                ltCtx.fillText(`${stage.time}ms`, currentX + width / 2, startY + 55);
+
+                currentX += width;
+            });
+
+            // Total latency
+            ltCtx.fillStyle = '#fff';
+            ltCtx.font = 'bold 24px sans-serif';
+            ltCtx.textAlign = 'center';
+            ltCtx.fillText(`Total Latency: ${totalTime.toFixed(2)}ms`, latencyCanvas.width / 2, 250);
+
+            // Timeline
+            ltCtx.strokeStyle = '#00ffff';
+            ltCtx.lineWidth = 3;
+            ltCtx.beginPath();
+            ltCtx.moveTo(startX, 300);
+            ltCtx.lineTo(startX + maxWidth, 300);
+            ltCtx.stroke();
+
+            // Time markers
+            let timeX = startX;
+            let accumulatedTime = 0;
+            latencyStages.forEach(stage => {
+                ltCtx.fillStyle = '#00ffff';
+                ltCtx.beginPath();
+                ltCtx.arc(timeX, 300, 5, 0, Math.PI * 2);
+                ltCtx.fill();
+
+                ltCtx.fillStyle = '#fff';
+                ltCtx.font = '12px sans-serif';
+                ltCtx.textAlign = 'center';
+                ltCtx.fillText(`${accumulatedTime.toFixed(1)}ms`, timeX, 325);
+
+                const width = (stage.time / totalTime) * maxWidth;
+                timeX += width;
+                accumulatedTime += stage.time;
+            });
+
+            // Final marker
+            ltCtx.fillStyle = '#00ffff';
+            ltCtx.beginPath();
+            ltCtx.arc(timeX, 300, 5, 0, Math.PI * 2);
+            ltCtx.fill();
+            ltCtx.fillText(`${totalTime.toFixed(1)}ms`, timeX, 325);
+        }
+
+        drawLatencyTimeline();
+
+        // ============================================
+        // Musical Saliency
+        // ============================================
+        const saliencyCanvas = document.getElementById('saliencyCanvas');
+        const slCtx = saliencyCanvas.getContext('2d');
+
+        const saliencyTypes = [
+            { name: 'Harmonic', color: '#ff6b6b', value: 0 },
+            { name: 'Rhythmic', color: '#4ecdc4', value: 0 },
+            { name: 'Timbral', color: '#ffe66d', value: 0 },
+            { name: 'Dynamic', color: '#a8e6cf', value: 0 }
+        ];
+
+        function drawSaliency() {
+            slCtx.fillStyle = 'rgba(15, 12, 41, 1)';
+            slCtx.fillRect(0, 0, saliencyCanvas.width, saliencyCanvas.height);
+
+            const barHeight = 50;
+            const spacing = 20;
+            const startY = 30;
+            const maxWidth = saliencyCanvas.width - 300;
+
+            saliencyTypes.forEach((type, i) => {
+                const y = startY + i * (barHeight + spacing);
+
+                // Background
+                slCtx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+                slCtx.fillRect(150, y, maxWidth, barHeight);
+
+                // Value bar
+                slCtx.fillStyle = type.color;
+                slCtx.shadowBlur = 20;
+                slCtx.shadowColor = type.color;
+                slCtx.fillRect(150, y, maxWidth * type.value, barHeight);
+                slCtx.shadowBlur = 0;
+
+                // Label
+                slCtx.fillStyle = '#fff';
+                slCtx.font = 'bold 16px sans-serif';
+                slCtx.textAlign = 'right';
+                slCtx.fillText(type.name, 130, y + 30);
+
+                // Value text
+                slCtx.textAlign = 'left';
+                slCtx.fillStyle = '#00ffff';
+                slCtx.fillText((type.value * 100).toFixed(0) + '%', 150 + maxWidth + 20, y + 30);
+
+                // Threshold line (0.7)
+                const thresholdX = 150 + maxWidth * 0.7;
+                slCtx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+                slCtx.lineWidth = 2;
+                slCtx.setLineDash([5, 5]);
+                slCtx.beginPath();
+                slCtx.moveTo(thresholdX, y);
+                slCtx.lineTo(thresholdX, y + barHeight);
+                slCtx.stroke();
+                slCtx.setLineDash([]);
+            });
+
+            // Update values with smooth random walk
+            saliencyTypes.forEach(type => {
+                type.value += (Math.random() - 0.5) * 0.05;
+                type.value = Math.max(0, Math.min(1, type.value));
+            });
+
+            requestAnimationFrame(drawSaliency);
+        }
+
+        drawSaliency();
+
+        // ============================================
+        // Effect Examples
+        // ============================================
+        const effectCanvas = document.getElementById('effectCanvas');
+        const efCtx = effectCanvas.getContext('2d');
+        let currentEffect = 'energy';
+        const ledCount = 320;
+        const leds = new Array(ledCount).fill({ r: 0, g: 0, b: 0 });
+        let effectTime = 0;
+
+        function drawEffects() {
+            efCtx.fillStyle = 'rgba(15, 12, 41, 1)';
+            efCtx.fillRect(0, 0, effectCanvas.width, effectCanvas.height);
+
+            const ledWidth = effectCanvas.width / ledCount;
+            const centerX = effectCanvas.width / 2;
+
+            // Simulate audio data
+            const energy = 0.3 + Math.sin(effectTime * 0.05) * 0.3;
+            const bass = 0.5 + Math.sin(effectTime * 0.03) * 0.5;
+            const beatPhase = (effectTime % 60) / 60;
+            const isBeat = beatPhase < 0.1;
+
+            for (let i = 0; i < ledCount; i++) {
+                const distFromCenter = Math.abs(i - ledCount / 2);
+                const normalizedDist = distFromCenter / (ledCount / 2);
+
+                let r = 0, g = 0, b = 0;
+
+                switch (currentEffect) {
+                    case 'energy':
+                        const brightness = energy * 255;
+                        r = g = b = brightness;
+                        break;
+
+                    case 'beat':
+                        if (isBeat) {
+                            r = g = b = 255;
+                        } else {
+                            r = g = b = 30;
+                        }
+                        break;
+
+                    case 'frequency':
+                        if (i < ledCount / 3) {
+                            r = bass * 255; // Bass zone
+                        } else if (i < 2 * ledCount / 3) {
+                            g = energy * 255; // Mid zone
+                        } else {
+                            b = (1 - bass) * 255; // Treble zone
+                        }
+                        break;
+
+                    case 'chord':
+                        const hue = (effectTime * 0.5) % 360;
+                        const rgb = hslToRgb(hue / 360, 1, 0.5);
+                        r = rgb[0];
+                        g = rgb[1];
+                        b = rgb[2];
+                        break;
+
+                    case 'saliency':
+                        const wave = Math.sin((effectTime - distFromCenter) * 0.1) * 0.5 + 0.5;
+                        r = wave * 255;
+                        g = (1 - wave) * 255;
+                        b = energy * 128;
+                        break;
+                }
+
+                leds[i] = { r, g, b };
+            }
+
+            // Draw LEDs
+            leds.forEach((led, i) => {
+                const x = i * ledWidth;
+                efCtx.fillStyle = `rgb(${led.r}, ${led.g}, ${led.b})`;
+                efCtx.fillRect(x, 50, ledWidth, 100);
+            });
+
+            // Center marker
+            efCtx.strokeStyle = '#00ffff';
+            efCtx.lineWidth = 2;
+            efCtx.beginPath();
+            efCtx.moveTo(centerX, 30);
+            efCtx.lineTo(centerX, 170);
+            efCtx.stroke();
+
+            efCtx.fillStyle = '#00ffff';
+            efCtx.font = 'bold 14px sans-serif';
+            efCtx.textAlign = 'center';
+            efCtx.fillText('CENTER (LED 159/160)', centerX, 20);
+
+            // Effect label
+            efCtx.fillStyle = '#fff';
+            efCtx.font = 'bold 20px sans-serif';
+            const effectNames = {
+                energy: 'Energy-Driven Brightness',
+                beat: 'Beat-Synchronized Flash',
+                frequency: 'Frequency-Zone Colors',
+                chord: 'Chord-Aware Palette',
+                saliency: 'Saliency-Adaptive Response'
+            };
+            efCtx.fillText(effectNames[currentEffect], centerX, 200);
+
+            // Stats
+            efCtx.font = '14px sans-serif';
+            efCtx.fillText(`Energy: ${(energy * 100).toFixed(0)}% | Bass: ${(bass * 100).toFixed(0)}% | Beat: ${isBeat ? 'YES' : 'NO'}`, centerX, 230);
+
+            effectTime++;
+            requestAnimationFrame(drawEffects);
+        }
+
+        function hslToRgb(h, s, l) {
+            let r, g, b;
+            if (s === 0) {
+                r = g = b = l;
+            } else {
+                const hue2rgb = (p, q, t) => {
+                    if (t < 0) t += 1;
+                    if (t > 1) t -= 1;
+                    if (t < 1/6) return p + (q - p) * 6 * t;
+                    if (t < 1/2) return q;
+                    if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+                    return p;
+                };
+                const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+                const p = 2 * l - q;
+                r = hue2rgb(p, q, h + 1/3);
+                g = hue2rgb(p, q, h);
+                b = hue2rgb(p, q, h - 1/3);
+            }
+            return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+        }
+
+        document.getElementById('effectEnergy').addEventListener('click', () => currentEffect = 'energy');
+        document.getElementById('effectBeat').addEventListener('click', () => currentEffect = 'beat');
+        document.getElementById('effectFreq').addEventListener('click', () => currentEffect = 'frequency');
+        document.getElementById('effectChord').addEventListener('click', () => currentEffect = 'chord');
+        document.getElementById('effectSaliency').addEventListener('click', () => currentEffect = 'saliency');
+
+        drawEffects();
+    </script>
+</body>
+</html>

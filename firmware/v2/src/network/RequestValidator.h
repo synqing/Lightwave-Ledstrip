@@ -580,7 +580,7 @@ private:
  * @return Valid effect ID, defaults to 0 if out of bounds
  */
 inline uint8_t validateEffectIdInRequest(uint8_t effectId) {
-    constexpr uint8_t MAX_EFFECTS = 102;  // Keep in sync with RendererNode::MAX_EFFECTS
+    constexpr uint8_t MAX_EFFECTS = 100;  // Keep in sync with RendererActor::MAX_EFFECTS
     if (effectId >= MAX_EFFECTS) {
         return 0;  // Return safe default (effect 0)
     }
@@ -787,27 +787,28 @@ namespace RequestSchemas {
     // ========================================================================
 
     /**
-     * @brief POST /api/network/connect
-     * Required: ssid
-     * Optional: password
+     * @brief POST /api/v1/network/connect
+     * Required: ssid (1-32 chars)
+     * Optional: password (0-64 chars, empty for open networks)
+     * Optional: save (bool, save credentials to NVS)
      */
     constexpr FieldSchema NetworkConnect[] = {
-        {"ssid",     FieldType::STRING, true, 1, 32},
-        {"password", FieldType::STRING, false, 0, 64}
+        {"ssid",     FieldType::STRING, true,  1, 32},
+        {"password", FieldType::STRING, false, 0, 64},
+        {"save",     FieldType::BOOL,   false}
     };
     constexpr size_t NetworkConnectSize = sizeof(NetworkConnect) / sizeof(FieldSchema);
 
     /**
-     * @brief POST /api/v1/network/sta/enable
-     * Optional: durationSeconds (0 = no auto-revert), revertToApOnly, ssid, password
+     * @brief POST /api/v1/network/saved
+     * Required: ssid (1-32 chars)
+     * Required: password (8-64 chars, WPA2 minimum)
      */
-    constexpr FieldSchema NetworkStaEnable[] = {
-        {"durationSeconds", FieldType::UINT32, false, 0, 86400},
-        {"revertToApOnly",  FieldType::BOOL,   false, 0, 0},
-        {"ssid",            FieldType::STRING, false, 1, 32},
-        {"password",        FieldType::STRING, false, 0, 64}
+    constexpr FieldSchema NetworkSave[] = {
+        {"ssid",     FieldType::STRING, true, 1, 32},
+        {"password", FieldType::STRING, true, 8, 64}
     };
-    constexpr size_t NetworkStaEnableSize = sizeof(NetworkStaEnable) / sizeof(FieldSchema);
+    constexpr size_t NetworkSaveSize = sizeof(NetworkSave) / sizeof(FieldSchema);
 
     // Legacy API schemas removed - all endpoints migrated to V1 API
 

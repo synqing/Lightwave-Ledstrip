@@ -68,7 +68,6 @@ void LGPGrinCloakEffect::render(plugins::EffectContext& ctx) {
         uint8_t brightness = (uint8_t)constrain(brightnessF, 0.0f, 255.0f);
         uint8_t hue = (uint8_t)(ctx.gHue + (uint8_t)(sample * 1.5f));
 
-        // Use palette system - apply brightness scaling
         uint8_t brightU8 = (uint8_t)((brightness * ctx.brightness) / 255);
         ctx.leds[i] = ctx.palette.getColor(hue, brightU8);
         if (i + STRIP_LENGTH < ctx.ledCount) {

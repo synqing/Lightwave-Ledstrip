@@ -89,6 +89,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Eliminated cross-platform dependency leakage in ESP32 builds (no ESP8266/RP2040 async TCP libraries pulled into ESP32-S3 builds).
+- **Audio Gate Responsiveness**: Fixed activity gate closing on valid audio signals
+  - Lowered default `gateStartFactor` from 1.5 to 1.0 (more permissive threshold)
+  - Fixed hardcoded noise floor rise rate (now uses tunable `noiseFloorRise` parameter)
+  - Increased SNR threshold from 2.0 to 3.0 to prevent floor drift during active audio
+  - Added automatic recovery mechanism: forces noise floor down when gate stuck with signal present
+  - Audio-reactive effects now respond correctly to normal audio levels
+  - See `docs/audio-visual/audio-gate-fix-2025-01.md` for comprehensive documentation
 
 ---
 

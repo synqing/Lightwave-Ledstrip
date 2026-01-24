@@ -1,0 +1,98 @@
+name: JSON Codec Boundary & Tests
+
+on:
+  pull_request:
+    branches: [ main, feat/Development-Progress-Continues ]
+    paths:
+      - 'firmware/v2/**'
+      - 'tools/check_json_boundary.sh'
+      - 'tools/json_boundary_baseline_firmware_v2.txt'
+  push:
+    branches: [ main, feat/Development-Progress-Continues ]
+    paths:
+      - 'firmware/v2/**'
+
+jobs:
+  check-codec-boundary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Full history for reliable merge-base diffs
+      
+      - name: Verify baseline may only shrink
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          
+          # BASE_REF is only set on pull_request / pull_request_target events.
+          # Fallback to your default base if this job can run on push/workflow_dispatch.
+          BASE_REF="${BASE_REF:-main}"
+          
+          BASELINE_FILE="tools/json_boundary_baseline_firmware_v2.txt"
+          if [ ! -f "$BASELINE_FILE" ]; then
+            echo "✓ Baseline file deleted - all violations must be fixed (hard-fail mode)"
+            echo "Any violations found will cause CI to fail"
+            exit 0
+          fi
+          
+          # Ensure we have a proper remote-tracking ref for the base branch.
+          git fetch --no-tags --prune origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+          
+          # Use three-dot diff so Git computes merge-base correctly.
+          # This matches GitHub PR comparison semantics (merge-base → head).
+          DIFF_RANGE="origin/${BASE_REF}...HEAD"
+          
+          # Optional sanity check (will fail fast if history is too shallow to find merge-base)
+          git merge-base "origin/${BASE_REF}" HEAD >/dev/null
+          
+          # Check if baseline changed in this PR
+          if git diff --quiet "$DIFF_RANGE" -- "$BASELINE_FILE"; then
+            echo "Baseline file unchanged (OK)"
+            exit 0
+          fi
+          
+          # Get diff stats: <added> <deleted> <file>
+          DIFF_STATS=$(git diff --numstat "$DIFF_RANGE" -- "$BASELINE_FILE" || true)
+          ADDED=$(echo "$DIFF_STATS" | awk '{print $1}')
+          DELETED=$(echo "$DIFF_STATS" | awk '{print $2}')
+          
+          if [ -z "$ADDED" ] || [ "$ADDED" -eq 0 ]; then
+            echo "✓ Baseline only shrunk (deleted: $DELETED lines, added: 0 lines)"
+            exit 0
+          fi
+          
+          echo "✗ Baseline growth detected (added: $ADDED lines, deleted: $DELETED lines)"
+          echo ""
+          echo "Baseline may only shrink as violations are fixed, not grow"
+          echo "Resolution: Fix new violations by moving JSON parsing/encoding to codec modules"
+          echo "Do not add violations to baseline - that defeats progressive enforcement"
+          exit 1
+      
+      - name: Setup PlatformIO
+        uses: platformio/platformio-action@v1
+      
+      - name: Check JSON Boundary (firmware/v2)
+        run: |
+          # If baseline exists, check against it. If not, hard-fail on any violations.
+          if [ -f "tools/json_boundary_baseline_firmware_v2.txt" ]; then
+            TARGET_DIR=firmware/v2 ./tools/check_json_boundary.sh --check-baseline
+          else
+            echo "Baseline file deleted - running in strict mode (any violation fails)"
+            TARGET_DIR=firmware/v2 ./tools/check_json_boundary.sh || {
+              echo "✗ JSON boundary violations found - all violations must be fixed"
+              echo "Move JSON parsing/encoding to codec modules (firmware/v2/src/codec/)"
+              exit 1
+            }
+          fi
+      
+      - name: Run Codec Tests
+        working-directory: firmware/v2
+        run: pio test -e native_codec_test_ws
+      
+      - name: Build Check
+        working-directory: firmware/v2
+        run: pio run -e esp32dev_audio

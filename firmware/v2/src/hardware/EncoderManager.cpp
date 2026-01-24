@@ -17,7 +17,7 @@
 #define LW_LOG_TAG "Encoder"
 #include "utils/Log.h"
 
-#include "../core/actors/NodeOrchestrator.h"
+#include "../core/actors/ActorSystem.h"
 
 namespace lightwaveos {
 namespace hardware {
@@ -582,13 +582,13 @@ void EncoderManager::performI2CBusRecovery(uint8_t sda, uint8_t scl) {
  *   #endif
  *
  * @param event The encoder event to process
- * @param orchestrator Reference to NodeOrchestrator
+ * @param actors Reference to ActorSystem
  * @param renderer Pointer to RendererActor
  */
 void handleEncoderEvent(const EncoderEvent& event, 
-                       lightwaveos::nodes::NodeOrchestrator& orchestrator,
-                       lightwaveos::nodes::RendererActor* renderer) {
-    using namespace lightwaveos::nodes;
+                       lightwaveos::actors::ActorSystem& actors,
+                       lightwaveos::actors::RendererActor* renderer) {
+    using namespace lightwaveos::actors;
 
     if (!renderer) return;
 
@@ -602,7 +602,7 @@ void handleEncoderEvent(const EncoderEvent& event,
             int16_t newEffect = (int16_t)current + event.delta;
             if (newEffect < 0) newEffect = effectCount - 1;
             if (newEffect >= effectCount) newEffect = 0;
-            orchestrator.setEffect((uint8_t)newEffect);
+            actors.setEffect((uint8_t)newEffect);
             break;
         }
 
@@ -611,7 +611,7 @@ void handleEncoderEvent(const EncoderEvent& event,
             uint8_t current = renderer->getBrightness();
             int16_t newVal = (int16_t)current + (event.delta * 8);
             newVal = constrain(newVal, 0, 255);
-            orchestrator.setBrightness((uint8_t)newVal);
+            actors.setBrightness((uint8_t)newVal);
             break;
         }
 
@@ -623,7 +623,7 @@ void handleEncoderEvent(const EncoderEvent& event,
             int16_t newPalette = (int16_t)current + event.delta;
             if (newPalette < 0) newPalette = paletteCount - 1;
             if (newPalette >= paletteCount) newPalette = 0;
-            orchestrator.setPalette((uint8_t)newPalette);
+            actors.setPalette((uint8_t)newPalette);
             break;
         }
 
@@ -632,7 +632,7 @@ void handleEncoderEvent(const EncoderEvent& event,
             uint8_t current = renderer->getSpeed();
             int16_t newVal = (int16_t)current + event.delta;
             newVal = constrain(newVal, 1, 50);
-            orchestrator.setSpeed((uint8_t)newVal);
+            actors.setSpeed((uint8_t)newVal);
             break;
         }
 

@@ -1,0 +1,911 @@
+{
+  "format": "ITF",
+  "formatVersion": "1.0",
+  "generatedAt": "2026-01-19T18:17:01.385461",
+  "states": [
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {}
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "71323"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {}
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "71324"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {}
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "72126"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {
+            "0": {
+              "effectId": {
+                "#bigint": "1"
+              },
+              "brightness": {
+                "#bigint": "200"
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "72930"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {
+            "0": {
+              "effectId": {
+                "#bigint": "1"
+              },
+              "brightness": {
+                "#bigint": "200"
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "73944"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {
+            "0": {
+              "effectId": {
+                "#bigint": "1"
+              },
+              "brightness": {
+                "#bigint": "200"
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "79694"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {
+            "0": {
+              "effectId": {
+                "#bigint": "1"
+              },
+              "brightness": {
+                "#bigint": "200"
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "79966"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {
+            "0": {
+              "effectId": {
+                "#bigint": "1"
+              },
+              "brightness": {
+                "#bigint": "200"
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "79971"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {
+            "0": {
+              "effectId": {
+                "#bigint": "1"
+              },
+              "brightness": {
+                "#bigint": "200"
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "79975"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {
+            "0": {
+              "effectId": {
+                "#bigint": "1"
+              },
+              "brightness": {
+                "#bigint": "200"
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "79978"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {
+            "0": {
+              "effectId": {
+                "#bigint": "1"
+              },
+              "brightness": {
+                "#bigint": "200"
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "80246"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {
+            "0": {
+              "effectId": {
+                "#bigint": "1"
+              },
+              "brightness": {
+                "#bigint": "200"
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "80519"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {
+            "0": {
+              "effectId": {
+                "#bigint": "1"
+              },
+              "brightness": {
+                "#bigint": "200"
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "80807"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {
+            "0": {
+              "effectId": {
+                "#bigint": "1"
+              },
+              "brightness": {
+                "#bigint": "200"
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "81056"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {
+            "0": {
+              "effectId": {
+                "#bigint": "1"
+              },
+              "brightness": {
+                "#bigint": "200"
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "81356"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {
+            "0": {
+              "effectId": {
+                "#bigint": "1"
+              },
+              "brightness": {
+                "#bigint": "200"
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "81645"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {
+            "0": {
+              "effectId": {
+                "#bigint": "1"
+              },
+              "brightness": {
+                "#bigint": "200"
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "81903"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {
+            "0": {
+              "effectId": {
+                "#bigint": "1"
+              },
+              "brightness": {
+                "#bigint": "200"
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "82198"
+        }
+      }
+    },
+    {
+      "state": {
+        "node": {
+          "connState": "DISCONNECTED",
+          "connEpoch": {
+            "#bigint": "0"
+          },
+          "handshakeComplete": false,
+          "lastAppliedParams": {},
+          "pendingCommands": [],
+          "lastStatusTs": {
+            "#bigint": "0"
+          }
+        },
+        "hub": {
+          "connState": {},
+          "connEpoch": {
+            "Tab5": {
+              "#bigint": "0"
+            }
+          },
+          "activeParams": {},
+          "activeEffectId": {
+            "#bigint": "0"
+          },
+          "lastBroadcastTs": {
+            "#bigint": "0"
+          },
+          "zoneCount": {
+            "#bigint": "0"
+          },
+          "zones": {
+            "0": {
+              "effectId": {
+                "#bigint": "1"
+              },
+              "brightness": {
+                "#bigint": "200"
+              }
+            }
+          }
+        }
+      },
+      "metadata": {
+        "ts_ms": {
+          "#bigint": "82490"
+        }
+      }
+    }
+  ]
+}

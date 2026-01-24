@@ -5,8 +5,9 @@
 // Non-blocking WiFi connection management with mDNS resolution.
 // Ported from K1.8encoderS3 with Tab5-specific adaptations.
 //
-// ESP32-P4 uses ESP32-C6 co-processor for WiFi via SDIO.
-// Requires WiFi.setPins() before WiFi.begin() - see Config.h for pin defs.
+// NOTE: WiFi is currently DISABLED on Tab5 (ESP32-P4) due to SDIO pin
+// configuration issues with the ESP32-C6 WiFi co-processor.
+// See Config.h ENABLE_WIFI flag for details.
 // ============================================================================
 
 #include "config/Config.h"
@@ -42,13 +43,10 @@ class WiFiManager {
 public:
     WiFiManager();
 
-    // Initialize and start WiFi connection with primary and optional secondary network
-    // @param ssid Primary WiFi network SSID
-    // @param password Primary WiFi network password
-    // @param ssid2 Secondary WiFi network SSID (optional, nullptr to disable)
-    // @param password2 Secondary WiFi network password (optional)
-    void begin(const char* ssid, const char* password, 
-               const char* ssid2 = nullptr, const char* password2 = nullptr);
+    // Initialize and start WiFi connection
+    // @param ssid WiFi network SSID
+    // @param password WiFi network password
+    void begin(const char* ssid, const char* password);
 
     // Update connection state machine (call from loop())
     // Non-blocking: returns immediately, handles state transitions internally
@@ -76,14 +74,6 @@ public:
                _status == WiFiConnectionStatus::MDNS_RESOLVED;
     }
 
-    // Check if retry button should be shown (after 2 minutes of failed connections)
-    bool shouldShowRetryButton() const {
-        return _retryButtonEnabled;
-    }
-
-    // Trigger manual retry (reset retry state and restart connection attempts)
-    void triggerRetry();
-
     // Check if mDNS resolved successfully
     bool isMDNSResolved() const {
         return _status == WiFiConnectionStatus::MDNS_RESOLVED;
@@ -100,38 +90,36 @@ public:
     // Get status as human-readable string
     const char* getStatusString() const;
 
-    // Check if mDNS resolution has exceeded timeout threshold
-    bool isMDNSTimeoutExceeded() const;
+    // ========================================================================
+    // Stub API for compatibility with main.cpp (features not implemented)
+    // ========================================================================
 
-    // Get stored manual IP from NVS (if configured)
-    IPAddress getManualIP() const;
+    // Trigger connection retry (no-op in simple mode)
+    void triggerRetry() { reconnect(); }
 
-    // Set manual IP address (stores in NVS)
-    bool setManualIP(const IPAddress& ip);
+    // Check if manual IP should be used (always false)
+    bool shouldUseManualIP() const { return false; }
 
-    // Check if manual IP should be used
-    bool shouldUseManualIP() const;
+    // Get manual IP address (returns INADDR_NONE)
+    IPAddress getManualIP() const { return IPAddress(INADDR_NONE); }
 
-    // Clear manual IP configuration from NVS
-    void clearManualIP();
+    // Check if mDNS timeout exceeded (always false - use isMDNSResolved instead)
+    bool isMDNSTimeoutExceeded() const { return false; }
 
-    // Get mDNS attempt count (for diagnostics)
+    // Check if retry button should be shown (show when not connected or resolving)
+    bool shouldShowRetryButton() const {
+        return _status == WiFiConnectionStatus::DISCONNECTED ||
+               _status == WiFiConnectionStatus::ERROR;
+    }
+
+    // Get mDNS attempt count
     uint8_t getMDNSAttemptCount() const { return _mdnsRetryCount; }
 
 private:
     const char* _ssid;
     const char* _password;
-    const char* _ssid2;
-    const char* _password2;
     WiFiConnectionStatus _status;
     IPAddress _resolvedIP;
-
-    // Network selection state
-    bool _usingPrimaryNetwork;  // true = primary, false = secondary
-    uint8_t _primaryAttempts;   // Number of attempts on primary network
-    uint8_t _secondaryAttempts; // Number of attempts on secondary network
-    unsigned long _retryTimeoutStartTime;  // When 2-minute retry period started
-    bool _retryButtonEnabled;  // Whether retry button should be shown
 
     // Timing state
     unsigned long _connectStartTime;
@@ -142,11 +130,6 @@ private:
     // mDNS state
     const char* _mdnsHostname;
     uint8_t _mdnsRetryCount;
-    unsigned long _mdnsStartTime;  // When mDNS resolution started
-
-    // Manual IP configuration (from NVS)
-    IPAddress _manualIP;           // User-configured IP (from NVS)
-    bool _useManualIP;              // Whether to use manual IP
 
     // State handlers
     void handleDisconnected();
@@ -156,9 +139,7 @@ private:
 
     // Internal helpers
     void startConnection();
-    void switchToSecondaryNetwork();
     void enterErrorState(const char* reason);
-    void loadManualIPFromNVS();
 };
 
 #else // ENABLE_WIFI == 0
@@ -177,15 +158,22 @@ enum class WiFiConnectionStatus {
 class WiFiManager {
 public:
     WiFiManager() {}
-    void begin(const char*, const char*, const char* = nullptr, const char* = nullptr) {}
+    void begin(const char*, const char*) {}
     void update() {}
     WiFiConnectionStatus getStatus() const { return WiFiConnectionStatus::DISCONNECTED; }
     bool isConnected() const { return false; }
-    bool shouldShowRetryButton() const { return false; }
-    void triggerRetry() {}
     bool isMDNSResolved() const { return false; }
     void reconnect() {}
     const char* getStatusString() const { return "WiFi Disabled"; }
+
+    // Stub API for compatibility
+    void triggerRetry() {}
+    bool shouldUseManualIP() const { return false; }
+    IPAddress getManualIP() const { return IPAddress(INADDR_NONE); }
+    bool isMDNSTimeoutExceeded() const { return false; }
+    bool shouldShowRetryButton() const { return false; }
+    uint8_t getMDNSAttemptCount() const { return 0; }
+    IPAddress getResolvedIP() const { return IPAddress(INADDR_NONE); }
 };
 
 #endif // ENABLE_WIFI

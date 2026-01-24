@@ -37,17 +37,16 @@ private:
     float m_burst = 0.0f;       // Snare-driven burst intensity
     uint32_t m_lastHopSeq = 0;  // Audio hop sequence tracking
 
-    // Chromagram smoothing (AsymmetricFollower for natural attack/release)
-    enhancement::AsymmetricFollower m_chromaFollowers[12];
-    float m_chromaSmoothed[12] = {0.0f};
-    float m_chromaTargets[12] = {0.0f};
-    
     // Color state
     uint8_t m_dominantBin = 0;       // Dominant chroma bin
     float m_dominantBinSmooth = 0.0f; // Smoothed for stability
 
     // Speed state (Spring physics for natural momentum)
     enhancement::Spring m_phaseSpeedSpring;  // Critically damped - no overshoot
+    
+    // EMA smoothing for heavyBass (prevents pops)
+    float m_heavyBassSmooth = 0.0f;
+    bool m_heavyBassSmoothInitialized = false;
 };
 
 } // namespace ieffect

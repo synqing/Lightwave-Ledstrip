@@ -1,0 +1,10 @@
+{
+  "schema": 2,
+  "version": "1.0",
+  "plugin": {
+    "description": "Missing required 'name' field"
+  },
+  "effects": [
+    { "id": 0 }
+  ]
+}

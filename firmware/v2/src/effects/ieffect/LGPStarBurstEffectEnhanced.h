@@ -2,7 +2,7 @@
  * @file LGPStarBurstEnhancedEffect.h
  * @brief LGP Star Burst Enhanced - Enhanced version with 64-bin sub-bass, enhanced snare/hi-hat triggers
  *
- * Effect ID: 100
+ * Effect ID: 95
  * Family: GEOMETRIC
  * Tags: CENTER_ORIGIN
  *
@@ -61,6 +61,9 @@ private:
     
     // Enhanced: Hi-hat sparkle burst
     float m_hihatSparkle = 0.0f;
+    
+    // Tempo lock hysteresis (Schmitt trigger: 0.6 lock / 0.4 unlock)
+    bool m_tempoLocked = false;
 };
 
 } // namespace ieffect

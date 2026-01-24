@@ -285,6 +285,25 @@ All existing functionality is preserved:
 - ✅ Error codes and messages
 - ✅ CORS, mDNS, LittleFS behavior
 
+## Security Considerations
+
+### WebSocket Origin Validation Policy
+
+**Current Policy**: Origin validation is **disabled** to support non-browser clients (e.g., Tab5 encoder).
+
+**Rationale**: 
+- Embedded devices (Tab5 encoder) may send `file://` or empty Origin headers
+- Local network clients are trusted (same subnet as v2 device)
+- OWASP CSWSH (Cross-Site WebSocket Hijacking) risk is minimal on isolated local networks
+
+**If Origin validation is re-enabled in future**:
+- Must allow empty/missing Origin (non-browser clients)
+- Must allow local network origins (lightwaveos.local, device IPs)
+- Should be configurable via compile-time flag
+- Must coordinate with Tab5 encoder firmware to ensure compatibility
+
+**Location**: Origin validation logic exists in `WsGateway::validateOrigin()` but is not registered in the WebSocket handshake (see `WebServer::begin()`).
+
 ## Metrics
 
 ### Baseline (Before Refactoring)

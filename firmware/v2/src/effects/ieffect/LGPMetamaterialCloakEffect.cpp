@@ -60,7 +60,6 @@ void LGPMetamaterialCloakEffect::render(plugins::EffectContext& ctx) {
             }
         }
 
-        // Use palette system - apply brightness scaling
         uint8_t brightU8 = (uint8_t)((wave * ctx.brightness) / 255);
         ctx.leds[i] = ctx.palette.getColor(hue, brightU8);
         if (i + STRIP_LENGTH < ctx.ledCount) {

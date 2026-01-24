@@ -343,36 +343,36 @@ inline int8_t TouchHandler::getLastTouchedParam() const {
 }
 
 inline TouchZone TouchHandler::hitTestZone(int16_t x, int16_t y) {
-    // #region agent log
-    Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1,H3\",\"location\":\"TouchHandler.h:341\",\"message\":\"hitTestZone.entry\",\"data\":{\"x\":%d,\"y\":%d,\"statusBarYEnd\":%d,\"actionRowYStart\":%d,\"actionRowYEnd\":%d,\"gridYStart\":%d,\"screenH\":%d},\"timestamp\":%lu}\n", x, y, TouchConfig::STATUS_BAR_Y_END, TouchConfig::ACTION_ROW_Y_START, TouchConfig::ACTION_ROW_Y_END, TouchConfig::GRID_Y_START, TouchConfig::SCREEN_HEIGHT, (unsigned long)millis());
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1,H3\",\"location\":\"TouchHandler.h:341\",\"message\":\"hitTestZone.entry\",\"data\":{\"x\":%d,\"y\":%d,\"statusBarYEnd\":%d,\"actionRowYStart\":%d,\"actionRowYEnd\":%d,\"gridYStart\":%d,\"screenH\":%d},\"timestamp\":%lu}\n", x, y, TouchConfig::STATUS_BAR_Y_END, TouchConfig::ACTION_ROW_Y_START, TouchConfig::ACTION_ROW_Y_END, TouchConfig::GRID_Y_START, TouchConfig::SCREEN_HEIGHT, (unsigned long)millis());
+        // #endregion
     // Status bar zone
     if (y >= TouchConfig::STATUS_BAR_Y_START && y <= TouchConfig::STATUS_BAR_Y_END) {
-        // #region agent log
-        Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\",\"location\":\"TouchHandler.h:344\",\"message\":\"hitTestZone.statusBar\",\"data\":{\"x\":%d,\"y\":%d},\"timestamp\":%lu}\n", x, y, (unsigned long)millis());
-        // #endregion
+        // #region agent log (DISABLED)
+        // Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\",\"location\":\"TouchHandler.h:344\",\"message\":\"hitTestZone.statusBar\",\"data\":{\"x\":%d,\"y\":%d},\"timestamp\":%lu}\n", x, y, (unsigned long)millis());
+                // #endregion
         return TouchZone::STATUS_BAR;
     }
 
     // Action row zone (check BEFORE parameter grid to avoid conflicts)
     if (y >= TouchConfig::ACTION_ROW_Y_START && y <= TouchConfig::ACTION_ROW_Y_END) {
-        // #region agent log
-        Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\",\"location\":\"TouchHandler.h:352\",\"message\":\"hitTestZone.actionRow\",\"data\":{\"x\":%d,\"y\":%d,\"yStart\":%d,\"yEnd\":%d},\"timestamp\":%lu}\n", x, y, TouchConfig::ACTION_ROW_Y_START, TouchConfig::ACTION_ROW_Y_END, (unsigned long)millis());
-        // #endregion
+        // #region agent log (DISABLED)
+        // Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\",\"location\":\"TouchHandler.h:352\",\"message\":\"hitTestZone.actionRow\",\"data\":{\"x\":%d,\"y\":%d,\"yStart\":%d,\"yEnd\":%d},\"timestamp\":%lu}\n", x, y, TouchConfig::ACTION_ROW_Y_START, TouchConfig::ACTION_ROW_Y_END, (unsigned long)millis());
+                // #endregion
         return TouchZone::ACTION_ROW;
     }
 
     // Parameter grid zone
     if (y >= TouchConfig::GRID_Y_START && y < TouchConfig::SCREEN_HEIGHT) {
-        // #region agent log
-        Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\",\"location\":\"TouchHandler.h:359\",\"message\":\"hitTestZone.parameterGrid\",\"data\":{\"x\":%d,\"y\":%d},\"timestamp\":%lu}\n", x, y, (unsigned long)millis());
-        // #endregion
+        // #region agent log (DISABLED)
+        // Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\",\"location\":\"TouchHandler.h:359\",\"message\":\"hitTestZone.parameterGrid\",\"data\":{\"x\":%d,\"y\":%d},\"timestamp\":%lu}\n", x, y, (unsigned long)millis());
+                // #endregion
         return TouchZone::PARAMETER_GRID;
     }
 
-    // #region agent log
-    Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\",\"location\":\"TouchHandler.h:365\",\"message\":\"hitTestZone.none\",\"data\":{\"x\":%d,\"y\":%d},\"timestamp\":%lu}\n", x, y, (unsigned long)millis());
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\",\"location\":\"TouchHandler.h:365\",\"message\":\"hitTestZone.none\",\"data\":{\"x\":%d,\"y\":%d},\"timestamp\":%lu}\n", x, y, (unsigned long)millis());
+        // #endregion
     return TouchZone::NONE;
 }
 
@@ -420,36 +420,36 @@ inline int8_t TouchHandler::hitTestParameter(int16_t x, int16_t y) {
 }
 
 inline int8_t TouchHandler::hitTestActionButton(int16_t x, int16_t y) {
-    // #region agent log
-    Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H2\",\"location\":\"TouchHandler.h:403\",\"message\":\"hitTestActionButton.entry\",\"data\":{\"x\":%d,\"y\":%d,\"yStart\":%d,\"yEnd\":%d,\"screenW\":%d,\"buttonW\":%d},\"timestamp\":%lu}\n", x, y, TouchConfig::ACTION_ROW_Y_START, TouchConfig::ACTION_ROW_Y_END, TouchConfig::SCREEN_WIDTH, TouchConfig::ACTION_BUTTON_W, (unsigned long)millis());
-    // #endregion
-    if (y < TouchConfig::ACTION_ROW_Y_START || y > TouchConfig::ACTION_ROW_Y_END) {
-        // #region agent log
-        Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H2\",\"location\":\"TouchHandler.h:405\",\"message\":\"hitTestActionButton.yOutOfRange\",\"data\":{\"x\":%d,\"y\":%d,\"yStart\":%d,\"yEnd\":%d},\"timestamp\":%lu}\n", x, y, TouchConfig::ACTION_ROW_Y_START, TouchConfig::ACTION_ROW_Y_END, (unsigned long)millis());
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H2\",\"location\":\"TouchHandler.h:403\",\"message\":\"hitTestActionButton.entry\",\"data\":{\"x\":%d,\"y\":%d,\"yStart\":%d,\"yEnd\":%d,\"screenW\":%d,\"buttonW\":%d},\"timestamp\":%lu}\n", x, y, TouchConfig::ACTION_ROW_Y_START, TouchConfig::ACTION_ROW_Y_END, TouchConfig::SCREEN_WIDTH, TouchConfig::ACTION_BUTTON_W, (unsigned long)millis());
         // #endregion
+    if (y < TouchConfig::ACTION_ROW_Y_START || y > TouchConfig::ACTION_ROW_Y_END) {
+        // #region agent log (DISABLED)
+        // Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H2\",\"location\":\"TouchHandler.h:405\",\"message\":\"hitTestActionButton.yOutOfRange\",\"data\":{\"x\":%d,\"y\":%d,\"yStart\":%d,\"yEnd\":%d},\"timestamp\":%lu}\n", x, y, TouchConfig::ACTION_ROW_Y_START, TouchConfig::ACTION_ROW_Y_END, (unsigned long)millis());
+                // #endregion
         return -1;
     }
 
     if (x < 0 || x >= TouchConfig::SCREEN_WIDTH) {
-        // #region agent log
-        Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H2\",\"location\":\"TouchHandler.h:410\",\"message\":\"hitTestActionButton.xOutOfRange\",\"data\":{\"x\":%d,\"screenW\":%d},\"timestamp\":%lu}\n", x, TouchConfig::SCREEN_WIDTH, (unsigned long)millis());
-        // #endregion
+        // #region agent log (DISABLED)
+        // Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H2\",\"location\":\"TouchHandler.h:410\",\"message\":\"hitTestActionButton.xOutOfRange\",\"data\":{\"x\":%d,\"screenW\":%d},\"timestamp\":%lu}\n", x, TouchConfig::SCREEN_WIDTH, (unsigned long)millis());
+                // #endregion
         return -1;
     }
 
     int8_t idx = x / TouchConfig::ACTION_BUTTON_W;
-    // #region agent log
-    Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H2\",\"location\":\"TouchHandler.h:415\",\"message\":\"hitTestActionButton.calculated\",\"data\":{\"x\":%d,\"buttonW\":%d,\"calculatedIdx\":%d,\"maxButtons\":%d},\"timestamp\":%lu}\n", x, TouchConfig::ACTION_BUTTON_W, idx, TouchConfig::ACTION_BUTTONS, (unsigned long)millis());
-    // #endregion
-    if (idx < 0 || idx >= TouchConfig::ACTION_BUTTONS) {
-        // #region agent log
-        Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H2\",\"location\":\"TouchHandler.h:417\",\"message\":\"hitTestActionButton.idxOutOfRange\",\"data\":{\"idx\":%d,\"maxButtons\":%d},\"timestamp\":%lu}\n", idx, TouchConfig::ACTION_BUTTONS, (unsigned long)millis());
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H2\",\"location\":\"TouchHandler.h:415\",\"message\":\"hitTestActionButton.calculated\",\"data\":{\"x\":%d,\"buttonW\":%d,\"calculatedIdx\":%d,\"maxButtons\":%d},\"timestamp\":%lu}\n", x, TouchConfig::ACTION_BUTTON_W, idx, TouchConfig::ACTION_BUTTONS, (unsigned long)millis());
         // #endregion
+    if (idx < 0 || idx >= TouchConfig::ACTION_BUTTONS) {
+        // #region agent log (DISABLED)
+        // Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H2\",\"location\":\"TouchHandler.h:417\",\"message\":\"hitTestActionButton.idxOutOfRange\",\"data\":{\"idx\":%d,\"maxButtons\":%d},\"timestamp\":%lu}\n", idx, TouchConfig::ACTION_BUTTONS, (unsigned long)millis());
+                // #endregion
         return -1;
     }
 
-    // #region agent log
-    Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H2\",\"location\":\"TouchHandler.h:422\",\"message\":\"hitTestActionButton.success\",\"data\":{\"idx\":%d},\"timestamp\":%lu}\n", idx, (unsigned long)millis());
-    // #endregion
+    // #region agent log (DISABLED)
+    // Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H2\",\"location\":\"TouchHandler.h:422\",\"message\":\"hitTestActionButton.success\",\"data\":{\"idx\":%d},\"timestamp\":%lu}\n", idx, (unsigned long)millis());
+        // #endregion
     return idx;
 }

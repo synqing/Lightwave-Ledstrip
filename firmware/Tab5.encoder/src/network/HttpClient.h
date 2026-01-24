@@ -135,18 +135,11 @@ public:
     bool disconnectFromNetwork();
 
     /**
-     * Initiate network scan
-     * @param jobId Output parameter for scan job ID
-     * @return true if scan initiated, false otherwise
+     * Perform network scan (synchronous - v2 returns immediate results)
+     * @param status Output parameter for scan results
+     * @return true if scan successful, false otherwise
      */
-    bool startScan(uint32_t& jobId);
-
-    /**
-     * Get scan status and results
-     * @param status Output parameter for scan status
-     * @return true if successful, false otherwise
-     */
-    bool getScanStatus(ScanStatus& status);
+    bool startScan(ScanStatus& status);
 
     /**
      * Get network status (AP/STA info)

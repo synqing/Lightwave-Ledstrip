@@ -2,7 +2,7 @@
  * @file AudioBenchmarkRing.h
  * @brief Lock-free ring buffer for cross-core benchmark sample transfer
  *
- * Single-producer (AudioNode on audio core) to single-consumer (WebServer
+ * Single-producer (AudioActor on audio core) to single-consumer (WebServer
  * or stats aggregator on main core) ring buffer using acquire/release
  * memory ordering for safe cross-core access without mutexes.
  *
@@ -24,7 +24,7 @@ namespace lightwaveos::audio {
  * This avoids the "full vs empty" ambiguity of traditional ring buffers.
  *
  * Thread safety:
- * - push(): Called only from AudioNode::processHop() (single producer)
+ * - push(): Called only from AudioActor::processHop() (single producer)
  * - pop(), available(), peekLast(): Called from main core (single consumer)
  */
 class AudioBenchmarkRing {

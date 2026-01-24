@@ -16,52 +16,42 @@
 #ifndef NATIVE_BUILD
 #include <esp_task_wdt.h>
 #endif
-#include <time.h>
 
 #define LW_LOG_TAG "Main"
 #include "utils/Log.h"
 
 #include "config/features.h"
-#include "core/actors/NodeOrchestrator.h"
+#include "core/actors/ActorSystem.h"
 #include "hardware/EncoderManager.h"
-#include "core/actors/RendererNode.h"
+#include "core/actors/RendererActor.h"
 #include "core/persistence/NVSManager.h"
 #include "core/persistence/ZoneConfigManager.h"
-#include "core/persistence/PresetManager.h"
 #include "effects/CoreEffects.h"
 #include "effects/zones/ZoneComposer.h"
 #include "effects/PatternRegistry.h"
 #include "effects/transitions/TransitionEngine.h"
 #include "effects/transitions/TransitionTypes.h"
 #include "core/narrative/NarrativeEngine.h"
-#include "core/actors/ShowNode.h"
+#include "core/actors/ShowDirectorActor.h"
 #include "core/shows/BuiltinShows.h"
 #include "plugins/api/IEffect.h"
+#include "plugins/PluginManagerActor.h"
 #include "core/system/StackMonitor.h"
 #include "core/system/HeapMonitor.h"
 #include "core/system/MemoryLeakDetector.h"
 #include "core/system/ValidationProfiler.h"
 
-// Effect Modifiers
-#include "effects/modifiers/ModifierStack.h"
-#include "effects/modifiers/SpeedModifier.h"
-#include "effects/modifiers/IntensityModifier.h"
-#include "effects/modifiers/ColorShiftModifier.h"
-#include "effects/modifiers/MirrorModifier.h"
-#include "effects/modifiers/GlitchModifier.h"
-#include "effects/modifiers/BlurModifier.h"
-#include "effects/modifiers/TrailModifier.h"
-#include "effects/modifiers/SaturationModifier.h"
-#include "effects/modifiers/StrobeModifier.h"
-
-// TempoTracker debug included via AudioNode.h
+// TempoTracker debug included via AudioActor.h
 
 #if FEATURE_AUDIO_SYNC
 #include "audio/AudioDebugConfig.h"
 #endif
 
+#include "config/DebugConfig.h"
+
 #if FEATURE_WEB_SERVER
 #include "network/WiFiManager.h"
+#include "network/WiFiCredentialManager.h"
 #include "network/WebServer.h"
 using namespace lightwaveos::network;
 using namespace lightwaveos::config;
@@ -72,79 +62,31 @@ WebServer* webServerInstance = nullptr;
 
 using namespace lightwaveos::persistence;
 
-using namespace lightwaveos::nodes;
+using namespace lightwaveos::actors;
 using namespace lightwaveos::effects;
 using namespace lightwaveos::zones;
 using namespace lightwaveos::transitions;
 using namespace lightwaveos::narrative;
 using namespace lightwaveos::plugins;
-using namespace lightwaveos::effects::modifiers;
-
-// ==================== Global Modifier Instances (ownership retained by main) ====================
-// These static instances are reused by the modifier stack (ownership NOT transferred)
-static SpeedModifier* s_speedModifier = nullptr;
-static IntensityModifier* s_intensityModifier = nullptr;
-static ColorShiftModifier* s_colorShiftModifier = nullptr;
-static MirrorModifier* s_mirrorModifier = nullptr;
-static GlitchModifier* s_glitchModifier = nullptr;
-static BlurModifier* s_blurModifier = nullptr;
-static TrailModifier* s_trailModifier = nullptr;
-static SaturationModifier* s_saturationModifier = nullptr;
-static StrobeModifier* s_strobeModifier = nullptr;
 
 // ==================== Global Zone Composer ====================
 
 ZoneComposer zoneComposer;
 ZoneConfigManager* zoneConfigMgr = nullptr;
-PresetManager* presetMgr = nullptr;
 
-// Global Node Orchestrator Access
-NodeOrchestrator& orchestrator = NodeOrchestrator::instance();
-RendererNode* renderer = nullptr;
+// ==================== Global Plugin Manager ====================
+
+PluginManagerActor* pluginManager = nullptr;
+
+// Global Actor System Access
+ActorSystem& actors = ActorSystem::instance();
+RendererActor* renderer = nullptr;
 
 // Effect count is now dynamic via renderer->getEffectCount()
 // Effect names retrieved via renderer->getEffectName(id)
 
 // Current show index for serial navigation
 static uint8_t currentShowIndex = 0;
-
-// ==================== Helper Functions ====================
-
-/**
- * @brief Ensure LittleFS is mounted for preset saves
- * @return true if LittleFS is mounted and ready
- */
-static bool ensureLittleFSMounted() {
-#if FEATURE_WEB_SERVER
-    // If WebServer exists and is running, use its mount management
-    if (webServerInstance) {
-        if (webServerInstance->isLittleFSMounted()) {
-            return true;
-        }
-        // Try to mount via WebServer
-        if (webServerInstance->mountLittleFS()) {
-            Serial.println("  LittleFS mounted via WebServer");
-            return true;
-        }
-    }
-#endif
-    
-    // Fallback: Try direct mount (when WebServer is disabled or not running)
-    if (LittleFS.begin(false)) {
-        Serial.println("  LittleFS mounted directly");
-        return true;
-    }
-    
-    // If mount failed, try formatting (handles corrupted filesystem)
-    Serial.println("  LittleFS mount failed, attempting format...");
-    if (LittleFS.begin(true)) {  // true = format if mount fails
-        Serial.println("  LittleFS formatted and mounted successfully");
-        return true;
-    }
-    
-    Serial.println("  LittleFS format failed - filesystem unavailable");
-    return false;
-}
 
 // ==================== Setup ====================
 
@@ -153,11 +95,14 @@ void setup() {
     Serial.begin(115200);
     delay(1000);
 
+    // Telemetry boot heartbeat (for trace capture verification)
+    Serial.println("{\"event\":\"telemetry.boot\",\"ts_mono_ms\":0,\"version\":\"2.0\"}");
+
     LW_LOGI("==========================================");
     LW_LOGI("LightwaveOS v2 - Actor System + Zones");
     LW_LOGI("==========================================");
 
-    // Initialize Node System (creates RendererNode)
+    // Initialize Actor System (creates RendererActor)
     // Initialize system monitoring (must be before actors start)
     lightwaveos::core::system::StackMonitor::init();
     LW_LOGI("Stack Monitor: INITIALIZED");
@@ -179,13 +124,13 @@ void setup() {
     delay(1000);  // Wait for system to stabilize
     lightwaveos::core::system::MemoryLeakDetector::resetBaseline();
 
-    LW_LOGI("Initializing Node Orchestrator...");
-    if (!orchestrator.init()) {
-        LW_LOGE("Node Orchestrator init failed!");
+    LW_LOGI("Initializing Actor System...");
+    if (!actors.init()) {
+        LW_LOGE("Actor System init failed!");
         while(1) delay(1000);  // Halt
     }
-    renderer = orchestrator.getRenderer();
-    LW_LOGI("Node Orchestrator: INITIALIZED");
+    renderer = actors.getRenderer();
+    LW_LOGI("Actor System: INITIALIZED");
 
     // Register ALL effects (core + LGP) BEFORE starting actors
     LW_LOGI("Registering effects...");
@@ -211,11 +156,6 @@ void setup() {
         // Create config manager
         zoneConfigMgr = new ZoneConfigManager(&zoneComposer);
 
-        // Create preset manager (lazy init - will initialize when LittleFS is mounted)
-        presetMgr = new PresetManager();
-        // Don't call init() here - LittleFS isn't mounted yet (mounted in WebServer::begin())
-        // PresetManager will auto-initialize on first use when LittleFS is available
-
         // Try to load saved zone configuration
         if (zoneConfigMgr->loadFromNVS()) {
             LW_LOGI("Zone Composer: INITIALIZED (restored from NVS)");
@@ -227,43 +167,50 @@ void setup() {
         }
     }
 
-    // Load narrative configuration from NVS
-    if (NARRATIVE.loadFromNVS()) {
-        LW_LOGI("Narrative Engine: Configuration loaded from NVS");
-    } else {
-        LW_LOGI("Narrative Engine: Using default configuration");
-    }
-
-    // Start all nodes (RendererNode runs on Core 1 at 120 FPS)
-    LW_LOGI("Starting Node Orchestrator...");
-    if (!orchestrator.start()) {
-        LW_LOGE("Node Orchestrator start failed!");
+    // Start all actors (RendererActor runs on Core 1 at 120 FPS)
+    LW_LOGI("Starting Actor System...");
+    if (!actors.start()) {
+        LW_LOGE("Actor System start failed!");
         while(1) delay(1000);  // Halt
     }
-    LW_LOGI("Node Orchestrator: RUNNING");
+    LW_LOGI("Actor System: RUNNING");
+
+    // Initialize Plugin Manager
+    LW_LOGI("Initializing Plugin Manager...");
+    pluginManager = new PluginManagerActor();
+    
+    // Wire to RendererActor for effect forwarding
+    if (renderer) {
+        pluginManager->setTargetRegistry(renderer);
+        LW_LOGI("Plugin Manager: Target registry set to RendererActor");
+    }
+    
+    // Start plugin manager (loads manifests from LittleFS)
+    pluginManager->onStart();
+    LW_LOGI("Plugin Manager: INITIALIZED");
 
     // Load or set initial state
     LW_LOGI("Loading system state...");
     uint8_t savedEffect, savedBrightness, savedSpeed, savedPalette;
     if (zoneConfigMgr && zoneConfigMgr->loadSystemState(savedEffect, savedBrightness, savedSpeed, savedPalette)) {
-        orchestrator.setEffect(savedEffect);
-        orchestrator.setBrightness(savedBrightness);
-        orchestrator.setSpeed(savedSpeed);
-        orchestrator.setPalette(savedPalette);
+        actors.setEffect(savedEffect);
+        actors.setBrightness(savedBrightness);
+        actors.setSpeed(savedSpeed);
+        actors.setPalette(savedPalette);
         LW_LOGI("Restored: Effect=%d, Brightness=%d, Speed=%d, Palette=%d",
                 savedEffect, savedBrightness, savedSpeed, savedPalette);
     } else {
         // First boot defaults
-        orchestrator.setEffect(0);       // Fire
-        orchestrator.setBrightness(128); // 50% brightness
-        orchestrator.setSpeed(15);       // Medium speed
-        orchestrator.setPalette(0);      // Party colors
+        actors.setEffect(0);       // Fire
+        actors.setBrightness(128); // 50% brightness
+        actors.setSpeed(15);       // Medium speed
+        actors.setPalette(0);      // Party colors
         LW_LOGI("Using defaults (first boot)");
     }
 
     // Initialize Network (if enabled)
 #if FEATURE_WEB_SERVER
-    // Start WiFiManager BEFORE WebServer (pattern from working commit 3c94ff7)
+    // Start WiFiManager BEFORE WebServer
     LW_LOGI("Initializing WiFiManager...");
     WIFI_MANAGER.setCredentials(
         NetworkConfig::WIFI_SSID_VALUE,
@@ -289,29 +236,33 @@ void setup() {
         }
 
         if (WIFI_MANAGER.isConnected()) {
-            LW_LOGI("WiFi CONNECTED: %s (IP: %s)",
-                    WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
+            LW_LOGI("WiFi: CONNECTED to %s", NetworkConfig::WIFI_SSID_VALUE);
+            LW_LOGI("IP: %s", WiFi.localIP().toString().c_str());
         } else if (WIFI_MANAGER.isAPMode()) {
-            LW_LOGI("WiFi in AP mode: %s", WiFi.softAPIP().toString().c_str());
+            LW_LOGI("WiFi: AP MODE (connect to LightwaveOS-Setup)");
+            LW_LOGI("IP: %s", WiFi.softAPIP().toString().c_str());
+        }
+
+        // Initialize WiFi Credential Manager (for saved networks)
+        if (!WIFI_CREDENTIALS.begin()) {
+            LW_LOGW("WiFiCredentialManager failed to initialize");
         }
     }
 
     // Start WebServer
-    // NOTE: Give WiFi stack time to stabilize and release temporary buffers.
-    // AsyncTCP creates a 8KB task (CONFIG_ASYNC_TCP_STACK_SIZE) which can fail
-    // if heap is fragmented from WiFi initialization.
-    delay(500);
     LW_LOGI("Starting Web Server...");
-    LW_LOGI("  Heap before WebServer: %lu bytes, largest block: %lu bytes",
-            ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 
     // Instantiate WebServer with dependencies
-    webServerInstance = new WebServer(orchestrator, renderer);
+    webServerInstance = new WebServer(actors, renderer);
+
+    // Wire PluginManagerActor to WebServer BEFORE begin() (context created during begin)
+    if (pluginManager) {
+        webServerInstance->setPluginManager(pluginManager);
+        LW_LOGI("Plugin Manager: Wired to WebServer");
+    }
 
     if (!webServerInstance->begin()) {
-        LW_LOGE("Web Server failed to start! Check heap fragmentation.");
-        LW_LOGE("  Heap after failure: %lu bytes, largest block: %lu bytes",
-                ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+        LW_LOGW("Web Server failed to start!");
     } else {
         LW_LOGI("Web Server: RUNNING");
         LW_LOGI("REST API: http://lightwaveos.local/api/v1/");
@@ -328,8 +279,6 @@ void setup() {
     Serial.println("  n/N     - Next/Prev effect");
     Serial.println("  +/-     - Adjust brightness");
     Serial.println("  [/]     - Adjust speed");
-    Serial.println("  {/}     - Adjust mood (0=reactive, 255=smooth)");
-    Serial.println("  (/)     - Adjust saturation (0=grayscale, 255=vivid)");
     Serial.println("  ,/.     - Prev/Next palette (75 total)");
     Serial.println("  l       - List effects");
     Serial.println("  P       - List palettes");
@@ -343,8 +292,7 @@ void setup() {
     Serial.println("  Z       - Print zone status");
     Serial.println("  zs      - Set zone speed: zs <zoneId> <speed> OR zs <speed0> <speed1> <speed2>");
     Serial.println("  1-5     - Load zone preset (in zone mode)");
-    Serial.println("  S       - Save settings to NVS and also save a timestamped preset");
-    Serial.println("  R       - List saved presets");
+    Serial.println("  S       - Save all settings to NVS");
     Serial.println("\nTransition Commands:");
     Serial.println("  t       - Transition to next effect (random type)");
     Serial.println("  T       - Transition to next effect (fade)");
@@ -355,7 +303,8 @@ void setup() {
     Serial.println("\nShow Playback Commands:");
     Serial.println("  W       - List all shows (10 presets)");
     Serial.println("  w       - Toggle show playback");
-    Serial.println("  </>     - Previous/Next show (also seek when playing)");
+    Serial.println("  </>     - Previous/Next show");
+    Serial.println("  {/}     - Seek backward/forward 30s");
     Serial.println("  #       - Print show status");
     Serial.println("\nColor Correction Commands:");
     Serial.println("  c       - Cycle correction mode (OFF→HSV→RGB→BOTH→OFF)");
@@ -378,19 +327,31 @@ void setup() {
 #endif
 #if FEATURE_AUDIO_SYNC
     Serial.println("\nAudio Debug Verbosity:");
-    Serial.println("  adbg         - Show current level and intervals");
-    Serial.println("  adbg <0-5>   - Set level (0=off, 2=status, 4=medium, 5=verbose)");
+    Serial.println("  adbg           - Show current level");
+    Serial.println("  adbg <0-5>     - Set level (0=off, 2=warnings, 5=trace)");
+    Serial.println("  adbg status    - Print health summary (one-shot)");
+    Serial.println("  adbg spectrum  - Print 8-band + 64-bin spectrum (one-shot)");
+    Serial.println("  adbg beat      - Print BPM, phase, confidence (one-shot)");
     Serial.println("  adbg interval <N> - Set base interval in frames");
 #endif
+    Serial.println("\nDebug Commands (unified):");
+    Serial.println("  dbg           - Show debug config");
+    Serial.println("  dbg <0-5>     - Set global level (0=off,2=warn,3=info,4=debug,5=trace)");
+    Serial.println("  dbg audio <0-5>   - Set audio domain level");
+    Serial.println("  dbg render <0-5>  - Set render domain level");
+    Serial.println("  dbg network <0-5> - Set network domain level");
+    Serial.println("  dbg actor <0-5>   - Set actor domain level");
+    Serial.println("  dbg status    - Print audio health NOW");
+    Serial.println("  dbg spectrum  - Print 64-bin spectrum NOW");
+    Serial.println("  dbg beat      - Print beat tracking NOW");
+    Serial.println("  dbg memory    - Print heap/stack NOW");
+    Serial.println("  dbg interval status <N>  - Auto status every N sec (0=off)");
+    Serial.println("  dbg interval spectrum <N>- Auto spectrum every N sec (0=off)");
 #if FEATURE_WEB_SERVER
     Serial.println("\nWeb API:");
     Serial.println("  GET  /api/v1/effects - List effects");
     Serial.println("  POST /api/v1/effects/set - Set effect");
     Serial.println("  WS   /ws - Real-time control");
-    Serial.println("\nNetwork Commands:");
-    Serial.println("  net status - Show WiFi status");
-    Serial.println("  net sta [seconds] - Enable STA mode (optional auto-revert)");
-    Serial.println("  net ap - Force AP-only mode");
 #endif
     Serial.println();
 }
@@ -427,7 +388,7 @@ void loop() {
     using namespace lightwaveos::hardware;
     EncoderEvent event;
     while (xQueueReceive(encoderManager.getEventQueue(), &event, 0) == pdTRUE) {
-        handleEncoderEvent(event, orchestrator, renderer);
+        handleEncoderEvent(event, actors, renderer);
     }
 #endif
 
@@ -450,13 +411,7 @@ void loop() {
                 case '[': case ']':  // Speed
                 case ',': case '.':  // Palette
                 case '<': case '>':  // Show navigation
-                case '{': case '}':  // Mood
-                case '(': case ')':  // Saturation
-                case 'M':  // Toggle Mirror modifier
-                case 'G':  // Toggle Glitch modifier
-                case 'F':  // Toggle Trail modifier (Fade)
-                case 'X':  // Toggle Strobe modifier
-                case '~':  // Clear all modifiers
+                case '{': case '}':  // Seek
                     isImmediate = true;
                     break;
             }
@@ -542,13 +497,13 @@ void loop() {
                                   (tapMask & 0x04) ? "C" : "");
                 }
                 else if (subcmd.startsWith("dump")) {
-                    using namespace lightwaveos::nodes;
-                    RendererNode::CaptureTap tap;
+                    using namespace lightwaveos::actors;
+                    RendererActor::CaptureTap tap;
                     bool valid = false;
 
-                    if (subcmd.indexOf('a') >= 0) { tap = RendererNode::CaptureTap::TAP_A_PRE_CORRECTION; valid = true; }
-                    else if (subcmd.indexOf('b') >= 0) { tap = RendererNode::CaptureTap::TAP_B_POST_CORRECTION; valid = true; }
-                    else if (subcmd.indexOf('c') >= 0) { tap = RendererNode::CaptureTap::TAP_C_PRE_WS2812; valid = true; }
+                    if (subcmd.indexOf('a') >= 0) { tap = RendererActor::CaptureTap::TAP_A_PRE_CORRECTION; valid = true; }
+                    else if (subcmd.indexOf('b') >= 0) { tap = RendererActor::CaptureTap::TAP_B_POST_CORRECTION; valid = true; }
+                    else if (subcmd.indexOf('c') >= 0) { tap = RendererActor::CaptureTap::TAP_C_PRE_WS2812; valid = true; }
 
                     if (valid) {
                         CRGB frame[320];
@@ -659,7 +614,7 @@ void loop() {
                     Serial.printf("ERROR: Invalid effect ID. Valid range: 0-%d\n", effectCount - 1);
                 } else {
                     currentEffect = (uint8_t)effectId;
-                    orchestrator.setEffect((uint8_t)effectId);
+                    actors.setEffect((uint8_t)effectId);
                     Serial.printf("Effect %d: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n", effectId, renderer->getEffectName(effectId));
                 }
             }
@@ -705,17 +660,48 @@ void loop() {
                 }
             }
 #if FEATURE_AUDIO_SYNC
-            // Audio Debug Verbosity: adbg, adbg <0-5>, adbg interval <N>
+            // Audio Debug Verbosity: adbg (backwards-compatible alias for dbg audio)
+            // adbg        -> show audio debug config
+            // adbg <0-5>  -> set audio domain level
+            // adbg status -> one-shot health summary
+            // adbg spectrum -> one-shot spectrum
+            // adbg beat -> one-shot beat tracking
+            // adbg interval <N> -> set base interval (legacy)
             else if (inputLower.startsWith("adbg")) {
                 handledMulti = true;
                 auto& dbgCfg = lightwaveos::audio::getAudioDebugConfig();
+                auto& unifiedCfg = lightwaveos::config::getDebugConfig();
 
                 if (inputLower == "adbg") {
                     // Show current settings
-                    Serial.printf("Audio debug: level=%d interval=%d (8band=%d, 64bin=%d, dma=%d)\n",
-                                  dbgCfg.verbosity, dbgCfg.baseInterval,
-                                  dbgCfg.interval8Band(), dbgCfg.interval64Bin(), dbgCfg.intervalDMA());
-                    Serial.println("Levels: 0=off, 1=errors, 2=status(10s), 3=+DMA, 4=+64bin, 5=+8band");
+                    Serial.printf("Audio debug: level=%d interval=%d frames\n",
+                                  dbgCfg.verbosity, dbgCfg.baseInterval);
+                    Serial.println("Levels: 0=off, 1=errors, 2=warnings, 3=info, 4=debug, 5=trace");
+                    Serial.println("One-shot: adbg status | adbg spectrum | adbg beat");
+                } else if (inputLower == "adbg status") {
+                    // One-shot status via AudioActor method
+                    auto* audio = actors.getAudio();
+                    if (audio) {
+                        audio->printStatus();
+                    } else {
+                        Serial.println("Audio not available");
+                    }
+                } else if (inputLower == "adbg spectrum") {
+                    // One-shot spectrum via AudioActor method
+                    auto* audio = actors.getAudio();
+                    if (audio) {
+                        audio->printSpectrum();
+                    } else {
+                        Serial.println("Audio not available");
+                    }
+                } else if (inputLower == "adbg beat") {
+                    // One-shot beat tracking via AudioActor method
+                    auto* audio = actors.getAudio();
+                    if (audio) {
+                        audio->printBeat();
+                    } else {
+                        Serial.println("Audio not available");
+                    }
                 } else if (inputLower.startsWith("adbg interval ")) {
                     int val = inputLower.substring(14).toInt();
                     if (val > 0 && val < 1000) {
@@ -735,10 +721,12 @@ void loop() {
                     }
                     if (level >= 0 && level <= 5) {
                         dbgCfg.verbosity = level;
-                        const char* names[] = {"off", "errors", "status", "low(+DMA)", "medium(+64bin)", "high(+8band)"};
+                        // Also sync with unified DebugConfig
+                        unifiedCfg.setDomainLevel(lightwaveos::config::DebugDomain::AUDIO, level);
+                        const char* names[] = {"off", "errors", "warnings", "info", "debug", "trace"};
                         Serial.printf("Audio debug level: %d (%s)\n", level, names[level]);
                     } else {
-                        Serial.println("Usage: adbg [0-5] | adbg interval <frames>");
+                        Serial.println("Usage: adbg [0-5] | adbg status | adbg spectrum | adbg beat | adbg interval <N>");
                     }
                 }
             }
@@ -773,6 +761,166 @@ void loop() {
                             Serial.println("Invalid gamma. Use 0 (off) or 1.0-3.0");
                         }
                     }
+                }
+            }
+        }
+        // -----------------------------------------------------------------
+        // Debug Commands: dbg
+        // -----------------------------------------------------------------
+        else if (peekChar == 'd' && input.length() >= 3) {
+            if (inputLower.startsWith("dbg")) {
+                handledMulti = true;
+                auto& cfg = lightwaveos::config::getDebugConfig();
+                String subcmd = inputLower.substring(3);
+                subcmd.trim();
+
+                if (subcmd.length() == 0) {
+                    // dbg - show config
+                    lightwaveos::config::printDebugConfig();
+                }
+                else if (subcmd.length() == 1 && subcmd[0] >= '0' && subcmd[0] <= '5') {
+                    // dbg <0-5> - set global level
+                    cfg.globalLevel = subcmd[0] - '0';
+                    Serial.printf("Global debug level: %d (%s)\n",
+                                  cfg.globalLevel,
+                                  lightwaveos::config::DebugConfig::levelName(cfg.globalLevel));
+                }
+                else if (subcmd.startsWith("audio ")) {
+                    // dbg audio <0-5>
+                    int level = subcmd.substring(6).toInt();
+                    if (level >= 0 && level <= 5) {
+                        cfg.setDomainLevel(lightwaveos::config::DebugDomain::AUDIO, level);
+                        Serial.printf("Audio debug level: %d (%s)\n", level,
+                                      lightwaveos::config::DebugConfig::levelName((uint8_t)level));
+#if FEATURE_AUDIO_SYNC
+                        // Also sync with legacy AudioDebugConfig for backwards compatibility
+                        lightwaveos::audio::getAudioDebugConfig().verbosity = level;
+#endif
+                    } else {
+                        Serial.println("Invalid level. Use 0-5.");
+                    }
+                }
+                else if (subcmd.startsWith("render ")) {
+                    // dbg render <0-5>
+                    int level = subcmd.substring(7).toInt();
+                    if (level >= 0 && level <= 5) {
+                        cfg.setDomainLevel(lightwaveos::config::DebugDomain::RENDER, level);
+                        Serial.printf("Render debug level: %d (%s)\n", level,
+                                      lightwaveos::config::DebugConfig::levelName((uint8_t)level));
+                    } else {
+                        Serial.println("Invalid level. Use 0-5.");
+                    }
+                }
+                else if (subcmd.startsWith("network ")) {
+                    // dbg network <0-5>
+                    int level = subcmd.substring(8).toInt();
+                    if (level >= 0 && level <= 5) {
+                        cfg.setDomainLevel(lightwaveos::config::DebugDomain::NETWORK, level);
+                        Serial.printf("Network debug level: %d (%s)\n", level,
+                                      lightwaveos::config::DebugConfig::levelName((uint8_t)level));
+                    } else {
+                        Serial.println("Invalid level. Use 0-5.");
+                    }
+                }
+                else if (subcmd.startsWith("actor ")) {
+                    // dbg actor <0-5>
+                    int level = subcmd.substring(6).toInt();
+                    if (level >= 0 && level <= 5) {
+                        cfg.setDomainLevel(lightwaveos::config::DebugDomain::ACTOR, level);
+                        Serial.printf("Actor debug level: %d (%s)\n", level,
+                                      lightwaveos::config::DebugConfig::levelName((uint8_t)level));
+                    } else {
+                        Serial.println("Invalid level. Use 0-5.");
+                    }
+                }
+                else if (subcmd == "status") {
+                    // One-shot status print - use AudioActor's printStatus() method
+#if FEATURE_AUDIO_SYNC
+                    auto* audio = actors.getAudio();
+                    if (audio) {
+                        audio->printStatus();
+                    } else {
+                        Serial.println("[DBG] Audio not available");
+                    }
+#else
+                    Serial.println("[DBG] Audio not enabled in this build");
+#endif
+                }
+                else if (subcmd == "spectrum") {
+                    // One-shot spectrum print - use AudioActor's printSpectrum() method
+#if FEATURE_AUDIO_SYNC
+                    auto* audio = actors.getAudio();
+                    if (audio) {
+                        audio->printSpectrum();
+                    } else {
+                        Serial.println("[DBG] Audio not available");
+                    }
+#else
+                    Serial.println("[DBG] Audio not enabled in this build");
+#endif
+                }
+                else if (subcmd == "beat") {
+                    // One-shot beat print - use AudioActor's printBeat() method
+#if FEATURE_AUDIO_SYNC
+                    auto* audio = actors.getAudio();
+                    if (audio) {
+                        audio->printBeat();
+                    } else {
+                        Serial.println("[DBG] Audio not available");
+                    }
+#else
+                    Serial.println("[DBG] Audio not enabled in this build");
+#endif
+                }
+                else if (subcmd == "memory") {
+                    // One-shot memory print
+                    Serial.println("\n=== Memory Status ===");
+                    Serial.printf("  Free heap: %lu bytes\n", ESP.getFreeHeap());
+                    Serial.printf("  Min free heap: %lu bytes\n", ESP.getMinFreeHeap());
+                    Serial.printf("  Max alloc heap: %lu bytes\n", ESP.getMaxAllocHeap());
+#ifdef CONFIG_SPIRAM_SUPPORT
+                    Serial.printf("  Free PSRAM: %lu bytes\n", ESP.getFreePsram());
+#endif
+                    Serial.println();
+                }
+                else if (subcmd.startsWith("interval ")) {
+                    // dbg interval status <N> or dbg interval spectrum <N>
+                    String rest = subcmd.substring(9);
+                    rest.trim();
+                    if (rest.startsWith("status ")) {
+                        cfg.statusIntervalSec = rest.substring(7).toInt();
+                        if (cfg.statusIntervalSec > 0) {
+                            Serial.printf("Status interval: %u seconds\n", cfg.statusIntervalSec);
+                        } else {
+                            Serial.println("Status interval: disabled");
+                        }
+                    }
+                    else if (rest.startsWith("spectrum ")) {
+                        cfg.spectrumIntervalSec = rest.substring(9).toInt();
+                        if (cfg.spectrumIntervalSec > 0) {
+                            Serial.printf("Spectrum interval: %u seconds\n", cfg.spectrumIntervalSec);
+                        } else {
+                            Serial.println("Spectrum interval: disabled");
+                        }
+                    }
+                    else {
+                        Serial.println("Usage: dbg interval <status|spectrum> <seconds>");
+                    }
+                }
+                else {
+                    Serial.println("Usage: dbg [0-5|audio|render|network|actor|status|spectrum|beat|memory|interval]");
+                    Serial.println("  dbg           - Show debug config");
+                    Serial.println("  dbg <0-5>     - Set global level");
+                    Serial.println("  dbg audio <0-5>   - Set audio domain level");
+                    Serial.println("  dbg render <0-5>  - Set render domain level");
+                    Serial.println("  dbg network <0-5> - Set network domain level");
+                    Serial.println("  dbg actor <0-5>   - Set actor domain level");
+                    Serial.println("  dbg status    - Print audio health NOW");
+                    Serial.println("  dbg spectrum  - Print spectrum NOW");
+                    Serial.println("  dbg beat      - Print beat tracking NOW");
+                    Serial.println("  dbg memory    - Print heap/stack NOW");
+                    Serial.println("  dbg interval status <N>   - Auto status every N sec (0=off)");
+                    Serial.println("  dbg interval spectrum <N> - Auto spectrum every N sec (0=off)");
                 }
             }
         }
@@ -834,7 +982,7 @@ void loop() {
                     Serial.printf("\n=== Validating Effect: %s (ID %d) ===\n", effectName, effectId);
 
                     // Switch to effect temporarily
-                    orchestrator.setEffect(effectId);
+                    actors.setEffect(effectId);
                     delay(100);  // Allow effect to initialize
 
                     // Validation checks
@@ -984,7 +1132,7 @@ void loop() {
                                   passCount, totalChecks);
 
                     // Restore original effect
-                    orchestrator.setEffect(savedEffect);
+                    actors.setEffect(savedEffect);
                     delay(50);
 
                     Serial.println("========================================\n");
@@ -1022,18 +1170,18 @@ void loop() {
                 }
                 else if (subcmd.startsWith("dump ")) {
                     // Dump captured frame: "dump a", "dump b", "dump c"
-                    using namespace lightwaveos::nodes;
-                    RendererNode::CaptureTap tap;
+                    using namespace lightwaveos::actors;
+                    RendererActor::CaptureTap tap;
                     bool valid = false;
                     
                     if (subcmd.indexOf(" a") >= 0) {
-                        tap = RendererNode::CaptureTap::TAP_A_PRE_CORRECTION;
+                        tap = RendererActor::CaptureTap::TAP_A_PRE_CORRECTION;
                         valid = true;
                     } else if (subcmd.indexOf(" b") >= 0) {
-                        tap = RendererNode::CaptureTap::TAP_B_POST_CORRECTION;
+                        tap = RendererActor::CaptureTap::TAP_B_POST_CORRECTION;
                         valid = true;
                     } else if (subcmd.indexOf(" c") >= 0) {
-                        tap = RendererNode::CaptureTap::TAP_C_PRE_WS2812;
+                        tap = RendererActor::CaptureTap::TAP_C_PRE_WS2812;
                         valid = true;
                     }
                     
@@ -1098,16 +1246,18 @@ void loop() {
         else if (inputLower.startsWith("tempo")) {
             handledMulti = true;
 
-            // Get TempoTracker from AudioNode
-            auto* audio = orchestrator.getAudio();
+            // Get TempoTracker from AudioActor
+            auto* audio = actors.getAudio();
             if (audio) {
-                const auto& output = audio->getTempo();
+                const auto& tempo = audio->getTempo();
+                auto output = tempo.getOutput();
                 Serial.println("=== TempoTracker Status ===");
                 Serial.printf("  BPM: %.1f\n", output.bpm);
                 Serial.printf("  Phase: %.3f\n", output.phase01);
                 Serial.printf("  Confidence: %.2f\n", output.confidence);
                 Serial.printf("  Locked: %s\n", output.locked ? "YES" : "NO");
                 Serial.printf("  Beat Strength: %.2f\n", output.beat_strength);
+                Serial.printf("  Winner Bin: %u\n", tempo.getWinnerBin());
             } else {
                 Serial.println("TempoTracker not available (audio not enabled)");
             }
@@ -1186,267 +1336,6 @@ void loop() {
                 }
             }
         }
-        else if (peekChar == 'n' && input.length() > 1) {
-            // -----------------------------------------------------------------
-            // Network commands: net status/sta/ap
-            // -----------------------------------------------------------------
-#if FEATURE_WEB_SERVER
-            if (inputLower.startsWith("net")) {
-                handledMulti = true;
-                String args = input.substring(3);
-                args.trim();
-
-                if (args.length() == 0 || args == "help") {
-                    Serial.println("net status");
-                    Serial.println("net sta [seconds]   - Enable STA (APSTA window if heap allows, then STA-only)");
-                    Serial.println("                      seconds: APSTA window duration (30-300s, default 60s)");
-                    Serial.println("                      Note: AP may be dropped to reclaim heap");
-                    Serial.println("net ap              - Force AP-only mode");
-                } else if (args == "status") {
-                    Serial.printf("WiFi state: %s\n", WIFI_MANAGER.getStateString().c_str());
-                    Serial.printf("AP IP: %s (clients=%d)\n",
-                                  WIFI_MANAGER.getAPIP().toString().c_str(),
-                                  WiFi.softAPgetStationNum());
-                    Serial.printf("STA: %s ssid='%s' ip=%s rssi=%d\n",
-                                  WIFI_MANAGER.isConnected() ? "CONNECTED" : "DISCONNECTED",
-                                  WIFI_MANAGER.getSSID().c_str(),
-                                  WIFI_MANAGER.getLocalIP().toString().c_str(),
-                                  WIFI_MANAGER.isConnected() ? WIFI_MANAGER.getRSSI() : 0);
-                } else if (args.startsWith("sta")) {
-                    String rest = args.substring(3);
-                    rest.trim();
-
-                    if (rest.length() == 0) {
-                        WIFI_MANAGER.requestSTAEnable(0, false);
-                        Serial.println("Requested: STA (APSTA window: 60s if heap allows, then STA-only)");
-                    } else {
-                        uint32_t seconds = (uint32_t)rest.toInt();
-                        WIFI_MANAGER.requestSTAEnable(seconds * 1000u, true);
-                        Serial.printf("Requested: STA with APSTA window %lu seconds (auto-revert to AP-only after disconnect)\n",
-                                      (unsigned long)seconds);
-                        Serial.println("Note: AP may be dropped if heap pressure detected or window expires");
-                    }
-                } else if (args == "ap") {
-                    WIFI_MANAGER.requestAPOnly();
-                    Serial.println("Requested: AP-only");
-                } else {
-                    Serial.println("Unknown net command. Try: net help");
-                }
-            }
-#else
-            if (inputLower.startsWith("net")) {
-                handledMulti = true;
-                Serial.println("Network disabled (FEATURE_WEB_SERVER=0)");
-            }
-#endif
-        }
-
-        // -----------------------------------------------------------------
-        // Effect Modifier Commands: mod
-        // -----------------------------------------------------------------
-        else if (peekChar == 'm' && inputLower.startsWith("mod")) {
-            handledMulti = true;
-
-            String args = input.substring(3);
-            args.trim();
-
-            auto* modStack = renderer->getModifierStack();
-            if (!modStack) {
-                Serial.println("ERROR: Modifier stack not available");
-            } else if (args.length() == 0 || args == "help") {
-                // mod help
-                Serial.println("\n=== Effect Modifiers ===");
-                Serial.println("mod list              - List active modifiers");
-                Serial.println("mod add <type>        - Add modifier (default params)");
-                Serial.println("mod remove <type>     - Remove modifier");
-                Serial.println("mod clear             - Remove all modifiers");
-                Serial.println("\nTypes: speed, intensity, color_shift, mirror, glitch,");
-                Serial.println("       blur, trail, saturation, strobe");
-                Serial.println();
-            } else if (args == "list") {
-                // mod list
-                uint8_t count = modStack->getCount();
-                Serial.printf("\n=== Active Modifiers (%d/%d) ===\n", count, ModifierStack::MAX_MODIFIERS);
-                if (count == 0) {
-                    Serial.println("  (none)");
-                } else {
-                    for (uint8_t i = 0; i < count; i++) {
-                        auto* mod = modStack->getModifier(i);
-                        if (mod) {
-                            const auto& meta = mod->getMetadata();
-                            Serial.printf("  [%d] %s (%s)\n", i, meta.name,
-                                          mod->isEnabled() ? "enabled" : "disabled");
-                        }
-                    }
-                }
-                Serial.println();
-            } else if (args == "clear") {
-                // mod clear
-                modStack->clear();
-                Serial.println("All modifiers cleared");
-            } else if (args.startsWith("add ")) {
-                // mod add <type>
-                String typeStr = args.substring(4);
-                typeStr.trim();
-                typeStr.toLowerCase();
-
-                if (modStack->isFull()) {
-                    Serial.printf("ERROR: Modifier stack full (%d/%d)\n",
-                                  modStack->getCount(), ModifierStack::MAX_MODIFIERS);
-                } else {
-                    // Create dummy context for init
-                    lightwaveos::plugins::EffectContext ctx;
-                    ctx.leds = nullptr;
-                    ctx.ledCount = 320;
-                    ctx.brightness = renderer->getBrightness();
-                    ctx.speed = renderer->getSpeed();
-
-                    bool added = false;
-                    const char* modName = "unknown";
-
-                    if (typeStr == "speed") {
-                        if (!s_speedModifier) s_speedModifier = new SpeedModifier(1.5f);
-                        if (modStack->findByType(ModifierType::SPEED)) {
-                            Serial.println("ERROR: Speed modifier already active");
-                        } else if (modStack->add(s_speedModifier, ctx)) {
-                            added = true;
-                            modName = "Speed (1.5x)";
-                        }
-                    } else if (typeStr == "intensity") {
-                        if (!s_intensityModifier) s_intensityModifier = new IntensityModifier(
-                            IntensitySource::AUDIO_BEAT_PHASE, 1.0f, 0.5f);
-                        if (modStack->findByType(ModifierType::INTENSITY)) {
-                            Serial.println("ERROR: Intensity modifier already active");
-                        } else if (modStack->add(s_intensityModifier, ctx)) {
-                            added = true;
-                            modName = "Intensity (beat-phase)";
-                        }
-                    } else if (typeStr == "color_shift") {
-                        if (!s_colorShiftModifier) s_colorShiftModifier = new ColorShiftModifier(
-                            ColorShiftMode::AUTO_ROTATE, 0, 30.0f);
-                        if (modStack->findByType(ModifierType::COLOR_SHIFT)) {
-                            Serial.println("ERROR: ColorShift modifier already active");
-                        } else if (modStack->add(s_colorShiftModifier, ctx)) {
-                            added = true;
-                            modName = "ColorShift (auto-rotate 30/sec)";
-                        }
-                    } else if (typeStr == "mirror") {
-                        if (!s_mirrorModifier) s_mirrorModifier = new MirrorModifier(MirrorMode::LEFT_TO_RIGHT);
-                        if (modStack->findByType(ModifierType::MIRROR)) {
-                            Serial.println("ERROR: Mirror modifier already active");
-                        } else if (modStack->add(s_mirrorModifier, ctx)) {
-                            added = true;
-                            modName = "Mirror (left-to-right)";
-                        }
-                    } else if (typeStr == "glitch") {
-                        if (!s_glitchModifier) s_glitchModifier = new GlitchModifier(GlitchMode::PIXEL_FLIP, 0.1f);
-                        if (modStack->findByType(ModifierType::GLITCH)) {
-                            Serial.println("ERROR: Glitch modifier already active");
-                        } else if (modStack->add(s_glitchModifier, ctx)) {
-                            added = true;
-                            modName = "Glitch (pixel-flip 10%)";
-                        }
-                    } else if (typeStr == "blur") {
-                        if (!s_blurModifier) s_blurModifier = new BlurModifier(BlurMode::BOX, 2, 0.8f);
-                        if (modStack->findByType(ModifierType::BLUR)) {
-                            Serial.println("ERROR: Blur modifier already active");
-                        } else if (modStack->add(s_blurModifier, ctx)) {
-                            added = true;
-                            modName = "Blur (box, radius=2)";
-                        }
-                    } else if (typeStr == "trail") {
-                        if (!s_trailModifier) s_trailModifier = new TrailModifier(TrailMode::CONSTANT, 20, 5, 50);
-                        if (modStack->findByType(ModifierType::TRAIL)) {
-                            Serial.println("ERROR: Trail modifier already active");
-                        } else if (modStack->add(s_trailModifier, ctx)) {
-                            added = true;
-                            modName = "Trail (fade=20)";
-                        }
-                    } else if (typeStr == "saturation") {
-                        if (!s_saturationModifier) s_saturationModifier = new SaturationModifier(
-                            SatMode::VIBRANCE, 64, true);
-                        if (modStack->findByType(ModifierType::SATURATION)) {
-                            Serial.println("ERROR: Saturation modifier already active");
-                        } else if (modStack->add(s_saturationModifier, ctx)) {
-                            added = true;
-                            modName = "Saturation (vibrance +64)";
-                        }
-                    } else if (typeStr == "strobe") {
-                        if (!s_strobeModifier) s_strobeModifier = new StrobeModifier(
-                            StrobeMode::BEAT_SYNC, 1, 0.3f, 1.0f, 4.0f);
-                        if (modStack->findByType(ModifierType::STROBE)) {
-                            Serial.println("ERROR: Strobe modifier already active");
-                        } else if (modStack->add(s_strobeModifier, ctx)) {
-                            added = true;
-                            modName = "Strobe (beat-sync)";
-                        }
-                    } else {
-                        Serial.printf("ERROR: Unknown modifier type '%s'\n", typeStr.c_str());
-                        Serial.println("Valid types: speed, intensity, color_shift, mirror, glitch,");
-                        Serial.println("             blur, trail, saturation, strobe");
-                    }
-
-                    if (added) {
-                        Serial.printf("Added modifier: %s\n", modName);
-                        Serial.printf("Active modifiers: %d/%d\n", modStack->getCount(), ModifierStack::MAX_MODIFIERS);
-                    }
-                }
-            } else if (args.startsWith("remove ")) {
-                // mod remove <type>
-                String typeStr = args.substring(7);
-                typeStr.trim();
-                typeStr.toLowerCase();
-
-                ModifierType targetType;
-                bool validType = true;
-                const char* typeName = "unknown";
-
-                if (typeStr == "speed") {
-                    targetType = ModifierType::SPEED;
-                    typeName = "Speed";
-                } else if (typeStr == "intensity") {
-                    targetType = ModifierType::INTENSITY;
-                    typeName = "Intensity";
-                } else if (typeStr == "color_shift") {
-                    targetType = ModifierType::COLOR_SHIFT;
-                    typeName = "ColorShift";
-                } else if (typeStr == "mirror") {
-                    targetType = ModifierType::MIRROR;
-                    typeName = "Mirror";
-                } else if (typeStr == "glitch") {
-                    targetType = ModifierType::GLITCH;
-                    typeName = "Glitch";
-                } else if (typeStr == "blur") {
-                    targetType = ModifierType::BLUR;
-                    typeName = "Blur";
-                } else if (typeStr == "trail") {
-                    targetType = ModifierType::TRAIL;
-                    typeName = "Trail";
-                } else if (typeStr == "saturation") {
-                    targetType = ModifierType::SATURATION;
-                    typeName = "Saturation";
-                } else if (typeStr == "strobe") {
-                    targetType = ModifierType::STROBE;
-                    typeName = "Strobe";
-                } else {
-                    validType = false;
-                    Serial.printf("ERROR: Unknown modifier type '%s'\n", typeStr.c_str());
-                    Serial.println("Valid types: speed, intensity, color_shift, mirror, glitch,");
-                    Serial.println("             blur, trail, saturation, strobe");
-                }
-
-                if (validType) {
-                    if (modStack->removeByType(targetType)) {
-                        Serial.printf("Removed modifier: %s\n", typeName);
-                        Serial.printf("Active modifiers: %d/%d\n", modStack->getCount(), ModifierStack::MAX_MODIFIERS);
-                    } else {
-                        Serial.printf("ERROR: %s modifier not found in stack\n", typeName);
-                    }
-                }
-            } else {
-                Serial.println("Unknown mod command. Type 'mod' for help.");
-            }
-        }
 
         if (handledMulti) {
             // Do not process single-character commands after consuming a multi-char command
@@ -1478,7 +1367,7 @@ void loop() {
                     
                     if (audioEffectId < renderer->getEffectCount()) {
                         currentEffect = audioEffectId;
-                        orchestrator.setEffect(audioEffectId);
+                        actors.setEffect(audioEffectId);
                         Serial.printf("Audio Effect %d: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n", audioEffectId, renderer->getEffectName(audioEffectId));
                     } else {
                         Serial.printf("ERROR: Audio effect %d not available (effect count: %d)\n", 
@@ -1488,7 +1377,7 @@ void loop() {
                     // Normal numeric effect selection (0-5, 7-9)
                 if (e < renderer->getEffectCount()) {
                     currentEffect = e;
-                    orchestrator.setEffect(e);
+                    actors.setEffect(e);
                     Serial.printf("Effect %d: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n", e, renderer->getEffectName(e));
                     }
                 }
@@ -1502,7 +1391,7 @@ void loop() {
                     uint8_t e = 10 + (cmd - 'a');
                     if (e < renderer->getEffectCount()) {
                         currentEffect = e;
-                        orchestrator.setEffect(e);
+                        actors.setEffect(e);
                         Serial.printf("Effect %d: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n", e, renderer->getEffectName(e));
                         isEffectKey = true;
                     }
@@ -1526,7 +1415,7 @@ void loop() {
                     break;
 
                 case 'S':
-                    // Save all settings to NVS (auto-load on boot)
+                    // Save all settings to NVS
                     if (zoneConfigMgr) {
                         Serial.println("Saving settings to NVS...");
                         bool zoneOk = zoneConfigMgr->saveToNVS();
@@ -1536,41 +1425,6 @@ void loop() {
                             renderer->getSpeed(),
                             renderer->getPaletteIndex()
                         );
-                        
-                        // Also save to preset library with timestamp name
-                        if (presetMgr && zoneOk) {
-                            // Ensure LittleFS is mounted before attempting preset save
-                            if (ensureLittleFSMounted()) {
-                                ZoneConfigData config;
-                                zoneConfigMgr->exportConfig(config);
-                                
-                                // Generate timestamp name
-                                struct tm timeinfo;
-                                char presetName[32];
-                                bool timeValid = false;
-                                
-                                // Try to get local time (requires NTP sync)
-                                if (getLocalTime(&timeinfo)) {
-                                    strftime(presetName, sizeof(presetName), "preset-%Y%m%d-%H%M%S", &timeinfo);
-                                    timeValid = true;
-                                } else {
-                                    // Fallback: use millis-based name if time not available
-                                    uint32_t millisNow = millis();
-                                    snprintf(presetName, sizeof(presetName), "preset-%lu", millisNow);
-                                }
-                                
-                                // Attempt preset save
-                                if (presetMgr->savePreset(presetName, config)) {
-                                    Serial.printf("  Preset saved: %s\n", presetName);
-                                } else {
-                                    // PresetManager::savePreset() already logs warnings
-                                    Serial.println("  Preset save failed (check logs above)");
-                                }
-                            } else {
-                                Serial.println("  Preset save skipped: LittleFS not available");
-                            }
-                        }
-                        
                         if (zoneOk && sysOk) {
                             Serial.println("  All settings saved!");
                         } else {
@@ -1613,7 +1467,7 @@ void loop() {
 
                         if (newEffectId != 0xFF && newEffectId < effectCount) {
                             currentEffect = newEffectId;
-                            orchestrator.setEffect(currentEffect);
+                            actors.setEffect(currentEffect);
                             const char* suffix = (currentRegister == EffectRegister::REACTIVE) ? "[R]" :
                                                  (currentRegister == EffectRegister::AMBIENT) ? "[M]" : "";
                             Serial.printf("Effect %d%s: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n",
@@ -1653,7 +1507,7 @@ void loop() {
 
                         if (newEffectId != 0xFF && newEffectId < effectCount) {
                             currentEffect = newEffectId;
-                            orchestrator.setEffect(currentEffect);
+                            actors.setEffect(currentEffect);
                             const char* suffix = (currentRegister == EffectRegister::REACTIVE) ? "[R]" :
                                                  (currentRegister == EffectRegister::AMBIENT) ? "[M]" : "";
                             Serial.printf("Effect %d%s: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n",
@@ -1672,7 +1526,7 @@ void loop() {
                         uint8_t reactiveId = PatternRegistry::getReactiveEffectId(reactiveRegisterIndex);
                         if (reactiveId != 0xFF && reactiveId < renderer->getEffectCount()) {
                             currentEffect = reactiveId;
-                            orchestrator.setEffect(reactiveId);
+                            actors.setEffect(reactiveId);
                             Serial.printf("  Current: %s (ID %d)\n",
                                           renderer->getEffectName(reactiveId), reactiveId);
                         }
@@ -1688,7 +1542,7 @@ void loop() {
                         uint8_t ambientId = ambientEffectIds[ambientRegisterIndex];
                         if (ambientId < renderer->getEffectCount()) {
                             currentEffect = ambientId;
-                            orchestrator.setEffect(ambientId);
+                            actors.setEffect(ambientId);
                             Serial.printf("  Current: %s (ID %d)\n",
                                           renderer->getEffectName(ambientId), ambientId);
                         }
@@ -1709,7 +1563,7 @@ void loop() {
                         uint8_t b = renderer->getBrightness();
                         if (b < 250) {
                             b = min((int)b + 16, 250);
-                            orchestrator.setBrightness(b);
+                            actors.setBrightness(b);
                             Serial.printf("Brightness: %d\n", b);
                         }
                     }
@@ -1720,7 +1574,7 @@ void loop() {
                         uint8_t b = renderer->getBrightness();
                         if (b > 16) {
                             b = max((int)b - 16, 16);
-                            orchestrator.setBrightness(b);
+                            actors.setBrightness(b);
                             Serial.printf("Brightness: %d\n", b);
                         }
                     }
@@ -1731,7 +1585,7 @@ void loop() {
                         uint8_t s = renderer->getSpeed();
                         if (s > 1) {
                             s = max((int)s - 1, 1);
-                            orchestrator.setSpeed(s);
+                            actors.setSpeed(s);
                             Serial.printf("Speed: %d\n", s);
                         }
                     }
@@ -1742,7 +1596,7 @@ void loop() {
                         uint8_t s = renderer->getSpeed();
                         if (s < 100) {
                             s = min((int)s + 1, 100);
-                            orchestrator.setSpeed(s);
+                            actors.setSpeed(s);
                             Serial.printf("Speed: %d\n", s);
                         }
                     }
@@ -1753,7 +1607,7 @@ void loop() {
                     {
                         uint8_t paletteCount = renderer->getPaletteCount();
                         uint8_t p = (renderer->getPaletteIndex() + 1) % paletteCount;
-                        orchestrator.setPalette(p);
+                        actors.setPalette(p);
                         Serial.printf("Palette %d/%d: %s\n", p, paletteCount, renderer->getPaletteName(p));
                     }
                     break;
@@ -1763,7 +1617,7 @@ void loop() {
                         uint8_t paletteCount = renderer->getPaletteCount();
                         uint8_t current = renderer->getPaletteIndex();
                         uint8_t p = (current + paletteCount - 1) % paletteCount;
-                        orchestrator.setPalette(p);
+                        actors.setPalette(p);
                         Serial.printf("Palette %d/%d: %s\n", p, paletteCount, renderer->getPaletteName(p));
                     }
                     break;
@@ -1779,40 +1633,6 @@ void loop() {
                                           (!inZoneMode && i == currentEffect) ? " <--" : "");
                         }
                         Serial.println();
-                    }
-                    break;
-
-                case 'R':
-                    // List all saved presets
-                    if (presetMgr) {
-                        if (!presetMgr->init()) {
-                            Serial.println("ERROR: Preset manager not initialized");
-                            break;
-                        }
-                        std::vector<String> presets = presetMgr->listPresets();
-                        Serial.printf("\n=== Saved Presets (%d total) ===\n", presets.size());
-                        if (presets.empty()) {
-                            Serial.println("  No presets saved yet");
-                        } else {
-                            for (size_t i = 0; i < presets.size(); i++) {
-                                lightwaveos::persistence::PresetMetadata metadata;
-                                if (presetMgr->getPresetMetadata(presets[i].c_str(), metadata)) {
-                                    Serial.printf("  %s", presets[i].c_str());
-                                    if (metadata.description.length() > 0) {
-                                        Serial.printf(" - %s", metadata.description.c_str());
-                                    }
-                                    if (metadata.created.length() > 0) {
-                                        Serial.printf(" (%s)", metadata.created.c_str());
-                                    }
-                                    Serial.println();
-                                } else {
-                                    Serial.printf("  %s\n", presets[i].c_str());
-                                }
-                            }
-                        }
-                        Serial.println();
-                    } else {
-                        Serial.println("ERROR: Preset manager not available");
                     }
                     break;
 
@@ -1842,7 +1662,7 @@ void loop() {
                     break;
 
                 case 's':
-                    orchestrator.printStatus();
+                    actors.printStatus();
                     if (zoneComposer.isEnabled()) {
                         zoneComposer.printStatus();
                     }
@@ -1941,7 +1761,7 @@ void loop() {
                 case 'w':
                     // Toggle show playback
                     {
-                        ShowNode* showDir = orchestrator.getShowDirector();
+                        ShowDirectorActor* showDir = actors.getShowDirector();
                         if (showDir) {
                             if (showDir->isPlaying()) {
                                 // Stop the show
@@ -1997,49 +1817,34 @@ void loop() {
                     break;
 
                 case '{':
-                    // Mood down (more reactive)
+                    // Seek backward 30s
                     {
-                        uint8_t m = renderer->getMood();
-                        if (m > 0) {
-                            m = (m > 16) ? (m - 16) : 0;
-                            orchestrator.setMood(m);
-                            Serial.printf("Mood: %d (reactive)\n", m);
+                        ShowDirectorActor* showDir = actors.getShowDirector();
+                        if (showDir && showDir->isPlaying()) {
+                            uint32_t elapsed = showDir->getElapsedMs();
+                            uint32_t newTime = (elapsed > 30000) ? (elapsed - 30000) : 0;
+                            Message seekMsg(MessageType::SHOW_SEEK, 0, 0, 0, newTime);
+                            showDir->send(seekMsg);
+                            Serial.printf("Seek: %d:%02d\n", newTime / 60000, (newTime % 60000) / 1000);
+                        } else {
+                            Serial.println("No show playing");
                         }
                     }
                     break;
 
                 case '}':
-                    // Mood up (more smooth)
+                    // Seek forward 30s
                     {
-                        uint8_t m = renderer->getMood();
-                        if (m < 255) {
-                            m = (m < 239) ? (m + 16) : 255;
-                            orchestrator.setMood(m);
-                            Serial.printf("Mood: %d (smooth)\n", m);
-                        }
-                    }
-                    break;
-
-                case '(':
-                    // Saturation down (more grayscale)
-                    {
-                        uint8_t sat = renderer->getSaturation();
-                        if (sat > 0) {
-                            sat = (sat > 16) ? (sat - 16) : 0;
-                            orchestrator.setSaturation(sat);
-                            Serial.printf("Saturation: %d (grayscale)\n", sat);
-                        }
-                    }
-                    break;
-
-                case ')':
-                    // Saturation up (more vivid)
-                    {
-                        uint8_t sat = renderer->getSaturation();
-                        if (sat < 255) {
-                            sat = (sat < 239) ? (sat + 16) : 255;
-                            orchestrator.setSaturation(sat);
-                            Serial.printf("Saturation: %d (vivid)\n", sat);
+                        ShowDirectorActor* showDir = actors.getShowDirector();
+                        if (showDir && showDir->isPlaying()) {
+                            uint32_t elapsed = showDir->getElapsedMs();
+                            uint32_t remaining = showDir->getRemainingMs();
+                            uint32_t newTime = (remaining > 30000) ? (elapsed + 30000) : (elapsed + remaining);
+                            Message seekMsg(MessageType::SHOW_SEEK, 0, 0, 0, newTime);
+                            showDir->send(seekMsg);
+                            Serial.printf("Seek: %d:%02d\n", newTime / 60000, (newTime % 60000) / 1000);
+                        } else {
+                            Serial.println("No show playing");
                         }
                     }
                     break;
@@ -2047,7 +1852,7 @@ void loop() {
                 case '#':
                     // Print show status
                     {
-                        ShowNode* showDir = orchestrator.getShowDirector();
+                        ShowDirectorActor* showDir = actors.getShowDirector();
                         if (showDir) {
                             if (showDir->hasShow()) {
                                 ShowDefinition show;
@@ -2212,111 +2017,6 @@ void loop() {
                             Serial.printf("  Version: %d\n", meta.version);
                         }
                         Serial.println();
-                    }
-                    break;
-
-                // ========== Effect Modifier Shortcuts ==========
-
-                case 'M':
-                    // Toggle Mirror modifier
-                    {
-                        using namespace lightwaveos::effects::modifiers;
-                        auto* stack = renderer->getModifierStack();
-                        auto* existing = stack->findByType(ModifierType::MIRROR);
-                        if (existing) {
-                            stack->removeByType(ModifierType::MIRROR);
-                            delete existing;
-                            Serial.println("Mirror: OFF");
-                        } else {
-                            auto* mirror = new MirrorModifier();
-                            lightwaveos::plugins::EffectContext ctx;
-                            ctx.leds = renderer->getLedBuffer();
-                            ctx.ledCount = LedConfig::TOTAL_LEDS;
-                            stack->add(mirror, ctx);
-                            Serial.println("Mirror: ON");
-                        }
-                    }
-                    break;
-
-                case 'G':
-                    // Toggle Glitch modifier
-                    {
-                        using namespace lightwaveos::effects::modifiers;
-                        auto* stack = renderer->getModifierStack();
-                        auto* existing = stack->findByType(ModifierType::GLITCH);
-                        if (existing) {
-                            stack->removeByType(ModifierType::GLITCH);
-                            delete existing;
-                            Serial.println("Glitch: OFF");
-                        } else {
-                            auto* glitch = new GlitchModifier(GlitchMode::PIXEL_FLIP, 0.3f);
-                            lightwaveos::plugins::EffectContext ctx;
-                            ctx.leds = renderer->getLedBuffer();
-                            ctx.ledCount = LedConfig::TOTAL_LEDS;
-                            stack->add(glitch, ctx);
-                            Serial.println("Glitch: ON (30%)");
-                        }
-                    }
-                    break;
-
-                case 'F':
-                    // Toggle Trail (Fade) modifier
-                    {
-                        using namespace lightwaveos::effects::modifiers;
-                        auto* stack = renderer->getModifierStack();
-                        auto* existing = stack->findByType(ModifierType::TRAIL);
-                        if (existing) {
-                            stack->removeByType(ModifierType::TRAIL);
-                            delete existing;
-                            Serial.println("Trail: OFF");
-                        } else {
-                            auto* trail = new TrailModifier(TrailMode::CONSTANT, 25);
-                            lightwaveos::plugins::EffectContext ctx;
-                            ctx.leds = renderer->getLedBuffer();
-                            ctx.ledCount = LedConfig::TOTAL_LEDS;
-                            stack->add(trail, ctx);
-                            Serial.println("Trail: ON (fade 25)");
-                        }
-                    }
-                    break;
-
-                case 'X':
-                    // Toggle Strobe modifier
-                    {
-                        using namespace lightwaveos::effects::modifiers;
-                        auto* stack = renderer->getModifierStack();
-                        auto* existing = stack->findByType(ModifierType::STROBE);
-                        if (existing) {
-                            stack->removeByType(ModifierType::STROBE);
-                            delete existing;
-                            Serial.println("Strobe: OFF");
-                        } else {
-                            auto* strobe = new StrobeModifier(StrobeMode::BEAT_SYNC, 4, 0.3f, 1.0f);
-                            lightwaveos::plugins::EffectContext ctx;
-                            ctx.leds = renderer->getLedBuffer();
-                            ctx.ledCount = LedConfig::TOTAL_LEDS;
-                            stack->add(strobe, ctx);
-                            Serial.println("Strobe: ON (beat-sync)");
-                        }
-                    }
-                    break;
-
-                case '~':
-                    // Clear all modifiers
-                    {
-                        using namespace lightwaveos::effects::modifiers;
-                        auto* stack = renderer->getModifierStack();
-                        // Get count before clearing
-                        uint8_t count = stack->getCount();
-                        // Delete all modifiers first
-                        for (uint8_t i = 0; i < count; i++) {
-                            IEffectModifier* mod = stack->getModifier(i);
-                            if (mod) {
-                                delete mod;
-                            }
-                        }
-                        stack->clear();
-                        Serial.printf("All modifiers cleared (%d removed)\n", count);
                     }
                     break;
             }

@@ -1,0 +1,9 @@
+{
+  "version": "1.0",
+  "plugin": {
+    "name": "Test Plugin Missing Schema"
+  },
+  "effects": [
+    { "id": 0 }
+  ]
+}

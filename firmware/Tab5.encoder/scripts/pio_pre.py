@@ -132,32 +132,32 @@ _ndjson(
     {"includeDirs": include_dirs},
 )
 
-# ==============================================================================
-# Remove ARM Helium assembly files from LVGL (incompatible with RISC-V ESP32-P4)
-# ==============================================================================
-# LVGL 9.x includes ARM Helium and NEON optimized assembly files that cause
-# linker errors on RISC-V: "can't link soft-float modules with single-float modules"
-# The LV_USE_DRAW_SW_ASM=0 build flag doesn't prevent compilation of these files,
-# so we remove them before building.
+# Suppress noisy upstream warnings from framework/IDF headers without changing vendor code.
+# Keep this targeted to avoid masking warnings in our own sources.
+env.Append(CCFLAGS=["-Wno-deprecated-declarations"])
+env.Append(CXXFLAGS=["-Wno-literal-suffix"])
 
-import shutil
+# LVGL Helium/NEON ASM Exclusion for RISC-V
+# The ESP32-P4 is RISC-V and cannot link ARM Helium/NEON assembly files.
+# Remove these files before compilation to prevent linker errors.
 import glob
+import shutil
 
-libdeps_dir = os.path.join(env.subst("$PROJECT_LIBDEPS_DIR"), env.subst("$PIOENV"))
-lvgl_draw_blend = os.path.join(libdeps_dir, "lvgl", "src", "draw", "sw", "blend")
+project_dir = env.get("PROJECT_DIR", "")
+lvgl_helium_patterns = [
+    os.path.join(project_dir, ".pio", "libdeps", "*", "lvgl", "src", "draw", "sw", "blend", "helium"),
+    os.path.join(project_dir, ".pio", "libdeps", "*", "lvgl", "src", "draw", "sw", "blend", "neon"),
+]
 
-arm_asm_dirs = ["helium", "neon"]
 removed_dirs = []
-
-for asm_dir in arm_asm_dirs:
-    asm_path = os.path.join(lvgl_draw_blend, asm_dir)
-    if os.path.isdir(asm_path):
-        try:
-            shutil.rmtree(asm_path)
-            removed_dirs.append(asm_dir)
-        except Exception as e:
-            _ndjson("LVGL_ASM", "pio_pre.py:140", f"rmtree_{asm_dir}_failed", {"error": str(e)})
+for pattern in lvgl_helium_patterns:
+    for dir_path in glob.glob(pattern):
+        if os.path.isdir(dir_path):
+            try:
+                shutil.rmtree(dir_path)
+                removed_dirs.append(dir_path)
+            except Exception as e:
+                _ndjson("LVGL_ASM", "pio_pre.py", "remove_failed", {"dir": dir_path, "error": str(e)})
 
 if removed_dirs:
-    _ndjson("LVGL_ASM", "pio_pre.py:143", "removed_arm_asm_dirs", {"removedDirs": removed_dirs})
-    print(f"[pio_pre.py] Removed ARM assembly directories from LVGL: {removed_dirs}")
+    _ndjson("LVGL_ASM", "pio_pre.py", "removed_asm_dirs", {"removed": removed_dirs})

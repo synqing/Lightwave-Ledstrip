@@ -5,7 +5,6 @@
 
 #include "LGPBassBreathEffect.h"
 #include "../CoreEffects.h"
-#include "../enhancement/SmoothingEngine.h"
 
 #ifndef NATIVE_BUILD
 #include <FastLED.h>
@@ -20,16 +19,6 @@ namespace ieffect {
 
 bool LGPBassBreathEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
-    // Initialize smoothing followers
-    m_bassFollower.reset(0.0f);
-    m_midFollower.reset(0.0f);
-    m_trebleFollower.reset(0.0f);
-    m_breathFollower.reset(0.0f);
-    m_lastHopSeq = 0;
-    m_targetBass = 0.0f;
-    m_targetMid = 0.0f;
-    m_targetTreble = 0.0f;
-    
     m_breathLevel = 0.0f;
     m_hueShift = 0.0f;
     return true;
@@ -37,32 +26,11 @@ bool LGPBassBreathEffect::init(plugins::EffectContext& ctx) {
 
 void LGPBassBreathEffect::render(plugins::EffectContext& ctx) {
     float bass, mid, treble;
-    float dt = ctx.getSafeDeltaSeconds();
-    float moodNorm = ctx.getMoodNormalized();
 
     if (ctx.audio.available) {
-        // Hop-based updates: update targets only on new hops
-        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
-        if (newHop) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
-            m_targetBass = ctx.audio.bass();
-            m_targetMid = ctx.audio.mid();
-            m_targetTreble = ctx.audio.treble();
-        }
-
-        // Smooth toward targets every frame with MOOD-adjusted smoothing
-        bass = m_bassFollower.updateWithMood(m_targetBass, dt, moodNorm);
-        mid = m_midFollower.updateWithMood(m_targetMid, dt, moodNorm);
-        treble = m_trebleFollower.updateWithMood(m_targetTreble, dt, moodNorm);
-
-        // Time-based fallback when bass is low - ensures visibility without audio content
-        float timeBreath = 0.4f + 0.2f * sinf((float)(ctx.totalTimeMs % 4000) / 4000.0f * 6.283f);
-        float audioDrive = bass + mid * 0.5f;
-        if (audioDrive < 0.25f) {
-            // Blend in time-based breathing when audio is quiet
-            float blendFactor = 1.0f - (audioDrive / 0.25f);
-            bass = bass + timeBreath * blendFactor;
-        }
+        bass = ctx.audio.bass();
+        mid = ctx.audio.mid();
+        treble = ctx.audio.treble();
     } else {
         // Fallback: slow sine wave breathing
         float phase = (float)(ctx.totalTimeMs % 3000) / 3000.0f;
@@ -71,11 +39,13 @@ void LGPBassBreathEffect::render(plugins::EffectContext& ctx) {
         treble = 0.2f;
     }
 
-    // Breath dynamics: use AsymmetricFollower for natural attack/release
+    // Breath dynamics: fast attack, slow decay
     float targetBreath = bass * 0.8f + mid * 0.2f;
-    m_breathLevel = m_breathFollower.updateWithMood(targetBreath, dt, moodNorm);
-    // Ensure minimum breath level for visibility
-    m_breathLevel = fmaxf(0.25f, m_breathLevel);
+    if (targetBreath > m_breathLevel) {
+        m_breathLevel = targetBreath;  // Instant attack
+    } else {
+        m_breathLevel *= 0.97f;  // Slow exhale (~500ms)
+    }
 
     // Hue shifts with treble activity
     m_hueShift += treble * ctx.deltaTimeMs * 0.1f;

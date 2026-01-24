@@ -1,0 +1,13 @@
+{
+  "name": "lightwave-tools",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Development tools for LightwaveOS - pinned dependencies for reproducible builds",
+  "devDependencies": {
+    "@toon-format/cli": "2.1.0"
+  },
+  "scripts": {
+    "toon": "toon",
+    "contextpack": "python contextpack.py"
+  }
+}

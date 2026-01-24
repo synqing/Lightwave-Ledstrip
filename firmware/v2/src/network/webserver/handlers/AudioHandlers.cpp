@@ -6,8 +6,8 @@
 #include "AudioHandlers.h"
 #include "../../ApiResponse.h"
 #include "../../RequestValidator.h"
-#include "../../../core/actors/NodeOrchestrator.h"
-#include "../../../core/actors/RendererNode.h"
+#include "../../../core/actors/ActorSystem.h"
+#include "../../../core/actors/RendererActor.h"
 #include <cstring>
 
 #if FEATURE_AUDIO_SYNC
@@ -18,14 +18,13 @@
 #endif
 
 #if FEATURE_AUDIO_BENCHMARK
-#include "../BenchmarkStreamBroadcaster.h"
 #include "../../../audio/AudioBenchmarkMetrics.h"
 #endif
 
 #define LW_LOG_TAG "AudioHandlers"
 #include "../../../utils/Log.h"
 
-using namespace lightwaveos::nodes;
+using namespace lightwaveos::actors;
 using namespace lightwaveos::network;
 
 namespace lightwaveos {
@@ -36,9 +35,9 @@ namespace handlers {
 #if FEATURE_AUDIO_SYNC
 
 void AudioHandlers::handleParametersGet(AsyncWebServerRequest* request,
-                                         NodeOrchestrator& orchestrator,
-                                         RendererNode* renderer) {
-    auto* audio = orchestrator.getAudio();
+                                         ActorSystem& actorSystem,
+                                         RendererActor* renderer) {
+    auto* audio = actorSystem.getAudio();
     if (!audio) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::SYSTEM_NOT_READY, "Audio system not available");
@@ -53,7 +52,6 @@ void AudioHandlers::handleParametersGet(AsyncWebServerRequest* request,
     sendSuccessResponse(request, [&](JsonObject& data) {
         JsonObject pipelineObj = data["pipeline"].to<JsonObject>();
         pipelineObj["dcAlpha"] = pipeline.dcAlpha;
-        pipelineObj["agcEnabled"] = pipeline.agcEnabled;
         pipelineObj["agcTargetRms"] = pipeline.agcTargetRms;
         pipelineObj["agcMinGain"] = pipeline.agcMinGain;
         pipelineObj["agcMaxGain"] = pipeline.agcMaxGain;
@@ -74,6 +72,34 @@ void AudioHandlers::handleParametersGet(AsyncWebServerRequest* request,
         pipelineObj["chromaDbFloor"] = pipeline.chromaDbFloor;
         pipelineObj["chromaDbCeil"] = pipeline.chromaDbCeil;
         pipelineObj["fluxScale"] = pipeline.fluxScale;
+        pipelineObj["bandAttack"] = pipeline.bandAttack;
+        pipelineObj["bandRelease"] = pipeline.bandRelease;
+        pipelineObj["heavyBandAttack"] = pipeline.heavyBandAttack;
+        pipelineObj["heavyBandRelease"] = pipeline.heavyBandRelease;
+        pipelineObj["usePerBandNoiseFloor"] = pipeline.usePerBandNoiseFloor;
+        pipelineObj["silenceHysteresisMs"] = pipeline.silenceHysteresisMs;
+        pipelineObj["silenceThreshold"] = pipeline.silenceThreshold;
+
+        JsonArray perBandGains = pipelineObj["perBandGains"].to<JsonArray>();
+        for (uint8_t i = 0; i < 8; ++i) {
+            perBandGains.add(pipeline.perBandGains[i]);
+        }
+
+        JsonArray perBandNoiseFloors = pipelineObj["perBandNoiseFloors"].to<JsonArray>();
+        for (uint8_t i = 0; i < 8; ++i) {
+            perBandNoiseFloors.add(pipeline.perBandNoiseFloors[i]);
+        }
+
+        JsonObject bins64Adaptive = pipelineObj["bins64Adaptive"].to<JsonObject>();
+        bins64Adaptive["scale"] = pipeline.bins64AdaptiveScale;
+        bins64Adaptive["floor"] = pipeline.bins64AdaptiveFloor;
+        bins64Adaptive["rise"] = pipeline.bins64AdaptiveRise;
+        bins64Adaptive["fall"] = pipeline.bins64AdaptiveFall;
+        bins64Adaptive["decay"] = pipeline.bins64AdaptiveDecay;
+
+        JsonObject novelty = pipelineObj["novelty"].to<JsonObject>();
+        novelty["useSpectralFlux"] = pipeline.noveltyUseSpectralFlux;
+        novelty["spectralFluxScale"] = pipeline.noveltySpectralFluxScale;
 
         JsonObject controlBus = data["controlBus"].to<JsonObject>();
         controlBus["alphaFast"] = pipeline.controlBusAlphaFast;
@@ -117,16 +143,16 @@ void AudioHandlers::handleParametersGet(AsyncWebServerRequest* request,
 
 void AudioHandlers::handleParametersSet(AsyncWebServerRequest* request,
                                         uint8_t* data, size_t len,
-                                        NodeOrchestrator& orchestrator,
-                                        RendererNode* renderer) {
-    auto* audio = orchestrator.getAudio();
+                                        ActorSystem& actorSystem,
+                                        RendererActor* renderer) {
+    auto* audio = actorSystem.getAudio();
     if (!audio) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::SYSTEM_NOT_READY, "Audio system not available");
         return;
     }
 
-    StaticJsonDocument<512> doc;
+    StaticJsonDocument<1024> doc;
     DeserializationError error = deserializeJson(doc, data, len);
     if (error) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
@@ -157,6 +183,27 @@ void AudioHandlers::handleParametersSet(AsyncWebServerRequest* request,
             updated = true;
         }
     };
+    auto applyBool = [](JsonVariant source, const char* key, bool& target, bool& updated) {
+        if (!source.is<JsonObject>()) return;
+        if (source.containsKey(key)) {
+            target = source[key].as<bool>();
+            updated = true;
+        }
+    };
+    auto applyFloatArray = [](JsonVariant source, const char* key, float* target, size_t count, bool& updated) {
+        if (!source.is<JsonObject>()) return;
+        if (!source.containsKey(key)) return;
+        JsonArray values = source[key].as<JsonArray>();
+        if (!values) return;
+        size_t idx = 0;
+        for (JsonVariant v : values) {
+            if (idx >= count) break;
+            target[idx++] = v.as<float>();
+        }
+        if (idx > 0) {
+            updated = true;
+        }
+    };
 
     JsonVariant pipelineSrc = doc.as<JsonVariant>();
     if (doc.containsKey("pipeline")) {
@@ -170,13 +217,6 @@ void AudioHandlers::handleParametersSet(AsyncWebServerRequest* request,
     applyFloat(pipelineSrc, "agcRelease", pipeline.agcRelease, updatedPipeline);
     applyFloat(pipelineSrc, "agcClipReduce", pipeline.agcClipReduce, updatedPipeline);
     applyFloat(pipelineSrc, "agcIdleReturnRate", pipeline.agcIdleReturnRate, updatedPipeline);
-    
-    // AGC enable/disable toggle
-    if (pipelineSrc.containsKey("agcEnabled")) {
-        pipeline.agcEnabled = pipelineSrc["agcEnabled"].as<bool>();
-        updatedPipeline = true;
-    }
-    
     applyFloat(pipelineSrc, "noiseFloorMin", pipeline.noiseFloorMin, updatedPipeline);
     applyFloat(pipelineSrc, "noiseFloorRise", pipeline.noiseFloorRise, updatedPipeline);
     applyFloat(pipelineSrc, "noiseFloorFall", pipeline.noiseFloorFall, updatedPipeline);
@@ -190,6 +230,36 @@ void AudioHandlers::handleParametersSet(AsyncWebServerRequest* request,
     applyFloat(pipelineSrc, "chromaDbFloor", pipeline.chromaDbFloor, updatedPipeline);
     applyFloat(pipelineSrc, "chromaDbCeil", pipeline.chromaDbCeil, updatedPipeline);
     applyFloat(pipelineSrc, "fluxScale", pipeline.fluxScale, updatedPipeline);
+    applyFloat(pipelineSrc, "bandAttack", pipeline.bandAttack, updatedPipeline);
+    applyFloat(pipelineSrc, "bandRelease", pipeline.bandRelease, updatedPipeline);
+    applyFloat(pipelineSrc, "heavyBandAttack", pipeline.heavyBandAttack, updatedPipeline);
+    applyFloat(pipelineSrc, "heavyBandRelease", pipeline.heavyBandRelease, updatedPipeline);
+    applyBool(pipelineSrc, "usePerBandNoiseFloor", pipeline.usePerBandNoiseFloor, updatedPipeline);
+    applyFloat(pipelineSrc, "silenceHysteresisMs", pipeline.silenceHysteresisMs, updatedPipeline);
+    applyFloat(pipelineSrc, "silenceThreshold", pipeline.silenceThreshold, updatedPipeline);
+    applyFloatArray(pipelineSrc, "perBandGains", pipeline.perBandGains, 8, updatedPipeline);
+    applyFloatArray(pipelineSrc, "perBandNoiseFloors", pipeline.perBandNoiseFloors, 8, updatedPipeline);
+
+    JsonVariant bins64AdaptiveSrc = doc.as<JsonVariant>();
+    if (pipelineSrc.is<JsonObject>() && pipelineSrc.containsKey("bins64Adaptive")) {
+        bins64AdaptiveSrc = pipelineSrc["bins64Adaptive"];
+    } else if (doc.containsKey("bins64Adaptive")) {
+        bins64AdaptiveSrc = doc["bins64Adaptive"];
+    }
+    applyFloat(bins64AdaptiveSrc, "scale", pipeline.bins64AdaptiveScale, updatedPipeline);
+    applyFloat(bins64AdaptiveSrc, "floor", pipeline.bins64AdaptiveFloor, updatedPipeline);
+    applyFloat(bins64AdaptiveSrc, "rise", pipeline.bins64AdaptiveRise, updatedPipeline);
+    applyFloat(bins64AdaptiveSrc, "fall", pipeline.bins64AdaptiveFall, updatedPipeline);
+    applyFloat(bins64AdaptiveSrc, "decay", pipeline.bins64AdaptiveDecay, updatedPipeline);
+
+    JsonVariant noveltySrc = doc.as<JsonVariant>();
+    if (pipelineSrc.is<JsonObject>() && pipelineSrc.containsKey("novelty")) {
+        noveltySrc = pipelineSrc["novelty"];
+    } else if (doc.containsKey("novelty")) {
+        noveltySrc = doc["novelty"];
+    }
+    applyBool(noveltySrc, "useSpectralFlux", pipeline.noveltyUseSpectralFlux, updatedPipeline);
+    applyFloat(noveltySrc, "spectralFluxScale", pipeline.noveltySpectralFluxScale, updatedPipeline);
 
     JsonVariant controlBusSrc = doc.as<JsonVariant>();
     if (doc.containsKey("controlBus")) {
@@ -236,8 +306,8 @@ void AudioHandlers::handleParametersSet(AsyncWebServerRequest* request,
 
 void AudioHandlers::handleControl(AsyncWebServerRequest* request,
                                    uint8_t* data, size_t len,
-                                   NodeOrchestrator& orchestrator) {
-    auto* audio = orchestrator.getAudio();
+                                   ActorSystem& actorSystem) {
+    auto* audio = actorSystem.getAudio();
     if (!audio) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
@@ -270,62 +340,29 @@ void AudioHandlers::handleControl(AsyncWebServerRequest* request,
     }
 }
 
-void AudioHandlers::handleAGCToggle(AsyncWebServerRequest* request,
-                                     uint8_t* data, size_t len,
-                                     NodeOrchestrator& orchestrator) {
-    auto* audio = orchestrator.getAudio();
-    if (!audio) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
-        return;
-    }
-
-    StaticJsonDocument<128> doc;
-    if (deserializeJson(doc, data, len)) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::INVALID_JSON, "Invalid JSON");
-        return;
-    }
-
-    if (!doc.containsKey("enabled")) {
-        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
-                          ErrorCodes::MISSING_FIELD, "Missing 'enabled' field");
-        return;
-    }
-
-    bool enabled = doc["enabled"].as<bool>();
-    audio::AudioPipelineTuning tuning = audio->getPipelineTuning();
-    tuning.agcEnabled = enabled;
-    audio->setPipelineTuning(tuning);
-
-    sendSuccessResponse(request, [enabled](JsonObject& d) {
-        d["enabled"] = enabled;
-        d["agcEnabled"] = enabled;  // Alias for consistency
-    });
-}
-
 void AudioHandlers::handleStateGet(AsyncWebServerRequest* request,
-                                    NodeOrchestrator& orchestrator) {
-    auto* audio = orchestrator.getAudio();
+                                    ActorSystem& actorSystem) {
+    auto* audio = actorSystem.getAudio();
     if (!audio) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
         return;
     }
 
-    audio::AudioNodeState state = audio->getState();
-    const audio::AudioNodeStats& stats = audio->getStats();
+    auto* renderer = actorSystem.getRenderer();
+    audio::AudioActorState state = audio->getState();
+    const audio::AudioActorStats& stats = audio->getStats();
 
     const char* stateStr = "UNKNOWN";
     switch (state) {
-        case audio::AudioNodeState::UNINITIALIZED: stateStr = "UNINITIALIZED"; break;
-        case audio::AudioNodeState::INITIALIZING:  stateStr = "INITIALIZING"; break;
-        case audio::AudioNodeState::RUNNING:       stateStr = "RUNNING"; break;
-        case audio::AudioNodeState::PAUSED:        stateStr = "PAUSED"; break;
-        case audio::AudioNodeState::ERROR:         stateStr = "ERROR"; break;
+        case audio::AudioActorState::UNINITIALIZED: stateStr = "UNINITIALIZED"; break;
+        case audio::AudioActorState::INITIALIZING:  stateStr = "INITIALIZING"; break;
+        case audio::AudioActorState::RUNNING:       stateStr = "RUNNING"; break;
+        case audio::AudioActorState::PAUSED:        stateStr = "PAUSED"; break;
+        case audio::AudioActorState::ERROR:         stateStr = "ERROR"; break;
     }
 
-    sendSuccessResponse(request, [stateStr, &stats, audio](JsonObject& d) {
+    sendSuccessResponse(request, [stateStr, &stats, audio, renderer](JsonObject& d) {
         d["state"] = stateStr;
         d["capturing"] = audio->isCapturing();
         d["hopCount"] = audio->getHopCount();
@@ -334,12 +371,25 @@ void AudioHandlers::handleStateGet(AsyncWebServerRequest* request,
         statsObj["tickCount"] = stats.tickCount;
         statsObj["captureSuccess"] = stats.captureSuccessCount;
         statsObj["captureFail"] = stats.captureFailCount;
+
+#if FEATURE_AUDIO_SYNC
+        if (renderer && renderer->isAudioEnabled()) {
+            const audio::ControlBusFrame& frame = renderer->getCachedAudioFrame();
+            JsonObject cb = d["controlBus"].to<JsonObject>();
+            cb["silentScale"] = frame.silentScale;
+            cb["isSilent"] = frame.isSilent;
+            cb["tempoLocked"] = frame.tempoLocked;
+            cb["tempoConfidence"] = frame.tempoConfidence;
+            cb["style"] = static_cast<uint8_t>(frame.currentStyle);
+            cb["styleConfidence"] = frame.styleConfidence;
+        }
+#endif
     });
 }
 
 void AudioHandlers::handleTempoGet(AsyncWebServerRequest* request,
-                                    NodeOrchestrator& orchestrator) {
-    auto* renderer = orchestrator.getRenderer();
+                                    ActorSystem& actorSystem) {
+    auto* renderer = actorSystem.getRenderer();
     if (!renderer) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::AUDIO_UNAVAILABLE, "Renderer not available");
@@ -355,35 +405,6 @@ void AudioHandlers::handleTempoGet(AsyncWebServerRequest* request,
         d["bar_phase"] = grid.bar_phase01;
         d["beat_in_bar"] = grid.beat_in_bar;
         d["beats_per_bar"] = grid.beats_per_bar;
-    });
-}
-
-void AudioHandlers::handleFftGet(AsyncWebServerRequest* request,
-                                 NodeOrchestrator& orchestrator) {
-    auto* renderer = orchestrator.getRenderer();
-    if (!renderer) {
-        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                          ErrorCodes::AUDIO_UNAVAILABLE, "Renderer not available");
-        return;
-    }
-
-    const audio::ControlBusFrame& frame = renderer->getCachedAudioFrame();
-
-    sendSuccessResponse(request, [&frame](JsonObject& d) {
-        JsonArray bins = d["bins64"].to<JsonArray>();
-        for (uint8_t i = 0; i < audio::ControlBusFrame::BINS_64_COUNT; i++) {
-            bins.add(frame.bins64[i]);
-        }
-
-        d["binCount"] = audio::ControlBusFrame::BINS_64_COUNT;
-        d["sampleRate"] = audio::SAMPLE_RATE;
-        d["hopSize"] = audio::HOP_SIZE;
-        d["hopSeq"] = frame.hop_seq;
-
-        JsonObject freqMapping = d["frequencyMapping"].to<JsonObject>();
-        freqMapping["minHz"] = 55;      // A1
-        freqMapping["maxHz"] = 2093;    // C7
-        freqMapping["spacing"] = "semitone";
     });
 }
 
@@ -433,7 +454,6 @@ void AudioHandlers::handlePresetGet(AsyncWebServerRequest* request, uint8_t pres
         // Pipeline tuning (DSP parameters)
         JsonObject p = d["pipeline"].to<JsonObject>();
         p["dcAlpha"] = pipeline.dcAlpha;
-        p["agcEnabled"] = pipeline.agcEnabled;
         p["agcTargetRms"] = pipeline.agcTargetRms;
         p["agcMinGain"] = pipeline.agcMinGain;
         p["agcMaxGain"] = pipeline.agcMaxGain;
@@ -456,6 +476,34 @@ void AudioHandlers::handlePresetGet(AsyncWebServerRequest* request, uint8_t pres
         p["fluxScale"] = pipeline.fluxScale;
         p["controlBusAlphaFast"] = pipeline.controlBusAlphaFast;
         p["controlBusAlphaSlow"] = pipeline.controlBusAlphaSlow;
+        p["bandAttack"] = pipeline.bandAttack;
+        p["bandRelease"] = pipeline.bandRelease;
+        p["heavyBandAttack"] = pipeline.heavyBandAttack;
+        p["heavyBandRelease"] = pipeline.heavyBandRelease;
+        p["usePerBandNoiseFloor"] = pipeline.usePerBandNoiseFloor;
+        p["silenceHysteresisMs"] = pipeline.silenceHysteresisMs;
+        p["silenceThreshold"] = pipeline.silenceThreshold;
+
+        JsonArray perBandGains = p["perBandGains"].to<JsonArray>();
+        for (uint8_t i = 0; i < 8; ++i) {
+            perBandGains.add(pipeline.perBandGains[i]);
+        }
+
+        JsonArray perBandNoiseFloors = p["perBandNoiseFloors"].to<JsonArray>();
+        for (uint8_t i = 0; i < 8; ++i) {
+            perBandNoiseFloors.add(pipeline.perBandNoiseFloors[i]);
+        }
+
+        JsonObject bins64Adaptive = p["bins64Adaptive"].to<JsonObject>();
+        bins64Adaptive["scale"] = pipeline.bins64AdaptiveScale;
+        bins64Adaptive["floor"] = pipeline.bins64AdaptiveFloor;
+        bins64Adaptive["rise"] = pipeline.bins64AdaptiveRise;
+        bins64Adaptive["fall"] = pipeline.bins64AdaptiveFall;
+        bins64Adaptive["decay"] = pipeline.bins64AdaptiveDecay;
+
+        JsonObject novelty = p["novelty"].to<JsonObject>();
+        novelty["useSpectralFlux"] = pipeline.noveltyUseSpectralFlux;
+        novelty["spectralFluxScale"] = pipeline.noveltySpectralFluxScale;
 
         // Contract tuning (tempo/beat parameters)
         JsonObject c = d["contract"].to<JsonObject>();
@@ -473,8 +521,8 @@ void AudioHandlers::handlePresetGet(AsyncWebServerRequest* request, uint8_t pres
 
 void AudioHandlers::handlePresetSave(AsyncWebServerRequest* request,
                                       uint8_t* data, size_t len,
-                                      NodeOrchestrator& orchestrator,
-                                      RendererNode* renderer) {
+                                      ActorSystem& actorSystem,
+                                      RendererActor* renderer) {
     using namespace persistence;
 
     StaticJsonDocument<512> doc;
@@ -486,8 +534,8 @@ void AudioHandlers::handlePresetSave(AsyncWebServerRequest* request,
 
     const char* name = doc["name"] | "Unnamed";
 
-    // Get current tuning from AudioNode
-    auto* audioActor = orchestrator.getAudio();
+    // Get current tuning from AudioActor
+    auto* audioActor = actorSystem.getAudio();
     if (!audioActor) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
@@ -515,8 +563,8 @@ void AudioHandlers::handlePresetSave(AsyncWebServerRequest* request,
 }
 
 void AudioHandlers::handlePresetApply(AsyncWebServerRequest* request, uint8_t presetId,
-                                        NodeOrchestrator& orchestrator,
-                                        RendererNode* renderer) {
+                                        ActorSystem& actorSystem,
+                                        RendererActor* renderer) {
     using namespace persistence;
     auto& mgr = AudioTuningManager::instance();
 
@@ -536,8 +584,8 @@ void AudioHandlers::handlePresetApply(AsyncWebServerRequest* request, uint8_t pr
         return;
     }
 
-    // Apply to AudioNode
-    auto* audioActor = orchestrator.getAudio();
+    // Apply to AudioActor
+    auto* audioActor = actorSystem.getAudio();
     if (!audioActor) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
@@ -674,7 +722,7 @@ void AudioHandlers::handleMappingsListCurves(AsyncWebServerRequest* request) {
 }
 
 void AudioHandlers::handleMappingsList(AsyncWebServerRequest* request,
-                                        RendererNode* renderer) {
+                                        RendererActor* renderer) {
     using namespace audio;
     auto& registry = AudioMappingRegistry::instance();
 
@@ -699,7 +747,7 @@ void AudioHandlers::handleMappingsList(AsyncWebServerRequest* request,
 }
 
 void AudioHandlers::handleMappingsGet(AsyncWebServerRequest* request, uint8_t effectId,
-                                       RendererNode* renderer) {
+                                       RendererActor* renderer) {
     using namespace audio;
     auto& registry = AudioMappingRegistry::instance();
 
@@ -746,7 +794,7 @@ void AudioHandlers::handleMappingsGet(AsyncWebServerRequest* request, uint8_t ef
 
 void AudioHandlers::handleMappingsSet(AsyncWebServerRequest* request, uint8_t effectId,
                                        uint8_t* data, size_t len,
-                                       RendererNode* renderer) {
+                                       RendererActor* renderer) {
     using namespace audio;
     auto& registry = AudioMappingRegistry::instance();
 
@@ -868,8 +916,8 @@ void AudioHandlers::handleMappingsStats(AsyncWebServerRequest* request) {
 }
 
 void AudioHandlers::handleZoneAGCGet(AsyncWebServerRequest* request,
-                                      NodeOrchestrator& orchestrator) {
-    auto* audio = orchestrator.getAudio();
+                                      ActorSystem& actorSystem) {
+    auto* audio = actorSystem.getAudio();
     if (!audio) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
@@ -894,8 +942,8 @@ void AudioHandlers::handleZoneAGCGet(AsyncWebServerRequest* request,
 
 void AudioHandlers::handleZoneAGCSet(AsyncWebServerRequest* request,
                                        uint8_t* data, size_t len,
-                                       NodeOrchestrator& orchestrator) {
-    auto* audio = orchestrator.getAudio();
+                                       ActorSystem& actorSystem) {
+    auto* audio = actorSystem.getAudio();
     if (!audio) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
@@ -940,8 +988,8 @@ void AudioHandlers::handleZoneAGCSet(AsyncWebServerRequest* request,
 }
 
 void AudioHandlers::handleSpikeDetectionGet(AsyncWebServerRequest* request,
-                                               NodeOrchestrator& orchestrator) {
-    auto* audio = orchestrator.getAudio();
+                                               ActorSystem& actorSystem) {
+    auto* audio = actorSystem.getAudio();
     if (!audio) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
@@ -966,8 +1014,8 @@ void AudioHandlers::handleSpikeDetectionGet(AsyncWebServerRequest* request,
 }
 
 void AudioHandlers::handleSpikeDetectionReset(AsyncWebServerRequest* request,
-                                                NodeOrchestrator& orchestrator) {
-    auto* audio = orchestrator.getAudio();
+                                                ActorSystem& actorSystem) {
+    auto* audio = actorSystem.getAudio();
     if (!audio) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
@@ -979,8 +1027,8 @@ void AudioHandlers::handleSpikeDetectionReset(AsyncWebServerRequest* request,
 }
 
 void AudioHandlers::handleCalibrateStatus(AsyncWebServerRequest* request,
-                                             NodeOrchestrator& orchestrator) {
-    auto* audio = orchestrator.getAudio();
+                                             ActorSystem& actorSystem) {
+    auto* audio = actorSystem.getAudio();
     if (!audio) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
@@ -1044,8 +1092,8 @@ void AudioHandlers::handleCalibrateStatus(AsyncWebServerRequest* request,
 
 void AudioHandlers::handleCalibrateStart(AsyncWebServerRequest* request,
                                            uint8_t* data, size_t len,
-                                           NodeOrchestrator& orchestrator) {
-    auto* audio = orchestrator.getAudio();
+                                           ActorSystem& actorSystem) {
+    auto* audio = actorSystem.getAudio();
     if (!audio) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
@@ -1089,8 +1137,8 @@ void AudioHandlers::handleCalibrateStart(AsyncWebServerRequest* request,
 }
 
 void AudioHandlers::handleCalibrateCancel(AsyncWebServerRequest* request,
-                                            NodeOrchestrator& orchestrator) {
-    auto* audio = orchestrator.getAudio();
+                                            ActorSystem& actorSystem) {
+    auto* audio = actorSystem.getAudio();
     if (!audio) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
@@ -1102,8 +1150,8 @@ void AudioHandlers::handleCalibrateCancel(AsyncWebServerRequest* request,
 }
 
 void AudioHandlers::handleCalibrateApply(AsyncWebServerRequest* request,
-                                           NodeOrchestrator& orchestrator) {
-    auto* audio = orchestrator.getAudio();
+                                           ActorSystem& actorSystem) {
+    auto* audio = actorSystem.getAudio();
     if (!audio) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
@@ -1133,9 +1181,9 @@ void AudioHandlers::handleCalibrateApply(AsyncWebServerRequest* request,
 
 #if FEATURE_AUDIO_BENCHMARK
 void AudioHandlers::handleBenchmarkGet(AsyncWebServerRequest* request,
-                                        NodeOrchestrator& orchestrator,
-                                        webserver::BenchmarkStreamBroadcaster* broadcaster) {
-    auto* audio = orchestrator.getAudio();
+                                        ActorSystem& actorSystem,
+                                        std::function<bool()> hasSubscribers) {
+    auto* audio = actorSystem.getAudio();
     if (!audio) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
@@ -1143,7 +1191,7 @@ void AudioHandlers::handleBenchmarkGet(AsyncWebServerRequest* request,
     }
 
     const audio::AudioBenchmarkStats& stats = audio->getBenchmarkStats();
-    bool hasSubs = broadcaster && broadcaster->hasSubscribers();
+    bool hasSubs = hasSubscribers();
 
     sendSuccessResponse(request, [&stats, hasSubs](JsonObject& d) {
         d["streaming"] = hasSubs;
@@ -1169,9 +1217,9 @@ void AudioHandlers::handleBenchmarkGet(AsyncWebServerRequest* request,
 }
 
 void AudioHandlers::handleBenchmarkStart(AsyncWebServerRequest* request,
-                                          NodeOrchestrator& orchestrator,
-                                          webserver::BenchmarkStreamBroadcaster* broadcaster) {
-    auto* audio = orchestrator.getAudio();
+                                          ActorSystem& actorSystem,
+                                          std::function<void(bool)> setStreamingActive) {
+    auto* audio = actorSystem.getAudio();
     if (!audio) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
@@ -1181,7 +1229,7 @@ void AudioHandlers::handleBenchmarkStart(AsyncWebServerRequest* request,
     // Reset stats to start fresh collection
     audio->resetBenchmarkStats();
 
-    if (broadcaster) broadcaster->setStreamingActive(true);
+    setStreamingActive(true);
 
     LW_LOGI("Benchmark collection started");
 
@@ -1192,16 +1240,16 @@ void AudioHandlers::handleBenchmarkStart(AsyncWebServerRequest* request,
 }
 
 void AudioHandlers::handleBenchmarkStop(AsyncWebServerRequest* request,
-                                         NodeOrchestrator& orchestrator,
-                                         webserver::BenchmarkStreamBroadcaster* broadcaster) {
-    auto* audio = orchestrator.getAudio();
+                                         ActorSystem& actorSystem,
+                                         std::function<void(bool)> setStreamingActive) {
+    auto* audio = actorSystem.getAudio();
     if (!audio) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
         return;
     }
 
-    if (broadcaster) broadcaster->setStreamingActive(false);
+    setStreamingActive(false);
 
     // Return final stats
     const audio::AudioBenchmarkStats& stats = audio->getBenchmarkStats();
@@ -1222,8 +1270,8 @@ void AudioHandlers::handleBenchmarkStop(AsyncWebServerRequest* request,
 }
 
 void AudioHandlers::handleBenchmarkHistory(AsyncWebServerRequest* request,
-                                            NodeOrchestrator& orchestrator) {
-    auto* audio = orchestrator.getAudio();
+                                            ActorSystem& actorSystem) {
+    auto* audio = actorSystem.getAudio();
     if (!audio) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
@@ -1264,35 +1312,30 @@ void AudioHandlers::handleBenchmarkHistory(AsyncWebServerRequest* request,
 
 // Stub implementations when audio sync is disabled
 void AudioHandlers::handleParametersGet(AsyncWebServerRequest* request,
-                                         NodeOrchestrator&, RendererNode*) {
+                                         ActorSystem&, RendererActor*) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
 
 void AudioHandlers::handleParametersSet(AsyncWebServerRequest* request,
                                          uint8_t*, size_t,
-                                         NodeOrchestrator&, RendererNode*) {
+                                         ActorSystem&, RendererActor*) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
 
 void AudioHandlers::handleControl(AsyncWebServerRequest* request,
-                                    uint8_t*, size_t, NodeOrchestrator&) {
+                                    uint8_t*, size_t, ActorSystem&) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
 
-void AudioHandlers::handleStateGet(AsyncWebServerRequest* request, NodeOrchestrator&) {
+void AudioHandlers::handleStateGet(AsyncWebServerRequest* request, ActorSystem&) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
 
-void AudioHandlers::handleTempoGet(AsyncWebServerRequest* request, NodeOrchestrator&) {
-    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
-                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
-}
-
-void AudioHandlers::handleFftGet(AsyncWebServerRequest* request, NodeOrchestrator&) {
+void AudioHandlers::handleTempoGet(AsyncWebServerRequest* request, ActorSystem&) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
@@ -1308,13 +1351,13 @@ void AudioHandlers::handlePresetGet(AsyncWebServerRequest* request, uint8_t) {
 }
 
 void AudioHandlers::handlePresetSave(AsyncWebServerRequest* request,
-                                       uint8_t*, size_t, NodeOrchestrator&, RendererNode*) {
+                                       uint8_t*, size_t, ActorSystem&, RendererActor*) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
 
 void AudioHandlers::handlePresetApply(AsyncWebServerRequest* request, uint8_t,
-                                        NodeOrchestrator&, RendererNode*) {
+                                        ActorSystem&, RendererActor*) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
@@ -1339,18 +1382,18 @@ void AudioHandlers::handleMappingsListCurves(AsyncWebServerRequest* request) {
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
 
-void AudioHandlers::handleMappingsList(AsyncWebServerRequest* request, RendererNode*) {
+void AudioHandlers::handleMappingsList(AsyncWebServerRequest* request, RendererActor*) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
 
-void AudioHandlers::handleMappingsGet(AsyncWebServerRequest* request, uint8_t, RendererNode*) {
+void AudioHandlers::handleMappingsGet(AsyncWebServerRequest* request, uint8_t, RendererActor*) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
 
 void AudioHandlers::handleMappingsSet(AsyncWebServerRequest* request, uint8_t,
-                                        uint8_t*, size_t, RendererNode*) {
+                                        uint8_t*, size_t, RendererActor*) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
@@ -1370,44 +1413,44 @@ void AudioHandlers::handleMappingsStats(AsyncWebServerRequest* request) {
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
 
-void AudioHandlers::handleZoneAGCGet(AsyncWebServerRequest* request, NodeOrchestrator&) {
+void AudioHandlers::handleZoneAGCGet(AsyncWebServerRequest* request, ActorSystem&) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
 
 void AudioHandlers::handleZoneAGCSet(AsyncWebServerRequest* request,
-                                       uint8_t*, size_t, NodeOrchestrator&) {
+                                       uint8_t*, size_t, ActorSystem&) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
 
-void AudioHandlers::handleSpikeDetectionGet(AsyncWebServerRequest* request, NodeOrchestrator&) {
+void AudioHandlers::handleSpikeDetectionGet(AsyncWebServerRequest* request, ActorSystem&) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
 
-void AudioHandlers::handleSpikeDetectionReset(AsyncWebServerRequest* request, NodeOrchestrator&) {
+void AudioHandlers::handleSpikeDetectionReset(AsyncWebServerRequest* request, ActorSystem&) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
 
-void AudioHandlers::handleCalibrateStatus(AsyncWebServerRequest* request, NodeOrchestrator&) {
+void AudioHandlers::handleCalibrateStatus(AsyncWebServerRequest* request, ActorSystem&) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
 
 void AudioHandlers::handleCalibrateStart(AsyncWebServerRequest* request,
-                                           uint8_t*, size_t, NodeOrchestrator&) {
+                                           uint8_t*, size_t, ActorSystem&) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
 
-void AudioHandlers::handleCalibrateCancel(AsyncWebServerRequest* request, NodeOrchestrator&) {
+void AudioHandlers::handleCalibrateCancel(AsyncWebServerRequest* request, ActorSystem&) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }
 
-void AudioHandlers::handleCalibrateApply(AsyncWebServerRequest* request, NodeOrchestrator&) {
+void AudioHandlers::handleCalibrateApply(AsyncWebServerRequest* request, ActorSystem&) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }

@@ -1,4 +1,5 @@
 #include "MusicalGrid.h"
+#include <math.h>
 
 namespace lightwaveos::audio {
 
@@ -137,6 +138,44 @@ void MusicalGrid::onK1Beat(int beat_in_bar, bool is_downbeat, float strength) {
     (void)beat_in_bar; // Reserved for future bar-level phase correction
 }
 
+// ============================================================================
+// Trinity External Sync (Offline ML Analysis)
+// ============================================================================
+
+void MusicalGrid::injectExternalBeat(float bpm, float phase01, bool isTick, bool isDownbeat, int beatInBar)
+{
+    // Clamp BPM to configured range
+    if (bpm < m_tuning.bpmMin) bpm = m_tuning.bpmMin;
+    if (bpm > m_tuning.bpmMax) bpm = m_tuning.bpmMax;
+
+    m_externalBpm = bpm;
+    m_externalPhase01 = clamp01(phase01);
+    m_externalBeatTick = isTick;
+    m_externalDownbeatTick = isDownbeat;
+    m_externalBeatInBar = (beatInBar >= 0 && beatInBar < m_beats_per_bar) ? beatInBar : 0;
+
+    // Update internal state directly (bypass PLL)
+    m_bpm_smoothed = bpm;
+    m_bpm_target = bpm;
+    m_conf = 1.0f;  // High confidence for pre-computed analysis
+
+    // Update beat counter to match phase
+    const double beat_float = (double)m_externalPhase01 + (double)(beatInBar + m_beats_per_bar * 0);
+    m_beat_float = beat_float;
+}
+
+void MusicalGrid::setExternalSyncMode(bool enabled)
+{
+    m_externalSyncMode = enabled;
+    if (!enabled) {
+        // Reset to normal PLL mode
+        m_externalBpm = 120.0f;
+        m_externalPhase01 = 0.0f;
+        m_externalBeatTick = false;
+        m_externalDownbeatTick = false;
+    }
+}
+
 void MusicalGrid::Tick(const AudioTime& render_now) {
     MusicalGridSnapshot s;
     s.t = render_now;
@@ -145,6 +184,30 @@ void MusicalGrid::Tick(const AudioTime& render_now) {
 
     s.beat_tick = false;
     s.downbeat_tick = false;
+
+    // External sync mode: bypass PLL, use injected state directly
+    if (m_externalSyncMode) {
+        s.bpm_smoothed = m_externalBpm;
+        s.tempo_confidence = 1.0f;
+        s.beat_phase01 = m_externalPhase01;
+        s.bar_phase01 = m_externalPhase01 / (float)m_beats_per_bar;
+        s.beat_tick = m_externalBeatTick;
+        s.downbeat_tick = m_externalDownbeatTick;
+        s.beat_in_bar = (uint8_t)m_externalBeatInBar;
+        s.beat_strength = m_externalBeatTick ? 1.0f : 0.0f;
+        
+        // Estimate beat/bar indices from phase
+        const double beat_float = (double)m_externalPhase01 + (double)(m_externalBeatInBar + m_beats_per_bar * 0);
+        s.beat_index = (uint64_t)floor(beat_float);
+        s.bar_index = (uint64_t)floor(beat_float / (double)m_beats_per_bar);
+        
+        // Clear tick flags after reading (one-shot)
+        m_externalBeatTick = false;
+        m_externalDownbeatTick = false;
+        
+        m_snap.Publish(s);
+        return;
+    }
 
     if (!m_has_tick) {
         // First tick seeds timing without inventing history.

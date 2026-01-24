@@ -42,7 +42,6 @@ void LGPComplementaryMixingEffect::render(plugins::EffectContext& ctx) {
         uint8_t edgeIntensity = (uint8_t)(255.0f * (1.0f - normalizedDist * variation));
 
         if (normalizedDist > 0.5f) {
-            // Use palette system - apply brightness scaling
             uint8_t brightU8 = (uint8_t)(edgeIntensity * intensity);
             brightU8 = (uint8_t)((brightU8 * ctx.brightness) / 255);
             ctx.leds[i] = ctx.palette.getColor(baseHue, brightU8);
@@ -50,7 +49,6 @@ void LGPComplementaryMixingEffect::render(plugins::EffectContext& ctx) {
                 ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor(complementHue, brightU8);
             }
         } else {
-            // Use palette system - apply brightness scaling
             uint8_t brightU8 = (uint8_t)(128.0f * intensity);
             brightU8 = (uint8_t)((brightU8 * ctx.brightness) / 255);
             ctx.leds[i] = ctx.palette.getColor(baseHue, brightU8);

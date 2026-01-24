@@ -1,0 +1,1870 @@
+diff --git a/.gitignore b/.gitignore
+index 41d647a..887a03e 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -140,3 +140,7 @@ repomix-output.*
+ 
+ # Context engineering / AI tooling runs
+ context_engineering_runs/
++
++# Context Pack cache and ledger
++.contextpack_ledger.json
++.contextpack_cache/
+\ No newline at end of file
+diff --git a/AGENTS.md b/AGENTS.md
+index 6aead68..f43c18b 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -46,27 +46,38 @@ This repository contains firmware for an ESP32-S3 driving a dual-strip Light Gui
+ 
+ ## Build / Flash / Monitor (PlatformIO)
+ 
++### Device Port Mapping
++
++**CRITICAL: Device Port Assignments**
++- **ESP32-S3 (v2 firmware)**: `/dev/cu.usbmodem1101`
++- **Tab5 (encoder firmware)**: `/dev/cu.usbmodem101`
++
++Always use these specific ports for uploads and monitoring.
++
+ ### LightwaveOS Build Commands
+ 
+ ```bash
+ # Build (default, audio-enabled)
+ cd firmware/v2 && pio run -e esp32dev_audio
+ 
+-# Build + upload
+-cd firmware/v2 && pio run -e esp32dev_audio -t upload
++# Build + upload (ESP32-S3 on usbmodem1101)
++cd firmware/v2 && pio run -e esp32dev_audio -t upload --upload-port /dev/cu.usbmodem1101
+ 
+-# Serial monitor
+-pio device monitor -b 115200
++# Serial monitor (ESP32-S3 on usbmodem1101)
++pio device monitor -p /dev/cu.usbmodem1101 -b 115200
+ ```
+ 
+ ### Encoder Build Commands
+ 
+ ```bash
+ # Build
+-cd firmware/Tab5.encoder && pio run -e atoms3
++cd firmware/Tab5.encoder && pio run -e tab5
++
++# Build + upload (Tab5 on usbmodem101)
++cd firmware/Tab5.encoder && pio run -e tab5 -t upload --upload-port /dev/cu.usbmodem101
+ 
+-# Build + upload
+-cd firmware/Tab5.encoder && pio run -e atoms3 -t upload
++# Serial monitor (Tab5 on usbmodem101)
++pio device monitor -p /dev/cu.usbmodem101 -b 115200
+ ```
+ 
+ ---
+diff --git a/README.md b/README.md
+index ea99711..a89d587 100644
+--- a/README.md
++++ b/README.md
+@@ -72,6 +72,14 @@ LC_SelfContained/
+ 
+ ## Building and Flashing
+ 
++### Device Port Mapping
++
++**CRITICAL: Device Port Assignments**
++- **ESP32-S3 (v2 firmware)**: `/dev/cu.usbmodem1101`
++- **Tab5 (encoder firmware)**: `/dev/cu.usbmodem101`
++
++Always use these specific ports for uploads and monitoring. Verify with `pio device list` before uploading.
++
+ ### Prerequisites
+ - [PlatformIO](https://platformio.org/) (VS Code extension or CLI)
+ - ESP32 board package
+@@ -79,12 +87,17 @@ LC_SelfContained/
+ 
+ ### Build Instructions
+ 
+-1. Clone the repository
+-2. Open in PlatformIO (VS Code recommended)
+-3. Build and upload:
+-   ```bash
+-   pio run -t upload
+-   ```
++**v2 Firmware (ESP32-S3)**:
++```bash
++cd firmware/v2
++pio run -e esp32dev_audio -t upload --upload-port /dev/cu.usbmodem1101
++```
++
++**Tab5 Encoder Firmware**:
++```bash
++# From repository root:
++PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" pio run -e tab5 -t upload --upload-port /dev/cu.usbmodem101 -d firmware/Tab5.encoder
++```
+ 
+ ### Configuration
+ 
+diff --git a/docs/hardware/USB_SETUP.md b/docs/hardware/USB_SETUP.md
+index 44bb6c2..793867b 100644
+--- a/docs/hardware/USB_SETUP.md
++++ b/docs/hardware/USB_SETUP.md
+@@ -1,11 +1,21 @@
+-# USB Setup Guide for Light Crystals
++# USB Setup Guide for LightwaveOS Hardware
++
++## Device Port Mapping
++
++**CRITICAL: Device Port Assignments**
++- **ESP32-S3 (v2 firmware)**: `/dev/cu.usbmodem1101`
++- **Tab5 (encoder firmware)**: `/dev/cu.usbmodem101`
++
++Always use these specific ports for uploads and monitoring.
+ 
+ ## Configuration
+ 
+-### USB Port
+-- **Upload Port**: `/dev/cu.usbmodem1101`
+-- **Monitor Port**: `/dev/cu.usbmodem1101`
+-- **Baud Rate**: 115200
++### USB Ports
++- **ESP32-S3 Upload Port**: `/dev/cu.usbmodem1101`
++- **ESP32-S3 Monitor Port**: `/dev/cu.usbmodem1101`
++- **Tab5 Upload Port**: `/dev/cu.usbmodem101`
++- **Tab5 Monitor Port**: `/dev/cu.usbmodem101`
++- **Baud Rate**: 115200 (both devices)
+ 
+ ### USB CDC Settings
+ The project is configured with USB CDC (Communications Device Class) enabled:
+@@ -16,21 +26,29 @@ The project is configured with USB CDC (Communications Device Class) enabled:
+ ## Quick Commands
+ 
+ ### Upload Firmware
++
++**ESP32-S3 (v2 firmware)**:
+ ```bash
+-# Using the script
+-./scripts/upload.sh
++cd firmware/v2
++pio run -e esp32dev_audio -t upload --upload-port /dev/cu.usbmodem1101
++```
+ 
+-# Or manually
+-pio run -t upload
++**Tab5 (encoder firmware)**:
++```bash
++cd firmware/Tab5.encoder
++pio run -e tab5 -t upload --upload-port /dev/cu.usbmodem101
+ ```
+ 
+ ### Monitor Serial Output
++
++**ESP32-S3**:
+ ```bash
+-# Using the script
+-./scripts/monitor.sh
++pio device monitor -p /dev/cu.usbmodem1101 -b 115200
++```
+ 
+-# Or manually
+-pio device monitor
++**Tab5**:
++```bash
++pio device monitor -p /dev/cu.usbmodem101 -b 115200
+ ```
+ 
+ ### Clean and Rebuild
+@@ -42,15 +60,24 @@ pio run
+ ## Troubleshooting
+ 
+ ### Device Not Found
+-If `/dev/cu.usbmodem1101` is not found:
+ 
++**ESP32-S3** - If `/dev/cu.usbmodem1101` is not found:
++1. Check USB cable connection
++2. Verify ESP32-S3 is powered on
++3. List available devices:
++   ```bash
++   pio device list
++   ```
++4. Try resetting the device (press EN/RST button)
++
++**Tab5** - If `/dev/cu.usbmodem101` is not found:
+ 1. Check USB cable connection
+-2. Verify ESP32 is powered on
++2. Verify Tab5 is powered on
+ 3. List available devices:
+    ```bash
+-   ls /dev/cu.usb*
++   pio device list
+    ```
+-4. Try resetting the ESP32 (press EN/RST button)
++4. Try resetting the device (press EN/RST button)
+ 
+ ### Upload Fails
+ 1. Ensure no other program is using the serial port
+@@ -70,10 +97,11 @@ If `/dev/cu.usbmodem1101` is not found:
+ - Better reliability for high-speed data
+ 
+ ## Important Notes
+-- **NEVER** upload to usbmodem12201 (as specified in user instructions)
+-- Always use `/dev/cu.usbmodem1101` for this project
++- **ESP32-S3 (v2 firmware)**: Always use `/dev/cu.usbmodem1101`
++- **Tab5 (encoder firmware)**: Always use `/dev/cu.usbmodem101`
+ - USB CDC requires proper initialization delay in setup()
+ - Some ESP32 boards may need BOOT button held during upload
++- **NEVER** upload to the wrong device port (always verify with `pio device list` first)
+ 
+ ## Platform-Specific Notes
+ 
+diff --git a/docs/operations/claude-flow/pair-programming.md b/docs/operations/claude-flow/pair-programming.md
+index 577ffbf..6c8a280 100644
+--- a/docs/operations/claude-flow/pair-programming.md
++++ b/docs/operations/claude-flow/pair-programming.md
+@@ -256,6 +256,63 @@ npx claude-flow@v3alpha pair start \
+ 
+ ---
+ 
++## Progressive Streaming for Large Context
++
++For large context packs or complex multi-file tasks, use progressive streaming to send context incrementally.
++
++### When to Use Progressive Streaming
++
++- Context pack > 100K tokens
++- Multi-part diff (>3 parts)
++- Complex multi-domain tasks (firmware + API + dashboard)
++- Long-running sessions (prevent context bloat)
++
++### Progressive Streaming Pattern
++
++**Turn 1: Minimal Context**
++```
++- Send packet.md + summary_1line.md (or summary_5line.md)
++- Wait for LLM to request specific files/parts
++```
++
++**Turn 2-N: Add Context Incrementally**
++```
++- LLM requests "show me diff_part_02.patch" → Send that part
++- LLM requests "show me fixtures" → Send fixtures/*.toon
++- LLM requests "full diff" → Send all diff_part_*.patch files
++```
++
++### Chunked Response Guidelines
++
++1. **Start with summaries**: Use `summary_1line.md`, `summary_5line.md`, or `summary_1para.md` for initial context
++2. **Diff index first**: If using multi-part diff, send `diff_index.md` before individual parts
++3. **On-demand loading**: Attach large files (fixtures, diff parts) only when LLM requests them
++4. **Resume capability**: LLM can request specific chunks by name from index
++
++### Example Progressive Session
++
++```bash
++# Generate context pack with summaries
++python tools/contextpack.py --summaries
++
++# Turn 1: Send minimal context
++# - packet.md (goal, symptom, acceptance)
++# - summary_5line.md (overview)
++
++# Turn 2: LLM requests diff → Send diff_part_01.patch
++# Turn 3: LLM requests more → Send diff_part_02.patch
++# Turn 4: LLM requests fixtures → Send fixtures/effects.toon
++```
++
++### Benefits
++
++- **Reduced initial token cost**: Start small, add only what's needed
++- **Faster iteration**: LLM processes minimal context first
++- **Context management**: Prevents context bloat in long sessions
++- **Selective detail**: LLM requests specific parts as needed
++
++---
++
+ ## Related Documentation
+ 
+ - **[overview.md](./overview.md)** - Strategic integration overview
+diff --git a/docs/plugins.md b/docs/plugins.md
+index 53acdfb..e9d88df 100644
+--- a/docs/plugins.md
++++ b/docs/plugins.md
+@@ -299,17 +299,21 @@ Built-in Effects → BuiltinEffectRegistry → PluginManagerActor → RendererAc
+ 
+ ### Uploading Manifests
+ 
+-**Via PlatformIO**:
++**Device Port Mapping**:
++- **ESP32-S3 (v2 firmware)**: `/dev/cu.usbmodem1101`
++- **Tab5 (encoder firmware)**: `/dev/cu.usbmodem101`
++
++**Via PlatformIO** (ESP32-S3 on usbmodem1101):
+ ```bash
+ cd firmware/v2
+ # Place manifest files in data/ directory
+-pio run -e esp32dev_audio -t uploadfs  # Upload LittleFS image
++pio run -e esp32dev_audio -t uploadfs --upload-port /dev/cu.usbmodem1101  # Upload LittleFS image
+ ```
+ 
+ **Workflow**:
+ 1. Create your `.plugin.json` file
+ 2. Place it in `firmware/v2/data/` directory
+-3. Run `pio run -e esp32dev_audio -t uploadfs`
++3. Run `pio run -e esp32dev_audio -t uploadfs --upload-port /dev/cu.usbmodem1101` (ESP32-S3 on usbmodem1101)
+ 4. Restart device or call reload API
+ 
+ ### Scanning Order
+diff --git a/firmware/Tab5.encoder/README.md b/firmware/Tab5.encoder/README.md
+index 69acefd..3da308e 100644
+--- a/firmware/Tab5.encoder/README.md
++++ b/firmware/Tab5.encoder/README.md
+@@ -62,6 +62,16 @@ The Tab5 uses **ESP32-P4 (RISC-V architecture)**. You MUST use the exact build c
+ 
+ ---
+ 
++### Device Port Mapping
++
++**CRITICAL: Device Port Assignments**
++- **ESP32-S3 (v2 firmware)**: `/dev/cu.usbmodem1101`
++- **Tab5 (encoder firmware)**: `/dev/cu.usbmodem101`
++
++Always use these specific ports for uploads and monitoring.
++
++---
++
+ ### ⛔ FORBIDDEN - These Commands WILL FAIL:
+ 
+ ```bash
+@@ -74,8 +84,8 @@ cd firmware/Tab5.encoder && pio run -e tab5
+ # ❌ WRONG - Never add hardcoded toolchain paths
+ PATH="...:$HOME/.platformio/packages/toolchain-riscv32-esp/..." pio run ...
+ 
+-# ❌ WRONG - Never specify upload port manually (use auto-detect)
+-pio run -e tab5 -t upload --upload-port /dev/cu.usbmodem21401 ...
++# ❌ WRONG - Never specify wrong upload port (Tab5 is usbmodem101, NOT usbmodem1101)
++pio run -e tab5 -t upload --upload-port /dev/cu.usbmodem1101
+ ```
+ 
+ ---
+@@ -88,11 +98,11 @@ pio run -e tab5 -t upload --upload-port /dev/cu.usbmodem21401 ...
+ # Build only:
+ PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" pio run -e tab5 -d firmware/Tab5.encoder
+ 
+-# Build + Upload (auto-detect port):
+-PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" pio run -e tab5 -t upload -d firmware/Tab5.encoder
++# Build + Upload (Tab5 on usbmodem101):
++PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" pio run -e tab5 -t upload --upload-port /dev/cu.usbmodem101 -d firmware/Tab5.encoder
+ 
+-# Monitor serial output:
+-pio device monitor -d firmware/Tab5.encoder -b 115200
++# Monitor serial output (Tab5 on usbmodem101):
++pio device monitor -p /dev/cu.usbmodem101 -d firmware/Tab5.encoder -b 115200
+ ```
+ 
+ ---
+@@ -103,7 +113,7 @@ pio device monitor -d firmware/Tab5.encoder -b 115200
+ 
+ 2. **`-d firmware/Tab5.encoder`** - Tells PlatformIO where the project is WITHOUT changing directory.
+ 
+-3. **No `--upload-port`** - Let PlatformIO auto-detect the port.
++3. **`--upload-port /dev/cu.usbmodem101`** - Tab5 device port (use explicit port to avoid uploading to wrong device).
+ 
+ 4. **Pre-build hook** (`scripts/pio_pre.py`) automatically:
+    - Finds the RISC-V toolchain (`toolchain-riscv32-esp`)
+diff --git a/firmware/v2/platformio.ini b/firmware/v2/platformio.ini
+index 5e062f1..23ae4a4 100644
+--- a/firmware/v2/platformio.ini
++++ b/firmware/v2/platformio.ini
+@@ -149,6 +149,7 @@ platform = native
+ build_src_filter =
+ 	-<*>
+ 	+<../test/test_native/*>
++	+<../src/codec/ManifestCodec.cpp>
+ build_flags =
+ 	-std=c++17
+ 	-D NATIVE_BUILD=1
+@@ -166,6 +167,84 @@ test_framework = unity
+ test_build_src = no
+ lib_deps =
+ 	throwtheswitch/Unity@^2.5.2
++	bblanchon/ArduinoJson@7.0.4
++
++; Isolated manifest codec unit tests (no hardware dependencies)
++; Build: pio run -e native_codec_test_manifest
++; Run:   .pio/build/native_codec_test_manifest/program
++; Only includes ManifestCodec tests to avoid FastLED/audio hardware dependencies
++[env:native_codec_test_manifest]
++platform = native
++build_src_filter =
++	-<*>
++	+<../test/test_native/test_manifest_codec.cpp>
++	+<../src/codec/ManifestCodec.cpp>
++build_flags =
++	-std=c++17
++	-D NATIVE_BUILD=1
++	-D LIGHTWAVEOS_V2=1
++	-D LW_LOG_LEVEL=4
++	-I test/test_native
++	-I src
++test_framework = unity
++test_build_src = no
++# test_filter removed: build_src_filter already isolates test_manifest_codec.cpp
++# test_ignore ensures other test suites are excluded even if discovered
++test_ignore = 
++	test_effect_id_limits
++	test_ws_effects_codec
++	test_audio_*
++lib_deps =
++	throwtheswitch/Unity@^2.5.2
++	bblanchon/ArduinoJson@7.0.4
++
++; Isolated codec unit tests (no hardware dependencies)
++; Build: pio run -e native_codec_test_ws_effects
++; Run:   .pio/build/native_codec_test_ws_effects/program
++; Only includes WsEffectsCodec tests to avoid FastLED/audio hardware dependencies
++[env:native_codec_test_ws_effects]
++platform = native
++build_src_filter =
++	-<*>
++	+<../test/test_native/test_ws_effects_codec.cpp>
++	+<../src/codec/WsEffectsCodec.cpp>
++build_flags =
++	-std=c++17
++	-D NATIVE_BUILD=1
++	-D LIGHTWAVEOS_V2=1
++	-D LW_LOG_LEVEL=4
++	-I test/test_native
++	-I src
++test_framework = unity
++test_build_src = no
++lib_deps =
++	throwtheswitch/Unity@^2.5.2
++	bblanchon/ArduinoJson@7.0.4
++
++; Isolated WS codec unit tests (no hardware dependencies)
++; Build: pio run -e native_codec_test_ws
++; Run:   .pio/build/native_codec_test_ws/program
++; Only includes WS codec tests (zones, plugins, etc.) to avoid FastLED/audio hardware dependencies
++[env:native_codec_test_ws]
++platform = native
++build_src_filter =
++	-<*>
++	+<../test/test_native/test_ws_plugins_codec.cpp>
++	+<../src/codec/WsPluginsCodec.cpp>
++	+<../src/codec/WsZonesCodec.cpp>
++	+<../test/test_native/test_ws_zones_codec.cpp>
++build_flags =
++	-std=c++17
++	-D NATIVE_BUILD=1
++	-D LIGHTWAVEOS_V2=1
++	-D LW_LOG_LEVEL=4
++	-I test/test_native
++	-I src
++test_framework = unity
++test_build_src = no
++lib_deps =
++	throwtheswitch/Unity@^2.5.2
++	bblanchon/ArduinoJson@7.0.4
+ 
+ ; Audio unit tests (native)
+ ; Run: pio test -e native_test_audio
+diff --git a/firmware/v2/src/core/actors/RendererActor.cpp b/firmware/v2/src/core/actors/RendererActor.cpp
+index 260e5d5..f8fdc14 100644
+--- a/firmware/v2/src/core/actors/RendererActor.cpp
++++ b/firmware/v2/src/core/actors/RendererActor.cpp
+@@ -229,6 +229,65 @@ bool RendererActor::registerEffect(uint8_t id, plugins::IEffect* effect)
+     return true;
+ }
+ 
++// ============================================================================
++// IEffectRegistry Implementation
++// ============================================================================
++
++bool RendererActor::unregisterEffect(uint8_t id)
++{
++    if (id >= MAX_EFFECTS) {
++        return false;
++    }
++
++    if (m_effects[id].active) {
++        m_effects[id].active = false;
++        m_effects[id].effect = nullptr;
++        m_effects[id].name = nullptr;
++
++        // Clean up legacy adapter if present
++        if (m_legacyAdapters[id] != nullptr) {
++            delete m_legacyAdapters[id];
++            m_legacyAdapters[id] = nullptr;
++        }
++
++        // Update count (recalculate from active effects)
++        // This is safe but may not be exact if effects are unregistered out of order
++        // The count represents the highest registered ID, not the actual active count
++        uint8_t highestActive = 0;
++        for (uint8_t i = 0; i < MAX_EFFECTS; i++) {
++            if (m_effects[i].active && i >= highestActive) {
++                highestActive = i + 1;
++            }
++        }
++        m_effectCount = highestActive;
++
++        LW_LOGD("Unregistered effect %d", id);
++        return true;
++    }
++
++    return false;
++}
++
++bool RendererActor::isEffectRegistered(uint8_t id) const
++{
++    if (id >= MAX_EFFECTS) {
++        return false;
++    }
++    return m_effects[id].active;
++}
++
++uint8_t RendererActor::getRegisteredCount() const
++{
++    // Count actual active effects (not just highest ID)
++    uint8_t count = 0;
++    for (uint8_t i = 0; i < MAX_EFFECTS; i++) {
++        if (m_effects[i].active) {
++            count++;
++        }
++    }
++    return count;
++}
++
+ const char* RendererActor::getEffectName(uint8_t id) const
+ {
+     if (id < MAX_EFFECTS && m_effects[id].active) {
+diff --git a/firmware/v2/src/core/actors/RendererActor.h b/firmware/v2/src/core/actors/RendererActor.h
+index e16dbc8..2bbb347 100644
+--- a/firmware/v2/src/core/actors/RendererActor.h
++++ b/firmware/v2/src/core/actors/RendererActor.h
+@@ -33,6 +33,7 @@
+ #include "../../effects/enhancement/ColorCorrectionEngine.h"
+ #include "../../config/features.h"
+ #include "../../plugins/api/EffectContext.h"
++#include "../../plugins/api/IEffectRegistry.h"
+ 
+ #include <atomic>
+ 
+@@ -158,7 +159,7 @@ using EffectRenderFn = void (*)(RenderContext& ctx);
+  * State changes (effect, brightness, etc.) are received as messages
+  * and applied atomically before the next frame.
+  */
+-class RendererActor : public Actor {
++class RendererActor : public Actor, public plugins::IEffectRegistry {
+ public:
+     /**
+      * @brief Construct the RendererActor
+@@ -222,7 +223,31 @@ public:
+      * @param effect IEffect instance pointer
+      * @return true if registered successfully
+      */
+-    bool registerEffect(uint8_t id, plugins::IEffect* effect);
++    bool registerEffect(uint8_t id, plugins::IEffect* effect) override;
++
++    // ========================================================================
++    // IEffectRegistry Implementation
++    // ========================================================================
++
++    /**
++     * @brief Unregister an effect by ID
++     * @param id Effect ID to unregister
++     * @return true if effect was registered and is now unregistered
++     */
++    bool unregisterEffect(uint8_t id) override;
++
++    /**
++     * @brief Check if an effect is registered
++     * @param id Effect ID to check
++     * @return true if effect is registered
++     */
++    bool isEffectRegistered(uint8_t id) const override;
++
++    /**
++     * @brief Get registered effect count
++     * @return Number of registered effects
++     */
++    uint8_t getRegisteredCount() const override;
+ 
+     /**
+      * @brief Get number of registered effects
+diff --git a/firmware/v2/src/main.cpp b/firmware/v2/src/main.cpp
+index fbad2d6..5dcc333 100644
+--- a/firmware/v2/src/main.cpp
++++ b/firmware/v2/src/main.cpp
+@@ -35,6 +35,7 @@
+ #include "core/actors/ShowDirectorActor.h"
+ #include "core/shows/BuiltinShows.h"
+ #include "plugins/api/IEffect.h"
++#include "plugins/PluginManagerActor.h"
+ #include "core/system/StackMonitor.h"
+ #include "core/system/HeapMonitor.h"
+ #include "core/system/MemoryLeakDetector.h"
+@@ -70,6 +71,10 @@ using namespace lightwaveos::plugins;
+ ZoneComposer zoneComposer;
+ ZoneConfigManager* zoneConfigMgr = nullptr;
+ 
++// ==================== Global Plugin Manager ====================
++
++PluginManagerActor* pluginManager = nullptr;
++
+ // Global Actor System Access
+ ActorSystem& actors = ActorSystem::instance();
+ RendererActor* renderer = nullptr;
+@@ -164,6 +169,20 @@ void setup() {
+     }
+     LW_LOGI("Actor System: RUNNING");
+ 
++    // Initialize Plugin Manager
++    LW_LOGI("Initializing Plugin Manager...");
++    pluginManager = new PluginManagerActor();
++    
++    // Wire to RendererActor for effect forwarding
++    if (renderer) {
++        pluginManager->setTargetRegistry(renderer);
++        LW_LOGI("Plugin Manager: Target registry set to RendererActor");
++    }
++    
++    // Start plugin manager (loads manifests from LittleFS)
++    pluginManager->onStart();
++    LW_LOGI("Plugin Manager: INITIALIZED");
++
+     // Load or set initial state
+     LW_LOGI("Loading system state...");
+     uint8_t savedEffect, savedBrightness, savedSpeed, savedPalette;
+@@ -225,6 +244,12 @@ void setup() {
+     // Instantiate WebServer with dependencies
+     webServerInstance = new WebServer(actors, renderer);
+ 
++    // Wire PluginManagerActor to WebServer BEFORE begin() (context created during begin)
++    if (pluginManager) {
++        webServerInstance->setPluginManager(pluginManager);
++        LW_LOGI("Plugin Manager: Wired to WebServer");
++    }
++
+     if (!webServerInstance->begin()) {
+         LW_LOGW("Web Server failed to start!");
+     } else {
+diff --git a/firmware/v2/src/network/ApiResponse.h b/firmware/v2/src/network/ApiResponse.h
+index b569181..145216a 100644
+--- a/firmware/v2/src/network/ApiResponse.h
++++ b/firmware/v2/src/network/ApiResponse.h
+@@ -239,5 +239,87 @@ inline String buildWsRateLimitError(uint32_t retryAfterSeconds, const char* requ
+     return output;
+ }
+ 
++// ============================================================================
++// WebSocket Telemetry Helpers
++// ============================================================================
++
++namespace WsTelemetry {
++
++/**
++ * @brief Log msg.send telemetry event and send response via client->text()
++ *
++ * Extracts msgType and result from response JSON, logs structured JSONL event,
++ * then sends response to client.
++ *
++ * @param client WebSocket client
++ * @param response Response string (JSON)
++ * @param responseType Optional response type (if null, extracted from response JSON)
++ * @param clientId Client ID (from client->id())
++ * @param connEpoch Connection epoch (0 if unknown)
++ * @param eventSeq Event sequence number (monotonic)
++ */
++inline void sendWithLogging(AsyncWebSocketClient* client, const String& response, 
++                            const char* responseType = nullptr,
++                            uint32_t clientId = 0, uint32_t connEpoch = 0, uint32_t eventSeq = 0) {
++    if (!client) return;
++    
++    // Get client ID if not provided
++    if (clientId == 0) {
++        clientId = client->id();
++    }
++    
++    // Parse response to extract type and result
++    const char* msgType = responseType ? responseType : "";
++    const char* result = "ok";
++    
++    StaticJsonDocument<256> respDoc;
++    DeserializationError error = deserializeJson(respDoc, response);
++    if (!error) {
++        if (!msgType || strlen(msgType) == 0) {
++            msgType = respDoc["type"] | "";
++        }
++        
++        if (respDoc.containsKey("error")) {
++            result = "error";
++        } else if (respDoc.containsKey("success")) {
++            result = respDoc["success"].as<bool>() ? "ok" : "error";
++        }
++    }
++    
++    // Create bounded payload summary (~100 chars max)
++    char payloadSummary[128] = {0};
++    size_t len = response.length();
++    if (len > sizeof(payloadSummary) - 1) {
++        len = sizeof(payloadSummary) - 1;
++    }
++    memcpy(payloadSummary, response.c_str(), len);
++    payloadSummary[len] = '\0';
++    
++    // Log structured msg.send event (JSONL)
++    uint32_t tsMonoms = millis();
++    {
++        char buf[512];
++        const int n = snprintf(
++            buf, sizeof(buf),
++            "{\"event\":\"msg.send\",\"ts_mono_ms\":%lu,\"connEpoch\":%lu,\"eventSeq\":%lu,\"clientId\":%lu,\"msgType\":\"%s\",\"result\":\"%s\",\"payloadSummary\":\"%.100s\"}",
++            static_cast<unsigned long>(tsMonoms),
++            static_cast<unsigned long>(connEpoch),
++            static_cast<unsigned long>(eventSeq),
++            static_cast<unsigned long>(clientId),
++            msgType,
++            result,
++            payloadSummary
++        );
++        if (n > 0 && n < static_cast<int>(sizeof(buf))) {
++            Serial.println(buf);
++        }
++    }
++    
++    // Send response
++    client->text(response);
++}
++
++} // namespace WsTelemetry
++
+ } // namespace network
+ } // namespace lightwaveos
+diff --git a/firmware/v2/src/network/webserver/V1ApiRoutes.cpp b/firmware/v2/src/network/webserver/V1ApiRoutes.cpp
+index 584c888..a326935 100644
+--- a/firmware/v2/src/network/webserver/V1ApiRoutes.cpp
++++ b/firmware/v2/src/network/webserver/V1ApiRoutes.cpp
+@@ -745,15 +745,11 @@ void V1ApiRoutes::registerRoutes(
+     });
+ 
+     // Plugin Reload - POST /api/v1/plugins/reload
+-    registry.onPost("/api/v1/plugins/reload",
+-        [](AsyncWebServerRequest* request) {},
+-        nullptr,
+-        [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t*, size_t, size_t, size_t) {
+-            if (!checkRateLimit(request)) return;
+-            if (!checkAPIKey(request)) return;
+-            handlers::PluginHandlers::handleReload(request, ctx.pluginManager);
+-        }
+-    );
++    registry.onPost("/api/v1/plugins/reload", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
++        if (!checkRateLimit(request)) return;
++        if (!checkAPIKey(request)) return;
++        handlers::PluginHandlers::handleReload(request, ctx.pluginManager);
++    });
+ 
+     // Plugin List - GET /api/v1/plugins
+     registry.onGet("/api/v1/plugins", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+diff --git a/firmware/v2/src/network/webserver/WsGateway.cpp b/firmware/v2/src/network/webserver/WsGateway.cpp
+index 8958ee8..7db7c01 100644
+--- a/firmware/v2/src/network/webserver/WsGateway.cpp
++++ b/firmware/v2/src/network/webserver/WsGateway.cpp
+@@ -21,6 +21,9 @@ namespace webserver {
+ // Static instance for event handler
+ WsGateway* WsGateway::s_instance = nullptr;
+ 
++// Monotonic event sequence counter (wraps at UINT32_MAX)
++uint32_t WsGateway::s_eventSeq = 0;
++
+ WsGateway::WsGateway(
+     AsyncWebSocket* ws,
+     const WebServerContext& ctx,
+@@ -204,12 +207,61 @@ void WsGateway::handleConnect(AsyncWebSocketClient* client) {
+         }
+     }
+ 
++    // Track connection epoch (increments on reconnect)
++    uint32_t clientId = client->id();
++    uint32_t connEpoch = getOrIncrementEpoch(clientId);  // Epoch is set/incremented here
++    uint32_t eventSeq = s_eventSeq++;
++    uint32_t tsMonoms = millis();
++
++    // Structured telemetry: ws.connect event
++    {
++        char buf[512];
++        const int n = snprintf(buf, sizeof(buf),
++            "{\"event\":\"ws.connect\",\"ts_mono_ms\":%lu,\"connEpoch\":%lu,\"eventSeq\":%lu,\"clientId\":%lu,\"ip\":\"%s\"}",
++            static_cast<unsigned long>(tsMonoms),
++            static_cast<unsigned long>(connEpoch),
++            static_cast<unsigned long>(eventSeq),
++            static_cast<unsigned long>(clientId),
++            ip.toString().c_str()
++        );
++        if (n > 0 && n < static_cast<int>(sizeof(buf))) {
++            Serial.println(buf);
++        }
++    }
++
+     // Call connection callback (for status broadcasts, etc.)
+     if (m_onConnect) {
+         m_onConnect(client);
+     }
+ }
+ 
++uint32_t WsGateway::getOrIncrementEpoch(uint32_t clientId) {
++    // Find existing epoch entry or create new one
++    uint8_t epochSlot = 0xFF;
++    for (uint8_t i = 0; i < CLIENT_IP_MAP_SLOTS; i++) {
++        if (m_clientEpochs[i].clientId == clientId) {
++            // Client exists - increment epoch (contract: every connect = new epoch)
++            m_clientEpochs[i].connEpoch++;
++            m_clientEpochs[i].connectTs = millis();
++            return m_clientEpochs[i].connEpoch;
++        }
++        if (epochSlot == 0xFF && m_clientEpochs[i].clientId == 0) {
++            epochSlot = i;  // first empty slot
++        }
++    }
++    
++    // New client - create entry with epoch 0
++    if (epochSlot != 0xFF) {
++        m_clientEpochs[epochSlot].clientId = clientId;
++        m_clientEpochs[epochSlot].connEpoch = 0;
++        m_clientEpochs[epochSlot].connectTs = millis();
++        return 0;
++    }
++    
++    // Table full - return 0 (shouldn't happen with normal client counts)
++    return 0;
++}
++
+ void WsGateway::handleDisconnect(AsyncWebSocketClient* client) {
+     uint32_t clientId = client->id();
+     LW_LOGI("WS: Client %u disconnected", clientId);
+@@ -222,6 +274,37 @@ void WsGateway::handleDisconnect(AsyncWebSocketClient* client) {
+         (static_cast<uint32_t>(ip[2]) << 8)  |
+         (static_cast<uint32_t>(ip[3]) << 0);
+ 
++    // Lookup connection epoch before cleanup
++    uint32_t connEpoch = 0;
++    for (uint8_t i = 0; i < CLIENT_IP_MAP_SLOTS; i++) {
++        if (m_clientEpochs[i].clientId == clientId) {
++            connEpoch = m_clientEpochs[i].connEpoch;
++            // Clear epoch entry (disconnect cleanup)
++            m_clientEpochs[i].clientId = 0;
++            m_clientEpochs[i].connEpoch = 0;
++            m_clientEpochs[i].connectTs = 0;
++            break;
++        }
++    }
++    
++    uint32_t eventSeq = s_eventSeq++;
++    
++    // Structured telemetry: ws.disconnect event
++    {
++        char buf[512];
++        const int n = snprintf(buf, sizeof(buf),
++            "{\"event\":\"ws.disconnect\",\"ts_mono_ms\":%lu,\"connEpoch\":%lu,\"eventSeq\":%lu,\"clientId\":%lu,\"ip\":\"%s\"}",
++            static_cast<unsigned long>(nowMs),
++            static_cast<unsigned long>(connEpoch),
++            static_cast<unsigned long>(eventSeq),
++            static_cast<unsigned long>(clientId),
++            ip.toString().c_str()
++        );
++        if (n > 0 && n < static_cast<int>(sizeof(buf))) {
++            Serial.println(buf);
++        }
++    }
++
+     // If remoteIP() returned 0.0.0.0 (common after disconnect), lookup stored IP
+     if (ipKey == 0) {
+         for (uint8_t i = 0; i < CLIENT_IP_MAP_SLOTS; i++) {
+@@ -286,7 +369,31 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
+     }
+ 
+     // Parse message
+-    if (len > 1024) {
++    if (len > MAX_WS_MESSAGE_SIZE) {
++        // Log rejected frame (oversize)
++        uint32_t clientId = client->id();
++        uint32_t connEpoch = 0;
++        for (uint8_t i = 0; i < CLIENT_IP_MAP_SLOTS; i++) {
++            if (m_clientEpochs[i].clientId == clientId) {
++                connEpoch = m_clientEpochs[i].connEpoch;
++                break;
++            }
++        }
++        uint32_t eventSeq = s_eventSeq++;
++        uint32_t tsMonoms = millis();
++        
++        char buf[512];
++        const int n = snprintf(buf, sizeof(buf),
++            "{\"event\":\"msg.recv\",\"ts_mono_ms\":%lu,\"connEpoch\":%lu,\"eventSeq\":%lu,\"clientId\":%lu,\"msgType\":\"\",\"result\":\"rejected\",\"reason\":\"size_limit\",\"payloadSummary\":\"\"}",
++            static_cast<unsigned long>(tsMonoms),
++            static_cast<unsigned long>(connEpoch),
++            static_cast<unsigned long>(eventSeq),
++            static_cast<unsigned long>(clientId)
++        );
++        if (n > 0 && n < static_cast<int>(sizeof(buf))) {
++            Serial.println(buf);
++        }
++        
+         client->text(buildWsError(ErrorCodes::INVALID_VALUE, "Message too large"));
+         return;
+     }
+@@ -310,7 +417,29 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
+     StaticJsonDocument<512> doc;
+     DeserializationError error = deserializeJson(doc, data, len);
+ 
++    // Structured telemetry: msg.recv event (log ALL inbound frames, before auth check)
++    uint32_t clientId = client->id();
++    uint32_t connEpoch = 0;
++    
++    // Lookup connection epoch for this client
++    for (uint8_t i = 0; i < CLIENT_IP_MAP_SLOTS; i++) {
++        if (m_clientEpochs[i].clientId == clientId) {
++            connEpoch = m_clientEpochs[i].connEpoch;
++            break;
++        }
++    }
++    
++    uint32_t eventSeq = s_eventSeq++;
++    uint32_t tsMonoms = millis();
++    
+     if (error) {
++        // Log rejected frame (parse error)
++        // Create bounded payload summary from raw data (~100 chars max)
++        char payloadSummary[128] = {0};
++        size_t copyLen = len < (sizeof(payloadSummary) - 1) ? len : (sizeof(payloadSummary) - 1);
++        memcpy(payloadSummary, data, copyLen);
++        payloadSummary[copyLen] = '\0';
++        
+         // #region agent log
+         {
+             // Hwse2: Prove whether disconnects follow parse errors (invalid JSON / partial frames).
+@@ -325,17 +454,62 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
+             if (n > 0) Serial.println(buf);
+         }
+         // #endregion
++        
++        // Structured telemetry: msg.recv with result="rejected"
++        {
++            char buf[512];
++            const int n = snprintf(buf, sizeof(buf),
++                "{\"event\":\"msg.recv\",\"ts_mono_ms\":%lu,\"connEpoch\":%lu,\"eventSeq\":%lu,\"clientId\":%lu,\"msgType\":\"\",\"result\":\"rejected\",\"reason\":\"parse_error\",\"payloadSummary\":\"%.100s\"}",
++                static_cast<unsigned long>(tsMonoms),
++                static_cast<unsigned long>(connEpoch),
++                static_cast<unsigned long>(eventSeq),
++                static_cast<unsigned long>(clientId),
++                payloadSummary
++            );
++            if (n > 0 && n < static_cast<int>(sizeof(buf))) {
++                Serial.println(buf);
++            }
++        }
++        
+         client->text(buildWsError(ErrorCodes::INVALID_JSON, "Parse error"));
+         return;
+     }
+-
+-    // Auth check
+-    if (!m_checkAuth(client, doc)) {
+-        return;  // Auth checker sends error response
++    
++    const char* msgType = doc["type"] | "";
++    
++    // Create bounded payload summary (~100 chars max)
++    char payloadSummary[128] = {0};
++    serializeJson(doc, payloadSummary, sizeof(payloadSummary) - 1);
++    
++    // Auth check (before logging msg.recv to determine result)
++    bool authPassed = m_checkAuth(client, doc);
++    
++    // Log structured msg.recv event (result="ok" if auth passed, "rejected" if auth failed)
++    {
++        char buf[512];
++        const int n = snprintf(buf, sizeof(buf),
++            "{\"event\":\"msg.recv\",\"ts_mono_ms\":%lu,\"connEpoch\":%lu,\"eventSeq\":%lu,\"clientId\":%lu,\"msgType\":\"%s\",\"result\":\"%s\",\"reason\":\"%s\",\"payloadSummary\":\"%.100s\"}",
++            static_cast<unsigned long>(tsMonoms),
++            static_cast<unsigned long>(connEpoch),
++            static_cast<unsigned long>(eventSeq),
++            static_cast<unsigned long>(clientId),
++            msgType,
++            authPassed ? "ok" : "rejected",
++            authPassed ? "" : "auth_failed",
++            payloadSummary
++        );
++        if (n > 0 && n < static_cast<int>(sizeof(buf))) {
++            Serial.println(buf);
++        }
++    }
++    
++    if (!authPassed) {
++        // Auth failure - error response already sent by auth checker
++        return;
+     }
+ 
+     // Route command via WsCommandRouter
+-    const char* typeStr = doc["type"] | "";
++    const char* typeStr = msgType;
+     bool handled = WsCommandRouter::route(client, doc, m_ctx);
+ 
+     // #region agent log
+diff --git a/firmware/v2/src/network/webserver/WsGateway.h b/firmware/v2/src/network/webserver/WsGateway.h
+index c690ee8..559c149 100644
+--- a/firmware/v2/src/network/webserver/WsGateway.h
++++ b/firmware/v2/src/network/webserver/WsGateway.h
+@@ -117,6 +117,32 @@ private:
+     };
+     ClientIpMapEntry m_clientIpMap[CLIENT_IP_MAP_SLOTS] = {};
+ 
++    // ------------------------------------------------------------------------
++    // Connection epoch tracking (for Choreo telemetry)
++    //
++    // Tracks connection epochs per client ID. Epoch increments on reconnect
++    // to distinguish messages across connection boundaries.
++    // ------------------------------------------------------------------------
++    struct ClientEpochEntry {
++        uint32_t clientId;    // AsyncWebSocketClient ID (0 = empty)
++        uint32_t connEpoch;   // Increments on reconnect (starts at 0)
++        uint32_t connectTs;   // Timestamp of this epoch start (millis)
++    };
++    ClientEpochEntry m_clientEpochs[CLIENT_IP_MAP_SLOTS] = {};
++
++    // ------------------------------------------------------------------------
++    // WebSocket message size limit (OWASP recommendation: 64KB)
++    // ------------------------------------------------------------------------
++    static constexpr size_t MAX_WS_MESSAGE_SIZE = 64 * 1024;  // 64KB
++
++    // ------------------------------------------------------------------------
++    // Monotonic event sequence counter (for telemetry)
++    // ------------------------------------------------------------------------
++    static uint32_t s_eventSeq;
++
++    // Helper to get or increment connection epoch for a client
++    uint32_t getOrIncrementEpoch(uint32_t clientId);
++
+     // Static instance pointer for event handler
+     static WsGateway* s_instance;
+ };
+diff --git a/firmware/v2/src/network/webserver/ws/WsColorCommands.cpp b/firmware/v2/src/network/webserver/ws/WsColorCommands.cpp
+index 08bb0dd..5af2d55 100644
+--- a/firmware/v2/src/network/webserver/ws/WsColorCommands.cpp
++++ b/firmware/v2/src/network/webserver/ws/WsColorCommands.cpp
+@@ -7,6 +7,7 @@
+ #include "../WsCommandRouter.h"
+ #include "../WebServerContext.h"
+ #include "../../ApiResponse.h"
++#include "../../../codec/WsColorCodec.h"
+ #include "../../../effects/enhancement/ColorEngine.h"
+ #include "../../../effects/enhancement/ColorCorrectionEngine.h"
+ #include "../../../palettes/Palettes_Master.h"
+@@ -42,38 +43,49 @@ static void handleColorGetStatus(AsyncWebSocketClient* client, JsonDocument& doc
+         data["diffusionEnabled"] = engine.isDiffusionEnabled();
+         data["diffusionAmount"] = engine.getDiffusionAmount();
+     });
+-    client->text(response);
++    WsTelemetry::sendWithLogging(client, response, "color.getStatus");
+ }
+ 
+ static void handleColorEnableBlend(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    const char* requestId = doc["requestId"] | "";
+-    
+-    if (!doc.containsKey("enable")) {
+-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "enable required", requestId));
++    // Decode using codec (single canonical JSON parser)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::ColorEnableBlendDecodeResult decodeResult = codec::WsColorCodec::decodeEnableBlend(root);
++
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
+         return;
+     }
++
++    const codec::ColorEnableBlendRequest& req = decodeResult.request;
++    const char* requestId = req.requestId ? req.requestId : "";
++    bool enable = req.enable;
+     
+-    bool enable = doc["enable"] | false;
+     auto& engine = ColorEngine::getInstance();
+     engine.enableCrossBlend(enable);
+     
+     String response = buildWsResponse("color.enableBlend", requestId, [enable](JsonObject& data) {
+         data["blendEnabled"] = enable;
+     });
+-    client->text(response);
++    WsTelemetry::sendWithLogging(client, response, "color.enableBlend");
+ }
+ 
+ static void handleColorSetBlendPalettes(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    const char* requestId = doc["requestId"] | "";
+-    
+-    if (!doc.containsKey("palette1") || !doc.containsKey("palette2")) {
+-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "palette1 and palette2 required", requestId));
++    // Decode using codec (single canonical JSON parser)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::ColorSetBlendPalettesDecodeResult decodeResult = codec::WsColorCodec::decodeSetBlendPalettes(root);
++
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
+         return;
+     }
+-    
+-    uint8_t p1 = doc["palette1"] | 0;
+-    uint8_t p2 = doc["palette2"] | 0;
+-    uint8_t p3 = doc["palette3"] | 255;
++
++    const codec::ColorSetBlendPalettesRequest& req = decodeResult.request;
++    const char* requestId = req.requestId ? req.requestId : "";
++    uint8_t p1 = req.palette1;
++    uint8_t p2 = req.palette2;
++    uint8_t p3 = req.palette3;
+     
+     if (p1 >= MASTER_PALETTE_COUNT || p2 >= MASTER_PALETTE_COUNT ||
+         (p3 != 255 && p3 >= MASTER_PALETTE_COUNT)) {
+@@ -108,16 +120,21 @@ static void handleColorSetBlendPalettes(AsyncWebSocketClient* client, JsonDocume
+ }
+ 
+ static void handleColorSetBlendFactors(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    const char* requestId = doc["requestId"] | "";
+-    
+-    if (!doc.containsKey("factor1") || !doc.containsKey("factor2")) {
+-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "factor1 and factor2 required", requestId));
++    // Decode using codec (single canonical JSON parser)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::ColorSetBlendFactorsDecodeResult decodeResult = codec::WsColorCodec::decodeSetBlendFactors(root);
++
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
+         return;
+     }
+-    
+-    uint8_t f1 = doc["factor1"] | 0;
+-    uint8_t f2 = doc["factor2"] | 0;
+-    uint8_t f3 = doc["factor3"] | 0;
++
++    const codec::ColorSetBlendFactorsRequest& req = decodeResult.request;
++    const char* requestId = req.requestId ? req.requestId : "";
++    uint8_t f1 = req.factor1;
++    uint8_t f2 = req.factor2;
++    uint8_t f3 = req.factor3;
+     
+     auto& engine = ColorEngine::getInstance();
+     engine.setBlendFactors(f1, f2, f3);
+@@ -132,14 +149,20 @@ static void handleColorSetBlendFactors(AsyncWebSocketClient* client, JsonDocumen
+ }
+ 
+ static void handleColorEnableRotation(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    const char* requestId = doc["requestId"] | "";
+-    
+-    if (!doc.containsKey("enable")) {
+-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "enable required", requestId));
++    // Decode using codec (single canonical JSON parser)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::ColorEnableRotationDecodeResult decodeResult = codec::WsColorCodec::decodeEnableRotation(root);
++
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
+         return;
+     }
++
++    const codec::ColorEnableRotationRequest& req = decodeResult.request;
++    const char* requestId = req.requestId ? req.requestId : "";
++    bool enable = req.enable;
+     
+-    bool enable = doc["enable"] | false;
+     auto& engine = ColorEngine::getInstance();
+     engine.enableTemporalRotation(enable);
+     
+@@ -150,14 +173,20 @@ static void handleColorEnableRotation(AsyncWebSocketClient* client, JsonDocument
+ }
+ 
+ static void handleColorSetRotationSpeed(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    const char* requestId = doc["requestId"] | "";
+-    
+-    if (!doc.containsKey("degreesPerFrame")) {
+-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "degreesPerFrame required", requestId));
++    // Decode using codec (single canonical JSON parser)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::ColorSetRotationSpeedDecodeResult decodeResult = codec::WsColorCodec::decodeSetRotationSpeed(root);
++
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
+         return;
+     }
++
++    const codec::ColorSetRotationSpeedRequest& req = decodeResult.request;
++    const char* requestId = req.requestId ? req.requestId : "";
++    float speed = req.degreesPerFrame;
+     
+-    float speed = doc["degreesPerFrame"] | 0.0f;
+     auto& engine = ColorEngine::getInstance();
+     engine.setRotationSpeed(speed);
+     
+@@ -168,14 +197,20 @@ static void handleColorSetRotationSpeed(AsyncWebSocketClient* client, JsonDocume
+ }
+ 
+ static void handleColorEnableDiffusion(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    const char* requestId = doc["requestId"] | "";
+-    
+-    if (!doc.containsKey("enable")) {
+-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "enable required", requestId));
++    // Decode using codec (single canonical JSON parser)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::ColorEnableDiffusionDecodeResult decodeResult = codec::WsColorCodec::decodeEnableDiffusion(root);
++
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
+         return;
+     }
++
++    const codec::ColorEnableDiffusionRequest& req = decodeResult.request;
++    const char* requestId = req.requestId ? req.requestId : "";
++    bool enable = req.enable;
+     
+-    bool enable = doc["enable"] | false;
+     auto& engine = ColorEngine::getInstance();
+     engine.enableDiffusion(enable);
+     
+@@ -186,14 +221,20 @@ static void handleColorEnableDiffusion(AsyncWebSocketClient* client, JsonDocumen
+ }
+ 
+ static void handleColorSetDiffusionAmount(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    const char* requestId = doc["requestId"] | "";
+-    
+-    if (!doc.containsKey("amount")) {
+-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "amount required", requestId));
++    // Decode using codec (single canonical JSON parser)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::ColorSetDiffusionAmountDecodeResult decodeResult = codec::WsColorCodec::decodeSetDiffusionAmount(root);
++
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
+         return;
+     }
++
++    const codec::ColorSetDiffusionAmountRequest& req = decodeResult.request;
++    const char* requestId = req.requestId ? req.requestId : "";
++    uint8_t amount = req.amount;
+     
+-    uint8_t amount = doc["amount"] | 0;
+     auto& engine = ColorEngine::getInstance();
+     engine.setDiffusionAmount(amount);
+     
+@@ -226,19 +267,21 @@ static void handleColorCorrectionGetConfig(AsyncWebSocketClient* client, JsonDoc
+ }
+ 
+ static void handleColorCorrectionSetMode(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    const char* requestId = doc["requestId"] | "";
+-    
+-    if (!doc.containsKey("mode")) {
+-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "mode required (0-3)", requestId));
+-        return;
+-    }
+-    
+-    uint8_t mode = doc["mode"] | 2;
+-    if (mode > 3) {
+-        client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "mode must be 0-3 (OFF,HSV,RGB,BOTH)", requestId));
++    // Decode using codec (single canonical JSON parser)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::ColorCorrectionSetModeDecodeResult decodeResult = codec::WsColorCodec::decodeSetMode(root);
++
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
+         return;
+     }
++
++    const codec::ColorCorrectionSetModeRequest& req = decodeResult.request;
++    const char* requestId = req.requestId ? req.requestId : "";
++    uint8_t mode = req.mode;
+     
++    // Range already validated by codec (0-3)
+     auto& engine = ColorCorrectionEngine::getInstance();
+     engine.setMode((CorrectionMode)mode);
+     
+@@ -251,44 +294,54 @@ static void handleColorCorrectionSetMode(AsyncWebSocketClient* client, JsonDocum
+ }
+ 
+ static void handleColorCorrectionSetConfig(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    const char* requestId = doc["requestId"] | "";
++    // Decode using codec (single canonical JSON parser)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::ColorCorrectionSetConfigDecodeResult decodeResult = codec::WsColorCodec::decodeSetConfig(root);
++
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
++        return;
++    }
++
++    const codec::ColorCorrectionSetConfigRequest& req = decodeResult.request;
++    const char* requestId = req.requestId ? req.requestId : "";
+     auto& engine = ColorCorrectionEngine::getInstance();
+     auto& cfg = engine.getConfig();
+     
+-    if (doc.containsKey("mode")) {
+-        uint8_t mode = doc["mode"];
+-        if (mode <= 3) cfg.mode = (CorrectionMode)mode;
++    // Apply changes conditionally using has* flags (codec already validated ranges)
++    if (req.hasMode) {
++        cfg.mode = (CorrectionMode)req.mode;
+     }
+-    if (doc.containsKey("hsvMinSaturation")) {
+-        cfg.hsvMinSaturation = doc["hsvMinSaturation"];
++    if (req.hasHsvMinSaturation) {
++        cfg.hsvMinSaturation = req.hsvMinSaturation;
+     }
+-    if (doc.containsKey("rgbWhiteThreshold")) {
+-        cfg.rgbWhiteThreshold = doc["rgbWhiteThreshold"];
++    if (req.hasRgbWhiteThreshold) {
++        cfg.rgbWhiteThreshold = req.rgbWhiteThreshold;
+     }
+-    if (doc.containsKey("rgbTargetMin")) {
+-        cfg.rgbTargetMin = doc["rgbTargetMin"];
++    if (req.hasRgbTargetMin) {
++        cfg.rgbTargetMin = req.rgbTargetMin;
+     }
+-    if (doc.containsKey("autoExposureEnabled")) {
+-        cfg.autoExposureEnabled = doc["autoExposureEnabled"];
++    if (req.hasAutoExposureEnabled) {
++        cfg.autoExposureEnabled = req.autoExposureEnabled;
+     }
+-    if (doc.containsKey("autoExposureTarget")) {
+-        cfg.autoExposureTarget = doc["autoExposureTarget"];
++    if (req.hasAutoExposureTarget) {
++        cfg.autoExposureTarget = req.autoExposureTarget;
+     }
+-    if (doc.containsKey("gammaEnabled")) {
+-        cfg.gammaEnabled = doc["gammaEnabled"];
++    if (req.hasGammaEnabled) {
++        cfg.gammaEnabled = req.gammaEnabled;
+     }
+-    if (doc.containsKey("gammaValue")) {
+-        float val = doc["gammaValue"];
+-        if (val >= 1.0f && val <= 3.0f) cfg.gammaValue = val;
++    if (req.hasGammaValue) {
++        cfg.gammaValue = req.gammaValue;  // Codec already validated 1.0f-3.0f
+     }
+-    if (doc.containsKey("brownGuardrailEnabled")) {
+-        cfg.brownGuardrailEnabled = doc["brownGuardrailEnabled"];
++    if (req.hasBrownGuardrailEnabled) {
++        cfg.brownGuardrailEnabled = req.brownGuardrailEnabled;
+     }
+-    if (doc.containsKey("maxGreenPercentOfRed")) {
+-        cfg.maxGreenPercentOfRed = doc["maxGreenPercentOfRed"];
++    if (req.hasMaxGreenPercentOfRed) {
++        cfg.maxGreenPercentOfRed = req.maxGreenPercentOfRed;
+     }
+-    if (doc.containsKey("maxBluePercentOfRed")) {
+-        cfg.maxBluePercentOfRed = doc["maxBluePercentOfRed"];
++    if (req.hasMaxBluePercentOfRed) {
++        cfg.maxBluePercentOfRed = req.maxBluePercentOfRed;
+     }
+     
+     String response = buildWsResponse("colorCorrection.setConfig", requestId, [&cfg](JsonObject& data) {
+diff --git a/firmware/v2/src/network/webserver/ws/WsDeviceCommands.cpp b/firmware/v2/src/network/webserver/ws/WsDeviceCommands.cpp
+index fde66ce..979ac12 100644
+--- a/firmware/v2/src/network/webserver/ws/WsDeviceCommands.cpp
++++ b/firmware/v2/src/network/webserver/ws/WsDeviceCommands.cpp
+@@ -7,6 +7,7 @@
+ #include "../WsCommandRouter.h"
+ #include "../WebServerContext.h"
+ #include "../../ApiResponse.h"
++#include "../../../codec/WsDeviceCodec.h"
+ #include "../../../core/actors/RendererActor.h"
+ #include <ESPAsyncWebServer.h>
+ #include <WiFi.h>
+@@ -19,17 +20,25 @@ namespace ws {
+ // Legacy compatibility: original on-device UI sends {"type":"getStatus"} and expects a "status" event.
+ // We keep this as a lightweight alias that triggers the existing status broadcast.
+ static void handleLegacyGetStatus(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    (void)doc;
++    // Decode using codec (extracts requestId only)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::DeviceDecodeResult decodeResult = codec::WsDeviceCodec::decode(root);
++    
++    const char* requestId = (decodeResult.success && decodeResult.request.requestId) 
++        ? decodeResult.request.requestId : "";
++    
+     if (ctx.broadcastStatus) {
+         ctx.broadcastStatus();  // Broadcasts "status" to all clients (includes the requester).
+         return;
+     }
+-    const char* requestId = doc["requestId"] | "";
+     client->text(buildWsError(ErrorCodes::SYSTEM_NOT_READY, "Status broadcaster not available", requestId));
+ }
+ 
+ static void handleDeviceGetStatus(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    const char* requestId = doc["requestId"] | "";
++    // Decode using codec (extracts requestId only)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::DeviceDecodeResult decodeResult = codec::WsDeviceCodec::decode(root);
++    const char* requestId = (decodeResult.request.requestId) ? decodeResult.request.requestId : "";
+     String response = buildWsResponse("device.status", requestId, [&ctx](JsonObject& data) {
+         data["uptime"] = (millis() - ctx.startTime) / 1000;
+         data["freeHeap"] = ESP.getFreeHeap();
+@@ -58,7 +67,10 @@ static void handleDeviceGetStatus(AsyncWebSocketClient* client, JsonDocument& do
+ }
+ 
+ static void handleDeviceGetInfo(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    const char* requestId = doc["requestId"] | "";
++    // Decode using codec (extracts requestId only)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::DeviceDecodeResult decodeResult = codec::WsDeviceCodec::decode(root);
++    const char* requestId = (decodeResult.request.requestId) ? decodeResult.request.requestId : "";
+     String response = buildWsResponse("device.info", requestId, [&ctx](JsonObject& data) {
+         data["chipModel"] = ESP.getChipModel();
+         data["chipRevision"] = ESP.getChipRevision();
+diff --git a/firmware/v2/src/network/webserver/ws/WsEffectsCommands.cpp b/firmware/v2/src/network/webserver/ws/WsEffectsCommands.cpp
+index 0399687..c2c10c3 100644
+--- a/firmware/v2/src/network/webserver/ws/WsEffectsCommands.cpp
++++ b/firmware/v2/src/network/webserver/ws/WsEffectsCommands.cpp
+@@ -11,6 +11,7 @@
+ #include "../WebServerContext.h"
+ #include "../../ApiResponse.h"
+ #include "../../RequestValidator.h"
++#include "../../../codec/WsEffectsCodec.h"
+ #include "../../../core/actors/ActorSystem.h"
+ #include "../../../core/actors/RendererActor.h"
+ #include "../../../effects/PatternRegistry.h"
+@@ -26,8 +27,19 @@ namespace webserver {
+ namespace ws {
+ 
+ static void handleEffectsGetMetadata(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    const char* requestId = doc["requestId"] | "";
+-    uint8_t effectId = doc["effectId"] | 255;
++    // Decode using codec (single canonical JSON parser)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::EffectsGetMetadataDecodeResult decodeResult = codec::WsEffectsCodec::decodeGetMetadata(root);
++
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
++        return;
++    }
++
++    const codec::EffectsGetMetadataRequest& req = decodeResult.request;
++    const char* requestId = req.requestId ? req.requestId : "";
++    uint8_t effectId = req.effectId;
+     
+     // DEFENSIVE CHECK: Validate effectId before array access
+     if (effectId != 255) {
+@@ -91,14 +103,23 @@ static void handleEffectsGetCurrent(AsyncWebSocketClient* client, JsonDocument&
+ }
+ 
+ static void handleEffectsList(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    const char* requestId = doc["requestId"] | "";
+-    uint8_t page = doc["page"] | 1;
+-    uint8_t limit = doc["limit"] | 20;
+-    bool details = doc["details"] | false;
++    // Decode using codec (single canonical JSON parser)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::EffectsListDecodeResult decodeResult = codec::WsEffectsCodec::decodeList(root);
+ 
+-    if (page < 1) page = 1;
+-    if (limit < 1) limit = 1;
+-    if (limit > 50) limit = 50;
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
++        return;
++    }
++
++    const codec::EffectsListRequest& req = decodeResult.request;
++    const char* requestId = req.requestId ? req.requestId : "";
++    uint8_t page = req.page;
++    uint8_t limit = req.limit;
++    bool details = req.details;
++
++    // Values already validated by codec (page >= 1, limit 1-50)
+ 
+     uint8_t effectCount = ctx.renderer->getEffectCount();
+     uint8_t startIdx = (page - 1) * limit;
+@@ -127,9 +148,17 @@ static void handleEffectsList(AsyncWebSocketClient* client, JsonDocument& doc, c
+ }
+ 
+ static void handleSetEffect(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    uint8_t effectId = doc["effectId"] | 0;
+-    // DEFENSIVE CHECK: Validate effectId before array access
+-    effectId = lightwaveos::network::validateEffectIdInRequest(effectId);
++    // Decode using codec (single canonical JSON parser)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::EffectsSetEffectDecodeResult decodeResult = codec::WsEffectsCodec::decodeSetEffect(root);
++
++    if (!decodeResult.success) {
++        // Legacy command doesn't send errors, just ignore invalid requests
++        return;
++    }
++
++    // DEFENSIVE CHECK: Validate effectId against current effect count
++    uint8_t effectId = lightwaveos::network::validateEffectIdInRequest(decodeResult.request.effectId);
+     if (effectId < ctx.renderer->getEffectCount()) {
+         ctx.actorSystem.setEffect(effectId);
+         if (ctx.broadcastStatus) ctx.broadcastStatus();
+@@ -151,74 +180,103 @@ static void handlePrevEffect(AsyncWebSocketClient* client, JsonDocument& doc, co
+ }
+ 
+ static void handleSetBrightness(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    uint8_t value = doc["value"] | 128;
+-    ctx.actorSystem.setBrightness(value);
++    // Decode using codec (single canonical JSON parser)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::EffectsSetBrightnessDecodeResult decodeResult = codec::WsEffectsCodec::decodeSetBrightness(root);
++
++    if (!decodeResult.success) {
++        // Legacy command doesn't send errors, just ignore invalid requests
++        return;
++    }
++
++    ctx.actorSystem.setBrightness(decodeResult.request.value);
+     if (ctx.broadcastStatus) ctx.broadcastStatus();
+ }
+ 
+ static void handleSetSpeed(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    uint8_t value = doc["value"] | 15;
+-    if (value >= 1 && value <= 50) {
+-        ctx.actorSystem.setSpeed(value);
+-        if (ctx.broadcastStatus) ctx.broadcastStatus();
++    // Decode using codec (single canonical JSON parser)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::EffectsSetSpeedDecodeResult decodeResult = codec::WsEffectsCodec::decodeSetSpeed(root);
++
++    if (!decodeResult.success) {
++        // Legacy command doesn't send errors, just ignore invalid requests
++        return;
+     }
++
++    // Range already validated by codec (1-50)
++    ctx.actorSystem.setSpeed(decodeResult.request.value);
++    if (ctx.broadcastStatus) ctx.broadcastStatus();
+ }
+ 
+ static void handleSetPalette(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    uint8_t paletteId = doc["paletteId"] | 0;
++    // Decode using codec (single canonical JSON parser)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::EffectsSetPaletteDecodeResult decodeResult = codec::WsEffectsCodec::decodeSetPalette(root);
++
++    if (!decodeResult.success) {
++        // Legacy command doesn't send errors, just ignore invalid requests
++        return;
++    }
++
+     // DEFENSIVE CHECK: Validate paletteId before array access
+-    paletteId = lightwaveos::network::validatePaletteIdInRequest(paletteId);
++    uint8_t paletteId = lightwaveos::network::validatePaletteIdInRequest(decodeResult.request.paletteId);
+     ctx.actorSystem.setPalette(paletteId);
+     if (ctx.broadcastStatus) ctx.broadcastStatus();
+ }
+ 
+ static void handleEffectsSetCurrent(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    const char* requestId = doc["requestId"] | "";
+-    uint8_t effectId = doc["effectId"] | 255;
++    // Decode using codec (single canonical JSON parser)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::EffectsSetCurrentDecodeResult decodeResult = codec::WsEffectsCodec::decodeSetCurrent(root);
+ 
+-    if (effectId == 255) {
+-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "effectId required", requestId));
++    if (!decodeResult.success) {
++        // Error: Cannot decode requestId from invalid JSON, use empty string
++        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, ""));
+         return;
+     }
+-    
+-    // DEFENSIVE CHECK: Validate effectId before array access
+-    effectId = lightwaveos::network::validateEffectIdInRequest(effectId);
++
++    const codec::EffectsSetCurrentRequest& req = decodeResult.request;
++    const char* requestId = req.requestId ? req.requestId : "";
++
++    // DEFENSIVE CHECK: Validate effectId against current effect count
++    uint8_t effectId = lightwaveos::network::validateEffectIdInRequest(req.effectId);
+ 
+     if (effectId >= ctx.renderer->getEffectCount()) {
+         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid effectId", requestId));
+         return;
+     }
+ 
+-    bool useTransition = false;
+-    uint8_t transType = 0;
+-    uint16_t duration = 1000;
+-
+-    if (doc.containsKey("transition")) {
+-        JsonObject trans = doc["transition"];
+-        useTransition = true;
+-        transType = trans["type"] | 0;
+-        duration = trans["duration"] | 1000;
+-    }
+-
+-    if (useTransition && transType < static_cast<uint8_t>(lightwaveos::transitions::TransitionType::TYPE_COUNT)) {
+-        ctx.renderer->startTransition(effectId, transType);
++    // Apply effect change (with or without transition)
++    if (req.hasTransition && req.transitionType < static_cast<uint8_t>(lightwaveos::transitions::TransitionType::TYPE_COUNT)) {
++        ctx.renderer->startTransition(effectId, req.transitionType);
+     } else {
+         ctx.actorSystem.setEffect(effectId);
+     }
+ 
+     if (ctx.broadcastStatus) ctx.broadcastStatus();
+ 
+-    String response = buildWsResponse("effects.changed", requestId, [&ctx, effectId, useTransition](JsonObject& data) {
++    String response = buildWsResponse("effects.changed", requestId, [&ctx, effectId, req](JsonObject& data) {
+         data["effectId"] = effectId;
+         data["name"] = ctx.renderer->getEffectName(effectId);
+-        data["transitionActive"] = useTransition;
++        data["transitionActive"] = req.hasTransition;
+     });
+     client->text(response);
+ }
+ 
+ static void handleEffectsParametersGet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    const char* requestId = doc["requestId"] | "";
+-    uint8_t effectId = doc["effectId"] | ctx.renderer->getCurrentEffect();
++    // Decode using codec (single canonical JSON parser)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::EffectsParametersGetDecodeResult decodeResult = codec::WsEffectsCodec::decodeParametersGet(root);
++
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
++        return;
++    }
++
++    const codec::EffectsParametersGetRequest& req = decodeResult.request;
++    const char* requestId = req.requestId ? req.requestId : "";
++    uint8_t effectId = (req.effectId == 255) ? ctx.renderer->getCurrentEffect() : req.effectId;
+ 
+     if (effectId >= ctx.renderer->getEffectCount()) {
+         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid effectId", requestId));
+@@ -253,8 +311,19 @@ static void handleEffectsParametersGet(AsyncWebSocketClient* client, JsonDocumen
+ }
+ 
+ static void handleEffectsParametersSet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    const char* requestId = doc["requestId"] | "";
+-    uint8_t effectId = doc["effectId"] | ctx.renderer->getCurrentEffect();
++    // Decode using codec (single canonical JSON parser)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::EffectsParametersSetDecodeResult decodeResult = codec::WsEffectsCodec::decodeEffectsParametersSet(root);
++
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
++        return;
++    }
++
++    const codec::EffectsParametersSetRequest& req = decodeResult.request;
++    const char* requestId = req.requestId ? req.requestId : "";
++    uint8_t effectId = (req.effectId == 255) ? ctx.renderer->getCurrentEffect() : req.effectId;
+ 
+     if (effectId >= ctx.renderer->getEffectCount()) {
+         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid effectId", requestId));
+@@ -267,11 +336,14 @@ static void handleEffectsParametersSet(AsyncWebSocketClient* client, JsonDocumen
+         return;
+     }
+ 
+-    if (!doc.containsKey("parameters") || !doc["parameters"].is<JsonObject>()) {
++    if (!req.hasParameters) {
+         client->text(buildWsError(ErrorCodes::MISSING_FIELD, "Missing parameters object", requestId));
+         return;
+     }
+ 
++    // Parameters object is validated by codec, but we need JsonObject (mutable) for iteration
++    // Note: JsonObjectConst can't be used in range-for, so we need to cast or handle differently
++    // For now, we'll keep the original doc access for params iteration since codec validated presence
+     JsonObject params = doc["parameters"].as<JsonObject>();
+     String response = buildWsResponse("effects.parameters.changed", requestId,
+                                       [&ctx, effectId, effect, params](JsonObject& data) {
+@@ -331,13 +403,21 @@ static void handleEffectsGetCategories(AsyncWebSocketClient* client, JsonDocumen
+ }
+ 
+ static void handleEffectsGetByFamily(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    const char* requestId = doc["requestId"] | "";
+-    uint8_t familyId = doc["familyId"] | 255;
+-    
+-    if (familyId >= 10) {
+-        client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Invalid familyId (0-9)", requestId));
++    // Decode using codec (single canonical JSON parser)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::EffectsGetByFamilyDecodeResult decodeResult = codec::WsEffectsCodec::decodeGetByFamily(root);
++
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
+         return;
+     }
++
++    const codec::EffectsGetByFamilyRequest& req = decodeResult.request;
++    const char* requestId = req.requestId ? req.requestId : "";
++    uint8_t familyId = req.familyId;
++
++    // Range already validated by codec (0-9)
+     
+     PatternFamily family = static_cast<PatternFamily>(familyId);
+     uint8_t patternIndices[128];
+@@ -376,7 +456,18 @@ static void handleParametersGet(AsyncWebSocketClient* client, JsonDocument& doc,
+ }
+ 
+ static void handleParametersSet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    const char* requestId = doc["requestId"] | "";
++    // Decode using codec (single canonical JSON parser)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::ParametersSetDecodeResult decodeResult = codec::WsEffectsCodec::decodeParametersSet(root);
++
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
++        return;
++    }
++
++    const codec::ParametersSetRequest& req = decodeResult.request;
++    const char* requestId = req.requestId ? req.requestId : "";
+ 
+     bool updatedBrightness = false;
+     bool updatedSpeed = false;
+@@ -387,53 +478,43 @@ static void handleParametersSet(AsyncWebSocketClient* client, JsonDocument& doc,
+     bool updatedVariation = false;
+     bool updatedHue = false;
+ 
+-    if (doc.containsKey("brightness")) {
+-        uint8_t value = doc["brightness"] | 128;
+-        ctx.actorSystem.setBrightness(value);
++    if (req.hasBrightness) {
++        ctx.actorSystem.setBrightness(req.brightness);
+         updatedBrightness = true;
+     }
+ 
+-    if (doc.containsKey("speed")) {
+-        uint8_t value = doc["speed"] | 15;
+-        if (value >= 1 && value <= 50) {
+-            ctx.actorSystem.setSpeed(value);
+-            updatedSpeed = true;
+-        }
++    if (req.hasSpeed) {
++        ctx.actorSystem.setSpeed(req.speed);
++        updatedSpeed = true;
+     }
+ 
+-    if (doc.containsKey("paletteId")) {
+-        uint8_t value = doc["paletteId"] | 0;
+-        ctx.actorSystem.setPalette(value);
++    if (req.hasPaletteId) {
++        ctx.actorSystem.setPalette(req.paletteId);
+         updatedPalette = true;
+     }
+ 
+-    if (doc.containsKey("intensity")) {
+-        uint8_t value = doc["intensity"] | 128;
+-        ctx.actorSystem.setIntensity(value);
++    if (req.hasIntensity) {
++        ctx.actorSystem.setIntensity(req.intensity);
+         updatedIntensity = true;
+     }
+ 
+-    if (doc.containsKey("saturation")) {
+-        uint8_t value = doc["saturation"] | 255;
+-        ctx.actorSystem.setSaturation(value);
++    if (req.hasSaturation) {
++        ctx.actorSystem.setSaturation(req.saturation);
+         updatedSaturation = true;
+     }
+ 
+-    if (doc.containsKey("complexity")) {
+-        uint8_t value = doc["complexity"] | 128;
+-        ctx.actorSystem.setComplexity(value);
++    if (req.hasComplexity) {
++        ctx.actorSystem.setComplexity(req.complexity);
+         updatedComplexity = true;
+     }
+ 
+-    if (doc.containsKey("variation")) {
+-        uint8_t value = doc["variation"] | 0;
+-        ctx.actorSystem.setVariation(value);
++    if (req.hasVariation) {
++        ctx.actorSystem.setVariation(req.variation);
+         updatedVariation = true;
+     }
+ 
+-    if (doc.containsKey("hue")) {
+-        uint8_t value = doc["hue"] | 0;
+-        ctx.actorSystem.setHue(value);
++    if (req.hasHue) {
++        ctx.actorSystem.setHue(req.hue);
+         updatedHue = true;
+     }
+ 
+diff --git a/firmware/v2/src/network/webserver/ws/WsPaletteCommands.cpp b/firmware/v2/src/network/webserver/ws/WsPaletteCommands.cpp
+index c6a086a..c42a3d5 100644
+--- a/firmware/v2/src/network/webserver/ws/WsPaletteCommands.cpp
++++ b/firmware/v2/src/network/webserver/ws/WsPaletteCommands.cpp
+@@ -7,6 +7,7 @@
+ #include "../WsCommandRouter.h"
+ #include "../WebServerContext.h"
+ #include "../../ApiResponse.h"
++#include "../../../codec/WsPaletteCodec.h"
+ #include "../../../core/actors/ActorSystem.h"
+ #include "../../../palettes/Palettes_Master.h"
+ #include <ESPAsyncWebServer.h>
+@@ -20,13 +21,22 @@ namespace ws {
+ using namespace lightwaveos::palettes;
+ 
+ static void handlePalettesList(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    const char* requestId = doc["requestId"] | "";
+-    uint8_t page = doc["page"] | 1;
+-    uint8_t limit = doc["limit"] | 20;
+-    
+-    if (page < 1) page = 1;
+-    if (limit < 1) limit = 1;
+-    if (limit > 50) limit = 50;
++    // Decode using codec (single canonical JSON parser)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::PalettesListDecodeResult decodeResult = codec::WsPaletteCodec::decodeList(root);
++
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
++        return;
++    }
++
++    const codec::PalettesListRequest& req = decodeResult.request;
++    const char* requestId = req.requestId ? req.requestId : "";
++    uint8_t page = req.page;
++    uint8_t limit = req.limit;
++
++    // Values already validated by codec (page >= 1, limit 1-50)
+     
+     uint8_t startIdx = (page - 1) * limit;
+     uint8_t endIdx = (startIdx + limit < MASTER_PALETTE_COUNT) ? (startIdx + limit) : MASTER_PALETTE_COUNT;
+@@ -85,13 +95,19 @@ static void handlePalettesGet(AsyncWebSocketClient* client, JsonDocument& doc, c
+ }
+ 
+ static void handlePalettesSet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+-    const char* requestId = doc["requestId"] | "";
+-    uint8_t paletteId = doc["paletteId"] | 255;
+-    
+-    if (paletteId == 255) {
+-        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "paletteId required", requestId));
++    // Decode using codec (single canonical JSON parser)
++    JsonObjectConst root = doc.as<JsonObjectConst>();
++    codec::PalettesSetDecodeResult decodeResult = codec::WsPaletteCodec::decodeSet(root);
++
++    if (!decodeResult.success) {
++        const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
++        client->text(buildWsError(ErrorCodes::MISSING_FIELD, decodeResult.errorMsg, requestId));
+         return;
+     }
++
++    const codec::PalettesSetRequest& req = decodeResult.request;
++    const char* requestId = req.requestId ? req.requestId : "";
++    uint8_t paletteId = req.paletteId;
+     
+     if (paletteId >= MASTER_PALETTE_COUNT) {
+         client->text(buildWsError(ErrorCodes::OUT_OF_RANGE, "Palette ID out of range", requestId));

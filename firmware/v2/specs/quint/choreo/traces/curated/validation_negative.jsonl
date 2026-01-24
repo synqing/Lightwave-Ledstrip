@@ -1,0 +1,10 @@
+{"event":"ws.connect","ts_mono_ms":111922,"connEpoch":0,"eventSeq":13,"clientId":4,"ip":"192.168.0.25"}
+{"event":"msg.recv","ts_mono_ms":112429,"connEpoch":0,"eventSeq":14,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"not valid json at all"}
+{"event":"msg.recv","ts_mono_ms":112937,"connEpoch":0,"eventSeq":15,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":"{\"method\": \"test\", \"data\": \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}
+{"event":"msg.recv","ts_mono_ms":112943,"connEpoch":0,"eventSeq":16,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":""}
+{"event":"msg.recv","ts_mono_ms":112946,"connEpoch":0,"eventSeq":17,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":""}
+{"event":"msg.recv","ts_mono_ms":112951,"connEpoch":0,"eventSeq":18,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":""}
+{"event":"msg.recv","ts_mono_ms":113442,"connEpoch":0,"eventSeq":19,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":""}
+{"event":"msg.recv","ts_mono_ms":113942,"connEpoch":0,"eventSeq":20,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":""}
+{"event":"msg.recv","ts_mono_ms":114450,"connEpoch":0,"eventSeq":21,"clientId":4,"msgType":"","result":"rejected","reason":"parse_error","payloadSummary":""}
+{"event":"ws.disconnect","ts_mono_ms":118641,"connEpoch":0,"eventSeq":22,"clientId":4,"ip":"0.0.0.0"}

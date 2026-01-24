@@ -4,7 +4,6 @@
  */
 
 #include "StateSerializer.h"
-#include "SyncProtocol.h"
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
@@ -21,7 +20,6 @@ namespace sync {
 // Helper functions for JSON parsing (shared with CommandSerializer)
 namespace {
     bool findString(const char* json, const char* key, char* out, size_t outSize) {
-        if (!json || !key || !out || outSize == 0) return false;
         const char* keyPos = strstr(json, key);
         if (!keyPos) return false;
 
@@ -41,7 +39,6 @@ namespace {
     }
 
     bool findLong(const char* json, const char* key, long* out) {
-        if (!json || !key || !out) return false;
         const char* keyPos = strstr(json, key);
         if (!keyPos) return false;
 
@@ -58,7 +55,6 @@ namespace {
     }
 
     bool findBool(const char* json, const char* key, bool* out) {
-        if (!json || !key || !out) return false;
         const char* keyPos = strstr(json, key);
         if (!keyPos) return false;
 
@@ -172,46 +168,27 @@ size_t StateSerializer::serialize(
 }
 
 bool StateSerializer::isStateMessage(const char* json, size_t length) {
-    if (!json || length == 0) return false;
-
-    if (length > MAX_MESSAGE_SIZE) {
-        return false;
-    }
-    char buf[MAX_MESSAGE_SIZE + 1];
-    memcpy(buf, json, length);
-    buf[length] = '\0';
+    (void)length;
+    if (!json) return false;
 
     char msgType[16] = {0};
-    if (!findString(buf, "\"t\"", msgType, sizeof(msgType))) return false;
+    if (!findString(json, "\"t\"", msgType, sizeof(msgType))) return false;
     return strcmp(msgType, "sync.state") == 0;
 }
 
 uint32_t StateSerializer::extractVersion(const char* json, size_t length) {
-    if (!json || length == 0) return 0;
-
-    if (length > MAX_MESSAGE_SIZE) {
-        return 0;
-    }
-    char buf[MAX_MESSAGE_SIZE + 1];
-    memcpy(buf, json, length);
-    buf[length] = '\0';
+    (void)length;
+    if (!json) return 0;
 
     long version = 0;
-    if (!findLong(buf, "\"v\"", &version)) return 0;
+    if (!findLong(json, "\"v\"", &version)) return 0;
     return static_cast<uint32_t>(version);
 }
 
 bool StateSerializer::extractSenderUuid(const char* json, size_t length, char* outUuid) {
-    if (!json || length == 0 || !outUuid) return false;
-
-    if (length > MAX_MESSAGE_SIZE) {
-        return false;
-    }
-    char buf[MAX_MESSAGE_SIZE + 1];
-    memcpy(buf, json, length);
-    buf[length] = '\0';
-
-    return findString(buf, "\"u\"", outUuid, 16);
+    (void)length;
+    if (!json || !outUuid) return false;
+    return findString(json, "\"u\"", outUuid, 16);
 }
 
 bool StateSerializer::parseZone(const char* json, state::ZoneState& zone) {
@@ -227,19 +204,11 @@ bool StateSerializer::parseZone(const char* json, state::ZoneState& zone) {
 }
 
 bool StateSerializer::parse(const char* json, size_t length, state::SystemState& outState) {
-    if (!json || length == 0) return false;
-
-    // Incoming frames may not be NUL-terminated; parsing below expects C strings.
-    if (length > MAX_MESSAGE_SIZE) return false;
-    char buf[MAX_MESSAGE_SIZE + 1];
-    memcpy(buf, json, length);
-    buf[length] = '\0';
-    json = buf;
+    (void)length;
+    if (!json) return false;
 
     // Verify message type
-    char msgType[16] = {0};
-    if (!findString(json, "\"t\"", msgType, sizeof(msgType))) return false;
-    if (strcmp(msgType, "sync.state") != 0) return false;
+    if (!isStateMessage(json, length)) return false;
 
     // Find the state object "s":{...}
     const char* stateStart = strstr(json, "\"s\":{");

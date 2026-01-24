@@ -97,6 +97,29 @@ public:
     void updateSegments(const zones::ZoneSegment* segments, uint8_t count);
 
     /**
+     * Check if zone mode is enabled
+     * @return true if zones are active
+     */
+    bool isZoneModeEnabled() const { return _zonesEnabled; }
+
+    /**
+     * Get number of active zones
+     * @return Zone count (1-4)
+     */
+    uint8_t getZoneCount() const { return _zoneCount; }
+
+    /**
+     * Get zone state
+     * @param zoneId Zone ID (0-3)
+     * @return Const reference to ZoneState
+     */
+    const ZoneState& getZoneState(uint8_t zoneId) const {
+        static ZoneState empty;
+        if (zoneId >= 4) return empty;
+        return _zones[zoneId];
+    }
+
+    /**
      * Set button handler for checking speed/palette mode
      * @param handler ButtonHandler instance
      */
@@ -195,32 +218,7 @@ public:
      */
     ZoneParameterMode getActiveMode() const { return _activeMode; }
 
-    // ========================================================================
-    // Zone State Accessors (for PresetManager)
-    // ========================================================================
-
-    /**
-     * Check if zone mode is enabled
-     * @return true if zones are active
-     */
-    bool isZoneModeEnabled() const { return _zonesEnabled; }
-
-    /**
-     * Get number of active zones
-     * @return Zone count (1-4)
-     */
-    uint8_t getZoneCount() const { return _zoneCount; }
-
-    /**
-     * Get zone state
-     * @param zoneId Zone ID (0-3)
-     * @return Const reference to ZoneState
-     */
-    const ZoneState& getZoneState(uint8_t zoneId) const {
-        static ZoneState empty;
-        if (zoneId >= 4) return empty;
-        return _zones[zoneId];
-    }
+    // Zone State Accessors moved to public section
 
 private:
     M5GFX& _display;
@@ -273,6 +271,8 @@ private:
     // Mode selector buttons
     lv_obj_t* _modeButtons[4] = {nullptr};  // Effect, Palette, Speed, Brightness
     lv_obj_t* _backButton = nullptr;
+    lv_obj_t* _zoneEnableButton = nullptr;  // Zone enable toggle button
+    lv_obj_t* _zoneEnableLabel = nullptr;   // "ZONES: ON/OFF" label
 
     // Zone count and preset rows
     lv_obj_t* _zoneCountRow = nullptr;
@@ -481,6 +481,12 @@ private:
      * @param e LVGL event
      */
     static void backButtonCb(lv_event_t* e);
+
+    /**
+     * Zone enable toggle button callback
+     * @param e LVGL event
+     */
+    static void zoneEnableButtonCb(lv_event_t* e);
 
     /**
      * Apply selection highlighting to current selection

@@ -4,7 +4,6 @@
  */
 
 #include "CommandSerializer.h"
-#include "SyncProtocol.h"
 #include <cstring>
 #include <cstdio>
 
@@ -235,7 +234,6 @@ namespace {
 
     // Find a string value after a key
     bool findString(const char* json, const char* key, char* out, size_t outSize) {
-        if (!json || !key || !out || outSize == 0) return false;
         const char* keyPos = strstr(json, key);
         if (!keyPos) return false;
 
@@ -256,7 +254,6 @@ namespace {
 
     // Find an integer value after a key
     bool findInt(const char* json, const char* key, long* out) {
-        if (!json || !key || !out) return false;
         const char* keyPos = strstr(json, key);
         if (!keyPos) return false;
 
@@ -276,13 +273,6 @@ namespace {
 ParsedCommand CommandSerializer::parse(const char* json, size_t length) {
     ParsedCommand result;
     if (!json || length == 0) return result;
-
-    // Incoming frames may not be NUL-terminated; parsing below expects C strings.
-    if (length > MAX_MESSAGE_SIZE) return result;
-    char buf[MAX_MESSAGE_SIZE + 1];
-    memcpy(buf, json, length);
-    buf[length] = '\0';
-    json = buf;
 
     // Check message type
     char msgType[16] = {0};

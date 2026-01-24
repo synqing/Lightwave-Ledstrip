@@ -80,7 +80,18 @@
                 <div class="value-secondary compact" id="zoneModeInfo">--</div>
                 <div class="button-row">
                     <button class="control-btn compact" id="zoneModeToggle" aria-label="Toggle zone mode">Toggle</button>
-                    <button class="control-btn compact" id="showsTabToggle" aria-label="Toggle shows tab">Shows</button>
+                </div>
+            </section>
+
+            <!-- Plugin Status (hidden by default, shown when plugin data available) -->
+            <section class="control-card full-width" id="pluginSection" style="display: none;">
+                <h2 class="card-header">Plugins</h2>
+                <div class="value-display compact" id="pluginEffectCount">--</div>
+                <div class="value-secondary compact" id="pluginModeStatus">--</div>
+                <div class="value-secondary compact" id="pluginReloadStatus" style="display: none;">--</div>
+                <div id="pluginErrorList" style="display: none; margin-top: var(--space-xs); padding: var(--space-xs); background: rgba(255, 77, 77, 0.1); border-radius: 4px; font-size: 0.7rem;"></div>
+                <div class="button-row">
+                    <button class="control-btn compact" id="pluginReloadBtn" aria-label="Reload plugins">Reload</button>
                 </div>
             </section>
         </div>
@@ -127,133 +138,35 @@
             </section>
         </div>
 
-        <!-- Row 4: Effect Modifiers -->
-        <div class="controls-row" id="modifiersRow">
-            <section class="control-card full-width" id="modifiersCard">
-                <h2 class="card-header">Effect Modifiers</h2>
-
-                <!-- Active Modifier Stack -->
-                <div id="modifierStack" style="margin-bottom: var(--space-md);">
-                    <div class="value-secondary compact" style="text-align: center;">No modifiers active</div>
-                </div>
-
-                <!-- Quick Add Buttons -->
-                <div class="button-row" style="flex-wrap: wrap; gap: var(--space-xs);">
-                    <button class="control-btn compact modifier-add-btn" data-modifier="speed">Speed</button>
-                    <button class="control-btn compact modifier-add-btn" data-modifier="mirror">Mirror</button>
-                    <button class="control-btn compact modifier-add-btn" data-modifier="blur">Blur</button>
-                    <button class="control-btn compact modifier-add-btn" data-modifier="trail">Trail</button>
-                    <button class="control-btn compact modifier-add-btn" data-modifier="strobe">Strobe</button>
-                    <button class="control-btn compact modifier-add-btn" data-modifier="glitch">Glitch</button>
-                    <button class="control-btn compact modifier-add-btn" data-modifier="color_shift">Hue</button>
-                    <button class="control-btn compact modifier-add-btn" data-modifier="saturation">Sat</button>
-                    <button class="control-btn compact modifier-add-btn" data-modifier="intensity">Int</button>
-                </div>
-
-                <!-- Clear All Button -->
-                <button id="modifierClearBtn" class="control-btn compact" style="width: 100%; margin-top: var(--space-sm); background: rgba(255,77,77,0.2);">
-                    Clear All Modifiers
-                </button>
-            </section>
-        </div>
-
-        <!-- Modifier Parameter Editor (shown when modifier selected) -->
-        <div class="controls-row" id="modifierEditorRow" style="display: none;">
-            <section class="control-card full-width" id="modifierEditorCard">
-                <h2 class="card-header" id="modifierEditorTitle">Edit Modifier</h2>
-                <div id="modifierParamsContainer"></div>
-                <div class="button-row" style="margin-top: var(--space-sm);">
-                    <button id="modifierApplyBtn" class="control-btn compact" style="flex: 1; background: var(--gold); color: var(--bg-base);">
-                        Apply
-                    </button>
-                    <button id="modifierCloseBtn" class="control-btn compact" style="flex: 1;">
-                        Close
-                    </button>
-                </div>
-            </section>
-        </div>
-
-        <!-- Row 5: Zone Speed Controls (only shown when zones enabled) -->
+        <!-- Row 4: Zone Speed Controls (only shown when zones enabled) -->
         <div class="controls-row" id="zoneControlsRow" style="display: none;">
             <!-- Zone 0 Speed -->
             <section class="control-card full-width slider-card">
                 <h2 class="card-header">Zone 0 Speed</h2>
                 <div class="slider-container">
-                    <input type="range" id="zone0SpeedSlider" min="1" max="50" value="1" class="slider" aria-label="Zone 0 Speed">
-                    <div class="slider-value" id="zone0SpeedValue">1</div>
+                    <input type="range" id="zone0SpeedSlider" min="1" max="50" value="15" class="slider" aria-label="Zone 0 Speed">
+                    <div class="slider-value" id="zone0SpeedValue">15</div>
                 </div>
             </section>
             <!-- Zone 1 Speed -->
             <section class="control-card full-width slider-card">
                 <h2 class="card-header">Zone 1 Speed</h2>
                 <div class="slider-container">
-                    <input type="range" id="zone1SpeedSlider" min="1" max="50" value="1" class="slider" aria-label="Zone 1 Speed">
-                    <div class="slider-value" id="zone1SpeedValue">1</div>
+                    <input type="range" id="zone1SpeedSlider" min="1" max="50" value="15" class="slider" aria-label="Zone 1 Speed">
+                    <div class="slider-value" id="zone1SpeedValue">15</div>
                 </div>
             </section>
             <!-- Zone 2 Speed -->
             <section class="control-card full-width slider-card">
                 <h2 class="card-header">Zone 2 Speed</h2>
                 <div class="slider-container">
-                    <input type="range" id="zone2SpeedSlider" min="1" max="50" value="1" class="slider" aria-label="Zone 2 Speed">
-                    <div class="slider-value" id="zone2SpeedValue">1</div>
-                </div>
-            </section>
-            <!-- Zone 3 Speed -->
-            <section class="control-card full-width slider-card">
-                <h2 class="card-header">Zone 3 Speed</h2>
-                <div class="slider-container">
-                    <input type="range" id="zone3SpeedSlider" min="1" max="50" value="1" class="slider" aria-label="Zone 3 Speed">
-                    <div class="slider-value" id="zone3SpeedValue">1</div>
+                    <input type="range" id="zone2SpeedSlider" min="1" max="50" value="15" class="slider" aria-label="Zone 2 Speed">
+                    <div class="slider-value" id="zone2SpeedValue">15</div>
                 </div>
             </section>
         </div>
 
-        <!-- Row 5: Zone Brightness Controls (only shown when zones enabled) -->
-        <div class="controls-row" id="zoneBrightnessRow" style="display: none;">
-            <!-- Zone 0 Brightness -->
-            <section class="control-card full-width slider-card">
-                <h2 class="card-header">Zone 0 Brightness</h2>
-                <div class="slider-container">
-                    <input type="range" id="zone0BrightnessSlider" min="0" max="255" value="128" class="slider" aria-label="Zone 0 Brightness">
-                    <div class="slider-value" id="zone0BrightnessValue">128</div>
-                </div>
-            </section>
-            <!-- Zone 1 Brightness -->
-            <section class="control-card full-width slider-card">
-                <h2 class="card-header">Zone 1 Brightness</h2>
-                <div class="slider-container">
-                    <input type="range" id="zone1BrightnessSlider" min="0" max="255" value="128" class="slider" aria-label="Zone 1 Brightness">
-                    <div class="slider-value" id="zone1BrightnessValue">128</div>
-                </div>
-            </section>
-            <!-- Zone 2 Brightness -->
-            <section class="control-card full-width slider-card">
-                <h2 class="card-header">Zone 2 Brightness</h2>
-                <div class="slider-container">
-                    <input type="range" id="zone2BrightnessSlider" min="0" max="255" value="128" class="slider" aria-label="Zone 2 Brightness">
-                    <div class="slider-value" id="zone2BrightnessValue">128</div>
-                </div>
-            </section>
-            <!-- Zone 3 Brightness -->
-            <section class="control-card full-width slider-card">
-                <h2 class="card-header">Zone 3 Brightness</h2>
-                <div class="slider-container">
-                    <input type="range" id="zone3BrightnessSlider" min="0" max="255" value="128" class="slider" aria-label="Zone 3 Brightness">
-                    <div class="slider-value" id="zone3BrightnessValue">128</div>
-                </div>
-            </section>
-        </div>
-
-        <!-- Row 6: Zone Quick Controls (only shown when zones enabled) -->
-        <div class="controls-row" id="zoneQuickControlsRow" style="display: none;">
-            <section class="control-card full-width" id="zoneQuickControlsCard">
-                <h2 class="card-header">Zone Quick Controls</h2>
-                <div id="zoneQuickControlsGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-md);"></div>
-            </section>
-        </div>
-
-        <!-- Row 7: Zone Layout Editor (only shown when zones enabled) -->
+        <!-- Row 5: Zone Layout Editor (only shown when zones enabled) -->
         <div class="controls-row" id="zoneEditorRow" style="display: none;">
             <section class="control-card full-width" id="zoneEditorCard">
                 <h2 class="card-header">Zone Layout Editor</h2>
@@ -317,181 +230,6 @@
 
                 <!-- Apply Button -->
                 <button id="zoneApplyButton" class="control-btn compact" style="width: 100%; margin-top: var(--space-md); background: var(--gold); color: var(--bg-base);" disabled>Apply Zone Layout</button>
-            </section>
-        </div>
-
-        <!-- Row 8: Zone Presets (only shown when zones enabled) -->
-        <div class="controls-row" id="presetLibraryRow" style="display: none;">
-            <section class="control-card full-width" id="presetLibraryCard">
-                <h2 class="card-header">Zone Presets</h2>
-
-                <!-- Save Current Zone Config -->
-                <div style="margin-bottom: var(--space-md); padding: var(--space-sm); background: var(--bg-elevated); border-radius: 8px;">
-                    <div class="card-header" style="text-align: left; margin-bottom: var(--space-xs);">Save Current Zone Configuration</div>
-                    <div style="display: flex; gap: var(--space-xs); flex-wrap: wrap;">
-                        <input type="text" id="presetNameInput" placeholder="Preset name" class="control-btn compact" style="flex: 1; min-width: 150px; padding: var(--space-xs) var(--space-sm); text-align: left; font-size: 0.75rem;">
-                        <input type="text" id="presetDescriptionInput" placeholder="Description (optional)" class="control-btn compact" style="flex: 2; min-width: 200px; padding: var(--space-xs) var(--space-sm); text-align: left; font-size: 0.75rem;">
-                        <button id="presetSaveButton" class="control-btn compact" style="background: var(--gold); color: var(--bg-base);">Save</button>
-                    </div>
-                    <div class="value-secondary compact" style="font-size: 0.625rem; color: var(--text-tertiary); margin-top: var(--space-xs);">
-                        Saves all zone effects, palettes, audio bands, tempo settings, and layout.
-                    </div>
-                </div>
-
-                <!-- Preset List -->
-                <div>
-                    <div class="card-header" style="text-align: left; margin-bottom: var(--space-xs);">Saved Zone Presets</div>
-                    <div id="presetList" style="display: flex; flex-direction: column; gap: var(--space-xs); max-height: 300px; overflow-y: auto;">
-                        <div class="value-secondary compact" style="text-align: center; padding: var(--space-sm);">Loading presets...</div>
-                    </div>
-                </div>
-            </section>
-        </div>
-
-        <!-- Row: Color Correction -->
-        <div class="controls-row" id="colorCorrectionRow">
-            <section class="control-card full-width" id="colorCorrectionCard">
-                <h2 class="card-header">Color Correction</h2>
-
-                <!-- Preset Selector -->
-                <div class="control-group" style="margin-bottom: var(--space-sm);">
-                    <label>Preset</label>
-                    <select id="ccPreset" class="dropdown-select">
-                        <option value="0">Off</option>
-                        <option value="1">Subtle</option>
-                        <option value="2" selected>Balanced</option>
-                        <option value="3">Aggressive</option>
-                    </select>
-                </div>
-
-                <!-- Mode Selector (Advanced) -->
-                <div class="control-group">
-                    <label>Mode</label>
-                    <select id="ccMode" class="dropdown-select">
-                        <option value="0">OFF</option>
-                        <option value="1">HSV</option>
-                        <option value="2">RGB</option>
-                        <option value="3">BOTH</option>
-                    </select>
-                </div>
-
-                <!-- Feature Toggles -->
-                <div class="toggle-row" style="display: flex; flex-wrap: wrap; gap: var(--space-sm); margin: var(--space-sm) 0;">
-                    <label class="toggle-label"><input type="checkbox" id="ccAutoExposure"> Auto-Exposure</label>
-                    <label class="toggle-label"><input type="checkbox" id="ccBrownGuardrail"> Brown Guardrail</label>
-                    <label class="toggle-label"><input type="checkbox" id="ccGamma"> Gamma</label>
-                </div>
-
-                <!-- Sliders -->
-                <div class="slider-container" style="margin-bottom: var(--space-sm);">
-                    <label style="font-size: 0.75rem;">AE Target: <span id="ccAETargetVal">110</span></label>
-                    <input type="range" id="ccAETarget" min="50" max="200" value="110" class="slider">
-                </div>
-                <div class="slider-container" style="margin-bottom: var(--space-sm);">
-                    <label style="font-size: 0.75rem;">Gamma: <span id="ccGammaVal">2.2</span></label>
-                    <input type="range" id="ccGammaSlider" min="10" max="30" value="22" class="slider">
-                </div>
-
-                <!-- Save Button -->
-                <button id="ccSaveBtn" class="control-btn compact" style="width: 100%; margin-top: var(--space-sm);">Save to Device</button>
-            </section>
-        </div>
-
-        <!-- Row: Security Settings -->
-        <div class="controls-row" id="securityRow">
-            <section class="control-card full-width" id="securityCard">
-                <h2 class="card-header">Security</h2>
-
-                <!-- Auth Status -->
-                <div id="authStatusContainer" style="margin-bottom: var(--space-md);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-xs);">
-                        <span class="value-secondary compact">Authentication</span>
-                        <span id="authStatusBadge" class="value-secondary compact" style="padding: 2px 8px; border-radius: 4px; background: rgba(255,255,255,0.1);">Checking...</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span class="value-secondary compact">Custom Key</span>
-                        <span id="authKeyConfiguredBadge" class="value-secondary compact" style="padding: 2px 8px; border-radius: 4px; background: rgba(255,255,255,0.1);">--</span>
-                    </div>
-                </div>
-
-                <!-- API Key Input (shown when auth enabled) -->
-                <div id="authKeyInputContainer" style="margin-bottom: var(--space-md); display: none;">
-                    <label style="font-size: 0.75rem; display: block; margin-bottom: var(--space-xs);">API Key</label>
-                    <div style="display: flex; gap: var(--space-xs);">
-                        <input type="password" id="authKeyInput" placeholder="Enter API key" class="control-btn compact" style="flex: 1; text-align: left; padding: var(--space-xs) var(--space-sm); font-family: monospace;">
-                        <button id="authKeyToggleBtn" class="control-btn compact" style="width: 40px;" aria-label="Toggle key visibility">Show</button>
-                    </div>
-                    <div style="display: flex; gap: var(--space-xs); margin-top: var(--space-xs);">
-                        <button id="authKeySaveBtn" class="control-btn compact" style="flex: 1;">Save Key</button>
-                        <button id="authKeyClearBtn" class="control-btn compact" style="flex: 1; background: rgba(255,77,77,0.2);">Clear</button>
-                    </div>
-                </div>
-
-                <!-- Key Management (shown when auth enabled and authenticated) -->
-                <div id="authKeyManageContainer" style="display: none;">
-                    <div class="value-secondary compact" style="text-align: center; margin-bottom: var(--space-sm);">Authenticated</div>
-                    <button id="authRotateBtn" class="control-btn compact" style="width: 100%; background: var(--gold); color: var(--bg-base);">Rotate API Key</button>
-                    <div class="value-secondary compact" style="font-size: 0.625rem; text-align: center; margin-top: var(--space-xs); color: var(--text-tertiary);">
-                        Generates a new key. Current key will be invalidated.
-                    </div>
-                </div>
-
-                <!-- New Key Display (shown after rotation) -->
-                <div id="authNewKeyContainer" style="display: none; margin-top: var(--space-md); padding: var(--space-sm); background: rgba(255,184,77,0.1); border: 1px solid rgba(255,184,77,0.3); border-radius: 8px;">
-                    <div class="card-header" style="color: var(--gold); text-align: left; margin-bottom: var(--space-xs);">New API Key</div>
-                    <div id="authNewKeyDisplay" style="font-family: monospace; font-size: 0.75rem; word-break: break-all; padding: var(--space-xs); background: var(--bg-elevated); border-radius: 4px; margin-bottom: var(--space-xs);">--</div>
-                    <div class="value-secondary compact" style="font-size: 0.625rem; color: var(--warning);">
-                        Copy this key now! It will not be shown again.
-                    </div>
-                    <button id="authCopyKeyBtn" class="control-btn compact" style="width: 100%; margin-top: var(--space-xs);">Copy to Clipboard</button>
-                </div>
-            </section>
-        </div>
-
-        <!-- Row 8: Shows Tab (Timeline Editor) -->
-        <div class="controls-row" id="showsTabRow" style="display: none;">
-            <section class="control-card full-width" id="showsTab">
-                <h2 class="card-header">Timeline Editor</h2>
-                
-                <!-- Show Selector -->
-                <div class="shows-header" style="display: flex; gap: var(--space-sm); margin-bottom: var(--space-md); align-items: center;">
-                    <select id="showSelect" class="dropdown-select" style="flex: 1;">
-                        <option value="">Select Show...</option>
-                    </select>
-                    <button id="showNewBtn" class="control-btn compact">New</button>
-                    <button id="showSaveBtn" class="control-btn compact" disabled>Save</button>
-                </div>
-                
-                <!-- Transport Controls -->
-                <div class="transport-controls" style="display: flex; gap: var(--space-sm); margin-bottom: var(--space-md); align-items: center; justify-content: center;">
-                    <button id="showPlayBtn" class="control-btn compact">▶ Play</button>
-                    <button id="showPauseBtn" class="control-btn compact" style="display: none;">⏸ Pause</button>
-                    <button id="showStopBtn" class="control-btn compact">⏹ Stop</button>
-                    <div style="flex: 1; max-width: 300px;">
-                        <input type="range" id="showSeekSlider" min="0" max="100" value="0" class="slider" style="width: 100%;">
-                        <div class="value-secondary compact" style="text-align: center; font-size: 0.7rem;" id="showTimeDisplay">0:00 / 0:00</div>
-                    </div>
-                </div>
-                
-                <!-- Timeline -->
-                <div class="timeline-container" style="position: relative; margin-bottom: var(--space-md);">
-                    <div class="time-ruler" id="timeRuler" style="position: relative; height: 24px; background: rgba(255,255,255,0.05); border-radius: 4px; margin-bottom: var(--space-xs); padding: 0 var(--space-xs);">
-                        <!-- Time markers will be generated here -->
-                    </div>
-                    <div class="timeline-tracks" id="timelineTracks" style="position: relative;">
-                        <!-- Zone tracks will be generated here -->
-                    </div>
-                    <!-- Playhead -->
-                    <div id="timelinePlayhead" style="position: absolute; top: 24px; bottom: 0; width: 2px; background: var(--gold); pointer-events: none; z-index: 20; display: none; box-shadow: 0 0 8px rgba(255,184,77,0.5);"></div>
-                </div>
-                
-                <!-- Scene Editor -->
-                <div class="scene-editor" id="sceneEditor" style="margin-top: var(--space-md);">
-                    <div class="card-header" style="margin-bottom: var(--space-sm);">Scenes</div>
-                    <div id="sceneList" style="display: flex; flex-direction: column; gap: var(--space-xs);">
-                        <!-- Scenes will be listed here -->
-                    </div>
-                </div>
             </section>
         </div>
     </main>

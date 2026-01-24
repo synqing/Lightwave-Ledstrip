@@ -41,9 +41,9 @@
 #include "m5rotate8.h"
 
 namespace lightwaveos {
-namespace nodes {
-    class NodeOrchestrator;
-    class RendererNode;
+namespace actors {
+    class ActorSystem;
+    class RendererActor;
 }
 }
 
@@ -427,12 +427,12 @@ extern EncoderManager encoderManager;
 /**
  * @brief Process encoder event and dispatch to Actor system
  * @param event The encoder event to process
- * @param orchestrator Reference to NodeOrchestrator
+ * @param actors Reference to ActorSystem
  * @param renderer Pointer to RendererActor
  */
 void handleEncoderEvent(const EncoderEvent& event, 
-                       lightwaveos::nodes::NodeOrchestrator& orchestrator,
-                       lightwaveos::nodes::RendererNode* renderer);
+                       lightwaveos::actors::ActorSystem& actors,
+                       lightwaveos::actors::RendererActor* renderer);
 
 } // namespace hardware
 } // namespace lightwaveos

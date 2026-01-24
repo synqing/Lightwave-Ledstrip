@@ -1,8 +1,8 @@
 /**
  * @file RippleEnhancedEffect.h
- * @brief Ripple Enhanced - Enhanced version with improved 64-bin thresholds, snare triggers, treble shimmer
+ * @brief Ripple Enhanced - improved thresholds, snare triggers, treble shimmer
  *
- * Effect ID: 95
+ * Effect ID: 97
  * Family: FLUID_PLASMA
  * Tags: CENTER_ORIGIN | TRAVELING
  *
@@ -10,7 +10,7 @@
  * - Improved 64-bin kick threshold (0.4f instead of 0.5f)
  * - Enhanced treble shimmer threshold (0.08f instead of 0.1f)
  * - Guaranteed snare hit ripple spawn
- * - Removed chord reactivity (uses heavy_chroma only)
+ * - Beat/downbeat edge spawn (latched, not hop-gated)
  */
 
 #pragma once
@@ -37,7 +37,6 @@ public:
     const plugins::EffectMetadata& getMetadata() const override;
 
 private:
-    // Instance state (was: static struct ripples[5])
     struct Ripple {
         float radius;
         float speed;
@@ -55,6 +54,10 @@ private:
     float m_chromaEnergySum = 0.0f;
     uint8_t m_chromaHistIdx = 0;
 
+    // Beat tracking (edge-latched, not hop-gated)
+    bool m_lastBeatState = false;
+    bool m_lastDownbeatState = false;
+
     // Radial LED history buffer (centre-out)
     CRGB m_radial[HALF_LENGTH];
     CRGB m_radialAux[HALF_LENGTH];
@@ -63,14 +66,14 @@ private:
     enhancement::AsymmetricFollower m_chromaFollowers[12];
     enhancement::AsymmetricFollower m_kickFollower{0.0f, 0.05f, 0.30f};
     enhancement::AsymmetricFollower m_trebleFollower{0.0f, 0.05f, 0.30f};
-    
+
     // Chromagram smoothing state
     float m_chromaSmoothed[12] = {0.0f};
     float m_chromaTargets[12] = {0.0f};
-    
+
     // 64-bin spectrum tracking for enhanced audio response
-    float m_kickPulse = 0.0f;       ///< Sub-bass energy (bins 0-5) for kick-triggered ripples
-    float m_trebleShimmer = 0.0f;   ///< Treble energy (bins 48-63) for wavefront sparkle
+    float m_kickPulse = 0.0f;
+    float m_trebleShimmer = 0.0f;
     float m_targetKick = 0.0f;
     float m_targetTreble = 0.0f;
 };

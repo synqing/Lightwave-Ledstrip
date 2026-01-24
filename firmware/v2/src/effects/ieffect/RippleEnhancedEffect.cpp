@@ -9,6 +9,7 @@
 #include "../../config/features.h"
 #include <FastLED.h>
 #include <cmath>
+#include <cstring>
 
 namespace lightwaveos {
 namespace effects {
@@ -43,6 +44,8 @@ bool RippleEnhancedEffect::init(plugins::EffectContext& ctx) {
     for (uint8_t i = 0; i < CHROMA_HISTORY; ++i) {
         m_chromaEnergyHist[i] = 0.0f;
     }
+    m_lastBeatState = false;
+    m_lastDownbeatState = false;
     memset(m_radial, 0, sizeof(m_radial));
     memset(m_radialAux, 0, sizeof(m_radialAux));
     // Initialize smoothing followers
@@ -72,11 +75,21 @@ void RippleEnhancedEffect::render(plugins::EffectContext& ctx) {
 
     const bool hasAudio = ctx.audio.available;
     bool newHop = false;
+    bool beatOnset = false;
+    bool downbeatOnset = false;
     float dt = ctx.getSafeDeltaSeconds();
     float moodNorm = ctx.getMoodNormalized();
-    
+
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
+        // Beat/downbeat edge detection (not hop-gated)
+        const bool currentBeat = ctx.audio.isOnBeat();
+        const bool currentDownbeat = ctx.audio.isOnDownbeat();
+        beatOnset = currentBeat && !m_lastBeatState;
+        downbeatOnset = currentDownbeat && !m_lastDownbeatState;
+        m_lastBeatState = currentBeat;
+        m_lastDownbeatState = currentDownbeat;
+
         newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
         if (newHop) {
             m_lastHopSeq = ctx.audio.controlBus.hop_seq;
@@ -100,22 +113,25 @@ void RippleEnhancedEffect::render(plugins::EffectContext& ctx) {
                 trebleSum += ctx.audio.bin(i);
             }
             m_targetTreble = trebleSum / 16.0f;
-            
+
             // Update chromagram targets
             for (uint8_t i = 0; i < 12; i++) {
                 m_chromaTargets[i] = ctx.audio.controlBus.heavy_chroma[i];
             }
         }
-        
+
         // Smooth toward targets every frame with MOOD-adjusted smoothing
         m_kickPulse = m_kickFollower.updateWithMood(m_targetKick, dt, moodNorm);
         m_trebleShimmer = m_trebleFollower.updateWithMood(m_targetTreble, dt, moodNorm);
-        
+
         // Smooth chromagram with AsymmetricFollower
         for (uint8_t i = 0; i < 12; i++) {
             m_chromaSmoothed[i] = m_chromaFollowers[i].updateWithMood(
                 m_chromaTargets[i], dt, moodNorm);
         }
+    } else {
+        m_lastBeatState = false;
+        m_lastDownbeatState = false;
     }
 #endif
 
@@ -182,6 +198,26 @@ void RippleEnhancedEffect::render(plugins::EffectContext& ctx) {
     // Range: 1.0 (slow) to 3.0 (fast) based on speed slider
     // =========================================================================
     const float speedScale = 1.0f + 2.0f * (ctx.speed / 50.0f);
+
+    // =========================================================================
+    // BEAT/DOWNBEAT EDGE RIPPLE (latched, not hop-gated)
+    // =========================================================================
+#if FEATURE_AUDIO_SYNC
+    if (hasAudio && (beatOnset || downbeatOnset)) {
+        for (uint8_t r = 0; r < MAX_RIPPLES; ++r) {
+            if (!m_ripples[r].active) {
+                m_ripples[r].radius = 0.0f;
+                m_ripples[r].intensity = downbeatOnset ? 255 : 210;
+                m_ripples[r].speed = speedScale * (downbeatOnset ? 1.2f : 1.0f);
+                float harmonicShift = ctx.audio.harmonicSaliency() * 40.0f;
+                m_ripples[r].hue = ctx.gHue + (uint8_t)harmonicShift;
+                m_ripples[r].active = true;
+                m_spawnCooldown = 1;
+                break;
+            }
+        }
+    }
+#endif
 
     // =========================================================================
     // 64-bin KICK-TRIGGERED RIPPLE (sub-bass bins 0-5)
@@ -291,9 +327,10 @@ void RippleEnhancedEffect::render(plugins::EffectContext& ctx) {
                 CRGB color = ctx.palette.getColor(
                     m_ripples[r].hue + (uint8_t)dist,
                     brightness);
-                m_radial[dist].r = qadd8(m_radial[dist].r, color.r);
-                m_radial[dist].g = qadd8(m_radial[dist].g, color.g);
-                m_radial[dist].b = qadd8(m_radial[dist].b, color.b);
+                // Keep colours within palette: select brightest contributor.
+                if (brightness > m_radial[dist].getAverageLight()) {
+                    m_radial[dist] = color;
+                }
             }
         }
     }

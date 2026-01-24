@@ -66,15 +66,15 @@ fi
 
 echo ""
 
-# 3. Build verification (audio environment for tempo tracking)
-echo "--- Build Verification (esp32dev_audio) ---"
-echo "Running: pio run -e esp32dev_audio -d firmware/v2"
-if pio run -e esp32dev_audio -d firmware/v2 > /tmp/pio_build.log 2>&1; then
-    check_result 0 "Build esp32dev_audio"
+# 3. Build verification (default environment - no WiFi, faster)
+echo "--- Build Verification (esp32dev) ---"
+echo "Running: pio run -e esp32dev"
+if pio run -e esp32dev > /tmp/pio_build.log 2>&1; then
+    check_result 0 "Build esp32dev"
     # Extract memory usage (ignore grep exit code)
     grep -E "(RAM:|Flash:)" /tmp/pio_build.log | tail -2 || true
 else
-    check_result 1 "Build esp32dev_audio"
+    check_result 1 "Build esp32dev"
     echo "Build log tail:"
     tail -20 /tmp/pio_build.log
 fi

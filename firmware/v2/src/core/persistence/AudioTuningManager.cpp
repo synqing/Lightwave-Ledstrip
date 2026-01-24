@@ -7,6 +7,7 @@
 
 #if FEATURE_AUDIO_SYNC
 
+#include <cstddef>
 #include <cstring>
 #include <Arduino.h>
 
@@ -14,6 +15,77 @@ namespace lightwaveos {
 namespace persistence {
 
 // NVS_MANAGER macro is defined in NVSManager.h
+
+namespace {
+
+struct AudioPipelineTuningV1 {
+    float dcAlpha = 0.001f;
+    float agcTargetRms = 0.25f;
+    float agcMinGain = 1.0f;
+    float agcMaxGain = 40.0f;
+    float agcAttack = 0.03f;
+    float agcRelease = 0.015f;
+    float agcClipReduce = 0.90f;
+    float agcIdleReturnRate = 0.01f;
+    float noiseFloorMin = 0.0004f;
+    float noiseFloorRise = 0.0005f;
+    float noiseFloorFall = 0.01f;
+    float gateStartFactor = 1.0f;  // Updated to match AudioTuning.h default
+    float gateRangeFactor = 1.5f;
+    float gateRangeMin = 0.0005f;
+    float rmsDbFloor = -65.0f;
+    float rmsDbCeil = -12.0f;
+    float bandDbFloor = -65.0f;
+    float bandDbCeil = -12.0f;
+    float chromaDbFloor = -65.0f;
+    float chromaDbCeil = -12.0f;
+    float fluxScale = 1.0f;
+    float controlBusAlphaFast = 0.35f;
+    float controlBusAlphaSlow = 0.12f;
+    float bandAttack = 0.15f;
+    float bandRelease = 0.03f;
+    float heavyBandAttack = 0.08f;
+    float heavyBandRelease = 0.015f;
+    float perBandGains[8] = {0.8f, 0.85f, 1.0f, 1.2f, 1.5f, 1.8f, 2.0f, 2.2f};
+    float perBandNoiseFloors[8] = {0.0008f, 0.0012f, 0.0006f, 0.0005f,
+                                   0.0008f, 0.0010f, 0.0012f, 0.0006f};
+    bool usePerBandNoiseFloor = false;
+    float silenceHysteresisMs = 5000.0f;
+    float silenceThreshold = 0.01f;
+};
+
+struct AudioTuningPresetV1 {
+    static constexpr uint8_t VERSION = 1;
+    static constexpr size_t NAME_MAX_LEN = AudioTuningPreset::NAME_MAX_LEN;
+
+    uint8_t version = VERSION;
+    char name[NAME_MAX_LEN] = {0};
+    AudioPipelineTuningV1 pipeline;
+    audio::AudioContractTuning contract;
+    uint32_t checksum = 0;
+
+    void calculateChecksum() {
+        const size_t dataSize = offsetof(AudioTuningPresetV1, checksum);
+        checksum = NVSManager::calculateCRC32(this, dataSize);
+    }
+
+    bool isValid() const {
+        if (version != VERSION) return false;
+        const size_t dataSize = offsetof(AudioTuningPresetV1, checksum);
+        uint32_t calculated = NVSManager::calculateCRC32(this, dataSize);
+        return (checksum == calculated);
+    }
+};
+
+static bool loadPresetV1(uint8_t id, AudioTuningPresetV1& preset) {
+    char key[16];
+    snprintf(key, sizeof(key), "preset_%u", id);
+    NVSResult result = NVS_MANAGER.loadBlob(AudioTuningManager::NVS_NAMESPACE, key,
+                                            &preset, sizeof(preset));
+    return (result == NVSResult::OK && preset.isValid());
+}
+
+} // namespace
 
 // ==================== AudioTuningPreset Implementation ====================
 
@@ -86,26 +158,37 @@ bool AudioTuningManager::loadPreset(uint8_t id,
 
     NVSResult result = NVS_MANAGER.loadBlob(NVS_NAMESPACE, key, &preset, sizeof(preset));
 
-    if (result != NVSResult::OK) {
-        return false;
+    if (result == NVSResult::OK && preset.isValid()) {
+        pipeline = audio::clampAudioPipelineTuning(preset.pipeline);
+        contract = audio::clampAudioContractTuning(preset.contract);
+        if (nameOut) {
+            strncpy(nameOut, preset.name, AudioTuningPreset::NAME_MAX_LEN);
+        }
+        Serial.printf("[AudioTuning] Preset '%s' loaded from slot %d\n", preset.name, id);
+        return true;
     }
 
-    if (!preset.isValid()) {
+    AudioTuningPresetV1 presetV1;
+    if (result == NVSResult::SIZE_MISMATCH || (result == NVSResult::OK && !preset.isValid())) {
+        if (loadPresetV1(id, presetV1)) {
+            audio::AudioPipelineTuning pipelineOut{};
+            static_assert(sizeof(AudioPipelineTuningV1) <= sizeof(audio::AudioPipelineTuning),
+                          "AudioPipelineTuningV1 must fit in AudioPipelineTuning");
+            std::memcpy(&pipelineOut, &presetV1.pipeline, sizeof(AudioPipelineTuningV1));
+            pipeline = audio::clampAudioPipelineTuning(pipelineOut);
+            contract = audio::clampAudioContractTuning(presetV1.contract);
+            if (nameOut) {
+                strncpy(nameOut, presetV1.name, AudioTuningPreset::NAME_MAX_LEN);
+            }
+            Serial.printf("[AudioTuning] Preset '%s' loaded from slot %d (v1)\n", presetV1.name, id);
+            return true;
+        }
+    }
+
+    if (result == NVSResult::OK) {
         Serial.printf("[AudioTuning] WARNING: Preset %d has invalid checksum\n", id);
-        return false;
     }
-
-    // Apply clamping for safety
-    pipeline = audio::clampAudioPipelineTuning(preset.pipeline);
-    contract = audio::clampAudioContractTuning(preset.contract);
-
-    if (nameOut) {
-        strncpy(nameOut, preset.name, AudioTuningPreset::NAME_MAX_LEN - 1);
-        nameOut[AudioTuningPreset::NAME_MAX_LEN - 1] = '\0';
-    }
-
-    Serial.printf("[AudioTuning] Preset '%s' loaded from slot %d\n", preset.name, id);
-    return true;
+    return false;
 }
 
 bool AudioTuningManager::deletePreset(uint8_t id) {
@@ -138,13 +221,26 @@ uint8_t AudioTuningManager::listPresets(char names[][AudioTuningPreset::NAME_MAX
 
         if (result == NVSResult::OK && preset.isValid()) {
             if (names) {
-                strncpy(names[count], preset.name, AudioTuningPreset::NAME_MAX_LEN - 1);
-                names[count][AudioTuningPreset::NAME_MAX_LEN - 1] = '\0';
+                strncpy(names[count], preset.name, AudioTuningPreset::NAME_MAX_LEN);
             }
             if (ids) {
                 ids[count] = i;
             }
             count++;
+            continue;
+        }
+
+        if (result == NVSResult::SIZE_MISMATCH || (result == NVSResult::OK && !preset.isValid())) {
+            AudioTuningPresetV1 presetV1;
+            if (loadPresetV1(i, presetV1)) {
+                if (names) {
+                    strncpy(names[count], presetV1.name, AudioTuningPreset::NAME_MAX_LEN);
+                }
+                if (ids) {
+                    ids[count] = i;
+                }
+                count++;
+            }
         }
     }
 
@@ -159,7 +255,14 @@ bool AudioTuningManager::hasPreset(uint8_t id) const {
     makeKey(id, key);
 
     NVSResult result = NVS_MANAGER.loadBlob(NVS_NAMESPACE, key, &preset, sizeof(preset));
-    return (result == NVSResult::OK && preset.isValid());
+    if (result == NVSResult::OK && preset.isValid()) {
+        return true;
+    }
+    if (result == NVSResult::SIZE_MISMATCH || (result == NVSResult::OK && !preset.isValid())) {
+        AudioTuningPresetV1 presetV1;
+        return loadPresetV1(id, presetV1);
+    }
+    return false;
 }
 
 uint8_t AudioTuningManager::getPresetCount() const {

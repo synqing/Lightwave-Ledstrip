@@ -31,7 +31,6 @@
 #ifndef SIMULATOR_BUILD
 class ZoneComposerUI;
 class ConnectivityTab;
-class DemoModeUI;
 class PresetManager;
 #endif
 class UIHeader;
@@ -42,8 +41,7 @@ class UIHeader;
 enum class UIScreen : uint8_t {
     GLOBAL = 0,        // Default: 16-parameter gauge view
     ZONE_COMPOSER = 1, // Zone composer dashboard
-    CONNECTIVITY = 2,  // Network connectivity management
-    DEMO_MODE = 3      // Interactive demo mode for in-person demos
+    CONNECTIVITY = 2   // Network connectivity management
 };
 
 #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
@@ -85,12 +83,9 @@ public:
     #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL)
     ZoneComposerUI* getZoneComposerUI() { return _zoneComposer; }
     ConnectivityTab* getConnectivityTab() { return _connectivityTab; }
-    DemoModeUI* getDemoModeUI() { return _demoMode; }
-    void setWebSocketClientForDemo(WebSocketClient* wsClient);
     #else
     ZoneComposerUI* getZoneComposerUI() { return _zoneComposer; }
     ConnectivityTab* getConnectivityTab() { return _connectivityTab; }
-    DemoModeUI* getDemoModeUI() { return _demoMode; }
     #endif
     #endif
     
@@ -133,14 +128,12 @@ private:
     static DisplayUI* s_instance;
     static void onZoneComposerBackButton();
     static void onConnectivityTabBackButton();
-    static void onDemoModeBackButton();
     uint8_t _activePresetSlot = 0xFF;
     UIScreen _currentScreen = UIScreen::GLOBAL;
 
     lv_obj_t* _screen_global = nullptr;
     lv_obj_t* _screen_zone = nullptr;
     lv_obj_t* _screen_connectivity = nullptr;
-    lv_obj_t* _screen_demo = nullptr;
 
     lv_obj_t* _header = nullptr;
     lv_obj_t* _header_title_main = nullptr;
@@ -150,9 +143,10 @@ private:
     lv_obj_t* _header_effect = nullptr;
     lv_obj_t* _header_palette_container = nullptr;
     lv_obj_t* _header_palette = nullptr;
-            lv_obj_t* _header_net_ip = nullptr;
-            lv_obj_t* _header_net_ssid = nullptr;
-            lv_obj_t* _header_net_rssi = nullptr;
+    lv_obj_t* _header_net_container = nullptr;  // Clickable container for network info
+    lv_obj_t* _header_net_ip = nullptr;
+    lv_obj_t* _header_net_ssid = nullptr;
+    lv_obj_t* _header_net_rssi = nullptr;
 
     lv_obj_t* _gauges_container = nullptr;
     lv_obj_t* _gauge_cards[8] = {nullptr};
@@ -181,9 +175,6 @@ private:
     
     // Connectivity Tab UI
     ConnectivityTab* _connectivityTab = nullptr;
-
-    // Demo Mode UI
-    DemoModeUI* _demoMode = nullptr;
 
     // Footer UI elements
     lv_obj_t* _footer = nullptr;

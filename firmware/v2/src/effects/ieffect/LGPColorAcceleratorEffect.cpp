@@ -73,7 +73,6 @@ void LGPColorAcceleratorEffect::render(plugins::EffectContext& ctx) {
                 uint8_t debrisHue = random8();
                 uint8_t debrisBright = (uint8_t)(255.0f * (1.0f - distFromCenter / m_debrisRadius) * intensity);
 
-                // Use palette system - apply brightness scaling
                 uint8_t brightU8 = (uint8_t)((debrisBright * ctx.brightness) / 255);
                 CRGB debrisColor = ctx.palette.getColor(debrisHue, brightU8);
                 if (random8(2) == 0) {

@@ -1,0 +1,10 @@
+{
+  "schema": 2,
+  "version": "1.0",
+  "plugin": {
+    "name": 12345
+  },
+  "effects": [
+    { "id": 0 }
+  ]
+}

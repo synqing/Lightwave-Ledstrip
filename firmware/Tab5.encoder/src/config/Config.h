@@ -61,17 +61,18 @@ namespace I2C {
     constexpr uint16_t TIMEOUT_MS = 200;
 }
 
-// Parameter Indices (matches LightwaveOS)
+// Parameter Indices (matches PARAMETER_TABLE and physical encoder layout)
 enum class Parameter : uint8_t {
     // Unit A (0-7) - Global LightwaveOS parameters
+    // Physical layout: Effect, Palette, Speed, Mood, FadeAmount, Complexity, Variation, Brightness
     Effect = 0,
-    Brightness = 1,
-    Palette = 2,
-    Speed = 3,
-    Mood = 4,
-    FadeAmount = 5,
-    Complexity = 6,
-    Variation = 7,
+    Palette = 1,      // Encoder 1 = Palette (wraps 0-74)
+    Speed = 2,        // Encoder 2 = Speed
+    Mood = 3,         // Encoder 3 = Mood
+    FadeAmount = 4,   // Encoder 4 = FadeAmount
+    Complexity = 5,   // Encoder 5 = Complexity
+    Variation = 6,    // Encoder 6 = Variation
+    Brightness = 7,   // Encoder 7 = Brightness (0-255)
     // Unit B (8-15) - Zone parameters
     // Pattern: [Zone N Effect, Zone N Speed/Palette] pairs
     // Note: Encoders 9, 11, 13, 15 toggle between Speed and Palette via button
@@ -123,10 +124,10 @@ namespace ZoneParam {
 namespace ParamRange {
     // Unit A (0-7) - Global parameters
     constexpr uint8_t EFFECT_MIN = 0;
-    constexpr uint8_t EFFECT_MAX = 87;  // 88 effects total (0-87) - matches v2 EXPECTED_EFFECT_COUNT
+    constexpr uint8_t EFFECT_MAX = 99;  // 100 effects total (0-99) - matches v2 EXPECTED_EFFECT_COUNT
 
     constexpr uint8_t PALETTE_MIN = 0;
-    constexpr uint8_t PALETTE_MAX = 63;
+    constexpr uint8_t PALETTE_MAX = 74;  // v2 has 75 palettes (0-74)
 
     constexpr uint8_t SPEED_MIN = 1;
     constexpr uint8_t SPEED_MAX = 100;
@@ -152,12 +153,12 @@ namespace ParamRange {
     
     // Zone Palette (Unit B, encoders 9, 11, 13, 15 when toggled) - same as global palette
     constexpr uint8_t ZONE_PALETTE_MIN = 0;
-    constexpr uint8_t ZONE_PALETTE_MAX = 63;
+    constexpr uint8_t ZONE_PALETTE_MAX = 74;  // v2 has 75 palettes (0-74)
 
     // Unit B (8-15) - Zone parameters
-    // Zone Effect: 0-87 (wraps around for continuous scrolling) - matches v2 EXPECTED_EFFECT_COUNT
+    // Zone Effect: 0-99 (wraps around for continuous scrolling) - matches v2 EXPECTED_EFFECT_COUNT
     constexpr uint8_t ZONE_EFFECT_MIN = 0;
-    constexpr uint8_t ZONE_EFFECT_MAX = 87;  // 88 effects total (0-87)
+    constexpr uint8_t ZONE_EFFECT_MAX = 99;  // 100 effects total (0-99)
 
     // Zone Brightness: 0-255 (clamped, no wrap)
     constexpr uint8_t ZONE_BRIGHTNESS_MIN = 0;

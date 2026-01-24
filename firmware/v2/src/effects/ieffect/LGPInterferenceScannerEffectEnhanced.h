@@ -2,7 +2,7 @@
  * @file LGPInterferenceScannerEnhancedEffect.h
  * @brief LGP Interference Scanner Enhanced - Enhanced version with optimized 64-bin usage, enhanced snare boost
  *
- * Effect ID: 97
+ * Effect ID: 91
  * Family: INTERFERENCE
  * Tags: CENTER_ORIGIN | DUAL_STRIP | TRAVELING
  *

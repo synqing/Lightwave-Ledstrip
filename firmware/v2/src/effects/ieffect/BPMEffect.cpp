@@ -37,19 +37,14 @@ bool BPMEffect::init(plugins::EffectContext& ctx) {
 
     // Initialize phase
     m_phase = 0.0f;
+    
+    // Initialize smoothing
+    m_heavyEnergySmooth = 0.0f;
+    m_heavyEnergySmoothInitialized = false;
 
     // Initialize Spring with stiffness=50, critically damped (matches v8 pattern)
     m_speedSpring.init(50.0f, 1.0f);
     m_speedSpring.reset(1.0f);
-    
-    // Initialize smoothing followers
-    m_heavyEnergyFollower.reset(0.0f);
-    m_beatStrengthFollower.reset(0.0f);
-    m_tempoConfFollower.reset(0.0f);
-    m_lastHopSeq = 0;
-    m_targetHeavyEnergy = 0.0f;
-    m_targetBeatStrength = 0.0f;
-    m_targetTempoConf = 0.0f;
 
     // Clear ring buffer
     for (int r = 0; r < MAX_RINGS; r++) {
@@ -69,7 +64,6 @@ void BPMEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     float dt = ctx.getSafeDeltaSeconds();
     float speedNorm = ctx.speed / 50.0f;
-    float moodNorm = ctx.getMoodNormalized();
 
     // Default values for no-audio mode
     float speedMult = 1.0f;
@@ -78,25 +72,24 @@ void BPMEffect::render(plugins::EffectContext& ctx) {
 #if FEATURE_AUDIO_SYNC
     if (ctx.audio.available) {
         // =====================================================================
-        // Hop-based updates: update targets only on new hops
+        // v8 SPEED MODULATION: heavy_bands → EMA smoothing → Spring
         // =====================================================================
-        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
-        if (newHop) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
-            m_targetHeavyEnergy = (ctx.audio.controlBus.heavy_bands[1] +
-                                   ctx.audio.controlBus.heavy_bands[2]) / 2.0f;
-            m_targetBeatStrength = ctx.audio.beatStrength();
-            m_targetTempoConf = ctx.audio.tempoConfidence();
+        float rawHeavyEnergy = (ctx.audio.controlBus.heavy_bands[1] +
+                                 ctx.audio.controlBus.heavy_bands[2]) / 2.0f;
+        
+        // EMA smoothing with frame-rate-independent alpha (tau = 50ms)
+        const float tau = 0.05f;
+        float alpha = 1.0f - expf(-dt / tau);
+        
+        // CRITICAL: Initialize to raw value on first frame (no ramp-from-zero)
+        if (!m_heavyEnergySmoothInitialized) {
+            m_heavyEnergySmooth = rawHeavyEnergy;
+            m_heavyEnergySmoothInitialized = true;
+        } else {
+            m_heavyEnergySmooth += (rawHeavyEnergy - m_heavyEnergySmooth) * alpha;
         }
         
-        // Smooth toward targets every frame with MOOD-adjusted smoothing
-        float heavyEnergy = m_heavyEnergyFollower.updateWithMood(m_targetHeavyEnergy, dt, moodNorm);
-        float beatStrength = m_beatStrengthFollower.updateWithMood(m_targetBeatStrength, dt, moodNorm);
-        float tempoConf = m_tempoConfFollower.updateWithMood(m_targetTempoConf, dt, moodNorm);
-        
-        // =====================================================================
-        // v8 SPEED MODULATION: heavy_bands → Spring (NO stacked smoothing!)
-        // =====================================================================
+        float heavyEnergy = m_heavyEnergySmooth;
         float targetSpeed = 0.6f + 0.8f * heavyEnergy;  // 0.6-1.4x range
         speedMult = m_speedSpring.update(targetSpeed, dt);
         if (speedMult > 1.6f) speedMult = 1.6f;
@@ -105,6 +98,7 @@ void BPMEffect::render(plugins::EffectContext& ctx) {
         // =====================================================================
         // TEMPO LOCK HYSTERESIS
         // =====================================================================
+        float tempoConf = ctx.audio.tempoConfidence();
         if (tempoConf > 0.6f) m_tempoLocked = true;
         else if (tempoConf < 0.4f) m_tempoLocked = false;
 
@@ -115,8 +109,9 @@ void BPMEffect::render(plugins::EffectContext& ctx) {
         // BEAT RING SPAWNING
         // =====================================================================
         if (ctx.audio.isOnBeat()) {
+            float strength = ctx.audio.beatStrength();
             // Scale by confidence for gentler response on uncertain beats
-            float weightedStrength = beatStrength * (0.5f + 0.5f * tempoConf);
+            float weightedStrength = strength * (0.5f + 0.5f * tempoConf);
 
             // Spawn new ring
             m_ringRadius[m_nextRing] = 0.0f;
@@ -146,11 +141,6 @@ void BPMEffect::render(plugins::EffectContext& ctx) {
             }
         }
     }
-
-    // =========================================================================
-    // Fade for background wave trails
-    // =========================================================================
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
     // =========================================================================
     // DUAL-LAYER RENDER LOOP

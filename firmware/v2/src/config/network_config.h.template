@@ -73,13 +73,13 @@ namespace NetworkConfig {
     #ifdef AP_SSID_CUSTOM
         constexpr const char* AP_SSID = AP_SSID_CUSTOM;
     #else
-        constexpr const char* AP_SSID = "LightwaveOS-AP";  // Tab5.encoder expects this SSID
+        constexpr const char* AP_SSID = "LightwaveOS-Setup";
     #endif
 
     #ifdef AP_PASSWORD_CUSTOM
         constexpr const char* AP_PASSWORD = AP_PASSWORD_CUSTOM;
     #else
-        constexpr const char* AP_PASSWORD = "SpectraSynq";  // Tab5.encoder expects this password
+        constexpr const char* AP_PASSWORD = "lightwave123";
     #endif
 
     // ========================================================================
@@ -117,18 +117,6 @@ namespace NetworkConfig {
     constexpr uint32_t SCAN_INTERVAL_MS = 60000;        // Re-scan every minute
     constexpr uint32_t RECONNECT_DELAY_MS = 5000;       // 5s between reconnect attempts
     constexpr uint32_t MAX_RECONNECT_DELAY_MS = 60000;  // Max 1 minute backoff
-
-    // ========================================================================
-    // WiFi Mode Settings
-    // ========================================================================
-
-    // Force AP-only mode (disables STA connection attempts)
-    // Set to true to force AP-only mode, false for STA+AP mode
-    #ifdef FORCE_AP_MODE
-        constexpr bool FORCE_AP_MODE = (FORCE_AP_MODE != 0);
-    #else
-        constexpr bool FORCE_AP_MODE = false;  // Default: STA+AP mode enabled
-    #endif
 
 } // namespace NetworkConfig
 

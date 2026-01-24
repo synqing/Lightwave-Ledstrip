@@ -24,11 +24,8 @@ bool LGPRadialRippleEffect::init(plugins::EffectContext& ctx) {
 
 void LGPRadialRippleEffect::render(plugins::EffectContext& ctx) {
     // CENTER ORIGIN - Concentric rings that expand from center
-    float complexityNorm = ctx.complexity / 255.0f;
-    float variationNorm = ctx.variation / 255.0f;
-    const uint8_t ringCount = (uint8_t)(4 + complexityNorm * 6.0f);
-    uint16_t ringSpeed = (uint16_t)((ctx.speed << 2) + (uint16_t)(variationNorm * 30.0f));
-    uint8_t hueOffset = (uint8_t)(variationNorm * 96.0f);
+    const uint8_t ringCount = 6;
+    uint16_t ringSpeed = (uint16_t)(ctx.speed << 2);
 
     m_time = (uint16_t)(m_time + ringSpeed);
 
@@ -45,11 +42,11 @@ void LGPRadialRippleEffect::render(plugins::EffectContext& ctx) {
         uint8_t brightness = (uint8_t)((wave + 32768) >> 8);
         brightness = scale8(brightness, ctx.brightness);
 
-        uint8_t hue = (uint8_t)(ctx.gHue + hueOffset + (distSquared >> 10));
+        uint8_t hue = (uint8_t)(ctx.gHue + (distSquared >> 10));
         ctx.leds[i] = ctx.palette.getColor(hue, brightness);
 
         if (i + STRIP_LENGTH < ctx.ledCount) {
-            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(hue + 64 + (hueOffset >> 1)), brightness);
+            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(hue + 64), brightness);
         }
     }
 }

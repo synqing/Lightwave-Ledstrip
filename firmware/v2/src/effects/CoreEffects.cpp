@@ -28,6 +28,7 @@
 #include "ieffect/JuggleEffect.h"
 #include "ieffect/BPMEffect.h"
 #include "ieffect/WaveEffect.h"
+#include "ieffect/WaveAmbientEffect.h"
 #include "ieffect/WaveReactiveEffect.h"
 #include "ieffect/RippleEffect.h"
 #include "ieffect/HeartbeatEffect.h"
@@ -87,12 +88,14 @@
 #include "ieffect/LGPChromaticLensEffect.h"
 #include "ieffect/LGPChromaticPulseEffect.h"
 #include "ieffect/LGPAudioTestEffect.h"
+#include "ieffect/LGPBeatPulseEffect.h"
 #include "ieffect/LGPSpectrumBarsEffect.h"
-#include "ieffect/LGPSpectrumDetailEffect.h"
-#include "ieffect/LGPSpectrumDetailEnhancedEffect.h"
 #include "ieffect/LGPBassBreathEffect.h"
-// DELETED: AudioWaveformEffect, AudioBloomEffect, SnapwaveEffect, WaveformEffect - broken effects removed
+#include "ieffect/AudioWaveformEffect.h"
+#include "ieffect/AudioBloomEffect.h"
+#include "ieffect/SnapwaveLinearEffect.h"
 #include "ieffect/LGPStarBurstNarrativeEffect.h"
+#include "ieffect/LGPChordGlowEffect.h"
 #include "ieffect/LGPPerlinVeilEffect.h"
 #include "ieffect/LGPPerlinShocklinesEffect.h"
 #include "ieffect/LGPPerlinCausticsEffect.h"
@@ -100,30 +103,20 @@
 #include "ieffect/LGPPerlinBackendFastLEDEffect.h"
 #include "ieffect/LGPPerlinBackendEmotiscopeFullEffect.h"
 #include "ieffect/LGPPerlinBackendEmotiscopeQuarterEffect.h"
-#include "ieffect/SpectrumAnalyzerEffect.h"
-#include "ieffect/StyleAdaptiveEffect.h"
+#include "ieffect/LGPPerlinVeilAmbientEffect.h"
+#include "ieffect/LGPPerlinShocklinesAmbientEffect.h"
+#include "ieffect/LGPPerlinCausticsAmbientEffect.h"
+#include "ieffect/LGPPerlinInterferenceWeaveAmbientEffect.h"
 #include "ieffect/BPMEnhancedEffect.h"
-#include "ieffect/RippleEnhancedEffect.h"
-#include "ieffect/LGPInterferenceScannerEffectEnhanced.h"
-#include "ieffect/LGPWaveCollisionEffectEnhanced.h"
+#include "ieffect/BreathingEnhancedEffect.h"
 #include "ieffect/ChevronWavesEffectEnhanced.h"
-#include "ieffect/LGPStarBurstEffectEnhanced.h"
+#include "ieffect/LGPInterferenceScannerEffectEnhanced.h"
 #include "ieffect/LGPPhotonicCrystalEffectEnhanced.h"
-#include "ieffect/DynamicEnvelopeEffect.h"
-#include "ieffect/HarmonicPaletteEffect.h"
-#include "ieffect/BreathingRippleEffect.h"
-#include "ieffect/TimbralTextureEffect.h"
-#include "ieffect/NarrativePerlinEffect.h"
-#include "ieffect/OrganicRippleEffect.h"
-#include "ieffect/CascadedSpringEffect.h"
-#include "ieffect/SpectrumCenterEffect.h"
-#include "ieffect/PhaseNarrativeEffect.h"
-#include "ieffect/PerlinBreathingEffect.h"
-#include "ieffect/RhythmGatedPulseEffect.h"
-#include "ieffect/LGPWaveCollisionAmbientEffect.h"
-#include "ieffect/ChevronWavesAmbientEffect.h"
-#include "ieffect/LGPStarBurstAmbientEffect.h"
-#include "ieffect/LGPPhotonicCrystalAmbientEffect.h"
+#include "ieffect/LGPSpectrumDetailEffect.h"
+#include "ieffect/LGPSpectrumDetailEnhancedEffect.h"
+#include "ieffect/LGPStarBurstEffectEnhanced.h"
+#include "ieffect/LGPWaveCollisionEffectEnhanced.h"
+#include "ieffect/RippleEnhancedEffect.h"
 #include "utils/FastLEDOptim.h"
 #include "../core/narrative/NarrativeEngine.h"
 #include <FastLED.h>
@@ -131,7 +124,7 @@
 namespace lightwaveos {
 namespace effects {
 
-using namespace lightwaveos::nodes;
+using namespace lightwaveos::actors;
 
 // ==================== Static State for Stateful Effects ====================
 // Note: In v2, effect state should eventually move to EffectContext
@@ -264,7 +257,7 @@ void effectPulse(RenderContext& ctx) {
 
 // ==================== EFFECT REGISTRATION ====================
 
-uint8_t registerCoreEffects(RendererNode* renderer) {
+uint8_t registerCoreEffects(RendererActor* renderer) {
     if (!renderer) return 0;
 
     uint8_t count = 0;
@@ -300,7 +293,7 @@ uint8_t registerCoreEffects(RendererNode* renderer) {
     return count;
 }
 
-uint8_t registerAllEffects(RendererNode* renderer) {
+uint8_t registerAllEffects(RendererActor* renderer) {
     if (!renderer) return 0;
 
     uint8_t total = 0;
@@ -355,8 +348,13 @@ uint8_t registerAllEffects(RendererNode* renderer) {
         // Effect already counted in registerCoreEffects (count++), just register it
     }
     
-    // DELETED: Wave Ambient (ID 7) - broken visibility, removed
-
+    // Pilot: Wave Ambient (ID 7) - IEffect native (replaces WaveEffect)
+    // Uses time-driven motion with audio amplitude modulation (AMBIENT pattern)
+    static ieffect::WaveAmbientEffect waveAmbientInstance;
+    if (renderer->registerEffect(coreStart + 7, &waveAmbientInstance)) {
+        // Effect already counted in registerCoreEffects (count++), just register it
+    }
+    
     // Pilot: Ripple (ID 8) - IEffect native
     static ieffect::RippleEffect rippleInstance;
     if (renderer->registerEffect(coreStart + 8, &rippleInstance)) {
@@ -764,21 +762,15 @@ uint8_t registerAllEffects(RendererNode* renderer) {
         total++;  // Count this effect
     }
 
+    // LGP Beat Pulse (ID 69) - Beat-synchronized radial pulse
+    static ieffect::LGPBeatPulseEffect beatPulseInstance;
+    if (renderer->registerEffect(total, &beatPulseInstance)) {
+        total++;
+    }
+
     // LGP Spectrum Bars (ID 70) - 8-band spectrum analyzer
     static ieffect::LGPSpectrumBarsEffect spectrumBarsInstance;
     if (renderer->registerEffect(total, &spectrumBarsInstance)) {
-        total++;
-    }
-
-    // LGP Spectrum Detail (ID 70.5) - 64-bin FFT spectrum with logarithmic mapping
-    static ieffect::LGPSpectrumDetailEffect spectrumDetailInstance;
-    if (renderer->registerEffect(total, &spectrumDetailInstance)) {
-        total++;
-    }
-
-    // LGP Spectrum Detail Enhanced (ID 102) - Enhanced version with faster response and increased brightness
-    static ieffect::LGPSpectrumDetailEnhancedEffect spectrumDetailEnhancedInstance;
-    if (renderer->registerEffect(total, &spectrumDetailEnhancedInstance)) {
         total++;
     }
 
@@ -788,23 +780,39 @@ uint8_t registerAllEffects(RendererNode* renderer) {
         total++;
     }
 
-    // DELETED: IDs 72-74 (AudioWaveform, AudioBloom, Snapwave, WaveformEffect) - broken effects removed
+    // Audio Waveform (ID 72) - True time-domain waveform visualization
+    static ieffect::AudioWaveformEffect audioWaveformInstance;
+    if (renderer->registerEffect(total, &audioWaveformInstance)) {
+        total++;
+    }
 
-    // LGP Star Burst Narrative (ID 76) - Story conductor + chord-based color
+    // Audio Bloom (ID 73) - Centre bloom pulses triggered by audio transients
+    static ieffect::AudioBloomEffect audioBloomInstance;
+    if (renderer->registerEffect(total, &audioBloomInstance)) {
+        total++;
+    }
+
+    // LGP Star Burst Narrative (ID 74) - Story conductor + chord-based color
     static ieffect::LGPStarBurstNarrativeEffect starBurstNarrativeInstance;
     if (renderer->registerEffect(total, &starBurstNarrativeInstance)) {
         total++;
     }
 
-    // Wave Reactive (ID 77) - Energy-accumulating wave with audio-driven motion
+    // LGP Chord Glow (ID 75) - Full chord detection showcase effect
+    static ieffect::LGPChordGlowEffect chordGlowInstance;
+    if (renderer->registerEffect(total, &chordGlowInstance)) {
+        total++;
+    }
+
+    // Wave Reactive (ID 76) - Energy-accumulating wave with audio-driven motion
     // Uses Kaleidoscope-style energy accumulation (REACTIVE pattern)
     static ieffect::WaveReactiveEffect waveReactiveInstance;
     if (renderer->registerEffect(total, &waveReactiveInstance)) {
         total++;
     }
 
-    // Perlin-based LGP effects (IDs 78-81) - Audio-reactive noise field patterns
-    // LGP Perlin Veil (ID 78) - Slow drifting curtains from centre, audio-driven advection
+    // Perlin-based LGP effects (IDs 77-80) - Audio-reactive noise field patterns
+    // LGP Perlin Veil (ID 77) - Slow drifting curtains from centre, audio-driven advection
     static ieffect::LGPPerlinVeilEffect perlinVeilInstance;
     if (renderer->registerEffect(total, &perlinVeilInstance)) {
         total++;
@@ -828,6 +836,31 @@ uint8_t registerAllEffects(RendererNode* renderer) {
         total++;
     }
 
+    // Perlin-based LGP effects (IDs 81-84) - Ambient (time-driven) variants
+    // LGP Perlin Veil Ambient (ID 81) - Time-driven drifting curtains
+    static ieffect::LGPPerlinVeilAmbientEffect perlinVeilAmbientInstance;
+    if (renderer->registerEffect(total, &perlinVeilAmbientInstance)) {
+        total++;
+    }
+
+    // LGP Perlin Shocklines Ambient (ID 82) - Time-driven travelling ridges
+    static ieffect::LGPPerlinShocklinesAmbientEffect perlinShocklinesAmbientInstance;
+    if (renderer->registerEffect(total, &perlinShocklinesAmbientInstance)) {
+        total++;
+    }
+
+    // LGP Perlin Caustics Ambient (ID 83) - Time-driven caustic lobes
+    static ieffect::LGPPerlinCausticsAmbientEffect perlinCausticsAmbientInstance;
+    if (renderer->registerEffect(total, &perlinCausticsAmbientInstance)) {
+        total++;
+    }
+
+    // LGP Perlin Interference Weave Ambient (ID 84) - Time-driven moiré
+    static ieffect::LGPPerlinInterferenceWeaveAmbientEffect perlinInterferenceWeaveAmbientInstance;
+    if (renderer->registerEffect(total, &perlinInterferenceWeaveAmbientInstance)) {
+        total++;
+    }
+
     // Perlin Backend Test Effects (IDs 85-87) - A/B/C comparison harness
     // Perlin Backend Test A (ID 85) - FastLED inoise8 baseline
     static ieffect::LGPPerlinBackendFastLEDEffect perlinBackendFastLEDInstance;
@@ -847,187 +880,77 @@ uint8_t registerAllEffects(RendererNode* renderer) {
         total++;
     }
 
-    // Audio Pipeline Enhancement Effects (IDs 88-90) - New audio-reactive effects
-    // Spectrum Analyzer (ID 88) - 64-bin frequency spectrum visualization
-    static ieffect::SpectrumAnalyzerEffect spectrumAnalyzerInstance;
-    if (renderer->registerEffect(total, &spectrumAnalyzerInstance)) {
-        total++;
-    }
+    // =============== ENHANCED AUDIO-REACTIVE EFFECTS (88-99) ===============
 
-    // Style Adaptive (ID 90) - Adapts behavior based on detected music style
-    static ieffect::StyleAdaptiveEffect styleAdaptiveInstance;
-    if (renderer->registerEffect(total, &styleAdaptiveInstance)) {
-        total++;
-    }
-
-    // =============== ENHANCED AUDIO EFFECTS (IDs 93-101) ===============
-    // Enhanced versions of existing audio-reactive effects with proven feature enhancements
-    
-    // BPM Enhanced (ID 93) - Enhanced version with 64-bin sub-bass, heavy_chroma, beatPhase sync, snare triggers
+    // BPM Enhanced (ID 88) - Tempo-locked pulse rings
     static ieffect::BPMEnhancedEffect bpmEnhancedInstance;
     if (renderer->registerEffect(total, &bpmEnhancedInstance)) {
         total++;
     }
 
-    // DELETED: Wave Ambient Enhanced - broken visibility, removed
-
-    // Ripple Enhanced (ID 95) - Enhanced version with improved 64-bin thresholds, snare triggers, treble shimmer
-    static ieffect::RippleEnhancedEffect rippleEnhancedInstance;
-    if (renderer->registerEffect(total, &rippleEnhancedInstance)) {
+    // Breathing Enhanced (ID 89) - Style-adaptive breathing
+    static ieffect::BreathingEnhancedEffect breathingEnhancedInstance;
+    if (renderer->registerEffect(total, &breathingEnhancedInstance)) {
         total++;
     }
 
-    // LGP Interference Scanner Enhanced (ID 97) - Enhanced version with optimized 64-bin usage, enhanced snare boost
-    static ieffect::LGPInterferenceScannerEnhancedEffect interferenceScannerEnhancedInstance;
-    if (renderer->registerEffect(total, &interferenceScannerEnhancedInstance)) {
-        total++;
-    }
-
-    // LGP Wave Collision Enhanced (ID 98) - Enhanced version with 64-bin sub-bass, enhanced snare/hi-hat triggers
-    static ieffect::LGPWaveCollisionEnhancedEffect waveCollisionEnhancedInstance;
-    if (renderer->registerEffect(total, &waveCollisionEnhancedInstance)) {
-        total++;
-    }
-
-    // Chevron Waves Enhanced (ID 99) - Enhanced version with heavy_chroma, 64-bin sub-bass, snare sharpness boost
+    // Chevron Waves Enhanced (ID 90) - Beat-synced chevron propagation
     static ieffect::ChevronWavesEnhancedEffect chevronWavesEnhancedInstance;
     if (renderer->registerEffect(total, &chevronWavesEnhancedInstance)) {
         total++;
     }
 
-    // LGP Star Burst Enhanced (ID 100) - Enhanced version with 64-bin sub-bass, enhanced snare/hi-hat triggers
-    static ieffect::LGPStarBurstEnhancedEffect starBurstEnhancedInstance;
-    if (renderer->registerEffect(total, &starBurstEnhancedInstance)) {
+    // LGP Interference Scanner Enhanced (ID 91) - Audio-reactive scan speed
+    static ieffect::LGPInterferenceScannerEnhancedEffect interferenceScannerEnhancedInstance;
+    if (renderer->registerEffect(total, &interferenceScannerEnhancedInstance)) {
         total++;
     }
 
-    // LGP Photonic Crystal Enhanced (ID 101) - Enhanced version with heavy_chroma, 64-bin sub-bass, enhanced snare flash
+    // LGP Photonic Crystal Enhanced (ID 92) - Harmonic lattice modulation
     static ieffect::LGPPhotonicCrystalEnhancedEffect photonicCrystalEnhancedInstance;
     if (renderer->registerEffect(total, &photonicCrystalEnhancedInstance)) {
         total++;
     }
 
-    // =============== DYNAMIC SALIENCY EFFECTS (IDs 102+) ===============
-    // Effects utilizing previously unused audio features
-
-    // Dynamic Envelope (ID 102) - Brightness follows musical dynamics (crescendo/diminuendo)
-    // FIRST EFFECT to use dynamicSaliency (was 0% utilized in codebase)
-    static ieffect::DynamicEnvelopeEffect dynamicEnvelopeInstance;
-    if (renderer->registerEffect(total, &dynamicEnvelopeInstance)) {
+    // LGP Spectrum Detail (ID 93) - 64-bin FFT direct visualisation
+    static ieffect::LGPSpectrumDetailEffect spectrumDetailInstance;
+    if (renderer->registerEffect(total, &spectrumDetailInstance)) {
         total++;
     }
 
-    // Breathing Ripple (ID 103) - Oscillating radius ripples that expand AND contract
-    // Combines beatsin16 oscillation with radial expansion for breathing wavefronts
-    static ieffect::BreathingRippleEffect breathingRippleInstance;
-    if (renderer->registerEffect(total, &breathingRippleInstance)) {
+    // LGP Spectrum Detail Enhanced (ID 94) - Saliency-weighted spectrum
+    static ieffect::LGPSpectrumDetailEnhancedEffect spectrumDetailEnhancedInstance;
+    if (renderer->registerEffect(total, &spectrumDetailEnhancedInstance)) {
         total++;
     }
 
-    // Narrative Perlin (ID 104) - Beat-triggered Perlin noise with BUILD/HOLD/RELEASE arc
-    // Story conductor controls intensity envelope, octaves scale with narrative intensity
-    static ieffect::NarrativePerlinEffect narrativePerlinInstance;
-    if (renderer->registerEffect(total, &narrativePerlinInstance)) {
+    // LGP Star Burst Enhanced (ID 95) - Beat-triggered bursts
+    static ieffect::LGPStarBurstEnhancedEffect starBurstEnhancedInstance;
+    if (renderer->registerEffect(total, &starBurstEnhancedInstance)) {
         total++;
     }
 
-    // Cascaded Spring (ID 105) - Ultra-smooth audio-reactive waves via cascaded spring physics
-    // Two springs in series: fast spring catches transients, slow spring provides buttery smooth output
-    static ieffect::CascadedSpringEffect cascadedSpringInstance;
-    if (renderer->registerEffect(total, &cascadedSpringInstance)) {
+    // LGP Wave Collision Enhanced (ID 96) - Audio-driven wave interference
+    static ieffect::LGPWaveCollisionEnhancedEffect waveCollisionEnhancedInstance;
+    if (renderer->registerEffect(total, &waveCollisionEnhancedInstance)) {
         total++;
     }
 
-    // Spectrum Center (ID 106) - 64-bin spectrum analyzer with CENTER ORIGIN pattern
-    // Bass at center (79/80), treble at edges. Peak hold indicators, beat pulse overlay.
-    static ieffect::SpectrumCenterEffect spectrumCenterInstance;
-    if (renderer->registerEffect(total, &spectrumCenterInstance)) {
+    // Ripple Enhanced (ID 97) - Beat-synced ripple propagation
+    static ieffect::RippleEnhancedEffect rippleEnhancedInstance;
+    if (renderer->registerEffect(total, &rippleEnhancedInstance)) {
         total++;
     }
 
-    // Organic Ripple (ID 107) - Perlin-modulated ripples with natural speed variation
-    // Audio-reactive spawning with organic velocity modulation from noise fields
-    static ieffect::OrganicRippleEffect organicRippleInstance;
-    if (renderer->registerEffect(total, &organicRippleInstance)) {
-        total++;
-    }
-
-    // Perlin Breathing (ID 108) - Organic Perlin noise with beatsin16 breathing modulation
-    // beatsin16 modulates spatial scale (zoom) and brightness envelope for synchronized breathing
-    static ieffect::PerlinBreathingEffect perlinBreathingInstance;
-    if (renderer->registerEffect(total, &perlinBreathingInstance)) {
-        total++;
-    }
-
-    // Phase Narrative (ID 109) - Phase accumulation traveling waves with narrative arc envelope
-    // Combines traveling sine waves with BUILD/HOLD/RELEASE state machine
-    // Beat-triggered narrative cycles, waves originate from center (79/80)
-    static ieffect::PhaseNarrativeEffect phaseNarrativeInstance;
-    if (renderer->registerEffect(total, &phaseNarrativeInstance)) {
-        total++;
-    }
-
-    // Rhythm Gated Pulse (ID 110) - Pulses ONLY during rhythmically salient sections
-    // FIRST EFFECT to use rhythmicSaliency (was 0% utilized in codebase)
-    // Fades to gentle ambient pattern during melodic/quiet sections
-    static ieffect::RhythmGatedPulseEffect rhythmGatedPulseInstance;
-    if (renderer->registerEffect(total, &rhythmGatedPulseInstance)) {
-        total++;
-    }
-
-    // Harmonic Palette (ID 111) - Colors shift ONLY on harmonic changes
-    // FIRST EFFECT to properly use harmonicSaliency for palette control
-    // Demonstrates musical intelligence: stable colors during playback,
-    // transitions triggered by harmony changes (chord progressions, key changes)
-    static ieffect::HarmonicPaletteEffect harmonicPaletteInstance;
-    if (renderer->registerEffect(total, &harmonicPaletteInstance)) {
-        total++;
-    }
-
-    // Timbral Texture (ID 112) - Visual complexity tracks audio texture changes
-    // FIRST EFFECT to use timbralSaliency (was 0% utilized in codebase)
-    // LOW timbralSaliency -> simple Perlin noise (1 octave)
-    // HIGH timbralSaliency -> complex Perlin noise (3 octaves)
-    static ieffect::TimbralTextureEffect timbralTextureInstance;
-    if (renderer->registerEffect(total, &timbralTextureInstance)) {
-        total++;
-    }
-
-    // =============== AMBIENT VARIANTS (IDs 113-116) ===============
-    // Restored original clean implementations (pre-audio-reactive)
-    // These are time-driven only, no audio dependencies
-
-    // LGP Wave Collision Ambient (ID 113) - Original wave packet interference
-    // Restored from c691ea3: simple expanding wave packets with interference
-    static ieffect::LGPWaveCollisionAmbientEffect waveCollisionAmbientInstance;
-    if (renderer->registerEffect(total, &waveCollisionAmbientInstance)) {
-        total++;
-    }
-
-    // Chevron Waves Ambient (ID 114) - Original V-shaped wave propagation
-    // Restored from c691ea3: clean V-shaped patterns without audio complexity
-    static ieffect::ChevronWavesAmbientEffect chevronWavesAmbientInstance;
-    if (renderer->registerEffect(total, &chevronWavesAmbientInstance)) {
-        total++;
-    }
-
-    // LGP Star Burst Ambient (ID 115) - Original radial star patterns
-    // Restored from c691ea3: simple star patterns with pulsing
-    static ieffect::LGPStarBurstAmbientEffect starBurstAmbientInstance;
-    if (renderer->registerEffect(total, &starBurstAmbientInstance)) {
-        total++;
-    }
-
-    // LGP Photonic Crystal Ambient (ID 116) - Original bandgap structure
-    // Restored from cd67598~5: simple periodic lattice without audio
-    static ieffect::LGPPhotonicCrystalAmbientEffect photonicCrystalAmbientInstance;
-    if (renderer->registerEffect(total, &photonicCrystalAmbientInstance)) {
+    // Snapwave Linear (ID 98) - v1 parity, LINEAR exempt from CENTER_ORIGIN
+    static ieffect::SnapwaveLinearEffect snapwaveLinearInstance;
+    if (renderer->registerEffect(total, &snapwaveLinearInstance)) {
         total++;
     }
 
     // =============== EFFECT COUNT PARITY VALIDATION ===============
     // Runtime validation: ensure registered count matches expected
-    constexpr uint8_t EXPECTED_EFFECT_COUNT = 105;  // Updated: 101 + 4 ambient variants
+    constexpr uint8_t EXPECTED_EFFECT_COUNT = 99;  // 86 base + 12 enhanced + 1 snapwave
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

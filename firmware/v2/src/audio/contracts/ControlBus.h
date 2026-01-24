@@ -4,7 +4,6 @@
 #include "AudioTime.h"
 #include "MusicalSaliency.h"
 #include "StyleDetector.h"
-#include "TempoOutput.h"
 
 namespace lightwaveos::audio {
 
@@ -51,6 +50,7 @@ struct ChordState {
  */
 struct ControlBusRawInput {
     float rms = 0.0f;   // 0..1
+    float rmsUngated = 0.0f;  // 0..1 (mapped RMS before activity gate; used for silence detection)
     float flux = 0.0f;  // 0..1 (novelty proxy)
 
     float bands[CONTROLBUS_NUM_BANDS] = {0};     // 0..1
@@ -66,9 +66,12 @@ struct ControlBusRawInput {
     // Phase 2: Full 64-bin Goertzel spectrum (110 Hz - 4186 Hz)
     static constexpr uint8_t BINS_64_COUNT = 64;
     float bins64[BINS_64_COUNT] = {0};  // 0..1 normalized magnitudes
+    float bins64Adaptive[BINS_64_COUNT] = {0};  // 0..1 adaptive normalised (Sensory Bridge max follower)
 
-    // Phase 2: Tempo Output (TempoTracker)
-    TempoOutput tempo = {0};
+    // Tempo tracker output (saliency computation ONLY - effects read MusicalGrid)
+    bool tempoLocked = false;       ///< TempoTracker lock state (saliency; effects read MusicalGrid)
+    float tempoConfidence = 0.0f;   ///< TempoTracker confidence (saliency; effects read MusicalGrid.confidence)
+    bool tempoBeatTick = false;     ///< TempoTracker beat tick gated by lock (saliency support)
 };
 
 /**
@@ -78,16 +81,36 @@ struct ControlBusFrame {
     AudioTime t;
     uint32_t hop_seq = 0;
 
+    static constexpr uint8_t BINS_64_COUNT = ControlBusRawInput::BINS_64_COUNT;
+
     float rms = 0.0f;
     float flux = 0.0f;
     float fast_rms = 0.0f;
     float fast_flux = 0.0f;
+
+    // Audio-driven liveliness scalar for global speed trim (0..1)
+    float liveliness = 0.0f;
 
     float bands[CONTROLBUS_NUM_BANDS] = {0};
     float chroma[CONTROLBUS_NUM_CHROMA] = {0};
     float heavy_bands[CONTROLBUS_NUM_BANDS] = {0};
     float heavy_chroma[CONTROLBUS_NUM_CHROMA] = {0};
     int16_t waveform[CONTROLBUS_WAVEFORM_N] = {0};  // Time-domain samples (int16_t range: -32768 to 32767)
+
+    // -----------------------------------------------------------------------
+    // Sensory Bridge parity fields (side-car pipeline)
+    // -----------------------------------------------------------------------
+    int16_t sb_waveform[CONTROLBUS_WAVEFORM_N] = {0};  // 3.1.0 waveform (post capture scaling)
+    float sb_waveform_peak_scaled = 0.0f;
+    float sb_waveform_peak_scaled_last = 0.0f;
+    float sb_note_chromagram[CONTROLBUS_NUM_CHROMA] = {0};  // 3.1.0 chroma
+    float sb_chromagram_max_val = 0.0f;
+
+    float sb_spectrogram[BINS_64_COUNT] = {0};        // 4.1.1 spectrogram (normalised)
+    float sb_spectrogram_smooth[BINS_64_COUNT] = {0}; // 4.1.1 smoothed spectrogram
+    float sb_chromagram_smooth[CONTROLBUS_NUM_CHROMA] = {0}; // 4.1.1 chroma
+    float sb_hue_position = 0.0f;
+    float sb_hue_shifting_mix = -0.35f;
 
     ChordState chordState;  // Chord detection results (root, type, confidence)
 
@@ -104,11 +127,13 @@ struct ControlBusFrame {
     bool hihatTrigger = false;      // True on hi-hat onset frame
 
     // Phase 2: Full 64-bin Goertzel spectrum (110 Hz - 4186 Hz)
-    static constexpr uint8_t BINS_64_COUNT = 64;
     float bins64[BINS_64_COUNT] = {0};  // 0..1 normalized magnitudes
+    float bins64Adaptive[BINS_64_COUNT] = {0};  // 0..1 adaptive normalised (Sensory Bridge max follower)
 
-    // Phase 2: Tempo Output (TempoTracker)
-    TempoOutput tempo = {0};
+    // Tempo tracker output (saliency computation ONLY - effects read MusicalGrid)
+    bool tempoLocked = false;       ///< TempoTracker lock state (saliency; effects read MusicalGrid)
+    float tempoConfidence = 0.0f;   ///< TempoTracker confidence (saliency; effects read MusicalGrid.confidence)
+    bool tempoBeatTick = false;     ///< TempoTracker beat tick gated by lock (saliency support)
 
     // Silence detection (Sensory Bridge pattern)
     // silentScale fades from 1.0 to 0.0 after silenceHysteresisMs of silence
@@ -300,6 +325,11 @@ public:
 private:
     ControlBusFrame m_frame{};
 
+    // Liveliness smoothing state
+    float m_liveliness_s = 0.0f;
+    AudioTime m_last_time{};
+    bool m_time_valid = false;
+
     // One-pole smoothing state
     float m_rms_s = 0.0f;
     float m_flux_s = 0.0f;
@@ -322,11 +352,10 @@ private:
     float m_alpha_slow = 0.12f;  // slower response
 
     // LGP_SMOOTH: Asymmetric attack/release for bands
-    // A1 Optimization: Adjusted for smoother feature transitions
-    float m_band_attack = 0.18f;       // Slightly slower rise (was 0.15f) - smoother onset
-    float m_band_release = 0.04f;      // Slightly faster fall (was 0.03f) - faster decay
-    float m_heavy_band_attack = 0.10f; // Slightly faster rise (was 0.08f) - more responsive
-    float m_heavy_band_release = 0.020f; // Slightly faster fall (was 0.015f) - cleaner fade
+    float m_band_attack = 0.15f;       // Fast rise for transients
+    float m_band_release = 0.03f;      // Slow fall for LGP viewing
+    float m_heavy_band_attack = 0.08f; // Extra slow rise
+    float m_heavy_band_release = 0.015f; // Ultra slow fall
 
     // Zone AGC state (Sensory Bridge pattern: 4 zones)
     bool m_zone_agc_enabled = true;  // Enabled by default for balanced frequency response

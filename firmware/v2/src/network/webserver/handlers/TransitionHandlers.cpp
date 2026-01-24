@@ -7,11 +7,11 @@
 #include "../../ApiResponse.h"
 #include "../../RequestValidator.h"
 #include "../../WebServer.h"  // For CachedRendererState
-#include "../../../core/actors/NodeOrchestrator.h"
-#include "../../../core/actors/RendererNode.h"
+#include "../../../core/actors/ActorSystem.h"
+#include "../../../core/actors/RendererActor.h"
 #include "../../../effects/transitions/TransitionTypes.h"
 
-using namespace lightwaveos::nodes;
+using namespace lightwaveos::actors;
 using namespace lightwaveos::network;
 using namespace lightwaveos::transitions;
 
@@ -36,7 +36,7 @@ void TransitionHandlers::handleTypes(AsyncWebServerRequest* request) {
 
 void TransitionHandlers::handleTrigger(AsyncWebServerRequest* request,
                                          uint8_t* data, size_t len,
-                                         NodeOrchestrator& orchestrator,
+                                         ActorSystem& actors,
                                          const WebServer::CachedRendererState& cachedState,
                                          std::function<void()> broadcastStatus) {
     StaticJsonDocument<512> doc;
@@ -58,10 +58,10 @@ void TransitionHandlers::handleTrigger(AsyncWebServerRequest* request,
         // For random transitions, use a random type (0-11)
         // Note: This is a simplified approach - ideally ActorSystem would have startRandomTransition()
         uint8_t randomType = (millis() % 12);  // Simple pseudo-random
-        orchestrator.startTransition(toEffect, randomType);
+        actors.startTransition(toEffect, randomType);
         transitionType = randomType;
     } else {
-        orchestrator.startTransition(toEffect, transitionType);
+        actors.startTransition(toEffect, transitionType);
     }
 
     sendSuccessResponse(request, [&cachedState, toEffect, transitionType](JsonObject& respData) {
@@ -77,7 +77,7 @@ void TransitionHandlers::handleTrigger(AsyncWebServerRequest* request,
 }
 
 void TransitionHandlers::handleConfigGet(AsyncWebServerRequest* request,
-                                           RendererNode* renderer) {
+                                           RendererActor* renderer) {
     if (!renderer) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::SYSTEM_NOT_READY, "Renderer not available");

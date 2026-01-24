@@ -1,0 +1,57 @@
+name: Quint Simulation
+
+on:
+  pull_request:
+    branches: [ main, feat/* ]
+    paths:
+      - 'firmware/v2/specs/quint/choreo/*.qnt'
+      - '.github/workflows/quint_simulation.yml'
+  push:
+    branches: [ main, feat/* ]
+    paths:
+      - 'firmware/v2/specs/quint/choreo/*.qnt'
+      - '.github/workflows/quint_simulation.yml'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  simulate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install Quint
+        run: npm install -g @informalsystems/quint@0.29.1
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Run simulation
+        working-directory: firmware/v2/specs/quint/choreo
+        run: |
+          mkdir -p traces/sim
+          quint run lightwave_step.qnt \
+            --main=lightwave_step \
+            --max-steps=25 --n-traces=10 --mbt \
+            --out-itf=traces/sim/ci_out.itf.json
+      
+      - name: Validate ITF
+        working-directory: firmware/v2/specs/quint/choreo
+        run: |
+          # Validate all generated ITF files
+          for itf_file in traces/sim/ci_out*.itf.json; do
+            if [ -f "$itf_file" ]; then
+              echo "Validating: $itf_file"
+              if ! python3 tools/validate_itf_bigint.py "$itf_file"; then
+                echo "ERROR: $itf_file contains raw numbers (ADR-015 violation)"
+                exit 1
+              fi
+            fi
+          done
+          echo "PASS: All generated ITF files are ADR-015 compliant"

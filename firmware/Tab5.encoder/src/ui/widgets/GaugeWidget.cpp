@@ -19,26 +19,26 @@
 GaugeWidget::GaugeWidget(M5GFX* display, int32_t x, int32_t y, int32_t w, int32_t h, uint8_t index)
     : _display(display), _sprite(display), _x(x), _y(y), _w(w), _h(h), _index(index)
 {
-    // #region agent log
-    EspHal::log("[DEBUG] GaugeWidget ctor idx=%d size=%dx%d bytes=%u - Heap before: free=%u minFree=%u\n",
-                  index, w, h, w * h * 2, EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
-    // #endregion
+    // #region agent log (DISABLED)
+    // EspHal::log("[DEBUG] GaugeWidget ctor idx=%d size=%dx%d bytes=%u - Heap before: free=%u minFree=%u\n",
+                  // index, w, h, w * h * 2, EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
+        // #endregion
 #if ENABLE_UI_DIAGNOSTICS
     EspHal::log("[DBG] gauge_ctor idx=%d x=%d y=%d w=%d h=%d\n", index, x, y, w, h);
 #endif
 
     _sprite.setColorDepth(16);
     _sprite.setPsram(true);
-    // #region agent log
-    EspHal::log("[DEBUG] Before createSprite(idx=%d) - Heap: free=%u minFree=%u\n",
-                  index, EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
-    // #endregion
+    // #region agent log (DISABLED)
+    // EspHal::log("[DEBUG] Before createSprite(idx=%d) - Heap: free=%u minFree=%u\n",
+                  // index, EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
+        // #endregion
     bool spriteOk = _sprite.createSprite(_w, _h);
     _spriteOk = spriteOk;
-    // #region agent log
-    EspHal::log("[DEBUG] After createSprite(idx=%d) ok=%d - Heap: free=%u minFree=%u\n",
-                  index, spriteOk ? 1 : 0, EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
-    // #endregion
+    // #region agent log (DISABLED)
+    // EspHal::log("[DEBUG] After createSprite(idx=%d) ok=%d - Heap: free=%u minFree=%u\n",
+                  // index, spriteOk ? 1 : 0, EspHal::getFreeHeap(), EspHal::getMinFreeHeap());
+        // #endregion
 
 #if ENABLE_UI_DIAGNOSTICS
     EspHal::log("[DBG] sprite_created idx=%d ok=%d\n", index, spriteOk ? 1 : 0);

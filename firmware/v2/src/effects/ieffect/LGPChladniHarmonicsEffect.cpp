@@ -68,7 +68,6 @@ void LGPChladniHarmonicsEffect::render(plugins::EffectContext& ctx) {
         uint8_t hue1 = (uint8_t)(ctx.gHue + (uint8_t)(plateDisplacement * 30.0f));
         uint8_t hue2 = (uint8_t)(ctx.gHue + 128 + (uint8_t)(plateDisplacement * 30.0f));
 
-        // Use palette system - apply brightness scaling
         uint8_t brightU8 = (uint8_t)((brightness * ctx.brightness) / 255);
         ctx.leds[i] = ctx.palette.getColor(hue1, brightU8);
 

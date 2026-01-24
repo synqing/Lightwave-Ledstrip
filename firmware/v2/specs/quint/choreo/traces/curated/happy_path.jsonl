@@ -1,0 +1,7 @@
+{"event":"ws.connect","ts_mono_ms":60835,"connEpoch":0,"eventSeq":6,"clientId":3,"ip":"192.168.0.25"}
+{"event":"msg.recv","ts_mono_ms":60839,"connEpoch":0,"eventSeq":7,"clientId":3,"msgType":"","result":"ok","reason":"","payloadSummary":"{\"method\":\"status.get\"}"}
+{"event":"msg.recv","ts_mono_ms":61354,"connEpoch":0,"eventSeq":8,"clientId":3,"msgType":"","result":"ok","reason":"","payloadSummary":"{\"method\":\"parameters.set\",\"params\":{\"brightness\":200}}"}
+{"event":"msg.recv","ts_mono_ms":61862,"connEpoch":0,"eventSeq":9,"clientId":3,"msgType":"","result":"ok","reason":"","payloadSummary":"{\"method\":\"parameters.set\",\"params\":{\"speed\":75}}"}
+{"event":"msg.recv","ts_mono_ms":62366,"connEpoch":0,"eventSeq":10,"clientId":3,"msgType":"","result":"ok","reason":"","payloadSummary":"{\"method\":\"effects.setCurrent\",\"params\":{\"effectId\":1}}"}
+{"event":"msg.recv","ts_mono_ms":62865,"connEpoch":0,"eventSeq":11,"clientId":3,"msgType":"","result":"ok","reason":"","payloadSummary":"{\"method\":\"status.get\"}"}
+{"event":"ws.disconnect","ts_mono_ms":63382,"connEpoch":0,"eventSeq":12,"clientId":3,"ip":"0.0.0.0"}

@@ -2,7 +2,7 @@
  * @file LGPWaveCollisionEnhancedEffect.h
  * @brief LGP Wave Collision Enhanced - Enhanced version with 64-bin sub-bass, enhanced snare/hi-hat triggers
  *
- * Effect ID: 98
+ * Effect ID: 96
  * Family: INTERFERENCE
  * Tags: CENTER_ORIGIN | DUAL_STRIP | TRAVELING
  *
@@ -69,6 +69,9 @@ private:
 
     // Validation instrumentation
     float m_prevPhaseDelta = 0.0f;    // Previous frame phase delta for reversal detection
+    
+    // Tempo lock hysteresis (Schmitt trigger: 0.6 lock / 0.4 unlock)
+    bool m_tempoLocked = false;
 };
 
 } // namespace ieffect

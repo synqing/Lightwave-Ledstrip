@@ -120,7 +120,6 @@ void LGPGravitationalWaveChirpEffect::render(plugins::EffectContext& ctx) {
         if (m_merging) baseHue = 40;
         else if (m_ringdown) baseHue = 160;
 
-        // Use palette system - apply brightness scaling
         uint8_t brightU8_1 = (uint8_t)((brightness1 * ctx.brightness) / 255);
         ctx.leds[i] = ctx.palette.getColor((uint8_t)(baseHue + ctx.gHue), brightU8_1);
         if (i + STRIP_LENGTH < ctx.ledCount) {

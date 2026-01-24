@@ -12,7 +12,7 @@
 
 #pragma once
 
-#include "../core/actors/RendererNode.h"
+#include "../core/actors/RendererActor.h"
 
 namespace lightwaveos {
 namespace effects {
@@ -86,7 +86,7 @@ constexpr float centerPairSignedPosition(uint16_t index) {
 
 // ==================== Effect Function Declarations ====================
 
-using namespace lightwaveos::nodes;
+using namespace lightwaveos::actors;
 
 // Basic Effects
 void effectFire(RenderContext& ctx);
@@ -112,14 +112,14 @@ void effectPulse(RenderContext& ctx);
  * @param renderer Pointer to RendererActor
  * @return Number of effects registered
  */
-uint8_t registerCoreEffects(RendererNode* renderer);
+uint8_t registerCoreEffects(RendererActor* renderer);
 
 /**
  * @brief Register ALL effects (core + LGP) with RendererActor
  * @param renderer Pointer to RendererActor
  * @return Total number of effects registered
  */
-uint8_t registerAllEffects(RendererNode* renderer);
+uint8_t registerAllEffects(RendererActor* renderer);
 
 } // namespace effects
 } // namespace lightwaveos

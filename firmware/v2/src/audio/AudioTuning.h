@@ -100,8 +100,6 @@ struct NoiseCalibrationState {
 struct AudioPipelineTuning {
     float dcAlpha = 0.001f;
 
-    bool agcEnabled = false;  ///< Enable/disable AGC (false = fixed 4x gain like Emotiscope)
-
     float agcTargetRms = 0.25f;
     float agcMinGain = 1.0f;
     float agcMaxGain = 40.0f;      // Was 100.0 - cap to prevent runaway amplification
@@ -114,7 +112,7 @@ struct AudioPipelineTuning {
     float noiseFloorRise = 0.0005f;
     float noiseFloorFall = 0.01f;
 
-    float gateStartFactor = 1.5f;
+    float gateStartFactor = 1.0f;  // Reduced from 1.5: more permissive gate to prevent false closures
     float gateRangeFactor = 1.5f;
     float gateRangeMin = 0.0005f;
 
@@ -147,6 +145,17 @@ struct AudioPipelineTuning {
     // Silence detection (fade to black after sustained silence)
     float silenceHysteresisMs = 5000.0f;  ///< 5s default (user-approved), 0 = disabled
     float silenceThreshold = 0.01f;       ///< RMS below this is considered silence
+
+    // Goertzel novelty tuning (runtime adjustable)
+    bool noveltyUseSpectralFlux = true;   ///< Use per-band flux instead of RMS-based
+    float noveltySpectralFluxScale = 1.0f; ///< Additional scaling before fluxScale
+
+    // Adaptive 64-bin normalisation (Sensory Bridge max follower)
+    float bins64AdaptiveScale = 200.0f;   ///< Scale normalised bins into SB magnitude space
+    float bins64AdaptiveFloor = 4.0f;     ///< Minimum max follower value (SB parity)
+    float bins64AdaptiveRise = 0.0050f;   ///< Max follower rise rate
+    float bins64AdaptiveFall = 0.0025f;   ///< Max follower fall rate
+    float bins64AdaptiveDecay = 0.995f;   ///< Per-frame decay on max_value
 };
 
 struct AudioContractTuning {
@@ -158,13 +167,6 @@ struct AudioContractTuning {
     float confidenceTau = 1.00f;
     float phaseCorrectionGain = 0.35f;
     float barCorrectionGain = 0.20f;
-
-    // TempoTracker Goertzel Tuning
-    float tempoHysteresisThreshold = 1.1f; // Ratio (e.g., 1.1 = 10% advantage required)
-    uint8_t tempoHysteresisFrames = 5;     // Consecutive frames to switch
-    float tempoMagnitudeAlpha = 0.025f;    // Smoothing factor for magnitudes (0.0-1.0)
-    float tempoSilentDecay = 0.995f;       // Decay factor for silent bins
-    float tempoSilenceThreshold = 0.5f;    // 0.0-1.0 (higher = more sensitive)
 
     uint8_t beatsPerBar = 4;
     uint8_t beatUnit = 4;
@@ -247,6 +249,14 @@ inline AudioPipelineTuning clampAudioPipelineTuning(const AudioPipelineTuning& i
     out.silenceHysteresisMs = clampf(out.silenceHysteresisMs, 0.0f, 60000.0f);
     out.silenceThreshold = clampf(out.silenceThreshold, 0.0f, 1.0f);
 
+    out.noveltySpectralFluxScale = clampf(out.noveltySpectralFluxScale, 0.1f, 10.0f);
+
+    out.bins64AdaptiveScale = clampf(out.bins64AdaptiveScale, 0.1f, 1000.0f);
+    out.bins64AdaptiveFloor = clampf(out.bins64AdaptiveFloor, 0.01f, 1000.0f);
+    out.bins64AdaptiveRise = clampf(out.bins64AdaptiveRise, 0.0f, 1.0f);
+    out.bins64AdaptiveFall = clampf(out.bins64AdaptiveFall, 0.0f, 1.0f);
+    out.bins64AdaptiveDecay = clampf(out.bins64AdaptiveDecay, 0.0f, 1.0f);
+
     return out;
 }
 
@@ -265,13 +275,6 @@ inline AudioContractTuning clampAudioContractTuning(const AudioContractTuning& i
     out.confidenceTau = clampf(out.confidenceTau, 0.01f, 10.0f);
     out.phaseCorrectionGain = clampf(out.phaseCorrectionGain, 0.0f, 1.0f);
     out.barCorrectionGain = clampf(out.barCorrectionGain, 0.0f, 1.0f);
-
-    out.tempoHysteresisThreshold = clampf(out.tempoHysteresisThreshold, 1.0f, 2.0f);
-    if (out.tempoHysteresisFrames < 1) out.tempoHysteresisFrames = 1;
-    if (out.tempoHysteresisFrames > 60) out.tempoHysteresisFrames = 60;
-    out.tempoMagnitudeAlpha = clampf(out.tempoMagnitudeAlpha, 0.001f, 1.0f);
-    out.tempoSilentDecay = clampf(out.tempoSilentDecay, 0.0f, 1.0f);
-    out.tempoSilenceThreshold = clampf(out.tempoSilenceThreshold, 0.0f, 1.0f);
 
     if (out.beatsPerBar == 0) out.beatsPerBar = 4;
     if (out.beatUnit == 0) out.beatUnit = 4;

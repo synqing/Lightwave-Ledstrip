@@ -71,7 +71,6 @@ void LGPSolitonWavesEffect::render(plugins::EffectContext& ctx) {
                     // Use blended color from colliding solitons instead of white
                     uint8_t blendHue = (uint8_t)((m_hue[s] + m_hue[other]) / 2);
                     uint8_t blendBright = (uint8_t)(qadd8(m_amp[s], m_amp[other]) / 2);
-                    // Use palette system for collision blend
                     uint8_t brightU8 = (uint8_t)((blendBright * ctx.brightness) / 255);
                     ctx.leds[collisionPos] = ctx.palette.getColor((uint8_t)(blendHue + ctx.gHue), brightU8);
                     if (collisionPos + STRIP_LENGTH < ctx.ledCount) {
@@ -92,7 +91,6 @@ void LGPSolitonWavesEffect::render(plugins::EffectContext& ctx) {
                 uint8_t brightness = (uint8_t)(m_amp[s] * profile);
                 uint8_t hue = (uint8_t)(m_hue[s] + ctx.gHue);
 
-                // Use palette system for soliton
                 uint8_t brightU8 = (uint8_t)((brightness * ctx.brightness) / 255);
                 CRGB solitonColor = ctx.palette.getColor(hue, brightU8);
                 ctx.leds[pos] = solitonColor;

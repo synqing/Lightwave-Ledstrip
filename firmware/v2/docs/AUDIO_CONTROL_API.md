@@ -280,7 +280,7 @@ GET /api/v1/audio/presets/get?id=0
       "noiseFloorMin": 0.0004,
       "noiseFloorRise": 0.0005,
       "noiseFloorFall": 0.01,
-      "gateStartFactor": 1.5,
+      "gateStartFactor": 1.0,
       "gateRangeFactor": 1.5,
       "gateRangeMin": 0.0005,
       "rmsDbFloor": -65.0,
@@ -510,7 +510,7 @@ Controls low-level digital signal processing.
 | `noiseFloorMin` | float | 0.0004 | 0.0-0.1 | Minimum noise floor threshold |
 | `noiseFloorRise` | float | 0.0005 | 0.0-1.0 | Noise floor rise rate |
 | `noiseFloorFall` | float | 0.01 | 0.0-1.0 | Noise floor fall rate |
-| `gateStartFactor` | float | 1.5 | 0.0-10.0 | Noise gate activation threshold |
+| `gateStartFactor` | float | 1.0 | 0.0-10.0 | Noise gate activation threshold |
 | `gateRangeFactor` | float | 1.5 | 0.0-10.0 | Noise gate range multiplier |
 | `gateRangeMin` | float | 0.0005 | 0.0-0.1 | Minimum gate range |
 | `rmsDbFloor` | float | -65.0 | -120-0 | RMS dB floor for normalization |

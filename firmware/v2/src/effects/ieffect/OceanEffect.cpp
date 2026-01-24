@@ -27,10 +27,7 @@ void OceanEffect::render(plugins::EffectContext& ctx) {
     // Narrative integration: wave intensity modulated by narrative intensity
     using namespace lightwaveos::narrative;
     
-    // Mood modulates speed: low mood (reactive) = faster, high mood (smooth) = slower
-    float moodNorm = ctx.getMoodNormalized();
-    float speedMultiplier = 1.0f + moodNorm * 0.5f;  // 1.0x to 1.5x range
-    m_waterOffset += (ctx.speed / 2) * speedMultiplier;
+    m_waterOffset += ctx.speed / 2;
 
     if (m_waterOffset > 65535) m_waterOffset = m_waterOffset % 65536;
     
@@ -39,9 +36,6 @@ void OceanEffect::render(plugins::EffectContext& ctx) {
     if (NARRATIVE.isEnabled()) {
         narrativeIntensity = NARRATIVE.getIntensity();
     }
-
-    // Fade for wave trail persistence
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         // Calculate distance from CENTER PAIR
@@ -58,9 +52,7 @@ void OceanEffect::render(plugins::EffectContext& ctx) {
         // Ocean colors from deep blue to cyan - use palette system
         uint8_t hue = 160 + (combinedWave >> 3);
         uint8_t brightness = 100 + (uint8_t)((combinedWave >> 1) * narrativeIntensity);
-        // Apply brightness scaling
         uint8_t brightU8 = (uint8_t)((brightness * ctx.brightness) / 255);
-        // Use palette with hue offset by gHue for rotation
         uint8_t paletteIdx = (uint8_t)(hue + ctx.gHue);
         CRGB color = ctx.palette.getColor(paletteIdx, brightU8);
 
@@ -89,4 +81,3 @@ const plugins::EffectMetadata& OceanEffect::getMetadata() const {
 } // namespace ieffect
 } // namespace effects
 } // namespace lightwaveos
-

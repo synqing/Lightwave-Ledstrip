@@ -26,6 +26,9 @@
 #include "../ui/DisplayUI.h"
 #include "WebSocketClient.h"
 
+// External function to cache palette names (defined in main.cpp)
+extern void cachePaletteName(uint8_t id, const char* name);
+
 // ============================================================================
 // Router logging (compile-time, default off)
 // ============================================================================
@@ -166,6 +169,16 @@ private:
                 if (s_displayUI) {
                     s_displayUI->updateHostUptime(uptimeSeconds);
                 }
+            }
+        }
+
+        // Extract and cache paletteName from status message if present
+        // This ensures palette names display immediately without waiting for palettes.list
+        if (doc["paletteName"].is<const char*>() && doc["paletteId"].is<uint8_t>()) {
+            uint8_t id = doc["paletteId"].as<uint8_t>();
+            const char* name = doc["paletteName"].as<const char*>();
+            if (name && name[0]) {
+                cachePaletteName(id, name);
             }
         }
     }

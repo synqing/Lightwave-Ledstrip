@@ -31,18 +31,15 @@ bool LGPWaveCollisionEffect::init(plugins::EffectContext& ctx) {
     m_collisionBoost = 0.0f;
     m_speedTarget = 1.0f;
 
-    // Initialize chromagram smoothing
-    for (uint8_t i = 0; i < 12; i++) {
-        m_chromaFollowers[i].reset(0.0f);
-        m_chromaSmoothed[i] = 0.0f;
-        m_chromaTargets[i] = 0.0f;
-    }
-    
     // Initialize enhancement utilities
     m_speedSpring.init(50.0f, 1.0f);  // stiffness=50, mass=1 (critically damped)
     m_speedSpring.reset(1.0f);         // Start at base speed
     m_energyAvgFollower.reset(0.0f);
     m_energyDeltaFollower.reset(0.0f);
+    
+    // Initialize EMA smoothing
+    m_energyDeltaEMASmooth = 0.0f;
+    m_energyDeltaEMAInitialized = false;
     return true;
 }
 
@@ -58,21 +55,15 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
         newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
         if (newHop) {
             m_lastHopSeq = ctx.audio.controlBus.hop_seq;
-            
-            // Update chromagram targets
-            for (uint8_t i = 0; i < 12; i++) {
-                m_chromaTargets[i] = ctx.audio.controlBus.heavy_chroma[i];
-            }
 
             const float led_share = 255.0f / 12.0f;
             float chromaEnergy = 0.0f;
             float maxBinVal = 0.0f;
             uint8_t dominantBin = 0;
             for (uint8_t i = 0; i < 12; ++i) {
-                // Use smoothed chromagram for energy calculation
-                float bin = m_chromaSmoothed[i];
-                // FIX: Use sqrt scaling instead of squaring to preserve low-level signals
-                float bright = sqrtf(bin) * 1.5f;
+                float bin = ctx.audio.controlBus.chroma[i];
+                float bright = bin * bin;
+                bright *= 1.5f;
                 if (bright > 1.0f) bright = 1.0f;
                 if (bright > maxBinVal) {
                     maxBinVal = bright;
@@ -102,19 +93,26 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
     }
 
     float dt = enhancement::getSafeDeltaSeconds(ctx.deltaTimeMs);
-    float moodNorm = ctx.getMoodNormalized();
 
-    // Smooth chromagram with AsymmetricFollower (every frame)
-    if (hasAudio) {
-        for (uint8_t i = 0; i < 12; i++) {
-            m_chromaSmoothed[i] = m_chromaFollowers[i].updateWithMood(
-                m_chromaTargets[i], dt, moodNorm);
-        }
+    // EMA smoothing for energyDelta (prevents pops from spiky audio features)
+    const float tau = 0.05f;  // 50ms time constant
+    float alpha = 1.0f - expf(-dt / tau);
+    
+    // CRITICAL: Initialize to raw value on first frame (no ramp-from-zero)
+    if (!m_energyDeltaEMAInitialized && ctx.audio.available) {
+        m_energyDeltaEMASmooth = m_energyDelta;
+        m_energyDeltaEMAInitialized = true;
+    } else {
+        m_energyDeltaEMASmooth += (m_energyDelta - m_energyDeltaEMASmooth) * alpha;
     }
+    
+    // Use EMA-smoothed energyDelta for further processing
+    float energyDeltaForSmoothing = m_energyDeltaEMASmooth;
 
     // True exponential smoothing with AsymmetricFollower (frame-rate independent)
+    float moodNorm = ctx.mood / 255.0f;  // 0=reactive, 1=smooth
     float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, dt, moodNorm);
-    float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, dt, moodNorm);
+    float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(energyDeltaForSmoothing, dt, moodNorm);
 
     // Dominant bin smoothing
     float alphaBin = 1.0f - expf(-dt / 0.25f);  // True exponential, 250ms time constant
@@ -216,8 +214,6 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
 
         // Base audio intensity (without uniform collision boost - moved to spatial flash)
         float audioIntensity = 0.4f + 0.5f * energyAvgSmooth + 0.4f * energyDeltaSmooth;
-        // FIX: Add minimum amplitude floor for wave visibility at low bass
-        audioIntensity = fmaxf(0.2f, audioIntensity);
         float interference = wave1 * audioIntensity + collisionFlash * 0.8f;  // Collision adds separate layer
 
         // CRITICAL: Use tanhf for uniform brightness (like ChevronWaves)
@@ -229,10 +225,15 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
         uint8_t paletteIndex = (uint8_t)(distFromCenter * 2.0f + interference * 50.0f);
         uint8_t baseHue = (uint8_t)(ctx.gHue + (uint8_t)(m_dominantBinSmooth * (255.0f / 12.0f)));
 
-        ctx.leds[i] = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex), brightness);
+        // Blend with existing pixel (preserves trails from fadeToBlackBy)
+        // nblend uses 8-bit amount: 0=keep existing, 255=full replace
+        CRGB newColor = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex), brightness);
+        nblend(ctx.leds[i], newColor, 180);  // ~70% new, ~30% existing
+        
         if (i + STRIP_LENGTH < ctx.ledCount) {
             // FIX: Hue offset +90 matches ChevronWaves pattern (was +128)
-            ctx.leds[i + STRIP_LENGTH] = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex + 90), brightness);
+            CRGB newColor2 = ctx.palette.getColor((uint8_t)(baseHue + paletteIndex + 90), brightness);
+            nblend(ctx.leds[i + STRIP_LENGTH], newColor2, 180);  // Apply same blend to BOTH strips
         }
     }
 }

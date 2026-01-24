@@ -39,7 +39,7 @@
 #include "../../audio/contracts/StyleDetector.h"
 #endif
 
-// Behavior selection types (used by 2 effects: BreathingEffect, LGPStarBurstNarrativeEffect)
+// Behavior selection (Phase 3)
 #include "BehaviorSelection.h"
 
 namespace lightwaveos {
@@ -54,12 +54,12 @@ namespace plugins {
  * @brief Audio context passed to effects (by-value copies for thread safety)
  *
  * This struct contains copies (not references!) of audio data from the
- * AudioNode. It's populated by RendererActor each frame with extrapolated
+ * AudioActor. It's populated by RendererActor each frame with extrapolated
  * timing for smooth 120 FPS beat phase.
  *
  * Thread Safety:
  * - All data is copied by value in renderFrame()
- * - No references to AudioNode's buffers
+ * - No references to AudioActor's buffers
  * - Safe to use throughout effect render()
  */
 struct AudioContext {
@@ -127,7 +127,34 @@ struct AudioContext {
     /// Example: brightness *= 0.5f + 0.5f * ctx.audio.beatStrength();
     float beatStrength() const { return musicalGrid.beat_strength; }
 
-    // Waveform accessors removed - 0 effects use them
+    /// Get waveform sample count
+    uint8_t waveformSize() const { return audio::CONTROLBUS_WAVEFORM_N; }
+
+    /// Get raw waveform sample at index (int16_t: -32768 to 32767)
+    int16_t getWaveformSample(uint8_t index) const {
+        if (index < audio::CONTROLBUS_WAVEFORM_N) {
+            return controlBus.waveform[index];
+        }
+        return 0;
+    }
+
+    /// Get normalized waveform amplitude at index (0.0-1.0, based on abs(sample)/32768)
+    float getWaveformAmplitude(uint8_t index) const {
+        if (index < audio::CONTROLBUS_WAVEFORM_N) {
+            int16_t sample = controlBus.waveform[index];
+            int16_t absSample = (sample < 0) ? -sample : sample;
+            return static_cast<float>(absSample) / 32768.0f;
+        }
+        return 0.0f;
+    }
+
+    /// Get normalized waveform sample with sign (-1.0 to +1.0)
+    float getWaveformNormalized(uint8_t index) const {
+        if (index < audio::CONTROLBUS_WAVEFORM_N) {
+            return static_cast<float>(controlBus.waveform[index]) / 32768.0f;
+        }
+        return 0.0f;
+    }
 
     // ========================================================================
     // Chord Detection Accessors (Priority 6: Musical intelligence)
@@ -193,6 +220,17 @@ struct AudioContext {
 
     /// Get pointer to full 64-bin array (for efficient iteration)
     const float* bins64() const { return controlBus.bins64; }
+
+    /// Get single bin value from adaptive 64-bin FFT (0.0-1.0)
+    float binAdaptive(uint8_t index) const {
+        if (index < audio::ControlBusFrame::BINS_64_COUNT) {
+            return controlBus.bins64Adaptive[index];
+        }
+        return 0.0f;
+    }
+
+    /// Get pointer to adaptive 64-bin array (Sensory Bridge normalisation)
+    const float* bins64Adaptive() const { return controlBus.bins64Adaptive; }
 
     // ========================================================================
     // Musical Saliency Accessors (MIS Phase 1: Adaptive audio-visual intelligence)
@@ -262,13 +300,38 @@ struct AudioContext {
     bool isDynamicMusic() const { return controlBus.currentStyle == audio::MusicStyle::DYNAMIC_DRIVEN; }
 
     // ========================================================================
-    // Behavior Context Accessors (used by AudioBehaviorSelector)
+    // Behavior Context Accessors (MIS Phase 3: Adaptive behavior selection)
     // ========================================================================
 
-    BehaviorContext behaviorContext{};  ///< Behavior selection context (populated from AudioNode)
+    BehaviorContext behaviorContext{};  ///< Behavior selection context (populated from AudioActor)
 
     /// Get the recommended primary visual behavior
     VisualBehavior recommendedBehavior() const { return behaviorContext.recommendedPrimary; }
+
+    /// Check if effect should pulse on beat (rhythmic music or high rhythmic saliency)
+    bool shouldPulseOnBeat() const {
+        return behaviorContext.recommendedPrimary == VisualBehavior::PULSE_ON_BEAT;
+    }
+
+    /// Check if effect should drift with harmony (harmonic music or chord changes)
+    bool shouldDriftWithHarmony() const {
+        return behaviorContext.recommendedPrimary == VisualBehavior::DRIFT_WITH_HARMONY;
+    }
+
+    /// Check if effect should shimmer with melody (melodic music or treble emphasis)
+    bool shouldShimmerWithMelody() const {
+        return behaviorContext.recommendedPrimary == VisualBehavior::SHIMMER_WITH_MELODY;
+    }
+
+    /// Check if effect should breathe with dynamics (dynamic music or RMS-driven)
+    bool shouldBreatheWithDynamics() const {
+        return behaviorContext.recommendedPrimary == VisualBehavior::BREATHE_WITH_DYNAMICS;
+    }
+
+    /// Check if effect should use texture flow (ambient/textural music)
+    bool shouldTextureFlow() const {
+        return behaviorContext.recommendedPrimary == VisualBehavior::TEXTURE_FLOW;
+    }
 };
 
 #else
@@ -299,7 +362,10 @@ struct AudioContext {
     float bpm() const { return 120.0f; }
     float tempoConfidence() const { return 0.0f; }
     float beatStrength() const { return 0.0f; }
-    // Waveform stubs removed - 0 effects use them
+    uint8_t waveformSize() const { return 128; }
+    int16_t getWaveformSample(uint8_t) const { return 0; }
+    float getWaveformAmplitude(uint8_t) const { return 0.0f; }
+    float getWaveformNormalized(uint8_t) const { return 0.0f; }
 
     // Chord detection stubs (always return "no chord")
     struct StubChordState {
@@ -330,6 +396,8 @@ struct AudioContext {
     static constexpr uint8_t bins64Count() { return 64; }
     float bin(uint8_t) const { return 0.0f; }
     const float* bins64() const { return nullptr; }
+    float binAdaptive(uint8_t) const { return 0.0f; }
+    const float* bins64Adaptive() const { return nullptr; }
 
     // Musical saliency stubs (always return "not salient")
     struct StubSaliencyFrame {
@@ -360,9 +428,14 @@ struct AudioContext {
     bool isTextureMusic() const { return false; }
     bool isDynamicMusic() const { return false; }
 
-    // Behavior context stubs (used by AudioBehaviorSelector)
-    BehaviorContext behaviorContext{};
+    // Behavior context stubs (always return default behavior)
+    BehaviorContext behaviorContext{};  ///< Default behavior context
     VisualBehavior recommendedBehavior() const { return VisualBehavior::BREATHE_WITH_DYNAMICS; }
+    bool shouldPulseOnBeat() const { return false; }
+    bool shouldDriftWithHarmony() const { return false; }
+    bool shouldShimmerWithMelody() const { return false; }
+    bool shouldBreatheWithDynamics() const { return true; }  // Default behavior
+    bool shouldTextureFlow() const { return false; }
 };
 #endif
 

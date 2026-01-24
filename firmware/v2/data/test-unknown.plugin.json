@@ -1,0 +1,11 @@
+{
+  "schema": 2,
+  "version": "1.0",
+  "plugin": {
+    "name": "Test Plugin V2 With Unknown Key"
+  },
+  "typo": "should be rejected in schema 2",
+  "effects": [
+    { "id": 0 }
+  ]
+}

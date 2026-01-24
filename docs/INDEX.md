@@ -15,6 +15,7 @@
 | Use the REST/WebSocket API | [api-v1.md](api/API_V1.md) |
 | Design a light show narrative | [storytelling-framework.md](guides/storytelling-framework.md) |
 | Understand system architecture | [00-lightwaveos-infrastructure-comprehensive.md](architecture/00_LIGHTWAVEOS_INFRASTRUCTURE_COMPREHENSIVE.md) |
+| Prepare efficient LLM prompts | [LLM_CONTEXT.md](LLM_CONTEXT.md) + [contextpack/README.md](contextpack/README.md) |
 | Set up CI/CD | [ci-cd/README.md](ci_cd/README.md) |
 | Find archived/legacy docs | [archive/consolidation-manifest.md](archive/consolidation-manifest.md) |
 
@@ -28,6 +29,22 @@
 | [CLAUDE.md](../CLAUDE.md) | **MANDATORY** - Claude Code project instructions, constraints, harness protocol | Current |
 | [ARCHITECTURE.md](../ARCHITECTURE.md) | Extracted system facts for quick agent reference | Current |
 | [CONSTRAINTS.md](../CONSTRAINTS.md) | Hard limits: timing, memory, power | Current |
+
+---
+
+## LLM / Prompting
+
+Resources for efficient LLM interactions and delta-only prompting:
+
+| Document | Description | Status |
+|----------|-------------|--------|
+| [LLM_CONTEXT.md](LLM_CONTEXT.md) | Stable LLM prefix file - include instead of re-explaining the project | Current |
+| [contextpack/README.md](contextpack/README.md) | Context Pack pipeline - delta-only prompting discipline | Current |
+| [contextpack/packet.md](contextpack/packet.md) | Prompt packet template (goal, symptom, acceptance checks) | Current |
+| [contextpack/fixtures/README.md](contextpack/fixtures/README.md) | Fixture format selection (TOON/CSV/JSON) | Current |
+| [architecture/TOON_FORMAT_EVALUATION.md](architecture/TOON_FORMAT_EVALUATION.md) | TOON decision document - prompt codec, not wire format | Current |
+
+**Generator script**: `tools/contextpack.py` - generates prompt bundles with diff, logs, and fixtures.
 
 ---
 

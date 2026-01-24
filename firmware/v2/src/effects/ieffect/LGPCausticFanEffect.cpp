@@ -49,7 +49,6 @@ void LGPCausticFanEffect::render(plugins::EffectContext& ctx) {
         uint8_t brightness = (uint8_t)brightnessF;
         uint8_t hue = (uint8_t)(ctx.gHue + (uint8_t)(x * 1.5f) + (m_time >> 4));
 
-        // Use palette system - apply brightness scaling
         uint8_t brightU8 = (uint8_t)((brightness * ctx.brightness) / 255);
         ctx.leds[i] = ctx.palette.getColor(hue, brightU8);
         if (i + STRIP_LENGTH < ctx.ledCount) {

@@ -52,7 +52,7 @@ static CRGB computeChromaticColor(const float chroma[12], const plugins::EffectC
     
     for (int i = 0; i < 12; i++) {
         float prog = i / 12.0f;  // 0.0 to 0.917 (0° to 330°)
-        float brightness = sqrtf(chroma[i]) * share * 2.0f;  // Sqrt boost for visibility (was squaring)
+        float brightness = chroma[i] * chroma[i] * share;  // Quadratic contrast (like Sensory Bridge)
         
         // Clamp brightness to valid range
         if (brightness > 1.0f) brightness = 1.0f;
@@ -123,15 +123,6 @@ bool BreathingEffect::init(plugins::EffectContext& ctx) {
     m_fluxBoost = 0.0f;
     m_texturePhase = 0.0f;
     m_energySmoothed = 0.0f;
-    
-    // Initialize smoothing followers
-    m_rmsFollower.reset(0.0f);
-    for (int i = 0; i < 12; i++) {
-        m_chromaFollowers[i].reset(0.0f);
-        m_chromaTargets[i] = 0.0f;
-    }
-    m_lastHopSeq = 0;
-    m_targetRms = 0.0f;
 
     // Initialize history buffer
     for (uint8_t i = 0; i < HISTORY_SIZE; ++i) {
@@ -191,7 +182,7 @@ void BreathingEffect::renderBreathing(plugins::EffectContext& ctx) {
     // Audio → Color/Brightness (AUDIO-REACTIVE)
     // Time → Motion Speed (TIME-BASED, USER-CONTROLLED)
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
+    fadeToBlackBy(ctx.leds, ctx.ledCount, 15);
 
     // ========================================================================
     // PHASE 1: TIME-BASED MOTION (User-controlled speed, NOT audio-reactive)
@@ -213,31 +204,20 @@ void BreathingEffect::renderBreathing(plugins::EffectContext& ctx) {
 #if FEATURE_AUDIO_SYNC
     if (ctx.audio.available) {
         // ====================================================================
-        // Multi-Stage Smoothing Pipeline (Enhanced with AsymmetricFollower)
+        // Multi-Stage Smoothing Pipeline (Sensory Bridge Pattern)
         // ====================================================================
-        float dt = ctx.getSafeDeltaSeconds();
-        float moodNorm = ctx.getMoodNormalized();
         
-        // Stage 1: Smooth chromagram with AsymmetricFollower (MOOD-adjusted)
-        // Check for new hop to update targets
-        bool newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
-        if (newHop) {
-            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
-            // Update chromagram targets on new hop
-            for (int i = 0; i < 12; i++) {
-                m_chromaTargets[i] = ctx.audio.controlBus.heavy_chroma[i];
-            }
-            m_targetRms = ctx.audio.rms();
-        }
-        
-        // Smooth chromagram with AsymmetricFollower (per-note smoothing)
+        // Stage 1: Smooth chromagram (0.75 alpha - fast attack/release)
         for (int i = 0; i < 12; i++) {
-            m_chromaSmoothed[i] = m_chromaFollowers[i].updateWithMood(
-                m_chromaTargets[i], dt, moodNorm);
+            float alpha = 0.75f;  // Like spectrogram_smooth in Sensory Bridge
+            m_chromaSmoothed[i] = ctx.audio.controlBus.heavy_chroma[i] * alpha + 
+                                  m_chromaSmoothed[i] * (1.0f - alpha);
         }
         
-        // Stage 2: Smooth energy envelope with AsymmetricFollower
-        m_energySmoothed = m_rmsFollower.updateWithMood(m_targetRms, dt, moodNorm);
+        // Stage 2: Smooth energy envelope (0.3 alpha - slower smoothing)
+        float alpha_energy = 0.3f;  // Like magnitudes_normalized_avg in Sensory Bridge
+        m_energySmoothed = ctx.audio.rms() * alpha_energy + 
+                           m_energySmoothed * (1.0f - alpha_energy);
         
         // ====================================================================
         // Compute Chromatic Color from Smoothed Chromagram
@@ -248,7 +228,7 @@ void BreathingEffect::renderBreathing(plugins::EffectContext& ctx) {
         // Compute Energy Envelope for Brightness Modulation
         // ====================================================================
         energyEnvelope = m_energySmoothed;
-        brightness = sqrtf(energyEnvelope) * 1.5f;  // Sqrt boost for visibility (was squaring)
+        brightness = energyEnvelope * energyEnvelope;  // Quadratic contrast (like Sensory Bridge)
         
         // Optional: Beat sync - reset phase on beat (optional feature)
         if (ctx.audio.isOnBeat()) {
@@ -285,7 +265,7 @@ void BreathingEffect::renderBreathing(plugins::EffectContext& ctx) {
     // ========================================================================
     // Alpha blending with previous frame (0.99 alpha = 99% persistence)
     // This creates smooth motion through frame accumulation, not exponential decay
-    float alpha = 0.94f;  // Faster response (~50ms half-life at 120fps)
+    float alpha = 0.99f;  // Like Bloom's draw_sprite() alpha
     m_currentRadius = m_prevRadius * alpha + avgTargetRadius * (1.0f - alpha);
     m_prevRadius = m_currentRadius;  // Store for next frame
 
@@ -297,7 +277,7 @@ void BreathingEffect::renderBreathing(plugins::EffectContext& ctx) {
     // ========================================================================
     // PHASE 6: RENDERING with Chromatic Color & Energy-Modulated Brightness
     // ========================================================================
-    if (m_currentRadius > 0.0001f) {  // Lower threshold for visibility
+    if (m_currentRadius > 0.001f) {
         for (int i = 0; i < STRIP_LENGTH; i++) {
             float dist = (float)centerPairDistance((uint16_t)i);
 
@@ -310,7 +290,7 @@ void BreathingEffect::renderBreathing(plugins::EffectContext& ctx) {
                 // Apply subtle exponential foreshortening for visual depth
                 float normalizedDist = dist / (float)HALF_LENGTH;
                 float foreshortened = powf(normalizedDist, FORESHORTEN_EXP);
-                float expMod = expf(-foreshortened * 0.8f);  // Softer decay for visibility
+                float expMod = expf(-foreshortened * 1.5f);
                 intensity *= (0.7f + 0.3f * expMod);
 
                 // Apply energy-modulated brightness (audio drives brightness, not motion)
@@ -339,7 +319,7 @@ void BreathingEffect::renderBreathing(plugins::EffectContext& ctx) {
     // Fade outer 32 LEDs using quadratic curve for smooth edge
     for (uint8_t i = 0; i < 32; i++) {
         float prog = i / 31.0f;  // 0.0 to 1.0
-        float falloff = prog * 0.7f;  // Linear fade (was quadratic - too aggressive)
+        float falloff = prog * prog;  // Quadratic fade (like Bloom mode)
         
         // Apply to outer LEDs (from edge inward)
         uint16_t edgeIdx = STRIP_LENGTH - 1 - i;
@@ -355,7 +335,7 @@ void BreathingEffect::renderPulsing(plugins::EffectContext& ctx) {
     // BLOOM_PULSE: Sharp radial expansion on beat with BPM-adaptive decay
     // Falls back to flux-driven transients when beat tracking unreliable
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);  // Use fadeAmount parameter
+    fadeToBlackBy(ctx.leds, ctx.ledCount, 30);  // Faster fade for snappy feel
 
     float decayRate = 0.92f;  // Default: ~200ms decay
 
@@ -451,7 +431,7 @@ void BreathingEffect::renderTexture(plugins::EffectContext& ctx) {
     // BLOOM_TEXTURE: Slow organic drift with audio-modulated amplitude
     // Motion is TIME-BASED (Sensory Bridge pattern), audio→amplitude only
 
-    fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);  // Use fadeAmount parameter
+    fadeToBlackBy(ctx.leds, ctx.ledCount, 8);  // Slow fade for dreamy feel
 
     // Audio-modulated wave AMPLITUDE parameters (not speed!)
     float timbralMod = 0.5f;   // Default if no audio

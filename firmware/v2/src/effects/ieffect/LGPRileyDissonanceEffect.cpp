@@ -72,7 +72,6 @@ void LGPRileyDissonanceEffect::render(plugins::EffectContext& ctx) {
             hue2 = (uint8_t)(hue2 - (uint8_t)(rivalryZone * 30.0f));
         }
 
-        // Use palette system - apply brightness scaling
         uint8_t brightU8_1 = (uint8_t)((brightness1 * ctx.brightness) / 255);
         ctx.leds[i] = ctx.palette.getColor(hue1, brightU8_1);
         if (i + STRIP_LENGTH < ctx.ledCount) {

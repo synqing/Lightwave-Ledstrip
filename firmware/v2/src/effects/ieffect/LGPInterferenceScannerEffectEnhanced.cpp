@@ -102,7 +102,7 @@ void LGPInterferenceScannerEnhancedEffect::render(plugins::EffectContext& ctx) {
             // =================================================================
             float bassSum = 0.0f;
             for (uint8_t i = 0; i < 6; ++i) {
-                bassSum += ctx.audio.bin(i);
+                bassSum += ctx.audio.binAdaptive(i);
             }
             m_targetBass = bassSum / 6.0f;
 
@@ -113,7 +113,7 @@ void LGPInterferenceScannerEnhancedEffect::render(plugins::EffectContext& ctx) {
             // =================================================================
             float trebleSum = 0.0f;
             for (uint8_t i = 48; i < 64; ++i) {
-                trebleSum += ctx.audio.bin(i);
+                trebleSum += ctx.audio.binAdaptive(i);
             }
             m_targetTreble = trebleSum / 16.0f;
 

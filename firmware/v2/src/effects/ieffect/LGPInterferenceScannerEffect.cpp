@@ -36,19 +36,6 @@ bool LGPInterferenceScannerEffect::init(plugins::EffectContext& ctx) {
     m_bassWavelength = 0.0f;
     m_trebleOverlay = 0.0f;
 
-    // Initialize chromagram smoothing
-    for (uint8_t i = 0; i < 12; i++) {
-        m_chromaFollowers[i].reset(0.0f);
-        m_chromaSmoothed[i] = 0.0f;
-        m_chromaTargets[i] = 0.0f;
-    }
-    
-    // Initialize smoothing followers
-    m_bassFollower.reset(0.0f);
-    m_trebleFollower.reset(0.0f);
-    m_targetBass = 0.0f;
-    m_targetTreble = 0.0f;
-    
     // Initialize enhancement utilities
     m_speedSpring.init(50.0f, 1.0f);  // stiffness=50, mass=1 (critically damped)
     m_speedSpring.reset(1.0f);         // Start at base speed
@@ -61,8 +48,6 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
     // CENTER ORIGIN INTERFERENCE SCANNER - Creates scanning interference patterns
     float speedNorm = ctx.speed / 50.0f;
     float intensityNorm = ctx.brightness / 255.0f;
-    float complexityNorm = ctx.complexity / 255.0f;
-    float variationNorm = ctx.variation / 255.0f;
     const bool hasAudio = ctx.audio.available;
     bool newHop = false;
 
@@ -79,16 +64,11 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
             if (energyNorm < 0.0f) energyNorm = 0.0f;
             if (energyNorm > 1.0f) energyNorm = 1.0f;
 
-            // Update chromagram targets
-            for (uint8_t i = 0; i < 12; i++) {
-                m_chromaTargets[i] = ctx.audio.controlBus.heavy_chroma[i];
-            }
-            
-            // Still track dominant chroma bin for color mapping (use smoothed values)
+            // Still track dominant chroma bin for color mapping
             float maxBinVal = 0.0f;
             uint8_t dominantBin = 0;
             for (uint8_t i = 0; i < 12; ++i) {
-                float bin = m_chromaSmoothed[i];
+                float bin = ctx.audio.controlBus.heavy_chroma[i];  // Use heavy_chroma for stability
                 if (bin > maxBinVal) {
                     maxBinVal = bin;
                     dominantBin = i;
@@ -102,9 +82,15 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
             // =================================================================
             float bassSum = 0.0f;
             for (uint8_t i = 0; i < 6; ++i) {
-                bassSum += ctx.audio.bin(i);
+                bassSum += ctx.audio.binAdaptive(i);
             }
-            m_targetBass = bassSum / 6.0f;
+            float bassNorm = bassSum / 6.0f;
+            // Smooth with fast attack, slower decay for punchy response
+            if (bassNorm > m_bassWavelength) {
+                m_bassWavelength = bassNorm;  // Instant attack
+            } else {
+                m_bassWavelength *= 0.85f;    // ~100ms decay
+            }
 
             // =================================================================
             // 64-bin Treble Overlay (bins 48-63 = 1.3-4.2 kHz)
@@ -113,9 +99,9 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
             // =================================================================
             float trebleSum = 0.0f;
             for (uint8_t i = 48; i < 64; ++i) {
-                trebleSum += ctx.audio.bin(i);
+                trebleSum += ctx.audio.binAdaptive(i);
             }
-            m_targetTreble = trebleSum / 16.0f;
+            m_trebleOverlay = trebleSum / 16.0f;
 
             m_chromaEnergySum -= m_chromaEnergyHist[m_chromaHistIdx];
             m_chromaEnergyHist[m_chromaHistIdx] = energyNorm;
@@ -135,21 +121,9 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
     }
 
     float dt = enhancement::getSafeDeltaSeconds(ctx.deltaTimeMs);
-    float moodNorm = ctx.getMoodNormalized();
-
-    // Smooth chromagram with AsymmetricFollower (every frame)
-    if (hasAudio) {
-        for (uint8_t i = 0; i < 12; i++) {
-            m_chromaSmoothed[i] = m_chromaFollowers[i].updateWithMood(
-                m_chromaTargets[i], dt, moodNorm);
-        }
-    }
-
-    // Smooth bass and treble with AsymmetricFollower
-    m_bassWavelength = m_bassFollower.updateWithMood(m_targetBass, dt, moodNorm);
-    m_trebleOverlay = m_trebleFollower.updateWithMood(m_targetTreble, dt, moodNorm);
 
     // True exponential smoothing with AsymmetricFollower (frame-rate independent)
+    float moodNorm = ctx.mood / 255.0f;  // 0=reactive, 1=smooth
     float energyAvgSmooth = m_energyAvgFollower.updateWithMood(m_energyAvg, dt, moodNorm);
     float energyDeltaSmooth = m_energyDeltaFollower.updateWithMood(m_energyDelta, dt, moodNorm);
 
@@ -198,8 +172,8 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
         // On kick drum hits, the interference fringes expand majestically.
         // Bass energy reduces frequency → larger wavelength → wider pattern.
         // =====================================================================
-        float freq1 = (0.16f + 0.08f * complexityNorm) - 0.05f * m_bassWavelength;
-        float freq2 = (0.28f + 0.10f * complexityNorm) - 0.08f * m_bassWavelength;
+        float freq1 = 0.20f - 0.05f * m_bassWavelength;  // 0.20→0.15 (wider on bass)
+        float freq2 = 0.35f - 0.08f * m_bassWavelength;  // 0.35→0.27 (wider on bass)
         float wave1 = sinf(dist * freq1 - m_scanPhase);
         float wave2 = sinf(dist * freq2 - m_scanPhase * 1.2f);  // Slight phase offset
         float interference = wave1 + wave2 * 0.6f;  // Combine with weight for moiré
@@ -217,8 +191,7 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
         // Hi-hat and cymbal energy creates high-frequency brightness overlay.
         // =====================================================================
         if (m_trebleOverlay > 0.1f) {
-            float shimmerFreq = 1.2f + variationNorm * 0.9f;
-            float shimmer = m_trebleOverlay * sinf(dist * shimmerFreq + m_scanPhase * 4.0f);
+            float shimmer = m_trebleOverlay * sinf(dist * 1.5f + m_scanPhase * 4.0f);
             audioGain += shimmer * 0.35f;
         }
 
@@ -230,19 +203,10 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
 #endif
         audioGain = fminf(audioGain, 2.0f);  // Clamp max to prevent oversaturation
 
-        // VISIBILITY FIX: Ensure minimum interference amplitude
-        float interferenceAbs = fabsf(interference);
-        if (interferenceAbs < 0.2f) {
-            interference = (interference >= 0.0f) ? 0.2f : -0.2f;
-        }
-
         float pattern = interference * audioGain;
 
         // CRITICAL: Use tanhf for uniform brightness (like ChevronWaves)
         pattern = tanhf(pattern * 2.0f) * 0.5f + 0.5f;
-
-        // VISIBILITY FIX: Ensure minimum brightness floor
-        pattern = fmaxf(0.2f, pattern);
 
         uint8_t brightness = (uint8_t)(pattern * 255.0f * intensityNorm);
         uint8_t paletteIndex = (uint8_t)(dist * 2.0f + pattern * 50.0f);

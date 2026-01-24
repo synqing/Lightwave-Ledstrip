@@ -29,18 +29,14 @@ bool LGPChromaticShearEffect::init(plugins::EffectContext& ctx) {
 void LGPChromaticShearEffect::render(plugins::EffectContext& ctx) {
     // CENTER ORIGIN - Color planes sliding with velocity shear
     m_phase = (uint16_t)(m_phase + ctx.speed);
-    float complexityNorm = ctx.complexity / 255.0f;
-    float variationNorm = ctx.variation / 255.0f;
 
     // Palette rotation
     if (ctx.frameNumber - m_lastUpdateFrame > 5) {
-        uint8_t step = (uint8_t)(2 + (ctx.variation >> 7));
-        m_paletteOffset = (uint8_t)(m_paletteOffset + step);
+        m_paletteOffset = (uint8_t)(m_paletteOffset + 2);
         m_lastUpdateFrame = ctx.frameNumber;
     }
 
-    const uint8_t shearAmount = (uint8_t)(96 + complexityNorm * 96.0f);
-    uint8_t hueSpread = (uint8_t)(96 + variationNorm * 80.0f);
+    const uint8_t shearAmount = 128;
 
     for (uint16_t i = 0; i < STRIP_LENGTH; i++) {
         float distFromCenter = (float)centerPairDistance(i);
@@ -55,7 +51,7 @@ void LGPChromaticShearEffect::render(plugins::EffectContext& ctx) {
         uint8_t leftBright = ctx.brightness;
 
         // Right strip: complementary hue + inverse shear
-        uint8_t rightHue = (uint8_t)(m_paletteOffset + distPos + hueSpread - (m_phase >> 8));
+        uint8_t rightHue = (uint8_t)(m_paletteOffset + distPos + 120 - (m_phase >> 8));
         uint8_t rightBright = ctx.brightness;
 
         // Add interference at center

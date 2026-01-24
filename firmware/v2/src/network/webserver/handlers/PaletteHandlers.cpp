@@ -6,11 +6,11 @@
 #include "PaletteHandlers.h"
 #include "../../ApiResponse.h"
 #include "../../RequestValidator.h"
-#include "../../../core/actors/NodeOrchestrator.h"
-#include "../../../core/actors/RendererNode.h"
+#include "../../../core/actors/ActorSystem.h"
+#include "../../../core/actors/RendererActor.h"
 #include "../../../palettes/Palettes_Master.h"
 
-using namespace lightwaveos::nodes;
+using namespace lightwaveos::actors;
 using namespace lightwaveos::network;
 using namespace lightwaveos::palettes;
 
@@ -20,7 +20,7 @@ namespace webserver {
 namespace handlers {
 
 void PaletteHandlers::handleList(AsyncWebServerRequest* request,
-                                   RendererNode* renderer) {
+                                   RendererActor* renderer) {
     if (!renderer) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::SYSTEM_NOT_READY, "Renderer not available");
@@ -170,7 +170,7 @@ void PaletteHandlers::handleList(AsyncWebServerRequest* request,
 }
 
 void PaletteHandlers::handleCurrent(AsyncWebServerRequest* request,
-                                      RendererNode* renderer) {
+                                      RendererActor* renderer) {
     if (!renderer) {
         sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                           ErrorCodes::SYSTEM_NOT_READY, "Renderer not available");
@@ -197,7 +197,7 @@ void PaletteHandlers::handleCurrent(AsyncWebServerRequest* request,
 
 void PaletteHandlers::handleSet(AsyncWebServerRequest* request,
                                   uint8_t* data, size_t len,
-                                  NodeOrchestrator& orchestrator,
+                                  ActorSystem& actorSystem,
                                   std::function<void()> broadcastStatus) {
     StaticJsonDocument<512> doc;
     VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::SetPalette, request);
@@ -209,7 +209,7 @@ void PaletteHandlers::handleSet(AsyncWebServerRequest* request,
         return;
     }
 
-    orchestrator.setPalette(paletteId);
+    actorSystem.setPalette(paletteId);
 
     sendSuccessResponse(request, [paletteId](JsonObject& respData) {
         respData["paletteId"] = paletteId;

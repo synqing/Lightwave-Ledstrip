@@ -7,6 +7,7 @@
 #if ENABLE_WIFI
 
 #include <ESP.h>
+#include <ESPmDNS.h>
 #include <cstring>
 #include "../config/network_config.h"
 
@@ -23,21 +24,24 @@ HttpClient::~HttpClient() {
 }
 
 bool HttpClient::resolveHostname() {
-    // NOTE: WiFi.hostByName() is DNS-only and typically won't resolve .local mDNS names
-    // The Tab5 WiFiManager already performs mDNS resolution via MDNS.queryHost()
-    // and provides the resolved IP via getResolvedIP()
-    
-    // Attempt DNS resolution first (will likely fail for .local hostnames)
-    IPAddress resolved;
+    // Try mDNS first (for .local hostnames)
+    IPAddress resolved = MDNS.queryHost(_serverHostname);
+    if (resolved != IPAddress(0, 0, 0, 0)) {
+        _serverIP = resolved;
+        Serial.printf("[HTTP] Resolved %s to %s (via mDNS)\n", _serverHostname, resolved.toString().c_str());
+        return true;
+    }
+    Serial.printf("[HTTP] mDNS resolution failed for %s\n", _serverHostname);
+
+    // Try DNS as fallback (for non-.local hostnames)
     if (WiFi.hostByName(_serverHostname, resolved)) {
         _serverIP = resolved;
         Serial.printf("[HTTP] Resolved %s to %s (via DNS)\n", _serverHostname, resolved.toString().c_str());
         return true;
     }
-    
     Serial.printf("[HTTP] DNS resolution failed for %s\n", _serverHostname);
-    
-    // Fall back to v2 SoftAP IP (192.168.4.1) - this is the guaranteed baseline path
+
+    // Fall back to v2 SoftAP IP (192.168.4.1) as last resort
     _serverIP = IPAddress(192, 168, 4, 1);
     Serial.printf("[HTTP] Using v2 SoftAP fallback IP: %s\n", _serverIP.toString().c_str());
     return true; // Return true since fallback IP is valid
@@ -357,64 +361,37 @@ bool HttpClient::disconnectFromNetwork() {
     return post("/api/v1/network/disconnect", "{}", response);
 }
 
-bool HttpClient::startScan(uint32_t& jobId) {
+bool HttpClient::startScan(ScanStatus& status) {
+    Serial.println("[HTTP] Starting network scan...");
+
     HttpResponse response;
     if (!get("/api/v1/network/scan", response)) {
+        Serial.println("[HTTP] Scan request failed");
         return false;
     }
 
     JsonDocument doc;
     if (!parseJsonResponse(response, doc)) {
+        Serial.println("[HTTP] Failed to parse scan response");
         return false;
     }
 
     // v2 API wraps response under "data" key
     if (!doc.containsKey("data") || !doc["data"].is<JsonObject>()) {
-        Serial.printf("[HTTP] Response missing 'data' wrapper\n");
+        Serial.println("[HTTP] Scan response missing 'data' wrapper");
         return false;
     }
 
     JsonObject data = doc["data"].as<JsonObject>();
-    if (!data.containsKey("jobId") || !data["jobId"].is<uint32_t>()) {
-        return false;
-    }
 
-    jobId = data["jobId"].as<uint32_t>();
-    return true;
-}
-
-bool HttpClient::getScanStatus(ScanStatus& status) {
-    HttpResponse response;
-    if (!get("/api/v1/network/scan/status", response)) {
-        return false;
-    }
-
-    JsonDocument doc;
-    if (!parseJsonResponse(response, doc)) {
-        return false;
-    }
-
-    // v2 API wraps response under "data" key
-    if (!doc.containsKey("data") || !doc["data"].is<JsonObject>()) {
-        Serial.printf("[HTTP] Response missing 'data' wrapper\n");
-        return false;
-    }
-
-    JsonObject data = doc["data"].as<JsonObject>();
-    
-    // Parse scan status - v2 uses "status" string (not "inProgress" boolean)
-    if (data.containsKey("status")) {
-        String statusStr = data["status"].as<String>();
-        status.inProgress = (statusStr == "in_progress" || statusStr == "started");
-    } else {
-        status.inProgress = false;
-    }
-    
-    status.jobId = data.containsKey("jobId") ? data["jobId"].as<uint32_t>() : 0;
+    // v2 returns synchronous results - no jobId/polling needed
+    status.inProgress = false;
+    status.jobId = 0;
+    status.networkCount = 0;
 
     if (data.containsKey("networks") && data["networks"].is<JsonArray>()) {
         JsonArray networkArray = data["networks"].as<JsonArray>();
-        status.networkCount = 0;
+
         for (JsonObject network : networkArray) {
             if (status.networkCount >= 20) break;
 
@@ -427,30 +404,19 @@ bool HttpClient::getScanStatus(ScanStatus& status) {
             if (network.containsKey("channel")) {
                 status.networks[status.networkCount].channel = network["channel"].as<uint8_t>();
             }
-            // v2 uses "encryption" (numeric) not "encrypted"/"encryptionType"
+
+            // v2 returns "encryption" as STRING (e.g., "WPA2", "OPEN")
             if (network.containsKey("encryption")) {
-                uint8_t encType = network["encryption"].as<uint8_t>();
-                status.networks[status.networkCount].encrypted = (encType != 0); // 0 = WIFI_AUTH_OPEN
-                // Map encryption type to string for UI display
-                switch(encType) {
-                    case 0: status.networks[status.networkCount].encryptionType = "Open"; break;
-                    case 2: status.networks[status.networkCount].encryptionType = "WPA"; break;
-                    case 3: status.networks[status.networkCount].encryptionType = "WPA2"; break;
-                    case 4: status.networks[status.networkCount].encryptionType = "WPA/WPA2"; break;
-                    case 5: status.networks[status.networkCount].encryptionType = "WPA2-Enterprise"; break;
-                    case 6: status.networks[status.networkCount].encryptionType = "WPA3"; break;
-                    case 7: status.networks[status.networkCount].encryptionType = "WPA2/WPA3"; break;
-                    case 8: status.networks[status.networkCount].encryptionType = "WAPI"; break;
-                    default: status.networks[status.networkCount].encryptionType = "Unknown"; break;
-                }
+                String encStr = network["encryption"].as<String>();
+                status.networks[status.networkCount].encrypted = (encStr != "OPEN");
+                status.networks[status.networkCount].encryptionType = encStr;
             }
 
             status.networkCount++;
         }
-    } else {
-        status.networkCount = 0;
     }
 
+    Serial.printf("[HTTP] Scan complete, found %d networks\n", status.networkCount);
     return true;
 }
 

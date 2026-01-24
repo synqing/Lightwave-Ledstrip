@@ -1,13 +1,13 @@
 /**
  * Pattern Registry Implementation
  *
- * Provides metadata for all 68 registered patterns.
+ * Provides metadata for all registered patterns.
  * Pattern indices match effect IDs exactly (stable ID mapping).
  */
 
 #include "PatternRegistry.h"
-#include "../core/actors/NodeOrchestrator.h"
-#include "../core/actors/RendererNode.h"
+#include "../core/actors/ActorSystem.h"
+#include "../core/actors/RendererActor.h"
 
 // ============================================================================
 // Pattern Metadata Definitions (PROGMEM)
@@ -106,10 +106,13 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
 
     // --- Audio-Reactive Effects (68+) - Phase 2 ---
     {PM_STR("Audio Test"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Audio-reactive spectrum visualization"), PM_STR("RMS energy, 8-band spectrum, beat detection"), PM_STR("")},
+    {PM_STR("Beat Pulse"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Beat-synchronized radial pulse from centre"), PM_STR("Tempo tracking, beat detection"), PM_STR("")},
     {PM_STR("Spectrum Bars"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("8-band spectrum analyzer from centre to edge"), PM_STR("Frequency analysis, band energy"), PM_STR("")},
     {PM_STR("Bass Breath"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Organic breathing driven by bass energy"), PM_STR("Bass band tracking, breathing simulation"), PM_STR("")},
-    // DELETED: Audio Waveform, Audio Bloom, Snapwave, Waveform, Wave Ambient, Wave Ambient Enhanced - broken effects removed
+    {PM_STR("Audio Waveform"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("True time-domain waveform visualization mirrored from centre"), PM_STR("Waveform samples, time-domain display"), PM_STR("")},
+    {PM_STR("Audio Bloom"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Centre bloom pulses triggered by audio transients"), PM_STR("Flux detection, pulse generation, radial decay"), PM_STR("")},
     {PM_STR("LGP Star Burst (Narrative)"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN, PM_STR("Story-driven starburst with phrase-gated chord coloring"), PM_STR("Narrative conductor, chord harmonics, phrase timing"), PM_STR("LGP Star Burst")},
+    {PM_STR("Chord Glow"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Full chord detection showcase with harmonic color mapping"), PM_STR("Chord detection, root note color, quality modulation"), PM_STR("")},
     {PM_STR("Wave Reactive"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Energy-accumulating wave with audio-driven motion"), PM_STR("Beat accumulation, frequency-driven velocity, kaleidoscope integration"), PM_STR("Wave")},
 
     // --- Perlin-based LGP Effects (77-80) - Audio-reactive noise field patterns ---
@@ -118,53 +121,30 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
     {PM_STR("LGP Perlin Caustics"), PatternFamily::ADVANCED_OPTICAL, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Sparkling caustic lobes, treble→sparkle, bass→scale"), PM_STR("Multi-octave Perlin noise, caustic focus, spectral modulation"), PM_STR("")},
     {PM_STR("LGP Perlin Interference Weave"), PatternFamily::ADVANCED_OPTICAL, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::MOIRE, PM_STR("Dual-strip moiré interference, beat→phase, chroma→colour"), PM_STR("Phase-offset Perlin noise, interference patterns, chroma mapping"), PM_STR("")},
 
+    // --- Perlin-based LGP Effects Ambient (81-84) - Time-driven variants ---
+    {PM_STR("LGP Perlin Veil Ambient"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Slow drifting noise curtains from centre, time-driven"), PM_STR("Perlin noise fields, slow drift, breathing contrast"), PM_STR("LGP Perlin Veil")},
+    {PM_STR("LGP Perlin Shocklines Ambient"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Time-driven travelling ridges propagating from centre"), PM_STR("Perlin noise, periodic shockwaves, time-based propagation"), PM_STR("LGP Perlin Shocklines")},
+    {PM_STR("LGP Perlin Caustics Ambient"), PatternFamily::ADVANCED_OPTICAL, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Sparkling caustic lobes, time-driven modulation"), PM_STR("Multi-octave Perlin noise, caustic focus, slow parameter drift"), PM_STR("LGP Perlin Caustics")},
+    {PM_STR("LGP Perlin Interference Weave Ambient"), PatternFamily::ADVANCED_OPTICAL, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::MOIRE, PM_STR("Dual-strip moiré interference, time-driven phase"), PM_STR("Phase-offset Perlin noise, interference patterns, slow phase modulation"), PM_STR("LGP Perlin Interference Weave")},
 
     // --- Perlin Backend Test Effects (85-87) - A/B/C comparison harness ---
     {PM_STR("Perlin Test: FastLED"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("FastLED inoise8 baseline test (TEST)"), PM_STR("FastLED noise, centre-origin mapping, seed + advection"), PM_STR("")},
     {PM_STR("Perlin Test: Emotiscope2 Full"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Emotiscope 2.0 Perlin full-res per-frame test (TEST)"), PM_STR("Seedable Perlin noise, hash-based gradients, octaves, full resolution"), PM_STR("")},
     {PM_STR("Perlin Test: Emotiscope2 Quarter"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Emotiscope 2.0 Perlin quarter-res + interpolation test (TEST)"), PM_STR("Seedable Perlin noise, quarter resolution, periodic refresh, linear interpolation"), PM_STR("")},
 
-    // --- Audio Pipeline Enhancement Effects (88-90) - New audio-reactive effects ---
-    {PM_STR("Spectrum Analyzer"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("64-bin frequency spectrum visualization, bass at centre, treble at edges"), PM_STR("64-bin Goertzel spectrum, peak hold, beat-sync mode"), PM_STR("Spectrum Bars")},
-    {PM_STR("Style Adaptive"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Adapts behavior based on detected music style (EDM, jazz, ambient, orchestral, pop)"), PM_STR("Style detection, music classification, adaptive visual response"), PM_STR("")},
-    
-    // --- Enhanced Audio-Reactive Effects (93-101) ---
-    {PM_STR("BPM Enhanced"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN, PM_STR("Enhanced: 64-bin sub-bass, heavy_chroma, beatPhase sync, snare triggers"), PM_STR("64-bin spectrum, heavy_chroma, beatPhase, snare triggers"), PM_STR("BPM")},
-    // DELETED: Wave Ambient Enhanced - broken visibility, removed
-    {PM_STR("Ripple Enhanced"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Enhanced: improved 64-bin thresholds, snare triggers, treble shimmer"), PM_STR("64-bin spectrum, snare triggers, treble shimmer"), PM_STR("Ripple")},
-    {PM_STR("LGP Interference Scanner Enhanced"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN, PM_STR("Enhanced: optimized 64-bin usage, enhanced snare boost"), PM_STR("64-bin spectrum, enhanced snare boost"), PM_STR("LGP Interference Scanner")},
-    {PM_STR("LGP Wave Collision Enhanced"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN, PM_STR("Enhanced: 64-bin sub-bass, enhanced snare/hi-hat triggers"), PM_STR("64-bin sub-bass, snare/hi-hat triggers"), PM_STR("LGP Wave Collision")},
-    {PM_STR("LGP Chevron Waves Enhanced"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN, PM_STR("Enhanced: heavy_chroma, 64-bin sub-bass, snare sharpness boost"), PM_STR("heavy_chroma, 64-bin sub-bass, snare sharpness"), PM_STR("LGP Chevron Waves")},
-    {PM_STR("LGP Star Burst Enhanced"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN, PM_STR("Enhanced: 64-bin sub-bass, enhanced snare/hi-hat triggers"), PM_STR("64-bin sub-bass, snare/hi-hat triggers"), PM_STR("LGP Star Burst")},
-    {PM_STR("LGP Photonic Crystal Enhanced"), PatternFamily::ADVANCED_OPTICAL, PatternTags::CENTER_ORIGIN, PM_STR("Enhanced: heavy_chroma, 64-bin sub-bass, enhanced snare flash"), PM_STR("heavy_chroma, 64-bin sub-bass, snare flash"), PM_STR("LGP Photonic Crystal")},
-    
-    // --- Enhanced Spectrum Detail (101) ---
-    {PM_STR("LGP Spectrum Detail Enhanced"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Enhanced: Faster response, increased brightness, full LED range utilization"), PM_STR("64-bin spectrum, faster smoothing, amplitude boost, full range"), PM_STR("LGP Spectrum Detail")},
-
-    // --- Dynamic Envelope Effect (102) ---
-    {PM_STR("Dynamic Envelope"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Brightness follows musical dynamics (crescendo/diminuendo)"), PM_STR("dynamicSaliency tracking, musical dynamics envelope"), PM_STR("")},
-
-    // --- Breathing Ripple Effect (103) ---
-    {PM_STR("Breathing Ripple"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Oscillating ripples that pulse while expanding from center"), PM_STR("beatsin16 oscillation, radial expansion, harmonic/rhythmic saliency"), PM_STR("Ripple")},
-
-    // --- Narrative Perlin Effect (104) ---
-    {PM_STR("Narrative Perlin"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Beat-triggered organic noise with dramatic BUILD/HOLD/RELEASE arc"), PM_STR("NarrativeArc state machine, multi-octave Perlin noise, intensity envelope"), PM_STR("LGP Perlin Veil")},
-
-    // --- Additional Dynamic Saliency Effects (105-112) ---
-    {PM_STR("Cascaded Spring"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Ultra-smooth audio-reactive waves via cascaded spring physics"), PM_STR("Dual spring system, buttery smooth output, transient capture"), PM_STR("")},
-    {PM_STR("Spectrum Center"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("64-bin spectrum with bass at center, treble at edges"), PM_STR("CENTER_ORIGIN spectrum, peak hold, beat pulse overlay"), PM_STR("Spectrum Analyzer")},
-    {PM_STR("Organic Ripple"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Perlin-modulated ripples with natural speed variation"), PM_STR("Organic velocity, noise-driven speed modulation"), PM_STR("Ripple")},
-    {PM_STR("Perlin Breathing"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Organic Perlin noise with beatsin16 breathing modulation"), PM_STR("beatsin16 zoom modulation, breathing envelope"), PM_STR("LGP Perlin Veil")},
-    {PM_STR("Phase Narrative"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Phase accumulation waves with narrative arc envelope"), PM_STR("BUILD/HOLD/RELEASE state machine, traveling sine waves"), PM_STR("")},
-    {PM_STR("Rhythm Gated Pulse"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Pulses ONLY during rhythmically salient sections"), PM_STR("rhythmicSaliency gating, ambient fallback"), PM_STR("Pulse")},
-    {PM_STR("Harmonic Palette"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Colors shift ONLY on harmonic changes (chord/key)"), PM_STR("harmonicSaliency palette control, stable playback colors"), PM_STR("")},
-    {PM_STR("Timbral Texture"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Visual complexity tracks audio texture changes via timbralSaliency"), PM_STR("Multi-octave fractal noise, timbral-driven octave count"), PM_STR("LGP Perlin Veil")},
-
-    // --- Ambient Variants (113-116) - Restored original clean implementations ---
-    {PM_STR("LGP Wave Collision (Ambient)"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Time-driven colliding wave fronts creating standing nodes"), PM_STR("Simple wave packet interference, exponential decay, no audio"), PM_STR("LGP Wave Collision")},
-    {PM_STR("Chevron Waves (Ambient)"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Time-driven V-shaped wave propagation from center"), PM_STR("Clean V-shaped patterns, simple sine wave motion"), PM_STR("LGP Chevron Waves")},
-    {PM_STR("LGP Star Burst (Ambient)"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN, PM_STR("Time-driven explosive radial lines with pulsing"), PM_STR("Radial star patterns, natural pulsing rhythm"), PM_STR("LGP Star Burst")},
-    {PM_STR("LGP Photonic Crystal (Ambient)"), PatternFamily::ADVANCED_OPTICAL, PatternTags::CENTER_ORIGIN, PM_STR("Time-driven bandgap structure simulation"), PM_STR("Periodic lattice, allowed/forbidden zones"), PM_STR("LGP Photonic Crystal")}
+    // --- Enhanced Audio-Reactive Effects (88-97) - Beat-sync, musical intelligence ---
+    {PM_STR("BPM Enhanced"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Tempo-locked pulse rings with beat-phase sync"), PM_STR("Beat phase, sub-bass reinforcement, spring speed"), PM_STR("BPM")},
+    {PM_STR("Breathing Enhanced"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Style-adaptive breathing with harmonic saliency"), PM_STR("RMS breathing, saliency-aware pacing"), PM_STR("Breathing")},
+    {PM_STR("LGP Chevron Waves Enhanced"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Beat-synced chevron propagation with chroma detail"), PM_STR("Chroma mapping, beat phase, wave sharpening"), PM_STR("LGP Chevron Waves")},
+    {PM_STR("LGP Interference Scanner Enhanced"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::TRAVELING, PM_STR("Audio-reactive scan speed with interference fringes"), PM_STR("Phase scanning, snare emphasis"), PM_STR("LGP Interference Scanner")},
+    {PM_STR("LGP Photonic Crystal Enhanced"), PatternFamily::ADVANCED_OPTICAL, PatternTags::CENTER_ORIGIN, PM_STR("Harmonic lattice modulation with saliency weighting"), PM_STR("Harmonic saliency, lattice shimmer"), PM_STR("LGP Photonic Crystal")},
+    {PM_STR("LGP Spectrum Detail"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("64-bin spectrum detail, bass at centre and treble at edges"), PM_STR("Logarithmic bin mapping, palette bands"), PM_STR("Spectrum Bars")},
+    {PM_STR("LGP Spectrum Detail Enhanced"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Saliency-weighted spectrum detail with adaptive emphasis"), PM_STR("Musical saliency, adaptive spectrum weighting"), PM_STR("LGP Spectrum Detail")},
+    {PM_STR("LGP Star Burst Enhanced"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN, PM_STR("Beat-triggered star bursts with sub-bass boost"), PM_STR("Beat phase, sub-bass burst, chroma colour"), PM_STR("LGP Star Burst")},
+    {PM_STR("LGP Wave Collision Enhanced"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::TRAVELING, PM_STR("Audio-driven wave collision with sub-bass boost"), PM_STR("Snare collisions, beat phase, chroma weighting"), PM_STR("LGP Wave Collision")},
+    {PM_STR("Ripple Enhanced"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Beat-sync ripple propagation with musical intelligence"), PM_STR("Beat sync, style-adaptive, harmonic saliency, centre-origin"), PM_STR("Ripple")},
+    {PM_STR("Audio Bloom Parity"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("SB 4.1.1 bloom parity with centre smear"), PM_STR("Chroma-weighted palette hue, centre smear, edge fade"), PM_STR("Audio Bloom")},
+    {PM_STR("Audio Waveform Parity"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("SB 3.1.0 waveform parity with MOOD smoothing"), PM_STR("Waveform history, palette chroma hue, centre-origin"), PM_STR("Audio Waveform")}
 };
 
 const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(PatternMetadata);
@@ -174,8 +154,7 @@ const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(Pattern
 // ============================================================================
 
 // Expected number of implemented effects (must match registerAllEffects() return value)
-// Note: Pattern metadata may have more entries than this (allows for future additions)
-constexpr uint8_t EXPECTED_EFFECT_COUNT = 105;  // Updated: 101 + 4 ambient variants
+constexpr uint8_t EXPECTED_EFFECT_COUNT = 100;  // 88 base + 12 enhanced
 
 // Compile-time assertion: metadata must have at least as many entries as implemented effects
 // This ensures we can always map effect IDs to metadata (allows for future effects in metadata)
@@ -262,15 +241,11 @@ uint8_t getRelatedPatterns(const char* name, const char** output, uint8_t maxOut
 }
 
 void getFamilyName(PatternFamily family, char* buffer, size_t bufferSize) {
-    if (!buffer || bufferSize == 0) {
-        return;
-    }
     if ((uint8_t)family < 10) {
         strncpy_P(buffer, (char*)pgm_read_ptr(&PATTERN_FAMILY_NAMES[(uint8_t)family]), bufferSize - 1);
         buffer[bufferSize - 1] = '\0';
     } else {
-        strncpy(buffer, "Unknown", bufferSize - 1);
-        buffer[bufferSize - 1] = '\0';
+        strncpy(buffer, "Unknown", bufferSize);
     }
 }
 
@@ -352,9 +327,9 @@ const lightwaveos::plugins::EffectMetadata* getIEffectMetadata(uint8_t effectId)
         return nullptr;
     }
     
-    // Access RendererNode via NodeOrchestrator
-    using namespace lightwaveos::nodes;
-    RendererNode* renderer = NodeOrchestrator::instance().getRenderer();
+    // Access RendererActor via ActorSystem
+    using namespace lightwaveos::actors;
+    RendererActor* renderer = ActorSystem::instance().getRenderer();
     if (!renderer) {
         return nullptr;
     }
@@ -400,7 +375,7 @@ bool shouldSkipColorCorrection(uint8_t effectId) {
 // Determined by grep analysis of ctx.audio usage patterns in ieffect/*.cpp
 static const uint8_t REACTIVE_EFFECT_IDS[] PROGMEM = {
     6,   // BPM - beat-synced pulsing
-    // DELETED: 7 (Wave Ambient) - broken visibility, removed
+    7,   // Wave Ambient - RMS amplitude modulation
     8,   // Ripple - kick/treble triggered, chroma-driven
     11,  // Breathing - RMS breathing, beat-gated pulses
     16,  // Interference Scanner - heavyMid energy, snare boost
@@ -409,26 +384,31 @@ static const uint8_t REACTIVE_EFFECT_IDS[] PROGMEM = {
     24,  // Star Burst - full audio pipeline, snare bursts
     33,  // Photonic Crystal - tempo breathing, saliency
     68,  // Audio Test - demo effect
+    69,  // Beat Pulse - beat-synced radial pulse
     70,  // Spectrum Bars - 8-band analyzer
     71,  // Bass Breath - bass-driven breathing
-    // DELETED: 72-74 (Audio Waveform, Audio Bloom, Snapwave, Waveform) - broken effects removed
-    76,  // Star Burst Narrative - full musical intelligence
-    78,  // Wave Reactive - energy accumulation
-    79,  // Perlin Veil - audio-driven advection
-    80,  // Perlin Shocklines - beat-driven ridges
-    // Removed ambient Perlin variants 81-84 (time-driven)
-    88,  // Spectrum Analyzer - 64-bin frequency spectrum
-    90,  // Style Adaptive - music style adaptation
-    93,  // BPM Enhanced - enhanced version with 64-bin sub-bass, heavy_chroma, beatPhase sync, snare triggers
-    // DELETED: 94 (Wave Ambient Enhanced) - broken visibility, removed
-    95,  // Ripple Enhanced - enhanced version with improved 64-bin thresholds, snare triggers, treble shimmer
-    97,  // LGP Interference Scanner Enhanced - enhanced version with optimized 64-bin usage, enhanced snare boost
-    98,  // LGP Wave Collision Enhanced - enhanced version with 64-bin sub-bass, enhanced snare/hi-hat triggers
-    99,  // Chevron Waves Enhanced - enhanced version with heavy_chroma, 64-bin sub-bass, snare sharpness boost
-    100, // LGP Star Burst Enhanced - enhanced version with 64-bin sub-bass, enhanced snare/hi-hat triggers
-    101, // LGP Photonic Crystal Enhanced - enhanced version with heavy_chroma, 64-bin sub-bass, enhanced snare flash
-    102, // LGP Spectrum Detail Enhanced - enhanced version with faster response, increased brightness, full LED range
-    103  // Breathing Ripple - oscillating ripples with beat-triggered spawning and saliency modulation
+    72,  // Audio Waveform - time-domain visualization
+    73,  // Audio Bloom - transient-triggered blooms
+    74,  // Star Burst Narrative - full musical intelligence
+    75,  // Chord Glow - chord detection showcase
+    76,  // Wave Reactive - energy accumulation
+    77,  // Perlin Veil - audio-driven advection
+    78,  // Perlin Shocklines - beat-driven ridges
+    79,  // Perlin Caustics - treble/bass modulation
+    80,  // Perlin Interference Weave - dual-strip moiré
+    // Enhanced Audio-Reactive Effects (88-99)
+    88,  // BPM Enhanced - tempo-locked pulse rings
+    89,  // Breathing Enhanced - style-adaptive breathing
+    90,  // Chevron Waves Enhanced - beat-synced chevrons
+    91,  // Interference Scanner Enhanced - audio-reactive scanning
+    92,  // Photonic Crystal Enhanced - harmonic lattice modulation
+    93,  // Spectrum Detail - 64-bin spectrum detail
+    94,  // Spectrum Detail Enhanced - saliency-weighted spectrum
+    95,  // LGP Star Burst Enhanced - beat-triggered bursts
+    96,  // LGP Wave Collision Enhanced - audio-driven collisions
+    97,  // Ripple Enhanced - beat-sync propagation
+    98,  // Audio Bloom Parity - SB 4.1.1 bloom parity
+    99   // Audio Waveform Parity - SB 3.1.0 waveform parity
 };
 static constexpr uint8_t REACTIVE_EFFECT_COUNT = sizeof(REACTIVE_EFFECT_IDS);
 

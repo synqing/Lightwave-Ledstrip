@@ -175,6 +175,43 @@ public:
     WiFiState getState() const;
 
     /**
+     * @brief Get saved networks from NVS storage
+     * @param networks Output array to fill
+     * @param maxNetworks Maximum number of networks to load
+     * @return Number of networks loaded
+     */
+    uint8_t getSavedNetworks(WiFiCredentialsStorage::NetworkCredential* networks,
+                             uint8_t maxNetworks);
+
+    /**
+     * @brief Get number of saved networks
+     * @return Saved network count
+     */
+    uint8_t getSavedNetworkCount() const;
+
+    /**
+     * @brief Save or update a network credential
+     * @param ssid Network SSID
+     * @param password Network password
+     * @return true if saved successfully
+     */
+    bool saveNetwork(const String& ssid, const String& password);
+
+    /**
+     * @brief Remove a saved network by SSID
+     * @param ssid Network SSID
+     * @return true if removed successfully
+     */
+    bool removeNetwork(const String& ssid);
+
+    /**
+     * @brief Check if a network is saved
+     * @param ssid Network SSID
+     * @return true if saved
+     */
+    bool hasSavedNetwork(const String& ssid);
+
+    /**
      * @brief Check if connected to WiFi AP
      * @return true if connected
      */

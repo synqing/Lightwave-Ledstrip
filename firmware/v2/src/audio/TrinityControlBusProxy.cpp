@@ -89,15 +89,27 @@ bool TrinityControlBusProxy::isActive() const
     if (m_lastUpdate == 0) {
         return false;
     }
-    
+
     #ifdef NATIVE_BUILD
     uint64_t now = esp_timer_get_time();
     #else
     uint64_t now = esp_timer_get_time();
     #endif
-    
+
     uint64_t elapsed = (now > m_lastUpdate) ? (now - m_lastUpdate) : 0;
     return elapsed < STALENESS_TIMEOUT_US;
+}
+
+void TrinityControlBusProxy::markActive()
+{
+    // Update timestamp without changing macro values
+    // This primes the proxy when trinity.sync START is received,
+    // ensuring isActive() returns true before first macro arrives.
+    #ifdef NATIVE_BUILD
+    m_lastUpdate = esp_timer_get_time();
+    #else
+    m_lastUpdate = esp_timer_get_time();
+    #endif
 }
 
 void TrinityControlBusProxy::reset()

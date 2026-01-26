@@ -18,7 +18,7 @@ namespace ws {
  * @brief Register audio-related WebSocket commands
  * @param ctx WebServer context
  */
-void registerWsAudioCommands(const WebServerContext& ctx);
+void registerWsAudioCommands(const webserver::WebServerContext& ctx);
 
 } // namespace ws
 } // namespace webserver

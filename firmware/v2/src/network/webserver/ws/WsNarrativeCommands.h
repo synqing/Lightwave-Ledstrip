@@ -18,7 +18,7 @@ namespace ws {
  * @brief Register narrative-related WebSocket commands
  * @param ctx WebServer context
  */
-void registerWsNarrativeCommands(const WebServerContext& ctx);
+void registerWsNarrativeCommands(const webserver::WebServerContext& ctx);
 
 } // namespace ws
 } // namespace webserver

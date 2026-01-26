@@ -1,0 +1,4 @@
+- Branch: `feat/esp32-p4-migration`
+- Remote: `origin	https://github.com/synqing/Lightwave-Ledstrip.git (fetch)`
+- Branch: `feat/esp32-p4-migration`
+- Remote: `origin	https://github.com/synqing/Lightwave-Ledstrip.git (fetch)`

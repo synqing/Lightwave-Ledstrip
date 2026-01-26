@@ -120,7 +120,7 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
         m_energyDelta = 0.0f;
     }
 
-    float dt = enhancement::getSafeDeltaSeconds(ctx.deltaTimeMs);
+    float dt = enhancement::getSafeDeltaSeconds(ctx.deltaTimeSeconds);
 
     // True exponential smoothing with AsymmetricFollower (frame-rate independent)
     float moodNorm = ctx.mood / 255.0f;  // 0=reactive, 1=smooth

@@ -135,7 +135,7 @@ public:
      * {
      *   "networks": ["Network1", "Network2"],
      *   "count": 2,
-     *   "maxNetworks": 8
+     *   "maxNetworks": 10
      * }
      */
     static void handleSavedList(AsyncWebServerRequest* request);
@@ -171,6 +171,60 @@ public:
      * }
      */
     static void handleSavedDelete(AsyncWebServerRequest* request);
+
+    // ========================================================================
+    // Alternative Endpoints (for V1ApiRoutes compatibility)
+    // ========================================================================
+
+    /**
+     * @brief Handle GET /api/v1/networks - List saved networks
+     */
+    static void handleListNetworks(AsyncWebServerRequest* request);
+
+    /**
+     * @brief Handle POST /api/v1/networks - Add network
+     */
+    static void handleAddNetwork(AsyncWebServerRequest* request, uint8_t* data, size_t len);
+
+    /**
+     * @brief Handle DELETE /api/v1/networks/:ssid - Delete network
+     */
+    static void handleDeleteNetwork(AsyncWebServerRequest* request, const String& ssid);
+
+    /**
+     * @brief Handle POST /api/v1/network/scan - Start scan
+     */
+    static void handleScanNetworks(AsyncWebServerRequest* request);
+
+    /**
+     * @brief Handle GET /api/v1/network/scan/status - Get scan status
+     */
+    static void handleScanStatus(AsyncWebServerRequest* request);
+
+    // ========================================================================
+    // Network Mode Control
+    // ========================================================================
+
+    /**
+     * @brief Handle POST /api/v1/network/sta/enable - Enable STA mode
+     *
+     * Enables station mode to connect to WiFi networks.
+     * Optional auto-revert to AP-only after timeout.
+     *
+     * Request body:
+     * {
+     *   "durationSeconds": 300,  // Optional: auto-revert after N seconds
+     *   "revertToApOnly": true   // Optional: revert to AP mode on timeout
+     * }
+     */
+    static void handleEnableSTA(AsyncWebServerRequest* request, uint8_t* data, size_t len);
+
+    /**
+     * @brief Handle POST /api/v1/network/ap/enable - Force AP-only mode
+     *
+     * Disables station mode and forces AP-only operation.
+     */
+    static void handleEnableAPOnly(AsyncWebServerRequest* request);
 
 private:
     /**

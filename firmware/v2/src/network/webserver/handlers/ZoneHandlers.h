@@ -31,6 +31,26 @@ public:
     static void handleSetBlend(AsyncWebServerRequest* request, uint8_t* data, size_t len, lightwaveos::zones::ZoneComposer* composer, std::function<void()> broadcastZoneState);
     static void handleSetEnabled(AsyncWebServerRequest* request, uint8_t* data, size_t len, lightwaveos::zones::ZoneComposer* composer, std::function<void()> broadcastZoneState);
 
+    // Zone Configuration Persistence
+    static void handleConfigGet(AsyncWebServerRequest* request, lightwaveos::zones::ZoneComposer* composer, void* zoneConfigMgr);
+    static void handleConfigSave(AsyncWebServerRequest* request, lightwaveos::zones::ZoneComposer* composer, void* zoneConfigMgr);
+    static void handleConfigLoad(AsyncWebServerRequest* request, lightwaveos::zones::ZoneComposer* composer, void* zoneConfigMgr, std::function<void()> broadcastZoneState);
+
+    // Zone Timing
+    static void handleTimingGet(AsyncWebServerRequest* request, lightwaveos::zones::ZoneComposer* composer);
+    static void handleTimingReset(AsyncWebServerRequest* request, lightwaveos::zones::ZoneComposer* composer);
+
+    // Zone Audio Configuration
+    static void handleAudioConfigGet(AsyncWebServerRequest* request, uint8_t zoneId, lightwaveos::zones::ZoneComposer* composer);
+    static void handleAudioConfigSet(AsyncWebServerRequest* request, uint8_t* data, size_t len, uint8_t zoneId, lightwaveos::zones::ZoneComposer* composer, std::function<void()> broadcastZoneState);
+
+    // Zone Beat Trigger
+    static void handleBeatTriggerGet(AsyncWebServerRequest* request, uint8_t zoneId, lightwaveos::zones::ZoneComposer* composer);
+    static void handleBeatTriggerSet(AsyncWebServerRequest* request, uint8_t* data, size_t len, uint8_t zoneId, lightwaveos::zones::ZoneComposer* composer, std::function<void()> broadcastZoneState);
+
+    // Zone Reorder
+    static void handleReorder(AsyncWebServerRequest* request, uint8_t* data, size_t len, lightwaveos::zones::ZoneComposer* composer, std::function<void()> broadcastZoneState);
+
 private:
     static uint8_t extractZoneIdFromPath(AsyncWebServerRequest* request);
 };

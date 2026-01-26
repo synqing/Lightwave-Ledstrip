@@ -43,7 +43,7 @@ static void handleColorGetStatus(AsyncWebSocketClient* client, JsonDocument& doc
         data["diffusionEnabled"] = engine.isDiffusionEnabled();
         data["diffusionAmount"] = engine.getDiffusionAmount();
     });
-    WsTelemetry::sendWithLogging(client, response, "color.getStatus");
+    client->text(response);
 }
 
 static void handleColorEnableBlend(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
@@ -67,7 +67,7 @@ static void handleColorEnableBlend(AsyncWebSocketClient* client, JsonDocument& d
     String response = buildWsResponse("color.enableBlend", requestId, [enable](JsonObject& data) {
         data["blendEnabled"] = enable;
     });
-    WsTelemetry::sendWithLogging(client, response, "color.enableBlend");
+    client->text(response);
 }
 
 static void handleColorSetBlendPalettes(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {

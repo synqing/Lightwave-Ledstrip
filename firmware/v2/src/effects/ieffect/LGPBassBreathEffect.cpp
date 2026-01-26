@@ -48,7 +48,7 @@ void LGPBassBreathEffect::render(plugins::EffectContext& ctx) {
     }
 
     // Hue shifts with treble activity
-    m_hueShift += treble * ctx.deltaTimeMs * 0.1f;
+    m_hueShift += treble * ctx.deltaTimeSeconds * 100.0f;
     if (m_hueShift > 255.0f) m_hueShift -= 255.0f;
 
     // Clear buffer

@@ -92,7 +92,7 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
         m_energyDelta = 0.0f;
     }
 
-    float dt = enhancement::getSafeDeltaSeconds(ctx.deltaTimeMs);
+    float dt = enhancement::getSafeDeltaSeconds(ctx.deltaTimeSeconds);
 
     // EMA smoothing for energyDelta (prevents pops from spiky audio features)
     const float tau = 0.05f;  // 50ms time constant

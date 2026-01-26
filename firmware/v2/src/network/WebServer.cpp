@@ -56,6 +56,10 @@
 #if FEATURE_API_AUTH
 #include "webserver/ws/WsAuthCommands.h"
 #endif
+#include "webserver/ws/WsSysCommands.h"
+#include "webserver/ws/WsTrinityCommands.h"
+#include "webserver/ws/WsOtaCommands.h"
+#include "webserver/ws/WsPluginCommands.h"
 #include "../config/network_config.h"
 #include "../core/actors/NodeOrchestrator.h"
 #include "../effects/zones/ZoneDefinition.h"
@@ -76,7 +80,7 @@
 #include "../core/persistence/AudioTuningManager.h"
 #include "../audio/AudioNode.h"
 #include "../audio/contracts/ControlBus.h"
-#include "../audio/contracts/TempoOutput.h"
+#include "../audio/tempo/TempoTracker.h"  // For TempoTrackerOutput
 #include <cmath>
 #endif
 #if FEATURE_AUDIO_BENCHMARK
@@ -156,8 +160,9 @@ WebServer::WebServer(NodeOrchestrator& orchestrator, RendererNode* renderer)
 WebServer::~WebServer() {
     stop();
 
-    // Clear log callback before deleting broadcaster
-    lightwaveos::logging::clearLogCallback();
+    // TODO: Implement logging callback system for WebSocket log streaming
+    // clearLogCallback() would unregister the WebSocket log forwarder here
+    // lightwaveos::logging::clearLogCallback();
 
     delete m_wsGateway;
 #if FEATURE_AUDIO_BENCHMARK
@@ -217,13 +222,14 @@ bool WebServer::begin() {
     // Create log stream broadcaster (wireless serial monitoring)
     m_logBroadcaster = new webserver::LogStreamBroadcaster(m_ws);
 
-    // Set up log callback to send logs to WebSocket subscribers
-    lightwaveos::logging::setLogCallback([this](const char* formattedLine) {
-        if (m_logBroadcaster) {
-            m_logBroadcaster->broadcastLine(formattedLine);
-        }
-    });
-    LW_LOGI("Log streaming enabled (ws://lightwaveos.local/ws)");
+    // TODO: Implement logging callback system for WebSocket log streaming
+    // setLogCallback() would register a callback to forward logs to WebSocket subscribers:
+    // lightwaveos::logging::setLogCallback([this](const char* formattedLine) {
+    //     if (m_logBroadcaster) {
+    //         m_logBroadcaster->broadcastLine(formattedLine);
+    //     }
+    // });
+    LW_LOGI("WebSocket log streaming not yet implemented - requires logging callback system");
 
 #if FEATURE_AUDIO_SYNC
     // Create audio stream broadcaster
@@ -742,6 +748,10 @@ void WebServer::setupWebSocket() {
 #if FEATURE_API_AUTH
     webserver::ws::registerWsAuthCommands(ctx);
 #endif
+    webserver::ws::registerWsSysCommands(ctx);
+    webserver::ws::registerWsTrinityCommands(ctx);
+    webserver::ws::registerWsOtaCommands(ctx);
+    webserver::ws::registerWsPluginCommands(ctx);
 
     // Log handler registration summary
     size_t handlerCount = webserver::WsCommandRouter::getHandlerCount();
@@ -1000,8 +1010,8 @@ void WebServer::doBroadcastStatus() {
     // Add audio metrics (BPM, KEY, MIC)
     auto* audio = m_orchestrator.getAudio();
     if (audio) {
-        // BPM from TempoOutput
-        audio::TempoOutput tempo = audio->getTempo();
+        // BPM from TempoTrackerOutput
+        audio::TempoTrackerOutput tempo = audio->getTempo().getOutput();
         doc["bpm"] = tempo.bpm;
         
         // Mic level in dB (calculated from rmsPreGain)

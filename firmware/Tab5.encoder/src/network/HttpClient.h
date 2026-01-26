@@ -18,6 +18,8 @@
 #include <ArduinoJson.h>
 #include <IPAddress.h>
 #include <cstdint>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 /**
  * HTTP response structure
@@ -64,6 +66,13 @@ struct ScanStatus {
  */
 class HttpClient {
 public:
+    enum class DiscoveryState : uint8_t {
+        IDLE = 0,
+        RUNNING,
+        SUCCESS,
+        FAILED
+    };
+
     HttpClient();
     ~HttpClient();
 
@@ -90,6 +99,22 @@ public:
      * @return true if resolved, false otherwise
      */
     bool resolveHostname();
+
+    /**
+     * Start non-blocking discovery task
+     * @return true if task started or already running
+     */
+    bool startDiscovery();
+
+    /**
+     * Get current discovery state
+     */
+    DiscoveryState getDiscoveryState() const { return _discoveryState; }
+
+    /**
+     * Get discovered server IP (valid when SUCCESS)
+     */
+    IPAddress getDiscoveredIP() const { return _discoveryResult; }
     
     /**
      * Set optional API key for authentication
@@ -156,6 +181,11 @@ private:
     static constexpr uint16_t HTTP_TIMEOUT_MS = 5000;
     static constexpr uint16_t HTTP_PORT = 80;
 
+    // Discovery task state
+    volatile DiscoveryState _discoveryState = DiscoveryState::IDLE;
+    IPAddress _discoveryResult;
+    TaskHandle_t _discoveryTaskHandle = nullptr;
+
     /**
      * Make HTTP GET request
      * @param path API path (e.g., "/api/v1/network/networks")
@@ -194,6 +224,9 @@ private:
      * @return true if parsed successfully, false otherwise
      */
     bool parseJsonResponse(const HttpResponse& response, JsonDocument& doc);
+
+    bool runDiscovery();
+    static void discoveryTask(void* parameter);
 };
 
 #endif // ENABLE_WIFI

@@ -172,7 +172,7 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
     // ------------------------------
     const float speedNorm = ctx.speed / 50.0f;         // typical 0..~2
     const float intensityNorm = ctx.brightness / 255.0f;
-    const float dt = ctx.deltaTimeMs * 0.001f;         // seconds
+    const float dt = ctx.getSafeDeltaSeconds();
 
     const bool hasAudio = ctx.audio.available;
 

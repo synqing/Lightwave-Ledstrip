@@ -163,6 +163,15 @@ public:
      */
     void onActionButton(ActionButtonCallback callback);
 
+    /**
+     * Set screen gate callback for touch zone isolation
+     * The gate callback returns true if touches should be processed,
+     * false if they should be ignored (e.g., when not on GLOBAL screen).
+     * @param gate Callback that returns true to allow touch processing
+     */
+    using ScreenGateCallback = std::function<bool()>;
+    void setScreenGate(ScreenGateCallback gate);
+
     // ========================================================================
     // State Query
     // ========================================================================
@@ -241,6 +250,7 @@ private:
     LongPressCallback m_longPressCallback;
     StatusBarCallback m_statusBarCallback;
     ActionButtonCallback m_actionButtonCallback;
+    ScreenGateCallback m_screenGateCallback;
 
     // ========================================================================
     // Internal Methods
@@ -293,6 +303,7 @@ inline TouchHandler::TouchHandler()
     , m_longPressCallback(nullptr)
     , m_statusBarCallback(nullptr)
     , m_actionButtonCallback(nullptr)
+    , m_screenGateCallback(nullptr)
 {
 }
 
@@ -325,6 +336,10 @@ inline void TouchHandler::onStatusBarTouch(StatusBarCallback callback) {
 
 inline void TouchHandler::onActionButton(ActionButtonCallback callback) {
     m_actionButtonCallback = callback;
+}
+
+inline void TouchHandler::setScreenGate(ScreenGateCallback gate) {
+    m_screenGateCallback = gate;
 }
 
 inline bool TouchHandler::isTouching() const {

@@ -7,6 +7,7 @@
 
 #include "ZoneComposer.h"
 #include <Arduino.h>
+#include <math.h>
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../../palettes/Palettes_Master.h"
@@ -24,6 +25,24 @@ extern "C" {
 
 namespace lightwaveos {
 namespace zones {
+
+namespace {
+constexpr float kMinSpeedTimeFactor = 0.04f;  // ~3-5 FPS feel at speed 1
+
+float computeSpeedTimeFactor(uint8_t speed) {
+    if (lightwaveos::actors::LedConfig::MAX_SPEED <= 1) {
+        return 1.0f;
+    }
+    float norm = 0.0f;
+    if (speed > 1) {
+        norm = (static_cast<float>(speed - 1) /
+                static_cast<float>(lightwaveos::actors::LedConfig::MAX_SPEED - 1));
+        if (norm > 1.0f) norm = 1.0f;
+    }
+    float curved = sqrtf(norm);
+    return kMinSpeedTimeFactor + (1.0f - kMinSpeedTimeFactor) * curved;
+}
+}  // namespace
 
 // ==================== Preset Definitions ====================
 
@@ -150,7 +169,11 @@ ZoneComposer::ZoneComposer()
     // Clear buffers
     memset(m_zoneBuffers, 0, sizeof(m_zoneBuffers));
     memset(m_outputBuffer, 0, sizeof(m_outputBuffer));
-    m_totalTimeMs = 0;
+    for (uint8_t i = 0; i < MAX_ZONES; i++) {
+        m_zoneTimeSeconds[i] = 0.0f;
+        m_zoneFrameAccumulator[i] = 0.0f;
+        m_zoneFrameCount[i] = 0;
+    }
 }
 
 // ==================== Initialization ====================
@@ -191,15 +214,12 @@ void ZoneComposer::render(CRGB* leds, uint16_t numLeds, CRGBPalette16* palette,
     m_zoneContext.complexity = 128;
     m_zoneContext.variation = 0;
     m_zoneContext.frameNumber = frameCount;
-    // Use real deltaTimeMs for frame-rate independent smooth animation.
-    // Clamp to reasonable bounds to prevent physics explosions on frame drops.
-    uint32_t safeDeltaMs = deltaTimeMs;
-    if (safeDeltaMs < 1) safeDeltaMs = 1;      // Minimum 1ms (1000 FPS cap)
-    if (safeDeltaMs > 50) safeDeltaMs = 50;    // Maximum 50ms (20 FPS floor)
-    m_zoneContext.deltaTimeMs = safeDeltaMs;
-    // Monotonic time accumulator (stable even when safeDeltaMs varies)
-    m_totalTimeMs += safeDeltaMs;
-    m_zoneContext.totalTimeMs = m_totalTimeMs;
+    // Base delta in seconds for per-zone scaling.
+    float deltaSeconds = static_cast<float>(deltaTimeMs) * 0.001f;
+    if (deltaSeconds > 0.05f) deltaSeconds = 0.05f;  // Maximum 50ms (20 FPS floor)
+    m_zoneContext.deltaTimeSeconds = deltaSeconds;
+    m_zoneContext.deltaTimeMs = static_cast<uint32_t>(deltaSeconds * 1000.0f + 0.5f);
+    m_zoneContext.totalTimeMs = 0;
 
     // Copy audio context once per frame if available (reused for all zones)
     if (audioCtx != nullptr) {
@@ -216,7 +236,7 @@ void ZoneComposer::render(CRGB* leds, uint16_t numLeds, CRGBPalette16* palette,
     // Render each enabled zone
     for (uint8_t z = 0; z < m_zoneCount; z++) {
         if (m_zones[z].enabled) {
-            renderZone(z, leds, numLeds, hue, frameCount);
+            renderZone(z, leds, numLeds, hue, frameCount, deltaSeconds);
         }
     }
 
@@ -225,7 +245,7 @@ void ZoneComposer::render(CRGB* leds, uint16_t numLeds, CRGBPalette16* palette,
 }
 
 void ZoneComposer::renderZone(uint8_t zoneId, CRGB* leds, uint16_t numLeds,
-                               uint8_t hue, uint32_t frameCount) {
+                               uint8_t hue, uint32_t frameCount, float deltaSeconds) {
     // Validate against both m_zoneCount and MAX_ZONES for safety
     if (zoneId >= m_zoneCount || zoneId >= MAX_ZONES) return;
 
@@ -264,6 +284,22 @@ void ZoneComposer::renderZone(uint8_t zoneId, CRGB* leds, uint16_t numLeds,
     m_zoneContext.brightness = zone.brightness;
     m_zoneContext.speed = zone.speed;
     m_zoneContext.zoneId = zoneId;  // Zone ID for zone-aware effects
+    // Apply speed-scaled time for this zone.
+    float speedFactor = computeSpeedTimeFactor(zone.speed);
+    float scaledDeltaSeconds = deltaSeconds * speedFactor;
+
+    m_zoneTimeSeconds[safeZone] += scaledDeltaSeconds;
+    m_zoneFrameAccumulator[safeZone] += speedFactor;
+    if (m_zoneFrameAccumulator[safeZone] >= 1.0f) {
+        uint32_t advance = static_cast<uint32_t>(m_zoneFrameAccumulator[safeZone]);
+        m_zoneFrameAccumulator[safeZone] -= static_cast<float>(advance);
+        m_zoneFrameCount[safeZone] += advance;
+    }
+
+    m_zoneContext.deltaTimeSeconds = scaledDeltaSeconds;
+    m_zoneContext.deltaTimeMs = static_cast<uint32_t>(scaledDeltaSeconds * 1000.0f + 0.5f);
+    m_zoneContext.frameNumber = m_zoneFrameCount[safeZone];
+    m_zoneContext.totalTimeMs = static_cast<uint32_t>(m_zoneTimeSeconds[safeZone] * 1000.0f + 0.5f);
     // Provide actual zone boundaries for zone-aware effects (forward compatible)
     m_zoneContext.zoneStart = seg.s1LeftStart;
     m_zoneContext.zoneLength = seg.totalLeds;
@@ -558,6 +594,35 @@ BlendMode ZoneComposer::getZoneBlendMode(uint8_t zone) const {
 
 bool ZoneComposer::isZoneEnabled(uint8_t zone) const {
     return (zone < MAX_ZONES) ? m_zones[zone].enabled : false;
+}
+
+// ==================== Zone Audio Config ====================
+
+ZoneAudioConfig ZoneComposer::getZoneAudioConfig(uint8_t zone) const {
+    if (zone >= MAX_ZONES) {
+        return ZoneAudioConfig();  // Return default config for invalid zone
+    }
+    return m_zoneAudioConfigs[zone];
+}
+
+void ZoneComposer::setZoneAudioConfig(uint8_t zone, const ZoneAudioConfig& config) {
+    // DEFENSIVE CHECK: Validate zone ID before array access
+    uint8_t safeZone = validateZoneId(zone);
+    if (safeZone >= MAX_ZONES || safeZone >= m_zoneCount) {
+        return;  // Invalid zone, ignore request
+    }
+    m_zoneAudioConfigs[safeZone] = config;
+
+    // Notify callback if registered
+    if (m_stateChangeCallback) {
+        m_stateChangeCallback(safeZone);
+    }
+}
+
+// ==================== State Change Callback ====================
+
+void ZoneComposer::setStateChangeCallback(std::function<void(uint8_t)> callback) {
+    m_stateChangeCallback = callback;
 }
 
 // ==================== Presets ====================

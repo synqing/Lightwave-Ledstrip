@@ -1336,9 +1336,12 @@ void setup() {
                 }
 
                 // Also update zone effect max values (indices 8, 10, 12, 14)
-                uint8_t zoneEffectMax = getParameterMax(0);  // Use same max as global effect
-                for (uint8_t i = 8; i <= 14; i += 2) {
-                    updateParameterMetadata(i, 0, zoneEffectMax);
+                // Only update when Zone Composer is active - prevents spurious updates on other screens
+                if (g_ui && s_uiInitialized && g_ui->getCurrentScreen() == UIScreen::ZONE_COMPOSER) {
+                    uint8_t zoneEffectMax = getParameterMax(0);  // Use same max as global effect
+                    for (uint8_t i = 8; i <= 14; i += 2) {
+                        updateParameterMetadata(i, 0, zoneEffectMax);
+                    }
                 }
 
                 updateUiEffectPaletteLabels();
@@ -1621,6 +1624,13 @@ void setup() {
                          g_encoders ? g_encoders->isUnitBAvailable() : false);
     g_touchHandler.init();
     g_touchHandler.setEncoderService(g_encoders);
+
+    // CRITICAL FIX: Gate touch processing to GLOBAL screen only
+    // This prevents touch events from firing main dashboard callbacks
+    // when Zone Composer or Connectivity Tab are active
+    g_touchHandler.setScreenGate([]() {
+        return g_ui && g_ui->getCurrentScreen() == UIScreen::GLOBAL;
+    });
 
     // Register long press callback - resets parameter to default
     g_touchHandler.onLongPress([](uint8_t paramIndex) {
@@ -2077,11 +2087,28 @@ void loop() {
                 g_wifiManager.isMDNSResolved()) {
                 IPAddress fallbackIP = g_wifiManager.getResolvedIP();
                 
-                // If timeout exceeded but no resolved IP, use default fallback for primary network
+                // If timeout exceeded but no resolved IP, use configured fallback
                 if (fallbackIP == INADDR_NONE && g_wifiManager.isMDNSTimeoutExceeded()) {
-                    fallbackIP.fromString(NetworkConfig::MDNS_FALLBACK_IP_PRIMARY);
-                    Serial.printf("[NETWORK] mDNS timeout exceeded, using default fallback IP: %s\n", 
-                                  NetworkConfig::MDNS_FALLBACK_IP_PRIMARY);
+                    IPAddress configuredIP;
+                    IPAddress localIP = WiFi.localIP();
+                    bool useConfigured = configuredIP.fromString(NetworkConfig::MDNS_FALLBACK_IP_PRIMARY);
+
+                    // IMPORTANT: Check if configured fallback IP is the local IP (common mistake)
+                    if (useConfigured && configuredIP == localIP) {
+                        Serial.printf("[NETWORK] WARNING: Configured fallback IP %s is THIS DEVICE's IP!\n",
+                                      NetworkConfig::MDNS_FALLBACK_IP_PRIMARY);
+                        Serial.printf("[NETWORK] To find v2 IP: check v2 serial output or router DHCP list.\n");
+                        useConfigured = false;
+                    }
+
+                    if (useConfigured) {
+                        fallbackIP = configuredIP;
+                        Serial.printf("[NETWORK] mDNS timeout, using configured fallback IP: %s\n",
+                                      NetworkConfig::MDNS_FALLBACK_IP_PRIMARY);
+                    } else {
+                        Serial.printf("[NETWORK] ERROR: mDNS failed and no valid fallback IP!\n");
+                        Serial.printf("[NETWORK] Update MDNS_FALLBACK_IP_PRIMARY in network_config.h\n");
+                    }
                 }
                 
                 if (fallbackIP != INADDR_NONE) {

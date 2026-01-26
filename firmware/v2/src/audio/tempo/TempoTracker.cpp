@@ -614,10 +614,10 @@ void TempoTracker::advancePhase(float delta_sec) {
 // Output Accessor
 // ============================================================================
 
-TempoOutput TempoTracker::getOutput() const {
+TempoTrackerOutput TempoTracker::getOutput() const {
     // Validate winner_bin_ to prevent out-of-bounds access
     uint16_t safe_bin = validateWinnerBin();
-    
+
     float conf = confidence_;
 
     // Suppress confidence during silence
@@ -625,7 +625,7 @@ TempoOutput TempoTracker::getOutput() const {
         conf *= (1.0f - silence_level_);
     }
 
-    return TempoOutput{
+    return TempoTrackerOutput{
         .bpm = tempi_[safe_bin].target_bpm,
         .phase01 = (current_phase_ + static_cast<float>(M_PI)) /
                    (2.0f * static_cast<float>(M_PI)),

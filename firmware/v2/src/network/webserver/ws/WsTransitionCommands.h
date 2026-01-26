@@ -18,7 +18,7 @@ namespace ws {
  * @brief Register transition-related WebSocket commands
  * @param ctx WebServer context
  */
-void registerWsTransitionCommands(const WebServerContext& ctx);
+void registerWsTransitionCommands(const webserver::WebServerContext& ctx);
 
 } // namespace ws
 } // namespace webserver

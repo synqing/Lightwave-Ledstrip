@@ -96,10 +96,19 @@ public:
     // Zone AGC
     static void handleZoneAGCGet(AsyncWebServerRequest* request,
                                   lightwaveos::actors::ActorSystem& actorSystem);
-    
+
     static void handleZoneAGCSet(AsyncWebServerRequest* request,
                                   uint8_t* data, size_t len,
                                   lightwaveos::actors::ActorSystem& actorSystem);
+
+    // AGC Toggle
+    static void handleAGCToggle(AsyncWebServerRequest* request,
+                                 uint8_t* data, size_t len,
+                                 lightwaveos::actors::ActorSystem& actorSystem);
+
+    // FFT Data
+    static void handleFftGet(AsyncWebServerRequest* request,
+                              lightwaveos::actors::ActorSystem& actorSystem);
 
     // Spike Detection
     static void handleSpikeDetectionGet(AsyncWebServerRequest* request,

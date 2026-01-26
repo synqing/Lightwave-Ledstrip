@@ -9,6 +9,7 @@
 #include "../../ApiResponse.h"
 #include "../../../config/DebugConfig.h"
 #include "../../../core/actors/ActorSystem.h"
+#include "../../../effects/zones/ZoneComposer.h"
 #include <ArduinoJson.h>
 #include <esp_system.h>
 #include <cmath>  // for log10f
@@ -364,6 +365,38 @@ void DebugHandlers::handleAudioDebugSet(AsyncWebServerRequest* request,
 }
 
 #endif // FEATURE_AUDIO_SYNC
+
+void DebugHandlers::handleZoneMemoryStats(AsyncWebServerRequest* request,
+                                           lightwaveos::zones::ZoneComposer* zoneComposer) {
+    if (!zoneComposer) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::SYSTEM_NOT_READY, "Zone composer not available");
+        return;
+    }
+
+    sendSuccessResponse(request, [zoneComposer](JsonObject& data) {
+        uint8_t zoneCount = zoneComposer->getZoneCount();
+
+        // Estimate memory based on zone count and typical configuration
+        // Each zone typically has: 40 LEDs × 3 bytes (CRGB) = 120 bytes buffer
+        // Plus zone metadata (~64 bytes per zone)
+        size_t perZoneBufferSize = 40 * 3;  // Typical zone LED count
+        size_t perZoneMetadata = 64;
+        size_t totalMemory = zoneCount * (perZoneBufferSize + perZoneMetadata);
+
+        JsonArray zones = data["zones"].to<JsonArray>();
+        for (uint8_t i = 0; i < zoneCount; i++) {
+            JsonObject zoneObj = zones.add<JsonObject>();
+            zoneObj["id"] = i;
+            zoneObj["estimatedBufferSize"] = perZoneBufferSize;
+            zoneObj["estimatedMetadata"] = perZoneMetadata;
+        }
+
+        data["zoneCount"] = zoneCount;
+        data["totalMemoryEstimate"] = totalMemory;
+        data["composerOverhead"] = sizeof(*zoneComposer);
+    });
+}
 
 } // namespace handlers
 } // namespace webserver

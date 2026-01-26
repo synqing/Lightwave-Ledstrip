@@ -187,7 +187,7 @@ void BreathingEffect::renderBreathing(plugins::EffectContext& ctx) {
     // ========================================================================
     // PHASE 1: TIME-BASED MOTION (User-controlled speed, NOT audio-reactive)
     // ========================================================================
-    float dt = ctx.deltaTimeMs * 0.001f;  // Convert to seconds
+    float dt = ctx.getSafeDeltaSeconds();
     float baseSpeed = ctx.speed / 200.0f;  // User speed parameter (like CONFIG.MOOD)
     m_phase += baseSpeed * dt;  // Time-based phase accumulation
     

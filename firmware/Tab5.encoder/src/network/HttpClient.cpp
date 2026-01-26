@@ -8,6 +8,7 @@
 
 #include <ESP.h>
 #include <ESPmDNS.h>
+#include <esp_task_wdt.h>
 #include <cstring>
 #include "../config/network_config.h"
 
@@ -15,8 +16,9 @@ HttpClient::HttpClient()
     : _serverIP(INADDR_NONE)
     , _serverHostname(LIGHTWAVE_HOST)
 {
-    // Try to resolve hostname on initialization
-    resolveHostname();
+    // Resolution deferred to first HTTP request via connectToServer()
+    // This prevents blocking the main loop during construction
+    // (blocking here caused Task Watchdog crashes when navigating to ConnectivityTab)
 }
 
 HttpClient::~HttpClient() {
@@ -24,27 +26,224 @@ HttpClient::~HttpClient() {
 }
 
 bool HttpClient::resolveHostname() {
-    // Try mDNS first (for .local hostnames)
-    IPAddress resolved = MDNS.queryHost(_serverHostname);
-    if (resolved != IPAddress(0, 0, 0, 0)) {
-        _serverIP = resolved;
-        Serial.printf("[HTTP] Resolved %s to %s (via mDNS)\n", _serverHostname, resolved.toString().c_str());
+    if (_serverIP != INADDR_NONE) {
         return true;
     }
-    Serial.printf("[HTTP] mDNS resolution failed for %s\n", _serverHostname);
 
-    // Try DNS as fallback (for non-.local hostnames)
-    if (WiFi.hostByName(_serverHostname, resolved)) {
-        _serverIP = resolved;
-        Serial.printf("[HTTP] Resolved %s to %s (via DNS)\n", _serverHostname, resolved.toString().c_str());
+    if (_discoveryState == DiscoveryState::SUCCESS) {
+        _serverIP = _discoveryResult;
         return true;
     }
-    Serial.printf("[HTTP] DNS resolution failed for %s\n", _serverHostname);
 
-    // Fall back to v2 SoftAP IP (192.168.4.1) as last resort
-    _serverIP = IPAddress(192, 168, 4, 1);
-    Serial.printf("[HTTP] Using v2 SoftAP fallback IP: %s\n", _serverIP.toString().c_str());
-    return true; // Return true since fallback IP is valid
+    if (_discoveryState != DiscoveryState::RUNNING) {
+        startDiscovery();
+    }
+
+    Serial.println("[HTTP] Discovery in progress; deferring hostname resolution.");
+    return false;
+}
+
+bool HttpClient::startDiscovery() {
+    if (_discoveryState == DiscoveryState::RUNNING) {
+        return true;
+    }
+
+    _discoveryState = DiscoveryState::RUNNING;
+    _discoveryResult = IPAddress(0, 0, 0, 0);
+
+    BaseType_t taskOk = xTaskCreate(
+        &HttpClient::discoveryTask,
+        "lw_discovery",
+        4096,
+        this,
+        1,
+        &_discoveryTaskHandle
+    );
+
+    if (taskOk != pdPASS) {
+        _discoveryTaskHandle = nullptr;
+        _discoveryState = DiscoveryState::FAILED;
+        Serial.println("[HTTP] Failed to start discovery task.");
+        return false;
+    }
+
+    return true;
+}
+
+void HttpClient::discoveryTask(void* parameter) {
+    auto* client = static_cast<HttpClient*>(parameter);
+    bool success = client->runDiscovery();
+    client->_discoveryState = success ? DiscoveryState::SUCCESS : DiscoveryState::FAILED;
+    client->_discoveryTaskHandle = nullptr;
+    vTaskDelete(nullptr);
+}
+
+bool HttpClient::runDiscovery() {
+    bool onLightwaveNetwork = false;
+    String currentSSID = "";
+
+    if (WiFi.status() == WL_CONNECTED) {
+        currentSSID = WiFi.SSID();
+        onLightwaveNetwork = currentSSID.startsWith("LightwaveOS") || currentSSID == WIFI_SSID2;
+    }
+
+    Serial.printf("[HTTP] Resolving v2 address (connected to: %s, onLightwaveNetwork: %s)\n",
+                  currentSSID.c_str(), onLightwaveNetwork ? "YES" : "NO");
+
+    if (onLightwaveNetwork) {
+        IPAddress gateway = WiFi.gatewayIP();
+        if (gateway != IPAddress(0, 0, 0, 0)) {
+            _discoveryResult = gateway;
+            Serial.printf("[HTTP] Using gateway IP: %s (on LightwaveOS network)\n",
+                          _discoveryResult.toString().c_str());
+            return true;
+        }
+        #ifdef LIGHTWAVE_IP
+        {
+            IPAddress compiledIP;
+            if (compiledIP.fromString(LIGHTWAVE_IP)) {
+                _discoveryResult = compiledIP;
+                Serial.printf("[HTTP] Using compiled IP: %s (LightwaveOS fallback)\n",
+                              _discoveryResult.toString().c_str());
+                return true;
+            }
+        }
+        #endif
+    }
+
+    Serial.printf("[HTTP] Attempting mDNS resolution for %s (with retries)...\n", _serverHostname);
+    esp_task_wdt_reset();
+
+    IPAddress resolved(0, 0, 0, 0);
+    for (uint8_t attempt = 0; attempt < NetworkConfig::MDNS_MAX_ATTEMPTS; attempt++) {
+        if (attempt > 0) {
+            vTaskDelay(pdMS_TO_TICKS(NetworkConfig::MDNS_RETRY_DELAY_MS));
+        }
+        esp_task_wdt_reset();
+        resolved = MDNS.queryHost(_serverHostname);
+        esp_task_wdt_reset();
+
+        if (resolved != IPAddress(0, 0, 0, 0)) {
+            _discoveryResult = resolved;
+            Serial.printf("[HTTP] Resolved %s to %s (via mDNS, attempt %d/%d)\n",
+                          _serverHostname, resolved.toString().c_str(),
+                          attempt + 1, NetworkConfig::MDNS_MAX_ATTEMPTS);
+            return true;
+        }
+        Serial.printf("[HTTP] mDNS attempt %d/%d failed\n", attempt + 1, NetworkConfig::MDNS_MAX_ATTEMPTS);
+    }
+
+    Serial.printf("[HTTP] mDNS resolution failed after %d attempts\n", NetworkConfig::MDNS_MAX_ATTEMPTS);
+
+    if (onLightwaveNetwork) {
+        _discoveryResult = IPAddress(192, 168, 4, 1);
+        Serial.printf("[HTTP] Using SoftAP fallback IP: %s (on LightwaveOS network)\n",
+                      _discoveryResult.toString().c_str());
+        return true;
+    }
+
+    Serial.printf("[HTTP] Scanning network to discover LightwaveOS device...\n");
+    IPAddress localIP = WiFi.localIP();
+    IPAddress subnet = WiFi.subnetMask();
+    IPAddress gateway = WiFi.gatewayIP();
+
+    IPAddress networkBase(localIP[0] & subnet[0],
+                          localIP[1] & subnet[1],
+                          localIP[2] & subnet[2],
+                          localIP[3] & subnet[3]);
+
+    IPAddress candidates[] = {
+        gateway,
+        IPAddress(gateway[0], gateway[1], gateway[2], gateway[3] + 1),
+        IPAddress(gateway[0], gateway[1], gateway[2], gateway[3] + 2),
+        IPAddress(localIP[0], localIP[1], localIP[2], 1),
+        IPAddress(localIP[0], localIP[1], localIP[2], 100),
+        IPAddress(localIP[0], localIP[1], localIP[2], 101),
+        IPAddress(localIP[0], localIP[1], localIP[2], 102),
+    };
+
+    for (uint8_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++) {
+        if (candidates[i] == IPAddress(0, 0, 0, 0) || candidates[i] == localIP) {
+            continue;
+        }
+
+        WiFiClient testClient;
+        testClient.setTimeout(500);
+        if (testClient.connect(candidates[i], HTTP_PORT)) {
+            testClient.print("GET /api/v1/device/info HTTP/1.1\r\n");
+            testClient.print("Host: ");
+            testClient.print(candidates[i].toString());
+            testClient.print("\r\n");
+            testClient.print("Connection: close\r\n\r\n");
+
+            String response = "";
+            unsigned long startTime = millis();
+            while (millis() - startTime < 1000 && testClient.available()) {
+                response += (char)testClient.read();
+                if (response.length() > 200) break;
+            }
+            testClient.stop();
+
+            if (response.indexOf("lightwaveos") >= 0 ||
+                response.indexOf("LightwaveOS") >= 0 ||
+                response.indexOf("\"board\":\"ESP32-S3\"") >= 0) {
+                _discoveryResult = candidates[i];
+                Serial.printf("[HTTP] Discovered LightwaveOS device at %s (network scan)\n",
+                              _discoveryResult.toString().c_str());
+                return true;
+            }
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(5));
+        esp_task_wdt_reset();
+    }
+
+    Serial.printf("[HTTP] Scanning subnet %s.0/24 for LightwaveOS device...\n",
+                  networkBase.toString().c_str());
+    for (uint8_t host = 1; host < 255; host++) {
+        if (host == localIP[3]) continue;
+
+        IPAddress testIP(networkBase[0], networkBase[1], networkBase[2], host);
+
+        WiFiClient testClient;
+        testClient.setTimeout(300);
+        if (testClient.connect(testIP, HTTP_PORT)) {
+            testClient.print("GET /api/v1/device/info HTTP/1.1\r\n");
+            testClient.print("Host: ");
+            testClient.print(testIP.toString());
+            testClient.print("\r\n");
+            testClient.print("Connection: close\r\n\r\n");
+
+            String response = "";
+            unsigned long startTime = millis();
+            while (millis() - startTime < 500 && testClient.available()) {
+                response += (char)testClient.read();
+                if (response.length() > 200) break;
+            }
+            testClient.stop();
+
+            if (response.indexOf("lightwaveos") >= 0 ||
+                response.indexOf("LightwaveOS") >= 0 ||
+                response.indexOf("\"board\":\"ESP32-S3\"") >= 0) {
+                _discoveryResult = testIP;
+                Serial.printf("[HTTP] Discovered LightwaveOS device at %s (subnet scan)\n",
+                              _discoveryResult.toString().c_str());
+                return true;
+            }
+        }
+
+        if (host % 20 == 0) {
+            Serial.printf("[HTTP] Scanning... %d/254\n", host);
+            esp_task_wdt_reset();
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(2));
+    }
+
+    Serial.printf("[HTTP] ERROR: Could not discover LightwaveOS device on network!\n");
+    Serial.printf("[HTTP] Tried mDNS (%d attempts) and network scan (254 IPs)\n",
+                  NetworkConfig::MDNS_MAX_ATTEMPTS);
+    return false;
 }
 
 bool HttpClient::connectToServer() {
@@ -55,11 +254,14 @@ bool HttpClient::connectToServer() {
         }
     }
 
-    // Connect to server
+    // Connect to server (feed watchdog before blocking call)
+    Serial.printf("[HTTP] Connecting to %s:%d\n", _serverIP.toString().c_str(), HTTP_PORT);
+    esp_task_wdt_reset();
     if (!_client.connect(_serverIP, HTTP_PORT)) {
         Serial.printf("[HTTP] Failed to connect to %s:%d\n", _serverIP.toString().c_str(), HTTP_PORT);
         return false;
     }
+    esp_task_wdt_reset();  // Feed after successful connect
 
     return true;
 }
@@ -80,10 +282,11 @@ bool HttpClient::get(const String& path, HttpResponse& response) {
     }
     _client.printf("Connection: close\r\n\r\n");
 
-    // Wait for response with timeout
+    // Wait for response with timeout (CRITICAL: feed watchdog to prevent WDT crash)
     uint32_t startTime = millis();
     while (!_client.available() && (millis() - startTime) < HTTP_TIMEOUT_MS) {
         delay(10);
+        esp_task_wdt_reset();  // Prevent watchdog timeout during HTTP wait
     }
 
     if (!_client.available()) {
@@ -91,6 +294,8 @@ bool HttpClient::get(const String& path, HttpResponse& response) {
         _client.stop();
         return false;
     }
+
+    esp_task_wdt_reset();  // Feed watchdog before parsing
 
     // Read HTTP status line
     String statusLine = _client.readStringUntil('\n');
@@ -113,6 +318,8 @@ bool HttpClient::get(const String& path, HttpResponse& response) {
             break;
         }
     }
+
+    esp_task_wdt_reset();  // Feed watchdog before reading body
 
     // Read body
     while (_client.available()) {
@@ -148,10 +355,11 @@ bool HttpClient::post(const String& path, const String& body, HttpResponse& resp
     _client.printf("Connection: close\r\n\r\n");
     _client.print(body);
 
-    // Wait for response with timeout
+    // Wait for response with timeout (CRITICAL: feed watchdog to prevent WDT crash)
     uint32_t startTime = millis();
     while (!_client.available() && (millis() - startTime) < HTTP_TIMEOUT_MS) {
         delay(10);
+        esp_task_wdt_reset();  // Prevent watchdog timeout during HTTP wait
     }
 
     if (!_client.available()) {
@@ -159,6 +367,8 @@ bool HttpClient::post(const String& path, const String& body, HttpResponse& resp
         _client.stop();
         return false;
     }
+
+    esp_task_wdt_reset();  // Feed watchdog before parsing
 
     // Read HTTP status line
     String statusLine = _client.readStringUntil('\n');
@@ -181,6 +391,8 @@ bool HttpClient::post(const String& path, const String& body, HttpResponse& resp
             break;
         }
     }
+
+    esp_task_wdt_reset();  // Feed watchdog before reading body
 
     // Read body
     while (_client.available()) {
@@ -213,10 +425,11 @@ bool HttpClient::del(const String& path, HttpResponse& response) {
     }
     _client.printf("Connection: close\r\n\r\n");
 
-    // Wait for response with timeout
+    // Wait for response with timeout (CRITICAL: feed watchdog to prevent WDT crash)
     uint32_t startTime = millis();
     while (!_client.available() && (millis() - startTime) < HTTP_TIMEOUT_MS) {
         delay(10);
+        esp_task_wdt_reset();  // Prevent watchdog timeout during HTTP wait
     }
 
     if (!_client.available()) {
@@ -224,6 +437,8 @@ bool HttpClient::del(const String& path, HttpResponse& response) {
         _client.stop();
         return false;
     }
+
+    esp_task_wdt_reset();  // Feed watchdog before parsing
 
     // Read HTTP status line
     String statusLine = _client.readStringUntil('\n');
@@ -246,6 +461,8 @@ bool HttpClient::del(const String& path, HttpResponse& response) {
             break;
         }
     }
+
+    esp_task_wdt_reset();  // Feed watchdog before reading body
 
     // Read body
     while (_client.available()) {
@@ -296,17 +513,31 @@ int HttpClient::listNetworks(NetworkEntry* networks, uint8_t maxNetworks) {
 
     JsonArray networkArray = data["networks"].as<JsonArray>();
     uint8_t count = 0;
-    for (JsonObject network : networkArray) {
+    for (JsonVariant network : networkArray) {
         if (count >= maxNetworks) break;
 
-        if (network.containsKey("ssid")) {
-            networks[count].ssid = network["ssid"].as<String>();
+        if (network.is<const char*>()) {
+            // v2 API returns saved networks as array of SSID strings
+            networks[count].ssid = network.as<const char*>();
+            networks[count].password = "";
+            networks[count].isSaved = true;
+            count++;
+            continue;
         }
-        if (network.containsKey("password")) {
-            networks[count].password = network["password"].as<String>();
+
+        if (!network.is<JsonObject>()) {
+            continue;
         }
-        if (network.containsKey("isSaved")) {
-            networks[count].isSaved = network["isSaved"].as<bool>();
+
+        JsonObject networkObj = network.as<JsonObject>();
+        if (networkObj.containsKey("ssid")) {
+            networks[count].ssid = networkObj["ssid"].as<String>();
+        }
+        if (networkObj.containsKey("password")) {
+            networks[count].password = networkObj["password"].as<String>();
+        }
+        if (networkObj.containsKey("isSaved")) {
+            networks[count].isSaved = networkObj["isSaved"].as<bool>();
         } else {
             networks[count].isSaved = true;  // Default to saved if not specified
         }

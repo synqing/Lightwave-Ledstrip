@@ -22,7 +22,7 @@ namespace ws {
  *   debug.audio.get - Get current verbosity settings
  *   debug.audio.set - Set verbosity level {verbosity: 0-5}
  */
-void registerWsDebugCommands(const WebServerContext& ctx);
+void registerWsDebugCommands(const webserver::WebServerContext& ctx);
 
 } // namespace ws
 } // namespace webserver

@@ -70,9 +70,14 @@
 #define FEATURE_TRANSITIONS 1
 #endif
 
-// Audio Reactive Effects (requires I2S microphone)
+// Audio Reactive Effects + Trinity Protocol (PRISM Dashboard integration)
 #ifndef FEATURE_AUDIO_SYNC
-#define FEATURE_AUDIO_SYNC 0
+#define FEATURE_AUDIO_SYNC 1
+#endif
+
+// Auto-speed trim (audio-driven base speed) - disabled by default
+#ifndef FEATURE_AUTO_SPEED
+#define FEATURE_AUTO_SPEED 0
 #endif
 
 // Musical Saliency Analysis - Computes harmonic/rhythmic/timbral/dynamic novelty

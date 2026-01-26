@@ -109,7 +109,7 @@ void LGPWaveCollisionEnhancedEffect::render(plugins::EffectContext& ctx) {
         m_energyDelta = 0.0f;
     }
 
-    float dt = enhancement::getSafeDeltaSeconds(ctx.deltaTimeMs);
+    float dt = enhancement::getSafeDeltaSeconds(ctx.deltaTimeSeconds);
     float moodNorm = ctx.getMoodNormalized();
 
     // Smooth chromagram with AsymmetricFollower (every frame)

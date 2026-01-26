@@ -51,7 +51,7 @@ void LGPAudioTestEffect::render(plugins::EffectContext& ctx) {
         }
     } else {
         // Fallback: fake 120 BPM beat
-        m_fallbackPhase += (ctx.deltaTimeMs / 500.0f);  // 500ms per beat = 120 BPM
+        m_fallbackPhase += ((ctx.deltaTimeSeconds * 1000.0f) / 500.0f);  // 500ms per beat = 120 BPM
         if (m_fallbackPhase >= 1.0f) {
             m_fallbackPhase -= 1.0f;
         }

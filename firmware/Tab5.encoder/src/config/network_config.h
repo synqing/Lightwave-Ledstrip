@@ -112,8 +112,13 @@ namespace NetworkConfig {
     constexpr uint32_t WIFI_RETRY_TIMEOUT_MS = 120000;  // 2 minutes
     
     // Default fallback IP for primary network (when mDNS fails)
-    // This should match v2 device's typical IP on primary network
-    constexpr const char* MDNS_FALLBACK_IP_PRIMARY = "192.168.1.102";
+    // IMPORTANT: Set this to the v2 LightwaveOS device's IP on your WiFi network!
+    // To find it:
+    //   1. Check v2 device serial output for "STA IP: x.x.x.x"
+    //   2. Or check your router's admin page for connected devices
+    //   3. Or use a network scanner app (Fing, etc.)
+    // This IP is used when mDNS fails on third-party networks (e.g., VX220-013F)
+    constexpr const char* MDNS_FALLBACK_IP_PRIMARY = "192.168.1.101";
 }
 
 // NVS namespace and keys for network configuration

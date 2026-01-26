@@ -357,9 +357,10 @@ void WiFiManager::handleStateConnected() {
     // Print status periodically (every 30 seconds)
     if (millis() - lastStatusPrint > 30000) {
         lastStatusPrint = millis();
-        LW_LOGI("Connected to '%s', RSSI: %d dBm, Channel: %d, Uptime: %ds",
+        LW_LOGI("Connected to '%s', RSSI: %d dBm, Channel: %d, Uptime: %ds, IP: %s (%s.local)",
                 WiFi.SSID().c_str(), WiFi.RSSI(), WiFi.channel(),
-                getUptimeSeconds());
+                getUptimeSeconds(), WiFi.localIP().toString().c_str(),
+                config::NetworkConfig::MDNS_HOSTNAME);
     }
 
     // Check for disconnection event
@@ -722,6 +723,27 @@ String WiFiManager::getStateString() const {
         case STATE_WIFI_DISCONNECTED: return "DISCONNECTED";
         default:                      return "UNKNOWN";
     }
+}
+
+uint8_t WiFiManager::getSavedNetworks(WiFiCredentialsStorage::NetworkCredential* networks,
+                                      uint8_t maxNetworks) {
+    return m_credentialsStorage.loadNetworks(networks, maxNetworks);
+}
+
+uint8_t WiFiManager::getSavedNetworkCount() const {
+    return m_credentialsStorage.getNetworkCount();
+}
+
+bool WiFiManager::saveNetwork(const String& ssid, const String& password) {
+    return m_credentialsStorage.saveNetwork(ssid, password);
+}
+
+bool WiFiManager::removeNetwork(const String& ssid) {
+    return m_credentialsStorage.deleteNetwork(ssid);
+}
+
+bool WiFiManager::hasSavedNetwork(const String& ssid) {
+    return m_credentialsStorage.hasNetwork(ssid);
 }
 
 // ============================================================================

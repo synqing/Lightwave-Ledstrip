@@ -13,6 +13,19 @@
 // ============================================================================
 
 void TouchHandler::update() {
+    // CRITICAL: If screen gate blocks us, yield to LVGL for touch handling
+    // This prevents TouchHandler from consuming touch events meant for LVGL screens
+    // (ConnectivityTab, ZoneComposer) which have their own LVGL widgets
+    if (m_screenGateCallback && !m_screenGateCallback()) {
+        // Not on GLOBAL screen - let LVGL handle touches exclusively
+        // Reset our state to prevent stale data when we return to GLOBAL
+        m_wasPressed = false;
+        m_touching = false;
+        m_touchedParam = -1;
+        m_touchedAction = -1;
+        return;  // Early exit - don't read touch at all
+    }
+
     // M5.update() must be called before this (handled in main loop)
     auto touch = M5.Touch.getDetail();
     uint32_t now = millis();
@@ -125,12 +138,14 @@ void TouchHandler::handleTouchHold(int16_t x, int16_t y, uint32_t duration) {
             Serial.printf("[TOUCH] Long press on param %d (duration %lu ms)\n",
                           currentParam, duration);
 
-            // Reset parameter to default
-            resetParameterToDefault(static_cast<uint8_t>(currentParam));
+            // Reset parameter to default (gated by screen state)
+            if (!m_screenGateCallback || m_screenGateCallback()) {
+                resetParameterToDefault(static_cast<uint8_t>(currentParam));
 
-            // Invoke callback if registered
-            if (m_longPressCallback) {
-                m_longPressCallback(static_cast<uint8_t>(currentParam));
+                // Invoke callback if registered
+                if (m_longPressCallback) {
+                    m_longPressCallback(static_cast<uint8_t>(currentParam));
+                }
             }
         }
     }
@@ -164,8 +179,8 @@ void TouchHandler::handleTouchRelease(uint32_t duration) {
             Serial.printf("[TOUCH] Tap on param %d (duration %lu ms)\n",
                           m_touchedParam, duration);
 
-            // Invoke tap callback if registered
-            if (m_tapCallback) {
+            // Invoke tap callback if registered (gated by screen state)
+            if (m_tapCallback && (!m_screenGateCallback || m_screenGateCallback())) {
                 m_tapCallback(static_cast<uint8_t>(m_touchedParam));
             }
         }
@@ -175,13 +190,17 @@ void TouchHandler::handleTouchRelease(uint32_t duration) {
             // #region agent log (DISABLED)
             // Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H3\",\"location\":\"TouchHandler.cpp:158\",\"message\":\"touch.release.zoneCheck\",\"data\":{\"zone\":%d,\"touchX\":%d,\"touchY\":%d,\"actionRowYStart\":%d,\"actionRowYEnd\":%d},\"timestamp\":%lu}\n", (int)zone, m_touchX, m_touchY, TouchConfig::ACTION_ROW_Y_START, TouchConfig::ACTION_ROW_Y_END, (unsigned long)now);
                         // #endregion
-            if (zone == TouchZone::STATUS_BAR && m_statusBarCallback) {
+            // Status bar callback (gated by screen state)
+            if (zone == TouchZone::STATUS_BAR && m_statusBarCallback &&
+                (!m_screenGateCallback || m_screenGateCallback())) {
                 m_statusBarCallback(m_touchX, m_touchY);
             }
             // #region agent log (DISABLED)
             // Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H4\",\"location\":\"TouchHandler.cpp:181\",\"message\":\"touch.release.actionRowCheck\",\"data\":{\"zone\":%d,\"zoneIsActionRow\":%d,\"callbackSet\":%d,\"touchedAction\":%d,\"touchX\":%d,\"touchY\":%d,\"actionRowYStart\":%d,\"actionRowYEnd\":%d},\"timestamp\":%lu}\n", (int)zone, (zone == TouchZone::ACTION_ROW) ? 1 : 0, (m_actionButtonCallback != nullptr) ? 1 : 0, m_touchedAction, m_touchX, m_touchY, TouchConfig::ACTION_ROW_Y_START, TouchConfig::ACTION_ROW_Y_END, (unsigned long)now);
                         // #endregion
-            if (zone == TouchZone::ACTION_ROW && m_actionButtonCallback && m_touchedAction >= 0) {
+            // Action button callback (gated by screen state - CRITICAL FIX for cross-screen touch)
+            if (zone == TouchZone::ACTION_ROW && m_actionButtonCallback && m_touchedAction >= 0 &&
+                (!m_screenGateCallback || m_screenGateCallback())) {
                 // #region agent log (DISABLED)
                 // Serial.printf("[DEBUG] {\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H4\",\"location\":\"TouchHandler.cpp:184\",\"message\":\"touch.release.callbackInvoke\",\"data\":{\"buttonIndex\":%d},\"timestamp\":%lu}\n", m_touchedAction, (unsigned long)now);
                                 // #endregion

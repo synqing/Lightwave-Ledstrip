@@ -85,6 +85,10 @@ size_t WsCommandRouter::getHandlerCount() {
     return s_handlerCount;
 }
 
+size_t WsCommandRouter::getMaxHandlers() {
+    return MAX_HANDLERS;
+}
+
 } // namespace webserver
 } // namespace network
 } // namespace lightwaveos

@@ -83,7 +83,7 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
     // =========================================================================
     // Per-frame Updates (smooth animation)
     // =========================================================================
-    float dt = ctx.deltaTimeMs * 0.001f;
+    float dt = ctx.getSafeDeltaSeconds();
     if (dt > 0.1f) dt = 0.1f;  // Clamp for safety
 
     // Smooth dominant bin (for color stability)

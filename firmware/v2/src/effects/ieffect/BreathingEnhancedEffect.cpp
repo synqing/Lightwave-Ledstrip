@@ -108,7 +108,7 @@ void BreathingEnhancedEffect::render(plugins::EffectContext& ctx) {
     // ========================================================================
     // PHASE 1: TIME-BASED MOTION (User-controlled speed, NOT audio-reactive)
     // ========================================================================
-    float dt = ctx.deltaTimeMs * 0.001f;
+    float dt = ctx.getSafeDeltaSeconds();
     float baseSpeed = ctx.speed / 200.0f;
     
     // Enhanced: Use beatPhase for sync when tempo confidence high (PLL-style correction)

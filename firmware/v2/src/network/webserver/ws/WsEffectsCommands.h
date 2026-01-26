@@ -18,7 +18,7 @@ namespace ws {
  * @brief Register effects-related WebSocket commands
  * @param ctx WebServer context
  */
-void registerWsEffectsCommands(const WebServerContext& ctx);
+void registerWsEffectsCommands(const webserver::WebServerContext& ctx);
 
 } // namespace ws
 } // namespace webserver

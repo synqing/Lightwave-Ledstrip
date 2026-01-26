@@ -11,27 +11,63 @@
 #include "../../../core/actors/RendererActor.h"
 #include <ESPAsyncWebServer.h>
 #include <WiFi.h>
+#include <ArduinoJson.h>
 
 namespace lightwaveos {
 namespace network {
 namespace webserver {
 namespace ws {
 
-// Legacy compatibility: original on-device UI sends {"type":"getStatus"} and expects a "status" event.
-// We keep this as a lightweight alias that triggers the existing status broadcast.
 static void handleLegacyGetStatus(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
-    // Decode using codec (extracts requestId only)
     JsonObjectConst root = doc.as<JsonObjectConst>();
     codec::DeviceDecodeResult decodeResult = codec::WsDeviceCodec::decode(root);
     
     const char* requestId = (decodeResult.success && decodeResult.request.requestId) 
         ? decodeResult.request.requestId : "";
     
-    if (ctx.broadcastStatus) {
-        ctx.broadcastStatus();  // Broadcasts "status" to all clients (includes the requester).
+    // Extract optional ping metadata from envelope
+    int64_t pingId = 0;
+    bool hasPingId = false;
+    if (root.containsKey("_id")) {
+        pingId = root["_id"].as<int64_t>();
+        if (pingId > 0) {
+            hasPingId = true;
+        }
+    }
+
+    int64_t clientTime = 0;
+    bool hasClientTime = false;
+    if (root.containsKey("_time")) {
+        clientTime = root["_time"].as<int64_t>();
+        if (clientTime > 0) {
+            hasClientTime = true;
+        }
+    }
+
+    if (!ctx.broadcastStatus) {
+        client->text(buildWsError(ErrorCodes::SYSTEM_NOT_READY, "Status broadcaster not available", requestId));
         return;
     }
-    client->text(buildWsError(ErrorCodes::SYSTEM_NOT_READY, "Status broadcaster not available", requestId));
+
+    ctx.broadcastStatus();
+
+    // Send a dedicated pong response back to the requesting client so PRISM can
+    // measure RTT and clock drift. For now we operate in "echo" mode: if the
+    // client supplied _time we echo it back, which yields near-zero drift while
+    // still giving an accurate RTT measurement.
+    if (hasPingId) {
+        StaticJsonDocument<128> response;
+        response["_type"] = "pong";
+        response["_id"] = pingId;
+        if (hasClientTime) {
+            response["_time"] = clientTime;
+        } else {
+            response["_time"] = static_cast<int64_t>(millis());
+        }
+        String output;
+        serializeJson(response, output);
+        client->text(output);
+    }
 }
 
 static void handleDeviceGetStatus(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
@@ -99,4 +135,3 @@ void registerWsDeviceCommands(const WebServerContext& ctx) {
 } // namespace webserver
 } // namespace network
 } // namespace lightwaveos
-

@@ -549,7 +549,7 @@ private:
     TempoTracker m_tempo;
 
     /// Last tempo output for diagnostics
-    TempoOutput m_lastTempoOutput;
+    TempoTrackerOutput m_lastTempoOutput;
 
     /// Cached 64-bin spectrum for tempo tracker novelty input
     /// Updated every ~94ms when 64-bin analysis completes, used every hop

@@ -73,7 +73,7 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
         m_lastTrebleEnergy = trebleEnergy;
     } else {
         // Fallback: 120 BPM with simulated snare on off-beats
-        m_fallbackPhase += (ctx.deltaTimeMs / 500.0f);
+        m_fallbackPhase += ((ctx.deltaTimeSeconds * 1000.0f) / 500.0f);
         if (m_fallbackPhase >= 1.0f) m_fallbackPhase -= 1.0f;
         beatPhase = m_fallbackPhase;
         bassEnergy = 0.5f;
@@ -102,7 +102,7 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
     }
 
     // Expand pulse outward (~400ms to reach edge)
-    m_pulsePosition += ctx.deltaTimeMs / 400.0f;
+    m_pulsePosition += (ctx.deltaTimeSeconds * 1000.0f) / 400.0f;
     if (m_pulsePosition > 1.0f) m_pulsePosition = 1.0f;
 
     // Decay intensity
@@ -116,7 +116,7 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
     }
 
     // Snare pulse expands faster (~300ms)
-    m_snarePulsePos += ctx.deltaTimeMs / 300.0f;
+    m_snarePulsePos += (ctx.deltaTimeSeconds * 1000.0f) / 300.0f;
     if (m_snarePulsePos > 1.0f) m_snarePulsePos = 1.0f;
 
     // Faster decay for snare

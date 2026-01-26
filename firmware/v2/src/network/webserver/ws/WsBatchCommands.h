@@ -18,7 +18,7 @@ namespace ws {
  * @brief Register batch-related WebSocket commands
  * @param ctx WebServer context
  */
-void registerWsBatchCommands(const WebServerContext& ctx);
+void registerWsBatchCommands(const webserver::WebServerContext& ctx);
 
 } // namespace ws
 } // namespace webserver

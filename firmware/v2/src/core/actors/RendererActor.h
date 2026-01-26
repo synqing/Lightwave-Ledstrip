@@ -403,13 +403,13 @@ public:
 
     /**
      * @brief Get current tempo output (read-only access for diagnostics)
-     * @return TempoOutput with BPM, phase, confidence, beat_tick
+     * @return TempoTrackerOutput with BPM, phase, confidence, beat_tick
      */
-    lightwaveos::audio::TempoOutput getTempoOutput() const {
+    lightwaveos::audio::TempoTrackerOutput getTempoOutput() const {
         if (m_tempo) {
             return m_tempo->getOutput();
         }
-        return lightwaveos::audio::TempoOutput{};
+        return lightwaveos::audio::TempoTrackerOutput{};
     }
 #endif
 
@@ -602,6 +602,9 @@ private:
     // Timing
     uint32_t m_lastFrameTime;
     uint32_t m_frameCount;
+    float m_effectTimeSeconds;
+    float m_effectFrameAccumulator;
+    uint32_t m_effectFrameCount;
 
     // Statistics
     RenderStats m_stats;

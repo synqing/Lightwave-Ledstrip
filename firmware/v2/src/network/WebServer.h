@@ -63,12 +63,20 @@ class AsyncWebSocket;
 class AsyncWebSocketClient;
 
 namespace lightwaveos {
-    namespace nodes {
-        class NodeOrchestrator;
-        class RendererNode;
+    namespace actors {
+        class ActorSystem;
+        class RendererActor;
     }
     namespace zones {
         class ZoneComposer;
+    }
+    // Type aliases for legacy handler compatibility
+    // The codebase was originally designed with NodeOrchestrator/RendererNode
+    // but evolved to use ActorSystem/RendererActor. These aliases maintain
+    // compatibility with existing handler code.
+    namespace nodes {
+        using NodeOrchestrator = actors::ActorSystem;
+        using RendererNode = actors::RendererActor;
     }
 }
 

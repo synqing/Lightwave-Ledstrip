@@ -117,6 +117,7 @@
 #include "ieffect/LGPStarBurstEffectEnhanced.h"
 #include "ieffect/LGPWaveCollisionEffectEnhanced.h"
 #include "ieffect/RippleEnhancedEffect.h"
+#include "ieffect/TrinityTestEffect.h"
 #include "utils/FastLEDOptim.h"
 #include "../core/narrative/NarrativeEngine.h"
 #include <FastLED.h>
@@ -948,9 +949,17 @@ uint8_t registerAllEffects(RendererActor* renderer) {
         total++;
     }
 
+    // =============== DIAGNOSTIC EFFECTS ===============
+
+    // Trinity Test (ID 99) - Diagnostic effect for PRISM Trinity data flow verification
+    static ieffect::TrinityTestEffect trinityTestInstance;
+    if (renderer->registerEffect(total, &trinityTestInstance)) {
+        total++;
+    }
+
     // =============== EFFECT COUNT PARITY VALIDATION ===============
     // Runtime validation: ensure registered count matches expected
-    constexpr uint8_t EXPECTED_EFFECT_COUNT = 99;  // 86 base + 12 enhanced + 1 snapwave
+    constexpr uint8_t EXPECTED_EFFECT_COUNT = 100;  // 99 + 1 Trinity Test diagnostic
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

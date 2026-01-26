@@ -17,6 +17,7 @@
 #pragma once
 
 #include <FastLED.h>
+#include <functional>
 #include "ZoneDefinition.h"
 #include "BlendMode.h"
 #include "../../core/actors/RendererActor.h"
@@ -32,6 +33,21 @@ using namespace lightwaveos::actors;
 
 // Use the EffectRenderFn typedef from RendererActor
 using EffectFunc = EffectRenderFn;
+
+// ==================== Zone Audio Config ====================
+
+/**
+ * @brief Per-zone audio-reactive configuration
+ */
+struct ZoneAudioConfig {
+    bool tempoSync = false;           // Sync effect speed to detected tempo
+    bool beatModulation = false;      // Modulate effect with beat phase
+    float tempoSpeedScale = 1.0f;     // Speed multiplier when tempo sync is active
+    float beatDecay = 0.5f;           // Beat modulation decay rate (0.0-1.0)
+    uint8_t audioBand = 0;            // Primary audio band for this zone (0-7)
+    bool beatTriggerEnabled = false;  // Enable beat-triggered transitions
+    uint16_t beatTriggerInterval = 500; // Minimum interval between beat triggers (ms)
+};
 
 // ==================== Zone State ====================
 
@@ -129,6 +145,30 @@ public:
     BlendMode getZoneBlendMode(uint8_t zone) const;
     bool isZoneEnabled(uint8_t zone) const;
 
+    // ==================== Zone Audio Config ====================
+
+    /**
+     * @brief Get audio configuration for a zone
+     * @param zone Zone ID (0-3)
+     * @return ZoneAudioConfig for the zone (default config if zone invalid)
+     */
+    ZoneAudioConfig getZoneAudioConfig(uint8_t zone) const;
+
+    /**
+     * @brief Set audio configuration for a zone
+     * @param zone Zone ID (0-3)
+     * @param config Audio configuration to apply
+     */
+    void setZoneAudioConfig(uint8_t zone, const ZoneAudioConfig& config);
+
+    // ==================== State Change Callback ====================
+
+    /**
+     * @brief Set callback for zone state changes
+     * @param callback Function called when zone state changes, receives zone ID
+     */
+    void setStateChangeCallback(std::function<void(uint8_t)> callback);
+
     // ==================== Presets ====================
 
     /**
@@ -150,7 +190,7 @@ private:
     // ==================== Rendering Helpers ====================
 
     void renderZone(uint8_t zoneId, CRGB* leds, uint16_t numLeds,
-                    uint8_t hue, uint32_t frameCount);
+                    uint8_t hue, uint32_t frameCount, float deltaSeconds);
 
     void extractZoneSegment(uint8_t zoneId, const CRGB* source, CRGB* dest);
 
@@ -179,6 +219,9 @@ private:
     ZoneSegment m_zoneConfig[MAX_ZONES]; // Runtime storage for zone segment definitions
 
     ZoneState m_zones[MAX_ZONES];       // Per-zone state
+    ZoneAudioConfig m_zoneAudioConfigs[MAX_ZONES]; // Per-zone audio configuration
+
+    std::function<void(uint8_t)> m_stateChangeCallback; // Callback for zone state changes
 
     RendererActor* m_renderer;          // Renderer for effect access
 
@@ -194,8 +237,10 @@ private:
     CRGBPalette16 m_zonePalettes[MAX_ZONES]; // Per-zone palette storage (for zone-specific palettes)
     plugins::EffectContext m_zoneContext;  // Reused for all zones
 
-    // Monotonic time accumulator for stable getPhase()/time-based animations.
-    uint32_t m_totalTimeMs = 0;
+    // Per-zone time accumulators for stable slow-motion scaling.
+    float m_zoneTimeSeconds[MAX_ZONES];
+    float m_zoneFrameAccumulator[MAX_ZONES];
+    uint32_t m_zoneFrameCount[MAX_ZONES];
 };
 
 } // namespace zones

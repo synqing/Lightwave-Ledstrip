@@ -18,7 +18,7 @@ namespace ws {
  * @brief Register motion-related WebSocket commands
  * @param ctx WebServer context
  */
-void registerWsMotionCommands(const WebServerContext& ctx);
+void registerWsMotionCommands(const webserver::WebServerContext& ctx);
 
 } // namespace ws
 } // namespace webserver

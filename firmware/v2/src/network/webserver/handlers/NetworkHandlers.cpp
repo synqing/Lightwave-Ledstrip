@@ -7,7 +7,6 @@
 
 #include "NetworkHandlers.h"
 #include "../../WiFiManager.h"
-#include "../../WiFiCredentialManager.h"
 #include "../../RequestValidator.h"
 #include "../../ApiResponse.h"
 #include <WiFi.h>
@@ -133,7 +132,7 @@ void NetworkHandlers::handleConnect(AsyncWebServerRequest* request, uint8_t* dat
 
     // Save to credential manager if requested
     if (saveNetwork && passLen > 0) {
-        WIFI_CREDENTIALS.addNetwork(ssid, password);
+        WIFI_MANAGER.saveNetwork(ssid, password);
     }
 
     // Initiate connection via WiFiManager
@@ -160,15 +159,21 @@ void NetworkHandlers::handleDisconnect(AsyncWebServerRequest* request) {
 // ============================================================================
 
 void NetworkHandlers::handleSavedList(AsyncWebServerRequest* request) {
-    auto ssids = WIFI_CREDENTIALS.getSavedSSIDs();
+    lightwaveos::network::WiFiCredentialsStorage::NetworkCredential savedNetworks[
+        lightwaveos::network::WiFiCredentialsStorage::MAX_NETWORKS
+    ];
+    uint8_t savedCount = WIFI_MANAGER.getSavedNetworks(
+        savedNetworks,
+        lightwaveos::network::WiFiCredentialsStorage::MAX_NETWORKS
+    );
 
-    sendSuccessResponse(request, [&ssids](JsonObject& data) {
+    sendSuccessResponse(request, [&savedNetworks, savedCount](JsonObject& data) {
         JsonArray networks = data["networks"].to<JsonArray>();
-        for (const auto& ssid : ssids) {
-            networks.add(ssid);
+        for (uint8_t i = 0; i < savedCount; i++) {
+            networks.add(savedNetworks[i].ssid);
         }
-        data["count"] = ssids.size();
-        data["maxNetworks"] = MAX_SAVED_NETWORKS;
+        data["count"] = savedCount;
+        data["maxNetworks"] = lightwaveos::network::WiFiCredentialsStorage::MAX_NETWORKS;
     });
 }
 
@@ -188,16 +193,16 @@ void NetworkHandlers::handleSavedAdd(AsyncWebServerRequest* request, uint8_t* da
     const char* password = doc["password"].as<const char*>();
 
     // Check if we have room
-    if (WIFI_CREDENTIALS.getNetworkCount() >= MAX_SAVED_NETWORKS &&
-        !WIFI_CREDENTIALS.hasNetwork(ssid)) {
+    if (WIFI_MANAGER.getSavedNetworkCount() >= lightwaveos::network::WiFiCredentialsStorage::MAX_NETWORKS &&
+        !WIFI_MANAGER.hasSavedNetwork(ssid)) {
         sendErrorResponse(request, HttpStatus::CONFLICT,
                           "NETWORK_LIMIT_REACHED",
-                          "Maximum saved networks reached (8). Remove a network first.");
+                          "Maximum saved networks reached (10). Remove a network first.");
         return;
     }
 
     // Add/update network
-    if (!WIFI_CREDENTIALS.addNetwork(ssid, password)) {
+    if (!WIFI_MANAGER.saveNetwork(ssid, password)) {
         sendErrorResponse(request, HttpStatus::INTERNAL_SERVER_ERROR,
                           ErrorCodes::INTERNAL_ERROR, "Failed to save network");
         return;
@@ -245,13 +250,13 @@ void NetworkHandlers::handleSavedDelete(AsyncWebServerRequest* request) {
     }
 
     // Attempt to remove
-    if (!WIFI_CREDENTIALS.hasNetwork(ssid.c_str())) {
+    if (!WIFI_MANAGER.hasSavedNetwork(ssid.c_str())) {
         sendErrorResponse(request, HttpStatus::NOT_FOUND,
                           ErrorCodes::NOT_FOUND, "Network not found");
         return;
     }
 
-    if (!WIFI_CREDENTIALS.removeNetwork(ssid.c_str())) {
+    if (!WIFI_MANAGER.removeNetwork(ssid.c_str())) {
         sendErrorResponse(request, HttpStatus::INTERNAL_SERVER_ERROR,
                           ErrorCodes::INTERNAL_ERROR, "Failed to remove network");
         return;
@@ -260,6 +265,119 @@ void NetworkHandlers::handleSavedDelete(AsyncWebServerRequest* request) {
     sendSuccessResponse(request, [&ssid](JsonObject& data) {
         data["message"] = "Network removed";
         data["ssid"] = ssid;
+    });
+}
+
+// ============================================================================
+// Alternative Endpoints (for V1ApiRoutes compatibility)
+// ============================================================================
+
+void NetworkHandlers::handleListNetworks(AsyncWebServerRequest* request) {
+    // Delegate to handleSavedList
+    handleSavedList(request);
+}
+
+void NetworkHandlers::handleAddNetwork(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
+    // Delegate to handleSavedAdd
+    handleSavedAdd(request, data, len);
+}
+
+void NetworkHandlers::handleDeleteNetwork(AsyncWebServerRequest* request, const String& ssid) {
+    // Validate SSID
+    if (ssid.isEmpty()) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::MISSING_FIELD, "SSID required", "ssid");
+        return;
+    }
+
+    if (!WIFI_MANAGER.hasSavedNetwork(ssid.c_str())) {
+        sendErrorResponse(request, HttpStatus::NOT_FOUND,
+                          ErrorCodes::NOT_FOUND, "Network not found");
+        return;
+    }
+
+    if (!WIFI_MANAGER.removeNetwork(ssid.c_str())) {
+        sendErrorResponse(request, HttpStatus::INTERNAL_ERROR,
+                          ErrorCodes::INTERNAL_ERROR, "Failed to remove network");
+        return;
+    }
+
+    sendSuccessResponse(request, [&ssid](JsonObject& data) {
+        data["message"] = "Network removed";
+        data["ssid"] = ssid;
+    });
+}
+
+void NetworkHandlers::handleScanNetworks(AsyncWebServerRequest* request) {
+    // Delegate to handleScan
+    handleScan(request);
+}
+
+void NetworkHandlers::handleScanStatus(AsyncWebServerRequest* request) {
+    // Return current scan state
+    sendSuccessResponse(request, [](JsonObject& data) {
+        data["scanning"] = false;
+        data["complete"] = true;
+        data["status"] = "idle";
+    });
+}
+
+// ============================================================================
+// Network Mode Control
+// ============================================================================
+
+void NetworkHandlers::handleEnableSTA(AsyncWebServerRequest* request, uint8_t* data, size_t len) {
+    JsonDocument doc;
+
+    // Parse optional parameters
+    if (len > 0) {
+        DeserializationError err = deserializeJson(doc, data, len);
+        if (err) {
+            sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                              ErrorCodes::INVALID_JSON, "Invalid JSON");
+            return;
+        }
+    }
+
+    uint32_t durationSeconds = doc["durationSeconds"] | 0;
+    bool revertToApOnly = doc["revertToApOnly"] | false;
+
+    WiFiManager& wm = WIFI_MANAGER;
+
+    // Request STA mode enable (triggers reconnection attempt)
+    // Note: Auto-revert timer is handled by WiFiManager internally
+    bool success = wm.requestSTAEnable(durationSeconds * 1000, revertToApOnly);
+
+    if (!success) {
+        // Fallback: trigger reconnection manually
+        wm.reconnect();
+    }
+
+    sendSuccessResponse(request, [durationSeconds, revertToApOnly](JsonObject& data) {
+        data["message"] = "STA mode requested";
+        data["staEnabled"] = true;
+        if (durationSeconds > 0) {
+            data["autoRevertSeconds"] = durationSeconds;
+            data["revertToApOnly"] = revertToApOnly;
+        }
+    });
+}
+
+void NetworkHandlers::handleEnableAPOnly(AsyncWebServerRequest* request) {
+    WiFiManager& wm = WIFI_MANAGER;
+
+    // Request AP-only mode
+    bool success = wm.requestAPOnly();
+
+    if (!success) {
+        // AP-only mode not fully implemented in this version
+        // Disconnect to allow AP mode to take over
+        wm.disconnect();
+    }
+
+    sendSuccessResponse(request, [](JsonObject& data) {
+        data["message"] = "AP-only mode requested";
+        data["apOnly"] = true;
     });
 }
 

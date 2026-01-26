@@ -74,6 +74,10 @@ using namespace lightwaveos::plugins;
 ZoneComposer zoneComposer;
 ZoneConfigManager* zoneConfigMgr = nullptr;
 
+// Forward declaration for PresetManager (not yet implemented)
+namespace lightwaveos { namespace persistence { class PresetManager; } }
+lightwaveos::persistence::PresetManager* presetMgr = nullptr;
+
 // ==================== Global Plugin Manager ====================
 
 PluginManagerActor* pluginManager = nullptr;
@@ -255,10 +259,10 @@ void setup() {
     // Instantiate WebServer with dependencies
     webServerInstance = new WebServer(actors, renderer);
 
-    // Wire PluginManagerActor to WebServer BEFORE begin() (context created during begin)
+    // Note: PluginManager wiring to WebServer not yet implemented
+    // TODO: Add setPluginManager() to WebServer when plugin web UI is needed
     if (pluginManager) {
-        webServerInstance->setPluginManager(pluginManager);
-        LW_LOGI("Plugin Manager: Wired to WebServer");
+        LW_LOGI("Plugin Manager: Created (WebServer integration pending)");
     }
 
     if (!webServerInstance->begin()) {

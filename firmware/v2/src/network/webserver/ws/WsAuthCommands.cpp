@@ -31,8 +31,7 @@ namespace ws {
 static void handleAuthStatus(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     const char* requestId = doc["requestId"] | "";
 
-    // Access ApiKeyManager through WebServer
-    WebServer* server = ctx.server;
+    WebServer* server = ctx.webServer;
     if (!server) {
         client->text(buildWsError(ErrorCodes::SYSTEM_NOT_READY, "Server not available", requestId));
         return;
@@ -60,8 +59,7 @@ static void handleAuthStatus(AsyncWebSocketClient* client, JsonDocument& doc, co
 static void handleAuthRotate(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     const char* requestId = doc["requestId"] | "";
 
-    // Access WebServer to check authentication and get ApiKeyManager
-    WebServer* server = ctx.server;
+    WebServer* server = ctx.webServer;
     if (!server) {
         client->text(buildWsError(ErrorCodes::SYSTEM_NOT_READY, "Server not available", requestId));
         return;

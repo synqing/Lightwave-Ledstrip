@@ -18,7 +18,7 @@ namespace ws {
  * @brief Register zones-related WebSocket commands
  * @param ctx WebServer context
  */
-void registerWsZonesCommands(const WebServerContext& ctx);
+void registerWsZonesCommands(const webserver::WebServerContext& ctx);
 
 } // namespace ws
 } // namespace webserver

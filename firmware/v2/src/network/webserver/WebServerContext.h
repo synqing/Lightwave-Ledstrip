@@ -27,9 +27,11 @@ namespace lightwaveos {
         class PluginManagerActor;
     }
     namespace network {
+        class WebServer;  // Forward declaration for WebServer (passed as 'this')
         namespace webserver {
             class RateLimiter;
             class LedStreamBroadcaster;
+            class LogStreamBroadcaster;
 #if FEATURE_AUDIO_SYNC
             class AudioStreamBroadcaster;
 #endif
@@ -55,16 +57,21 @@ namespace webserver {
  */
 struct WebServerContext {
     // Business systems (non-owning references)
+    // Note: actorSystem is the canonical name. orchestrator is an alias for
+    // compatibility with V1ApiRoutes.cpp which was written expecting that name.
     actors::ActorSystem& actorSystem;
+    actors::ActorSystem& orchestrator;  // Alias for actorSystem (V1ApiRoutes compatibility)
     actors::RendererActor* renderer;
     zones::ZoneComposer* zoneComposer;
-    plugins::PluginManagerActor* pluginManager;
+    network::WebServer* webServer;  // WebServer instance (passed as 'this' from WebServer.cpp)
+    plugins::PluginManagerActor* pluginManager;  // Plugin manager (may be nullptr)
 
     // Cross-cutting concerns
     RateLimiter& rateLimiter;
 
     // Streaming broadcasters
     LedStreamBroadcaster* ledBroadcaster;
+    LogStreamBroadcaster* logBroadcaster;
 #if FEATURE_AUDIO_SYNC
     AudioStreamBroadcaster* audioBroadcaster;
 #endif
@@ -81,6 +88,7 @@ struct WebServerContext {
     std::function<void()> broadcastZoneState;
     AsyncWebSocket* ws;  // For broadcasting events to all clients
     std::function<bool(AsyncWebSocketClient*, bool)> setLEDStreamSubscription;
+    std::function<bool(AsyncWebSocketClient*, bool)> setLogStreamSubscription;
 #if FEATURE_AUDIO_SYNC
     std::function<bool(AsyncWebSocketClient*, bool)> setAudioStreamSubscription;
 #endif
@@ -99,9 +107,10 @@ struct WebServerContext {
         actors::ActorSystem& actors,
         actors::RendererActor* rendererPtr,
         zones::ZoneComposer* zoneComposerPtr,
-        plugins::PluginManagerActor* pluginMgr,
+        network::WebServer* webServerPtr,
         RateLimiter& limiter,
         LedStreamBroadcaster* ledBroadcast,
+        LogStreamBroadcaster* logBroadcast,
 #if FEATURE_AUDIO_SYNC
         AudioStreamBroadcaster* audioBroadcast,
 #endif
@@ -114,6 +123,7 @@ struct WebServerContext {
         std::function<void()> broadcastZoneStateFn = nullptr,
         AsyncWebSocket* wsPtr = nullptr,
         std::function<bool(AsyncWebSocketClient*, bool)> setLEDStreamFn = nullptr,
+        std::function<bool(AsyncWebSocketClient*, bool)> setLogStreamFn = nullptr,
 #if FEATURE_AUDIO_SYNC
         std::function<bool(AsyncWebSocketClient*, bool)> setAudioStreamFn = nullptr,
 #endif
@@ -123,14 +133,18 @@ struct WebServerContext {
 #if FEATURE_AUDIO_BENCHMARK
         std::function<bool(AsyncWebSocketClient*, bool)> setBenchmarkStreamFn = nullptr,
 #endif
-        std::function<bool(const String&, JsonVariant)> executeBatchFn = nullptr
+        std::function<bool(const String&, JsonVariant)> executeBatchFn = nullptr,
+        plugins::PluginManagerActor* pluginMgr = nullptr
     )
         : actorSystem(actors)
+        , orchestrator(actors)  // Alias for actorSystem (V1ApiRoutes compatibility)
         , renderer(rendererPtr)
         , zoneComposer(zoneComposerPtr)
+        , webServer(webServerPtr)
         , pluginManager(pluginMgr)
         , rateLimiter(limiter)
         , ledBroadcaster(ledBroadcast)
+        , logBroadcaster(logBroadcast)
 #if FEATURE_AUDIO_SYNC
         , audioBroadcaster(audioBroadcast)
 #endif
@@ -143,6 +157,7 @@ struct WebServerContext {
         , broadcastZoneState(broadcastZoneStateFn)
         , ws(wsPtr)
         , setLEDStreamSubscription(setLEDStreamFn)
+        , setLogStreamSubscription(setLogStreamFn)
 #if FEATURE_AUDIO_SYNC
         , setAudioStreamSubscription(setAudioStreamFn)
 #endif

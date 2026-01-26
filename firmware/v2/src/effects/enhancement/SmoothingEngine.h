@@ -298,13 +298,13 @@ struct SubpixelRenderer {
 
 /**
  * Get safe delta time (clamped to prevent physics explosion)
- * @param deltaTimeMs Delta time in milliseconds
- * @return Delta time in seconds, clamped to [0.001, 0.05]
+ * @param deltaSeconds Delta time in seconds
+ * @return Delta time in seconds, clamped to [0.0001, 0.05]
  */
-inline float getSafeDeltaSeconds(float deltaTimeMs) {
-    float dt = deltaTimeMs * 0.001f;
-    if (dt < 0.001f) dt = 0.001f;   // Minimum 1ms
-    if (dt > 0.05f) dt = 0.05f;     // Maximum 50ms (20 FPS floor)
+inline float getSafeDeltaSeconds(float deltaSeconds) {
+    float dt = deltaSeconds;
+    if (dt < 0.0001f) dt = 0.0001f;   // Minimum 0.1ms
+    if (dt > 0.05f) dt = 0.05f;       // Maximum 50ms (20 FPS floor)
     return dt;
 }
 

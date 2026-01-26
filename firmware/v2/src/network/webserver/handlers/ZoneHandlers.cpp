@@ -408,6 +408,197 @@ uint8_t ZoneHandlers::extractZoneIdFromPath(AsyncWebServerRequest* request) {
     return 255;  // Invalid
 }
 
+// ============================================================================
+// Zone Configuration Persistence (stubs)
+// ============================================================================
+
+void ZoneHandlers::handleConfigGet(AsyncWebServerRequest* request, lightwaveos::zones::ZoneComposer* composer, void* zoneConfigMgr) {
+    (void)zoneConfigMgr;
+    if (!composer) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
+        return;
+    }
+
+    sendSuccessResponse(request, [composer](JsonObject& data) {
+        data["zoneCount"] = composer->getZoneCount();
+        data["message"] = "Zone config retrieval not fully implemented";
+    });
+}
+
+void ZoneHandlers::handleConfigSave(AsyncWebServerRequest* request, lightwaveos::zones::ZoneComposer* composer, void* zoneConfigMgr) {
+    (void)zoneConfigMgr;
+    if (!composer) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
+        return;
+    }
+
+    sendSuccessResponse(request, [](JsonObject& data) {
+        data["message"] = "Zone config save not fully implemented";
+        data["saved"] = false;
+    });
+}
+
+void ZoneHandlers::handleConfigLoad(AsyncWebServerRequest* request, lightwaveos::zones::ZoneComposer* composer, void* zoneConfigMgr, std::function<void()> broadcastZoneState) {
+    (void)zoneConfigMgr;
+    (void)broadcastZoneState;
+    if (!composer) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
+        return;
+    }
+
+    sendSuccessResponse(request, [](JsonObject& data) {
+        data["message"] = "Zone config load not fully implemented";
+        data["loaded"] = false;
+    });
+}
+
+// ============================================================================
+// Zone Timing
+// ============================================================================
+
+void ZoneHandlers::handleTimingGet(AsyncWebServerRequest* request, lightwaveos::zones::ZoneComposer* composer) {
+    if (!composer) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
+        return;
+    }
+
+    sendSuccessResponse(request, [composer](JsonObject& data) {
+        data["zoneCount"] = composer->getZoneCount();
+        // Timing stats would go here
+        data["message"] = "Zone timing not fully implemented";
+    });
+}
+
+void ZoneHandlers::handleTimingReset(AsyncWebServerRequest* request, lightwaveos::zones::ZoneComposer* composer) {
+    if (!composer) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
+        return;
+    }
+
+    sendSuccessResponse(request, [](JsonObject& data) {
+        data["message"] = "Zone timing reset not fully implemented";
+        data["reset"] = false;
+    });
+}
+
+// ============================================================================
+// Zone Audio Configuration
+// ============================================================================
+
+void ZoneHandlers::handleAudioConfigGet(AsyncWebServerRequest* request, uint8_t zoneId, lightwaveos::zones::ZoneComposer* composer) {
+    if (!composer) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
+        return;
+    }
+
+    if (zoneId >= composer->getZoneCount()) {
+        sendErrorResponse(request, HttpStatus::NOT_FOUND,
+                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range");
+        return;
+    }
+
+    sendSuccessResponse(request, [zoneId](JsonObject& data) {
+        data["zoneId"] = zoneId;
+        data["message"] = "Zone audio config not fully implemented";
+    });
+}
+
+void ZoneHandlers::handleAudioConfigSet(AsyncWebServerRequest* request, uint8_t* data, size_t len, uint8_t zoneId, lightwaveos::zones::ZoneComposer* composer, std::function<void()> broadcastZoneState) {
+    (void)data;
+    (void)len;
+    (void)broadcastZoneState;
+
+    if (!composer) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
+        return;
+    }
+
+    if (zoneId >= composer->getZoneCount()) {
+        sendErrorResponse(request, HttpStatus::NOT_FOUND,
+                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range");
+        return;
+    }
+
+    sendSuccessResponse(request, [zoneId](JsonObject& respData) {
+        respData["zoneId"] = zoneId;
+        respData["message"] = "Zone audio config set not fully implemented";
+    });
+}
+
+// ============================================================================
+// Zone Beat Trigger
+// ============================================================================
+
+void ZoneHandlers::handleBeatTriggerGet(AsyncWebServerRequest* request, uint8_t zoneId, lightwaveos::zones::ZoneComposer* composer) {
+    if (!composer) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
+        return;
+    }
+
+    if (zoneId >= composer->getZoneCount()) {
+        sendErrorResponse(request, HttpStatus::NOT_FOUND,
+                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range");
+        return;
+    }
+
+    sendSuccessResponse(request, [zoneId](JsonObject& data) {
+        data["zoneId"] = zoneId;
+        data["message"] = "Zone beat trigger not fully implemented";
+    });
+}
+
+void ZoneHandlers::handleBeatTriggerSet(AsyncWebServerRequest* request, uint8_t* data, size_t len, uint8_t zoneId, lightwaveos::zones::ZoneComposer* composer, std::function<void()> broadcastZoneState) {
+    (void)data;
+    (void)len;
+    (void)broadcastZoneState;
+
+    if (!composer) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
+        return;
+    }
+
+    if (zoneId >= composer->getZoneCount()) {
+        sendErrorResponse(request, HttpStatus::NOT_FOUND,
+                          ErrorCodes::OUT_OF_RANGE, "Zone ID out of range");
+        return;
+    }
+
+    sendSuccessResponse(request, [zoneId](JsonObject& respData) {
+        respData["zoneId"] = zoneId;
+        respData["message"] = "Zone beat trigger set not fully implemented";
+    });
+}
+
+// ============================================================================
+// Zone Reorder
+// ============================================================================
+
+void ZoneHandlers::handleReorder(AsyncWebServerRequest* request, uint8_t* data, size_t len, lightwaveos::zones::ZoneComposer* composer, std::function<void()> broadcastZoneState) {
+    (void)data;
+    (void)len;
+    (void)broadcastZoneState;
+
+    if (!composer) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::FEATURE_DISABLED, "Zone system not available");
+        return;
+    }
+
+    sendSuccessResponse(request, [](JsonObject& respData) {
+        respData["message"] = "Zone reorder not fully implemented";
+        respData["reordered"] = false;
+    });
+}
+
 } // namespace handlers
 } // namespace webserver
 } // namespace network

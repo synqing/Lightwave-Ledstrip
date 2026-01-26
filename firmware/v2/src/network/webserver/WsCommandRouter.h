@@ -10,7 +10,6 @@
 
 #include <ArduinoJson.h>
 #include <ESPAsyncWebServer.h>
-#include <functional>
 #include <stdint.h>
 
 namespace lightwaveos {
@@ -23,14 +22,14 @@ struct WebServerContext;  // Forward declare to avoid circular dependency
 /**
  * @brief WebSocket command handler function type
  */
-using WsCommandHandler = std::function<void(AsyncWebSocketClient*, JsonDocument&, const WebServerContext&)>;
+using WsCommandHandler = void (*)(AsyncWebSocketClient*, JsonDocument&, const WebServerContext&);
 
 /**
  * @brief Command entry in lookup table
  */
 struct WsCommandEntry {
     const char* type;           // Command type string
-    uint8_t typeLen;            // Precomputed length for fast comparison
+    uint16_t typeLen;           // Precomputed length for fast comparison
     char firstChar;             // First character for quick filtering
     WsCommandHandler handler;   // Handler function
 };
@@ -63,9 +62,14 @@ public:
      * @brief Get handler count (for testing/debugging)
      */
     static size_t getHandlerCount();
+    
+    /**
+     * @brief Get maximum handler capacity
+     */
+    static size_t getMaxHandlers();
 
 private:
-    static constexpr size_t MAX_HANDLERS = 80;  // Enough for all current commands
+    static constexpr size_t MAX_HANDLERS = 192;  // Capacity for all current commands (126 registered) plus ~50% headroom
     static WsCommandEntry s_handlers[MAX_HANDLERS];
     static size_t s_handlerCount;
     
@@ -78,4 +82,3 @@ private:
 } // namespace webserver
 } // namespace network
 } // namespace lightwaveos
-

@@ -48,6 +48,33 @@ bool WiFiCredentialsStorage::begin() {
     }
 
     m_initialized = true;
+
+    // Sanity check: verify count matches actual stored entries
+    uint8_t actualCount = 0;
+    for (uint8_t i = 0; i < MAX_NETWORKS; i++) {
+        String key = getNetworkKey(i);
+        String jsonStr = m_prefs.getString(key.c_str(), "");
+        if (jsonStr.length() == 0) {
+            continue;
+        }
+
+        StaticJsonDocument<256> doc;
+        DeserializationError error = deserializeJson(doc, jsonStr);
+        if (error) {
+            continue;
+        }
+
+        const char* ssid = doc["ssid"];
+        if (ssid && strlen(ssid) > 0) {
+            actualCount++;
+        }
+    }
+
+    if (actualCount != m_networkCount) {
+        LW_LOGW("NVS count mismatch: stored=%d actual=%d - compacting", m_networkCount, actualCount);
+        compactStorage();
+    }
+
     LW_LOGI("WiFiCredentialsStorage initialized - %d networks saved", m_networkCount);
     return m_initialized;
 }
@@ -314,7 +341,7 @@ void WiFiCredentialsStorage::compactStorage() {
     // Compact storage: remove gaps left by deleted networks
     // Reorder networks sequentially (net_0, net_1, ..., net_N)
     
-    if (!m_initialized || m_networkCount == 0) {
+    if (!m_initialized) {
         return;
     }
 

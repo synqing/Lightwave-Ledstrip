@@ -121,8 +121,9 @@ struct TempoBin {
  * @brief Tempo tracker output for effect consumption
  *
  * Provides all the information effects need for beat-synchronized visuals.
+ * Named TempoTrackerOutput to avoid ODR conflict with contracts/TempoOutput.h
  */
-struct TempoOutput {
+struct TempoTrackerOutput {
     float bpm;                      ///< Current detected tempo
     float phase01;                  ///< Phase [0, 1) - 0 = beat instant
     float confidence;               ///< Confidence [0, 1] - how dominant this tempo is
@@ -145,7 +146,7 @@ struct TempoOutput {
  *         |
  *   advancePhase() -> winner phase tracking
  *         |
- *   getOutput() -> TempoOutput for effects
+ *   getOutput() -> TempoTrackerOutput for effects
  *
  * Call sequence per audio frame:
  *   1. updateNovelty() - log spectral flux (25 Hz) and VU derivative (50 Hz) @ 12.8kHz
@@ -204,9 +205,9 @@ public:
     /**
      * @brief Get current output state
      *
-     * @return TempoOutput with BPM, phase, confidence, beat_tick
+     * @return TempoTrackerOutput with BPM, phase, confidence, beat_tick
      */
-    TempoOutput getOutput() const;
+    TempoTrackerOutput getOutput() const;
 
     // ========================================================================
     // Debug Accessors

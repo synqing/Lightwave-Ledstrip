@@ -147,7 +147,7 @@ void registerWsTransitionCommands(const WebServerContext& ctx) {
     // Note: transition.config is handled by two separate handlers based on whether it's get or set
     // We need to register a handler that checks for the presence of defaultDuration/defaultType
     // For now, register both and handle the logic in the handler
-    WsCommandRouter::registerCommand("transition.config", [&ctx](AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& context) {
+    WsCommandRouter::registerCommand("transition.config", [](AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& context) {
         if (doc.containsKey("defaultDuration") || doc.containsKey("defaultType")) {
             handleTransitionConfigSet(client, doc, context);
         } else {

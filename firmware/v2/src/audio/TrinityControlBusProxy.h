@@ -54,7 +54,14 @@ public:
      * @return true if last update was < 250ms ago
      */
     bool isActive() const;
-    
+
+    /**
+     * @brief Mark proxy as active without changing macro values
+     * Called when trinity.sync START is received to prevent race condition
+     * where the first frame check happens before any macro arrives.
+     */
+    void markActive();
+
     /**
      * @brief Reset proxy state (clear frame, mark inactive)
      */

@@ -18,7 +18,7 @@ namespace ws {
  * @brief Register color-related WebSocket commands
  * @param ctx WebServer context
  */
-void registerWsColorCommands(const WebServerContext& ctx);
+void registerWsColorCommands(const webserver::WebServerContext& ctx);
 
 } // namespace ws
 } // namespace webserver

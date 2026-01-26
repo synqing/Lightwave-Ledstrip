@@ -15,6 +15,7 @@
 #include "../../../config/audio_config.h"
 #include "../../../core/persistence/AudioTuningManager.h"
 #include "../../../audio/AudioMappingRegistry.h"
+#include "../../../audio/contracts/ControlBus.h"
 #endif
 
 #if FEATURE_AUDIO_BENCHMARK
@@ -1308,6 +1309,73 @@ void AudioHandlers::handleBenchmarkHistory(AsyncWebServerRequest* request,
 }
 #endif
 
+void AudioHandlers::handleAGCToggle(AsyncWebServerRequest* request,
+                                      uint8_t* data, size_t len,
+                                      ActorSystem& actorSystem) {
+    auto* audio = actorSystem.getAudio();
+    if (!audio) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
+        return;
+    }
+
+    JsonDocument doc;
+    if (deserializeJson(doc, data, len)) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::INVALID_JSON, "Invalid JSON payload");
+        return;
+    }
+
+    if (!doc.containsKey("enabled")) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::MISSING_FIELD, "Missing 'enabled' field");
+        return;
+    }
+
+    bool enabled = doc["enabled"].as<bool>();
+
+    // AGC is controlled via the control bus, not pipeline tuning
+    audio::ControlBus& controlBus = audio->getControlBusMut();
+    controlBus.setZoneAGCEnabled(enabled);
+
+    sendSuccessResponse(request, [enabled](JsonObject& resp) {
+        resp["agcEnabled"] = enabled;
+    });
+}
+
+void AudioHandlers::handleFftGet(AsyncWebServerRequest* request,
+                                   ActorSystem& actorSystem) {
+    auto* audio = actorSystem.getAudio();
+    if (!audio) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
+        return;
+    }
+
+    // Get DSP state and control bus for band/chroma data
+    const audio::AudioDspState state = audio->getDspState();
+    const audio::ControlBusFrame frame = audio->getControlBusRef().GetFrame();
+
+    sendSuccessResponse(request, [&state, &frame](JsonObject& data) {
+        data["rmsRaw"] = state.rmsRaw;
+        data["rmsMapped"] = state.rmsMapped;
+        data["rmsPreGain"] = state.rmsPreGain;
+        data["agcGain"] = state.agcGain;
+
+        // Get smoothed band energies from control bus frame
+        JsonArray bands = data["bands"].to<JsonArray>();
+        for (int i = 0; i < audio::CONTROLBUS_NUM_BANDS; ++i) {
+            bands.add(frame.bands[i]);
+        }
+
+        // Get chroma energies from control bus frame
+        JsonArray chroma = data["chroma"].to<JsonArray>();
+        for (int i = 0; i < audio::CONTROLBUS_NUM_CHROMA; ++i) {
+            chroma.add(frame.chroma[i]);
+        }
+    });
+}
+
 #else // !FEATURE_AUDIO_SYNC
 
 // Stub implementations when audio sync is disabled
@@ -1451,6 +1519,17 @@ void AudioHandlers::handleCalibrateCancel(AsyncWebServerRequest* request, ActorS
 }
 
 void AudioHandlers::handleCalibrateApply(AsyncWebServerRequest* request, ActorSystem&) {
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void AudioHandlers::handleAGCToggle(AsyncWebServerRequest* request,
+                                      uint8_t*, size_t, ActorSystem&) {
+    sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                      ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
+}
+
+void AudioHandlers::handleFftGet(AsyncWebServerRequest* request, ActorSystem&) {
     sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
                       ErrorCodes::FEATURE_DISABLED, "Audio sync disabled");
 }

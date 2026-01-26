@@ -18,7 +18,7 @@ namespace ws {
  * @brief Register palette-related WebSocket commands
  * @param ctx WebServer context
  */
-void registerWsPaletteCommands(const WebServerContext& ctx);
+void registerWsPaletteCommands(const webserver::WebServerContext& ctx);
 
 } // namespace ws
 } // namespace webserver

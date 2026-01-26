@@ -24,6 +24,7 @@
 #include "../../plugins/api/IEffect.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../../plugins/runtime/LegacyEffectAdapter.h"
+#include <math.h>
 #if FEATURE_VALIDATION_PROFILING
 #include "../../core/system/ValidationProfiler.h"
 #endif
@@ -37,6 +38,25 @@
 
 using namespace lightwaveos::transitions;
 using namespace lightwaveos::palettes;
+
+namespace {
+constexpr float kMinSpeedTimeFactor = 0.04f;  // ~3-5 FPS feel at speed 1
+
+float computeSpeedTimeFactor(uint8_t speed) {
+    if (lightwaveos::actors::LedConfig::MAX_SPEED <= 1) {
+        return 1.0f;
+    }
+    float norm = 0.0f;
+    if (speed > 1) {
+        norm = (static_cast<float>(speed - 1) /
+                static_cast<float>(lightwaveos::actors::LedConfig::MAX_SPEED - 1));
+        if (norm > 1.0f) norm = 1.0f;
+    }
+    // Use a gentle curve to preserve mid/high speeds while slowing the low end.
+    float curved = sqrtf(norm);
+    return kMinSpeedTimeFactor + (1.0f - kMinSpeedTimeFactor) * curved;
+}
+}  // namespace
 
 // Stub for legacy effect ID tracking - no-op when legacy effects are disabled
 // When legacy/LegacyEffectWrapper is re-enabled, this will be replaced by the real implementation
@@ -91,6 +111,9 @@ RendererActor::RendererActor()
     , m_effectCount(0)
     , m_lastFrameTime(0)
     , m_frameCount(0)
+    , m_effectTimeSeconds(0.0f)
+    , m_effectFrameAccumulator(0.0f)
+    , m_effectFrameCount(0)
     , m_ctrl1(nullptr)
     , m_ctrl2(nullptr)
     , m_zoneComposer(nullptr)
@@ -527,16 +550,19 @@ void RendererActor::onMessage(const Message& msg)
                 float positionSec = (float)msg.param4 / 1000.0f;
                 uint16_t bpmFixed = ((uint16_t)msg.param2 << 8) | msg.param3;
                 float bpm = (float)bpmFixed / 100.0f;
-                
+
                 switch (action) {
                     case 0: // start
                         m_trinitySyncActive = true;
                         m_trinitySyncPaused = false;
                         m_trinitySyncPosition = positionSec;
                         m_musicalGrid.setExternalSyncMode(true);
+                        // Prime the proxy so isActive() returns true before first macro arrives
+                        m_trinityProxy.markActive();
                         if (bpm > 0.0f) {
                             m_musicalGrid.injectExternalBeat(bpm, 0.0f, false, false, 0);
                         }
+                        LW_LOGI("TRINITY_SYNC: START active=1 paused=0 pos=%.2fs bpm=%.1f", positionSec, bpm);
                         break;
                     case 1: // stop
                         m_trinitySyncActive = false;
@@ -544,18 +570,22 @@ void RendererActor::onMessage(const Message& msg)
                         m_trinitySyncPosition = 0.0f;
                         m_musicalGrid.setExternalSyncMode(false);
                         m_trinityProxy.reset();
+                        LW_LOGI("TRINITY_SYNC: STOP active=0 paused=0");
                         break;
                     case 2: // pause
                         m_trinitySyncPaused = true;
+                        LW_LOGI("TRINITY_SYNC: PAUSE paused=1");
                         break;
                     case 3: // resume
                         m_trinitySyncPaused = false;
+                        LW_LOGI("TRINITY_SYNC: RESUME paused=0");
                         break;
                     case 4: // seek
                         m_trinitySyncPosition = positionSec;
                         if (bpm > 0.0f) {
                             m_musicalGrid.injectExternalBeat(bpm, 0.0f, false, false, 0);
                         }
+                        LW_LOGD("TRINITY_SYNC: SEEK pos=%.2fs bpm=%.1f", positionSec, bpm);
                         break;
                 }
             }
@@ -884,7 +914,7 @@ void RendererActor::renderFrame()
         m_tempo->advancePhase(deltaSec);
 
         // Get tempo output to update MusicalGrid
-        lightwaveos::audio::TempoOutput tempoOut = m_tempo->getOutput();
+        lightwaveos::audio::TempoTrackerOutput tempoOut = m_tempo->getOutput();
         if (tempoOut.locked) {
             // Feed tempo to MusicalGrid for effects to use
             m_musicalGrid.OnTempoEstimate(
@@ -960,17 +990,28 @@ void RendererActor::renderFrame()
         // 6. Populate shared AudioContext (member, reused across zone + single-effect mode)
         // Check if Trinity sync is active and proxy is fresh
         bool trinityActive = (m_trinitySyncActive && m_trinityProxy.isActive() && !m_trinitySyncPaused);
-        
+
+        // Periodic Trinity state debug (every 2 seconds when trinity sync flag is set)
+        static uint32_t lastTrinityDbg = 0;
+        uint32_t nowMs = millis();
+        if (m_trinitySyncActive && (nowMs - lastTrinityDbg >= 2000)) {
+            lastTrinityDbg = nowMs;
+            LW_LOGD("Trinity state: syncActive=%d proxyActive=%d paused=%d => trinityActive=%d",
+                    m_trinitySyncActive, m_trinityProxy.isActive(), m_trinitySyncPaused, trinityActive);
+        }
+
         if (trinityActive) {
             // Use Trinity proxy for offline ML analysis sync
             m_sharedAudioCtx.controlBus = m_trinityProxy.getFrame();
             m_sharedAudioCtx.musicalGrid = m_lastMusicalGrid;
             m_sharedAudioCtx.available = true;
+            m_sharedAudioCtx.trinityActive = true;
         } else {
             // Use live audio data
             m_sharedAudioCtx.controlBus = m_lastControlBus;
             m_sharedAudioCtx.musicalGrid = m_lastMusicalGrid;
             m_sharedAudioCtx.available = audioAvailable;
+            m_sharedAudioCtx.trinityActive = false;
         }
     } else {
         // No audio buffer - check Trinity proxy as fallback
@@ -979,8 +1020,10 @@ void RendererActor::renderFrame()
             m_sharedAudioCtx.controlBus = m_trinityProxy.getFrame();
             m_sharedAudioCtx.musicalGrid = m_lastMusicalGrid;
             m_sharedAudioCtx.available = true;
+            m_sharedAudioCtx.trinityActive = true;
         } else {
             m_sharedAudioCtx.available = false;
+            m_sharedAudioCtx.trinityActive = false;
         }
     }
 #endif
@@ -1039,9 +1082,9 @@ void RendererActor::renderFrame()
         ctx.mood = m_mood;
         ctx.fadeAmount = m_fadeAmount;
         ctx.frameNumber = m_frameCount;
-        // Use frame count as proxy for total time (millis() not always available)
-        ctx.totalTimeMs = m_frameCount * 8;  // ~8ms per frame at 120 FPS
-        ctx.deltaTimeMs = deltaTimeMs;
+        ctx.totalTimeMs = 0;
+        ctx.deltaTimeMs = 0;
+        ctx.deltaTimeSeconds = 0.0f;
         ctx.zoneId = 0xFF;  // Global render
         ctx.zoneStart = 0;
         ctx.zoneLength = 0;
@@ -1097,6 +1140,7 @@ void RendererActor::renderFrame()
         }
 #endif
 
+#if FEATURE_AUTO_SPEED
         // =====================================================================
         // Global auto-speed trim (tempo + spectral flux liveliness)
         // User SPEED acts as trim; audio drives base rate
@@ -1117,6 +1161,27 @@ void RendererActor::renderFrame()
         if (finalSpeed < 1.0f) finalSpeed = 1.0f;
         if (finalSpeed > 50.0f) finalSpeed = 50.0f;
         ctx.speed = static_cast<uint8_t>(finalSpeed + 0.5f);
+#endif
+
+        // =====================================================================
+        // Speed-scaled timing (slow motion at low speed settings)
+        // =====================================================================
+        float speedFactor = computeSpeedTimeFactor(ctx.speed);
+        float deltaSeconds = static_cast<float>(deltaTimeMs) * 0.001f;
+        float scaledDeltaSeconds = deltaSeconds * speedFactor;
+
+        m_effectTimeSeconds += scaledDeltaSeconds;
+        m_effectFrameAccumulator += speedFactor;
+        if (m_effectFrameAccumulator >= 1.0f) {
+            uint32_t advance = static_cast<uint32_t>(m_effectFrameAccumulator);
+            m_effectFrameAccumulator -= static_cast<float>(advance);
+            m_effectFrameCount += advance;
+        }
+
+        ctx.deltaTimeSeconds = scaledDeltaSeconds;
+        ctx.deltaTimeMs = static_cast<uint32_t>(scaledDeltaSeconds * 1000.0f + 0.5f);
+        ctx.frameNumber = m_effectFrameCount;
+        ctx.totalTimeMs = static_cast<uint32_t>(m_effectTimeSeconds * 1000.0f + 0.5f);
 
         m_effects[safeEffect].effect->render(ctx);
     }

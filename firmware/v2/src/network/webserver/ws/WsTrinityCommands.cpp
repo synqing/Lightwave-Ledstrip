@@ -9,10 +9,14 @@
 #include "../../ApiResponse.h"
 #include "../../../core/actors/ActorSystem.h"
 #include "../../../config/features.h"
+#include "../../../utils/Log.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 #include <cstring>
 #include <math.h>
+
+#undef LW_LOG_TAG
+#define LW_LOG_TAG "WsTrinity"
 
 namespace lightwaveos {
 namespace network {
@@ -49,13 +53,16 @@ static void handleTrinityBeat(AsyncWebSocketClient* client, JsonDocument& doc, c
     
     // Route through ActorSystem for thread safety
     bool sent = ctx.actorSystem.trinityBeat(bpm, beatPhase, tick, downbeat, beatInBar);
-    
+
     if (!sent) {
+        LW_LOGW("trinity.beat rejected - queue saturated");
         client->text(buildWsError(ErrorCodes::RATE_LIMITED, "Queue saturated", ""));
         return;
     }
-    
-    // Success - no response needed (fire-and-forget)
+
+    // Success - log for debugging
+    LW_LOGD("trinity.beat: bpm=%.1f phase=%.3f tick=%d downbeat=%d bar=%d",
+            bpm, beatPhase, tick, downbeat, beatInBar);
 }
 
 static void handleTrinityMacro(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
@@ -77,17 +84,34 @@ static void handleTrinityMacro(AsyncWebSocketClient* client, JsonDocument& doc, 
     
     // Route through ActorSystem for thread safety
     bool sent = ctx.actorSystem.trinityMacro(energy, vocal, bass, perc, bright);
-    
+
     if (!sent) {
+        LW_LOGW("trinity.macro rejected - queue saturated");
         client->text(buildWsError(ErrorCodes::RATE_LIMITED, "Queue saturated", ""));
         return;
     }
-    
-    // Success - no response needed (fire-and-forget)
+
+    // Success - log for debugging (throttled to avoid flood)
+    static uint32_t lastMacroLog = 0;
+    uint32_t now = millis();
+    if (now - lastMacroLog >= 1000) {  // Log once per second max
+        LW_LOGD("trinity.macro: energy=%.2f vocal=%.2f bass=%.2f perc=%.2f bright=%.2f",
+                energy, vocal, bass, perc, bright);
+        lastMacroLog = now;
+    }
 }
 
 static void handleTrinitySync(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     JsonObjectConst root = doc.as<JsonObjectConst>();
+    
+    int64_t commandId = 0;
+    bool hasCommandId = false;
+    if (root.containsKey("_id")) {
+        commandId = root["_id"].as<int64_t>();
+        if (commandId > 0) {
+            hasCommandId = true;
+        }
+    }
     
     if (!root.containsKey("action") || !root.containsKey("position_sec")) {
         client->text(buildWsError(ErrorCodes::MISSING_FIELD, "Missing required fields: action, position_sec", ""));
@@ -121,15 +145,30 @@ static void handleTrinitySync(AsyncWebSocketClient* client, JsonDocument& doc, c
         return;
     }
     
+    // Log trinity.sync reception (CRITICAL for debugging)
+    LW_LOGI("trinity.sync: action=%s pos=%.2fs bpm=%.1f _id=%lld",
+            actionStr, positionSec, bpm, commandId);
+
     // Route through ActorSystem for thread safety
     bool sent = ctx.actorSystem.trinitySync(action, positionSec, bpm);
-    
+
     if (!sent) {
+        LW_LOGW("trinity.sync rejected - queue saturated");
         client->text(buildWsError(ErrorCodes::RATE_LIMITED, "Queue saturated", ""));
         return;
     }
-    
-    // Success - no response needed (fire-and-forget)
+
+    LW_LOGI("trinity.sync: action=%s dispatched to RendererActor", actionStr);
+
+    if (hasCommandId) {
+        StaticJsonDocument<64> response;
+        response["_type"] = "ack";
+        response["_id"] = commandId;
+        String output;
+        serializeJson(response, output);
+        client->text(output);
+        LW_LOGD("trinity.sync: ACK sent for _id=%lld", commandId);
+    }
 }
 
 #endif // FEATURE_AUDIO_SYNC

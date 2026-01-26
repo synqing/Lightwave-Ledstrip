@@ -145,7 +145,7 @@ void LGPPerlinBackendEmotiscopeQuarterEffect::render(plugins::EffectContext& ctx
     
     // Advection (use ms-based delta like Emotiscope 2.0)
     // Clamp delta to prevent teleport jumps after stalls (max 50ms)
-    uint32_t deltaMs = ctx.deltaTimeMs;
+    float deltaMs = ctx.deltaTimeSeconds * 1000.0f;
     if (deltaMs > 50) deltaMs = 50;
     m_positionY += 0.001f * (float)deltaMs * (1.0f + speedNorm);
     

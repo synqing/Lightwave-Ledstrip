@@ -66,6 +66,7 @@ struct AudioContext {
     audio::ControlBusFrame controlBus;      ///< DSP signals (RMS, flux, bands)
     audio::MusicalGridSnapshot musicalGrid; ///< Beat/tempo tracking
     bool available = false;                  ///< True if audio data is fresh (<100ms old)
+    bool trinityActive = false;              ///< True if PRISM Trinity data is active (not microphone)
 
     // ========================================================================
     // Convenience Accessors
@@ -343,6 +344,7 @@ struct AudioContext {
  */
 struct AudioContext {
     bool available = false;
+    bool trinityActive = false;
 
     float rms() const { return 0.0f; }
     float fastRms() const { return 0.0f; }
@@ -535,6 +537,7 @@ struct EffectContext {
     //--------------------------------------------------------------------------
 
     uint32_t deltaTimeMs;       ///< Time since last frame (ms)
+    float deltaTimeSeconds;     ///< Time since last frame (seconds, high precision)
     uint32_t frameNumber;       ///< Frame counter (wraps at 2^32)
     uint32_t totalTimeMs;       ///< Total effect runtime (ms)
 
@@ -684,10 +687,10 @@ struct EffectContext {
 
     /**
      * @brief Get safe delta time in seconds (clamped for physics stability)
-     * @return Delta time in seconds, clamped to [0.001, 0.05]
+     * @return Delta time in seconds, clamped to [0.0001, 0.05]
      *
      * This prevents physics explosion on frame drops (>50ms) and ensures
-     * a minimum timestep for stability (1ms). Essential for true exponential
+     * a minimum timestep for stability (0.1ms). Essential for true exponential
      * smoothing formulas: alpha = 1 - exp(-lambda * dt)
      *
      * Example:
@@ -698,8 +701,8 @@ struct EffectContext {
      * @endcode
      */
     float getSafeDeltaSeconds() const {
-        float dt = static_cast<float>(deltaTimeMs) * 0.001f;
-        if (dt < 0.001f) dt = 0.001f;   // Minimum 1ms (1000 FPS cap)
+        float dt = deltaTimeSeconds;
+        if (dt < 0.0001f) dt = 0.0001f;   // Minimum 0.1ms for slow-motion precision
         if (dt > 0.05f) dt = 0.05f;     // Maximum 50ms (20 FPS floor)
         return dt;
     }
@@ -723,6 +726,7 @@ struct EffectContext {
         , variation(64)
         , fadeAmount(20)
         , deltaTimeMs(8)
+        , deltaTimeSeconds(0.008f)
         , frameNumber(0)
         , totalTimeMs(0)
         , zoneId(0xFF)

@@ -80,7 +80,7 @@ bool LGPChordGlowEffect::init(plugins::EffectContext& ctx) {
 
 void LGPChordGlowEffect::render(plugins::EffectContext& ctx) {
     // Clear output buffer with fade for trails
-    const float dt = ctx.deltaTimeMs * 0.001f;  // Convert to seconds
+    const float dt = ctx.getSafeDeltaSeconds();
     const int fadeAmt = (int)roundf(25.0f * (dt * 60.0f));
     fadeToBlackBy(ctx.leds, ctx.ledCount, clampU8(fadeAmt));
 
@@ -128,7 +128,7 @@ void LGPChordGlowEffect::render(plugins::EffectContext& ctx) {
 
     // Update transition progress
     if (m_isTransitioning) {
-        m_transitionProgress += (ctx.deltaTimeMs / TRANSITION_DURATION_MS);
+        m_transitionProgress += (ctx.deltaTimeSeconds * 1000.0f / TRANSITION_DURATION_MS);
         if (m_transitionProgress >= 1.0f) {
             m_transitionProgress = 1.0f;
             m_isTransitioning = false;

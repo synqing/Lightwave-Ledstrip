@@ -27,6 +27,9 @@ namespace lightwaveos {
 namespace actors {
 class ActorSystem;
 }
+namespace zones {
+class ZoneComposer;
+}
 }
 
 namespace lightwaveos {
@@ -103,6 +106,23 @@ public:
     // ========================================================================
     // Legacy Audio Debug Handlers (backward compatibility)
     // ========================================================================
+
+    // ========================================================================
+    // Zone Memory Stats Handler
+    // ========================================================================
+
+    /**
+     * @brief Handle GET /api/v1/debug/memory/zones
+     *
+     * Returns zone system memory statistics:
+     * {
+     *   "zones": [ { "id": 0, "bufferSize": 640, ... }, ... ],
+     *   "totalMemory": 2560,
+     *   "composerOverhead": 256
+     * }
+     */
+    static void handleZoneMemoryStats(AsyncWebServerRequest* request,
+                                       lightwaveos::zones::ZoneComposer* zoneComposer);
 
 #if FEATURE_AUDIO_SYNC
     /**

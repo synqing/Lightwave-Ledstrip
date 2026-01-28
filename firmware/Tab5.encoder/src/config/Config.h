@@ -124,7 +124,7 @@ namespace ZoneParam {
 namespace ParamRange {
     // Unit A (0-7) - Global parameters
     constexpr uint8_t EFFECT_MIN = 0;
-    constexpr uint8_t EFFECT_MAX = 99;  // 100 effects total (0-99) - matches v2 EXPECTED_EFFECT_COUNT
+    constexpr uint8_t EFFECT_MAX = 103;  // 104 effect slots (0-103) - matches v2 RendererActor::MAX_EFFECTS
 
     constexpr uint8_t PALETTE_MIN = 0;
     constexpr uint8_t PALETTE_MAX = 74;  // v2 has 75 palettes (0-74)
@@ -158,7 +158,7 @@ namespace ParamRange {
     // Unit B (8-15) - Zone parameters
     // Zone Effect: 0-99 (wraps around for continuous scrolling) - matches v2 EXPECTED_EFFECT_COUNT
     constexpr uint8_t ZONE_EFFECT_MIN = 0;
-    constexpr uint8_t ZONE_EFFECT_MAX = 99;  // 100 effects total (0-99)
+    constexpr uint8_t ZONE_EFFECT_MAX = 103;  // 104 effect slots (0-103)
 
     // Zone Brightness: 0-255 (clamped, no wrap)
     constexpr uint8_t ZONE_BRIGHTNESS_MIN = 0;

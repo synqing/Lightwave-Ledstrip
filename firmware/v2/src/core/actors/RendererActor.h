@@ -576,7 +576,7 @@ private:
     // IMPORTANT: This value must be >= the number of registered effects.
     // It is referenced (sometimes duplicated) across networking/state/persistence.
     // If you add effects beyond this limit, registration and/or selection will fail.
-    static constexpr uint8_t MAX_EFFECTS = 100;
+    static constexpr uint8_t MAX_EFFECTS = 104;
     struct EffectEntry {
         const char* name;
         plugins::IEffect* effect;   // All effects are IEffect instances (native or adapter)

@@ -118,6 +118,7 @@
 #include "ieffect/LGPWaveCollisionEffectEnhanced.h"
 #include "ieffect/RippleEnhancedEffect.h"
 #include "ieffect/TrinityTestEffect.h"
+#include "ieffect/LGPHolographicAutoCycleEffect.h"
 #include "utils/FastLEDOptim.h"
 #include "../core/narrative/NarrativeEngine.h"
 #include <FastLED.h>
@@ -957,9 +958,17 @@ uint8_t registerAllEffects(RendererActor* renderer) {
         total++;
     }
 
+    // =============== PALETTE AUTO-CYCLE EFFECTS ===============
+
+    // LGP Holographic Auto-Cycle (ID 100) - Holographic with internal palette cycling
+    static ieffect::LGPHolographicAutoCycleEffect holographicAutoCycleInstance;
+    if (renderer->registerEffect(total, &holographicAutoCycleInstance)) {
+        total++;
+    }
+
     // =============== EFFECT COUNT PARITY VALIDATION ===============
     // Runtime validation: ensure registered count matches expected
-    constexpr uint8_t EXPECTED_EFFECT_COUNT = 100;  // 99 + 1 Trinity Test diagnostic
+    constexpr uint8_t EXPECTED_EFFECT_COUNT = 101;  // 100 + 1 Holographic Auto-Cycle
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

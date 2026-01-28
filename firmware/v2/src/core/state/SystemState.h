@@ -11,7 +11,7 @@ constexpr uint8_t MAX_ZONES = 4;
 constexpr uint8_t MAX_PALETTE_COUNT = 64;
 // Maximum effect ID allowed by CQRS/state commands.
 // Keep in sync with RendererActor::MAX_EFFECTS (upper bound for effect IDs).
-constexpr uint8_t MAX_EFFECT_COUNT = 100;
+constexpr uint8_t MAX_EFFECT_COUNT = 104;
 
 /**
  * Zone configuration state

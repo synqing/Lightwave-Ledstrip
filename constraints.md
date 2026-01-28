@@ -26,7 +26,7 @@ This file contains extracted constraints from code and documentation. Agents mus
 | **Available after boot** | ~280KB | FreeRTOS + framework overhead | Measured |
 | **LED buffer** | 960 bytes | 320 LEDs × 3 bytes (RGB) | hardware_config.h |
 | **Transition buffer** | 960 bytes | Same as LED buffer | hardware_config.h |
-| **Max effects** | 80 | `MAX_EFFECTS` constant | hardware_config.h |
+| **Max effects** | 104 | `MAX_EFFECTS` constant | RendererActor.h |
 | **Zone buffer** | 480 bytes | 160 LEDs × 3 bytes (per zone) | hardware_config.h |
 
 **Rule:** No dynamic allocation in render loops. Use static buffers.
@@ -140,13 +140,13 @@ These compile-time flags control what's included:
 
 | Flag | Default | Effect |
 |------|---------|--------|
-| `FEATURE_WEB_SERVER` | 0 (off) | WiFi/WebServer |
+| `FEATURE_WEB_SERVER` | 1 (on) | WiFi/WebServer (enabled in all hardware builds) |
 | `FEATURE_SERIAL_MENU` | 1 (on) | Serial commands |
 | `FEATURE_PERFORMANCE_MONITOR` | 1 (on) | FPS tracking |
 | `FEATURE_INTERFERENCE_CALC` | 1 (on) | Wave physics |
 | `FEATURE_PHYSICS_SIMULATION` | 1 (on) | Physics effects |
 
-To enable WiFi: Use `esp32dev_audio` environment or add `-D FEATURE_WEB_SERVER=1` to build flags.
+WiFi and WebServer are enabled by default in all hardware build environments via common build flags in platformio.ini.
 
 ---
 

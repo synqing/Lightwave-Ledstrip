@@ -118,7 +118,7 @@ Global buffer: `CRGB leds[320]`
 ┌─────────────────────────────────────────────────────────────┐
 │                      EFFECT LAYER                           │
 │  Zone Composer (src/effects/zones/ZoneComposer.cpp)         │
-│  Effect Functions (src/effects/strip/*.cpp)                 │
+│  Effect Classes (src/effects/ieffect/*.cpp)                 │
 │  Transition Engine (src/effects/transitions/)               │
 └─────────────────────────────────────────────────────────────┘
                               ↓
@@ -135,10 +135,10 @@ Global buffer: `CRGB leds[320]`
 ## Key Files by Task
 
 ### Adding a New Effect
-1. Create function in `src/effects/strip/`
-2. Register in `effects[]` array in `src/main.cpp` (~line 202)
+1. Create class implementing `IEffect` in `src/effects/ieffect/`
+2. Register in `registerAllEffects()` in `src/effects/CoreEffects.cpp`
 3. Follow CENTER ORIGIN pattern
-4. Test with serial menu (`e` command)
+4. Test with serial menu (`e` command) or web UI
 
 ### Modifying Web Interface
 1. Edit `data/index.html`, `data/app.js`, `data/styles.css`
@@ -156,26 +156,34 @@ Global buffer: `CRGB leds[320]`
 
 | Environment | Command | Features |
 |-------------|---------|----------|
-| esp32dev | `pio run` | Default, no WiFi |
-| esp32dev_audio | `pio run -e esp32dev_audio` | WiFi + WebServer |
-| memory_debug | `pio run -e memory_debug` | Heap tracing |
+| esp32dev_audio | `pio run -e esp32dev_audio` | Primary build: WiFi + Audio + WebServer |
+| esp32dev_audio_benchmark | `pio run -e esp32dev_audio_benchmark` | Audio pipeline benchmarking |
+| esp32dev_audio_trace | `pio run -e esp32dev_audio_trace` | Perfetto timeline tracing |
+| esp32dev_SSB | `pio run -e esp32dev_SSB` | Sensory Bridge compatibility |
+| native | `pio test -e native` | Native unit tests (no hardware) |
 
 ---
 
 ## Effect Registration Pattern
 
 ```cpp
-// In main.cpp
-Effect effects[] = {
-    {"Effect Name", effectFunction, EFFECT_TYPE_STANDARD},
-    // ...
-};
-
-// Effect function signature
-void effectFunction() {
-    // Access globals: leds[], currentPalette, gHue, fadeAmount, brightnessVal
-    // MUST use CENTER ORIGIN pattern
+// In src/effects/CoreEffects.cpp
+void registerAllEffects(RendererActor* renderer) {
+    renderer->registerEffect(0, "Fire", std::make_unique<FireEffect>());
+    renderer->registerEffect(1, "Ocean", std::make_unique<OceanEffect>());
+    // ... 101+ effects registered with stable IDs
 }
+
+// Effect class (src/effects/ieffect/MyEffect.h)
+class MyEffect : public IEffect {
+public:
+    void init(const EffectContext& ctx) override { /* setup */ }
+    void render(const EffectContext& ctx, CRGB* leds, uint16_t numLeds) override {
+        // MUST use CENTER ORIGIN pattern
+    }
+    const char* name() const override { return "MyEffect"; }
+    EffectCategory category() const override { return EffectCategory::LGP_INTERFERENCE; }
+};
 ```
 
 ---

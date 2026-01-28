@@ -1,6 +1,6 @@
 # LightwaveOS v2 Source Directory
 
-The `src/` directory contains the complete firmware implementation for LightwaveOS v2, an ESP32-S3 LED control system for dual 160-LED WS2812 strips (320 total). It features an actor-based architecture, 90+ visual effects, audio-reactive capabilities, multi-zone composition, and web-based control.
+The `src/` directory contains the complete firmware implementation for LightwaveOS v2, an ESP32-S3 LED control system for dual 160-LED WS2812 strips (320 total). It features an actor-based architecture, 101+ visual effects, audio-reactive capabilities, multi-zone composition, and web-based control.
 
 ---
 
@@ -54,7 +54,7 @@ The `src/` directory contains the complete firmware implementation for Lightwave
                             │                                            │
                             │  ┌──────────────────────────────────────┐  │
                             │  │           PatternRegistry            │  │
-                            │  │   (90+ effects with metadata)        │  │
+                            │  │   (101+ effects with metadata)       │  │
                             │  └──────────────────────────────────────┘  │
                             │                     │                      │
                             │  ┌──────────────────┼──────────────────┐  │
@@ -223,7 +223,7 @@ System monitoring and profiling.
 
 ### effects/
 
-Visual effects library with 90+ effects organized by category.
+Visual effects library with 101+ effects organized by category.
 
 #### Effect Categories
 
@@ -245,7 +245,7 @@ Visual effects library with 90+ effects organized by category.
 
 | Directory | Purpose |
 |-----------|---------|
-| `ieffect/` | Individual effect implementations (90 effects) |
+| `ieffect/` | Individual effect implementations (101+ effects) |
 | `zones/` | ZoneComposer for multi-zone rendering |
 | `transitions/` | TransitionEngine (12 transition types) |
 | `enhancement/` | ColorEngine and MotionEngine post-processing |
@@ -417,24 +417,14 @@ Enable with `FEATURE_EFFECT_VALIDATION=1`.
 
 ## Build Instructions
 
-### Default Build (no WiFi)
+### Primary Build (WiFi + Audio + WebServer)
 
 ```bash
 cd firmware/v2
-pio run -t upload
-```
-
-### WiFi-Enabled Build
-
-```bash
 pio run -e esp32dev_audio -t upload
 ```
 
-### Audio-Enabled Build
-
-```bash
-pio run -e esp32dev_audio -t upload
-```
+All hardware build environments include WiFi, audio, and web server by default.
 
 ### Monitor Serial Output
 
@@ -473,7 +463,7 @@ Feature flags are defined in `config/features.h` and can be overridden via `plat
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `FEATURE_WEB_SERVER` | 0 | REST API and WebSocket server |
+| `FEATURE_WEB_SERVER` | 1 | REST API and WebSocket server (enabled in all hardware builds) |
 | `FEATURE_MULTI_DEVICE` | 0 | Multi-device synchronization |
 
 ### Optional Features

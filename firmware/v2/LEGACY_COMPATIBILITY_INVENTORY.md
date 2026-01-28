@@ -1,7 +1,7 @@
 # Legacy Compatibility Inventory
 **Phase 0 Audit Output - Forward-Port Planning**
 
-**Date:** 2025-01-XX  
+**Date:** 2026-01-28
 **Purpose:** Complete inventory of v1 dependencies required to run legacy effects in v2
 
 ---
@@ -9,9 +9,10 @@
 ## 1. v2 Build Targets
 
 ### Firmware Builds
-- **`esp32dev`** (default): ESP32-S3 firmware without WiFi
-- **`esp32dev_audio`**: ESP32-S3 firmware with WiFi/WebSocket enabled
-- **`debug`**: Debug build with verbose logging
+- **`esp32dev_audio`** (primary): ESP32-S3 firmware with WiFi, Audio, and WebServer
+- **`esp32dev_audio_benchmark`**: Audio pipeline benchmarking
+- **`esp32dev_audio_trace`**: Perfetto timeline tracing
+- **`esp32dev_SSB`**: Sensory Bridge compatibility build
 
 ### Test Builds
 - **`native_test`**: Native unit tests (no hardware, uses mocks)
@@ -156,15 +157,10 @@ v2/src/plugins/legacy/
 ```
 
 ### Effect Count
-- **Total effect files**: ~74 files (cpp + h)
-- **Effect functions**: ~80+ individual effect functions
-- **Categories**:
-  - Basic: 5 effects
-  - Strip: 20+ effects
-  - LGP Strip: 13+ effects
-  - LGP Lightguide: 8+ effects
-  - Advanced: 6 effects
-  - Plugins: 3 effects
+- **Total effect header files**: ~103 files in `src/effects/ieffect/`
+- **Registered effects**: 101 (EXPECTED_EFFECT_COUNT in CoreEffects.cpp)
+- **MAX_EFFECTS ceiling**: 104 (room for growth)
+- **Registration**: `registerAllEffects()` in `CoreEffects.cpp` using `IEffect` interface
 
 ---
 
@@ -191,7 +187,7 @@ v2/src/plugins/legacy/
 ## 7. Feature Parity Acceptance Criteria
 
 ### Effects
-- [ ] All 80+ legacy effects render correctly in v2
+- [ ] All 101+ effects render correctly in v2
 - [ ] At least 5 representative effects verified (including one heavy LGP effect)
 - [ ] No crashes from missing globals/palettes
 - [ ] Effect IDs match between v1 and v2 (for API compatibility)

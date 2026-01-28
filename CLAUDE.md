@@ -1,20 +1,20 @@
 # CLAUDE.md
 
-**Protocol Version:** 2.0.0  
-**Last Updated:** 2025-01-XX  
+**Protocol Version:** 2.1.0
+**Last Updated:** 2026-01-28
 **Status:** Active
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## What Is This Project?
 
-**LightwaveOS** is an ESP32-S3 LED control system for dual 160-LED WS2812 strips (320 total). It features 45+ visual effects, multi-zone composition, and web-based control. The hardware is designed as a **Light Guide Plate (LGP)** where LEDs fire into an acrylic waveguide to create interference effects.
+**LightwaveOS** is an ESP32-S3 LED control system for dual 160-LED WS2812 strips (320 total). It features 100+ visual effects, multi-zone composition, audio-reactive rendering, and web-based control. The hardware is designed as a **Light Guide Plate (LGP)** where LEDs fire into an acrylic waveguide to create interference effects.
 
 ## Current Focus
 
-- **Branch**: `main`
-- **Active Work**: Security hardening, performance optimization, encoder support
-- **Recent**: WiFi credentials externalized, CORS headers added, TrigLookup optimization, M5ROTATE8 encoder support
+- **Primary Build**: `pio run -e esp32dev_audio` (WiFi, audio, web server all included)
+- **Active Work**: WiFi fallback hardening, Tab5 encoder improvements, effect expansion
+- **Recent**: AP-mode fallback on scan failure, centralized network config, LGPHolographicAutoCycleEffect, thread-safe HttpClient discovery, local WiFi scanning on Tab5
 
 ## First Steps for New Agents
 
@@ -137,7 +137,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Best Practices
 - **Modular Code**: Write focused, reusable code to optimize token usage
 - **UI-First for Web**: When modifying `data/` web interface, build UI first, then add functionality
-- **Test with WiFi build**: `pio run -e esp32dev_audio -t upload` for web interface testing
+- **Test build**: `pio run -e esp32dev_audio -t upload` (primary build, includes WiFi/audio/web)
 
 ### Command Centre — Claude-Flow Integration
 
@@ -277,10 +277,11 @@ pio run -e esp32dev_audio -t upload
 ## How To: Common Tasks
 
 ### Add a New Effect
-1. Create function in `src/effects/strip/` (must be CENTER ORIGIN compliant)
-2. Register in `effects[]` array in `main.cpp` (~line 202)
-3. Use global `leds[]` buffer (320 LEDs total)
-4. Test with serial menu (`e` command)
+1. Create an `IEffect` subclass in `src/effects/ieffect/` (must be CENTER ORIGIN compliant)
+2. Register in `registerAllEffects()` in `src/effects/CoreEffects.cpp`
+3. Update `EXPECTED_EFFECT_COUNT` in CoreEffects.cpp
+4. Bump `MAX_EFFECTS` if needed in RendererActor.h, SystemState.h, ZoneConfigManager.h, AudioEffectMapping.h, RequestValidator.h
+5. Test with serial menu (`e` command) or web UI
 
 ### Modify Web Interface
 1. Edit files in `data/` (index.html, app.js, styles.css)
@@ -305,20 +306,23 @@ pio run -e esp32dev_audio -t upload
 ## Build Commands
 
 ```bash
-# Default build (no WiFi)
-pio run -t upload
-
-# WiFi-enabled build
+# Primary build (WiFi + audio + web server)
 pio run -e esp32dev_audio -t upload
 
-# Memory debug build
-pio run -e memory_debug -t upload
+# Audio benchmark build (per-hop timing instrumentation)
+pio run -e esp32dev_audio_benchmark -t upload
+
+# Audio trace build (Perfetto timeline visualization)
+pio run -e esp32dev_audio_trace -t upload
+
+# Secondary board build (alternate GPIO mapping)
+pio run -e esp32dev_SSB -t upload
 
 # Monitor serial (115200 baud)
 pio device monitor -b 115200
 
 # Clean build
-pio run -t clean
+pio run -e esp32dev_audio -t clean
 ```
 
 ## Hardware Configuration
@@ -351,7 +355,7 @@ pio run -t clean
          ↓
 ┌──────────────────────────────────────┐
 │  Effect System (src/effects/)        │
-│  45+ effects (strip/, lightguide/)   │
+│  100+ effects (ieffect/)             │
 │  TransitionEngine (12 types)         │
 └──────────────────────────────────────┘
          ↓
@@ -371,32 +375,32 @@ pio run -t clean
 
 | File | Purpose |
 |------|---------|
-| `src/main.cpp` | Entry point, global state, main loop, effect registration |
+| `src/main.cpp` | Entry point, actor system bootstrap, main loop |
+| `src/effects/CoreEffects.cpp` | Effect registration (101 effects via IEffect) |
+| `src/effects/ieffect/*.cpp` | Individual IEffect implementations |
 | `src/config/features.h` | Compile-time feature flags |
 | `src/config/hardware_config.h` | Pin definitions, LED counts, zone config |
-| `src/config/network_config.h` | WiFi credentials, ports |
-| `src/effects/effects.h` | Effect struct definition, extern declarations |
-| `src/effects/strip/StripEffects.cpp` | Core CENTER ORIGIN effects |
-| `src/effects/strip/LGP*.cpp` | Light Guide Plate physics effects |
+| `src/config/network_config.h` | WiFi credentials, ports, timing constants |
+| `src/core/actors/RendererActor.h` | Render pipeline, effect management |
 | `src/effects/zones/ZoneComposer.h` | Multi-zone orchestration |
 | `src/effects/transitions/TransitionEngine.h` | 12 transition types |
 | `src/network/WebServer.cpp` | REST + WebSocket handlers |
+| `src/network/WiFiManager.cpp` | WiFi state machine with AP fallback |
 | `data/app.js` | Web interface JavaScript |
 
 ## Effect Registration Pattern
 
-Effects are parameterless void functions registered in `main.cpp`:
+Effects implement the `IEffect` interface and are registered in `CoreEffects.cpp`:
 
 ```cpp
-// In main.cpp effects[] array
-Effect effects[] = {
-    {"Fire", fire, EFFECT_TYPE_STANDARD},
-    {"Ocean", stripOcean, EFFECT_TYPE_STANDARD},
-    // ... 45+ effects
-};
+// In src/effects/CoreEffects.cpp — registerAllEffects()
+static ieffect::MyNewEffect myNewEffectInstance;
+if (renderer->registerEffect(total, &myNewEffectInstance)) {
+    total++;
+}
 ```
 
-Effects access global state: `leds[]`, `currentPalette`, `gHue`, `fadeAmount`, `brightnessVal`.
+Each effect receives an `EffectContext` with access to LED buffers, timing, palette, audio data, and parameters. See existing effects in `src/effects/ieffect/` for examples.
 
 ## Feature Flags
 
@@ -404,7 +408,7 @@ Set in `platformio.ini` or `src/config/features.h`:
 
 | Flag | Purpose |
 |------|---------|
-| `FEATURE_WEB_SERVER` | Enable WiFi/WebServer (use `esp32dev_audio` env) |
+| `FEATURE_WEB_SERVER` | WiFi/WebServer (enabled by default in common flags) |
 | `FEATURE_SERIAL_MENU` | Serial command interface |
 | `FEATURE_PERFORMANCE_MONITOR` | FPS/memory tracking |
 | `FEATURE_INTERFERENCE_CALC` | Wave physics calculations |
@@ -423,7 +427,7 @@ These features compute musical context for audio-reactive effects. They default 
 
 **When to disable:** If no effects use `ctx.audio.harmonicSaliency()`, `ctx.audio.musicStyle()`, etc.
 
-**Effects using these features:** BreathingEffect, LGPPhotonicCrystalEffect, LGPStarBurstNarrativeEffect (3 of 76 effects)
+**Effects using these features:** BreathingEffect, LGPPhotonicCrystalEffect, LGPStarBurstNarrativeEffect (3 of 101 effects)
 
 ## Web API
 
@@ -515,8 +519,8 @@ dbg interval status <N>    - Auto-print every N seconds (0=off)
 
 - `FastLED@3.10.0` - LED control with ESP32 RMT driver
 - `ArduinoJson@7.0.4` - JSON parsing
-- `ESPAsyncWebServer@3.6.0` - Async HTTP/WebSocket
-- `AsyncTCP@3.4.4` - Async networking
+- `ESPAsyncWebServer@3.9.3` - Async HTTP/WebSocket
+- `AsyncTCP@3.4.9` - Async networking
 
 ---
 

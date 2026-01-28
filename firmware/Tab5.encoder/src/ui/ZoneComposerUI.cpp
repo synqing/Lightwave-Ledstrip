@@ -59,7 +59,7 @@ ZoneComposerUI::~ZoneComposerUI() {
 
 void ZoneComposerUI::begin(lv_obj_t* parent) {
     uint32_t t0 = millis();
-    Serial.printf("[ZC_TRACE] begin() entry @ %lu ms\n", t0);
+    // Serial.printf("[ZC_TRACE] begin() entry @ %lu ms\n", t0);
     
     // Reset watchdog at start of potentially long init
     esp_task_wdt_reset();
@@ -69,24 +69,24 @@ void ZoneComposerUI::begin(lv_obj_t* parent) {
 
     // Initialize editing segments with default 3-zone layout
     uint32_t t1 = millis();
-    Serial.printf("[ZC_TRACE] before generateZoneSegments @ %lu ms (delta=%lu)\n", t1, t1-t0);
+    // Serial.printf("[ZC_TRACE] before generateZoneSegments @ %lu ms (delta=%lu)\n", t1, t1-t0);
     generateZoneSegments(3);
     
     // Validate presets at boot (back-test against v2 firmware expectations)
     uint32_t t2 = millis();
-    Serial.printf("[ZC_TRACE] before validatePresets @ %lu ms (delta=%lu)\n", t2, t2-t1);
+    // Serial.printf("[ZC_TRACE] before validatePresets @ %lu ms (delta=%lu)\n", t2, t2-t1);
     esp_task_wdt_reset();  // Reset before potentially long preset validation
     validatePresets();
 
     // Phase 1: Initialize LVGL styles
     uint32_t t3 = millis();
-    Serial.printf("[ZC_TRACE] before initStyles @ %lu ms (delta=%lu)\n", t3, t3-t2);
+    // Serial.printf("[ZC_TRACE] before initStyles @ %lu ms (delta=%lu)\n", t3, t3-t2);
     esp_task_wdt_reset();  // Reset before LVGL style init
     initStyles();
 
     // Phase 2: Create LVGL widgets if parent provided
     uint32_t t4 = millis();
-    Serial.printf("[ZC_TRACE] before createInteractiveUI @ %lu ms (delta=%lu)\n", t4, t4-t3);
+    // Serial.printf("[ZC_TRACE] before createInteractiveUI @ %lu ms (delta=%lu)\n", t4, t4-t3);
     esp_task_wdt_reset();  // Reset before massive widget creation
     if (parent) {
         createInteractiveUI(parent);
@@ -94,7 +94,7 @@ void ZoneComposerUI::begin(lv_obj_t* parent) {
     }
 
     uint32_t t5 = millis();
-    Serial.printf("[ZC_TRACE] begin() exit @ %lu ms (total=%lu)\n", t5, t5-t0);
+    // Serial.printf("[ZC_TRACE] begin() exit @ %lu ms (total=%lu)\n", t5, t5-t0);
     esp_task_wdt_reset();  // Final reset after init complete
     Serial.println("[ZoneComposer] Interactive UI initialized");
 }
@@ -1064,7 +1064,7 @@ static lv_obj_t* make_zone_card(lv_obj_t* parent, bool elevated) {
 
 void ZoneComposerUI::createInteractiveUI(lv_obj_t* parent) {
     uint32_t t0 = millis();
-    Serial.printf("[ZC_TRACE] createInteractiveUI() entry @ %lu ms\n", t0);
+    // Serial.printf("[ZC_TRACE] createInteractiveUI() entry @ %lu ms\n", t0);
 
     // Set up flex layout for vertical stacking
     lv_obj_set_layout(parent, LV_LAYOUT_FLEX);
@@ -1075,7 +1075,7 @@ void ZoneComposerUI::createInteractiveUI(lv_obj_t* parent) {
     lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
 
     uint32_t t1 = millis();
-    Serial.printf("[ZC_TRACE] before header creation @ %lu ms (delta=%lu)\n", t1, t1-t0);
+    // Serial.printf("[ZC_TRACE] before header creation @ %lu ms (delta=%lu)\n", t1, t1-t0);
 
     // ═══════════════════════════════════════════════════════════════════════
     // HEADER: Title + Back Button
@@ -1128,7 +1128,7 @@ void ZoneComposerUI::createInteractiveUI(lv_obj_t* parent) {
     lv_obj_center(_zoneEnableLabel);
 
     uint32_t t2 = millis();
-    Serial.printf("[ZC_TRACE] before controls row @ %lu ms (delta=%lu)\n", t2, t2-t1);
+    // Serial.printf("[ZC_TRACE] before controls row @ %lu ms (delta=%lu)\n", t2, t2-t1);
 
     // ═══════════════════════════════════════════════════════════════════════
     // CONTROLS ROW: Zone Count + Preset Selector
@@ -1180,7 +1180,7 @@ void ZoneComposerUI::createInteractiveUI(lv_obj_t* parent) {
     lv_obj_align(_presetValueLabel, LV_ALIGN_BOTTOM_MID, 0, 0);
 
     uint32_t t3 = millis();
-    Serial.printf("[ZC_TRACE] before createZoneParameterGrid @ %lu ms (delta=%lu)\n", t3, t3-t2);
+    // Serial.printf("[ZC_TRACE] before createZoneParameterGrid @ %lu ms (delta=%lu)\n", t3, t3-t2);
 
     // ═══════════════════════════════════════════════════════════════════════
     // ZONE GRID: 4 zones with their parameters
@@ -1188,7 +1188,7 @@ void ZoneComposerUI::createInteractiveUI(lv_obj_t* parent) {
     createZoneParameterGrid(parent);
 
     uint32_t t4 = millis();
-    Serial.printf("[ZC_TRACE] before createModeSelector @ %lu ms (delta=%lu)\n", t4, t4-t3);
+    // Serial.printf("[ZC_TRACE] before createModeSelector @ %lu ms (delta=%lu)\n", t4, t4-t3);
 
     // ═══════════════════════════════════════════════════════════════════════
     // MODE SELECTOR ROW
@@ -1196,7 +1196,7 @@ void ZoneComposerUI::createInteractiveUI(lv_obj_t* parent) {
     createModeSelector(parent);
 
     uint32_t t5 = millis();
-    Serial.printf("[ZC_TRACE] createInteractiveUI() exit @ %lu ms (total=%lu)\n", t5, t5-t0);
+    // Serial.printf("[ZC_TRACE] createInteractiveUI() exit @ %lu ms (total=%lu)\n", t5, t5-t0);
     Serial.println("[ZoneComposer] LVGL interactive UI created");
 }
 
@@ -1229,7 +1229,7 @@ lv_obj_t* ZoneComposerUI::createPresetRow(lv_obj_t* parent) {
 
 void ZoneComposerUI::createZoneParameterGrid(lv_obj_t* parent) {
     uint32_t t0 = millis();
-    Serial.printf("[ZC_TRACE] createZoneParameterGrid() entry @ %lu ms\n", t0);
+    // Serial.printf("[ZC_TRACE] createZoneParameterGrid() entry @ %lu ms\n", t0);
     
     // Container for zone cards
     lv_obj_t* zoneGrid = lv_obj_create(parent);
@@ -1247,7 +1247,7 @@ void ZoneComposerUI::createZoneParameterGrid(lv_obj_t* parent) {
 
     uint32_t t1 = millis();
     for (uint8_t i = 0; i < 4; i++) {
-        Serial.printf("[ZC_TRACE] creating zone %d @ %lu ms (delta=%lu)\n", i, millis(), millis()-t1);
+        // Serial.printf("[ZC_TRACE] creating zone %d @ %lu ms (delta=%lu)\n", i, millis(), millis()-t1);
         createZoneParamRow(zoneGrid, i);
         t1 = millis();
         
@@ -1257,7 +1257,7 @@ void ZoneComposerUI::createZoneParameterGrid(lv_obj_t* parent) {
     }
     
     uint32_t t2 = millis();
-    Serial.printf("[ZC_TRACE] createZoneParameterGrid() exit @ %lu ms (total=%lu)\n", t2, t2-t0);
+    // Serial.printf("[ZC_TRACE] createZoneParameterGrid() exit @ %lu ms (total=%lu)\n", t2, t2-t0);
 }
 
 lv_obj_t* ZoneComposerUI::createZoneParamRow(lv_obj_t* parent, uint8_t zoneIndex) {

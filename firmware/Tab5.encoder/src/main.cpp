@@ -1716,15 +1716,6 @@ void loop() {
     // CRITICAL: Reset watchdog at START of every loop iteration
     esp_task_wdt_reset();
 
-    // TRACE: Log every 2 seconds to verify loop is running
-    static uint32_t s_lastLoopTrace = 0;
-    static uint32_t s_loopCount = 0;
-    s_loopCount++;
-    if (millis() - s_lastLoopTrace >= 2000) {
-        Serial.printf("[LOOP_TRACE] loop() running @ %lu ms, iterations=%lu\n", millis(), s_loopCount);
-        s_lastLoopTrace = millis();
-    }
-
     // Update M5Stack (handles button events, touch, etc.)
     M5.update();
 
@@ -1841,10 +1832,10 @@ void loop() {
             LoadingScreen::hide(M5.Display);
             
             // Initialize full UI
-            Serial.printf("[MAIN_TRACE] Before g_ui->begin() @ %lu ms\n", millis());
+            // Serial.printf("[MAIN_TRACE] Before g_ui->begin() @ %lu ms\n", millis());
             esp_task_wdt_reset();
             g_ui->begin();
-            Serial.printf("[MAIN_TRACE] After g_ui->begin() @ %lu ms\n", millis());
+            // Serial.printf("[MAIN_TRACE] After g_ui->begin() @ %lu ms\n", millis());
             esp_task_wdt_reset();
             // #region agent log (DISABLED)
             // Serial.printf("[DEBUG] After DisplayUI::begin() - Heap: free=%u minFree=%u largest=%u\n",

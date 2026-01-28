@@ -690,7 +690,7 @@ void DisplayUI::begin() {
 
     Serial.println("[DisplayUI] Zone Composer initialized");
 
-    Serial.printf("[DisplayUI_TRACE] Creating connectivity screen @ %lu ms\n", millis());
+        // Serial.printf("[DisplayUI_TRACE] Creating connectivity screen @ %lu ms\n", millis());
     esp_task_wdt_reset();
 
     // Create connectivity screen
@@ -698,40 +698,40 @@ void DisplayUI::begin() {
     lv_obj_set_style_bg_color(_screen_connectivity, lv_color_hex(TAB5_COLOR_BG_PAGE), LV_PART_MAIN);
     lv_obj_set_style_pad_all(_screen_connectivity, 0, LV_PART_MAIN);
 
-    Serial.printf("[DisplayUI_TRACE] Connectivity screen created @ %lu ms\n", millis());
+        // Serial.printf("[DisplayUI_TRACE] Connectivity screen created @ %lu ms\n", millis());
     esp_task_wdt_reset();
 
 #if ENABLE_WIFI
-    Serial.printf("[DisplayUI_TRACE] Creating ConnectivityTab @ %lu ms\n", millis());
+        // Serial.printf("[DisplayUI_TRACE] Creating ConnectivityTab @ %lu ms\n", millis());
     Serial.flush();
     // Create ConnectivityTab and initialize with connectivity screen as parent
     _connectivityTab = new ConnectivityTab(_display);
-    Serial.printf("[DisplayUI_TRACE] ConnectivityTab constructed @ %lu ms\n", millis());
+        // Serial.printf("[DisplayUI_TRACE] ConnectivityTab constructed @ %lu ms\n", millis());
     Serial.flush();
     _connectivityTab->setBackButtonCallback(onConnectivityTabBackButton);  // Wire Back button
-    Serial.printf("[DisplayUI_TRACE] setBackButtonCallback done @ %lu ms\n", millis());
+        // Serial.printf("[DisplayUI_TRACE] setBackButtonCallback done @ %lu ms\n", millis());
     Serial.flush();
     _connectivityTab->setWiFiManager(&g_wifiManager);
-    Serial.printf("[DisplayUI_TRACE] setWiFiManager done @ %lu ms\n", millis());
+        // Serial.printf("[DisplayUI_TRACE] setWiFiManager done @ %lu ms\n", millis());
     Serial.flush();
     esp_task_wdt_reset();
-    Serial.printf("[DisplayUI_TRACE] Before ConnectivityTab::begin @ %lu ms\n", millis());
+        // Serial.printf("[DisplayUI_TRACE] Before ConnectivityTab::begin @ %lu ms\n", millis());
     Serial.flush();
     _connectivityTab->begin(_screen_connectivity);  // Create LVGL widgets on connectivity screen
-    Serial.printf("[DisplayUI_TRACE] After ConnectivityTab::begin @ %lu ms\n", millis());
+        // Serial.printf("[DisplayUI_TRACE] After ConnectivityTab::begin @ %lu ms\n", millis());
     Serial.flush();
     Serial.println("[DisplayUI] Connectivity Tab initialized");
 #else
-    Serial.println("[DisplayUI_TRACE] ENABLE_WIFI not defined - skipping ConnectivityTab");
+        // Serial.println("[DisplayUI_TRACE] ENABLE_WIFI not defined - skipping ConnectivityTab");
 #endif
 
-    Serial.printf("[DisplayUI_TRACE] Before lv_scr_load @ %lu ms\n", millis());
+    // Serial.printf("[DisplayUI_TRACE] Before lv_scr_load @ %lu ms\n", millis());
     esp_task_wdt_reset();
     lv_scr_load(_screen_global);
-    Serial.printf("[DisplayUI_TRACE] After lv_scr_load @ %lu ms\n", millis());
+    // Serial.printf("[DisplayUI_TRACE] After lv_scr_load @ %lu ms\n", millis());
     esp_task_wdt_reset();
     _currentScreen = UIScreen::GLOBAL;
-    Serial.printf("[DisplayUI_TRACE] begin() complete @ %lu ms\n", millis());
+    // Serial.printf("[DisplayUI_TRACE] begin() complete @ %lu ms\n", millis());
 }
 
 void DisplayUI::loop() {

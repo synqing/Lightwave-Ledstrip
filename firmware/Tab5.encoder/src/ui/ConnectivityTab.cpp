@@ -75,24 +75,24 @@ ConnectivityTab::~ConnectivityTab() {
 }
 
 void ConnectivityTab::begin(lv_obj_t* parent) {
-    Serial.printf("[CT_TRACE] begin() entry @ %lu ms\n", millis());
-    Serial.flush();
+    // Serial.printf("[CT_TRACE] begin() entry @ %lu ms\n", millis());
+    // Serial.flush();
     esp_task_wdt_reset(); // Reset WDT at start of begin()
 
     markDirty();
     _lastRenderTime = 0;
 
-    Serial.printf("[CT_TRACE] before initStyles @ %lu ms\n", millis());
-    Serial.flush();
+    // Serial.printf("[CT_TRACE] before initStyles @ %lu ms\n", millis());
+    // Serial.flush();
     esp_task_wdt_reset(); // Reset WDT before initStyles()
 
     // Initialize LVGL styles
     initStyles();
-    Serial.printf("[CT_TRACE] after initStyles @ %lu ms\n", millis());
-    Serial.flush();
+    // Serial.printf("[CT_TRACE] after initStyles @ %lu ms\n", millis());
+    // Serial.flush();
 
-    Serial.printf("[CT_TRACE] before createInteractiveUI @ %lu ms\n", millis());
-    Serial.flush();
+    // Serial.printf("[CT_TRACE] before createInteractiveUI @ %lu ms\n", millis());
+    // Serial.flush();
     esp_task_wdt_reset(); // Reset WDT before createInteractiveUI()
 
     // Create LVGL widgets if parent provided
@@ -115,11 +115,11 @@ void ConnectivityTab::begin(lv_obj_t* parent) {
     #if ENABLE_WIFI
     _needsInitialLoad = true;
     Serial.println("[ConnectivityTab] Deferred network loading to loop()");
-    Serial.printf("[CT_DIAG] begin() this=%p _needsInitialLoad set to TRUE\n", (void*)this);
+    // Serial.printf("[CT_DIAG] begin() this=%p _needsInitialLoad set to TRUE\n", (void*)this);
     #endif
 
-    Serial.printf("[CT_TRACE] begin() exit @ %lu ms\n", millis());
-    Serial.flush();
+    // Serial.printf("[CT_TRACE] begin() exit @ %lu ms\n", millis());
+    // Serial.flush();
     esp_task_wdt_reset(); // Reset WDT at end of begin()
 }
 
@@ -150,8 +150,8 @@ void ConnectivityTab::initStyles() {
 }
 
 void ConnectivityTab::createInteractiveUI(lv_obj_t* parent) {
-    Serial.printf("[CT_TRACE] createInteractiveUI() entry @ %lu ms\n", millis());
-    Serial.flush();
+    // Serial.printf("[CT_TRACE] createInteractiveUI() entry @ %lu ms\n", millis());
+    // Serial.flush();
     _screen = parent;
 
     // Set TAB5 page background (dark charcoal, not pure black)
@@ -168,46 +168,46 @@ void ConnectivityTab::createInteractiveUI(lv_obj_t* parent) {
     lv_obj_set_pos(title, 160, 25);
     lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
 
-    Serial.printf("[CT_TRACE] before createBackButton @ %lu ms\n", millis());
-    Serial.flush();
+    // Serial.printf("[CT_TRACE] before createBackButton @ %lu ms\n", millis());
+    // Serial.flush();
     createBackButton(_screen);
     esp_task_wdt_reset();
 
-    Serial.printf("[CT_TRACE] before createStatusLabel @ %lu ms\n", millis());
-    Serial.flush();
+    // Serial.printf("[CT_TRACE] before createStatusLabel @ %lu ms\n", millis());
+    // Serial.flush();
     createStatusLabel(_screen);
 
     // ==========================================================================
     // NEW LAYOUT: Available Networks (TOP) with SCAN/ADD buttons on right
     // ==========================================================================
-    Serial.printf("[CT_TRACE] before createAvailableNetworksCard @ %lu ms\n", millis());
-    Serial.flush();
+    // Serial.printf("[CT_TRACE] before createAvailableNetworksCard @ %lu ms\n", millis());
+    // Serial.flush();
     createAvailableNetworksCard(_screen);
     esp_task_wdt_reset();
 
-    Serial.printf("[CT_TRACE] before createAvailableNetworksButtons @ %lu ms\n", millis());
-    Serial.flush();
+    // Serial.printf("[CT_TRACE] before createAvailableNetworksButtons @ %lu ms\n", millis());
+    // Serial.flush();
     createAvailableNetworksButtons(_screen);
 
     // ==========================================================================
     // NEW LAYOUT: Saved Networks (BELOW) with CONNECT/DISCONNECT/DELETE on right
     // ==========================================================================
-    Serial.printf("[CT_TRACE] before createSavedNetworksCard @ %lu ms\n", millis());
-    Serial.flush();
+    // Serial.printf("[CT_TRACE] before createSavedNetworksCard @ %lu ms\n", millis());
+    // Serial.flush();
     createSavedNetworksCard(_screen);
     esp_task_wdt_reset();
 
-    Serial.printf("[CT_TRACE] before createSavedNetworksButtons @ %lu ms\n", millis());
-    Serial.flush();
+    // Serial.printf("[CT_TRACE] before createSavedNetworksButtons @ %lu ms\n", millis());
+    // Serial.flush();
     createSavedNetworksButtons(_screen);
     esp_task_wdt_reset();
 
-    Serial.printf("[CT_TRACE] before createAddNetworkDialog @ %lu ms\n", millis());
-    Serial.flush();
+    // Serial.printf("[CT_TRACE] before createAddNetworkDialog @ %lu ms\n", millis());
+    // Serial.flush();
     createAddNetworkDialog(_screen);
 
-    Serial.printf("[CT_TRACE] createInteractiveUI() exit @ %lu ms\n", millis());
-    Serial.flush();
+    // Serial.printf("[CT_TRACE] createInteractiveUI() exit @ %lu ms\n", millis());
+    // Serial.flush();
     esp_task_wdt_reset();
 }
 
@@ -259,7 +259,7 @@ void ConnectivityTab::createAvailableNetworksCard(lv_obj_t* parent) {
 
     // Inner scrollable list
     _scannedNetworksList = lv_obj_create(card);
-    Serial.printf("[CT_DEBUG] createAvailableNetworksCard: widget=%p\n", (void*)_scannedNetworksList);
+    // Serial.printf("[CT_DEBUG] createAvailableNetworksCard: widget=%p\n", (void*)_scannedNetworksList);
     lv_obj_set_pos(_scannedNetworksList, 0, 40);
     lv_obj_set_size(_scannedNetworksList, NETWORK_CARD_W - 20, NETWORK_LIST_H);
     lv_obj_set_style_bg_color(_scannedNetworksList, lv_color_hex(TAB5_COLOR_BG_SURFACE_ELEVATED), LV_PART_MAIN);
@@ -603,8 +603,8 @@ void ConnectivityTab::loop() {
     #if ENABLE_WIFI
     static uint32_t lastDiagLog = 0;
     if (now - lastDiagLog >= 2000) {  // Every 2 seconds
-        Serial.printf("[CT_DIAG] loop() this=%p _needsInitialLoad=%d _savedNetworkCount=%d\n",
-                      (void*)this, _needsInitialLoad, _savedNetworkCount);
+        // Serial.printf("[CT_DIAG] loop() this=%p _needsInitialLoad=%d _savedNetworkCount=%d\n",
+        //               (void*)this, _needsInitialLoad, _savedNetworkCount);
         lastDiagLog = now;
     }
     #endif

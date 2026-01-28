@@ -178,7 +178,7 @@ print(f"Audio-Visual Correlation: {result.audio_visual_correlation:.3f}")
 
 **Solutions**:
 1. Verify device is on network: `ping lightwaveos.local`
-2. Check device has WiFi enabled: Use `esp32dev_wifi` build
+2. Check device has WiFi enabled: Use `esp32dev_audio` build
 3. Try IP address instead: `lwos-test record --host 192.168.1.100`
 
 ### No validation frames received

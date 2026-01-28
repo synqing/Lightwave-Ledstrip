@@ -107,7 +107,7 @@ Look for:
 | Environment | WiFi | Audio | Audio Broadcast | Use Case |
 |-------------|------|-------|-----------------|----------|
 | `esp32dev` | No | No | No | Standalone LED effects |
-| `esp32dev_wifi` | Yes | No | No | Web control, no audio |
+| `esp32dev_audio` | Yes | No | No | Web control, no audio |
 | `esp32dev_audio` | Yes | Yes | Yes | Full audio-reactive features |
 
 **Important**: Audio stream broadcasting requires `esp32dev_audio`. The audio pipeline (I2S capture, Goertzel analysis, chroma extraction) is only compiled with `FEATURE_AUDIO_SYNC=1`.

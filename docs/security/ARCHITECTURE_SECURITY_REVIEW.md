@@ -702,7 +702,7 @@ While credentials are externalized (good), they are:
 - `FEATURE_WEB_SERVER` - enables network attack surface
 - `FEATURE_OTA_UPDATE` - enables firmware update attacks
 - `FEATURE_AUDIO_SYNC` - adds audio processing code
-- Build variants: esp32dev (no WiFi), esp32dev_wifi, esp32dev_enhanced, memory_debug
+- Build variants: esp32dev (no WiFi), esp32dev_audio, esp32dev_enhanced, memory_debug
 
 No testing matrix validates security across all combinations. Disabled features may leave dead code with vulnerabilities.
 

@@ -108,7 +108,7 @@ cd firmware/v2
 pio run
 
 # Build with WiFi
-pio run -e esp32dev_wifi
+pio run -e esp32dev_audio
 
 # Upload
 pio run -t upload

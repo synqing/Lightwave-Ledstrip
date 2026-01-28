@@ -201,7 +201,7 @@ build_flags =
 
 ```bash
 # ESP32-S3 build (existing)
-pio run -e esp32dev_wifi
+pio run -e esp32dev_audio
 
 # ESP32-P4 build (new)
 pio run -e esp32p4_idf

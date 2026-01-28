@@ -298,7 +298,7 @@ Technical:
 Dependencies: Commit 1 (unified logging system)
 
 Testing:
-- Build: pio run -e esp32dev_wifi (should compile)
+- Build: pio run -e esp32dev_audio (should compile)
 - Runtime: Verify WiFi connection logs appear
 - Runtime: Verify WebServer initialization logs appear
 - Runtime: Verify WebSocket connection/disconnection logs

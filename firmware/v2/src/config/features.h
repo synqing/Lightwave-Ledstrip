@@ -33,7 +33,7 @@
 #endif
 
 // ============================================================================
-// Network Features (defined in esp32dev_wifi environment)
+// Network Features (defined in common build flags)
 // ============================================================================
 
 // Web Server with REST API and WebSocket

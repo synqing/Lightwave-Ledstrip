@@ -70,7 +70,7 @@ EOF
 )"
 
 success "Commit 1 complete: Configuration and Feature Flags"
-checkpoint "Verify compile: pio run -e esp32dev_wifi"
+checkpoint "Verify compile: pio run -e esp32dev_audio"
 
 # =============================================================================
 # COMMIT 2: Add TempoTracker Implementation
@@ -116,7 +116,7 @@ EOF
 )"
 
 success "Commit 2 complete: TempoTracker Implementation"
-checkpoint "Verify compile: pio run -e esp32dev_wifi"
+checkpoint "Verify compile: pio run -e esp32dev_audio"
 
 # =============================================================================
 # COMMIT 3: Integrate TempoTracker into Audio Pipeline
@@ -165,7 +165,7 @@ EOF
 )"
 
 success "Commit 3 complete: Audio Pipeline Integration"
-checkpoint "Verify compile: pio run -e esp32dev_wifi"
+checkpoint "Verify compile: pio run -e esp32dev_audio"
 
 # =============================================================================
 # COMMIT 4: Delete K1 Beat Tracker
@@ -219,7 +219,7 @@ EOF
 )"
 
 success "Commit 4 complete: K1 Deletion"
-checkpoint "Verify clean compile: pio run -e esp32dev_wifi"
+checkpoint "Verify clean compile: pio run -e esp32dev_audio"
 
 # =============================================================================
 # COMMIT 5: Wire TempoTracker to RendererActor
@@ -272,7 +272,7 @@ EOF
 )"
 
 success "Commit 5 complete: RendererActor Integration"
-checkpoint "UPLOAD: pio run -e esp32dev_wifi -t upload - verify tempo in serial"
+checkpoint "UPLOAD: pio run -e esp32dev_audio -t upload - verify tempo in serial"
 
 # =============================================================================
 # COMMIT 6: Effects and Zone System Improvements
@@ -331,7 +331,7 @@ EOF
 )"
 
 success "Commit 6 complete: Effects and Zone System"
-checkpoint "UPLOAD: pio run -e esp32dev_wifi -t upload - test zone effects"
+checkpoint "UPLOAD: pio run -e esp32dev_audio -t upload - test zone effects"
 
 # =============================================================================
 # COMMIT 7: WebServer Infrastructure Extraction
@@ -374,7 +374,7 @@ EOF
 )"
 
 success "Commit 7 complete: WebServer Infrastructure"
-checkpoint "Verify compile: pio run -e esp32dev_wifi"
+checkpoint "Verify compile: pio run -e esp32dev_audio"
 
 # =============================================================================
 # COMMIT 8: Network Handlers and WiFi Fixes
@@ -437,7 +437,7 @@ EOF
 )"
 
 success "Commit 8 complete: Handlers and WiFi Fix"
-checkpoint "UPLOAD: pio run -e esp32dev_wifi -t upload - verify WiFi works"
+checkpoint "UPLOAD: pio run -e esp32dev_audio -t upload - verify WiFi works"
 
 # =============================================================================
 # COMMIT 9: UI and Dashboard Updates

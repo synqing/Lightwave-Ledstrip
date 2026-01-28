@@ -569,7 +569,7 @@ scripts/ralph/
 | Environment | Purpose | Command |
 |-------------|---------|---------|
 | `esp32dev_audio` | Audio-enabled build (default) | `pio run -e esp32dev_audio` |
-| `esp32dev_wifi` | WiFi + WebServer | `pio run -e esp32dev_wifi` |
+| `esp32dev_audio` | WiFi + WebServer | `pio run -e esp32dev_audio` |
 | `memory_debug` | Heap tracing | `pio run -e memory_debug` |
 
 ### 11.2 Required Quality Checks
@@ -582,7 +582,7 @@ cd firmware/v2
 pio run -e esp32dev_audio
 
 # WiFi build (if story touches web)
-pio run -e esp32dev_wifi
+pio run -e esp32dev_audio
 
 # Pre-commit hooks
 pre-commit run --all-files
@@ -599,7 +599,7 @@ Run these checks before committing:
 
 ### PlatformIO Builds
 - `cd firmware/v2 && pio run -e esp32dev_audio` - Must compile
-- `pio run -e esp32dev_wifi` - Must compile (if touching web code)
+- `pio run -e esp32dev_audio` - Must compile (if touching web code)
 
 ### Pre-commit Hooks
 - `pre-commit run --all-files` - Formatting and validation
@@ -892,7 +892,7 @@ These files require HIGH CAUTION when modifying:
       "acceptanceCriteria": [
         "Effect ID exposed in /api/v1/effects endpoint",
         "WebSocket setEffect command accepts PulseEffect",
-        "pio run -e esp32dev_wifi compiles",
+        "pio run -e esp32dev_audio compiles",
         "Effect selectable from web dashboard"
       ],
       "priority": 4,

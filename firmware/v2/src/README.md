@@ -427,7 +427,7 @@ pio run -t upload
 ### WiFi-Enabled Build
 
 ```bash
-pio run -e esp32dev_wifi -t upload
+pio run -e esp32dev_audio -t upload
 ```
 
 ### Audio-Enabled Build
@@ -445,7 +445,7 @@ pio device monitor -b 115200
 ### Clean Build
 
 ```bash
-pio run -t clean && pio run -e esp32dev_wifi -t upload
+pio run -t clean && pio run -e esp32dev_audio -t upload
 ```
 
 ### Run Native Tests

@@ -13,7 +13,7 @@ Feature: API Authentication with NVS persistence and web UI
 ---
 
 ## 2025-01-24 - US-001
-- Added `esp32dev_wifi` environment to platformio.ini
+- Added `esp32dev_audio` environment to platformio.ini
 - Enabled FEATURE_API_AUTH=1 with default key placeholder
 - Files changed: firmware/v2/platformio.ini
 - **Learnings for future iterations:**

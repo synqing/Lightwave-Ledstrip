@@ -146,7 +146,7 @@ These compile-time flags control what's included:
 | `FEATURE_INTERFERENCE_CALC` | 1 (on) | Wave physics |
 | `FEATURE_PHYSICS_SIMULATION` | 1 (on) | Physics effects |
 
-To enable WiFi: Use `esp32dev_wifi` environment or add `-D FEATURE_WEB_SERVER=1` to build flags.
+To enable WiFi: Use `esp32dev_audio` environment or add `-D FEATURE_WEB_SERVER=1` to build flags.
 
 ---
 

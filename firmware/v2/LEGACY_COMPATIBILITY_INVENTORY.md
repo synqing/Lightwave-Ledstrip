@@ -10,7 +10,7 @@
 
 ### Firmware Builds
 - **`esp32dev`** (default): ESP32-S3 firmware without WiFi
-- **`esp32dev_wifi`**: ESP32-S3 firmware with WiFi/WebSocket enabled
+- **`esp32dev_audio`**: ESP32-S3 firmware with WiFi/WebSocket enabled
 - **`debug`**: Debug build with verbose logging
 
 ### Test Builds

@@ -19,10 +19,48 @@ HttpClient::HttpClient()
     // Resolution deferred to first HTTP request via connectToServer()
     // This prevents blocking the main loop during construction
     // (blocking here caused Task Watchdog crashes when navigating to ConnectivityTab)
+    _discoveryMutex = xSemaphoreCreateMutex();
 }
 
 HttpClient::~HttpClient() {
+    _discoveryCancelRequested = true;
+    if (_discoveryTaskHandle != nullptr) {
+        uint32_t timeoutAt = millis() + 1000;
+        while (_discoveryTaskHandle != nullptr && millis() < timeoutAt) {
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+        if (_discoveryTaskHandle != nullptr) {
+            vTaskDelete(_discoveryTaskHandle);
+            _discoveryTaskHandle = nullptr;
+        }
+    }
+    if (_discoveryMutex) {
+        vSemaphoreDelete(_discoveryMutex);
+        _discoveryMutex = nullptr;
+    }
     _client.stop();
+}
+
+HttpClient::DiscoveryState HttpClient::getDiscoveryState() const {
+    if (_discoveryMutex) {
+        xSemaphoreTake(_discoveryMutex, portMAX_DELAY);
+    }
+    DiscoveryState state = _discoveryState;
+    if (_discoveryMutex) {
+        xSemaphoreGive(_discoveryMutex);
+    }
+    return state;
+}
+
+IPAddress HttpClient::getDiscoveredIP() const {
+    if (_discoveryMutex) {
+        xSemaphoreTake(_discoveryMutex, portMAX_DELAY);
+    }
+    IPAddress result = _discoveryResult;
+    if (_discoveryMutex) {
+        xSemaphoreGive(_discoveryMutex);
+    }
+    return result;
 }
 
 bool HttpClient::resolveHostname() {
@@ -30,13 +68,15 @@ bool HttpClient::resolveHostname() {
         return true;
     }
 
-    if (_discoveryState == DiscoveryState::SUCCESS) {
-        _serverIP = _discoveryResult;
+    if (getDiscoveryState() == DiscoveryState::SUCCESS) {
+        _serverIP = getDiscoveredIP();
         return true;
     }
 
-    if (_discoveryState != DiscoveryState::RUNNING) {
-        startDiscovery();
+    if (getDiscoveryState() != DiscoveryState::RUNNING) {
+        if (!startDiscovery()) {
+            return false;
+        }
     }
 
     Serial.println("[HTTP] Discovery in progress; deferring hostname resolution.");
@@ -44,17 +84,25 @@ bool HttpClient::resolveHostname() {
 }
 
 bool HttpClient::startDiscovery() {
+    if (_discoveryMutex) {
+        xSemaphoreTake(_discoveryMutex, portMAX_DELAY);
+    }
+
     if (_discoveryState == DiscoveryState::RUNNING) {
+        if (_discoveryMutex) {
+            xSemaphoreGive(_discoveryMutex);
+        }
         return true;
     }
 
     _discoveryState = DiscoveryState::RUNNING;
     _discoveryResult = IPAddress(0, 0, 0, 0);
+    _discoveryCancelRequested = false;
 
     BaseType_t taskOk = xTaskCreate(
         &HttpClient::discoveryTask,
         "lw_discovery",
-        4096,
+        6144,
         this,
         1,
         &_discoveryTaskHandle
@@ -63,22 +111,37 @@ bool HttpClient::startDiscovery() {
     if (taskOk != pdPASS) {
         _discoveryTaskHandle = nullptr;
         _discoveryState = DiscoveryState::FAILED;
+        if (_discoveryMutex) {
+            xSemaphoreGive(_discoveryMutex);
+        }
         Serial.println("[HTTP] Failed to start discovery task.");
         return false;
     }
 
+    if (_discoveryMutex) {
+        xSemaphoreGive(_discoveryMutex);
+    }
     return true;
 }
 
 void HttpClient::discoveryTask(void* parameter) {
     auto* client = static_cast<HttpClient*>(parameter);
     bool success = client->runDiscovery();
+    if (client->_discoveryMutex) {
+        xSemaphoreTake(client->_discoveryMutex, portMAX_DELAY);
+    }
     client->_discoveryState = success ? DiscoveryState::SUCCESS : DiscoveryState::FAILED;
     client->_discoveryTaskHandle = nullptr;
+    if (client->_discoveryMutex) {
+        xSemaphoreGive(client->_discoveryMutex);
+    }
     vTaskDelete(nullptr);
 }
 
 bool HttpClient::runDiscovery() {
+    if (_discoveryCancelRequested) {
+        return false;
+    }
     bool onLightwaveNetwork = false;
     String currentSSID = "";
 
@@ -93,7 +156,13 @@ bool HttpClient::runDiscovery() {
     if (onLightwaveNetwork) {
         IPAddress gateway = WiFi.gatewayIP();
         if (gateway != IPAddress(0, 0, 0, 0)) {
+            if (_discoveryMutex) {
+                xSemaphoreTake(_discoveryMutex, portMAX_DELAY);
+            }
             _discoveryResult = gateway;
+            if (_discoveryMutex) {
+                xSemaphoreGive(_discoveryMutex);
+            }
             Serial.printf("[HTTP] Using gateway IP: %s (on LightwaveOS network)\n",
                           _discoveryResult.toString().c_str());
             return true;
@@ -102,7 +171,13 @@ bool HttpClient::runDiscovery() {
         {
             IPAddress compiledIP;
             if (compiledIP.fromString(LIGHTWAVE_IP)) {
+                if (_discoveryMutex) {
+                    xSemaphoreTake(_discoveryMutex, portMAX_DELAY);
+                }
                 _discoveryResult = compiledIP;
+                if (_discoveryMutex) {
+                    xSemaphoreGive(_discoveryMutex);
+                }
                 Serial.printf("[HTTP] Using compiled IP: %s (LightwaveOS fallback)\n",
                               _discoveryResult.toString().c_str());
                 return true;
@@ -112,19 +187,24 @@ bool HttpClient::runDiscovery() {
     }
 
     Serial.printf("[HTTP] Attempting mDNS resolution for %s (with retries)...\n", _serverHostname);
-    esp_task_wdt_reset();
-
     IPAddress resolved(0, 0, 0, 0);
     for (uint8_t attempt = 0; attempt < NetworkConfig::MDNS_MAX_ATTEMPTS; attempt++) {
+        if (_discoveryCancelRequested) {
+            return false;
+        }
         if (attempt > 0) {
             vTaskDelay(pdMS_TO_TICKS(NetworkConfig::MDNS_RETRY_DELAY_MS));
         }
-        esp_task_wdt_reset();
         resolved = MDNS.queryHost(_serverHostname);
-        esp_task_wdt_reset();
 
         if (resolved != IPAddress(0, 0, 0, 0)) {
+            if (_discoveryMutex) {
+                xSemaphoreTake(_discoveryMutex, portMAX_DELAY);
+            }
             _discoveryResult = resolved;
+            if (_discoveryMutex) {
+                xSemaphoreGive(_discoveryMutex);
+            }
             Serial.printf("[HTTP] Resolved %s to %s (via mDNS, attempt %d/%d)\n",
                           _serverHostname, resolved.toString().c_str(),
                           attempt + 1, NetworkConfig::MDNS_MAX_ATTEMPTS);
@@ -136,7 +216,13 @@ bool HttpClient::runDiscovery() {
     Serial.printf("[HTTP] mDNS resolution failed after %d attempts\n", NetworkConfig::MDNS_MAX_ATTEMPTS);
 
     if (onLightwaveNetwork) {
+        if (_discoveryMutex) {
+            xSemaphoreTake(_discoveryMutex, portMAX_DELAY);
+        }
         _discoveryResult = IPAddress(192, 168, 4, 1);
+        if (_discoveryMutex) {
+            xSemaphoreGive(_discoveryMutex);
+        }
         Serial.printf("[HTTP] Using SoftAP fallback IP: %s (on LightwaveOS network)\n",
                       _discoveryResult.toString().c_str());
         return true;
@@ -163,6 +249,9 @@ bool HttpClient::runDiscovery() {
     };
 
     for (uint8_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++) {
+        if (_discoveryCancelRequested) {
+            return false;
+        }
         if (candidates[i] == IPAddress(0, 0, 0, 0) || candidates[i] == localIP) {
             continue;
         }
@@ -187,7 +276,13 @@ bool HttpClient::runDiscovery() {
             if (response.indexOf("lightwaveos") >= 0 ||
                 response.indexOf("LightwaveOS") >= 0 ||
                 response.indexOf("\"board\":\"ESP32-S3\"") >= 0) {
+                if (_discoveryMutex) {
+                    xSemaphoreTake(_discoveryMutex, portMAX_DELAY);
+                }
                 _discoveryResult = candidates[i];
+                if (_discoveryMutex) {
+                    xSemaphoreGive(_discoveryMutex);
+                }
                 Serial.printf("[HTTP] Discovered LightwaveOS device at %s (network scan)\n",
                               _discoveryResult.toString().c_str());
                 return true;
@@ -201,6 +296,9 @@ bool HttpClient::runDiscovery() {
     Serial.printf("[HTTP] Scanning subnet %s.0/24 for LightwaveOS device...\n",
                   networkBase.toString().c_str());
     for (uint8_t host = 1; host < 255; host++) {
+        if (_discoveryCancelRequested) {
+            return false;
+        }
         if (host == localIP[3]) continue;
 
         IPAddress testIP(networkBase[0], networkBase[1], networkBase[2], host);
@@ -225,7 +323,13 @@ bool HttpClient::runDiscovery() {
             if (response.indexOf("lightwaveos") >= 0 ||
                 response.indexOf("LightwaveOS") >= 0 ||
                 response.indexOf("\"board\":\"ESP32-S3\"") >= 0) {
+                if (_discoveryMutex) {
+                    xSemaphoreTake(_discoveryMutex, portMAX_DELAY);
+                }
                 _discoveryResult = testIP;
+                if (_discoveryMutex) {
+                    xSemaphoreGive(_discoveryMutex);
+                }
                 Serial.printf("[HTTP] Discovered LightwaveOS device at %s (subnet scan)\n",
                               _discoveryResult.toString().c_str());
                 return true;
@@ -234,7 +338,6 @@ bool HttpClient::runDiscovery() {
 
         if (host % 20 == 0) {
             Serial.printf("[HTTP] Scanning... %d/254\n", host);
-            esp_task_wdt_reset();
         }
 
         vTaskDelay(pdMS_TO_TICKS(2));

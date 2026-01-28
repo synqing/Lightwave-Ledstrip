@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <cstring>
 #include <esp_task_wdt.h>
+#include <WiFi.h>
 #include "../hal/EspHal.h"
 #include "../network/WiFiManager.h"
 #include "Theme.h"
@@ -646,7 +647,9 @@ void ConnectivityTab::loop() {
         }
 
         _initialLoadAwaitingDiscovery = true;
-        _httpClient->startDiscovery();
+        if (_httpClient->getDiscoveryState() != HttpClient::DiscoveryState::RUNNING) {
+            _httpClient->startDiscovery();
+        }
         Serial.println("[CT_FALLBACK] ========== FORCE LOADING COMPLETE ==========");
     }
     #endif
@@ -679,22 +682,6 @@ void ConnectivityTab::loop() {
         }
     }
 
-    if (_scanAwaitingDiscovery && _httpClient) {
-        auto state = _httpClient->getDiscoveryState();
-        if (state == HttpClient::DiscoveryState::SUCCESS) {
-            _scanAwaitingDiscovery = false;
-            performScanRequest();
-        } else if (state == HttpClient::DiscoveryState::FAILED) {
-            _scanAwaitingDiscovery = false;
-            _errorMessage = "Discovery failed";
-            _state = ConnectivityState::ERROR;
-            if (_scanButtonLabel) {
-                lv_label_set_text(_scanButtonLabel, "SCAN");
-                lv_obj_center(_scanButtonLabel);
-            }
-            markDirty();
-        }
-    }
     #endif
 
     // Update connection status periodically
@@ -972,10 +959,6 @@ void ConnectivityTab::refreshNetworkLists() {
 
 void ConnectivityTab::startScan() {
     #if ENABLE_WIFI
-    if (!_httpClient) {
-        _httpClient = new HttpClient();
-    }
-
     // Visual feedback: Change button to "SCANNING..."
     if (_scanButtonLabel) {
         lv_label_set_text(_scanButtonLabel, "SCANNING...");
@@ -987,12 +970,75 @@ void ConnectivityTab::startScan() {
     _state = ConnectivityState::SCANNING;
     _scanInProgress = true;
 
-    if (_httpClient->getDiscoveryState() == HttpClient::DiscoveryState::SUCCESS) {
-        performScanRequest();
-    } else {
-        _scanAwaitingDiscovery = true;
-        _httpClient->startDiscovery();
+    Serial.println("[SCAN] Local WiFi scan started");
+    int found = WiFi.scanNetworks();
+    if (found < 0) {
+        _errorMessage = "WiFi scan failed";
+        _state = ConnectivityState::ERROR;
+        _scanInProgress = false;
+        if (_scanButtonLabel) {
+            lv_label_set_text(_scanButtonLabel, "SCAN");
+            lv_obj_center(_scanButtonLabel);
+        }
+        markDirty();
+        Serial.println("[SCAN] Local WiFi scan failed");
+        return;
     }
+
+    _scannedNetworkCount = found > 20 ? 20 : static_cast<uint8_t>(found);
+    for (uint8_t i = 0; i < _scannedNetworkCount; i++) {
+        _scannedNetworks[i].ssid = WiFi.SSID(i);
+        _scannedNetworks[i].rssi = WiFi.RSSI(i);
+        _scannedNetworks[i].channel = WiFi.channel(i);
+
+        auto enc = WiFi.encryptionType(i);
+        bool isOpen = (enc == WIFI_AUTH_OPEN);
+        _scannedNetworks[i].encrypted = !isOpen;
+
+        switch (enc) {
+            case WIFI_AUTH_OPEN:
+                _scannedNetworks[i].encryptionType = "OPEN";
+                break;
+            case WIFI_AUTH_WEP:
+                _scannedNetworks[i].encryptionType = "WEP";
+                break;
+            case WIFI_AUTH_WPA_PSK:
+                _scannedNetworks[i].encryptionType = "WPA";
+                break;
+            case WIFI_AUTH_WPA2_PSK:
+                _scannedNetworks[i].encryptionType = "WPA2";
+                break;
+            case WIFI_AUTH_WPA_WPA2_PSK:
+                _scannedNetworks[i].encryptionType = "WPA/WPA2";
+                break;
+            case WIFI_AUTH_WPA2_ENTERPRISE:
+                _scannedNetworks[i].encryptionType = "WPA2-ENT";
+                break;
+            case WIFI_AUTH_WPA3_PSK:
+                _scannedNetworks[i].encryptionType = "WPA3";
+                break;
+            case WIFI_AUTH_WPA2_WPA3_PSK:
+                _scannedNetworks[i].encryptionType = "WPA2/WPA3";
+                break;
+            case WIFI_AUTH_WAPI_PSK:
+                _scannedNetworks[i].encryptionType = "WAPI";
+                break;
+            default:
+                _scannedNetworks[i].encryptionType = "UNKNOWN";
+                break;
+        }
+    }
+
+    WiFi.scanDelete();
+    _scanInProgress = false;
+    _state = ConnectivityState::IDLE;
+    if (_scanButtonLabel) {
+        lv_label_set_text(_scanButtonLabel, "SCAN");
+        lv_obj_center(_scanButtonLabel);
+    }
+    Serial.printf("[SCAN] Local WiFi scan complete: %u networks\n", _scannedNetworkCount);
+    forceDirty();
+    refreshNetworkLists();
     #endif
 }
 

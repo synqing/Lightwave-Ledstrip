@@ -12,6 +12,9 @@
 
 #if ENABLE_WIFI
 
+#include <esp_log.h>
+#include <mdns.h>
+
 WiFiManager::WiFiManager()
     : _ssid(nullptr)
     , _password(nullptr)
@@ -108,6 +111,9 @@ void WiFiManager::handleConnecting() {
             Serial.println("[WiFi] mDNS responder started: tab5encoder.local");
         }
 
+        // Silence ESPmDNS internal warnings while keeping resolution active.
+        esp_log_level_set("mdns", ESP_LOG_ERROR);
+
         // Reset mDNS resolution state for target host
         _lastMdnsAttempt = 0;
         _mdnsRetryCount = 0;
@@ -186,22 +192,18 @@ bool WiFiManager::resolveMDNS(const char* hostname) {
     _status = WiFiConnectionStatus::MDNS_RESOLVING;
     _mdnsRetryCount++;
 
-    Serial.printf("[WiFi] Resolving mDNS: %s.local (attempt %d)...\n",
-                  hostname, _mdnsRetryCount);
+    // Query mDNS for the hostname (direct IDF API to avoid noisy warnings)
+    esp_ip4_addr_t addr;
+    addr.addr = 0;
+    esp_err_t err = mdns_query_a(hostname, 2000, &addr);
 
-    // Query mDNS for the hostname
-    IPAddress resolvedIP = MDNS.queryHost(hostname);
-
-    if (resolvedIP != INADDR_NONE) {
-        _resolvedIP = resolvedIP;
+    if (err == ESP_OK && addr.addr != 0) {
+        _resolvedIP = IPAddress(addr.addr);
         _status = WiFiConnectionStatus::MDNS_RESOLVED;
-        Serial.printf("[WiFi] mDNS resolved: %s.local -> %s\n",
-                      hostname, resolvedIP.toString().c_str());
         return true;
     } else {
         // Resolution failed, stay in CONNECTED state for retry
         _status = WiFiConnectionStatus::CONNECTED;
-        Serial.printf("[WiFi] mDNS resolution failed for %s.local\n", hostname);
         return false;
     }
 }

@@ -137,7 +137,6 @@ private:
     uint8_t _scannedNetworkCount = 0;
     uint32_t _scanJobId = 0;
     bool _scanInProgress = false;
-    bool _scanAwaitingDiscovery = false;
     bool _initialLoadAwaitingDiscovery = false;
 
     // DEFERRED LOADING: Prevents watchdog crash from blocking HTTP in begin()

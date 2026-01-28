@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <freertos/semphr.h>
 
 /**
  * HTTP response structure
@@ -109,12 +110,12 @@ public:
     /**
      * Get current discovery state
      */
-    DiscoveryState getDiscoveryState() const { return _discoveryState; }
+    DiscoveryState getDiscoveryState() const;
 
     /**
      * Get discovered server IP (valid when SUCCESS)
      */
-    IPAddress getDiscoveredIP() const { return _discoveryResult; }
+    IPAddress getDiscoveredIP() const;
     
     /**
      * Set optional API key for authentication
@@ -185,6 +186,8 @@ private:
     volatile DiscoveryState _discoveryState = DiscoveryState::IDLE;
     IPAddress _discoveryResult;
     TaskHandle_t _discoveryTaskHandle = nullptr;
+    mutable SemaphoreHandle_t _discoveryMutex = nullptr;
+    volatile bool _discoveryCancelRequested = false;
 
     /**
      * Make HTTP GET request

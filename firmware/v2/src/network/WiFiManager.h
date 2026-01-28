@@ -523,6 +523,8 @@ private:
     String m_password2;
     uint8_t m_currentNetworkIndex = 0;     // 0 = primary, 1 = secondary
     uint8_t m_attemptsOnCurrentNetwork = 0;
+    uint8_t m_scanAttemptsWithoutKnown = 0;
+    bool m_noKnownNetworksLastScan = false;
     bool m_useStaticIP = false;
     IPAddress m_staticIP;
     IPAddress m_gateway;

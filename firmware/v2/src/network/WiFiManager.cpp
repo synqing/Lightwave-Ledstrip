@@ -233,6 +233,8 @@ void WiFiManager::handleStateScanning() {
             m_ssid = best.ssid;
             m_password = best.password;
             m_bestChannel = best.channel;
+            m_scanAttemptsWithoutKnown = 0;
+            m_noKnownNetworksLastScan = false;
 
             LW_LOGI("Smart selection: '%s' (RSSI: %d dBm, Channel: %d)",
                     best.ssid.c_str(), best.rssi, best.channel);
@@ -240,6 +242,8 @@ void WiFiManager::handleStateScanning() {
         } else {
             LW_LOGW("No known networks found in %d scan results",
                     m_cachedScanResults.size());
+            m_noKnownNetworksLastScan = true;
+            m_scanAttemptsWithoutKnown++;
             setState(STATE_WIFI_FAILED);
         }
     }
@@ -380,6 +384,24 @@ void WiFiManager::handleStateConnected() {
 
 void WiFiManager::handleStateFailed() {
     LW_LOGD("STATE: FAILED");
+
+    if (m_noKnownNetworksLastScan) {
+        if (m_scanAttemptsWithoutKnown >= 2 && m_apEnabled) {
+            LW_LOGW("No known networks after %d scans, switching to AP mode",
+                    m_scanAttemptsWithoutKnown);
+            setState(STATE_WIFI_AP_MODE);
+            return;
+        }
+
+        if (m_scanAttemptsWithoutKnown < 2) {
+            LW_LOGW("No known networks found, retrying scan (%d/2)",
+                    m_scanAttemptsWithoutKnown);
+            setState(STATE_WIFI_SCANNING);
+            return;
+        }
+        // If AP mode is disabled, fall through to retry logic.
+        m_noKnownNetworksLastScan = false;
+    }
 
     m_attemptsOnCurrentNetwork++;
 
@@ -758,6 +780,8 @@ void WiFiManager::setCredentials(const String& ssid, const String& password) {
     m_password2 = NetworkConfig::WIFI_PASSWORD_2_VALUE;
     m_currentNetworkIndex = 0;
     m_attemptsOnCurrentNetwork = 0;
+    m_scanAttemptsWithoutKnown = 0;
+    m_noKnownNetworksLastScan = false;
 
     if (hasSecondaryNetwork()) {
         LW_LOGI("Configured networks: %s (primary), %s (fallback)",

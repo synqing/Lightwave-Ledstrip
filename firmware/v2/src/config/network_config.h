@@ -79,7 +79,7 @@ namespace NetworkConfig {
     #ifdef AP_PASSWORD_CUSTOM
         constexpr const char* AP_PASSWORD = AP_PASSWORD_CUSTOM;
     #else
-        constexpr const char* AP_PASSWORD = "lightwave123";
+    constexpr const char* AP_PASSWORD = "spectrasynq";
     #endif
 
     // ========================================================================

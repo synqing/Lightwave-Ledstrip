@@ -50,6 +50,7 @@
 #include "webserver/LedFrameEncoder.h"
 #include "webserver/LedStreamBroadcaster.h"
 #include "webserver/LogStreamBroadcaster.h"
+#include "../config/network_config.h"
 #if FEATURE_AUDIO_SYNC
 #include "webserver/AudioStreamBroadcaster.h"
 #endif
@@ -97,11 +98,11 @@ namespace network {
 // ============================================================================
 
 namespace WebServerConfig {
-    constexpr uint16_t HTTP_PORT = 80;
-    constexpr const char* MDNS_HOSTNAME = "lightwaveos";
+    constexpr uint16_t HTTP_PORT = config::NetworkConfig::WEB_SERVER_PORT;
+    constexpr const char* MDNS_HOSTNAME = config::NetworkConfig::MDNS_HOSTNAME;
     constexpr const char* AP_SSID_PREFIX = "LightwaveOS-";
-    constexpr const char* AP_PASSWORD = "SpectraSynq";  // Matches Tab5.encoder expectation
-    constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = 15000;
+    constexpr const char* AP_PASSWORD = config::NetworkConfig::AP_PASSWORD;
+    constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = config::NetworkConfig::WIFI_CONNECT_TIMEOUT_MS;
     constexpr uint32_t STATUS_BROADCAST_INTERVAL_MS = 5000;
     // Allow multiple open dashboard tabs + dev tools without immediately thrashing connections.
     // This also bounds subscriber tables and per-frame broadcast iteration.

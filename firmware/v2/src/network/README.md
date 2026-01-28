@@ -528,7 +528,7 @@ When WiFi connection fails, device enters AP mode:
 | Setting | Value |
 |---------|-------|
 | SSID | `LightwaveOS-XXXX` (last 4 of MAC) |
-| Password | `lightwave123` |
+| Password | `spectrasynq` |
 | IP | `192.168.4.1` |
 | Channel | Auto-selected (least congested) |
 

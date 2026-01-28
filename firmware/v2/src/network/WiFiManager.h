@@ -19,7 +19,7 @@
  * @code
  * // In setup()
  * WIFI_MANAGER.setCredentials(ssid, password);
- * WIFI_MANAGER.enableSoftAP("LightwaveOS-Setup", "lightwave123");
+ * WIFI_MANAGER.enableSoftAP("LightwaveOS-Setup", "spectrasynq");
  * if (!WIFI_MANAGER.begin()) {
  *     Serial.println("WiFiManager failed!");
  * }
@@ -429,10 +429,10 @@ private:
     // Timing Configuration
     // ========================================================================
 
-    static constexpr uint32_t SCAN_INTERVAL_MS = 60000;       // Re-scan every minute
-    static constexpr uint32_t CONNECT_TIMEOUT_MS = 10000;     // 10s connection timeout
-    static constexpr uint32_t RECONNECT_DELAY_MS = 5000;      // 5s between reconnect attempts
-    static constexpr uint32_t MAX_RECONNECT_DELAY_MS = 60000; // Max 1 minute backoff
+    static constexpr uint32_t SCAN_INTERVAL_MS = config::NetworkConfig::SCAN_INTERVAL_MS;
+    static constexpr uint32_t CONNECT_TIMEOUT_MS = config::NetworkConfig::WIFI_CONNECT_TIMEOUT_MS;
+    static constexpr uint32_t RECONNECT_DELAY_MS = config::NetworkConfig::RECONNECT_DELAY_MS;
+    static constexpr uint32_t MAX_RECONNECT_DELAY_MS = config::NetworkConfig::MAX_RECONNECT_DELAY_MS;
 
     // ========================================================================
     // FreeRTOS Task
@@ -553,7 +553,7 @@ private:
 
     bool m_apEnabled = false;
     String m_apSSID = "LightwaveOS-AP";
-    String m_apPassword = "lightwave123";
+    String m_apPassword = config::NetworkConfig::AP_PASSWORD;
     uint8_t m_apChannel = 1;
 
     // ========================================================================

@@ -148,7 +148,7 @@ static const uint8_t NUM_PRESETS = sizeof(PRESETS) / sizeof(PRESETS[0]);
 ZoneComposer::ZoneComposer()
     : m_enabled(false)
     , m_initialized(false)
-    , m_zoneCount(3)                    // Default to 3 zones (TRIPLE)
+    , m_zoneCount(2)                    // Default to 2 zones (DUAL)
     , m_renderer(nullptr)
 {
     // Initialize zones to defaults
@@ -163,8 +163,8 @@ ZoneComposer::ZoneComposer()
         };
     }
     
-    // Initialize default layout (TRIPLE) by copying from compile-time config
-    memcpy(m_zoneConfig, ZONE_3_CONFIG, sizeof(ZONE_3_CONFIG));
+    // Initialize default layout (DUAL) by copying from compile-time config
+    memcpy(m_zoneConfig, ZONE_2_CONFIG, sizeof(ZONE_2_CONFIG));
 
     // Clear buffers
     memset(m_zoneBuffers, 0, sizeof(m_zoneBuffers));

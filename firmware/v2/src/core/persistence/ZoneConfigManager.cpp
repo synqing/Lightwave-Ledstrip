@@ -67,86 +67,87 @@ const ZonePreset ZONE_PRESETS[ZONE_PRESET_COUNT] = {
         {
             .version = 2,
             .segments = {},  // Will be set in loadPreset
-            .zoneCount = 3,
+            .zoneCount = 1,
             .systemEnabled = false,  // User must enable manually
-            .zoneEffects = {0, 0, 0, 0},  // Fire
+            .zoneEffects = {0, 0, 0, 0},
             .zoneEnabled = {true, false, false, false},
             .zoneBrightness = {255, 255, 255, 255},
             .zoneSpeed = {25, 25, 25, 25},
-            .zonePalette = {0, 0, 0, 0},  // Global palette
-            .zoneBlendMode = {0, 0, 0, 0},  // Overwrite
+            .zonePalette = {0, 0, 0, 0},
+            .zoneBlendMode = {0, 0, 0, 0},
             .checksum = 0
         }
     },
 
-    // Preset 1: Dual Split - 2 zone configuration
+    // Preset 1: Dual Split - 2 zones (default-recommended)
     {
         "Dual Split",
         {
             .version = 2,
             .segments = {},
-            .zoneCount = 3,  // Use 3-zone layout, but only enable 2
+            .zoneCount = 2,
             .systemEnabled = false,
-            .zoneEffects = {0, 5, 0, 0},  // Fire + Juggle
+            .zoneEffects = {0, 5, 0, 0},  // Inner: Fire, Outer: Juggle (example)
             .zoneEnabled = {true, true, false, false},
             .zoneBrightness = {255, 200, 255, 255},
             .zoneSpeed = {25, 30, 25, 25},
             .zonePalette = {0, 0, 0, 0},
-            .zoneBlendMode = {0, 0, 0, 0},
+            // Start with a softer blend on the outer zone
+            .zoneBlendMode = {0, 1, 0, 0},
             .checksum = 0
         }
     },
 
-    // Preset 2: Triple Rings - 3 concentric zones
+    // Preset 2: Dual Glow - 2 zones, calmer outer ambience
     {
-        "Triple Rings",
+        "Dual Glow",
         {
             .version = 2,
             .segments = {},
-            .zoneCount = 3,
+            .zoneCount = 2,
             .systemEnabled = false,
-            .zoneEffects = {2, 8, 10, 0},  // Plasma, Ripple, Interference
-            .zoneEnabled = {true, true, true, false},
-            .zoneBrightness = {255, 220, 180, 255},
-            .zoneSpeed = {20, 25, 35, 25},
+            .zoneEffects = {0, 0, 0, 0},
+            .zoneEnabled = {true, true, false, false},
+            .zoneBrightness = {255, 140, 255, 255},
+            .zoneSpeed = {20, 12, 25, 25},
             .zonePalette = {0, 0, 0, 0},
-            .zoneBlendMode = {0, 0, 0, 0},
+            .zoneBlendMode = {0, 1, 0, 0},
             .checksum = 0
         }
     },
 
-    // Preset 3: Quad Active - All 4 zones active
+    // Preset 3: Dual Pulse - 2 zones with different energy
     {
-        "Quad Active",
+        "Dual Pulse",
         {
             .version = 2,
             .segments = {},
-            .zoneCount = 4,
+            .zoneCount = 2,
             .systemEnabled = false,
-            .zoneEffects = {0, 4, 8, 12},  // Fire, Sinelon, Ripple, Pulse
-            .zoneEnabled = {true, true, true, true},
-            .zoneBrightness = {255, 230, 200, 170},  // Gradient brightness
-            .zoneSpeed = {15, 25, 35, 45},  // Gradient speed
+            .zoneEffects = {12, 4, 0, 0},
+            .zoneEnabled = {true, true, false, false},
+            .zoneBrightness = {255, 180, 255, 255},
+            .zoneSpeed = {18, 28, 25, 25},
             .zonePalette = {0, 0, 0, 0},
-            .zoneBlendMode = {0, 0, 0, 0},
+            .zoneBlendMode = {0, 1, 0, 0},
             .checksum = 0
         }
     },
 
-    // Preset 4: LGP Showcase - Light Guide Plate effects
+    // Preset 4: LGP Duo - 2 zones tuned for LGP-style effects
     {
-        "LGP Showcase",
+        "LGP Duo",
         {
             .version = 2,
             .segments = {},
-            .zoneCount = 4,
+            .zoneCount = 2,
             .systemEnabled = false,
-            .zoneEffects = {10, 2, 8, 0},  // Interference, Plasma, Ripple, Fire
-            .zoneEnabled = {true, true, true, true},
-            .zoneBrightness = {255, 255, 255, 255},
-            .zoneSpeed = {20, 25, 30, 25},
+            .zoneEffects = {10, 2, 0, 0},
+            .zoneEnabled = {true, true, false, false},
+            .zoneBrightness = {255, 220, 255, 255},
+            .zoneSpeed = {20, 24, 25, 25},
             .zonePalette = {0, 0, 0, 0},
-            .zoneBlendMode = {0, 0, 0, 0},
+            .zoneBlendMode = {0, 1, 0, 0},
             .checksum = 0
         }
     }
@@ -251,12 +252,18 @@ bool ZoneConfigManager::loadFromNVS() {
         ZoneConfigData v2Config;
         v2Config.version = CONFIG_VERSION;
         v2Config.systemEnabled = v1Config.systemEnabled;
-        v2Config.zoneCount = (v1Config.layout == ZoneLayout::QUAD) ? 4 : 3;
-        
-        // Convert layout enum to segments
-        if (v1Config.layout == ZoneLayout::QUAD) {
+        // Convert old layout enum to zoneCount+segments (v2)
+        if (v1Config.layout == ZoneLayout::SINGLE) {
+            v2Config.zoneCount = 1;
+            memcpy(v2Config.segments, ZONE_1_CONFIG, sizeof(ZONE_1_CONFIG));
+        } else if (v1Config.layout == ZoneLayout::QUAD) {
+            v2Config.zoneCount = 4;
             memcpy(v2Config.segments, ZONE_4_CONFIG, sizeof(ZONE_4_CONFIG));
+        } else if (v1Config.layout == ZoneLayout::DUAL) {
+            v2Config.zoneCount = 2;
+            memcpy(v2Config.segments, ZONE_2_CONFIG, sizeof(ZONE_2_CONFIG));
         } else {
+            v2Config.zoneCount = 3;
             memcpy(v2Config.segments, ZONE_3_CONFIG, sizeof(ZONE_3_CONFIG));
         }
         
@@ -371,10 +378,16 @@ bool ZoneConfigManager::loadPreset(uint8_t presetId) {
     ZoneConfigData config = preset.config;
     
     // Set segments based on zoneCount
-    if (config.zoneCount == 4) {
+    if (config.zoneCount == 1) {
+        memcpy(config.segments, ZONE_1_CONFIG, sizeof(ZONE_1_CONFIG));
+    } else if (config.zoneCount == 2) {
+        memcpy(config.segments, ZONE_2_CONFIG, sizeof(ZONE_2_CONFIG));
+    } else if (config.zoneCount == 4) {
         memcpy(config.segments, ZONE_4_CONFIG, sizeof(ZONE_4_CONFIG));
     } else {
+        // Default/fallback
         memcpy(config.segments, ZONE_3_CONFIG, sizeof(ZONE_3_CONFIG));
+        config.zoneCount = 3;
     }
 
     // Validate preset config

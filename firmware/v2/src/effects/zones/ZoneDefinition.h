@@ -5,7 +5,7 @@
  * LightwaveOS v2 - Zone System
  *
  * All zones are symmetric around CENTER PAIR (LEDs 79/80), radiating outward.
- * Supports 3-zone and 4-zone configurations.
+ * Supports 1-zone, 2-zone, 3-zone and 4-zone configurations.
  */
 
 #pragma once
@@ -42,6 +42,40 @@ struct ZoneSegment {
     // s2LeftStart = s1LeftStart + 160, etc.
 
     uint8_t totalLeds;      // Total LEDs in this zone
+};
+
+// ==================== 1-Zone Configuration ====================
+
+/**
+ * 1-Zone Layout (Unified):
+ * Entire strip is one zone.
+ */
+constexpr ZoneSegment ZONE_1_CONFIG[1] = {
+    { .zoneId = 0,
+      .s1LeftStart = 0, .s1LeftEnd = 79,
+      .s1RightStart = 80, .s1RightEnd = 159,
+      .totalLeds = 160 }
+};
+
+// ==================== 2-Zone Configuration ====================
+
+/**
+ * 2-Zone Layout (Dual Split):
+ * Zone 0 = inner half (near centre), Zone 1 = outer half.
+ * Each zone is 40 LEDs per side (80 total).
+ */
+constexpr ZoneSegment ZONE_2_CONFIG[2] = {
+    // Zone 0: INNER (80 LEDs total)
+    { .zoneId = 0,
+      .s1LeftStart = 40, .s1LeftEnd = 79,
+      .s1RightStart = 80, .s1RightEnd = 119,
+      .totalLeds = 80 },
+
+    // Zone 1: OUTER (80 LEDs total)
+    { .zoneId = 1,
+      .s1LeftStart = 0, .s1LeftEnd = 39,
+      .s1RightStart = 120, .s1RightEnd = 159,
+      .totalLeds = 80 }
 };
 
 // ==================== 3-Zone Configuration ====================
@@ -123,8 +157,9 @@ constexpr ZoneSegment ZONE_4_CONFIG[4] = {
 
 enum class ZoneLayout : uint8_t {
     SINGLE = 1,     // All LEDs as one zone
-    TRIPLE = 3,     // 3 concentric zones (default)
-    QUAD = 4        // 4 equal zones
+    DUAL   = 2,     // 2 zones (inner/outer) (default)
+    TRIPLE = 3,     // 3 concentric zones
+    QUAD   = 4      // 4 equal zones
 };
 
 /**
@@ -134,16 +169,18 @@ enum class ZoneLayout : uint8_t {
  */
 inline const ZoneSegment* getZoneConfig(ZoneLayout layout) {
     switch (layout) {
+        case ZoneLayout::SINGLE: return ZONE_1_CONFIG;
+        case ZoneLayout::DUAL:   return ZONE_2_CONFIG;
         case ZoneLayout::TRIPLE: return ZONE_3_CONFIG;
         case ZoneLayout::QUAD:   return ZONE_4_CONFIG;
-        default:                 return ZONE_3_CONFIG;
+        default:                 return ZONE_2_CONFIG;
     }
 }
 
 /**
  * @brief Get zone count for a layout
  * @param layout The zone layout type
- * @return Number of zones (1, 3, or 4)
+ * @return Number of zones (1, 2, 3, or 4)
  */
 inline uint8_t getZoneCount(ZoneLayout layout) {
     return static_cast<uint8_t>(layout);

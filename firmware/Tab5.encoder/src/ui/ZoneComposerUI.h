@@ -254,8 +254,9 @@ private:
     uint8_t _zoneBrightness[4] = {128, 128, 128, 128};
 
     // Preset state
-    uint8_t _currentPresetIndex = 0;
-    const char* _presetName = "Unified";
+    // Pivot: default to 2-zone layout
+    uint8_t _currentPresetIndex = 1;
+    const char* _presetName = "Dual Split";
 
     // ========================================================================
     // LVGL Widget References (Phase 1)

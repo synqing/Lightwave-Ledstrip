@@ -67,10 +67,10 @@ void ZoneComposerUI::begin(lv_obj_t* parent) {
     markDirty();
     _lastRenderTime = 0;
 
-    // Initialize editing segments with default 3-zone layout
+    // Initialize editing segments with default 2-zone layout
     uint32_t t1 = millis();
     // Serial.printf("[ZC_TRACE] before generateZoneSegments @ %lu ms (delta=%lu)\n", t1, t1-t0);
-    generateZoneSegments(3);
+    generateZoneSegments(2);
     
     // Validate presets at boot (back-test against v2 firmware expectations)
     uint32_t t2 = millis();
@@ -100,8 +100,9 @@ void ZoneComposerUI::begin(lv_obj_t* parent) {
 }
 
 void ZoneComposerUI::validatePresets() {
-    // Test all presets to ensure they match v2 firmware expectations
-    for (int8_t presetId = 0; presetId <= 4; presetId++) {
+    // Test available presets to ensure they match v2 firmware expectations
+    // Pivot: only 1-zone (Unified) and 2-zone (Dual Split) are supported.
+    for (int8_t presetId = 0; presetId <= 1; presetId++) {
         loadPreset(presetId);
         uint8_t count = _editingZoneCount;
         if (!validateLayout(_editingSegments, count)) {
@@ -115,7 +116,7 @@ void ZoneComposerUI::validatePresets() {
     }
     
     // Restore default
-    generateZoneSegments(3);
+    generateZoneSegments(2);
 }
 
 void ZoneComposerUI::loop() {
@@ -491,49 +492,33 @@ void ZoneComposerUI::generateZoneSegments(uint8_t zoneCount) {
 }
 
 void ZoneComposerUI::loadPreset(int8_t presetId) {
-    if (presetId < 0 || presetId > 4) {
+    // Pivot: only 2 presets supported
+    // 0 = Unified (1 zone)
+    // 1 = Dual Split (2 zones, inner/outer)
+    if (presetId < 0 || presetId > 1) {
         return;
     }
-    
-    // Preset definitions (matching webapp and v2 firmware)
-    static const zones::ZoneSegment PRESET_0[3] = {  // Unified
-        {0, 65, 79, 80, 94, 30},
-        {1, 20, 64, 95, 139, 90},
-        {2, 0, 19, 140, 159, 40}
+
+    static const zones::ZoneSegment PRESET_0[1] = {  // Unified (1 zone)
+        {0, 0, 79, 80, 159, 160}
     };
-    static const zones::ZoneSegment PRESET_1[3] = {  // Dual Split (same as Unified)
-        {0, 65, 79, 80, 94, 30},
-        {1, 20, 64, 95, 139, 90},
-        {2, 0, 19, 140, 159, 40}
+
+    static const zones::ZoneSegment PRESET_1[2] = {  // Dual Split (2 zones)
+        // Zone 0: INNER (40 LEDs per side)
+        {0, 40, 79, 80, 119, 80},
+        // Zone 1: OUTER (40 LEDs per side)
+        {1, 0, 39, 120, 159, 80}
     };
-    static const zones::ZoneSegment PRESET_2[3] = {  // Triple Rings (same as Unified)
-        {0, 65, 79, 80, 94, 30},
-        {1, 20, 64, 95, 139, 90},
-        {2, 0, 19, 140, 159, 40}
-    };
-    static const zones::ZoneSegment PRESET_3[4] = {  // Quad Active
-        {0, 60, 79, 80, 99, 40},
-        {1, 40, 59, 100, 119, 40},
-        {2, 20, 39, 120, 139, 40},
-        {3, 0, 19, 140, 159, 40}
-    };
-    static const zones::ZoneSegment PRESET_4[3] = {  // Heartbeat Focus (same as Unified)
-        {0, 65, 79, 80, 94, 30},
-        {1, 20, 64, 95, 139, 90},
-        {2, 0, 19, 140, 159, 40}
-    };
-    
+
     const zones::ZoneSegment* preset = nullptr;
     uint8_t count = 0;
-    
+
     switch (presetId) {
-        case 0: preset = PRESET_0; count = 3; break;
-        case 1: preset = PRESET_1; count = 3; break;
-        case 2: preset = PRESET_2; count = 3; break;
-        case 3: preset = PRESET_3; count = 4; break;
-        case 4: preset = PRESET_4; count = 3; break;
+        case 0: preset = PRESET_0; count = 1; break;
+        case 1: preset = PRESET_1; count = 2; break;
+        default: break;
     }
-    
+
     if (preset) {
         for (uint8_t i = 0; i < count; i++) {
             _editingSegments[i] = preset[i];
@@ -929,13 +914,14 @@ void ZoneComposerUI::adjustZoneParameter(uint8_t zoneIndex, int32_t delta) {
 }
 
 void ZoneComposerUI::adjustZoneCount(int32_t delta) {
+    // Pivot: cap to 1–2 zones (2-zone default)
     int newCount = _zoneCount + delta;
-    if (newCount < 1) newCount = 4;  // Wrap to 4
-    if (newCount > 4) newCount = 1;  // Wrap to 1
+    if (newCount < 1) newCount = 2;  // Wrap to 2
+    if (newCount > 2) newCount = 1;  // Wrap to 1
     _zoneCount = newCount;
 
     // Generate new zone layout
-    generateZoneSegments(_zoneCount);
+    generateZoneSegments((uint8_t)_zoneCount);
 
     // Send WebSocket command to v2 firmware
     if (_wsClient && _wsClient->isConnected()) {
@@ -947,8 +933,9 @@ void ZoneComposerUI::adjustZoneCount(int32_t delta) {
 }
 
 void ZoneComposerUI::adjustPreset(int32_t delta) {
-    const char* presets[] = {"Unified", "Dual Split", "Triple Rings", "Quad Active", "Heartbeat Focus"};
-    const int presetCount = 5;
+    // Pivot: only 2 presets (1-zone + 2-zone)
+    const char* presets[] = {"Unified", "Dual Split"};
+    const int presetCount = 2;
 
     int newIndex = _currentPresetIndex + delta;
     if (newIndex < 0) newIndex = presetCount - 1;  // Wrap to end

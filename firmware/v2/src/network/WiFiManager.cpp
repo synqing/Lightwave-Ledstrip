@@ -19,6 +19,7 @@
 
 #include <esp_wifi.h>
 #include "../config/network_config.h"
+#include "../core/system/OtaSessionLock.h"
 
 #define LW_LOG_TAG "WiFi"
 #include "utils/Log.h"
@@ -439,6 +440,19 @@ void WiFiManager::handleStateFailed() {
 void WiFiManager::handleStateAPMode() {
     static uint32_t lastStatusPrint = 0;
     static uint32_t lastRetryTime = 0;
+
+    // Guard: Do NOT attempt STA retry while an OTA upload is in progress.
+    // Switching to STA mode tears down the AP, which disconnects the client
+    // mid-upload and bricks the update. Uses the unified cross-transport
+    // OtaSessionLock which is thread-safe (spinlock-guarded).
+    if (core::system::OtaSessionLock::isOtaInProgress()) {
+        // Still print status so operator knows why retry is suppressed
+        if (millis() - lastStatusPrint > 30000) {
+            lastStatusPrint = millis();
+            LW_LOGI("AP Mode - OTA in progress, STA retry suppressed");
+        }
+        return;
+    }
 
     // Print AP status periodically
     if (millis() - lastStatusPrint > 30000) {

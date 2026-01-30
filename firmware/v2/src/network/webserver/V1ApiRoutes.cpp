@@ -1222,6 +1222,21 @@ void V1ApiRoutes::registerRoutes(
         }
     );
 
+    // V1 API filesystem OTA update - POST /api/v1/firmware/filesystem
+    // Writes to U_SPIFFS partition (LittleFS image). Same auth as firmware OTA.
+    registry.onPost("/api/v1/firmware/filesystem",
+        [](AsyncWebServerRequest* request) {
+            // Request handler - called after upload completes
+            handlers::FirmwareHandlers::handleV1FsUpdate(request,
+                handlers::FirmwareHandlers::checkOTAToken);
+        },
+        [](AsyncWebServerRequest* request, const String& filename, size_t index,
+           uint8_t* data, size_t len, bool final) {
+            // Upload handler - processes filesystem image chunks
+            handlers::FirmwareHandlers::handleFsUpload(request, filename, index, data, len, final);
+        }
+    );
+
     // Legacy OTA update - POST /update
     // Simple text response format for curl compatibility
     registry.onPost("/update",
@@ -1234,6 +1249,26 @@ void V1ApiRoutes::registerRoutes(
            uint8_t* data, size_t len, bool final) {
             // Upload handler - processes firmware chunks
             handlers::FirmwareHandlers::handleUpload(request, filename, index, data, len, final);
+        }
+    );
+
+    // ==================== OTA Token Management Routes ====================
+
+    // GET /api/v1/device/ota-token - Retrieve current per-device OTA token
+    registry.onGet("/api/v1/device/ota-token", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::FirmwareHandlers::handleGetOtaToken(request);
+    });
+
+    // POST /api/v1/device/ota-token - Regenerate or set a new OTA token
+    registry.onPost("/api/v1/device/ota-token",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::FirmwareHandlers::handleSetOtaToken(request, data, len);
         }
     );
 

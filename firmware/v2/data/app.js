@@ -141,6 +141,12 @@ const state = {
     // Plugin state
     plugins: null,  // { registeredCount, loadedFromLittleFS, overrideModeEnabled, lastReloadOk, lastReloadMillis, errorCount, lastErrorSummary }
 
+    // OTA state
+    otaFile: null,        // Selected File object
+    otaUploading: false,  // Upload in progress
+    otaTransport: null,   // 'rest' or 'ws' (auto-detected)
+    otaTarget: 'firmware', // 'firmware' or 'filesystem'
+
     // Beat tracking
     currentBpm: 0,
     bpmConfidence: 0,
@@ -166,6 +172,14 @@ const state = {
 
 // DOM Element References (cached on init)
 const elements = {};
+
+// ─────────────────────────────────────────────────────────────
+// API Host Resolution
+// ─────────────────────────────────────────────────────────────
+
+function getApiHost() {
+    return state.deviceHost || window.location.host || 'lightwaveos.local';
+}
 
 // ─────────────────────────────────────────────────────────────
 // WebSocket Connection
@@ -231,6 +245,8 @@ function connect() {
             fetchEffectsList();
             // Fetch plugin stats
             fetchPluginStats();
+            // Check firmware version
+            otaCheckVersion();
         }, 100);
     };
 
@@ -384,8 +400,19 @@ function handleBeatEvent(msg) {
 // ─────────────────────────────────────────────────────────────
 
 function handleMessage(msg) {
+    // Route OTA messages to dedicated handler
+    if (msg.type && msg.type.startsWith('ota.')) {
+        otaHandleMessage(msg);
+        return;
+    }
+
     // Handle WebSocket error envelopes
     if (msg.type === 'error' && msg.error) {
+        // Route errors to OTA handler if upload is in progress
+        if (state.otaUploading) {
+            otaHandleMessage(msg);
+            return;
+        }
         const errorCode = msg.error.code || 'UNKNOWN';
         const errorMsg = msg.error.message || 'Unknown error';
         log(`[WS] ERROR: ${errorCode} - ${errorMsg}`);
@@ -741,7 +768,7 @@ function setEffect(effectId) {
         state.pendingEffectChange = setTimeout(() => { state.pendingEffectChange = null; }, 1000);
         
         // REST API
-        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/effects/set`, {
+        fetchWithRetry(`http://${getApiHost()}/api/v1/effects/set`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ effectId: effectId })
@@ -777,7 +804,7 @@ function setPalette(paletteId) {
         state.pendingPaletteChange = setTimeout(() => { state.pendingPaletteChange = null; }, 1000);
         
         // REST API
-        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/palettes/set`, {
+        fetchWithRetry(`http://${getApiHost()}/api/v1/palettes/set`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ paletteId: paletteId })
@@ -821,7 +848,7 @@ function nextPattern() {
         state.pendingEffectChange = setTimeout(() => { state.pendingEffectChange = null; }, 1000);
         
         // REST API only - removed duplicate WebSocket send
-        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/effects/set`, {
+        fetchWithRetry(`http://${getApiHost()}/api/v1/effects/set`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ effectId: nextId })
@@ -869,7 +896,7 @@ function prevPattern() {
         state.pendingEffectChange = setTimeout(() => { state.pendingEffectChange = null; }, 1000);
         
         // REST API only - removed duplicate WebSocket send
-        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/effects/set`, {
+        fetchWithRetry(`http://${getApiHost()}/api/v1/effects/set`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ effectId: prevId })
@@ -904,7 +931,7 @@ function nextPalette() {
         state.pendingPaletteChange = setTimeout(() => { state.pendingPaletteChange = null; }, 1000);
         
         // REST API only - removed duplicate WebSocket send
-        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/palettes/set`, {
+        fetchWithRetry(`http://${getApiHost()}/api/v1/palettes/set`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ paletteId: state.paletteId })
@@ -933,7 +960,7 @@ function prevPalette() {
         state.pendingPaletteChange = setTimeout(() => { state.pendingPaletteChange = null; }, 1000);
         
         // REST API only - removed duplicate WebSocket send
-        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/palettes/set`, {
+        fetchWithRetry(`http://${getApiHost()}/api/v1/palettes/set`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ paletteId: state.paletteId })
@@ -973,7 +1000,7 @@ function onBrightnessChange() {
             }
             
             // REST API backup
-            fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/parameters`, {
+            fetchWithRetry(`http://${getApiHost()}/api/v1/parameters`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ brightness: newVal })
@@ -1012,7 +1039,7 @@ function onSpeedChange() {
             }
             
             // REST API backup
-            fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/parameters`, {
+            fetchWithRetry(`http://${getApiHost()}/api/v1/parameters`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ speed: newVal })
@@ -1051,7 +1078,7 @@ function onMoodChange() {
             }
 
             // REST API backup
-            fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/parameters`, {
+            fetchWithRetry(`http://${getApiHost()}/api/v1/parameters`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ mood: newVal })
@@ -1085,7 +1112,7 @@ function onFadeChange() {
 
         fadeUpdateTimer = setTimeout(() => {
             // REST API
-            fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/parameters`, {
+            fetchWithRetry(`http://${getApiHost()}/api/v1/parameters`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ fadeAmount: newVal })
@@ -1132,7 +1159,7 @@ function toggleZoneMode() {
         } else {
             log('[ZONE] WebSocket not connected, using REST API fallback');
             // REST API fallback
-            fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zones/enabled`, {
+            fetchWithRetry(`http://${getApiHost()}/api/v1/zones/enabled`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ enabled: newEnabled })
@@ -1219,7 +1246,7 @@ function onZoneSpeedChange(zoneId) {
             }
 
             // REST API backup (only if zones are enabled)
-            fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zones/${zoneId}/speed`, {
+            fetchWithRetry(`http://${getApiHost()}/api/v1/zones/${zoneId}/speed`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ speed: newVal })
@@ -1286,7 +1313,7 @@ function fetchZonesState() {
     }
 
     // REST API backup
-    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zones`, {
+    fetchWithRetry(`http://${getApiHost()}/api/v1/zones`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
     })
@@ -1319,7 +1346,7 @@ function fetchZonesState() {
 }
 
 function fetchCurrentParameters() {
-    const url = `http://${state.deviceHost || '192.168.0.16'}/api/v1/parameters`;
+    const url = `http://${getApiHost()}/api/v1/parameters`;
     fetchWithRetry(url)
         .then(data => {
             if (data && data.success && data.data) {
@@ -1737,7 +1764,7 @@ function setZonePalette(zoneId, paletteId) {
         log(`[WS] Zone ${zoneId} palette: ${paletteId}`);
     } else {
         // REST fallback
-        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zones/${zoneId}/palette`, {
+        fetchWithRetry(`http://${getApiHost()}/api/v1/zones/${zoneId}/palette`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ paletteId })
@@ -1761,7 +1788,7 @@ function setZoneEffect(zoneId, effectId) {
         log(`[WS] Zone ${zoneId} effect: ${effectId}`);
     } else {
         // REST fallback
-        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zones/${zoneId}/effect`, {
+        fetchWithRetry(`http://${getApiHost()}/api/v1/zones/${zoneId}/effect`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ effectId })
@@ -1785,7 +1812,7 @@ function setZoneBlend(zoneId, blendMode) {
         log(`[WS] Zone ${zoneId} blend: ${blendMode}`);
     } else {
         // REST fallback
-        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zones/${zoneId}/blend`, {
+        fetchWithRetry(`http://${getApiHost()}/api/v1/zones/${zoneId}/blend`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ blendMode })
@@ -2127,7 +2154,7 @@ function applyZoneLayout() {
         log(`[ZONE EDITOR] Sent via WebSocket`);
     } else {
         // REST API fallback
-        fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zones/layout`, {
+        fetchWithRetry(`http://${getApiHost()}/api/v1/zones/layout`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ zones: state.zoneEditorSegments })
@@ -2276,11 +2303,27 @@ async function discoverDevice() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Dropdown Error Recovery
+// ─────────────────────────────────────────────────────────────
+
+function showDropdownError(selectId, message, retryFn) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    select.innerHTML = `<option value="">${message}</option>`;
+    const handler = () => {
+        select.removeEventListener('mousedown', handler);
+        select.innerHTML = '<option value="">Loading...</option>';
+        retryFn();
+    };
+    select.addEventListener('mousedown', handler);
+}
+
+// ─────────────────────────────────────────────────────────────
 // Palette and Effect Lists (for dropdowns)
 // ─────────────────────────────────────────────────────────────
 
 function fetchPalettesList() {
-    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/palettes?limit=75`, {
+    fetchWithRetry(`http://${getApiHost()}/api/v1/palettes?limit=75`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
     })
@@ -2293,11 +2336,12 @@ function fetchPalettesList() {
     })
     .catch(e => {
         log(`[REST] ❌ Error fetching palettes: ${e.message}`);
+        showDropdownError('paletteSelect', 'Load failed — tap to retry', fetchPalettesList);
     });
 }
 
 function fetchEffectsList() {
-    fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/effects`, {
+    fetchWithRetry(`http://${getApiHost()}/api/v1/effects?limit=150`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
     })
@@ -2311,6 +2355,7 @@ function fetchEffectsList() {
     })
     .catch(e => {
         log(`[REST] ❌ Error fetching effects: ${e.message}`);
+        showDropdownError('patternSelect', 'Load failed — tap to retry', fetchEffectsList);
     });
 }
 
@@ -2357,6 +2402,451 @@ function populatePalettesDropdown() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// MD5 Hash (RFC 1321) - compact implementation for OTA verification
+// ─────────────────────────────────────────────────────────────
+
+function computeMD5(uint8Array) {
+    // Pre-computed sine table (Math.abs(Math.sin(i+1)) * 2^32, truncated)
+    const K = new Uint32Array([
+        0xd76aa478,0xe8c7b756,0x242070db,0xc1bdceee,0xf57c0faf,0x4787c62a,0xa8304613,0xfd469501,
+        0x698098d8,0x8b44f7af,0xffff5bb1,0x895cd7be,0x6b901122,0xfd987193,0xa679438e,0x49b40821,
+        0xf61e2562,0xc040b340,0x265e5a51,0xe9b6c7aa,0xd62f105d,0x02441453,0xd8a1e681,0xe7d3fbc8,
+        0x21e1cde6,0xc33707d6,0xf4d50d87,0x455a14ed,0xa9e3e905,0xfcefa3f8,0x676f02d9,0x8d2a4c8a,
+        0xfffa3942,0x8771f681,0x6d9d6122,0xfde5380c,0xa4beea44,0x4bdecfa9,0xf6bb4b60,0xbebfbc70,
+        0x289b7ec6,0xeaa127fa,0xd4ef3085,0x04881d05,0xd9d4d039,0xe6db99e5,0x1fa27cf8,0xc4ac5665,
+        0xf4292244,0x432aff97,0xab9423a7,0xfc93a039,0x655b59c3,0x8f0ccc92,0xffeff47d,0x85845dd1,
+        0x6fa87e4f,0xfe2ce6e0,0xa3014314,0x4e0811a1,0xf7537e82,0xbd3af235,0x2ad7d2bb,0xeb86d391
+    ]);
+    const S = [7,12,17,22,7,12,17,22,7,12,17,22,7,12,17,22,
+               5,9,14,20,5,9,14,20,5,9,14,20,5,9,14,20,
+               4,11,16,23,4,11,16,23,4,11,16,23,4,11,16,23,
+               6,10,15,21,6,10,15,21,6,10,15,21,6,10,15,21];
+
+    // Pre-processing: pad message to 64-byte boundary
+    const origLen = uint8Array.length;
+    const bitLen = origLen * 8;
+    // Padding: 1 byte (0x80) + zeros + 8 bytes length
+    const padLen = (56 - (origLen + 1) % 64 + 64) % 64;
+    const totalLen = origLen + 1 + padLen + 8;
+    const msg = new Uint8Array(totalLen);
+    msg.set(uint8Array);
+    msg[origLen] = 0x80;
+    // Append original length in bits as 64-bit little-endian
+    const view = new DataView(msg.buffer);
+    view.setUint32(totalLen - 8, bitLen >>> 0, true);
+    view.setUint32(totalLen - 4, Math.floor(bitLen / 0x100000000) >>> 0, true);
+
+    // Initialize hash
+    let a0 = 0x67452301 >>> 0;
+    let b0 = 0xefcdab89 >>> 0;
+    let c0 = 0x98badcfe >>> 0;
+    let d0 = 0x10325476 >>> 0;
+
+    const M = new Uint32Array(16);
+
+    // Process each 64-byte block
+    for (let off = 0; off < totalLen; off += 64) {
+        // Decode block into 16 x 32-bit words (little-endian)
+        for (let j = 0; j < 16; j++) {
+            M[j] = view.getUint32(off + j * 4, true);
+        }
+
+        let A = a0, B = b0, C = c0, D = d0;
+
+        for (let i = 0; i < 64; i++) {
+            let F, g;
+            if (i < 16) {
+                F = (B & C) | ((~B) & D);
+                g = i;
+            } else if (i < 32) {
+                F = (D & B) | ((~D) & C);
+                g = (5 * i + 1) % 16;
+            } else if (i < 48) {
+                F = B ^ C ^ D;
+                g = (3 * i + 5) % 16;
+            } else {
+                F = C ^ (B | (~D));
+                g = (7 * i) % 16;
+            }
+            F = (F + A + K[i] + M[g]) >>> 0;
+            A = D;
+            D = C;
+            C = B;
+            const rot = S[i];
+            B = (B + (((F << rot) | (F >>> (32 - rot))) >>> 0)) >>> 0;
+        }
+
+        a0 = (a0 + A) >>> 0;
+        b0 = (b0 + B) >>> 0;
+        c0 = (c0 + C) >>> 0;
+        d0 = (d0 + D) >>> 0;
+    }
+
+    // Output as 32-char hex string (little-endian bytes)
+    function toLEHex(val) {
+        let s = '';
+        for (let i = 0; i < 4; i++) {
+            s += ((val >> (i * 8)) & 0xff).toString(16).padStart(2, '0');
+        }
+        return s;
+    }
+    return toLEHex(a0) + toLEHex(b0) + toLEHex(c0) + toLEHex(d0);
+}
+
+// ─────────────────────────────────────────────────────────────
+// OTA Firmware Update
+// ─────────────────────────────────────────────────────────────
+
+function otaCheckVersion() {
+    // Try REST first
+    const host = state.deviceHost || window.location.hostname || 'lightwaveos.local';
+    fetch(`http://${host}/api/v1/firmware/version`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.success && data.data) {
+                elements.fwVersion.textContent = `v${data.data.version} (${data.data.platform})`;
+                // Also check free space via WebSocket
+                if (state.connected) {
+                    send({ type: 'ota.check' });
+                }
+            }
+        })
+        .catch(err => {
+            log('[OTA] Version check failed: ' + err.message);
+            // Fallback to WebSocket
+            if (state.connected) {
+                send({ type: 'ota.check' });
+            }
+        });
+}
+
+function otaSetStatus(msg, cls) {
+    elements.fwStatus.textContent = msg;
+    elements.fwStatus.className = 'value-secondary compact ' + (cls || '');
+}
+
+function otaSetProgress(percent) {
+    elements.fwProgressBar.style.width = percent + '%';
+    elements.fwProgressText.textContent = Math.round(percent) + '%';
+}
+
+function otaUploadREST(file, token) {
+    // REST multipart upload (primary transport)
+    const host = state.deviceHost || window.location.hostname || 'lightwaveos.local';
+    const formData = new FormData();
+    const fieldName = state.otaTarget === 'filesystem' ? 'filesystem' : 'firmware';
+    formData.append(fieldName, file, file.name);
+
+    const targetLabel = state.otaTarget === 'filesystem' ? 'Filesystem' : 'Firmware';
+    const endpoint = state.otaTarget === 'filesystem'
+        ? `/api/v1/firmware/filesystem`
+        : `/api/v1/firmware/update`;
+
+    const xhr = new XMLHttpRequest();
+
+    xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+            otaSetProgress((e.loaded / e.total) * 100);
+            otaSetStatus(`Uploading ${targetLabel}... ${Math.round(e.loaded / 1024)}KB / ${Math.round(e.total / 1024)}KB`);
+        }
+    };
+
+    xhr.onload = () => {
+        try {
+            const resp = JSON.parse(xhr.responseText);
+            if (xhr.status === 200 && resp.success) {
+                elements.fwProgressBar.classList.add('complete');
+                otaSetProgress(100);
+                otaSetStatus(`${targetLabel} updated! Rebooting...`, 'success');
+                state.otaUploading = false;
+                elements.fwUploadBtn.disabled = false;
+                // Device will reboot, try reconnecting after delay
+                setTimeout(() => {
+                    otaSetStatus('Reconnecting...', 'warning');
+                    if (state.ws) { state.ws.close(); state.ws = null; }
+                    setTimeout(connect, 3000);
+                }, 3000);
+            } else if (resp.error && resp.error.code === 'NOT_IMPLEMENTED') {
+                // REST not implemented, fall back to WebSocket
+                log('[OTA] REST not available, falling back to WebSocket');
+                otaUploadWS(file);
+            } else {
+                elements.fwProgressBar.classList.add('error');
+                otaSetStatus('Upload failed: ' + (resp.error?.message || 'Unknown error'), 'error');
+                state.otaUploading = false;
+                elements.fwUploadBtn.disabled = false;
+            }
+        } catch (e) {
+            // Could be REST not implemented (non-JSON response), fall back to WS
+            log('[OTA] REST response parse failed, falling back to WebSocket');
+            otaUploadWS(file);
+        }
+    };
+
+    xhr.onerror = () => {
+        log('[OTA] REST upload failed, falling back to WebSocket');
+        otaUploadWS(file);
+    };
+
+    xhr.open('POST', `http://${host}${endpoint}`);
+    if (token) {
+        xhr.setRequestHeader('X-OTA-Token', token);
+    }
+    if (state._otaMD5) {
+        xhr.setRequestHeader('X-OTA-MD5', state._otaMD5);
+    }
+    xhr.send(formData);
+}
+
+function otaUploadWS(file) {
+    // WebSocket chunked upload (fallback transport)
+    if (!state.connected || !state.ws) {
+        otaSetStatus('WebSocket not connected', 'error');
+        state.otaUploading = false;
+        elements.fwUploadBtn.disabled = false;
+        return;
+    }
+
+    state.otaTransport = 'ws';
+    otaSetStatus('Starting WebSocket OTA...', '');
+    otaSetProgress(0);
+
+    const CHUNK_SIZE = 4096; // bytes per chunk before base64
+    const reader = new FileReader();
+
+    reader.onload = () => {
+        const firmware = new Uint8Array(reader.result);
+        const totalSize = firmware.length;
+
+        // Compute MD5 if not already done (fallback from REST path already has it)
+        if (!state._otaMD5) {
+            state._otaMD5 = computeMD5(firmware);
+            log('[OTA] MD5: ' + state._otaMD5);
+        }
+
+        // Send ota.begin with MD5 hash, auth token, and target for server-side verification
+        const beginMsg = { type: 'ota.begin', size: totalSize };
+        if (state._otaMD5) {
+            beginMsg.md5 = state._otaMD5;
+        }
+        if (state._otaToken) {
+            beginMsg.token = state._otaToken;
+        }
+        if (state.otaTarget === 'filesystem') {
+            beginMsg.target = 'filesystem';
+        }
+        send(beginMsg);
+
+        // Wait for ota.ready response, then send chunks
+        // The message handler in onmessage will drive chunk sending
+        state._otaFirmware = firmware;
+        state._otaOffset = 0;
+        state._otaChunkSize = CHUNK_SIZE;
+        state._otaTotalSize = totalSize;
+    };
+
+    reader.onerror = () => {
+        otaSetStatus('Failed to read firmware file', 'error');
+        state.otaUploading = false;
+        elements.fwUploadBtn.disabled = false;
+    };
+
+    reader.readAsArrayBuffer(file);
+}
+
+function otaSendNextChunk() {
+    if (!state._otaFirmware || !state.otaUploading) return;
+
+    const offset = state._otaOffset;
+    const total = state._otaTotalSize;
+    const chunkSize = state._otaChunkSize;
+    const end = Math.min(offset + chunkSize, total);
+    const chunk = state._otaFirmware.slice(offset, end);
+
+    // Convert to base64
+    let binary = '';
+    for (let i = 0; i < chunk.length; i++) {
+        binary += String.fromCharCode(chunk[i]);
+    }
+    const base64 = btoa(binary);
+
+    send({ type: 'ota.chunk', offset: offset, data: base64 });
+    state._otaOffset = end;
+}
+
+function otaHandleMessage(msg) {
+    // Handle OTA-related WebSocket responses
+    switch (msg.type) {
+        case 'ota.status':
+            if (msg.data) {
+                elements.fwVersion.textContent = `v${msg.data.version || '?'}`;
+                if (msg.data.freeSpace) {
+                    elements.fwSpace.textContent = `Free: ${Math.round(msg.data.freeSpace / 1024)}KB`;
+                }
+            }
+            break;
+
+        case 'ota.ready':
+            // Server accepted, start sending chunks
+            log('[OTA] Server ready, sending chunks...');
+            otaSetStatus('Uploading via WebSocket...', '');
+            otaSendNextChunk();
+            break;
+
+        case 'ota.progress':
+            if (msg.data) {
+                otaSetProgress(msg.data.percent || 0);
+                otaSetStatus(`Uploading... ${msg.data.percent || 0}%`);
+                // Send next chunk
+                if (state._otaOffset < state._otaTotalSize) {
+                    otaSendNextChunk();
+                } else {
+                    // All chunks sent, verify
+                    log('[OTA] All chunks sent, verifying...');
+                    otaSetStatus('Verifying firmware...', '');
+                    const verifyMsg = { type: 'ota.verify' };
+                    if (state._otaMD5) {
+                        verifyMsg.md5 = state._otaMD5;
+                    }
+                    send(verifyMsg);
+                }
+            }
+            break;
+
+        case 'ota.complete': {
+            const doneLabel = state.otaTarget === 'filesystem' ? 'Filesystem' : 'Firmware';
+            elements.fwProgressBar.classList.add('complete');
+            otaSetProgress(100);
+            otaSetStatus(`${doneLabel} updated! Rebooting...`, 'success');
+            state.otaUploading = false;
+            elements.fwUploadBtn.disabled = false;
+            state._otaFirmware = null;
+            state._otaMD5 = null;
+            // Reconnect after reboot
+            setTimeout(() => {
+                otaSetStatus('Reconnecting...', 'warning');
+                if (state.ws) { state.ws.close(); state.ws = null; }
+                setTimeout(connect, 3000);
+            }, 3000);
+            break;
+        }
+
+        case 'ota.aborted':
+            otaSetStatus('Update aborted', 'warning');
+            state.otaUploading = false;
+            elements.fwUploadBtn.disabled = false;
+            state._otaFirmware = null;
+            state._otaMD5 = null;
+            break;
+
+        case 'error':
+            if (state.otaUploading) {
+                elements.fwProgressBar.classList.add('error');
+                otaSetStatus('Error: ' + (msg.error?.message || 'Unknown'), 'error');
+                state.otaUploading = false;
+                elements.fwUploadBtn.disabled = false;
+                state._otaFirmware = null;
+            state._otaMD5 = null;
+            }
+            break;
+    }
+}
+
+function otaStartUpload() {
+    if (!state.otaFile || state.otaUploading) return;
+
+    // Read upload target from dropdown
+    const targetSelect = document.getElementById('fwTargetSelect');
+    state.otaTarget = targetSelect ? targetSelect.value : 'firmware';
+    const targetLabel = state.otaTarget === 'filesystem' ? 'filesystem' : 'firmware';
+
+    state.otaUploading = true;
+    elements.fwUploadBtn.disabled = true;
+    elements.fwProgressArea.style.display = '';
+    elements.fwProgressBar.className = 'progress-bar'; // Reset classes
+    otaSetProgress(0);
+    otaSetStatus('Computing MD5 checksum...', '');
+
+    const token = elements.fwTokenInput ? elements.fwTokenInput.value.trim() : '';
+    state._otaToken = token;  // Store for WebSocket fallback path
+
+    // Read file to compute MD5 before upload
+    const reader = new FileReader();
+    reader.onload = () => {
+        const fileData = new Uint8Array(reader.result);
+        const md5 = computeMD5(fileData);
+        state._otaMD5 = md5;
+        log('[OTA] Target: ' + targetLabel + ', MD5: ' + md5);
+        otaSetStatus('Starting ' + targetLabel + ' upload...', '');
+
+        // Try REST first, falls back to WebSocket automatically
+        state.otaTransport = 'rest';
+        otaUploadREST(state.otaFile, token);
+    };
+    reader.onerror = () => {
+        otaSetStatus('Failed to read file', 'error');
+        state.otaUploading = false;
+        elements.fwUploadBtn.disabled = false;
+    };
+    reader.readAsArrayBuffer(state.otaFile);
+}
+
+function setupOtaHandlers() {
+    // File selection
+    elements.fwSelectBtn.addEventListener('click', () => {
+        elements.fwFileInput.click();
+    });
+
+    elements.fwFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            state.otaFile = file;
+            elements.fwFileName.style.display = '';
+            elements.fwFileName.textContent = `${file.name} (${Math.round(file.size / 1024)}KB)`;
+            elements.fwUploadBtn.disabled = false;
+            otaSetStatus('Ready to upload', '');
+            log('[OTA] File selected: ' + file.name + ' (' + file.size + ' bytes)');
+        }
+    });
+
+    // Upload button
+    elements.fwUploadBtn.addEventListener('click', otaStartUpload);
+
+    // Check version button
+    elements.fwCheckBtn.addEventListener('click', otaCheckVersion);
+
+    // Load Token button - fetches per-device OTA token from API
+    if (elements.fwShowTokenBtn) {
+        elements.fwShowTokenBtn.addEventListener('click', () => {
+            const host = state.deviceHost || window.location.hostname || 'lightwaveos.local';
+            const url = `http://${host}/api/v1/device/ota-token`;
+            elements.fwShowTokenBtn.disabled = true;
+            elements.fwShowTokenBtn.textContent = '...';
+            fetch(url)
+                .then(r => r.json())
+                .then(json => {
+                    if (json.success && json.data && json.data.token) {
+                        elements.fwTokenInput.value = json.data.token;
+                        log('[OTA] Token loaded from device (' + json.data.source + ')');
+                    } else {
+                        log('[OTA] Failed to load token: ' + (json.error?.message || 'Unknown error'));
+                    }
+                })
+                .catch(err => {
+                    log('[OTA] Token fetch error: ' + err.message);
+                })
+                .finally(() => {
+                    elements.fwShowTokenBtn.disabled = false;
+                    elements.fwShowTokenBtn.textContent = 'Load Token';
+                });
+        });
+    }
+
+    // Initial version check
+    setTimeout(otaCheckVersion, 2000);
+}
+
+// ─────────────────────────────────────────────────────────────
 // Initialization
 // ─────────────────────────────────────────────────────────────
 
@@ -2395,6 +2885,22 @@ function init() {
     elements.zone1SpeedValue = document.getElementById('zone1SpeedValue');
     elements.zone2SpeedSlider = document.getElementById('zone2SpeedSlider');
     elements.zone2SpeedValue = document.getElementById('zone2SpeedValue');
+
+    // OTA firmware update elements
+    elements.fwVersion = document.getElementById('fwVersion');
+    elements.fwSpace = document.getElementById('fwSpace');
+    elements.fwFileInput = document.getElementById('fwFileInput');
+    elements.fwSelectBtn = document.getElementById('fwSelectBtn');
+    elements.fwFileName = document.getElementById('fwFileName');
+    elements.fwTokenInput = document.getElementById('fwTokenInput');
+    elements.fwTokenRow = document.getElementById('fwTokenRow');
+    elements.fwShowTokenBtn = document.getElementById('fwShowTokenBtn');
+    elements.fwProgressArea = document.getElementById('fwProgressArea');
+    elements.fwProgressBar = document.getElementById('fwProgressBar');
+    elements.fwProgressText = document.getElementById('fwProgressText');
+    elements.fwUploadBtn = document.getElementById('fwUploadBtn');
+    elements.fwCheckBtn = document.getElementById('fwCheckBtn');
+    elements.fwStatus = document.getElementById('fwStatus');
 
     // Bind button events
     document.getElementById('patternPrev').addEventListener('click', prevPattern);
@@ -2496,13 +3002,22 @@ function init() {
         zoneApplyButton.addEventListener('click', applyZoneLayout);
     }
 
+    // Setup OTA firmware update handlers
+    if (elements.fwSelectBtn) {
+        setupOtaHandlers();
+    }
+
     // Check if we're running on the device or remotely
-    // Only hide config bar if we're actually ON the device (192.168.0.16 or lightwaveos.local)
-    const isOnDevice = window.location.hostname === 'lightwaveos.local' ||
-                       window.location.hostname === '192.168.0.16';
+    // Remote = opened as local file, localhost, or 127.0.0.1
+    const isRemote = !window.location.hostname ||
+                     window.location.hostname === 'localhost' ||
+                     window.location.hostname === '127.0.0.1' ||
+                     window.location.protocol === 'file:';
+    const isOnDevice = !isRemote;
 
     if (isOnDevice) {
-        // Running on device - hide config bar, auto-connect
+        // Running on device - set host from page origin, hide config bar, auto-connect
+        state.deviceHost = window.location.host;
         elements.configBar.classList.add('hidden');
         connect();
     } else {

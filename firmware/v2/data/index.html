@@ -38,10 +38,10 @@
 
     <!-- Main Controls -->
     <main class="controls-container">
-        <!-- Row 1: Pattern, Palette, and Zone Mode -->
+        <!-- Row 1: Pattern and Palette side-by-side -->
         <div class="controls-row">
             <!-- Pattern Card -->
-            <section class="control-card full-width">
+            <section class="control-card compact full-width">
                 <h2 class="card-header">Pattern</h2>
                 <select id="patternSelect" class="dropdown-select">
                     <option value="">Loading...</option>
@@ -60,7 +60,7 @@
             </section>
 
             <!-- Palette Card -->
-            <section class="control-card full-width">
+            <section class="control-card compact full-width">
                 <h2 class="card-header">Palette</h2>
                 <select id="paletteSelect" class="dropdown-select">
                     <option value="">Loading...</option>
@@ -72,34 +72,12 @@
                     <button class="control-btn compact" id="paletteNext" aria-label="Next palette">▶</button>
                 </div>
             </section>
-
-            <!-- Zone Mode Toggle -->
-            <section class="control-card full-width">
-                <h2 class="card-header">Zone Mode</h2>
-                <div class="value-display compact" id="zoneModeStatus">OFF</div>
-                <div class="value-secondary compact" id="zoneModeInfo">--</div>
-                <div class="button-row">
-                    <button class="control-btn compact" id="zoneModeToggle" aria-label="Toggle zone mode">Toggle</button>
-                </div>
-            </section>
-
-            <!-- Plugin Status (hidden by default, shown when plugin data available) -->
-            <section class="control-card full-width" id="pluginSection" style="display: none;">
-                <h2 class="card-header">Plugins</h2>
-                <div class="value-display compact" id="pluginEffectCount">--</div>
-                <div class="value-secondary compact" id="pluginModeStatus">--</div>
-                <div class="value-secondary compact" id="pluginReloadStatus" style="display: none;">--</div>
-                <div id="pluginErrorList" style="display: none; margin-top: var(--space-xs); padding: var(--space-xs); background: rgba(255, 77, 77, 0.1); border-radius: 4px; font-size: 0.7rem;"></div>
-                <div class="button-row">
-                    <button class="control-btn compact" id="pluginReloadBtn" aria-label="Reload plugins">Reload</button>
-                </div>
-            </section>
         </div>
 
         <!-- Row 2: Brightness and Speed sliders side-by-side -->
         <div class="controls-row">
             <!-- Brightness Slider -->
-            <section class="control-card full-width slider-card">
+            <section class="control-card compact full-width slider-card">
                 <h2 class="card-header">Brightness</h2>
                 <div class="slider-container">
                     <input type="range" id="brightnessSlider" min="0" max="255" value="128" class="slider" aria-label="Brightness">
@@ -108,7 +86,7 @@
             </section>
 
             <!-- Speed Slider -->
-            <section class="control-card full-width slider-card">
+            <section class="control-card compact full-width slider-card">
                 <h2 class="card-header">Speed</h2>
                 <div class="slider-container">
                     <input type="range" id="speedSlider" min="1" max="100" value="25" class="slider" aria-label="Speed">
@@ -120,7 +98,7 @@
         <!-- Row 3: Mood and Trail Fade sliders side-by-side -->
         <div class="controls-row">
             <!-- Mood Slider -->
-            <section class="control-card full-width slider-card">
+            <section class="control-card compact full-width slider-card">
                 <h2 class="card-header">Mood</h2>
                 <div class="slider-container">
                     <input type="range" id="moodSlider" min="0" max="255" value="128" class="slider" aria-label="Mood">
@@ -129,7 +107,7 @@
             </section>
 
             <!-- Trail Fade Slider -->
-            <section class="control-card full-width slider-card">
+            <section class="control-card compact full-width slider-card">
                 <h2 class="card-header">Trail Fade</h2>
                 <div class="slider-container">
                     <input type="range" id="fadeSlider" min="0" max="255" value="20" class="slider" aria-label="Trail Fade">
@@ -138,10 +116,22 @@
             </section>
         </div>
 
-        <!-- Row 4: Zone Speed Controls (only shown when zones enabled) -->
+        <!-- Row 4: Zone Mode Toggle (full width) -->
+        <div class="controls-row">
+            <section class="control-card compact full-width">
+                <h2 class="card-header">Zone Mode</h2>
+                <div class="value-display compact" id="zoneModeStatus">OFF</div>
+                <div class="value-secondary compact" id="zoneModeInfo">--</div>
+                <div class="button-row">
+                    <button class="control-btn compact" id="zoneModeToggle" aria-label="Toggle zone mode">Toggle</button>
+                </div>
+            </section>
+        </div>
+
+        <!-- Row 5: Zone Speed Controls (only shown when zones enabled) -->
         <div class="controls-row" id="zoneControlsRow" style="display: none;">
             <!-- Zone 0 Speed -->
-            <section class="control-card full-width slider-card">
+            <section class="control-card compact full-width slider-card">
                 <h2 class="card-header">Zone 0 Speed</h2>
                 <div class="slider-container">
                     <input type="range" id="zone0SpeedSlider" min="1" max="50" value="15" class="slider" aria-label="Zone 0 Speed">
@@ -149,7 +139,7 @@
                 </div>
             </section>
             <!-- Zone 1 Speed -->
-            <section class="control-card full-width slider-card">
+            <section class="control-card compact full-width slider-card">
                 <h2 class="card-header">Zone 1 Speed</h2>
                 <div class="slider-container">
                     <input type="range" id="zone1SpeedSlider" min="1" max="50" value="15" class="slider" aria-label="Zone 1 Speed">
@@ -157,7 +147,7 @@
                 </div>
             </section>
             <!-- Zone 2 Speed -->
-            <section class="control-card full-width slider-card">
+            <section class="control-card compact full-width slider-card">
                 <h2 class="card-header">Zone 2 Speed</h2>
                 <div class="slider-container">
                     <input type="range" id="zone2SpeedSlider" min="1" max="50" value="15" class="slider" aria-label="Zone 2 Speed">
@@ -230,6 +220,43 @@
 
                 <!-- Apply Button -->
                 <button id="zoneApplyButton" class="control-btn compact" style="width: 100%; margin-top: var(--space-md); background: var(--gold); color: var(--bg-base);" disabled>Apply Zone Layout</button>
+            </section>
+        </div>
+        <!-- Row 6: Firmware / Filesystem Update -->
+        <div class="controls-row">
+            <section class="control-card full-width" id="firmwareCard">
+                <h2 class="card-header">OTA Update</h2>
+                <div class="firmware-info">
+                    <div class="value-display compact" id="fwVersion">--</div>
+                    <div class="value-secondary compact" id="fwSpace">--</div>
+                </div>
+                <div style="margin-bottom: var(--space-sm);">
+                    <label class="value-secondary compact" style="display: block; margin-bottom: var(--space-xs);">Upload Target</label>
+                    <select id="fwTargetSelect" class="dropdown-select" style="font-size: 0.75rem;">
+                        <option value="firmware" selected>Firmware (.bin)</option>
+                        <option value="filesystem">Filesystem / Web Assets (.bin)</option>
+                    </select>
+                </div>
+                <div class="firmware-upload" id="fwUploadArea">
+                    <input type="file" id="fwFileInput" accept=".bin" style="display: none;">
+                    <button class="control-btn compact" id="fwSelectBtn">Select File (.bin)</button>
+                    <div class="value-secondary compact" id="fwFileName" style="display: none;">No file selected</div>
+                </div>
+                <div class="firmware-token" style="display: flex; align-items: center; gap: var(--space-xs);" id="fwTokenRow">
+                    <input type="text" id="fwTokenInput" placeholder="OTA Token" class="dropdown-select" style="font-size: 0.75rem; flex: 1;">
+                    <button class="control-btn compact" id="fwShowTokenBtn" style="font-size: 0.7rem; white-space: nowrap;">Load Token</button>
+                </div>
+                <div class="firmware-progress" id="fwProgressArea" style="display: none;">
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="fwProgressBar"></div>
+                    </div>
+                    <div class="value-secondary compact" id="fwProgressText">0%</div>
+                </div>
+                <div class="button-row">
+                    <button class="control-btn compact" id="fwUploadBtn" disabled>Upload</button>
+                    <button class="control-btn compact" id="fwCheckBtn">Check Version</button>
+                </div>
+                <div class="value-secondary compact" id="fwStatus" style="margin-top: var(--space-xs);"></div>
             </section>
         </div>
     </main>

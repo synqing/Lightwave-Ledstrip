@@ -1,4 +1,5 @@
 /* LightwaveOS Simple Controller - Design System */
+/* Unified with Dashboard V2 tokens for consistency */
 
 /* Prevent iOS Safari from autosising text unexpectedly */
 html {
@@ -12,45 +13,71 @@ body {
 }
 
 :root {
-    /* Primary accent */
-    --gold: #FFB84D;
-    --gold-dim: rgba(255, 184, 77, 0.3);
-    --gold-glow: rgba(255, 184, 77, 0.15);
+    /* =================================================================
+       ACCENT COLORS (V2-compatible naming)
+       ================================================================= */
+    /* Primary accent: Gold (warm, energetic) */
+    --accent-primary: #FFB84D;
+    --accent-primary-dim: rgba(255, 184, 77, 0.3);
+    --accent-primary-glow: rgba(255, 184, 77, 0.15);
 
-    /* Background layers */
+    /* Secondary accent: Cyan (cool, tech) - from Dashboard V2 */
+    --accent-secondary: #00d4ff;
+    --accent-secondary-dim: rgba(0, 212, 255, 0.3);
+    --accent-secondary-glow: rgba(0, 212, 255, 0.15);
+
+    /* Legacy aliases (backward compatibility) */
+    --gold: var(--accent-primary);
+    --gold-dim: var(--accent-primary-dim);
+    --gold-glow: var(--accent-primary-glow);
+
+    /* =================================================================
+       BACKGROUND LAYERS (identical to Dashboard V2)
+       ================================================================= */
     --bg-base: #0f1219;
     --bg-card: #1a1f2e;
     --bg-elevated: #252d3f;
+    --bg-elevated-hover: #2f3849;    /* V2 addition for hover states */
 
-    /* Text hierarchy */
+    /* =================================================================
+       TEXT HIERARCHY (expanded with V2 tertiary level)
+       ================================================================= */
     --text-primary: #e6e9ef;
-    --text-secondary: #8b95a5;
+    --text-secondary: #9ca3b0;       /* Adjusted to match V2 */
+    --text-tertiary: #6b7280;        /* V2 addition */
     --text-muted: #555555;
 
-    /* Status colors */
+    /* =================================================================
+       STATUS COLORS
+       ================================================================= */
     --success: #4DFFB8;
+    --warning: #f59e0b;              /* V2 addition */
     --error: #FF4D4D;
 
-    /* Typography */
+    /* =================================================================
+       TYPOGRAPHY
+       ================================================================= */
     --font-body: 'Inter', system-ui, -apple-system, sans-serif;
     --font-display: 'Space Grotesk', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', monospace;  /* V2 addition */
 
-    /* Spacing */
+    /* =================================================================
+       SPACING SCALE
+       ================================================================= */
     --space-xs: 4px;
     --space-sm: 8px;
     --space-md: 16px;
     --space-lg: 24px;
     --space-xl: 32px;
 
-    /* Touch targets */
+    /* =================================================================
+       INTERACTION
+       ================================================================= */
     --touch-min: 44px;
-
-    /* Borders */
     --border-subtle: rgba(255, 255, 255, 0.06);
     --border-default: rgba(255, 255, 255, 0.1);
-
-    /* Transitions */
     --transition-fast: 150ms ease;
+    --transition-medium: 250ms ease;  /* V2 addition */
 }
 
 /* Reset */
@@ -351,9 +378,8 @@ body {
 
 .control-btn.compact {
     min-height: 32px;
-    padding: 6px var(--space-sm);
-    font-size: 0.75rem;
-    line-height: 1.4;
+    padding: var(--space-xs) var(--space-sm);
+    font-size: 0.875rem;
     border-radius: 8px;
     text-transform: none;
     letter-spacing: 0;
@@ -398,6 +424,7 @@ select.control-btn {
 
 select.control-btn:focus {
     outline: 2px solid var(--gold);
+    outline-offset: 2px;
 }
 
 /* Dropdown select for pattern and palette */
@@ -463,6 +490,40 @@ select.control-btn:focus {
     align-items: center;
 }
 
+/* Slider with labels (Reactive/Smooth for mood) */
+.slider-container.with-labels {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--space-sm);
+}
+
+.slider-container.with-labels .slider {
+    flex: 1;
+    min-width: 60%;
+}
+
+.slider-label-left,
+.slider-label-right {
+    font-family: var(--font-display);
+    font-size: 0.625rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+}
+
+.slider-container.with-labels .slider-value {
+    width: 100%;
+    text-align: center;
+}
+
+/* Full-width card variant */
+.control-card.full-width {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
 .slider {
     width: 100%;
     height: 6px;
@@ -504,45 +565,6 @@ select.control-btn:focus {
     font-variant-numeric: tabular-nums;
     min-width: 2.5rem;
     text-align: center;
-}
-
-/* Slider with labels (e.g., Mood: Reactive <--> Smooth) */
-.slider-container {
-    position: relative;
-}
-
-.slider-label-left,
-.slider-label-right {
-    font-family: var(--font-display);
-    font-size: 0.625rem;
-    font-weight: 500;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    white-space: nowrap;
-}
-
-.slider-label-left {
-    position: absolute;
-    left: 0;
-    top: -1.25rem;
-}
-
-.slider-label-right {
-    position: absolute;
-    right: 0;
-    top: -1.25rem;
-}
-
-/* Full-width card (spans entire row) */
-.control-card.full-width {
-    flex: 1 1 auto;
-    min-width: 0;
-}
-
-/* Adjust mood slider container for labels */
-.slider-card.full-width .slider-container {
-    padding-top: 1.5rem;
 }
 
 /* Mobile Responsive (iPhone 13 and smaller) */
@@ -739,6 +761,48 @@ select.control-btn:focus {
         padding: var(--space-xs);
     }
 }
+
+/* Firmware Update Section */
+.firmware-info {
+    margin-bottom: var(--space-sm);
+}
+
+.firmware-upload {
+    margin-bottom: var(--space-sm);
+}
+
+.progress-bar-container {
+    width: 100%;
+    height: 8px;
+    background: var(--bg-elevated);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: var(--space-xs);
+}
+
+.progress-bar {
+    height: 100%;
+    width: 0%;
+    background: var(--accent-primary);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.progress-bar.complete {
+    background: var(--success);
+}
+
+.progress-bar.error {
+    background: var(--error);
+}
+
+#fwStatus {
+    min-height: 1.2em;
+}
+
+#fwStatus.success { color: var(--success); }
+#fwStatus.error { color: var(--error); }
+#fwStatus.warning { color: var(--warning); }
 
 /* Safe area support for notched devices */
 @supports (padding-top: env(safe-area-inset-top)) {

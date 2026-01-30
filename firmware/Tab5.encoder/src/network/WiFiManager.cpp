@@ -195,7 +195,7 @@ bool WiFiManager::resolveMDNS(const char* hostname) {
     // Query mDNS for the hostname (direct IDF API to avoid noisy warnings)
     esp_ip4_addr_t addr;
     addr.addr = 0;
-    esp_err_t err = mdns_query_a(hostname, 2000, &addr);
+    esp_err_t err = mdns_query_a(hostname, 500, &addr);
 
     if (err == ESP_OK && addr.addr != 0) {
         _resolvedIP = IPAddress(addr.addr);

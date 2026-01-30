@@ -369,6 +369,7 @@ inline void DualEncoderService::update() {
 
     // Poll Unit A encoders (indices 0-7)
     if (_transportA.isAvailable()) {
+        const uint32_t _dbg_t0 = millis();
         for (uint8_t localIdx = 0; localIdx < ENCODERS_PER_UNIT; localIdx++) {
             uint8_t globalIdx = localIdx;  // 0-7
 
@@ -380,10 +381,27 @@ inline void DualEncoderService::update() {
             bool isPressed = _transportA.getKeyPressed(localIdx);
             processButton(globalIdx, isPressed, now);
         }
+        const uint32_t _dbg_dt = millis() - _dbg_t0;
+        // #region agent log (DISABLED)
+        static uint32_t s_lastI2CSlowMs = 0;
+        const uint32_t _dbg_now = millis();
+        if (false) {
+            if (_dbg_dt > 250 && (_dbg_now - s_lastI2CSlowMs) > 500) {
+                s_lastI2CSlowMs = _dbg_now;
+                Serial.printf(
+                    "{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\",\"location\":\"Tab5.encoder/src/input/DualEncoderService.h:update\",\"message\":\"i2c.poll.slow\",\"data\":{\"unit\":\"A\",\"dtMs\":%lu,\"timeoutMs\":%u},\"timestamp\":%lu}\n",
+                    (unsigned long)_dbg_dt,
+                    (unsigned)I2C::TIMEOUT_MS,
+                    (unsigned long)_dbg_now
+                );
+            }
+        }
+        // #endregion
     }
 
     // Poll Unit B encoders (indices 8-15)
     if (_transportB.isAvailable()) {
+        const uint32_t _dbg_t0 = millis();
         for (uint8_t localIdx = 0; localIdx < ENCODERS_PER_UNIT; localIdx++) {
             uint8_t globalIdx = localIdx + ENCODERS_PER_UNIT;  // 8-15
 
@@ -395,6 +413,22 @@ inline void DualEncoderService::update() {
             bool isPressed = _transportB.getKeyPressed(localIdx);
             processButton(globalIdx, isPressed, now);
         }
+        const uint32_t _dbg_dt = millis() - _dbg_t0;
+        // #region agent log (DISABLED)
+        static uint32_t s_lastI2CSlowMs = 0;
+        const uint32_t _dbg_now = millis();
+        if (false) {
+            if (_dbg_dt > 250 && (_dbg_now - s_lastI2CSlowMs) > 500) {
+                s_lastI2CSlowMs = _dbg_now;
+                Serial.printf(
+                    "{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\",\"location\":\"Tab5.encoder/src/input/DualEncoderService.h:update\",\"message\":\"i2c.poll.slow\",\"data\":{\"unit\":\"B\",\"dtMs\":%lu,\"timeoutMs\":%u},\"timestamp\":%lu}\n",
+                    (unsigned long)_dbg_dt,
+                    (unsigned)I2C::TIMEOUT_MS,
+                    (unsigned long)_dbg_now
+                );
+            }
+        }
+        // #endregion
     }
 
     // Update LED flash states for all 16 encoders

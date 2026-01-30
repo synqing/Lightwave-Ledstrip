@@ -128,6 +128,16 @@ namespace NetworkNVS {
     constexpr const char* KEY_USE_MANUAL_IP = "use_manual";
 }
 
+// NVS namespace and keys for device registry
+namespace DeviceNVS {
+    constexpr const char* NAMESPACE = "tab5dev";
+    constexpr const char* KEY_COUNT = "dev_count";
+    constexpr const char* KEY_SELECTED = "dev_sel";
+    constexpr uint8_t MAX_SAVED_DEVICES = 8;
+    constexpr uint32_t FINGERPRINT_TIMEOUT_MS = 2000;
+    constexpr uint32_t FINGERPRINT_STAGGER_MS = 200;
+}
+
 // OTA Update Configuration
 // SECURITY: Change this token in production deployments!
 #ifndef OTA_UPDATE_TOKEN

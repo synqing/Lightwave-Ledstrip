@@ -57,8 +57,8 @@ namespace I2C {
     // The M5ROTATE8 library supports up to 400kHz, but we start safe
     constexpr uint32_t FREQ_HZ = 100000;
 
-    // I2C timeout (ms) - larger than default 50ms for robustness
-    constexpr uint16_t TIMEOUT_MS = 200;
+    // I2C timeout (ms) - kept low so 32 transactions/loop stay under WDT (5s)
+    constexpr uint16_t TIMEOUT_MS = 50;
 }
 
 // Parameter Indices (matches PARAMETER_TABLE and physical encoder layout)

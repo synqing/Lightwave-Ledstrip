@@ -31,6 +31,7 @@
 #ifndef SIMULATOR_BUILD
 class ZoneComposerUI;
 class ConnectivityTab;
+class DeviceSelectorTab;
 class PresetManager;
 #endif
 class UIHeader;
@@ -39,9 +40,10 @@ class UIHeader;
  * UI screen types
  */
 enum class UIScreen : uint8_t {
-    GLOBAL = 0,        // Default: 16-parameter gauge view
-    ZONE_COMPOSER = 1, // Zone composer dashboard
-    CONNECTIVITY = 2   // Network connectivity management
+    GLOBAL = 0,           // Default: 16-parameter gauge view
+    ZONE_COMPOSER = 1,    // Zone composer dashboard
+    CONNECTIVITY = 2,     // Network connectivity management
+    DEVICE_SELECTOR = 3   // Multi-device selection
 };
 
 #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
@@ -83,9 +85,11 @@ public:
     #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL)
     ZoneComposerUI* getZoneComposerUI() { return _zoneComposer; }
     ConnectivityTab* getConnectivityTab() { return _connectivityTab; }
+    DeviceSelectorTab* getDeviceSelectorTab() { return _deviceSelectorTab; }
     #else
     ZoneComposerUI* getZoneComposerUI() { return _zoneComposer; }
     ConnectivityTab* getConnectivityTab() { return _connectivityTab; }
+    DeviceSelectorTab* getDeviceSelectorTab() { return nullptr; }
     #endif
     #endif
     
@@ -128,6 +132,7 @@ private:
     static DisplayUI* s_instance;
     static void onZoneComposerBackButton();
     static void onConnectivityTabBackButton();
+    static void onDeviceSelectorBackButton();
     uint8_t _activePresetSlot = 0xFF;
     UIScreen _currentScreen = UIScreen::GLOBAL;
 
@@ -175,6 +180,10 @@ private:
     
     // Connectivity Tab UI
     ConnectivityTab* _connectivityTab = nullptr;
+
+    // Device Selector Tab UI
+    lv_obj_t* _screen_deviceSelector = nullptr;
+    DeviceSelectorTab* _deviceSelectorTab = nullptr;
 
     // Footer UI elements
     lv_obj_t* _footer = nullptr;

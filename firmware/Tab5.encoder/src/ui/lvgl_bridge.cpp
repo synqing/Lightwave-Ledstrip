@@ -2,6 +2,7 @@
 
 #include <esp_heap_caps.h>
 #include <Arduino.h>
+#include <esp_task_wdt.h>
 
 namespace LVGLBridge {
 static lv_display_t* gDisplay = nullptr;
@@ -133,9 +134,24 @@ static void flush_cb(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map)
   // #endif // ENABLE_VERBOSE_DEBUG
     // #endregion
 
+  // IMPORTANT: flush_cb runs inside lv_timer_handler() on Arduino loopTask (CPU1).
+  // Large SPI transfers can take long enough to trip the task watchdog if we never
+  // feed it during the transfer.
+  esp_task_wdt_reset();
+  const uint32_t t0 = millis();
   M5.Display.startWrite();
   M5.Display.pushImage(area->x1, area->y1, w, h, (uint16_t*)px_map);
   M5.Display.endWrite();
+  const uint32_t dt = millis() - t0;
+  esp_task_wdt_reset();
+
+  // Lightweight stall signal (kept always-on but only logs when clearly bad).
+  // If this fires, consider lowering LV_DISP_DEF_REFR_PERIOD, reducing invalidation,
+  // or switching to DMA push if supported by the display driver.
+  if (dt > 250) {
+    Serial.printf("[LVGL] WARNING: flush_cb %ldx%ld took %lu ms\n",
+                  (long)w, (long)h, (unsigned long)dt);
+  }
 
   lv_display_flush_ready(disp);
 }

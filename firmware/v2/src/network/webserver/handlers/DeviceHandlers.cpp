@@ -4,6 +4,7 @@
  */
 
 #include "DeviceHandlers.h"
+#include "../../../config/version.h"
 #include "core/actors/ActorSystem.h"
 #include "core/actors/RendererActor.h"
 #include <WiFi.h>
@@ -65,7 +66,8 @@ void DeviceHandlers::handleInfo(AsyncWebServerRequest* request,
     (void)actors;
     (void)renderer;
     sendSuccessResponse(request, [](JsonObject& data) {
-        data["firmware"] = "2.0.0";
+        data["firmware"] = FIRMWARE_VERSION_STRING;
+        data["firmwareVersionNumber"] = FIRMWARE_VERSION_NUMBER;
         data["board"] = "ESP32-S3-DevKitC-1";
         data["sdk"] = ESP.getSdkVersion();
         data["flashSize"] = ESP.getFlashChipSize();

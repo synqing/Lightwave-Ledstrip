@@ -49,7 +49,7 @@ void EffectHandlers::handleList(AsyncWebServerRequest* request, RendererActor* r
     if (request->hasParam("limit")) {
         limit = request->getParam("limit")->value().toInt();
         if (limit < 1) limit = 1;
-        if (limit > 100) limit = 100;
+        if (limit > 150) limit = 150;
         if (request->hasParam("offset") && !request->hasParam("page")) {
             int offset = request->getParam("offset")->value().toInt();
             if (offset < 0) offset = 0;

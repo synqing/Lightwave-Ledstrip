@@ -112,7 +112,9 @@ const state = {
     pendingBrightnessChange: null, // Timer ID when brightness change is pending
     pendingSpeedChange: null,      // Timer ID when speed change is pending
     pendingMoodChange: null,       // Timer ID when mood change is pending
+    pendingFadeChange: null,       // Timer ID when fade change is pending
     pendingZoneSpeedChange: {},    // Object: { [zoneId]: timerId } for per-zone debouncing
+    pendingZoneModeToggle: null,   // Timer ID when zone mode toggle is pending (prevents rapid toggles)
 
     // Current values (synced from server)
     effectId: 0,
@@ -121,7 +123,7 @@ const state = {
     paletteName: '',
     brightness: 128,
     speed: 25,
-    mood: 128,  // Sensory Bridge mood: 0=reactive, 255=smooth
+    mood: 128,  // Sensory Bridge: 0=reactive, 255=smooth
     fadeAmount: 20,  // Trail fade amount
 
     // Zone state (null if zones not available/disabled)
@@ -136,6 +138,9 @@ const state = {
     effectsList: [],   // Array of {id, name, category, ...}
     patternFilter: 'all',  // 'all', 'reactive', 'ambient'
 
+    // Plugin state
+    plugins: null,  // { registeredCount, loadedFromLittleFS, overrideModeEnabled, lastReloadOk, lastReloadMillis, errorCount, lastErrorSummary }
+
     // Beat tracking
     currentBpm: 0,
     bpmConfidence: 0,
@@ -147,10 +152,13 @@ const state = {
     BRIGHTNESS_MAX: 255,
     BRIGHTNESS_STEP: 10,
     SPEED_MIN: 1,
-    SPEED_MAX: 100,  // Extended range (was 50)
+    SPEED_MAX: 100,  // Extended range
     SPEED_STEP: 1,
     MOOD_MIN: 0,
     MOOD_MAX: 255,
+    MOOD_STEP: 1,
+    FADE_MIN: 0,
+    FADE_MAX: 255,
 
     // Reconnect interval
     RECONNECT_MS: 3000
@@ -206,6 +214,10 @@ function connect() {
             clearTimeout(state.pendingSpeedChange);
             state.pendingSpeedChange = null;
         }
+        if (state.pendingZoneModeToggle) {
+            clearTimeout(state.pendingZoneModeToggle);
+            state.pendingZoneModeToggle = null;
+        }
 
         // Request initial state (re-fetch all state on reconnect)
         setTimeout(() => {
@@ -217,6 +229,8 @@ function connect() {
             // Fetch palettes and effects lists for dropdowns
             fetchPalettesList();
             fetchEffectsList();
+            // Fetch plugin stats
+            fetchPluginStats();
         }, 100);
     };
 
@@ -443,6 +457,18 @@ function handleMessage(msg) {
             updatePatternUI();
             break;
 
+        case 'paletteChange':
+            if (msgFlat.paletteId !== undefined) {
+                state.paletteId = parseInt(msgFlat.paletteId);
+                // Use hardcoded lookup for name (instant, no API call)
+                state.paletteName = getPaletteName(state.paletteId);
+            }
+            if (msgFlat.name !== undefined) {
+                state.paletteName = msgFlat.name;
+            }
+            updatePaletteUI();
+            break;
+
         case 'zones.list':
             // Zones list response from WebSocket
             if (msgFlat.enabled !== undefined) {
@@ -609,21 +635,37 @@ function handleMessage(msg) {
                 fetchZonesState();
             }
             break;
-
-        case 'paletteChange':
-            if (msgFlat.paletteId !== undefined) {
-                state.paletteId = parseInt(msgFlat.paletteId);
-                // Use hardcoded lookup for name (instant, no API call)
-                state.paletteName = getPaletteName(state.paletteId);
-            }
-            if (msgFlat.name !== undefined) {
-                state.paletteName = msgFlat.name;
-            }
-            updatePaletteUI();
             break;
 
         case 'beat.event':
             handleBeatEvent(msgFlat);
+            break;
+
+        case 'plugins.stats':
+        case 'plugins.reload.result':
+            // Plugin stats response
+            if (msgFlat.stats) {
+                // Response from reload has stats nested
+                state.plugins = msgFlat.stats;
+            } else {
+                // Direct stats response
+                state.plugins = {
+                    registeredCount: msgFlat.registeredCount,
+                    loadedFromLittleFS: msgFlat.loadedFromLittleFS,
+                    overrideModeEnabled: msgFlat.overrideModeEnabled,
+                    disabledByOverride: msgFlat.disabledByOverride,
+                    lastReloadOk: msgFlat.lastReloadOk,
+                    lastReloadMillis: msgFlat.lastReloadMillis,
+                    manifestCount: msgFlat.manifestCount,
+                    errorCount: msgFlat.errorCount,
+                    lastErrorSummary: msgFlat.lastErrorSummary
+                };
+            }
+            // Store errors if present
+            if (msgFlat.errors && msgFlat.errors.length > 0) {
+                state.plugins.errors = msgFlat.errors;
+            }
+            updatePluginUI();
             break;
 
         default:
@@ -641,6 +683,7 @@ function handleMessage(msg) {
 
 let lastButtonTime = 0;
 const BUTTON_THROTTLE_MS = 150;
+const ZONE_MODE_TOGGLE_THROTTLE_MS = 500; // Longer throttle for zone mode toggle to prevent flooding
 
 // ─────────────────────────────────────────────────────────────
 // Retry Logic with Exponential Backoff
@@ -952,22 +995,22 @@ function onSpeedChange() {
     if (newVal !== state.speed) {
         state.speed = newVal;
         updateSpeedUI();
-
+        
         // Set pending flag to ignore stale server updates while dragging
         if (state.pendingSpeedChange) clearTimeout(state.pendingSpeedChange);
         state.pendingSpeedChange = setTimeout(() => { state.pendingSpeedChange = null; }, 1000);
-
+        
         // Debounce API calls while dragging
         if (speedUpdateTimer) {
             clearTimeout(speedUpdateTimer);
         }
-
+        
         speedUpdateTimer = setTimeout(() => {
             // Try WebSocket
             if (state.connected && state.ws && state.ws.readyState === WebSocket.OPEN) {
                 send({ type: 'setSpeed', value: newVal });
             }
-
+            
             // REST API backup
             fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/parameters`, {
                 method: 'POST',
@@ -984,13 +1027,98 @@ function onSpeedChange() {
     }
 }
 
-// Zone mode toggle handler
+// Mood control - slider handler (Sensory Bridge: 0=reactive, 255=smooth)
+let moodUpdateTimer = null;
+function onMoodChange() {
+    const newVal = parseInt(elements.moodSlider.value);
+    if (newVal !== state.mood) {
+        state.mood = newVal;
+        updateMoodUI();
+
+        // Set pending flag to ignore stale server updates while dragging
+        if (state.pendingMoodChange) clearTimeout(state.pendingMoodChange);
+        state.pendingMoodChange = setTimeout(() => { state.pendingMoodChange = null; }, 1000);
+
+        // Debounce API calls while dragging
+        if (moodUpdateTimer) {
+            clearTimeout(moodUpdateTimer);
+        }
+
+        moodUpdateTimer = setTimeout(() => {
+            // Try WebSocket
+            if (state.connected && state.ws && state.ws.readyState === WebSocket.OPEN) {
+                send({ type: 'setMood', value: newVal });
+            }
+
+            // REST API backup
+            fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/parameters`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mood: newVal })
+            })
+            .then(data => {
+                if (data.success) {
+                    log(`[REST] Mood set to: ${newVal}`);
+                }
+            })
+            .catch(e => log('[REST] Error after retries: ' + e.message));
+        }, 150);
+    }
+}
+
+// Fade control - slider handler
+let fadeUpdateTimer = null;
+function onFadeChange() {
+    const newVal = parseInt(elements.fadeSlider.value);
+    if (newVal !== state.fadeAmount) {
+        state.fadeAmount = newVal;
+        updateFadeUI();
+
+        // Set pending flag to ignore stale server updates while dragging
+        if (state.pendingFadeChange) clearTimeout(state.pendingFadeChange);
+        state.pendingFadeChange = setTimeout(() => { state.pendingFadeChange = null; }, 1000);
+
+        // Debounce API calls while dragging
+        if (fadeUpdateTimer) {
+            clearTimeout(fadeUpdateTimer);
+        }
+
+        fadeUpdateTimer = setTimeout(() => {
+            // REST API
+            fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/parameters`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fadeAmount: newVal })
+            })
+            .then(data => {
+                if (data.success) {
+                    log(`[REST] Fade set to: ${newVal}`);
+                }
+            })
+            .catch(e => log('[REST] Error after retries: ' + e.message));
+        }, 150);
+    }
+}
+
+// Zone mode toggle handler - with aggressive throttling to prevent flooding
 function toggleZoneMode() {
+    // Prevent rapid toggling - check if already pending
+    if (state.pendingZoneModeToggle) {
+        log('[ZONE] Toggle already pending, ignoring rapid click');
+        return;
+    }
+
+    // Use throttledAction for button-level throttling (150ms)
     if (!throttledAction(() => {
         const currentEnabled = state.zones ? state.zones.enabled : false;
         const newEnabled = !currentEnabled;
         
         log(`[ZONE] Toggling zone mode: ${currentEnabled} -> ${newEnabled}`);
+        
+        // Set pending flag to prevent rapid toggles (500ms cooldown)
+        state.pendingZoneModeToggle = setTimeout(() => {
+            state.pendingZoneModeToggle = null;
+        }, 500);
         
         // Try WebSocket first
         if (state.connected && state.ws && state.ws.readyState === WebSocket.OPEN) {
@@ -1018,10 +1146,20 @@ function toggleZoneMode() {
                     }, 300);
                 } else {
                     log(`[REST] Error setting zone mode: ${data.error || 'Unknown error'}`);
+                    // Clear pending flag on error
+                    if (state.pendingZoneModeToggle) {
+                        clearTimeout(state.pendingZoneModeToggle);
+                        state.pendingZoneModeToggle = null;
+                    }
                 }
             })
             .catch(e => {
                 log(`[REST] Error setting zone mode: ${e.message}`);
+                // Clear pending flag on error
+                if (state.pendingZoneModeToggle) {
+                    clearTimeout(state.pendingZoneModeToggle);
+                    state.pendingZoneModeToggle = null;
+                }
             });
         }
         
@@ -1069,70 +1207,35 @@ function onZoneSpeedChange(zoneId) {
         }
 
         zoneSpeedUpdateTimers[zoneId] = setTimeout(() => {
+            // Only send if zones are enabled (prevents flooding when disabled)
+            if (!state.zones || !state.zones.enabled) {
+                log(`[ZONE] Zone mode is disabled, not sending speed change for zone ${zoneId}`);
+                return;
+            }
+
             // Try WebSocket
             if (state.connected && state.ws && state.ws.readyState === WebSocket.OPEN) {
                 send({ type: 'zones.update', zoneId: zoneId, speed: newVal });
             }
 
             // REST API backup (only if zones are enabled)
-            if (state.zones && state.zones.enabled) {
-                fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zones/${zoneId}/speed`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ speed: newVal })
-                })
-                .then(data => {
-                    if (data.success) {
-                        log(`[REST] Zone ${zoneId} speed set to: ${newVal}`);
-                    }
-                })
-                .catch(e => {
-                    // 404 is OK if zones aren't fully initialized yet
-                    if (e.message && !e.message.includes('404')) {
-                        log(`[REST] Error setting zone ${zoneId} speed: ${e.message}`);
-                    }
-                });
-            }
-        }, 150);
-    }
-}
-
-// Mood control - slider handler (Sensory Bridge: 0=reactive, 255=smooth)
-let moodUpdateTimer = null;
-function onMoodChange() {
-    const newVal = parseInt(elements.moodSlider.value);
-    if (newVal !== state.mood) {
-        state.mood = newVal;
-        updateMoodUI();
-
-        // Set pending flag to ignore stale server updates while dragging
-        if (state.pendingMoodChange) clearTimeout(state.pendingMoodChange);
-        state.pendingMoodChange = setTimeout(() => { state.pendingMoodChange = null; }, 1000);
-
-        // Debounce API calls while dragging
-        if (moodUpdateTimer) {
-            clearTimeout(moodUpdateTimer);
-        }
-
-        moodUpdateTimer = setTimeout(() => {
-            // Try WebSocket
-            if (state.connected && state.ws && state.ws.readyState === WebSocket.OPEN) {
-                send({ type: 'setMood', value: newVal });
-            }
-
-            // REST API backup
-            fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/parameters`, {
+            fetchWithRetry(`http://${state.deviceHost || '192.168.0.16'}/api/v1/zones/${zoneId}/speed`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mood: newVal })
+                body: JSON.stringify({ speed: newVal })
             })
             .then(data => {
                 if (data.success) {
-                    log(`[REST] Mood set to: ${newVal}`);
+                    log(`[REST] Zone ${zoneId} speed set to: ${newVal}`);
                 }
             })
-            .catch(e => log('[REST] Error after retries: ' + e.message));
-        }, 150);
+            .catch(e => {
+                // 404 is OK if zones aren't fully initialized yet
+                if (e.message && !e.message.includes('404')) {
+                    log(`[REST] Error setting zone ${zoneId} speed: ${e.message}`);
+                }
+            });
+        }, 300); // Increased from 150ms to 300ms to reduce flooding
     }
 }
 
@@ -1175,7 +1278,7 @@ function getPaletteName(paletteId) {
     return `Palette ${paletteId}`;
 }
 
-// Fetch current parameters (including paletteId, mood) from API
+// Fetch current parameters (including paletteId) from API
 function fetchZonesState() {
     // Try WebSocket first
     if (state.connected && state.ws && state.ws.readyState === WebSocket.OPEN) {
@@ -1229,11 +1332,6 @@ function fetchCurrentParameters() {
                     state.speed = data.data.speed;
                     updateSpeedUI();
                 }
-                if (data.data.mood !== undefined) {
-                    state.mood = data.data.mood;
-                    updateMoodUI();
-                    log(`[REST] ✅ Mood: ${state.mood}`);
-                }
                 if (data.data.paletteId !== undefined) {
                     const paletteId = parseInt(data.data.paletteId);
                     if (!isNaN(paletteId)) {
@@ -1243,6 +1341,14 @@ function fetchCurrentParameters() {
                         updatePaletteUI();
                         log(`[REST] ✅ Palette: ${state.paletteName} (${paletteId})`);
                     }
+                }
+                if (data.data.mood !== undefined) {
+                    state.mood = data.data.mood;
+                    updateMoodUI();
+                }
+                if (data.data.fadeAmount !== undefined) {
+                    state.fadeAmount = data.data.fadeAmount;
+                    updateFadeUI();
                 }
             }
         })
@@ -1316,10 +1422,10 @@ function updateMoodUI() {
 
 function updateFadeUI() {
     if (elements.fadeSlider) {
-        elements.fadeSlider.value = state.fadeAmount || 20;
+        elements.fadeSlider.value = state.fadeAmount;
     }
     if (elements.fadeValue) {
-        elements.fadeValue.textContent = state.fadeAmount || 20;
+        elements.fadeValue.textContent = state.fadeAmount;
     }
 }
 
@@ -1623,25 +1729,6 @@ function calculateMirroredRightSegment(seg) {
     };
 }
 
-// Calculate mirrored right segment values from left segment values
-function calculateMirroredRightSegment(seg) {
-    // Validate left segment values
-    if (seg.s1LeftStart > seg.s1LeftEnd || seg.s1LeftStart < 0 || seg.s1LeftEnd > CENTER_LEFT) {
-        return seg; // Return unchanged if invalid
-    }
-    
-    const leftSize = seg.s1LeftEnd - seg.s1LeftStart + 1;
-    const distanceFromCenter = CENTER_LEFT - seg.s1LeftEnd;
-    const s1RightStart = CENTER_RIGHT + distanceFromCenter;
-    const s1RightEnd = s1RightStart + leftSize - 1;
-    
-    return {
-        ...seg,
-        s1RightStart: Math.max(CENTER_RIGHT, Math.min(MAX_LED, s1RightStart)),
-        s1RightEnd: Math.max(s1RightStart, Math.min(MAX_LED, s1RightEnd))
-    };
-}
-
 // Zone control functions (palette, effect, blend)
 function setZonePalette(zoneId, paletteId) {
     if (state.connected && state.ws) {
@@ -1693,7 +1780,7 @@ function setZoneEffect(zoneId, effectId) {
 
 function setZoneBlend(zoneId, blendMode) {
     if (state.connected && state.ws) {
-        // WebSocket preferred
+        // WebSocket preferred (will be implemented in next todo)
         send({ type: 'zone.setBlend', zoneId, blendMode });
         log(`[WS] Zone ${zoneId} blend: ${blendMode}`);
     } else {
@@ -1712,74 +1799,6 @@ function setZoneBlend(zoneId, blendMode) {
         .catch(e => {
             log(`[REST] ❌ Error setting zone ${zoneId} blend: ${e.message}`);
         });
-    }
-}
-
-// Generate valid segments for a given zone count (1-4)
-function generateZoneSegments(zoneCount) {
-    if (zoneCount < 1 || zoneCount > 4) {
-        log(`[ZONE EDITOR] Invalid zone count: ${zoneCount}`);
-        return null;
-    }
-    
-    const segments = [];
-    const LEDsPerSide = 80; // 0-79 left, 80-159 right
-    const centerLeft = 79;
-    const centerRight = 80;
-    
-    // Distribute LEDs evenly across zones, centre-out
-    // Each zone gets approximately LEDsPerSide / zoneCount LEDs per side
-    const ledsPerZone = Math.floor(LEDsPerSide / zoneCount);
-    const remainder = LEDsPerSide % zoneCount;
-    
-    // Build zones from centre outward
-    let leftEnd = centerLeft;
-    let rightStart = centerRight;
-    
-    for (let i = 0; i < zoneCount; i++) {
-        // Calculate zone size (give remainder to outermost zones)
-        const zoneSize = ledsPerZone + (i >= zoneCount - remainder ? 1 : 0);
-        
-        // Left segment (descending from centre)
-        const leftStart = leftEnd - zoneSize + 1;
-        
-        // Right segment (ascending from centre)
-        const rightEnd = rightStart + zoneSize - 1;
-        
-        segments.push({
-            zoneId: i,
-            s1LeftStart: leftStart,
-            s1LeftEnd: leftEnd,
-            s1RightStart: rightStart,
-            s1RightEnd: rightEnd,
-            totalLeds: zoneSize * 2 // Both sides
-        });
-        
-        // Move outward for next zone
-        leftEnd = leftStart - 1;
-        rightStart = rightEnd + 1;
-    }
-    
-    // Reverse to get centre-out order (zone 0 = innermost)
-    segments.reverse();
-    
-    // Re-assign zone IDs to match order
-    segments.forEach((seg, idx) => {
-        seg.zoneId = idx;
-    });
-    
-    return segments;
-}
-
-function handleZoneCountSelect(zoneCount) {
-    const segments = generateZoneSegments(zoneCount);
-    if (segments) {
-        state.zoneEditorSegments = segments;
-        state.zoneEditorPreset = null; // Clear preset when using custom count
-        renderLedStrips();
-        renderZoneSegments();
-        updateZoneEditorValidation();
-        log(`[ZONE EDITOR] Generated ${zoneCount} zones`);
     }
 }
 
@@ -1916,18 +1935,6 @@ function renderZoneSegments() {
             state.zoneEditorSegments[zoneIndex][field] = value;
             state.zoneEditorPreset = null;  // Clear preset selection
             
-            // Auto-calculate mirrored right segment if left segment values changed
-            if (field === 's1LeftStart' || field === 's1LeftEnd') {
-                const updatedSeg = calculateMirroredRightSegment(state.zoneEditorSegments[zoneIndex]);
-                state.zoneEditorSegments[zoneIndex] = updatedSeg;
-                
-                // Update right segment input fields in DOM
-                const rightStartInput = container.querySelector(`input[data-zone="${zoneIndex}"][data-field="s1RightStart"]`);
-                const rightEndInput = container.querySelector(`input[data-zone="${zoneIndex}"][data-field="s1RightEnd"]`);
-                if (rightStartInput) rightStartInput.value = updatedSeg.s1RightStart;
-                if (rightEndInput) rightEndInput.value = updatedSeg.s1RightEnd;
-            }
-            
             // Recalculate totalLeds
             const seg = state.zoneEditorSegments[zoneIndex];
             const leftSize = seg.s1LeftEnd - seg.s1LeftStart + 1;
@@ -1936,10 +1943,7 @@ function renderZoneSegments() {
             
             // Update UI
             renderLedStrips();
-            // Only re-render segments if we didn't auto-calculate (to avoid infinite loop)
-            if (field !== 's1LeftStart' && field !== 's1LeftEnd') {
-                renderZoneSegments();
-            }
+            renderZoneSegments();
             updateZoneEditorValidation();
         });
     });
@@ -2018,6 +2022,74 @@ function updateZoneEditorUI() {
 }
 
 // Handle preset selection
+// Generate valid segments for a given zone count (1-4)
+function generateZoneSegments(zoneCount) {
+    if (zoneCount < 1 || zoneCount > 4) {
+        log(`[ZONE EDITOR] Invalid zone count: ${zoneCount}`);
+        return null;
+    }
+    
+    const segments = [];
+    const LEDsPerSide = 80; // 0-79 left, 80-159 right
+    const centerLeft = 79;
+    const centerRight = 80;
+    
+    // Distribute LEDs evenly across zones, centre-out
+    // Each zone gets approximately LEDsPerSide / zoneCount LEDs per side
+    const ledsPerZone = Math.floor(LEDsPerSide / zoneCount);
+    const remainder = LEDsPerSide % zoneCount;
+    
+    // Build zones from centre outward
+    let leftEnd = centerLeft;
+    let rightStart = centerRight;
+    
+    for (let i = 0; i < zoneCount; i++) {
+        // Calculate zone size (give remainder to outermost zones)
+        const zoneSize = ledsPerZone + (i >= zoneCount - remainder ? 1 : 0);
+        
+        // Left segment (descending from centre)
+        const leftStart = leftEnd - zoneSize + 1;
+        
+        // Right segment (ascending from centre)
+        const rightEnd = rightStart + zoneSize - 1;
+        
+        segments.push({
+            zoneId: i,
+            s1LeftStart: leftStart,
+            s1LeftEnd: leftEnd,
+            s1RightStart: rightStart,
+            s1RightEnd: rightEnd,
+            totalLeds: zoneSize * 2 // Both sides
+        });
+        
+        // Move outward for next zone
+        leftEnd = leftStart - 1;
+        rightStart = rightEnd + 1;
+    }
+    
+    // Reverse to get centre-out order (zone 0 = innermost)
+    segments.reverse();
+    
+    // Re-assign zone IDs to match order
+    segments.forEach((seg, idx) => {
+        seg.zoneId = idx;
+    });
+    
+    return segments;
+}
+
+function handleZoneCountSelect(zoneCount) {
+    const segments = generateZoneSegments(zoneCount);
+    if (segments) {
+        state.zoneEditorSegments = segments;
+        state.zoneEditorPreset = null; // Clear preset when using custom count
+        renderLedStrips();
+        renderZoneSegments();
+        updateZoneEditorValidation();
+        log(`[ZONE EDITOR] Generated ${zoneCount} zones`);
+    }
+}
+
 function handleZonePresetSelect(presetId) {
     if (presetId === -1) {
         state.zoneEditorPreset = null;
@@ -2086,6 +2158,77 @@ function updateAllUI() {
     updateZonesUI();
     updateZoneModeUI();
     updateZoneEditorUI();
+    updatePluginUI();
+}
+
+// ─────────────────────────────────────────────────────────────
+// Plugin UI
+// ─────────────────────────────────────────────────────────────
+
+function updatePluginUI() {
+    const section = document.getElementById('pluginSection');
+    const effectCount = document.getElementById('pluginEffectCount');
+    const modeStatus = document.getElementById('pluginModeStatus');
+    const reloadStatus = document.getElementById('pluginReloadStatus');
+    const errorList = document.getElementById('pluginErrorList');
+
+    if (!section || !state.plugins) {
+        if (section) section.style.display = 'none';
+        return;
+    }
+
+    // Show the section
+    section.style.display = '';
+
+    // Effect count
+    effectCount.textContent = `${state.plugins.registeredCount || 0} effects`;
+
+    // Mode status
+    if (state.plugins.overrideModeEnabled) {
+        modeStatus.textContent = `Override mode (${state.plugins.disabledByOverride || 0} disabled)`;
+    } else {
+        modeStatus.textContent = `Additive mode (${state.plugins.manifestCount || 0} manifests)`;
+    }
+
+    // Reload status
+    if (state.plugins.lastReloadMillis > 0) {
+        const reloadTime = new Date(state.plugins.lastReloadMillis).toLocaleTimeString();
+        const status = state.plugins.lastReloadOk ? 'OK' : 'FAIL';
+        reloadStatus.textContent = `Last reload: ${status} @ ${reloadTime}`;
+        reloadStatus.style.display = '';
+        reloadStatus.style.color = state.plugins.lastReloadOk ? 'var(--success)' : 'var(--error)';
+    } else {
+        reloadStatus.style.display = 'none';
+    }
+
+    // Error list
+    if (state.plugins.errors && state.plugins.errors.length > 0) {
+        errorList.innerHTML = state.plugins.errors.map(e =>
+            `<div style="color: var(--error); margin-bottom: 4px;">${e.file}: ${e.error}</div>`
+        ).join('');
+        errorList.style.display = '';
+    } else if (state.plugins.errorCount > 0) {
+        errorList.innerHTML = `<div style="color: var(--error);">${state.plugins.errorCount} manifest errors</div>`;
+        if (state.plugins.lastErrorSummary) {
+            errorList.innerHTML += `<div style="color: var(--error); font-size: 0.65rem; margin-top: 2px;">${state.plugins.lastErrorSummary}</div>`;
+        }
+        errorList.style.display = '';
+    } else {
+        errorList.style.display = 'none';
+    }
+}
+
+function fetchPluginStats() {
+    if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+        state.ws.send(JSON.stringify({ type: 'plugins.stats' }));
+    }
+}
+
+function reloadPlugins() {
+    if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+        log('[PLUGINS] Requesting reload...');
+        state.ws.send(JSON.stringify({ type: 'plugins.reload' }));
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -2231,6 +2374,8 @@ function init() {
     elements.speedValue = document.getElementById('speedValue');
     elements.moodSlider = document.getElementById('moodSlider');
     elements.moodValue = document.getElementById('moodValue');
+    elements.fadeSlider = document.getElementById('fadeSlider');
+    elements.fadeValue = document.getElementById('fadeValue');
     elements.configBar = document.getElementById('configBar');
     elements.deviceHost = document.getElementById('deviceHost');
     elements.connectBtn = document.getElementById('connectBtn');
@@ -2297,6 +2442,30 @@ function init() {
     if (elements.zoneModeToggle) {
         elements.zoneModeToggle.addEventListener('click', toggleZoneMode);
     }
+
+    // Plugin reload button
+    const pluginReloadBtn = document.getElementById('pluginReloadBtn');
+    if (pluginReloadBtn) {
+        pluginReloadBtn.addEventListener('click', reloadPlugins);
+    }
+    
+    // Bind slider events
+    if (elements.brightnessSlider) {
+        elements.brightnessSlider.addEventListener('input', onBrightnessChange);
+        elements.brightnessSlider.addEventListener('change', onBrightnessChange);
+    }
+    if (elements.speedSlider) {
+        elements.speedSlider.addEventListener('input', onSpeedChange);
+        elements.speedSlider.addEventListener('change', onSpeedChange);
+    }
+    if (elements.moodSlider) {
+        elements.moodSlider.addEventListener('input', onMoodChange);
+        elements.moodSlider.addEventListener('change', onMoodChange);
+    }
+    if (elements.fadeSlider) {
+        elements.fadeSlider.addEventListener('input', onFadeChange);
+        elements.fadeSlider.addEventListener('change', onFadeChange);
+    }
     
     // Bind zone speed slider events
     if (elements.zone0SpeedSlider) {
@@ -2325,20 +2494,6 @@ function init() {
     }
     if (zoneApplyButton) {
         zoneApplyButton.addEventListener('click', applyZoneLayout);
-    }
-
-    // Bind slider events
-    if (elements.brightnessSlider) {
-        elements.brightnessSlider.addEventListener('input', onBrightnessChange);
-        elements.brightnessSlider.addEventListener('change', onBrightnessChange);
-    }
-    if (elements.speedSlider) {
-        elements.speedSlider.addEventListener('input', onSpeedChange);
-        elements.speedSlider.addEventListener('change', onSpeedChange);
-    }
-    if (elements.moodSlider) {
-        elements.moodSlider.addEventListener('input', onMoodChange);
-        elements.moodSlider.addEventListener('change', onMoodChange);
     }
 
     // Check if we're running on the device or remotely

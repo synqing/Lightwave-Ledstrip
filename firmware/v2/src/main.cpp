@@ -40,6 +40,8 @@
 #include "core/system/HeapMonitor.h"
 #include "core/system/MemoryLeakDetector.h"
 #include "core/system/ValidationProfiler.h"
+#include "core/system/OtaBootVerifier.h"
+#include "core/system/OtaTokenManager.h"
 
 // TempoTracker debug included via AudioActor.h
 
@@ -102,6 +104,11 @@ void setup() {
     // Telemetry boot heartbeat (for trace capture verification)
     Serial.println("{\"event\":\"telemetry.boot\",\"ts_mono_ms\":0,\"version\":\"2.0\"}");
 
+    // OTA boot verification -- check rollback status before anything else
+#ifndef NATIVE_BUILD
+    lightwaveos::core::system::OtaBootVerifier::init();
+#endif
+
     LW_LOGI("==========================================");
     LW_LOGI("LightwaveOS v2 - Actor System + Zones");
     LW_LOGI("==========================================");
@@ -148,6 +155,15 @@ void setup() {
     } else {
         LW_LOGI("NVS: INITIALIZED");
     }
+
+    // Initialize per-device OTA token (must be after NVS, before WebServer)
+#if FEATURE_OTA_UPDATE && FEATURE_WEB_SERVER
+    if (!lightwaveos::core::system::OtaTokenManager::init()) {
+        LW_LOGW("OTA Token Manager init failed - using compile-time token");
+    } else {
+        LW_LOGI("OTA Token Manager: INITIALIZED");
+    }
+#endif
 
     // Initialize Zone Composer
     LW_LOGI("Initializing Zone Composer...");
@@ -205,7 +221,7 @@ void setup() {
                 savedEffect, savedBrightness, savedSpeed, savedPalette);
     } else {
         // First boot defaults
-        actors.setEffect(0);       // Fire
+        actors.setEffect(100);     // LGP Holographic Auto-Cycle
         actors.setBrightness(128); // 50% brightness
         actors.setSpeed(15);       // Medium speed
         actors.setPalette(0);      // Party colors
@@ -271,6 +287,20 @@ void setup() {
         LW_LOGI("Web Server: RUNNING");
         LW_LOGI("REST API: http://lightwaveos.local/api/v1/");
         LW_LOGI("WebSocket: ws://lightwaveos.local/ws");
+    }
+#endif
+
+    // OTA boot verification -- validate health after all critical subsystems init
+#ifndef NATIVE_BUILD
+    {
+#if FEATURE_WEB_SERVER
+        bool wifiOk = WIFI_MANAGER.isConnected() || WIFI_MANAGER.isAPMode();
+        bool wsOk = (webServerInstance != nullptr);
+#else
+        bool wifiOk = false;
+        bool wsOk = false;
+#endif
+        lightwaveos::core::system::OtaBootVerifier::markAppValidIfHealthy(wifiOk, wsOk);
     }
 #endif
 

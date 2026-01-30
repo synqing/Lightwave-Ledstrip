@@ -177,6 +177,12 @@ void WebSocketClient::update() {
         sendHelloMessage();
     }
 
+    // Deferred zones.get (set by WsMessageRouter on "zones.changed" to avoid sending inside WS callback)
+    if (_pendingZonesRefresh && _status == WebSocketStatus::CONNECTED) {
+        _pendingZonesRefresh = false;
+        requestZonesState();
+    }
+
     // Check if stuck in CONNECTING state too long (timeout protection)
     static uint32_t s_connectingStartTime = 0;
     if (_status == WebSocketStatus::CONNECTING) {
@@ -330,15 +336,12 @@ bool WebSocketClient::canSend(uint8_t paramIndex) {
 void WebSocketClient::sendJSON(const char* type, JsonDocument& doc) {
     if (!isConnected()) {
         #ifdef ENABLE_VERBOSE_DEBUG
-        Serial.printf("[WS] Drop: not connected (type=%s, status=%d)\n", 
+        Serial.printf("[WS] Drop: not connected (type=%s, status=%d)\n",
                       type ? type : "null", static_cast<int>(_status));
         #endif
         return;
     }
-
-    // CRITICAL: Take mutex BEFORE accessing _jsonBuffer (prevents concurrent corruption)
     if (!takeSendLock(SEND_MUTEX_TIMEOUT_MS)) {
-        // Mutex busy - drop message to prevent blocking (queue will retry)
         #ifdef ENABLE_VERBOSE_DEBUG
         Serial.printf("[WS] Drop: send mutex busy (type=%s)\n", type ? type : "null");
         #endif
@@ -349,58 +352,43 @@ void WebSocketClient::sendJSON(const char* type, JsonDocument& doc) {
         }
         return;
     }
+    sendJSONUnlocked(type, doc);
+    releaseSendLock();
+}
 
-    // Reset watchdog before potentially blocking operations
+void WebSocketClient::sendJSONUnlocked(const char* type, JsonDocument& doc) {
+    if (!isConnected()) {
+        return;
+    }
     esp_task_wdt_reset();
-
-    // Track send attempt start time for timeout detection
     _sendAttemptStartTime = millis();
 
-    // Create message with type field (LightwaveOS protocol: {"type": "...", ...})
     JsonDocument message;
     JsonObject msgObj = message.to<JsonObject>();
     msgObj["type"] = type;
-
-    // Merge payload fields directly into message (not nested)
     JsonObject docObj = doc.as<JsonObject>();
     for (JsonPair kv : docObj) {
         msgObj[kv.key().c_str()] = kv.value();
     }
 
-    // Serialize to fixed buffer (drop if too large to prevent fragmentation)
-    #ifdef ENABLE_VERBOSE_DEBUG
-    Serial.printf("[DEBUG] sendJSON before serialize - Heap: free=%u minFree=%u largest=%u type=%s\n",
-                  ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap(), type ? type : "null");
-    #endif
     size_t len = serializeJson(message, _jsonBuffer, JSON_BUFFER_SIZE - 1);
-    #ifdef ENABLE_VERBOSE_DEBUG
-    Serial.printf("[DEBUG] sendJSON after serialize - len=%u bufferSize=%u Heap: free=%u minFree=%u\n",
-                  len, JSON_BUFFER_SIZE, ESP.getFreeHeap(), ESP.getMinFreeHeap());
-    #endif
-    
     if (len == 0 || len >= JSON_BUFFER_SIZE) {
         #ifdef ENABLE_VERBOSE_DEBUG
         Serial.printf("[WS] Message too large, dropping (type=%s, len=%u, max=%u)\n",
                       type ? type : "null", (unsigned)len, JSON_BUFFER_SIZE);
         #endif
-        releaseSendLock();
         return;
     }
-    _jsonBuffer[len] = '\0';  // Ensure null termination
+    _jsonBuffer[len] = '\0';
 
-    // Send via WebSocket (non-blocking, but check for timeout)
-    esp_task_wdt_reset();  // Reset before send
-    
+    esp_task_wdt_reset();
     bool sendResult = _ws.sendTXT(_jsonBuffer);
-    
-    // Check send duration for timeout detection
     uint32_t sendDuration = millis() - _sendAttemptStartTime;
     if (sendDuration > SEND_TIMEOUT_MS) {
         Serial.printf("[WS] WARNING: Send took %lu ms (threshold: %lu ms, type=%s)\n",
                       sendDuration, SEND_TIMEOUT_MS, type ? type : "null");
     }
 
-    // Track consecutive failures for graceful degradation
     if (sendResult) {
         _consecutiveSendFailures = 0;
         if (_sendDegraded) {
@@ -415,18 +403,7 @@ void WebSocketClient::sendJSON(const char* type, JsonDocument& doc) {
                           _consecutiveSendFailures);
         }
     }
-
-    // Reset watchdog after send
     esp_task_wdt_reset();
-
-    // Release mutex AFTER send completes
-    releaseSendLock();
-
-    #ifdef ENABLE_VERBOSE_DEBUG
-    Serial.printf("[DEBUG] sendJSON after sendTXT - Heap: free=%u minFree=%u largest=%u sendResult=%d duration=%lu\n",
-                  ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap(), 
-                  sendResult ? 1 : 0, sendDuration);
-    #endif
 }
 
 void WebSocketClient::sendHelloMessage() {
@@ -963,23 +940,16 @@ void WebSocketClient::processSendQueue() {
                 }
             }
             
-            // Send (non-blocking, protected by mutex)
+            // Send (caller holds mutex - use Unlocked to avoid nested take)
             _sendAttemptStartTime = millis();
-            sendJSON(sendType, doc);
-            
-            // Check timeout after send
+            sendJSONUnlocked(sendType, doc);
             uint32_t sendDuration = millis() - _sendAttemptStartTime;
             if (sendDuration > SEND_TIMEOUT_MS) {
-                Serial.printf("[WS] WARNING: Send took %lu ms (threshold: %lu ms)\n", 
+                Serial.printf("[WS] WARNING: Send took %lu ms (threshold: %lu ms)\n",
                               sendDuration, SEND_TIMEOUT_MS);
             }
-
-            // Reset watchdog after send
             esp_task_wdt_reset();
-
-            // Mark queue entry as sent
             _sendQueue[i].reset();
-
             releaseSendLock();
             break;  // Only send one message per update() call to prevent blocking
         }

@@ -963,25 +963,100 @@ void ConnectivityTab::startScan() {
     if (_scanButtonLabel) {
         lv_label_set_text(_scanButtonLabel, "SCANNING...");
         lv_obj_center(_scanButtonLabel);
-        // Force LVGL to render the change NOW before blocking HTTP call
-        lv_refr_now(NULL);
     }
 
     _state = ConnectivityState::SCANNING;
     _scanInProgress = true;
+    _scanStartMs = millis();
 
-    Serial.println("[SCAN] Local WiFi scan started");
-    int found = WiFi.scanNetworks();
-    if (found < 0) {
-        _errorMessage = "WiFi scan failed";
+    // IMPORTANT: Do not block inside an LVGL event callback.
+    // WiFi.scanNetworks() (sync) can stall for multiple seconds and trigger loopTask WDT.
+    // Use async scan and poll results in checkScanStatus().
+    Serial.println("[SCAN] Local WiFi scan started (async)");
+    (void)WiFi.scanNetworks(true /* async */);
+    markDirty();
+    #endif
+}
+
+void ConnectivityTab::performScanRequest() {
+    #if ENABLE_WIFI
+    ScanStatus status;
+    if (_httpClient->startScan(status)) {
+        // v2 returns synchronous results - no polling needed
+        _scannedNetworkCount = status.networkCount > 20 ? 20 : status.networkCount;
+        for (uint8_t i = 0; i < _scannedNetworkCount; i++) {
+            _scannedNetworks[i] = status.networks[i];
+        }
+        _scanInProgress = false;
+        _state = ConnectivityState::IDLE;
+        Serial.printf("[ConnectivityTab] Scan complete, found %d networks\n", _scannedNetworkCount);
+
+        // ALSO refresh saved networks list when scanning
+        int savedCount = _httpClient->listNetworks(_savedNetworks, 10);
+        if (savedCount >= 0) {
+            _savedNetworkCount = static_cast<uint8_t>(savedCount);
+            Serial.printf("[ConnectivityTab] Refreshed %d saved networks\n", savedCount);
+        }
+
+        if (_scanButtonLabel) {
+            lv_label_set_text(_scanButtonLabel, "SCAN");
+            lv_obj_center(_scanButtonLabel);
+        }
+
+        forceDirty();
+        refreshNetworkLists();
+    } else {
+        _errorMessage = "Failed to scan networks";
         _state = ConnectivityState::ERROR;
         _scanInProgress = false;
+
         if (_scanButtonLabel) {
             lv_label_set_text(_scanButtonLabel, "SCAN");
             lv_obj_center(_scanButtonLabel);
         }
         markDirty();
-        Serial.println("[SCAN] Local WiFi scan failed");
+    }
+    #endif
+}
+
+void ConnectivityTab::checkScanStatus() {
+    #if ENABLE_WIFI
+    if (!_scanInProgress) {
+        return;
+    }
+
+    const uint32_t now = millis();
+    if (_scanStartMs != 0 && (now - _scanStartMs) > SCAN_TIMEOUT_MS) {
+        Serial.println("[SCAN] Async scan timed out");
+        _errorMessage = "WiFi scan timed out";
+        _state = ConnectivityState::ERROR;
+        _scanInProgress = false;
+        WiFi.scanDelete();
+        if (_scanButtonLabel) {
+            lv_label_set_text(_scanButtonLabel, "SCAN");
+            lv_obj_center(_scanButtonLabel);
+        }
+        markDirty();
+        return;
+    }
+
+    const int found = WiFi.scanComplete();
+    if (found == WIFI_SCAN_RUNNING) {
+        // Still scanning; keep UI responsive.
+        return;
+    }
+
+    if (found < 0) {
+        Serial.printf("[SCAN] Async scan failed (code=%d)\n", found);
+        _errorMessage = "WiFi scan failed";
+        _state = ConnectivityState::ERROR;
+        _scanInProgress = false;
+        WiFi.scanDelete();
+        if (_scanButtonLabel) {
+            lv_label_set_text(_scanButtonLabel, "SCAN");
+            lv_obj_center(_scanButtonLabel);
+        }
+        markDirty();
         return;
     }
 
@@ -1036,58 +1111,8 @@ void ConnectivityTab::startScan() {
         lv_label_set_text(_scanButtonLabel, "SCAN");
         lv_obj_center(_scanButtonLabel);
     }
-    Serial.printf("[SCAN] Local WiFi scan complete: %u networks\n", _scannedNetworkCount);
+    Serial.printf("[SCAN] Async scan complete: %u networks\n", _scannedNetworkCount);
     forceDirty();
-    refreshNetworkLists();
-    #endif
-}
-
-void ConnectivityTab::performScanRequest() {
-    #if ENABLE_WIFI
-    ScanStatus status;
-    if (_httpClient->startScan(status)) {
-        // v2 returns synchronous results - no polling needed
-        _scannedNetworkCount = status.networkCount > 20 ? 20 : status.networkCount;
-        for (uint8_t i = 0; i < _scannedNetworkCount; i++) {
-            _scannedNetworks[i] = status.networks[i];
-        }
-        _scanInProgress = false;
-        _state = ConnectivityState::IDLE;
-        Serial.printf("[ConnectivityTab] Scan complete, found %d networks\n", _scannedNetworkCount);
-
-        // ALSO refresh saved networks list when scanning
-        int savedCount = _httpClient->listNetworks(_savedNetworks, 10);
-        if (savedCount >= 0) {
-            _savedNetworkCount = static_cast<uint8_t>(savedCount);
-            Serial.printf("[ConnectivityTab] Refreshed %d saved networks\n", savedCount);
-        }
-
-        if (_scanButtonLabel) {
-            lv_label_set_text(_scanButtonLabel, "SCAN");
-            lv_obj_center(_scanButtonLabel);
-        }
-
-        forceDirty();
-        refreshNetworkLists();
-    } else {
-        _errorMessage = "Failed to scan networks";
-        _state = ConnectivityState::ERROR;
-        _scanInProgress = false;
-
-        if (_scanButtonLabel) {
-            lv_label_set_text(_scanButtonLabel, "SCAN");
-            lv_obj_center(_scanButtonLabel);
-        }
-        markDirty();
-    }
-    #endif
-}
-
-void ConnectivityTab::checkScanStatus() {
-    // No longer needed - scan is now synchronous in startScan()
-    // This function is kept for interface compatibility but is a no-op
-    #if ENABLE_WIFI
-    // Scan results are retrieved directly in startScan() - no polling required
     #endif
 }
 

@@ -315,13 +315,13 @@ private:
      * @brief Handle "zones.changed" message
      *
      * Notification that zone configuration has changed.
-     * Triggers zone state refresh request.
+     * Defer zone refresh to next update() to avoid sending inside WS receive callback
+     * (prevents deadlock / long block inside _ws.loop()).
      */
     static void handleZonesChanged(JsonDocument& doc) {
         TAB5_WS_PRINTLN("[WsRouter] Zones changed notification");
-        // Request fresh zone state
         if (s_wsClient) {
-            s_wsClient->requestZonesState();
+            s_wsClient->setPendingZonesRefresh();
         }
         (void)doc;
     }

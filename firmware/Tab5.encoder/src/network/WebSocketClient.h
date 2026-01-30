@@ -162,6 +162,8 @@ public:
     void requestEffectsList(uint8_t page, uint8_t limit, const char* requestId);
     void requestPalettesList(uint8_t page, uint8_t limit, const char* requestId);
     void requestZonesState();
+    /** Set flag to send zones.get on next update() (avoids sending inside WS receive callback). */
+    void setPendingZonesRefresh() { _pendingZonesRefresh = true; }
 
     // ========================================================================
     // Message Handling
@@ -189,6 +191,7 @@ private:
     const char* _serverPath;
     bool _useIP;
     bool _pendingHello;
+    bool _pendingZonesRefresh = false;
 
     // Rate limiting state (16 parameters for dual encoder units)
     struct RateLimiter {
@@ -251,6 +254,8 @@ private:
     
     // Send JSON message (non-blocking, protected by mutex)
     void sendJSON(const char* type, JsonDocument& doc);
+    // Internal: send without taking mutex (caller must hold _sendMutex)
+    void sendJSONUnlocked(const char* type, JsonDocument& doc);
     
     // Queue parameter change for later sending (prevents blocking)
     void queueParameterChange(uint8_t paramIndex, uint8_t value, const char* type, uint8_t zoneId = 255);

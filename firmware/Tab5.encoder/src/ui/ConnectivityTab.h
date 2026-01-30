@@ -137,6 +137,7 @@ private:
     uint8_t _scannedNetworkCount = 0;
     uint32_t _scanJobId = 0;
     bool _scanInProgress = false;
+    uint32_t _scanStartMs = 0;
     bool _initialLoadAwaitingDiscovery = false;
 
     // DEFERRED LOADING: Prevents watchdog crash from blocking HTTP in begin()
@@ -181,6 +182,7 @@ private:
     bool _pendingDirty = false;
     uint32_t _lastRenderTime = 0;
     static constexpr uint32_t FRAME_INTERVAL_MS = 100;  // 10 FPS for network UI
+    static constexpr uint32_t SCAN_TIMEOUT_MS = 15000;  // Avoid stuck scan blocking UI state
 
     // ==========================================================================
     // Layout constants (optimized for 1280x720) - REDESIGNED

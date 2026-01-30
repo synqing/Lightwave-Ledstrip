@@ -323,6 +323,22 @@ pio device monitor -b 115200
 
 # Clean build
 pio run -e esp32dev_audio -t clean
+
+# OTA firmware update (K1 or any networked device)
+# Via Web UI: http://lightwaveos.local → OTA Update tab
+# Via curl:
+curl -X POST http://lightwaveos.local/api/v1/firmware/update \
+     -H "X-OTA-Token: <device-token>" \
+     -F "firmware=@.pio/build/esp32dev_audio/firmware.bin"
+
+# OTA web assets update (LittleFS)
+pio run -e esp32dev_audio -t buildfs
+curl -X POST http://lightwaveos.local/api/v1/firmware/filesystem \
+     -H "X-OTA-Token: <device-token>" \
+     -F "filesystem=@.pio/build/esp32dev_audio/littlefs.bin"
+
+# Retrieve device OTA token
+curl http://lightwaveos.local/api/v1/device/ota-token
 ```
 
 ## Hardware Configuration
@@ -332,6 +348,17 @@ pio run -e esp32dev_audio -t clean
 - **160 LEDs per strip** = 320 total
 - **Center point**: LED 79/80 (effects originate here)
 - **Optional HMI**: M5ROTATE8 8-encoder unit via I2C (enable with `FEATURE_ROTATE8_ENCODER`)
+
+### Hardware Deployments
+
+| Device | MAC | IP (typical) | USB Access | Update Method |
+|--------|-----|--------------|------------|---------------|
+| **K1 Prototype** | `b4:3a:45:a5:87:f8` | `192.168.1.101` | Requires disassembly | **OTA only** |
+| **Dev Board** (bench test) | — | — | USB-C available | USB or OTA |
+
+**K1 Prototype:** The K1 is a sealed LGP assembly. Once assembled, the ESP32-S3 USB-C port is physically inaccessible without disassembly. All firmware and web asset updates **must** use OTA via `http://lightwaveos.local` or direct IP. The K1 runs firmware v2.0.0+ with full OTA support (boot rollback, MD5 verification, per-device auth token, LED progress feedback).
+
+**Dev Board:** The regular esp32dev_audio test setup remains available on the workbench with direct USB-C access for `pio run -t upload` and serial monitoring.
 
 ## Architecture Overview
 

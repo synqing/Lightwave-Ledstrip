@@ -12,7 +12,7 @@ namespace codec {
 
 // Allowed keys for each command type
 static const char* OTA_CHECK_ALLOWED[] = {"type", "requestId"};
-static const char* OTA_BEGIN_ALLOWED[] = {"type", "size", "md5", "requestId"};
+static const char* OTA_BEGIN_ALLOWED[] = {"type", "size", "md5", "token", "version", "force", "target", "requestId"};
 static const char* OTA_CHUNK_ALLOWED[] = {"type", "offset", "data", "requestId"};
 static const char* OTA_ABORT_ALLOWED[] = {"type", "requestId"};
 static const char* OTA_VERIFY_ALLOWED[] = {"type", "md5", "requestId"};
@@ -68,17 +68,45 @@ OtaBeginDecodeResult WsOtaCodec::decodeOtaBegin(JsonObjectConst root) {
     }
     
     result.request.size = root["size"].as<uint32_t>();
-    
+
     // Extract md5 (optional)
     if (root.containsKey("md5") && root["md5"].is<const char*>()) {
         result.request.md5 = root["md5"].as<const char*>();
     }
-    
+
+    // Extract token (optional at codec level; command handler enforces requirement)
+    if (root.containsKey("token") && root["token"].is<const char*>()) {
+        result.request.token = root["token"].as<const char*>();
+    }
+
+    // Extract version (optional - incoming firmware version for validation)
+    if (root.containsKey("version") && root["version"].is<const char*>()) {
+        result.request.version = root["version"].as<const char*>();
+    }
+
+    // Extract force flag (optional - defaults to true for backward compatibility)
+    if (root.containsKey("force") && root["force"].is<bool>()) {
+        result.request.force = root["force"].as<bool>();
+    }
+    // If "force" key is absent, default remains true (backward compatible: always allow)
+
+    // Extract target (optional - "firmware" or "filesystem", defaults to "firmware")
+    if (root.containsKey("target") && root["target"].is<const char*>()) {
+        const char* target = root["target"].as<const char*>();
+        if (strcmp(target, "firmware") == 0 || strcmp(target, "filesystem") == 0) {
+            result.request.target = target;
+        } else {
+            strncpy(result.errorMsg, "Invalid 'target': must be 'firmware' or 'filesystem'",
+                    sizeof(result.errorMsg) - 1);
+            return result;
+        }
+    }
+
     // Extract requestId (optional)
     if (root.containsKey("requestId") && root["requestId"].is<const char*>()) {
         result.request.requestId = root["requestId"].as<const char*>();
     }
-    
+
     result.success = true;
     return result;
 }
@@ -156,9 +184,11 @@ OtaVerifyDecodeResult WsOtaCodec::decodeOtaVerify(JsonObjectConst root) {
 }
 
 void WsOtaCodec::encodeOtaStatus(JsonObject& data, const char* version,
+                                 uint32_t versionNumber,
                                  uint32_t sketchSize, uint32_t freeSpace,
                                  bool otaAvailable) {
     data["version"] = version;
+    data["versionNumber"] = versionNumber;
     data["sketchSize"] = sketchSize;
     data["freeSpace"] = freeSpace;
     data["otaAvailable"] = otaAvailable;

@@ -23,6 +23,16 @@ void registerWsOtaCommands(const WebServerContext& ctx);
  */
 void handleOtaClientDisconnect(uint32_t clientId);
 
+/**
+ * @brief Check if a WebSocket OTA session is currently active
+ *
+ * Used by WiFiManager to avoid STA retry during OTA uploads,
+ * which would tear down the AP and interrupt the transfer.
+ *
+ * @return true if a WebSocket OTA upload session is in progress
+ */
+bool isWsOtaInProgress();
+
 } // namespace ws
 } // namespace webserver
 } // namespace network

@@ -52,11 +52,15 @@ struct OtaCheckDecodeResult {
 // ============================================================================
 
 struct OtaBeginRequest {
-    uint32_t size;          // Firmware size in bytes
+    uint32_t size;          // Firmware/filesystem image size in bytes
     const char* md5;        // Expected MD5 hash (optional)
+    const char* token;      // OTA authentication token (required)
+    const char* version;    // Incoming firmware version string (optional, e.g. "2.1.0")
+    bool force;             // Force update even if version is older/same (default: true for backward compat)
+    const char* target;     // "firmware" (default) or "filesystem" (optional)
     const char* requestId;
-    
-    OtaBeginRequest() : size(0), md5(nullptr), requestId("") {}
+
+    OtaBeginRequest() : size(0), md5(nullptr), token(nullptr), version(nullptr), force(true), target("firmware"), requestId("") {}
 };
 
 struct OtaBeginDecodeResult {
@@ -150,7 +154,8 @@ public:
     /**
      * @brief Encode ota.status response
      */
-    static void encodeOtaStatus(JsonObject& data, const char* version, 
+    static void encodeOtaStatus(JsonObject& data, const char* version,
+                                uint32_t versionNumber,
                                 uint32_t sketchSize, uint32_t freeSpace,
                                 bool otaAvailable);
     

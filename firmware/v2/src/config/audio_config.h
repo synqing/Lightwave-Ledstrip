@@ -23,12 +23,29 @@ namespace lightwaveos {
 namespace audio {
 
 // ============================================================================
-// I2S Pin Configuration (SPH0645 Wiring)
+// Microphone Type Selection
 // ============================================================================
 
 /**
- * SPH0645 I2S MEMS Microphone pinout:
- * - SEL tied to GND = Left channel (mono)
+ * Select which I2S MEMS microphone is wired to the board.
+ * Each mic type has different bit depth, channel slot, and I2S register needs.
+ *
+ * SPH0645: 18-bit, RIGHT channel on ESP32-S3 legacy driver, >>10 shift
+ * INMP441: 24-bit, LEFT channel (SEL floating/GND), >>8 shift, MSB_SHIFT set
+ */
+enum class MicType : uint8_t {
+    SPH0645,    // Sparkfun SPH0645LM4H (dev board reference)
+    INMP441     // InvenSense INMP441 (K1 Prototype)
+};
+
+constexpr MicType MICROPHONE_TYPE = MicType::SPH0645;
+
+// ============================================================================
+// I2S Pin Configuration
+// ============================================================================
+
+/**
+ * I2S MEMS Microphone pinout:
  * - GPIO 12/13/14 chosen to avoid conflicts with:
  *   - GPIO 4/5: WS2812 LED strips
  *   - GPIO 17/18: I2C (M5ROTATE8 encoder)
@@ -73,26 +90,19 @@ constexpr size_t DMA_BUFFER_COUNT = 4;
 constexpr size_t DMA_BUFFER_SAMPLES = 512;
 
 // ============================================================================
-// SPH0645 Sample Format and I2S Configuration
+// Sample Format and I2S Configuration
 // ============================================================================
 
 /**
- * SPH0645 outputs 18-bit data, MSB-first, in 32-bit I2S slots.
- * 
- * I2S Configuration (ESP32-S3 legacy driver):
- * - I2S_CHANNEL_FMT_ONLY_RIGHT (SEL=GND wiring; ESP32-S3 expects right slot)
- * - 32-bit slots (I2S_BITS_PER_SAMPLE_32BIT)
- * - MSB shift enabled (REG_SET_BIT I2S_RX_MSB_SHIFT) - aligns SPH0645 data
- * - Timing delay enabled (REG_SET_BIT BIT(9) in I2S_RX_TIMING_REG)
- * - WS idle polarity inverted (REG_SET_BIT I2S_RX_WS_IDLE_POL)
+ * Both SPH0645 and INMP441 use 32-bit I2S slots.
  *
- * Sample conversion (see AudioCapture.cpp):
- *   1. Shift >> 14 to extract 18-bit value (validate via DMA dbg pk>>N output)
- *   2. Clip to ±131072 (18-bit signed range)
- *   3. Scale to 16-bit (>> 2)
- *   4. DC removal handled in AudioActor
+ * SPH0645: 18-bit data, RIGHT channel, >>10 shift, MSB_SHIFT cleared
+ * INMP441: 24-bit data, LEFT channel, >>8 shift, MSB_SHIFT set
+ *
+ * Channel selection and bit shift are handled at runtime in AudioCapture.cpp
+ * based on MICROPHONE_TYPE above.
  */
-constexpr uint8_t I2S_BITS_PER_SAMPLE = 32;   // 32-bit slots for SPH0645
+constexpr uint8_t I2S_BITS_PER_SAMPLE = 32;   // 32-bit slots for both mic types
 
 // ============================================================================
 // ControlBus Band Configuration

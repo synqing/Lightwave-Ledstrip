@@ -662,6 +662,18 @@ void AudioActor::processHop()
         m_dspStateSeq.store(v + 2U, std::memory_order_release);
     }
 
+    // [DIAG A2] DSP pipeline health — rmsPreGain, agcGain, activity, noiseFloor
+    {
+        auto& dbgCfg = audio::getAudioDebugConfig();
+        static uint32_t s_a2Hop = 0;
+        s_a2Hop++;
+        if (dbgCfg.verbosity >= 5 && (s_a2Hop % dbgCfg.intervalDMA()) == 0) {
+            LW_LOGD(LW_CLR_CYAN "[DIAG-A2]" LW_ANSI_RESET
+                    " rmsPreGain=%.4f agcGain=%.2f activity=%.3f noiseFloor=%.5f rmsRaw=%.4f peak=%d",
+                    m_lastRmsPreGain, m_lastAgcGain, activity, m_noiseFloor, rmsRaw, (int)m_lastPeakCentered);
+        }
+    }
+
     // 4. Analysis window preparation (Overlap-Add)
     // Build 512-sample window from previous + current hop for per-hop analysis
     int16_t window512[GoertzelAnalyzer::WINDOW_SIZE];
@@ -864,6 +876,23 @@ void AudioActor::processHop()
         // Apply activity gating and store in raw.bins64 for ControlBus passthrough
         for (size_t i = 0; i < GoertzelAnalyzer::NUM_BINS; ++i) {
             raw.bins64[i] = m_bins64Raw[i] * activity;
+        }
+
+        // [DIAG A4] 64-bin Goertzel trigger and magnitude
+        {
+            auto& dbgCfg = audio::getAudioDebugConfig();
+            static uint32_t s_a4Count = 0;
+            s_a4Count++;
+            if (dbgCfg.verbosity >= 5 && (s_a4Count % 10) == 0) {
+                float maxBin = 0.0f;
+                size_t maxIdx = 0;
+                for (size_t i = 0; i < GoertzelAnalyzer::NUM_BINS; ++i) {
+                    if (m_bins64Raw[i] > maxBin) { maxBin = m_bins64Raw[i]; maxIdx = i; }
+                }
+                LW_LOGD(LW_CLR_MAGENTA "[DIAG-A4]" LW_ANSI_RESET
+                        " 64bin trigger#%lu maxBin[%u]=%.4f adaptiveMax=%.4f",
+                        (unsigned long)s_a4Count, (unsigned)maxIdx, maxBin, m_bins64AdaptiveMax);
+            }
         }
 
         // Throttled 64-bin logging - gated by verbosity >= 5 (TRACE)

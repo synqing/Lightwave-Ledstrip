@@ -18,6 +18,9 @@
 
 #include "TempoTracker.h"
 #include <cstring>
+#define LW_LOG_TAG "Tempo"
+#include "utils/Log.h"
+#include "../AudioDebugConfig.h"
 #if FEATURE_VALIDATION_PROFILING
 #include "../../core/system/ValidationProfiler.h"
 #endif
@@ -220,6 +223,29 @@ void TempoTracker::updateNovelty(const float* bins, uint16_t num_bins,
 
         // Check for silence to prevent false tracking
         checkSilence();
+
+        // [DIAG A3] Spectral novelty + silence + confidence
+        {
+            auto& dbgCfg = lightwaveos::audio::getAudioDebugConfig();
+            static uint32_t s_a3Count = 0;
+            s_a3Count++;
+            if (dbgCfg.verbosity >= 5 && (s_a3Count % 25) == 0) {
+                // Find max bin magnitude from last spectral input
+                float spectralMax = 0.0f;
+                for (uint16_t i = 0; i < NUM_FREQS; i++) {
+                    spectralMax = std::max(spectralMax, bins_last_[i]);
+                }
+                float vuMax = 0.0f;
+                for (uint16_t i = 0; i < VU_HISTORY_LENGTH; i++) {
+                    vuMax = std::max(vuMax, vu_curve_[i]);
+                }
+                LW_LOGD(LW_CLR_GREEN "[DIAG-A3]" LW_ANSI_RESET
+                        " spectralMax=%.5f vuMax=%.5f silence=%s conf=%.1f%% power_sum=%.5f flux=%.5f",
+                        spectralMax, vuMax,
+                        silence_detected_ ? "YES" : "no",
+                        confidence_ * 100.0f, power_sum_, spectral_flux);
+            }
+        }
     }
 
     // ========================================================================

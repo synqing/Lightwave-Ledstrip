@@ -1,12 +1,12 @@
 /**
  * @file AudioCapture.cpp
- * @brief I2S audio capture with LEGACY driver and CORRECT bit shift
+ * @brief I2S audio capture with LEGACY driver and compile-time mic selection
  *
- * CRITICAL FIX: Legacy driver bit alignment is different from NEW driver.
- * - NEW driver (Emotiscope): data in bits [31:14], use >>14
- * - LEGACY driver: data in bits [31:10], use >>10
+ * Supports mic-type selection via MicType enum in audio_config.h:
+ * - SPH0645 (default): 18-bit, RIGHT channel, >>10 shift (K1 hardware)
+ * - INMP441: 24-bit, LEFT channel, >>8 shift, MSB_SHIFT set
  *
- * @version 4.1.0 - Legacy driver with >>10 bit shift
+ * @version 5.0.0 - Compile-time mic-type branching
  */
 
 #include "AudioCapture.h"
@@ -132,31 +132,47 @@ CaptureResult AudioCapture::captureHop(int16_t* buffer)
     auto& dbgCfg = getAudioDebugConfig();
     if (dbgCfg.verbosity >= 5 && (s_firstPrint || (s_dbgHop % dbgCfg.intervalDMA()) == 0)) {
         s_firstPrint = false;
-        int32_t rawMin = INT32_MAX, rawMax = INT32_MIN;
-        for (size_t i = 1; i < HOP_SIZE * 2; i += 2) {
-            int32_t v = m_dmaBuffer[i];
-            if (v < rawMin) rawMin = v;
-            if (v > rawMax) rawMax = v;
+        // [DIAG A1] Log BOTH channels with BOTH shift values to identify correct mic config
+        int32_t leftMin = INT32_MAX, leftMax = INT32_MIN;
+        int32_t rightMin = INT32_MAX, rightMax = INT32_MIN;
+        for (size_t i = 0; i < HOP_SIZE; i++) {
+            int32_t left  = m_dmaBuffer[i * 2];      // LEFT channel (even indices)
+            int32_t right = m_dmaBuffer[i * 2 + 1];  // RIGHT channel (odd indices)
+            if (left < leftMin)   leftMin = left;
+            if (left > leftMax)   leftMax = left;
+            if (right < rightMin) rightMin = right;
+            if (right > rightMax) rightMax = right;
         }
-        LW_LOGD(LW_CLR_YELLOW "DMA:" LW_ANSI_RESET " hop=%lu R=[%08X..%08X] >>10=[%ld..%ld]",
-                (unsigned long)s_dbgHop,
-                (uint32_t)rawMin, (uint32_t)rawMax,
-                (long)(rawMin >> 10), (long)(rawMax >> 10));
+        LW_LOGD(LW_CLR_YELLOW "[DIAG-A1] hop=%lu" LW_ANSI_RESET, (unsigned long)s_dbgHop);
+        LW_LOGD("  LEFT  raw=[%08X..%08X] >>8=[%ld..%ld] >>10=[%ld..%ld]",
+                (uint32_t)leftMin, (uint32_t)leftMax,
+                (long)(leftMin >> 8), (long)(leftMax >> 8),
+                (long)(leftMin >> 10), (long)(leftMax >> 10));
+        LW_LOGD("  RIGHT raw=[%08X..%08X] >>8=[%ld..%ld] >>10=[%ld..%ld]",
+                (uint32_t)rightMin, (uint32_t)rightMax,
+                (long)(rightMin >> 8), (long)(rightMax >> 8),
+                (long)(rightMin >> 10), (long)(rightMax >> 10));
     }
 
     // =========================================================================
     // SAMPLE CONVERSION WITH DC-BLOCKING FILTER
     // =========================================================================
-    // 1. >>10 shift (legacy driver bit alignment)
+    // 1. Extract sample from correct channel with mic-appropriate bit shift
     // 2. DC-blocking high-pass filter (removes DC drift, no magic bias needed)
     // 3. Clamp and normalize to int16
+    //
+    // SPH0645: RIGHT channel (odd DMA indices), >>10 shift (18-bit data)
+    // INMP441: LEFT channel (even DMA indices), >>8 shift (24-bit data)
     // =========================================================================
+    constexpr size_t CHANNEL_OFFSET = (MICROPHONE_TYPE == MicType::INMP441) ? 0 : 1;
+    constexpr int    BIT_SHIFT      = (MICROPHONE_TYPE == MicType::INMP441) ? 8 : 10;
+
     int16_t peak = 0;
     for (size_t i = 0; i < HOP_SIZE; i++) {
-        int32_t rawSample = m_dmaBuffer[i * 2 + 1];  // RIGHT channel
+        int32_t rawSample = m_dmaBuffer[i * 2 + CHANNEL_OFFSET];
 
-        // Step 1: >>10 shift (legacy driver alignment)
-        float input = static_cast<float>(rawSample >> 10);
+        // Step 1: Bit shift (mic-type dependent)
+        float input = static_cast<float>(rawSample >> BIT_SHIFT);
 
         // Step 2: DC-blocking high-pass filter
         // y[n] = x[n] - x[n-1] + alpha * y[n-1]
@@ -220,13 +236,22 @@ bool AudioCapture::configureI2S()
         return false;
     }
 
-    // Register settings AFTER i2s_set_pin()
-    REG_CLR_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_MSB_SHIFT);
-    REG_CLR_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_WS_IDLE_POL);  // NO WS inversion - data in RIGHT channel
-    REG_SET_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_LEFT_ALIGN);
-    REG_SET_BIT(I2S_RX_TIMING_REG(I2S_PORT), BIT(9));
-
-    LW_LOGI("I2S configured: STEREO, MSB format, >>10 shift");
+    // Register settings AFTER i2s_set_pin() — mic-type dependent
+    if constexpr (MICROPHONE_TYPE == MicType::INMP441) {
+        // INMP441: SET MSB_SHIFT to compensate 1-bit I2S delay
+        REG_SET_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_MSB_SHIFT);
+        REG_CLR_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_WS_IDLE_POL);
+        REG_SET_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_LEFT_ALIGN);
+        REG_SET_BIT(I2S_RX_TIMING_REG(I2S_PORT), BIT(9));
+        LW_LOGI("I2S configured: INMP441, LEFT ch, MSB_SHIFT set, >>8 shift");
+    } else {
+        // SPH0645: CLEAR MSB_SHIFT, data in RIGHT channel
+        REG_CLR_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_MSB_SHIFT);
+        REG_CLR_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_WS_IDLE_POL);
+        REG_SET_BIT(I2S_RX_CONF_REG(I2S_PORT), I2S_RX_LEFT_ALIGN);
+        REG_SET_BIT(I2S_RX_TIMING_REG(I2S_PORT), BIT(9));
+        LW_LOGI("I2S configured: SPH0645, RIGHT ch, MSB_SHIFT clear, >>10 shift");
+    }
     return true;
 }
 

@@ -1,0 +1,860 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		04CF3ABF4F690ECCD65A93B3 /* LWSlider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61D83CFB65D318279505DBE1 /* LWSlider.swift */; };
+		0A1D15C59D3B43DF3C54945F /* ParametersViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C2DEC421D3DDA638E3C0A64 /* ParametersViewModel.swift */; };
+		11E6A0E782BD4B03CD542F5B /* TransitionConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A450B5387DC386220A98816 /* TransitionConfig.swift */; };
+		1263036EBD20BAFA598E80AB /* PaletteMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E098D8F3CD5BB4C24E6F3BE /* PaletteMetadata.swift */; };
+		1753660806145577E7550059 /* TransitionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D2D905559510B8544F756FE /* TransitionViewModel.swift */; };
+		17EFD59BD34954993885E7CB /* DeviceTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7DF92D44D22FEB411F9071B /* DeviceTab.swift */; };
+		2DE021CF3623E96957E0FB5C /* ZoneConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08C2D77D1CFF5748E86799D6 /* ZoneConfig.swift */; };
+		1A2B3C4D5E6F7A8B9C0D1E2F /* AudioMetricsFrame.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6A7B8C9D0E1F2 /* AudioMetricsFrame.swift */; };
+		2B3C4D5E6F7A8B9C0D1E2F3A /* AudioTuningParameters.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F6A7B8C9D0E1F2A3 /* AudioTuningParameters.swift */; };
+		3C4D5E6F7A8B9C0D1E2F3A4B /* PaletteLUT.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3D4E5F6A7B8C9D0E1F2A3B4 /* PaletteLUT.swift */; };
+		4D5E6F7A8B9C0D1E2F3A4B5C /* CatmullRom.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4E5F6A7B8C9D0E1F2A3B4C5 /* CatmullRom.swift */; };
+		31BBB2F2C90464B12766B78B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 18BB5AEC76BDB1042E10C43A /* Assets.xcassets */; };
+		F0A1B2C3D4E5F6A7B8C90001 /* BebasNeue-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = F0A1B2C3D4E5F6A7B8C90011 /* BebasNeue-Bold.ttf */; };
+		F0A1B2C3D4E5F6A7B8C90002 /* Rajdhani-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = F0A1B2C3D4E5F6A7B8C90012 /* Rajdhani-Medium.ttf */; };
+		F0A1B2C3D4E5F6A7B8C90003 /* JetBrainsMono-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = F0A1B2C3D4E5F6A7B8C90013 /* JetBrainsMono-Medium.ttf */; };
+		C7A1D938E4B205F1A6C83E7D /* ColourCorrectionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8B2E049F5C316A2B7D94F8E /* ColourCorrectionCard.swift */; };
+		3B728228347413E7091E32CA /* TransitionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F36409ABC36BCB430CD9E0A4 /* TransitionCard.swift */; };
+		3D89807695C36EF268ECF7F4 /* AppViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F30172340FDF0956E377E609 /* AppViewModel.swift */; };
+		45694336ED60BDA41BFA3540 /* PresetsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF92DC1993E1D866C81B1AF2 /* PresetsViewModel.swift */; };
+		46A01374A6FEBB0BD76B44B0 /* HeroLEDPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4CB0B4835A9BACD84EF9FB5 /* HeroLEDPreview.swift */; };
+		4B3C99D5686D76D39E70E94A /* PalettePill.swift in Sources */ = {isa = PBXBuildFile; fileRef = C370B32AA140BBEF43C6E2C2 /* PalettePill.swift */; };
+		4D751605DDEF7E6FDFD34564 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB07CA24EADEF6BA881D646F /* ContentView.swift */; };
+		5570105A1AFE44E78C87C12F /* EffectSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BEF66607D6EB7A86DAB1A24 /* EffectSelectorView.swift */; };
+		5E6F7A8B9C0D1E2F3A4B5C6D /* WaterfallCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5F6A7B8C9D0E1F2A3B4C5D6 /* WaterfallCanvas.swift */; };
+		6F7A8B9C0D1E2F3A4B5C6D7E /* DotRidgeCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6A7B8C9D0E1F2A3B4C5D6E7 /* DotRidgeCanvas.swift */; };
+		7A8B9C0D1E2F3A4B5C6D7E8F /* DotMatrixCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7B8C9D0E1F2A3B4C5D6E7F8 /* DotMatrixCanvas.swift */; };
+		8B9C0D1E2F3A4B5C6D7E8F9A /* SpectrumVisualisationCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8C9D0E1F2A3B4C5D6E7F8A9 /* SpectrumVisualisationCard.swift */; };
+		D1D2D3D4D5D6D7D8E1E2E3F1 /* MetricBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A2A3A4A5A6A7A8B1B2B3C1 /* MetricBar.swift */; };
+		D1D2D3D4D5D6D7D8E1E2E3F2 /* BooleanIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A2A3A4A5A6A7A8B1B2B3C2 /* BooleanIndicator.swift */; };
+		D1D2D3D4D5D6D7D8E1E2E3F3 /* StepperControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A2A3A4A5A6A7A8B1B2B3C3 /* StepperControl.swift */; };
+		D1D2D3D4D5D6D7D8E1E2E3F4 /* EnergyCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A2A3A4A5A6A7A8B1B2B3C4 /* EnergyCard.swift */; };
+		D1D2D3D4D5D6D7D8E1E2E3F5 /* BeatTempoCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A2A3A4A5A6A7A8B1B2B3C5 /* BeatTempoCard.swift */; };
+		D1D2D3D4D5D6D7D8E1E2E3F6 /* StateCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A2A3A4A5A6A7A8B1B2B3C6 /* StateCard.swift */; };
+		D1D2D3D4D5D6D7D8E1E2E3F7 /* WaveformSpectrumCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A2A3A4A5A6A7A8B1B2B3C7 /* WaveformSpectrumCard.swift */; };
+		D1D2D3D4D5D6D7D8E1E2E3F8 /* DSPHealthCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A2A3A4A5A6A7A8B1B2B3C8 /* DSPHealthCard.swift */; };
+		D1D2D3D4D5D6D7D8E1E2E3F9 /* BeatHapticsCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A2A3A4A5A6A7A8B1B2B3C9 /* BeatHapticsCard.swift */; };
+		D1D2D3D4D5D6D7D8E1E2E3FA /* ControlBusSmoothingCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A2A3A4A5A6A7A8B1B2B3CA /* ControlBusSmoothingCard.swift */; };
+		D1D2D3D4D5D6D7D8E1E2E3FB /* BandEnvelopeCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A2A3A4A5A6A7A8B1B2B3CB /* BandEnvelopeCard.swift */; };
+		D1D2D3D4D5D6D7D8E1E2E3FC /* SilenceDetectionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A2A3A4A5A6A7A8B1B2B3CC /* SilenceDetectionCard.swift */; };
+		D1D2D3D4D5D6D7D8E1E2E3FD /* NoveltyOnsetCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1A2A3A4A5A6A7A8B1B2B3CD /* NoveltyOnsetCard.swift */; };
+		567B084BC06F68C464764BF6 /* LWCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25C2C8B36E0F08C57DD1C8ED /* LWCard.swift */; };
+		5B6B5DE31AEFA3BD6EDD2094 /* ConnectionSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89A2E16E0729B28215952E9B /* ConnectionSheet.swift */; };
+		5C1C06EBB274C051A439A797 /* ZonePreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = C22F18DAE2719E6988E4786B /* ZonePreset.swift */; };
+		5CAB43DF6F29197959F5DD73 /* PersistentStatusBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 254F0C219FB5F9F4CE8A47D4 /* PersistentStatusBar.swift */; };
+		5D1AFF73F547DEB373796126 /* ZonesTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E1E87FD587D3F3C005F248C /* ZonesTab.swift */; };
+		5FDC20B426C20FB926696A29 /* ZoneHeaderCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = C704DF2FFFAD9DA38DF9AAC2 /* ZoneHeaderCard.swift */; };
+		7199AF4B6F1AC075548475CF /* PaletteViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 224698FD7FB174C316FBE60D /* PaletteViewModel.swift */; };
+		731AD47052D2320BBE28F2C3 /* ConnectionDot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CA3B90727EBB0CF6103AEA1 /* ConnectionDot.swift */; };
+		798069C686F9B5DADBE9494F /* ExpressionParametersCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF78CFCA2FCF79A5CDB755D9 /* ExpressionParametersCard.swift */; };
+		7BC7BCDD524D77A5D2AF0044 /* BeatEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CE2A301EC4BB1F6157369C3 /* BeatEvent.swift */; };
+		800432784DA7C15F40CA4A21 /* DeviceDiscoveryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A06B1F5D1B76135389E8A37 /* DeviceDiscoveryService.swift */; };
+		8552E2FE7937823BA926DF2E /* PatternPill.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C1ED4C5F6EC72A53B9AEC1C /* PatternPill.swift */; };
+		91C002843B54FEC54EA87C4C /* APIResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = E448948AAFAA0CD844A14110 /* APIResponse.swift */; };
+		964260B8CD010BFD9E4B6328 /* AudioViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6653D1E80D92C64FAC24AD3 /* AudioViewModel.swift */; };
+		96C9D4D2DCE98659FD34D56F /* PaletteSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E24D590F91011F14E7284A3 /* PaletteSelectorView.swift */; };
+		98512C417EA442B34802EB83 /* PlayTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 456CA5276801070F23B37070 /* PlayTab.swift */; };
+		9E2095C181E3E4C63D8EE18F /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87205249A100EE9FB99CC9D8 /* DesignTokens.swift */; };
+		A8C6128BC49CA053AEDD3E60 /* AudioParametersCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6C3DFA6F658077123421991 /* AudioParametersCard.swift */; };
+		A9B951C25B83511114C208EF /* ColourCorrectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C72251A9FB2D4BBDBF401161 /* ColourCorrectionView.swift */; };
+		A9DA8D7D7DE6C390B6CB5D9F /* ZoneSegment.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3494A9997E5BDD618C4F611 /* ZoneSegment.swift */; };
+		AA4974FFED4AA3412E9CCEFF /* WebSocketService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E5E9E104E8517B31A2FCD3 /* WebSocketService.swift */; };
+		ABC80644A6EF1724A606D6CF /* EffectViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25808F2C76C005D96028C674 /* EffectViewModel.swift */; };
+		BAE8BCD1B192AB3E5AEC645A /* LightwaveOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8486C05EF5A54BF248CBC5 /* LightwaveOSApp.swift */; };
+		BF2618C4BF2E8B080D8ABD8D /* ColourCorrectionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F510F083B57F41382CDE442A /* ColourCorrectionViewModel.swift */; };
+		C37B4DEBCA003D607F1EB6B7 /* SystemState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FE0B2000D2C4873FDC10DF5 /* SystemState.swift */; };
+		C57C8477A4CEC46122235A5B /* BeatPulse.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1C44B4393BF8BAEE1D5974 /* BeatPulse.swift */; };
+		D40C0E29EE75A444D41C091B /* DeviceInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24F263BD5B2BE3B042FD6500 /* DeviceInfo.swift */; };
+		D7B1E0FA82137B04E351A3AC /* PrimaryControlsCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3683BF0C58E2D73196B6C24F /* PrimaryControlsCard.swift */; };
+		DD03A1AAA86329C8F31ED5F8 /* ZoneViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CEDD5DA50941F20E512D1B2 /* ZoneViewModel.swift */; };
+		DD2A1545ECFBAFC9366C0222 /* ShowsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01B2B27348B24F57C57E84EE /* ShowsView.swift */; };
+		DD9590BF303220F7E3701DD7 /* EffectMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 455F2E537DDB7B2763EC9AD0 /* EffectMetadata.swift */; };
+		E58931F01E9F0E5EA55B34D1 /* AudioTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21011EB5D02FBEF35115201F /* AudioTab.swift */; };
+		E75779C39E1662B362D2A503 /* LWButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20112EA69C6BBF4AD578EAB9 /* LWButton.swift */; };
+		E88C768709E490E1957F1944 /* LEDStripView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E185DC09E48C5BAB0DA19E5 /* LEDStripView.swift */; };
+		EE6E92BCD446F432BFB4D1A9 /* ColourCorrectionConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C193AB587158FAE17B70076 /* ColourCorrectionConfig.swift */; };
+		F0E737F62762F2F3CBD94E41 /* DebugLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3312C970BE3E5BC4D373D9AA /* DebugLogView.swift */; };
+		F2115B1183C10DA720A36477 /* ZoneCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = E806390A509CCD91CCE62C34 /* ZoneCard.swift */; };
+		F9B02ED4E22BECB3EFD01829 /* RESTClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DABC7E4FD7AB390A7413924 /* RESTClient.swift */; };
+		F9F86388A7F4ACC8530A4B99 /* PresetsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F546C8A2C99339CAF146E5B8 /* PresetsView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		E635043E3E02678AA156B044 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D0F43B11DF7EBA3561B06F55 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E405F82EAA41B9EF50E5A037;
+			remoteInfo = LightwaveOS;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		01B2B27348B24F57C57E84EE /* ShowsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowsView.swift; sourceTree = "<group>"; };
+		08C2D77D1CFF5748E86799D6 /* ZoneConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoneConfig.swift; sourceTree = "<group>"; };
+		0C1ED4C5F6EC72A53B9AEC1C /* PatternPill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatternPill.swift; sourceTree = "<group>"; };
+		18BB5AEC76BDB1042E10C43A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		1A8573E656EDD28AD85E9F93 /* LightwaveOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = LightwaveOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1BE5EB53F03D24EAA9BF8845 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		A1B2C3D4E5F6A7B8C9D0E1F2 /* AudioMetricsFrame.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMetricsFrame.swift; sourceTree = "<group>"; };
+		B2C3D4E5F6A7B8C9D0E1F2A3 /* AudioTuningParameters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioTuningParameters.swift; sourceTree = "<group>"; };
+		1D2D905559510B8544F756FE /* TransitionViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitionViewModel.swift; sourceTree = "<group>"; };
+		20112EA69C6BBF4AD578EAB9 /* LWButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LWButton.swift; sourceTree = "<group>"; };
+		21011EB5D02FBEF35115201F /* AudioTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioTab.swift; sourceTree = "<group>"; };
+		224698FD7FB174C316FBE60D /* PaletteViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteViewModel.swift; sourceTree = "<group>"; };
+		24F263BD5B2BE3B042FD6500 /* DeviceInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceInfo.swift; sourceTree = "<group>"; };
+		254F0C219FB5F9F4CE8A47D4 /* PersistentStatusBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistentStatusBar.swift; sourceTree = "<group>"; };
+		25808F2C76C005D96028C674 /* EffectViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EffectViewModel.swift; sourceTree = "<group>"; };
+		25C2C8B36E0F08C57DD1C8ED /* LWCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LWCard.swift; sourceTree = "<group>"; };
+		2A8486C05EF5A54BF248CBC5 /* LightwaveOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LightwaveOSApp.swift; sourceTree = "<group>"; };
+		2CEDD5DA50941F20E512D1B2 /* ZoneViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoneViewModel.swift; sourceTree = "<group>"; };
+		3312C970BE3E5BC4D373D9AA /* DebugLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogView.swift; sourceTree = "<group>"; };
+		3683BF0C58E2D73196B6C24F /* PrimaryControlsCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrimaryControlsCard.swift; sourceTree = "<group>"; };
+		3A450B5387DC386220A98816 /* TransitionConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitionConfig.swift; sourceTree = "<group>"; };
+		3CA3B90727EBB0CF6103AEA1 /* ConnectionDot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionDot.swift; sourceTree = "<group>"; };
+		455F2E537DDB7B2763EC9AD0 /* EffectMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EffectMetadata.swift; sourceTree = "<group>"; };
+		456CA5276801070F23B37070 /* PlayTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayTab.swift; sourceTree = "<group>"; };
+		4A06B1F5D1B76135389E8A37 /* DeviceDiscoveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceDiscoveryService.swift; sourceTree = "<group>"; };
+		4BEF66607D6EB7A86DAB1A24 /* EffectSelectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EffectSelectorView.swift; sourceTree = "<group>"; };
+		4C2DEC421D3DDA638E3C0A64 /* ParametersViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParametersViewModel.swift; sourceTree = "<group>"; };
+		5EB40BA8FF3F11929580852A /* LightwaveOSTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = LightwaveOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		5FE0B2000D2C4873FDC10DF5 /* SystemState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemState.swift; sourceTree = "<group>"; };
+		61D83CFB65D318279505DBE1 /* LWSlider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LWSlider.swift; sourceTree = "<group>"; };
+		6E1E87FD587D3F3C005F248C /* ZonesTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZonesTab.swift; sourceTree = "<group>"; };
+		C3D4E5F6A7B8C9D0E1F2A3B4 /* PaletteLUT.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteLUT.swift; sourceTree = "<group>"; };
+		D4E5F6A7B8C9D0E1F2A3B4C5 /* CatmullRom.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatmullRom.swift; sourceTree = "<group>"; };
+		E5F6A7B8C9D0E1F2A3B4C5D6 /* WaterfallCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaterfallCanvas.swift; sourceTree = "<group>"; };
+		F6A7B8C9D0E1F2A3B4C5D6E7 /* DotRidgeCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DotRidgeCanvas.swift; sourceTree = "<group>"; };
+		A7B8C9D0E1F2A3B4C5D6E7F8 /* DotMatrixCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DotMatrixCanvas.swift; sourceTree = "<group>"; };
+		B8C9D0E1F2A3B4C5D6E7F8A9 /* SpectrumVisualisationCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpectrumVisualisationCard.swift; sourceTree = "<group>"; };
+		A1A2A3A4A5A6A7A8B1B2B3C1 /* MetricBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricBar.swift; sourceTree = "<group>"; };
+		A1A2A3A4A5A6A7A8B1B2B3C2 /* BooleanIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooleanIndicator.swift; sourceTree = "<group>"; };
+		A1A2A3A4A5A6A7A8B1B2B3C3 /* StepperControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StepperControl.swift; sourceTree = "<group>"; };
+		A1A2A3A4A5A6A7A8B1B2B3C4 /* EnergyCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnergyCard.swift; sourceTree = "<group>"; };
+		A1A2A3A4A5A6A7A8B1B2B3C5 /* BeatTempoCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeatTempoCard.swift; sourceTree = "<group>"; };
+		A1A2A3A4A5A6A7A8B1B2B3C6 /* StateCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StateCard.swift; sourceTree = "<group>"; };
+		A1A2A3A4A5A6A7A8B1B2B3C7 /* WaveformSpectrumCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformSpectrumCard.swift; sourceTree = "<group>"; };
+		A1A2A3A4A5A6A7A8B1B2B3C8 /* DSPHealthCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DSPHealthCard.swift; sourceTree = "<group>"; };
+		A1A2A3A4A5A6A7A8B1B2B3C9 /* BeatHapticsCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeatHapticsCard.swift; sourceTree = "<group>"; };
+		A1A2A3A4A5A6A7A8B1B2B3CA /* ControlBusSmoothingCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlBusSmoothingCard.swift; sourceTree = "<group>"; };
+		A1A2A3A4A5A6A7A8B1B2B3CB /* BandEnvelopeCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BandEnvelopeCard.swift; sourceTree = "<group>"; };
+		A1A2A3A4A5A6A7A8B1B2B3CC /* SilenceDetectionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SilenceDetectionCard.swift; sourceTree = "<group>"; };
+		A1A2A3A4A5A6A7A8B1B2B3CD /* NoveltyOnsetCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoveltyOnsetCard.swift; sourceTree = "<group>"; };
+		7DABC7E4FD7AB390A7413924 /* RESTClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RESTClient.swift; sourceTree = "<group>"; };
+		7E185DC09E48C5BAB0DA19E5 /* LEDStripView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LEDStripView.swift; sourceTree = "<group>"; };
+		7E24D590F91011F14E7284A3 /* PaletteSelectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteSelectorView.swift; sourceTree = "<group>"; };
+		87205249A100EE9FB99CC9D8 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
+		89A2E16E0729B28215952E9B /* ConnectionSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionSheet.swift; sourceTree = "<group>"; };
+		8CE2A301EC4BB1F6157369C3 /* BeatEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeatEvent.swift; sourceTree = "<group>"; };
+		9C193AB587158FAE17B70076 /* ColourCorrectionConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColourCorrectionConfig.swift; sourceTree = "<group>"; };
+		9E098D8F3CD5BB4C24E6F3BE /* PaletteMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteMetadata.swift; sourceTree = "<group>"; };
+		A0E5E9E104E8517B31A2FCD3 /* WebSocketService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSocketService.swift; sourceTree = "<group>"; };
+		A3494A9997E5BDD618C4F611 /* ZoneSegment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoneSegment.swift; sourceTree = "<group>"; };
+		AA1C44B4393BF8BAEE1D5974 /* BeatPulse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeatPulse.swift; sourceTree = "<group>"; };
+		BF92DC1993E1D866C81B1AF2 /* PresetsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetsViewModel.swift; sourceTree = "<group>"; };
+		C22F18DAE2719E6988E4786B /* ZonePreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZonePreset.swift; sourceTree = "<group>"; };
+		C370B32AA140BBEF43C6E2C2 /* PalettePill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PalettePill.swift; sourceTree = "<group>"; };
+		C6C3DFA6F658077123421991 /* AudioParametersCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioParametersCard.swift; sourceTree = "<group>"; };
+		C704DF2FFFAD9DA38DF9AAC2 /* ZoneHeaderCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoneHeaderCard.swift; sourceTree = "<group>"; };
+		C72251A9FB2D4BBDBF401161 /* ColourCorrectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColourCorrectionView.swift; sourceTree = "<group>"; };
+		D6653D1E80D92C64FAC24AD3 /* AudioViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioViewModel.swift; sourceTree = "<group>"; };
+		DB07CA24EADEF6BA881D646F /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		DF78CFCA2FCF79A5CDB755D9 /* ExpressionParametersCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpressionParametersCard.swift; sourceTree = "<group>"; };
+		E448948AAFAA0CD844A14110 /* APIResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIResponse.swift; sourceTree = "<group>"; };
+		E4CB0B4835A9BACD84EF9FB5 /* HeroLEDPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeroLEDPreview.swift; sourceTree = "<group>"; };
+		E806390A509CCD91CCE62C34 /* ZoneCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoneCard.swift; sourceTree = "<group>"; };
+		F30172340FDF0956E377E609 /* AppViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppViewModel.swift; sourceTree = "<group>"; };
+		D8B2E049F5C316A2B7D94F8E /* ColourCorrectionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColourCorrectionCard.swift; sourceTree = "<group>"; };
+		F36409ABC36BCB430CD9E0A4 /* TransitionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitionCard.swift; sourceTree = "<group>"; };
+		F510F083B57F41382CDE442A /* ColourCorrectionViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColourCorrectionViewModel.swift; sourceTree = "<group>"; };
+		F546C8A2C99339CAF146E5B8 /* PresetsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetsView.swift; sourceTree = "<group>"; };
+		F7DF92D44D22FEB411F9071B /* DeviceTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceTab.swift; sourceTree = "<group>"; };
+		F0A1B2C3D4E5F6A7B8C90011 /* BebasNeue-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "BebasNeue-Bold.ttf"; sourceTree = "<group>"; };
+		F0A1B2C3D4E5F6A7B8C90012 /* Rajdhani-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Rajdhani-Medium.ttf"; sourceTree = "<group>"; };
+		F0A1B2C3D4E5F6A7B8C90013 /* JetBrainsMono-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "JetBrainsMono-Medium.ttf"; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		06835CFE31755DC52480B3E0 = {
+			isa = PBXGroup;
+			children = (
+				6496E1ED07FD075EDC975B77 /* LightwaveOS */,
+				275A3BEE403997031628F68D /* LightwaveOSTests */,
+				CDB39E193750DF138CF1E6D7 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		0F4B629A0EDC630F6AD6725B /* Audio */ = {
+			isa = PBXGroup;
+			children = (
+				C6C3DFA6F658077123421991 /* AudioParametersCard.swift */,
+				A1A2A3A4A5A6A7A8B1B2B3CB /* BandEnvelopeCard.swift */,
+				A1A2A3A4A5A6A7A8B1B2B3C9 /* BeatHapticsCard.swift */,
+				A1A2A3A4A5A6A7A8B1B2B3C5 /* BeatTempoCard.swift */,
+				A1A2A3A4A5A6A7A8B1B2B3CA /* ControlBusSmoothingCard.swift */,
+				A7B8C9D0E1F2A3B4C5D6E7F8 /* DotMatrixCanvas.swift */,
+				F6A7B8C9D0E1F2A3B4C5D6E7 /* DotRidgeCanvas.swift */,
+				A1A2A3A4A5A6A7A8B1B2B3C8 /* DSPHealthCard.swift */,
+				A1A2A3A4A5A6A7A8B1B2B3C4 /* EnergyCard.swift */,
+				A1A2A3A4A5A6A7A8B1B2B3CD /* NoveltyOnsetCard.swift */,
+				A1A2A3A4A5A6A7A8B1B2B3CC /* SilenceDetectionCard.swift */,
+				B8C9D0E1F2A3B4C5D6E7F8A9 /* SpectrumVisualisationCard.swift */,
+				A1A2A3A4A5A6A7A8B1B2B3C6 /* StateCard.swift */,
+				E5F6A7B8C9D0E1F2A3B4C5D6 /* WaterfallCanvas.swift */,
+				A1A2A3A4A5A6A7A8B1B2B3C7 /* WaveformSpectrumCard.swift */,
+			);
+			path = Audio;
+			sourceTree = "<group>";
+		};
+		0FE53C2F3EBBC1B442360F8D /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				AA1C44B4393BF8BAEE1D5974 /* BeatPulse.swift */,
+				A1A2A3A4A5A6A7A8B1B2B3C2 /* BooleanIndicator.swift */,
+				3CA3B90727EBB0CF6103AEA1 /* ConnectionDot.swift */,
+				20112EA69C6BBF4AD578EAB9 /* LWButton.swift */,
+				25C2C8B36E0F08C57DD1C8ED /* LWCard.swift */,
+				61D83CFB65D318279505DBE1 /* LWSlider.swift */,
+				A1A2A3A4A5A6A7A8B1B2B3C1 /* MetricBar.swift */,
+				A1A2A3A4A5A6A7A8B1B2B3C3 /* StepperControl.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		275A3BEE403997031628F68D /* LightwaveOSTests */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = LightwaveOSTests;
+			sourceTree = "<group>";
+		};
+		35E26233B47299927CFC807F /* Device */ = {
+			isa = PBXGroup;
+			children = (
+				C72251A9FB2D4BBDBF401161 /* ColourCorrectionView.swift */,
+				3312C970BE3E5BC4D373D9AA /* DebugLogView.swift */,
+				F546C8A2C99339CAF146E5B8 /* PresetsView.swift */,
+				01B2B27348B24F57C57E84EE /* ShowsView.swift */,
+			);
+			path = Device;
+			sourceTree = "<group>";
+		};
+		3966AB2DD47C6B8C86487BDF /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				89A2E16E0729B28215952E9B /* ConnectionSheet.swift */,
+				DB07CA24EADEF6BA881D646F /* ContentView.swift */,
+				4BEF66607D6EB7A86DAB1A24 /* EffectSelectorView.swift */,
+				7E24D590F91011F14E7284A3 /* PaletteSelectorView.swift */,
+				0F4B629A0EDC630F6AD6725B /* Audio */,
+				35E26233B47299927CFC807F /* Device */,
+				D08CF0274A4A957D156523CD /* Play */,
+				698326AA5A0546C9C66AC457 /* Shared */,
+				EC5A559B47BFFA1AC5D2C1DF /* Tabs */,
+				A49F221A8F4B0335D35F3A33 /* Zones */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		6496E1ED07FD075EDC975B77 /* LightwaveOS */ = {
+			isa = PBXGroup;
+			children = (
+				18BB5AEC76BDB1042E10C43A /* Assets.xcassets */,
+				C09C5C83D21C91F921848082 /* App */,
+				0FE53C2F3EBBC1B442360F8D /* Components */,
+				E9D96B63C493E956D7941F3E /* Models */,
+				CCE19016D5E2D870FAC4E39A /* Network */,
+				6C5E97CC447298533E6753FB /* Resources */,
+				67DEA038B5EAA3D49B8302AA /* Theme */,
+				9C0D1E2F3A4B5C6D7E8F9A0B /* Utilities */,
+				B4146180EC1E865562154BD9 /* ViewModels */,
+				3966AB2DD47C6B8C86487BDF /* Views */,
+			);
+			path = LightwaveOS;
+			sourceTree = "<group>";
+		};
+		67DEA038B5EAA3D49B8302AA /* Theme */ = {
+			isa = PBXGroup;
+			children = (
+				87205249A100EE9FB99CC9D8 /* DesignTokens.swift */,
+			);
+			path = Theme;
+			sourceTree = "<group>";
+		};
+		698326AA5A0546C9C66AC457 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				254F0C219FB5F9F4CE8A47D4 /* PersistentStatusBar.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		6C5E97CC447298533E6753FB /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				F0A1B2C3D4E5F6A7B8C90020 /* Fonts */,
+				1BE5EB53F03D24EAA9BF8845 /* Info.plist */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		F0A1B2C3D4E5F6A7B8C90020 /* Fonts */ = {
+			isa = PBXGroup;
+			children = (
+				F0A1B2C3D4E5F6A7B8C90011 /* BebasNeue-Bold.ttf */,
+				F0A1B2C3D4E5F6A7B8C90012 /* Rajdhani-Medium.ttf */,
+				F0A1B2C3D4E5F6A7B8C90013 /* JetBrainsMono-Medium.ttf */,
+			);
+			path = Fonts;
+			sourceTree = "<group>";
+		};
+		A49F221A8F4B0335D35F3A33 /* Zones */ = {
+			isa = PBXGroup;
+			children = (
+				7E185DC09E48C5BAB0DA19E5 /* LEDStripView.swift */,
+				E806390A509CCD91CCE62C34 /* ZoneCard.swift */,
+				C704DF2FFFAD9DA38DF9AAC2 /* ZoneHeaderCard.swift */,
+			);
+			path = Zones;
+			sourceTree = "<group>";
+		};
+		B4146180EC1E865562154BD9 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				F30172340FDF0956E377E609 /* AppViewModel.swift */,
+				D6653D1E80D92C64FAC24AD3 /* AudioViewModel.swift */,
+				F510F083B57F41382CDE442A /* ColourCorrectionViewModel.swift */,
+				25808F2C76C005D96028C674 /* EffectViewModel.swift */,
+				224698FD7FB174C316FBE60D /* PaletteViewModel.swift */,
+				4C2DEC421D3DDA638E3C0A64 /* ParametersViewModel.swift */,
+				BF92DC1993E1D866C81B1AF2 /* PresetsViewModel.swift */,
+				1D2D905559510B8544F756FE /* TransitionViewModel.swift */,
+				2CEDD5DA50941F20E512D1B2 /* ZoneViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		C09C5C83D21C91F921848082 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				2A8486C05EF5A54BF248CBC5 /* LightwaveOSApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		CCE19016D5E2D870FAC4E39A /* Network */ = {
+			isa = PBXGroup;
+			children = (
+				4A06B1F5D1B76135389E8A37 /* DeviceDiscoveryService.swift */,
+				7DABC7E4FD7AB390A7413924 /* RESTClient.swift */,
+				A0E5E9E104E8517B31A2FCD3 /* WebSocketService.swift */,
+			);
+			path = Network;
+			sourceTree = "<group>";
+		};
+		CDB39E193750DF138CF1E6D7 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				1A8573E656EDD28AD85E9F93 /* LightwaveOS.app */,
+				5EB40BA8FF3F11929580852A /* LightwaveOSTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		D08CF0274A4A957D156523CD /* Play */ = {
+			isa = PBXGroup;
+			children = (
+				DF78CFCA2FCF79A5CDB755D9 /* ExpressionParametersCard.swift */,
+				D8B2E049F5C316A2B7D94F8E /* ColourCorrectionCard.swift */,
+				E4CB0B4835A9BACD84EF9FB5 /* HeroLEDPreview.swift */,
+				C370B32AA140BBEF43C6E2C2 /* PalettePill.swift */,
+				0C1ED4C5F6EC72A53B9AEC1C /* PatternPill.swift */,
+				3683BF0C58E2D73196B6C24F /* PrimaryControlsCard.swift */,
+				F36409ABC36BCB430CD9E0A4 /* TransitionCard.swift */,
+			);
+			path = Play;
+			sourceTree = "<group>";
+		};
+		E9D96B63C493E956D7941F3E /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				E448948AAFAA0CD844A14110 /* APIResponse.swift */,
+				A1B2C3D4E5F6A7B8C9D0E1F2 /* AudioMetricsFrame.swift */,
+				B2C3D4E5F6A7B8C9D0E1F2A3 /* AudioTuningParameters.swift */,
+				8CE2A301EC4BB1F6157369C3 /* BeatEvent.swift */,
+				9C193AB587158FAE17B70076 /* ColourCorrectionConfig.swift */,
+				24F263BD5B2BE3B042FD6500 /* DeviceInfo.swift */,
+				455F2E537DDB7B2763EC9AD0 /* EffectMetadata.swift */,
+				9E098D8F3CD5BB4C24E6F3BE /* PaletteMetadata.swift */,
+				5FE0B2000D2C4873FDC10DF5 /* SystemState.swift */,
+				3A450B5387DC386220A98816 /* TransitionConfig.swift */,
+				08C2D77D1CFF5748E86799D6 /* ZoneConfig.swift */,
+				C22F18DAE2719E6988E4786B /* ZonePreset.swift */,
+				A3494A9997E5BDD618C4F611 /* ZoneSegment.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		9C0D1E2F3A4B5C6D7E8F9A0B /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+				D4E5F6A7B8C9D0E1F2A3B4C5 /* CatmullRom.swift */,
+				C3D4E5F6A7B8C9D0E1F2A3B4 /* PaletteLUT.swift */,
+			);
+			path = Utilities;
+			sourceTree = "<group>";
+		};
+		EC5A559B47BFFA1AC5D2C1DF /* Tabs */ = {
+			isa = PBXGroup;
+			children = (
+				21011EB5D02FBEF35115201F /* AudioTab.swift */,
+				F7DF92D44D22FEB411F9071B /* DeviceTab.swift */,
+				456CA5276801070F23B37070 /* PlayTab.swift */,
+				6E1E87FD587D3F3C005F248C /* ZonesTab.swift */,
+			);
+			path = Tabs;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		E405F82EAA41B9EF50E5A037 /* LightwaveOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B9BDDB363180DD6B82ECA048 /* Build configuration list for PBXNativeTarget "LightwaveOS" */;
+			buildPhases = (
+				D8E2986E3848E92BABAF1B8D /* Sources */,
+				FC3197B091E4005197AF7DC7 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = LightwaveOS;
+			packageProductDependencies = (
+			);
+			productName = LightwaveOS;
+			productReference = 1A8573E656EDD28AD85E9F93 /* LightwaveOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+		E5834188A4BD75A6BB636F26 /* LightwaveOSTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 40882BEE10D36CC1E2D7FDE7 /* Build configuration list for PBXNativeTarget "LightwaveOSTests" */;
+			buildPhases = (
+				38FBE43344E5DCBBAAF8D0FB /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				28EE30D11937F51EFD28BA8B /* PBXTargetDependency */,
+			);
+			name = LightwaveOSTests;
+			packageProductDependencies = (
+			);
+			productName = LightwaveOSTests;
+			productReference = 5EB40BA8FF3F11929580852A /* LightwaveOSTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		D0F43B11DF7EBA3561B06F55 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					E405F82EAA41B9EF50E5A037 = {
+						DevelopmentTeam = VS4NV74375;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = D16035F5F882D2A42DF8F310 /* Build configuration list for PBXProject "LightwaveOS" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 06835CFE31755DC52480B3E0;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				E405F82EAA41B9EF50E5A037 /* LightwaveOS */,
+				E5834188A4BD75A6BB636F26 /* LightwaveOSTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		FC3197B091E4005197AF7DC7 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				31BBB2F2C90464B12766B78B /* Assets.xcassets in Resources */,
+				F0A1B2C3D4E5F6A7B8C90001 /* BebasNeue-Bold.ttf in Resources */,
+				F0A1B2C3D4E5F6A7B8C90002 /* Rajdhani-Medium.ttf in Resources */,
+				F0A1B2C3D4E5F6A7B8C90003 /* JetBrainsMono-Medium.ttf in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		38FBE43344E5DCBBAAF8D0FB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D8E2986E3848E92BABAF1B8D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				91C002843B54FEC54EA87C4C /* APIResponse.swift in Sources */,
+				3D89807695C36EF268ECF7F4 /* AppViewModel.swift in Sources */,
+				1A2B3C4D5E6F7A8B9C0D1E2F /* AudioMetricsFrame.swift in Sources */,
+				A8C6128BC49CA053AEDD3E60 /* AudioParametersCard.swift in Sources */,
+				E58931F01E9F0E5EA55B34D1 /* AudioTab.swift in Sources */,
+				2B3C4D5E6F7A8B9C0D1E2F3A /* AudioTuningParameters.swift in Sources */,
+				964260B8CD010BFD9E4B6328 /* AudioViewModel.swift in Sources */,
+				4D5E6F7A8B9C0D1E2F3A4B5C /* CatmullRom.swift in Sources */,
+				7A8B9C0D1E2F3A4B5C6D7E8F /* DotMatrixCanvas.swift in Sources */,
+				6F7A8B9C0D1E2F3A4B5C6D7E /* DotRidgeCanvas.swift in Sources */,
+				3C4D5E6F7A8B9C0D1E2F3A4B /* PaletteLUT.swift in Sources */,
+				8B9C0D1E2F3A4B5C6D7E8F9A /* SpectrumVisualisationCard.swift in Sources */,
+				5E6F7A8B9C0D1E2F3A4B5C6D /* WaterfallCanvas.swift in Sources */,
+				7BC7BCDD524D77A5D2AF0044 /* BeatEvent.swift in Sources */,
+				C57C8477A4CEC46122235A5B /* BeatPulse.swift in Sources */,
+				EE6E92BCD446F432BFB4D1A9 /* ColourCorrectionConfig.swift in Sources */,
+				A9B951C25B83511114C208EF /* ColourCorrectionView.swift in Sources */,
+				BF2618C4BF2E8B080D8ABD8D /* ColourCorrectionViewModel.swift in Sources */,
+				731AD47052D2320BBE28F2C3 /* ConnectionDot.swift in Sources */,
+				5B6B5DE31AEFA3BD6EDD2094 /* ConnectionSheet.swift in Sources */,
+				4D751605DDEF7E6FDFD34564 /* ContentView.swift in Sources */,
+				F0E737F62762F2F3CBD94E41 /* DebugLogView.swift in Sources */,
+				9E2095C181E3E4C63D8EE18F /* DesignTokens.swift in Sources */,
+				800432784DA7C15F40CA4A21 /* DeviceDiscoveryService.swift in Sources */,
+				D40C0E29EE75A444D41C091B /* DeviceInfo.swift in Sources */,
+				17EFD59BD34954993885E7CB /* DeviceTab.swift in Sources */,
+				DD9590BF303220F7E3701DD7 /* EffectMetadata.swift in Sources */,
+				5570105A1AFE44E78C87C12F /* EffectSelectorView.swift in Sources */,
+				ABC80644A6EF1724A606D6CF /* EffectViewModel.swift in Sources */,
+				798069C686F9B5DADBE9494F /* ExpressionParametersCard.swift in Sources */,
+				46A01374A6FEBB0BD76B44B0 /* HeroLEDPreview.swift in Sources */,
+				E88C768709E490E1957F1944 /* LEDStripView.swift in Sources */,
+				E75779C39E1662B362D2A503 /* LWButton.swift in Sources */,
+				567B084BC06F68C464764BF6 /* LWCard.swift in Sources */,
+				04CF3ABF4F690ECCD65A93B3 /* LWSlider.swift in Sources */,
+				BAE8BCD1B192AB3E5AEC645A /* LightwaveOSApp.swift in Sources */,
+				1263036EBD20BAFA598E80AB /* PaletteMetadata.swift in Sources */,
+				4B3C99D5686D76D39E70E94A /* PalettePill.swift in Sources */,
+				96C9D4D2DCE98659FD34D56F /* PaletteSelectorView.swift in Sources */,
+				7199AF4B6F1AC075548475CF /* PaletteViewModel.swift in Sources */,
+				0A1D15C59D3B43DF3C54945F /* ParametersViewModel.swift in Sources */,
+				8552E2FE7937823BA926DF2E /* PatternPill.swift in Sources */,
+				5CAB43DF6F29197959F5DD73 /* PersistentStatusBar.swift in Sources */,
+				98512C417EA442B34802EB83 /* PlayTab.swift in Sources */,
+				F9F86388A7F4ACC8530A4B99 /* PresetsView.swift in Sources */,
+				45694336ED60BDA41BFA3540 /* PresetsViewModel.swift in Sources */,
+				D7B1E0FA82137B04E351A3AC /* PrimaryControlsCard.swift in Sources */,
+				F9B02ED4E22BECB3EFD01829 /* RESTClient.swift in Sources */,
+				DD2A1545ECFBAFC9366C0222 /* ShowsView.swift in Sources */,
+				C37B4DEBCA003D607F1EB6B7 /* SystemState.swift in Sources */,
+				C7A1D938E4B205F1A6C83E7D /* ColourCorrectionCard.swift in Sources */,
+				3B728228347413E7091E32CA /* TransitionCard.swift in Sources */,
+				11E6A0E782BD4B03CD542F5B /* TransitionConfig.swift in Sources */,
+				1753660806145577E7550059 /* TransitionViewModel.swift in Sources */,
+				AA4974FFED4AA3412E9CCEFF /* WebSocketService.swift in Sources */,
+				F2115B1183C10DA720A36477 /* ZoneCard.swift in Sources */,
+				2DE021CF3623E96957E0FB5C /* ZoneConfig.swift in Sources */,
+				5FDC20B426C20FB926696A29 /* ZoneHeaderCard.swift in Sources */,
+				5C1C06EBB274C051A439A797 /* ZonePreset.swift in Sources */,
+				A9DA8D7D7DE6C390B6CB5D9F /* ZoneSegment.swift in Sources */,
+				DD03A1AAA86329C8F31ED5F8 /* ZoneViewModel.swift in Sources */,
+				5D1AFF73F547DEB373796126 /* ZonesTab.swift in Sources */,
+				D1D2D3D4D5D6D7D8E1E2E3F1 /* MetricBar.swift in Sources */,
+				D1D2D3D4D5D6D7D8E1E2E3F2 /* BooleanIndicator.swift in Sources */,
+				D1D2D3D4D5D6D7D8E1E2E3F3 /* StepperControl.swift in Sources */,
+				D1D2D3D4D5D6D7D8E1E2E3F4 /* EnergyCard.swift in Sources */,
+				D1D2D3D4D5D6D7D8E1E2E3F5 /* BeatTempoCard.swift in Sources */,
+				D1D2D3D4D5D6D7D8E1E2E3F6 /* StateCard.swift in Sources */,
+				D1D2D3D4D5D6D7D8E1E2E3F7 /* WaveformSpectrumCard.swift in Sources */,
+				D1D2D3D4D5D6D7D8E1E2E3F8 /* DSPHealthCard.swift in Sources */,
+				D1D2D3D4D5D6D7D8E1E2E3F9 /* BeatHapticsCard.swift in Sources */,
+				D1D2D3D4D5D6D7D8E1E2E3FA /* ControlBusSmoothingCard.swift in Sources */,
+				D1D2D3D4D5D6D7D8E1E2E3FB /* BandEnvelopeCard.swift in Sources */,
+				D1D2D3D4D5D6D7D8E1E2E3FC /* SilenceDetectionCard.swift in Sources */,
+				D1D2D3D4D5D6D7D8E1E2E3FD /* NoveltyOnsetCard.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		28EE30D11937F51EFD28BA8B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E405F82EAA41B9EF50E5A037 /* LightwaveOS */;
+			targetProxy = E635043E3E02678AA156B044 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		51D5B0DC3CC0E8E021EBD02A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = VS4NV74375;
+				INFOPLIST_FILE = LightwaveOS/Resources/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "LightwaveOS v2";
+				INFOPLIST_KEY_NSBonjourServices = "_lightwaveos._tcp,_http._tcp";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "LightwaveOS needs to discover LED controllers on your local network.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 2.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.spectrasynq.lightwaveos2;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		52CE31D261CF00C067AB7F44 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		564C15EB68CC4BFF383481AF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = VS4NV74375;
+				INFOPLIST_FILE = LightwaveOS/Resources/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "LightwaveOS v2";
+				INFOPLIST_KEY_NSBonjourServices = "_lightwaveos._tcp,_http._tcp";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "LightwaveOS needs to discover LED controllers on your local network.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 2.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.spectrasynq.lightwaveos2;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		921F2E0BCB47321639B4D105 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.spectrasynq.lightwaveos2.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/LightwaveOS.app/LightwaveOS";
+			};
+			name = Release;
+		};
+		DC92046C8190563274E9A568 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.spectrasynq.lightwaveos2.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/LightwaveOS.app/LightwaveOS";
+			};
+			name = Debug;
+		};
+		E866ADD8F6F550D71F42D140 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		40882BEE10D36CC1E2D7FDE7 /* Build configuration list for PBXNativeTarget "LightwaveOSTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DC92046C8190563274E9A568 /* Debug */,
+				921F2E0BCB47321639B4D105 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		B9BDDB363180DD6B82ECA048 /* Build configuration list for PBXNativeTarget "LightwaveOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				51D5B0DC3CC0E8E021EBD02A /* Debug */,
+				564C15EB68CC4BFF383481AF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		D16035F5F882D2A42DF8F310 /* Build configuration list for PBXProject "LightwaveOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E866ADD8F6F550D71F42D140 /* Debug */,
+				52CE31D261CF00C067AB7F44 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = D0F43B11DF7EBA3561B06F55 /* Project object */;
+}

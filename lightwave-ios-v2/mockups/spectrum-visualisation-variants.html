@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LightwaveOS — Audio Spectrum Visualisation Variants</title>
+<style>
+  :root {
+    --lw-base: #0F1219;
+    --lw-card: #1E2535;
+    --lw-elevated: #252D3F;
+    --lw-gold: #FFB84D;
+    --lw-cyan: #00D4FF;
+    --lw-text-primary: #E6E9EF;
+    --lw-text-secondary: #9CA3B0;
+    --lw-text-tertiary: #6B7280;
+    --lw-success: #4DFFB8;
+    --lw-error: #FF4D4D;
+    --lw-beat: #FFCC33;
+    --lw-zone0: #06b6d4;
+    --lw-zone1: #22c55e;
+    --lw-zone2: #a855f7;
+  }
+
+  @font-face { font-family: 'Bebas Neue'; src: local('Bebas Neue Bold'), local('BebasNeue-Bold'); font-weight: 700; }
+  @font-face { font-family: 'Rajdhani'; src: local('Rajdhani Medium'), local('Rajdhani-Medium'); font-weight: 500; }
+  @font-face { font-family: 'JetBrains Mono'; src: local('JetBrains Mono Medium'), local('JetBrainsMono-Medium'); font-weight: 500; }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--lw-base);
+    color: var(--lw-text-primary);
+    font-family: 'Rajdhani', -apple-system, sans-serif;
+    font-weight: 500;
+    padding: 16px;
+    max-width: 420px;
+    margin: 0 auto;
+  }
+
+  h1 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: 2px;
+    color: var(--lw-gold);
+    margin-bottom: 8px;
+  }
+
+  .subtitle {
+    font-size: 12px;
+    color: var(--lw-text-tertiary);
+    margin-bottom: 24px;
+    line-height: 1.5;
+  }
+
+  .variant-label {
+    font-family: 'Bebas Neue', sans-serif;
+    font-weight: 700;
+    font-size: 17px;
+    letter-spacing: 1.5px;
+    color: var(--lw-text-primary);
+    margin-bottom: 4px;
+  }
+
+  .variant-desc {
+    font-size: 11px;
+    color: var(--lw-text-tertiary);
+    margin-bottom: 8px;
+  }
+
+  .card {
+    background: linear-gradient(180deg, #1E2535, #1A2030);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 24px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+  }
+
+  .section-header {
+    font-family: 'Bebas Neue', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 1.2px;
+    color: var(--lw-text-tertiary);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  canvas {
+    width: 100%;
+    border-radius: 12px;
+    display: block;
+  }
+
+  .metric-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .metric-label {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 11px;
+    color: var(--lw-text-secondary);
+    width: 60px;
+    flex-shrink: 0;
+  }
+
+  .metric-bar-track {
+    flex: 1;
+    height: 6px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .metric-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 33ms linear;
+  }
+
+  .metric-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--lw-gold);
+    width: 36px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .divider {
+    height: 1px;
+    background: rgba(255,255,255,0.06);
+    margin: 16px 0;
+  }
+
+  .beat-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    transition: all 100ms;
+  }
+
+  .beat-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .chroma-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--lw-text-tertiary);
+    text-align: center;
+  }
+
+  .variant-tag {
+    display: inline-block;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 11px;
+    letter-spacing: 1px;
+    padding: 2px 8px;
+    border-radius: 100px;
+    margin-left: 8px;
+  }
+
+  .tag-recommended {
+    background: var(--lw-gold);
+    color: var(--lw-base);
+  }
+
+  .tag-alt {
+    background: rgba(255,255,255,0.1);
+    color: var(--lw-text-secondary);
+  }
+</style>
+</head>
+<body>
+
+<h1>SPECTRUM VISUALISATION VARIANTS</h1>
+<p class="subtitle">
+  Firmware provides: 8 Goertzel bands, 12 chroma bins (C-B), 128 waveform samples at 30 FPS.<br>
+  No 64-bin FFT. All variants use real firmware data shapes with mock values.
+</p>
+
+<!-- ============================================ -->
+<!-- VARIANT 1: Side-by-side waveform + bars -->
+<!-- ============================================ -->
+<div class="variant-label">VARIANT 1 — SPLIT WAVEFORM + BAND BARS <span class="variant-tag tag-recommended">RECOMMENDED</span></div>
+<p class="variant-desc">Left: time-domain waveform (128 samples). Right: 8 frequency bands as vertical bars. Clean separation of time and frequency domain.</p>
+<div class="card">
+  <div class="section-header">WAVEFORM & SPECTRUM</div>
+  <canvas id="v1-canvas" height="160"></canvas>
+</div>
+
+<!-- ============================================ -->
+<!-- VARIANT 2: Full-width waveform + bars below -->
+<!-- ============================================ -->
+<div class="variant-label">VARIANT 2 — STACKED WAVEFORM + BANDS <span class="variant-tag tag-alt">COMPACT</span></div>
+<p class="variant-desc">Full-width waveform on top, 8 horizontal bars below. Better for narrow screens. Bars match the ENERGY card style.</p>
+<div class="card">
+  <div class="section-header">WAVEFORM & SPECTRUM</div>
+  <canvas id="v2-waveform" height="80"></canvas>
+  <div style="height: 8px"></div>
+  <div id="v2-bars"></div>
+</div>
+
+<!-- ============================================ -->
+<!-- VARIANT 3: Full-width bands + chroma ring -->
+<!-- ============================================ -->
+<div class="variant-label">VARIANT 3 — BAND BARS + CHROMA WHEEL <span class="variant-tag tag-alt">MUSICAL</span></div>
+<p class="variant-desc">8 bands as wide bars left, 12-note chroma wheel right. Shows both frequency energy and musical pitch content.</p>
+<div class="card">
+  <div class="section-header">SPECTRUM & CHROMA</div>
+  <canvas id="v3-canvas" height="160"></canvas>
+</div>
+
+<!-- ============================================ -->
+<!-- VARIANT 4: Waterfall / spectrogram -->
+<!-- ============================================ -->
+<div class="variant-label">VARIANT 4 — SCROLLING SPECTROGRAM <span class="variant-tag tag-alt">IMMERSIVE</span></div>
+<p class="variant-desc">8-band spectrogram scrolling left. Time flows right-to-left. Colour intensity = band energy. Waveform overlay on top.</p>
+<div class="card">
+  <div class="section-header">SPECTROGRAM</div>
+  <canvas id="v4-canvas" height="160"></canvas>
+</div>
+
+<!-- ============================================ -->
+<!-- VARIANT 5: Unified meter wall -->
+<!-- ============================================ -->
+<div class="variant-label">VARIANT 5 — METER WALL <span class="variant-tag tag-alt">DIAGNOSTIC</span></div>
+<p class="variant-desc">All metrics unified: waveform, 8 bands, 12 chroma, energy bars, beat state — in one dense card. Maximum information density.</p>
+<div class="card">
+  <div class="section-header">AUDIO DIAGNOSTICS</div>
+  <canvas id="v5-waveform" height="60"></canvas>
+  <div style="height: 6px"></div>
+  <canvas id="v5-bands" height="50"></canvas>
+  <div style="height: 6px"></div>
+  <canvas id="v5-chroma" height="30"></canvas>
+  <div style="height: 8px"></div>
+  <div id="v5-energy"></div>
+</div>
+
+<div class="divider"></div>
+
+<!-- Energy metrics card (shared reference) -->
+<div class="variant-label" style="margin-top: 16px">ENERGY METRICS CARD (ALL VARIANTS)</div>
+<p class="variant-desc">Read-only energy bars shared across all variants. Shown below the spectrum card.</p>
+<div class="card">
+  <div class="section-header">ENERGY</div>
+  <div id="energy-card"></div>
+</div>
+
+<div class="card">
+  <div class="section-header">BEAT / TEMPO</div>
+  <div id="beat-card"></div>
+</div>
+
+<div class="card">
+  <div class="section-header">DSP HEALTH</div>
+  <div id="health-card"></div>
+</div>
+
+<script>
+// ============================================
+// Mock audio data generator
+// ============================================
+const BAND_COUNT = 8;
+const CHROMA_COUNT = 12;
+const WAVEFORM_SIZE = 128;
+const BAND_LABELS = ['Sub', 'Bass', 'Low', 'LMid', 'Mid', 'HMid', 'High', 'Air'];
+const CHROMA_LABELS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+const state = {
+  bands: new Float32Array(BAND_COUNT),
+  heavyBands: new Float32Array(BAND_COUNT),
+  chroma: new Float32Array(CHROMA_COUNT),
+  waveform: new Float32Array(WAVEFORM_SIZE),
+  rms: 0, flux: 0, fastRms: 0, fastFlux: 0,
+  bpm: 124, tempoConfidence: 0.92, tempoLocked: true,
+  isSilent: false, silentScale: 0,
+  noiseFloor: 0.008, clipCount: 0,
+  beatPhase: 0, isBeat: false, isDownbeat: false,
+  time: 0,
+};
+
+// Spectrogram history
+const spectrogramHistory = [];
+const SPECTROGRAM_WIDTH = 200;
+
+function generateMockData(dt) {
+  state.time += dt;
+  const t = state.time;
+
+  // Simulate a beat at ~124 BPM
+  const beatInterval = 60 / state.bpm;
+  state.beatPhase = (t % beatInterval) / beatInterval;
+  const beatPulse = Math.exp(-((state.beatPhase) * 8));
+
+  state.isBeat = state.beatPhase < 0.05;
+  state.isDownbeat = state.isBeat && (Math.floor(t / beatInterval) % 4 === 0);
+
+  // Bands: simulate bass-heavy music
+  const bassCurve = [0.8, 0.7, 0.5, 0.35, 0.25, 0.2, 0.15, 0.1];
+  for (let i = 0; i < BAND_COUNT; i++) {
+    const target = bassCurve[i] * (0.5 + 0.5 * beatPulse) + Math.random() * 0.15;
+    state.bands[i] += (target - state.bands[i]) * 0.3;
+    state.heavyBands[i] += (state.bands[i] - state.heavyBands[i]) * 0.08;
+  }
+
+  // Chroma: simulate C major chord emphasis
+  const chromaBase = [0.7, 0.1, 0.2, 0.1, 0.6, 0.15, 0.1, 0.5, 0.1, 0.15, 0.1, 0.1];
+  for (let i = 0; i < CHROMA_COUNT; i++) {
+    const target = chromaBase[i] * (0.4 + 0.6 * beatPulse) + Math.random() * 0.1;
+    state.chroma[i] += (target - state.chroma[i]) * 0.2;
+  }
+
+  // Waveform: sine + noise + beat transient
+  const freq = 220 + Math.sin(t * 0.5) * 80;
+  for (let i = 0; i < WAVEFORM_SIZE; i++) {
+    const phase = (i / WAVEFORM_SIZE) * Math.PI * 8;
+    state.waveform[i] = Math.sin(phase + t * freq * 0.01) * (0.3 + 0.5 * beatPulse)
+      + (Math.random() - 0.5) * 0.15;
+  }
+
+  // Energy metrics
+  state.rms += ((0.3 + 0.4 * beatPulse + Math.random() * 0.1) - state.rms) * 0.2;
+  state.flux += ((0.1 + 0.6 * beatPulse + Math.random() * 0.1) - state.flux) * 0.15;
+  state.fastRms += ((state.rms * 1.1 + Math.random() * 0.05) - state.fastRms) * 0.4;
+  state.fastFlux += ((state.flux * 0.8 + Math.random() * 0.05) - state.fastFlux) * 0.3;
+
+  // Silence
+  state.silentScale = Math.max(0, 1 - state.rms * 5);
+  state.isSilent = state.rms < 0.02;
+
+  // DSP health
+  state.noiseFloor = 0.005 + Math.random() * 0.005;
+  if (Math.random() < 0.002) state.clipCount++;
+
+  // Spectrogram history
+  spectrogramHistory.push([...state.bands]);
+  if (spectrogramHistory.length > SPECTROGRAM_WIDTH) spectrogramHistory.shift();
+}
+
+// ============================================
+// Rendering helpers
+// ============================================
+const CYAN = '#00D4FF';
+const GOLD = '#FFB84D';
+const CARD_BG = '#1E2535';
+
+function lerpColor(a, b, t) {
+  const ar = parseInt(a.slice(1,3), 16), ag = parseInt(a.slice(3,5), 16), ab = parseInt(a.slice(5,7), 16);
+  const br = parseInt(b.slice(1,3), 16), bg = parseInt(b.slice(3,5), 16), bb = parseInt(b.slice(5,7), 16);
+  const r = Math.round(ar + (br - ar) * t), g = Math.round(ag + (bg - ag) * t), bv = Math.round(ab + (bb - ab) * t);
+  return `rgb(${r},${g},${bv})`;
+}
+
+function bandColor(value) {
+  return lerpColor(CYAN, GOLD, value);
+}
+
+function setupCanvas(id) {
+  const c = document.getElementById(id);
+  const dpr = window.devicePixelRatio || 2;
+  const rect = c.getBoundingClientRect();
+  c.width = rect.width * dpr;
+  c.height = rect.height * dpr;
+  const ctx = c.getContext('2d');
+  ctx.scale(dpr, dpr);
+  return { ctx, w: rect.width, h: rect.height };
+}
+
+// ============================================
+// VARIANT 1: Split waveform + band bars
+// ============================================
+function renderV1() {
+  const { ctx, w, h } = setupCanvas('v1-canvas');
+  const gap = 8;
+  const halfW = (w - gap) / 2;
+
+  // Background
+  ctx.fillStyle = 'rgba(15, 18, 25, 0.6)';
+  ctx.fillRect(0, 0, w, h);
+
+  // Waveform (left half)
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(0, 0, halfW, h, 8);
+  ctx.clip();
+  ctx.fillStyle = 'rgba(0, 212, 255, 0.04)';
+  ctx.fillRect(0, 0, halfW, h);
+
+  // Centre line
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, h / 2);
+  ctx.lineTo(halfW, h / 2);
+  ctx.stroke();
+
+  // Waveform line
+  ctx.strokeStyle = CYAN;
+  ctx.lineWidth = 1.5;
+  ctx.shadowColor = CYAN;
+  ctx.shadowBlur = 4;
+  ctx.beginPath();
+  for (let i = 0; i < WAVEFORM_SIZE; i++) {
+    const x = (i / (WAVEFORM_SIZE - 1)) * halfW;
+    const y = h / 2 - state.waveform[i] * h * 0.4;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.restore();
+
+  // Band bars (right half)
+  const barX = halfW + gap;
+  const barW = (halfW - (BAND_COUNT - 1) * 2) / BAND_COUNT;
+
+  for (let i = 0; i < BAND_COUNT; i++) {
+    const x = barX + i * (barW + 2);
+    const barH = state.bands[i] * h * 0.85;
+    const heavyH = state.heavyBands[i] * h * 0.85;
+
+    // Heavy band (dim)
+    ctx.fillStyle = `rgba(0, 212, 255, 0.15)`;
+    ctx.beginPath();
+    ctx.roundRect(x, h - heavyH, barW, heavyH, 3);
+    ctx.fill();
+
+    // Active band
+    const grad = ctx.createLinearGradient(0, h, 0, h - barH);
+    grad.addColorStop(0, CYAN);
+    grad.addColorStop(1, GOLD);
+    ctx.fillStyle = grad;
+    ctx.shadowColor = CYAN;
+    ctx.shadowBlur = 6;
+    ctx.beginPath();
+    ctx.roundRect(x, h - barH, barW, barH, 3);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Label
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '8px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(BAND_LABELS[i], x + barW / 2, h - 2);
+  }
+}
+
+// ============================================
+// VARIANT 2: Stacked waveform + horizontal bars
+// ============================================
+function renderV2() {
+  const { ctx, w, h } = setupCanvas('v2-waveform');
+
+  ctx.fillStyle = 'rgba(15, 18, 25, 0.6)';
+  ctx.fillRect(0, 0, w, h);
+
+  // Centre line
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, h / 2);
+  ctx.lineTo(w, h / 2);
+  ctx.stroke();
+
+  // Waveform
+  ctx.strokeStyle = CYAN;
+  ctx.lineWidth = 1.5;
+  ctx.shadowColor = CYAN;
+  ctx.shadowBlur = 4;
+  ctx.beginPath();
+  for (let i = 0; i < WAVEFORM_SIZE; i++) {
+    const x = (i / (WAVEFORM_SIZE - 1)) * w;
+    const y = h / 2 - state.waveform[i] * h * 0.4;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Horizontal bars below canvas
+  const container = document.getElementById('v2-bars');
+  container.innerHTML = '';
+  for (let i = 0; i < BAND_COUNT; i++) {
+    const row = document.createElement('div');
+    row.className = 'metric-row';
+    row.innerHTML = `
+      <span class="metric-label">${BAND_LABELS[i]}</span>
+      <div class="metric-bar-track">
+        <div class="metric-bar-fill" style="width:${state.bands[i] * 100}%;background:${bandColor(state.bands[i])}"></div>
+      </div>
+      <span class="metric-value">${state.bands[i].toFixed(2)}</span>
+    `;
+    container.appendChild(row);
+  }
+}
+
+// ============================================
+// VARIANT 3: Band bars + chroma wheel
+// ============================================
+function renderV3() {
+  const { ctx, w, h } = setupCanvas('v3-canvas');
+  const gap = 12;
+  const barSection = w * 0.5;
+  const chromaSection = w - barSection - gap;
+  const chromaCX = barSection + gap + chromaSection / 2;
+  const chromaCY = h / 2;
+  const chromaR = Math.min(chromaSection, h) / 2 - 12;
+
+  ctx.fillStyle = 'rgba(15, 18, 25, 0.6)';
+  ctx.fillRect(0, 0, w, h);
+
+  // Band bars (left)
+  const barW = (barSection - (BAND_COUNT - 1) * 3) / BAND_COUNT;
+  for (let i = 0; i < BAND_COUNT; i++) {
+    const x = i * (barW + 3);
+    const barH = state.bands[i] * h * 0.85;
+
+    const grad = ctx.createLinearGradient(0, h, 0, h - barH);
+    grad.addColorStop(0, CYAN);
+    grad.addColorStop(1, GOLD);
+    ctx.fillStyle = grad;
+    ctx.shadowColor = CYAN;
+    ctx.shadowBlur = 4;
+    ctx.beginPath();
+    ctx.roundRect(x, h - barH, barW, barH, 3);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = '8px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(BAND_LABELS[i], x + barW / 2, h - 2);
+  }
+
+  // Chroma wheel (right)
+  for (let i = 0; i < CHROMA_COUNT; i++) {
+    const angle = (i / CHROMA_COUNT) * Math.PI * 2 - Math.PI / 2;
+    const nextAngle = ((i + 1) / CHROMA_COUNT) * Math.PI * 2 - Math.PI / 2;
+    const innerR = chromaR * 0.4;
+    const outerR = innerR + (chromaR - innerR) * state.chroma[i];
+
+    ctx.beginPath();
+    ctx.arc(chromaCX, chromaCY, outerR, angle, nextAngle);
+    ctx.arc(chromaCX, chromaCY, innerR, nextAngle, angle, true);
+    ctx.closePath();
+
+    const hue = (i / CHROMA_COUNT) * 300 + 180; // cyan → gold range
+    ctx.fillStyle = `hsla(${hue}, 80%, ${40 + state.chroma[i] * 30}%, ${0.3 + state.chroma[i] * 0.7})`;
+    ctx.shadowColor = `hsla(${hue}, 80%, 60%, 0.4)`;
+    ctx.shadowBlur = state.chroma[i] * 8;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Label
+    const labelR = chromaR + 8;
+    const labelAngle = (angle + nextAngle) / 2;
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.font = '8px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(CHROMA_LABELS[i], chromaCX + Math.cos(labelAngle) * labelR, chromaCY + Math.sin(labelAngle) * labelR);
+  }
+}
+
+// ============================================
+// VARIANT 4: Scrolling spectrogram
+// ============================================
+function renderV4() {
+  const { ctx, w, h } = setupCanvas('v4-canvas');
+
+  ctx.fillStyle = 'rgba(15, 18, 25, 0.6)';
+  ctx.fillRect(0, 0, w, h);
+
+  const waveH = 30;
+  const spectH = h - waveH - 4;
+
+  // Spectrogram (bottom)
+  const colW = w / SPECTROGRAM_WIDTH;
+  for (let col = 0; col < spectrogramHistory.length; col++) {
+    const bands = spectrogramHistory[col];
+    const bandH = spectH / BAND_COUNT;
+    for (let b = 0; b < BAND_COUNT; b++) {
+      const val = bands[b];
+      const x = col * colW;
+      const y = waveH + 4 + (BAND_COUNT - 1 - b) * bandH;
+
+      ctx.fillStyle = lerpColor('#0F1219', CYAN, val * 0.7);
+      if (val > 0.5) ctx.fillStyle = lerpColor(CYAN, GOLD, (val - 0.5) * 2);
+      ctx.fillRect(x, y, colW + 0.5, bandH);
+    }
+  }
+
+  // Band labels on right edge
+  const bandH = spectH / BAND_COUNT;
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.font = '8px "JetBrains Mono", monospace';
+  ctx.textAlign = 'right';
+  for (let b = 0; b < BAND_COUNT; b++) {
+    ctx.fillText(BAND_LABELS[BAND_COUNT - 1 - b], w - 3, waveH + 4 + b * bandH + bandH / 2 + 3);
+  }
+
+  // Waveform (top overlay)
+  ctx.strokeStyle = `rgba(0, 212, 255, 0.6)`;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 0; i < WAVEFORM_SIZE; i++) {
+    const x = (i / (WAVEFORM_SIZE - 1)) * w;
+    const y = waveH / 2 - state.waveform[i] * waveH * 0.4;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Time axis line
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, waveH + 2);
+  ctx.lineTo(w, waveH + 2);
+  ctx.stroke();
+}
+
+// ============================================
+// VARIANT 5: Meter wall
+// ============================================
+function renderV5() {
+  // Waveform
+  const { ctx: ctx1, w: w1, h: h1 } = setupCanvas('v5-waveform');
+  ctx1.fillStyle = 'rgba(15, 18, 25, 0.6)';
+  ctx1.fillRect(0, 0, w1, h1);
+  ctx1.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx1.beginPath(); ctx1.moveTo(0, h1/2); ctx1.lineTo(w1, h1/2); ctx1.stroke();
+  ctx1.strokeStyle = CYAN;
+  ctx1.lineWidth = 1;
+  ctx1.beginPath();
+  for (let i = 0; i < WAVEFORM_SIZE; i++) {
+    const x = (i / (WAVEFORM_SIZE - 1)) * w1;
+    const y = h1/2 - state.waveform[i] * h1 * 0.4;
+    i === 0 ? ctx1.moveTo(x, y) : ctx1.lineTo(x, y);
+  }
+  ctx1.stroke();
+
+  // Bands
+  const { ctx: ctx2, w: w2, h: h2 } = setupCanvas('v5-bands');
+  ctx2.fillStyle = 'rgba(15, 18, 25, 0.6)';
+  ctx2.fillRect(0, 0, w2, h2);
+  const barW = (w2 - (BAND_COUNT - 1) * 2) / BAND_COUNT;
+  for (let i = 0; i < BAND_COUNT; i++) {
+    const x = i * (barW + 2);
+    const barH = state.bands[i] * h2 * 0.9;
+    const grad = ctx2.createLinearGradient(0, h2, 0, h2 - barH);
+    grad.addColorStop(0, CYAN);
+    grad.addColorStop(1, GOLD);
+    ctx2.fillStyle = grad;
+    ctx2.beginPath();
+    ctx2.roundRect(x, h2 - barH, barW, barH, 2);
+    ctx2.fill();
+  }
+
+  // Chroma (horizontal bar strip)
+  const { ctx: ctx3, w: w3, h: h3 } = setupCanvas('v5-chroma');
+  ctx3.fillStyle = 'rgba(15, 18, 25, 0.6)';
+  ctx3.fillRect(0, 0, w3, h3);
+  const cellW = w3 / CHROMA_COUNT;
+  for (let i = 0; i < CHROMA_COUNT; i++) {
+    const hue = (i / CHROMA_COUNT) * 300 + 180;
+    ctx3.fillStyle = `hsla(${hue}, 70%, ${20 + state.chroma[i] * 40}%, ${0.3 + state.chroma[i] * 0.7})`;
+    ctx3.fillRect(i * cellW, 0, cellW - 1, h3);
+    ctx3.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx3.font = '8px "JetBrains Mono", monospace';
+    ctx3.textAlign = 'center';
+    ctx3.fillText(CHROMA_LABELS[i], i * cellW + cellW / 2, h3 - 3);
+  }
+
+  // Energy bars
+  const container = document.getElementById('v5-energy');
+  container.innerHTML = '';
+  const metrics = [
+    { label: 'RMS', value: state.rms, color: CYAN },
+    { label: 'Flux', value: state.flux, color: CYAN },
+    { label: 'Noise', value: state.noiseFloor * 10, color: '#FF4D4D' },
+  ];
+  for (const m of metrics) {
+    const row = document.createElement('div');
+    row.className = 'metric-row';
+    row.innerHTML = `
+      <span class="metric-label">${m.label}</span>
+      <div class="metric-bar-track">
+        <div class="metric-bar-fill" style="width:${Math.min(m.value, 1) * 100}%;background:${m.color}"></div>
+      </div>
+      <span class="metric-value">${m.value.toFixed(3)}</span>
+    `;
+    container.appendChild(row);
+  }
+}
+
+// ============================================
+// Shared metric cards
+// ============================================
+function renderEnergyCard() {
+  const container = document.getElementById('energy-card');
+  container.innerHTML = '';
+  const metrics = [
+    { label: 'RMS', value: state.rms, color: CYAN },
+    { label: 'Flux', value: state.flux, color: CYAN },
+    { label: 'RMS Raw', value: state.fastRms, color: CYAN },
+    { label: 'Mapped', value: state.rms * 0.8, color: CYAN },
+  ];
+  for (const m of metrics) {
+    const row = document.createElement('div');
+    row.className = 'metric-row';
+    row.innerHTML = `
+      <span class="metric-label">${m.label}</span>
+      <div class="metric-bar-track">
+        <div class="metric-bar-fill" style="width:${Math.min(m.value, 1) * 100}%;background:${m.color}"></div>
+      </div>
+      <span class="metric-value">${m.value.toFixed(2)}</span>
+    `;
+    container.appendChild(row);
+  }
+}
+
+function renderBeatCard() {
+  const container = document.getElementById('beat-card');
+  const beatPulseOpacity = state.isBeat ? 1 : 0.3;
+  container.innerHTML = `
+    <div class="metric-row">
+      <span class="metric-label">Tempo</span>
+      <div class="metric-bar-track">
+        <div class="metric-bar-fill" style="width:${state.tempoConfidence * 100}%;background:${GOLD}"></div>
+      </div>
+      <span class="metric-value">${state.tempoConfidence.toFixed(2)}</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Locked</span>
+      <div style="flex:1">
+        <div class="beat-dot" style="background:${state.tempoLocked ? '#4DFFB8' : '#FF4D4D'};box-shadow:0 0 6px ${state.tempoLocked ? '#4DFFB8' : '#FF4D4D'}44"></div>
+      </div>
+      <span class="metric-value">${state.tempoLocked ? 'YES' : 'NO'}</span>
+    </div>
+    <div class="beat-row">
+      <span class="metric-label" style="width:40px">Beat</span>
+      ${[0,1,2,3].map(i => {
+        const active = Math.floor(state.beatPhase * 4) === i;
+        return `<div class="beat-dot" style="width:10px;height:10px;background:${active ? GOLD : 'rgba(255,255,255,0.1)'};box-shadow:0 0 ${active ? '8' : '0'}px ${GOLD}88"></div>`;
+      }).join('')}
+      <span class="metric-value" style="margin-left:auto;font-size:15px;color:${GOLD}">${state.bpm} BPM</span>
+    </div>
+  `;
+}
+
+function renderHealthCard() {
+  const container = document.getElementById('health-card');
+  container.innerHTML = `
+    <div class="metric-row">
+      <span class="metric-label">Noise</span>
+      <div class="metric-bar-track">
+        <div class="metric-bar-fill" style="width:${Math.min(state.noiseFloor * 1000, 100)}%;background:#FF4D4D"></div>
+      </div>
+      <span class="metric-value">${state.noiseFloor.toFixed(4)}</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Clips</span>
+      <div style="flex:1">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:${state.clipCount > 0 ? '#FF4D4D' : '#4DFFB8'}">${state.clipCount}</span>
+      </div>
+      <span class="metric-value" style="color:var(--lw-text-tertiary)">total</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-label">Silent</span>
+      <div style="flex:1">
+        <div class="beat-dot" style="background:${state.isSilent ? '#FF4D4D' : '#4DFFB8'};box-shadow:0 0 6px ${state.isSilent ? '#FF4D4D' : '#4DFFB8'}44"></div>
+      </div>
+      <span class="metric-value">${state.silentScale.toFixed(2)}</span>
+    </div>
+  `;
+}
+
+// ============================================
+// Animation loop
+// ============================================
+let lastTime = 0;
+function animate(timestamp) {
+  const dt = lastTime ? (timestamp - lastTime) / 1000 : 1/30;
+  lastTime = timestamp;
+
+  generateMockData(dt);
+
+  renderV1();
+  renderV2();
+  renderV3();
+  renderV4();
+  renderV5();
+  renderEnergyCard();
+  renderBeatCard();
+  renderHealthCard();
+
+  requestAnimationFrame(animate);
+}
+
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>

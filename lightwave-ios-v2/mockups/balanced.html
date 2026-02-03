@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>LightwaveOS — Balanced Modern</title>
+  <style>
+    /* Tab5.encoder colour theme (firmware/Tab5.encoder) */
+    :root {
+      --base: #0A0A0B;
+      --card: #121214;
+      --elevated: #1A1A1C;
+      --border: #2A2A2E;
+      --accent: #FFC700;
+      --text: #FFFFFF;
+      --text2: #9CA3AF;
+      --text3: #6B7280;
+      --success: #00FF00;
+      --error: #FF0000;
+      --zone1: #00FFFF;
+      --zone2: #00FF99;
+      --zone3: #9900FF;
+      --zone4: #FF6600;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+      background: var(--base);
+      color: var(--text);
+      font-size: 12px;
+      line-height: 1.4;
+      min-height: 100vh;
+      padding: 8px;
+      max-width: 390px;
+      margin: 0 auto;
+    }
+    .status { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; height: 32px; background: var(--card); border-radius: 8px; margin-bottom: 8px; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
+    .status-conn { font-size: 11px; color: var(--text2); }
+    .status-bpm { font-size: 11px; color: var(--accent); font-variant-numeric: tabular-nums; font-weight: 500; }
+    .status-effect { font-size: 11px; color: var(--accent); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .row { display: flex; gap: 8px; margin-bottom: 8px; }
+    .dropdown { flex: 1; padding: 8px 10px; background: var(--card); border-radius: 10px; border: 1px solid var(--elevated); }
+    .dropdown-label { font-size: 9px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+    .dropdown-value { font-size: 13px; font-weight: 600; }
+    .dropdown-sub { font-size: 10px; color: var(--text3); }
+    .card { background: var(--card); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; }
+    .card-title { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 8px; }
+    .slider-row { display: flex; gap: 12px; }
+    .slider-wrap { flex: 1; }
+    .slider-label { font-size: 10px; color: var(--text2); margin-bottom: 4px; }
+    .slider-track { height: 6px; background: var(--elevated); border-radius: 3px; position: relative; }
+    .slider-fill { height: 100%; width: 60%; background: var(--accent); border-radius: 3px; }
+    .slider-thumb { width: 18px; height: 18px; background: var(--accent); border-radius: 50%; position: absolute; top: -6px; left: 55%; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+    .zone-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .zone-toggle { display: flex; align-items: center; gap: 8px; }
+    .toggle-track { width: 44px; height: 24px; background: var(--elevated); border-radius: 12px; position: relative; }
+    .toggle-thumb { width: 20px; height: 20px; background: var(--accent); border-radius: 50%; position: absolute; right: 2px; top: 2px; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+    .zone-selectors { display: flex; gap: 8px; margin-bottom: 10px; }
+    .zone-selector { flex: 1; }
+    .zone-selector-label { font-size: 9px; color: var(--text3); text-transform: uppercase; font-weight: 500; margin-bottom: 4px; }
+    .zone-selector-value { font-size: 11px; padding: 6px 8px; background: var(--elevated); border-radius: 6px; border: 1px solid var(--border); }
+    .led-strip { display: flex; height: 20px; margin: 10px 0; border-radius: 4px; overflow: hidden; }
+    .led-seg { flex: 1; }
+    .z1 { background: var(--zone1); }
+    .z2 { background: var(--zone2); }
+    .z3 { background: var(--zone3); }
+    .z4 { background: var(--zone4); }
+    .zone-card { background: var(--elevated); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; border-left: 4px solid; }
+    .zone-card.z0 { border-color: var(--zone1); }
+    .zone-card.z1 { border-color: var(--zone2); }
+    .zone-card.z2 { border-color: var(--zone3); }
+    .zone-card.z3 { border-color: var(--zone4); }
+    .zone-card-title { font-size: 11px; font-weight: 600; margin-bottom: 4px; }
+    .zone-card.z0 .zone-card-title { color: var(--zone1); }
+    .zone-card.z1 .zone-card-title { color: var(--zone2); }
+    .zone-card.z2 .zone-card-title { color: var(--zone3); }
+    .zone-card.z3 .zone-card-title { color: var(--zone4); }
+    .zone-meta { font-size: 10px; color: var(--text3); margin-bottom: 8px; }
+    .zone-param { margin-bottom: 6px; }
+    .zone-param-label { font-size: 9px; color: var(--text3); text-transform: uppercase; margin-bottom: 2px; }
+    .zone-param-value { font-size: 11px; padding: 6px 8px; background: var(--card); border-radius: 6px; display: block; border: 1px solid var(--border); }
+    .zone-slider { margin-top: 8px; }
+    .zone-slider .slider-track { height: 5px; }
+    .zone-slider .slider-thumb { width: 16px; height: 16px; top: -5px; }
+    .debug-header { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; cursor: pointer; }
+    .debug-entry { font-size: 9px; font-family: ui-monospace, monospace; padding: 3px 0; display: flex; gap: 8px; }
+    .debug-time { color: var(--text3); min-width: 52px; }
+    .debug-cat { color: var(--zone1); min-width: 42px; }
+    .mock-label { font-size: 10px; color: var(--text3); text-align: center; margin-top: 8px; padding: 8px; }
+  </style>
+</head>
+<body>
+  <div class="mock-label">Balanced Modern — Clean Hierarchy, More Spacing (11–13pt, 6–12px padding)</div>
+  <div class="status">
+    <div style="display:flex;align-items:center;gap:6px;">
+      <div class="status-dot"></div>
+      <span class="status-conn">Connected</span>
+    </div>
+    <span class="status-bpm">124 BPM</span>
+    <span class="status-effect">LGP Holographic Auto-Cycle</span>
+  </div>
+  <div class="row">
+    <div class="dropdown"><div class="dropdown-label">Pattern</div><div class="dropdown-value">LGP Holographic Auto-Cycle</div><div class="dropdown-sub">42 / 101</div></div>
+    <div class="dropdown"><div class="dropdown-label">Palette</div><div class="dropdown-value">Spectral Nova</div><div class="dropdown-sub">5 / 75</div></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Main Controls</div>
+    <div class="slider-row">
+      <div class="slider-wrap"><div class="slider-label">Brightness</div><div class="slider-track"><div class="slider-fill"></div><div class="slider-thumb"></div></div></div>
+      <div class="slider-wrap"><div class="slider-label">Speed</div><div class="slider-track"><div class="slider-fill" style="width:45%"></div><div class="slider-thumb" style="left:42%"></div></div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Advanced Parameters</div>
+    <div style="font-size:11px;color:var(--text2);">Mood · Fade Amount · Hue · Saturation · Intensity · Complexity · Variation</div>
+  </div>
+  <div class="card">
+    <div class="zone-header">
+      <div class="zone-toggle">
+        <span class="card-title">Zone Mode</span>
+        <div class="toggle-track"><div class="toggle-thumb"></div></div>
+      </div>
+    </div>
+    <div class="zone-selectors">
+      <div class="zone-selector"><div class="zone-selector-label">Zones</div><div class="zone-selector-value">2 Zones ▾</div></div>
+      <div class="zone-selector"><div class="zone-selector-label">Preset</div><div class="zone-selector-value">Dual Split ▾</div></div>
+    </div>
+    <div class="led-strip">
+      <div class="led-seg z1" style="flex:2"></div>
+      <div class="led-seg z2" style="flex:2"></div>
+      <div class="led-seg z1" style="flex:2"></div>
+      <div class="led-seg z2" style="flex:2"></div>
+    </div>
+    <div class="zone-card z0">
+      <div class="zone-card-title">Zone 0</div>
+      <div class="zone-meta">80 LEDs · L[40-79] R[80-119]</div>
+      <div class="zone-param"><div class="zone-param-label">Effect</div><div class="zone-param-value">Ripple Enhanced ▾</div></div>
+      <div class="zone-param"><div class="zone-param-label">Palette</div><div class="zone-param-value">Copper ▾</div></div>
+      <div class="zone-param"><div class="zone-param-label">Blend Mode</div><div class="zone-param-value">Additive ▾</div></div>
+      <div class="zone-slider"><div class="slider-label">Speed</div><div class="slider-track"><div class="slider-fill" style="width:40%"></div><div class="slider-thumb" style="left:37%"></div></div></div>
+    </div>
+    <div class="zone-card z1">
+      <div class="zone-card-title">Zone 1</div>
+      <div class="zone-meta">80 LEDs · L[0-39] R[120-159]</div>
+      <div class="zone-param"><div class="zone-param-label">Effect</div><div class="zone-param-value">LGP Holographic ▾</div></div>
+      <div class="zone-param"><div class="zone-param-label">Palette</div><div class="zone-param-value">Copper ▾</div></div>
+      <div class="zone-param"><div class="zone-param-label">Blend Mode</div><div class="zone-param-value">Additive ▾</div></div>
+      <div class="zone-slider"><div class="slider-label">Speed</div><div class="slider-track"><div class="slider-fill" style="width:70%"></div><div class="slider-thumb" style="left:67%"></div></div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="debug-header"><span class="card-title">Debug Log</span><span style="font-size:10px;color:var(--accent);background:rgba(255,199,0,0.15);padding:2px 6px;border-radius:4px">12</span></div>
+    <div class="debug-entry"><span class="debug-time">14:32:01</span><span class="debug-cat">CONN</span><span>Connected successfully</span></div>
+    <div class="debug-entry"><span class="debug-time">14:32:02</span><span class="debug-cat">WS</span><span>Status update received</span></div>
+    <div class="debug-entry"><span class="debug-time">14:32:03</span><span class="debug-cat">INIT</span><span>Loaded 101 effects</span></div>
+  </div>
+</body>
+</html>

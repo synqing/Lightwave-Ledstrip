@@ -1,0 +1,1375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LightwaveOS UI Overhaul v2 — Mockups</title>
+<!-- Tab5.encoder fonts: Bebas Neue, Rajdhani, JetBrains Mono -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=JetBrains+Mono:wght@400;500;600&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================
+   DESIGN TOKENS (DesignTokens.swift + Tab5.encoder)
+   ============================================ */
+:root {
+  --lw-gold: #FFB84D;
+  --lw-base: #0F1219;
+  --lw-card: #1E2535;
+  --lw-elevated: #252D3F;
+  --lw-beat-accent: #FFCC33;
+  --lw-text-primary: #E6E9EF;
+  --lw-text-secondary: #9CA3B0;
+  --lw-text-tertiary: #6B7280;
+  --lw-success: #4DFFB8;
+  --lw-error: #FF4D4D;
+  --lw-cyan: #00D4FF;
+  --lw-zone0: #06b6d4;
+  --lw-zone1: #22c55e;
+  --lw-zone2: #a855f7;
+  --lw-white-border: rgba(255,255,255,0.25);
+
+  /* Typography — Tab5.encoder font stack */
+  --font-bebas: 'Bebas Neue', Impact, sans-serif;
+  --font-rajdhani: 'Rajdhani', 'SF Pro Text', system-ui, sans-serif;
+  --font-jetbrains: 'JetBrains Mono', 'SF Mono', monospace;
+
+  --space-xs: 4px; --space-sm: 8px; --space-md: 12px; --space-lg: 24px;
+  --radius-hero: 24px; --radius-card: 16px; --radius-nested: 12px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #111; color: var(--lw-text-primary); font-family: var(--font-rajdhani); min-height: 100vh; }
+
+/* ============================================
+   MOCKUP NAV
+   ============================================ */
+.mockup-nav {
+  position: sticky; top: 0; z-index: 100;
+  display: flex; gap: 2px; background: #000; padding: 8px 12px;
+  overflow-x: auto; border-bottom: 1px solid #333;
+}
+.mockup-nav button {
+  flex: none; padding: 8px 16px; background: #1a1a1a; color: var(--lw-text-secondary);
+  border: 1px solid #333; border-radius: 8px; cursor: pointer; white-space: nowrap;
+  font: 600 13px/1 var(--font-bebas); letter-spacing: 1px; transition: all 0.15s;
+}
+.mockup-nav button:hover { background: #222; }
+.mockup-nav button.active { background: var(--lw-card); color: var(--lw-gold); border-color: var(--lw-gold); }
+
+/* ============================================
+   SCREEN CONTAINERS
+   ============================================ */
+.screen-container { display: none; padding: 24px; }
+.screen-container.active { display: block; }
+.screen-label { font: 700 20px/1 var(--font-bebas); color: var(--lw-gold); margin-bottom: 8px; letter-spacing: 1.5px; }
+.screen-desc { font: 500 14px/1.6 var(--font-rajdhani); color: var(--lw-text-secondary); margin-bottom: 20px; max-width: 600px; }
+
+/* ============================================
+   PHONE FRAME
+   ============================================ */
+.phone-frame {
+  width: 393px; min-height: 700px; background: var(--lw-base);
+  border-radius: 44px; border: 3px solid #333; overflow: hidden;
+  margin: 0 auto; position: relative; box-shadow: 0 0 60px rgba(0,0,0,0.6);
+}
+.ios-status-bar {
+  height: 54px; padding: 14px 20px 0; display: flex; justify-content: space-between;
+  align-items: center; font: 600 15px/1 system-ui; color: white;
+}
+.ios-status-bar .time { font-weight: 700; }
+.ios-status-bar .icons { display: flex; gap: 5px; font-size: 13px; }
+.app-content { padding: 0 16px 100px; overflow-y: auto; max-height: 750px; }
+
+/* ============================================
+   STATUS BAR — "LIGHTWAVEOS" + "● Connected ›"
+   ============================================ */
+.persistent-status-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px;
+  margin: 4px 12px 0;
+  background: var(--lw-card);
+  border: 2px solid var(--lw-white-border);
+  border-radius: 12px;
+}
+.status-left { display: flex; align-items: center; gap: 8px; }
+.status-brand {
+  font: 700 16px/1 var(--font-bebas); color: var(--lw-text-primary);
+  letter-spacing: 2px;
+}
+.status-right-group { display: flex; align-items: center; gap: 6px; }
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--lw-success); box-shadow: 0 0 6px var(--lw-success);
+}
+.status-label { font: 500 12px/1 var(--font-rajdhani); color: var(--lw-text-secondary); }
+.status-chevron { font: 500 14px/1 var(--font-rajdhani); color: var(--lw-text-tertiary); margin-left: 2px; }
+
+/* Status drawer (expanded) */
+.status-drawer {
+  background: var(--lw-elevated); padding: 10px 16px;
+  margin: 0 12px; border: 1px solid rgba(255,255,255,0.06);
+  border-top: none; border-radius: 0 0 12px 12px;
+  display: none;
+}
+.status-drawer.open { display: block; }
+.status-drawer-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 4px 0;
+}
+.status-drawer-label { font: 500 11px/1 var(--font-rajdhani); color: var(--lw-text-tertiary); }
+.status-drawer-value { font: 500 11px/1 var(--font-jetbrains); color: var(--lw-text-secondary); }
+.status-drawer-value.rssi-good { color: var(--lw-success); }
+
+/* ============================================
+   HERO LED PREVIEW
+   ============================================ */
+.hero-led-preview {
+  position: relative; height: 120px; border-radius: var(--radius-hero);
+  overflow: hidden; margin-bottom: var(--space-md);
+  box-shadow: 0 0 40px rgba(255,184,77,0.12);
+}
+.hero-led-canvas { width: 100%; height: 100%; }
+.hero-centre-marker {
+  position: absolute; top: 0; bottom: 0; left: calc(79.5 / 320 * 100%);
+  width: 1.5px; background: rgba(255,184,77,0.6);
+}
+.hero-bpm-ring {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 80px; height: 80px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+}
+.hero-bpm-ring svg { position: absolute; top: 0; left: 0; width: 80px; height: 80px; }
+.hero-bpm-number {
+  font: 700 32px/1 var(--font-bebas); color: var(--lw-gold);
+  text-shadow: 0 2px 8px rgba(0,0,0,0.8); z-index: 1; letter-spacing: 2px;
+}
+.hero-bpm-label {
+  font: 500 10px/1 var(--font-rajdhani); color: var(--lw-text-secondary);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.8); z-index: 1; margin-top: 1px;
+  text-transform: uppercase; letter-spacing: 1.5px;
+}
+
+/* ============================================
+   PATTERN / PALETTE PILLS — with ◀/▶
+   ============================================ */
+.pill-card {
+  background: var(--lw-card); border-radius: var(--radius-card);
+  padding: 12px 16px; margin-bottom: var(--space-md);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+}
+.pill-label {
+  font: 600 11px/1 var(--font-bebas); color: var(--lw-text-tertiary);
+  text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px;
+}
+.pill-nav-row {
+  display: flex; align-items: center; gap: 10px;
+}
+.pill-nav-btn {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: var(--lw-elevated); display: flex; align-items: center; justify-content: center;
+  font: 600 16px/1 var(--font-rajdhani); color: var(--lw-gold); cursor: pointer;
+  border: 1px solid rgba(255,184,77,0.15); flex-shrink: 0;
+}
+.pill-nav-btn:hover { background: rgba(255,184,77,0.1); }
+.pill-value-area { flex: 1; min-width: 0; }
+.pill-value-name {
+  font: 500 15px/1.2 var(--font-rajdhani); color: var(--lw-text-primary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pill-value-gradient {
+  height: 24px; border-radius: var(--radius-nested); width: 100%; margin-bottom: 4px;
+}
+.pill-value-palette-name { font: 500 11px/1 var(--font-rajdhani); color: var(--lw-text-secondary); }
+.pill-chevron { color: var(--lw-text-tertiary); font-size: 18px; flex-shrink: 0; cursor: pointer; }
+
+/* ============================================
+   EXPRESSION PARAMETERS CARD
+   ============================================ */
+.expression-card {
+  background: var(--lw-card); border-radius: var(--radius-card);
+  padding: 16px; margin-bottom: var(--space-md); box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+}
+.section-header {
+  font: 700 14px/1 var(--font-bebas); color: var(--lw-text-primary);
+  text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 14px;
+}
+.sub-group-header {
+  font: 700 12px/1 var(--font-bebas); color: var(--lw-text-tertiary);
+  text-transform: uppercase; letter-spacing: 1.5px; margin-top: 12px; margin-bottom: 8px;
+}
+.slider-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.slider-label { font: 500 12px/1 var(--font-rajdhani); color: var(--lw-text-secondary); min-width: 80px; }
+.slider-track { flex: 1; height: 6px; border-radius: 3px; background: var(--lw-elevated); margin: 0 12px; position: relative; overflow: hidden; }
+.slider-fill { height: 100%; border-radius: 3px; background: var(--lw-gold); }
+.slider-value { font: 500 13px/1 var(--font-jetbrains); color: var(--lw-gold); min-width: 36px; text-align: right; }
+
+/* ============================================
+   TAB BAR
+   ============================================ */
+.tab-bar {
+  position: absolute; bottom: 0; left: 0; right: 0; height: 88px;
+  background: rgba(15,18,25,0.95); backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(255,184,77,0.08);
+  display: flex; justify-content: space-around; align-items: flex-start; padding-top: 8px;
+}
+.tab-item { display: flex; flex-direction: column; align-items: center; gap: 4px; font: 500 10px/1 var(--font-rajdhani); color: var(--lw-text-tertiary); }
+.tab-item.active { color: var(--lw-gold); }
+.tab-icon { font-size: 22px; }
+
+/* ============================================
+   AUDIO TAB
+   ============================================ */
+.audio-section-card {
+  background: var(--lw-card); border-radius: var(--radius-card);
+  padding: 16px; margin-bottom: var(--space-md); box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+}
+.haptic-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.haptic-label { font: 500 13px/1 var(--font-rajdhani); color: var(--lw-text-primary); }
+.haptic-subtitle { font: 400 11px/1 var(--font-rajdhani); color: var(--lw-text-tertiary); margin-bottom: 12px; }
+.toggle-switch { width: 44px; height: 26px; background: var(--lw-gold); border-radius: 13px; position: relative; flex-shrink: 0; }
+.toggle-switch::after { content:''; position:absolute; width:22px; height:22px; background:white; border-radius:50%; top:2px; right:2px; }
+.toggle-switch.off { background: var(--lw-elevated); }
+.toggle-switch.off::after { right: auto; left: 2px; }
+/* Parameter stepper: [◀] 0.35 [▶] */
+.param-stepper-row {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;
+}
+.param-stepper-label {
+  font: 500 12px/1 var(--font-rajdhani); color: var(--lw-text-secondary); min-width: 100px;
+}
+.param-stepper-controls {
+  display: flex; align-items: center; gap: 0;
+}
+.param-step-btn {
+  width: 32px; height: 28px; border: 1px solid rgba(255,184,77,0.2); background: var(--lw-elevated);
+  color: var(--lw-gold); font: 600 14px/1 var(--font-rajdhani); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: background 0.1s;
+}
+.param-step-btn:hover { background: rgba(255,184,77,0.15); }
+.param-step-btn.left { border-radius: 6px 0 0 6px; }
+.param-step-btn.right { border-radius: 0 6px 6px 0; }
+.param-step-value {
+  min-width: 52px; height: 28px; background: var(--lw-base);
+  border-top: 1px solid rgba(255,184,77,0.2); border-bottom: 1px solid rgba(255,184,77,0.2);
+  font: 500 13px/28px var(--font-jetbrains); color: var(--lw-gold); text-align: center;
+}
+.param-step-value.wide { min-width: 64px; }
+
+/* Real-time metric bar */
+.metric-row {
+  display: flex; align-items: center; margin-bottom: 8px;
+}
+.metric-label {
+  font: 500 11px/1 var(--font-rajdhani); color: var(--lw-text-tertiary);
+  min-width: 72px; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.metric-bar-track {
+  flex: 1; height: 8px; border-radius: 4px; background: var(--lw-elevated);
+  margin: 0 10px; position: relative; overflow: hidden;
+}
+.metric-bar-fill {
+  height: 100%; border-radius: 4px; transition: width 0.15s;
+}
+.metric-bar-fill.energy { background: var(--lw-cyan); }
+.metric-bar-fill.tempo { background: var(--lw-gold); }
+.metric-bar-fill.state { background: var(--lw-success); }
+.metric-bar-fill.health { background: var(--lw-error); }
+.metric-value {
+  font: 500 11px/1 var(--font-jetbrains); color: var(--lw-text-secondary);
+  min-width: 36px; text-align: right;
+}
+
+/* Boolean metric indicator */
+.metric-bool-row {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
+}
+.metric-bool-dot {
+  width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; flex-shrink: 0;
+}
+.metric-bool-dot.on { background: var(--lw-success); box-shadow: 0 0 6px var(--lw-success); }
+.metric-bool-dot.off { background: var(--lw-text-tertiary); }
+.metric-bool-label {
+  font: 500 11px/1 var(--font-rajdhani); color: var(--lw-text-secondary);
+  display: flex; align-items: center;
+}
+.metric-bool-value {
+  font: 500 11px/1 var(--font-jetbrains); color: var(--lw-text-tertiary);
+}
+
+/* Mini waveform / spectrum canvas */
+.metric-canvas-container {
+  margin: 8px 0 12px; border-radius: 8px; overflow: hidden;
+  background: var(--lw-base); border: 1px solid rgba(255,255,255,0.06);
+}
+.metric-canvas-label {
+  font: 700 10px/1 var(--font-bebas); color: var(--lw-text-tertiary);
+  letter-spacing: 1px; padding: 6px 8px 2px; text-transform: uppercase;
+}
+.metric-canvas {
+  width: 100%; height: 48px; display: block;
+}
+
+/* ============================================
+   ZONE CARDS
+   ============================================ */
+.zone-header-card {
+  background: var(--lw-card); border-radius: var(--radius-card);
+  padding: 16px; margin-bottom: var(--space-md); box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+}
+.zone-header-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.zone-count-row { display: flex; align-items: center; justify-content: space-between; }
+.zone-count-label { font: 500 12px/1 var(--font-rajdhani); color: var(--lw-text-secondary); }
+.zone-count-picker { display: flex; gap: 2px; background: var(--lw-elevated); border-radius: 8px; padding: 2px; }
+.zone-count-option {
+  padding: 6px 18px; font: 500 12px/1 var(--font-rajdhani); color: var(--lw-text-secondary);
+  border-radius: 6px; cursor: pointer;
+}
+.zone-count-option.active { background: var(--lw-gold); color: var(--lw-base); font-weight: 600; }
+
+.zone-card {
+  background: var(--lw-card); border-radius: var(--radius-card);
+  padding: 16px; margin-bottom: var(--space-md); box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+}
+/* Zone pill title — white outlined capsule straddling the card top border */
+.zone-pill-title {
+  display: inline-block; padding: 5px 18px; border-radius: 20px;
+  font: 700 13px/1 var(--font-bebas); letter-spacing: 1.5px;
+  border: 2px solid var(--lw-white-border); background: var(--lw-card);
+  color: var(--lw-text-primary);
+  position: relative; z-index: 2; margin-left: 16px;
+  margin-bottom: -14px; /* pull into card top border */
+}
+.zone-card-title { font: 700 14px/1 var(--font-bebas); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 4px; }
+.zone-card-meta { font: 400 11px/1 var(--font-jetbrains); color: var(--lw-text-tertiary); margin-bottom: 12px; }
+
+/* Zone nav rows (effect/palette with ◀/▶) */
+.zone-nav-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.zone-nav-label { font: 500 12px/1 var(--font-rajdhani); color: var(--lw-text-secondary); min-width: 56px; }
+.zone-nav-btn {
+  width: 26px; height: 26px; border-radius: 6px; background: var(--lw-elevated);
+  display: flex; align-items: center; justify-content: center;
+  font: 600 14px/1 var(--font-rajdhani); color: var(--lw-gold); cursor: pointer;
+  border: 1px solid rgba(255,184,77,0.1); flex-shrink: 0;
+}
+.zone-nav-value {
+  flex: 1; font: 500 13px/1 var(--font-rajdhani); color: var(--lw-text-primary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;
+}
+
+/* Zone split slider */
+.zone-split-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.04); }
+.zone-split-label { font: 500 12px/1 var(--font-rajdhani); color: var(--lw-text-secondary); min-width: 56px; }
+.zone-split-track {
+  flex: 1; height: 8px; border-radius: 4px; background: var(--lw-elevated);
+  position: relative; cursor: pointer;
+}
+.zone-split-fill { height: 100%; border-radius: 4px; }
+.zone-split-thumb {
+  position: absolute; top: 50%; transform: translate(-50%, -50%);
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--lw-gold); border: 2px solid var(--lw-base);
+  box-shadow: 0 0 6px rgba(255,184,77,0.4);
+}
+.zone-split-value { font: 600 13px/1 var(--font-jetbrains); color: var(--lw-gold); min-width: 52px; text-align: right; }
+
+/* LED strip vis */
+.led-strip-vis {
+  height: 28px; border-radius: 8px; overflow: hidden; margin-bottom: 4px; display: flex;
+}
+.led-strip-vis-zone { height: 100%; display: flex; align-items: center; justify-content: center; }
+.led-strip-vis-label { font: 500 10px/1 var(--font-rajdhani); }
+.led-strip-vis-meta {
+  display: flex; justify-content: space-between; margin-bottom: 12px;
+  font: 400 10px/1 var(--font-jetbrains); color: var(--lw-text-tertiary);
+}
+
+/* ============================================
+   PALETTE SELECTOR — 3-col grid
+   ============================================ */
+.palette-search-bar {
+  position: sticky; top: 0; z-index: 10; background: var(--lw-base);
+  padding: 12px 0 8px;
+}
+.palette-search-input {
+  width: 100%; padding: 10px 14px; background: var(--lw-card);
+  border: 1px solid var(--lw-elevated); border-radius: var(--radius-nested);
+  font: 500 13px/1 var(--font-rajdhani); color: var(--lw-text-primary);
+  outline: none; margin-bottom: 8px;
+}
+.palette-search-input::placeholder { color: var(--lw-text-tertiary); }
+.palette-search-input:focus { border-color: var(--lw-gold); }
+.palette-filter-chips { display: flex; gap: 6px; }
+.palette-chip {
+  padding: 5px 12px; border-radius: 20px; font: 600 11px/1 var(--font-bebas);
+  letter-spacing: 1px; cursor: pointer; border: 1px solid var(--lw-elevated);
+  background: transparent; color: var(--lw-text-secondary);
+}
+.palette-chip.active { background: var(--lw-gold); color: var(--lw-base); border-color: var(--lw-gold); }
+
+.palette-selector-grid {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; padding-bottom: 20px;
+}
+.palette-category-header {
+  grid-column: 1 / -1; font: 700 12px/1 var(--font-bebas); color: var(--lw-text-secondary);
+  text-transform: uppercase; letter-spacing: 1.5px; padding: 12px 0 4px;
+}
+.palette-grid-cell {
+  background: var(--lw-card); border-radius: 10px; overflow: hidden;
+  cursor: pointer; border: 2px solid transparent; transition: all 0.15s;
+}
+.palette-grid-cell.selected { border-color: var(--lw-gold); box-shadow: 0 0 12px rgba(255,184,77,0.3); }
+.palette-swatch { height: 40px; width: 100%; }
+.palette-cell-name {
+  padding: 5px 6px; font: 500 10px/1.2 var(--font-rajdhani); color: var(--lw-text-secondary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ============================================
+   TYPOGRAPHY COMPARISON
+   ============================================ */
+.type-comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 800px; margin: 0 auto; }
+.type-column { background: var(--lw-card); border-radius: var(--radius-card); padding: 20px; }
+.type-column-title { font: 700 14px/1 var(--font-bebas); color: var(--lw-gold); letter-spacing: 1.5px; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,184,77,0.2); }
+.type-sample { margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.type-token-name { font: 400 10px/1 var(--font-jetbrains); color: var(--lw-text-tertiary); margin-bottom: 4px; }
+.type-token-spec { font: 400 10px/1 var(--font-jetbrains); color: var(--lw-gold); opacity: 0.6; margin-top: 2px; }
+
+/* ============================================
+   ANNOTATIONS
+   ============================================ */
+.annotation { position: relative; margin: 8px 0; }
+.annotation::before {
+  content: attr(data-note); display: block;
+  font: 400 10px/1.3 var(--font-jetbrains); color: var(--lw-success);
+  background: rgba(77,255,184,0.06); border: 1px solid rgba(77,255,184,0.15);
+  border-radius: 6px; padding: 5px 8px; margin-bottom: 6px;
+}
+.change-new { outline: 2px solid var(--lw-success); outline-offset: 4px; position: relative; }
+.change-new::after { content:'NEW'; position:absolute; top:-10px; right:-4px; font:700 9px/1 var(--font-jetbrains); color:var(--lw-success); background:var(--lw-base); padding:2px 6px; border-radius:4px; border:1px solid var(--lw-success); }
+.change-modified { outline: 2px solid var(--lw-gold); outline-offset: 4px; position: relative; }
+.change-modified::after { content:'MODIFIED'; position:absolute; top:-10px; right:-4px; font:700 9px/1 var(--font-jetbrains); color:var(--lw-gold); background:var(--lw-base); padding:2px 6px; border-radius:4px; border:1px solid var(--lw-gold); }
+.change-removed { outline: 2px dashed var(--lw-error); outline-offset: 4px; position: relative; opacity: 0.5; }
+.change-removed::after { content:'REMOVED'; position:absolute; top:-10px; right:-4px; font:700 9px/1 var(--font-jetbrains); color:var(--lw-error); background:var(--lw-base); padding:2px 6px; border-radius:4px; border:1px solid var(--lw-error); }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="mockup-nav">
+  <button class="active" onclick="showScreen('play')">PLAY TAB</button>
+  <button onclick="showScreen('audio')">AUDIO TAB</button>
+  <button onclick="showScreen('zones')">ZONES TAB</button>
+  <button onclick="showScreen('palette-selector')">PALETTE SELECTOR</button>
+  <button onclick="showScreen('typography')">TYPOGRAPHY</button>
+</nav>
+
+<!-- ============================================
+     SCREEN 1: PLAY TAB
+     ============================================ -->
+<div id="screen-play" class="screen-container active">
+  <div class="screen-label">PLAY TAB</div>
+  <div class="screen-desc">
+    Status bar: "LIGHTWAVEOS" + collapsed "● Connected ›" (tap reveals IP/RSSI drawer). BPM removed from status bar. Hero has centred BPM ring (no effect name, no palette overlay). Pattern and Palette pills have ◀/▶ navigation buttons.
+  </div>
+
+  <div class="phone-frame">
+    <div class="ios-status-bar"><span class="time">9:41</span><span class="icons">&#x1F4F6; &#x1F50B;</span></div>
+
+    <!-- STATUS BAR -->
+    <div class="annotation" data-note="'LIGHTWAVEOS' brand + '● Connected ›' collapsed. Tap chevron reveals IP/RSSI drawer. White 2px border. NO BPM.">
+      <div class="persistent-status-bar change-modified" id="playStatusBar" onclick="toggleDrawer('playDrawer')">
+        <div class="status-left">
+          <span class="status-brand">LIGHTWAVEOS</span>
+        </div>
+        <div class="status-right-group">
+          <div class="status-dot"></div>
+          <span class="status-label">Connected</span>
+          <span class="status-chevron" id="playChevron">&#x203A;</span>
+        </div>
+      </div>
+      <!-- Drawer (hidden by default) -->
+      <div class="status-drawer" id="playDrawer">
+        <div class="status-drawer-row">
+          <span class="status-drawer-label">IP Address</span>
+          <span class="status-drawer-value">192.168.1.42</span>
+        </div>
+        <div class="status-drawer-row">
+          <span class="status-drawer-label">RSSI</span>
+          <span class="status-drawer-value rssi-good">-48 dBm (Excellent)</span>
+        </div>
+        <div class="status-drawer-row">
+          <span class="status-drawer-label">WiFi</span>
+          <span class="status-drawer-value" style="color:var(--lw-success)">Connected</span>
+        </div>
+        <div class="status-drawer-row">
+          <span class="status-drawer-label">WebSocket</span>
+          <span class="status-drawer-value" style="color:var(--lw-success)">Connected</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="app-content">
+      <!-- HERO LED PREVIEW -->
+      <div class="hero-led-preview">
+        <canvas id="heroCanvas" class="hero-led-canvas" width="393" height="120"></canvas>
+        <div class="hero-centre-marker"></div>
+        <div class="hero-bpm-ring">
+          <svg viewBox="0 0 80 80">
+            <circle cx="40" cy="40" r="36" fill="none" stroke="#252D3F" stroke-width="4" opacity="0.5"/>
+            <circle cx="40" cy="40" r="36" fill="none" stroke="#FFB84D" stroke-width="4"
+              stroke-dasharray="170 226" stroke-dashoffset="-57" stroke-linecap="round" opacity="0.6"
+              transform="rotate(-90 40 40)"/>
+          </svg>
+          <span class="hero-bpm-number">124</span>
+          <span class="hero-bpm-label">BPM</span>
+        </div>
+      </div>
+
+      <!-- PATTERN PILL — with ◀/▶ -->
+      <div class="annotation" data-note="◀/▶ buttons cycle through patterns. Tap name/chevron opens full selector.">
+        <div class="pill-card change-modified">
+          <div class="pill-label">Pattern</div>
+          <div class="pill-nav-row">
+            <div class="pill-nav-btn">&#x25C0;</div>
+            <div class="pill-value-area">
+              <div class="pill-value-name">Quantum Flux</div>
+            </div>
+            <div class="pill-nav-btn">&#x25B6;</div>
+            <span class="pill-chevron">&#x203A;</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- PALETTE PILL — with ◀/▶ and real gradient -->
+      <div class="annotation" data-note="◀/▶ buttons cycle through palettes. Real gradient from firmware data.">
+        <div class="pill-card change-modified">
+          <div class="pill-label">Palette</div>
+          <div class="pill-nav-row">
+            <div class="pill-nav-btn">&#x25C0;</div>
+            <div class="pill-value-area">
+              <div class="pill-value-gradient" style="background: linear-gradient(to right, rgb(120,0,0), rgb(179,22,0) 8.6%, rgb(255,104,0) 20%, rgb(167,22,18) 33%, rgb(100,0,103) 53%, rgb(16,0,130) 77.6%, rgb(0,0,160))"></div>
+              <div class="pill-value-palette-name">Sunset Real</div>
+            </div>
+            <div class="pill-nav-btn">&#x25B6;</div>
+            <span class="pill-chevron">&#x203A;</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- EXPRESSION PARAMETERS -->
+      <div class="expression-card">
+        <div class="section-header">Parameters</div>
+        <div class="sub-group-header">Colour</div>
+        <div class="slider-row">
+          <span class="slider-label">Saturation</span>
+          <div class="slider-track"><div class="slider-fill" style="width:75%"></div></div>
+          <span class="slider-value">192</span>
+        </div>
+        <div class="slider-row">
+          <span class="slider-label">Hue Shift</span>
+          <div class="slider-track"><div class="slider-fill" style="width:0%"></div></div>
+          <span class="slider-value">0</span>
+        </div>
+        <div class="sub-group-header">Motion</div>
+        <div class="slider-row">
+          <span class="slider-label">Speed</span>
+          <div class="slider-track"><div class="slider-fill" style="width:50%"></div></div>
+          <span class="slider-value">128</span>
+        </div>
+        <div class="slider-row">
+          <span class="slider-label">Intensity</span>
+          <div class="slider-track"><div class="slider-fill" style="width:62%"></div></div>
+          <span class="slider-value">160</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-bar">
+      <div class="tab-item active"><span class="tab-icon">&#x25B6;</span><span>Play</span></div>
+      <div class="tab-item"><span class="tab-icon">&#x266B;</span><span>Audio</span></div>
+      <div class="tab-item"><span class="tab-icon">&#x25A6;</span><span>Zones</span></div>
+      <div class="tab-item"><span class="tab-icon">&#x2699;</span><span>Device</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================
+     SCREEN 2: AUDIO TAB
+     ============================================ -->
+<div id="screen-audio" class="screen-container">
+  <div class="screen-label">AUDIO TAB</div>
+  <div class="screen-desc">
+    BPM circle REMOVED (already on Play hero). Mic Type picker REMOVED (only SPH0645 I2S). Haptic toggle clarified as "Beat Haptics". SPH0645 gain/threshold sliders. DSP parameters with ◀/▶ stepper controls (0.1 increments): Control Bus Smoothing, Band Envelope, Silence Detection, Novelty/Onset. Real-time metrics: Energy bars, Beat/Tempo status, State indicators, Waveform + Spectrum canvases, DSP Health.
+  </div>
+
+  <div class="phone-frame">
+    <div class="ios-status-bar"><span class="time">9:41</span><span class="icons">&#x1F4F6; &#x1F50B;</span></div>
+
+    <div class="persistent-status-bar" onclick="toggleDrawer('audioDrawer')">
+      <div class="status-left"><span class="status-brand">LIGHTWAVEOS</span></div>
+      <div class="status-right-group">
+        <div class="status-dot"></div>
+        <span class="status-label">Connected</span>
+        <span class="status-chevron" id="audioChevron">&#x203A;</span>
+      </div>
+    </div>
+    <div class="status-drawer" id="audioDrawer">
+      <div class="status-drawer-row"><span class="status-drawer-label">IP Address</span><span class="status-drawer-value">192.168.1.42</span></div>
+      <div class="status-drawer-row"><span class="status-drawer-label">RSSI</span><span class="status-drawer-value rssi-good">-48 dBm</span></div>
+    </div>
+
+    <div class="app-content">
+
+      <!-- ===== REAL-TIME METRICS (read-only) — TOP ===== -->
+
+      <!-- Energy -->
+      <div class="audio-section-card">
+        <div class="section-header">ENERGY</div>
+        <div class="metric-row">
+          <span class="metric-label">RMS</span>
+          <div class="metric-bar-track"><div class="metric-bar-fill energy" style="width:42%"></div></div>
+          <span class="metric-value">0.42</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Flux</span>
+          <div class="metric-bar-track"><div class="metric-bar-fill energy" style="width:18%"></div></div>
+          <span class="metric-value">0.18</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">RMS Raw</span>
+          <div class="metric-bar-track"><div class="metric-bar-fill energy" style="width:35%"></div></div>
+          <span class="metric-value">0.35</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">RMS Map</span>
+          <div class="metric-bar-track"><div class="metric-bar-fill energy" style="width:56%"></div></div>
+          <span class="metric-value">0.56</span>
+        </div>
+      </div>
+
+      <!-- Beat / Tempo -->
+      <div class="audio-section-card">
+        <div class="section-header">BEAT / TEMPO</div>
+        <div class="metric-row">
+          <span class="metric-label">Confidence</span>
+          <div class="metric-bar-track"><div class="metric-bar-fill tempo" style="width:78%"></div></div>
+          <span class="metric-value">0.78</span>
+        </div>
+        <div class="metric-bool-row">
+          <span class="metric-bool-label"><span class="metric-bool-dot on"></span>Tempo Locked</span>
+          <span class="metric-bool-value">true</span>
+        </div>
+      </div>
+
+      <!-- State -->
+      <div class="audio-section-card">
+        <div class="section-header">STATE</div>
+        <div class="metric-bool-row">
+          <span class="metric-bool-label"><span class="metric-bool-dot off"></span>Silent</span>
+          <span class="metric-bool-value">false</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Silent Scale</span>
+          <div class="metric-bar-track"><div class="metric-bar-fill state" style="width:100%"></div></div>
+          <span class="metric-value">1.00</span>
+        </div>
+      </div>
+
+      <!-- Waveform & Spectrum -->
+      <div class="audio-section-card">
+        <div class="section-header">WAVEFORM &amp; SPECTRUM</div>
+        <div class="metric-canvas-container">
+          <div class="metric-canvas-label">WAVEFORM (128 SAMPLES)</div>
+          <canvas class="metric-canvas" id="waveformCanvas"></canvas>
+        </div>
+        <div class="metric-canvas-container">
+          <div class="metric-canvas-label">SPECTRUM (64 BINS)</div>
+          <canvas class="metric-canvas" id="spectrumCanvas"></canvas>
+        </div>
+      </div>
+
+      <!-- DSP Health -->
+      <div class="audio-section-card">
+        <div class="section-header">DSP HEALTH</div>
+        <div class="metric-row">
+          <span class="metric-label">Noise Floor</span>
+          <div class="metric-bar-track"><div class="metric-bar-fill health" style="width:8%"></div></div>
+          <span class="metric-value">0.0004</span>
+        </div>
+        <div class="metric-bool-row">
+          <span class="metric-bool-label"><span class="metric-bool-dot off"></span>Clip Count</span>
+          <span class="metric-bool-value" style="color:var(--lw-text-secondary)">0</span>
+        </div>
+      </div>
+
+      <!-- ===== DSP PARAMETERS (editable steppers) — BOTTOM ===== -->
+
+      <!-- Beat Haptics toggle -->
+      <div class="audio-section-card">
+        <div class="haptic-row">
+          <span class="haptic-label">Beat Haptics</span>
+          <div class="toggle-switch"></div>
+        </div>
+        <div class="haptic-subtitle">Vibrate on beat detection</div>
+      </div>
+
+      <!-- SPH0645 Tuning -->
+      <div class="audio-section-card">
+        <div class="section-header">SPH0645 TUNING</div>
+        <div class="slider-row">
+          <span class="slider-label">Gain</span>
+          <div class="slider-track"><div class="slider-fill" style="width:50%"></div></div>
+          <span class="slider-value">1.0</span>
+        </div>
+        <div class="slider-row">
+          <span class="slider-label">Threshold</span>
+          <div class="slider-track"><div class="slider-fill" style="width:30%"></div></div>
+          <span class="slider-value">0.30</span>
+        </div>
+      </div>
+
+      <!-- Control Bus Smoothing -->
+      <div class="audio-section-card">
+        <div class="section-header">CONTROL BUS SMOOTHING</div>
+        <div class="param-stepper-row">
+          <span class="param-stepper-label">Alpha Fast</span>
+          <div class="param-stepper-controls">
+            <div class="param-step-btn left">&#x25C0;</div>
+            <div class="param-step-value">0.35</div>
+            <div class="param-step-btn right">&#x25B6;</div>
+          </div>
+        </div>
+        <div class="param-stepper-row">
+          <span class="param-stepper-label">Alpha Slow</span>
+          <div class="param-stepper-controls">
+            <div class="param-step-btn left">&#x25C0;</div>
+            <div class="param-step-value">0.12</div>
+            <div class="param-step-btn right">&#x25B6;</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Band Envelope -->
+      <div class="audio-section-card">
+        <div class="section-header">BAND ENVELOPE</div>
+        <div class="param-stepper-row">
+          <span class="param-stepper-label">Band Attack</span>
+          <div class="param-stepper-controls">
+            <div class="param-step-btn left">&#x25C0;</div>
+            <div class="param-step-value">0.15</div>
+            <div class="param-step-btn right">&#x25B6;</div>
+          </div>
+        </div>
+        <div class="param-stepper-row">
+          <span class="param-stepper-label">Band Release</span>
+          <div class="param-stepper-controls">
+            <div class="param-step-btn left">&#x25C0;</div>
+            <div class="param-step-value">0.03</div>
+            <div class="param-step-btn right">&#x25B6;</div>
+          </div>
+        </div>
+        <div class="param-stepper-row">
+          <span class="param-stepper-label">Heavy Attack</span>
+          <div class="param-stepper-controls">
+            <div class="param-step-btn left">&#x25C0;</div>
+            <div class="param-step-value">0.08</div>
+            <div class="param-step-btn right">&#x25B6;</div>
+          </div>
+        </div>
+        <div class="param-stepper-row">
+          <span class="param-stepper-label">Heavy Release</span>
+          <div class="param-stepper-controls">
+            <div class="param-step-btn left">&#x25C0;</div>
+            <div class="param-step-value">0.02</div>
+            <div class="param-step-btn right">&#x25B6;</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Silence Detection -->
+      <div class="audio-section-card">
+        <div class="section-header">SILENCE DETECTION</div>
+        <div class="param-stepper-row">
+          <span class="param-stepper-label">Hysteresis</span>
+          <div class="param-stepper-controls">
+            <div class="param-step-btn left">&#x25C0;</div>
+            <div class="param-step-value wide">5000 ms</div>
+            <div class="param-step-btn right">&#x25B6;</div>
+          </div>
+        </div>
+        <div class="param-stepper-row">
+          <span class="param-stepper-label">Threshold</span>
+          <div class="param-stepper-controls">
+            <div class="param-step-btn left">&#x25C0;</div>
+            <div class="param-step-value">0.01</div>
+            <div class="param-step-btn right">&#x25B6;</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Novelty / Onset -->
+      <div class="audio-section-card">
+        <div class="section-header">NOVELTY / ONSET</div>
+        <div class="haptic-row" style="margin-bottom:10px">
+          <span class="haptic-label">Spectral Flux</span>
+          <div class="toggle-switch"></div>
+        </div>
+        <div class="param-stepper-row">
+          <span class="param-stepper-label">Flux Scale</span>
+          <div class="param-stepper-controls">
+            <div class="param-step-btn left">&#x25C0;</div>
+            <div class="param-step-value">1.0</div>
+            <div class="param-step-btn right">&#x25B6;</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-bar">
+      <div class="tab-item"><span class="tab-icon">&#x25B6;</span><span>Play</span></div>
+      <div class="tab-item active"><span class="tab-icon">&#x266B;</span><span>Audio</span></div>
+      <div class="tab-item"><span class="tab-icon">&#x25A6;</span><span>Zones</span></div>
+      <div class="tab-item"><span class="tab-icon">&#x2699;</span><span>Device</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================
+     SCREEN 3: ZONES TAB
+     ============================================ -->
+<div id="screen-zones" class="screen-container">
+  <div class="screen-label">ZONES TAB</div>
+  <div class="screen-desc">
+    1-based zone numbering (Zone 0 phased out → Zone 1). Status bar is island (doesn't touch edges). LED strip vis: left half flipped so Z1 segments face each other at centre. No coloured card borders. Pill tab titles for zone cards. Split slider on Zone 1 only (2-zone) or Zone 1 + Zone 2 (3-zone). Defaults: Zone 1 = Ripple Enhanced/Copper/5/135, Zone 2 = LGP Holographic/Copper/35/135. Centre tap resets splits.
+  </div>
+
+  <div class="phone-frame" style="min-height: 850px;">
+    <div class="ios-status-bar"><span class="time">9:41</span><span class="icons">&#x1F4F6; &#x1F50B;</span></div>
+
+    <div class="persistent-status-bar" onclick="toggleDrawer('zonesDrawer')">
+      <div class="status-left"><span class="status-brand">LIGHTWAVEOS</span></div>
+      <div class="status-right-group">
+        <div class="status-dot"></div>
+        <span class="status-label">Connected</span>
+        <span class="status-chevron" id="zonesChevron">&#x203A;</span>
+      </div>
+    </div>
+    <div class="status-drawer" id="zonesDrawer">
+      <div class="status-drawer-row"><span class="status-drawer-label">IP Address</span><span class="status-drawer-value">192.168.1.42</span></div>
+      <div class="status-drawer-row"><span class="status-drawer-label">RSSI</span><span class="status-drawer-value rssi-good">-48 dBm</span></div>
+    </div>
+
+    <div class="app-content" style="max-height: 850px;">
+      <!-- LED Strip Visualisation -->
+      <div style="margin-bottom: 4px;">
+        <div style="font:700 11px/1 var(--font-bebas); color:var(--lw-text-tertiary); letter-spacing:1.5px; text-align:center; margin-bottom:6px;">LED STRIP VISUALISATION</div>
+        <div class="led-strip-vis-meta">
+          <span>Left (0-79)</span>
+          <span>Right (80-159)</span>
+        </div>
+        <!-- Left: Z2(outer)|Z1(inner) → centre → Z1(inner)|Z2(outer) :Right -->
+        <!-- Z1 segments face each other at centre (LEDs 79/80) -->
+        <div class="led-strip-vis">
+          <!-- Left half: outer first (edge), inner at centre -->
+          <div class="led-strip-vis-zone" style="flex: 55; background: rgba(34,197,94,0.25);">
+            <span class="led-strip-vis-label" style="color:var(--lw-zone1);">Z2</span>
+          </div>
+          <div class="led-strip-vis-zone" style="flex: 25; background: rgba(6,182,212,0.25); border-right: 2px solid rgba(255,184,77,0.5);">
+            <span class="led-strip-vis-label" style="color:var(--lw-zone0);">Z1</span>
+          </div>
+          <!-- Right half: inner at centre, outer at edge -->
+          <div class="led-strip-vis-zone" style="flex: 25; background: rgba(6,182,212,0.25); border-right: 2px solid rgba(255,255,255,0.12);">
+            <span class="led-strip-vis-label" style="color:var(--lw-zone0);">Z1</span>
+          </div>
+          <div class="led-strip-vis-zone" style="flex: 55; background: rgba(34,197,94,0.25);">
+            <span class="led-strip-vis-label" style="color:var(--lw-zone1);">Z2</span>
+          </div>
+        </div>
+        <div style="text-align:center; font:400 10px/1 var(--font-jetbrains); color:var(--lw-text-tertiary); margin-top:4px; margin-bottom:12px;">
+          Centre pair: LEDs 79 (left) / 80 (right) &bull; Tap centre to reset splits
+        </div>
+      </div>
+
+      <!-- Zone Composer Header -->
+      <div class="zone-header-card">
+        <div class="zone-header-top">
+          <span class="section-header" style="margin-bottom:0">ZONE COMPOSER</span>
+          <div class="toggle-switch"></div>
+        </div>
+        <div class="zone-count-row">
+          <span class="zone-count-label">Zones</span>
+          <div class="zone-count-picker">
+            <div class="zone-count-option active">2</div>
+            <div class="zone-count-option">3</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Zone 1 (Inner) — pill title in zone colour -->
+      <div class="zone-pill-title" style="color: var(--lw-zone0);">ZONE 1 — INNER</div>
+      <div class="zone-card">
+        <div class="zone-card-meta">LEDs 55-79 / 80-104 &bull; 50 LEDs</div>
+
+        <!-- Effect with ◀/▶ -->
+        <div class="zone-nav-row">
+          <span class="zone-nav-label">Effect</span>
+          <div class="zone-nav-btn">&#x25C0;</div>
+          <span class="zone-nav-value">Ripple Enhanced</span>
+          <div class="zone-nav-btn">&#x25B6;</div>
+        </div>
+
+        <!-- Palette with ◀/▶ -->
+        <div class="zone-nav-row">
+          <span class="zone-nav-label">Palette</span>
+          <div class="zone-nav-btn">&#x25C0;</div>
+          <span class="zone-nav-value">Copper</span>
+          <div class="zone-nav-btn">&#x25B6;</div>
+        </div>
+
+        <!-- Speed slider -->
+        <div class="slider-row">
+          <span class="slider-label">Speed</span>
+          <div class="slider-track"><div class="slider-fill" style="width:2%"></div></div>
+          <span class="slider-value">5</span>
+        </div>
+
+        <!-- Brightness slider -->
+        <div class="slider-row">
+          <span class="slider-label">Brightness</span>
+          <div class="slider-track"><div class="slider-fill" style="width:53%"></div></div>
+          <span class="slider-value">135</span>
+        </div>
+
+        <!-- Zone Split slider — controls boundary between Z1 (inner) and Z2 (outer) -->
+        <!-- 2 zones: Z1=25 LEDs, Z2=55 LEDs → split at LED 55 (from centre: 80-25=55) -->
+        <div class="zone-split-row">
+          <span class="zone-split-label">Split</span>
+          <div class="zone-split-track">
+            <div class="zone-split-fill" style="width: 31%; background: var(--lw-zone0); opacity: 0.3; border-radius: 4px;"></div>
+            <div class="zone-split-thumb" style="left: 31%;"></div>
+          </div>
+          <span class="zone-split-value">LED 55</span>
+        </div>
+      </div>
+
+      <!-- Zone 2 (Outer) — pill title in zone colour -->
+      <div class="zone-pill-title" style="color: var(--lw-zone1);">ZONE 2 — OUTER</div>
+      <div class="zone-card">
+        <div class="zone-card-meta">LEDs 0-54 / 105-159 &bull; 110 LEDs</div>
+
+        <div class="zone-nav-row">
+          <span class="zone-nav-label">Effect</span>
+          <div class="zone-nav-btn">&#x25C0;</div>
+          <span class="zone-nav-value">LGP Holographic</span>
+          <div class="zone-nav-btn">&#x25B6;</div>
+        </div>
+        <div class="zone-nav-row">
+          <span class="zone-nav-label">Palette</span>
+          <div class="zone-nav-btn">&#x25C0;</div>
+          <span class="zone-nav-value">Copper</span>
+          <div class="zone-nav-btn">&#x25B6;</div>
+        </div>
+        <div class="slider-row">
+          <span class="slider-label">Speed</span>
+          <div class="slider-track"><div class="slider-fill" style="width:14%"></div></div>
+          <span class="slider-value">35</span>
+        </div>
+        <div class="slider-row">
+          <span class="slider-label">Brightness</span>
+          <div class="slider-track"><div class="slider-fill" style="width:53%"></div></div>
+          <span class="slider-value">135</span>
+        </div>
+        <!-- No split slider on outermost zone -->
+      </div>
+    </div>
+
+    <div class="tab-bar">
+      <div class="tab-item"><span class="tab-icon">&#x25B6;</span><span>Play</span></div>
+      <div class="tab-item"><span class="tab-icon">&#x266B;</span><span>Audio</span></div>
+      <div class="tab-item active"><span class="tab-icon">&#x25A6;</span><span>Zones</span></div>
+      <div class="tab-item"><span class="tab-icon">&#x2699;</span><span>Device</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================
+     SCREEN 4: PALETTE SELECTOR
+     ============================================ -->
+<div id="screen-palette-selector" class="screen-container">
+  <div class="screen-label">PALETTE SELECTOR</div>
+  <div class="screen-desc">
+    3-column grid (was 2). Sticky search bar + filter chips (All / CPT-City / Crameri / Colorspace). Gold border on selected. Real firmware palette colours.
+  </div>
+
+  <div class="phone-frame" style="min-height: 900px;">
+    <div class="ios-status-bar"><span class="time">9:41</span><span class="icons">&#x1F4F6; &#x1F50B;</span></div>
+
+    <div class="persistent-status-bar">
+      <div class="status-left"><span class="status-brand">LIGHTWAVEOS</span></div>
+      <div class="status-right-group">
+        <div class="status-dot"></div>
+        <span class="status-label">Connected</span>
+        <span class="status-chevron">&#x203A;</span>
+      </div>
+    </div>
+
+    <div class="app-content" style="max-height: 850px;">
+      <div style="font:700 16px/1 var(--font-bebas); color:var(--lw-text-primary); text-align:center; padding:12px 0 4px; letter-spacing:2px;">SELECT PALETTE</div>
+
+      <!-- Sticky search + filters -->
+      <div class="annotation" data-note="Search by name + filter chips. Sticky at top.">
+        <div class="palette-search-bar change-new">
+          <input type="text" class="palette-search-input" placeholder="Search palettes...">
+          <div class="palette-filter-chips">
+            <div class="palette-chip active">All</div>
+            <div class="palette-chip">CPT-City</div>
+            <div class="palette-chip">Crameri</div>
+            <div class="palette-chip">Colorspace</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="palette-selector-grid">
+        <!-- CPT-City -->
+        <div class="palette-category-header">CPT-City</div>
+        <div class="palette-grid-cell selected">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(120,0,0),rgb(179,22,0) 9%,rgb(255,104,0) 20%,rgb(167,22,18) 33%,rgb(100,0,103) 53%,rgb(16,0,130) 78%,rgb(0,0,160))"></div>
+          <div class="palette-cell-name">Sunset Real</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(1,14,5),rgb(16,36,14) 40%,rgb(56,68,30) 65%,rgb(150,156,99))"></div>
+          <div class="palette-cell-name">Rivendell</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(1,6,7),rgb(1,99,111) 35%,rgb(144,209,255) 60%,rgb(0,73,82))"></div>
+          <div class="palette-cell-name">Ocean Breeze</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(4,1,31),rgb(197,3,7) 25%,rgb(6,2,34) 50%,rgb(112,13,32) 75%,rgb(22,6,38))"></div>
+          <div class="palette-cell-name">RGI 15</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(188,135,1),rgb(46,7,1))"></div>
+          <div class="palette-cell-name">Retro 2</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(3,0,255),rgb(67,0,255) 50%,rgb(142,0,45) 75%,rgb(255,0,0))"></div>
+          <div class="palette-cell-name">Analogous 1</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(126,11,255),rgb(197,1,22) 50%,rgb(210,157,172) 69%,rgb(157,3,112))"></div>
+          <div class="palette-cell-name">Pink Splash</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(40,199,197),rgb(1,111,120) 38%,rgb(10,73,111) 55%,rgb(1,34,71))"></div>
+          <div class="palette-cell-name">Coral Reef</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(0,0,0),rgb(113,0,0) 38%,rgb(255,82,4) 68%,rgb(255,255,4) 92%,rgb(255,255,255))"></div>
+          <div class="palette-cell-name">Lava</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(1,1,0),rgb(192,24,0) 57%,rgb(252,255,31) 94%,rgb(255,255,255))"></div>
+          <div class="palette-cell-name">Fire</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(229,1,1),rgb(255,12,255) 40%,rgb(255,11,235) 60%,rgb(232,1,5))"></div>
+          <div class="palette-cell-name">Pink Splash 07</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(43,3,153),rgb(188,5,66) 50%,rgb(135,20,182))"></div>
+          <div class="palette-cell-name">Fuschia 7</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(97,255,1),rgb(47,133,1) 40%,rgb(2,10,1))"></div>
+          <div class="palette-cell-name">Emerald Dragon</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(71,27,39),rgb(252,1,69) 30%,rgb(46,9,35))"></div>
+          <div class="palette-cell-name">Magenta Eve</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(19,2,39),rgb(118,187,240) 40%,rgb(217,244,255) 45%,rgb(146,40,123))"></div>
+          <div class="palette-cell-name">Pink Purple</div>
+        </div>
+
+        <!-- Crameri -->
+        <div class="palette-category-header">Crameri Scientific</div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(3,43,113),rgb(95,157,188) 29%,rgb(235,237,233) 57%,rgb(154,107,20) 86%,rgb(115,48,0))"></div>
+          <div class="palette-cell-name">Vik</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(52,22,66),rgb(134,91,120) 29%,rgb(153,188,148) 71%,rgb(235,254,203))"></div>
+          <div class="palette-cell-name">Tokyo</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(146,66,14),rgb(213,200,91) 29%,rgb(170,232,215) 57%,rgb(39,76,164))"></div>
+          <div class="palette-cell-name">Roma</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(253,244,173),rgb(229,137,81) 43%,rgb(166,70,69) 71%,rgb(49,34,14))"></div>
+          <div class="palette-cell-name">La Jolla</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(144,29,99),rgb(153,94,51) 29%,rgb(150,170,44) 57%,rgb(135,239,238))"></div>
+          <div class="palette-cell-name">Hawaii</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(42,41,91),rgb(94,128,207) 43%,rgb(190,184,242) 71%,rgb(242,240,252))"></div>
+          <div class="palette-cell-name">Devon</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(121,171,237),rgb(29,76,98) 29%,rgb(25,11,9) 57%,rgb(221,141,134))"></div>
+          <div class="palette-cell-name">Berlin</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(9,42,92),rgb(55,105,88) 29%,rgb(158,137,46) 57%,rgb(252,192,215))"></div>
+          <div class="palette-cell-name">Batlow</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(11,70,71),rgb(81,115,29) 43%,rgb(159,149,11) 71%,rgb(241,216,125))"></div>
+          <div class="palette-cell-name">Bamako</div>
+        </div>
+
+        <!-- Colorspace -->
+        <div class="palette-category-header">Colorspace</div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(68,1,84),rgb(62,74,137) 29%,rgb(38,130,142) 57%,rgb(144,215,67) 86%,rgb(253,231,37))"></div>
+          <div class="palette-cell-name">Viridis</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(13,8,135),rgb(126,3,168) 29%,rgb(203,70,121) 57%,rgb(248,149,64) 86%,rgb(240,249,33))"></div>
+          <div class="palette-cell-name">Plasma</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(0,0,4),rgb(66,10,91) 29%,rgb(172,50,58) 57%,rgb(252,157,40) 86%,rgb(252,255,164))"></div>
+          <div class="palette-cell-name">Inferno</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(0,0,4),rgb(51,16,91) 29%,rgb(147,37,103) 57%,rgb(237,130,98) 86%,rgb(252,253,191))"></div>
+          <div class="palette-cell-name">Magma</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(0,0,0),rgb(19,54,62) 29%,rgb(89,135,55) 57%,rgb(210,157,193) 86%,rgb(232,232,232))"></div>
+          <div class="palette-cell-name">Cubhelix</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(0,0,0),rgb(100,55,30) 40%,rgb(210,150,95) 80%,rgb(255,200,160))"></div>
+          <div class="palette-cell-name">Copper</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(10,0,0),rgb(170,0,0) 33%,rgb(255,150,0) 67%,rgb(255,255,100))"></div>
+          <div class="palette-cell-name">Hot</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(0,255,255),rgb(100,150,255) 40%,rgb(200,50,255) 80%,rgb(255,0,255))"></div>
+          <div class="palette-cell-name">Cool</div>
+        </div>
+        <div class="palette-grid-cell">
+          <div class="palette-swatch" style="background:linear-gradient(to right,rgb(30,50,30),rgb(130,120,70) 40%,rgb(200,180,130) 80%,rgb(235,215,180))"></div>
+          <div class="palette-cell-name">Earth</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================
+     SCREEN 5: TYPOGRAPHY
+     ============================================ -->
+<div id="screen-typography" class="screen-container">
+  <div class="screen-label">TYPOGRAPHY — TAB5.ENCODER FONTS</div>
+  <div class="screen-desc">
+    Bebas Neue (brand/headings), Rajdhani (body/labels), JetBrains Mono (values/monospace). Matching the Tab5.encoder font system.
+  </div>
+
+  <div class="type-comparison">
+    <div class="type-column">
+      <div class="type-column-title">BEFORE (SF Pro only)</div>
+      <div class="type-sample">
+        <div class="type-token-name">heroNumeral</div>
+        <div style="font: bold 48px/1 system-ui; color: var(--lw-gold);">124</div>
+        <div class="type-token-spec">48pt SF Pro Rounded Bold</div>
+      </div>
+      <div class="type-sample">
+        <div class="type-token-name">effectTitle</div>
+        <div style="font: 600 22px/1.2 system-ui; color: var(--lw-text-primary);">Quantum Flux</div>
+        <div class="type-token-spec">22pt SF Pro Semibold</div>
+      </div>
+      <div class="type-sample">
+        <div class="type-token-name">bodyValue</div>
+        <div style="font: 400 15px/1.4 system-ui; color: var(--lw-text-primary);">Sunset Real</div>
+        <div class="type-token-spec" style="color:var(--lw-error);">15pt SF Pro Regular (too light)</div>
+      </div>
+      <div class="type-sample">
+        <div class="type-token-name">sectionHeader</div>
+        <div style="font: 600 13px/1.3 system-ui; color: var(--lw-text-primary); text-transform: uppercase; letter-spacing: 0.8px;">PARAMETERS</div>
+        <div class="type-token-spec">13pt SF Pro Semibold</div>
+      </div>
+      <div class="type-sample">
+        <div class="type-token-name">cardLabel</div>
+        <div style="font: 500 11px/1.3 system-ui; color: var(--lw-text-secondary);">Speed</div>
+        <div class="type-token-spec" style="color:var(--lw-error);">11pt SF Pro Medium (same as caption!)</div>
+      </div>
+      <div class="type-sample">
+        <div class="type-token-name">caption</div>
+        <div style="font: 400 11px/1.3 system-ui; color: var(--lw-text-tertiary);">ID: 42 &bull; 80 LEDs</div>
+        <div class="type-token-spec">11pt SF Pro Regular</div>
+      </div>
+      <div class="type-sample">
+        <div class="type-token-name">slider values (inline)</div>
+        <div style="font: 600 13px/1.2 system-ui; color: var(--lw-gold);">128</div>
+        <div class="type-token-spec" style="color:var(--lw-error);">11 inline definitions across 7 files</div>
+      </div>
+    </div>
+
+    <div class="type-column" style="border: 1px solid rgba(77,255,184,0.2);">
+      <div class="type-column-title" style="color: var(--lw-success);">AFTER (Tab5 Fonts)</div>
+      <div class="type-sample">
+        <div class="type-token-name">heroNumeral — Bebas Neue</div>
+        <div style="font: 700 48px/1 var(--font-bebas); color: var(--lw-gold); letter-spacing: 3px;">124</div>
+        <div class="type-token-spec">48pt Bebas Neue Bold</div>
+      </div>
+      <div class="type-sample">
+        <div class="type-token-name">effectTitle — Bebas Neue</div>
+        <div style="font: 400 22px/1.2 var(--font-bebas); color: var(--lw-text-primary); letter-spacing: 1.5px;">QUANTUM FLUX</div>
+        <div class="type-token-spec">22pt Bebas Neue Regular</div>
+      </div>
+      <div class="type-sample">
+        <div class="type-token-name">bodyValue — Rajdhani</div>
+        <div style="font: 500 15px/1.4 var(--font-rajdhani); color: var(--lw-text-primary);">Sunset Real</div>
+        <div class="type-token-spec">15pt Rajdhani Medium</div>
+      </div>
+      <div class="type-sample">
+        <div class="type-token-name">sectionHeader — Bebas Neue</div>
+        <div style="font: 700 14px/1.3 var(--font-bebas); color: var(--lw-text-primary); text-transform: uppercase; letter-spacing: 1.5px;">PARAMETERS</div>
+        <div class="type-token-spec">14pt Bebas Neue Bold</div>
+      </div>
+      <div class="type-sample">
+        <div class="type-token-name">cardLabel — Rajdhani</div>
+        <div style="font: 500 12px/1.3 var(--font-rajdhani); color: var(--lw-text-secondary);">Speed</div>
+        <div class="type-token-spec">12pt Rajdhani Medium (distinct from caption)</div>
+      </div>
+      <div class="type-sample">
+        <div class="type-token-name">caption — Rajdhani</div>
+        <div style="font: 400 11px/1.3 var(--font-rajdhani); color: var(--lw-text-tertiary);">ID: 42 &bull; 80 LEDs</div>
+        <div class="type-token-spec">11pt Rajdhani Regular</div>
+      </div>
+      <div class="type-sample">
+        <div class="type-token-name">sliderValue — JetBrains Mono</div>
+        <div style="font: 500 13px/1.2 var(--font-jetbrains); color: var(--lw-gold);">128</div>
+        <div class="type-token-spec">13pt JetBrains Mono Medium (single token for all)</div>
+      </div>
+      <div class="type-sample">
+        <div class="type-token-name">monospace — JetBrains Mono</div>
+        <div style="font: 400 11px/1.3 var(--font-jetbrains); color: var(--lw-text-tertiary);">192.168.1.42 &bull; LED 56</div>
+        <div class="type-token-spec">11pt JetBrains Mono Regular</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================
+     SCRIPTS
+     ============================================ -->
+<script>
+function showScreen(id) {
+  document.querySelectorAll('.screen-container').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.mockup-nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('screen-' + id).classList.add('active');
+  event.target.classList.add('active');
+  if (id === 'play') renderHeroLEDs();
+  if (id === 'audio') setTimeout(renderAudioCanvases, 50);
+}
+
+function toggleDrawer(id) {
+  const drawer = document.getElementById(id);
+  drawer.classList.toggle('open');
+}
+
+function renderHeroLEDs() {
+  const canvas = document.getElementById('heroCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  const ledWidth = w / 320;
+  const palette = [[0,120,0,0],[22,179,22,0],[51,255,104,0],[85,167,22,18],[135,100,0,103],[198,16,0,130],[255,0,0,160]];
+
+  function lerp(pos) {
+    pos = Math.max(0, Math.min(255, pos));
+    for (let i = 0; i < palette.length - 1; i++) {
+      if (pos >= palette[i][0] && pos <= palette[i+1][0]) {
+        const t = (palette[i+1][0] - palette[i][0]) === 0 ? 0 : (pos - palette[i][0]) / (palette[i+1][0] - palette[i][0]);
+        return [
+          Math.round(palette[i][1] + (palette[i+1][1] - palette[i][1]) * t),
+          Math.round(palette[i][2] + (palette[i+1][2] - palette[i][2]) * t),
+          Math.round(palette[i][3] + (palette[i+1][3] - palette[i][3]) * t),
+        ];
+      }
+    }
+    const l = palette[palette.length-1];
+    return [l[1], l[2], l[3]];
+  }
+
+  for (let i = 0; i < 320; i++) {
+    let dist = i < 160 ? Math.abs(79.5 - i) : Math.abs(239.5 - i);
+    const [r, g, b] = lerp((dist / 80) * 255);
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fillRect(i * ledWidth, 0, ledWidth + 0.5, h);
+  }
+}
+
+function renderAudioCanvases() {
+  // Waveform — simulated 128-sample sine + noise
+  const wc = document.getElementById('waveformCanvas');
+  if (wc) {
+    const ctx = wc.getContext('2d');
+    wc.width = wc.offsetWidth * 2; wc.height = 96;
+    const w = wc.width, h = wc.height;
+    ctx.fillStyle = '#0F1219'; ctx.fillRect(0, 0, w, h);
+
+    // Zero line
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, h/2); ctx.lineTo(w, h/2); ctx.stroke();
+
+    // Waveform
+    ctx.strokeStyle = '#00D4FF'; ctx.lineWidth = 1.5; ctx.beginPath();
+    for (let i = 0; i < 128; i++) {
+      const x = (i / 127) * w;
+      const val = Math.sin(i * 0.18) * 0.6 + (Math.random() - 0.5) * 0.15;
+      const y = h/2 - val * (h/2 - 4);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  // Spectrum — simulated 64-bin bars
+  const sc = document.getElementById('spectrumCanvas');
+  if (sc) {
+    const ctx = sc.getContext('2d');
+    sc.width = sc.offsetWidth * 2; sc.height = 96;
+    const w = sc.width, h = sc.height;
+    ctx.fillStyle = '#0F1219'; ctx.fillRect(0, 0, w, h);
+
+    const barW = w / 64 - 1;
+    for (let i = 0; i < 64; i++) {
+      // Bass-heavy falloff curve
+      const energy = Math.max(0, 0.85 * Math.exp(-i * 0.04) + (Math.random() - 0.5) * 0.12);
+      const barH = energy * (h - 4);
+      const x = i * (barW + 1);
+      ctx.fillStyle = `rgba(0, 212, 255, ${0.4 + energy * 0.6})`;
+      ctx.fillRect(x, h - barH, barW, barH);
+    }
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  renderHeroLEDs();
+  renderAudioCanvases();
+});
+
+</script>
+</body>
+</html>

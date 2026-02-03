@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LightwaveOS — Palette &times; Ridge Line Explorer</title>
+<style>
+  :root {
+    --lw-base: #0F1219;
+    --lw-card: #1E2535;
+    --lw-elevated: #252D3F;
+    --lw-gold: #FFB84D;
+    --lw-cyan: #00D4FF;
+    --lw-text-primary: #E6E9EF;
+    --lw-text-secondary: #9CA3B0;
+    --lw-text-tertiary: #6B7280;
+  }
+
+  @font-face { font-family: 'Bebas Neue'; src: local('Bebas Neue Bold'), local('BebasNeue-Bold'); font-weight: 700; }
+  @font-face { font-family: 'Rajdhani'; src: local('Rajdhani Medium'), local('Rajdhani-Medium'); font-weight: 500; }
+  @font-face { font-family: 'JetBrains Mono'; src: local('JetBrains Mono Medium'), local('JetBrainsMono-Medium'); font-weight: 500; }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--lw-base);
+    color: var(--lw-text-primary);
+    font-family: 'Rajdhani', -apple-system, sans-serif;
+    font-weight: 500;
+    padding: 12px;
+    max-width: 420px;
+    margin: 0 auto;
+  }
+
+  h1 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-weight: 700;
+    font-size: 20px;
+    letter-spacing: 2px;
+    color: var(--lw-gold);
+    margin-bottom: 2px;
+  }
+
+  .subtitle {
+    font-size: 11px;
+    color: var(--lw-text-tertiary);
+    margin-bottom: 16px;
+    line-height: 1.4;
+  }
+
+  .section-header {
+    font-family: 'Bebas Neue', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 1.5px;
+    color: var(--lw-text-secondary);
+    margin: 20px 0 10px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .card {
+    background: linear-gradient(180deg, #1E2535, #1A2030);
+    border-radius: 12px;
+    padding: 10px;
+    margin-bottom: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+    position: relative;
+  }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+
+  .card-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 13px;
+    letter-spacing: 1.2px;
+    color: var(--lw-text-primary);
+  }
+
+  .card-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--lw-text-tertiary);
+  }
+
+  .palette-strip {
+    height: 4px;
+    border-radius: 2px;
+    margin-bottom: 6px;
+  }
+
+  canvas {
+    width: 100%;
+    border-radius: 6px;
+    display: block;
+  }
+
+  .band-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 3px;
+    padding: 0 2px;
+  }
+
+  .band-labels span {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 7px;
+    color: var(--lw-text-tertiary);
+    opacity: 0.5;
+  }
+
+  hr.divider {
+    border: none;
+    height: 1px;
+    background: rgba(255,255,255,0.06);
+    margin: 16px 0;
+  }
+
+  .fps-counter {
+    position: fixed;
+    top: 8px;
+    right: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--lw-gold);
+    background: rgba(15,18,25,0.85);
+    padding: 2px 6px;
+    border-radius: 4px;
+    z-index: 100;
+  }
+</style>
+</head>
+<body>
+
+<h1>PALETTE &times; RIDGE EXPLORER</h1>
+<div class="subtitle">
+  V1 waterfall across 12 palettes &bull; 6 ridge line styles &bull; 8 Goertzel bands &bull; 30 FPS
+</div>
+
+<div class="fps-counter" id="fpsDisplay">-- FPS</div>
+
+<!-- ─── SECTION 1: WATERFALL × PALETTES ─── -->
+<div class="section-header">WATERFALL &times; 12 PALETTES</div>
+
+<div id="waterfallContainer"></div>
+
+<hr class="divider">
+
+<!-- ─── SECTION 2: RIDGE LINE VARIANTS ─── -->
+<div class="section-header">RIDGE LINE VARIANTS &times; CUBHELIX</div>
+
+<div id="ridgeContainer"></div>
+
+<hr class="divider">
+
+<!-- ─── SECTION 3: DOT MATRIX VARIANTS ─── -->
+<div class="section-header">DOT MATRIX VARIANTS</div>
+
+<div id="dotContainer"></div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// PALETTE DEFINITIONS (extracted from firmware)
+// ══════════════════════════════════════════════════════════════
+const PALETTES = [
+  { id: 61, name: "Cubhelix", cat: "Colorspace",
+    stops: [[0,0,0,0],[36,22,11,43],[73,19,54,62],[109,25,107,49],[146,89,135,55],[182,175,130,107],[219,210,157,193],[255,232,232,232]] },
+  { id: 57, name: "Viridis", cat: "Colorspace",
+    stops: [[0,68,1,84],[36,71,39,117],[73,62,74,137],[109,49,104,142],[146,38,130,142],[182,53,183,121],[219,144,215,67],[255,253,231,37]] },
+  { id: 58, name: "Plasma", cat: "Colorspace",
+    stops: [[0,13,8,135],[36,75,3,161],[73,126,3,168],[109,168,34,150],[146,203,70,121],[182,229,107,93],[219,248,149,64],[255,240,249,33]] },
+  { id: 59, name: "Inferno", cat: "Colorspace",
+    stops: [[0,0,0,4],[36,22,11,57],[73,66,10,91],[109,120,28,85],[146,172,50,58],[182,219,92,32],[219,252,157,40],[255,252,255,164]] },
+  { id: 60, name: "Magma", cat: "Colorspace",
+    stops: [[0,0,0,4],[36,18,13,51],[73,51,16,91],[109,95,22,109],[146,147,37,103],[182,196,71,91],[219,237,130,98],[255,252,253,191]] },
+  { id: 23, name: "Lava", cat: "CPT-City",
+    stops: [[0,0,0,0],[46,18,0,0],[96,113,0,0],[108,142,3,1],[119,175,17,1],[146,213,44,2],[174,255,82,4],[188,255,115,4],[202,255,156,4],[218,255,203,4],[234,255,255,4],[244,255,255,71],[255,255,255,255]] },
+  { id: 24, name: "Fire", cat: "CPT-City",
+    stops: [[0,1,1,0],[76,32,5,0],[146,192,24,0],[197,220,105,5],[240,252,255,31],[250,252,255,111],[255,255,255,255]] },
+  { id: 0, name: "Sunset Real", cat: "CPT-City",
+    stops: [[0,120,0,0],[22,179,22,0],[51,255,104,0],[85,167,22,18],[135,100,0,103],[198,16,0,130],[255,0,0,160]] },
+  { id: 33, name: "Vik", cat: "Crameri",
+    stops: [[0,3,43,113],[36,11,95,146],[73,95,157,188],[109,196,219,231],[146,235,237,233],[182,194,165,105],[219,154,107,20],[255,115,48,0]] },
+  { id: 43, name: "Berlin", cat: "Crameri",
+    stops: [[0,121,171,237],[36,54,133,173],[73,29,76,98],[109,16,26,32],[146,25,11,9],[182,90,28,6],[219,156,79,61],[255,221,141,134]] },
+  { id: 39, name: "Hawaii", cat: "Crameri",
+    stops: [[0,144,29,99],[36,149,62,73],[73,153,94,51],[109,157,129,31],[146,150,170,44],[182,123,201,106],[219,96,222,176],[255,135,239,238]] },
+  { id: 69, name: "Hot", cat: "Colorspace",
+    stops: [[0,10,0,0],[42,80,0,0],[85,170,0,0],[128,255,60,0],[170,255,150,0],[212,255,220,0],[255,255,255,100]] },
+];
+
+// ── Build 256-entry LUTs for all palettes ──
+function buildLUT(stops) {
+  const lut = new Array(256);
+  for (let i = 0; i < 256; i++) {
+    let lo = 0;
+    for (let s = 0; s < stops.length - 1; s++) {
+      if (i >= stops[s][0] && i <= stops[s + 1][0]) { lo = s; break; }
+    }
+    const a = stops[lo], b = stops[lo + 1];
+    const range = b[0] - a[0];
+    const f = range > 0 ? (i - a[0]) / range : 0;
+    lut[i] = [
+      Math.round(a[1] + (b[1] - a[1]) * f),
+      Math.round(a[2] + (b[2] - a[2]) * f),
+      Math.round(a[3] + (b[3] - a[3]) * f)
+    ];
+  }
+  return lut;
+}
+
+PALETTES.forEach(p => { p.lut = buildLUT(p.stops); });
+
+function lookupColor(lut, val) {
+  const idx = Math.max(0, Math.min(255, Math.round(val * 255)));
+  return lut[idx];
+}
+
+// ══════════════════════════════════════════════════════════════
+// MOCK AUDIO ENGINE
+// ══════════════════════════════════════════════════════════════
+const BANDS = 8;
+const HISTORY = 60;
+const BAND_FREQ = [0.4, 0.6, 0.8, 1.1, 1.5, 2.0, 2.8, 3.5];
+const BAND_AMP  = [0.7, 0.85, 0.75, 0.6, 0.55, 0.45, 0.35, 0.25];
+
+const audioHistory = [];
+for (let r = 0; r < HISTORY; r++) audioHistory.push(new Float32Array(BANDS));
+let writeRow = 0;
+let audioTime = 0;
+
+function pushAudioFrame() {
+  audioTime += 1 / 30;
+  const frame = new Float32Array(BANDS);
+  const beatPhase = (audioTime * 2.133) % 1.0;
+  const beatKick = Math.exp(-beatPhase * 6) * 0.4;
+
+  for (let b = 0; b < BANDS; b++) {
+    const base = Math.sin(audioTime * BAND_FREQ[b] * 2.5 + b * 0.7) * 0.5 + 0.5;
+    const mod = Math.sin(audioTime * 0.3 + b * 1.2) * 0.3;
+    const noise = (Math.random() - 0.5) * 0.08;
+    let val = base * BAND_AMP[b] + mod * 0.2 + noise;
+    if (b < 3) val += beatKick;
+    frame[b] = Math.max(0, Math.min(1, val));
+  }
+  audioHistory[writeRow].set(frame);
+  writeRow = (writeRow + 1) % HISTORY;
+}
+
+function getRow(ageIndex) {
+  return audioHistory[(writeRow - 1 - ageIndex + HISTORY * 2) % HISTORY];
+}
+
+// ══════════════════════════════════════════════════════════════
+// CANVAS SETUP
+// ══════════════════════════════════════════════════════════════
+const dpr = window.devicePixelRatio || 2;
+const allCanvases = [];
+
+function makeCanvas(parent, height) {
+  const c = document.createElement('canvas');
+  c.style.width = '100%';
+  c.style.borderRadius = '6px';
+  c.style.display = 'block';
+  parent.appendChild(c);
+  return c;
+}
+
+function sizeCanvas(c, h) {
+  const w = c.offsetWidth;
+  c.width = w * dpr;
+  c.height = h * dpr;
+  c.style.height = h + 'px';
+  const ctx = c.getContext('2d');
+  ctx.scale(dpr, dpr);
+  return { ctx, w, h };
+}
+
+// ══════════════════════════════════════════════════════════════
+// SECTION 1: WATERFALL × PALETTES
+// ══════════════════════════════════════════════════════════════
+const waterfallCards = [];
+
+function buildWaterfallCards() {
+  const container = document.getElementById('waterfallContainer');
+  PALETTES.forEach((pal, idx) => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <div class="card-header">
+        <span class="card-title">${pal.name.toUpperCase()}</span>
+        <span class="card-meta">ID ${pal.id} &bull; ${pal.cat}</span>
+      </div>
+      <canvas class="palette-strip-canvas"></canvas>
+    `;
+    const mainCanvas = makeCanvas(card, 80);
+    card.innerHTML += `<div class="band-labels"><span>SUB</span><span>BASS</span><span>LOW</span><span>LMID</span><span>MID</span><span>HMID</span><span>HIGH</span><span>AIR</span></div>`;
+    container.appendChild(card);
+
+    // Draw palette strip
+    const stripCanvas = card.querySelector('.palette-strip-canvas');
+    stripCanvas.style.width = '100%';
+    stripCanvas.style.height = '4px';
+    stripCanvas.style.borderRadius = '2px';
+    stripCanvas.style.display = 'block';
+    stripCanvas.style.marginBottom = '6px';
+
+    waterfallCards.push({ canvas: mainCanvas, pal, stripCanvas });
+  });
+}
+
+function sizeWaterfallStrips() {
+  waterfallCards.forEach(wc => {
+    const s = wc.stripCanvas;
+    s.width = s.offsetWidth * dpr;
+    s.height = 8;
+    const ctx = s.getContext('2d');
+    for (let x = 0; x < s.width; x++) {
+      const c = wc.pal.lut[Math.round(x / s.width * 255)];
+      ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`;
+      ctx.fillRect(x, 0, 1, 8);
+    }
+  });
+}
+
+function drawWaterfalls() {
+  waterfallCards.forEach(wc => {
+    const { ctx, w, h } = sizeCanvas(wc.canvas, 80);
+    const lut = wc.pal.lut;
+    ctx.fillStyle = '#0F1219';
+    ctx.fillRect(0, 0, w, h);
+
+    const cols = HISTORY;
+    const colW = w / cols;
+    const rowH = h / BANDS;
+
+    for (let col = 0; col < cols; col++) {
+      const row = getRow(col);
+      const age = col / cols;
+      for (let b = 0; b < BANDS; b++) {
+        const val = row[b] * (1 - age * 0.15);
+        const c = lookupColor(lut, val);
+        ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`;
+        const y = (BANDS - 1 - b) * rowH;
+        const x = w - (col + 1) * colW;
+        ctx.fillRect(x, y, colW + 0.5, rowH + 0.5);
+      }
+    }
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+// SECTION 2: RIDGE LINE VARIANTS
+// ══════════════════════════════════════════════════════════════
+const RIDGE_VARIANTS = [
+  { name: "MONOCHROME CLASSIC",
+    desc: "Original R3F style. White lines, height = intensity, age fades to black.",
+    draw: drawRidgeMono },
+  { name: "CUBHELIX COLOUR-MAPPED",
+    desc: "Line colour driven by average band intensity through cubhelix palette.",
+    draw: drawRidgeColour },
+  { name: "FILLED GRADIENT",
+    desc: "Area under ridge filled with vertical cubhelix gradient. Solid, dense feel.",
+    draw: drawRidgeFilled },
+  { name: "NEON WIRE",
+    desc: "Thin bright lines with bloom glow. Dark background, high contrast.",
+    draw: drawRidgeNeon },
+  { name: "THICK RIBBON",
+    desc: "Wide semi-transparent ribbons. Overlapping depth creates layered transparency.",
+    draw: drawRidgeRibbon },
+  { name: "DOT RIDGE",
+    desc: "Ridge lines rendered as dots at band positions. Inspired by R3F dot matrix.",
+    draw: drawRidgeDots },
+];
+
+const ridgeCards = [];
+
+function buildRidgeCards() {
+  const container = document.getElementById('ridgeContainer');
+  RIDGE_VARIANTS.forEach((v, idx) => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <div class="card-header">
+        <span class="card-title">${v.name}</span>
+        <span class="card-meta">ridge ${idx + 1}/6</span>
+      </div>
+      <div style="font-size:10px;color:var(--lw-text-tertiary);margin-bottom:6px">${v.desc}</div>
+    `;
+    const canvas = makeCanvas(card, 120);
+    container.appendChild(card);
+    ridgeCards.push({ canvas, variant: v });
+  });
+}
+
+// ── Shared ridge helpers ──
+const cubLut = PALETTES[0].lut; // cubhelix
+const NUM_LINES = 35;
+
+function ridgePath(ctx, li, w, h, gain) {
+  const row = getRow(li);
+  const age = li / NUM_LINES;
+  const fade = Math.pow(1 - age, 1.6);
+  const lineSpacing = h / (NUM_LINES + 3);
+  const baseY = h - (NUM_LINES - li) * lineSpacing;
+  const bandW = w / (BANDS - 1);
+  const pts = [];
+
+  ctx.beginPath();
+  for (let b = 0; b < BANDS; b++) {
+    const x = b * bandW;
+    const elevation = row[b] * gain * fade;
+    const y = baseY - elevation;
+    pts.push({ x, y, val: row[b] });
+    if (b === 0) ctx.moveTo(x, y);
+    else {
+      const px = (b - 1) * bandW;
+      const cpx = (px + x) / 2;
+      ctx.quadraticCurveTo(cpx, pts[b - 1].y, x, y);
+    }
+  }
+  return { baseY, fade, age, pts, avg: Array.from(row).reduce((s, v) => s + v, 0) / BANDS };
+}
+
+// V1: Monochrome classic
+function drawRidgeMono(ctx, w, h) {
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, w, h);
+  for (let li = NUM_LINES - 1; li >= 0; li--) {
+    const { baseY, fade, pts } = ridgePath(ctx, li, w, h, 30);
+    // Fill dark below
+    ctx.lineTo(w, baseY + 10);
+    ctx.lineTo(0, baseY + 10);
+    ctx.closePath();
+    ctx.fillStyle = `rgba(0,0,0,${0.7})`;
+    ctx.fill();
+    // Stroke
+    ridgePath(ctx, li, w, h, 30);
+    const brightness = Math.round(60 + 195 * fade);
+    ctx.strokeStyle = `rgba(${brightness},${brightness},${brightness},${0.3 + 0.7 * fade})`;
+    ctx.lineWidth = 1 + fade * 0.6;
+    ctx.stroke();
+  }
+}
+
+// V2: Cubhelix colour-mapped
+function drawRidgeColour(ctx, w, h) {
+  ctx.fillStyle = '#0F1219';
+  ctx.fillRect(0, 0, w, h);
+  for (let li = NUM_LINES - 1; li >= 0; li--) {
+    const { baseY, fade, avg } = ridgePath(ctx, li, w, h, 32);
+    ctx.lineTo(w, baseY + 10);
+    ctx.lineTo(0, baseY + 10);
+    ctx.closePath();
+    ctx.fillStyle = `rgba(15,18,25,${0.65 + 0.35 * (li / NUM_LINES)})`;
+    ctx.fill();
+    ridgePath(ctx, li, w, h, 32);
+    const c = lookupColor(cubLut, avg * fade);
+    ctx.strokeStyle = `rgba(${c[0]},${c[1]},${c[2]},${0.3 + 0.7 * fade})`;
+    ctx.lineWidth = 1.2 + fade * 0.8;
+    ctx.stroke();
+    if (li < 4) {
+      ctx.strokeStyle = `rgba(${c[0]},${c[1]},${c[2]},${0.12 * (1 - li / 4)})`;
+      ctx.lineWidth = 5;
+      ctx.stroke();
+    }
+  }
+}
+
+// V3: Filled gradient
+function drawRidgeFilled(ctx, w, h) {
+  ctx.fillStyle = '#0F1219';
+  ctx.fillRect(0, 0, w, h);
+  for (let li = NUM_LINES - 1; li >= 0; li--) {
+    const row = getRow(li);
+    const age = li / NUM_LINES;
+    const fade = Math.pow(1 - age, 1.6);
+    const lineSpacing = h / (NUM_LINES + 3);
+    const baseY = h - (NUM_LINES - li) * lineSpacing;
+    const bandW = w / (BANDS - 1);
+
+    // Build path
+    ctx.beginPath();
+    for (let b = 0; b < BANDS; b++) {
+      const x = b * bandW;
+      const elevation = row[b] * 28 * fade;
+      const y = baseY - elevation;
+      if (b === 0) ctx.moveTo(x, y);
+      else {
+        const px = (b - 1) * bandW;
+        ctx.quadraticCurveTo((px + x) / 2, baseY - row[b - 1] * 28 * fade, x, y);
+      }
+    }
+    ctx.lineTo(w, baseY + 4);
+    ctx.lineTo(0, baseY + 4);
+    ctx.closePath();
+
+    // Gradient fill under curve
+    const avg = Array.from(row).reduce((s, v) => s + v, 0) / BANDS;
+    const cTop = lookupColor(cubLut, Math.min(1, avg * 1.3));
+    const cBot = lookupColor(cubLut, avg * 0.3);
+    const grad = ctx.createLinearGradient(0, baseY - 30, 0, baseY + 4);
+    grad.addColorStop(0, `rgba(${cTop[0]},${cTop[1]},${cTop[2]},${0.5 * fade})`);
+    grad.addColorStop(1, `rgba(${cBot[0]},${cBot[1]},${cBot[2]},${0.1 * fade})`);
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Thin line on top
+    ctx.beginPath();
+    for (let b = 0; b < BANDS; b++) {
+      const x = b * bandW;
+      const elevation = row[b] * 28 * fade;
+      const y = baseY - elevation;
+      if (b === 0) ctx.moveTo(x, y);
+      else {
+        const px = (b - 1) * bandW;
+        ctx.quadraticCurveTo((px + x) / 2, baseY - row[b - 1] * 28 * fade, x, y);
+      }
+    }
+    const cLine = lookupColor(cubLut, avg * fade);
+    ctx.strokeStyle = `rgba(${cLine[0]},${cLine[1]},${cLine[2]},${0.5 + 0.5 * fade})`;
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+  }
+}
+
+// V4: Neon wire
+function drawRidgeNeon(ctx, w, h) {
+  ctx.fillStyle = '#050810';
+  ctx.fillRect(0, 0, w, h);
+  for (let li = NUM_LINES - 1; li >= 0; li--) {
+    const { baseY, fade, avg } = ridgePath(ctx, li, w, h, 35);
+    // No fill, just glow + line
+    const c = lookupColor(cubLut, Math.min(1, avg * 1.5));
+    // Outer glow
+    if (li < 15) {
+      ctx.shadowColor = `rgb(${c[0]},${c[1]},${c[2]})`;
+      ctx.shadowBlur = 8 + fade * 12;
+      ctx.strokeStyle = `rgba(${c[0]},${c[1]},${c[2]},${0.15 * fade})`;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+    // Core line
+    ridgePath(ctx, li, w, h, 35);
+    ctx.strokeStyle = `rgba(${c[0]},${c[1]},${c[2]},${0.2 + 0.8 * fade})`;
+    ctx.lineWidth = 0.8 + fade * 0.5;
+    ctx.stroke();
+  }
+}
+
+// V5: Thick ribbon
+function drawRidgeRibbon(ctx, w, h) {
+  ctx.fillStyle = '#0F1219';
+  ctx.fillRect(0, 0, w, h);
+  for (let li = NUM_LINES - 1; li >= 0; li--) {
+    const row = getRow(li);
+    const age = li / NUM_LINES;
+    const fade = Math.pow(1 - age, 1.4);
+    const lineSpacing = h / (NUM_LINES + 3);
+    const baseY = h - (NUM_LINES - li) * lineSpacing;
+    const bandW = w / (BANDS - 1);
+    const ribbonH = lineSpacing * 0.7;
+
+    // Top edge
+    ctx.beginPath();
+    for (let b = 0; b < BANDS; b++) {
+      const x = b * bandW;
+      const elev = row[b] * 25 * fade;
+      const y = baseY - elev;
+      if (b === 0) ctx.moveTo(x, y);
+      else {
+        const px = (b - 1) * bandW;
+        ctx.quadraticCurveTo((px + x) / 2, baseY - row[b - 1] * 25 * fade, x, y);
+      }
+    }
+    // Bottom edge (offset down)
+    for (let b = BANDS - 1; b >= 0; b--) {
+      const x = b * bandW;
+      const elev = row[b] * 25 * fade;
+      const y = baseY - elev + ribbonH;
+      if (b === BANDS - 1) ctx.lineTo(x, y);
+      else {
+        const nx = (b + 1) * bandW;
+        ctx.quadraticCurveTo((nx + x) / 2, baseY - row[b + 1] * 25 * fade + ribbonH, x, y);
+      }
+    }
+    ctx.closePath();
+
+    const avg = Array.from(row).reduce((s, v) => s + v, 0) / BANDS;
+    const c = lookupColor(cubLut, avg * fade);
+    ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${0.15 + 0.35 * fade})`;
+    ctx.fill();
+    ctx.strokeStyle = `rgba(${c[0]},${c[1]},${c[2]},${0.3 + 0.5 * fade})`;
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+  }
+}
+
+// V6: Dot ridge
+function drawRidgeDots(ctx, w, h) {
+  ctx.fillStyle = '#0F1219';
+  ctx.fillRect(0, 0, w, h);
+
+  const lineSpacing = h / (NUM_LINES + 3);
+  const bandW = w / (BANDS - 1);
+
+  // Background dot grid (faint)
+  for (let li = 0; li < NUM_LINES; li++) {
+    const baseY = h - (NUM_LINES - li) * lineSpacing;
+    for (let b = 0; b < BANDS; b++) {
+      const x = b * bandW;
+      ctx.beginPath();
+      ctx.arc(x, baseY, 1.5, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.04)';
+      ctx.fill();
+    }
+  }
+
+  // Active dots (back to front)
+  for (let li = NUM_LINES - 1; li >= 0; li--) {
+    const row = getRow(li);
+    const age = li / NUM_LINES;
+    const fade = Math.pow(1 - age, 1.5);
+    const baseY = h - (NUM_LINES - li) * lineSpacing;
+
+    for (let b = 0; b < BANDS; b++) {
+      const x = b * bandW;
+      const val = row[b];
+      const elevation = val * 25 * fade;
+      const y = baseY - elevation;
+      const radius = 1.5 + val * 3 * fade;
+
+      const c = lookupColor(cubLut, val * fade);
+
+      // Glow
+      if (val > 0.3 && li < 10) {
+        ctx.beginPath();
+        ctx.arc(x, y, radius + 3, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${0.08 * fade})`;
+        ctx.fill();
+      }
+
+      // Core dot
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${0.3 + 0.7 * fade})`;
+      ctx.fill();
+    }
+
+    // Connect dots with faint line
+    if (fade > 0.2) {
+      ctx.beginPath();
+      for (let b = 0; b < BANDS; b++) {
+        const x = b * bandW;
+        const y = baseY - row[b] * 25 * fade;
+        if (b === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = `rgba(255,255,255,${0.04 * fade})`;
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// SECTION 3: DOT MATRIX VARIANTS
+// ══════════════════════════════════════════════════════════════
+const DOT_VARIANTS = [
+  { name: "DOT MATRIX — CUBHELIX",
+    desc: "R3F-inspired procedural dot grid. 8×40 cells. Dot size scales with intensity.",
+    draw: drawDotMatrix },
+  { name: "DOT MATRIX — INFERNO",
+    desc: "Same grid, Inferno palette. Bright peaks, dark silence.",
+    draw: drawDotInferno },
+];
+
+const dotCards = [];
+
+function buildDotCards() {
+  const container = document.getElementById('dotContainer');
+  DOT_VARIANTS.forEach((v, idx) => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <div class="card-header">
+        <span class="card-title">${v.name}</span>
+        <span class="card-meta">dot ${idx + 1}/2</span>
+      </div>
+      <div style="font-size:10px;color:var(--lw-text-tertiary);margin-bottom:6px">${v.desc}</div>
+    `;
+    const canvas = makeCanvas(card, 100);
+    container.appendChild(card);
+    dotCards.push({ canvas, variant: v });
+  });
+}
+
+function drawDotMatrix(ctx, w, h) {
+  ctx.fillStyle = '#0A0D14';
+  ctx.fillRect(0, 0, w, h);
+
+  const cols = 40;
+  const cellW = w / cols;
+  const cellH = h / BANDS;
+  const maxR = Math.min(cellW, cellH) * 0.35;
+
+  // Background lattice
+  for (let col = 0; col < cols; col++) {
+    for (let b = 0; b < BANDS; b++) {
+      const cx = (col + 0.5) * cellW;
+      const cy = (BANDS - 1 - b + 0.5) * cellH;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 1.5, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.05)';
+      ctx.fill();
+    }
+  }
+
+  // Active dots
+  for (let col = 0; col < cols; col++) {
+    const histIdx = Math.floor(col * HISTORY / cols);
+    const row = getRow(histIdx);
+    const age = col / cols;
+    const fade = Math.pow(1 - age, 1.5);
+
+    for (let b = 0; b < BANDS; b++) {
+      const val = row[b];
+      const shaped = Math.pow(val, 1.15);
+      const brightness = shaped * fade;
+      if (brightness < 0.02) continue;
+
+      const cx = w - (col + 0.5) * cellW;
+      const cy = (BANDS - 1 - b + 0.5) * cellH;
+      const r = maxR * (0.3 + 0.7 * brightness);
+
+      const c = lookupColor(cubLut, brightness);
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${0.3 + 0.7 * fade})`;
+      ctx.fill();
+    }
+  }
+}
+
+function drawDotInferno(ctx, w, h) {
+  const infernoLut = PALETTES[3].lut; // Inferno
+  ctx.fillStyle = '#0A0D14';
+  ctx.fillRect(0, 0, w, h);
+
+  const cols = 40;
+  const cellW = w / cols;
+  const cellH = h / BANDS;
+  const maxR = Math.min(cellW, cellH) * 0.35;
+
+  for (let col = 0; col < cols; col++) {
+    for (let b = 0; b < BANDS; b++) {
+      const cx = w - (col + 0.5) * cellW;
+      const cy = (BANDS - 1 - b + 0.5) * cellH;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 1.5, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.04)';
+      ctx.fill();
+    }
+  }
+
+  for (let col = 0; col < cols; col++) {
+    const histIdx = Math.floor(col * HISTORY / cols);
+    const row = getRow(histIdx);
+    const age = col / cols;
+    const fade = Math.pow(1 - age, 1.5);
+
+    for (let b = 0; b < BANDS; b++) {
+      const val = row[b];
+      const shaped = Math.pow(val, 1.15);
+      const brightness = shaped * fade;
+      if (brightness < 0.02) continue;
+
+      const cx = w - (col + 0.5) * cellW;
+      const cy = (BANDS - 1 - b + 0.5) * cellH;
+      const r = maxR * (0.3 + 0.7 * brightness);
+
+      const c = lookupColor(infernoLut, brightness);
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${0.3 + 0.7 * fade})`;
+      ctx.fill();
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// ANIMATION LOOP
+// ══════════════════════════════════════════════════════════════
+let frameCount = 0;
+let lastFpsTime = performance.now();
+
+function init() {
+  buildWaterfallCards();
+  buildRidgeCards();
+  buildDotCards();
+  sizeWaterfallStrips();
+}
+
+function animate() {
+  pushAudioFrame();
+
+  // Draw waterfalls
+  drawWaterfalls();
+
+  // Draw ridge variants
+  ridgeCards.forEach(rc => {
+    const { ctx, w, h } = sizeCanvas(rc.canvas, 120);
+    rc.variant.draw(ctx, w, h);
+  });
+
+  // Draw dot matrix variants
+  dotCards.forEach(dc => {
+    const { ctx, w, h } = sizeCanvas(dc.canvas, 100);
+    dc.variant.draw(ctx, w, h);
+  });
+
+  // FPS
+  frameCount++;
+  const now = performance.now();
+  if (now - lastFpsTime > 1000) {
+    document.getElementById('fpsDisplay').textContent =
+      Math.round(frameCount * 1000 / (now - lastFpsTime)) + ' FPS';
+    frameCount = 0;
+    lastFpsTime = now;
+  }
+
+  requestAnimationFrame(animate);
+}
+
+window.addEventListener('load', () => { init(); animate(); });
+</script>
+
+</body>
+</html>

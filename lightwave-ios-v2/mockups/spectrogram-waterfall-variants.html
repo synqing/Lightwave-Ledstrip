@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LightwaveOS — Spectrogram Waterfall Variants (Cubhelix Palette)</title>
+<style>
+  :root {
+    --lw-base: #0F1219;
+    --lw-card: #1E2535;
+    --lw-elevated: #252D3F;
+    --lw-gold: #FFB84D;
+    --lw-cyan: #00D4FF;
+    --lw-text-primary: #E6E9EF;
+    --lw-text-secondary: #9CA3B0;
+    --lw-text-tertiary: #6B7280;
+    --lw-success: #4DFFB8;
+    --lw-error: #FF4D4D;
+    --lw-beat: #FFCC33;
+  }
+
+  @font-face { font-family: 'Bebas Neue'; src: local('Bebas Neue Bold'), local('BebasNeue-Bold'); font-weight: 700; }
+  @font-face { font-family: 'Rajdhani'; src: local('Rajdhani Medium'), local('Rajdhani-Medium'); font-weight: 500; }
+  @font-face { font-family: 'JetBrains Mono'; src: local('JetBrains Mono Medium'), local('JetBrainsMono-Medium'); font-weight: 500; }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--lw-base);
+    color: var(--lw-text-primary);
+    font-family: 'Rajdhani', -apple-system, sans-serif;
+    font-weight: 500;
+    padding: 16px;
+    max-width: 420px;
+    margin: 0 auto;
+  }
+
+  h1 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: 2px;
+    color: var(--lw-gold);
+    margin-bottom: 4px;
+  }
+
+  .subtitle {
+    font-size: 12px;
+    color: var(--lw-text-tertiary);
+    margin-bottom: 20px;
+    line-height: 1.5;
+  }
+
+  .palette-strip {
+    height: 6px;
+    border-radius: 3px;
+    margin-bottom: 20px;
+  }
+
+  .variant-label {
+    font-family: 'Bebas Neue', sans-serif;
+    font-weight: 700;
+    font-size: 17px;
+    letter-spacing: 1.5px;
+    color: var(--lw-text-primary);
+    margin-bottom: 2px;
+  }
+
+  .variant-tag {
+    display: inline-block;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 10px;
+    letter-spacing: 1px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+
+  .tag-recommended { background: var(--lw-gold); color: var(--lw-base); }
+  .tag-experimental { background: rgba(168,85,247,0.3); color: #c084fc; border: 1px solid rgba(168,85,247,0.4); }
+  .tag-minimal { background: rgba(0,212,255,0.15); color: var(--lw-cyan); border: 1px solid rgba(0,212,255,0.3); }
+
+  .variant-desc {
+    font-size: 11px;
+    color: var(--lw-text-tertiary);
+    margin-bottom: 8px;
+    line-height: 1.4;
+  }
+
+  .card {
+    background: linear-gradient(180deg, #1E2535, #1A2030);
+    border-radius: 16px;
+    padding: 12px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+  }
+
+  canvas {
+    width: 100%;
+    border-radius: 8px;
+    display: block;
+  }
+
+  .band-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 4px;
+    padding: 0 2px;
+  }
+
+  .band-labels span {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    color: var(--lw-text-tertiary);
+    opacity: 0.6;
+  }
+
+  .meta-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 6px;
+    padding: 0 2px;
+  }
+
+  .meta-row .fps {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--lw-text-tertiary);
+  }
+
+  .meta-row .palette-name {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 10px;
+    color: var(--lw-text-secondary);
+  }
+
+  .section-divider {
+    border: none;
+    height: 1px;
+    background: rgba(255,255,255,0.06);
+    margin: 24px 0;
+  }
+
+  .ridge-section {
+    background: linear-gradient(180deg, #1E2535, #1A2030);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+    border: 1px solid rgba(168,85,247,0.2);
+  }
+
+  .ridge-section h3 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 14px;
+    letter-spacing: 1.5px;
+    color: #c084fc;
+    margin-bottom: 8px;
+  }
+
+  .ridge-section p {
+    font-size: 11px;
+    color: var(--lw-text-secondary);
+    line-height: 1.5;
+    margin-bottom: 6px;
+  }
+
+  .ridge-section code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    background: rgba(255,255,255,0.06);
+    padding: 1px 4px;
+    border-radius: 3px;
+    color: var(--lw-cyan);
+  }
+
+  .comparison-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+    font-size: 10px;
+  }
+
+  .comparison-table th {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-align: left;
+    padding: 4px 6px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    color: var(--lw-text-secondary);
+  }
+
+  .comparison-table td {
+    padding: 3px 6px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    color: var(--lw-text-secondary);
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 11px;
+  }
+
+  .comparison-table .check { color: var(--lw-success); }
+  .comparison-table .cross { color: var(--lw-error); }
+</style>
+</head>
+<body>
+
+<h1>SPECTROGRAM WATERFALL</h1>
+<div class="subtitle">
+  6 styling variants using the <strong style="color: var(--lw-cyan)">Cubhelix</strong> palette<br>
+  8 Goertzel frequency bands &bull; 60 history rows &bull; 30 FPS mock data
+</div>
+
+<!-- Cubhelix palette strip -->
+<canvas id="paletteStrip" height="6" class="palette-strip"></canvas>
+
+<!-- V1: Classic Waterfall -->
+<div class="variant-label">V1 — CLASSIC WATERFALL <span class="variant-tag tag-recommended">RECOMMENDED</span></div>
+<div class="variant-desc">Standard L&rarr;R scrolling spectrogram. Frequency on Y-axis (Sub&rarr;Air), time scrolls left. Cubhelix colour-mapped intensity.</div>
+<div class="card">
+  <canvas id="v1" height="140"></canvas>
+  <div class="band-labels">
+    <span>SUB</span><span>BASS</span><span>LOW</span><span>LMID</span><span>MID</span><span>HMID</span><span>HIGH</span><span>AIR</span>
+  </div>
+  <div class="meta-row">
+    <span class="fps" id="v1fps">30 FPS</span>
+    <span class="palette-name">cubhelix &bull; ID 61</span>
+  </div>
+</div>
+
+<!-- V2: Ridge Lines 2D -->
+<div class="variant-label">V2 — RIDGE LINES <span class="variant-tag tag-experimental">EXPERIMENTAL</span></div>
+<div class="variant-desc">2D ridge plot inspired by R3F project. Stacked waveform lines with depth fade. Newest at bottom, oldest fades to black.</div>
+<div class="card">
+  <canvas id="v2" height="160"></canvas>
+  <div class="meta-row">
+    <span class="fps" id="v2fps">30 FPS</span>
+    <span class="palette-name">ridge &bull; 40 history lines</span>
+  </div>
+</div>
+
+<!-- V3: Neon Edge Glow -->
+<div class="variant-label">V3 — NEON EDGE GLOW</div>
+<div class="variant-desc">Dark waterfall with bright contour edges on intensity transitions. Glow bloom on peaks. High-contrast readability.</div>
+<div class="card">
+  <canvas id="v3" height="140"></canvas>
+  <div class="band-labels">
+    <span>SUB</span><span>BASS</span><span>LOW</span><span>LMID</span><span>MID</span><span>HMID</span><span>HIGH</span><span>AIR</span>
+  </div>
+  <div class="meta-row">
+    <span class="fps" id="v3fps">30 FPS</span>
+    <span class="palette-name">cubhelix neon &bull; edge detect</span>
+  </div>
+</div>
+
+<!-- V4: Pixel Block -->
+<div class="variant-label">V4 — PIXEL BLOCK</div>
+<div class="variant-desc">Chunky retro pixel grid. Each cell = 1 band &times; 1 time step. Gap between cells. Clear, readable, low-GPU.</div>
+<div class="card">
+  <canvas id="v4" height="140"></canvas>
+  <div class="band-labels">
+    <span>SUB</span><span>BASS</span><span>LOW</span><span>LMID</span><span>MID</span><span>HMID</span><span>HIGH</span><span>AIR</span>
+  </div>
+  <div class="meta-row">
+    <span class="fps" id="v4fps">30 FPS</span>
+    <span class="palette-name">cubhelix &bull; 8&times;48 grid</span>
+  </div>
+</div>
+
+<!-- V5: Smoke Trail -->
+<div class="variant-label">V5 — SMOKE TRAIL <span class="variant-tag tag-minimal">MINIMAL</span></div>
+<div class="variant-desc">Gaussian-blurred waterfall with soft smoke-like trails. Bands bleed into neighbours. Ambient, atmospheric feel.</div>
+<div class="card">
+  <canvas id="v5" height="140"></canvas>
+  <div class="meta-row">
+    <span class="fps" id="v5fps">30 FPS</span>
+    <span class="palette-name">cubhelix soft &bull; gaussian blur</span>
+  </div>
+</div>
+
+<!-- V6: Centre-Origin Mirrored -->
+<div class="variant-label">V6 — CENTRE-ORIGIN MIRROR</div>
+<div class="variant-desc">Reflects LightwaveOS centre-origin LED layout. Scrolls outward from centre. Sub at edges, Air at centre. Symmetrical.</div>
+<div class="card">
+  <canvas id="v6" height="140"></canvas>
+  <div class="band-labels">
+    <span>SUB</span><span>BASS</span><span>LOW</span><span>LMID</span><span style="color:var(--lw-gold)">|</span><span>LMID</span><span>LOW</span><span>BASS</span><span>SUB</span>
+  </div>
+  <div class="meta-row">
+    <span class="fps" id="v6fps">30 FPS</span>
+    <span class="palette-name">cubhelix &bull; centre origin</span>
+  </div>
+</div>
+
+<hr class="section-divider">
+
+<!-- Ridge Plot iOS Feasibility -->
+<div class="ridge-section">
+  <h3>RIDGE PLOT &mdash; iOS FEASIBILITY</h3>
+  <p>Analysed <code>ridge-plot-r3f-2025</code>: React Three Fiber + Three.js, 256&times;60 PlaneGeometry with vertex displacement from ring-buffer texture. ~400 lines total.</p>
+  <p><strong style="color:var(--lw-text-primary)">Can it run on iPhone?</strong> Yes. Three viable paths:</p>
+
+  <table class="comparison-table">
+    <tr>
+      <th>APPROACH</th>
+      <th>PERF</th>
+      <th>EFFORT</th>
+      <th>3D</th>
+      <th>VERDICT</th>
+    </tr>
+    <tr>
+      <td>Metal + MTKView</td>
+      <td><span class="check">60fps</span></td>
+      <td>High</td>
+      <td><span class="check">&check;</span></td>
+      <td style="color:var(--lw-gold)">Best</td>
+    </tr>
+    <tr>
+      <td>SceneKit + SCNProgram</td>
+      <td><span class="check">45fps</span></td>
+      <td>Medium</td>
+      <td><span class="check">&check;</span></td>
+      <td>Good</td>
+    </tr>
+    <tr>
+      <td>SwiftUI Canvas (2D ridge)</td>
+      <td><span class="check">30fps</span></td>
+      <td>Low</td>
+      <td><span class="cross">&cross;</span></td>
+      <td style="color:var(--lw-cyan)">V2 above</td>
+    </tr>
+  </table>
+
+  <p style="margin-top:8px"><strong style="color:var(--lw-text-primary)">Recommendation:</strong> Start with <strong>V2 Ridge Lines (2D)</strong> via SwiftUI Canvas — zero Metal dependency, ships in the current Audio tab. If the visual sells, upgrade to Metal later for true 3D ridges with perspective and rotation.</p>
+
+  <p><strong>Key translation notes:</strong></p>
+  <p>&bull; GLSL vertex shader &rarr; Metal Shading Language (mechanical port)<br>
+  &bull; <code>DataTexture</code> ring buffer &rarr; <code>MTLBuffer</code> with <code>didModifyRange:</code><br>
+  &bull; Web Audio FFT &rarr; Already solved: firmware sends 8 Goertzel bands via WebSocket<br>
+  &bull; <code>OrbitControls</code> &rarr; <code>UIPanGestureRecognizer</code> + rotation matrix<br>
+  &bull; 15,360 vertices (256&times;60) &rarr; Only 480 (8&times;60) needed for our 8-band data</p>
+</div>
+
+<script>
+// ── Cubhelix Palette ──────────────────────────────────────────
+const CUBHELIX_STOPS = [
+  { pos: 0.000, r: 0,   g: 0,   b: 0   },
+  { pos: 0.141, r: 22,  g: 11,  b: 43  },
+  { pos: 0.286, r: 19,  g: 54,  b: 62  },
+  { pos: 0.427, r: 25,  g: 107, b: 49  },
+  { pos: 0.573, r: 89,  g: 135, b: 55  },
+  { pos: 0.714, r: 175, g: 130, b: 107 },
+  { pos: 0.859, r: 210, g: 157, b: 193 },
+  { pos: 1.000, r: 232, g: 232, b: 232 }
+];
+
+// Build 256-entry LUT
+const PALETTE_LUT = new Array(256);
+for (let i = 0; i < 256; i++) {
+  const t = i / 255;
+  let lo = 0;
+  for (let s = 0; s < CUBHELIX_STOPS.length - 1; s++) {
+    if (t >= CUBHELIX_STOPS[s].pos && t <= CUBHELIX_STOPS[s + 1].pos) { lo = s; break; }
+  }
+  const a = CUBHELIX_STOPS[lo], b = CUBHELIX_STOPS[lo + 1];
+  const f = (t - a.pos) / (b.pos - a.pos);
+  PALETTE_LUT[i] = {
+    r: Math.round(a.r + (b.r - a.r) * f),
+    g: Math.round(a.g + (b.g - a.g) * f),
+    b: Math.round(a.b + (b.b - a.b) * f)
+  };
+}
+
+function cubhelix(val) {
+  const idx = Math.max(0, Math.min(255, Math.round(val * 255)));
+  return PALETTE_LUT[idx];
+}
+
+function cubhelixCSS(val) {
+  const c = cubhelix(val);
+  return `rgb(${c.r},${c.g},${c.b})`;
+}
+
+// ── Palette strip ──
+(function drawStrip() {
+  const c = document.getElementById('paletteStrip');
+  c.width = c.offsetWidth * 2; c.height = 12;
+  const ctx = c.getContext('2d');
+  for (let x = 0; x < c.width; x++) {
+    const col = cubhelix(x / c.width);
+    ctx.fillStyle = `rgb(${col.r},${col.g},${col.b})`;
+    ctx.fillRect(x, 0, 1, c.height);
+  }
+})();
+
+// ── Mock Audio Data ───────────────────────────────────────────
+const BANDS = 8;
+const HISTORY = 60;
+const BAND_NAMES = ['Sub', 'Bass', 'Low', 'LMid', 'Mid', 'HMid', 'High', 'Air'];
+
+// Base frequencies per band for mock oscillation
+const BAND_FREQ = [0.4, 0.6, 0.8, 1.1, 1.5, 2.0, 2.8, 3.5];
+const BAND_AMP  = [0.7, 0.85, 0.75, 0.6, 0.55, 0.45, 0.35, 0.25];
+
+// Ring buffer: history[row][band] = 0..1
+const history = [];
+for (let r = 0; r < HISTORY; r++) {
+  history.push(new Float32Array(BANDS));
+}
+let writeRow = 0;
+
+function generateMockFrame(t) {
+  const frame = new Float32Array(BANDS);
+  // Simulated beat at ~128 BPM
+  const beatPhase = (t * 2.133) % 1.0;
+  const beatKick = Math.exp(-beatPhase * 6) * 0.4;
+
+  for (let b = 0; b < BANDS; b++) {
+    const base = Math.sin(t * BAND_FREQ[b] * 2.5 + b * 0.7) * 0.5 + 0.5;
+    const mod = Math.sin(t * 0.3 + b * 1.2) * 0.3;
+    const noise = (Math.random() - 0.5) * 0.08;
+    let val = base * BAND_AMP[b] + mod * 0.2 + noise;
+    if (b < 3) val += beatKick; // beat hits low bands
+    frame[b] = Math.max(0, Math.min(1, val));
+  }
+  return frame;
+}
+
+let time = 0;
+function pushFrame() {
+  time += 1 / 30;
+  const frame = generateMockFrame(time);
+  history[writeRow].set(frame);
+  writeRow = (writeRow + 1) % HISTORY;
+}
+
+// ── Canvas Helpers ────────────────────────────────────────────
+function setupCanvas(id, h) {
+  const c = document.getElementById(id);
+  const dpr = window.devicePixelRatio || 2;
+  c.width = c.offsetWidth * dpr;
+  c.height = (h || c.height) * dpr;
+  c.style.height = (h || parseInt(c.getAttribute('height'))) + 'px';
+  const ctx = c.getContext('2d');
+  ctx.scale(dpr, dpr);
+  return { canvas: c, ctx, w: c.offsetWidth, h: h || parseInt(c.getAttribute('height')) };
+}
+
+// Get row age-ordered (newest=0, oldest=HISTORY-1)
+function getRow(ageIndex) {
+  return history[(writeRow - 1 - ageIndex + HISTORY * 2) % HISTORY];
+}
+
+// ── V1: Classic Waterfall ─────────────────────────────────────
+let v1ctx, v1w, v1h;
+function initV1() { const s = setupCanvas('v1', 140); v1ctx = s.ctx; v1w = s.w; v1h = s.h; }
+function drawV1() {
+  const ctx = v1ctx;
+  ctx.fillStyle = '#0F1219';
+  ctx.fillRect(0, 0, v1w, v1h);
+
+  const cols = HISTORY;
+  const colW = v1w / cols;
+  const rowH = v1h / BANDS;
+
+  for (let col = 0; col < cols; col++) {
+    const row = getRow(col);
+    const age = col / cols;
+    for (let b = 0; b < BANDS; b++) {
+      const val = row[b] * (1 - age * 0.15); // slight age fade
+      const c = cubhelix(val);
+      ctx.fillStyle = `rgb(${c.r},${c.g},${c.b})`;
+      // Y-axis: band 0 (Sub) at bottom, band 7 (Air) at top
+      const y = (BANDS - 1 - b) * rowH;
+      const x = v1w - (col + 1) * colW; // newest on right
+      ctx.fillRect(x, y, colW + 0.5, rowH + 0.5);
+    }
+  }
+}
+
+// ── V2: Ridge Lines 2D ────────────────────────────────────────
+let v2ctx, v2w, v2h;
+function initV2() { const s = setupCanvas('v2', 160); v2ctx = s.ctx; v2w = s.w; v2h = s.h; }
+function drawV2() {
+  const ctx = v2ctx;
+  ctx.fillStyle = '#0F1219';
+  ctx.fillRect(0, 0, v2w, v2h);
+
+  const numLines = 40;
+  const lineSpacing = v2h / (numLines + 2);
+  const gain = 35; // vertical displacement
+  const bandW = v2w / (BANDS - 1);
+
+  // Draw back to front (oldest first)
+  for (let li = numLines - 1; li >= 0; li--) {
+    const row = getRow(li);
+    const age = li / numLines;
+    const baseY = v2h - (numLines - li) * lineSpacing;
+    const fade = Math.pow(1 - age, 1.6);
+
+    // Build path
+    ctx.beginPath();
+    for (let b = 0; b < BANDS; b++) {
+      const x = b * bandW;
+      const elevation = row[b] * gain * fade;
+      const y = baseY - elevation;
+      if (b === 0) ctx.moveTo(x, y);
+      else {
+        // Smooth curve through points
+        const prevX = (b - 1) * bandW;
+        const cpx = (prevX + x) / 2;
+        ctx.quadraticCurveTo(cpx, baseY - getRow(li)[b - 1] * gain * fade, x, y);
+      }
+    }
+    // Close fill to baseline
+    ctx.lineTo(v2w, baseY + lineSpacing);
+    ctx.lineTo(0, baseY + lineSpacing);
+    ctx.closePath();
+
+    // Fill: dark below line for occlusion
+    ctx.fillStyle = `rgba(15,18,25,${0.6 + 0.4 * age})`;
+    ctx.fill();
+
+    // Stroke: cubhelix coloured by average intensity
+    const avg = Array.from(row).reduce((s, v) => s + v, 0) / BANDS;
+    const lineColor = cubhelix(avg * fade);
+    ctx.strokeStyle = `rgba(${lineColor.r},${lineColor.g},${lineColor.b},${0.3 + 0.7 * fade})`;
+    ctx.lineWidth = 1.2 + fade * 0.8;
+    ctx.stroke();
+
+    // Peak glow for newest lines
+    if (li < 5) {
+      ctx.strokeStyle = `rgba(${lineColor.r},${lineColor.g},${lineColor.b},${0.15 * (1 - li / 5)})`;
+      ctx.lineWidth = 4;
+      ctx.stroke();
+    }
+  }
+}
+
+// ── V3: Neon Edge Glow ────────────────────────────────────────
+let v3ctx, v3w, v3h;
+function initV3() { const s = setupCanvas('v3', 140); v3ctx = s.ctx; v3w = s.w; v3h = s.h; }
+function drawV3() {
+  const ctx = v3ctx;
+  ctx.fillStyle = '#0A0D14';
+  ctx.fillRect(0, 0, v3w, v3h);
+
+  const cols = HISTORY;
+  const colW = v3w / cols;
+  const rowH = v3h / BANDS;
+
+  // Base dark layer
+  for (let col = 0; col < cols; col++) {
+    const row = getRow(col);
+    const age = col / cols;
+    for (let b = 0; b < BANDS; b++) {
+      const val = row[b] * (1 - age * 0.3);
+      const c = cubhelix(val * 0.3); // dark base
+      ctx.fillStyle = `rgb(${c.r},${c.g},${c.b})`;
+      const y = (BANDS - 1 - b) * rowH;
+      const x = v3w - (col + 1) * colW;
+      ctx.fillRect(x, y, colW + 0.5, rowH + 0.5);
+    }
+  }
+
+  // Edge detection + glow overlay
+  for (let col = 0; col < cols - 1; col++) {
+    const row = getRow(col);
+    const rowNext = getRow(col + 1);
+    const age = col / cols;
+    for (let b = 0; b < BANDS; b++) {
+      const diff = Math.abs(row[b] - rowNext[b]);
+      const vertDiff = b < BANDS - 1 ? Math.abs(row[b] - row[b + 1]) : 0;
+      const edge = Math.min(1, (diff + vertDiff) * 3);
+
+      if (edge > 0.15) {
+        const c = cubhelix(row[b]);
+        const alpha = edge * (1 - age * 0.5);
+        const y = (BANDS - 1 - b) * rowH;
+        const x = v3w - (col + 1) * colW;
+
+        // Glow
+        ctx.shadowColor = `rgba(${c.r},${c.g},${c.b},${alpha * 0.8})`;
+        ctx.shadowBlur = 6 + edge * 8;
+        ctx.fillStyle = `rgba(${c.r},${c.g},${c.b},${alpha * 0.9})`;
+        ctx.fillRect(x, y, colW + 0.5, rowH + 0.5);
+        ctx.shadowBlur = 0;
+      }
+    }
+  }
+}
+
+// ── V4: Pixel Block ───────────────────────────────────────────
+let v4ctx, v4w, v4h;
+function initV4() { const s = setupCanvas('v4', 140); v4ctx = s.ctx; v4w = s.w; v4h = s.h; }
+function drawV4() {
+  const ctx = v4ctx;
+  ctx.fillStyle = '#0F1219';
+  ctx.fillRect(0, 0, v4w, v4h);
+
+  const cols = 48; // fewer columns = chunkier pixels
+  const gap = 1.5;
+  const cellW = (v4w - gap * (cols + 1)) / cols;
+  const cellH = (v4h - gap * (BANDS + 1)) / BANDS;
+
+  for (let col = 0; col < cols; col++) {
+    // Map fewer columns to history
+    const histIdx = Math.floor(col * HISTORY / cols);
+    const row = getRow(histIdx);
+    const age = col / cols;
+
+    for (let b = 0; b < BANDS; b++) {
+      const val = row[b] * (1 - age * 0.2);
+      const c = cubhelix(val);
+
+      const x = v4w - gap - (col + 1) * (cellW + gap);
+      const y = gap + (BANDS - 1 - b) * (cellH + gap);
+      const radius = 2;
+
+      ctx.fillStyle = `rgb(${c.r},${c.g},${c.b})`;
+      ctx.beginPath();
+      ctx.roundRect(x, y, cellW, cellH, radius);
+      ctx.fill();
+
+      // Subtle inner highlight on bright cells
+      if (val > 0.6) {
+        ctx.fillStyle = `rgba(255,255,255,${(val - 0.6) * 0.15})`;
+        ctx.beginPath();
+        ctx.roundRect(x + 1, y + 1, cellW - 2, cellH * 0.4, 1);
+        ctx.fill();
+      }
+    }
+  }
+}
+
+// ── V5: Smoke Trail ───────────────────────────────────────────
+let v5ctx, v5w, v5h;
+function initV5() { const s = setupCanvas('v5', 140); v5ctx = s.ctx; v5w = s.w; v5h = s.h; }
+function drawV5() {
+  const ctx = v5ctx;
+  ctx.fillStyle = '#0F1219';
+  ctx.fillRect(0, 0, v5w, v5h);
+
+  const cols = HISTORY;
+  const colW = v5w / cols;
+  const rowH = v5h / BANDS;
+
+  // First pass: blurred base
+  for (let col = 0; col < cols; col++) {
+    const row = getRow(col);
+    const age = col / cols;
+    for (let b = 0; b < BANDS; b++) {
+      // Average with neighbours for blur effect
+      let val = row[b];
+      if (b > 0) val = val * 0.5 + row[b - 1] * 0.25;
+      if (b < BANDS - 1) val = val * 0.8 + row[b + 1] * 0.2;
+
+      // Temporal blur: blend with adjacent columns
+      if (col > 0) {
+        const prev = getRow(col - 1);
+        val = val * 0.6 + prev[b] * 0.4;
+      }
+
+      val *= (1 - age * 0.4);
+      const c = cubhelix(val);
+
+      // Draw with radial gradient for soft edges
+      const cx = v5w - (col + 0.5) * colW;
+      const cy = (BANDS - 1 - b + 0.5) * rowH;
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, rowH * 0.9);
+      grad.addColorStop(0, `rgba(${c.r},${c.g},${c.b},${0.7 * (1 - age * 0.5)})`);
+      grad.addColorStop(0.6, `rgba(${c.r},${c.g},${c.b},${0.3 * (1 - age * 0.5)})`);
+      grad.addColorStop(1, 'transparent');
+
+      ctx.fillStyle = grad;
+      ctx.fillRect(cx - colW, cy - rowH, colW * 2, rowH * 2);
+    }
+  }
+}
+
+// ── V6: Centre-Origin Mirror ──────────────────────────────────
+let v6ctx, v6w, v6h;
+function initV6() { const s = setupCanvas('v6', 140); v6ctx = s.ctx; v6w = s.w; v6h = s.h; }
+function drawV6() {
+  const ctx = v6ctx;
+  ctx.fillStyle = '#0F1219';
+  ctx.fillRect(0, 0, v6w, v6h);
+
+  const cols = HISTORY;
+  const halfW = v6w / 2;
+  const colW = halfW / cols;
+  const rowH = v6h / BANDS;
+
+  for (let col = 0; col < cols; col++) {
+    const row = getRow(col);
+    const age = col / cols;
+    for (let b = 0; b < BANDS; b++) {
+      const val = row[b] * (1 - age * 0.2);
+      const c = cubhelix(val);
+      ctx.fillStyle = `rgb(${c.r},${c.g},${c.b})`;
+
+      // Band 0 (Sub) at edges, Band 7 (Air) at centre
+      // Right half: Air near centre, Sub at right edge
+      const yR = b * rowH;
+      const xR = halfW + col * colW; // scroll outward from centre
+      ctx.fillRect(xR, yR, colW + 0.5, rowH + 0.5);
+
+      // Left half: mirrored
+      const xL = halfW - (col + 1) * colW;
+      ctx.fillRect(xL, yR, colW + 0.5, rowH + 0.5);
+    }
+  }
+
+  // Centre line (gold)
+  ctx.strokeStyle = 'rgba(255,184,77,0.6)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(halfW, 0);
+  ctx.lineTo(halfW, v6h);
+  ctx.stroke();
+
+  // Gold glow on centre
+  const centreGlow = ctx.createLinearGradient(halfW - 8, 0, halfW + 8, 0);
+  centreGlow.addColorStop(0, 'transparent');
+  centreGlow.addColorStop(0.5, 'rgba(255,184,77,0.08)');
+  centreGlow.addColorStop(1, 'transparent');
+  ctx.fillStyle = centreGlow;
+  ctx.fillRect(halfW - 8, 0, 16, v6h);
+}
+
+// ── Animation Loop ────────────────────────────────────────────
+let frameCount = 0;
+let lastFpsTime = performance.now();
+
+function init() {
+  initV1(); initV2(); initV3(); initV4(); initV5(); initV6();
+}
+
+function animate() {
+  pushFrame();
+  drawV1(); drawV2(); drawV3(); drawV4(); drawV5(); drawV6();
+
+  frameCount++;
+  const now = performance.now();
+  if (now - lastFpsTime > 1000) {
+    const fps = Math.round(frameCount * 1000 / (now - lastFpsTime));
+    const label = `${fps} FPS`;
+    ['v1fps','v2fps','v3fps','v4fps','v5fps','v6fps'].forEach(id => {
+      document.getElementById(id).textContent = label;
+    });
+    frameCount = 0;
+    lastFpsTime = now;
+  }
+
+  requestAnimationFrame(animate);
+}
+
+window.addEventListener('load', () => { init(); animate(); });
+window.addEventListener('resize', () => { init(); });
+</script>
+
+</body>
+</html>

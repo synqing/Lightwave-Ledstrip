@@ -1,0 +1,1877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Audio Viz Explorer</title>
+<style>
+@font-face { font-family: 'Bebas Neue'; font-weight: 700; src: local('Bebas Neue'); }
+@font-face { font-family: 'Rajdhani'; font-weight: 500; src: local('Rajdhani Medium'), local('Rajdhani'); }
+@font-face { font-family: 'JetBrains Mono'; font-weight: 500; src: local('JetBrains Mono Medium'), local('JetBrains Mono'); }
+
+:root {
+  --lw-base: #0F1219;
+  --lw-card: #1E2535;
+  --lw-elevated: #252D3F;
+  --lw-gold: #FFB84D;
+  --lw-cyan: #00D4FF;
+  --lw-text-primary: #E6E9EF;
+  --lw-text-secondary: #9CA3B0;
+  --lw-text-tertiary: #6B7280;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  background: var(--lw-base);
+  color: var(--lw-text-primary);
+  font-family: 'Rajdhani', 'Segoe UI', sans-serif;
+  font-weight: 500;
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.container {
+  width: 100%;
+  max-width: 420px;
+  padding: 20px 12px 60px;
+}
+
+h1 {
+  font-family: 'Bebas Neue', Impact, sans-serif;
+  font-weight: 700;
+  font-size: 28px;
+  letter-spacing: 3px;
+  color: var(--lw-text-primary);
+  text-align: center;
+  margin-bottom: 2px;
+}
+
+.subtitle {
+  text-align: center;
+  font-size: 12px;
+  color: var(--lw-text-tertiary);
+  margin-bottom: 24px;
+  font-family: 'Rajdhani', sans-serif;
+}
+
+.section-title {
+  font-family: 'Bebas Neue', Impact, sans-serif;
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: 2px;
+  color: var(--lw-gold);
+  margin: 24px 0 10px;
+  padding-left: 4px;
+}
+
+.card {
+  background: var(--lw-card);
+  border-radius: 8px;
+  padding: 8px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.card-title {
+  font-family: 'Bebas Neue', Impact, sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 1.5px;
+  color: var(--lw-text-primary);
+  margin-bottom: 1px;
+}
+
+.card-desc {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 10px;
+  color: var(--lw-text-tertiary);
+  margin-bottom: 6px;
+  line-height: 1.3;
+}
+
+.card canvas {
+  display: block;
+  width: 100%;
+  border-radius: 4px;
+  background: var(--lw-base);
+}
+
+.palette-strip {
+  height: 4px;
+  border-radius: 2px;
+  margin-top: 6px;
+  background: linear-gradient(to right, #440154, #31688e, #35b779, #fde725);
+}
+
+#fps-counter {
+  position: fixed;
+  top: 8px;
+  right: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--lw-cyan);
+  background: rgba(15,18,25,0.85);
+  padding: 3px 7px;
+  border-radius: 4px;
+  z-index: 100;
+  pointer-events: none;
+}
+</style>
+</head>
+<body>
+
+<div class="container" id="app"></div>
+<div id="fps-counter">-- FPS</div>
+
+<script>
+'use strict';
+
+/* ===================================================================
+   PALETTE SYSTEM
+   =================================================================== */
+const PALETTE_DEFS = [
+  { name: "Viridis", stops: [[0,68,1,84],[36,71,39,117],[73,62,74,137],[109,49,104,142],[146,38,130,142],[182,53,183,121],[219,144,215,67],[255,253,231,37]] },
+  { name: "Plasma", stops: [[0,13,8,135],[36,75,3,161],[73,126,3,168],[109,168,34,150],[146,203,70,121],[182,229,107,93],[219,248,149,64],[255,240,249,33]] },
+  { name: "Sunset Real", stops: [[0,120,0,0],[22,179,22,0],[51,255,104,0],[85,167,22,18],[135,100,0,103],[198,16,0,130],[255,0,0,160]] },
+  { name: "Berlin", stops: [[0,121,171,237],[36,54,133,173],[73,29,76,98],[109,16,26,32],[146,25,11,9],[182,90,28,6],[219,156,79,61],[255,221,141,134]] },
+];
+
+function buildLUT(stops) {
+  const lut = new Uint8Array(256 * 3);
+  for (let i = 0; i < 256; i++) {
+    let lo = 0, hi = stops.length - 1;
+    for (let s = 0; s < stops.length - 1; s++) {
+      if (i >= stops[s][0] && i <= stops[s + 1][0]) { lo = s; hi = s + 1; break; }
+    }
+    const range = stops[hi][0] - stops[lo][0] || 1;
+    const t = (i - stops[lo][0]) / range;
+    lut[i * 3]     = Math.round(stops[lo][1] + (stops[hi][1] - stops[lo][1]) * t);
+    lut[i * 3 + 1] = Math.round(stops[lo][2] + (stops[hi][2] - stops[lo][2]) * t);
+    lut[i * 3 + 2] = Math.round(stops[lo][3] + (stops[hi][3] - stops[lo][3]) * t);
+  }
+  return lut;
+}
+
+const PALETTES = PALETTE_DEFS.map(p => ({ name: p.name, lut: buildLUT(p.stops), stops: p.stops }));
+
+function palRGB(lut, t) {
+  const idx = Math.max(0, Math.min(255, Math.round(t * 255)));
+  return [lut[idx * 3], lut[idx * 3 + 1], lut[idx * 3 + 2]];
+}
+
+function palCSS(lut, t) {
+  const c = palRGB(lut, t);
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+
+function paletteGradientCSS(pal) {
+  const stops = [];
+  for (let i = 0; i <= 8; i++) {
+    const t = i / 8;
+    stops.push(palCSS(pal.lut, t) + ' ' + Math.round(t * 100) + '%');
+  }
+  return 'linear-gradient(to right, ' + stops.join(', ') + ')';
+}
+
+/* ===================================================================
+   SYNTHETIC AUDIO ENGINE
+   =================================================================== */
+const NUM_BANDS = 8;
+const HISTORY_LEN = 60;
+const audioHistory = [];
+let audioWriteIdx = 0;
+let audioTime = 0;
+const AUDIO_FPS = 30;
+
+for (let i = 0; i < HISTORY_LEN; i++) audioHistory.push(new Float32Array(NUM_BANDS));
+
+function generateFrame(t) {
+  const section = Math.floor(t / 8) % 5;
+  const sectionPhase = (t % 8) / 8;
+
+  // Section-based master volume
+  let masterVolume;
+  if (section === 4) masterVolume = Math.max(0, 0.1 - sectionPhase * 0.1);
+  else if (section === 0) masterVolume = sectionPhase * 0.8;
+  else if (section === 1) masterVolume = 0.9 + Math.exp(-sectionPhase * 3) * 0.3;
+  else if (section === 2) masterVolume = 0.7;
+  else masterVolume = 0.4 * (1 - sectionPhase);
+
+  // Silence gaps
+  const silenceGap = (Math.sin(t * 0.31) > 0.92) ? 0 : 1;
+  masterVolume *= silenceGap;
+
+  // Beat at 128 BPM (2.133 Hz)
+  const beatPhase = (t * 2.133) % 1;
+  const kickStrength = (section === 1) ? 0.7 : (section === 2) ? 0.5 : 0.3;
+  const kick = Math.exp(-beatPhase * 8) * kickStrength * masterVolume;
+
+  // Snare on beats 2 and 4 (offset half beat)
+  const snarePhase = ((t * 2.133) + 0.5) % 1;
+  const snareOn = snarePhase < 0.08;
+  const snareStrength = snareOn ? Math.exp(-snarePhase * 15) * 0.45 * masterVolume : 0;
+
+  // Hi-hat 8th notes
+  const hihatPhase = (t * 4.266) % 1;
+  const hihat = Math.exp(-hihatPhase * 12) * 0.3 * masterVolume;
+
+  // 16th note hi-hat on drops
+  const hihat16Phase = (t * 8.532) % 1;
+  const hihat16 = (section === 1) ? Math.exp(-hihat16Phase * 16) * 0.2 * masterVolume : 0;
+
+  // Filter sweep
+  const sweepCentre = (Math.sin(t * 0.15) * 0.5 + 0.5) * 7;
+  const sweepWidth = 0.5 + Math.sin(t * 0.07) * 0.3;
+
+  // Harmonic buildup on section 0
+  const buildupHarmonic = (section === 0) ? sectionPhase * sectionPhase * 0.4 : 0;
+
+  const frame = new Float32Array(NUM_BANDS);
+  for (let b = 0; b < NUM_BANDS; b++) {
+    let val = 0;
+
+    // Base texture (sine oscillation per band with phase variety)
+    val += (Math.sin(t * (0.3 + b * 0.2) + b * 1.1) * 0.5 + 0.5) * 0.2;
+    val += (Math.sin(t * (0.17 + b * 0.13) + b * 2.3) * 0.5 + 0.5) * 0.08;
+
+    // Beat kick on low bands
+    if (b < 3) val += kick * (1 - b * 0.3);
+
+    // Sub correlates with bass
+    if (b === 0 && kick > 0.1) val += kick * 0.3;
+
+    // Snare on mid bands
+    if (b >= 3 && b <= 5) val += snareStrength * (1 - Math.abs(b - 4) * 0.2);
+
+    // Hi-hat on high bands
+    if (b >= 5) {
+      val += hihat * (b - 4) * 0.15;
+      val += hihat16 * (b - 4) * 0.1;
+    }
+
+    // Air follows High
+    if (b === 7 && hihat > 0.15) val += hihat * 0.2;
+
+    // Filter sweep (gaussian around centre)
+    const sweepDist = Math.abs(b - sweepCentre);
+    val += Math.exp(-sweepDist * sweepDist * sweepWidth) * 0.35 * masterVolume;
+
+    // Buildup harmonic (energy rises from low to high)
+    if (section === 0) {
+      val += buildupHarmonic * Math.max(0, 1 - Math.abs(b - sectionPhase * 7) * 0.5);
+    }
+
+    // Random transients (snare hits, percussion)
+    if (Math.random() < 0.02) val += Math.random() * 0.4 * masterVolume;
+
+    // Master volume
+    val *= masterVolume;
+
+    // Crescendo/decrescendo envelope
+    const envPhase = (t * 0.05) % 1;
+    val *= 0.7 + Math.sin(envPhase * Math.PI * 2) * 0.3;
+
+    // Noise floor
+    val += (Math.random() - 0.5) * 0.03;
+
+    frame[b] = Math.max(0, Math.min(1, val));
+  }
+  return frame;
+}
+
+function tickAudio() {
+  audioTime += 1 / AUDIO_FPS;
+  const frame = generateFrame(audioTime);
+  audioHistory[audioWriteIdx] = frame;
+  audioWriteIdx = (audioWriteIdx + 1) % HISTORY_LEN;
+}
+
+function getHistoryFrame(age) {
+  const idx = ((audioWriteIdx - 1 - age) % HISTORY_LEN + HISTORY_LEN) % HISTORY_LEN;
+  return audioHistory[idx];
+}
+
+/* ===================================================================
+   CATMULL-ROM SPLINE
+   =================================================================== */
+function catmullRom(yValues, numOut) {
+  const n = yValues.length;
+  if (n < 2) return new Float32Array(numOut);
+  const out = new Float32Array(numOut);
+  for (let i = 0; i < numOut; i++) {
+    const t = i / (numOut - 1) * (n - 1);
+    const idx = Math.floor(t);
+    const frac = t - idx;
+    const p0 = yValues[Math.max(0, idx - 1)];
+    const p1 = yValues[idx];
+    const p2 = yValues[Math.min(n - 1, idx + 1)];
+    const p3 = yValues[Math.min(n - 1, idx + 2)];
+    const tt = frac * frac;
+    const ttt = tt * frac;
+    out[i] = 0.5 * ((2 * p1) +
+      (-p0 + p2) * frac +
+      (2 * p0 - 5 * p1 + 4 * p2 - p3) * tt +
+      (-p0 + 3 * p1 - 3 * p2 + p3) * ttt);
+  }
+  return out;
+}
+
+/* ===================================================================
+   VARIANT DEFINITIONS
+   =================================================================== */
+const VARIANTS = [];
+
+// ---- RIDGE LINE (R1-R4) ----
+VARIANTS.push({
+  id: 'R1', section: 'RIDGE LINE', title: 'DEEP CANYON',
+  desc: '6 lines, 24pt spacing, Catmull-Rom 48pt, solid black fills, vertical peak bars',
+  canvasH: 120, frameSkip: 2,
+  draw: function(ctx, w, h, lut, state) {
+    if (!state._skip) state._skip = 0;
+    state._skip++;
+    if (state._skip < this.frameSkip) return false;
+    state._skip = 0;
+
+    ctx.clearRect(0, 0, w, h);
+    const numLines = 6;
+    const spacing = 24 * (h / 120);
+    const baseline = h - 10 * (h / 120);
+    const numPts = 48;
+
+    // Draw back to front
+    const newestVals = [];
+    const newestXs = [];
+    for (let line = numLines - 1; line >= 0; line--) {
+      const frame = getHistoryFrame(line * 2);
+      const yBase = baseline - line * spacing;
+      const amplitudes = new Float32Array(NUM_BANDS);
+      for (let b = 0; b < NUM_BANDS; b++) amplitudes[b] = frame[b] * spacing * 2;
+
+      const interp = catmullRom(Array.from(amplitudes), numPts);
+      const xs = [];
+      const ys = [];
+      for (let p = 0; p < numPts; p++) {
+        const x = (p / (numPts - 1)) * w;
+        xs.push(x);
+        ys.push(yBase - interp[p]);
+      }
+
+      // Solid black fill
+      ctx.beginPath();
+      ctx.moveTo(xs[0], yBase);
+      for (let p = 0; p < numPts; p++) ctx.lineTo(xs[p], ys[p]);
+      ctx.lineTo(xs[numPts - 1], yBase);
+      ctx.closePath();
+      ctx.fillStyle = '#000';
+      ctx.fill();
+
+      // Stroke line in palette colour
+      const age = line / (numLines - 1);
+      const alpha = 1 - age * 0.7;
+      const col = palRGB(lut, 0.3 + age * 0.6);
+      ctx.beginPath();
+      for (let p = 0; p < numPts; p++) {
+        if (p === 0) ctx.moveTo(xs[p], ys[p]);
+        else ctx.lineTo(xs[p], ys[p]);
+      }
+      ctx.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha})`;
+      ctx.lineWidth = line === 0 ? 2 : 1;
+      ctx.stroke();
+
+      if (line === 0) {
+        for (let p = 0; p < numPts; p++) { newestXs.push(xs[p]); newestVals.push(ys[p]); }
+      }
+    }
+
+    // Vertical bars from newest line's peaks
+    if (newestVals.length) {
+      const peakCol = palRGB(lut, 0.9);
+      ctx.strokeStyle = `rgba(${peakCol[0]},${peakCol[1]},${peakCol[2]},0.4)`;
+      ctx.lineWidth = 1;
+      for (let p = 0; p < newestVals.length; p += 6) {
+        const yPeak = newestVals[p];
+        ctx.beginPath();
+        ctx.moveTo(newestXs[p], yPeak);
+        ctx.lineTo(newestXs[p], yPeak + 12 * (h / 120));
+        ctx.stroke();
+      }
+    }
+    return true;
+  }
+});
+
+VARIANTS.push({
+  id: 'R2', section: 'RIDGE LINE', title: 'SEISMIC TRACE',
+  desc: '7 lines, variable spacing, bipolar waveform, stroke only, linear interpolation',
+  canvasH: 120, frameSkip: 3,
+  draw: function(ctx, w, h, lut, state) {
+    if (!state._skip) state._skip = 0;
+    state._skip++;
+    if (state._skip < this.frameSkip) return false;
+    state._skip = 0;
+
+    ctx.clearRect(0, 0, w, h);
+    const numLines = 7;
+    const centreY = h / 2;
+    const numPts = 40;
+
+    for (let line = numLines - 1; line >= 0; line--) {
+      const frame = getHistoryFrame(line * 3);
+      // Variable spacing: newest 20pt, oldest 14pt (scaled)
+      const spacingPt = (20 - line * (6 / (numLines - 1))) * (h / 120);
+      let yBase = centreY;
+      for (let l = 0; l < line; l++) {
+        yBase -= (20 - l * (6 / (numLines - 1))) * (h / 120) * 0.5;
+      }
+      yBase = 15 * (h / 120) + line * (h - 30 * (h / 120)) / (numLines - 1);
+
+      const age = line / (numLines - 1);
+      const alpha = 1 - age * 0.8;
+      const lw = 1.5 - age;
+
+      // Linear interpolation 8 -> 40
+      ctx.beginPath();
+      for (let p = 0; p < numPts; p++) {
+        const t = p / (numPts - 1);
+        const bandF = t * (NUM_BANDS - 1);
+        const bLo = Math.floor(bandF);
+        const bHi = Math.min(NUM_BANDS - 1, bLo + 1);
+        const frac = bandF - bLo;
+        const val = frame[bLo] * (1 - frac) + frame[bHi] * frac;
+        // Bipolar: oscillate around baseline
+        const bipolar = (val - 0.5) * 2;
+        const x = (p / (numPts - 1)) * w;
+        const y = yBase + bipolar * spacingPt;
+        if (p === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      if (line === 0) {
+        ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
+      } else {
+        ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.3})`;
+      }
+      ctx.lineWidth = Math.max(0.5, lw);
+      ctx.stroke();
+    }
+    return true;
+  }
+});
+
+VARIANTS.push({
+  id: 'R3', section: 'RIDGE LINE', title: 'SILK RIBBON',
+  desc: '5 lines, 28pt spacing, adaptive speed, gradient fill, sigmoid amplitude',
+  canvasH: 120, _lastRMS: 0, _accum: 0,
+  draw: function(ctx, w, h, lut, state) {
+    // Adaptive speed: measure RMS
+    const newest = getHistoryFrame(0);
+    let rms = 0;
+    for (let b = 0; b < NUM_BANDS; b++) rms += newest[b] * newest[b];
+    rms = Math.sqrt(rms / NUM_BANDS);
+
+    const skipFrames = rms > 0.5 ? 1 : rms < 0.3 ? 4 : 2;
+    if (!state._skip) state._skip = 0;
+    state._skip++;
+    if (state._skip < skipFrames) return false;
+    state._skip = 0;
+
+    ctx.clearRect(0, 0, w, h);
+    const numLines = 5;
+    const spacing = 28 * (h / 120);
+    const baseline = h - 8 * (h / 120);
+    const numPts = 48;
+
+    function sigmoid(x) { return 1 / (1 + Math.exp(-6 * (x - 0.5))); }
+
+    for (let line = numLines - 1; line >= 0; line--) {
+      const frame = getHistoryFrame(line * 3);
+      const yBase = baseline - line * spacing;
+      const amplitudes = new Float32Array(NUM_BANDS);
+      for (let b = 0; b < NUM_BANDS; b++) amplitudes[b] = sigmoid(frame[b]) * spacing * 1.8;
+
+      const interp = catmullRom(Array.from(amplitudes), numPts);
+      const xs = [];
+      const ys = [];
+      for (let p = 0; p < numPts; p++) {
+        xs.push((p / (numPts - 1)) * w);
+        ys.push(yBase - interp[p]);
+      }
+
+      // Gradient fill from peak colour to transparent
+      const peakY = Math.min(...ys);
+      const grad = ctx.createLinearGradient(0, peakY, 0, yBase);
+      const age = line / (numLines - 1);
+      const col = palRGB(lut, 0.2 + age * 0.7);
+      const alpha = (1 - age * 0.6) * 0.5;
+      grad.addColorStop(0, `rgba(${col[0]},${col[1]},${col[2]},${alpha})`);
+      grad.addColorStop(1, `rgba(${col[0]},${col[1]},${col[2]},0)`);
+
+      ctx.beginPath();
+      ctx.moveTo(xs[0], yBase);
+      for (let p = 0; p < numPts; p++) ctx.lineTo(xs[p], ys[p]);
+      ctx.lineTo(xs[numPts - 1], yBase);
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Stroke outline
+      ctx.beginPath();
+      for (let p = 0; p < numPts; p++) {
+        if (p === 0) ctx.moveTo(xs[p], ys[p]);
+        else ctx.lineTo(xs[p], ys[p]);
+      }
+      const sCol = palRGB(lut, 0.3 + age * 0.6);
+      ctx.strokeStyle = `rgba(${sCol[0]},${sCol[1]},${sCol[2]},${1 - age * 0.6})`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    return true;
+  }
+});
+
+VARIANTS.push({
+  id: 'R4', section: 'RIDGE LINE', title: 'CONSTRUCTIVIST',
+  desc: '8 lines, 16pt spacing, 30Hz, quantised hard edges, CRT noise, vertical bars',
+  canvasH: 120, frameSkip: 1,
+  draw: function(ctx, w, h, lut, state) {
+    ctx.clearRect(0, 0, w, h);
+    const numLines = 8;
+    const spacing = 16 * (h / 120);
+    const baseline = h - 6 * (h / 120);
+    const numPts = 48;
+
+    const newestXs = [];
+    const newestYs = [];
+
+    for (let line = numLines - 1; line >= 0; line--) {
+      const frame = getHistoryFrame(line);
+      const yBase = baseline - line * spacing;
+      const amplitudes = new Float32Array(NUM_BANDS);
+      for (let b = 0; b < NUM_BANDS; b++) {
+        // Hard edge quantisation
+        amplitudes[b] = Math.floor(frame[b] * 6) / 6 * spacing * 2;
+      }
+
+      const interp = catmullRom(Array.from(amplitudes), numPts);
+      const xs = [];
+      const ys = [];
+      for (let p = 0; p < numPts; p++) {
+        xs.push((p / (numPts - 1)) * w);
+        ys.push(yBase - interp[p]);
+      }
+
+      // Solid black fill with CRT noise
+      const noiseBright = Math.random() * 0.08;
+      const nb = Math.round(noiseBright * 255);
+      ctx.beginPath();
+      ctx.moveTo(xs[0], yBase + 2);
+      for (let p = 0; p < numPts; p++) ctx.lineTo(xs[p], ys[p]);
+      ctx.lineTo(xs[numPts - 1], yBase + 2);
+      ctx.closePath();
+      ctx.fillStyle = `rgb(${nb},${nb},${nb})`;
+      ctx.fill();
+
+      // Thin baseline shelf
+      ctx.beginPath();
+      ctx.moveTo(0, yBase);
+      ctx.lineTo(w, yBase);
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+      ctx.lineWidth = 0.3;
+      ctx.stroke();
+
+      // Stroke line
+      const age = line / (numLines - 1);
+      const col = palRGB(lut, age);
+      const alpha = 1 - age * 0.7;
+      ctx.beginPath();
+      for (let p = 0; p < numPts; p++) {
+        if (p === 0) ctx.moveTo(xs[p], ys[p]);
+        else ctx.lineTo(xs[p], ys[p]);
+      }
+      ctx.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha})`;
+      ctx.lineWidth = line === 0 ? 1.5 : 0.8;
+      ctx.stroke();
+
+      if (line === 0) {
+        for (let p = 0; p < numPts; p++) { newestXs.push(xs[p]); newestYs.push(ys[p]); }
+      }
+    }
+
+    // Vertical bars from newest peaks with additive brighten
+    if (newestXs.length) {
+      ctx.globalCompositeOperation = 'lighter';
+      const bCol = palRGB(lut, 0.95);
+      ctx.strokeStyle = `rgba(${bCol[0]},${bCol[1]},${bCol[2]},0.25)`;
+      ctx.lineWidth = 1.5;
+      for (let p = 0; p < newestXs.length; p += 4) {
+        const baselineY = baseline;
+        ctx.beginPath();
+        ctx.moveTo(newestXs[p], newestYs[p]);
+        ctx.lineTo(newestXs[p], baselineY);
+        ctx.stroke();
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    return true;
+  }
+});
+
+// ---- DOT RIDGE (DR0-DR14) ----
+const DR_HISTORY = 35;
+
+VARIANTS.push({
+  id: 'DR0', section: 'DOT RIDGE', title: 'BASELINE',
+  desc: 'Dots falling, circle, amplitude sizes 2-8px, faint connecting lines, age fade',
+  canvasH: 100,
+  draw: function(ctx, w, h, lut) {
+    ctx.clearRect(0, 0, w, h);
+    const cols = NUM_BANDS;
+    const rows = DR_HISTORY;
+    const colW = w / cols;
+
+    for (let age = rows - 1; age >= 0; age--) {
+      const frame = getHistoryFrame(age);
+      const y = (age / (rows - 1)) * (h - 16) + 8;
+      const alpha = 1 - (age / rows) * 0.8;
+
+      for (let b = 0; b < cols; b++) {
+        const x = (b + 0.5) * colW;
+        const val = frame[b];
+        const r = 2 + val * 6;
+        const col = palRGB(lut, val);
+
+        // Connecting lines to adjacent bands
+        if (b < cols - 1) {
+          const nextX = (b + 1.5) * colW;
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(nextX, y);
+          ctx.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha * 0.15})`;
+          ctx.lineWidth = 0.5;
+          ctx.stroke();
+        }
+
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha})`;
+        ctx.fill();
+      }
+    }
+    return true;
+  }
+});
+
+VARIANTS.push({
+  id: 'DR1', section: 'DOT RIDGE', title: 'CONSTELLATION FALL',
+  desc: 'Gravity fall (age^2), circle 2-12px, triangulated mesh lines, log horizontal spacing',
+  canvasH: 100,
+  draw: function(ctx, w, h, lut) {
+    ctx.clearRect(0, 0, w, h);
+    const cols = NUM_BANDS;
+    const rows = DR_HISTORY;
+
+    // Logarithmic horizontal spacing
+    const logPositions = [];
+    for (let b = 0; b < cols; b++) {
+      logPositions.push(((Math.log(b + 1) / Math.log(cols)) * 0.8 + 0.1) * w);
+    }
+
+    const positions = []; // [age][band] = {x,y}
+    for (let age = 0; age < rows; age++) {
+      const frame = getHistoryFrame(age);
+      const row = [];
+      const gravityY = (age * age / (rows * rows)) * (h - 12) + 6;
+      for (let b = 0; b < cols; b++) {
+        row.push({ x: logPositions[b], y: gravityY, val: frame[b] });
+      }
+      positions.push(row);
+    }
+
+    // Draw mesh lines
+    ctx.lineWidth = 0.4;
+    for (let age = 0; age < rows; age++) {
+      const alpha = (1 - age / rows) * 0.2;
+      for (let b = 0; b < cols - 1; b++) {
+        const a = positions[age][b];
+        const c = positions[age][b + 1];
+        const col = palRGB(lut, a.val);
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(c.x, c.y);
+        ctx.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha})`;
+        ctx.stroke();
+      }
+      // Vertical mesh to next age
+      if (age < rows - 1) {
+        for (let b = 0; b < cols; b++) {
+          const a = positions[age][b];
+          const d = positions[age + 1][b];
+          const col = palRGB(lut, a.val);
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(d.x, d.y);
+          ctx.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${(1 - age / rows) * 0.1})`;
+          ctx.stroke();
+        }
+      }
+    }
+
+    // Draw dots
+    for (let age = rows - 1; age >= 0; age--) {
+      const alpha = 1 - (age / rows) * 0.85;
+      for (let b = 0; b < cols; b++) {
+        const p = positions[age][b];
+        const r = 2 + p.val * 10;
+        const col = palRGB(lut, p.val);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha})`;
+        ctx.fill();
+      }
+    }
+    return true;
+  }
+});
+
+VARIANTS.push({
+  id: 'DR2', section: 'DOT RIDGE', title: 'SEISMIC TRACE',
+  desc: '8 horizontal lanes, dots scroll right to left, square 4px, 3-level brightness, drop lines',
+  canvasH: 100,
+  draw: function(ctx, w, h, lut) {
+    ctx.clearRect(0, 0, w, h);
+    const cols = DR_HISTORY;
+    const rows = NUM_BANDS;
+    const laneH = h / rows;
+
+    for (let b = 0; b < rows; b++) {
+      const laneY = b * laneH;
+      for (let age = 0; age < cols; age++) {
+        const frame = getHistoryFrame(age);
+        const val = frame[b];
+        const x = w - (age / (cols - 1)) * w;
+        const dotY = laneY + laneH * 0.3;
+
+        // 3-level brightness quantisation
+        let brightness;
+        if (val < 0.2) brightness = 0;
+        else if (val < 0.5) brightness = 0.4;
+        else brightness = 1;
+
+        if (brightness === 0) continue;
+
+        const col = palRGB(lut, b / (rows - 1));
+
+        // Vertical drop line
+        ctx.beginPath();
+        ctx.moveTo(x, dotY + 2);
+        ctx.lineTo(x, laneY + laneH - 2);
+        ctx.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${brightness * 0.15})`;
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+
+        // Square dot
+        ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${brightness})`;
+        ctx.fillRect(x - 2, dotY - 2, 4, 4);
+      }
+    }
+    return true;
+  }
+});
+
+VARIANTS.push({
+  id: 'DR3', section: 'DOT RIDGE', title: 'RAINFALL',
+  desc: 'Different fall speeds per band, teardrop shape with tail, motion blur trails',
+  canvasH: 100,
+  draw: function(ctx, w, h, lut) {
+    ctx.clearRect(0, 0, w, h);
+    const cols = NUM_BANDS;
+    const rows = DR_HISTORY;
+    const colW = w / cols;
+
+    for (let age = rows - 1; age >= 0; age--) {
+      const frame = getHistoryFrame(age);
+      for (let b = 0; b < cols; b++) {
+        const speed = 1 + b * 0.5;
+        const y = Math.min(h - 4, (age * speed / rows) * (h - 8) + 4);
+        const x = (b + 0.5) * colW;
+        const val = frame[b];
+        const r = 2 + val * 4;
+        const alpha = (1 - age / rows) * 0.9;
+        const col = palRGB(lut, b / (cols - 1));
+
+        // Motion blur trail (3px tail above)
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x, y - 3);
+        ctx.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha * 0.3})`;
+        ctx.lineWidth = r * 0.6;
+        ctx.stroke();
+
+        // Teardrop tail
+        const tailLen = val * 8;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x, y - tailLen);
+        ctx.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha * 0.5})`;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Circle dot
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha})`;
+        ctx.fill();
+      }
+    }
+    return true;
+  }
+});
+
+VARIANTS.push({
+  id: 'DR4', section: 'DOT RIDGE', title: 'VERTICAL COLUMNS',
+  desc: 'Dots rise upward, 8 vertical columns, golden ratio spacing, opacity = amplitude, bezier curves',
+  canvasH: 100,
+  draw: function(ctx, w, h, lut) {
+    ctx.clearRect(0, 0, w, h);
+    const cols = NUM_BANDS;
+    const rows = DR_HISTORY;
+    const phi = 1.618033988749;
+
+    // Golden ratio spacing
+    const positions = [];
+    let total = 0;
+    for (let b = 0; b < cols; b++) total += Math.pow(phi, b * 0.3);
+    let accum = 0;
+    for (let b = 0; b < cols; b++) {
+      accum += Math.pow(phi, b * 0.3);
+      positions.push((accum / total) * w * 0.85 + w * 0.075);
+    }
+
+    for (let b = 0; b < cols; b++) {
+      const x = positions[b];
+      const col = palRGB(lut, b / (cols - 1));
+
+      // Draw bezier curves connecting frames
+      ctx.beginPath();
+      let started = false;
+      for (let age = 0; age < rows; age++) {
+        const frame = getHistoryFrame(age);
+        const y = h - (age / (rows - 1)) * (h - 12) - 6;
+        if (!started) { ctx.moveTo(x, y); started = true; }
+        else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},0.08)`;
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+
+      // Draw dots
+      for (let age = rows - 1; age >= 0; age--) {
+        const frame = getHistoryFrame(age);
+        const val = frame[b];
+        const y = h - (age / (rows - 1)) * (h - 12) - 6;
+        const alpha = val * (1 - age / rows * 0.5);
+
+        ctx.beginPath();
+        ctx.arc(x, y, 3, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha})`;
+        ctx.fill();
+      }
+    }
+    return true;
+  }
+});
+
+VARIANTS.push({
+  id: 'DR5', section: 'DOT RIDGE', title: 'QUANTUM JITTER',
+  desc: 'Brownian motion, tiny 2px particles, jitter scales with amplitude, pure particle field',
+  canvasH: 100,
+  draw: function(ctx, w, h, lut, state) {
+    if (!state.jitter) {
+      state.jitter = [];
+      for (let age = 0; age < DR_HISTORY; age++) {
+        const row = [];
+        for (let b = 0; b < NUM_BANDS; b++) row.push(0);
+        state.jitter.push(row);
+      }
+    }
+
+    // Shift jitter history
+    state.jitter.pop();
+    const newRow = [];
+    for (let b = 0; b < NUM_BANDS; b++) {
+      const frame = getHistoryFrame(0);
+      const prev = state.jitter[0] ? state.jitter[0][b] : 0;
+      newRow.push(prev + (Math.random() - 0.5) * 4 * frame[b]);
+    }
+    state.jitter.unshift(newRow);
+
+    ctx.clearRect(0, 0, w, h);
+    const colW = w / NUM_BANDS;
+
+    for (let age = DR_HISTORY - 1; age >= 0; age--) {
+      const frame = getHistoryFrame(age);
+      const y = (age / (DR_HISTORY - 1)) * (h - 8) + 4;
+      const alpha = 1 - (age / DR_HISTORY) * 0.9;
+
+      for (let b = 0; b < NUM_BANDS; b++) {
+        const baseX = (b + 0.5) * colW;
+        const jitterX = state.jitter[age] ? state.jitter[age][b] : 0;
+        const x = baseX + jitterX;
+        const val = frame[b];
+        const col = palRGB(lut, val);
+
+        ctx.beginPath();
+        ctx.arc(x, y, 2, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha})`;
+        ctx.fill();
+      }
+    }
+    return true;
+  }
+});
+
+VARIANTS.push({
+  id: 'DR6', section: 'DOT RIDGE', title: 'STAIRCASE DESCENT',
+  desc: 'Step down every 4 frames, square 6px, 4-level brightness, brick-pattern offset',
+  canvasH: 100,
+  draw: function(ctx, w, h, lut) {
+    ctx.clearRect(0, 0, w, h);
+    const cols = NUM_BANDS;
+    const rows = DR_HISTORY;
+    const colW = w / cols;
+    const stepSize = h / (rows / 4 + 1);
+
+    for (let age = rows - 1; age >= 0; age--) {
+      const frame = getHistoryFrame(age);
+      const step = Math.floor(age / 4);
+      const y = step * stepSize + stepSize * 0.5;
+      if (y > h) continue;
+
+      // Horizontal shelf lines
+      ctx.beginPath();
+      ctx.moveTo(0, step * stepSize);
+      ctx.lineTo(w, step * stepSize);
+      ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+
+      for (let b = 0; b < cols; b++) {
+        const val = frame[b];
+        // 4-level brightness
+        const level = Math.floor(val * 4) / 3;
+        if (level < 0.1) continue;
+
+        // Brick-pattern offset
+        const offset = (step % 2 === 0) ? 0 : colW * 0.5;
+        const x = (b + 0.5) * colW + offset;
+        if (x > w) continue;
+
+        const col = palRGB(lut, b / (cols - 1));
+        ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${level})`;
+        ctx.fillRect(x - 3, y - 3, 6, 6);
+      }
+    }
+    return true;
+  }
+});
+
+VARIANTS.push({
+  id: 'DR7', section: 'DOT RIDGE', title: 'CONVERGING HORIZON',
+  desc: 'Dots flow to centre vanishing point, shrink with perspective, converging guide lines',
+  canvasH: 100,
+  draw: function(ctx, w, h, lut) {
+    ctx.clearRect(0, 0, w, h);
+    const cols = NUM_BANDS;
+    const rows = DR_HISTORY;
+    const vanishY = h * 0.5;
+    const vanishX = w * 0.5;
+    const colW = w / cols;
+
+    // Draw converging guide lines
+    for (let b = 0; b < cols; b++) {
+      const topX = (b + 0.5) * colW;
+      ctx.beginPath();
+      ctx.moveTo(topX, 0);
+      ctx.lineTo(vanishX, vanishY);
+      ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    }
+
+    for (let age = rows - 1; age >= 0; age--) {
+      const frame = getHistoryFrame(age);
+      const t = age / (rows - 1); // 0=newest, 1=oldest
+      const perspScale = 1 - t * 0.8;
+
+      for (let b = 0; b < cols; b++) {
+        const topX = (b + 0.5) * colW;
+        const x = topX + (vanishX - topX) * t;
+        const y = t * vanishY;
+        const val = frame[b];
+        const r = Math.max(1, (2 + val * 5) * perspScale);
+        const alpha = (1 - t * 0.7) * (0.3 + val * 0.7);
+        const col = palRGB(lut, val);
+
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha})`;
+        ctx.fill();
+      }
+    }
+    return true;
+  }
+});
+
+VARIANTS.push({
+  id: 'DR8', section: 'DOT RIDGE', title: 'BINARY CURTAIN',
+  desc: 'Full-width horizontal bars, thickness = amplitude, independent scanlines, binary stripes',
+  canvasH: 100,
+  draw: function(ctx, w, h, lut) {
+    ctx.clearRect(0, 0, w, h);
+    const rows = NUM_BANDS;
+    const laneH = h / rows;
+    const newest = getHistoryFrame(0);
+
+    for (let b = 0; b < rows; b++) {
+      const val = newest[b];
+      const thickness = val * laneH * 0.8;
+      const centreY = (b + 0.5) * laneH;
+      const col = palRGB(lut, b / (rows - 1));
+
+      // Main bar
+      ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${0.3 + val * 0.7})`;
+      ctx.fillRect(0, centreY - thickness / 2, w, thickness);
+
+      // Scanline overlay
+      for (let s = 0; s < thickness; s += 2) {
+        ctx.fillStyle = `rgba(0,0,0,0.15)`;
+        ctx.fillRect(0, centreY - thickness / 2 + s, w, 1);
+      }
+    }
+    return true;
+  }
+});
+
+VARIANTS.push({
+  id: 'DR9', section: 'DOT RIDGE', title: 'GLITCH CASCADE',
+  desc: 'Diagonal 45 deg motion, rectangles 2:1, random scanline flicker, stutter freeze',
+  canvasH: 100,
+  draw: function(ctx, w, h, lut, state) {
+    if (!state.frozenFrame) state.frozenFrame = null;
+    if (!state.freezeCount) state.freezeCount = 0;
+
+    ctx.clearRect(0, 0, w, h);
+    const cols = NUM_BANDS;
+    const rows = DR_HISTORY;
+
+    // Random freeze/stutter
+    if (state.freezeCount > 0) {
+      state.freezeCount--;
+    } else if (Math.random() < 0.03) {
+      state.freezeCount = 3;
+    }
+
+    for (let age = rows - 1; age >= 0; age--) {
+      const useAge = state.freezeCount > 0 ? Math.max(0, age - 2) : age;
+      const frame = getHistoryFrame(useAge);
+      const t = age / (rows - 1);
+
+      for (let b = 0; b < cols; b++) {
+        // Diagonal: top-right to bottom-left
+        const x = w - (b + 0.5) * (w / cols) - t * w * 0.3;
+        const y = t * h;
+        if (x < -10 || x > w + 10) continue;
+
+        const val = frame[b];
+        const rectW = val * 12;
+        const rectH = rectW * 0.5;
+        const alpha = (1 - t * 0.8);
+        const col = palRGB(lut, val);
+
+        // Random scanline flicker
+        if (Math.random() < 0.1) continue;
+
+        ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha})`;
+        ctx.fillRect(x - rectW / 2, y - rectH / 2, rectW, rectH);
+      }
+    }
+
+    // Random scanlines
+    for (let i = 0; i < 3; i++) {
+      const sy = Math.random() * h;
+      ctx.fillStyle = `rgba(255,255,255,${Math.random() * 0.05})`;
+      ctx.fillRect(0, sy, w, 1);
+    }
+    return true;
+  }
+});
+
+VARIANTS.push({
+  id: 'DR10', section: 'DOT RIDGE', title: 'HEARTBEAT GRID',
+  desc: 'Static diagonal dots, crosshair shape, faint 8x8 grid, bass-triggered rotation',
+  canvasH: 100,
+  draw: function(ctx, w, h, lut, state) {
+    if (!state.rotateFrames) state.rotateFrames = 0;
+
+    const newest = getHistoryFrame(0);
+    const bassAvg = (newest[0] + newest[1]) / 2;
+    if (bassAvg > 0.6) state.rotateFrames = 3;
+
+    ctx.clearRect(0, 0, w, h);
+    const gridSize = 8;
+    const cellW = w / gridSize;
+    const cellH = h / gridSize;
+
+    // Faint 8x8 grid
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+    ctx.lineWidth = 0.5;
+    for (let i = 0; i <= gridSize; i++) {
+      ctx.beginPath(); ctx.moveTo(i * cellW, 0); ctx.lineTo(i * cellW, h); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i * cellH); ctx.lineTo(w, i * cellH); ctx.stroke();
+    }
+
+    const rotate45 = state.rotateFrames > 0;
+    if (state.rotateFrames > 0) state.rotateFrames--;
+
+    // 8 dots on diagonal
+    for (let b = 0; b < NUM_BANDS; b++) {
+      const val = newest[b];
+      const x = (b + 0.5) * cellW;
+      const y = (b + 0.5) * cellH;
+      const armLen = val * 12;
+      const col = palRGB(lut, b / (NUM_BANDS - 1));
+
+      ctx.save();
+      ctx.translate(x, y);
+      if (rotate45) ctx.rotate(Math.PI / 4);
+
+      // Crosshair (+)
+      ctx.beginPath();
+      ctx.moveTo(-armLen, 0); ctx.lineTo(armLen, 0);
+      ctx.moveTo(0, -armLen); ctx.lineTo(0, armLen);
+      ctx.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${0.5 + val * 0.5})`;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // Centre dot
+      ctx.beginPath();
+      ctx.arc(0, 0, 2, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},1)`;
+      ctx.fill();
+
+      ctx.restore();
+    }
+    return true;
+  }
+});
+
+VARIANTS.push({
+  id: 'DR11', section: 'DOT RIDGE', title: 'RADIAL BURST',
+  desc: 'Dots emanate from centre, 8 radial spokes at 45 deg, hollow rings, arc connections',
+  canvasH: 100,
+  draw: function(ctx, w, h, lut) {
+    ctx.clearRect(0, 0, w, h);
+    const cx = w / 2;
+    const cy = h / 2;
+    const maxR = Math.min(w, h) * 0.45;
+
+    for (let age = DR_HISTORY - 1; age >= 0; age--) {
+      const frame = getHistoryFrame(age);
+      const t = age / (DR_HISTORY - 1);
+      const baseR = t * maxR;
+
+      for (let b = 0; b < NUM_BANDS; b++) {
+        const angle = (b / NUM_BANDS) * Math.PI * 2 - Math.PI / 2;
+        const val = frame[b];
+        const r = baseR + val * 8;
+        const x = cx + Math.cos(angle) * r;
+        const y = cy + Math.sin(angle) * r;
+        const ringThickness = Math.max(0.5, val * 3);
+        const alpha = (1 - t * 0.8) * (0.3 + val * 0.7);
+        const col = palRGB(lut, val);
+
+        // Hollow ring
+        ctx.beginPath();
+        ctx.arc(x, y, 2 + val * 3, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha})`;
+        ctx.lineWidth = ringThickness;
+        ctx.stroke();
+      }
+
+      // Curved arcs between adjacent bands
+      if (age < DR_HISTORY - 1) {
+        const alpha2 = (1 - t * 0.85) * 0.15;
+        for (let b = 0; b < NUM_BANDS; b++) {
+          const angle1 = (b / NUM_BANDS) * Math.PI * 2 - Math.PI / 2;
+          const angle2 = ((b + 1) / NUM_BANDS) * Math.PI * 2 - Math.PI / 2;
+          const val = frame[b];
+          const r1 = baseR + val * 8;
+          const col = palRGB(lut, val);
+          ctx.beginPath();
+          ctx.arc(cx, cy, r1, angle1, angle2);
+          ctx.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha2})`;
+          ctx.lineWidth = 0.5;
+          ctx.stroke();
+        }
+      }
+    }
+    return true;
+  }
+});
+
+VARIANTS.push({
+  id: 'DR12', section: 'DOT RIDGE', title: 'ORBITAL RINGS',
+  desc: '8 concentric rings, diamond dots orbiting clockwise, orbit speed = amplitude, comet trail',
+  canvasH: 100,
+  draw: function(ctx, w, h, lut, state) {
+    if (!state.angles) {
+      state.angles = new Float32Array(NUM_BANDS);
+    }
+
+    ctx.clearRect(0, 0, w, h);
+    const cx = w / 2;
+    const cy = h / 2;
+    const minR = 6;
+    const maxR = Math.min(w, h) * 0.45;
+
+    // Faint concentric circle guides
+    for (let b = 0; b < NUM_BANDS; b++) {
+      const r = minR + (b / (NUM_BANDS - 1)) * (maxR - minR);
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    }
+
+    const newest = getHistoryFrame(0);
+
+    for (let b = 0; b < NUM_BANDS; b++) {
+      const val = newest[b];
+      const r = minR + (b / (NUM_BANDS - 1)) * (maxR - minR);
+      const speed = 0.01 + val * 0.08;
+      state.angles[b] += speed;
+      const angle = state.angles[b];
+      const col = palRGB(lut, b / (NUM_BANDS - 1));
+
+      // Comet trail (3 frames)
+      for (let trail = 3; trail >= 0; trail--) {
+        const tAngle = angle - trail * speed * 2;
+        const tx = cx + Math.cos(tAngle) * r;
+        const ty = cy + Math.sin(tAngle) * r;
+        const tAlpha = trail === 0 ? 1 : (1 - trail / 4) * 0.4;
+
+        // Diamond shape
+        const ds = trail === 0 ? 5 : 3;
+        ctx.beginPath();
+        ctx.moveTo(tx, ty - ds);
+        ctx.lineTo(tx + ds, ty);
+        ctx.lineTo(tx, ty + ds);
+        ctx.lineTo(tx - ds, ty);
+        ctx.closePath();
+        ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${tAlpha})`;
+        ctx.fill();
+      }
+    }
+    return true;
+  }
+});
+
+VARIANTS.push({
+  id: 'DR13', section: 'DOT RIDGE', title: 'DIFFRACTION GRATING',
+  desc: 'Vertical line segments scroll right to left, 1px wide, height = amplitude, moire patterns',
+  canvasH: 100,
+  draw: function(ctx, w, h, lut) {
+    ctx.clearRect(0, 0, w, h);
+    const cols = DR_HISTORY;
+    const rows = NUM_BANDS;
+    const laneH = h / rows;
+
+    ctx.lineWidth = 1;
+    for (let age = 0; age < cols; age++) {
+      const frame = getHistoryFrame(age);
+      const x = w - (age / (cols - 1)) * w;
+
+      for (let b = 0; b < rows; b++) {
+        const val = frame[b];
+        const lineH = val * laneH * 0.9;
+        const centreY = (b + 0.5) * laneH;
+        const col = palRGB(lut, b / (rows - 1));
+        const alpha = (1 - age / cols) * (0.2 + val * 0.8);
+
+        ctx.beginPath();
+        ctx.moveTo(x, centreY - lineH / 2);
+        ctx.lineTo(x, centreY + lineH / 2);
+        ctx.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha})`;
+        ctx.stroke();
+      }
+    }
+    return true;
+  }
+});
+
+VARIANTS.push({
+  id: 'DR14', section: 'DOT RIDGE', title: 'PENDULUM SWING',
+  desc: '8 pendulums from top edge, circle 5px, swing angle = amplitude, arc path trails',
+  canvasH: 100,
+  draw: function(ctx, w, h, lut, state) {
+    if (!state.trails) {
+      state.trails = [];
+      for (let b = 0; b < NUM_BANDS; b++) state.trails.push([]);
+    }
+
+    ctx.clearRect(0, 0, w, h);
+    const cols = NUM_BANDS;
+    const colW = w / cols;
+    const newest = getHistoryFrame(0);
+    const pendulumLen = h * 0.8;
+
+    for (let b = 0; b < cols; b++) {
+      const anchorX = (b + 0.5) * colW;
+      const anchorY = 0;
+      const val = newest[b];
+      const maxAngle = 50 * (Math.PI / 180);
+      // Oscillating swing based on time and amplitude
+      const swingAngle = Math.sin(audioTime * (2 + b * 0.3)) * val * maxAngle;
+
+      const bobX = anchorX + Math.sin(swingAngle) * pendulumLen;
+      const bobY = anchorY + Math.cos(swingAngle) * pendulumLen;
+
+      // Store trail
+      state.trails[b].unshift({ x: bobX, y: bobY });
+      if (state.trails[b].length > 8) state.trails[b].pop();
+
+      const col = palRGB(lut, b / (cols - 1));
+
+      // Pendulum string
+      ctx.beginPath();
+      ctx.moveTo(anchorX, anchorY);
+      ctx.lineTo(bobX, bobY);
+      ctx.strokeStyle = `rgba(255,255,255,0.1)`;
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+
+      // Arc path trails
+      for (let t = state.trails[b].length - 1; t >= 1; t--) {
+        const p = state.trails[b][t];
+        const alpha = (1 - t / 8) * 0.3;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${alpha})`;
+        ctx.fill();
+      }
+
+      // Bob circle
+      ctx.beginPath();
+      ctx.arc(bobX, bobY, 5, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${0.6 + val * 0.4})`;
+      ctx.fill();
+    }
+    return true;
+  }
+});
+
+// ---- DOT MATRIX (DM0-DM9) ----
+const DM_COLS = 40;
+
+VARIANTS.push({
+  id: 'DM0', section: 'DOT MATRIX', title: 'CUBHELIX CLASSIC',
+  desc: 'Circle dots, continuous size = amplitude, colour via palette',
+  canvasH: 80,
+  draw: function(ctx, w, h, lut) {
+    ctx.clearRect(0, 0, w, h);
+    const rows = NUM_BANDS;
+    const cols = DM_COLS;
+    const cellW = w / cols;
+    const cellH = h / rows;
+    const maxR = Math.min(cellW, cellH) * 0.45;
+
+    for (let age = 0; age < cols; age++) {
+      const frame = getHistoryFrame(age);
+      const x = w - (age + 0.5) * cellW;
+
+      for (let b = 0; b < rows; b++) {
+        const val = frame[b];
+        if (val < 0.02) continue;
+        const y = (b + 0.5) * cellH;
+        const r = val * maxR;
+        const col = palRGB(lut, val);
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgb(${col[0]},${col[1]},${col[2]})`;
+        ctx.fill();
+      }
+    }
+    return true;
+  }
+});
+
+VARIANTS.push({
+  id: 'DM1', section: 'DOT MATRIX', title: 'BINARY BLOOM',
+  desc: 'Circle, binary: amplitude > 0.5 = full size, else invisible, fixed white',
+  canvasH: 80,
+  draw: function(ctx, w, h) {
+    ctx.clearRect(0, 0, w, h);
+    const rows = NUM_BANDS;
+    const cols = DM_COLS;
+    const cellW = w / cols;
+    const cellH = h / rows;
+    const maxR = Math.min(cellW, cellH) * 0.4;
+
+    for (let age = 0; age < cols; age++) {
+      const frame = getHistoryFrame(age);
+      const x = w - (age + 0.5) * cellW;
+
+      for (let b = 0; b < rows; b++) {
+        const val = frame[b];
+        if (val <= 0.5) continue;
+        const y = (b + 0.5) * cellH;
+        ctx.beginPath();
+        ctx.arc(x, y, maxR, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+      }
+    }
+    return true;
+  }
+});
+
+VARIANTS.push({
+  id: 'DM2', section: 'DOT MATRIX', title: 'VU LADDER',
+  desc: 'Square, 4 discrete sizes, colour via palette at quantised level',
+  canvasH: 80,
+  draw: function(ctx, w, h, lut) {
+    ctx.clearRect(0, 0, w, h);
+    const rows = NUM_BANDS;
+    const cols = DM_COLS;
+    const cellW = w / cols;
+    const cellH = h / rows;
+    const maxS = Math.min(cellW, cellH) * 0.85;
+
+    for (let age = 0; age < cols; age++) {
+      const frame = getHistoryFrame(age);
+      const cx = w - (age + 0.5) * cellW;
+
+      for (let b = 0; b < rows; b++) {
+        const val = frame[b];
+        const level = Math.floor(val * 4) / 3;
+        if (level < 0.1) continue;
+        const cy = (b + 0.5) * cellH;
+        const s = level * maxS;
+        const col = palRGB(lut, level);
+        ctx.fillStyle = `rgb(${col[0]},${col[1]},${col[2]})`;
+        ctx.fillRect(cx - s / 2, cy - s / 2, s, s);
+      }
+    }
+    return true;
+  }
+});
+
+VARIANTS.push({
+  id: 'DM3', section: 'DOT MATRIX', title: 'GHOST ECHO',
+  desc: 'Circle, continuous size, palette colour x age brightness fade (100% to 15%)',
+  canvasH: 80,
+  draw: function(ctx, w, h, lut) {
+    ctx.clearRect(0, 0, w, h);
+    const rows = NUM_BANDS;
+    const cols = DM_COLS;
+    const cellW = w / cols;
+    const cellH = h / rows;
+    const maxR = Math.min(cellW, cellH) * 0.45;
+
+    for (let age = 0; age < cols; age++) {
+      const frame = getHistoryFrame(age);
+      const x = w - (age + 0.5) * cellW;
+      const ageFactor = 1 - (age / cols) * 0.85; // 100% to 15%
+
+      for (let b = 0; b < rows; b++) {
+        const val = frame[b];
+        if (val < 0.02) continue;
+        const y = (b + 0.5) * cellH;
+        const r = val * maxR;
+        const col = palRGB(lut, val);
+        const bright = ageFactor;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${Math.round(col[0] * bright)},${Math.round(col[1] * bright)},${Math.round(col[2] * bright)},1)`;
+        ctx.fill();
+      }
+    }
+    return true;
+  }
+});
+
+VARIANTS.push({
+  id: 'DM4', section: 'DOT MATRIX', title: 'MONOCHROME SIZE',
+  desc: 'Circle, size 2-16px = amplitude, fixed white, pure size-based breathing',
+  canvasH: 80,
+  draw: function(ctx, w, h) {
+    ctx.clearRect(0, 0, w, h);
+    const rows = NUM_BANDS;
+    const cols = DM_COLS;
+    const cellW = w / cols;
+    const cellH = h / rows;
+
+    for (let age = 0; age < cols; age++) {
+      const frame = getHistoryFrame(age);
+      const x = w - (age + 0.5) * cellW;
+
+      for (let b = 0; b < rows; b++) {
+        const val = frame[b];
+        if (val < 0.02) continue;
+        const y = (b + 0.5) * cellH;
+        const r = 1 + val * 7; // 2px to 16px diameter mapped to canvas scale
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+      }
+    }
+    return true;
+  }
+});
+
+VARIANTS.push({
+  id: 'DM5', section: 'DOT MATRIX', title: 'CROSSHAIR GRID',
+  desc: '+ shape, arm length = amplitude, 8-level quantised brightness, fixed white',
+  canvasH: 80,
+  draw: function(ctx, w, h) {
+    ctx.clearRect(0, 0, w, h);
+    const rows = NUM_BANDS;
+    const cols = DM_COLS;
+    const cellW = w / cols;
+    const cellH = h / rows;
+    const maxArm = Math.min(cellW, cellH) * 0.45;
+
+    ctx.lineWidth = 1;
+    for (let age = 0; age < cols; age++) {
+      const frame = getHistoryFrame(age);
+      const cx = w - (age + 0.5) * cellW;
+
+      for (let b = 0; b < rows; b++) {
+        const val = frame[b];
+        if (val < 0.05) continue;
+        const cy = (b + 0.5) * cellH;
+        const armLen = val * maxArm;
+        const brightness = Math.floor(val * 8) / 7;
+
+        ctx.beginPath();
+        ctx.moveTo(cx - armLen, cy);
+        ctx.lineTo(cx + armLen, cy);
+        ctx.moveTo(cx, cy - armLen);
+        ctx.lineTo(cx, cy + armLen);
+        ctx.strokeStyle = `rgba(255,255,255,${brightness})`;
+        ctx.stroke();
+      }
+    }
+    return true;
+  }
+});
+
+VARIANTS.push({
+  id: 'DM6', section: 'DOT MATRIX', title: 'RING PULSE',
+  desc: 'Hollow ring, outer diameter = amplitude, inner 2px, ring stroke colour via palette',
+  canvasH: 80,
+  draw: function(ctx, w, h, lut) {
+    ctx.clearRect(0, 0, w, h);
+    const rows = NUM_BANDS;
+    const cols = DM_COLS;
+    const cellW = w / cols;
+    const cellH = h / rows;
+    const maxR = Math.min(cellW, cellH) * 0.45;
+
+    for (let age = 0; age < cols; age++) {
+      const frame = getHistoryFrame(age);
+      const cx = w - (age + 0.5) * cellW;
+
+      for (let b = 0; b < rows; b++) {
+        const val = frame[b];
+        if (val < 0.05) continue;
+        const cy = (b + 0.5) * cellH;
+        const outerR = val * maxR;
+        if (outerR < 1.5) continue;
+        const innerR = 1;
+        const strokeW = Math.max(0.5, (outerR - innerR) * 0.5);
+        const drawR = (outerR + innerR) / 2;
+
+        const col = palRGB(lut, val);
+        ctx.beginPath();
+        ctx.arc(cx, cy, drawR, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgb(${col[0]},${col[1]},${col[2]})`;
+        ctx.lineWidth = strokeW;
+        ctx.stroke();
+      }
+    }
+    return true;
+  }
+});
+
+VARIANTS.push({
+  id: 'DM7', section: 'DOT MATRIX', title: 'PIXEL MOSAIC',
+  desc: 'Square blocks, no gaps, fill entire cell, colour quantised to 8 palette levels',
+  canvasH: 80,
+  draw: function(ctx, w, h, lut) {
+    ctx.clearRect(0, 0, w, h);
+    const rows = NUM_BANDS;
+    const cols = DM_COLS;
+    const cellW = Math.ceil(w / cols);
+    const cellH = Math.ceil(h / rows);
+
+    for (let age = 0; age < cols; age++) {
+      const frame = getHistoryFrame(age);
+      const x = Math.floor(w - (age + 1) * (w / cols));
+
+      for (let b = 0; b < rows; b++) {
+        const val = frame[b];
+        const level = Math.floor(val * 8) / 7;
+        if (level < 0.05) continue;
+        const y = Math.floor(b * (h / rows));
+        const col = palRGB(lut, level);
+        ctx.fillStyle = `rgb(${col[0]},${col[1]},${col[2]})`;
+        ctx.fillRect(x, y, cellW + 1, cellH + 1);
+      }
+    }
+    return true;
+  }
+});
+
+VARIANTS.push({
+  id: 'DM8', section: 'DOT MATRIX', title: 'STROBE BLADE',
+  desc: 'Vertical dash 2px wide, height = amplitude, fixed white, 8-level brightness, scanlines',
+  canvasH: 80,
+  draw: function(ctx, w, h) {
+    ctx.clearRect(0, 0, w, h);
+    const rows = NUM_BANDS;
+    const cols = DM_COLS;
+    const cellW = w / cols;
+    const cellH = h / rows;
+
+    // Faint horizontal scanlines every 4 rows
+    ctx.fillStyle = 'rgba(255,255,255,0.02)';
+    for (let r = 0; r < rows; r += 4) {
+      ctx.fillRect(0, r * cellH, w, 1);
+    }
+
+    for (let age = 0; age < cols; age++) {
+      const frame = getHistoryFrame(age);
+      const cx = w - (age + 0.5) * cellW;
+
+      for (let b = 0; b < rows; b++) {
+        const val = frame[b];
+        if (val < 0.05) continue;
+        const cy = (b + 0.5) * cellH;
+        const dashH = val * cellH * 0.9;
+        const brightness = Math.floor(val * 8) / 7;
+
+        ctx.fillStyle = `rgba(255,255,255,${brightness})`;
+        ctx.fillRect(cx - 1, cy - dashH / 2, 2, dashH);
+      }
+    }
+    return true;
+  }
+});
+
+VARIANTS.push({
+  id: 'DM9', section: 'DOT MATRIX', title: 'BEAT FLASH COLUMN',
+  desc: 'Circle, continuous size, palette colour, newest column flashes white on bass kicks',
+  canvasH: 80,
+  draw: function(ctx, w, h, lut, state) {
+    if (!state.flashFrames) state.flashFrames = 0;
+
+    const newest = getHistoryFrame(0);
+    const bassAvg = (newest[0] + newest[1]) / 2;
+    if (bassAvg > 0.6) state.flashFrames = 2;
+
+    ctx.clearRect(0, 0, w, h);
+    const rows = NUM_BANDS;
+    const cols = DM_COLS;
+    const cellW = w / cols;
+    const cellH = h / rows;
+    const maxR = Math.min(cellW, cellH) * 0.45;
+
+    const flash = state.flashFrames > 0;
+    if (state.flashFrames > 0) state.flashFrames--;
+
+    for (let age = 0; age < cols; age++) {
+      const frame = getHistoryFrame(age);
+      const x = w - (age + 0.5) * cellW;
+
+      for (let b = 0; b < rows; b++) {
+        const val = frame[b];
+        if (val < 0.02) continue;
+        const y = (b + 0.5) * cellH;
+        const r = val * maxR;
+
+        let colour;
+        if (age === 0 && flash) {
+          colour = '#fff';
+        } else {
+          const col = palRGB(lut, val);
+          colour = `rgb(${col[0]},${col[1]},${col[2]})`;
+        }
+
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = colour;
+        ctx.fill();
+      }
+    }
+    return true;
+  }
+});
+
+/* ===================================================================
+   APP INIT
+   =================================================================== */
+const container = document.getElementById('app');
+const fpsEl = document.getElementById('fps-counter');
+
+// Build HTML
+let html = '<h1>AUDIO VIZ EXPLORER</h1>';
+html += '<div class="subtitle">29 variants &middot; 4 palettes &middot; tap to cycle</div>';
+
+let currentSection = '';
+const canvasEntries = [];
+
+VARIANTS.forEach((v, idx) => {
+  if (v.section !== currentSection) {
+    currentSection = v.section;
+    html += `<div class="section-title">${currentSection}</div>`;
+  }
+  const canvasId = 'canvas-' + v.id;
+  const stripId = 'strip-' + v.id;
+  html += `<div class="card" data-idx="${idx}">`;
+  html += `<div class="card-title">${v.id} &mdash; ${v.title}</div>`;
+  html += `<div class="card-desc">${v.desc}</div>`;
+  html += `<canvas id="${canvasId}" height="${v.canvasH}"></canvas>`;
+  html += `<div class="palette-strip" id="${stripId}"></div>`;
+  html += '</div>';
+});
+
+container.innerHTML = html;
+
+// Initialise canvas entries
+VARIANTS.forEach((v, idx) => {
+  const canvas = document.getElementById('canvas-' + v.id);
+  const strip = document.getElementById('strip-' + v.id);
+  const dpr = window.devicePixelRatio || 1;
+
+  // Set display size
+  const displayW = canvas.parentElement.clientWidth - 16; // padding
+  canvas.style.width = displayW + 'px';
+  canvas.style.height = v.canvasH + 'px';
+
+  // Set actual size in memory (scaled for retina)
+  canvas.width = displayW * dpr;
+  canvas.height = v.canvasH * dpr;
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const entry = {
+    variant: v,
+    canvas: canvas,
+    ctx: ctx,
+    strip: strip,
+    w: displayW,
+    h: v.canvasH,
+    paletteIndex: 0,
+    visible: false,
+    state: {}
+  };
+
+  // Set initial palette strip
+  strip.style.background = paletteGradientCSS(PALETTES[0]);
+
+  canvasEntries.push(entry);
+});
+
+// Click/tap to cycle palette
+document.querySelectorAll('.card').forEach(card => {
+  card.addEventListener('click', function() {
+    const idx = parseInt(this.dataset.idx);
+    const entry = canvasEntries[idx];
+    entry.paletteIndex = (entry.paletteIndex + 1) % PALETTES.length;
+    entry.strip.style.background = paletteGradientCSS(PALETTES[entry.paletteIndex]);
+  });
+});
+
+// IntersectionObserver for viewport-only rendering
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(ioEntry => {
+    const canvas = ioEntry.target;
+    const idx = canvasEntries.findIndex(e => e.canvas === canvas);
+    if (idx >= 0) {
+      canvasEntries[idx].visible = ioEntry.isIntersecting;
+    }
+  });
+}, { rootMargin: '200px' });
+
+canvasEntries.forEach(entry => observer.observe(entry.canvas));
+
+/* ===================================================================
+   RENDER LOOP
+   =================================================================== */
+let lastAudioTick = 0;
+let frameCount = 0;
+let fpsTime = 0;
+
+function renderLoop(timestamp) {
+  requestAnimationFrame(renderLoop);
+
+  // Audio tick at 30 FPS
+  const audioInterval = 1000 / AUDIO_FPS;
+  if (timestamp - lastAudioTick >= audioInterval) {
+    lastAudioTick = timestamp;
+    tickAudio();
+  }
+
+  // FPS counter
+  frameCount++;
+  if (timestamp - fpsTime >= 1000) {
+    fpsEl.textContent = frameCount + ' FPS';
+    frameCount = 0;
+    fpsTime = timestamp;
+  }
+
+  // Render visible canvases
+  for (let i = 0; i < canvasEntries.length; i++) {
+    const entry = canvasEntries[i];
+    if (!entry.visible) continue;
+
+    const pal = PALETTES[entry.paletteIndex];
+    entry.variant.draw(entry.ctx, entry.w, entry.h, pal.lut, entry.state);
+  }
+}
+
+// Kick off
+requestAnimationFrame(renderLoop);
+
+/* ===================================================================
+   HANDLE RESIZE
+   =================================================================== */
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    const dpr = window.devicePixelRatio || 1;
+    canvasEntries.forEach(entry => {
+      const displayW = entry.canvas.parentElement.clientWidth - 16;
+      entry.canvas.style.width = displayW + 'px';
+      entry.canvas.width = displayW * dpr;
+      entry.canvas.height = entry.variant.canvasH * dpr;
+      entry.ctx = entry.canvas.getContext('2d');
+      entry.ctx.scale(dpr, dpr);
+      entry.w = displayW;
+    });
+  }, 150);
+});
+</script>
+</body>
+</html>

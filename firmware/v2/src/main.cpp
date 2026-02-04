@@ -29,17 +29,27 @@
 #include "effects/CoreEffects.h"
 #include "effects/zones/ZoneComposer.h"
 #include "effects/PatternRegistry.h"
+#if FEATURE_TRANSITIONS
 #include "effects/transitions/TransitionEngine.h"
 #include "effects/transitions/TransitionTypes.h"
+#endif
 #include "core/narrative/NarrativeEngine.h"
 #include "core/actors/ShowDirectorActor.h"
 #include "core/shows/BuiltinShows.h"
 #include "plugins/api/IEffect.h"
 #include "plugins/PluginManagerActor.h"
+#if FEATURE_STACK_PROFILING
 #include "core/system/StackMonitor.h"
+#endif
+#if FEATURE_HEAP_MONITORING
 #include "core/system/HeapMonitor.h"
+#endif
+#if FEATURE_MEMORY_LEAK_DETECTION
 #include "core/system/MemoryLeakDetector.h"
+#endif
+#if FEATURE_VALIDATION_PROFILING
 #include "core/system/ValidationProfiler.h"
+#endif
 #include "core/system/OtaBootVerifier.h"
 #include "core/system/OtaTokenManager.h"
 
@@ -52,6 +62,9 @@
 #include "config/DebugConfig.h"
 
 #if FEATURE_WEB_SERVER
+#ifndef NATIVE_BUILD
+#include <esp_wifi.h>
+#endif
 #include "network/WiFiManager.h"
 #include "network/WiFiCredentialManager.h"
 #include "network/WebServer.h"
@@ -67,7 +80,9 @@ using namespace lightwaveos::persistence;
 using namespace lightwaveos::actors;
 using namespace lightwaveos::effects;
 using namespace lightwaveos::zones;
+#if FEATURE_TRANSITIONS
 using namespace lightwaveos::transitions;
+#endif
 using namespace lightwaveos::narrative;
 using namespace lightwaveos::plugins;
 
@@ -109,31 +124,43 @@ void setup() {
     lightwaveos::core::system::OtaBootVerifier::init();
 #endif
 
+#if FEATURE_WEB_SERVER && !defined(NATIVE_BUILD)
+    // Force clean WiFi state before any WiFi use (avoids esp_wifi_init 257 / "Failed to deinit" on no-PSRAM)
+    esp_err_t deinit = esp_wifi_deinit();
+    if (deinit != ESP_OK && deinit != ESP_ERR_WIFI_NOT_INIT) {
+        LW_LOGW("esp_wifi_deinit() returned %d", deinit);
+    }
+#endif
+
     LW_LOGI("==========================================");
     LW_LOGI("LightwaveOS v2 - Actor System + Zones");
     LW_LOGI("==========================================");
 
     // Initialize Actor System (creates RendererActor)
     // Initialize system monitoring (must be before actors start)
+#if FEATURE_STACK_PROFILING
     lightwaveos::core::system::StackMonitor::init();
     LW_LOGI("Stack Monitor: INITIALIZED");
-    
-    // Start stack profiling
     lightwaveos::core::system::StackMonitor::startProfiling();
     LW_LOGI("Stack Profiling: STARTED");
-    
+#endif
+#if FEATURE_HEAP_MONITORING
     lightwaveos::core::system::HeapMonitor::init();
     LW_LOGI("Heap Monitor: INITIALIZED");
-    
+#endif
+#if FEATURE_MEMORY_LEAK_DETECTION
     lightwaveos::core::system::MemoryLeakDetector::init();
     LW_LOGI("Memory Leak Detector: INITIALIZED");
-    
+#endif
+#if FEATURE_VALIDATION_PROFILING
     lightwaveos::core::system::ValidationProfiler::init();
     LW_LOGI("Validation Profiler: INITIALIZED");
-    
+#endif
+#if FEATURE_MEMORY_LEAK_DETECTION
     // Reset baseline after all initialization
     delay(1000);  // Wait for system to stabilize
     lightwaveos::core::system::MemoryLeakDetector::resetBaseline();
+#endif
 
     LW_LOGI("Initializing Actor System...");
     if (!actors.init()) {
@@ -181,9 +208,9 @@ void setup() {
             LW_LOGI("Zone Composer: INITIALIZED (restored from NVS)");
         } else {
             // First boot - load default preset
-            zoneComposer.loadPreset(2);
+            zoneComposer.loadPreset(1);
             LW_LOGI("Zone Composer: INITIALIZED");
-            LW_LOGI("Preset: Triple Rings (default)");
+            LW_LOGI("Preset: Dual Split (default)");
         }
     }
 
@@ -194,6 +221,12 @@ void setup() {
         while(1) delay(1000);  // Halt
     }
     LW_LOGI("Actor System: RUNNING");
+#ifndef NATIVE_BUILD
+    LW_LOGI("Boot memory: heap %lu bytes free", (unsigned long)ESP.getFreeHeap());
+#ifdef CONFIG_SPIRAM_SUPPORT
+    LW_LOGI("Boot memory: PSRAM %lu bytes free", (unsigned long)ESP.getFreePsram());
+#endif
+#endif
 
     // Initialize Plugin Manager
     LW_LOGI("Initializing Plugin Manager...");
@@ -236,8 +269,9 @@ void setup() {
         NetworkConfig::WIFI_SSID_VALUE,
         NetworkConfig::WIFI_PASSWORD_VALUE
     );
-    // STA-only: do not enable SoftAP fallback here.
-    // If you want AP provisioning, explicitly re-enable this call.
+    // Enable AP fallback — K1 is a sealed device with no USB access.
+    // Without this, a WiFi drop makes the device permanently unreachable.
+    WIFI_MANAGER.enableSoftAP("LightwaveOS-AP", "SpectraSynq");
 
     if (!WIFI_MANAGER.begin()) {
         LW_LOGE("WiFiManager failed to start!");
@@ -259,7 +293,7 @@ void setup() {
             LW_LOGI("WiFi: CONNECTED to %s", NetworkConfig::WIFI_SSID_VALUE);
             LW_LOGI("IP: %s", WiFi.localIP().toString().c_str());
         } else if (WIFI_MANAGER.isAPMode()) {
-            LW_LOGI("WiFi: AP MODE (connect to LightwaveOS-Setup)");
+            LW_LOGI("WiFi: AP MODE (connect to LightwaveOS-AP)");
             LW_LOGI("IP: %s", WiFi.softAPIP().toString().c_str());
         }
 
@@ -269,24 +303,33 @@ void setup() {
         }
     }
 
-    // Start WebServer
-    LW_LOGI("Starting Web Server...");
-
-    // Instantiate WebServer with dependencies
-    webServerInstance = new WebServer(actors, renderer);
-
-    // Note: PluginManager wiring to WebServer not yet implemented
-    // TODO: Add setPluginManager() to WebServer when plugin web UI is needed
-    if (pluginManager) {
-        LW_LOGI("Plugin Manager: Created (WebServer integration pending)");
-    }
-
-    if (!webServerInstance->begin()) {
-        LW_LOGW("Web Server failed to start!");
+    // Start WebServer (skip when heap too low to avoid OOM abort on no-PSRAM)
+    const size_t kMinHeapForWebServer = 38000;
+    size_t freeHeap = ESP.getFreeHeap();
+    if (freeHeap < kMinHeapForWebServer) {
+        LW_LOGW("Insufficient heap for WebServer (%u bytes free, need %u), skipping",
+                (unsigned)freeHeap, (unsigned)kMinHeapForWebServer);
     } else {
-        LW_LOGI("Web Server: RUNNING");
-        LW_LOGI("REST API: http://lightwaveos.local/api/v1/");
-        LW_LOGI("WebSocket: ws://lightwaveos.local/ws");
+        LW_LOGI("Starting Web Server... (free heap: %u)", (unsigned)freeHeap);
+
+        // Instantiate WebServer with dependencies
+        webServerInstance = new WebServer(actors, renderer);
+
+        // Note: PluginManager wiring to WebServer not yet implemented
+        // TODO: Add setPluginManager() to WebServer when plugin UI wiring is needed
+        if (pluginManager) {
+            LW_LOGI("Plugin Manager: Created (WebServer integration pending)");
+        }
+
+        if (!webServerInstance->begin()) {
+            LW_LOGW("Web Server failed to start!");
+            delete webServerInstance;
+            webServerInstance = nullptr;
+        } else {
+            LW_LOGI("Web Server: RUNNING");
+            LW_LOGI("REST API: http://lightwaveos.local/api/v1/");
+            LW_LOGI("WebSocket: ws://lightwaveos.local/ws");
+        }
     }
 #endif
 
@@ -654,13 +697,19 @@ void loop() {
             }
         }
         else if (peekChar == 'a' && input.length() > 1) {
+#if FEATURE_VALIDATION_PROFILING
             if (inputLower.startsWith("validation_stats") || inputLower == "val_stats") {
                 lightwaveos::core::system::ValidationProfiler::generateReport();
                 handledMulti = true;
-            } else if (inputLower.startsWith("stack_usage") || inputLower == "stack_profile") {
+            } else
+#endif
+#if FEATURE_STACK_PROFILING
+            if (inputLower.startsWith("stack_usage") || inputLower == "stack_profile") {
                 lightwaveos::core::system::StackMonitor::generateProfileReport();
                 handledMulti = true;
-            } else if (input.startsWith("ae")) {
+            } else
+#endif
+            if (input.startsWith("ae")) {
                 handledMulti = true;
                 auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
                 auto& cfg = engine.getConfig();
@@ -1740,6 +1789,7 @@ void loop() {
                     break;
 
                 case '!':
+#if FEATURE_TRANSITIONS
                     // List transition types
                     Serial.println("\n=== Transition Types ===");
                     for (uint8_t i = 0; i < static_cast<uint8_t>(TransitionType::TYPE_COUNT); i++) {
@@ -1748,6 +1798,9 @@ void loop() {
                                       getDefaultDuration(static_cast<TransitionType>(i)));
                     }
                     Serial.println();
+#else
+                    Serial.println("Transitions disabled (FH4 build)");
+#endif
                     break;
 
                 case 'A':
@@ -2062,32 +2115,24 @@ void loop() {
     // Update NarrativeEngine (auto-play mode)
     NARRATIVE.update();
 
-    // Print status every 10 seconds
+    // Periodic system health checks every 10 seconds
     if (now - lastStatus > 10000) {
-        const RenderStats& stats = renderer->getStats();
-        if (zoneComposer.isEnabled()) {
-            Serial.printf("[Status] FPS: %d, CPU: %d%%, Mode: ZONES (%d zones)\n",
-                          stats.currentFPS,
-                          stats.cpuPercent,
-                          zoneComposer.getZoneCount());
-        } else {
-            Serial.printf("[Status] FPS: %d, CPU: %d%%, Effect: %s\n",
-                          stats.currentFPS,
-                          stats.cpuPercent,
-                          renderer->getEffectName(currentEffect));
-        }
-        
         // Periodic system health checks
+#if FEATURE_STACK_PROFILING
         lightwaveos::core::system::StackMonitor::checkAllTasks();
+#endif
+#if FEATURE_HEAP_MONITORING
         lightwaveos::core::system::HeapMonitor::checkHeapIntegrity();
-        
+#endif
+#if FEATURE_MEMORY_LEAK_DETECTION
         // Scan for memory leaks (every 10 seconds)
         static uint32_t lastLeakScan = 0;
         if (now - lastLeakScan > 10000) {
             lightwaveos::core::system::MemoryLeakDetector::scanForLeaks();
             lastLeakScan = now;
         }
-        
+#endif
+
         lastStatus = now;
     }
 

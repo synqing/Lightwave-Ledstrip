@@ -389,6 +389,20 @@ public:
      */
     const audio::MusicalGridSnapshot& getLastMusicalGrid() const { return m_lastMusicalGrid; }
 
+    /**
+     * @brief Get current audio sync mode for status/telemetry.
+     *
+     * - "trinity" when Trinity sync is active and proxy is fresh.
+     * - "es" (or LWLS internal backend) otherwise.
+     */
+    const char* getAudioSyncMode() const {
+        // NOTE: This is intentionally coarse-grained and mirrors the render-time
+        // gating used when selecting TrinityControlBusProxy vs live audio.
+        return (m_trinitySyncActive && m_trinityProxy.isActive() && !m_trinitySyncPaused)
+            ? "trinity"
+            : "es";
+    }
+
 #if !FEATURE_AUDIO_BACKEND_ESV11
     // ========================================================================
     // TempoTracker Integration (replaces K1)

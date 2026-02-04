@@ -1112,6 +1112,9 @@ void WebServer::doBroadcastStatus() {
     // Add audio metrics (BPM, KEY, MIC)
     auto* audio = m_orchestrator.getAudio();
     if (audio) {
+        if (m_orchestrator.getRenderer() != nullptr) {
+            doc["audioSyncMode"] = m_orchestrator.getRenderer()->getAudioSyncMode();
+        }
 #if FEATURE_AUDIO_BACKEND_ESV11
         audio::ControlBusFrame frame{};
         audio->getControlBusBuffer().ReadLatest(frame);

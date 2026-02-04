@@ -34,12 +34,6 @@
 	<string>LightwaveOS needs to discover LED controllers on your local network.</string>
 	<key>UIBackgroundModes</key>
 	<array/>
-	<key>UIAppFonts</key>
-	<array>
-		<string>BebasNeue-Bold.ttf</string>
-		<string>Rajdhani-Medium.ttf</string>
-		<string>JetBrainsMono-Medium.ttf</string>
-	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
 </dict>

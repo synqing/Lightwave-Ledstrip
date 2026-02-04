@@ -1,0 +1,88 @@
+{
+  "version": 1,
+  "source": "LightwaveOS/Utilities/Rive/RiveAssetRegistry.swift",
+  "artboardSize": {
+    "width": 390,
+    "height": 844,
+    "units": "pt"
+  },
+  "viewModelNaming": "VM_<ArtboardName>",
+  "assets": [
+    {
+      "id": "connectionIndicator",
+      "fileName": "lw_connection_indicator",
+      "artboard": "ConnectionIndicator",
+      "stateMachine": "Connection",
+      "inputs": [
+        {"name": "isConnected", "type": "bool"},
+        {"name": "isConnecting", "type": "bool"},
+        {"name": "isDiscovering", "type": "bool"},
+        {"name": "hasError", "type": "bool"}
+      ]
+    },
+    {
+      "id": "discoveryEmptyState",
+      "fileName": "lw_discovery_empty_state",
+      "artboard": "Discovery",
+      "stateMachine": "Discovery",
+      "inputs": [
+        {"name": "isSearching", "type": "bool"}
+      ]
+    },
+    {
+      "id": "beatPulse",
+      "fileName": "lw_beat_pulse",
+      "artboard": "BeatPulse",
+      "stateMachine": "Beat",
+      "inputs": [
+        {"name": "isBeating", "type": "bool"},
+        {"name": "isDownbeat", "type": "bool"},
+        {"name": "confidence", "type": "number"}
+      ]
+    },
+    {
+      "id": "heroOverlay",
+      "fileName": "lw_hero_overlay",
+      "artboard": "HeroOverlay",
+      "stateMachine": "Hero",
+      "inputs": [
+        {"name": "bpm", "type": "number"},
+        {"name": "confidence", "type": "number"},
+        {"name": "isBeating", "type": "bool"}
+      ]
+    },
+    {
+      "id": "patternPillAccent",
+      "fileName": "lw_pattern_pill_accent",
+      "artboard": "PatternPill",
+      "stateMachine": "Accent",
+      "inputs": [
+        {"name": "index", "type": "number"},
+        {"name": "count", "type": "number"}
+      ]
+    },
+    {
+      "id": "palettePillAccent",
+      "fileName": "lw_palette_pill_accent",
+      "artboard": "PalettePill",
+      "stateMachine": "Accent",
+      "inputs": [
+        {"name": "index", "type": "number"},
+        {"name": "count", "type": "number"}
+      ]
+    },
+    {
+      "id": "audioMicroInteraction",
+      "fileName": "lw_audio_micro",
+      "artboard": "AudioMicro",
+      "stateMachine": "Audio",
+      "inputs": [
+        {"name": "rms", "type": "number"},
+        {"name": "flux", "type": "number"},
+        {"name": "confidence", "type": "number"},
+        {"name": "isSilent", "type": "bool"},
+        {"name": "isBeating", "type": "bool"}
+      ]
+    }
+  ]
+}

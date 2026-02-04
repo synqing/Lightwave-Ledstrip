@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Hero LED Preview — 320 LEDs (Two Rows)</title>
+<style>
+  :root {
+    --lw-base: #0F1219;
+    --lw-card: #1E2535;
+    --lw-gold: #FFB84D;
+  }
+  body {
+    margin: 0;
+    background: var(--lw-base);
+    color: white;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    display: grid;
+    place-items: center;
+    min-height: 100vh;
+  }
+  .card {
+    background: var(--lw-card);
+    padding: 24px;
+    border-radius: 24px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    width: 420px;
+  }
+  h1 {
+    font-size: 14px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin: 0 0 12px 0;
+    color: #9CA3B0;
+  }
+  canvas {
+    width: 100%;
+    height: 140px;
+    border-radius: 20px;
+    display: block;
+    background: linear-gradient(180deg, #1E2535, #1A2030);
+    box-shadow: 0 0 40px rgba(255,184,77,0.12);
+  }
+  .legend {
+    margin-top: 10px;
+    font-size: 12px;
+    color: #9CA3B0;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Hero LED Preview (320 LEDs, 2x160)</h1>
+    <canvas id="hero" width="800" height="280"></canvas>
+    <div class="legend">Centre markers at LED 79/80 in each row.</div>
+  </div>
+
+<script>
+  const canvas = document.getElementById('hero');
+  const ctx = canvas.getContext('2d');
+
+  const width = canvas.width;
+  const height = canvas.height;
+  const rows = 2;
+  const ledsPerRow = 160;
+  const ledWidth = width / ledsPerRow;
+  const rowHeight = height / rows;
+  const centreX = (79.5 / 160) * width;
+
+  // Generate 320 LED RGB values (gradient + sine blue)
+  const ledData = [];
+  for (let i = 0; i < 320; i++) {
+    const t = i / 319;
+    const r = Math.round(255 * t);
+    const g = Math.round(255 * (1 - t));
+    const b = Math.round(128 + 127 * Math.sin(t * Math.PI * 2));
+    ledData.push(r, g, b);
+  }
+
+  for (let row = 0; row < rows; row++) {
+    const baseIndex = row * ledsPerRow;
+    const y = row * rowHeight;
+
+    for (let i = 0; i < ledsPerRow; i++) {
+      const idx = (baseIndex + i) * 3;
+      const r = ledData[idx];
+      const g = ledData[idx + 1];
+      const b = ledData[idx + 2];
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      ctx.fillRect(i * ledWidth, y, ledWidth + 1, rowHeight);
+    }
+
+    // Centre marker per row
+    ctx.strokeStyle = 'rgba(255,184,77,0.6)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(centreX, y);
+    ctx.lineTo(centreX, y + rowHeight);
+    ctx.stroke();
+  }
+</script>
+</body>
+</html>

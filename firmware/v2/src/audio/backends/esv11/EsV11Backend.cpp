@@ -33,6 +33,7 @@ bool EsV11Backend::init()
     init_window_lookup();
     init_goertzel_constants();
     init_tempo_goertzel_constants();
+    init_vu();
     init_i2s_microphone();
 
     m_sampleIndex = 0;
@@ -157,4 +158,3 @@ void EsV11Backend::getLatestOutputs(EsV11Outputs& out) const
 } // namespace lightwaveos::audio::esv11
 
 #endif
-

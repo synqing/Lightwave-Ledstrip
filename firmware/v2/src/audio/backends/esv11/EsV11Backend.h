@@ -10,7 +10,7 @@
 
 #pragma once
 
-#include "../../config/features.h"
+#include "config/features.h"
 
 #if FEATURE_AUDIO_SYNC && FEATURE_AUDIO_BACKEND_ESV11
 
@@ -79,4 +79,3 @@ private:
 } // namespace lightwaveos::audio::esv11
 
 #endif // FEATURE_AUDIO_SYNC && FEATURE_AUDIO_BACKEND_ESV11
-

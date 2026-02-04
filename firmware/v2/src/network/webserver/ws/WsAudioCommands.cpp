@@ -9,6 +9,7 @@
 #include "../../ApiResponse.h"
 #include "../../../audio/AudioTuning.h"
 #include "../../../config/audio_config.h"
+#include "../../../config/features.h"
 #include "../../../core/actors/ActorSystem.h"
 #include "../../../core/actors/RendererActor.h"
 #include "../../../audio/contracts/ControlBus.h"
@@ -39,6 +40,48 @@ static void handleAudioParametersGet(AsyncWebSocketClient* client, JsonDocument&
         return;
     }
     
+#if FEATURE_AUDIO_BACKEND_ESV11
+    ControlBusFrame frame{};
+    uint32_t seq = audio->getControlBusBuffer().ReadLatest(frame);
+    AudioContractTuning contract = ctx.renderer ? ctx.renderer->getAudioContractTuning()
+                                                 : clampAudioContractTuning(AudioContractTuning{});
+
+    String response = buildWsResponse("audio.parameters", requestId, [&frame, seq, &contract](JsonObject& data) {
+        data["backend"] = "esv11";
+        data["seq"] = seq;
+
+        JsonObject contractObj = data["contract"].to<JsonObject>();
+        contractObj["audioStalenessMs"] = contract.audioStalenessMs;
+        contractObj["bpmMin"] = contract.bpmMin;
+        contractObj["bpmMax"] = contract.bpmMax;
+        contractObj["bpmTau"] = contract.bpmTau;
+        contractObj["confidenceTau"] = contract.confidenceTau;
+        contractObj["phaseCorrectionGain"] = contract.phaseCorrectionGain;
+        contractObj["barCorrectionGain"] = contract.barCorrectionGain;
+        contractObj["beatsPerBar"] = contract.beatsPerBar;
+        contractObj["beatUnit"] = contract.beatUnit;
+
+        JsonObject latest = data["latest"].to<JsonObject>();
+        latest["rms"] = frame.rms;
+        latest["flux"] = frame.flux;
+        latest["bpm"] = frame.es_bpm;
+        latest["tempoConfidence"] = frame.es_tempo_confidence;
+        latest["phase01AtAudioT"] = frame.es_phase01_at_audio_t;
+        latest["beatTick"] = frame.es_beat_tick;
+        latest["downbeatTick"] = frame.es_downbeat_tick;
+        latest["beatInBar"] = frame.es_beat_in_bar;
+        latest["beatStrength"] = frame.es_beat_strength;
+
+        JsonObject caps = data["capabilities"].to<JsonObject>();
+        caps["sampleRate"] = frame.t.sample_rate_hz;
+        caps["hopSize"] = 64 * 4;
+        caps["bandCount"] = CONTROLBUS_NUM_BANDS;
+        caps["chromaCount"] = CONTROLBUS_NUM_CHROMA;
+        caps["waveformPoints"] = CONTROLBUS_WAVEFORM_N;
+        caps["bins64"] = ControlBusFrame::BINS_64_COUNT;
+    });
+    client->text(response);
+#else
     AudioPipelineTuning pipeline = audio->getPipelineTuning();
     AudioDspState state = audio->getDspState();
     AudioContractTuning contract = ctx.renderer ? ctx.renderer->getAudioContractTuning()
@@ -135,6 +178,7 @@ static void handleAudioParametersGet(AsyncWebSocketClient* client, JsonDocument&
         caps["waveformPoints"] = CONTROLBUS_WAVEFORM_N;
     });
     client->text(response);
+#endif
 }
 
 static void handleAudioParametersSet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
@@ -145,6 +189,39 @@ static void handleAudioParametersSet(AsyncWebSocketClient* client, JsonDocument&
         return;
     }
     
+#if FEATURE_AUDIO_BACKEND_ESV11
+    if (ctx.renderer == nullptr) {
+        client->text(buildWsError(ErrorCodes::SYSTEM_NOT_READY, "Renderer not available", requestId));
+        return;
+    }
+    if (!doc.containsKey("contract")) {
+        client->text(buildWsError(ErrorCodes::MISSING_FIELD, "Missing 'contract' object", requestId));
+        return;
+    }
+
+    AudioContractTuning contract = ctx.renderer->getAudioContractTuning();
+    JsonObject c = doc["contract"].as<JsonObject>();
+    if (c.containsKey("audioStalenessMs")) contract.audioStalenessMs = c["audioStalenessMs"].as<uint16_t>();
+    if (c.containsKey("bpmMin")) contract.bpmMin = c["bpmMin"].as<float>();
+    if (c.containsKey("bpmMax")) contract.bpmMax = c["bpmMax"].as<float>();
+    if (c.containsKey("bpmTau")) contract.bpmTau = c["bpmTau"].as<float>();
+    if (c.containsKey("confidenceTau")) contract.confidenceTau = c["confidenceTau"].as<float>();
+    if (c.containsKey("phaseCorrectionGain")) contract.phaseCorrectionGain = c["phaseCorrectionGain"].as<float>();
+    if (c.containsKey("barCorrectionGain")) contract.barCorrectionGain = c["barCorrectionGain"].as<float>();
+    if (c.containsKey("beatsPerBar")) contract.beatsPerBar = c["beatsPerBar"].as<uint8_t>();
+    if (c.containsKey("beatUnit")) contract.beatUnit = c["beatUnit"].as<uint8_t>();
+
+    ctx.renderer->setAudioContractTuning(contract);
+
+    String response = buildWsResponse("audio.parameters.changed", requestId,
+                                      [](JsonObject& data) {
+        JsonArray updated = data["updated"].to<JsonArray>();
+        updated.add("contract");
+    });
+    client->text(response);
+    (void)audio;
+    return;
+#else
     bool updatedPipeline = false;
     bool updatedContract = false;
     bool resetState = false;
@@ -289,6 +366,7 @@ static void handleAudioParametersSet(AsyncWebSocketClient* client, JsonDocument&
         if (resetState) updated.add("state");
     });
     client->text(response);
+#endif
 }
 
 static void handleAudioSubscribe(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
@@ -391,6 +469,11 @@ static void handleAudioZoneAgcGet(AsyncWebSocketClient* client, JsonDocument& do
         client->text(buildWsError(ErrorCodes::AUDIO_UNAVAILABLE, "Audio unavailable", requestId));
         return;
     }
+#if FEATURE_AUDIO_BACKEND_ESV11
+    (void)audio;
+    client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone AGC not available in ESV11 backend builds", requestId));
+    return;
+#else
     const ControlBus& controlBus = audio->getControlBusRef();
     String response = buildWsResponse("audio.zone-agc.state", requestId,
         [&controlBus](JsonObject& data) {
@@ -405,6 +488,7 @@ static void handleAudioZoneAgcGet(AsyncWebSocketClient* client, JsonDocument& do
             }
         });
     client->text(response);
+#endif
 }
 
 static void handleAudioZoneAgcSet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
@@ -414,6 +498,11 @@ static void handleAudioZoneAgcSet(AsyncWebSocketClient* client, JsonDocument& do
         client->text(buildWsError(ErrorCodes::AUDIO_UNAVAILABLE, "Audio unavailable", requestId));
         return;
     }
+#if FEATURE_AUDIO_BACKEND_ESV11
+    (void)audio;
+    client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Zone AGC not available in ESV11 backend builds", requestId));
+    return;
+#else
     ControlBus& controlBus = audio->getControlBusMut();
     bool updated = false;
     if (doc.containsKey("enabled")) {
@@ -437,6 +526,7 @@ static void handleAudioZoneAgcSet(AsyncWebSocketClient* client, JsonDocument& do
     String response = buildWsResponse("audio.zone-agc.updated", requestId,
         [updated](JsonObject& data) { data["updated"] = updated; });
     client->text(response);
+#endif
 }
 
 static void handleAudioSpikeDetectionGet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
@@ -446,6 +536,11 @@ static void handleAudioSpikeDetectionGet(AsyncWebSocketClient* client, JsonDocum
         client->text(buildWsError(ErrorCodes::AUDIO_UNAVAILABLE, "Audio unavailable", requestId));
         return;
     }
+#if FEATURE_AUDIO_BACKEND_ESV11
+    (void)audio;
+    client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Spike detection not available in ESV11 backend builds", requestId));
+    return;
+#else
     const ControlBus& controlBus = audio->getControlBusRef();
     const SpikeDetectionStats& stats = controlBus.getSpikeStats();
     String response = buildWsResponse("audio.spike-detection.state", requestId,
@@ -461,6 +556,7 @@ static void handleAudioSpikeDetectionGet(AsyncWebSocketClient* client, JsonDocum
             statsObj["avgCorrectionMagnitude"] = stats.avgCorrectionMagnitude;
         });
     client->text(response);
+#endif
 }
 
 static void handleAudioSpikeDetectionReset(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
@@ -470,10 +566,16 @@ static void handleAudioSpikeDetectionReset(AsyncWebSocketClient* client, JsonDoc
         client->text(buildWsError(ErrorCodes::AUDIO_UNAVAILABLE, "Audio unavailable", requestId));
         return;
     }
+#if FEATURE_AUDIO_BACKEND_ESV11
+    (void)audio;
+    client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Spike detection not available in ESV11 backend builds", requestId));
+    return;
+#else
     audio->getControlBusMut().resetSpikeStats();
     String response = buildWsResponse("audio.spike-detection.reset", requestId,
         [](JsonObject& data) { data["reset"] = true; });
     client->text(response);
+#endif
 }
 
 static void handleAudioMicGainGet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {

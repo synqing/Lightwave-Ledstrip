@@ -138,7 +138,11 @@ RendererActor::RendererActor()
     , m_captureTapBValid(false)
     , m_captureTapCValid(false)
 #if FEATURE_AUDIO_SYNC
+#if FEATURE_AUDIO_BACKEND_ESV11
+    , m_esBeatClock()                // Explicit default init for audio state
+#else
     , m_musicalGrid()                // Explicit default init for audio state
+#endif
     , m_lastControlBus()
     , m_lastMusicalGrid()
     , m_lastAudioTime()
@@ -170,8 +174,10 @@ RendererActor::RendererActor()
 #if FEATURE_AUDIO_SYNC
     m_audioContractTuning = audio::clampAudioContractTuning(audio::AudioContractTuning{});
     m_audioContractPending = m_audioContractTuning;
+#if !FEATURE_AUDIO_BACKEND_ESV11
     m_musicalGrid.setTuning(toMusicalGridTuning(m_audioContractTuning));
     m_musicalGrid.SetTimeSignature(m_audioContractTuning.beatsPerBar, m_audioContractTuning.beatUnit);
+#endif
 #endif
 }
 
@@ -531,6 +537,7 @@ void RendererActor::onMessage(const Message& msg)
             break;
 
 #if FEATURE_AUDIO_SYNC
+#if !FEATURE_AUDIO_BACKEND_ESV11
         case MessageType::TRINITY_BEAT:
             {
                 // Unpack BPM (param1=hi, param2=lo)
@@ -548,6 +555,7 @@ void RendererActor::onMessage(const Message& msg)
                 m_musicalGrid.injectExternalBeat(bpm, phase01, tick, downbeat, beatInBar);
             }
             break;
+#endif
 
         case MessageType::TRINITY_MACRO:
             {
@@ -562,6 +570,7 @@ void RendererActor::onMessage(const Message& msg)
             }
             break;
 
+#if !FEATURE_AUDIO_BACKEND_ESV11
         case MessageType::TRINITY_SYNC:
             {
                 uint8_t action = msg.param1;
@@ -608,6 +617,7 @@ void RendererActor::onMessage(const Message& msg)
                 }
             }
             break;
+#endif
 #endif
 
         default:
@@ -809,8 +819,10 @@ void RendererActor::applyPendingAudioContractTuning() {
     }
     audio::AudioContractTuning pending = getAudioContractTuning();
     m_audioContractTuning = pending;
+#if !FEATURE_AUDIO_BACKEND_ESV11
     m_musicalGrid.setTuning(toMusicalGridTuning(m_audioContractTuning));
     m_musicalGrid.SetTimeSignature(m_audioContractTuning.beatsPerBar, m_audioContractTuning.beatUnit);
+#endif
 }
 
 #endif

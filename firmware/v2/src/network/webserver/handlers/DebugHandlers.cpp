@@ -199,12 +199,20 @@ void DebugHandlers::handleDebugStatus(AsyncWebServerRequest* request,
 #if FEATURE_AUDIO_SYNC
     // Get audio actor reference once, use in both lambda and serial output
     auto* audioActor = actorSystem.getAudio();
-    audio::AudioDspState dspState;
     audio::AudioActorStats actorStats;
+    audio::ControlBusFrame lastFrame;
+    uint32_t lastSeq = 0;
     bool hasAudio = false;
+#if !FEATURE_AUDIO_BACKEND_ESV11
+    audio::AudioDspState dspState;
+#endif
 
     if (audioActor) {
+#if FEATURE_AUDIO_BACKEND_ESV11
+        lastSeq = audioActor->getControlBusBuffer().ReadLatest(lastFrame);
+#else
         dspState = audioActor->getDspState();
+#endif
         actorStats = audioActor->getStats();
         hasAudio = true;
     }
@@ -213,7 +221,10 @@ void DebugHandlers::handleDebugStatus(AsyncWebServerRequest* request,
     // Collect system status data
     sendSuccessResponse(request, [
 #if FEATURE_AUDIO_SYNC
-        &dspState, &actorStats, hasAudio
+        &actorStats, &lastFrame, lastSeq, hasAudio
+#if !FEATURE_AUDIO_BACKEND_ESV11
+        , &dspState
+#endif
 #endif
     ](JsonObject& data) {
         // Memory status (always available)
@@ -227,6 +238,28 @@ void DebugHandlers::handleDebugStatus(AsyncWebServerRequest* request,
         JsonObject audio = data["audio"].to<JsonObject>();
 
         if (hasAudio) {
+#if FEATURE_AUDIO_BACKEND_ESV11
+            audio["seq"] = lastSeq;
+            audio["rms"] = lastFrame.rms;
+            audio["flux"] = lastFrame.flux;
+            audio["bpm"] = lastFrame.es_bpm;
+            audio["tempoConfidence"] = lastFrame.es_tempo_confidence;
+            audio["phase01AtAudioT"] = lastFrame.es_phase01_at_audio_t;
+            audio["beatTick"] = lastFrame.es_beat_tick;
+            audio["downbeatTick"] = lastFrame.es_downbeat_tick;
+            audio["beatInBar"] = lastFrame.es_beat_in_bar;
+            audio["beatStrength"] = lastFrame.es_beat_strength;
+
+            float micLevelDb = (lastFrame.rms > 0.0001f)
+                ? 20.0f * log10f(lastFrame.rms)
+                : -60.0f;  // Floor at -60 dB
+            audio["micLevelDb"] = micLevelDb;
+
+            // From actor stats
+            audio["captures"] = actorStats.captureSuccessCount;
+            audio["capturesFailed"] = actorStats.captureFailCount;
+            audio["tickCount"] = actorStats.tickCount;
+#else
             // From DSP state
             audio["rms"] = dspState.rmsMapped;
             audio["rmsPreGain"] = dspState.rmsPreGain;
@@ -245,6 +278,7 @@ void DebugHandlers::handleDebugStatus(AsyncWebServerRequest* request,
                 ? 20.0f * log10f(dspState.rmsMapped)
                 : -60.0f;  // Floor at -60 dB
             audio["micLevelDb"] = micLevelDb;
+#endif
         } else {
             audio["error"] = "AudioActor not initialized";
         }
@@ -266,12 +300,20 @@ void DebugHandlers::handleDebugStatus(AsyncWebServerRequest* request,
 
 #if FEATURE_AUDIO_SYNC
     if (hasAudio) {
+#if FEATURE_AUDIO_BACKEND_ESV11
+        Serial.printf("Audio(ES): RMS=%.3f FLUX=%.3f BPM=%.1f conf=%.2f beat=%u/%u\n",
+                      lastFrame.rms, lastFrame.flux,
+                      lastFrame.es_bpm, lastFrame.es_tempo_confidence,
+                      (unsigned)lastFrame.es_beat_in_bar,
+                      (unsigned)lastFrame.es_beat_tick);
+#else
         Serial.printf("Audio: RMS=%.3f, AGC=%.2f, DC=%.1f, clips=%u\n",
                       dspState.rmsMapped, dspState.agcGain,
                       dspState.dcEstimate, dspState.clipCount);
         Serial.printf("Captures: %lu success, %lu failed\n",
                       (unsigned long)actorStats.captureSuccessCount,
                       (unsigned long)actorStats.captureFailCount);
+#endif
     }
 #endif
     Serial.println(F("===============================\n"));

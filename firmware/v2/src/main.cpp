@@ -1325,7 +1325,7 @@ void loop() {
         // -----------------------------------------------------------------
         // Tempo Debug Commands: tempo
         // -----------------------------------------------------------------
-#if FEATURE_AUDIO_SYNC
+#if FEATURE_AUDIO_SYNC && !FEATURE_AUDIO_BACKEND_ESV11
         else if (inputLower.startsWith("tempo")) {
             handledMulti = true;
 

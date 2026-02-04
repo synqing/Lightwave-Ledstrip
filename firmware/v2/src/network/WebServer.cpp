@@ -1112,6 +1112,25 @@ void WebServer::doBroadcastStatus() {
     // Add audio metrics (BPM, KEY, MIC)
     auto* audio = m_orchestrator.getAudio();
     if (audio) {
+#if FEATURE_AUDIO_BACKEND_ESV11
+        audio::ControlBusFrame frame{};
+        audio->getControlBusBuffer().ReadLatest(frame);
+
+        doc["bpm"] = frame.es_bpm;
+
+        // Mic level in dB (approx; ES backend publishes mapped RMS 0..1)
+        float micLevelDb = (frame.rms > 0.0001f)
+            ? (20.0f * log10f(frame.rms))
+            : -80.0f;
+        doc["mic"] = micLevelDb;
+
+        const audio::ChordState& chord = frame.chordState;
+        if (chord.confidence > 0.1f && chord.type != audio::ChordType::NONE) {
+            doc["key"] = formatKeyName(chord.rootNote, chord.type);
+        } else {
+            doc["key"] = "";
+        }
+#else
         // BPM from TempoTrackerOutput
         audio::TempoTrackerOutput tempo = audio->getTempo().getOutput();
         doc["bpm"] = tempo.bpm;
@@ -1132,6 +1151,7 @@ void WebServer::doBroadcastStatus() {
         } else {
             doc["key"] = "";  // Empty string when no valid key detected
         }
+#endif
     }
 #endif
 

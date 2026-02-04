@@ -1114,8 +1114,24 @@ void RendererActor::renderFrame()
                 LW_LOGW("Audio unavailable: seq=%u prevSeq=%u age_s=%.3f staleness_s=%.3f hop_seq=%u",
                         seq, prevSeq, age_s, staleness_s, m_lastControlBus.hop_seq);
             } else {
+                // Include ES raw signal peaks to aid parity debugging against Emotiscope.
+#if FEATURE_AUDIO_BACKEND_ESV11
+                float maxBinRaw = 0.0f;
+                float maxChromaRaw = 0.0f;
+                for (uint8_t i = 0; i < audio::ControlBusFrame::BINS_64_COUNT; ++i) {
+                    if (m_lastControlBus.es_bins64_raw[i] > maxBinRaw) maxBinRaw = m_lastControlBus.es_bins64_raw[i];
+                }
+                for (uint8_t i = 0; i < audio::CONTROLBUS_NUM_CHROMA; ++i) {
+                    if (m_lastControlBus.es_chroma_raw[i] > maxChromaRaw) maxChromaRaw = m_lastControlBus.es_chroma_raw[i];
+                }
+                LW_LOGI("Audio OK: seq=%u hop_seq=%u rms=%.3f flux=%.3f es_vu=%.3f es_binMax=%.3f es_chrMax=%.3f bpm=%.1f conf=%.2f",
+                        seq, m_lastControlBus.hop_seq, m_lastControlBus.rms, m_lastControlBus.flux,
+                        m_lastControlBus.es_vu_level_raw, maxBinRaw, maxChromaRaw,
+                        m_lastControlBus.es_bpm, m_lastControlBus.es_tempo_confidence);
+#else
                 LW_LOGI("Audio OK: seq=%u hop_seq=%u rms=%.3f flux=%.3f",
                         seq, m_lastControlBus.hop_seq, m_lastControlBus.rms, m_lastControlBus.flux);
+#endif
             }
         }
 

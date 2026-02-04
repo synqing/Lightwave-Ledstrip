@@ -54,11 +54,15 @@ void EsV11Adapter::buildFrame(lightwaveos::audio::ControlBusFrame& out,
     constexpr float ACTIVE_VU_THRESHOLD = 0.01f; // Below this, treat as near-silence.
     const bool isActive = es.vu_level >= ACTIVE_VU_THRESHOLD;
 
+    // Raw ES signals (for reference show parity)
+    out.es_vu_level_raw = clamp01(es.vu_level);
+
     float rawBins[lightwaveos::audio::ControlBusFrame::BINS_64_COUNT];
 
     // bins64: clamp raw ES spectrogram
     for (uint8_t i = 0; i < lightwaveos::audio::ControlBusFrame::BINS_64_COUNT; ++i) {
         rawBins[i] = clamp01(es.spectrogram_smooth[i]);
+        out.es_bins64_raw[i] = rawBins[i];
     }
 
     // bins64Adaptive: ES-style autorange follower (simple max follower)
@@ -105,6 +109,7 @@ void EsV11Adapter::buildFrame(lightwaveos::audio::ControlBusFrame& out,
     for (uint8_t i = 0; i < lightwaveos::audio::CONTROLBUS_NUM_CHROMA; ++i) {
         rawChroma[i] = clamp01(es.chromagram[i]);
         chromaMax = std::max(chromaMax, rawChroma[i]);
+        out.es_chroma_raw[i] = rawChroma[i];
     }
 
     // Similar autorange follower for chroma magnitudes, gated by activity.

@@ -119,6 +119,10 @@
 #include "ieffect/RippleEnhancedEffect.h"
 #include "ieffect/TrinityTestEffect.h"
 #include "ieffect/LGPHolographicAutoCycleEffect.h"
+#include "ieffect/esv11_reference/EsAnalogRefEffect.h"
+#include "ieffect/esv11_reference/EsSpectrumRefEffect.h"
+#include "ieffect/esv11_reference/EsOctaveRefEffect.h"
+#include "ieffect/esv11_reference/EsBloomRefEffect.h"
 #include "utils/FastLEDOptim.h"
 #include "../core/narrative/NarrativeEngine.h"
 #include <FastLED.h>
@@ -966,9 +970,36 @@ uint8_t registerAllEffects(RendererActor* renderer) {
         total++;
     }
 
+    // =============== ES v1.1 REFERENCE SHOWS ===============
+    // These are ports of Emotiscope v1.1_320 light modes for parity comparisons.
+
+    // ES Analog (Ref) (ID 101)
+    static ieffect::esv11_reference::EsAnalogRefEffect esAnalogRefInstance;
+    if (renderer->registerEffect(total, &esAnalogRefInstance)) {
+        total++;
+    }
+
+    // ES Spectrum (Ref) (ID 102)
+    static ieffect::esv11_reference::EsSpectrumRefEffect esSpectrumRefInstance;
+    if (renderer->registerEffect(total, &esSpectrumRefInstance)) {
+        total++;
+    }
+
+    // ES Octave (Ref) (ID 103)
+    static ieffect::esv11_reference::EsOctaveRefEffect esOctaveRefInstance;
+    if (renderer->registerEffect(total, &esOctaveRefInstance)) {
+        total++;
+    }
+
+    // ES Bloom (Ref) (ID 104)
+    static ieffect::esv11_reference::EsBloomRefEffect esBloomRefInstance;
+    if (renderer->registerEffect(total, &esBloomRefInstance)) {
+        total++;
+    }
+
     // =============== EFFECT COUNT PARITY VALIDATION ===============
     // Runtime validation: ensure registered count matches expected
-    constexpr uint8_t EXPECTED_EFFECT_COUNT = 101;  // 100 + 1 Holographic Auto-Cycle
+    constexpr uint8_t EXPECTED_EFFECT_COUNT = 105;  // 101 + 4 ES reference shows
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

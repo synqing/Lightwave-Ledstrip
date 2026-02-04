@@ -146,6 +146,17 @@ struct ControlBusFrame {
     uint8_t es_beat_in_bar = 0;
     bool es_downbeat_tick = false;
 
+    // -----------------------------------------------------------------------
+    // ES v1.1_320 raw signals (for ES reference show parity)
+    //
+    // These are the direct ES pipeline outputs before any LWLS contract
+    // normalisation/adaptation is applied. They allow us to port and compare
+    // Emotiscope light shows 1:1 against canonical hardware.
+    // -----------------------------------------------------------------------
+    float es_vu_level_raw = 0.0f;                 // 0..1
+    float es_bins64_raw[BINS_64_COUNT] = {0};     // 0..1 (ES spectrogram_smooth)
+    float es_chroma_raw[CONTROLBUS_NUM_CHROMA] = {0}; // 0..1 (ES chromagram)
+
     // Silence detection (Sensory Bridge pattern)
     // silentScale fades from 1.0 to 0.0 after silenceHysteresisMs of silence
     float silentScale = 1.0f;       ///< 0.0=silent, 1.0=active (multiply with brightness)

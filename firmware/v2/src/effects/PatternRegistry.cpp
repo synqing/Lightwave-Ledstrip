@@ -144,7 +144,16 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
     {PM_STR("LGP Wave Collision Enhanced"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::TRAVELING, PM_STR("Audio-driven wave collision with sub-bass boost"), PM_STR("Snare collisions, beat phase, chroma weighting"), PM_STR("LGP Wave Collision")},
     {PM_STR("Ripple Enhanced"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Beat-sync ripple propagation with musical intelligence"), PM_STR("Beat sync, style-adaptive, harmonic saliency, centre-origin"), PM_STR("Ripple")},
     {PM_STR("Audio Bloom Parity"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("SB 4.1.1 bloom parity with centre smear"), PM_STR("Chroma-weighted palette hue, centre smear, edge fade"), PM_STR("Audio Bloom")},
-    {PM_STR("Audio Waveform Parity"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("SB 3.1.0 waveform parity with MOOD smoothing"), PM_STR("Waveform history, palette chroma hue, centre-origin"), PM_STR("Audio Waveform")}
+    {PM_STR("Audio Waveform Parity"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("SB 3.1.0 waveform parity with MOOD smoothing"), PM_STR("Waveform history, palette chroma hue, centre-origin"), PM_STR("Audio Waveform")},
+
+    // --- Palette Auto-Cycle (100) ---
+    {PM_STR("LGP Holographic Auto-Cycle"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::MOIRE | PatternTags::DEPTH, PM_STR("Holographic effect with internal palette auto-cycling"), PM_STR("Multi-layer interference, palette cycling, depth illusion"), PM_STR("LGP Holographic")},
+
+    // --- ES v1.1 Reference Shows (101-104) ---
+    {PM_STR("ES Analog (Ref)"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Emotiscope v1.1 reference: VU dot display"), PM_STR("VU level, centre-origin dot"), PM_STR("")},
+    {PM_STR("ES Spectrum (Ref)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Emotiscope v1.1 reference: 64-bin spectrum strip"), PM_STR("Spectrogram magnitude, HSV gradient"), PM_STR("")},
+    {PM_STR("ES Octave (Ref)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Emotiscope v1.1 reference: chromagram strip"), PM_STR("Chromagram magnitude, HSV gradient"), PM_STR("")},
+    {PM_STR("ES Bloom (Ref)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Emotiscope v1.1 reference: chroma bloom"), PM_STR("Chromagram sampling, squared response"), PM_STR("")}
 };
 
 const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(PatternMetadata);
@@ -154,7 +163,7 @@ const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(Pattern
 // ============================================================================
 
 // Expected number of implemented effects (must match registerAllEffects() return value)
-constexpr uint8_t EXPECTED_EFFECT_COUNT = 100;  // 88 base + 12 enhanced
+constexpr uint8_t EXPECTED_EFFECT_COUNT = 105;  // 101 base + 4 ES reference shows
 
 // Compile-time assertion: metadata must have at least as many entries as implemented effects
 // This ensures we can always map effect IDs to metadata (allows for future effects in metadata)
@@ -408,7 +417,12 @@ static const uint8_t REACTIVE_EFFECT_IDS[] PROGMEM = {
     96,  // LGP Wave Collision Enhanced - audio-driven collisions
     97,  // Ripple Enhanced - beat-sync propagation
     98,  // Audio Bloom Parity - SB 4.1.1 bloom parity
-    99   // Audio Waveform Parity - SB 3.1.0 waveform parity
+    99,  // Audio Waveform Parity - SB 3.1.0 waveform parity
+    100, // LGP Holographic Auto-Cycle - audio reactive (palette-cycled)
+    101, // ES Analog (Ref) - reference show
+    102, // ES Spectrum (Ref) - reference show
+    103, // ES Octave (Ref) - reference show
+    104  // ES Bloom (Ref) - reference show
 };
 static constexpr uint8_t REACTIVE_EFFECT_COUNT = sizeof(REACTIVE_EFFECT_IDS);
 

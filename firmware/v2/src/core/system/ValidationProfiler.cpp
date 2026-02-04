@@ -3,6 +3,10 @@
  * @brief Validation performance profiling implementation
  */
 
+#include "../../config/features.h"
+
+#if FEATURE_VALIDATION_PROFILING
+
 #define LW_LOG_TAG "ValProfiler"
 #include "ValidationProfiler.h"
 #include "../../utils/Log.h"
@@ -37,13 +41,8 @@ void ValidationProfiler::init() {
     s_frameCount = 0;
     s_peakTimeUs = 0.0f;
 
-#if FEATURE_VALIDATION_PROFILING
     s_enabled = true;
     LW_LOGI("Initialized (validation profiling enabled)");
-#else
-    s_enabled = false;
-    LW_LOGI("Initialized (validation profiling disabled - enable FEATURE_VALIDATION_PROFILING)");
-#endif
 
     s_initialized = true;
 }
@@ -71,10 +70,11 @@ void ValidationProfiler::updateFrame() {
 
     s_frameCount++;
 
-    // Generate report every 1000 frames
-    if (s_frameCount % 1000 == 0) {
-        generateReport();
-    }
+    // Report generation disabled - validation overhead confirmed negligible (0.02%)
+    // Use 'vprof' serial command to generate report on demand if needed
+    // if (s_frameCount % 1000 == 0) {
+    //     generateReport();
+    // }
 
     // Reset frame counters
     s_frameCalls = 0;
@@ -132,4 +132,6 @@ void ValidationProfiler::generateReport() {
 } // namespace system
 } // namespace core
 } // namespace lightwaveos
+
+#endif
 

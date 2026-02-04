@@ -3,6 +3,10 @@
  * @brief Heap corruption detection and monitoring implementation
  */
 
+#include "../../config/features.h"
+
+#if FEATURE_HEAP_MONITORING
+
 #define LW_LOG_TAG "HeapMonitor"
 #include "HeapMonitor.h"
 #include "../../utils/Log.h"
@@ -165,4 +169,10 @@ extern "C" void vApplicationMallocFailedHook(void) {
     // Note: FreeRTOS doesn't pass size, but we can still log
     lightwaveos::core::system::HeapMonitor::onMallocFailed(0);
 }
+
+#else
+// Stubs when heap monitoring disabled (e.g. FH4) - satisfy linker
+extern "C" void heap_corruption_hook(void) {}
+extern "C" void vApplicationMallocFailedHook(void) {}
+#endif
 

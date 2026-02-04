@@ -8,8 +8,8 @@
 
 #pragma once
 
-#include <FreeRTOS.h>
-#include <task.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include <stdint.h>
 
 namespace lightwaveos {
@@ -138,4 +138,3 @@ private:
 
 // FreeRTOS hook function (must be C linkage)
 extern "C" void vApplicationStackOverflowHook(TaskHandle_t xTask, char* pcTaskName);
-

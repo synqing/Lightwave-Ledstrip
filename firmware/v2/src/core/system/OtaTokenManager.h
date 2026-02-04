@@ -132,6 +132,9 @@ private:
 
 #else  // Stub for native builds or disabled features
 
+#include <cstddef>
+#include <Arduino.h>
+
 namespace lightwaveos {
 namespace core {
 namespace system {

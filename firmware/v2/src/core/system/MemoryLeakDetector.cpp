@@ -3,6 +3,10 @@
  * @brief Memory leak detection and tracking implementation
  */
 
+#include "../../config/features.h"
+
+#if FEATURE_MEMORY_LEAK_DETECTION
+
 #define LW_LOG_TAG "LeakDetector"
 #include "MemoryLeakDetector.h"
 #include "../../utils/Log.h"
@@ -173,4 +177,6 @@ void MemoryLeakDetector::removeRecord(size_t index) {
 } // namespace system
 } // namespace core
 } // namespace lightwaveos
+
+#endif
 

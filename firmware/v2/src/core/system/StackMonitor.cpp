@@ -3,6 +3,10 @@
  * @brief FreeRTOS stack overflow detection and monitoring implementation
  */
 
+#include "../../config/features.h"
+
+#if FEATURE_STACK_PROFILING
+
 #define LW_LOG_TAG "StackMonitor"
 #include "StackMonitor.h"
 #include "../../utils/Log.h"
@@ -10,8 +14,8 @@
 
 #ifndef NATIVE_BUILD
 #include <Arduino.h>
-#include <FreeRTOS.h>
-#include <task.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include <esp_task_wdt.h>
 #endif
 
@@ -270,3 +274,14 @@ extern "C" void vApplicationStackOverflowHook(TaskHandle_t xTask, char* pcTaskNa
     lightwaveos::core::system::StackMonitor::onStackOverflow(xTask, pcTaskName);
 }
 
+#else
+// Stub when stack profiling disabled (e.g. FH4) - satisfy linker
+#ifndef NATIVE_BUILD
+#include <FreeRTOS.h>
+#include <task.h>
+#endif
+extern "C" void vApplicationStackOverflowHook(TaskHandle_t xTask, char* pcTaskName) {
+    (void)xTask;
+    (void)pcTaskName;
+}
+#endif

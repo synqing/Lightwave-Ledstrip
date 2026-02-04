@@ -39,8 +39,8 @@ constexpr bool HAS_INTEGRATED_WIFI = false;
 /// Has integrated Bluetooth (P4 does NOT have Bluetooth)
 constexpr bool HAS_BLUETOOTH = false;
 
-/// Has Ethernet MAC (P4 has 10/100 Mbps Ethernet)
-constexpr bool HAS_ETHERNET = true;
+/// Has Ethernet MAC (P4 has 10/100 Mbps Ethernet, but unused in LightwaveOS)
+constexpr bool HAS_ETHERNET = false;
 
 /// Number of RMT channels available
 constexpr uint8_t RMT_CHANNELS = 4;
@@ -68,25 +68,23 @@ constexpr uint32_t MIN_FREE_HEAP_KB = 60;
 namespace gpio {
 
     // LED Strip pins (WS2812 via RMT)
-    // Note: These should be validated against P4 Function EV Board pinout
-    constexpr uint8_t LED_STRIP1_DATA = 4;
-    constexpr uint8_t LED_STRIP2_DATA = 5;
+    // P4 Function EV Board: GPIO 20/21
+    constexpr uint8_t LED_STRIP1_DATA = 20;
+    constexpr uint8_t LED_STRIP2_DATA = 21;
 
-    // I2S Audio (SPH0645 microphone)
-    // Note: Pins may need adjustment based on P4 board layout
-    constexpr uint8_t I2S_BCLK = 14;    ///< Bit clock
-    constexpr uint8_t I2S_DOUT = 13;    ///< Data out (mic output)
-    constexpr uint8_t I2S_LRCL = 12;    ///< Left/Right clock (word select)
+    // I2S Audio (onboard front end)
+    constexpr uint8_t I2S_BCLK = 12;    ///< Bit clock
+    constexpr uint8_t I2S_DIN = 11;     ///< Data in (mic output)
+    constexpr uint8_t I2S_DOUT = 9;     ///< Data out (codec playback)
+    constexpr uint8_t I2S_LRCL = 10;    ///< Left/Right clock (word select)
+    constexpr uint8_t I2S_MCLK = 13;    ///< Master clock
 
-    // I2C (M5ROTATE8 encoder)
-    constexpr uint8_t I2C_SDA = 17;
-    constexpr uint8_t I2C_SCL = 18;
+    // I2C (audio codec control)
+    constexpr uint8_t I2C_SDA = 7;
+    constexpr uint8_t I2C_SCL = 8;
 
-    // Ethernet PHY (P4 Function EV Board typical pinout)
-    constexpr uint8_t ETH_MDC = 23;
-    constexpr uint8_t ETH_MDIO = 24;
-    constexpr uint8_t ETH_PHY_RST = 5;
-    constexpr uint8_t ETH_PHY_POWER = 12;
+    // Audio power enable
+    constexpr uint8_t AUDIO_PA_EN = 53;
 
     // USB (P4 has USB 2.0 HS)
     // Note: GPIO 24, 25 are commonly used for USB - avoid for LEDs
@@ -108,7 +106,7 @@ namespace i2s {
     constexpr uint8_t PORT = 0;
 
     /// Sample rate in Hz
-    constexpr uint32_t SAMPLE_RATE = 12800;
+    constexpr uint32_t SAMPLE_RATE = 16000;
 
     /// DMA buffer count
     constexpr uint8_t DMA_BUFFER_COUNT = 4;
@@ -151,28 +149,11 @@ namespace perf {
     constexpr uint32_t FRAME_BUDGET_US = 8333;  // 1000000 / 120
 
     /// Audio hop rate in Hz
-    constexpr uint16_t AUDIO_HOP_RATE = 50;
+    constexpr uint16_t AUDIO_HOP_RATE = 125;
 
     /// Audio latency target in milliseconds
     constexpr uint16_t AUDIO_LATENCY_MS = 20;
 
 } // namespace perf
-
-// ============================================================================
-// Ethernet Configuration (P4 specific)
-// ============================================================================
-
-namespace ethernet {
-
-    /// PHY address (depends on board design)
-    constexpr uint8_t PHY_ADDR = 1;
-
-    /// PHY type (LAN8720 is common)
-    constexpr const char* PHY_TYPE = "LAN8720";
-
-    /// Enable RMII interface
-    constexpr bool USE_RMII = true;
-
-} // namespace ethernet
 
 } // namespace chip

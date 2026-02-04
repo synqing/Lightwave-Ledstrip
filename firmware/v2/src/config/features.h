@@ -8,6 +8,9 @@
 
 #pragma once
 
+// Chip detection for platform-specific feature gating
+#include "chip_config.h"
+
 // ============================================================================
 // Core Features (defined in platformio.ini)
 // ============================================================================
@@ -44,6 +47,18 @@
 // Multi-Device Synchronization
 #ifndef FEATURE_MULTI_DEVICE
 #define FEATURE_MULTI_DEVICE 0
+#endif
+
+// ============================================================================
+// P4 Overrides (no network on P4)
+// ============================================================================
+
+#if defined(CHIP_ESP32_P4) && CHIP_ESP32_P4
+    #undef FEATURE_WEB_SERVER
+    #define FEATURE_WEB_SERVER 0
+
+    #undef FEATURE_MULTI_DEVICE
+    #define FEATURE_MULTI_DEVICE 0
 #endif
 
 // ============================================================================
@@ -161,6 +176,26 @@
 // Pattern Registry - Pattern taxonomy and metadata system
 #ifndef FEATURE_PATTERN_REGISTRY
 #define FEATURE_PATTERN_REGISTRY 1
+#endif
+
+// ============================================================================
+// System Monitoring (can be disabled for RAM-constrained builds e.g. FH4)
+// ============================================================================
+
+#ifndef FEATURE_HEAP_MONITORING
+#define FEATURE_HEAP_MONITORING 1
+#endif
+
+#ifndef FEATURE_MEMORY_LEAK_DETECTION
+#define FEATURE_MEMORY_LEAK_DETECTION 1
+#endif
+
+#ifndef FEATURE_VALIDATION_PROFILING
+#define FEATURE_VALIDATION_PROFILING 1
+#endif
+
+#ifndef FEATURE_STACK_PROFILING
+#define FEATURE_STACK_PROFILING 1
 #endif
 
 // ============================================================================

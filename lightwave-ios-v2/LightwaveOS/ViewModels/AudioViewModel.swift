@@ -66,6 +66,21 @@ class AudioViewModel {
     /// Current waveform (128 samples, normalised -1...1)
     var waveform: [Float] = Array(repeating: 0, count: 128)
 
+    // MARK: - Stream Diagnostics
+
+    /// Total audio frames received since launch
+    var audioFrameCount: Int = 0
+
+    /// Timestamp of last audio frame
+    var lastAudioFrameAt: Date?
+
+    // MARK: - Telemetry Polling (HTTP Fallback)
+
+    private var fftPollTask: Task<Void, Never>?
+    private var tempoPollTask: Task<Void, Never>?
+    private var statePollTask: Task<Void, Never>?
+    private var parametersPollTask: Task<Void, Never>?
+
     // MARK: - BPM Properties
 
     var bpm: Float = 0
@@ -113,6 +128,7 @@ class AudioViewModel {
     // MARK: - Debounce Tasks
 
     private var audioParamsDebounceTask: Task<Void, Never>?
+    private var audioTuningDebounceTask: Task<Void, Never>?
 
     // MARK: - Initialization
 
@@ -129,6 +145,9 @@ class AudioViewModel {
         downbeatResetTask?.cancel()
         isBeating = false
         isDownbeat = false
+        audioFrameCount = 0
+        lastAudioFrameAt = nil
+        stopTelemetryPolling()
     }
 
     // MARK: - Beat Event Handling
@@ -189,9 +208,15 @@ class AudioViewModel {
 
     /// Process a binary audio metrics frame from the WebSocket
     func handleMetricsFrame(_ frame: AudioMetricsFrame) {
+        audioFrameCount += 1
+        lastAudioFrameAt = Date()
+
         // Update current values
         bands = frame.bands
         rms = frame.rms
+        flux = frame.flux
+        rmsRaw = frame.fastRMS
+        rmsMapped = frame.rms
         waveform = frame.waveform
         bpm = frame.bpmSmoothed
         self.bpmConfidence = Double(frame.tempoConfidence)
@@ -206,6 +231,130 @@ class AudioViewModel {
         }
         if frame.downbeatTick > 0 {
             handleBeatEvent(type: "downbeat", bpm: frame.bpmSmoothed, confidence: frame.tempoConfidence, position: nil)
+        }
+    }
+
+    // MARK: - Telemetry Polling
+
+    /// Starts periodic REST polling to keep Audio tab visualisations functional even when WS streaming is unavailable.
+    ///
+    /// Rate budget: keep under firmware HTTP limit (~20 req/sec). Current plan ~9.5 req/sec:
+    /// - FFT: 6 Hz
+    /// - Tempo: 2 Hz
+    /// - State: 1 Hz
+    /// - Parameters: 0.5 Hz
+    func startTelemetryPolling() {
+        stopTelemetryPolling()
+
+        fftPollTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                guard let client = self.restClient else {
+                    try? await Task.sleep(for: .seconds(1))
+                    continue
+                }
+                do {
+                    let resp = try await client.getAudioFFT()
+                    self.applyFFT(resp.data)
+                } catch {
+                    // Keep last known values; avoid spamming UI.
+                }
+                try? await Task.sleep(for: .milliseconds(166)) // ~6 Hz
+            }
+        }
+
+        tempoPollTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                guard let client = self.restClient else {
+                    try? await Task.sleep(for: .seconds(1))
+                    continue
+                }
+                do {
+                    let resp = try await client.getAudioTempo()
+                    self.currentBpm = resp.data.bpm
+                    // Prefer control-bus confidence if available; tempo endpoint is a good fallback.
+                    self.bpmConfidence = resp.data.confidence
+                } catch {
+                    // Ignore transient failures.
+                }
+                try? await Task.sleep(for: .milliseconds(500)) // 2 Hz
+            }
+        }
+
+        statePollTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                guard let client = self.restClient else {
+                    try? await Task.sleep(for: .seconds(1))
+                    continue
+                }
+                do {
+                    let resp = try await client.getAudioState()
+                    if let cb = resp.data.controlBus {
+                        self.isSilent = cb.isSilent
+                        self.silentScale = Float(cb.silentScale)
+                        self.tempoLocked = cb.tempoLocked
+                        self.bpmConfidence = cb.tempoConfidence
+                    }
+                } catch {
+                    // Ignore transient failures.
+                }
+                try? await Task.sleep(for: .seconds(1)) // 1 Hz
+            }
+        }
+
+        parametersPollTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                guard let client = self.restClient else {
+                    try? await Task.sleep(for: .seconds(1))
+                    continue
+                }
+                do {
+                    let resp = try await client.getAudioTuning()
+                    if let state = resp.data.state {
+                        if let v = state.noiseFloor { self.noiseFloor = Float(v) }
+                        if let v = state.clipCount { self.clipCount = v }
+                        if let v = state.fluxMapped { self.flux = Float(v) }
+                        if let v = state.rmsRaw { self.rmsRaw = Float(v) }
+                        if let v = state.rmsMapped { self.rmsMapped = Float(v) }
+                        // Use mapped RMS as the main RMS readout on the Energy card.
+                        self.rms = self.rmsMapped
+                    }
+                } catch {
+                    // Ignore transient failures.
+                }
+                try? await Task.sleep(for: .seconds(2)) // 0.5 Hz
+            }
+        }
+    }
+
+    func stopTelemetryPolling() {
+        fftPollTask?.cancel()
+        fftPollTask = nil
+        tempoPollTask?.cancel()
+        tempoPollTask = nil
+        statePollTask?.cancel()
+        statePollTask = nil
+        parametersPollTask?.cancel()
+        parametersPollTask = nil
+    }
+
+    private func applyFFT(_ data: AudioFFTResponse.AudioFFTData) {
+        audioFrameCount += 1
+        lastAudioFrameAt = Date()
+
+        rmsRaw = Float(data.rmsRaw)
+        rmsMapped = Float(data.rmsMapped)
+        rms = rmsMapped
+
+        // Bands are already smoothed by the firmware's control bus.
+        let nextBands = data.bands.prefix(8).map { Float($0) }
+        if nextBands.count == 8 {
+            bands = nextBands
+            ringBuffer[writeRow] = nextBands
+            writeRow = (writeRow + 1) % 60
         }
     }
 
@@ -238,6 +387,75 @@ class AudioViewModel {
                 // Cancelled by newer update
             } catch {
                 print("Error updating audio params: \(error)")
+            }
+        }
+    }
+
+    // MARK: - Audio DSP Tuning
+
+    func loadAudioTuning() async {
+        guard let client = restClient else { return }
+
+        do {
+            let response = try await client.getAudioTuning()
+            let pipeline = response.data.pipeline
+            let controlBus = response.data.controlBus
+            let novelty = pipeline.novelty
+
+            if let alphaFast = controlBus.alphaFast { self.alphaFast = alphaFast }
+            if let alphaSlow = controlBus.alphaSlow { self.alphaSlow = alphaSlow }
+
+            if let bandAttack = pipeline.bandAttack { self.bandAttack = bandAttack }
+            if let bandRelease = pipeline.bandRelease { self.bandRelease = bandRelease }
+            if let heavyAttack = pipeline.heavyBandAttack { self.heavyAttack = heavyAttack }
+            if let heavyRelease = pipeline.heavyBandRelease { self.heavyRelease = heavyRelease }
+
+            if let silenceHysteresisMs = pipeline.silenceHysteresisMs { self.silenceHysteresis = silenceHysteresisMs }
+            if let silenceThreshold = pipeline.silenceThreshold { self.silenceThreshold = silenceThreshold }
+
+            if let useSpectralFlux = novelty?.useSpectralFlux { self.spectralFluxEnabled = useSpectralFlux }
+            if let fluxScale = novelty?.spectralFluxScale { self.fluxScale = fluxScale }
+
+        } catch {
+            print("Error loading audio tuning: \(error)")
+        }
+    }
+
+    func queueAudioTuningUpdate() {
+        guard let client = restClient else { return }
+
+        audioTuningDebounceTask?.cancel()
+
+        let payload: [String: Any] = [
+            "controlBus": [
+                "alphaFast": alphaFast,
+                "alphaSlow": alphaSlow
+            ],
+            "pipeline": [
+                "bandAttack": bandAttack,
+                "bandRelease": bandRelease,
+                "heavyBandAttack": heavyAttack,
+                "heavyBandRelease": heavyRelease,
+                "silenceHysteresisMs": silenceHysteresis,
+                "silenceThreshold": silenceThreshold
+            ],
+            "novelty": [
+                "useSpectralFlux": spectralFluxEnabled,
+                "spectralFluxScale": fluxScale
+            ]
+        ]
+
+        audioTuningDebounceTask = Task {
+            do {
+                try await Task.sleep(nanoseconds: 150_000_000) // 150ms
+                guard !Task.isCancelled else { return }
+
+                try await client.patchAudioTuning(payload)
+
+            } catch is CancellationError {
+                // Cancelled by newer update
+            } catch {
+                print("Error updating audio tuning: \(error)")
             }
         }
     }

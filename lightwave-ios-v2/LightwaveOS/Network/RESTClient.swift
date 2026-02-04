@@ -271,6 +271,159 @@ struct AudioParametersResponse: Codable, Sendable {
     }
 }
 
+struct AudioTuningResponse: Codable, Sendable {
+    let success: Bool
+    let data: AudioTuningData
+    let timestamp: Int?
+
+    struct AudioTuningData: Codable, Sendable {
+        let pipeline: Pipeline
+        let controlBus: ControlBus
+        let contract: Contract
+        let state: State?
+
+        struct Pipeline: Codable, Sendable {
+            let dcAlpha: Double?
+            let agcTargetRms: Double?
+            let agcMinGain: Double?
+            let agcMaxGain: Double?
+            let agcAttack: Double?
+            let agcRelease: Double?
+            let agcClipReduce: Double?
+            let agcIdleReturnRate: Double?
+            let noiseFloorMin: Double?
+            let noiseFloorRise: Double?
+            let noiseFloorFall: Double?
+            let gateStartFactor: Double?
+            let gateRangeFactor: Double?
+            let gateRangeMin: Double?
+            let rmsDbFloor: Double?
+            let rmsDbCeil: Double?
+            let bandDbFloor: Double?
+            let bandDbCeil: Double?
+            let chromaDbFloor: Double?
+            let chromaDbCeil: Double?
+            let fluxScale: Double?
+            let bandAttack: Double?
+            let bandRelease: Double?
+            let heavyBandAttack: Double?
+            let heavyBandRelease: Double?
+            let usePerBandNoiseFloor: Bool?
+            let silenceHysteresisMs: Double?
+            let silenceThreshold: Double?
+            let perBandGains: [Double]?
+            let perBandNoiseFloors: [Double]?
+            let bins64Adaptive: Bins64Adaptive?
+            let novelty: Novelty?
+
+            struct Bins64Adaptive: Codable, Sendable {
+                let scale: Double?
+                let floor: Double?
+                let rise: Double?
+                let fall: Double?
+                let decay: Double?
+            }
+
+            struct Novelty: Codable, Sendable {
+                let useSpectralFlux: Bool?
+                let spectralFluxScale: Double?
+            }
+        }
+
+        struct ControlBus: Codable, Sendable {
+            let alphaFast: Double?
+            let alphaSlow: Double?
+        }
+
+        struct Contract: Codable, Sendable {
+            let audioStalenessMs: Double?
+            let bpmMin: Double?
+            let bpmMax: Double?
+            let bpmTau: Double?
+            let confidenceTau: Double?
+            let phaseCorrectionGain: Double?
+            let barCorrectionGain: Double?
+            let beatsPerBar: Int?
+            let beatUnit: Int?
+        }
+
+        struct State: Codable, Sendable {
+            let rmsRaw: Double?
+            let rmsMapped: Double?
+            let rmsPreGain: Double?
+            let fluxMapped: Double?
+            let agcGain: Double?
+            let dcEstimate: Double?
+            let noiseFloor: Double?
+            let minSample: Double?
+            let maxSample: Double?
+            let peakCentered: Double?
+            let meanSample: Double?
+            let clipCount: Int?
+        }
+    }
+}
+
+struct AudioFFTResponse: Codable, Sendable {
+    let success: Bool
+    let data: AudioFFTData
+    let timestamp: Int?
+
+    struct AudioFFTData: Codable, Sendable {
+        let rmsRaw: Double
+        let rmsMapped: Double
+        let rmsPreGain: Double
+        let agcGain: Double
+        let bands: [Double]
+        let chroma: [Double]
+    }
+}
+
+struct AudioTempoResponse: Codable, Sendable {
+    let success: Bool
+    let data: AudioTempoData
+    let timestamp: Int?
+
+    struct AudioTempoData: Codable, Sendable {
+        let bpm: Double
+        let confidence: Double
+        let beatPhase: Double
+        let barPhase: Double
+        let beatInBar: Int
+        let beatsPerBar: Int
+
+        enum CodingKeys: String, CodingKey {
+            case bpm
+            case confidence
+            case beatPhase = "beat_phase"
+            case barPhase = "bar_phase"
+            case beatInBar = "beat_in_bar"
+            case beatsPerBar = "beats_per_bar"
+        }
+    }
+}
+
+struct AudioStateResponse: Codable, Sendable {
+    let success: Bool
+    let data: AudioStateData
+    let timestamp: Int?
+
+    struct AudioStateData: Codable, Sendable {
+        let state: String
+        let capturing: Bool
+        let hopCount: Int
+        let sampleIndex: UInt32
+        let controlBus: ControlBus?
+
+        struct ControlBus: Codable, Sendable {
+            let silentScale: Double
+            let isSilent: Bool
+            let tempoLocked: Bool
+            let tempoConfidence: Double
+        }
+    }
+}
+
 struct TransitionTypesResponse: Codable, Sendable {
     let success: Bool
     let data: TransitionTypesData
@@ -626,6 +779,26 @@ actor RESTClient {
             body["micType"] = micType
         }
         let _: GenericResponse = try await request("POST", path: "audio/parameters", body: body)
+    }
+
+    func getAudioTuning() async throws -> AudioTuningResponse {
+        try await request("GET", path: "audio/parameters")
+    }
+
+    func patchAudioTuning(_ payload: [String: Any]) async throws {
+        let _: GenericResponse = try await request("PATCH", path: "audio/parameters", body: payload)
+    }
+
+    func getAudioFFT() async throws -> AudioFFTResponse {
+        try await request("GET", path: "audio/fft")
+    }
+
+    func getAudioTempo() async throws -> AudioTempoResponse {
+        try await request("GET", path: "audio/tempo")
+    }
+
+    func getAudioState() async throws -> AudioStateResponse {
+        try await request("GET", path: "audio/state")
     }
 
     // MARK: - Network Endpoints (Wi-Fi setup)

@@ -52,7 +52,6 @@
 #include "input/CoarseModeManager.h"
 #include "network/WiFiManager.h"
 #include "network/WebSocketClient.h"
-#include "network/DeviceRegistry.h"
 #include "network/WsMessageRouter.h"
 #include "network/OtaHandler.h"
 #include <ESPAsyncWebServer.h>
@@ -65,7 +64,6 @@
 #include "ui/LedFeedback.h"
 // #include "ui/PaletteLedDisplay.h"  // DISABLED - causing encoder regression
 #include "ui/DisplayUI.h"
-#include "ui/DeviceSelectorTab.h"
 #include "ui/LoadingScreen.h"
 #include "ui/Theme.h"
 #include "ui/lvgl_bridge.h"
@@ -116,9 +114,6 @@ AsyncWebServer* g_otaServer = nullptr;
 
 // WebSocket connection state
 bool g_wsConfigured = false;  // true after wsClient.begin() called
-
-// Device registry for multi-device support
-DeviceRegistry* g_deviceRegistry = nullptr;
 
 // Connection status LED feedback (Phase F.5)
 LedFeedback g_ledFeedback;
@@ -624,24 +619,6 @@ static bool s_encodersInitialized[16] = {false};
  * @param wasReset true if this was a button-press reset to default
  */
 void onEncoderChange(uint8_t index, uint16_t value, bool wasReset) {
-    // Route to Device Selector if active
-    if (g_ui && s_uiInitialized && g_ui->getCurrentScreen() == UIScreen::DEVICE_SELECTOR) {
-        DeviceSelectorTab* selectorTab = g_ui->getDeviceSelectorTab();
-        if (selectorTab) {
-            if (!s_encodersInitialized[index]) {
-                s_prevEncoderValues[index] = value;
-                s_encodersInitialized[index] = true;
-                return;
-            }
-            int32_t delta = static_cast<int32_t>(value) - static_cast<int32_t>(s_prevEncoderValues[index]);
-            if (delta > 128) delta -= 256;
-            else if (delta < -128) delta += 256;
-            selectorTab->handleEncoderChange(index, delta);
-            s_prevEncoderValues[index] = value;
-            return;
-        }
-    }
-
     // CRITICAL FIX: Screen-aware encoder routing
     // If Zone Composer is active, route encoders to Zone Composer UI
     if (g_ui && s_uiInitialized && g_ui->getCurrentScreen() == UIScreen::ZONE_COMPOSER) {
@@ -1213,14 +1190,6 @@ void setup() {
     });
 
     // =========================================================================
-    // Initialize Device Registry (multi-device support)
-    // =========================================================================
-    g_deviceRegistry = new DeviceRegistry();
-    g_deviceRegistry->begin();
-    Serial.printf("[DEVICE] Registry initialized, %d devices loaded from NVS\n",
-                  g_deviceRegistry->getDeviceCount());
-
-    // =========================================================================
     // Initialize Preset Manager (Phase 8: 8-bank preset system)
     // =========================================================================
     g_presetManager = new PresetManager(g_paramHandler, &g_wsClient);
@@ -1718,12 +1687,6 @@ void cleanup() {
         Serial.println("[CLEANUP] PresetManager deleted");
     }
     
-    if (g_deviceRegistry) {
-        delete g_deviceRegistry;
-        g_deviceRegistry = nullptr;
-        Serial.println("[CLEANUP] DeviceRegistry deleted");
-    }
-
     if (g_paramHandler) {
         delete g_paramHandler;
         g_paramHandler = nullptr;
@@ -1753,32 +1716,6 @@ void loop() {
     // CRITICAL: Reset watchdog at START of every loop iteration
     esp_task_wdt_reset();
 
-    // #region agent log (Tab5 WDT timing) (DISABLED)
-    // Hypotheses:
-    // - H1: I2C polling blocks long enough to starve loopTask WDT
-    // - H2: WebSocket client blocks (connect/loop/send) long enough to starve loopTask WDT
-    // - H3: WiFi/mDNS blocks long enough to starve loopTask WDT
-    // - H4: LVGL flush blocks long enough to starve loopTask WDT
-    //
-    // Enable by changing `if (false)` to `if (true)` in this region.
-    // Logs are intentionally sparse: only emitted on slow segments, rate-limited.
-    static uint32_t s_lastLoopMs = 0;
-    static uint32_t s_lastSlowLogMs = 0;
-    const uint32_t _dbg_now = millis();
-    const uint32_t _dbg_gap = (s_lastLoopMs == 0) ? 0 : (_dbg_now - s_lastLoopMs);
-    s_lastLoopMs = _dbg_now;
-    if (false) {
-        if (_dbg_gap > 500 && (_dbg_now - s_lastSlowLogMs) > 500) {
-            s_lastSlowLogMs = _dbg_now;
-            Serial.printf(
-                "{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1,H2,H3,H4\",\"location\":\"Tab5.encoder/src/main.cpp:loop\",\"message\":\"loop.gap\",\"data\":{\"gapMs\":%lu},\"timestamp\":%lu}\n",
-                (unsigned long)_dbg_gap,
-                (unsigned long)_dbg_now
-            );
-        }
-    }
-    // #endregion
-
     // Update M5Stack (handles button events, touch, etc.)
     M5.update();
 
@@ -1788,23 +1725,7 @@ void loop() {
     g_touchHandler.update();
 
 #if defined(TAB5_ENCODER_USE_LVGL) && (TAB5_ENCODER_USE_LVGL) && !defined(SIMULATOR_BUILD)
-    const uint32_t _dbg_lvgl_t0 = millis();
     LVGLBridge::update();
-    const uint32_t _dbg_lvgl_dt = millis() - _dbg_lvgl_t0;
-    // #region agent log (DISABLED)
-    static uint32_t s_lastLvglSlowMs = 0;
-    const uint32_t _dbg_lvgl_now = millis();
-    if (false) {
-        if (_dbg_lvgl_dt > 250 && (_dbg_lvgl_now - s_lastLvglSlowMs) > 500) {
-            s_lastLvglSlowMs = _dbg_lvgl_now;
-            Serial.printf(
-                "{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H4\",\"location\":\"Tab5.encoder/src/main.cpp:LVGLBridge::update\",\"message\":\"seg.lvgl.slow\",\"data\":{\"dtMs\":%lu},\"timestamp\":%lu}\n",
-                (unsigned long)_dbg_lvgl_dt,
-                (unsigned long)_dbg_lvgl_now
-            );
-        }
-    }
-    // #endregion
     esp_task_wdt_reset();  // Reset after LVGL (can block on SPI I/O)
 #endif
 
@@ -1826,23 +1747,7 @@ void loop() {
     // }
 // #endif
         // #endregion
-    const uint32_t _dbg_ws_t0 = millis();
     g_wsClient.update();
-    const uint32_t _dbg_ws_dt = millis() - _dbg_ws_t0;
-    // #region agent log (DISABLED)
-    static uint32_t s_lastWsSlowMs = 0;
-    const uint32_t _dbg_ws_now = millis();
-    if (false) {
-        if (_dbg_ws_dt > 250 && (_dbg_ws_now - s_lastWsSlowMs) > 500) {
-            s_lastWsSlowMs = _dbg_ws_now;
-            Serial.printf(
-                "{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H2\",\"location\":\"Tab5.encoder/src/main.cpp:g_wsClient.update\",\"message\":\"seg.ws.slow\",\"data\":{\"dtMs\":%lu},\"timestamp\":%lu}\n",
-                (unsigned long)_dbg_ws_dt,
-                (unsigned long)_dbg_ws_now
-            );
-        }
-    }
-    // #endregion
     esp_task_wdt_reset();  // Reset after WebSocket (can block on network I/O)
     // #region agent log (DISABLED)
 // #if ENABLE_WS_DIAGNOSTICS
@@ -1856,23 +1761,7 @@ void loop() {
     // =========================================================================
     // NETWORK: Update WiFi state machine
     // =========================================================================
-    const uint32_t _dbg_wifi_t0 = millis();
     g_wifiManager.update();
-    const uint32_t _dbg_wifi_dt = millis() - _dbg_wifi_t0;
-    // #region agent log (DISABLED)
-    static uint32_t s_lastWiFiSlowMs = 0;
-    const uint32_t _dbg_wifi_now = millis();
-    if (false) {
-        if (_dbg_wifi_dt > 250 && (_dbg_wifi_now - s_lastWiFiSlowMs) > 500) {
-            s_lastWiFiSlowMs = _dbg_wifi_now;
-            Serial.printf(
-                "{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H3\",\"location\":\"Tab5.encoder/src/main.cpp:g_wifiManager.update\",\"message\":\"seg.wifi.slow\",\"data\":{\"dtMs\":%lu},\"timestamp\":%lu}\n",
-                (unsigned long)_dbg_wifi_dt,
-                (unsigned long)_dbg_wifi_now
-            );
-        }
-    }
-    // #endregion
     esp_task_wdt_reset();  // Reset after WiFi state machine (can block on network events)
 
     // =========================================================================
@@ -2023,47 +1912,7 @@ void loop() {
                 g_ui->refreshAllPresetSlots(g_presetManager);
                 Serial.println("[PRESET] UI slots refreshed from NVS");
             }
-
-            // Wire Device Selector Tab
-            #if ENABLE_WIFI
-            if (g_ui->getDeviceSelectorTab()) {
-                DeviceSelectorTab* selectorTab = g_ui->getDeviceSelectorTab();
-                selectorTab->setDeviceRegistry(g_deviceRegistry);
-                selectorTab->setWebSocketClient(&g_wsClient);
-
-                selectorTab->setDeviceSelectedCallback([](const char* ip, uint16_t port) {
-                    Serial.printf("[DEVICE] User selected device: %s:%d\n", ip, port);
-
-                    // Find and select in registry
-                    IPAddress selectedIP;
-                    if (selectedIP.fromString(ip) && g_deviceRegistry) {
-                        int8_t idx = g_deviceRegistry->findByIP(selectedIP);
-                        if (idx >= 0) {
-                            g_deviceRegistry->selectDevice(idx);
-                        }
-                    }
-
-                    // Disconnect current WebSocket
-                    if (g_wsClient.isConnected()) {
-                        g_wsClient.disconnect();
-                    }
-
-                    // Reset connection state (triggers reconnect in next loop)
-                    g_wsConfigured = false;
-                    s_requestedLists = false;
-
-                    // Return to main screen
-                    if (g_ui) {
-                        g_ui->setScreen(UIScreen::GLOBAL);
-                    }
-
-                    Serial.println("[DEVICE] WebSocket will reconnect to new device on next loop");
-                });
-
-                Serial.println("[DEVICE] Device Selector Tab callbacks wired");
-            }
-            #endif
-
+            
             s_uiInitialized = true;
             Serial.println("[UI] Full UI initialized after WiFi connection");
             
@@ -2177,23 +2026,10 @@ void loop() {
         }
 
         // Multi-tier fallback strategy:
-        // Priority 0: DeviceRegistry selected device (user chose via Device Selector)
         // Priority 1: If we are on the v2 SoftAP subnet (192.168.4.0/24), connect to the AP gateway
         // Priority 2: Manual IP from NVS (if configured and enabled)
         // Priority 3: mDNS resolution (with timeout fallback)
         // Priority 4: Timeout-based fallback (default fallback IP)
-
-        // Priority 0: DeviceRegistry selected device
-        if (!g_wsConfigured && g_deviceRegistry && g_deviceRegistry->getSelectedIndex() >= 0) {
-            IPAddress selectedIP = g_deviceRegistry->getSelectedIP();
-            if (selectedIP != INADDR_NONE) {
-                g_wsConfigured = true;
-                char ipStr[16];
-                formatIPv4(selectedIP, ipStr);
-                Serial.printf("[NETWORK] Using registry-selected device: %s\n", ipStr);
-                g_wsClient.begin(selectedIP, LIGHTWAVE_PORT, LIGHTWAVE_WS_PATH);
-            }
-        }
 
         // Priority 1: v2 SoftAP subnet (gateway 192.168.4.1)
         if (!g_wsConfigured &&
@@ -2213,10 +2049,6 @@ void loop() {
                               LIGHTWAVE_PORT,
                               LIGHTWAVE_WS_PATH);
                 g_wsClient.begin(serverIP, LIGHTWAVE_PORT, LIGHTWAVE_WS_PATH);
-                if (g_deviceRegistry) {
-                    g_deviceRegistry->addDiscoveredDevice(serverIP, DeviceInfo::Source::GATEWAY);
-                    g_deviceRegistry->autoSelect();
-                }
             }
 #else
             // Fallback if LIGHTWAVE_IP macro is not defined
@@ -2224,10 +2056,6 @@ void loop() {
             g_wsConfigured = true;
             Serial.printf("[NETWORK] On SoftAP subnet - using default AP IP: 192.168.4.1\n");
             g_wsClient.begin(serverIP, LIGHTWAVE_PORT, LIGHTWAVE_WS_PATH);
-            if (g_deviceRegistry) {
-                g_deviceRegistry->addDiscoveredDevice(serverIP, DeviceInfo::Source::GATEWAY);
-                g_deviceRegistry->autoSelect();
-            }
 #endif
         }
 
@@ -2240,13 +2068,9 @@ void loop() {
                 Serial.printf("[NETWORK] Using manual IP: %s\n", ipStr);
                 g_wsConfigured = true;
                 g_wsClient.begin(manualIP, LIGHTWAVE_PORT, LIGHTWAVE_WS_PATH);
-                if (g_deviceRegistry) {
-                    g_deviceRegistry->addDiscoveredDevice(manualIP, DeviceInfo::Source::MANUAL);
-                    g_deviceRegistry->autoSelect();
-                }
             }
         }
-
+        
         // Priority 3: mDNS resolution (with timeout fallback)
         if (!g_wsConfigured) {
             // Check if mDNS timeout exceeded OR resolved (not both AND - fixes broken logic)
@@ -2284,10 +2108,6 @@ void loop() {
                     Serial.printf("[NETWORK] Using fallback IP: %s\n", ipStr);
                     g_wsConfigured = true;
                     g_wsClient.begin(fallbackIP, LIGHTWAVE_PORT, LIGHTWAVE_WS_PATH);
-                    if (g_deviceRegistry) {
-                        g_deviceRegistry->addDiscoveredDevice(fallbackIP, DeviceInfo::Source::NETWORK_SCAN);
-                        g_deviceRegistry->autoSelect();
-                    }
                 }
             } else {
                 // Normal mDNS resolution attempt
@@ -2321,45 +2141,18 @@ void loop() {
                     );
 
                     g_wsClient.begin(serverIP, LIGHTWAVE_PORT, LIGHTWAVE_WS_PATH);
-                    if (g_deviceRegistry) {
-                        g_deviceRegistry->addDiscoveredDevice(serverIP, DeviceInfo::Source::MDNS, "lightwaveos");
-                        g_deviceRegistry->autoSelect();
-                    }
                 }
             }
         }
 
         // Reset g_wsConfigured if WebSocket disconnects (allows reconnection)
         // Use existing global s_wasWsConnected from updateConnectionLeds()
-        static uint8_t s_wsFailCount = 0;
         bool isWsConnected = g_wsClient.isConnected();
-
-        // Track successful connection for reachability
-        if (!s_wasWsConnected && isWsConnected) {
-            s_wsFailCount = 0;
-            if (g_deviceRegistry) {
-                int8_t selIdx = g_deviceRegistry->getSelectedIndex();
-                if (selIdx >= 0) {
-                    g_deviceRegistry->updateReachability(selIdx, true);
-                }
-            }
-        }
-
         if (s_wasWsConnected && !isWsConnected) {
             // WebSocket just disconnected (WiFi still connected)
             Serial.println("[NETWORK] WebSocket disconnected, resetting connection state");
             g_wsConfigured = false;  // Allow reconnection
             s_mdnsLogged = false;    // Allow fresh mDNS log
-
-            // Track consecutive failures for reachability
-            s_wsFailCount++;
-            if (s_wsFailCount >= 3 && g_deviceRegistry) {
-                int8_t selIdx = g_deviceRegistry->getSelectedIndex();
-                if (selIdx >= 0) {
-                    g_deviceRegistry->updateReachability(selIdx, false);
-                }
-                s_wsFailCount = 0;
-            }
         }
         // Note: s_wasWsConnected is updated in updateConnectionLeds() which is called later in the loop
 
@@ -2481,25 +2274,7 @@ void loop() {
 
     // Update encoder service (polls all 16 encoders, handles debounce, fires callbacks)
     // The callback (onEncoderChange) handles display updates with highlighting
-    const uint32_t _dbg_enc_t0 = millis();
     g_encoders->update();
-    const uint32_t _dbg_enc_dt = millis() - _dbg_enc_t0;
-    // #region agent log (DISABLED)
-    static uint32_t s_lastEncSlowMs = 0;
-    const uint32_t _dbg_enc_now = millis();
-    if (false) {
-        if (_dbg_enc_dt > 250 && (_dbg_enc_now - s_lastEncSlowMs) > 500) {
-            s_lastEncSlowMs = _dbg_enc_now;
-            Serial.printf(
-                "{\"sessionId\":\"debug-session\",\"runId\":\"run1\",\"hypothesisId\":\"H1\",\"location\":\"Tab5.encoder/src/main.cpp:g_encoders.update\",\"message\":\"seg.encoders.slow\",\"data\":{\"dtMs\":%lu,\"i2cErr\":%u,\"i2cRec\":%u},\"timestamp\":%lu}\n",
-                (unsigned long)_dbg_enc_dt,
-                (unsigned)I2CRecovery::getErrorCount(),
-                (unsigned)I2CRecovery::getRecoverySuccesses(),
-                (unsigned long)_dbg_enc_now
-            );
-        }
-    }
-    // #endregion
     
     // Reset watchdog after encoder update
     esp_task_wdt_reset();

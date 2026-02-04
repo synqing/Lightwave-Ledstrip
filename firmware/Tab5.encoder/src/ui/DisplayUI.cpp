@@ -20,7 +20,6 @@
 #include "fonts/experimental_fonts.h"
 #include "ZoneComposerUI.h"
 #include "ConnectivityTab.h"
-#include "DeviceSelectorTab.h"
 
 // Forward declaration - WiFiManager instance is in main.cpp
 extern WiFiManager g_wifiManager;
@@ -89,18 +88,12 @@ DisplayUI::~DisplayUI() {
         delete _connectivityTab;
         _connectivityTab = nullptr;
     }
-    if (_deviceSelectorTab) {
-        delete _deviceSelectorTab;
-        _deviceSelectorTab = nullptr;
-    }
     if (_screen_global) lv_obj_del(_screen_global);
     if (_screen_zone) lv_obj_del(_screen_zone);
     if (_screen_connectivity) lv_obj_del(_screen_connectivity);
-    if (_screen_deviceSelector) lv_obj_del(_screen_deviceSelector);
     _screen_global = nullptr;
     _screen_zone = nullptr;
     _screen_connectivity = nullptr;
-    _screen_deviceSelector = nullptr;
 }
 
 void DisplayUI::begin() {
@@ -255,18 +248,6 @@ void DisplayUI::begin() {
     lv_obj_set_layout(title_container, LV_LAYOUT_FLEX);
     lv_obj_set_flex_flow(title_container, LV_FLEX_FLOW_ROW);
     lv_obj_align(title_container, LV_ALIGN_CENTER, 0, 0);  // TRUE CENTER (absolute)
-    // Tap LIGHTWAVEOS to open Device Selector
-    lv_obj_add_flag(title_container, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_bg_opa(title_container, LV_OPA_20, LV_STATE_PRESSED);
-    lv_obj_set_style_bg_color(title_container, lv_color_hex(0xFFFFFF), LV_STATE_PRESSED);
-    lv_obj_set_style_radius(title_container, 8, LV_STATE_PRESSED);
-    lv_obj_add_event_cb(title_container, [](lv_event_t* e) {
-        DisplayUI* ui = static_cast<DisplayUI*>(lv_event_get_user_data(e));
-        if (ui) {
-            Serial.println("[DisplayUI] LIGHTWAVEOS tapped - switching to Device Selector");
-            ui->setScreen(UIScreen::DEVICE_SELECTOR);
-        }
-    }, LV_EVENT_CLICKED, reinterpret_cast<void*>(this));
 
     // LIGHTWAVEOS title inside centered container
     _header_title_main = lv_label_create(title_container);
@@ -744,22 +725,6 @@ void DisplayUI::begin() {
         // Serial.println("[DisplayUI_TRACE] ENABLE_WIFI not defined - skipping ConnectivityTab");
 #endif
 
-    // Create device selector screen
-    _screen_deviceSelector = lv_obj_create(nullptr);
-    lv_obj_set_style_bg_color(_screen_deviceSelector, lv_color_hex(TAB5_COLOR_BG_PAGE), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(_screen_deviceSelector, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(_screen_deviceSelector, 0, LV_PART_MAIN);
-
-    esp_task_wdt_reset();
-
-#if ENABLE_WIFI
-    _deviceSelectorTab = new DeviceSelectorTab(_display);
-    _deviceSelectorTab->setBackButtonCallback(onDeviceSelectorBackButton);
-    esp_task_wdt_reset();
-    _deviceSelectorTab->begin(_screen_deviceSelector);
-    Serial.println("[DisplayUI] Device Selector Tab initialized");
-#endif
-
     // Serial.printf("[DisplayUI_TRACE] Before lv_scr_load @ %lu ms\n", millis());
     esp_task_wdt_reset();
     lv_scr_load(_screen_global);
@@ -857,13 +822,6 @@ void DisplayUI::loop() {
             lv_label_set_text(_footer_uptime_value, buf);
         }
     }
-
-    // Device Selector Tab periodic update (deferred loading, scan timeout, status)
-#if ENABLE_WIFI
-    if (_currentScreen == UIScreen::DEVICE_SELECTOR && _deviceSelectorTab) {
-        _deviceSelectorTab->loop();
-    }
-#endif
 }
 
 void DisplayUI::updateEncoder(uint8_t index, int32_t value, bool highlight) {
@@ -980,9 +938,6 @@ void DisplayUI::setScreen(UIScreen screen) {
         case UIScreen::CONNECTIVITY:
             targetScreen = _screen_connectivity;
             break;
-        case UIScreen::DEVICE_SELECTOR:
-            targetScreen = _screen_deviceSelector;
-            break;
     }
     lv_scr_load(targetScreen);
 }
@@ -994,12 +949,6 @@ void DisplayUI::onZoneComposerBackButton() {
 }
 
 void DisplayUI::onConnectivityTabBackButton() {
-    if (s_instance) {
-        s_instance->setScreen(UIScreen::GLOBAL);
-    }
-}
-
-void DisplayUI::onDeviceSelectorBackButton() {
     if (s_instance) {
         s_instance->setScreen(UIScreen::GLOBAL);
     }
@@ -1533,9 +1482,6 @@ void DisplayUI::renderCurrentScreen() {
             #endif
             #endif
             break;
-        case UIScreen::DEVICE_SELECTOR:
-            // No non-LVGL rendering for device selector
-            break;
     }
 }
 
@@ -1609,9 +1555,6 @@ void DisplayUI::loop() {
             }
             #endif
             #endif
-            break;
-        case UIScreen::DEVICE_SELECTOR:
-            // No non-LVGL rendering for device selector
             break;
     }
 }

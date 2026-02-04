@@ -190,10 +190,18 @@ bool ActorSystem::start()
         // Wire up audio buffer to renderer for cross-core access
         if (m_renderer) {
             m_renderer->setAudioBuffer(&m_audio->getControlBusBuffer());
+#if !FEATURE_AUDIO_BACKEND_ESV11
             // Wire up TempoTracker for phase advancement at 120 FPS
             m_renderer->setTempo(&m_audio->getTempoMut());
+#endif
 #ifndef NATIVE_BUILD
-            ESP_LOGI(TAG, "Audio integration enabled - ControlBus + TempoTracker");
+            ESP_LOGI(TAG, "Audio integration enabled - ControlBus%s",
+#if !FEATURE_AUDIO_BACKEND_ESV11
+                     " + TempoTracker"
+#else
+                     " (ES v1.1 backend)"
+#endif
+            );
 #endif
         }
     }

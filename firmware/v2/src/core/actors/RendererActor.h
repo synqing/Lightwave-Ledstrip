@@ -52,8 +52,12 @@
 #include "../../audio/contracts/SnapshotBuffer.h"
 #include "../../audio/contracts/AudioEffectMapping.h"
 #include "../../audio/TrinityControlBusProxy.h"
+#if FEATURE_AUDIO_BACKEND_ESV11
+#include "../../audio/backends/esv11/EsBeatClock.h"
+#else
 // TempoTracker integration (replaces K1)
 #include "../../audio/tempo/TempoTracker.h"
+#endif
 #include "../../utils/LockFreeQueue.h"
 #endif
 
@@ -385,6 +389,7 @@ public:
      */
     const audio::MusicalGridSnapshot& getLastMusicalGrid() const { return m_lastMusicalGrid; }
 
+#if !FEATURE_AUDIO_BACKEND_ESV11
     // ========================================================================
     // TempoTracker Integration (replaces K1)
     // ========================================================================
@@ -417,6 +422,7 @@ public:
         }
         return lightwaveos::audio::TempoTrackerOutput{};
     }
+#endif // !FEATURE_AUDIO_BACKEND_ESV11
 #endif
 
     // ========================================================================
@@ -668,12 +674,16 @@ private:
      * in the audio domain at 62.5 Hz. This gives "PLL freewheel" behavior
      * where beat phase stays smooth even if audio stalls momentarily.
      */
+#if FEATURE_AUDIO_BACKEND_ESV11
+    audio::esv11::EsBeatClock m_esBeatClock;
+#else
     audio::MusicalGrid m_musicalGrid;
+#endif
 
     /// Last ControlBusFrame read from AudioActor (by-value copy)
     audio::ControlBusFrame m_lastControlBus;
 
-    /// Last MusicalGridSnapshot from our owned m_musicalGrid
+    /// Last MusicalGridSnapshot (populated by MusicalGrid or ES beat clock)
     audio::MusicalGridSnapshot m_lastMusicalGrid;
 
     /// Sequence number from last SnapshotBuffer read (for change detection)
@@ -726,7 +736,9 @@ private:
      * AudioActor calls updateNovelty() and updateTempo() per audio hop.
      * Set to nullptr if AudioActor isn't running.
      */
+#if !FEATURE_AUDIO_BACKEND_ESV11
     lightwaveos::audio::TempoTracker* m_tempo = nullptr;
+#endif
 #endif
 
     /**

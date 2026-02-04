@@ -38,8 +38,10 @@
 // Audio integration (Phase 2)
 #if FEATURE_AUDIO_SYNC
 #include "../../audio/AudioActor.h"
+#if !FEATURE_AUDIO_BACKEND_ESV11
 // TempoTracker integration (replaces K1)
 #include "../../audio/tempo/TempoTracker.h"
+#endif
 #endif
 
 #if FEATURE_TRANSITIONS
@@ -960,7 +962,7 @@ void RendererActor::initLeds()
 
 void RendererActor::renderFrame()
 {
-#if FEATURE_AUDIO_SYNC
+#if FEATURE_AUDIO_SYNC && !FEATURE_AUDIO_BACKEND_ESV11
     applyPendingAudioContractTuning();
 
     // Advance TempoTracker phase at 120 FPS
@@ -1044,16 +1046,21 @@ void RendererActor::renderFrame()
             now_us
         );
 
-        // 4. Tick MusicalGrid at 120 FPS
-        m_musicalGrid.Tick(render_now);
-        m_musicalGrid.ReadLatest(m_lastMusicalGrid);
-
-        // 5. Compute freshness
+        // 4. Compute freshness + "new frame" detection
         float age_s = audio::AudioTime_SecondsBetween(m_lastControlBus.t, render_now);
         float staleness_s = m_audioContractTuning.audioStalenessMs / 1000.0f;
         bool sequence_changed = (seq != prevSeq);
         bool age_within_tolerance = (age_s >= -0.01f && age_s < staleness_s);
         audioAvailable = sequence_changed || age_within_tolerance;
+
+        // 5. Beat phase at 120 FPS (renderer-domain integration)
+#if FEATURE_AUDIO_BACKEND_ESV11
+        m_esBeatClock.tick(m_lastControlBus, sequence_changed, render_now);
+        m_lastMusicalGrid = m_esBeatClock.snapshot();
+#else
+        m_musicalGrid.Tick(render_now);
+        m_musicalGrid.ReadLatest(m_lastMusicalGrid);
+#endif
         
         // Debug: Log audio availability issues every 4 seconds (reduced frequency)
         static uint32_t lastAudioDbg = 0;

@@ -21,6 +21,7 @@ static inline float clamp01(float x) {
 void EsV11Adapter::reset()
 {
     m_binsMaxFollower = 0.1f;
+    m_chromaMaxFollower = 0.2f;
     std::memset(m_heavyBands, 0, sizeof(m_heavyBands));
     std::memset(m_heavyChroma, 0, sizeof(m_heavyChroma));
     m_beatInBar = 0;
@@ -37,20 +38,33 @@ void EsV11Adapter::buildFrame(lightwaveos::audio::ControlBusFrame& out,
     out.hop_seq = hopSeq;
 
     // Core energy / novelty proxy
-    out.rms = clamp01(es.vu_level);
+    // ES vu_level tends to be a low-range linear energy; map to LWLS contract range
+    // expected by existing effects (0..1, perceptually expanded).
+    out.rms = clamp01(std::sqrt(std::max(0.0f, es.vu_level)) * 1.25f);
     out.flux = clamp01(es.novelty_norm_last);
     out.fast_rms = out.rms;
     out.fast_flux = out.flux;
 
-    // bins64: ES spectrogram_smooth is already [0..1] normalised
+    // When the ES backend is running on toolchains that align/scale I2S samples
+    // differently, the spectrogram can end up with lower absolute magnitudes.
+    //
+    // LWLS effects generally expect bins64 to already be usable as a 0..1 signal
+    // (e.g. sub-bass kick thresholds around 0.15..0.50). To preserve effect
+    // compatibility, we apply a simple autorange follower when audio is active.
+    constexpr float ACTIVE_VU_THRESHOLD = 0.01f; // Below this, treat as near-silence.
+    const bool isActive = es.vu_level >= ACTIVE_VU_THRESHOLD;
+
+    float rawBins[lightwaveos::audio::ControlBusFrame::BINS_64_COUNT];
+
+    // bins64: clamp raw ES spectrogram
     for (uint8_t i = 0; i < lightwaveos::audio::ControlBusFrame::BINS_64_COUNT; ++i) {
-        out.bins64[i] = clamp01(es.spectrogram_smooth[i]);
+        rawBins[i] = clamp01(es.spectrogram_smooth[i]);
     }
 
     // bins64Adaptive: ES-style autorange follower (simple max follower)
     float currentMax = 0.00001f;
     for (uint8_t i = 0; i < lightwaveos::audio::ControlBusFrame::BINS_64_COUNT; ++i) {
-        currentMax = std::max(currentMax, out.bins64[i]);
+        currentMax = std::max(currentMax, rawBins[i]);
     }
     // Decay + rise behaviour
     const float decay = 0.995f;
@@ -67,9 +81,12 @@ void EsV11Adapter::buildFrame(lightwaveos::audio::ControlBusFrame& out,
     if (m_binsMaxFollower < floor) {
         m_binsMaxFollower = floor;
     }
-    const float inv = 1.0f / m_binsMaxFollower;
+
+    const float inv = isActive ? (1.0f / m_binsMaxFollower) : 1.0f;
     for (uint8_t i = 0; i < lightwaveos::audio::ControlBusFrame::BINS_64_COUNT; ++i) {
-        out.bins64Adaptive[i] = clamp01(out.bins64[i] * inv);
+        const float v = clamp01(rawBins[i] * inv);
+        out.bins64[i] = v;
+        out.bins64Adaptive[i] = v;
     }
 
     // Aggregate 8 bands from 64 bins (mean of each 8-bin block)
@@ -77,14 +94,36 @@ void EsV11Adapter::buildFrame(lightwaveos::audio::ControlBusFrame& out,
         const uint8_t start = static_cast<uint8_t>(band * 8);
         float sum = 0.0f;
         for (uint8_t i = 0; i < 8; ++i) {
-            sum += out.bins64Adaptive[start + i];
+            sum += out.bins64[start + i];
         }
         out.bands[band] = clamp01(sum / 8.0f);
     }
 
     // Chroma
+    float rawChroma[lightwaveos::audio::CONTROLBUS_NUM_CHROMA];
+    float chromaMax = 0.00001f;
     for (uint8_t i = 0; i < lightwaveos::audio::CONTROLBUS_NUM_CHROMA; ++i) {
-        out.chroma[i] = clamp01(es.chromagram[i]);
+        rawChroma[i] = clamp01(es.chromagram[i]);
+        chromaMax = std::max(chromaMax, rawChroma[i]);
+    }
+
+    // Similar autorange follower for chroma magnitudes, gated by activity.
+    const float chromaDecay = 0.995f;
+    const float chromaRise = 0.35f;
+    const float chromaFloor = 0.08f;
+    float chromaDecayed = m_chromaMaxFollower * chromaDecay;
+    if (chromaMax > chromaDecayed) {
+        float delta = chromaMax - chromaDecayed;
+        m_chromaMaxFollower = chromaDecayed + delta * chromaRise;
+    } else {
+        m_chromaMaxFollower = chromaDecayed;
+    }
+    if (m_chromaMaxFollower < chromaFloor) {
+        m_chromaMaxFollower = chromaFloor;
+    }
+    const float chromaInv = isActive ? (1.0f / m_chromaMaxFollower) : 1.0f;
+    for (uint8_t i = 0; i < lightwaveos::audio::CONTROLBUS_NUM_CHROMA; ++i) {
+        out.chroma[i] = clamp01(rawChroma[i] * chromaInv);
     }
 
     // Heavy smoothing (slow envelope) purely within adapter
@@ -123,4 +162,3 @@ void EsV11Adapter::buildFrame(lightwaveos::audio::ControlBusFrame& out,
 } // namespace lightwaveos::audio::esv11
 
 #endif
-

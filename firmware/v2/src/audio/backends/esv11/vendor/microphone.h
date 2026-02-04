@@ -147,8 +147,24 @@ inline void acquire_sample_chunk() {
 #endif
 #endif
 
+        // NOTE: Emotiscope v1.1_320 uses the ESP-IDF "std" I2S driver and expects
+        // samples aligned such that >>14 yields an 18-bit signed range.
+        //
+        // In this LWLS integration we may fall back to the legacy I2S driver
+        // (Arduino toolchain/headers), which aligns SPH0645 samples differently.
+        // LWLS legacy capture uses >>10 for SPH0645 on the same hardware.
+#if defined(NATIVE_BUILD)
+        constexpr int BIT_SHIFT = 14;
+#else
+#if ESV11_HAS_I2S_STD
+        constexpr int BIT_SHIFT = 14;
+#else
+        constexpr int BIT_SHIFT = 10;
+#endif
+#endif
+
         for (uint16_t i = 0; i < CHUNK_SIZE; i++) {
-            float x = (float)(((int32_t)new_samples_raw[i]) >> 14);
+            float x = (float)(((int32_t)new_samples_raw[i]) >> BIT_SHIFT);
             float y = DC_BLOCKER_G * (x - dc_blocker_x_prev + DC_BLOCKER_R * dc_blocker_y_prev);
             dc_blocker_x_prev = x;
             dc_blocker_y_prev = y;

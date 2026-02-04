@@ -47,6 +47,9 @@ void DeviceHandlers::handleStatus(AsyncWebServerRequest* request,
         data["cpuPercent"] = stats.cpuPercent;
         data["framesRendered"] = stats.framesRendered;
 
+        // Audio sync mode (local ES backend vs external Trinity sync)
+        data["audioSyncMode"] = renderer->getAudioSyncMode();
+
         // Network info
         JsonObject network = data["network"].to<JsonObject>();
         network["connected"] = WiFi.status() == WL_CONNECTED;

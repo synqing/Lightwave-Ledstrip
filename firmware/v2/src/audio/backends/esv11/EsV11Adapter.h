@@ -36,6 +36,7 @@ public:
 private:
     // Adaptive normalisation follower for bins64Adaptive
     float m_binsMaxFollower = 0.1f;
+    float m_chromaMaxFollower = 0.2f;
 
     // Heavy smoothing state (slow envelope)
     float m_heavyBands[lightwaveos::audio::CONTROLBUS_NUM_BANDS] = {0};

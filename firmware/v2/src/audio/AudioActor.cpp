@@ -214,11 +214,72 @@ void AudioActor::printBeat()
 #endif // NATIVE_BUILD
 }
 
+void AudioActor::printDiagnostics()
+{
+    // Calculate rates
+    uint64_t now_us = esp_timer_get_time();
+    uint64_t elapsed_us = now_us - m_diag.diagStartTimeUs;
+    float elapsed_s = elapsed_us / 1000000.0f;
+    
+    float captureRate = (elapsed_s > 0.1f) ? (m_diag.captureSuccesses / elapsed_s) : 0.0f;
+    float publishRate = (elapsed_s > 0.1f) ? (m_diag.publishCount / elapsed_s) : 0.0f;
+    float successPct = (m_diag.captureAttempts > 0) 
+        ? (100.0f * m_diag.captureSuccesses / m_diag.captureAttempts) : 0.0f;
+    
+    // Expected rate for P4: 125 Hz (16kHz / 128 samples)
+    const float expectedRate = HOP_RATE_HZ;
+    bool rateOk = (captureRate >= expectedRate * 0.9f && captureRate <= expectedRate * 1.1f);
+    
+    LW_LOGI("========== AUDIO PIPELINE DIAGNOSTICS ==========");
+    
+    // Phase 1.1: Capture Rate
+    LW_LOGI("CAPTURE: rate=%.1f Hz (expect %.1f) %s | success=%.1f%% | attempts=%lu ok=%lu",
+            captureRate, expectedRate, rateOk ? "OK" : "PROBLEM",
+            successPct, (unsigned long)m_diag.captureAttempts, (unsigned long)m_diag.captureSuccesses);
+    
+    if (m_diag.captureDmaTimeouts > 0 || m_diag.captureReadErrors > 0) {
+        LW_LOGW("  ERRORS: DMA_timeouts=%lu read_errors=%lu",
+                (unsigned long)m_diag.captureDmaTimeouts, (unsigned long)m_diag.captureReadErrors);
+    }
+    
+    // Phase 1.2: Publish Rate
+    LW_LOGI("PUBLISH: rate=%.1f Hz | count=%lu | seq_gaps=%lu",
+            publishRate, (unsigned long)m_diag.publishCount, (unsigned long)m_diag.publishSeqGaps);
+    
+    // Phase 2.1: I2S/ES8311 Hardware Validation
+    LW_LOGI("SAMPLES: raw=[%d..%d] rms=%.4f nonzero=%s zero_hops=%lu",
+            m_diag.lastRawMin, m_diag.lastRawMax, m_diag.lastRawRms,
+            m_diag.samplesNonZero ? "YES" : "NO",
+            (unsigned long)m_diag.zeroHopCount);
+    
+    if (!m_diag.samplesNonZero || m_diag.zeroHopCount > 10) {
+        LW_LOGW("  WARNING: I2S may not be receiving audio data!");
+    }
+    
+    // Phase 2.3: Timing
+    LW_LOGI("TIMING: capture avg=%lu max=%lu us | process avg=%lu max=%lu us",
+            (unsigned long)m_diag.avgCaptureLatencyUs, (unsigned long)m_diag.maxCaptureLatencyUs,
+            (unsigned long)m_diag.avgProcessLatencyUs, (unsigned long)m_diag.maxProcessLatencyUs);
+    
+    // Frame freshness check
+    if (m_diag.lastPublishTimeUs > 0) {
+        uint32_t frameAge_ms = (now_us - m_diag.lastPublishTimeUs) / 1000;
+        LW_LOGI("FRESHNESS: last_publish=%lu ms ago | hop_seq=%lu",
+                (unsigned long)frameAge_ms, (unsigned long)m_diag.lastPublishSeq);
+    }
+    
+    // Quick health summary
+    bool healthy = rateOk && m_diag.samplesNonZero && 
+                   m_diag.captureDmaTimeouts == 0 && m_diag.publishSeqGaps == 0;
+    LW_LOGI("HEALTH: %s", healthy ? "OK - Pipeline functioning normally" : "ISSUES DETECTED - See warnings above");
+    LW_LOGI("=================================================");
+}
+
 AudioPipelineTuning AudioActor::getPipelineTuning() const
 {
     AudioPipelineTuning out;
     uint32_t v0;
-    uint32_t v1;
+    uint32_t v1 = 0;
     do {
         v0 = m_pipelineTuningSeq.load(std::memory_order_acquire);
         if (v0 & 1U) continue;
@@ -246,7 +307,7 @@ AudioDspState AudioActor::getDspState() const
 {
     AudioDspState out;
     uint32_t v0;
-    uint32_t v1;
+    uint32_t v1 = 0;
     do {
         v0 = m_dspStateSeq.load(std::memory_order_acquire);
         if (v0 & 1U) continue;
@@ -288,6 +349,10 @@ void AudioActor::onStart()
     m_state = AudioActorState::INITIALIZING;
     m_stats.state = m_state;
 
+    // Initialize diagnostics
+    m_diag.reset();
+    m_diag.diagStartTimeUs = esp_timer_get_time();
+
     // Initialize I2S audio capture
     if (!m_capture.init()) {
         LW_LOGE("Failed to initialize audio capture");
@@ -307,6 +372,7 @@ void AudioActor::onStart()
 
     LW_LOGI("AudioActor started (tick=%dms, hop=%d, rate=%.1fHz)",
              AUDIO_ACTOR_TICK_MS, HOP_SIZE, HOP_RATE_HZ);
+    LW_LOGI("Pipeline diagnostics enabled - will log every 10 seconds");
 }
 
 void AudioActor::onMessage(const actors::Message& msg)
@@ -320,12 +386,12 @@ void AudioActor::onMessage(const actors::Message& msg)
         case actors::MessageType::HEALTH_CHECK:
             LW_LOGD("Health check: state=%d, captures=%lu",
                      static_cast<int>(m_state), m_stats.captureSuccessCount);
-            // TODO: Send HEALTH_STATUS response when MessageBus is integrated
+            // TODO: Send HEALTH_STATUS response once MessageBus integration lands
             break;
 
         case actors::MessageType::PING:
             // Respond with PONG for latency testing
-            // TODO: Send PONG via MessageBus
+            // TODO: Send PONG once MessageBus integration lands
             LW_LOGD("PING received");
             break;
 
@@ -346,10 +412,29 @@ void AudioActor::onTick()
 
     m_stats.tickCount++;
 
+    // DEBUG: Log first few ticks and periodically to verify tick is running
+    static uint32_t s_tickDbgCount = 0;
+    s_tickDbgCount++;
+    if (s_tickDbgCount <= 5 || (s_tickDbgCount % 1250) == 0) {
+        LW_LOGI("AudioActor tick #%lu (state=%d)", (unsigned long)s_tickDbgCount, static_cast<int>(m_state));
+    }
+
     // Record tick start time
     uint64_t tickStart = esp_timer_get_time();
 
-    // Capture one hop of audio
+    // =========================================================================
+    // SELF-CLOCKED AUDIO CAPTURE (tickInterval=0 mode)
+    // =========================================================================
+    // In self-clocked mode, the I2S DMA is the timing source. Each onTick():
+    //   1. Blocks on i2s_channel_read() until a hop is ready (~8ms between hops)
+    //   2. Processes exactly ONE hop
+    //   3. Returns immediately, allowing Actor::run() to call onTick() again
+    //
+    // This achieves 125 Hz (= 16000 Hz / 128 samples) naturally, bypassing
+    // the 100 Hz FreeRTOS tick limitation entirely.
+    // =========================================================================
+    
+    // Single blocking capture - the I2S read IS the clock
     captureHop();
 
     // Record tick time
@@ -379,13 +464,24 @@ void AudioActor::onTick()
     }
 
     // Level 2+ (WARNING): Log warnings when they actually happen (not periodic)
-    // Example: High spike rate warning
+    // High spike rate warning - threshold raised from 5.0 to 10.0 because:
+    // - 20 bins checked per frame (8 bands + 12 chroma)
+    // - At low signal levels, noise fluctuations trigger direction-change detection
+    // - 10 spikes/frame is more realistic threshold for actual problems
     auto spikeStats = m_controlBus.getSpikeStats();
     static uint32_t lastSpikeWarningTick = 0;
-    if (dbgCfg.verbosity >= 2 && spikeStats.avgSpikesPerFrame > 5.0f &&
+    if (dbgCfg.verbosity >= 2 && spikeStats.avgSpikesPerFrame > 10.0f &&
         (m_stats.tickCount - lastSpikeWarningTick) > 620) {
         LW_LOGW("High spike rate: avg=%.1f/frame", spikeStats.avgSpikesPerFrame);
         lastSpikeWarningTick = m_stats.tickCount;
+    }
+
+    // ========================================================================
+    // Phase 1 Pipeline Diagnostics (every 10 seconds, ~1250 ticks @ 125 Hz)
+    // Always enabled - critical for debugging audio availability issues
+    // ========================================================================
+    if ((m_stats.tickCount % 1250) == 0 && m_stats.tickCount > 0) {
+        printDiagnostics();
     }
 }
 
@@ -417,17 +513,69 @@ void AudioActor::onStop()
 
 void AudioActor::captureHop()
 {
+    // Phase 1.1: Track capture timing
+    uint64_t captureStart = esp_timer_get_time();
+    m_diag.captureAttempts++;
+    m_diag.lastCaptureStartUs = captureStart;
+
     CaptureResult result = m_capture.captureHop(m_hopBuffer);
+
+    uint64_t captureEnd = esp_timer_get_time();
+    m_diag.lastCaptureEndUs = captureEnd;
+    uint32_t captureLatency = static_cast<uint32_t>(captureEnd - captureStart);
+    
+    // Update capture latency stats
+    if (captureLatency > m_diag.maxCaptureLatencyUs) {
+        m_diag.maxCaptureLatencyUs = captureLatency;
+    }
+    // Exponential moving average (alpha = 0.125)
+    m_diag.avgCaptureLatencyUs = (m_diag.avgCaptureLatencyUs * 7 + captureLatency) / 8;
 
     if (result == CaptureResult::SUCCESS) {
         m_stats.captureSuccessCount++;
+        m_diag.captureSuccesses++;
         m_newHopAvailable = true;
 
+        // Phase 2.1: Analyze raw samples before DC blocking
+        int16_t rawMin = 32767, rawMax = -32768;
+        int64_t rawSumSq = 0;
+        bool allSame = true;
+        int16_t firstSample = m_hopBuffer[0];
+        for (size_t i = 0; i < HOP_SIZE; ++i) {
+            int16_t s = m_hopBuffer[i];
+            if (s < rawMin) rawMin = s;
+            if (s > rawMax) rawMax = s;
+            rawSumSq += static_cast<int64_t>(s) * s;
+            if (s != firstSample) allSame = false;
+        }
+        m_diag.lastRawMin = rawMin;
+        m_diag.lastRawMax = rawMax;
+        m_diag.lastRawRms = std::sqrt(static_cast<float>(rawSumSq) / HOP_SIZE) / 32768.0f;
+        m_diag.samplesNonZero = !allSame && (rawMax != rawMin);
+        if (allSame || (rawMin == 0 && rawMax == 0)) {
+            m_diag.zeroHopCount++;
+        }
+
         // Phase 2: Process the hop through DSP pipeline
+        uint64_t processStart = esp_timer_get_time();
         processHop();
+        uint64_t processEnd = esp_timer_get_time();
+        m_diag.lastProcessEndUs = processEnd;
+        
+        uint32_t processLatency = static_cast<uint32_t>(processEnd - processStart);
+        if (processLatency > m_diag.maxProcessLatencyUs) {
+            m_diag.maxProcessLatencyUs = processLatency;
+        }
+        m_diag.avgProcessLatencyUs = (m_diag.avgProcessLatencyUs * 7 + processLatency) / 8;
 
     } else {
         m_stats.captureFailCount++;
+        // Phase 1.1: Track failure types
+        if (result == CaptureResult::DMA_TIMEOUT) {
+            m_diag.captureDmaTimeouts++;
+        } else {
+            m_diag.captureReadErrors++;
+        }
         handleCaptureError(result);
     }
 }
@@ -1034,7 +1182,11 @@ void AudioActor::processHop()
 
     // 7. Update ControlBus with attack/release smoothing
     m_controlBus.setSmoothing(tuning.controlBusAlphaFast, tuning.controlBusAlphaSlow);
+#ifdef AUDIO_SILENCE_GATE_DISABLED
+    m_controlBus.setSilenceParameters(tuning.silenceThreshold, 0.0f);
+#else
     m_controlBus.setSilenceParameters(tuning.silenceThreshold, tuning.silenceHysteresisMs);
+#endif
     m_controlBus.UpdateFromHop(now, raw);
 
     BENCH_END_PHASE(controlBusUs);
@@ -1083,6 +1235,17 @@ void AudioActor::processHop()
         frameToPublish.sb_hue_position = m_sbHuePosition;
         frameToPublish.sb_hue_shifting_mix = m_sbHueShiftingMix;
         m_controlBusBuffer.Publish(frameToPublish);
+        
+        // Phase 1.2: Track publish statistics
+        m_diag.publishCount++;
+        m_diag.lastPublishTimeUs = esp_timer_get_time();
+        
+        // Detect sequence gaps (indicates missed frames)
+        uint32_t expectedSeq = m_diag.lastPublishSeq + 1;
+        if (m_diag.lastPublishSeq > 0 && frameToPublish.hop_seq != expectedSeq) {
+            m_diag.publishSeqGaps++;
+        }
+        m_diag.lastPublishSeq = frameToPublish.hop_seq;
     }
 
     BENCH_END_PHASE(publishUs);

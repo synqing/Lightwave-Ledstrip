@@ -90,6 +90,68 @@ struct AudioActorStats {
 };
 
 /**
+ * @brief Phase 1 Diagnostic: Audio pipeline health metrics
+ * 
+ * Tracks capture rate, publish rate, and frame freshness for
+ * systematic debugging of audio availability issues.
+ * Modeled after Emotiscope's proven diagnostic approach.
+ */
+struct AudioPipelineDiagnostics {
+    // === Phase 1.1: Capture Rate Diagnostics ===
+    uint64_t diagStartTimeUs = 0;      ///< When diagnostics started
+    uint32_t captureAttempts = 0;      ///< Total capture attempts
+    uint32_t captureSuccesses = 0;     ///< Successful captures
+    uint32_t captureDmaTimeouts = 0;   ///< DMA timeout count
+    uint32_t captureReadErrors = 0;    ///< Read error count
+    
+    // === Phase 1.2: Publish Diagnostics ===
+    uint32_t publishCount = 0;         ///< Frames published to SnapshotBuffer
+    uint32_t publishSeqGaps = 0;       ///< Sequence number gaps detected
+    uint32_t lastPublishSeq = 0;       ///< Last published sequence number
+    
+    // === Phase 2.1: I2S/ES8311 Hardware Validation ===
+    int16_t lastRawMin = 0;            ///< Min raw sample in last hop (pre-DC block)
+    int16_t lastRawMax = 0;            ///< Max raw sample in last hop (pre-DC block)
+    float lastRawRms = 0.0f;           ///< RMS of raw samples (pre-DC block)
+    bool samplesNonZero = false;       ///< True if samples vary (not all zeros/constant)
+    uint32_t zeroHopCount = 0;         ///< Count of hops with all-zero samples
+    
+    // === Phase 2.3: Timing/Latency Diagnostics ===
+    uint64_t lastCaptureStartUs = 0;   ///< Start of last capture
+    uint64_t lastCaptureEndUs = 0;     ///< End of last capture
+    uint64_t lastProcessEndUs = 0;     ///< End of last processHop()
+    uint64_t lastPublishTimeUs = 0;    ///< Timestamp of last publish
+    uint32_t maxCaptureLatencyUs = 0;  ///< Max capture duration (I2S read)
+    uint32_t maxProcessLatencyUs = 0;  ///< Max processHop() duration
+    uint32_t avgCaptureLatencyUs = 0;  ///< Exponential moving average of capture latency
+    uint32_t avgProcessLatencyUs = 0;  ///< Exponential moving average of process latency
+    
+    void reset() {
+        diagStartTimeUs = 0;
+        captureAttempts = 0;
+        captureSuccesses = 0;
+        captureDmaTimeouts = 0;
+        captureReadErrors = 0;
+        publishCount = 0;
+        publishSeqGaps = 0;
+        lastPublishSeq = 0;
+        lastRawMin = 0;
+        lastRawMax = 0;
+        lastRawRms = 0.0f;
+        samplesNonZero = false;
+        zeroHopCount = 0;
+        lastCaptureStartUs = 0;
+        lastCaptureEndUs = 0;
+        lastProcessEndUs = 0;
+        lastPublishTimeUs = 0;
+        maxCaptureLatencyUs = 0;
+        maxProcessLatencyUs = 0;
+        avgCaptureLatencyUs = 0;
+        avgProcessLatencyUs = 0;
+    }
+};
+
+/**
  * @brief Snapshot of DSP state for diagnostics
  */
 struct AudioDspState {
@@ -157,6 +219,34 @@ public:
      * @brief Get audio capture statistics
      */
     const CaptureStats& getCaptureStats() const { return m_capture.getStats(); }
+
+#if defined(CHIP_ESP32_P4) && CHIP_ESP32_P4
+    /**
+     * @brief Get current microphone gain in dB
+     * @return Gain in dB (0, 6, 12, 18, 24, 30, 36, 42), or -1 if not supported
+     */
+    int8_t getMicGainDb() const { return m_capture.getMicGainDb(); }
+
+    /**
+     * @brief Set microphone input gain
+     * @param gainDb Gain in dB (must be 0, 6, 12, 18, 24, 30, 36, or 42)
+     * @return true if gain was set successfully
+     */
+    bool setMicGainDb(int8_t gainDb) { return m_capture.setMicGainDb(gainDb); }
+#endif
+
+    /**
+     * @brief Get pipeline diagnostics (Phase 1 debugging)
+     */
+    const AudioPipelineDiagnostics& getDiagnostics() const { return m_diag; }
+
+    /**
+     * @brief Print comprehensive pipeline diagnostics to serial
+     * 
+     * Called by 'adbg diag' serial command or automatically every 10 seconds.
+     * Includes capture rate, publish rate, sample health, and timing.
+     */
+    void printDiagnostics();
 
     /**
      * @brief Check if audio capture is working
@@ -460,6 +550,9 @@ private:
     // Statistics
     AudioActorStats m_stats;
 
+    // Pipeline diagnostics (Phase 1: systematic audio debugging)
+    AudioPipelineDiagnostics m_diag;
+
     // Sample buffer for last captured hop
     int16_t m_hopBuffer[HOP_SIZE];
     int16_t m_hopBufferCentered[HOP_SIZE];
@@ -689,10 +782,35 @@ private:
 namespace ActorConfigs {
 
 /**
+ * @brief Ceiling conversion from milliseconds to ticks.
+ * 
+ * Unlike pdMS_TO_TICKS() which floors (8ms -> 0 ticks at 100Hz),
+ * this macro rounds UP so 8ms -> 1 tick. Uses integer math with
+ * +999 to implement ceiling divide by 1000.
+ */
+#define LW_MS_TO_TICKS_CEIL(ms) \
+    ((TickType_t)(((ms) <= 0) ? 0 : \
+      (((uint64_t)(ms) * (uint64_t)configTICK_RATE_HZ + 999ULL) / 1000ULL)))
+
+/**
+ * @brief Ceiling conversion with minimum of 1 tick for non-zero ms.
+ * 
+ * This is the correct macro for actor tick intervals where ms > 0
+ * must result in at least 1 tick to prevent hot loops.
+ */
+#define LW_MS_TO_TICKS_CEIL_MIN1(ms) \
+    ((TickType_t)(((ms) <= 0) ? 0 : \
+      (LW_MS_TO_TICKS_CEIL(ms) == 0 ? 1 : LW_MS_TO_TICKS_CEIL(ms))))
+
+/**
  * @brief Configuration for AudioActor
  *
  * Runs on Core 0 at priority 4 (below Renderer at 5).
- * 16ms tick interval matches hop size for Tab5 parity.
+ * 
+ * SCHEDULER-ALIGNED MODE:
+ * With HOP_SIZE=160 @ 16kHz = 10ms = 100 Hz, the hop rate now matches
+ * the FreeRTOS tick rate (CONFIG_FREERTOS_HZ=100). This eliminates
+ * timing drift and multi-hop compensation hacks.
  */
 inline actors::ActorConfig Audio() {
     return actors::ActorConfig(
@@ -701,7 +819,7 @@ inline actors::ActorConfig Audio() {
         AUDIO_ACTOR_PRIORITY,                       // priority (4)
         AUDIO_ACTOR_CORE,                           // coreId (0)
         16,                                         // queueSize
-        pdMS_TO_TICKS(AUDIO_ACTOR_TICK_MS)          // tickInterval (16ms)
+        LW_MS_TO_TICKS_CEIL_MIN1(AUDIO_ACTOR_TICK_MS) // tickInterval: 10ms = 1 tick @ 100Hz RTOS
     );
 }
 

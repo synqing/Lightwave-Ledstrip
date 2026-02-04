@@ -5,7 +5,50 @@ All notable changes to the LightwaveOS project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - Light Guide Plate Feature
+## [Unreleased] - ESP32-P4 Audio Pipeline & iOS App
+
+### Added
+- **ESP32-P4 Platform Support**: Full audio capture and LED control on Waveshare ESP32-P4-WIFI6
+  - ES8311 audio codec integration via I2S standard driver
+  - Dual WS2812 LED strips (320 LEDs total) via RMT peripheral
+  - ESP-IDF v5.5.2 toolchain with RISC-V GCC
+  - Build scripts: `build_with_idf55.sh`, `flash_and_monitor.sh`
+
+### Changed
+- **Audio Pipeline Cadence Alignment** (ESP32-P4): Fixed timing mismatch between hop rate and scheduler
+  - Changed HOP_SIZE from 128 to 160 samples (8ms → 10ms) to match FreeRTOS 100Hz tick
+  - Hop rate now perfectly aligned: 160 samples @ 16kHz = 10ms = 100 Hz = 1 tick
+  - Eliminates DMA timeouts, watchdog triggers, and erratic capture rates
+  - See `docs/AUDIO_PIPELINE_CADENCE_FIX.md` for full technical analysis
+
+- **DC Blocker Coefficient**: Corrected from 0.9922 to 0.992176 using proper formula
+  - Formula: R = exp(-2π × fc / fs) where fc=20Hz, fs=16000Hz
+  - Ensures accurate DC removal without affecting audio content
+
+- **ES8311 Microphone Gain**: Added explicit 24dB gain setting
+  - Signal levels were ~0.2% of full scale (-54dB), now properly amplified
+  - Available gains: 0dB to 42dB in 6dB steps
+
+- **Spike Detection Improvements**:
+  - Added noise floor check (0.005 threshold) to skip detection on quiet signals
+  - Raised warning threshold from 5.0 to 10.0 spikes/frame (20 bins checked per frame)
+  - Prevents false warnings from noise-floor fluctuations
+
+- **I2C Probe for ES8311**: Changed to low-level ACK check using `i2c_cmd_link` API
+  - Fixes intermittent probe failures with `i2c_master_write_read_device()` 0-length read
+
+### Fixed
+- **AudioActor FreeRTOS Tick Conversion**: Added `LW_MS_TO_TICKS_CEIL_MIN1()` macro
+  - `pdMS_TO_TICKS(8)` returns 0 at 100Hz ticks (8ms < 10ms tick period)
+  - New macro uses ceiling division with minimum of 1 tick
+
+- **Self-clocked Mode Stability** (retained but unused): Actor.cpp now supports tickInterval=0
+  - Caused watchdog triggers due to IDLE0 starvation - not recommended for audio
+  - Kept for potential future use cases with proper yield points
+
+---
+
+## [Previous Unreleased] - Light Guide Plate Feature
 
 ### Added
 - **Light Guide Plate Mode**: Revolutionary optical waveguide display system

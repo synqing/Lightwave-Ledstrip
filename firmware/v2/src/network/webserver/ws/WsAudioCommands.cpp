@@ -17,6 +17,9 @@
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 
+#define LW_LOG_TAG "WsAudioCommands"
+#include "../../../utils/Log.h"
+
 #if FEATURE_AUDIO_SYNC
 
 namespace lightwaveos {
@@ -291,6 +294,8 @@ static void handleAudioSubscribe(AsyncWebSocketClient* client, JsonDocument& doc
     uint32_t clientId = client->id();
     const char* requestId = doc["requestId"] | "";
     
+    LW_LOGI("WS audio.subscribe received from client %u", clientId);
+    
     if (!ctx.setAudioStreamSubscription) {
         client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Audio streaming not available", requestId));
         return;
@@ -299,6 +304,11 @@ static void handleAudioSubscribe(AsyncWebSocketClient* client, JsonDocument& doc
     bool ok = ctx.setAudioStreamSubscription(client, true);
     
     if (ok) {
+        if (ctx.audioBroadcaster) {
+            LW_LOGI("WS audio.subscribe accepted (subscribers=%u)", static_cast<unsigned>(ctx.audioBroadcaster->getSubscriberCount()));
+        } else {
+            LW_LOGI("WS audio.subscribe accepted (broadcaster=null)");
+        }
         String response = buildWsResponse("audio.subscribed", requestId, [clientId](JsonObject& data) {
             data["clientId"] = clientId;
             data["frameSize"] = AudioStreamConfig::FRAME_SIZE;
@@ -311,6 +321,7 @@ static void handleAudioSubscribe(AsyncWebSocketClient* client, JsonDocument& doc
         });
         client->text(response);
     } else {
+        LW_LOGW("WS audio.subscribe rejected for client %u", clientId);
         JsonDocument response;
         response["type"] = "audio.subscribed";
         if (requestId != nullptr && strlen(requestId) > 0) {
@@ -434,6 +445,72 @@ static void handleAudioSpikeDetectionReset(AsyncWebSocketClient* client, JsonDoc
     client->text(response);
 }
 
+static void handleAudioMicGainGet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    const char* requestId = doc["requestId"] | "";
+    auto* audio = ctx.actorSystem.getAudio();
+    if (!audio) {
+        client->text(buildWsError(ErrorCodes::AUDIO_UNAVAILABLE, "Audio unavailable", requestId));
+        return;
+    }
+#if defined(CHIP_ESP32_P4) && CHIP_ESP32_P4
+    int8_t gainDb = audio->getMicGainDb();
+    String response = buildWsResponse("audio.mic-gain.state", requestId,
+        [gainDb](JsonObject& data) {
+            data["gainDb"] = gainDb;
+            data["supported"] = true;
+            JsonArray validValues = data["validValues"].to<JsonArray>();
+            validValues.add(0); validValues.add(6); validValues.add(12); validValues.add(18);
+            validValues.add(24); validValues.add(30); validValues.add(36); validValues.add(42);
+        });
+    client->text(response);
+#else
+    String response = buildWsResponse("audio.mic-gain.state", requestId,
+        [](JsonObject& data) {
+            data["gainDb"] = -1;
+            data["supported"] = false;
+            data["reason"] = "Microphone gain control only available on ESP32-P4 with ES8311 codec";
+        });
+    client->text(response);
+#endif
+}
+
+static void handleAudioMicGainSet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    const char* requestId = doc["requestId"] | "";
+    auto* audio = ctx.actorSystem.getAudio();
+    if (!audio) {
+        client->text(buildWsError(ErrorCodes::AUDIO_UNAVAILABLE, "Audio unavailable", requestId));
+        return;
+    }
+#if defined(CHIP_ESP32_P4) && CHIP_ESP32_P4
+    if (!doc.containsKey("gainDb")) {
+        client->text(buildWsError(ErrorCodes::MISSING_PARAMETER, "Missing 'gainDb' parameter", requestId));
+        return;
+    }
+    int8_t gainDb = doc["gainDb"].as<int8_t>();
+    
+    // Validate gain value
+    if (gainDb != 0 && gainDb != 6 && gainDb != 12 && gainDb != 18 &&
+        gainDb != 24 && gainDb != 30 && gainDb != 36 && gainDb != 42) {
+        client->text(buildWsError(ErrorCodes::INVALID_PARAMETER, 
+            "Invalid gain value. Must be 0, 6, 12, 18, 24, 30, 36, or 42 dB", requestId));
+        return;
+    }
+    
+    bool success = audio->setMicGainDb(gainDb);
+    if (!success) {
+        client->text(buildWsError(ErrorCodes::SYSTEM_ERROR, "Failed to set microphone gain", requestId));
+        return;
+    }
+    
+    String response = buildWsResponse("audio.mic-gain.updated", requestId,
+        [gainDb](JsonObject& data) { data["gainDb"] = gainDb; });
+    client->text(response);
+#else
+    client->text(buildWsError(ErrorCodes::NOT_SUPPORTED, 
+        "Microphone gain control only available on ESP32-P4 with ES8311 codec", requestId));
+#endif
+}
+
 void registerWsAudioCommands(const WebServerContext& ctx) {
 #if FEATURE_AUDIO_SYNC
     WsCommandRouter::registerCommand("audio.parameters.get", handleAudioParametersGet);
@@ -444,6 +521,8 @@ void registerWsAudioCommands(const WebServerContext& ctx) {
     WsCommandRouter::registerCommand("audio.zone-agc.set", handleAudioZoneAgcSet);
     WsCommandRouter::registerCommand("audio.spike-detection.get", handleAudioSpikeDetectionGet);
     WsCommandRouter::registerCommand("audio.spike-detection.reset", handleAudioSpikeDetectionReset);
+    WsCommandRouter::registerCommand("audio.mic-gain.get", handleAudioMicGainGet);
+    WsCommandRouter::registerCommand("audio.mic-gain.set", handleAudioMicGainSet);
 #endif
 }
 

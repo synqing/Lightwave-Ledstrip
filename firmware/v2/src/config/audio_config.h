@@ -14,6 +14,7 @@
 #pragma once
 
 #include "features.h"
+#include "chip_config.h"
 
 #if FEATURE_AUDIO_SYNC
 
@@ -51,24 +52,43 @@ constexpr MicType MICROPHONE_TYPE = MicType::SPH0645;
  *   - GPIO 17/18: I2C (M5ROTATE8 encoder)
  *   - GPIO 0/3/45/46: ESP32-S3 strapping pins
  */
+#if CHIP_ESP32_P4
+constexpr gpio_num_t I2S_BCLK_PIN = static_cast<gpio_num_t>(chip::gpio::I2S_BCLK);
+constexpr gpio_num_t I2S_DIN_PIN = static_cast<gpio_num_t>(chip::gpio::I2S_DIN);
+constexpr gpio_num_t I2S_DOUT_PIN = static_cast<gpio_num_t>(chip::gpio::I2S_DOUT);
+constexpr gpio_num_t I2S_LRCL_PIN = static_cast<gpio_num_t>(chip::gpio::I2S_LRCL);
+constexpr uint16_t I2S_MCLK_MULTIPLE = 384;
+#else
 constexpr gpio_num_t I2S_BCLK_PIN = GPIO_NUM_14;  // Bit Clock
+constexpr gpio_num_t I2S_DIN_PIN = GPIO_NUM_13;   // Data Out (mic output)
 constexpr gpio_num_t I2S_DOUT_PIN = GPIO_NUM_13;  // Data Out (mic output)
 constexpr gpio_num_t I2S_LRCL_PIN = GPIO_NUM_12;  // Left/Right Clock (Word Select)
+#endif
 
 // ============================================================================
 // Audio Processing Parameters (Tab5 Parity)
 // ============================================================================
 
 /**
- * Audio timing: 12.8kHz / HOP_N=256 = 50 Hz frames
+ * Audio timing:
+ * - ESP32-S3: 12.8kHz / HOP_N=256 = 50 Hz frames (Tab5 parity)
+ * - ESP32-P4: 16kHz / HOP_N=128 = 125 Hz frames (P4 front end parity)
  *
  * DO NOT change hop size without updating:
  * - Filter constants in ControlBus
  * - Resonator Q values in beat tracker (TempoTracker SPECTRAL_LOG_HZ, VU_LOG_HZ)
  * - Attack/release envelope timing
  */
+#if CHIP_ESP32_P4
+// P4 target: align hop to scheduler reality (100 Hz) while preserving 16 kHz audio
+// FreeRTOS tick = 100 Hz (10ms), so we use 160 samples @ 16kHz = 10ms = 100 Hz hops
+// This eliminates timing drift and multi-hop compensation hacks
+constexpr uint16_t SAMPLE_RATE = 16000;       // 16 kHz (P4 onboard front end)
+constexpr uint16_t HOP_SIZE = 160;            // 10ms hop @ 16kHz = 100 Hz frames
+#else
 constexpr uint16_t SAMPLE_RATE = 12800;       // 12.8 kHz (Emotiscope match)
 constexpr uint16_t HOP_SIZE = 256;            // 20ms hop @ 12.8kHz = 50 Hz frames
+#endif
 constexpr uint16_t FFT_SIZE = 512;            // For beat tracker spectral analysis
 constexpr uint16_t GOERTZEL_WINDOW = 512;     // 32ms window for bass coherence
 
@@ -147,7 +167,7 @@ constexpr float STALENESS_THRESHOLD_MS = 100.0f;  // 100ms = 5 frames @ 50 Hz
 constexpr uint8_t AUDIO_ACTOR_PRIORITY = 4;
 constexpr uint8_t AUDIO_ACTOR_CORE = 0;
 constexpr uint16_t AUDIO_ACTOR_STACK_WORDS = 4096;  // 16KB stack (reverted from 32KB - original was 3072)
-constexpr uint16_t AUDIO_ACTOR_TICK_MS = 20;        // Match hop duration (20ms @ 12.8kHz)
+constexpr uint16_t AUDIO_ACTOR_TICK_MS = static_cast<uint16_t>(HOP_DURATION_MS + 0.5f);
 
 } // namespace audio
 } // namespace lightwaveos

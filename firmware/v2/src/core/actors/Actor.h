@@ -468,7 +468,7 @@ inline ActorConfig Renderer() {
         5,              // priority (highest)
         1,              // coreId (Core 1 - application)
         32,             // queueSize
-        pdMS_TO_TICKS(8) // tickInterval (~120 FPS)
+        (pdMS_TO_TICKS(8) > 0 ? pdMS_TO_TICKS(8) : 1) // tickInterval (~120 FPS, clamp to 1 tick)
     );
 }
 

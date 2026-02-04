@@ -183,10 +183,24 @@ void ControlBus::detectAndRemoveSpikes(LookaheadBuffer& buffer,
 
     // Spike detection: check if middle frame is a spike relative to neighbors
     // A spike occurs when middle has opposite direction from both transitions
+    //
+    // Noise floor threshold: Skip spike detection when all 3 frames are below this level.
+    // At very low signal levels, random noise fluctuations cause false spike detections.
+    // 0.005 corresponds to ~-46dB below full scale, well into the noise floor.
+    constexpr float SPIKE_NOISE_FLOOR = 0.005f;
+
     for (size_t i = 0; i < num_bands; ++i) {
         const float oldest_val = buffer.history[oldest][i];
         const float middle_val = buffer.history[middle][i];
         const float newest_val = buffer.history[newest][i];
+
+        // Skip spike detection when signal is at noise floor
+        // This prevents false positives from random noise fluctuations
+        if (oldest_val < SPIKE_NOISE_FLOOR &&
+            middle_val < SPIKE_NOISE_FLOOR &&
+            newest_val < SPIKE_NOISE_FLOOR) {
+            continue;  // Pass through unchanged, no spike counting
+        }
 
         // Direction detection (Sensory Bridge pattern)
         // look_ahead_1_rising: middle > oldest (rising into middle)

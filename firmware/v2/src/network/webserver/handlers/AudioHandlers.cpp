@@ -153,7 +153,7 @@ void AudioHandlers::handleParametersSet(AsyncWebServerRequest* request,
         return;
     }
 
-    StaticJsonDocument<1024> doc;
+    JsonDocument doc;
     DeserializationError error = deserializeJson(doc, data, len);
     if (error) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
@@ -315,7 +315,7 @@ void AudioHandlers::handleControl(AsyncWebServerRequest* request,
         return;
     }
 
-    StaticJsonDocument<512> doc;
+    JsonDocument doc;
     if (deserializeJson(doc, data, len)) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
                           ErrorCodes::INVALID_JSON, "Invalid JSON");
@@ -526,7 +526,7 @@ void AudioHandlers::handlePresetSave(AsyncWebServerRequest* request,
                                       RendererActor* renderer) {
     using namespace persistence;
 
-    StaticJsonDocument<512> doc;
+    JsonDocument doc;
     if (deserializeJson(doc, data, len)) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
                           ErrorCodes::INVALID_JSON, "JSON parse error");
@@ -951,7 +951,7 @@ void AudioHandlers::handleZoneAGCSet(AsyncWebServerRequest* request,
         return;
     }
 
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     if (deserializeJson(doc, data, len)) {
         sendErrorResponse(request, HttpStatus::BAD_REQUEST,
                           ErrorCodes::INVALID_JSON, "Invalid JSON payload");
@@ -1025,6 +1025,93 @@ void AudioHandlers::handleSpikeDetectionReset(AsyncWebServerRequest* request,
 
     audio->getControlBusMut().resetSpikeStats();
     sendSuccessResponse(request);
+}
+
+void AudioHandlers::handleMicGainGet(AsyncWebServerRequest* request,
+                                      ActorSystem& actorSystem) {
+    auto* audio = actorSystem.getAudio();
+    if (!audio) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
+        return;
+    }
+
+#if defined(CHIP_ESP32_P4) && CHIP_ESP32_P4
+    int8_t gainDb = audio->getMicGainDb();
+    sendSuccessResponse(request, [gainDb](JsonObject& data) {
+        data["gainDb"] = gainDb;
+        data["supported"] = true;
+        // Document valid values
+        JsonArray validValues = data["validValues"].to<JsonArray>();
+        validValues.add(0);
+        validValues.add(6);
+        validValues.add(12);
+        validValues.add(18);
+        validValues.add(24);
+        validValues.add(30);
+        validValues.add(36);
+        validValues.add(42);
+    });
+#else
+    sendSuccessResponse(request, [](JsonObject& data) {
+        data["gainDb"] = -1;
+        data["supported"] = false;
+        data["reason"] = "Microphone gain control only available on ESP32-P4 with ES8311 codec";
+    });
+#endif
+}
+
+void AudioHandlers::handleMicGainSet(AsyncWebServerRequest* request,
+                                      uint8_t* data, size_t len,
+                                      ActorSystem& actorSystem) {
+    auto* audio = actorSystem.getAudio();
+    if (!audio) {
+        sendErrorResponse(request, HttpStatus::SERVICE_UNAVAILABLE,
+                          ErrorCodes::AUDIO_UNAVAILABLE, "Audio system not available");
+        return;
+    }
+
+#if defined(CHIP_ESP32_P4) && CHIP_ESP32_P4
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, data, len);
+    if (error) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::INVALID_JSON, "Invalid JSON");
+        return;
+    }
+
+    if (!doc.containsKey("gainDb")) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::MISSING_PARAMETER, "Missing 'gainDb' parameter");
+        return;
+    }
+
+    int8_t gainDb = doc["gainDb"].as<int8_t>();
+    
+    // Validate gain value
+    if (gainDb != 0 && gainDb != 6 && gainDb != 12 && gainDb != 18 &&
+        gainDb != 24 && gainDb != 30 && gainDb != 36 && gainDb != 42) {
+        sendErrorResponse(request, HttpStatus::BAD_REQUEST,
+                          ErrorCodes::INVALID_PARAMETER, 
+                          "Invalid gain value. Must be 0, 6, 12, 18, 24, 30, 36, or 42 dB");
+        return;
+    }
+
+    bool success = audio->setMicGainDb(gainDb);
+    if (!success) {
+        sendErrorResponse(request, HttpStatus::INTERNAL_SERVER_ERROR,
+                          ErrorCodes::SYSTEM_ERROR, "Failed to set microphone gain");
+        return;
+    }
+
+    sendSuccessResponse(request, [gainDb](JsonObject& data) {
+        data["gainDb"] = gainDb;
+    });
+#else
+    sendErrorResponse(request, HttpStatus::NOT_IMPLEMENTED,
+                      ErrorCodes::NOT_SUPPORTED, 
+                      "Microphone gain control only available on ESP32-P4 with ES8311 codec");
+#endif
 }
 
 void AudioHandlers::handleCalibrateStatus(AsyncWebServerRequest* request,

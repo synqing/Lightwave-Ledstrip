@@ -282,6 +282,11 @@ void Actor::run()
     // Call derived class initialization
     onStart();
 
+#ifndef NATIVE_BUILD
+    ESP_LOGI(TAG, "[%s] onStart() complete, entering main loop (tickInterval=%lu)", 
+             m_config.name, (unsigned long)m_config.tickInterval);
+#endif
+
     // Main message loop
     while (!m_shutdownRequested) {
         Message msg;
@@ -319,16 +324,25 @@ void Actor::run()
         }
 
         // Normal operation: wait for message with timeout based on tick interval
-        // CRITICAL: Tick happens on timeout, not by checking if due
-        // This preserves the original timing behavior that RendererActor depends on
+        // 
+        // tickInterval semantics:
+        //   > 0: Periodic tick mode - wait up to tickInterval, call onTick on timeout
+        //   = 0: Self-clocked mode - poll queue non-blocking, always call onTick
+        //        (Actor's onTick is expected to block internally, e.g., on I2S read)
+        //   portMAX_DELAY: No tick mode - wait forever for messages only
+        //
         TickType_t waitTime;
-        if (m_config.tickInterval > 0) {
+        if (m_config.tickInterval == 0) {
+            // Self-clocked mode: poll queue non-blocking, then call onTick
+            // onTick() is expected to block (e.g., AudioActor blocks on I2S read)
+            waitTime = 0;
+        } else if (m_config.tickInterval > 0) {
             waitTime = m_config.tickInterval;
         } else {
             waitTime = portMAX_DELAY; // Wait forever if no tick needed
         }
 
-        // Wait for a message
+        // Wait for a message (or poll if waitTime=0)
         BaseType_t received = xQueueReceive(m_queue, &msg, waitTime);
 
         if (received == pdTRUE) {
@@ -342,9 +356,10 @@ void Actor::run()
             m_messageCount++;
             onMessage(msg);
         } else {
-            // Timeout - call onTick if configured
-            // This is the original pattern: tick happens when no message arrives in time
-            if (m_config.tickInterval > 0) {
+            // Timeout or no message (waitTime=0) - call onTick
+            // For tickInterval=0 (self-clocked), always tick
+            // For tickInterval>0 (periodic), tick on timeout
+            if (m_config.tickInterval == 0 || m_config.tickInterval > 0) {
                 onTick();
             }
         }

@@ -117,6 +117,14 @@ public:
     static void handleSpikeDetectionReset(AsyncWebServerRequest* request,
                                            lightwaveos::actors::ActorSystem& actorSystem);
 
+    // Microphone Gain (ESP32-P4 only)
+    static void handleMicGainGet(AsyncWebServerRequest* request,
+                                  lightwaveos::actors::ActorSystem& actorSystem);
+    
+    static void handleMicGainSet(AsyncWebServerRequest* request,
+                                  uint8_t* data, size_t len,
+                                  lightwaveos::actors::ActorSystem& actorSystem);
+
     // Noise Calibration
     static void handleCalibrateStatus(AsyncWebServerRequest* request,
                                        lightwaveos::actors::ActorSystem& actorSystem);

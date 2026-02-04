@@ -494,6 +494,23 @@ void V1ApiRoutes::registerRoutes(
         handlers::AudioHandlers::handleSpikeDetectionReset(request, ctx.orchestrator);
     });
 
+    // Microphone gain routes (ESP32-P4 with ES8311 codec)
+    registry.onGet("/api/v1/audio/mic-gain", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::AudioHandlers::handleMicGainGet(request, ctx.orchestrator);
+    });
+
+    registry.onPost("/api/v1/audio/mic-gain",
+        [](AsyncWebServerRequest* request) {},
+        nullptr,
+        [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t, size_t) {
+            if (!checkRateLimit(request)) return;
+            if (!checkAPIKey(request)) return;
+            handlers::AudioHandlers::handleMicGainSet(request, data, len, ctx.orchestrator);
+        }
+    );
+
     // Calibration routes
     registry.onGet("/api/v1/audio/calibrate", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;
@@ -876,7 +893,7 @@ void V1ApiRoutes::registerRoutes(
             ctx.zoneComposer->setEnabled(enabled);
 
             // Send WebSocket event
-            StaticJsonDocument<128> eventDoc;
+            JsonDocument eventDoc;
             eventDoc["type"] = "zones.enabledChanged";
             eventDoc["enabled"] = enabled;
             String eventOutput;
@@ -1296,7 +1313,7 @@ void V1ApiRoutes::registerRoutes(
         handlers::NetworkHandlers::handleEnableAPOnly(request);
     });
 
-    // ==================== Network Management Routes (AP-first architecture) ====================
+    // ==================== Network Management Routes (WiFiManager-owned AP/STA) ====================
 
     // GET /api/v1/network/networks - List all saved networks
     registry.onGet("/api/v1/network/networks", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {

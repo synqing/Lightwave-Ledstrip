@@ -33,6 +33,7 @@ class ZoneViewModel {
     // MARK: - Network
 
     var restClient: RESTClient?
+    var ws: WebSocketService?
 
     // MARK: - Pending State (debounce tracking)
 
@@ -60,16 +61,26 @@ class ZoneViewModel {
     }
 
     func setZoneEffect(zoneId: Int, effectId: Int, effectName: String? = nil) async {
+        // Optimistic local update
+        if let index = zones.firstIndex(where: { $0.id == zoneId }) {
+            zones[index].effectId = effectId
+            if let name = effectName {
+                zones[index].effectName = name
+            }
+        }
+
+        // WebSocket path (more reliable for zone controls)
+        if let ws = ws {
+            await ws.send("zone.setEffect", params: [
+                "zoneId": zoneId,
+                "effectId": effectId
+            ])
+        }
+
         guard let client = restClient else { return }
 
         do {
             try await client.setZoneEffect(zoneId: zoneId, effectId: effectId)
-            if let index = zones.firstIndex(where: { $0.id == zoneId }) {
-                zones[index].effectId = effectId
-                if let name = effectName {
-                    zones[index].effectName = name
-                }
-            }
             print("Set zone \(zoneId) effect to \(effectId)")
         } catch {
             print("Error setting zone effect: \(error)")
@@ -77,16 +88,26 @@ class ZoneViewModel {
     }
 
     func setZonePalette(zoneId: Int, paletteId: Int, paletteName: String? = nil) async {
+        // Optimistic local update
+        if let index = zones.firstIndex(where: { $0.id == zoneId }) {
+            zones[index].paletteId = paletteId
+            if let name = paletteName {
+                zones[index].paletteName = name
+            }
+        }
+
+        // WebSocket path (more reliable for zone controls)
+        if let ws = ws {
+            await ws.send("zone.setPalette", params: [
+                "zoneId": zoneId,
+                "paletteId": paletteId
+            ])
+        }
+
         guard let client = restClient else { return }
 
         do {
             try await client.setZonePalette(zoneId: zoneId, paletteId: paletteId)
-            if let index = zones.firstIndex(where: { $0.id == zoneId }) {
-                zones[index].paletteId = paletteId
-                if let name = paletteName {
-                    zones[index].paletteName = name
-                }
-            }
             print("Set zone \(zoneId) palette to \(paletteId)")
         } catch {
             print("Error setting zone palette: \(error)")
@@ -94,16 +115,26 @@ class ZoneViewModel {
     }
 
     func setZoneBlend(zoneId: Int, blendMode: Int, blendModeName: String? = nil) async {
+        // Optimistic local update
+        if let index = zones.firstIndex(where: { $0.id == zoneId }) {
+            zones[index].blendMode = blendMode
+            if let name = blendModeName {
+                zones[index].blendModeName = name
+            }
+        }
+
+        // WebSocket path (more reliable for zone controls)
+        if let ws = ws {
+            await ws.send("zone.setBlend", params: [
+                "zoneId": zoneId,
+                "blendMode": blendMode
+            ])
+        }
+
         guard let client = restClient else { return }
 
         do {
             try await client.setZoneBlendMode(zoneId: zoneId, blendMode: blendMode)
-            if let index = zones.firstIndex(where: { $0.id == zoneId }) {
-                zones[index].blendMode = blendMode
-                if let name = blendModeName {
-                    zones[index].blendModeName = name
-                }
-            }
             print("Set zone \(zoneId) blend mode to \(blendMode)")
         } catch {
             print("Error setting zone blend: \(error)")
@@ -111,7 +142,7 @@ class ZoneViewModel {
     }
 
     func setZoneSpeed(zoneId: Int, speed: Int) {
-        guard let client = restClient else { return }
+        guard restClient != nil || ws != nil else { return }
 
         // Mark as pending to ignore WS updates
         pendingZoneSpeeds.insert(zoneId)
@@ -130,7 +161,15 @@ class ZoneViewModel {
                 try await Task.sleep(nanoseconds: 150_000_000)
                 guard !Task.isCancelled else { return }
 
-                try await client.setZoneSpeed(zoneId: zoneId, speed: speed)
+                if let ws = ws {
+                    await ws.send("zones.update", params: [
+                        "zoneId": zoneId,
+                        "speed": speed
+                    ])
+                }
+                if let client = restClient {
+                    try await client.setZoneSpeed(zoneId: zoneId, speed: speed)
+                }
                 print("Updated zone \(zoneId) speed to \(speed)")
 
                 // Clear pending flag after 1 second
@@ -152,7 +191,7 @@ class ZoneViewModel {
     }
 
     func setZoneBrightness(zoneId: Int, brightness: Int) {
-        guard let client = restClient else { return }
+        guard restClient != nil || ws != nil else { return }
 
         // Mark as pending to ignore WS updates
         pendingZoneBrightness.insert(zoneId)
@@ -171,7 +210,15 @@ class ZoneViewModel {
                 try await Task.sleep(nanoseconds: 150_000_000)
                 guard !Task.isCancelled else { return }
 
-                try await client.setZoneBrightness(zoneId: zoneId, brightness: brightness)
+                if let ws = ws {
+                    await ws.send("zones.update", params: [
+                        "zoneId": zoneId,
+                        "brightness": brightness
+                    ])
+                }
+                if let client = restClient {
+                    try await client.setZoneBrightness(zoneId: zoneId, brightness: brightness)
+                }
                 print("Updated zone \(zoneId) brightness to \(brightness)")
 
                 // Clear pending flag after 1 second
@@ -373,35 +420,94 @@ class ZoneViewModel {
     // MARK: - WebSocket Updates
 
     func handleZoneUpdate(_ data: [String: Any]) {
+        if let zonesData = data["zones"] as? [[String: Any]] {
+            self.zones = zonesData.compactMap { zone in
+                guard let id = zone["id"] as? Int else { return nil }
+                let effectId = zone["effectId"] as? Int ?? 0
+                let speed = zone["speed"] as? Int ?? 15
+                let paletteId = zone["paletteId"] as? Int ?? 0
+                let blendMode = zone["blendMode"] as? Int ?? 0
+                return ZoneConfig(
+                    id: id,
+                    enabled: zone["enabled"] as? Bool ?? true,
+                    effectId: effectId,
+                    effectName: zone["effectName"] as? String,
+                    brightness: zone["brightness"] as? Int ?? 255,
+                    speed: speed,
+                    paletteId: paletteId,
+                    paletteName: zone["paletteName"] as? String,
+                    blendMode: blendMode,
+                    blendModeName: zone["blendModeName"] as? String
+                )
+            }
+        }
+
+        if let segs = data["segments"] as? [[String: Any]] {
+            self.segments = segs.compactMap { seg in
+                guard
+                    let zoneId = seg["zoneId"] as? Int,
+                    let s1LeftStart = seg["s1LeftStart"] as? Int,
+                    let s1LeftEnd = seg["s1LeftEnd"] as? Int,
+                    let s1RightStart = seg["s1RightStart"] as? Int,
+                    let s1RightEnd = seg["s1RightEnd"] as? Int
+                else { return nil }
+
+                return ZoneSegment(
+                    zoneId: zoneId,
+                    s1LeftStart: s1LeftStart,
+                    s1LeftEnd: s1LeftEnd,
+                    s1RightStart: s1RightStart,
+                    s1RightEnd: s1RightEnd
+                )
+            }
+            updateBoundariesFromSegments()
+        }
+
         if let enabled = data["enabled"] as? Bool {
             zonesEnabled = enabled
         }
 
-        if let count = data["count"] as? Int {
+        if let count = (data["zoneCount"] as? Int) ?? (data["count"] as? Int) {
             zoneCount = count
         }
 
         if let zoneId = data["zoneId"] as? Int {
             guard let index = zones.firstIndex(where: { $0.id == zoneId }) else { return }
 
-            if let effectId = data["effectId"] as? Int {
+            let current = data["current"] as? [String: Any]
+
+            if let effectId = (current?["effectId"] as? Int) ?? (data["effectId"] as? Int) {
                 zones[index].effectId = effectId
             }
 
-            if let speed = data["speed"] as? Int, !pendingZoneSpeeds.contains(zoneId) {
+            if let effectName = (current?["effectName"] as? String) ?? (data["effectName"] as? String) {
+                zones[index].effectName = effectName
+            }
+
+            if let speed = (current?["speed"] as? Int) ?? (data["speed"] as? Int),
+               !pendingZoneSpeeds.contains(zoneId) {
                 zones[index].speed = speed
             }
 
-            if let brightness = data["brightness"] as? Int, !pendingZoneBrightness.contains(zoneId) {
+            if let brightness = (current?["brightness"] as? Int) ?? (data["brightness"] as? Int),
+               !pendingZoneBrightness.contains(zoneId) {
                 zones[index].brightness = brightness
             }
 
-            if let paletteId = data["paletteId"] as? Int {
+            if let paletteId = (current?["paletteId"] as? Int) ?? (data["paletteId"] as? Int) {
                 zones[index].paletteId = paletteId
             }
 
-            if let blendMode = data["blendMode"] as? Int {
+            if let paletteName = (current?["paletteName"] as? String) ?? (data["paletteName"] as? String) {
+                zones[index].paletteName = paletteName
+            }
+
+            if let blendMode = (current?["blendMode"] as? Int) ?? (data["blendMode"] as? Int) {
                 zones[index].blendMode = blendMode
+            }
+
+            if let blendModeName = (current?["blendModeName"] as? String) ?? (data["blendModeName"] as? String) {
+                zones[index].blendModeName = blendModeName
             }
         }
     }

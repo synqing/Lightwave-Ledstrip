@@ -89,7 +89,28 @@ struct PaletteMetadata: Codable, Identifiable, Sendable, Hashable {
 
 enum PaletteStore {
     /// All palettes (exposed for PaletteViewModel init)
-    static var all: [PaletteMetadata] { defaults }
+    static var all: [PaletteMetadata] { loadFromBundle() ?? defaults }
+
+    struct MasterPalettePayload: Codable {
+        let version: Int
+        let source: String
+        let palettes: [PaletteMetadata]
+    }
+
+    static func loadFromBundle(bundle: Bundle = .main) -> [PaletteMetadata]? {
+        guard let url = bundle.url(forResource: "Palettes_Master", withExtension: "json") else {
+            return nil
+        }
+
+        do {
+            let data = try Data(contentsOf: url)
+            let payload = try JSONDecoder().decode(MasterPalettePayload.self, from: data)
+            return payload.palettes
+        } catch {
+            print("PaletteStore: failed to load bundle palettes: \(error)")
+            return nil
+        }
+    }
 
     /// Hardcoded fallback palettes (real firmware names from Palettes_MasterData.cpp)
     static let defaults: [PaletteMetadata] = [

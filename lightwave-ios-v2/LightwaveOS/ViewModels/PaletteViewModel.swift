@@ -85,9 +85,15 @@ class PaletteViewModel {
                     merged[palette.id] = palette
                 }
 
-                // Override with API results
+                // Override with API results, but preserve palette colours from defaults
                 for palette in fromAPI {
-                    merged[palette.id] = palette
+                    let base = merged[palette.id]
+                    merged[palette.id] = PaletteMetadata(
+                        id: palette.id,
+                        name: palette.name,
+                        category: palette.category ?? base?.category,
+                        colors: base?.colors
+                    )
                 }
 
                 self.allPalettes = merged.values.sorted { $0.id < $1.id }

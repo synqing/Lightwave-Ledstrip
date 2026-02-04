@@ -41,7 +41,9 @@
 #include "AudioDebugConfig.h"
 
 // TempoTracker integration
+#if !FEATURE_AUDIO_BACKEND_ESV11
 #include "tempo/TempoTracker.h"
+#endif
 
 // Perceptual band weights for spectral flux calculation (derived from K1 research)
 // Bass bands weighted higher for better kick detection
@@ -70,6 +72,181 @@ inline uint32_t esp_log_timestamp() { return 0; }
 
 namespace lightwaveos {
 namespace audio {
+
+#if FEATURE_AUDIO_BACKEND_ESV11
+
+// ============================================================================
+// ES v1.1_320 Backend Implementation
+// ============================================================================
+
+AudioActor::AudioActor()
+    : Actor(ActorConfigs::Audio())
+    , m_state(AudioActorState::UNINITIALIZED)
+{
+    m_stats.reset();
+    m_diag.reset();
+    m_esAdapter.reset();
+}
+
+AudioActor::~AudioActor() = default;
+
+void AudioActor::pause()
+{
+    if (m_state == AudioActorState::RUNNING) {
+        LW_LOGI("Pausing ES v1.1 audio backend");
+        m_state = AudioActorState::PAUSED;
+    }
+}
+
+void AudioActor::resume()
+{
+    if (m_state == AudioActorState::PAUSED) {
+        LW_LOGI("Resuming ES v1.1 audio backend");
+        m_state = AudioActorState::RUNNING;
+    }
+}
+
+void AudioActor::resetStats()
+{
+    m_stats.reset();
+    m_diag.reset();
+    m_sampleIndex = 0;
+    m_hopCount = 0;
+    m_esHopSeq = 0;
+    m_esChunkCounter = 0;
+    m_esAdapter.reset();
+}
+
+void AudioActor::printDiagnostics()
+{
+    LW_LOGI("ES v1.1 audio backend: chunks=%lu publishes=%lu",
+            (unsigned long)m_stats.tickCount, (unsigned long)m_diag.publishCount);
+}
+
+void AudioActor::printStatus()
+{
+#ifndef NATIVE_BUILD
+    ControlBusFrame latest{};
+    m_controlBusBuffer.ReadLatest(latest);
+    Serial.println("=== Audio Status (ES v1.1 backend) ===");
+    Serial.printf("  RMS: %.3f  Flux: %.3f\n", latest.rms, latest.flux);
+    Serial.printf("  BPM: %.1f  Conf: %.3f  BeatTick: %d\n",
+                  latest.es_bpm, latest.es_tempo_confidence, latest.es_beat_tick ? 1 : 0);
+#endif
+}
+
+void AudioActor::printSpectrum()
+{
+#ifndef NATIVE_BUILD
+    ControlBusFrame latest{};
+    m_controlBusBuffer.ReadLatest(latest);
+    Serial.println("=== Spectrum (ES v1.1 backend) ===");
+    Serial.print("  Bands:");
+    for (int i = 0; i < CONTROLBUS_NUM_BANDS; ++i) {
+        Serial.printf(" %.3f", latest.bands[i]);
+    }
+    Serial.println();
+#endif
+}
+
+void AudioActor::printBeat()
+{
+#ifndef NATIVE_BUILD
+    ControlBusFrame latest{};
+    m_controlBusBuffer.ReadLatest(latest);
+    Serial.println("=== Beat (ES v1.1 backend) ===");
+    Serial.printf("  BPM: %.1f  Conf: %.3f  Phase01@t: %.3f  BeatInBar: %u\n",
+                  latest.es_bpm, latest.es_tempo_confidence, latest.es_phase01_at_audio_t,
+                  (unsigned)latest.es_beat_in_bar);
+#endif
+}
+
+const int16_t* AudioActor::getLastHop() const
+{
+    return nullptr;
+}
+
+bool AudioActor::hasNewHop()
+{
+    return false;
+}
+
+void AudioActor::onStart()
+{
+    m_state = AudioActorState::INITIALIZING;
+    m_diag.reset();
+    m_diag.diagStartTimeUs = esp_timer_get_time();
+
+    if (!m_esBackend.init()) {
+        m_state = AudioActorState::ERROR;
+        LW_LOGE("ES v1.1 backend init failed");
+        return;
+    }
+
+    m_state = AudioActorState::RUNNING;
+    LW_LOGI("ES v1.1 audio backend: INITIALISED");
+}
+
+void AudioActor::onMessage(const actors::Message& msg)
+{
+    // Keep minimal: shutdown is handled by Actor base; ignore other messages.
+    (void)msg;
+}
+
+void AudioActor::onTick()
+{
+    if (m_state != AudioActorState::RUNNING) {
+        // In self-clocked mode, avoid hot looping when paused/error.
+        sleep(5);
+        return;
+    }
+
+    const uint64_t now_us = esp_timer_get_time();
+    m_stats.tickCount++;
+
+    // Chunk processing blocks on I2S read (~5ms at 12.8kHz, 64 samples)
+    m_diag.captureAttempts++;
+    if (!m_esBackend.readAndProcessChunk(now_us)) {
+        m_stats.captureFailCount++;
+        m_diag.captureReadErrors++;
+        return;
+    }
+    m_stats.captureSuccessCount++;
+
+    // Publish at 50 Hz (every 4 chunks)
+    m_esChunkCounter++;
+    if (m_esChunkCounter < 4) {
+        return;
+    }
+    m_esChunkCounter = 0;
+
+    esv11::EsV11Outputs es{};
+    m_esBackend.getLatestOutputs(es);
+    m_sampleIndex = es.sample_index;
+
+    ControlBusFrame frame{};
+    m_esHopSeq++;
+    m_esAdapter.buildFrame(frame, es, m_esHopSeq);
+    m_controlBusBuffer.Publish(frame);
+
+    m_hopCount++;
+    m_diag.publishCount++;
+    m_diag.lastPublishTimeUs = now_us;
+
+    // Track sequence gaps
+    uint32_t expectedSeq = m_diag.lastPublishSeq + 1;
+    if (m_diag.lastPublishSeq > 0 && frame.hop_seq != expectedSeq) {
+        m_diag.publishSeqGaps++;
+    }
+    m_diag.lastPublishSeq = frame.hop_seq;
+}
+
+void AudioActor::onStop()
+{
+    m_state = AudioActorState::PAUSED;
+}
+
+#else  // !FEATURE_AUDIO_BACKEND_ESV11
 
 // ============================================================================
 // Constructor / Destructor
@@ -1691,6 +1868,8 @@ void AudioActor::processNoiseCalibration(float rms, const float* bands, const fl
         }
     }
 }
+
+#endif // FEATURE_AUDIO_BACKEND_ESV11
 
 } // namespace audio
 } // namespace lightwaveos

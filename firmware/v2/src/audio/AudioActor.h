@@ -37,6 +37,14 @@
 
 #include "../core/actors/Actor.h"
 #include "../config/audio_config.h"
+#include "contracts/AudioTime.h"
+#include "contracts/ControlBus.h"
+#include "contracts/SnapshotBuffer.h"
+
+#if FEATURE_AUDIO_BACKEND_ESV11
+#include "backends/esv11/EsV11Backend.h"
+#include "backends/esv11/EsV11Adapter.h"
+#else
 #include "AudioCapture.h"
 #include "AudioTuning.h"
 #include "GoertzelAnalyzer.h"
@@ -44,12 +52,9 @@
 #if FEATURE_STYLE_DETECTION
 #include "StyleDetector.h"
 #endif
-#include "contracts/AudioTime.h"
-#include "contracts/ControlBus.h"
-#include "contracts/SnapshotBuffer.h"
-
 // Tempo tracker
 #include "tempo/TempoTracker.h"
+#endif
 
 #if FEATURE_AUDIO_BENCHMARK
 #include "AudioBenchmarkMetrics.h"
@@ -218,8 +223,11 @@ public:
     /**
      * @brief Get audio capture statistics
      */
+#if !FEATURE_AUDIO_BACKEND_ESV11
     const CaptureStats& getCaptureStats() const { return m_capture.getStats(); }
+#endif
 
+#if !FEATURE_AUDIO_BACKEND_ESV11
 #if defined(CHIP_ESP32_P4) && CHIP_ESP32_P4
     /**
      * @brief Get current microphone gain in dB
@@ -234,6 +242,7 @@ public:
      */
     bool setMicGainDb(int8_t gainDb) { return m_capture.setMicGainDb(gainDb); }
 #endif
+#endif // !FEATURE_AUDIO_BACKEND_ESV11
 
     /**
      * @brief Get pipeline diagnostics (Phase 1 debugging)
@@ -354,6 +363,7 @@ public:
      */
     uint32_t getHopCount() const { return m_hopCount; }
 
+#if !FEATURE_AUDIO_BACKEND_ESV11
     /**
      * @brief Get current audio pipeline tuning (by value)
      */
@@ -500,6 +510,7 @@ public:
      */
     void resetBenchmarkStats() { m_benchmarkStats.reset(); }
 #endif
+#endif // !FEATURE_AUDIO_BACKEND_ESV11
 
 protected:
     // ========================================================================
@@ -541,6 +552,26 @@ private:
     // Internal State
     // ========================================================================
 
+#if FEATURE_AUDIO_BACKEND_ESV11
+    AudioActorState m_state;
+    AudioActorStats m_stats;
+    AudioPipelineDiagnostics m_diag;
+
+    // Lock-free buffer for cross-core sharing with RendererActor
+    SnapshotBuffer<ControlBusFrame> m_controlBusBuffer;
+
+    // Monotonic sample counter (64-bit for no overflow)
+    uint64_t m_sampleIndex = 0;
+
+    // Hop counter since start
+    uint32_t m_hopCount = 0;
+
+    // ES backend + adapter
+    esv11::EsV11Backend m_esBackend;
+    esv11::EsV11Adapter m_esAdapter;
+    uint32_t m_esHopSeq = 0;
+    uint8_t m_esChunkCounter = 0;  // Publish every 4 chunks (256 samples @ 12.8kHz = 50 Hz)
+#else
     // Audio capture driver
     AudioCapture m_capture;
 
@@ -773,6 +804,7 @@ private:
     float m_sbHueShiftingMix = -0.35f;
     float m_sbHueShiftingMixTarget = 1.0f;
     uint32_t m_sbRand = 0x12345678u;
+#endif // FEATURE_AUDIO_BACKEND_ESV11
 };
 
 // ============================================================================
@@ -819,7 +851,14 @@ inline actors::ActorConfig Audio() {
         AUDIO_ACTOR_PRIORITY,                       // priority (4)
         AUDIO_ACTOR_CORE,                           // coreId (0)
         16,                                         // queueSize
+        // tickInterval semantics:
+        // - FEATURE_AUDIO_BACKEND_ESV11: self-clocked mode (tickInterval=0), onTick blocks on I2S chunk reads
+        // - default LWLS pipeline: periodic tick aligned to hop cadence
+#if FEATURE_AUDIO_BACKEND_ESV11
+        0
+#else
         LW_MS_TO_TICKS_CEIL_MIN1(AUDIO_ACTOR_TICK_MS) // tickInterval: 10ms = 1 tick @ 100Hz RTOS
+#endif
     );
 }
 

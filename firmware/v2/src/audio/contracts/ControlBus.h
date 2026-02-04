@@ -135,6 +135,17 @@ struct ControlBusFrame {
     float tempoConfidence = 0.0f;   ///< TempoTracker confidence (saliency; effects read MusicalGrid.confidence)
     bool tempoBeatTick = false;     ///< TempoTracker beat tick gated by lock (saliency support)
 
+    // -----------------------------------------------------------------------
+    // ES v1.1_320 tempo extras (FEATURE_AUDIO_BACKEND_ESV11)
+    // -----------------------------------------------------------------------
+    float es_bpm = 120.0f;
+    float es_tempo_confidence = 0.0f;
+    bool  es_beat_tick = false;
+    float es_beat_strength = 0.0f;
+    float es_phase01_at_audio_t = 0.0f;  // Phase at frame timestamp t, [0,1)
+    uint8_t es_beat_in_bar = 0;
+    bool es_downbeat_tick = false;
+
     // Silence detection (Sensory Bridge pattern)
     // silentScale fades from 1.0 to 0.0 after silenceHysteresisMs of silence
     float silentScale = 1.0f;       ///< 0.0=silent, 1.0=active (multiply with brightness)

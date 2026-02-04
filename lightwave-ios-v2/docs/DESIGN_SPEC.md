@@ -2,17 +2,22 @@
 
 ## Design Tokens (Revised)
 
+**Canonical source:** `lightwave-ios-v2/mockups/ui-overhaul-mockup.html`  
+**Code mapping:** `lightwave-ios-v2/LightwaveOS/Theme/DesignTokens.swift`
+
 ### Typography Scale
 
 | Role | Size | Font | Weight | Usage |
 |------|------|------|--------|-------|
-| Hero numeral | 48pt | SF Pro Rounded | Bold | BPM display |
-| Effect title | 22pt | SF Pro Display | Semibold | Current effect name on hero |
-| Body value | 15pt | SF Pro Text | Regular | Selected effect/palette name |
-| Section header | 13pt | SF Pro Text | Semibold | "PATTERN", "ZONES" — uppercase, +0.08em tracking |
-| Card label | 11pt | SF Pro Text | Medium | Slider labels, metadata |
-| Caption | 11pt | SF Pro Text | Regular | IDs, counts, timestamps |
-| Monospace | 11pt | SF Mono | Regular | Debug log only |
+| Hero numeral | 48pt | Bebas Neue | Bold | BPM display |
+| Effect title | 22pt | Bebas Neue | Bold | Current effect name on hero |
+| Section header | 14pt | Bebas Neue | Bold | Uppercase labels, +1.5px tracking |
+| Sub-group header | 12pt | Bebas Neue | Bold | Group labels (e.g., COLOUR, MOTION) |
+| Pill label | 11pt | Bebas Neue | Bold | PATTERN, PALETTE pills |
+| Body value | 15pt | Rajdhani | Medium | Selected effect/palette name |
+| Card label | 12pt | Rajdhani | Medium | Slider labels, metadata |
+| Caption | 11pt | Rajdhani | Medium | IDs, counts, timestamps |
+| Monospace | 11pt | JetBrains Mono | Medium | Debug log + numeric readouts |
 
 ### Spacing Rules
 
@@ -71,6 +76,21 @@ static let lwTabBarBackground = Color(hex: "0F1219").opacity(0.95)
 static let lwTabBarActive = Color.lwGold
 static let lwTabBarInactive = Color(hex: "6B7280")
 ```
+
+---
+
+## Design Tokens ↔ Code Mapping
+
+**Source of truth:** `lightwave-ios-v2/LightwaveOS/Theme/DesignTokens.swift`  
+Use the token names below in SwiftUI to keep typography and spacing consistent.
+
+- **Typography**
+  - `heroNumeral`, `effectTitle`, `sectionHeader`, `subGroupHeader`, `pillLabel`
+  - `bodyValue`, `cardLabel`, `caption`, `statusLabel`, `hapticLabel`
+  - `sliderValue`, `monospace`, `metricValue`, `stepperValue`
+- **Spacing:** `Spacing.xs`, `Spacing.sm`, `Spacing.md`, `Spacing.lg`
+- **Corners:** `CornerRadius.hero`, `CornerRadius.card`, `CornerRadius.nested`
+- **Shadows:** `ambientShadow()`, `elevatedShadow()`, `heroGlow()`, `beatPulseGlow()`
 
 ---
 

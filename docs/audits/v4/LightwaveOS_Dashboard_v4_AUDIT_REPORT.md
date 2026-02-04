@@ -1,6 +1,6 @@
 # LightwaveOS Dashboard V4 — UI/UX/Tech Audit Report
 
-**Target:** `docs/LightwaveOS_Dashboard_v4.html`  
+**Target:** `docs/dashboard/prototypes/LightwaveOS_Dashboard_v4.html`  
 **Audit date:** 22 Dec 2025  
 **Scope:** Visual/UI, UX, accessibility (WCAG 2.1), responsiveness, performance signals, technical implementation, comparison to documented requirements.
 
@@ -136,7 +136,7 @@ This creates a brittle “works on my laptop” prototype that will degrade on:
 
 ### Reference specs used
 - `docs/PRD_WEBAPP_DASHBOARD.md`
-- `docs/DASHBOARD_V3_INTEGRATION_PLAN.md`
+- `docs/archive/dashboard/DASHBOARD_V3_INTEGRATION_PLAN.md`
 
 ### Key deviations / gaps
 
@@ -238,4 +238,3 @@ Align with PRD requirements:
   - a design-token layer (Tailwind config) rather than inline styles
   - an accessible component library (tabs/listbox/slider)
   - a real data layer (V2Client/V2WsClient) with loading/error handling
-

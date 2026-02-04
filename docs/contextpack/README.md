@@ -166,6 +166,26 @@ npm --prefix tools exec -- toon input.json --stats
 
 ---
 
+## Task-Specific Bundles
+
+For domain-specific work, use curated read-first lists and minimal file sets:
+
+### iOS UI/UX Bundle (`ios_ui_task`)
+
+**Template**: [`templates/ios_ui_task.md`](templates/ios_ui_task.md)
+
+**Read first** (in order):
+1. `.cursor/rules/000-core-constraints.mdc`
+2. `lightwave-ios/LightwaveOS/Theme/DesignTokens.swift`
+3. `lightwave-ios/mockups/balanced.html`
+4. `lightwave-ios/mockups/API_REFERENCE.md` (if touching data/network)
+
+**Minimal bundle**: DesignTokens.swift + balanced.html + core constraints (~1.7K tokens)
+
+**Agent**: [`.cursor/rules/agents/agent-ios-ux-ui.mdc`](../../.cursor/rules/agents/agent-ios-ux-ui.mdc)
+
+---
+
 ## Format Selection Guide
 
 | Data Shape | Format | When to Use |

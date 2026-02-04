@@ -14,8 +14,9 @@
 3. [Rate Limiting](#rate-limiting)
 4. [REST API](#rest-api)
 5. [WebSocket Protocol](#websocket-protocol)
-6. [Client Usage Matrix](#client-usage-matrix)
-7. [Enums & Constants](#enums--constants)
+6. [UDP Streaming Protocol](#udp-streaming-protocol)
+7. [Client Usage Matrix](#client-usage-matrix)
+8. [Enums & Constants](#enums--constants)
 
 ---
 
@@ -422,13 +423,13 @@ Connect to `ws://lightwaveos.local/ws`. All messages are JSON with `type` field.
 | `transition.getTypes` | — | Transition types |
 | `transition.config` | enabled | Transition config |
 | `batch` | operations: [{action, ...}] | Batch ops |
-| `ledStream.subscribe` | — | LED binary stream |
+| `ledStream.subscribe` | udpPort? | LED binary stream (UDP if udpPort provided) |
 | `ledStream.unsubscribe` | — | Unsubscribe |
 | `validation.subscribe` | — | Validation events |
 | `validation.unsubscribe` | — | Unsubscribe |
 | `audio.parameters.get` | — | Audio params |
 | `audio.parameters.set` | ... | Audio params |
-| `audio.subscribe` | — | Audio events |
+| `audio.subscribe` | udpPort? | Audio metrics stream (UDP if udpPort provided) |
 | `audio.unsubscribe` | — | Unsubscribe |
 | `auth.status` | — | Auth status |
 | `auth.rotate` | — | Rotate API key |
@@ -475,6 +476,54 @@ Connect to `ws://lightwaveos.local/ws`. All messages are JSON with `type` field.
   "presets": [{"id": 0, "name": "Unified"}, {"id": 1, "name": "Dual Split"}, ...]
 }
 ```
+
+---
+
+## UDP Streaming Protocol
+
+High-frequency binary frames (LED preview, audio metrics) are delivered via UDP to avoid TCP backpressure on weak WiFi connections. WebSocket remains the control channel for commands and JSON events.
+
+### Transport Negotiation
+
+1. iOS opens `NWListener` on UDP port 41234
+2. iOS connects via WebSocket (existing)
+3. iOS sends subscribe with UDP port:
+
+```json
+{"type": "ledStream.subscribe", "udpPort": 41234}
+{"type": "audio.subscribe", "udpPort": 41234}
+```
+
+4. Firmware records `{clientIP, 41234}` from the WebSocket client's remote IP
+5. Firmware sends UDP datagrams to `clientIP:41234`
+6. Subscribe response includes transport confirmation:
+
+```json
+{"type": "ledStream.subscribed", "success": true, "transport": "udp"}
+{"type": "audio.subscribed", "success": true, "transport": "udp"}
+```
+
+### Frame Demultiplexing
+
+Both frame types arrive on the same UDP port. Demultiplex by magic bytes:
+
+| Frame Type | Magic | Size | Rate |
+|------------|-------|------|------|
+| LED | `0xFE` (first byte) | 966 bytes | 10 FPS |
+| Audio | `0x00445541` (first 4 bytes, LE) | 464 bytes | 15 FPS |
+
+### Backward Compatibility
+
+If `udpPort` is omitted from subscribe commands, firmware delivers frames via WebSocket binary messages (existing behaviour). This ensures web dashboard clients continue working without modification.
+
+### Key Files
+
+| Component | File |
+|-----------|------|
+| Firmware streamer | `firmware/v2/src/network/webserver/UdpStreamer.h/cpp` |
+| iOS receiver | `LightwaveOS/Network/UDPStreamReceiver.swift` |
+| iOS subscribe | `LightwaveOS/Network/WebSocketService.swift` |
+| iOS wiring | `LightwaveOS/ViewModels/AppViewModel.swift` |
 
 ---
 
@@ -542,7 +591,7 @@ Connect to `ws://lightwaveos.local/ws`. All messages are JSON with `type` field.
 
 These exist in firmware but are not covered in full detail here. See `docs/api/api-v1.md` and `firmware/v2/src/network/webserver/V1ApiRoutes.cpp` for implementation:
 
-- **Audio:** `/api/v1/audio/parameters`, `/api/v1/audio/state`, `/api/v1/audio/tempo`, `/api/v1/audio/fft`, `/api/v1/audio/presets`, `/api/v1/audio/mappings`, `/api/v1/audio/zone-agc`, `/api/v1/audio/spike-detection`, `/api/v1/audio/calibrate`, `/api/v1/audio/benchmark`, `/api/v1/debug/audio`
+- **Audio:** `/api/v1/audio/parameters`, `/api/v1/audio/state`, `/api/v1/audio/tempo`, `/api/v1/audio/fft`, `/api/v1/audio/presets`, `/api/v1/audio/mappings`, `/api/v1/audio/zone-agc`, `/api/v1/audio/spike-detection`, `/api/v1/audio/calibrate`, `/api/v1/audio/benchmark`, `/api/v1/debug/audio`, `/api/v1/debug/udp`
 - **Narrative:** `/api/v1/narrative/status`, `/api/v1/narrative/config`
 - **Shows:** `/api/v1/shows`, `/api/v1/shows/current`, `/api/v1/shows/control`
 - **Presets:** `/api/v1/presets`, `/api/v1/presets/{name}/load`, `/api/v1/presets/save-current`
@@ -562,4 +611,4 @@ These exist in firmware but are not covered in full detail here. See `docs/api/a
 
 ---
 
-*Generated from firmware v2, Tab5.encoder, and lightwave-controller. Last updated: 2026-02-01.*
+*Generated from firmware v2, Tab5.encoder, and lightwave-controller. Last updated: 2026-02-04.*

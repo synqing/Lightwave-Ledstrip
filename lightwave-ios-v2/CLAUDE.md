@@ -15,8 +15,8 @@ open LightwaveOS.xcodeproj
 - **Navigation:** Bottom `TabView` — Play | Zones | Audio | Device
 - **LED Preview:** Horizontal strip default (Canvas-based, 320 LEDs). Concentric ring mode optional.
 - **State:** `@Observable` ViewModels on `@MainActor`, injected via `.environment()`
-- **Network:** REST (`/api/v1/*`) + WebSocket (`ws://device/ws`). Dual-channel with WS primary.
-- **No third-party UI libraries.** Pure SwiftUI + Apple frameworks.
+- **Network:** REST (`/api/v1/*`) + WebSocket (`ws://device/ws`) + UDP (port 41234 for LED/audio streaming). WS for commands, UDP for binary frames.
+- **No third-party UI libraries.** Pure SwiftUI + Apple frameworks, **except** the Rive runtime for UI animation assets only.
 
 ## Hard Constraints
 
@@ -39,6 +39,10 @@ open LightwaveOS.xcodeproj
 | API gaps for iOS | [mockups/API_AUDIT.md](mockups/API_AUDIT.md) |
 | Design mockup (balanced) | [mockups/balanced.html](mockups/balanced.html) |
 | Implementation plan | [docs/DESIGN_SPEC.md](docs/DESIGN_SPEC.md) |
+| Rive integration | [docs/RIVE_INTEGRATION.md](docs/RIVE_INTEGRATION.md) |
+| Rive asset contract | [docs/RIVE_ASSET_CONTRACT.md](docs/RIVE_ASSET_CONTRACT.md) |
+| Rive perf notes | [docs/RIVE_PERF_NOTES.md](docs/RIVE_PERF_NOTES.md) |
+| Rive UX checklist | [docs/RIVE_UX_CHECKLIST.md](docs/RIVE_UX_CHECKLIST.md) |
 | v1 source (reference) | [../lightwave-ios/](../lightwave-ios/) |
 | Firmware API docs | [../docs/api/api-v1.md](../docs/api/api-v1.md) |
 | Audio-reactive protocol | [../docs/audio-visual/audio-visual-semantic-mapping.md](../docs/audio-visual/audio-visual-semantic-mapping.md) |

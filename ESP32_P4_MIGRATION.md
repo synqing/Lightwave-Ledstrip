@@ -3,7 +3,7 @@
 **Project:** LightwaveOS v2 Firmware
 **Target:** ESP32-P4 Function EV Board v1.4
 **Current Platform:** ESP32-S3-DevKitC-1
-**Status:** Phase 1 Complete
+**Status:** Phase 1 In Progress
 **Branch:** `feat/esp32-p4-migration`
 
 ---
@@ -16,14 +16,14 @@ This document outlines the migration of LightwaveOS v2 LED control firmware from
 |--------|-------|
 | **Feasibility** | FEASIBLE with significant work |
 | **Code Portability** | 70% portable without modification |
-| **Estimated Effort** | 88-135 hours (12 weeks calendar) |
+| **Estimated Effort** | 82-125 hours (12 weeks calendar) |
 | **Risk Level** | MEDIUM-HIGH |
 
 ### Critical Blockers
 
-1. **WiFi**: P4 has **NO integrated WiFi** - requires Ethernet (built-in MAC) or external module
+1. **No network on P4**: P4 has **NO integrated WiFi** and we will **not** use Ethernet. Network and web control must be removed or gated off for P4.
 2. **I2S Audio Driver**: Uses legacy driver with S3-specific registers - complete rewrite required
-3. **PlatformIO**: No official P4 support - requires pioarduino community fork
+3. **Toolchain**: Must pin to ESP-IDF **v5.5.2** with hard gates (reuse proven P4 toolchain)
 
 ---
 
@@ -37,7 +37,7 @@ This document outlines the migration of LightwaveOS v2 LED control firmware from
 | **PSRAM** | 8 MB (OPI) | 32 MB (OPI) | 4x more |
 | **WiFi** | Integrated 802.11 b/g/n | **None** | BLOCKING |
 | **Bluetooth** | BLE 5.0 | **None** | Lost feature |
-| **Ethernet** | None | 10/100 MAC | New capability |
+| **Ethernet** | None | 10/100 MAC | Not used |
 | **GPIO** | 45 pins | 55 pins | More I/O |
 | **RMT Channels** | 8 | 4 | Fewer LED channels |
 | **USB** | USB 2.0 FS | USB 2.0 HS | Faster transfers |
@@ -64,7 +64,7 @@ firmware/v2/
 │   │   └── esp32p4/                 # P4 implementations (future)
 │   │       ├── AudioCapture_P4.cpp
 │   │       ├── LedDriver_P4.cpp
-│   │       └── EthernetDriver_P4.cpp
+│   │       └── NetworkDisabled_P4.cpp
 │   ├── config/
 │   │   ├── chip_config.h            # Platform auto-detection
 │   │   ├── chip_esp32s3.h           # S3-specific constants
@@ -82,20 +82,41 @@ firmware/v2/
 
 ## Migration Phases
 
+### Phase Gates (Hard vs Nice-to-have)
+
+**Hard gates (must pass before proceeding):**
+- Phase 0 → Phase 1: Blink + serial OK; ESP-IDF v5.5.2 boot log confirmed; S3 baseline metrics recorded.
+- Phase 1 → Phase 2: P4 build completes with v5.5.2 gate; toolchain scripts in place; no v6.0-dev contamination.
+- Phase 2 → Phase 3: 320 LEDs stable at target frame rate; LED output does not block render loop.
+- Phase 3 → Phase 4: P4 build runs with network disabled; S3 networking unaffected.
+- Phase 4 → Phase 5: Audio capture stable; no WDT; hop rate and overruns within gate.
+
+**Nice-to-have (non-blocking, can slip):**
+- Optional ESP-DSP acceleration once baseline audio capture is stable.
+- Additional profiling and frame-time instrumentation beyond minimum.
+
 ### Phase 0: Pre-Migration Validation (Week 1)
 - [ ] Acquire ESP32-P4 Function EV Board (×2 units recommended)
 - [ ] Flash minimal test firmware (LED blink)
 - [ ] Verify serial communication (115200 baud)
 - [ ] Archive S3 branch: `git checkout -b archive/s3-production`
 - [ ] Capture baseline metrics from S3 (120 FPS, 20ms audio latency)
+- [ ] Confirm LED data pins: GPIO 20 and GPIO 21 (P4)
+- [x] Document I2S pin map for P4 onboard audio front end (BCK 12, WS 10, DIN 11, DOUT 9, MCLK 13; I2C SCL 8, SDA 7; PA_EN 53)
+- [ ] Install ESP-IDF v5.5.2 and verify `IDF_PATH`
+- [ ] Run P4 toolchain gate: boot log must show `ESP-IDF v5.5.2` (no v6.0-dev)
+- [ ] Confirm P4 flash size and PSRAM config (align with 32MB/OPI as applicable)
+- [ ] Confirm onboard codec/init path (ES8311 or direct I2S mic) and required I2C init sequence
 
-### Phase 1: Build System Setup (Week 2) ✅ COMPLETE
+### Phase 1: Build System Setup (Week 2)
 - [x] Create feature branch: `feat/esp32-p4-migration`
 - [x] Create HAL interface directory structure
 - [x] Define platform-agnostic interfaces (IAudioCapture, ILedDriver, INetworkDriver)
 - [x] Create platform detection headers (chip_config.h, chip_esp32s3.h, chip_esp32p4.h)
 - [x] Add `[env:esp32p4_idf]` to platformio.ini
-- [ ] Test compilation with pioarduino fork (requires hardware)
+- [ ] Pin ESP-IDF v5.5.2 and add hard build gates (reuse P4 toolchain scripts)
+- [x] Import P4 toolchain scripts to `LightwaveOS-P4` (`build_with_idf55.sh`, `idf_version_pin.sh`, `clean_idf6.sh`, `verify_build.sh`)
+- [ ] Test compilation with ESP-IDF v5.5.2 on P4 hardware
 
 ### Phase 2: Core LED Output (Weeks 3-4)
 - [ ] Test FastLED 3.10.0 compatibility with P4 RMT driver
@@ -103,15 +124,15 @@ firmware/v2/
 - [ ] Create `LedDriver_S3.cpp` (extract from existing code)
 - [ ] Create `LedDriver_P4.cpp` (new implementation)
 - [ ] Port `RendererActor` to use HAL
+- [ ] Map LED outputs to GPIO 20 and GPIO 21 (P4)
 - [ ] Validate 320 LEDs @ 120 FPS (8.33ms frame budget)
+- [ ] Document LED send time (WS2812 @ 800 kHz) and confirm render loop is non-blocking
 
-### Phase 3: Network Stack (Weeks 5-6)
-- [ ] Implement `EthernetDriver_P4.cpp` using ESP-IDF Ethernet driver
-- [ ] Create `INetworkDriver` abstraction for WiFi/Ethernet
-- [ ] Port WebServer initialization for Ethernet
-- [ ] Test ESPAsyncWebServer compatibility (may need sync fallback)
-- [ ] Validate mDNS (`lightwaveos.local`)
-- [ ] Test all 20+ REST endpoints and WebSocket commands
+### Phase 3: Network Removal (Weeks 5-6)
+- [ ] Disable network features for P4 builds (compile-time flags)
+- [ ] Remove P4 network bring-up and web server dependencies
+- [ ] Ensure S3 networking remains intact and unchanged
+- [ ] Define P4 control path (serial/USB only) and document behaviour
 
 ### Phase 4: Audio Processing (Weeks 7-8)
 - [ ] **CRITICAL**: Rewrite I2S driver from legacy to std mode
@@ -120,6 +141,8 @@ firmware/v2/
 - [ ] Test 12.8kHz sample rate, 256-sample hops
 - [ ] Validate Goertzel analyzer, TempoTracker, ChromaAnalyzer
 - [ ] Test audio-reactive effects
+- [ ] Add hop-rate/overrun/WDT gates (from P4 audio producer) to boot log checks:
+      hop_rate capture=125 Hz ±2, fast=125 Hz ±2; overruns=0; WDT triggers=0 over 10-minute run
 
 ### Phase 5: Full Feature Parity (Weeks 9-10)
 - [ ] Test all 76 effects (visual verification)
@@ -132,7 +155,6 @@ firmware/v2/
 
 ### Phase 6: Stabilization (Weeks 11-12)
 - [ ] 72-hour stress test (monitor heap, crashes, thermal)
-- [ ] Ethernet reconnection testing
 - [ ] Memory leak analysis (<1KB/hour acceptable)
 - [ ] Update documentation (CLAUDE.md, API docs)
 - [ ] CI/CD pipeline for dual-platform builds
@@ -148,9 +170,9 @@ firmware/v2/
 | `src/audio/AudioCapture.cpp` | ~250 | Complete I2S rewrite |
 | `src/audio/AudioCapture.h` | ~80 | New I2S handle types |
 | `src/config/audio_config.h` | ~146 | New I2S config structs |
-| `platformio.ini` | ~360 | Add P4 environment |
-| `src/network/WiFiManager.cpp` | ~957 | Replace with Ethernet |
-| `src/network/WiFiManager.h` | ~543 | Interface redesign |
+| `platformio.ini` | ~360 | Keep S3 build only; P4 uses ESP-IDF toolchain |
+| `src/network/WiFiManager.cpp` | ~957 | Gate out for P4 |
+| `src/network/WiFiManager.h` | ~543 | Gate out for P4 |
 
 ### HIGH PRIORITY (Should Change)
 
@@ -160,7 +182,7 @@ firmware/v2/
 | `src/hal/led/FastLedDriver.cpp` | ~500 | GPIO remapping |
 | `src/core/actors/Actor.h` | ~600 | Increase stack sizes 12-25% |
 | `src/sync/SyncProtocol.h` | ~250 | Board identification |
-| `src/network/WebServer.cpp` | ~1480 | Ethernet initialization |
+| `src/network/WebServer.cpp` | ~1480 | Gate out for P4 |
 
 ### NEW FILES (Created in Phase 1)
 
@@ -176,39 +198,35 @@ firmware/v2/
 
 ---
 
-## PlatformIO Configuration
+## ESP-IDF Toolchain (P4)
 
-### New Environment: `[env:esp32p4_idf]`
+P4 builds must match the proven toolchain from `p4_audio_producer`.
+Scripts live in `LightwaveOS-P4`:
+`build_with_idf55.sh`, `idf_version_pin.sh`, `clean_idf6.sh`, `verify_build.sh`.
 
-```ini
-[env:esp32p4_idf]
-platform = https://github.com/pioarduino/platform-espressif32.git
-board = esp32-p4-function-ev-board
-framework = espidf
-board_build.f_cpu = 400000000L
-board_build.flash_mode = qio
-board_upload.flash_size = 8MB
-build_flags =
-    -D CHIP_ESP32_P4=1
-    -D CONFIG_IDF_TARGET_ESP32P4=1
-    -D FEATURE_WIFI=0
-    -D FEATURE_ETHERNET=1
-    -D FEATURE_WEB_SERVER=1
-    ; ... (see platformio.ini for full configuration)
-```
+### Required Version
+- ESP-IDF **v5.5.2** only (hard gate)
 
-### Build Commands
+### Build Commands (P4)
 
 ```bash
-# ESP32-S3 build (existing)
-pio run -e esp32dev_audio
+cd firmware/v2
 
-# ESP32-P4 build (new)
-pio run -e esp32p4_idf
+# Ensure IDF_PATH points to ESP-IDF v5.5.2
+export IDF_PATH=$HOME/esp/esp-idf-v5.5.2
 
-# List all environments
-grep -E "^\[env:" platformio.ini
+# Verify version gate (fails if not v5.5.2)
+../LightwaveOS-P4/idf_version_pin.sh
+
+# Source ESP-IDF and build (recommended script)
+. $IDF_PATH/export.sh
+./p4_build.sh
 ```
+
+### Version Gate (P4)
+Boot log must show:
+- `boot: ESP-IDF v5.5.2 ...`
+- `app_init: ESP-IDF: v5.5.2 ...`
 
 ---
 
@@ -218,12 +236,12 @@ grep -E "^\[env:" platformio.ini
 |-----------|-------|------|
 | HAL Interface Definition | 8-12 | LOW |
 | I2S Audio Driver Rewrite | 20-30 | **HIGH** |
-| WiFi→Ethernet Migration | 40-60 | **HIGH** |
+| Network removal / gating | 12-20 | MEDIUM |
 | FastLED/RMT Configuration | 10-15 | MEDIUM |
 | FreeRTOS Task Tuning | 8-12 | MEDIUM |
 | Build System | 4-6 | LOW |
 | Testing & Validation | 20-30 | MEDIUM |
-| **TOTAL** | **88-135** | **MEDIUM-HIGH** |
+| **TOTAL** | **82-125** | **MEDIUM-HIGH** |
 
 ---
 
@@ -232,14 +250,23 @@ grep -E "^\[env:" platformio.ini
 | Risk | Probability | Impact | Mitigation |
 |------|-------------|--------|------------|
 | FastLED P4 incompatibility | MEDIUM | CRITICAL | Fallback to ESP-IDF `led_strip` |
-| ESPAsyncWebServer issues | MEDIUM | HIGH | Use ESP-IDF native HTTP server |
+| Loss of network features on P4 | HIGH | MEDIUM | Accept reduced feature set on P4 |
 | I2S driver timing problems | MEDIUM | CRITICAL | Use new std mode driver API |
-| Pioarduino fork instability | MEDIUM | MEDIUM | Pin to specific version |
+| ESP-IDF version drift | MEDIUM | HIGH | Enforce v5.5.2 gate at build and boot |
 | Performance regression | LOW | HIGH | Profile and optimize |
 
 ---
 
 ## Acceptance Criteria
+
+### Hard Gates
+- [ ] Phase 0 gate met (blink + serial + IDF v5.5.2 + S3 baseline)
+- [ ] LED output does not block render loop (measured)
+- [ ] Audio capture stable: hop_rate capture=125 Hz ±2, fast=125 Hz ±2; overruns=0; WDT triggers=0 over 10 minutes
+
+### Nice-to-have
+- [ ] ESP-DSP acceleration integrated (optional)
+- [ ] Additional profiling instrumentation for render/LED send time
 
 ### Performance Targets
 - [ ] Frame rate ≥120 FPS sustained
@@ -249,15 +276,12 @@ grep -E "^\[env:" platformio.ini
 
 ### Feature Parity
 - [ ] All 76 effects render identically to S3
-- [ ] Web dashboard fully functional
-- [ ] All REST API endpoints operational
-- [ ] All WebSocket commands functional
+- [ ] Network and web UI are **disabled** on P4 (S3 retains full web control)
 - [ ] Zone system operational (4 zones)
 - [ ] Transition engine functional (12 types)
 
 ### Hardware Verification
-- [ ] 320 LEDs illuminate correctly (GPIO 4/5)
-- [ ] Ethernet connectivity (`http://lightwaveos.local`)
+- [ ] 320 LEDs illuminate correctly (GPIO 20/21)
 - [ ] Audio-reactive effects respond to music
 - [ ] Serial monitor shows 120+ FPS
 
@@ -269,7 +293,7 @@ If migration fails at any phase:
 
 **Abort Triggers:**
 - Unable to achieve 100 FPS in Phase 2
-- ESPAsyncWebServer incompatible with no viable alternative in Phase 3
+- Network removal causes P4 build instability
 - Audio pipeline unusable in Phase 4
 - Schedule exceeds 15 weeks (including 20% buffer)
 
@@ -286,20 +310,40 @@ Ten specialist agents conducted comprehensive analysis:
 
 | Agent | Key Finding |
 |-------|-------------|
-| Hardware Compatibility | P4: 400MHz RISC-V, no WiFi, has Ethernet MAC |
+| Hardware Compatibility | P4: 400MHz RISC-V, no WiFi, Ethernet MAC unused |
 | C++ Code Analysis | 70% portable, only I2S needs rewrite |
 | Architecture Strategy | Unified codebase with compile-time HAL recommended |
-| Network Layer | WiFi blocking; use built-in Ethernet |
+| Network Layer | WiFi blocking; remove network on P4 |
 | Deep Technical Audit | 102K LOC, well-architected for migration |
-| Build System | PlatformIO extensible, pioarduino required |
+| Build System | ESP-IDF v5.5.2 pinned; S3 stays PlatformIO |
 | Audio Subsystem | I2S legacy→std mode driver migration critical |
 | Effects System | All 76 effects are pure computation, fully portable |
-| Toolchain Investigation | ESP-IDF 5.3+ required, Arduino limited |
+| Toolchain Investigation | ESP-IDF 5.5.2 required; reuse P4 toolchain scripts |
 | Migration Strategy | 6-phase, 12-week roadmap with gates |
 
 ---
 
 ## Quick Reference
+
+### P4 I2S Pin Map (Onboard Audio Front End)
+
+From `p4_audio_producer` reference config:
+
+```cpp
+// I2S
+BCK = GPIO 12
+WS  = GPIO 10
+DIN = GPIO 11
+DOUT = GPIO 9
+MCLK = GPIO 13
+
+// I2C (audio codec control)
+SCL = GPIO 8
+SDA = GPIO 7
+
+// Audio PA enable
+PA_EN = GPIO 53
+```
 
 ### Chip Detection in Code
 
@@ -308,7 +352,7 @@ Ten specialist agents conducted comprehensive analysis:
 
 #if CHIP_ESP32_P4
     // P4-specific code
-    #include "hal/esp32p4/EthernetDriver_P4.h"
+    #include "hal/esp32p4/NetworkDisabled_P4.h"
 #else
     // S3-specific code (default)
     #include "hal/esp32s3/WiFiDriver_S3.h"
@@ -327,7 +371,7 @@ if (chip::isESP32P4()) {
 namespace chip {
     constexpr uint32_t CPU_FREQ_MHZ = 400;
     constexpr bool HAS_INTEGRATED_WIFI = false;
-    constexpr bool HAS_ETHERNET = true;
+    constexpr bool HAS_ETHERNET = false;  // MAC present but unused
     constexpr uint8_t RMT_CHANNELS = 4;
 
     namespace task {
@@ -341,7 +385,7 @@ namespace chip {
 ## Next Steps
 
 1. **Hardware**: Acquire ESP32-P4 Function EV Board (×2)
-2. **Environment**: Install pioarduino fork and test build
+2. **Environment**: Install ESP-IDF v5.5.2 and confirm toolchain gates
 3. **Validate**: Flash minimal firmware, verify serial output
 4. **Proceed**: Begin Phase 2 (LED output) upon successful boot
 
@@ -351,7 +395,6 @@ namespace chip {
 
 - [ESP32-P4 Technical Reference Manual](https://www.espressif.com/sites/default/files/documentation/esp32-p4_technical_reference_manual_en.pdf)
 - [ESP32-P4 Function EV Board User Guide](https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32p4/esp32-p4-function-ev-board/user_guide.html)
-- [pioarduino Platform Fork](https://github.com/pioarduino/platform-espressif32)
 - [FastLED ESP32-P4 Support](https://github.com/FastLED/FastLED/releases/tag/3.10.0)
 - [ESP-IDF I2S Standard Mode Driver](https://docs.espressif.com/projects/esp-idf/en/latest/esp32p4/api-reference/peripherals/i2s.html)
 

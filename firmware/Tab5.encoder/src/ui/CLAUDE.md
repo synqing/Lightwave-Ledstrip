@@ -17,6 +17,9 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #23533 | 12:02 PM | 🔴 | Tab5 LVGL Touch Pass-Through Fix for Header Containers | ~449 |
+| #23532 | " | ✅ | Tab5 Build Failed Due to LVGL Flag Type Casting Error | ~411 |
+| #23531 | " | 🟣 | Header Center Tap Detection for Device Selector Access | ~733 |
 | #23508 | 11:38 AM | 🟣 | DeviceSelectorTab Three-Panel Layout Implementation | ~791 |
 | #23486 | 11:36 AM | 🔵 | ConnectivityTab Implementation with Deferred Loading and Watchdog Safety | ~715 |
 | #23485 | " | 🟣 | DeviceSelectorTab Complete LVGL Implementation for Multi-Device Management | ~1050 |

@@ -116,7 +116,7 @@ npm run test:e2e  # ✅ Canvas tests included
 
 ### Implemented
 
-- ✅ **V4 HTML Prototype Fix** (`docs/LightwaveOS_Dashboard_v4.html`)
+- ✅ **V4 HTML Prototype Fix** (`docs/dashboard/prototypes/LightwaveOS_Dashboard_v4.html`)
   - Fixed invalid `sm:width` inline style (line 574)
   - Replaced with Tailwind classes: `w-40 sm:w-48`
 
@@ -232,7 +232,7 @@ npm run lint         # ✅ Includes style check
 - `lightwave-dashboard/eslint.config.js` - Added custom rule
 - `lightwave-dashboard/src/components/LGPVisualizer.tsx` - Added JSDoc
 - `lightwave-dashboard/src/components/TelemetryGraph.tsx` - Added JSDoc
-- `docs/LightwaveOS_Dashboard_v4.html` - Fixed inline style
+- `docs/dashboard/prototypes/LightwaveOS_Dashboard_v4.html` - Fixed inline style
 
 ---
 
@@ -339,4 +339,3 @@ All Phase 0 objectives have been successfully implemented. The dashboard now has
 - ✅ Guardrails to prevent future issues
 
 The codebase is now ready for production deployment with zero external runtime dependencies and comprehensive quality assurance measures in place.
-

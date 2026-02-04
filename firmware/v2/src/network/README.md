@@ -60,16 +60,19 @@ The network subsystem provides HTTP REST API, WebSocket real-time control, WiFi 
 |  - RendererActor pointer (read-only state cache)                  |
 |  - ZoneComposer pointer                                           |
 |  - Streaming broadcasters                                         |
+|  - UdpStreamer pointer (bypasses TCP)                              |
 +------------------------------------------------------------------+
                     |
-                    v
-+------------------------------------------------------------------+
-|                      WiFiManager                                  |
-|  - FreeRTOS task on Core 0                                        |
-|  - Event-driven state machine                                     |
-|  - Automatic reconnection with exponential backoff                |
-|  - Soft-AP fallback mode                                          |
-+------------------------------------------------------------------+
+          +---------+---------+
+          v                   v
++-------------------+  +-------------------+
+| WiFiManager       |  | UdpStreamer        |
+| - FreeRTOS Core 0 |  | - UDP port 5005   |
+| - Event-driven    |  | - LED frames 10Hz |
+| - Auto reconnect  |  | - Audio frames    |
+| - Soft-AP fallback|  |   15Hz            |
++-------------------+  | - Outbound only   |
+                       +-------------------+
 ```
 
 **Key Design Principles:**
@@ -111,6 +114,8 @@ src/network/
     |-- AudioFrameEncoder.h  # Binary audio frame encoding
     |-- AudioStreamConfig.h
     |-- AudioStreamBroadcaster.h/cpp
+    |
+    |-- UdpStreamer.h/cpp       # UDP streaming for LED/audio frames
     |
     |-- BenchmarkFrameEncoder.h
     |-- BenchmarkStreamConfig.h
@@ -230,6 +235,7 @@ struct WebServerContext {
     LedStreamBroadcaster* ledBroadcaster;
     AudioStreamBroadcaster* audioBroadcaster;     // FEATURE_AUDIO_SYNC
     BenchmarkStreamBroadcaster* benchmarkBroadcaster;  // FEATURE_AUDIO_BENCHMARK
+    UdpStreamer* udpStreamer;                         // UDP streaming (bypasses TCP)
 
     // Callbacks
     std::function<void()> broadcastStatus;
@@ -527,10 +533,10 @@ When WiFi connection fails, device enters AP mode:
 
 | Setting | Value |
 |---------|-------|
-| SSID | `LightwaveOS-XXXX` (last 4 of MAC) |
-| Password | `spectrasynq` |
+| SSID | `LightwaveOS-AP` |
+| Password | `SpectraSynq` |
 | IP | `192.168.4.1` |
-| Channel | Auto-selected (least congested) |
+| Channel | `1` (configurable via `enableSoftAP`) |
 
 ---
 
@@ -606,7 +612,7 @@ namespace LedStreamConfig {
     constexpr uint16_t TOTAL_LEDS = 320;
     constexpr uint8_t FRAME_VERSION = 1;
     constexpr uint8_t MAGIC_BYTE = 0xFE;
-    constexpr uint8_t TARGET_FPS = 20;  // ~50ms interval
+    constexpr uint8_t TARGET_FPS = 10;  // ~100ms interval (reduced for UDP coexistence)
 }
 ```
 
@@ -642,11 +648,56 @@ ws.onmessage = (event) => {
 **Configuration:**
 ```cpp
 namespace AudioStreamConfig {
-    constexpr uint8_t TARGET_FPS = 30;      // Match audio hop rate
+    constexpr uint8_t TARGET_FPS = 15;      // ~67ms interval (reduced for UDP coexistence)
     constexpr uint8_t MAX_CLIENTS = 4;
     constexpr uint8_t MAGIC_BYTE = 0xA1;    // Audio frame magic
 }
 ```
+
+### UDP Streaming (iOS Clients)
+
+High-frequency LED and audio frames are optionally delivered via UDP instead of WebSocket binary frames. This eliminates TCP ACK timeout failures on weak WiFi (-70 to -84 dBm).
+
+**Transport Negotiation:**
+
+Clients include `udpPort` in their WebSocket subscribe command to opt into UDP delivery:
+
+```json
+{"type": "ledStream.subscribe", "udpPort": 41234}
+{"type": "audio.subscribe", "udpPort": 41234}
+```
+
+Firmware records the client's IP (from WebSocket connection) paired with the UDP port, then sends datagrams to `clientIP:udpPort`. If `udpPort` is omitted, existing WebSocket binary streaming is used (backward compatible for web dashboard clients).
+
+**Subscribe Response:**
+
+```json
+{"type": "ledStream.subscribed", "success": true, "transport": "udp"}
+{"type": "audio.subscribed", "success": true, "transport": "ws"}
+```
+
+The `transport` field indicates which delivery method was accepted.
+
+**Frame Demultiplexing:**
+
+Both LED and audio frames are sent to the same UDP port. Receivers demultiplex by magic bytes:
+- LED frame: first byte `0xFE`, 966 bytes total
+- Audio frame: first 4 bytes `0x41 0x55 0x44 0x00` (little-endian `0x00445541`), 464 bytes total
+
+**Staggered Delivery:**
+
+`UdpStreamer` interleaves LED (10 FPS) and audio (15 FPS) sends so at most one packet is transmitted per 20ms tick, avoiding WiFi TX buffer contention.
+
+**Configuration:**
+```cpp
+class UdpStreamer {
+    static constexpr uint8_t MAX_SUBSCRIBERS = 4;
+    // Uses portMUX_TYPE spinlock for thread-safe subscriber management
+    // Pre-allocated frame buffers (no heap allocation in send path)
+};
+```
+
+**Cleanup:** When a WebSocket connection disconnects, `WsGateway` calls `removeSubscriber(clientIP)` to clean up UDP subscriptions.
 
 ### Benchmark Streaming
 
@@ -754,6 +805,7 @@ uint8_t safeZoneId = validateZoneIdInRequest(zoneId);
 - **WiFiManager:** `m_stateMutex` protects state transitions
 - **RateLimiter:** Caller must ensure thread safety
 - **LedStreamBroadcaster:** Uses `portMUX_TYPE` for ESP32 spinlock
+- **UdpStreamer:** Uses `portMUX_TYPE` for ESP32 spinlock (same pattern as LedStreamBroadcaster)
 - **SubscriptionManager:** Caller manages thread safety
 
 ### Safe Patterns
@@ -797,8 +849,9 @@ uint8_t effect = renderer->getCurrentEffect();  // BAD!
 | `RateLimiter.h` | ~280 | Rate limiting |
 | `WsGateway.cpp` | ~200 | WebSocket gateway |
 | `WsCommandRouter.cpp` | ~100 | Command dispatch |
+| `UdpStreamer.h/cpp` | ~350 | UDP frame streaming |
 
 ---
 
-**Last Updated:** 2025-01-02
+**Last Updated:** 2026-02-04
 **Subsystem Version:** 2.0.0

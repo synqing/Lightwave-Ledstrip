@@ -17,6 +17,7 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #23925 | 5:34 PM | 🔴 | Zone Segment Generation Fixed with Correct Ordering and Boundaries | ~583 |
 | #23198 | 7:28 AM | ⚖️ | Root Cause Analysis for Dashboard Dropdown Loading Bug | ~775 |
 | #23159 | 7:25 AM | 🔵 | Web UI HTTP Retry Mechanism Location | ~218 |
 | #23157 | " | 🔵 | Web UI Layout with Zone Editor and OTA Update Interface | ~804 |
@@ -24,4 +25,10 @@
 | #23123 | " | 🔵 | Web UI Effect and Palette Dropdown Population Logic | ~461 |
 | #23102 | 6:53 AM | 🔵 | LittleFS Filesystem Image Build Configuration | ~528 |
 | #23087 | 6:34 AM | 🟣 | OTA Filesystem Upload via REST and WebSocket | ~682 |
+
+### Jan 31, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #23961 | 8:51 PM | 🔵 | LightwaveOS Dashboard Architecture Fully Mapped | ~624 |
 </claude-mem-context>

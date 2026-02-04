@@ -1078,11 +1078,59 @@ curl -X POST http://lightwaveos.local/api/v1/batch \
 
 ---
 
+### Debug Endpoints
+
+#### `GET /api/v1/debug/udp`
+
+Get UDP streaming counters and backoff state for field diagnostics.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "started": true,
+    "subscribers": 1,
+    "suppressed": 0,
+    "consecutiveFailures": 0,
+    "lastFailureMs": 123456,
+    "lastFailureAgoMs": 250,
+    "cooldownRemainingMs": 0,
+    "socketResets": 0,
+    "lastSocketResetMs": 0,
+    "led": {"attempts": 100, "success": 100, "failures": 0},
+    "audio": {"attempts": 100, "success": 99, "failures": 1}
+  },
+  "timestamp": 123456789,
+  "version": "1.0.0"
+}
+```
+
+**cURL Example:**
+```bash
+curl http://lightwaveos.local/api/v1/debug/udp
+```
+
+---
+
 ## WebSocket Commands
 
 **WebSocket URL:** `ws://lightwaveos.local/ws`
 
 All WebSocket messages use JSON format with a `type` field.
+
+### Command Categories
+
+| Category | Commands |
+|----------|----------|
+| Effects | `effects.getCurrent`, `effects.getMetadata`, `effects.getCategories`, `setEffect` |
+| Parameters | `parameters.get`, `setBrightness`, `setSpeed`, `setPalette` |
+| Transitions | `transition.getTypes`, `transition.trigger`, `transition.config` |
+| Zones | `zones.list`, `zones.update`, `zones.setLayout`, `zone.setEffect`, `zone.setPalette`, `zone.setBlend` |
+| Device | `device.getStatus` |
+| Batch | `batch` |
+| Streaming | `ledStream.subscribe`, `ledStream.unsubscribe`, `audio.subscribe`, `audio.unsubscribe` |
+| Debug | `debug.audio.get`, `debug.audio.set`, `debug.udp.get` |
 
 ### Connection
 
@@ -1212,6 +1260,49 @@ Get device status over WebSocket.
 ```javascript
 ws.send(JSON.stringify({
   type: "device.getStatus"
+}));
+```
+
+---
+
+### Command: `debug.udp.get`
+
+Get UDP streaming counters and backoff state.
+
+**Send:**
+```json
+{
+  "type": "debug.udp.get",
+  "requestId": "udp-1"
+}
+```
+
+**Receive:**
+```json
+{
+  "type": "debug.udp.stats",
+  "success": true,
+  "data": {
+    "started": true,
+    "subscribers": 1,
+    "suppressed": 0,
+    "consecutiveFailures": 0,
+    "lastFailureMs": 123456,
+    "lastFailureAgoMs": 250,
+    "cooldownRemainingMs": 0,
+    "socketResets": 0,
+    "lastSocketResetMs": 0,
+    "led": {"attempts": 100, "success": 100, "failures": 0},
+    "audio": {"attempts": 100, "success": 99, "failures": 1}
+  }
+}
+```
+
+**JavaScript Example:**
+```javascript
+ws.send(JSON.stringify({
+  type: "debug.udp.get",
+  requestId: "udp-1"
 }));
 ```
 
@@ -1700,6 +1791,122 @@ ws.send(JSON.stringify({
 
 ---
 
+### Command: `ledStream.subscribe`
+
+Subscribe to live LED frame data. Frames are 966 bytes: 6-byte header + 960 bytes (320 LEDs x 3 RGB).
+
+**Send (WebSocket transport):**
+```json
+{
+  "type": "ledStream.subscribe"
+}
+```
+
+**Receive:**
+```json
+{
+  "type": "ledStream.subscribed",
+  "success": true,
+  "transport": "ws"
+}
+```
+
+After subscription, binary LED frames arrive on the WebSocket connection.
+
+**UDP Transport Negotiation:**
+
+Clients can opt into UDP delivery by including `udpPort` in the subscribe command:
+
+```json
+{"type": "ledStream.subscribe", "udpPort": 41234}
+```
+
+Response includes transport confirmation:
+```json
+{"type": "ledStream.subscribed", "success": true, "transport": "udp"}
+```
+
+If `udpPort` is omitted, frames are delivered via WebSocket binary (backward compatible).
+
+**Audio UDP subscription follows the same pattern:**
+```json
+{"type": "audio.subscribe", "udpPort": 41234}
+```
+
+---
+
+### Command: `ledStream.unsubscribe`
+
+Stop receiving LED frame data.
+
+**Send:**
+```json
+{
+  "type": "ledStream.unsubscribe"
+}
+```
+
+**Receive:**
+```json
+{
+  "type": "ledStream.unsubscribed",
+  "success": true
+}
+```
+
+---
+
+### Command: `audio.subscribe`
+
+Subscribe to live audio metrics data. Frames are 464 bytes of binary audio analysis data (30 FPS).
+
+**Send (WebSocket transport):**
+```json
+{
+  "type": "audio.subscribe"
+}
+```
+
+**Send (UDP transport):**
+```json
+{
+  "type": "audio.subscribe",
+  "udpPort": 41234
+}
+```
+
+**Receive:**
+```json
+{
+  "type": "audio.subscribed",
+  "success": true,
+  "transport": "udp"
+}
+```
+
+---
+
+### Command: `audio.unsubscribe`
+
+Stop receiving audio metrics data.
+
+**Send:**
+```json
+{
+  "type": "audio.unsubscribe"
+}
+```
+
+**Receive:**
+```json
+{
+  "type": "audio.unsubscribed",
+  "success": true
+}
+```
+
+---
+
 ## Effect Metadata
 
 ### Effect Categories
@@ -1886,6 +2093,14 @@ v1 API endpoints coexist with v0 endpoints:
 - `/api/*` - Legacy v0 endpoints (still functional)
 - WebSocket supports both `type` (v1) and `cmd` (v0) formats
 
+### UDP Streaming
+
+For high-frequency binary data (LED frames, audio metrics), iOS clients use UDP transport to avoid TCP ACK timeout failures on weak WiFi. The WebSocket connection serves as the control channel for subscription negotiation and JSON events. UDP and WebSocket streaming coexist -- clients choose transport per subscription.
+
+UDP frame demultiplexing uses magic bytes:
+- LED: first byte `0xFE` (966 bytes)
+- Audio: first 4 bytes `0x41 0x55 0x44 0x00` (464 bytes)
+
 ### Performance Considerations
 
 - Target frame rate: 120 FPS
@@ -1905,5 +2120,5 @@ For audio-specific APIs (requires `esp32dev_audio` build):
 ---
 
 **Documentation Version:** 1.0.0
-**Last Updated:** 2025-12-27
+**Last Updated:** 2026-02-04
 **API Base:** LightwaveOS v1.0.0

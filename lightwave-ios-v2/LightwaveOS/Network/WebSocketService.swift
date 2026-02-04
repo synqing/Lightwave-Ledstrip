@@ -27,6 +27,9 @@ enum WebSocketMessageType: String {
     case palettesList = "palettes.list"
     case deviceStatus = "device.status"
     case colourCorrectionConfig = "colorCorrection.getConfig"
+    case audioSubscribed = "audio.subscribed"
+    case audioUnsubscribed = "audio.unsubscribed"
+    case ledStreamSubscribed = "ledStream.subscribed"
     case unknown
 }
 
@@ -127,7 +130,12 @@ actor WebSocketService {
     }
 
     /// Subscribe to LED stream
-    func subscribeLEDStream() {
+    func subscribeLEDStream(udpPort: UInt16 = 41234) {
+        send("ledStream.subscribe", params: ["udpPort": Int(udpPort)])
+    }
+
+    /// Subscribe to LED stream via WebSocket (no UDP transport)
+    func subscribeLEDStreamWS() {
         send("ledStream.subscribe")
     }
 
@@ -137,7 +145,12 @@ actor WebSocketService {
     }
 
     /// Subscribe to audio metrics stream
-    func subscribeAudioStream() {
+    func subscribeAudioStream(udpPort: UInt16 = 41234) {
+        send("audio.subscribe", params: ["udpPort": Int(udpPort)])
+    }
+
+    /// Subscribe to audio metrics stream via WebSocket (no UDP transport)
+    func subscribeAudioStreamWS() {
         send("audio.subscribe")
     }
 
@@ -156,6 +169,24 @@ actor WebSocketService {
             params["toEffect"] = toEffect
         }
         send("transition.trigger", params: params)
+    }
+
+    /// Fetch current audio tuning parameters
+    func sendAudioParametersGet(requestId: String? = nil) {
+        var params: [String: Any] = [:]
+        if let requestId = requestId {
+            params["requestId"] = requestId
+        }
+        send("audio.parameters.get", params: params)
+    }
+
+    /// Patch audio tuning parameters
+    func sendAudioParametersSet(payload: [String: Any], requestId: String? = nil) {
+        var params = payload
+        if let requestId = requestId {
+            params["requestId"] = requestId
+        }
+        send("audio.parameters.set", params: params)
     }
 
     // MARK: - Private Connection Management
@@ -251,10 +282,24 @@ actor WebSocketService {
             // These are handled via REST API, not event stream
             break
 
+        case .audioSubscribed, .audioUnsubscribed, .ledStreamSubscribed:
+            #if DEBUG
+            let success = json["success"] as? Bool ?? (json["status"] as? String == "ok")
+            let errorCode = (json["error"] as? [String: Any])?["code"] as? String
+            print("[WS] Subscription response: \(messageType.rawValue) success=\(success) error=\(errorCode ?? "none")")
+            #endif
+
         case .unknown:
             break
         }
     }
+
+    // LED stream constants matching firmware LedStreamConfig
+    private static let ledFrameV1Size = 966       // v1: 4-byte header + 2×(1 + 160×3)
+    private static let ledFrameLegacySize = 961   // v0: 1 magic + 320×3
+    private static let ledMagicByte: UInt8 = 0xFE
+    private static let ledsPerStrip = 160
+    private static let rgbPerStrip = 160 * 3      // 480 bytes
 
     private func handleBinaryMessage(_ data: Data) {
         // Audio metrics frame: 464 bytes, magic 0x00445541
@@ -268,13 +313,26 @@ actor WebSocketService {
             }
         }
 
-        // LED stream validation: 961 bytes, magic byte 0xFE
-        guard data.count == 961, data.first == 0xFE else {
+        guard data.first == Self.ledMagicByte else { return }
+
+        // LED stream v1 format (966 bytes): [0xFE][version][numStrips][ledsPerStrip][stripId][RGB×160][stripId][RGB×160]
+        if data.count == Self.ledFrameV1Size {
+            var rgb = Data(capacity: 960)
+            // Strip 0: header(4) + stripId(1) = offset 5, length 480
+            let strip0Start = 5
+            rgb.append(data[strip0Start ..< strip0Start + Self.rgbPerStrip])
+            // Strip 1: strip0Start + 480 + stripId(1) = offset 486, length 480
+            let strip1Start = strip0Start + Self.rgbPerStrip + 1
+            rgb.append(data[strip1Start ..< strip1Start + Self.rgbPerStrip])
+            eventContinuation?.yield(.ledData(rgb))
             return
         }
 
-        // Pass 960 bytes (320 RGB triplets) after magic byte
-        eventContinuation?.yield(.ledData(Data(data.dropFirst())))
+        // Legacy format (961 bytes): [0xFE][RGB×320]
+        if data.count == Self.ledFrameLegacySize {
+            eventContinuation?.yield(.ledData(Data(data.dropFirst())))
+            return
+        }
     }
 
     // MARK: - Message Sending
@@ -295,6 +353,9 @@ actor WebSocketService {
             try await webSocketTask?.send(.string(text))
         } catch {
             // Connection error will be handled by receive loop or monitor
+            #if DEBUG
+            print("[WS] send failed: \(error.localizedDescription)")
+            #endif
         }
     }
 

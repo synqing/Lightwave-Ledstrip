@@ -417,6 +417,50 @@ void RendererActor::onStart()
     // Record start time
     m_lastFrameTime = micros();
 
+#if defined(CONFIG_IDF_TARGET_ESP32P4) && !defined(NATIVE_BUILD)
+    // ESP32-P4: drive the renderer from a microsecond-resolution metronome.
+    // This avoids 100 Hz FreeRTOS tick quantisation (10 ms granularity) while
+    // still letting the task block between frames (so IDLE1 can run for TWDT).
+    const esp_timer_create_args_t timerArgs = {
+        .callback = [](void* arg) {
+            auto* self = static_cast<RendererActor*>(arg);
+            if (self == nullptr) {
+                return;
+            }
+
+            // Coalesce: never allow more than one pending tick in the queue.
+            if (self->m_frameTickQueued.exchange(true, std::memory_order_acq_rel)) {
+                self->m_frameTickDrops++;
+                return;
+            }
+
+            Message tick(MessageType::RENDER_TICK);
+            if (!self->send(tick, 0)) {
+                self->m_frameTickQueued.store(false, std::memory_order_release);
+                self->m_frameTickDrops++;
+            }
+        },
+        .arg = this,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "lw_frameclk",
+        .skip_unhandled_events = true,
+    };
+
+    esp_err_t err = esp_timer_create(&timerArgs, &m_frameTimer);
+    if (err != ESP_OK) {
+        LW_LOGE("Failed to create frame clock timer: %s", esp_err_to_name(err));
+    } else {
+        err = esp_timer_start_periodic(m_frameTimer, LedConfig::FRAME_TIME_US);
+        if (err != ESP_OK) {
+            LW_LOGE("Failed to start frame clock timer: %s", esp_err_to_name(err));
+            esp_timer_delete(m_frameTimer);
+            m_frameTimer = nullptr;
+        } else {
+            LW_LOGI("Frame clock: %lu us (%u FPS)", (unsigned long)LedConfig::FRAME_TIME_US, LedConfig::TARGET_FPS);
+        }
+    }
+#endif
+
     LW_LOGI("Ready - %d effects, brightness=%d, target=%d FPS",
              m_effectCount, m_brightness, LedConfig::TARGET_FPS);
 }
@@ -424,6 +468,13 @@ void RendererActor::onStart()
 void RendererActor::onMessage(const Message& msg)
 {
     switch (msg.type) {
+        case MessageType::RENDER_TICK:
+            // Timer-driven render tick (ESP32-P4). Clear the coalesce latch first
+            // so the timer can enqueue the next tick while we render.
+            m_frameTickQueued.store(false, std::memory_order_release);
+            renderOneFrame();
+            break;
+
         case MessageType::SET_EFFECT:
             handleSetEffect(msg.param1);
             break;
@@ -586,8 +637,32 @@ void RendererActor::onMessage(const Message& msg)
 
 void RendererActor::onTick()
 {
+// ESP32-P4 uses the timer-driven `RENDER_TICK` message to pace frames.
+// Keep the tick path as a safety net for other targets/builds.
+#if defined(CONFIG_IDF_TARGET_ESP32P4)
+    // No-op: tickInterval is configured as portMAX_DELAY on P4.
+    // If this is ever reached, it indicates a scheduling/config regression.
+    return;
+#else
+    renderOneFrame();
+#endif
+}
+
+void RendererActor::renderOneFrame()
+{
     uint32_t frameStartUs = micros();
     static uint16_t s_wdtResetFrames = 0;
+
+    // Timer-driven renderer diagnostic: detect large gaps between frames.
+    // This indicates the renderer was blocked/overrun or ticks were coalesced.
+    if (m_lastFrameTime != 0) {
+        uint32_t deltaUs = (frameStartUs >= m_lastFrameTime)
+            ? (frameStartUs - m_lastFrameTime)
+            : ((UINT32_MAX - m_lastFrameTime) + frameStartUs);
+        if (deltaUs > (LedConfig::FRAME_TIME_US * 2)) {
+            m_frameTickLateFrames++;
+        }
+    }
 
     // Render the current effect
     renderFrame();
@@ -613,7 +688,7 @@ void RendererActor::onTick()
         captureFrame(CaptureTap::TAP_B_POST_CORRECTION, m_leds);
     }
 
-#ifndef NATIVE_BUILD
+#if !defined(NATIVE_BUILD) && !defined(CONFIG_IDF_TARGET_ESP32P4)
     // CRITICAL: Yield BEFORE showLeds() to let IDLE1 reset its watchdog
     // FastLED.show() blocks for ~9.6ms, preventing IDLE1 from running
     // We must yield here so IDLE1 gets CPU time before the blocking call
@@ -633,7 +708,7 @@ void RendererActor::onTick()
         rawFrameTimeUs = (UINT32_MAX - frameStartUs) + frameEndUs;
     }
 
-#ifndef NATIVE_BUILD
+#if !defined(NATIVE_BUILD) && !defined(CONFIG_IDF_TARGET_ESP32P4)
     // Frame-rate throttle to ~120 FPS on targets with high tick rates.
     if (rawFrameTimeUs < LedConfig::FRAME_TIME_US) {
         uint32_t remainingUs = LedConfig::FRAME_TIME_US - rawFrameTimeUs;
@@ -671,7 +746,7 @@ void RendererActor::onTick()
     m_lastFrameTime = frameStartUs;
     m_frameCount++;
 
-#ifndef NATIVE_BUILD
+#if !defined(NATIVE_BUILD) && !defined(CONFIG_IDF_TARGET_ESP32P4)
     // CRITICAL: Yield at END of frame to let IDLE1 reset its watchdog
     // The Actor system calls onTick() synchronously when queue times out,
     // so we must explicitly yield here to give IDLE1 CPU time
@@ -687,6 +762,15 @@ void RendererActor::onStop()
 
     // Unsubscribe from events
     bus::MessageBus::instance().unsubscribeAll(this);
+
+#if defined(CONFIG_IDF_TARGET_ESP32P4) && !defined(NATIVE_BUILD)
+    if (m_frameTimer != nullptr) {
+        esp_timer_stop(m_frameTimer);
+        esp_timer_delete(m_frameTimer);
+        m_frameTimer = nullptr;
+    }
+    m_frameTickQueued.store(false, std::memory_order_release);
+#endif
 
     // Turn off all LEDs
     memset(m_leds, 0, sizeof(m_leds));

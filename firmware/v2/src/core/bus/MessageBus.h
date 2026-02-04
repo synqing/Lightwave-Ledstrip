@@ -25,6 +25,7 @@
 #pragma once
 
 #include "../actors/Actor.h"
+#include <atomic>
 #include <cstdint>
 #include <cstring>
 
@@ -217,16 +218,32 @@ private:
      * @brief Find the subscription entry for a message type
      * @return Pointer to entry, or nullptr if not found
      */
-    SubscriptionEntry* findEntry(MessageType type);
+    static SubscriptionEntry* findEntry(SubscriptionEntry* table, MessageType type);
+    static const SubscriptionEntry* findEntry(const SubscriptionEntry* table, MessageType type);
 
     /**
      * @brief Find or create a subscription entry
      * @return Pointer to entry, or nullptr if table full
      */
-    SubscriptionEntry* findOrCreateEntry(MessageType type);
+    static SubscriptionEntry* findOrCreateEntry(SubscriptionEntry* table, MessageType type);
 
-    // Subscription table
-    SubscriptionEntry m_entries[MAX_TRACKED_TYPES];
+    // Subscription table (copy-on-write, double-buffered).
+    // subscribe/unsubscribe mutate the inactive table then atomically swap.
+    SubscriptionEntry m_tables[2][MAX_TRACKED_TYPES];
+    std::atomic<uint8_t> m_activeTableIndex;
+
+    // Latched (sticky) state messages for selected MessageTypes.
+    // Used to solve publish-before-subscribe races for state-like topics.
+    struct LatchedSlot {
+        MessageType type;
+        std::atomic<uint32_t> seq;
+        Message buffers[2];
+        bool active;
+    };
+
+    static constexpr uint8_t MAX_LATCHED_TYPES = 8;
+    LatchedSlot m_latched[MAX_LATCHED_TYPES];
+    uint32_t m_failedLatchedDeliveries;
 
     // Mutex for subscribe/unsubscribe operations
     SemaphoreHandle_t m_mutex;

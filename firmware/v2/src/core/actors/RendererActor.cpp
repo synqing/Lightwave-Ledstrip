@@ -9,7 +9,7 @@
  * Performance notes:
  * - Frame budget: 8.33ms (120 FPS)
  * - Typical render: 2-4ms (effect dependent)
- * - FastLED.show(): ~2ms for 320 LEDs
+ * - LED driver show(): ~2ms for 320 LEDs
  * - Remaining budget for message processing: ~2-4ms
  *
  * @author LightwaveOS Team
@@ -18,7 +18,9 @@
 
 #include "RendererActor.h"
 #include "../../effects/zones/ZoneComposer.h"
+#if FEATURE_TRANSITIONS
 #include "../../effects/transitions/TransitionEngine.h"
+#endif
 #include "../../effects/PatternRegistry.h"
 #include "../../palettes/Palettes_Master.h"
 #include "../../plugins/api/IEffect.h"
@@ -28,6 +30,10 @@
 #if FEATURE_VALIDATION_PROFILING
 #include "../../core/system/ValidationProfiler.h"
 #endif
+#ifndef NATIVE_BUILD
+#include "esp_rom_sys.h"
+#include <esp_task_wdt.h>
+#endif
 
 // Audio integration (Phase 2)
 #if FEATURE_AUDIO_SYNC
@@ -36,7 +42,9 @@
 #include "../../audio/tempo/TempoTracker.h"
 #endif
 
+#if FEATURE_TRANSITIONS
 using namespace lightwaveos::transitions;
+#endif
 using namespace lightwaveos::palettes;
 
 namespace {
@@ -114,12 +122,12 @@ RendererActor::RendererActor()
     , m_effectTimeSeconds(0.0f)
     , m_effectFrameAccumulator(0.0f)
     , m_effectFrameCount(0)
-    , m_ctrl1(nullptr)
-    , m_ctrl2(nullptr)
     , m_zoneComposer(nullptr)
+#if FEATURE_TRANSITIONS
     , m_transitionEngine(nullptr)
     , m_pendingEffect(0)
     , m_transitionPending(false)
+#endif
     , m_captureEnabled(false)
     , m_captureTapMask(0)
     , m_correctionSkipCount(0)
@@ -135,16 +143,16 @@ RendererActor::RendererActor()
 #endif
 {
     // Initialize LED buffers to black
-    memset(m_strip1, 0, sizeof(m_strip1));
-    memset(m_strip2, 0, sizeof(m_strip2));
+    m_strip1 = nullptr;
+    m_strip2 = nullptr;
     memset(m_leds, 0, sizeof(m_leds));
+#if FEATURE_TRANSITIONS
     memset(m_transitionSourceBuffer, 0, sizeof(m_transitionSourceBuffer));
+    m_transitionEngine = new TransitionEngine();
+#endif
     memset(m_captureTapA, 0, sizeof(m_captureTapA));
     memset(m_captureTapB, 0, sizeof(m_captureTapB));
     memset(m_captureTapC, 0, sizeof(m_captureTapC));
-
-    // Create transition engine
-    m_transitionEngine = new TransitionEngine();
 
     // Initialize effect registry
     for (uint8_t i = 0; i < MAX_EFFECTS; i++) {
@@ -167,11 +175,12 @@ RendererActor::RendererActor()
 
 RendererActor::~RendererActor()
 {
-    // Clean up transition engine
+#if FEATURE_TRANSITIONS
     if (m_transitionEngine) {
         delete m_transitionEngine;
         m_transitionEngine = nullptr;
     }
+#endif
     // Actor base class handles task cleanup
 }
 
@@ -393,6 +402,13 @@ void RendererActor::onStart()
 {
     LW_LOGI("Initializing LEDs on Core %d", xPortGetCoreID());
 
+#ifndef NATIVE_BUILD
+    // CRITICAL: Add this task to the watchdog
+    // Without this, esp_task_wdt_reset() calls in onTick() have no effect
+    esp_task_wdt_add(nullptr);  // nullptr means current task
+    LW_LOGI("Renderer task added to watchdog");
+#endif
+
     initLeds();
 
     // Subscribe to relevant events
@@ -601,6 +617,7 @@ void RendererActor::onMessage(const Message& msg)
 void RendererActor::onTick()
 {
     uint32_t frameStartUs = micros();
+    static uint16_t s_wdtResetFrames = 0;
 
     // Render the current effect
     renderFrame();
@@ -626,20 +643,51 @@ void RendererActor::onTick()
         captureFrame(CaptureTap::TAP_B_POST_CORRECTION, m_leds);
     }
 
+#ifndef NATIVE_BUILD
+    // CRITICAL: Yield BEFORE showLeds() to let IDLE1 reset its watchdog
+    // FastLED.show() blocks for ~9.6ms, preventing IDLE1 from running
+    // We must yield here so IDLE1 gets CPU time before the blocking call
+    // Use vTaskDelay(1) not vTaskDelay(0) - vTaskDelay(0) may not yield if nothing else is ready
+    vTaskDelay(1);
+#endif
+
     // Push to strips
     showLeds();
 
-    // Calculate frame time
+    // Calculate frame time (pre-throttle)
     uint32_t frameEndUs = micros();
-    uint32_t frameTimeUs = frameEndUs - frameStartUs;
+    uint32_t rawFrameTimeUs = frameEndUs - frameStartUs;
 
     // Handle micros() overflow (unlikely but possible)
+    if (frameEndUs < frameStartUs) {
+        rawFrameTimeUs = (UINT32_MAX - frameStartUs) + frameEndUs;
+    }
+
+#ifndef NATIVE_BUILD
+    // Frame-rate throttle to ~120 FPS on targets with high tick rates.
+    if (rawFrameTimeUs < LedConfig::FRAME_TIME_US) {
+        uint32_t remainingUs = LedConfig::FRAME_TIME_US - rawFrameTimeUs;
+        if (remainingUs > 0) {
+            esp_rom_delay_us(remainingUs);
+        }
+        frameEndUs = micros();
+    }
+
+    // Reset watchdog every 10 frames (~83ms at 120 FPS)
+    // This prevents watchdog timeout since RendererActor monopolizes CPU 1
+    // and prevents IDLE1 from running to reset the watchdog.
+    if (++s_wdtResetFrames >= 10) {
+        s_wdtResetFrames = 0;
+        esp_task_wdt_reset();
+    }
+#endif
+    uint32_t frameTimeUs = frameEndUs - frameStartUs;
     if (frameEndUs < frameStartUs) {
         frameTimeUs = (UINT32_MAX - frameStartUs) + frameEndUs;
     }
 
-    // Update statistics
-    updateStats(frameTimeUs);
+    // Update statistics (use raw time for drops, throttled time for FPS)
+    updateStats(frameTimeUs, rawFrameTimeUs);
 
     // Publish FRAME_RENDERED event (every 10 frames to reduce overhead)
     if ((m_frameCount % 10) == 0) {
@@ -652,6 +700,14 @@ void RendererActor::onTick()
 
     m_lastFrameTime = frameStartUs;
     m_frameCount++;
+
+#ifndef NATIVE_BUILD
+    // CRITICAL: Yield at END of frame to let IDLE1 reset its watchdog
+    // The Actor system calls onTick() synchronously when queue times out,
+    // so we must explicitly yield here to give IDLE1 CPU time
+    // Use vTaskDelay(1) to ensure at least one tick of yield (vTaskDelay(0) may not yield)
+    vTaskDelay(1);
+#endif
 }
 
 void RendererActor::onStop()
@@ -726,7 +782,7 @@ RendererActor::CaptureMetadata RendererActor::getCaptureMetadata() const {
 audio::AudioContractTuning RendererActor::getAudioContractTuning() const {
     audio::AudioContractTuning out;
     uint32_t v0;
-    uint32_t v1;
+    uint32_t v1 = 0;
     do {
         v0 = m_audioContractSeq.load(std::memory_order_acquire);
         if (v0 & 1U) continue;
@@ -870,26 +926,36 @@ void RendererActor::captureFrame(CaptureTap tap, const CRGB* sourceBuffer) {
 
 void RendererActor::initLeds()
 {
-#ifndef NATIVE_BUILD
-    // Initialize FastLED for dual strips
-    m_ctrl1 = &FastLED.addLeds<WS2812, LedConfig::STRIP1_PIN, GRB>(
-        m_strip1, LedConfig::LEDS_PER_STRIP);
-    m_ctrl2 = &FastLED.addLeds<WS2812, LedConfig::STRIP2_PIN, GRB>(
-        m_strip2, LedConfig::LEDS_PER_STRIP);
+    hal::LedStripConfig config1;
+    hal::LedStripConfig config2;
 
-    // Configure FastLED
-    FastLED.setBrightness(m_brightness);
-    FastLED.setCorrection(TypicalLEDStrip);
-    FastLED.setDither(1);  // Temporal dithering
-    FastLED.setMaxRefreshRate(0, true);  // Non-blocking
-    FastLED.setMaxPowerInVoltsAndMilliamps(5, 3000);  // 5V / 3A limit
+    config1.ledCount = LedConfig::LEDS_PER_STRIP;
+    config1.dataPin = LedConfig::STRIP1_PIN;
+    config1.brightness = m_brightness;
+    config1.reverseOrder = false;
+    config1.colorCorrection = TypicalLEDStrip;
 
-    // Start with all LEDs off
-    FastLED.clear(true);
+    config2 = config1;
+    config2.dataPin = LedConfig::STRIP2_PIN;
 
-    LW_LOGI("FastLED initialized: 2x%d LEDs on pins %d/%d",
+    if (!m_ledDriver.initDual(config1, config2)) {
+        LW_LOGE("LED driver init failed");
+        return;
+    }
+
+    m_strip1 = m_ledDriver.getBuffer(0);
+    m_strip2 = m_ledDriver.getBuffer(1);
+
+    if (m_strip1 == nullptr || m_strip2 == nullptr) {
+        LW_LOGE("LED buffers not available after init");
+        return;
+    }
+
+    m_ledDriver.setMaxPower(5, 3000);
+    m_ledDriver.clear(true);
+
+    LW_LOGI("LED driver initialized: 2x%d LEDs on pins %d/%d",
              LedConfig::LEDS_PER_STRIP, LedConfig::STRIP1_PIN, LedConfig::STRIP2_PIN);
-#endif
 }
 
 void RendererActor::renderFrame()
@@ -934,6 +1000,7 @@ void RendererActor::renderFrame()
 #endif
     applyPendingEffectParameterUpdates();
 
+#if FEATURE_TRANSITIONS
     // EXCLUSIVE MODE: If transition active, ONLY update transition
     // v1 pattern: effect OR transition, never both
     if (m_transitionEngine && m_transitionEngine->isActive()) {
@@ -941,6 +1008,7 @@ void RendererActor::renderFrame()
         m_hue += 1;
         return;  // Skip all effect rendering
     }
+#endif
 
     // =========================================================================
     // Audio Context Preparation (used by both zone mode and single-effect mode)
@@ -986,6 +1054,20 @@ void RendererActor::renderFrame()
         bool sequence_changed = (seq != prevSeq);
         bool age_within_tolerance = (age_s >= -0.01f && age_s < staleness_s);
         audioAvailable = sequence_changed || age_within_tolerance;
+        
+        // Debug: Log audio availability issues every 4 seconds (reduced frequency)
+        static uint32_t lastAudioDbg = 0;
+        uint32_t nowDbg = millis();
+        if (nowDbg - lastAudioDbg >= 4000) {
+            lastAudioDbg = nowDbg;
+            if (!audioAvailable) {
+                LW_LOGW("Audio unavailable: seq=%u prevSeq=%u age_s=%.3f staleness_s=%.3f hop_seq=%u",
+                        seq, prevSeq, age_s, staleness_s, m_lastControlBus.hop_seq);
+            } else {
+                LW_LOGI("Audio OK: seq=%u hop_seq=%u rms=%.3f flux=%.3f",
+                        seq, m_lastControlBus.hop_seq, m_lastControlBus.rms, m_lastControlBus.flux);
+            }
+        }
 
         // 6. Populate shared AudioContext (member, reused across zone + single-effect mode)
         // Check if Trinity sync is active and proxy is fresh
@@ -1192,7 +1274,10 @@ void RendererActor::renderFrame()
 
 void RendererActor::showLeds()
 {
-#ifndef NATIVE_BUILD
+    if (m_strip1 == nullptr || m_strip2 == nullptr) {
+        return;
+    }
+
     // Copy from unified buffer to strip buffers
     memcpy(m_strip1, &m_leds[0], sizeof(CRGB) * LedConfig::LEDS_PER_STRIP);
     memcpy(m_strip2, &m_leds[LedConfig::LEDS_PER_STRIP],
@@ -1212,7 +1297,7 @@ void RendererActor::showLeds()
     }
 #endif
 
-    // TAP C: Capture pre-WS2812 (after strip split, before FastLED.show)
+    // TAP C: Capture pre-WS2812 (after strip split, before show)
     if (m_captureEnabled && (m_captureTapMask & 0x04)) {
         // Interleave strip1 and strip2 into unified format for capture
         for (uint16_t i = 0; i < LedConfig::LEDS_PER_STRIP; i++) {
@@ -1223,8 +1308,7 @@ void RendererActor::showLeds()
     }
 
     // Push to hardware
-    FastLED.show();
-#endif
+    m_ledDriver.show();
 
 #if FEATURE_VALIDATION_PROFILING
     // Update validation profiling frame statistics
@@ -1232,12 +1316,12 @@ void RendererActor::showLeds()
 #endif
 }
 
-void RendererActor::updateStats(uint32_t frameTimeUs)
+void RendererActor::updateStats(uint32_t frameTimeUs, uint32_t rawFrameTimeUs)
 {
     m_stats.framesRendered++;
 
     // Check for frame drop (exceeded budget)
-    if (frameTimeUs > LedConfig::FRAME_TIME_US) {
+    if (rawFrameTimeUs > LedConfig::FRAME_TIME_US) {
         m_stats.frameDrops++;
     }
 
@@ -1349,9 +1433,7 @@ void RendererActor::handleSetBrightness(uint8_t brightness)
     if (m_brightness != brightness) {
         m_brightness = brightness;
 
-#ifndef NATIVE_BUILD
-        FastLED.setBrightness(m_brightness);
-#endif
+        m_ledDriver.setBrightness(m_brightness);
         LW_LOGD("Brightness: %d", m_brightness);
     }
 }
@@ -1473,11 +1555,13 @@ void RendererActor::handleSetFadeAmount(uint8_t fadeAmount)
 
 void RendererActor::handleStartTransition(uint8_t newEffectId, uint8_t transitionType)
 {
-    // Thread-safe handler called from message queue (Core 1)
-    if (!m_transitionEngine) return;
     // Validate effectId before access
     uint8_t safeEffectId = validateEffectId(newEffectId);
     if (safeEffectId >= MAX_EFFECTS || !m_effects[safeEffectId].active) return;
+
+#if FEATURE_TRANSITIONS
+    // Thread-safe handler called from message queue (Core 1)
+    if (!m_transitionEngine) return;
     if (transitionType >= static_cast<uint8_t>(TransitionType::TYPE_COUNT)) {
         transitionType = 0;  // Default to FADE
     }
@@ -1506,24 +1590,36 @@ void RendererActor::handleStartTransition(uint8_t newEffectId, uint8_t transitio
              getEffectName(oldEffect),
              getEffectName(safeEffectId),
              getTransitionName(type));
+#else
+    // Instant switch (no transition engine on FH4)
+    m_currentEffect = safeEffectId;
+#endif
 }
 
 void RendererActor::startTransition(uint8_t newEffectId, uint8_t transitionType)
 {
-    // DEPRECATED: Direct call - unsafe from Core 0. Use ActorSystem::startTransition() instead.
-    // This method is kept for internal use (ShowDirectorActor on Core 1) but should not be called from request handlers.
+    // DEPRECATED for external callers: unsafe from Core 0. Use ActorSystem::startTransition() instead.
+    // Kept for internal Core 1 usage (ShowDirectorActor) only; request handlers must not call this directly.
     handleStartTransition(newEffectId, transitionType);
 }
 
 void RendererActor::startRandomTransition(uint8_t newEffectId)
 {
+#if FEATURE_TRANSITIONS
     TransitionType type = TransitionEngine::getRandomTransition();
     startTransition(newEffectId, static_cast<uint8_t>(type));
+#else
+    startTransition(newEffectId, 0);  // Instant switch
+#endif
 }
 
 bool RendererActor::isTransitionActive() const
 {
+#if FEATURE_TRANSITIONS
     return m_transitionEngine && m_transitionEngine->isActive();
+#else
+    return false;
+#endif
 }
 
 } // namespace actors

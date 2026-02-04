@@ -41,6 +41,8 @@
 #include <FastLED.h>
 #endif
 
+#include "hal/HalFactory.h"
+
 // Audio contracts for Phase 2 integration
 #if FEATURE_AUDIO_SYNC
 #include "../../audio/AudioTuning.h"
@@ -77,8 +79,8 @@ struct LedConfig {
     static constexpr uint16_t NUM_STRIPS = 2;
     static constexpr uint16_t TOTAL_LEDS = LEDS_PER_STRIP * NUM_STRIPS;  // 320
 
-    static constexpr uint8_t STRIP1_PIN = 4;
-    static constexpr uint8_t STRIP2_PIN = 5;
+    static constexpr uint8_t STRIP1_PIN = chip::gpio::LED_STRIP1_DATA;
+    static constexpr uint8_t STRIP2_PIN = chip::gpio::LED_STRIP2_DATA;
 
     static constexpr uint16_t TARGET_FPS = 120;
     static constexpr uint32_t FRAME_TIME_US = 1000000 / TARGET_FPS;  // ~8333us
@@ -336,7 +338,11 @@ public:
     /**
      * @brief Get the transition engine (for external control)
      */
+#if FEATURE_TRANSITIONS
     transitions::TransitionEngine* getTransitionEngine() { return m_transitionEngine; }
+#else
+    transitions::TransitionEngine* getTransitionEngine() { return nullptr; }
+#endif
 
     // ========================================================================
     // Audio Integration (Phase 2)
@@ -511,7 +517,7 @@ private:
     /**
      * @brief Update frame timing statistics
      */
-    void updateStats(uint32_t frameTimeUs);
+    void updateStats(uint32_t frameTimeUs, uint32_t rawFrameTimeUs);
 
     /**
      * @brief Handle SET_EFFECT message
@@ -550,8 +556,8 @@ private:
     // ========================================================================
 
     // LED buffers
-    CRGB m_strip1[LedConfig::LEDS_PER_STRIP];
-    CRGB m_strip2[LedConfig::LEDS_PER_STRIP];
+    CRGB* m_strip1;
+    CRGB* m_strip2;
     CRGB m_leds[LedConfig::TOTAL_LEDS];  // Unified buffer
 
     // Current state
@@ -609,9 +615,7 @@ private:
     // Statistics
     RenderStats m_stats;
 
-    // Controller references
-    CLEDController* m_ctrl1;
-    CLEDController* m_ctrl2;
+    hal::LedDriver m_ledDriver;
 
     // Zone system
     zones::ZoneComposer* m_zoneComposer;
@@ -629,10 +633,12 @@ private:
 #endif
 
     // Transition system
+#if FEATURE_TRANSITIONS
     transitions::TransitionEngine* m_transitionEngine;
     CRGB m_transitionSourceBuffer[LedConfig::TOTAL_LEDS];
     uint8_t m_pendingEffect;
     bool m_transitionPending;
+#endif
 
     // Frame capture system (for testbed)
     bool m_captureEnabled;

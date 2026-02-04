@@ -598,6 +598,13 @@ void V1ApiRoutes::registerRoutes(
         handlers::DebugHandlers::handleZoneMemoryStats(request, ctx.zoneComposer);
     });
 
+    // Debug routes - UDP streaming stats
+    registry.onGet("/api/v1/debug/udp", [ctx, checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
+        if (!checkRateLimit(request)) return;
+        if (!checkAPIKey(request)) return;
+        handlers::DebugHandlers::handleUdpStatsGet(request, ctx.udpStreamer);
+    });
+
     // Transition routes
     registry.onGet("/api/v1/transitions/types", [checkRateLimit, checkAPIKey](AsyncWebServerRequest* request) {
         if (!checkRateLimit(request)) return;

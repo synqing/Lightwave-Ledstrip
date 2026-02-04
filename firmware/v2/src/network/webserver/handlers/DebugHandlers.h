@@ -35,6 +35,7 @@ class ZoneComposer;
 namespace lightwaveos {
 namespace network {
 namespace webserver {
+class UdpStreamer;
 namespace handlers {
 
 /**
@@ -123,6 +124,25 @@ public:
      */
     static void handleZoneMemoryStats(AsyncWebServerRequest* request,
                                        lightwaveos::zones::ZoneComposer* zoneComposer);
+
+    /**
+     * @brief Handle GET /api/v1/debug/udp
+     *
+     * Returns UDP streaming counters and backoff state:
+     * {
+     *   "started": true,
+     *   "subscribers": 1,
+     *   "suppressed": 0,
+     *   "cooldownRemainingMs": 0,
+     *   "consecutiveFailures": 0,
+     *   "lastFailureMs": 1234,
+     *   "lastFailureAgoMs": 250,
+     *   "led": {"attempts": 10, "success": 10, "failures": 0},
+     *   "audio": {"attempts": 10, "success": 9, "failures": 1}
+     * }
+     */
+    static void handleUdpStatsGet(AsyncWebServerRequest* request,
+                                   webserver::UdpStreamer* udpStreamer);
 
 #if FEATURE_AUDIO_SYNC
     /**

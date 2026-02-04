@@ -10,6 +10,7 @@
 #include "../../../config/DebugConfig.h"
 #include "../../../core/actors/ActorSystem.h"
 #include "../../../effects/zones/ZoneComposer.h"
+#include "../UdpStreamer.h"
 #include <ArduinoJson.h>
 #include <esp_system.h>
 #include <cmath>  // for log10f
@@ -274,6 +275,43 @@ void DebugHandlers::handleDebugStatus(AsyncWebServerRequest* request,
     }
 #endif
     Serial.println(F("===============================\n"));
+}
+
+void DebugHandlers::handleUdpStatsGet(AsyncWebServerRequest* request,
+                                       webserver::UdpStreamer* udpStreamer) {
+    if (!udpStreamer) {
+        sendSuccessResponse(request, [](JsonObject& data) {
+            data["status"] = "unavailable";
+            data["message"] = "UDP streamer not initialised";
+        });
+        return;
+    }
+
+    webserver::UdpStreamer::UdpStats stats;
+    udpStreamer->getStats(stats);
+    uint32_t nowMs = millis();
+
+    sendSuccessResponse(request, [stats, nowMs](JsonObject& data) {
+        data["started"] = stats.started;
+        data["subscribers"] = stats.subscriberCount;
+        data["suppressed"] = stats.suppressedCount;
+        data["consecutiveFailures"] = stats.consecutiveFailures;
+        data["lastFailureMs"] = stats.lastFailureMs;
+        data["lastFailureAgoMs"] = stats.lastFailureMs > 0 ? (nowMs - stats.lastFailureMs) : 0;
+        data["cooldownRemainingMs"] = stats.cooldownUntilMs > nowMs ? (stats.cooldownUntilMs - nowMs) : 0;
+        data["socketResets"] = stats.socketResets;
+        data["lastSocketResetMs"] = stats.lastSocketResetMs;
+
+        JsonObject led = data["led"].to<JsonObject>();
+        led["attempts"] = stats.ledAttempts;
+        led["success"] = stats.ledSuccess;
+        led["failures"] = stats.ledFailures;
+
+        JsonObject audio = data["audio"].to<JsonObject>();
+        audio["attempts"] = stats.audioAttempts;
+        audio["success"] = stats.audioSuccess;
+        audio["failures"] = stats.audioFailures;
+    });
 }
 
 // ============================================================================

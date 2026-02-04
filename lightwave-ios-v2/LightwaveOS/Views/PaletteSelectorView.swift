@@ -53,18 +53,18 @@ struct PaletteSelectorView: View {
             // Search bar
             HStack {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 13))
+                    .font(.iconSmall)
                     .foregroundStyle(Color.lwTextSecondary)
 
                 TextField("Search palettes...", text: $searchText)
-                    .font(.custom("Rajdhani-Medium", size: 13))
+                    .font(.hapticLabel)
                     .foregroundStyle(Color.lwTextPrimary)
                     .autocorrectionDisabled()
 
                 if !searchText.isEmpty {
                     Button(action: { searchText = "" }) {
                         Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 13))
+                            .font(.iconSmall)
                             .foregroundStyle(Color.lwTextTertiary)
                     }
                 }
@@ -107,7 +107,7 @@ struct PaletteSelectorView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     // Category header
                     Text(group.category.uppercased())
-                        .font(.custom("BebasNeue-Bold", size: 12))
+                        .font(.subGroupHeader)
                         .foregroundStyle(Color.lwTextSecondary)
                         .tracking(1.5)
                         .padding(.horizontal, 16)
@@ -200,7 +200,7 @@ struct FilterChip: View {
     var body: some View {
         Button(action: onTap) {
             Text(title)
-                .font(.custom("BebasNeue-Bold", size: 11))
+                .font(.pillLabel)
                 .tracking(1.0)
                 .foregroundStyle(isSelected ? Color.lwBase : Color.lwTextSecondary)
                 .padding(.horizontal, 12)
@@ -213,6 +213,7 @@ struct FilterChip: View {
                 .clipShape(Capsule())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -233,7 +234,7 @@ struct PaletteCell: View {
 
                 // Palette name
                 Text(palette.name)
-                    .font(.custom("Rajdhani-Medium", size: 10))
+                    .font(.microLabel)
                     .foregroundStyle(Color.lwTextSecondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -255,6 +256,9 @@ struct PaletteCell: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(Text(palette.name))
+        .accessibilityHint(Text("Select palette"))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

@@ -38,7 +38,7 @@ struct PrimaryControlsCard: View {
                 LWSlider(
                     title: "Speed",
                     value: $params.speed,
-                    range: 1...50,
+                    range: 1...100,
                     step: 1,
                     trackGradient: LinearGradient(
                         colors: [Color.lwCyan, Color.lwGold],

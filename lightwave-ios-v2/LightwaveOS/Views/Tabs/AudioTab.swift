@@ -14,6 +14,8 @@ struct AudioTab: View {
     var body: some View {
         ScrollView {
             VStack(spacing: Spacing.lg) {
+                audioStreamIndicator
+
                 // Spectrum visualisation cards (top 3)
                 SpectrumVisualisationCard(title: "WATERFALL") { palette in
                     WaterfallCanvas(palette: palette)
@@ -33,8 +35,6 @@ struct AudioTab: View {
                 BeatTempoCard()
 
                 StateCard()
-
-                WaveformSpectrumCard()
 
                 DSPHealthCard()
 
@@ -56,6 +56,44 @@ struct AudioTab: View {
             .padding(.vertical, Spacing.lg)
         }
         .background(Color.lwBase)
+        .onAppear {
+            app.audio.startTelemetryPolling()
+        }
+        .onDisappear {
+            app.audio.stopTelemetryPolling()
+        }
+    }
+
+    private var audioStreamIndicator: some View {
+        let isActive: Bool
+        if let last = app.audio.lastAudioFrameAt {
+            isActive = Date().timeIntervalSince(last) < 2.0
+        } else {
+            isActive = false
+        }
+
+        return HStack(spacing: Spacing.sm) {
+            Circle()
+                .fill(isActive ? Color.lwSuccess : Color.lwTextTertiary)
+                .frame(width: 8, height: 8)
+
+            Text(isActive ? "Audio stream live" : "Audio stream idle")
+                .font(.caption)
+                .foregroundStyle(Color.lwTextSecondary)
+
+            Spacer()
+
+            Text("\(app.audio.audioFrameCount) frames")
+                .font(.caption)
+                .foregroundStyle(Color.lwTextTertiary)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.lwCard)
+        .clipShape(Capsule())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("Audio stream status"))
+        .accessibilityValue(Text(isActive ? "Live" : "Idle"))
     }
 }
 

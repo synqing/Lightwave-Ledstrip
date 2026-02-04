@@ -102,6 +102,22 @@ struct LWSlider: View {
                 }
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(title))
+        .accessibilityValue(Text("\(Int(value))"))
+        .accessibilityHint(Text("Swipe up or down to adjust."))
+        .accessibilityAdjustableAction { direction in
+            let delta = step
+            switch direction {
+            case .increment:
+                value = min(value + delta, range.upperBound)
+            case .decrement:
+                value = max(value - delta, range.lowerBound)
+            @unknown default:
+                break
+            }
+            onChanged?(value)
+        }
     }
 
     // MARK: - Helpers

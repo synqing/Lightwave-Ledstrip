@@ -62,7 +62,7 @@ struct SpectrumVisualisationCard<Content: View>: View {
 
             // Palette name label
             Text(currentPalette.name)
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .font(.monospaceSmall)
                 .foregroundStyle(Color.lwTextSecondary)
         }
     }

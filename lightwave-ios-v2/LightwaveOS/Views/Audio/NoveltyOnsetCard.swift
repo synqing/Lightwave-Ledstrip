@@ -34,7 +34,7 @@ struct NoveltyOnsetCard: View {
                         .labelsHidden()
                         .tint(.lwGold)
                         .onChange(of: audio.spectralFluxEnabled) { _, _ in
-                            // TODO: Send update to firmware
+                            audio.queueAudioTuningUpdate()
                         }
                 }
 
@@ -44,7 +44,7 @@ struct NoveltyOnsetCard: View {
                     step: 0.1,
                     format: "%.1f"
                 ) {
-                    // TODO: Send update to firmware
+                    audio.queueAudioTuningUpdate()
                 }
             }
         }

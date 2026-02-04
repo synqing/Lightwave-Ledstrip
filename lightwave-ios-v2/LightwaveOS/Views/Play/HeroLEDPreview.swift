@@ -13,38 +13,44 @@ struct HeroLEDPreview: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var beatScale: CGFloat = 1.0
+    private let heroHeight: CGFloat = 140
 
     var body: some View {
         ZStack {
-            // LED Canvas — Strip 1 only (160 LEDs), centre-origin
+            // LED Canvas — Two stacked 160-LED rows (total 320), centre-origin per strip
             Canvas { context, size in
-                guard appVM.ledData.count >= 480 else { return }
+                guard appVM.ledData.count >= 960 else { return }
 
                 let ledWidth = size.width / 160.0
+                let rowHeight = size.height / 2.0
+                for row in 0..<2 {
+                    let baseIndex = row * 160
+                    let yOffset = CGFloat(row) * rowHeight
 
-                // Render Strip 1: LEDs 0-159
-                for i in 0..<160 {
-                    let r = appVM.ledData[i * 3]
-                    let g = appVM.ledData[i * 3 + 1]
-                    let b = appVM.ledData[i * 3 + 2]
-                    let color = Color(
-                        red: Double(r) / 255.0,
-                        green: Double(g) / 255.0,
-                        blue: Double(b) / 255.0
-                    )
+                    // Render row LEDs
+                    for i in 0..<160 {
+                        let idx = (baseIndex + i) * 3
+                        let r = appVM.ledData[idx]
+                        let g = appVM.ledData[idx + 1]
+                        let b = appVM.ledData[idx + 2]
+                        let color = Color(
+                            red: Double(r) / 255.0,
+                            green: Double(g) / 255.0,
+                            blue: Double(b) / 255.0
+                        )
 
-                    let rect = CGRect(
-                        x: CGFloat(i) * ledWidth,
-                        y: 0,
-                        width: ledWidth + 0.5, // Slight overlap to prevent gaps
-                        height: size.height
-                    )
-                    context.fill(Path(rect), with: .color(color))
+                        let rect = CGRect(
+                            x: CGFloat(i) * ledWidth,
+                            y: yOffset,
+                            width: ledWidth + 0.5, // Slight overlap to prevent gaps
+                            height: rowHeight
+                        )
+                        context.fill(Path(rect), with: .color(color))
+                    }
+
                 }
-
-                // Centre marker removed per design review
             }
-            .frame(height: 120)
+            .frame(height: heroHeight)
             .background(Color.lwCardGradient)
             .clipShape(RoundedRectangle(cornerRadius: CornerRadius.hero))
             .heroGlow(color: .lwGold)
@@ -62,16 +68,12 @@ struct HeroLEDPreview: View {
                     Spacer()
                 }
             }
-            .frame(height: 120)
+            .frame(height: heroHeight)
 
             // BPM ring overlay (centred in card)
-            BPMRingOverlay(
-                bpm: Int(appVM.audio.currentBpm),
-                confidence: appVM.audio.bpmConfidence,
-                isBeating: appVM.audio.isBeating
-            )
+            heroOverlay
         }
-        .frame(height: 120)
+        .frame(height: heroHeight)
         .onChange(of: appVM.audio.isBeating) { _, isBeating in
             guard isBeating, !reduceMotion else { return }
 
@@ -83,7 +85,35 @@ struct HeroLEDPreview: View {
                 beatScale = 1.0
             }
         }
-        // Swipe gestures for effect navigation will be added when effect VM is complete
+        .gesture(
+            DragGesture(minimumDistance: 24)
+                .onEnded { value in
+                    let horizontal = value.translation.width
+                    let vertical = value.translation.height
+                    guard abs(horizontal) > abs(vertical) else { return }
+                    if horizontal < -30 {
+                        triggerEffectChange(next: true)
+                    } else if horizontal > 30 {
+                        triggerEffectChange(next: false)
+                    }
+                }
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("LED preview"))
+        .accessibilityValue(Text("\(appVM.effects.currentEffectName), BPM \(Int(appVM.audio.currentBpm))"))
+        .accessibilityHint(Text("Swipe left or right to change effect."))
+    }
+
+    private func triggerEffectChange(next: Bool) {
+        let effects = appVM.effects.allEffects
+        guard !effects.isEmpty else { return }
+        let currentIndex = effects.firstIndex(where: { $0.id == appVM.effects.currentEffectId }) ?? -1
+        let targetIndex = next ? (currentIndex + 1) % effects.count : (currentIndex > 0 ? currentIndex - 1 : effects.count - 1)
+        let target = effects[targetIndex]
+
+        Task {
+            await appVM.transition.triggerTransition(toEffect: target.id)
+        }
     }
 }
 
@@ -118,19 +148,19 @@ struct BPMRingOverlay: View {
             VStack(spacing: 0) {
                 if bpm > 0 {
                     Text("\(bpm)")
-                        .font(.custom("BebasNeue-Bold", size: 32))
+                        .font(.bpmNumeral)
                         .kerning(2)
                         .foregroundStyle(Color.lwGold)
                         .shadow(color: Color.black.opacity(0.8), radius: 8, x: 0, y: 2)
                 } else {
                     Text("—")
-                        .font(.custom("BebasNeue-Bold", size: 32))
+                        .font(.bpmNumeral)
                         .foregroundStyle(Color.lwGold)
                         .shadow(color: Color.black.opacity(0.8), radius: 8, x: 0, y: 2)
                 }
 
                 Text("BPM")
-                    .font(.custom("Rajdhani-Medium", size: 10))
+                    .font(.microLabel)
                     .kerning(1.5)
                     .textCase(.uppercase)
                     .foregroundStyle(Color.lwTextSecondary)
@@ -142,10 +172,52 @@ struct BPMRingOverlay: View {
     }
 }
 
+// MARK: - Rive Overlay
+
+private extension HeroLEDPreview {
+    @ViewBuilder
+    var heroOverlay: some View {
+        RiveViewContainer(
+            asset: RiveAssetRegistry.heroOverlay,
+            inputs: [
+                .number("bpm", appVM.audio.currentBpm),
+                .number("confidence", appVM.audio.bpmConfidence),
+                .bool("isBeating", appVM.audio.isBeating)
+            ],
+            fallback: AnyView(
+                BPMRingOverlay(
+                    bpm: Int(appVM.audio.currentBpm),
+                    confidence: appVM.audio.bpmConfidence,
+                    isBeating: appVM.audio.isBeating
+                )
+            )
+        )
+        .frame(width: 96, height: 96)
+    }
+}
+
 // MARK: - Preview
 
 #Preview("Hero LED Preview") {
     VStack(spacing: Spacing.lg) {
+        // Preview with 320 LEDs (two rows)
+        HeroLEDPreview()
+            .environment({
+                let vm = AppViewModel()
+                vm.effects.currentEffectName = "Dual Strip Test"
+                vm.audio.currentBpm = 124
+                vm.audio.bpmConfidence = 0.82
+                vm.audio.isBeating = false
+                vm.ledData = (0..<320).flatMap { i -> [UInt8] in
+                    let t = Double(i) / 319.0
+                    let r = UInt8(255 * t)
+                    let g = UInt8(255 * (1.0 - t))
+                    let b = UInt8(128 + 127 * sin(t * .pi * 2))
+                    return [r, g, b]
+                }
+                return vm
+            }())
+
         // Preview with BPM
         HeroLEDPreview()
             .environment({

@@ -36,12 +36,13 @@ struct AudioParametersCard: View {
                         Spacer()
 
                         Text(String(format: "%.1f", audio.gain))
-                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .font(.sliderValue)
                             .monospacedDigit()
                             .foregroundStyle(Color.lwGold)
                     }
 
                     AudioSlider(
+                        label: "Gain",
                         value: $audio.gain,
                         range: 0.0...2.0,
                         step: 0.1,
@@ -63,12 +64,13 @@ struct AudioParametersCard: View {
                         Spacer()
 
                         Text(String(format: "%.2f", audio.threshold))
-                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .font(.sliderValue)
                             .monospacedDigit()
                             .foregroundStyle(Color.lwGold)
                     }
 
                     AudioSlider(
+                        label: "Threshold",
                         value: $audio.threshold,
                         range: 0.0...1.0,
                         step: 0.05,
@@ -93,6 +95,7 @@ struct AudioParametersCard: View {
 // MARK: - Audio Slider (simplified slider for floating-point values)
 
 struct AudioSlider: View {
+    let label: String
     @Binding var value: Double
     let range: ClosedRange<Double>
     let step: Double
@@ -153,6 +156,22 @@ struct AudioSlider: View {
             }
         }
         .frame(height: 24)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(label))
+        .accessibilityValue(Text(String(format: "%.2f", value)))
+        .accessibilityHint(Text("Swipe up or down to adjust."))
+        .accessibilityAdjustableAction { direction in
+            let delta = step
+            switch direction {
+            case .increment:
+                value = min(value + delta, range.upperBound)
+            case .decrement:
+                value = max(value - delta, range.lowerBound)
+            @unknown default:
+                break
+            }
+            onEnded?()
+        }
     }
 
     private func updateValue(from x: CGFloat, in width: CGFloat) {

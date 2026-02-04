@@ -30,15 +30,18 @@ struct PalettePill: View {
                     HStack(spacing: Spacing.xs) {
                         Text("\(appVM.palettes.currentPaletteId)/\(appVM.palettes.allPalettes.count)")
                             .font(.caption)
-                            .foregroundStyle(Color.lwTextTertiary)
+                            .foregroundStyle(Color.lwTextSecondary)
 
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.iconSmall)
                             .foregroundStyle(Color.lwGold)
                     }
                 }
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(Text("Select palette"))
+            .accessibilityValue(Text(appVM.palettes.currentPaletteName))
+            .accessibilityHint(Text("Opens the palette selector."))
 
             // Gradient swatch with prev/next buttons
             HStack(spacing: Spacing.sm) {
@@ -47,11 +50,12 @@ struct PalettePill: View {
                     Task { await appVM.palettes.previousPalette() }
                 } label: {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.iconSmall)
                         .foregroundStyle(Color.lwGold)
                         .frame(width: 32, height: 32)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(Text("Previous palette"))
 
                 // Gradient swatch — tappable to open sheet
                 Button {
@@ -82,11 +86,12 @@ struct PalettePill: View {
                     Task { await appVM.palettes.nextPalette() }
                 } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.iconSmall)
                         .foregroundStyle(Color.lwGold)
                         .frame(width: 32, height: 32)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(Text("Next palette"))
             }
 
             // Palette name
@@ -100,10 +105,31 @@ struct PalettePill: View {
             RoundedRectangle(cornerRadius: CornerRadius.card)
                 .fill(Color.lwCardGradient)
         )
+        .overlay(alignment: .topTrailing) {
+            paletteAccent
+                .padding(.top, 8)
+                .padding(.trailing, 12)
+        }
         .ambientShadow()
         .sheet(isPresented: $showPaletteSelector) {
             PaletteSelectorView()
         }
+    }
+
+    private var paletteAccent: some View {
+        return AnyView(
+            RiveViewContainer(
+                asset: RiveAssetRegistry.palettePillAccent,
+                inputs: [
+                    .number("index", Double(appVM.palettes.currentPaletteId)),
+                    .number("count", Double(appVM.palettes.allPalettes.count))
+                ],
+                fallback: AnyView(EmptyView())
+            )
+            .frame(width: 36, height: 36)
+            .opacity(0.9)
+            .allowsHitTesting(false)
+        )
     }
 }
 

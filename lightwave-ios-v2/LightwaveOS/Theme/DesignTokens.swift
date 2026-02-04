@@ -128,53 +128,85 @@ extension Font {
     // MARK: Bebas Neue — Brand / Headings
 
     /// Hero numeral: 48pt Bebas Neue Bold (BPM display)
-    static let heroNumeral = Font.custom("BebasNeue-Bold", size: 48)
+    static let heroNumeral = Font.custom("BebasNeue-Bold", size: 48, relativeTo: .largeTitle)
 
     /// Effect title: 22pt Bebas Neue Bold (current effect name on hero)
-    static let effectTitle = Font.custom("BebasNeue-Bold", size: 22)
+    static let effectTitle = Font.custom("BebasNeue-Bold", size: 22, relativeTo: .title3)
 
     /// Section header: 14pt Bebas Neue Bold (uppercase, +1.5px tracking)
-    static let sectionHeader = Font.custom("BebasNeue-Bold", size: 14)
+    static let sectionHeader = Font.custom("BebasNeue-Bold", size: 14, relativeTo: .headline)
 
     /// Sub-group header: 12pt Bebas Neue Bold (uppercase, +1.5px tracking)
-    static let subGroupHeader = Font.custom("BebasNeue-Bold", size: 12)
+    static let subGroupHeader = Font.custom("BebasNeue-Bold", size: 12, relativeTo: .subheadline)
 
     /// Status brand: 16pt Bebas Neue Bold ("LIGHTWAVEOS")
-    static let statusBrand = Font.custom("BebasNeue-Bold", size: 16)
+    static let statusBrand = Font.custom("BebasNeue-Bold", size: 16, relativeTo: .headline)
+
+    /// Sheet title: 17pt Rajdhani Medium (modal titles)
+    static let sheetTitle = Font.custom("Rajdhani-Medium", size: 17, relativeTo: .headline)
+
+    /// Zone pill label: 13pt Bebas Neue Bold (zone chip)
+    static let zonePillLabel = Font.custom("BebasNeue-Bold", size: 13, relativeTo: .subheadline)
+
+    /// BPM numeral: 32pt Bebas Neue Bold
+    static let bpmNumeral = Font.custom("BebasNeue-Bold", size: 32, relativeTo: .title)
 
     // MARK: Rajdhani — Body / Labels
 
     /// Body value: 15pt Rajdhani Medium (selected effect/palette name)
-    static let bodyValue = Font.custom("Rajdhani-Medium", size: 15)
+    static let bodyValue = Font.custom("Rajdhani-Medium", size: 15, relativeTo: .body)
 
     /// Card label: 12pt Rajdhani Medium (slider labels, metadata)
-    static let cardLabel = Font.custom("Rajdhani-Medium", size: 12)
+    static let cardLabel = Font.custom("Rajdhani-Medium", size: 12, relativeTo: .subheadline)
 
-    /// Caption: 11pt Rajdhani Regular (IDs, counts, timestamps)
-    static let caption = Font.custom("Rajdhani-Medium", size: 11)
+    /// Caption: 11pt Rajdhani Medium (IDs, counts, timestamps)
+    static let caption = Font.custom("Rajdhani-Medium", size: 11, relativeTo: .caption)
+
+    /// Micro label: 10pt Rajdhani Medium (tight UI labels)
+    static let microLabel = Font.custom("Rajdhani-Medium", size: 10, relativeTo: .caption2)
 
     /// Haptic label: 13pt Rajdhani Medium (toggle labels)
-    static let hapticLabel = Font.custom("Rajdhani-Medium", size: 13)
+    static let hapticLabel = Font.custom("Rajdhani-Medium", size: 13, relativeTo: .callout)
 
     /// Status label: 12pt Rajdhani Medium (connection status)
-    static let statusLabel = Font.custom("Rajdhani-Medium", size: 12)
+    static let statusLabel = Font.custom("Rajdhani-Medium", size: 12, relativeTo: .footnote)
 
     /// Pill label: 11pt Bebas Neue Bold (PATTERN, PALETTE)
-    static let pillLabel = Font.custom("BebasNeue-Bold", size: 11)
+    static let pillLabel = Font.custom("BebasNeue-Bold", size: 11, relativeTo: .caption)
 
     // MARK: JetBrains Mono — Values / Monospace
 
     /// Slider value: 13pt JetBrains Mono Medium (numeric readouts)
-    static let sliderValue = Font.custom("JetBrainsMono-Medium", size: 13)
+    static let sliderValue = Font.custom("JetBrainsMono-Medium", size: 13, relativeTo: .body)
 
     /// Monospace: 11pt JetBrains Mono Medium (debug log, IPs, LED indices)
-    static let monospace = Font.custom("JetBrainsMono-Medium", size: 11)
+    static let monospace = Font.custom("JetBrainsMono-Medium", size: 11, relativeTo: .caption)
+
+    /// Monospace small: 10pt JetBrains Mono Medium (compact readouts)
+    static let monospaceSmall = Font.custom("JetBrainsMono-Medium", size: 10, relativeTo: .caption2)
 
     /// Metric value: 11pt JetBrains Mono Medium (real-time metric readouts)
-    static let metricValue = Font.custom("JetBrainsMono-Medium", size: 11)
+    static let metricValue = Font.custom("JetBrainsMono-Medium", size: 11, relativeTo: .caption)
 
     /// Stepper value: 13pt JetBrains Mono Medium (stepper readouts)
-    static let stepperValue = Font.custom("JetBrainsMono-Medium", size: 13)
+    static let stepperValue = Font.custom("JetBrainsMono-Medium", size: 13, relativeTo: .body)
+
+    // MARK: System Icons
+
+    /// Icon tiny: 10pt system
+    static let iconTiny = Font.system(size: 10, weight: .semibold)
+
+    /// Icon small: 13pt system
+    static let iconSmall = Font.system(size: 13, weight: .semibold)
+
+    /// Icon nav: 14pt system
+    static let iconNav = Font.system(size: 14, weight: .regular)
+
+    /// Icon medium: 24pt system
+    static let iconMedium = Font.system(size: 24, weight: .regular)
+
+    /// Icon large: 48pt system
+    static let iconLarge = Font.system(size: 48, weight: .regular)
 }
 
 // MARK: - Spacing

@@ -46,7 +46,7 @@ struct EffectSelectorView: View {
                     if filteredAndGroupedEffects.isEmpty {
                         VStack(spacing: Spacing.md) {
                             Image(systemName: "magnifyingglass")
-                                .font(.system(size: 48))
+                                .font(.iconLarge)
                                 .foregroundStyle(Color.lwTextTertiary)
 
                             Text("No effects found")
@@ -62,7 +62,7 @@ struct EffectSelectorView: View {
                                         // Category header
                                         Text("\(group.category.uppercased()) (\(group.effects.count))")
                                             .font(.sectionHeader)
-                                            .foregroundStyle(Color.lwTextTertiary)
+                                            .foregroundStyle(Color.lwTextSecondary)
                                             .textCase(.uppercase)
                                             .tracking(0.8)
                                             .padding(.horizontal, Spacing.md)
@@ -174,6 +174,7 @@ struct CategoryFilterPill: View {
                 .clipShape(Capsule())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -189,23 +190,15 @@ struct EffectCard: View {
             HStack(spacing: Spacing.md) {
                 VStack(alignment: .leading, spacing: Spacing.xs) {
                     Text(effect.name)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.bodyValue)
                         .foregroundStyle(Color.lwTextPrimary)
                         .lineLimit(2)
 
-                    HStack(spacing: Spacing.sm) {
-                        Text(effect.displayCategory)
-                            .font(.caption)
-                            .foregroundStyle(Color.lwTextSecondary)
+                    HStack(spacing: Spacing.xs) {
+                        EffectChip(title: effect.displayCategory)
 
                         if effect.isAudioReactive {
-                            HStack(spacing: 2) {
-                                Image(systemName: "waveform")
-                                    .font(.caption)
-                                Text("Audio")
-                                    .font(.caption)
-                            }
-                            .foregroundStyle(Color.lwGold)
+                            EffectChip(title: "Audio", icon: "waveform", isHighlighted: true)
                         }
                     }
                 }
@@ -214,7 +207,7 @@ struct EffectCard: View {
 
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 24))
+                        .font(.iconMedium)
                         .foregroundStyle(Color.lwGold)
                 }
             }
@@ -237,6 +230,33 @@ struct EffectCard: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(Text(effect.name))
+        .accessibilityHint(Text("Select effect"))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+// MARK: - Effect Chip
+
+struct EffectChip: View {
+    let title: String
+    var icon: String? = nil
+    var isHighlighted: Bool = false
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.caption)
+            }
+            Text(title)
+                .font(.caption)
+        }
+        .foregroundStyle(isHighlighted ? Color.lwBase : Color.lwTextSecondary)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(isHighlighted ? Color.lwGold : Color.lwElevated)
+        .clipShape(Capsule())
     }
 }
 

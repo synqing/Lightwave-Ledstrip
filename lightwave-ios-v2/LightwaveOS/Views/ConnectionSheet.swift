@@ -18,6 +18,12 @@ struct ConnectionSheet: View {
     @State private var isConnecting = false
     @State private var errorMessage: String?
 
+    private let enableDiscoveryTasks: Bool
+
+    init(enableDiscoveryTasks: Bool = true) {
+        self.enableDiscoveryTasks = enableDiscoveryTasks
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -28,7 +34,8 @@ struct ConnectionSheet: View {
                         // Title
                         VStack(spacing: 2) {
                             Text("Connect to LightwaveOS")
-                                .font(.system(size: 17, weight: .bold))
+                                .font(.sheetTitle)
+                                .fontWeight(.bold)
                                 .foregroundStyle(Color.lwTextPrimary)
 
                             Text("Select a discovered device or enter IP manually")
@@ -55,13 +62,53 @@ struct ConnectionSheet: View {
                         // Section 1: Discovered Devices
                         LWCard(title: "Discovered Devices") {
                             if appVM.discoveredDevices.isEmpty {
-                                HStack {
-                                    ProgressView()
-                                        .tint(Color.lwGold)
-                                        .controlSize(.small)
+                                VStack(spacing: Spacing.sm) {
+                                    RiveViewContainer(
+                                        asset: RiveAssetRegistry.discoveryEmptyState,
+                                        inputs: [
+                                            .bool("isSearching", appVM.isDiscoverySearching)
+                                        ],
+                                        fallback: AnyView(
+                                            ProgressView()
+                                                .tint(Color.lwGold)
+                                                .controlSize(.small)
+                                        )
+                                    )
+                                    .frame(width: 120, height: 72)
+
                                     Text("Searching...")
                                         .font(.caption)
                                         .foregroundStyle(Color.lwTextSecondary)
+
+                                    VStack(spacing: Spacing.xs) {
+                                        Text("AP-only mode? Join LightwaveOS-AP and tap Quick Connect.")
+                                            .font(.caption)
+                                            .foregroundStyle(Color.lwTextSecondary)
+                                            .multilineTextAlignment(.center)
+
+                                        Button {
+                                            connectToApQuick()
+                                        } label: {
+                                            HStack {
+                                                if isConnecting {
+                                                    ProgressView()
+                                                        .tint(Color.lwBase)
+                                                        .controlSize(.small)
+                                                } else {
+                                                    Image(systemName: "wifi")
+                                                }
+                                                Text("Quick Connect: LightwaveOS-AP (192.168.4.1)")
+                                            }
+                                            .font(.bodyValue)
+                                            .foregroundStyle(Color.lwBase)
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, Spacing.sm)
+                                            .background(Color.lwGold)
+                                            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.nested))
+                                        }
+                                        .disabled(isConnecting)
+                                        .opacity(isConnecting ? 0.5 : 1.0)
+                                    }
                                 }
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, Spacing.sm)
@@ -152,9 +199,11 @@ struct ConnectionSheet: View {
             }
         }
         .task {
+            guard enableDiscoveryTasks else { return }
             await appVM.startDeviceDiscovery()
         }
         .onDisappear {
+            guard enableDiscoveryTasks else { return }
             Task {
                 await appVM.stopDeviceDiscovery()
             }
@@ -189,6 +238,25 @@ struct ConnectionSheet: View {
         let ip = manualIP.trimmingCharacters(in: .whitespaces)
         guard !ip.isEmpty else { return }
         let port = Int(manualPort) ?? 80
+
+        isConnecting = true
+        errorMessage = nil
+
+        Task {
+            await appVM.connectManual(ip: ip, port: port)
+
+            await MainActor.run {
+                isConnecting = false
+                if case .error(let message) = appVM.connectionState {
+                    errorMessage = message
+                }
+            }
+        }
+    }
+
+    private func connectToApQuick() {
+        let ip = "192.168.4.1"
+        let port = 80
 
         isConnecting = true
         errorMessage = nil

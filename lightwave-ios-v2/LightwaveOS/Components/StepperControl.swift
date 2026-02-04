@@ -32,7 +32,7 @@ struct StepperControl: View {
                     onChanged?()
                 } label: {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.iconSmall)
                         .foregroundStyle(Color.lwGold)
                         .frame(width: 32, height: 28)
                         .background(Color.lwElevated)
@@ -50,6 +50,7 @@ struct StepperControl: View {
                         )
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(Text("Decrease \(label)"))
 
                 // Value display
                 Text(String(format: format, value))
@@ -64,6 +65,8 @@ struct StepperControl: View {
                             .strokeBorder(Color.lwGold.opacity(0.2), lineWidth: 1)
                             .padding(.vertical, 0)
                     )
+                    .accessibilityLabel(Text("\(label) value"))
+                    .accessibilityValue(Text(String(format: format, value)))
 
                 // Increment button (▶)
                 Button {
@@ -71,7 +74,7 @@ struct StepperControl: View {
                     onChanged?()
                 } label: {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.iconSmall)
                         .foregroundStyle(Color.lwGold)
                         .frame(width: 32, height: 28)
                         .background(Color.lwElevated)
@@ -89,6 +92,7 @@ struct StepperControl: View {
                         )
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(Text("Increase \(label)"))
             }
         }
     }

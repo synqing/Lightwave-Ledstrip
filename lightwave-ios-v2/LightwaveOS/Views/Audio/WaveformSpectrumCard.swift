@@ -23,7 +23,7 @@ struct WaveformSpectrumCard: View {
                 // Waveform canvas
                 VStack(alignment: .leading, spacing: 4) {
                     Text("WAVEFORM (128 SAMPLES)")
-                        .font(.custom("BebasNeue-Bold", size: 10))
+                        .font(.pillLabel)
                         .foregroundStyle(Color.lwTextTertiary)
                         .tracking(1.0)
 
@@ -34,7 +34,7 @@ struct WaveformSpectrumCard: View {
                 // Spectrum canvas
                 VStack(alignment: .leading, spacing: 4) {
                     Text("SPECTRUM (64 BINS)")
-                        .font(.custom("BebasNeue-Bold", size: 10))
+                        .font(.pillLabel)
                         .foregroundStyle(Color.lwTextTertiary)
                         .tracking(1.0)
 

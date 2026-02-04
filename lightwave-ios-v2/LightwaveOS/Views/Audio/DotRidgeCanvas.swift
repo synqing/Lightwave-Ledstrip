@@ -119,33 +119,35 @@ struct DotRidgeCanvas: View {
             // Store dot positions for connecting lines
             var dotPositions: [(x: CGFloat, y: CGFloat, val: Float)] = []
 
-            // Draw dots for each band
-            for band in 0..<bands {
-                guard band < row.count else { continue }
+                // Draw dots for each band
+                for band in 0..<bands {
+                    guard band < row.count else { continue }
 
-                let val = row[band]
-                let elevation = CGFloat(val * 25.0 * fade)
-                let y = baseY - elevation
-                let x = CGFloat(band) * bandSpacing
-                let radius = 1.5 + CGFloat(val * 3.0 * fade)
+                    let val = max(0.0, row[band])
+                    // Boost low-level detail a bit so the ridge actually moves with quiet material.
+                    let shaped = pow(val, 0.70)
+                    let elevation = CGFloat(shaped * 42.0 * fade)
+                    let y = baseY - elevation
+                    let x = CGFloat(band) * bandSpacing
+                    let radius = 1.2 + CGFloat(shaped * 4.0 * fade)
 
-                // Store position for connecting lines
-                dotPositions.append((x: x, y: y, val: val))
+                    // Store position for connecting lines
+                    dotPositions.append((x: x, y: y, val: shaped))
 
-                // Glow effect (only for high values on recent lines)
-                if val > 0.3 && line < 10 {
-                    let glowCircle = Path(
-                        ellipseIn: CGRect(
-                            x: x - (radius + 3),
-                            y: y - (radius + 3),
-                            width: (radius + 3) * 2,
-                            height: (radius + 3) * 2
+                    // Glow effect (only for high values on recent lines)
+                    if shaped > 0.28 && line < 10 {
+                        let glowCircle = Path(
+                            ellipseIn: CGRect(
+                                x: x - (radius + 3),
+                                y: y - (radius + 3),
+                                width: (radius + 3) * 2,
+                                height: (radius + 3) * 2
+                            )
                         )
-                    )
 
-                    let glowColour = palette.color(at: val * fade)
-                    ctx.fill(glowCircle, with: .color(glowColour.opacity(0.08 * Double(fade))))
-                }
+                        let glowColour = palette.color(at: shaped * fade)
+                        ctx.fill(glowCircle, with: .color(glowColour.opacity(0.08 * Double(fade))))
+                    }
 
                 // Core dot
                 let dotCircle = Path(
@@ -157,10 +159,10 @@ struct DotRidgeCanvas: View {
                     )
                 )
 
-                let dotColour = palette.color(at: val * fade)
-                let dotOpacity = 0.3 + 0.7 * Double(fade)
-                ctx.fill(dotCircle, with: .color(dotColour.opacity(dotOpacity)))
-            }
+                    let dotColour = palette.color(at: shaped * fade)
+                    let dotOpacity = 0.3 + 0.7 * Double(fade)
+                    ctx.fill(dotCircle, with: .color(dotColour.opacity(dotOpacity)))
+                }
 
             // Draw connecting lines between adjacent dots
             if fade > 0.2 {

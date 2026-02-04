@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct TransitionCard: View {
-    @State private var selectedTransitionType: TransitionType = .crossfade
+    @Environment(AppViewModel.self) private var appVM
     @State private var transitionDuration: Double = 1200 // milliseconds
 
     var body: some View {
@@ -32,11 +32,11 @@ struct TransitionCard: View {
                     Menu {
                         ForEach(TransitionType.allCases) { type in
                             Button {
-                                selectedTransitionType = type
+                                appVM.transition.setType(type)
                             } label: {
                                 HStack {
                                     Text(type.name)
-                                    if type == selectedTransitionType {
+                                    if type == appVM.transition.currentType {
                                         Image(systemName: "checkmark")
                                     }
                                 }
@@ -44,12 +44,12 @@ struct TransitionCard: View {
                         }
                     } label: {
                         HStack(spacing: Spacing.xs) {
-                            Text(selectedTransitionType.name)
+                            Text(appVM.transition.currentType.name)
                                 .font(.bodyValue)
                                 .foregroundStyle(Color.lwTextPrimary)
 
                             Image(systemName: "chevron.up.chevron.down")
-                                .font(.system(size: 11))
+                                .font(.iconTiny)
                                 .foregroundStyle(Color.lwGold)
                         }
                     }
@@ -62,10 +62,10 @@ struct TransitionCard: View {
                     range: 200...5000,
                     step: 100,
                     onChanged: { value in
-                        // Live update duration
+                        appVM.transition.setDuration(Int(value))
                     },
                     onEnded: {
-                        // Commit duration
+                        appVM.transition.setDuration(Int(transitionDuration))
                     }
                 )
 
@@ -95,13 +95,20 @@ struct TransitionCard: View {
                 .buttonStyle(.plain)
             }
         }
+        .onAppear {
+            transitionDuration = Double(appVM.transition.duration)
+        }
+        .onChange(of: appVM.transition.duration) { _, newValue in
+            transitionDuration = Double(newValue)
+        }
     }
 
     // MARK: - Actions
 
     private func triggerTransition() {
-        // This will send the transition command to the device via WebSocket
-        print("Triggering transition: \(selectedTransitionType.name) @ \(Int(transitionDuration))ms")
+        Task {
+            await appVM.transition.triggerTransition()
+        }
     }
 }
 

@@ -16,47 +16,54 @@ struct ZoneCard: View {
     @State private var localSpeed: Double = 15
     @State private var localBrightness: Double = 255
     @State private var localSplit: Double = 40 // Split position for inner zones
+    @State private var showEffectSelector = false
+    @State private var showPaletteSelector = false
 
+    @ViewBuilder
     var body: some View {
-        // Guard against out-of-bounds access
-        guard zoneIndex < appVM.zones.zones.count else {
-            return AnyView(EmptyView())
-        }
+        if let zone = zoneForIndex {
+            let segment = appVM.zones.segments.first(where: { $0.zoneId == zone.id })
+            let effectIndex = appVM.effects.allEffects.firstIndex(where: { $0.id == zone.effectId }) ?? -1
+            let paletteIndex = appVM.palettes.allPalettes.firstIndex(where: { $0.id == zone.paletteId }) ?? -1
+            let paletteColors = currentPaletteColors(for: zone)
+            let isInnerZone = determineIfInnerZone(segment: segment)
 
-        let zone = appVM.zones.zones[zoneIndex]
-        let segment = appVM.zones.segments.first(where: { $0.zoneId == zone.id })
-        let isInnerZone = determineIfInnerZone(segment: segment)
-
-        return AnyView(
             ZStack(alignment: .topLeading) {
                 // Main card content
                 VStack(alignment: .leading, spacing: Spacing.md) {
                     // LED count metadata
                     if let segment = segment {
                         Text("LEDs \(segment.compactRange) \u{2022} \(segment.totalLeds) LEDs")
-                            .font(.custom("JetBrainsMono-Medium", size: 11))
+                            .font(.monospace)
                             .foregroundStyle(isInnerZone ? Color.lwSuccess : Color.lwTextTertiary)
                     }
 
                     // Effect row with ◀/▶ navigation
                     EffectNavigationRow(
                         zone: zone,
+                        currentIndex: effectIndex,
+                        totalCount: appVM.effects.allEffects.count,
                         onPrevious: { previousEffect(for: zone) },
-                        onNext: { nextEffect(for: zone) }
+                        onNext: { nextEffect(for: zone) },
+                        onSelect: { showEffectSelector = true }
                     )
 
                     // Palette row with ◀/▶ navigation
                     PaletteNavigationRow(
                         zone: zone,
+                        currentIndex: paletteIndex,
+                        totalCount: appVM.palettes.allPalettes.count,
+                        paletteColors: paletteColors,
                         onPrevious: { previousPalette(for: zone) },
-                        onNext: { nextPalette(for: zone) }
+                        onNext: { nextPalette(for: zone) },
+                        onSelect: { showPaletteSelector = true }
                     )
 
                     // Speed slider
                     LWSlider(
                         title: "Speed",
                         value: $localSpeed,
-                        range: 1...50,
+                        range: 1...100,
                         step: 1,
                         trackGradient: LinearGradient(
                             colors: [Color.lwCyan, Color.lwGold],
@@ -129,10 +136,21 @@ struct ZoneCard: View {
                     localSplit = Double(newValue)
                 }
             }
-        )
+            .sheet(isPresented: $showEffectSelector) {
+                ZoneEffectSelectorView(zoneId: zone.id)
+            }
+            .sheet(isPresented: $showPaletteSelector) {
+                ZonePaletteSelectorView(zoneId: zone.id)
+            }
+        }
     }
 
     // MARK: - Helpers
+
+    private var zoneForIndex: ZoneConfig? {
+        guard zoneIndex < appVM.zones.zones.count else { return nil }
+        return appVM.zones.zones[zoneIndex]
+    }
 
     /// Determine if this zone is an inner zone (not the outermost zone)
     private func determineIfInnerZone(segment: ZoneSegment?) -> Bool {
@@ -226,6 +244,16 @@ struct ZoneCard: View {
             )
         }
     }
+
+    private func currentPaletteColors(for zone: ZoneConfig) -> [Color] {
+        guard
+            let paletteId = zone.paletteId,
+            let palette = appVM.palettes.allPalettes.first(where: { $0.id == paletteId })
+        else {
+            return [Color.gray, Color.white]
+        }
+        return palette.gradientColors
+    }
 }
 
 // MARK: - Supporting Views
@@ -237,7 +265,7 @@ private struct ZonePillTitle: View {
 
     var body: some View {
         Text(zoneName)
-            .font(.custom("BebasNeue-Bold", size: 13))
+            .font(.zonePillLabel)
             .tracking(1.5)
             .foregroundStyle(Color.zoneColor(zoneIndex))
             .padding(.horizontal, 16)
@@ -266,54 +294,131 @@ private struct ZonePillTitle: View {
 /// Effect navigation row with ◀/▶ buttons
 private struct EffectNavigationRow: View {
     let zone: ZoneConfig
+    let currentIndex: Int
+    let totalCount: Int
     let onPrevious: () -> Void
     let onNext: () -> Void
+    let onSelect: () -> Void
 
     var body: some View {
-        HStack(spacing: Spacing.sm) {
-            Text("Effect")
-                .font(.custom("Rajdhani-Medium", size: 12))
-                .foregroundStyle(Color.lwTextSecondary)
-                .textCase(.uppercase)
-
-            Spacer()
-
+        HStack(spacing: 0) {
             NavigationButton(direction: .previous, action: onPrevious)
 
-            Text(zone.effectName ?? "Select Effect")
-                .font(.bodyValue)
-                .foregroundStyle(Color.lwTextPrimary)
-                .frame(minWidth: 120)
+            Button(action: onSelect) {
+                HStack(spacing: Spacing.md) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("EFFECT")
+                            .font(.sectionHeader)
+                            .foregroundStyle(Color.lwTextTertiary)
+                            .textCase(.uppercase)
+                            .tracking(0.8)
+
+                        Text(zone.effectName ?? "Select Effect")
+                            .font(.bodyValue)
+                            .foregroundStyle(Color.lwTextPrimary)
+                    }
+
+                    Spacer()
+
+                    HStack(spacing: Spacing.xs) {
+                        if totalCount > 0 {
+                            Text("\(max(currentIndex, 0) + 1)/\(totalCount)")
+                                .font(.caption)
+                                .foregroundStyle(Color.lwTextTertiary)
+                        }
+                        Image(systemName: "chevron.right")
+                            .font(.iconSmall)
+                            .foregroundStyle(Color.lwGold)
+                    }
+                }
+                .padding(.vertical, 8)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("Select effect for zone \(zone.id + 1)"))
+            .accessibilityValue(Text(zone.effectName ?? "Select Effect"))
+            .accessibilityHint(Text("Opens the effect selector."))
 
             NavigationButton(direction: .next, action: onNext)
         }
+        .padding(.horizontal, 6)
+        .background(
+            RoundedRectangle(cornerRadius: CornerRadius.card)
+                .fill(Color.lwElevated)
+                .overlay(
+                    RoundedRectangle(cornerRadius: CornerRadius.card)
+                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                )
+        )
     }
 }
 
 /// Palette navigation row with ◀/▶ buttons
 private struct PaletteNavigationRow: View {
     let zone: ZoneConfig
+    let currentIndex: Int
+    let totalCount: Int
+    let paletteColors: [Color]
     let onPrevious: () -> Void
     let onNext: () -> Void
+    let onSelect: () -> Void
 
     var body: some View {
-        HStack(spacing: Spacing.sm) {
-            Text("Palette")
-                .font(.custom("Rajdhani-Medium", size: 12))
-                .foregroundStyle(Color.lwTextSecondary)
-                .textCase(.uppercase)
-
-            Spacer()
-
+        HStack(spacing: 0) {
             NavigationButton(direction: .previous, action: onPrevious)
 
-            Text(zone.paletteName ?? "Select Palette")
-                .font(.bodyValue)
-                .foregroundStyle(Color.lwTextPrimary)
-                .frame(minWidth: 120)
+            Button(action: onSelect) {
+                HStack(spacing: Spacing.md) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("PALETTE")
+                            .font(.sectionHeader)
+                            .foregroundStyle(Color.lwTextTertiary)
+                            .textCase(.uppercase)
+                            .tracking(0.8)
+
+                        LinearGradient(
+                            colors: paletteColors,
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(height: 10)
+                        .clipShape(Capsule())
+
+                        Text(zone.paletteName ?? "Select Palette")
+                            .font(.bodyValue)
+                            .foregroundStyle(Color.lwTextPrimary)
+                    }
+
+                    Spacer()
+
+                    HStack(spacing: Spacing.xs) {
+                        if totalCount > 0 {
+                            Text("\(max(currentIndex, 0) + 1)/\(totalCount)")
+                                .font(.caption)
+                                .foregroundStyle(Color.lwTextTertiary)
+                        }
+                        Image(systemName: "chevron.right")
+                            .font(.iconSmall)
+                            .foregroundStyle(Color.lwGold)
+                    }
+                }
+                .padding(.vertical, 8)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("Select palette for zone \(zone.id + 1)"))
+            .accessibilityValue(Text(zone.paletteName ?? "Select Palette"))
+            .accessibilityHint(Text("Opens the palette selector."))
 
             NavigationButton(direction: .next, action: onNext)
         }
+        .padding(.horizontal, 6)
+        .background(
+            RoundedRectangle(cornerRadius: CornerRadius.card)
+                .fill(Color.lwElevated)
+                .overlay(
+                    RoundedRectangle(cornerRadius: CornerRadius.card)
+                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                )
+        )
     }
 }
 
@@ -333,7 +438,7 @@ private struct NavigationButton: View {
     var body: some View {
         Button(action: action) {
             Text(direction.symbol)
-                .font(.system(size: 14))
+                .font(.iconNav)
                 .foregroundStyle(Color.lwGold)
                 .frame(width: 26, height: 26)
                 .background(
@@ -346,6 +451,7 @@ private struct NavigationButton: View {
                 )
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(Text(direction == .previous ? "Previous" : "Next"))
     }
 }
 
@@ -368,14 +474,14 @@ private struct ZoneSplitSlider: View {
             // Split label and value
             HStack {
                 Text("Split")
-                    .font(.custom("Rajdhani-Medium", size: 12))
+                    .font(.cardLabel)
                     .foregroundStyle(Color.lwTextSecondary)
                     .textCase(.uppercase)
 
                 Spacer()
 
                 Text("LED \(Int(value))")
-                    .font(.custom("JetBrainsMono-Medium", size: 13))
+                    .font(.sliderValue)
                     .monospacedDigit()
                     .foregroundStyle(Color.lwGold)
             }
@@ -430,6 +536,21 @@ private struct ZoneSplitSlider: View {
                 }
             }
             .frame(height: 24)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("Split"))
+        .accessibilityValue(Text("LED \(Int(value))"))
+        .accessibilityHint(Text("Swipe up or down to adjust."))
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment:
+                value = min(value + 1, 78)
+            case .decrement:
+                value = max(value - 1, 1)
+            @unknown default:
+                break
+            }
+            onChanged?(value)
         }
     }
 

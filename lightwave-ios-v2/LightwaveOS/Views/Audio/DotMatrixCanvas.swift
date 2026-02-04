@@ -106,17 +106,21 @@ struct DotMatrixCanvas: View {
                 guard band < row.count else { continue }
 
                 // Get band value and apply shaping
-                let val = row[band]
-                let shaped = pow(val, 1.15)  // Slight contrast boost
+                let val = max(0.0, row[band])
+                // Avoid the \"always-on\" look: remove a small floor, then boost low-level detail.
+                let floor: Float = 0.02
+                let norm = max(0.0, (val - floor) / (1.0 - floor))
+                let shaped = pow(norm, 0.65)
 
                 // Apply age fade
                 let brightness = shaped * fade
 
-                // Calculate dot radius (minimum 30% of maxR)
-                let r = maxR * (0.3 + 0.7 * CGFloat(brightness))
+                // Calculate dot radius (small minimum; size is the primary signal)
+                let r = maxR * (0.08 + 0.92 * CGFloat(brightness))
 
-                // Map to palette colour
+                // Map to palette colour + opacity for better perceived dynamics
                 let colour = palette.color(at: brightness)
+                let opacity = 0.12 + 0.88 * Double(brightness)
 
                 // Calculate dot centre position
                 let cx = (CGFloat(col) + 0.5) * cellW
@@ -132,7 +136,7 @@ struct DotMatrixCanvas: View {
                     ))
                 }
 
-                ctx.fill(circle, with: .color(colour))
+                ctx.fill(circle, with: .color(colour.opacity(opacity)))
             }
         }
     }

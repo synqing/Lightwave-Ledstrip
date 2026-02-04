@@ -28,7 +28,7 @@ struct SilenceDetectionCard: View {
                     step: 500,
                     format: "%.0f ms"
                 ) {
-                    // TODO: Send update to firmware
+                    audio.queueAudioTuningUpdate()
                 }
 
                 StepperControl(
@@ -37,7 +37,7 @@ struct SilenceDetectionCard: View {
                     step: 0.01,
                     format: "%.2f"
                 ) {
-                    // TODO: Send update to firmware
+                    audio.queueAudioTuningUpdate()
                 }
             }
         }

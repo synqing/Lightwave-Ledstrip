@@ -41,6 +41,8 @@ struct PersistentStatusBar: View {
                 .background(statusBarBackground)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(Text("Connection status"))
+            .accessibilityValue(Text(statusText))
 
             // Expandable drawer
             if isDrawerOpen {
@@ -55,8 +57,8 @@ struct PersistentStatusBar: View {
 
     private var connectionStatusView: some View {
         HStack(spacing: 8) {
-            // Connection dot with glow
-            ConnectionDot(state: appVM.connectionState)
+            // Connection indicator (Rive where available, fallback to native dot)
+            connectionIndicator
                 .shadow(color: dotGlowColor, radius: 8, x: 0, y: 0)
 
             // Status label
@@ -66,10 +68,32 @@ struct PersistentStatusBar: View {
 
             // Chevron (rotates when drawer opens)
             Image(systemName: isDrawerOpen ? "chevron.down" : "chevron.right")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.iconTiny)
                 .foregroundStyle(Color.lwTextTertiary)
                 .rotationEffect(.degrees(isDrawerOpen ? 0 : 0))
         }
+    }
+
+    private var connectionIndicator: some View {
+        let inputs: [RiveInputValue] = [
+            .bool("isConnected", appVM.connectionState == .connected),
+            .bool("isConnecting", appVM.connectionState == .connecting),
+            .bool("isDiscovering", appVM.connectionState == .discovering),
+            .bool("hasError", isErrorState)
+        ]
+
+        return AnyView(
+            RiveViewContainer(
+                asset: RiveAssetRegistry.connectionIndicator,
+                inputs: inputs,
+                onEvent: { event in
+                    appVM.log("Connection indicator event: \(event)", category: "RIVE")
+                },
+                tapEventName: "tap",
+                fallback: AnyView(ConnectionDot(state: appVM.connectionState))
+            )
+            .frame(width: 16, height: 16)
+        )
     }
 
     private var statusBarBackground: some View {
@@ -176,6 +200,13 @@ struct PersistentStatusBar: View {
         }
     }
 
+    private var isErrorState: Bool {
+        if case .error = appVM.connectionState {
+            return true
+        }
+        return false
+    }
+
     private var dotGlowColor: Color {
         switch appVM.connectionState {
         case .connected:
@@ -188,32 +219,38 @@ struct PersistentStatusBar: View {
     }
 
     private var rssiText: String {
-        // TODO: RSSI support - add rssi: Int? to DeviceInfo model
-        // For now, show placeholder until model is updated
+        if let rssi = appVM.deviceStatus?.network?.rssi {
+            return "\(rssi) dBm"
+        }
         return "—"
     }
 
     private var rssiColor: Color {
-        // TODO: RSSI colour coding when DeviceInfo.rssi is available
-        // > -50 dBm: Excellent (green)
-        // -50 to -70 dBm: Good (gold)
-        // < -70 dBm: Poor (red)
-        return Color.lwTextTertiary
+        guard let rssi = appVM.deviceStatus?.network?.rssi else {
+            return Color.lwTextTertiary
+        }
+        if rssi >= -50 {
+            return Color.lwSuccess
+        }
+        if rssi >= -70 {
+            return Color.lwGold
+        }
+        return Color.lwError
     }
 
     private var wifiStatusText: String {
-        appVM.connectionState == .connected ? "Connected" : "Disconnected"
+        if let connected = appVM.deviceStatus?.network?.connected {
+            return connected ? "Connected" : "Disconnected"
+        }
+        return appVM.connectionState == .connected ? "Connected" : "Disconnected"
     }
 
     private var wsStatusText: String {
-        // WebSocketService is an actor, so we can't access isConnected synchronously
-        // For now, show "Active" when main connection is established
-        // TODO: Add @MainActor published wsConnected: Bool to AppViewModel
-        appVM.connectionState == .connected ? "Active" : "Inactive"
+        appVM.wsConnected ? "Active" : "Inactive"
     }
 
     private var wsStatusColor: Color {
-        appVM.connectionState == .connected ? Color.lwSuccess : Color.lwTextTertiary
+        appVM.wsConnected ? Color.lwSuccess : Color.lwTextTertiary
     }
 }
 

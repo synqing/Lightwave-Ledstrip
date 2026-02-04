@@ -29,12 +29,13 @@ struct LWButton: View {
             HStack(spacing: Spacing.xs) {
                 if let icon = icon {
                     Image(systemName: icon)
-                        .font(.system(size: style == .compact ? 10 : 12))
+                        .font(style == .compact ? .iconTiny : .iconSmall)
                 }
 
                 if !title.isEmpty {
                     Text(title)
-                        .font(.system(size: style == .compact ? 10 : 13, weight: .semibold))
+                        .font(style == .compact ? .microLabel : .hapticLabel)
+                        .fontWeight(.semibold)
                 }
             }
             .padding(.horizontal, horizontalPadding)

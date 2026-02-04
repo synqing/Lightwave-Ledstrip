@@ -97,10 +97,20 @@ struct ColourCorrectionView: View {
 }
 
 #Preview("Colour Correction View - Full") {
-    let appVM = AppViewModel()
-    appVM.colourCorrection.config = .previewFull
+    let appVM = {
+        let vm = AppViewModel()
+        vm.colourCorrection.config = ColourCorrectionConfig(
+            gammaEnabled: true,
+            gammaValue: 2.4,
+            autoExposureEnabled: true,
+            autoExposureTarget: 180,
+            brownGuardrailEnabled: true,
+            mode: .both
+        )
+        return vm
+    }()
 
-    return NavigationStack {
+    NavigationStack {
         ColourCorrectionView()
             .environment(appVM)
     }

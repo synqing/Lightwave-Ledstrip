@@ -14,7 +14,7 @@ struct LEDStripView: View {
         VStack(spacing: Spacing.sm) {
             // Header
             Text("LED STRIP VISUALISATION")
-                .font(.custom("BebasNeue-Bold", size: 11))
+                .font(.pillLabel)
                 .foregroundStyle(Color.lwTextTertiary)
                 .tracking(0.8)
                 .frame(maxWidth: .infinity)
@@ -22,13 +22,13 @@ struct LEDStripView: View {
             // Metadata row: Left/Right labels
             HStack {
                 Text("Left (0-79)")
-                    .font(.custom("JetBrainsMono-Medium", size: 10))
+                    .font(.monospaceSmall)
                     .foregroundStyle(Color.lwTextTertiary)
 
                 Spacer()
 
                 Text("Right (80-159)")
-                    .font(.custom("JetBrainsMono-Medium", size: 10))
+                    .font(.monospaceSmall)
                     .foregroundStyle(Color.lwTextTertiary)
             }
 
@@ -52,7 +52,7 @@ struct LEDStripView: View {
 
             // Centre label
             Text("Centre pair: LEDs 79 (left) / 80 (right) • Tap centre to reset splits")
-                .font(.custom("JetBrainsMono-Medium", size: 10))
+                .font(.monospaceSmall)
                 .foregroundStyle(Color.lwTextTertiary)
                 .frame(maxWidth: .infinity)
                 .multilineTextAlignment(.center)
@@ -130,39 +130,48 @@ struct LEDStripView: View {
 // MARK: - Preview
 
 #Preview("LED Strip View - Dual Zones") {
-    let appVM = AppViewModel()
-    appVM.zones.zonesEnabled = true
-    appVM.zones.zoneCount = 2
-    appVM.zones.segments = [
-        ZoneSegment.preview,
-        ZoneSegment.previewZone1
-    ]
+    let appVM = {
+        let vm = AppViewModel()
+        vm.zones.zonesEnabled = true
+        vm.zones.zoneCount = 2
+        vm.zones.segments = [
+            ZoneSegment(zoneId: 0, s1LeftStart: 0, s1LeftEnd: 39, s1RightStart: 80, s1RightEnd: 119),
+            ZoneSegment(zoneId: 1, s1LeftStart: 40, s1LeftEnd: 79, s1RightStart: 120, s1RightEnd: 159)
+        ]
+        return vm
+    }()
 
-    return LEDStripView()
+    LEDStripView()
         .environment(appVM)
         .padding(Spacing.lg)
         .background(Color.lwBase)
 }
 
 #Preview("LED Strip View - Centre Zone") {
-    let appVM = AppViewModel()
-    appVM.zones.zonesEnabled = true
-    appVM.zones.zoneCount = 1
-    appVM.zones.segments = [
-        ZoneSegment.previewCentreZone
-    ]
+    let appVM = {
+        let vm = AppViewModel()
+        vm.zones.zonesEnabled = true
+        vm.zones.zoneCount = 1
+        vm.zones.segments = [
+            ZoneSegment(zoneId: 0, s1LeftStart: 65, s1LeftEnd: 79, s1RightStart: 80, s1RightEnd: 94)
+        ]
+        return vm
+    }()
 
-    return LEDStripView()
+    LEDStripView()
         .environment(appVM)
         .padding(Spacing.lg)
         .background(Color.lwBase)
 }
 
 #Preview("LED Strip View - Disabled") {
-    let appVM = AppViewModel()
-    appVM.zones.zonesEnabled = false
+    let appVM = {
+        let vm = AppViewModel()
+        vm.zones.zonesEnabled = false
+        return vm
+    }()
 
-    return LEDStripView()
+    LEDStripView()
         .environment(appVM)
         .padding(Spacing.lg)
         .background(Color.lwBase)

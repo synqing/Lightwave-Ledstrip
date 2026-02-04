@@ -28,7 +28,7 @@ struct BandEnvelopeCard: View {
                     step: 0.01,
                     format: "%.2f"
                 ) {
-                    // TODO: Send update to firmware
+                    audio.queueAudioTuningUpdate()
                 }
 
                 StepperControl(
@@ -37,7 +37,7 @@ struct BandEnvelopeCard: View {
                     step: 0.01,
                     format: "%.2f"
                 ) {
-                    // TODO: Send update to firmware
+                    audio.queueAudioTuningUpdate()
                 }
 
                 StepperControl(
@@ -46,7 +46,7 @@ struct BandEnvelopeCard: View {
                     step: 0.01,
                     format: "%.2f"
                 ) {
-                    // TODO: Send update to firmware
+                    audio.queueAudioTuningUpdate()
                 }
 
                 StepperControl(
@@ -55,7 +55,7 @@ struct BandEnvelopeCard: View {
                     step: 0.01,
                     format: "%.2f"
                 ) {
-                    // TODO: Send update to firmware
+                    audio.queueAudioTuningUpdate()
                 }
             }
         }

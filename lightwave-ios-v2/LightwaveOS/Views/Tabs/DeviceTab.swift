@@ -16,34 +16,31 @@ struct DeviceTab: View {
             List {
                 // Section: Device
                 Section("Device") {
-                    // TODO: Wire to device status endpoint
                     DeviceInfoRow(
                         label: "Firmware Version",
-                        value: "v2.0.0"
+                        value: appVM.deviceInfo?.firmware ?? "—"
                     )
 
-                    // TODO: Wire to device status endpoint
                     DeviceInfoRow(
                         label: "Uptime",
-                        value: "2h 34m"
+                        value: uptimeText
                     )
 
                     DeviceInfoRow(
                         label: "FPS",
-                        value: "120",
-                        valueColor: .lwSuccess
+                        value: fpsText,
+                        valueColor: fpsColor
                     )
 
-                    // TODO: Wire to device status endpoint
                     DeviceInfoRow(
                         label: "Free Heap",
-                        value: "142 KB"
+                        value: freeHeapText
                     )
 
-                    // TODO: Wire to device status endpoint
                     DeviceInfoRow(
                         label: "WiFi RSSI",
-                        value: "-58 dBm"
+                        value: wifiRssiText,
+                        valueColor: wifiRssiColor
                     )
                 }
                 .listRowBackground(Color.lwCard)
@@ -160,6 +157,61 @@ struct DeviceTab: View {
         case .error(let message):
             return "Error: \(message)"
         }
+    }
+
+    private var wifiRssiText: String {
+        if let rssi = appVM.deviceStatus?.network?.rssi {
+            return "\(rssi) dBm"
+        }
+        return "—"
+    }
+
+    private var wifiRssiColor: Color {
+        guard let rssi = appVM.deviceStatus?.network?.rssi else {
+            return .lwTextTertiary
+        }
+        if rssi >= -50 {
+            return .lwSuccess
+        }
+        if rssi >= -70 {
+            return .lwGold
+        }
+        return .lwError
+    }
+
+    private var uptimeText: String {
+        guard let seconds = appVM.deviceStatus?.uptime else { return "—" }
+        let hours = seconds / 3600
+        let minutes = (seconds % 3600) / 60
+        let secs = seconds % 60
+        if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        }
+        if minutes > 0 {
+            return "\(minutes)m \(secs)s"
+        }
+        return "\(secs)s"
+    }
+
+    private var fpsText: String {
+        guard let fps = appVM.deviceStatus?.fps else { return "—" }
+        return String(format: "%.0f", fps)
+    }
+
+    private var fpsColor: Color {
+        guard let fps = appVM.deviceStatus?.fps else { return .lwTextTertiary }
+        if fps >= 100 { return .lwSuccess }
+        if fps >= 60 { return .lwGold }
+        return .lwError
+    }
+
+    private var freeHeapText: String {
+        guard let heap = appVM.deviceStatus?.freeHeap else { return "—" }
+        if heap >= 1024 {
+            let mb = Double(heap) / 1024.0
+            return String(format: "%.1f MB", mb)
+        }
+        return "\(heap) KB"
     }
 }
 

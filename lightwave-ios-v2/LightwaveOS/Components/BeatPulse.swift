@@ -32,6 +32,19 @@ struct BeatPulse: View {
     }
 
     var body: some View {
+        RiveViewContainer(
+            asset: RiveAssetRegistry.beatPulse,
+            inputs: [
+                .bool("isBeating", isBeating),
+                .bool("isDownbeat", isDownbeat),
+                .number("confidence", confidence)
+            ],
+            fallback: AnyView(nativePulse)
+        )
+        .frame(width: 16, height: 16)
+    }
+
+    private var nativePulse: some View {
         Circle()
             .fill(Color.lwBeatAccent)
             .frame(width: 12, height: 12)

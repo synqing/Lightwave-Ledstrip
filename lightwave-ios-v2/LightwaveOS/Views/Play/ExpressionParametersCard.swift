@@ -33,7 +33,7 @@ struct ExpressionParametersCard: View {
                         Spacer()
 
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.iconSmall)
                             .foregroundStyle(Color.lwGold)
                             .rotationEffect(.degrees(isExpanded ? 90 : 0))
                     }
@@ -52,6 +52,32 @@ struct ExpressionParametersCard: View {
                                 .tracking(0.6)
 
                             VStack(spacing: Spacing.xs) {
+                                LWSlider(
+                                    title: "Hue",
+                                    value: $params.hue,
+                                    range: 0...255,
+                                    step: 1,
+                                    trackGradient: LinearGradient(
+                                        colors: [
+                                            Color.red,
+                                            Color.yellow,
+                                            Color.green,
+                                            Color.cyan,
+                                            Color.blue,
+                                            Color.purple,
+                                            Color.red
+                                        ],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    ),
+                                    onChanged: { value in
+                                        params.sliderChanged("hue", value: value)
+                                    },
+                                    onEnded: {
+                                        params.sliderReleased("hue")
+                                    }
+                                )
+
                                 LWSlider(
                                     title: "Saturation",
                                     value: $params.saturation,

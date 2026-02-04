@@ -43,6 +43,10 @@
 
 #include "hal/HalFactory.h"
 
+#if defined(CONFIG_IDF_TARGET_ESP32P4) && !defined(NATIVE_BUILD)
+#include "esp_timer.h"
+#endif
+
 // Audio contracts for Phase 2 integration
 #if FEATURE_AUDIO_SYNC
 #include "../../audio/AudioTuning.h"
@@ -192,6 +196,16 @@ public:
     uint8_t getMood() const { return m_mood; }
     uint8_t getFadeAmount() const { return m_fadeAmount; }
     const RenderStats& getStats() const { return m_stats; }
+
+    /**
+     * @brief P4 frame clock diagnostics (timer-driven renderer)
+     *
+     * On ESP32-P4 the renderer is driven by a microsecond-resolution timer that
+     * enqueues `MessageType::RENDER_TICK` messages. These counters track how
+     * often ticks were dropped (renderer behind / queue full).
+     */
+    uint32_t getFrameTickDrops() const { return m_frameTickDrops; }
+    uint32_t getFrameTickLateFrames() const { return m_frameTickLateFrames; }
 
     /**
      * @brief Get a copy of the current LED buffer
@@ -515,6 +529,15 @@ private:
     void showLeds();
 
     /**
+     * @brief Execute one full render cycle (render → correction → show → stats)
+     *
+     * On ESP32-P4 this is invoked from `MessageType::RENDER_TICK` messages
+     * produced by the microsecond frame clock. On other targets it is invoked
+     * from the actor tick path.
+     */
+    void renderOneFrame();
+
+    /**
      * @brief Update frame timing statistics
      */
     void updateStats(uint32_t frameTimeUs, uint32_t rawFrameTimeUs);
@@ -611,6 +634,15 @@ private:
     float m_effectTimeSeconds;
     float m_effectFrameAccumulator;
     uint32_t m_effectFrameCount;
+
+    // P4 timer-driven render tick coalescing / diagnostics
+    std::atomic<bool> m_frameTickQueued{false};
+    uint32_t m_frameTickDrops = 0;
+    uint32_t m_frameTickLateFrames = 0;
+#if defined(CONFIG_IDF_TARGET_ESP32P4) && !defined(NATIVE_BUILD)
+    esp_timer_handle_t m_frameTimer = nullptr;
+    uint64_t m_lastFrameTickUs = 0;
+#endif
 
     // Statistics
     RenderStats m_stats;

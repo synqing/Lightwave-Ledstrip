@@ -437,21 +437,6 @@ void RendererActor::onMessage(const Message& msg)
             break;
 
         case MessageType::SET_PALETTE:
-            // #region agent log
-            {
-                FILE* f = fopen("/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/.cursor/debug.log", "a");
-                if (f) {
-                    fprintf(f,
-                            "{\"sessionId\":\"debug-session\",\"runId\":\"palette-loop-1\",\"hypothesisId\":\"H2\","
-                            "\"location\":\"RendererActor.cpp:onMessage\",\"message\":\"SET_PALETTE received\","
-                            "\"data\":{\"paletteIndex\":%u,\"currentPalette\":%u},\"timestamp\":%lu}\n",
-                            static_cast<unsigned>(msg.param1),
-                            static_cast<unsigned>(m_paletteIndex),
-                            static_cast<unsigned long>(millis()));
-                    fclose(f);
-                }
-            }
-            // #endregion
             handleSetPalette(msg.param1);
             break;
 
@@ -501,21 +486,6 @@ void RendererActor::onMessage(const Message& msg)
 
         case MessageType::PALETTE_CHANGED:
             // External palette change notification
-            // #region agent log
-            {
-                FILE* f = fopen("/Users/spectrasynq/Workspace_Management/Software/Lightwave-Ledstrip/.cursor/debug.log", "a");
-                if (f) {
-                    fprintf(f,
-                            "{\"sessionId\":\"debug-session\",\"runId\":\"palette-loop-1\",\"hypothesisId\":\"H2\","
-                            "\"location\":\"RendererActor.cpp:onMessage\",\"message\":\"PALETTE_CHANGED received\","
-                            "\"data\":{\"paletteIndex\":%u,\"currentPalette\":%u},\"timestamp\":%lu}\n",
-                            static_cast<unsigned>(msg.param1),
-                            static_cast<unsigned>(m_paletteIndex),
-                            static_cast<unsigned long>(millis()));
-                    fclose(f);
-                }
-            }
-            // #endregion
             handleSetPalette(msg.param1);
             break;
 

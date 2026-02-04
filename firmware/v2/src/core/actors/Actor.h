@@ -84,6 +84,7 @@ enum class MessageType : uint8_t {
     LOAD_STATE          = 0x64,
     PING                = 0x65,
     PONG                = 0x66,
+    RENDER_TICK         = 0x67,  // Internal: frame clock tick (RendererActor only)
 
     // Sync commands (0x68-0x6F)
     SYNC_REQUEST        = 0x68,
@@ -468,7 +469,13 @@ inline ActorConfig Renderer() {
         5,              // priority (highest)
         1,              // coreId (Core 1 - application)
         32,             // queueSize
+#if defined(CONFIG_IDF_TARGET_ESP32P4)
+        // P4: Renderer is driven by a microsecond-resolution frame clock (esp_timer)
+        // to avoid 100 Hz FreeRTOS tick quantisation. Block until messages arrive.
+        portMAX_DELAY
+#else
         (pdMS_TO_TICKS(8) > 0 ? pdMS_TO_TICKS(8) : 1) // tickInterval (~120 FPS, clamp to 1 tick)
+#endif
     );
 }
 

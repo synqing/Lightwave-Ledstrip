@@ -537,7 +537,6 @@ void RendererActor::onMessage(const Message& msg)
             break;
 
 #if FEATURE_AUDIO_SYNC
-#if !FEATURE_AUDIO_BACKEND_ESV11
         case MessageType::TRINITY_BEAT:
             {
                 // Unpack BPM (param1=hi, param2=lo)
@@ -551,11 +550,25 @@ void RendererActor::onMessage(const Message& msg)
                 bool tick = (msg.param4 & 0x01) != 0;
                 bool downbeat = (msg.param4 & 0x02) != 0;
                 int beatInBar = (int)((msg.param4 >> 2) & 0x03);
-                
+
+#if FEATURE_AUDIO_BACKEND_ESV11
+                // Inject into renderer-domain beat clock (no MusicalGrid in ESV11 builds).
+                uint64_t now_us = micros();
+                uint32_t sr = m_lastAudioTime.sample_rate_hz ? m_lastAudioTime.sample_rate_hz : 12800;
+                m_esBeatClock.injectExternalBeat(
+                    bpm,
+                    phase01,
+                    tick,
+                    downbeat,
+                    static_cast<uint8_t>(beatInBar),
+                    now_us,
+                    sr
+                );
+#else
                 m_musicalGrid.injectExternalBeat(bpm, phase01, tick, downbeat, beatInBar);
+#endif
             }
             break;
-#endif
 
         case MessageType::TRINITY_MACRO:
             {
@@ -570,7 +583,6 @@ void RendererActor::onMessage(const Message& msg)
             }
             break;
 
-#if !FEATURE_AUDIO_BACKEND_ESV11
         case MessageType::TRINITY_SYNC:
             {
                 uint8_t action = msg.param1;
@@ -583,11 +595,21 @@ void RendererActor::onMessage(const Message& msg)
                         m_trinitySyncActive = true;
                         m_trinitySyncPaused = false;
                         m_trinitySyncPosition = positionSec;
+#if FEATURE_AUDIO_BACKEND_ESV11
+                        m_esBeatClock.setExternalSyncMode(true);
+#else
                         m_musicalGrid.setExternalSyncMode(true);
+#endif
                         // Prime the proxy so isActive() returns true before first macro arrives
                         m_trinityProxy.markActive();
                         if (bpm > 0.0f) {
+#if FEATURE_AUDIO_BACKEND_ESV11
+                            uint64_t now_us = micros();
+                            uint32_t sr = m_lastAudioTime.sample_rate_hz ? m_lastAudioTime.sample_rate_hz : 12800;
+                            m_esBeatClock.injectExternalBeat(bpm, 0.0f, false, false, 0, now_us, sr);
+#else
                             m_musicalGrid.injectExternalBeat(bpm, 0.0f, false, false, 0);
+#endif
                         }
                         LW_LOGI("TRINITY_SYNC: START active=1 paused=0 pos=%.2fs bpm=%.1f", positionSec, bpm);
                         break;
@@ -595,7 +617,11 @@ void RendererActor::onMessage(const Message& msg)
                         m_trinitySyncActive = false;
                         m_trinitySyncPaused = false;
                         m_trinitySyncPosition = 0.0f;
+#if FEATURE_AUDIO_BACKEND_ESV11
+                        m_esBeatClock.setExternalSyncMode(false);
+#else
                         m_musicalGrid.setExternalSyncMode(false);
+#endif
                         m_trinityProxy.reset();
                         LW_LOGI("TRINITY_SYNC: STOP active=0 paused=0");
                         break;
@@ -610,14 +636,19 @@ void RendererActor::onMessage(const Message& msg)
                     case 4: // seek
                         m_trinitySyncPosition = positionSec;
                         if (bpm > 0.0f) {
+#if FEATURE_AUDIO_BACKEND_ESV11
+                            uint64_t now_us = micros();
+                            uint32_t sr = m_lastAudioTime.sample_rate_hz ? m_lastAudioTime.sample_rate_hz : 12800;
+                            m_esBeatClock.injectExternalBeat(bpm, 0.0f, false, false, 0, now_us, sr);
+#else
                             m_musicalGrid.injectExternalBeat(bpm, 0.0f, false, false, 0);
+#endif
                         }
                         LW_LOGD("TRINITY_SYNC: SEEK pos=%.2fs bpm=%.1f", positionSec, bpm);
                         break;
                 }
             }
             break;
-#endif
 #endif
 
         default:

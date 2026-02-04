@@ -28,6 +28,32 @@ public:
     void reset();
 
     /**
+     * @brief Enable/disable external sync mode (e.g. Trinity offline beat).
+     *
+     * When enabled, injected beats take precedence over ES audio tempo fields.
+     */
+    void setExternalSyncMode(bool enabled);
+
+    /**
+     * @brief Inject an external beat/tempo observation (e.g. Trinity beat).
+     *
+     * @param bpm Beats per minute.
+     * @param phase01 Beat phase [0,1).
+     * @param tick True if this observation corresponds to a beat tick.
+     * @param downbeat True if this observation corresponds to a downbeat tick.
+     * @param beatInBar Beat index within bar (0..3 for 4/4).
+     * @param now_us Wall-clock timestamp (micros()) at injection time.
+     * @param sample_rate_hz Sample rate used to construct an AudioTime for injection.
+     */
+    void injectExternalBeat(float bpm,
+                            float phase01,
+                            bool tick,
+                            bool downbeat,
+                            uint8_t beatInBar,
+                            uint64_t now_us,
+                            uint32_t sample_rate_hz = 12800);
+
+    /**
      * @brief Tick the beat clock at render cadence (~120 FPS).
      *
      * @param latest Latest ControlBusFrame (BY VALUE read by renderer).
@@ -41,6 +67,16 @@ public:
 private:
     bool m_hasBase = false;
     AudioTime m_lastTickT{};
+
+    // External sync/injection (Trinity)
+    bool m_externalSync = false;
+    bool m_externalPending = false;
+    float m_externalBpm = 120.0f;
+    float m_externalPhase01 = 0.0f;
+    bool m_externalTick = false;
+    bool m_externalDownbeat = false;
+    uint8_t m_externalBeatInBar = 0;
+    AudioTime m_externalT{};
 
     float m_phase01 = 0.0f;
     float m_bpm = 120.0f;

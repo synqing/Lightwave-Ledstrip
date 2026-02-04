@@ -172,9 +172,40 @@ bool AudioTuningManager::loadPreset(uint8_t id,
     if (result == NVSResult::SIZE_MISMATCH || (result == NVSResult::OK && !preset.isValid())) {
         if (loadPresetV1(id, presetV1)) {
             audio::AudioPipelineTuning pipelineOut{};
-            static_assert(sizeof(AudioPipelineTuningV1) <= sizeof(audio::AudioPipelineTuning),
-                          "AudioPipelineTuningV1 must fit in AudioPipelineTuning");
-            std::memcpy(&pipelineOut, &presetV1.pipeline, sizeof(AudioPipelineTuningV1));
+            pipelineOut.dcAlpha = presetV1.pipeline.dcAlpha;
+            pipelineOut.agcTargetRms = presetV1.pipeline.agcTargetRms;
+            pipelineOut.agcMinGain = presetV1.pipeline.agcMinGain;
+            pipelineOut.agcMaxGain = presetV1.pipeline.agcMaxGain;
+            pipelineOut.agcAttack = presetV1.pipeline.agcAttack;
+            pipelineOut.agcRelease = presetV1.pipeline.agcRelease;
+            pipelineOut.agcClipReduce = presetV1.pipeline.agcClipReduce;
+            pipelineOut.agcIdleReturnRate = presetV1.pipeline.agcIdleReturnRate;
+            pipelineOut.noiseFloorMin = presetV1.pipeline.noiseFloorMin;
+            pipelineOut.noiseFloorRise = presetV1.pipeline.noiseFloorRise;
+            pipelineOut.noiseFloorFall = presetV1.pipeline.noiseFloorFall;
+            pipelineOut.gateStartFactor = presetV1.pipeline.gateStartFactor;
+            pipelineOut.gateRangeFactor = presetV1.pipeline.gateRangeFactor;
+            pipelineOut.gateRangeMin = presetV1.pipeline.gateRangeMin;
+            pipelineOut.rmsDbFloor = presetV1.pipeline.rmsDbFloor;
+            pipelineOut.rmsDbCeil = presetV1.pipeline.rmsDbCeil;
+            pipelineOut.bandDbFloor = presetV1.pipeline.bandDbFloor;
+            pipelineOut.bandDbCeil = presetV1.pipeline.bandDbCeil;
+            pipelineOut.chromaDbFloor = presetV1.pipeline.chromaDbFloor;
+            pipelineOut.chromaDbCeil = presetV1.pipeline.chromaDbCeil;
+            pipelineOut.fluxScale = presetV1.pipeline.fluxScale;
+            pipelineOut.controlBusAlphaFast = presetV1.pipeline.controlBusAlphaFast;
+            pipelineOut.controlBusAlphaSlow = presetV1.pipeline.controlBusAlphaSlow;
+            pipelineOut.bandAttack = presetV1.pipeline.bandAttack;
+            pipelineOut.bandRelease = presetV1.pipeline.bandRelease;
+            pipelineOut.heavyBandAttack = presetV1.pipeline.heavyBandAttack;
+            pipelineOut.heavyBandRelease = presetV1.pipeline.heavyBandRelease;
+            for (size_t i = 0; i < 8; ++i) {
+                pipelineOut.perBandGains[i] = presetV1.pipeline.perBandGains[i];
+                pipelineOut.perBandNoiseFloors[i] = presetV1.pipeline.perBandNoiseFloors[i];
+            }
+            pipelineOut.usePerBandNoiseFloor = presetV1.pipeline.usePerBandNoiseFloor;
+            pipelineOut.silenceHysteresisMs = presetV1.pipeline.silenceHysteresisMs;
+            pipelineOut.silenceThreshold = presetV1.pipeline.silenceThreshold;
             pipeline = audio::clampAudioPipelineTuning(pipelineOut);
             contract = audio::clampAudioContractTuning(presetV1.contract);
             if (nameOut) {

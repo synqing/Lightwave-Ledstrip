@@ -21,6 +21,7 @@ namespace ws {
  * Commands:
  *   debug.audio.get - Get current verbosity settings
  *   debug.audio.set - Set verbosity level {verbosity: 0-5}
+ *   debug.udp.get   - Get UDP streaming counters and backoff state
  */
 void registerWsDebugCommands(const webserver::WebServerContext& ctx);
 

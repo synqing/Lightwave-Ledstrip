@@ -58,7 +58,7 @@ bool WiFiCredentialsStorage::begin() {
             continue;
         }
 
-        StaticJsonDocument<256> doc;
+        JsonDocument doc;
         DeserializationError error = deserializeJson(doc, jsonStr);
         if (error) {
             continue;
@@ -122,7 +122,7 @@ bool WiFiCredentialsStorage::saveNetwork(const String& ssid, const String& passw
         String key = getNetworkKey(existingIndex);
         
         // Create JSON document
-        StaticJsonDocument<256> doc;
+        JsonDocument doc;
         doc["ssid"] = ssid;
         doc["password"] = password;
         
@@ -148,7 +148,7 @@ bool WiFiCredentialsStorage::saveNetwork(const String& ssid, const String& passw
     String key = getNetworkKey(m_networkCount);
     
     // Create JSON document
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     doc["ssid"] = ssid;
     doc["password"] = password;
     
@@ -195,7 +195,7 @@ uint8_t WiFiCredentialsStorage::loadNetworks(NetworkCredential* networks, uint8_
         }
         
         // Parse JSON
-        StaticJsonDocument<256> doc;
+        JsonDocument doc;
         DeserializationError error = deserializeJson(doc, jsonStr);
         
         if (error) {
@@ -269,7 +269,7 @@ bool WiFiCredentialsStorage::getNetwork(uint8_t index, NetworkCredential& networ
     }
     
     // Parse JSON
-    StaticJsonDocument<256> doc;
+    JsonDocument doc;
     DeserializationError error = deserializeJson(doc, jsonStr);
     
     if (error) {
@@ -355,7 +355,7 @@ void WiFiCredentialsStorage::compactStorage() {
         
         if (jsonStr.length() > 0) {
             // Parse and store valid network
-            StaticJsonDocument<256> doc;
+            JsonDocument doc;
             DeserializationError error = deserializeJson(doc, jsonStr);
             
             if (!error) {
@@ -382,7 +382,7 @@ void WiFiCredentialsStorage::compactStorage() {
     for (uint8_t i = 0; i < validCount; i++) {
         String key = getNetworkKey(i);
         
-        StaticJsonDocument<256> doc;
+        JsonDocument doc;
         doc["ssid"] = networks[i].ssid;
         doc["password"] = networks[i].password;
         

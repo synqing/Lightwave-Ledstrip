@@ -105,6 +105,7 @@ size_t AudioStreamBroadcaster::broadcast(const audio::ControlBusFrame& frame, co
             }
             continue;
         }
+        if (!c->canSend()) continue;  // Back-pressure: skip frame if queue full
         c->binary(m_frameBuffer, AudioStreamConfig::FRAME_SIZE);
         sentCount++;
     }

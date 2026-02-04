@@ -42,6 +42,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <array>
 #include "../plugins/api/BehaviorSelection.h"

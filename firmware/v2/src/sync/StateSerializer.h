@@ -42,6 +42,7 @@
 #pragma once
 
 #include "../core/state/SystemState.h"
+#include <cstddef>
 #include <cstdint>
 
 namespace lightwaveos {

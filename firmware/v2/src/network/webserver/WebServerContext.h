@@ -38,6 +38,7 @@ namespace lightwaveos {
 #if FEATURE_AUDIO_BENCHMARK
             class BenchmarkStreamBroadcaster;
 #endif
+            class UdpStreamer;
         }
     }
 }
@@ -78,6 +79,9 @@ struct WebServerContext {
 #if FEATURE_AUDIO_BENCHMARK
     BenchmarkStreamBroadcaster* benchmarkBroadcaster;
 #endif
+
+    // UDP streaming (bypasses TCP for LED/audio frames)
+    UdpStreamer* udpStreamer;
 
     // State flags
     uint32_t startTime;
@@ -134,6 +138,7 @@ struct WebServerContext {
         std::function<bool(AsyncWebSocketClient*, bool)> setBenchmarkStreamFn = nullptr,
 #endif
         std::function<bool(const String&, JsonVariant)> executeBatchFn = nullptr,
+        UdpStreamer* udpStreamerPtr = nullptr,
         plugins::PluginManagerActor* pluginMgr = nullptr
     )
         : actorSystem(actors)
@@ -168,6 +173,7 @@ struct WebServerContext {
         , setBenchmarkStreamSubscription(setBenchmarkStreamFn)
 #endif
         , executeBatchAction(executeBatchFn)
+        , udpStreamer(udpStreamerPtr)
     {}
 };
 

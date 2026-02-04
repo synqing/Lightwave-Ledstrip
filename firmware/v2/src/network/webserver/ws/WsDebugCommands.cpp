@@ -7,22 +7,26 @@
 #include "../WsCommandRouter.h"
 #include "../WebServerContext.h"
 #include "../../ApiResponse.h"
+#include "../UdpStreamer.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 
 #include "../../../config/features.h"
 
 #if FEATURE_AUDIO_SYNC
-
 #include "../../../audio/AudioDebugConfig.h"
+#endif
 
 namespace lightwaveos {
 namespace network {
 namespace webserver {
 namespace ws {
 
+#if FEATURE_AUDIO_SYNC
 using namespace lightwaveos::audio;
+#endif
 
+#if FEATURE_AUDIO_SYNC
 static void handleDebugAudioGet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     (void)ctx;
     const char* requestId = doc["requestId"] | "";
@@ -48,7 +52,9 @@ static void handleDebugAudioGet(AsyncWebSocketClient* client, JsonDocument& doc,
         });
     client->text(response);
 }
+#endif
 
+#if FEATURE_AUDIO_SYNC
 static void handleDebugAudioSet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     (void)ctx;
     const char* requestId = doc["requestId"] | "";
@@ -93,33 +99,54 @@ static void handleDebugAudioSet(AsyncWebSocketClient* client, JsonDocument& doc,
         });
     client->text(response);
 }
+#endif
+
+static void handleDebugUdpGet(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
+    const char* requestId = doc["requestId"] | "";
+
+    if (!ctx.udpStreamer) {
+        client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "UDP streamer unavailable", requestId));
+        return;
+    }
+
+    webserver::UdpStreamer::UdpStats stats;
+    ctx.udpStreamer->getStats(stats);
+    uint32_t nowMs = millis();
+
+    String response = buildWsResponse("debug.udp.stats", requestId,
+        [stats, nowMs](JsonObject& data) {
+            data["started"] = stats.started;
+            data["subscribers"] = stats.subscriberCount;
+            data["suppressed"] = stats.suppressedCount;
+            data["consecutiveFailures"] = stats.consecutiveFailures;
+            data["lastFailureMs"] = stats.lastFailureMs;
+            data["lastFailureAgoMs"] = stats.lastFailureMs > 0 ? (nowMs - stats.lastFailureMs) : 0;
+            data["cooldownRemainingMs"] = stats.cooldownUntilMs > nowMs ? (stats.cooldownUntilMs - nowMs) : 0;
+            data["socketResets"] = stats.socketResets;
+            data["lastSocketResetMs"] = stats.lastSocketResetMs;
+
+            JsonObject led = data["led"].to<JsonObject>();
+            led["attempts"] = stats.ledAttempts;
+            led["success"] = stats.ledSuccess;
+            led["failures"] = stats.ledFailures;
+
+            JsonObject audio = data["audio"].to<JsonObject>();
+            audio["attempts"] = stats.audioAttempts;
+            audio["success"] = stats.audioSuccess;
+            audio["failures"] = stats.audioFailures;
+        });
+    client->text(response);
+}
 
 void registerWsDebugCommands(const WebServerContext& ctx) {
-    (void)ctx;
+#if FEATURE_AUDIO_SYNC
     WsCommandRouter::registerCommand("debug.audio.get", handleDebugAudioGet);
     WsCommandRouter::registerCommand("debug.audio.set", handleDebugAudioSet);
+#endif
+    WsCommandRouter::registerCommand("debug.udp.get", handleDebugUdpGet);
 }
 
 } // namespace ws
 } // namespace webserver
 } // namespace network
 } // namespace lightwaveos
-
-#else
-
-// Empty implementation when FEATURE_AUDIO_SYNC is disabled
-namespace lightwaveos {
-namespace network {
-namespace webserver {
-namespace ws {
-
-void registerWsDebugCommands(const WebServerContext& ctx) {
-    (void)ctx;
-}
-
-} // namespace ws
-} // namespace webserver
-} // namespace network
-} // namespace lightwaveos
-
-#endif // FEATURE_AUDIO_SYNC

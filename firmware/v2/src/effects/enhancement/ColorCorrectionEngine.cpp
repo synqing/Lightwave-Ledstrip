@@ -10,6 +10,7 @@
  */
 
 #include "ColorCorrectionEngine.h"
+#include <algorithm>
 #include <esp_log.h>
 
 static const char* TAG = "ColorCorrection";
@@ -157,8 +158,8 @@ void ColorCorrectionEngine::applyRGBWhiteCuration(CRGBPalette16& palette,
         CRGB& c = palette[i];
 
         // Find min and max RGB components
-        uint8_t minVal = min(c.r, min(c.g, c.b));
-        uint8_t maxVal = max(c.r, max(c.g, c.b));
+        uint8_t minVal = std::min(c.r, std::min(c.g, c.b));
+        uint8_t maxVal = std::max(c.r, std::max(c.g, c.b));
 
         // Check if "whitish" (high minimum, low spread between min/max)
         if (minVal > threshold && (maxVal - minVal) < 40) {
@@ -265,7 +266,7 @@ void ColorCorrectionEngine::applyWhiteGuardrail(CRGB* buffer, uint16_t count) {
 
         if (m_config.mode == CorrectionMode::RGB || m_config.mode == CorrectionMode::BOTH) {
             // RGB: Reduce white component
-            uint8_t minVal = min(c.r, min(c.g, c.b));
+            uint8_t minVal = std::min(c.r, std::min(c.g, c.b));
             if (minVal > m_config.rgbTargetMin) {
                 uint8_t reduction = minVal - m_config.rgbTargetMin;
                 c.r = (c.r > reduction) ? c.r - reduction : 0;
@@ -323,7 +324,7 @@ void ColorCorrectionEngine::applyBrightnessClamp(CRGB* buffer, uint16_t count, u
         CRGB& c = buffer[i];
 
         // Find maximum channel (brightness proxy)
-        uint8_t maxChannel = max(c.r, max(c.g, c.b));
+        uint8_t maxChannel = std::max(c.r, std::max(c.g, c.b));
 
         // Only clamp if above threshold
         if (maxChannel > maxV) {
@@ -350,7 +351,7 @@ void ColorCorrectionEngine::applySaturationBoost(CRGB* buffer, uint16_t count, u
         CRGB& c = buffer[i];
 
         // Skip very dark pixels (avoid divide-by-zero in rgb2hsv_approximate)
-        uint8_t maxChannel = max(c.r, max(c.g, c.b));
+        uint8_t maxChannel = std::max(c.r, std::max(c.g, c.b));
         if (maxChannel < 16) continue;
 
         // Convert to HSV, boost saturation, convert back
@@ -365,8 +366,8 @@ void ColorCorrectionEngine::applySaturationBoost(CRGB* buffer, uint16_t count, u
 // ============================================================================
 
 bool ColorCorrectionEngine::isWhitish(const CRGB& c, uint8_t threshold) {
-    uint8_t minVal = min(c.r, min(c.g, c.b));
-    uint8_t maxVal = max(c.r, max(c.g, c.b));
+    uint8_t minVal = std::min(c.r, std::min(c.g, c.b));
+    uint8_t maxVal = std::max(c.r, std::max(c.g, c.b));
 
     // Whitish: high minimum value and low spread (desaturated)
     return (minVal > threshold) && (maxVal - minVal) < 40;

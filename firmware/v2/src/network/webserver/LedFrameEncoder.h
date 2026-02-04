@@ -41,8 +41,8 @@ namespace LedStreamConfig {
     // Legacy format (v0): [MAGIC][RGB×320] = 961 bytes
     constexpr uint16_t LEGACY_FRAME_SIZE = 1 + (TOTAL_LEDS * 3);  // 961 bytes
     
-    constexpr uint8_t TARGET_FPS = 20;                // Max streaming FPS (throttled)
-    constexpr uint32_t FRAME_INTERVAL_MS = 1000 / TARGET_FPS;  // ~50ms between frames
+    constexpr uint8_t TARGET_FPS = 10;                // Max streaming FPS (throttled for WiFi headroom)
+    constexpr uint32_t FRAME_INTERVAL_MS = 1000 / TARGET_FPS;  // ~100ms between frames
 }
 
 // ============================================================================

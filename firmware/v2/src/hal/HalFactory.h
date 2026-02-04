@@ -19,18 +19,17 @@
 #if defined(CHIP_ESP32_S3) && CHIP_ESP32_S3
 
     // ESP32-S3 implementations
-    // Note: These will be created by extracting existing code
+    // Note: Audio/network drivers are still pending for HAL abstraction
     // #include "hal/esp32s3/AudioCapture_S3.h"
-    // #include "hal/esp32s3/LedDriver_S3.h"
+    #include "hal/esp32s3/LedDriver_S3.h"
     // #include "hal/esp32s3/WiFiDriver_S3.h"
 
 namespace lightwaveos {
 namespace hal {
 
     // Type aliases for S3 platform
-    // Uncomment when implementations are ready:
     // using AudioCapture = AudioCapture_S3;
-    // using LedDriver = LedDriver_S3;
+    using LedDriver = LedDriver_S3;
     // using NetworkDriver = WiFiDriver_S3;
 
     // Platform info
@@ -46,22 +45,35 @@ namespace hal {
 
     // ESP32-P4 implementations
     // #include "hal/esp32p4/AudioCapture_P4.h"
-    // #include "hal/esp32p4/LedDriver_P4.h"
+    
+    // LED Driver selection: Custom parallel RMT driver (recommended) or FastLED fallback
+    #ifndef USE_FASTLED_DRIVER
+    #define USE_FASTLED_DRIVER 0  // 0 = Custom RMT (parallel), 1 = FastLED (sequential)
+    #endif
+
+    #if USE_FASTLED_DRIVER
+    #include "hal/esp32p4/LedDriver_P4.h"
+    #else
+        #include "hal/esp32p4/LedDriver_P4_RMT.h"
+    #endif
     // #include "hal/esp32p4/EthernetDriver_P4.h"
 
 namespace lightwaveos {
 namespace hal {
 
     // Type aliases for P4 platform
-    // Uncomment when implementations are ready:
     // using AudioCapture = AudioCapture_P4;
-    // using LedDriver = LedDriver_P4;
+    #if USE_FASTLED_DRIVER
+    using LedDriver = LedDriver_P4;          // FastLED-based (sequential)
+    #else
+        using LedDriver = LedDriver_P4_RMT;      // Custom RMT (parallel, recommended)
+    #endif
     // using NetworkDriver = EthernetDriver_P4;
 
     // Platform info
     constexpr const char* PLATFORM_NAME = "ESP32-P4";
     constexpr bool HAS_INTEGRATED_WIFI = false;
-    constexpr bool HAS_ETHERNET = true;
+    constexpr bool HAS_ETHERNET = false;
     constexpr uint32_t CPU_FREQ_MHZ = 400;
 
 } // namespace hal

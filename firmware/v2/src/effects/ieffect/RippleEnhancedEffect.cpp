@@ -179,7 +179,7 @@ void RippleEnhancedEffect::render(plugins::EffectContext& ctx) {
     } else
 #endif
     if (!hasAudio) {
-        spawnChance = 0;  // No ripples without audio - was 10, causing animation without audio
+        spawnChance = 0;  // No ripples without audio - audio is mandatory for this product
     }
 
     if (m_spawnCooldown > 0) {

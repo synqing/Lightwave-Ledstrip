@@ -838,7 +838,7 @@ namespace RequestSchemas {
         } \
     } while(0)
 
-// VALIDATE_LEGACY_OR_RETURN macro removed - legacy API deprecated
+// VALIDATE_LEGACY_OR_RETURN macro removed - legacy API is deprecated
 
 }  // namespace network
 }  // namespace lightwaveos

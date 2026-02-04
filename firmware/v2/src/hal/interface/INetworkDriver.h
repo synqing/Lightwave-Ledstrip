@@ -55,7 +55,7 @@ struct NetworkStationConfig {
  * @brief Network configuration for AP mode
  */
 struct NetworkAPConfig {
-    const char* ssid = "LightwaveOS-Setup";
+    const char* ssid = "LightwaveOS-AP";
     const char* password = nullptr;     ///< nullptr for open network
     uint8_t channel = 1;
     uint8_t maxConnections = 4;

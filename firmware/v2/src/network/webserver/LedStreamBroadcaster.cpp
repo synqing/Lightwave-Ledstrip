@@ -99,6 +99,7 @@ size_t LedStreamBroadcaster::broadcast(const CRGB* leds) {
             }
             continue;
         }
+        if (!c->canSend()) continue;  // Back-pressure: skip frame if queue full
         c->binary(m_frameBuffer, LedStreamConfig::FRAME_SIZE);
         sentCount++;
     }

@@ -115,7 +115,7 @@ void TrinityControlBusProxy::markActive()
 void TrinityControlBusProxy::reset()
 {
     // Zero out the frame
-    memset(&m_frame, 0, sizeof(m_frame));
+    m_frame = {};
     m_lastUpdate = 0;
     
     // Set default AudioTime

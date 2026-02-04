@@ -8,16 +8,13 @@
 #include "PerformanceMonitor.h"
 #include <Arduino.h>
 #include <esp_timer.h>
+#include <esp_system.h>
 
 #define LW_LOG_TAG "PERF"
 #include "utils/Log.h"
 
-// ESP32 heap functions
-extern "C" {
-    size_t esp_get_free_heap_size(void);
-    size_t esp_get_minimum_free_heap_size(void);
-    size_t heap_caps_get_largest_free_block(uint32_t caps);
-}
+// heap_caps_get_largest_free_block not in esp_system.h on all versions
+extern "C" size_t heap_caps_get_largest_free_block(uint32_t caps);
 
 // MALLOC_CAP_DEFAULT for heap_caps_get_largest_free_block
 #ifndef MALLOC_CAP_DEFAULT

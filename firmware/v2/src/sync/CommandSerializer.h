@@ -38,6 +38,7 @@
 
 #include "CommandType.h"
 #include "../core/state/Commands.h"
+#include <cstddef>
 #include <cstdint>
 
 namespace lightwaveos {

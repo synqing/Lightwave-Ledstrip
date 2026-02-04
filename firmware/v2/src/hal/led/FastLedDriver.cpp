@@ -17,7 +17,7 @@
 #include <esp_timer.h>
 #endif
 
-#include <cstring>
+#include <algorithm>
 
 namespace lightwaveos {
 namespace hal {
@@ -94,7 +94,7 @@ bool FastLedDriver::init() {
     }
 
     m_buffer = s_ledBuffer;
-    std::memset(m_buffer, 0, m_totalLeds * sizeof(RGB));
+    std::fill(m_buffer, m_buffer + m_totalLeds, RGB{0, 0, 0});
 
     // Set up strip buffer pointers (pointing into unified buffer)
     for (uint8_t i = 0; i < m_config.stripCount; ++i) {
@@ -218,7 +218,7 @@ void FastLedDriver::clear() {
     if (m_buffer == nullptr) {
         return;
     }
-    std::memset(m_buffer, 0, m_totalLeds * sizeof(RGB));
+    std::fill(m_buffer, m_buffer + m_totalLeds, RGB{0, 0, 0});
 }
 
 RGB* FastLedDriver::getBuffer() {

@@ -73,7 +73,9 @@ bool ActorSystem::init()
     // 2. ShowDirectorActor (depends on RendererActor)
     // Future: StateStoreActor, NetworkActor, HmiActor, etc.
 
+    #if defined(__cpp_exceptions)
     try {
+    #endif
         // Create RendererActor
         m_renderer = std::make_unique<RendererActor>();
 
@@ -116,7 +118,7 @@ bool ActorSystem::init()
         ESP_LOGI(TAG, "Actors created successfully");
         ESP_LOGI(TAG, "Free heap after init: %lu bytes", esp_get_free_heap_size());
 #endif
-
+    #if defined(__cpp_exceptions)
     } catch (...) {
 #ifndef NATIVE_BUILD
         ESP_LOGE(TAG, "Exception during actor creation");
@@ -124,6 +126,7 @@ bool ActorSystem::init()
         m_state = SystemState::UNINITIALIZED;
         return false;
     }
+    #endif
 
     return true;
 }

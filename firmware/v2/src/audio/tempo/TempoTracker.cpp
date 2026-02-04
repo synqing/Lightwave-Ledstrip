@@ -18,6 +18,7 @@
 
 #include "TempoTracker.h"
 #include <cstring>
+#include <cmath>  // For std::isfinite, std::fmod, std::abs
 #define LW_LOG_TAG "Tempo"
 #include "utils/Log.h"
 #include "../AudioDebugConfig.h"
@@ -431,16 +432,28 @@ void TempoTracker::updateTempo(float delta_sec) {
 
             // Sync phase for active bins
             float phase_push = tempi_[i].phase_radians_per_frame * delta_sec * REFERENCE_FPS;
-            tempi_[i].phase += phase_push;
-
-            // Wrap phase to [-pi, +pi]
-            while (tempi_[i].phase > static_cast<float>(M_PI)) {
-                tempi_[i].phase -= 2.0f * static_cast<float>(M_PI);
-                tempi_[i].phase_inverted = !tempi_[i].phase_inverted;
+            if (std::isfinite(phase_push)) {
+                tempi_[i].phase += phase_push;
             }
-            while (tempi_[i].phase < -static_cast<float>(M_PI)) {
-                tempi_[i].phase += 2.0f * static_cast<float>(M_PI);
-                tempi_[i].phase_inverted = !tempi_[i].phase_inverted;
+
+            // Wrap phase to [-pi, +pi] using fmod (avoids infinite loop)
+            if (std::isfinite(tempi_[i].phase)) {
+                // Track if we cross a 2*pi boundary (for phase inversion tracking)
+                float old_phase = tempi_[i].phase;
+                tempi_[i].phase = std::fmod(tempi_[i].phase + static_cast<float>(M_PI),
+                                            2.0f * static_cast<float>(M_PI));
+                if (tempi_[i].phase < 0.0f) {
+                    tempi_[i].phase += 2.0f * static_cast<float>(M_PI);
+                }
+                tempi_[i].phase -= static_cast<float>(M_PI);
+                
+                // Check if we crossed a boundary (simplified check)
+                if (std::abs(old_phase - tempi_[i].phase) > static_cast<float>(M_PI)) {
+                    tempi_[i].phase_inverted = !tempi_[i].phase_inverted;
+                }
+            } else {
+                // Reset corrupted phase
+                tempi_[i].phase = 0.0f;
             }
         } else {
             // Silent bin: decay only, don't add to power sum
@@ -609,15 +622,26 @@ void TempoTracker::advancePhase(float delta_sec) {
 
     // Advance phase at winner's rate
     // phase_radians_per_frame is calibrated for REFERENCE_FPS
-    current_phase_ += tempi_[safe_bin].phase_radians_per_frame *
-                      delta_sec * REFERENCE_FPS;
-
-    // Wrap to [-pi, +pi]
-    while (current_phase_ > static_cast<float>(M_PI)) {
-        current_phase_ -= 2.0f * static_cast<float>(M_PI);
+    float phase_increment = tempi_[safe_bin].phase_radians_per_frame *
+                            delta_sec * REFERENCE_FPS;
+    
+    // Guard against NaN/Inf to prevent infinite loops
+    if (!std::isfinite(phase_increment)) {
+        phase_increment = 0.0f;
     }
-    while (current_phase_ < -static_cast<float>(M_PI)) {
-        current_phase_ += 2.0f * static_cast<float>(M_PI);
+    current_phase_ += phase_increment;
+
+    // Wrap to [-pi, +pi] using fmod (avoids infinite loop if phase is huge/NaN)
+    if (std::isfinite(current_phase_)) {
+        current_phase_ = std::fmod(current_phase_ + static_cast<float>(M_PI), 
+                                   2.0f * static_cast<float>(M_PI));
+        if (current_phase_ < 0.0f) {
+            current_phase_ += 2.0f * static_cast<float>(M_PI);
+        }
+        current_phase_ -= static_cast<float>(M_PI);
+    } else {
+        // Reset corrupted phase
+        current_phase_ = 0.0f;
     }
 
     // Beat tick detection: zero crossing from negative to positive

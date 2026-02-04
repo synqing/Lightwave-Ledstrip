@@ -6,6 +6,7 @@
 #include "LGPEvanescentSkinEffect.h"
 #include "../CoreEffects.h"
 #include <FastLED.h>
+#include <algorithm>
 #include <cmath>
 
 namespace lightwaveos {
@@ -47,7 +48,7 @@ void LGPEvanescentSkinEffect::render(plugins::EffectContext& ctx) {
             float carrier = sinf(distFromCenter * skinFreq * 0.05f + anim * TWO_PI);
             brightnessF = envelope * (carrier * 0.5f + 0.5f) * 255.0f;
         } else {
-            uint16_t edgeDistance = min((uint16_t)i, (uint16_t)(STRIP_LENGTH - 1 - i));
+            uint16_t edgeDistance = std::min((uint16_t)i, (uint16_t)(STRIP_LENGTH - 1 - i));
             float distToEdge = (float)edgeDistance;
             float envelope = 1.0f / (1.0f + lambda * distToEdge * 0.4f);
             float carrier = sinf(((float)STRIP_LENGTH - distToEdge) * skinFreq * 0.04f - anim * TWO_PI);

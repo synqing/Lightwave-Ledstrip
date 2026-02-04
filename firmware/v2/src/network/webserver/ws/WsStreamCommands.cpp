@@ -8,6 +8,7 @@
 #include "../WebServerContext.h"
 #include "../../ApiResponse.h"
 #include "../LedStreamBroadcaster.h"
+#include "../UdpStreamer.h"
 #include "../../../codec/WsStreamCodec.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
@@ -38,13 +39,36 @@ static void handleLedStreamSubscribe(AsyncWebSocketClient* client, JsonDocument&
     uint32_t clientId = client->id();
     const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
     
+    // Check for UDP transport negotiation
+    uint16_t udpPort = doc["udpPort"] | 0;
+    if (udpPort > 0 && ctx.udpStreamer) {
+        bool ok = ctx.udpStreamer->addLedSubscriber(client->remoteIP(), udpPort);
+        if (ok) {
+            String response = buildWsResponse("ledStream.subscribed", requestId, [clientId, udpPort](JsonObject& data) {
+                data["clientId"] = clientId;
+                data["transport"] = "udp";
+                data["udpPort"] = udpPort;
+                data["frameSize"] = webserver::LedStreamConfig::FRAME_SIZE;
+                data["frameVersion"] = webserver::LedStreamConfig::FRAME_VERSION;
+                data["numStrips"] = webserver::LedStreamConfig::NUM_STRIPS;
+                data["ledsPerStrip"] = webserver::LedStreamConfig::LEDS_PER_STRIP;
+                data["targetFps"] = webserver::LedStreamConfig::TARGET_FPS;
+                data["magic"] = webserver::LedStreamConfig::MAGIC_BYTE;
+            });
+            client->text(response);
+            LW_LOGI("LED stream: client %u subscribed via UDP port %u", clientId, udpPort);
+            return;
+        }
+        // Fall through to WS if UDP add failed
+    }
+
     if (!ctx.setLEDStreamSubscription) {
         client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "LED streaming not available", requestId));
         return;
     }
-    
+
     bool ok = ctx.setLEDStreamSubscription(client, true);
-    
+
     if (ok) {
         String response = buildWsResponse("ledStream.subscribed", requestId, [clientId](JsonObject& data) {
             codec::WsStreamCodec::encodeLedStreamSubscribed(
@@ -57,12 +81,13 @@ static void handleLedStreamSubscribe(AsyncWebSocketClient* client, JsonDocument&
                 webserver::LedStreamConfig::MAGIC_BYTE,
                 data
             );
+            data["transport"] = "ws";
         });
         client->text(response);
     } else {
         JsonDocument response;
         codec::WsStreamCodec::encodeStreamRejected("ledStream.rejected", requestId, "RESOURCE_EXHAUSTED", "Subscriber table full", response);
-        
+
         String output;
         serializeJson(response, output);
         client->text(output);
@@ -73,14 +98,19 @@ static void handleLedStreamUnsubscribe(AsyncWebSocketClient* client, JsonDocumen
     // Decode using codec (single canonical JSON parser)
     JsonObjectConst root = doc.as<JsonObjectConst>();
     codec::StreamSimpleDecodeResult decodeResult = codec::WsStreamCodec::decodeSimple(root);
-    
+
     uint32_t clientId = client->id();
     const char* requestId = decodeResult.request.requestId ? decodeResult.request.requestId : "";
-    
+
+    // Clean up UDP subscriber for this client's IP
+    if (ctx.udpStreamer) {
+        ctx.udpStreamer->removeSubscriber(client->remoteIP());
+    }
+
     if (ctx.setLEDStreamSubscription) {
         ctx.setLEDStreamSubscription(client, false);
     }
-    
+
     String response = buildWsResponse("ledStream.unsubscribed", requestId, [clientId](JsonObject& data) {
         codec::WsStreamCodec::encodeLedStreamUnsubscribed(clientId, data);
     });

@@ -58,8 +58,8 @@ static const ZonePreset PRESETS[] = {
     // Preset 0: Single Zone (unified)
     {
         .name = "Unified",
-        .segments = ZONE_3_CONFIG,
-        .zoneCount = 3,
+        .segments = ZONE_1_CONFIG,
+        .zoneCount = 1,
         .zones = {
             { .effectId = 0, .brightness = 255, .speed = 15, .paletteId = 0,
               .blendMode = BlendMode::OVERWRITE, .enabled = true },
@@ -75,15 +75,15 @@ static const ZonePreset PRESETS[] = {
     // Preset 1: Dual Split (center vs outer)
     {
         .name = "Dual Split",
-        .segments = ZONE_3_CONFIG,
-        .zoneCount = 3,
+        .segments = ZONE_2_CONFIG,
+        .zoneCount = 2,
         .zones = {
+            { .effectId = 97, .brightness = 255, .speed = 5, .paletteId = 68,
+              .blendMode = BlendMode::ADDITIVE, .enabled = true },    // Ripple Enhanced / Copper
+            { .effectId = 14, .brightness = 255, .speed = 35, .paletteId = 68,
+              .blendMode = BlendMode::ADDITIVE, .enabled = true },    // LGP Holographic / Copper
             { .effectId = 0, .brightness = 255, .speed = 15, .paletteId = 0,
-              .blendMode = BlendMode::OVERWRITE, .enabled = true },   // Fire center
-            { .effectId = 1, .brightness = 200, .speed = 20, .paletteId = 0,
-              .blendMode = BlendMode::ADDITIVE, .enabled = true },    // Ocean middle
-            { .effectId = 1, .brightness = 200, .speed = 20, .paletteId = 0,
-              .blendMode = BlendMode::ADDITIVE, .enabled = false },   // Outer disabled
+              .blendMode = BlendMode::OVERWRITE, .enabled = false },
             { .effectId = 0, .brightness = 255, .speed = 15, .paletteId = 0,
               .blendMode = BlendMode::OVERWRITE, .enabled = false }
         }
@@ -534,7 +534,10 @@ void ZoneComposer::setZoneSpeed(uint8_t zone, uint8_t speed) {
     if (safeZone >= MAX_ZONES || safeZone >= m_zoneCount) {
         return;  // Invalid zone, ignore request
     }
-    m_zones[safeZone].speed = constrain(speed, 1, 100);
+    // Clamp speed to valid range [1, 100]
+    if (speed < 1) speed = 1;
+    if (speed > 100) speed = 100;
+    m_zones[safeZone].speed = speed;
 }
 
 void ZoneComposer::setZonePalette(uint8_t zone, uint8_t paletteId) {

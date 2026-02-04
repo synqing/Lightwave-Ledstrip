@@ -14,6 +14,7 @@
 #include "../../../audio/contracts/ControlBus.h"
 #include "../../../audio/contracts/AudioTime.h"
 #include "../AudioStreamBroadcaster.h"
+#include "../UdpStreamer.h"
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 
@@ -293,16 +294,40 @@ static void handleAudioParametersSet(AsyncWebSocketClient* client, JsonDocument&
 static void handleAudioSubscribe(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     uint32_t clientId = client->id();
     const char* requestId = doc["requestId"] | "";
-    
+
     LW_LOGI("WS audio.subscribe received from client %u", clientId);
-    
+
+    // Check for UDP transport negotiation
+    uint16_t udpPort = doc["udpPort"] | 0;
+    if (udpPort > 0 && ctx.udpStreamer) {
+        bool ok = ctx.udpStreamer->addAudioSubscriber(client->remoteIP(), udpPort);
+        if (ok) {
+            String response = buildWsResponse("audio.subscribed", requestId, [clientId, udpPort](JsonObject& data) {
+                data["clientId"] = clientId;
+                data["transport"] = "udp";
+                data["udpPort"] = udpPort;
+                data["frameSize"] = AudioStreamConfig::FRAME_SIZE;
+                data["streamVersion"] = AudioStreamConfig::STREAM_VERSION;
+                data["numBands"] = AudioStreamConfig::NUM_BANDS;
+                data["numChroma"] = AudioStreamConfig::NUM_CHROMA;
+                data["waveformSize"] = AudioStreamConfig::WAVEFORM_SIZE;
+                data["targetFps"] = AudioStreamConfig::TARGET_FPS;
+                data["status"] = "ok";
+            });
+            client->text(response);
+            LW_LOGI("Audio stream: client %u subscribed via UDP port %u", clientId, udpPort);
+            return;
+        }
+        // Fall through to WS if UDP add failed
+    }
+
     if (!ctx.setAudioStreamSubscription) {
         client->text(buildWsError(ErrorCodes::FEATURE_DISABLED, "Audio streaming not available", requestId));
         return;
     }
-    
+
     bool ok = ctx.setAudioStreamSubscription(client, true);
-    
+
     if (ok) {
         if (ctx.audioBroadcaster) {
             LW_LOGI("WS audio.subscribe accepted (subscribers=%u)", static_cast<unsigned>(ctx.audioBroadcaster->getSubscriberCount()));
@@ -311,6 +336,7 @@ static void handleAudioSubscribe(AsyncWebSocketClient* client, JsonDocument& doc
         }
         String response = buildWsResponse("audio.subscribed", requestId, [clientId](JsonObject& data) {
             data["clientId"] = clientId;
+            data["transport"] = "ws";
             data["frameSize"] = AudioStreamConfig::FRAME_SIZE;
             data["streamVersion"] = AudioStreamConfig::STREAM_VERSION;
             data["numBands"] = AudioStreamConfig::NUM_BANDS;
@@ -331,7 +357,7 @@ static void handleAudioSubscribe(AsyncWebSocketClient* client, JsonDocument& doc
         JsonObject error = response["error"].to<JsonObject>();
         error["code"] = "RESOURCE_EXHAUSTED";
         error["message"] = "Audio subscriber table full or audio system unavailable";
-        
+
         String output;
         serializeJson(response, output);
         client->text(output);
@@ -341,11 +367,16 @@ static void handleAudioSubscribe(AsyncWebSocketClient* client, JsonDocument& doc
 static void handleAudioUnsubscribe(AsyncWebSocketClient* client, JsonDocument& doc, const WebServerContext& ctx) {
     uint32_t clientId = client->id();
     const char* requestId = doc["requestId"] | "";
-    
+
+    // Clean up UDP subscriber for this client's IP
+    if (ctx.udpStreamer) {
+        ctx.udpStreamer->removeSubscriber(client->remoteIP());
+    }
+
     if (ctx.setAudioStreamSubscription) {
         ctx.setAudioStreamSubscription(client, false);
     }
-    
+
     String response = buildWsResponse("audio.unsubscribed", requestId, [clientId](JsonObject& data) {
         data["clientId"] = clientId;
         data["status"] = "ok";
@@ -506,7 +537,7 @@ static void handleAudioMicGainSet(AsyncWebSocketClient* client, JsonDocument& do
         [gainDb](JsonObject& data) { data["gainDb"] = gainDb; });
     client->text(response);
 #else
-    client->text(buildWsError(ErrorCodes::NOT_SUPPORTED, 
+    client->text(buildWsError(ErrorCodes::FEATURE_DISABLED,
         "Microphone gain control only available on ESP32-P4 with ES8311 codec", requestId));
 #endif
 }

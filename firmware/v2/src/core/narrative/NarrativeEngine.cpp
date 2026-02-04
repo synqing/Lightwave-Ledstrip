@@ -6,6 +6,7 @@
  */
 
 #include "NarrativeEngine.h"
+#include <algorithm>
 
 namespace lightwaveos {
 namespace narrative {
@@ -84,19 +85,19 @@ void NarrativeEngine::update() {
 // ============================================================================
 
 void NarrativeEngine::setBuildDuration(float seconds) {
-    m_cycle.buildDuration = max(0.01f, seconds);
+    m_cycle.buildDuration = std::max(0.01f, seconds);
 }
 
 void NarrativeEngine::setHoldDuration(float seconds) {
-    m_cycle.holdDuration = max(0.0f, seconds);
+    m_cycle.holdDuration = std::max(0.0f, seconds);
 }
 
 void NarrativeEngine::setReleaseDuration(float seconds) {
-    m_cycle.releaseDuration = max(0.01f, seconds);
+    m_cycle.releaseDuration = std::max(0.01f, seconds);
 }
 
 void NarrativeEngine::setRestDuration(float seconds) {
-    m_cycle.restDuration = max(0.0f, seconds);
+    m_cycle.restDuration = std::max(0.0f, seconds);
 }
 
 void NarrativeEngine::setTempo(float totalCycleDuration) {

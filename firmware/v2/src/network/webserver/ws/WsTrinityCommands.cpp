@@ -161,7 +161,7 @@ static void handleTrinitySync(AsyncWebSocketClient* client, JsonDocument& doc, c
     LW_LOGI("trinity.sync: action=%s dispatched to RendererActor", actionStr);
 
     if (hasCommandId) {
-        StaticJsonDocument<64> response;
+        JsonDocument response;
         response["_type"] = "ack";
         response["_id"] = commandId;
         String output;

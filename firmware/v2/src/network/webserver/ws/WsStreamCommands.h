@@ -31,7 +31,7 @@ void registerWsStreamCommands(const webserver::WebServerContext& ctx);
 
 // ============================================================================
 // FFT Stream Stubs
-// TODO: Implement full FFT streaming when needed
+// TODO: Implement full FFT streaming if/when required
 // These stubs exist because WebServer::broadcastFftFrame() references them
 // but the feature is not yet fully implemented.
 // ============================================================================
@@ -67,4 +67,3 @@ inline void broadcastFftFrame(const audio::ControlBusFrame& /* frame */,
 } // namespace webserver
 } // namespace network
 } // namespace lightwaveos
-

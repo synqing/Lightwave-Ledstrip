@@ -752,8 +752,9 @@ bool AudioCapture::configureI2S()
 
 #if defined(CHIP_ESP32_P4) && CHIP_ESP32_P4
 bool AudioCapture::setMicGainDb(int8_t gainDb) {
-    if (!m_initialized || m_es8311Handle == nullptr) {
-        LW_LOGE("Cannot set mic gain: not initialized");
+    // Only check ES8311 handle - m_initialized may not be set yet during configureI2S()
+    if (m_es8311Handle == nullptr) {
+        LW_LOGE("Cannot set mic gain: ES8311 not initialized");
         return false;
     }
 

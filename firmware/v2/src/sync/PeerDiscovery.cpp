@@ -112,7 +112,11 @@ void PeerDiscovery::processScanResults(int resultCount) {
         strncpy(peer.hostname, hostname.c_str(), sizeof(peer.hostname) - 1);
         peer.hostname[sizeof(peer.hostname) - 1] = '\0';
 
+#if defined(ESP_ARDUINO_VERSION) && ESP_ARDUINO_VERSION >= 0x030000
+        IPAddress ip = MDNS.address(i);
+#else
         IPAddress ip = MDNS.IP(i);
+#endif
         peer.ip[0] = ip[0];
         peer.ip[1] = ip[1];
         peer.ip[2] = ip[2];

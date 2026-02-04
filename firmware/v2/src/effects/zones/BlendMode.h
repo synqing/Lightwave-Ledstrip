@@ -10,6 +10,7 @@
 #pragma once
 
 #include <FastLED.h>
+#include <algorithm>
 
 namespace lightwaveos {
 namespace zones {
@@ -112,16 +113,16 @@ inline CRGB blendPixels(const CRGB& base, const CRGB& blend, BlendMode mode) {
 
         case BlendMode::LIGHTEN:
             return CRGB(
-                max(base.r, blend.r),
-                max(base.g, blend.g),
-                max(base.b, blend.b)
+                std::max(base.r, blend.r),
+                std::max(base.g, blend.g),
+                std::max(base.b, blend.b)
             );
 
         case BlendMode::DARKEN:
             return CRGB(
-                min(base.r, blend.r),
-                min(base.g, blend.g),
-                min(base.b, blend.b)
+                std::min(base.r, blend.r),
+                std::min(base.g, blend.g),
+                std::min(base.b, blend.b)
             );
 
         default:

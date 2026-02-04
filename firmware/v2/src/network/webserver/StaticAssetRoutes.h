@@ -1,9 +1,10 @@
 /**
  * @file StaticAssetRoutes.h
- * @brief Static asset route registration
+ * @brief Inline launcher page and fallback route registration
  *
- * Handles serving static files from LittleFS (dashboard, assets, favicon).
- * Also provides SPA fallback routing for non-API paths.
+ * Serves a minimal device-info HTML page at the root URL with runtime
+ * values (IP, SSID, heap, uptime) injected via snprintf().  No LittleFS
+ * or external asset files are required.
  */
 
 #pragma once

@@ -61,8 +61,8 @@ namespace AudioStreamConfig {
 
     // Streaming configuration
     constexpr uint8_t MAX_CLIENTS = 4;               // Max simultaneous subscribers
-    constexpr uint8_t TARGET_FPS = 30;               // Broadcast rate (matches audio hop rate)
-    constexpr uint32_t FRAME_INTERVAL_MS = 1000 / TARGET_FPS;  // ~33ms between frames
+    constexpr uint8_t TARGET_FPS = 15;               // Broadcast rate (throttled for WiFi headroom)
+    constexpr uint32_t FRAME_INTERVAL_MS = 1000 / TARGET_FPS;  // ~67ms between frames
 }
 
 } // namespace webserver

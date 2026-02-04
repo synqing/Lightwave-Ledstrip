@@ -33,7 +33,7 @@ namespace ws {
 static void handleSysCapabilities(AsyncWebSocketClient* client,
                                   JsonDocument& doc,
                                   const WebServerContext& ctx) {
-    StaticJsonDocument<256> response;
+    JsonDocument response;
     response["type"] = "sys.capabilities";
 
     // Trinity/Audio Sync capability

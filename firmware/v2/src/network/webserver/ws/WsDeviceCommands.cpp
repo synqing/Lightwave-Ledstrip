@@ -56,7 +56,7 @@ static void handleLegacyGetStatus(AsyncWebSocketClient* client, JsonDocument& do
     // client supplied _time we echo it back, which yields near-zero drift while
     // still giving an accurate RTT measurement.
     if (hasPingId) {
-        StaticJsonDocument<128> response;
+        JsonDocument response;
         response["_type"] = "pong";
         response["_id"] = pingId;
         if (hasClientTime) {

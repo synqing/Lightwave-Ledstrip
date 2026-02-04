@@ -66,9 +66,16 @@ bool WiFiManager::begin() {
     // Register WiFi event handler
     WiFi.onEvent(onWiFiEvent);
 
+    // Set WiFi mode. Default is STA; AP-only builds start directly in AP mode.
+#ifdef WIFI_AP_ONLY
+    LW_LOGW("WIFI_AP_ONLY enabled - starting in AP mode only");
+    startSoftAP();
+    setState(STATE_WIFI_AP_MODE);
+#else
     // Set WiFi mode to STA only - AP mode is fallback only
     // (Exclusive modes: STA for normal operation, AP when connection fails)
     WiFi.mode(WIFI_MODE_STA);
+#endif
 
     // Create WiFi management task on Core 0
     BaseType_t result = xTaskCreatePinnedToCore(
@@ -174,6 +181,12 @@ void WiFiManager::wifiTask(void* parameter) {
 
 void WiFiManager::handleStateInit() {
     LW_LOGD("STATE: INIT");
+
+#ifdef WIFI_AP_ONLY
+    LW_LOGI("WIFI_AP_ONLY: forcing AP mode");
+    setState(STATE_WIFI_AP_MODE);
+    return;
+#endif
 
     // Reset credential save flag for new connection attempt
     m_credentialsSaved = false;
@@ -463,6 +476,11 @@ void WiFiManager::handleStateAPMode() {
                 WiFi.softAPgetStationNum());
     }
 
+#ifdef WIFI_AP_ONLY
+    // AP-only build: do not attempt STA retries.
+    return;
+#endif
+
     // Periodically try to connect to WiFi if we have valid credentials
     if (!m_ssid.isEmpty() && m_ssid != "CONFIGURE_ME") {
         if (millis() - lastRetryTime > 60000) {
@@ -567,6 +585,7 @@ void WiFiManager::updateBestChannel() {
     m_bestChannel = 0;
     int bestRSSI = -100;
 
+
     // Get scan results
     int n = WiFi.scanComplete();
     if (n <= 0) {
@@ -593,6 +612,7 @@ void WiFiManager::updateBestChannel() {
             bestRSSI = result.rssi;
             m_bestChannel = result.channel;
         }
+
     }
 
     m_lastScanTime = millis();
@@ -803,6 +823,7 @@ void WiFiManager::setCredentials(const String& ssid, const String& password) {
     } else {
         LW_LOGI("Credentials set for '%s'", ssid.c_str());
     }
+
 }
 
 bool WiFiManager::hasSecondaryNetwork() const {
@@ -892,10 +913,53 @@ void WiFiManager::scanNetworks() {
 void WiFiManager::onWiFiEvent(WiFiEvent_t event) {
     WiFiManager& manager = getInstance();
 
-    // Handle both old (SYSTEM_EVENT_*) and new (ARDUINO_EVENT_*) event names
-    // ESP32 Arduino Core 2.x uses ARDUINO_EVENT_*, older uses SYSTEM_EVENT_*
+#if defined(ESP_ARDUINO_VERSION) && ESP_ARDUINO_VERSION >= 0x030000
+    // Arduino-ESP32 3.x: use if/else (SC_EVENT_SCAN_DONE and IP_EVENT_STA_GOT_IP can share enum value)
+    if (event == SC_EVENT_SCAN_DONE) {
+        LW_LOGD("Event: Scan complete");
+        if (manager.m_wifiEventGroup) {
+            xEventGroupSetBits(manager.m_wifiEventGroup, EVENT_SCAN_COMPLETE);
+        }
+    } else if (event == WIFI_EVENT_STA_CONNECTED) {
+        LW_LOGI("Event: Connected to AP");
+        if (manager.m_wifiEventGroup) {
+            xEventGroupSetBits(manager.m_wifiEventGroup, EVENT_CONNECTED);
+        }
+    } else if (event == IP_EVENT_STA_GOT_IP) {
+        LW_LOGI("Event: Got IP - %s", WiFi.localIP().toString().c_str());
+        WiFi.setSleep(false);
+        WiFi.setAutoReconnect(true);
+        esp_err_t err = esp_wifi_set_ps(WIFI_PS_NONE);
+        if (err != ESP_OK) {
+            LW_LOGW("Failed to set WiFi PS mode: %d", err);
+        }
+        LW_LOGD("WiFi sleep disabled after GOT_IP (prevents ASSOC_LEAVE)");
+        if (manager.m_wifiEventGroup) {
+            xEventGroupSetBits(manager.m_wifiEventGroup, EVENT_GOT_IP);
+        }
+    } else if (event == WIFI_EVENT_STA_DISCONNECTED) {
+        LW_LOGW("Event: Disconnected from AP");
+        if (manager.m_wifiEventGroup) {
+            xEventGroupSetBits(manager.m_wifiEventGroup, EVENT_DISCONNECTED);
+        }
+    } else if (event == WIFI_EVENT_STA_AUTHMODE_CHANGE) {
+        LW_LOGD("Event: Auth mode changed");
+    } else if (event == WIFI_EVENT_AP_START) {
+        LW_LOGI("Event: AP started");
+        if (manager.m_wifiEventGroup) {
+            xEventGroupSetBits(manager.m_wifiEventGroup, EVENT_AP_START);
+        }
+    } else if (event == WIFI_EVENT_AP_STACONNECTED) {
+        LW_LOGI("Event: Station connected to AP");
+        if (manager.m_wifiEventGroup) {
+            xEventGroupSetBits(manager.m_wifiEventGroup, EVENT_AP_STACONNECTED);
+        }
+    } else if (event == WIFI_EVENT_AP_STADISCONNECTED) {
+        LW_LOGD("Event: Station disconnected from AP");
+    }
+#else
+    // Arduino-ESP32 2.x (ARDUINO_EVENT_*) or older (SYSTEM_EVENT_*)
     switch (event) {
-        // Scan complete
 #ifdef ARDUINO_EVENT_WIFI_SCAN_DONE
         case ARDUINO_EVENT_WIFI_SCAN_DONE:
 #else
@@ -906,8 +970,6 @@ void WiFiManager::onWiFiEvent(WiFiEvent_t event) {
                 xEventGroupSetBits(manager.m_wifiEventGroup, EVENT_SCAN_COMPLETE);
             }
             break;
-
-        // Connected to AP
 #ifdef ARDUINO_EVENT_WIFI_STA_CONNECTED
         case ARDUINO_EVENT_WIFI_STA_CONNECTED:
 #else
@@ -918,8 +980,6 @@ void WiFiManager::onWiFiEvent(WiFiEvent_t event) {
                 xEventGroupSetBits(manager.m_wifiEventGroup, EVENT_CONNECTED);
             }
             break;
-
-        // Got IP address
 #ifdef ARDUINO_EVENT_WIFI_STA_GOT_IP
         case ARDUINO_EVENT_WIFI_STA_GOT_IP:
 #else
@@ -927,28 +987,18 @@ void WiFiManager::onWiFiEvent(WiFiEvent_t event) {
 #endif
             {
                 LW_LOGI("Event: Got IP - %s", WiFi.localIP().toString().c_str());
-
-                // CRITICAL: Disable WiFi sleep AFTER connection is fully established
-                // This prevents ASSOC_LEAVE disconnects that occur when modem enters sleep
                 WiFi.setSleep(false);
                 WiFi.setAutoReconnect(true);
-
-                // Also disable at ESP-IDF level for maximum reliability
-                // WIFI_PS_NONE = 0 (no power save)
                 esp_err_t err = esp_wifi_set_ps(WIFI_PS_NONE);
                 if (err != ESP_OK) {
                     LW_LOGW("Failed to set WiFi PS mode: %d", err);
                 }
-
                 LW_LOGD("WiFi sleep disabled after GOT_IP (prevents ASSOC_LEAVE)");
-
                 if (manager.m_wifiEventGroup) {
                     xEventGroupSetBits(manager.m_wifiEventGroup, EVENT_GOT_IP);
                 }
             }
             break;
-
-        // Disconnected from AP
 #ifdef ARDUINO_EVENT_WIFI_STA_DISCONNECTED
         case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
 #else
@@ -956,13 +1006,9 @@ void WiFiManager::onWiFiEvent(WiFiEvent_t event) {
 #endif
             LW_LOGW("Event: Disconnected from AP");
             if (manager.m_wifiEventGroup) {
-                // Only set EVENT_DISCONNECTED - let timeout handle connection failures
-                // This avoids race conditions where disconnect happens but WiFi auto-reconnects
                 xEventGroupSetBits(manager.m_wifiEventGroup, EVENT_DISCONNECTED);
             }
             break;
-
-        // Auth mode changed
 #ifdef ARDUINO_EVENT_WIFI_STA_AUTHMODE_CHANGE
         case ARDUINO_EVENT_WIFI_STA_AUTHMODE_CHANGE:
 #else
@@ -970,8 +1016,6 @@ void WiFiManager::onWiFiEvent(WiFiEvent_t event) {
 #endif
             LW_LOGD("Event: Auth mode changed");
             break;
-
-        // AP started
 #ifdef ARDUINO_EVENT_WIFI_AP_START
         case ARDUINO_EVENT_WIFI_AP_START:
 #else
@@ -982,8 +1026,6 @@ void WiFiManager::onWiFiEvent(WiFiEvent_t event) {
                 xEventGroupSetBits(manager.m_wifiEventGroup, EVENT_AP_START);
             }
             break;
-
-        // Station connected to our AP
 #ifdef ARDUINO_EVENT_WIFI_AP_STACONNECTED
         case ARDUINO_EVENT_WIFI_AP_STACONNECTED:
 #else
@@ -994,8 +1036,6 @@ void WiFiManager::onWiFiEvent(WiFiEvent_t event) {
                 xEventGroupSetBits(manager.m_wifiEventGroup, EVENT_AP_STACONNECTED);
             }
             break;
-
-        // Station disconnected from our AP
 #ifdef ARDUINO_EVENT_WIFI_AP_STADISCONNECTED
         case ARDUINO_EVENT_WIFI_AP_STADISCONNECTED:
 #else
@@ -1003,11 +1043,10 @@ void WiFiManager::onWiFiEvent(WiFiEvent_t event) {
 #endif
             LW_LOGD("Event: Station disconnected from AP");
             break;
-
         default:
-            // Ignore other events
             break;
     }
+#endif
 }
 
 } // namespace network

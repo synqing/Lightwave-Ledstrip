@@ -143,6 +143,7 @@ struct AudioPipelineTuning {
     bool usePerBandNoiseFloor = false;  ///< Enable per-band noise floor gating
 
     // Silence detection (fade to black after sustained silence)
+    // Note: set silenceHysteresisMs to 0 to disable (used by AP-only builds).
     float silenceHysteresisMs = 5000.0f;  ///< 5s default (user-approved), 0 = disabled
     float silenceThreshold = 0.01f;       ///< RMS below this is considered silence
 

@@ -21,6 +21,7 @@
 #else
 #define ESV11_HAS_I2S_STD 0
 #include "driver/i2s.h"
+#include "soc/i2s_reg.h"
 #endif
 #endif
 
@@ -93,28 +94,26 @@ inline void init_i2s_microphone() {
     //
     // This preserves the ES v1.1_320 capture intent (pins + 12.8kHz + 32-bit slot + right channel),
     // but uses the older driver API available in this toolchain.
-    i2s_config_t cfg = {};
-    cfg.mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX);
-    cfg.sample_rate = SAMPLE_RATE;
-    cfg.bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT;
-    cfg.channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT;
-    cfg.communication_format = I2S_COMM_FORMAT_STAND_I2S;
-    cfg.intr_alloc_flags = ESP_INTR_FLAG_LEVEL1;
-    cfg.dma_buf_count = 4;
-    cfg.dma_buf_len = 256; // frames per DMA buffer; comfortably > CHUNK_SIZE
-    cfg.use_apll = false;
-    cfg.tx_desc_auto_clear = false;
-    cfg.fixed_mclk = 0;
-    cfg.mclk_multiple = I2S_MCLK_MULTIPLE_DEFAULT;
-    cfg.bits_per_chan = I2S_BITS_PER_CHAN_32BIT;
-#if SOC_I2S_SUPPORTS_TDM
-    cfg.chan_mask = I2S_CHANNEL_MONO;
-    cfg.total_chan = 2;
-    cfg.left_align = true;
-    cfg.big_edin = false;
-    cfg.bit_order_msb = true;
-    cfg.skip_msk = false;
-#endif
+    //
+    // IMPORTANT: LWLS v2's AudioCapture uses a known-good legacy I2S config for
+    // SPH0645 on ESP32-S3, including register tweaks for alignment. The ES DSP
+    // chain relies on sensible signal levels; if alignment is off, outputs
+    // collapse towards noise floor (VU ~0.004, tempo confidence ~0.1).
+    i2s_config_t cfg = {
+        .mode = static_cast<i2s_mode_t>(I2S_MODE_MASTER | I2S_MODE_RX),
+        .sample_rate = SAMPLE_RATE,
+        .bits_per_sample = I2S_BITS_PER_SAMPLE_32BIT,
+        .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
+        .communication_format = I2S_COMM_FORMAT_STAND_MSB,
+        .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
+        .dma_buf_count = 4,
+        .dma_buf_len = 512 * 2, // Stereo int32 frames; matches LWLS capture headroom
+        .use_apll = false,
+        .tx_desc_auto_clear = false,
+        .fixed_mclk = 0,
+        .mclk_multiple = I2S_MCLK_MULTIPLE_256,
+        .bits_per_chan = I2S_BITS_PER_CHAN_32BIT,
+    };
 
     i2s_driver_install(es_i2s_port, &cfg, 0, NULL);
 
@@ -125,6 +124,12 @@ inline void init_i2s_microphone() {
     pins.data_out_num = I2S_PIN_NO_CHANGE;
     pins.data_in_num = I2S_DIN_PIN;
     i2s_set_pin(es_i2s_port, &pins);
+
+    // Match LWLS legacy alignment tweaks for SPH0645 RIGHT channel extraction.
+    REG_CLR_BIT(I2S_RX_CONF_REG(es_i2s_port), I2S_RX_MSB_SHIFT);
+    REG_CLR_BIT(I2S_RX_CONF_REG(es_i2s_port), I2S_RX_WS_IDLE_POL);
+    REG_SET_BIT(I2S_RX_CONF_REG(es_i2s_port), I2S_RX_LEFT_ALIGN);
+    REG_SET_BIT(I2S_RX_TIMING_REG(es_i2s_port), BIT(9));
 
     i2s_zero_dma_buffer(es_i2s_port);
 #endif
@@ -143,7 +148,14 @@ inline void acquire_sample_chunk() {
 #if ESV11_HAS_I2S_STD
         i2s_channel_read(rx_handle, new_samples_raw, CHUNK_SIZE * sizeof(uint32_t), &bytes_read, portMAX_DELAY);
 #else
-        i2s_read(es_i2s_port, new_samples_raw, CHUNK_SIZE * sizeof(uint32_t), &bytes_read, portMAX_DELAY);
+        // Legacy driver returns interleaved stereo frames when configured with
+        // I2S_CHANNEL_FMT_RIGHT_LEFT. SPH0645 (SEL=3.3V) outputs on RIGHT channel,
+        // which corresponds to offset 1 in the interleaved stream.
+        int32_t stereo_raw[CHUNK_SIZE * 2];
+        i2s_read(es_i2s_port, stereo_raw, CHUNK_SIZE * 2 * sizeof(int32_t), &bytes_read, portMAX_DELAY);
+        for (uint16_t i = 0; i < CHUNK_SIZE; ++i) {
+            new_samples_raw[i] = static_cast<uint32_t>(stereo_raw[i * 2 + 1]);
+        }
 #endif
 #endif
 

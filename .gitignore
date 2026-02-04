@@ -147,3 +147,55 @@ context_engineering_runs/
 
 # Temporary working directory
 z_temp/
+
+# ==========================================
+# iOS BUILD ARTIFACTS
+# ==========================================
+# Xcode debug output
+lightwave-ios-v2/LightwaveOS/Debug/
+lightwave-ios-v2/LightwaveOS.xcodeproj/project.xcworkspace/
+lightwave-ios-v2/LightwaveOSTests/
+lightwave-ios-v2/LightwaveOSUITests/
+
+# ==========================================
+# ESP-IDF BUILD OUTPUT
+# ==========================================
+firmware/v2/esp-idf-p4/
+
+# ==========================================
+# TEMPORARY SESSION FILES
+# ==========================================
+findings.md
+progress.md
+task_plan.md
+z_changes.md
+*this-session-is-being-continued*.txt
+
+# ==========================================
+# ARCHIVE AND TEMPLATE FOLDERS
+# ==========================================
+docs/archive/
+docs/dashboard/
+docs/contextpack/templates/
+docs/guides/CLAUDE.md
+
+# ==========================================
+# EMBEDDING TOOL CACHE
+# ==========================================
+.embedder/
+
+# ==========================================
+# SEPARATE PROJECTS / OLD VERSIONS
+# ==========================================
+lightwave-controller/
+lightwave-ios/
+firmware-v2-product/
+
+# ==========================================
+# GENERATED RESOURCES (if auto-generated)
+# ==========================================
+# Uncomment if these are generated, otherwise commit them:
+# lightwave-ios-v2/LightwaveOS/Resources/Palettes/
+# lightwave-ios-v2/LightwaveOS/Resources/Rive/
+# lightwave-ios-v2/LightwaveOS/Utilities/Rive/
+# tools/rive-proxy-mcp/

@@ -82,7 +82,7 @@ void NarrativeHandlers::handleConfigGet(AsyncWebServerRequest* request) {
 
 void NarrativeHandlers::handleConfigSet(AsyncWebServerRequest* request,
                                   uint8_t* data, size_t len) {
-    StaticJsonDocument<512> doc;
+    JsonDocument doc;
     DeserializationError error = deserializeJson(doc, data, len);
     
     if (error) {
@@ -153,7 +153,7 @@ void NarrativeHandlers::handleConfigSet(AsyncWebServerRequest* request,
         updated = true;
     }
     
-    // TODO: Persist to NVS if needed
+    // TODO: Persist to NVS if we need this to survive reboot
     
     sendSuccessResponse(request, [updated](JsonObject& respData) {
         respData["message"] = updated ? "Narrative config updated" : "No changes";
@@ -165,4 +165,3 @@ void NarrativeHandlers::handleConfigSet(AsyncWebServerRequest* request,
 } // namespace webserver
 } // namespace network
 } // namespace lightwaveos
-

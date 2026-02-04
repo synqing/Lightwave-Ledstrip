@@ -21,7 +21,7 @@ void BatchHandlers::handleExecute(AsyncWebServerRequest* request,
                                     ActorSystem& actorSystem,
                                     std::function<bool(const String&, JsonVariant)> executeBatchAction,
                                     std::function<void()> broadcastStatus) {
-    StaticJsonDocument<512> doc;
+    JsonDocument doc;
     VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::BatchOperations, request);
 
     // Schema validates operations is an array with 1-10 items

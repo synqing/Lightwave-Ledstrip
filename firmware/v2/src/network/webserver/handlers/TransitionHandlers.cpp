@@ -39,7 +39,7 @@ void TransitionHandlers::handleTrigger(AsyncWebServerRequest* request,
                                          ActorSystem& actors,
                                          const WebServer::CachedRendererState& cachedState,
                                          std::function<void()> broadcastStatus) {
-    StaticJsonDocument<512> doc;
+    JsonDocument doc;
     VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::TriggerTransition, request);
 
     uint8_t toEffect = doc["toEffect"];
@@ -108,7 +108,7 @@ void TransitionHandlers::handleConfigGet(AsyncWebServerRequest* request,
 
 void TransitionHandlers::handleConfigSet(AsyncWebServerRequest* request,
                                           uint8_t* data, size_t len) {
-    StaticJsonDocument<512> doc;
+    JsonDocument doc;
     // Validate - all fields are optional but if present must be valid
     auto vr = RequestValidator::parseAndValidate(data, len, doc, RequestSchemas::TransitionConfig);
     if (!vr.valid) {

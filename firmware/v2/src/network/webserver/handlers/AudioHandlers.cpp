@@ -1108,8 +1108,8 @@ void AudioHandlers::handleMicGainSet(AsyncWebServerRequest* request,
         data["gainDb"] = gainDb;
     });
 #else
-    sendErrorResponse(request, HttpStatus::NOT_IMPLEMENTED,
-                      ErrorCodes::NOT_SUPPORTED, 
+    sendErrorResponse(request, HttpStatus::INTERNAL_ERROR,
+                      ErrorCodes::FEATURE_DISABLED,
                       "Microphone gain control only available on ESP32-P4 with ES8311 codec");
 #endif
 }

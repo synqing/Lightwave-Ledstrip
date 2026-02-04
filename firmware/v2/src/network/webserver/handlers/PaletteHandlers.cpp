@@ -110,7 +110,7 @@ void PaletteHandlers::handleList(AsyncWebServerRequest* request,
     int actualOffset = startIdx;
 
     // Build response - buffer sized for up to 50 palettes per page
-    StaticJsonDocument<512> doc;
+    JsonDocument doc;
     doc["success"] = true;
     doc["timestamp"] = millis();
     doc["version"] = API_VERSION;
@@ -199,7 +199,7 @@ void PaletteHandlers::handleSet(AsyncWebServerRequest* request,
                                   uint8_t* data, size_t len,
                                   ActorSystem& actorSystem,
                                   std::function<void()> broadcastStatus) {
-    StaticJsonDocument<512> doc;
+    JsonDocument doc;
     VALIDATE_REQUEST_OR_RETURN(data, len, doc, RequestSchemas::SetPalette, request);
 
     uint8_t paletteId = doc["paletteId"];

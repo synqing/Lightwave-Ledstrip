@@ -23,7 +23,7 @@ namespace handlers {
 void SystemHandlers::handleHealth(AsyncWebServerRequest* request,
                                     RendererActor* renderer,
                                     AsyncWebSocket* ws) {
-    StaticJsonDocument<512> doc;
+    JsonDocument doc;
     doc["success"] = true;
     doc["status"] = "healthy";
     
@@ -82,7 +82,7 @@ void SystemHandlers::handleApiDiscovery(AsyncWebServerRequest* request) {
 
 void SystemHandlers::handleOpenApiSpec(AsyncWebServerRequest* request) {
     // Build OpenAPI 3.0 spec dynamically
-    StaticJsonDocument<2048> spec;
+    JsonDocument spec;
     JsonObject openapi = spec.to<JsonObject>();
     openapi["openapi"] = "3.0.0";
     

@@ -39,7 +39,7 @@ void ParameterHandlers::handleSet(AsyncWebServerRequest* request,
                                      uint8_t* data, size_t len,
                                      ActorSystem& actorSystem,
                                      std::function<void()> broadcastStatus) {
-    StaticJsonDocument<512> doc;
+    JsonDocument doc;
     // Parse and validate - all fields are optional but must be valid if present
     auto vr = RequestValidator::parseAndValidate(data, len, doc, RequestSchemas::SetParameters);
     if (!vr.valid) {

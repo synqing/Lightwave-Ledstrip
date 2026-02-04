@@ -34,6 +34,7 @@
 #include "webserver/StaticAssetRoutes.h"
 #include "webserver/V1ApiRoutes.h"
 #include "webserver/WsGateway.h"
+#include "webserver/UdpStreamer.h"
 #include "webserver/WsCommandRouter.h"
 #include "webserver/ws/WsDeviceCommands.h"
 #include "webserver/ws/WsFilesystemCommands.h"
@@ -150,6 +151,7 @@ WebServer::WebServer(NodeOrchestrator& orchestrator, RendererNode* renderer)
     , m_zoneComposer(nullptr)
     , m_lastStateCacheUpdate(0)
     , m_ledBroadcaster(nullptr)
+    , m_udpStreamer(nullptr)
     , m_logBroadcaster(nullptr)
     , m_wsGateway(nullptr)
     , m_orchestrator(orchestrator)
@@ -172,6 +174,7 @@ WebServer::~WebServer() {
     delete m_audioBroadcaster;
 #endif
     delete m_logBroadcaster;
+    delete m_udpStreamer;
     delete m_ledBroadcaster;
     delete m_ws;
     delete m_server;
@@ -215,12 +218,24 @@ bool WebServer::begin() {
     // Create server instances
     m_server = new AsyncWebServer(WebServerConfig::HTTP_PORT);
     m_ws = new AsyncWebSocket("/ws");
-    
-    // Create LED stream broadcaster
+
+    // Create log stream broadcaster (wireless serial monitoring) - always created
+    m_logBroadcaster = new webserver::LogStreamBroadcaster(m_ws);
+
+#ifdef BOARD_HAS_PSRAM
+    // LED and audio stream broadcasters use non-trivial buffers; skip on no-PSRAM (FH4) to avoid OOM
     m_ledBroadcaster = new webserver::LedStreamBroadcaster(m_ws, WebServerConfig::MAX_WS_CLIENTS);
 
-    // Create log stream broadcaster (wireless serial monitoring)
-    m_logBroadcaster = new webserver::LogStreamBroadcaster(m_ws);
+    // UDP streamer for low-latency LED/audio frames (bypasses TCP backpressure)
+    m_udpStreamer = new webserver::UdpStreamer();
+    if (m_udpStreamer->begin()) {
+        LW_LOGI("UDP streamer initialised");
+    } else {
+        LW_LOGW("UDP streamer failed to initialise");
+        delete m_udpStreamer;
+        m_udpStreamer = nullptr;
+    }
+#endif
 
     // TODO: Implement logging callback system for WebSocket log streaming
     // setLogCallback() would register a callback to forward logs to WebSocket subscribers:
@@ -231,8 +246,8 @@ bool WebServer::begin() {
     // });
     LW_LOGI("WebSocket log streaming not yet implemented - requires logging callback system");
 
-#if FEATURE_AUDIO_SYNC
-    // Create audio stream broadcaster
+#if FEATURE_AUDIO_SYNC && defined(BOARD_HAS_PSRAM)
+    // Create audio stream broadcaster (skip on no-PSRAM to save RAM)
     m_audioBroadcaster = new webserver::AudioStreamBroadcaster(m_ws);
 #endif
 
@@ -253,7 +268,8 @@ bool WebServer::begin() {
     }
 #endif
 
-    // AP-first architecture: WiFiManager always starts in AP mode
+    // WiFi state is owned by WiFiManager; it may be STA or AP depending on build
+    // (AP-only builds force AP, standard builds start in STA and fall back to AP)
     // Check current WiFi state
     if (WIFI_MANAGER.isAPMode()) {
         LW_LOGI("WiFi in AP mode via WiFiManager");
@@ -262,7 +278,7 @@ bool WebServer::begin() {
         LW_LOGI("WiFi connected via WiFiManager, IP: %s", WiFi.localIP().toString().c_str());
         m_apMode = false;
     } else {
-        // Default to AP mode if state unclear
+        // Default to AP mode if state is unclear
         LW_LOGW("WiFi state unclear, defaulting to AP mode");
         m_apMode = true;
     }
@@ -288,7 +304,7 @@ bool WebServer::begin() {
     // Start mDNS
     startMDNS();
 
-    // AP-first architecture: AP IP (192.168.4.1) is always available immediately
+    // AP mode: AP IP (192.168.4.1) is available immediately
     // No need for IP validation or delays in AP mode
     IPAddress apIP = WiFi.softAPIP();
     LW_LOGI("Starting AsyncWebServer on port %d (AP IP: %s)...", 
@@ -391,8 +407,73 @@ void WebServer::update() {
         lastPingMs = nowMs;
     }
 
+    // UDP recovery service loop (runs regardless of subscriber activity)
+    if (m_udpStreamer) {
+        m_udpStreamer->service();
+    }
+
+    // Restart UDP streamer on WiFi reconnects (keeps socket state fresh)
+    if (m_udpStreamer) {
+        static bool udpSuspendedForWifi = false;
+        static uint32_t lastWifiReconnectRequestMs = 0;
+        static uint32_t lastUdpRebootMs = 0;
+        bool networkUp = WIFI_MANAGER.isConnected() || WIFI_MANAGER.isAPMode();
+        if (!networkUp && !udpSuspendedForWifi) {
+            m_udpStreamer->stop();
+            udpSuspendedForWifi = true;
+            LW_LOGW("UDP streamer suspended (network down)");
+        } else if (networkUp && udpSuspendedForWifi) {
+            if (m_udpStreamer->begin()) {
+                LW_LOGI("UDP streamer restarted after reconnect");
+                udpSuspendedForWifi = false;
+            } else {
+                LW_LOGW("UDP streamer restart failed (will retry)");
+            }
+        }
+
+        // If WiFi is up but UDP is in a persistent failure state, force a WiFi reconnect.
+        // This is a stronger recovery lever than resetting the UDP socket alone.
+        if (networkUp && !WIFI_MANAGER.isAPMode()) {
+            webserver::UdpStreamer::UdpStats st;
+            m_udpStreamer->getStats(st);
+            uint32_t now = millis();
+            uint32_t lastFailAgo = st.lastFailureMs > 0 ? (now - st.lastFailureMs) : 0;
+
+            // Only escalate while failures are current (not historical).
+            if (st.consecutiveFailures >= 6 && lastFailAgo < 5000) {
+                if (now - lastWifiReconnectRequestMs > 15000) {
+                    LW_LOGW("UDP: requesting WiFi reconnect (consecutiveFailures=%u)", static_cast<unsigned>(st.consecutiveFailures));
+                    WIFI_MANAGER.reconnect();
+                    lastWifiReconnectRequestMs = now;
+                }
+            }
+
+            // Absolute last resort: reboot if the system is stuck in a failure loop.
+            if (st.consecutiveFailures >= 12 && lastFailAgo < 5000) {
+                if (now - lastUdpRebootMs > 60000) {
+                    LW_LOGE("UDP: unrecoverable failure state, rebooting (consecutiveFailures=%u)", static_cast<unsigned>(st.consecutiveFailures));
+                    lastUdpRebootMs = now;
+                    ESP.restart();
+                }
+            }
+        }
+    }
+
     // LED frame streaming to subscribed clients (20 FPS)
     broadcastLEDFrame();
+
+    // UDP streaming to subscribed clients (bypasses TCP backpressure)
+    if (m_udpStreamer && m_renderer) {
+        CRGB udpLeds[webserver::LedStreamConfig::TOTAL_LEDS];
+        m_renderer->getBufferCopy(udpLeds);
+        m_udpStreamer->sendLedFrame(udpLeds);
+
+#if FEATURE_AUDIO_SYNC
+        const audio::ControlBusFrame& frame = m_renderer->getCachedAudioFrame();
+        const audio::MusicalGridSnapshot& grid = m_renderer->getLastMusicalGrid();
+        m_udpStreamer->sendAudioFrame(frame, grid);
+#endif
+    }
 
 #if FEATURE_AUDIO_SYNC
     // Audio frame streaming to subscribed clients (30 FPS)
@@ -444,6 +525,20 @@ void WebServer::update() {
         }
     }
     
+    // Re-register mDNS if IP changed (e.g. after WiFi reconnect with new DHCP lease)
+    if (m_mdnsStarted) {
+        IPAddress currentIP = WiFi.localIP();
+        if (currentIP != m_lastRegisteredIP && currentIP != INADDR_NONE && currentIP != IPAddress(0, 0, 0, 0)) {
+            MDNS.end();
+            if (MDNS.begin(WebServerConfig::MDNS_HOSTNAME)) {
+                MDNS.addService("http", "tcp", WebServerConfig::HTTP_PORT);
+                MDNS.addService("ws", "tcp", WebServerConfig::HTTP_PORT);
+                m_lastRegisteredIP = currentIP;
+                LW_LOGI("[MDNS] Re-registered %s.local at %s", WebServerConfig::MDNS_HOSTNAME, currentIP.toString().c_str());
+            }
+        }
+    }
+
     // Update cached renderer state (safe context - not in AsyncTCP callback)
     updateCachedRendererState();
 }
@@ -524,9 +619,9 @@ void WebServer::updateCachedRendererState() {
 // WiFi Initialization
 // ============================================================================
 
-// initWiFi() removed - WiFi state is checked inline in begin() for AP-first architecture
+// initWiFi() removed - WiFi state is checked inline in begin()
 
-// startAPMode() removed - AP-first architecture: AP is always managed by WiFiManager
+// startAPMode() removed - AP is always managed by WiFiManager
 
 void WebServer::setupCORS() {
     DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
@@ -540,13 +635,13 @@ void WebServer::startMDNS() {
     LW_LOGI("Starting mDNS service...");
     LW_LOGI("  Hostname: %s", WebServerConfig::MDNS_HOSTNAME);
     
-    // AP-first architecture: Use AP IP when in AP mode, STA IP when connected
+    // Use AP IP when in AP mode, STA IP when connected
     IPAddress ip = m_apMode ? WiFi.softAPIP() : WiFi.localIP();
     LW_LOGI("  IP Address: %s", ip.toString().c_str());
     LW_LOGI("  WiFi Mode: %s", WiFi.getMode() == WIFI_MODE_AP ? "AP" :
                                WiFi.getMode() == WIFI_MODE_STA ? "STA" : "UNKNOWN");
     
-    // AP IP (192.168.4.1) is always valid immediately - no need for validation
+    // AP IP (192.168.4.1) is valid immediately - no need for validation
     if (MDNS.begin(WebServerConfig::MDNS_HOSTNAME)) {
         LW_LOGI("  mDNS.begin() succeeded");
         
@@ -566,6 +661,7 @@ void WebServer::startMDNS() {
 #endif
 
         m_mdnsStarted = true;
+        m_lastRegisteredIP = WiFi.localIP();
         LW_LOGI("mDNS started successfully: http://%s.local", WebServerConfig::MDNS_HOSTNAME);
         LW_LOGI("  WebSocket: ws://%s.local:%d/ws", WebServerConfig::MDNS_HOSTNAME, WebServerConfig::HTTP_PORT);
     } else {
@@ -651,6 +747,7 @@ void WebServer::setupWebSocket() {
         , [this](AsyncWebSocketClient* client, bool subscribe) { return setBenchmarkStreamSubscription(client, subscribe); }
 #endif
         , [this](const String& action, JsonVariant params) { return executeBatchAction(action, params); }
+        , m_udpStreamer
     );
 
     // Create WebSocket gateway
@@ -741,8 +838,8 @@ void WebServer::setupWebSocket() {
     webserver::ws::registerWsBatchCommands(ctx);
 #if FEATURE_AUDIO_SYNC
     webserver::ws::registerWsAudioCommands(ctx);
-    webserver::ws::registerWsDebugCommands(ctx);
 #endif
+    webserver::ws::registerWsDebugCommands(ctx);
     webserver::ws::registerWsStreamCommands(ctx);
     webserver::ws::registerWsModifierCommands(ctx);
 #if FEATURE_API_AUTH
@@ -882,6 +979,11 @@ void WebServer::handleWsDisconnect(AsyncWebSocketClient* client) {
     // Cleanup LED stream subscription
     setLEDStreamSubscription(client, false);
 
+    // Cleanup UDP stream subscriptions
+    if (m_udpStreamer) {
+        m_udpStreamer->removeSubscriber(client->remoteIP());
+    }
+
 #if FEATURE_API_AUTH
     // Cleanup authenticated client tracking
     m_authenticatedClients.erase(clientId);
@@ -983,7 +1085,7 @@ void WebServer::doBroadcastStatus() {
     }
     lastBroadcastAttempt = now;
 
-    StaticJsonDocument<1024> doc;  // Increased to accommodate audio metrics
+    JsonDocument doc;  // Increased to accommodate audio metrics
     doc["type"] = "status";
 
     // SAFE: Use cached state instead of unsafe cross-core access
@@ -1052,7 +1154,7 @@ void WebServer::broadcastZoneState() {
     
     if (m_ws->count() == 0 || !m_zoneComposer) return;
 
-    StaticJsonDocument<2048> doc;  // Increased for audio config fields
+    JsonDocument doc;  // Increased for audio config fields
     doc["type"] = "zones.list";  // Changed from "zone.state"
     doc["enabled"] = m_zoneComposer->isEnabled();
     doc["zoneCount"] = m_zoneComposer->getZoneCount();
@@ -1140,7 +1242,7 @@ void WebServer::broadcastSingleZoneState(uint8_t zoneId) {
     }
 
     // Build zones.stateChanged message
-    StaticJsonDocument<512> doc;
+    JsonDocument doc;
     doc["type"] = "zones.stateChanged";
     doc["zoneId"] = zoneId;
     doc["timestamp"] = millis();
@@ -1196,7 +1298,7 @@ void WebServer::notifyEffectChange(uint8_t effectId, const char* name) {
     }
     lastEffectNotifyAttempt = now;
 
-    StaticJsonDocument<512> doc;
+    JsonDocument doc;
     doc["type"] = "effectChanged";
     doc["effectId"] = effectId;
     doc["name"] = name;
@@ -1303,7 +1405,7 @@ void WebServer::broadcastBeatEvent() {
     // Only broadcast on actual beat/downbeat (single-frame pulses)
     if (!grid.beat_tick && !grid.downbeat_tick) return;
 
-    StaticJsonDocument<512> doc;
+    JsonDocument doc;
     doc["type"] = "beat.event";
     doc["tick"] = grid.beat_tick;
     doc["downbeat"] = grid.downbeat_tick;

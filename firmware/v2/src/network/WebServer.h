@@ -86,6 +86,7 @@ namespace network {
 namespace webserver {
     class V1ApiRoutes;  // Forward declaration for friend
     class WsGateway;    // WebSocket gateway (implementation in webserver/WsGateway.*)
+    class UdpStreamer;  // UDP streaming (bypasses TCP for LED/audio frames)
 }
 }
 } // namespace lightwaveos
@@ -105,8 +106,13 @@ namespace WebServerConfig {
     constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = config::NetworkConfig::WIFI_CONNECT_TIMEOUT_MS;
     constexpr uint32_t STATUS_BROADCAST_INTERVAL_MS = 5000;
     // Allow multiple open dashboard tabs + dev tools without immediately thrashing connections.
-    // This also bounds subscriber tables and per-frame broadcast iteration.
-    constexpr uint8_t MAX_WS_CLIENTS = 8;
+    // On no-PSRAM (FH4) use fewer clients to reduce RAM; PSRAM builds get full capacity.
+    constexpr uint8_t MAX_WS_CLIENTS =
+#ifdef BOARD_HAS_PSRAM
+        8;
+#else
+        2;
+#endif
     constexpr uint8_t MAX_BATCH_OPERATIONS = 10;
 }
 
@@ -517,6 +523,7 @@ private:
     bool m_littleFSMounted;
     uint32_t m_lastBroadcast;
     uint32_t m_startTime;
+    IPAddress m_lastRegisteredIP;   // Track IP for mDNS refresh on DHCP change
     
     // Broadcast coalescing (prevent spam from rapid commands)
     uint32_t m_lastImmediateBroadcast;
@@ -525,6 +532,9 @@ private:
 
     // LED frame streaming (extracted to LedStreamBroadcaster)
     webserver::LedStreamBroadcaster* m_ledBroadcaster;
+
+    // UDP streaming (bypasses TCP backpressure for LED/audio frames)
+    webserver::UdpStreamer* m_udpStreamer;
 
     // Log streaming (wireless serial monitoring)
     webserver::LogStreamBroadcaster* m_logBroadcaster;

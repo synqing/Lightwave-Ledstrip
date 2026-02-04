@@ -241,6 +241,10 @@ void WsGateway::handleConnect(AsyncWebSocketClient* client) {
 
     LW_LOGI("WS: Client %u connected from %s", client->id(), client->remoteIP().toString().c_str());
 
+    // For streaming clients (LED/audio), drop excess frames instead of killing the connection.
+    // canSend() checks in broadcasters provide first-line back-pressure; this is defence-in-depth.
+    client->setCloseClientOnQueueFull(false);
+
     // Mark active for this IP (best-effort) and set initial activity timestamp
     if (ipKey != 0) {
         for (uint8_t i = 0; i < CONNECT_GUARD_SLOTS; i++) {
@@ -704,6 +708,14 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
     
     // Auth check (before logging msg.recv to determine result)
     bool authPassed = m_checkAuth(client, doc);
+
+    if (strcmp(msgType, "audio.subscribe") == 0 || strcmp(msgType, "ledStream.subscribe") == 0) {
+        LW_LOGI("WS cmd %s from %s (client %lu, auth=%s)",
+                msgType,
+                client->remoteIP().toString().c_str(),
+                static_cast<unsigned long>(client->id()),
+                authPassed ? "ok" : "fail");
+    }
     
     // Log structured msg.recv event (DISABLED - verbose, logs every WS message)
     // {
@@ -778,4 +790,3 @@ void WsGateway::cleanupStaleConnections() {
 } // namespace webserver
 } // namespace network
 } // namespace lightwaveos
-

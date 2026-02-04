@@ -104,7 +104,7 @@ private:
     // ------------------------------------------------------------------------
     static constexpr uint8_t CONNECT_GUARD_SLOTS = 8;
     static constexpr uint32_t CONNECT_COOLDOWN_MS = 2000;
-    static constexpr uint32_t IDLE_TIMEOUT_MS = 30000;  // Clear stale entries after 30s of inactivity
+    static constexpr uint32_t IDLE_TIMEOUT_MS = 15000;  // Clear stale entries after 15s of inactivity
     struct ConnectGuardEntry {
         uint32_t ipKey;          // Packed IPv4 (0 = empty)
         uint32_t lastMs;         // Last connect attempt time (millis)

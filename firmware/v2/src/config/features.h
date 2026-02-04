@@ -90,6 +90,12 @@
 #define FEATURE_AUDIO_SYNC 1
 #endif
 
+// Alternate audio backend: Emotiscope v1.1_320 end-to-end pipeline.
+// When enabled, LWLS audio analysis/tempo codepaths must not run.
+#ifndef FEATURE_AUDIO_BACKEND_ESV11
+#define FEATURE_AUDIO_BACKEND_ESV11 0
+#endif
+
 // Auto-speed trim (audio-driven base speed) - disabled by default
 #ifndef FEATURE_AUTO_SPEED
 #define FEATURE_AUTO_SPEED 0

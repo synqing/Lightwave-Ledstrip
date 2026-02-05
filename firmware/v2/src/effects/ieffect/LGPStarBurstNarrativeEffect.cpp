@@ -183,12 +183,21 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
     // MIS Phase 2: BEHAVIOR SELECTION UPDATE
     // -----------------------------------------
     if (hasAudio) {
-        // Get behavior recommendation from style + saliency
-        plugins::BehaviorContext behaviorCtx = plugins::selectBehavior(
-            ctx.audio.musicStyle(),
-            ctx.audio.saliencyFrame(),
-            ctx.audio.styleConfidence()
-        );
+        // "Hardening": Behaviour selection relies on MIS (style + saliency) which may be neutral
+        // under some audio backends. When MIS confidence is low, fall back to a stable behaviour
+        // rather than chasing noise.
+        const audio::MusicStyle style = ctx.audio.musicStyle();
+        const float styleConf = ctx.audio.styleConfidence();
+        const float overallSaliency = ctx.audio.overallSaliency();
+        const bool hasMIS = (style != audio::MusicStyle::UNKNOWN) || (styleConf > 0.25f) || (overallSaliency > 0.02f);
+
+        plugins::BehaviorContext behaviorCtx{};
+        if (hasMIS) {
+            // Get behaviour recommendation from style + saliency
+            behaviorCtx = plugins::selectBehavior(style, ctx.audio.saliencyFrame(), styleConf);
+        } else {
+            behaviorCtx.recommendedPrimary = plugins::VisualBehavior::DRIFT_WITH_HARMONY;
+        }
 
         // -----------------------------------------
         // Enhancement 2: BEHAVIOR TRANSITION BLENDING
@@ -206,10 +215,12 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
                           (m_currentBehavior == plugins::VisualBehavior::TEXTURE_FLOW) ? 0.8f : 1.3f;
         m_behaviorBlend = clamp01(m_behaviorBlend + dt * blendRate);
 
-        m_paletteStrategy = plugins::selectPaletteStrategy(ctx.audio.musicStyle());
+        // Palette strategy: only trust style when MIS is available; otherwise keep the default.
+        m_paletteStrategy = hasMIS ? plugins::selectPaletteStrategy(style) : plugins::PaletteStrategy::HARMONIC_COMMIT;
 
         // Update saliency emphasis
-        m_saliencyEmphasis = plugins::SaliencyEmphasis::fromSaliency(ctx.audio.saliencyFrame());
+        m_saliencyEmphasis = hasMIS ? plugins::SaliencyEmphasis::fromSaliency(ctx.audio.saliencyFrame())
+                                    : plugins::SaliencyEmphasis::neutral();
 
         // -----------------------------------------
         // Enhancement 1: DYNAMIC COLOR WARMTH
@@ -218,9 +229,9 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
         float targetWarmth = (rmsNorm - 0.5f) * 60.0f;  // Map 0-1 to -30..+30
 
         // Style-aware scaling: strongest for DYNAMIC, subtle for RHYTHMIC
-        float warmthScale = (ctx.audio.musicStyle() == audio::MusicStyle::DYNAMIC_DRIVEN) ? 1.5f :
-                            (ctx.audio.musicStyle() == audio::MusicStyle::RHYTHMIC_DRIVEN) ? 0.4f :
-                            (ctx.audio.musicStyle() == audio::MusicStyle::TEXTURE_DRIVEN) ? 0.8f : 0.6f;
+        float warmthScale = (style == audio::MusicStyle::DYNAMIC_DRIVEN) ? 1.5f :
+                            (style == audio::MusicStyle::RHYTHMIC_DRIVEN) ? 0.4f :
+                            (style == audio::MusicStyle::TEXTURE_DRIVEN) ? 0.8f : 0.6f;
         targetWarmth *= warmthScale;
 
         // Asymmetric smoothing: fast rise on crescendos, slow fall on decrescendos
@@ -229,7 +240,7 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
         m_warmthOffset = smoothValue(m_warmthOffset, targetWarmth, warmthRise, warmthFall);
 
         // Smooth style transitions to prevent jarring switches
-        audio::MusicStyle currentStyle = ctx.audio.musicStyle();
+        audio::MusicStyle currentStyle = style;
         if (currentStyle != m_prevStyle) {
             // Style changed: start blending to new timing
             m_styleBlend = 0.0f;
@@ -265,8 +276,21 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
         uint8_t dominantBin = 0;
 
         float chromaEnergyMean = 0.0f; // mean of 12 bins after transform (0..1)
+        // Prefer ES raw chroma when available (ES backend), otherwise use the generic chroma.
+        const float* chroma = ctx.audio.trinityActive ? nullptr : ctx.audio.controlBus.es_chroma_raw;
+        const float* chromaFallback = ctx.audio.controlBus.chroma;
+        // If ES raw chroma looks uninitialised (all zeros), fall back.
+        float esChromaMax = 0.0f;
+        if (chroma) {
+            for (uint8_t i = 0; i < 12; ++i) {
+                if (chroma[i] > esChromaMax) esChromaMax = chroma[i];
+            }
+            if (esChromaMax < 0.001f) {
+                chroma = nullptr;
+            }
+        }
         for (uint8_t i = 0; i < 12; ++i) {
-            const float bin = ctx.audio.controlBus.chroma[i];
+            const float bin = chroma ? chroma[i] : chromaFallback[i];
             float bright = bin * bin;     // emphasize strong notes
             bright *= 1.5f;
             bright = clamp01(bright);
@@ -287,7 +311,8 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
         } else {
             // Low confidence: use dominant chroma bin as fallback
             m_candidateRootBin = dominantBin;
-            // No reliable third detection at low confidence
+            // No reliable third detection at low confidence; keep the committed quality stable.
+            m_candidateMinor = m_keyMinor;
         }
 
         // 4-hop moving baseline to compute novelty (energyDelta)
@@ -311,7 +336,7 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
         // =====================================================================
         float kickSum = 0.0f;
         for (uint8_t i = 0; i < 6; ++i) {
-            kickSum += ctx.audio.bin(i);
+            kickSum += ctx.audio.binAdaptive(i);
         }
         float kickAvg = kickSum / 6.0f;
         if (kickAvg > m_kickBurst) {
@@ -333,7 +358,12 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
         for (uint8_t i = 48; i < 64; ++i) {
             trebleSum += ctx.audio.binAdaptive(i);
         }
-        m_trebleShimmerIntensity = trebleSum / 16.0f;
+        m_trebleShimmerIntensity = clamp01(trebleSum / 16.0f);
+
+        // ES pipeline provides a strong novelty/flux signal; use it as an auxiliary impact driver.
+        // This helps the narrative engine respond in rhythm-driven tracks where chroma can be sparse.
+        const float fluxNow = clamp01(ctx.audio.fastFlux());
+        m_energyDelta = fmaxf(m_energyDelta, fluxNow * 0.35f);
 
         // -----------------------------------------
         // BEHAVIOR-ADAPTIVE IMPACT TRIGGERS
@@ -425,7 +455,11 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
     m_storyTimeS  += dt;
     m_phraseHoldS += dt;
 
-    const bool quietNow = (m_energyAvgSmooth < 0.08f) && (m_energyDeltaSmooth < 0.015f);
+    // Hardening: treat audio as "quiet" only when multiple signals agree (prevents stuck REST on sparse chroma).
+    float rmsNow = hasAudio ? clamp01(ctx.audio.rms()) : 0.0f;
+    float fluxNow = hasAudio ? clamp01(ctx.audio.flux()) : 0.0f;
+    const bool audioQuiet = (rmsNow < 0.06f) && (fluxNow < 0.05f) && (m_kickBurst < 0.12f);
+    const bool quietNow = audioQuiet && (m_energyAvgSmooth < 0.10f) && (m_energyDeltaSmooth < 0.020f);
     if (quietNow) m_quietTimeS += dt;
     else          m_quietTimeS = 0.0f;
 

@@ -15,4 +15,10 @@
 |----|------|---|-------|------|
 | #23299 | 8:45 AM | ✅ | AsyncTCP Core Affinity Changed to Core 0 | ~448 |
 | #23251 | 8:15 AM | 🔵 | ESP32-S3 Secondary Board Custom Configuration | ~563 |
+
+### Feb 6, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #25558 | 12:13 AM | ✅ | v2 WiFi credentials configured for Portable Mode testing | ~386 |
 </claude-mem-context>

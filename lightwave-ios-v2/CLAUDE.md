@@ -101,4 +101,22 @@ Device tab:
 | #24697 | 9:11 AM | 🔵 | XcodeGen Project Configuration Structure | ~527 |
 | #24687 | 9:07 AM | 🔵 | LightwaveOS v2 README Comprehensive Project Documentation | ~572 |
 | #24685 | " | 🔵 | LightwaveOS v2 iOS Development Constraints and Architecture | ~591 |
+
+### Feb 5, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #25462 | 9:37 PM | ✅ | Portable Mode implementation staged for commit across all three platforms | ~447 |
+| #25456 | 9:36 PM | ✅ | Added entitlements file path to XcodeGen project configuration | ~407 |
+| #25454 | " | 🔴 | iOS Xcode project regenerated to fix missing resource references | ~371 |
+| #25432 | 9:28 PM | 🔵 | iOS WiFi Information entitlement already configured in project | ~377 |
+| #25412 | 8:36 PM | 🟣 | iOS app now supports direct AP connection, network change detection, and last-device reconnection | ~752 |
+
+### Feb 6, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #25572 | 12:26 AM | 🔵 | iOS Quick Connect button broken because it requires manual WiFi network join | ~751 |
+| #25566 | 12:25 AM | 🔵 | iOS project.yml contains NSLocationWhenInUseUsageDescription for WiFi network detection | ~478 |
+| #25565 | " | ✅ | WiFi Information entitlement removed from iOS app due to Apple Developer account requirement | ~384 |
 </claude-mem-context>

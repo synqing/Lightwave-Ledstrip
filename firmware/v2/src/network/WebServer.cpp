@@ -314,6 +314,14 @@ bool WebServer::begin() {
     m_server->begin();
     m_running = true;
 
+    // Register WiFi event handler for immediate AP client cleanup.
+    // When a station disconnects from the AP, TCP doesn't notice for 10-30s.
+    // This flag triggers immediate WebSocket cleanup in update().
+    m_apClientDisconnected = false;
+    WiFi.onEvent([this](WiFiEvent_t event, WiFiEventInfo_t info) {
+        m_apClientDisconnected = true;
+    }, WiFiEvent_t::ARDUINO_EVENT_WIFI_AP_STADISCONNECTED);
+
     // Get zone composer reference if available
     if (m_renderer) {
         m_zoneComposer = m_renderer->getZoneComposer();
@@ -397,10 +405,33 @@ void WebServer::update() {
     // Cleanup disconnected WebSocket clients
     m_ws->cleanupClients();
 
+    // Immediate cleanup when an AP station disconnects from WiFi.
+    // TCP won't notice the dead connection for 10-30s, but we know immediately
+    // from the WiFi event. Close all WS clients on the AP subnet (192.168.4.x).
+    // Also re-init the AP to flush the WPA2 PMK cache — without this, a client
+    // that reboots gets 4WAY_HANDSHAKE_TIMEOUT because the AP still holds the
+    // old session key.
+    if (m_apClientDisconnected) {
+        m_apClientDisconnected = false;
+        for (auto& c : m_ws->getClients()) {
+            IPAddress ip = c.remoteIP();
+            if (ip[0] == 192 && ip[1] == 168 && ip[2] == 4) {
+                LW_LOGI("AP station left — closing WS client %u (IP: %s)",
+                        c.id(), ip.toString().c_str());
+                c.close();
+            }
+        }
+        // Flush AP PMK cache so rebooted clients can reconnect immediately
+        WiFi.softAP(config::NetworkConfig::AP_SSID,
+                     config::NetworkConfig::AP_PASSWORD,
+                     1, false, 4, WIFI_AUTH_WPA_WPA2_PSK);
+        LW_LOGI("AP re-initialised (PMK cache flushed)");
+    }
+
     // WebSocket keepalive ping - prevents mobile network timeouts
     static uint32_t lastPingMs = 0;
     uint32_t nowMs = millis();
-    if (nowMs - lastPingMs >= 30000) {  // Every 30 seconds
+    if (nowMs - lastPingMs >= config::NetworkConfig::WS_PING_INTERVAL_MS) {
         if (m_ws && m_ws->count() > 0) {
             m_ws->pingAll();
         }

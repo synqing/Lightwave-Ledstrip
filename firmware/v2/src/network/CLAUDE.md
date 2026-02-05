@@ -24,4 +24,39 @@
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
 | #24143 | 10:49 PM | ⚖️ | Wireless Architecture Hardening Plan Created for K1 Network Recovery | ~647 |
+
+### Feb 5, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #25540 | 11:56 PM | 🔵 | v2 WiFiManager implements singleton pattern with FreeRTOS state machine running on Core 0 | ~598 |
+| #25537 | " | 🔴 | Added immediate AP client disconnect detection to prevent stale WebSocket connections | ~486 |
+| #25528 | 11:39 PM | 🔴 | v2 WiFiManager AP configuration hardened with explicit security settings | ~434 |
+| #25527 | " | 🔴 | v2 AP configured with explicit WPA2 encryption and 4-client limit | ~455 |
+| #25526 | " | 🔵 | v2 WiFiManager startSoftAP switches to AP+STA concurrent mode for portable architecture | ~528 |
+| #25523 | 11:38 PM | 🔵 | WiFi AUTH_EXPIRE root cause identified: auth mode mismatch between ESP32-S3 AP and ESP32-P4 STA | ~555 |
+| #25522 | " | ✅ | v2 firmware network_config.h aligned Soft-AP SSID and password with Tab5 expectations | ~425 |
+| #25510 | 11:29 PM | 🟣 | v2 WebServer implements immediate AP client WebSocket cleanup on WiFi disconnect | ~545 |
+| #25508 | " | ✅ | Added volatile AP client disconnect flag to WebServer for crash recovery detection | ~374 |
+| #25503 | 10:31 PM | 🔵 | v2 WebServer manages AsyncWebSocket instance with gateway pattern and per-client stream subscriptions | ~600 |
+| #25501 | " | 🔵 | v2 WiFiManager registers WiFi event handler for AP client connection/disconnection tracking | ~489 |
+| #25494 | 10:13 PM | 🔵 | v2 WebSocket server client lifecycle analysis reveals queue overflow root cause and cleanup architecture | ~762 |
+| #25489 | 10:12 PM | 🔵 | v2 WiFi smart selection algorithm prioritizes last-connected over configured primary network | ~603 |
+| #25486 | " | 🔵 | v2 WebServer uses deferred broadcasting and modular command routing to prevent re-entrancy issues | ~700 |
+| #25475 | 9:50 PM | 🔴 | UDP recovery logic skips WiFi reconnect in AP+STA mode | ~410 |
+| #25462 | 9:37 PM | ✅ | Portable Mode implementation staged for commit across all three platforms | ~447 |
+| #25424 | 9:25 PM | 🔄 | WiFiManager stub methods converted to forward declarations for implementation | ~405 |
+| #25423 | " | 🔄 | WiFiManager API stubs converted to forward declarations | ~358 |
+| #25422 | " | 🟣 | Runtime WiFi mode control API added to v2 WiFiManager | ~514 |
+| #25421 | " | 🔴 | v2 firmware AP mode retry now preserves access point during STA reconnection attempts | ~470 |
+| #25420 | " | 🔴 | WiFiManager startSoftAP() switched to AP+STA concurrent mode | ~363 |
+| #25419 | " | 🟣 | v2 firmware switched to concurrent AP+STA mode for portable operation | ~515 |
+| #25418 | 9:24 PM | ✅ | Updated WiFiManager task comment to reflect Portable Mode AP+STA architecture | ~408 |
+
+### Feb 6, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #25550 | 12:03 AM | 🔴 | Implemented AP re-initialization to flush WPA2 PMK cache on client disconnect | ~602 |
+| #25542 | 12:00 AM | 🔵 | Root cause identified for Tab5 4WAY_HANDSHAKE_TIMEOUT: ESP32 WiFi stack PMK cache retention | ~772 |
 </claude-mem-context>

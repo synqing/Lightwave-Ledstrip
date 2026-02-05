@@ -21,6 +21,10 @@ compile_commands.json
 *.sublime-project
 *.sublime-workspace
 
+# Xcode
+**/xcuserdata/
+**/*.xcuserstate
+
 # OS
 .DS_Store
 Thumbs.db
@@ -77,6 +81,9 @@ reports/
 
 # Hardware vendor folders (legacy)
 .waveshare/
+
+# Nested repo workspaces (do not track)
+firmware-v2-product/
 
 # Development artifacts in tools/
 tools/fastled-wasm/

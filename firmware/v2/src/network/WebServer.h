@@ -519,6 +519,7 @@ private:
 
     bool m_running;
     bool m_apMode;
+    volatile bool m_apClientDisconnected;
     bool m_mdnsStarted;
     bool m_littleFSMounted;
     uint32_t m_lastBroadcast;

@@ -13,18 +13,8 @@ struct AudioMicroInteractionCard: View {
     var body: some View {
         LWCard(title: "AUDIO FLOW") {
             HStack(spacing: Spacing.md) {
-                RiveViewContainer(
-                    asset: RiveAssetRegistry.audioMicroInteraction,
-                    inputs: [
-                        .number("rms", Double(app.audio.rms)),
-                        .number("flux", Double(app.audio.flux)),
-                        .number("confidence", app.audio.bpmConfidence),
-                        .bool("isSilent", app.audio.isSilent),
-                        .bool("isBeating", app.audio.isBeating)
-                    ],
-                    fallback: AnyView(fallbackIndicator)
-                )
-                .frame(width: 120, height: 48)
+                fallbackIndicator
+                    .frame(width: 120, height: 48)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Live input")

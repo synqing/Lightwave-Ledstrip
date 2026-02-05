@@ -201,6 +201,11 @@ static bool nextGammaState(bool enabled, float current, float& nextValue) {
     return true;  // Keep gamma enabled
 }
 
+// Deferred flag — set inside WebSocket callbacks, processed in main loop.
+// Calling UI updates synchronously from a network callback can crash the
+// LVGL rendering pipeline (Core 1 register dump after colour-correction sync).
+static volatile bool s_colourCorrectionSyncPending = false;
+
 static void syncColourCorrectionUi() {
     if (g_ui && s_uiInitialized) {
         g_ui->setColourCorrectionState(g_wsClient.getColorCorrectionState());
@@ -1441,7 +1446,7 @@ void setup() {
                     }
                     
                     g_wsClient.setColorCorrectionState(cc);
-                    syncColourCorrectionUi();
+                    s_colourCorrectionSyncPending = true;
                     Serial.println("[WS] Color correction config synced");
                 }
                 return;
@@ -1487,7 +1492,7 @@ void setup() {
                     }
                     
                     g_wsClient.setColorCorrectionState(cc);
-                    syncColourCorrectionUi();
+                    s_colourCorrectionSyncPending = true;
                     Serial.println("[WS] Color correction mode update confirmed");
                 } else {
                     Serial.println("[WS] Color correction mode update failed");
@@ -1750,6 +1755,12 @@ void loop() {
         // #endregion
     g_wsClient.update();
     esp_task_wdt_reset();  // Reset after WebSocket (can block on network I/O)
+
+    // Deferred UI sync — set by WebSocket callbacks, safe to run here in main loop
+    if (s_colourCorrectionSyncPending) {
+        s_colourCorrectionSyncPending = false;
+        syncColourCorrectionUi();
+    }
     // #region agent log (DISABLED)
 // #if ENABLE_WS_DIAGNOSTICS
     // if ((uint32_t)(millis() - s_lastWsUpdateLog) >= 1000) {

@@ -77,7 +77,8 @@ bool WiFiManager::begin() {
     if (m_apEnabled) {
         // Portable Mode: AP always on, STA connects in parallel
         WiFi.mode(WIFI_MODE_APSTA);
-        if (WiFi.softAP(m_apSSID.c_str(), m_apPassword.c_str(), m_apChannel)) {
+        if (WiFi.softAP(m_apSSID.c_str(), m_apPassword.c_str(), m_apChannel,
+                        false, 4, WIFI_AUTH_WPA_WPA2_PSK)) {
             LW_LOGI("AP always-on: '%s' at %s (STA will connect in parallel)",
                     m_apSSID.c_str(), WiFi.softAPIP().toString().c_str());
             xEventGroupSetBits(m_wifiEventGroup, EVENT_AP_START);
@@ -586,7 +587,8 @@ void WiFiManager::startSoftAP() {
     WiFi.mode(WIFI_MODE_APSTA);
 
     // Configure and start AP
-    if (WiFi.softAP(m_apSSID.c_str(), m_apPassword.c_str(), m_apChannel)) {
+    if (WiFi.softAP(m_apSSID.c_str(), m_apPassword.c_str(), m_apChannel,
+                    false, 4, WIFI_AUTH_WPA_WPA2_PSK)) {
         LW_LOGI("AP started - IP: %s", WiFi.softAPIP().toString().c_str());
         xEventGroupSetBits(m_wifiEventGroup, EVENT_AP_START);
     } else {

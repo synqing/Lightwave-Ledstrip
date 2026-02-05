@@ -75,25 +75,8 @@ struct PersistentStatusBar: View {
     }
 
     private var connectionIndicator: some View {
-        let inputs: [RiveInputValue] = [
-            .bool("isConnected", appVM.connectionState == .connected),
-            .bool("isConnecting", appVM.connectionState == .connecting),
-            .bool("isDiscovering", appVM.connectionState == .discovering),
-            .bool("hasError", isErrorState)
-        ]
-
-        return AnyView(
-            RiveViewContainer(
-                asset: RiveAssetRegistry.connectionIndicator,
-                inputs: inputs,
-                onEvent: { event in
-                    appVM.log("Connection indicator event: \(event)", category: "RIVE")
-                },
-                tapEventName: "tap",
-                fallback: AnyView(ConnectionDot(state: appVM.connectionState))
-            )
+        ConnectionDot(state: appVM.connectionState)
             .frame(width: 16, height: 16)
-        )
     }
 
     private var statusBarBackground: some View {

@@ -8,6 +8,7 @@
 //
 
 import SwiftUI
+import Network
 
 struct ConnectionSheet: View {
     @Environment(AppViewModel.self) private var appVM
@@ -17,6 +18,8 @@ struct ConnectionSheet: View {
     @State private var manualPort: String = "80"
     @State private var isConnecting = false
     @State private var errorMessage: String?
+    @State private var showAPInstructions = false
+    @State private var apMonitor: NWPathMonitor?
 
     private let enableDiscoveryTasks: Bool
 
@@ -63,28 +66,44 @@ struct ConnectionSheet: View {
                         LWCard(title: "Discovered Devices") {
                             if appVM.discoveredDevices.isEmpty {
                                 VStack(spacing: Spacing.sm) {
-                                    RiveViewContainer(
-                                        asset: RiveAssetRegistry.discoveryEmptyState,
-                                        inputs: [
-                                            .bool("isSearching", appVM.isDiscoverySearching)
-                                        ],
-                                        fallback: AnyView(
-                                            ProgressView()
-                                                .tint(Color.lwGold)
-                                                .controlSize(.small)
-                                        )
-                                    )
-                                    .frame(width: 120, height: 72)
+                                    ProgressView()
+                                        .tint(Color.lwGold)
+                                        .controlSize(.small)
+                                        .frame(width: 120, height: 72)
 
                                     Text("Searching...")
                                         .font(.caption)
                                         .foregroundStyle(Color.lwTextSecondary)
 
                                     VStack(spacing: Spacing.xs) {
-                                        Text("AP-only mode? Join LightwaveOS-AP and tap Quick Connect.")
-                                            .font(.caption)
-                                            .foregroundStyle(Color.lwTextSecondary)
-                                            .multilineTextAlignment(.center)
+                                        if showAPInstructions {
+                                            VStack(spacing: Spacing.xs) {
+                                                Text("Join the AP network first:")
+                                                    .font(.caption)
+                                                    .fontWeight(.semibold)
+                                                    .foregroundStyle(Color.lwGold)
+
+                                                VStack(alignment: .leading, spacing: 2) {
+                                                    Text("Network: **LightwaveOS-AP**")
+                                                    Text("Password: **SpectraSynq**")
+                                                }
+                                                .font(.caption)
+                                                .foregroundStyle(Color.lwTextPrimary)
+
+                                                Text("Open Settings > Wi-Fi, join the network, then return here. Connection will start automatically.")
+                                                    .font(.caption2)
+                                                    .foregroundStyle(Color.lwTextSecondary)
+                                                    .multilineTextAlignment(.center)
+                                            }
+                                            .padding(Spacing.sm)
+                                            .background(Color.lwElevated)
+                                            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.nested))
+                                        } else {
+                                            Text("AP-only mode? Tap Quick Connect below.")
+                                                .font(.caption)
+                                                .foregroundStyle(Color.lwTextSecondary)
+                                                .multilineTextAlignment(.center)
+                                        }
 
                                         Button {
                                             connectToApQuick()
@@ -97,7 +116,7 @@ struct ConnectionSheet: View {
                                                 } else {
                                                     Image(systemName: "wifi")
                                                 }
-                                                Text("Quick Connect: LightwaveOS-AP (192.168.4.1)")
+                                                Text(showAPInstructions ? "Retry Quick Connect" : "Quick Connect: LightwaveOS-AP")
                                             }
                                             .font(.bodyValue)
                                             .foregroundStyle(Color.lwBase)
@@ -203,6 +222,7 @@ struct ConnectionSheet: View {
             await appVM.startDeviceDiscovery()
         }
         .onDisappear {
+            stopAPMonitor()
             guard enableDiscoveryTasks else { return }
             Task {
                 await appVM.stopDeviceDiscovery()
@@ -266,11 +286,40 @@ struct ConnectionSheet: View {
 
             await MainActor.run {
                 isConnecting = false
-                if case .error(let message) = appVM.connectionState {
-                    errorMessage = message
+                if case .error = appVM.connectionState {
+                    // Probe failed — user is probably not on the AP network yet.
+                    // Show join instructions and start monitoring for WiFi changes.
+                    showAPInstructions = true
+                    errorMessage = "Cannot reach 192.168.4.1 — join the AP network first."
+                    startAPMonitor()
                 }
             }
         }
+    }
+
+    /// Monitor WiFi changes — when the user joins the AP in Settings and returns,
+    /// auto-retry the Quick Connect probe.
+    private func startAPMonitor() {
+        stopAPMonitor()
+        let monitor = NWPathMonitor(requiredInterfaceType: .wifi)
+        self.apMonitor = monitor
+
+        monitor.pathUpdateHandler = { [self] path in
+            Task { @MainActor in
+                if path.status == .satisfied {
+                    // WiFi changed — user may have joined the AP. Retry.
+                    self.stopAPMonitor()
+                    self.connectToApQuick()
+                }
+            }
+        }
+
+        monitor.start(queue: DispatchQueue(label: "com.lightwaveos.apmonitor", qos: .utility))
+    }
+
+    private func stopAPMonitor() {
+        apMonitor?.cancel()
+        apMonitor = nil
     }
 }
 

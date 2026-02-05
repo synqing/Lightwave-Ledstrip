@@ -69,8 +69,16 @@ void DeviceHandlers::handleInfo(AsyncWebServerRequest* request,
     (void)actors;
     (void)renderer;
     sendSuccessResponse(request, [](JsonObject& data) {
+        // Discovery signature fields (used by Tab5.encoder fallback network scan).
+        // Tab5 searches for "LightwaveOS"/"lightwaveos" in the /api/v1/device/info
+        // response when mDNS resolution fails, so keep these stable.
+        data["name"] = "LightwaveOS";
+        data["hostname"] = "lightwaveos";
+
         data["firmware"] = FIRMWARE_VERSION_STRING;
         data["firmwareVersionNumber"] = FIRMWARE_VERSION_NUMBER;
+        // Keep a generic board family for clients that do string matching.
+        data["boardFamily"] = "ESP32-S3";
         data["board"] = "ESP32-S3-DevKitC-1";
         data["sdk"] = ESP.getSdkVersion();
         data["flashSize"] = ESP.getFlashChipSize();

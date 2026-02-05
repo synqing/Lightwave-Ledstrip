@@ -432,8 +432,8 @@ void WebServer::update() {
         }
 
         // If WiFi is up but UDP is in a persistent failure state, force a WiFi reconnect.
-        // This is a stronger recovery lever than resetting the UDP socket alone.
-        if (networkUp && !WIFI_MANAGER.isAPMode()) {
+        // Skip in AP+STA mode — reconnecting STA would disrupt AP clients (Tab5, etc).
+        if (networkUp && !WIFI_MANAGER.isAPMode() && WiFi.getMode() != WIFI_MODE_APSTA) {
             webserver::UdpStreamer::UdpStats st;
             m_udpStreamer->getStats(st);
             uint32_t now = millis();

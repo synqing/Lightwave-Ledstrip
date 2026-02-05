@@ -554,7 +554,7 @@ private:
     // ========================================================================
 
     bool m_apEnabled = false;
-    String m_apSSID = "LightwaveOS-AP";
+    String m_apSSID = config::NetworkConfig::AP_SSID;
     String m_apPassword = config::NetworkConfig::AP_PASSWORD;
     uint8_t m_apChannel = 1;
 

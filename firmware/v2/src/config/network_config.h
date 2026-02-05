@@ -61,6 +61,22 @@ namespace NetworkConfig {
     #endif
 
     // ========================================================================
+    // WiFi Credentials - Tertiary/Fallback Network (Optional)
+    // ========================================================================
+
+    #ifdef WIFI_SSID_3
+        constexpr const char* WIFI_SSID_3_VALUE = WIFI_SSID_3;
+    #else
+        constexpr const char* WIFI_SSID_3_VALUE = "";  // Empty = disabled
+    #endif
+
+    #ifdef WIFI_PASSWORD_3
+        constexpr const char* WIFI_PASSWORD_3_VALUE = WIFI_PASSWORD_3;
+    #else
+        constexpr const char* WIFI_PASSWORD_3_VALUE = "";
+    #endif
+
+    // ========================================================================
     // Multi-Network Settings
     // ========================================================================
 
@@ -73,13 +89,16 @@ namespace NetworkConfig {
     #ifdef AP_SSID_CUSTOM
         constexpr const char* AP_SSID = AP_SSID_CUSTOM;
     #else
-        constexpr const char* AP_SSID = "LightwaveOS-Setup";
+        // Default Soft-AP SSID used when STA connection fails or credentials are missing.
+        // Keep this aligned with external tooling (e.g. Tab5.encoder) which expects "LightwaveOS-AP".
+        constexpr const char* AP_SSID = "LightwaveOS-AP";
     #endif
 
     #ifdef AP_PASSWORD_CUSTOM
         constexpr const char* AP_PASSWORD = AP_PASSWORD_CUSTOM;
     #else
-    constexpr const char* AP_PASSWORD = "spectrasynq";
+        // Default Soft-AP password. Keep the exact casing aligned with clients (e.g. Tab5.encoder).
+        constexpr const char* AP_PASSWORD = "SpectraSynq";
     #endif
 
     // ========================================================================

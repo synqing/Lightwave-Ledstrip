@@ -127,6 +127,7 @@
 #include "ieffect/esv11_reference/EsOctaveRefEffect.h"
 #include "ieffect/esv11_reference/EsBloomRefEffect.h"
 #include "ieffect/esv11_reference/EsWaveformRefEffect.h"
+#include "ieffect/sensorybridge_reference/SbWaveform310RefEffect.h"
 #include "utils/FastLEDOptim.h"
 #include "../core/narrative/NarrativeEngine.h"
 #include <FastLED.h>
@@ -1025,9 +1026,18 @@ uint8_t registerAllEffects(RendererActor* renderer) {
         total++;
     }
 
+    // =============== SENSORY BRIDGE REFERENCE SHOWS ===============
+    // These are ports of Sensory Bridge 3.1.0 light show modes for parity comparisons.
+
+    // SB Waveform (Ref) (ID 109)
+    static ieffect::sensorybridge_reference::SbWaveform310RefEffect sbWaveform310RefInstance;
+    if (renderer->registerEffect(total, &sbWaveform310RefInstance)) {
+        total++;
+    }
+
     // =============== EFFECT COUNT PARITY VALIDATION ===============
     // Runtime validation: ensure registered count matches expected
-    constexpr uint8_t EXPECTED_EFFECT_COUNT = 109;  // 101 + 5 ES reference shows + 3 ES-tuned ports
+    constexpr uint8_t EXPECTED_EFFECT_COUNT = 110;  // 101 base + 5 ES reference + 3 ES-tuned + 1 SB reference
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

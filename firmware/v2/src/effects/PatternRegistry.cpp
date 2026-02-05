@@ -159,7 +159,10 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
     // --- ES tuned ports (106+) ---
     {PM_STR("Ripple (ES tuned)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Beat-locked ripples tuned for ES v1.1 audio backend"), PM_STR("Beat strength + flux accents, FFT sub-bass/treble shaping"), PM_STR("Ripple")},
     {PM_STR("Heartbeat (ES tuned)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Beat-locked lub-dub heartbeat tuned for ES v1.1 audio backend"), PM_STR("Beat tick + flux accents, chroma-anchored palette hue"), PM_STR("Heartbeat")},
-    {PM_STR("LGP Holographic (ES tuned)"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::MOIRE | PatternTags::DEPTH, PM_STR("Musically driven holographic depth layers tuned for ES v1.1 audio backend"), PM_STR("Band energy voicing, beat phase ratios, flux refraction accents, chroma-anchored colour"), PM_STR("LGP Holographic")}
+    {PM_STR("LGP Holographic (ES tuned)"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::MOIRE | PatternTags::DEPTH, PM_STR("Musically driven holographic depth layers tuned for ES v1.1 audio backend"), PM_STR("Band energy voicing, beat phase ratios, flux refraction accents, chroma-anchored colour"), PM_STR("LGP Holographic")},
+
+    // --- Sensory Bridge Reference Shows (109+) ---
+    {PM_STR("SB Waveform (Ref)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Sensory Bridge 3.1.0 reference: waveform mode"), PM_STR("Waveform history, MOOD smoothing, note chromagram → colour summation"), PM_STR("Audio Waveform, ES Waveform (Ref)")}
 };
 
 const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(PatternMetadata);
@@ -169,7 +172,7 @@ const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(Pattern
 // ============================================================================
 
 // Expected number of implemented effects (must match registerAllEffects() return value)
-constexpr uint8_t EXPECTED_EFFECT_COUNT = 109;  // 101 base + 5 ES reference shows + 3 ES-tuned ports
+constexpr uint8_t EXPECTED_EFFECT_COUNT = 110;  // 101 base + 5 ES reference + 3 ES-tuned + 1 SB reference
 
 // Compile-time assertion: metadata must have at least as many entries as implemented effects
 // This ensures we can always map effect IDs to metadata (allows for future effects in metadata)
@@ -434,7 +437,8 @@ static const uint8_t REACTIVE_EFFECT_IDS[] PROGMEM = {
     102, // ES Spectrum (Ref) - reference show
     103, // ES Octave (Ref) - reference show
     104, // ES Bloom (Ref) - reference show
-    105  // ES Waveform (Ref) - reference show
+    105, // ES Waveform (Ref) - reference show
+    109  // SB Waveform (Ref) - reference show
 };
 static constexpr uint8_t REACTIVE_EFFECT_COUNT = sizeof(REACTIVE_EFFECT_IDS);
 

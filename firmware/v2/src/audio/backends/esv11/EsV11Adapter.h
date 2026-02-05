@@ -10,6 +10,7 @@
 #if FEATURE_AUDIO_SYNC && FEATURE_AUDIO_BACKEND_ESV11
 
 #include <cstdint>
+#include <cstddef>
 
 #include "../../contracts/ControlBus.h"
 #include "../../contracts/AudioTime.h"
@@ -43,6 +44,23 @@ private:
     float m_heavyChroma[lightwaveos::audio::CONTROLBUS_NUM_CHROMA] = {0};
 
     uint8_t m_beatInBar = 0;
+
+    // --------------------------------------------------------------------
+    // Sensory Bridge parity side-car (3.1.0 waveform)
+    //
+    // ES v1.1 provides waveform + 64-bin magnitudes, but the SB light shows
+    // expect additional “sweet spot” scaling and note-chromagram aggregation.
+    // We compute those here so SB parity effects can run on the ES backend.
+    // --------------------------------------------------------------------
+    static constexpr uint8_t SB_WAVEFORM_POINTS = lightwaveos::audio::CONTROLBUS_WAVEFORM_N;
+    static constexpr uint8_t SB_WAVEFORM_HISTORY = 4;
+    int16_t m_sbWaveformHistory[SB_WAVEFORM_HISTORY][SB_WAVEFORM_POINTS] = {{0}};
+    uint8_t m_sbWaveformHistoryIndex = 0;
+    float m_sbMaxWaveformValFollower = 750.0f;  // Sensory Bridge sweet spot min level
+    float m_sbWaveformPeakScaled = 0.0f;
+    float m_sbWaveformPeakScaledLast = 0.0f;
+    float m_sbNoteChroma[lightwaveos::audio::CONTROLBUS_NUM_CHROMA] = {0};
+    float m_sbChromaMaxVal = 0.0001f;
 };
 
 } // namespace lightwaveos::audio::esv11

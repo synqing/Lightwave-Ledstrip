@@ -25,6 +25,15 @@ void EsV11Adapter::reset()
     std::memset(m_heavyBands, 0, sizeof(m_heavyBands));
     std::memset(m_heavyChroma, 0, sizeof(m_heavyChroma));
     m_beatInBar = 0;
+
+    // Sensory Bridge parity (waveform + note-chromagram)
+    std::memset(m_sbWaveformHistory, 0, sizeof(m_sbWaveformHistory));
+    m_sbWaveformHistoryIndex = 0;
+    m_sbMaxWaveformValFollower = 750.0f;
+    m_sbWaveformPeakScaled = 0.0f;
+    m_sbWaveformPeakScaledLast = 0.0f;
+    std::memset(m_sbNoteChroma, 0, sizeof(m_sbNoteChroma));
+    m_sbChromaMaxVal = 0.0001f;
 }
 
 void EsV11Adapter::buildFrame(lightwaveos::audio::ControlBusFrame& out,
@@ -144,6 +153,88 @@ void EsV11Adapter::buildFrame(lightwaveos::audio::ControlBusFrame& out,
 
     // Waveform (already int16 in ES outputs)
     std::memcpy(out.waveform, es.waveform, sizeof(out.waveform));
+
+    // --------------------------------------------------------------------
+    // Sensory Bridge parity side-car (3.1.0 waveform)
+    // --------------------------------------------------------------------
+    // Store waveform into history ring buffer (4-frame history).
+    for (uint8_t i = 0; i < lightwaveos::audio::CONTROLBUS_WAVEFORM_N; ++i) {
+        int16_t sample = es.waveform[i];
+        out.sb_waveform[i] = sample;
+        m_sbWaveformHistory[m_sbWaveformHistoryIndex][i] = sample;
+    }
+    m_sbWaveformHistoryIndex++;
+    if (m_sbWaveformHistoryIndex >= SB_WAVEFORM_HISTORY) {
+        m_sbWaveformHistoryIndex = 0;
+    }
+
+    // Peak follower (sweet spot scaling; matches Sensory Bridge 3.1.0).
+    float maxWaveformValRaw = 0.0f;
+    for (uint8_t i = 0; i < lightwaveos::audio::CONTROLBUS_WAVEFORM_N; ++i) {
+        int16_t sample = es.waveform[i];
+        int16_t absSample = (sample < 0) ? -sample : sample;
+        if ((float)absSample > maxWaveformValRaw) {
+            maxWaveformValRaw = (float)absSample;
+        }
+    }
+
+    float maxWaveformVal = maxWaveformValRaw - 750.0f;  // Sweet spot min level
+    if (maxWaveformVal < 0.0f) maxWaveformVal = 0.0f;
+
+    if (maxWaveformVal > m_sbMaxWaveformValFollower) {
+        float delta = maxWaveformVal - m_sbMaxWaveformValFollower;
+        m_sbMaxWaveformValFollower += delta * 0.25f;
+    } else if (maxWaveformVal < m_sbMaxWaveformValFollower) {
+        float delta = m_sbMaxWaveformValFollower - maxWaveformVal;
+        m_sbMaxWaveformValFollower -= delta * 0.005f;
+        if (m_sbMaxWaveformValFollower < 750.0f) {
+            m_sbMaxWaveformValFollower = 750.0f;
+        }
+    }
+
+    float waveformPeakScaledRaw = 0.0f;
+    if (m_sbMaxWaveformValFollower > 0.0f) {
+        waveformPeakScaledRaw = maxWaveformVal / m_sbMaxWaveformValFollower;
+    }
+    if (waveformPeakScaledRaw > m_sbWaveformPeakScaled) {
+        float delta = waveformPeakScaledRaw - m_sbWaveformPeakScaled;
+        m_sbWaveformPeakScaled += delta * 0.25f;
+    } else if (waveformPeakScaledRaw < m_sbWaveformPeakScaled) {
+        float delta = m_sbWaveformPeakScaled - waveformPeakScaledRaw;
+        m_sbWaveformPeakScaled -= delta * 0.25f;
+    }
+
+    // 3.1.0 waveform peak follower used by waveform/VU modes.
+    m_sbWaveformPeakScaledLast =
+        (m_sbWaveformPeakScaled * 0.05f) + (m_sbWaveformPeakScaledLast * 0.95f);
+    out.sb_waveform_peak_scaled = m_sbWaveformPeakScaled;
+    out.sb_waveform_peak_scaled_last = m_sbWaveformPeakScaledLast;
+
+    // 3.1.0 note chromagram derived from the 64-bin note spectrogram.
+    m_sbChromaMaxVal = 0.0f;
+    for (uint8_t i = 0; i < lightwaveos::audio::CONTROLBUS_NUM_CHROMA; ++i) {
+        m_sbNoteChroma[i] = 0.0f;
+    }
+    for (uint8_t octave = 0; octave < 6; ++octave) {
+        for (uint8_t note = 0; note < lightwaveos::audio::CONTROLBUS_NUM_CHROMA; ++note) {
+            uint16_t noteIndex = static_cast<uint16_t>(12 * octave + note);
+            if (noteIndex < lightwaveos::audio::ControlBusFrame::BINS_64_COUNT) {
+                float val = out.bins64Adaptive[noteIndex];
+                m_sbNoteChroma[note] += val;
+                if (m_sbNoteChroma[note] > 1.0f) {
+                    m_sbNoteChroma[note] = 1.0f;
+                }
+                if (m_sbNoteChroma[note] > m_sbChromaMaxVal) {
+                    m_sbChromaMaxVal = m_sbNoteChroma[note];
+                }
+            }
+        }
+    }
+    if (m_sbChromaMaxVal < 0.0001f) {
+        m_sbChromaMaxVal = 0.0001f;
+    }
+    std::memcpy(out.sb_note_chromagram, m_sbNoteChroma, sizeof(out.sb_note_chromagram));
+    out.sb_chromagram_max_val = m_sbChromaMaxVal;
 
     // ES tempo extras (consumed by renderer beat clock)
     out.es_bpm = es.top_bpm;

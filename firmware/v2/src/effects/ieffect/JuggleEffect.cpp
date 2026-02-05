@@ -27,7 +27,6 @@ void JuggleEffect::render(plugins::EffectContext& ctx) {
     // not rainbow cycling. Each dot uses a fixed hue per frame, not cycling through the wheel.
     fadeToBlackBy(ctx.leds, ctx.ledCount, ctx.fadeAmount);
 
-    uint8_t dothue = ctx.gHue;
     const bool audioOk = ctx.audio.available;
     const bool tempoOk = audioOk && (ctx.audio.tempoConfidence() >= 0.25f);
     const bool useBins =
@@ -36,10 +35,40 @@ void JuggleEffect::render(plugins::EffectContext& ctx) {
         (ctx.audio.bins64Adaptive() != nullptr);
     const float beatPhase01 = tempoOk ? ctx.audio.beatPhase() : 0.0f;
     const bool beatTick = tempoOk && ctx.audio.isOnBeat();
+    const float beatStrength = tempoOk ? ctx.audio.beatStrength() : 0.0f;
+    const float flux = audioOk ? ctx.audio.fastFlux() : 0.0f;
 
     const float* bins = useBins ? ctx.audio.bins64Adaptive() : nullptr;
+    const float* chroma = audioOk ? ctx.audio.controlBus.chroma : nullptr;
 
-    for (int i = 0; i < 8; i++) {
+    // Dynamic dot count: more energy → more juggling balls.
+    uint8_t dotCount = 8;
+    if (audioOk) {
+        float rms = ctx.audio.rms();
+        if (rms < 0.0f) rms = 0.0f;
+        if (rms > 1.0f) rms = 1.0f;
+        dotCount = static_cast<uint8_t>(3 + static_cast<uint8_t>(rms * 5.0f));
+        if (dotCount < 3) dotCount = 3;
+        if (dotCount > 8) dotCount = 8;
+    }
+
+    // Chroma‑anchored hue (non‑rainbow): pick dominant chroma bin as base, then offset per dot.
+    uint8_t baseHue = ctx.gHue;
+    if (chroma) {
+        float maxChroma = 0.0f;
+        uint8_t maxIdx = 0;
+        for (uint8_t i = 0; i < 12; i++) {
+            if (chroma[i] > maxChroma) {
+                maxChroma = chroma[i];
+                maxIdx = i;
+            }
+        }
+        if (maxChroma > 0.05f) {
+            baseHue = static_cast<uint8_t>(maxIdx * 21);  // 256/12 ≈ 21
+        }
+    }
+
+    for (uint8_t i = 0; i < dotCount; i++) {
         float mag01 = 0.0f;
         if (bins) {
             // Map 8 dots → 8 equal bin groups (8 bins each) from the 64-bin spectrum.
@@ -59,7 +88,18 @@ void JuggleEffect::render(plugins::EffectContext& ctx) {
 
         // Audio semantic link (ES Spectrum reference):
         // magnitude drives "reach" from the centre, while beat phase drives motion cadence.
-        const uint16_t maxDist = static_cast<uint16_t>(HALF_LENGTH * (0.10f + 0.90f * mag01));
+        float elastic = 1.0f;
+        if (tempoOk) {
+            elastic = 0.70f + (0.60f * beatStrength);  // stronger beat → longer throws
+        }
+        float accent = 1.0f;
+        if (flux > 0.20f) {
+            accent = 1.0f + ((flux - 0.20f) * 0.6f);   // transient accents
+            if (accent > 1.30f) accent = 1.30f;
+        }
+        float maxDistF = static_cast<float>(HALF_LENGTH) * (0.10f + 0.90f * mag01) * elastic * accent;
+        if (maxDistF > static_cast<float>(HALF_LENGTH)) maxDistF = static_cast<float>(HALF_LENGTH);
+        const uint16_t maxDist = static_cast<uint16_t>(maxDistF);
 
         uint16_t distFromCenter = 0;
         if (tempoOk) {
@@ -92,7 +132,8 @@ void JuggleEffect::render(plugins::EffectContext& ctx) {
             if (b < 0.0f) b = 0.0f;
             brightU8 = static_cast<uint8_t>(b);
         }
-        CRGB color = ctx.palette.getColor(dothue, brightU8);
+        const uint8_t dotHue = static_cast<uint8_t>(baseHue + (i * 12));
+        CRGB color = ctx.palette.getColor(dotHue, brightU8);
 
         if (pos1 < STRIP_LENGTH) {
             ctx.leds[pos1] = color;
@@ -108,8 +149,6 @@ void JuggleEffect::render(plugins::EffectContext& ctx) {
                 ctx.leds[mirrorPos2] = color;
             }
         }
-
-        dothue += 32;
     }
 }
 

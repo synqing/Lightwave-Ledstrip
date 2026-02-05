@@ -384,6 +384,7 @@ bool shouldSkipColorCorrection(uint8_t effectId) {
 // Audio-reactive effect IDs (effects that actively use ctx.audio)
 // Determined by grep analysis of ctx.audio usage patterns in ieffect/*.cpp
 static const uint8_t REACTIVE_EFFECT_IDS[] PROGMEM = {
+    5,   // Juggle - audio-reactive (spectrum/beat driven)
     6,   // BPM - beat-synced pulsing
     7,   // Wave Ambient - RMS amplitude modulation
     8,   // Ripple - kick/treble triggered, chroma-driven

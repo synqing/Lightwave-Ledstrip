@@ -542,6 +542,13 @@ private:
     bool m_broadcastPending;
     static constexpr uint32_t BROADCAST_COALESCE_MS = 50;
 
+    // Low internal heap shedding (avoid esp_timer/WiFi/lwIP ENOMEM spirals).
+    // Use hysteresis to prevent rapid toggling.
+    bool m_lowHeapShed;
+    uint32_t m_lastHeapShedLogMs;
+    static constexpr uint32_t INTERNAL_HEAP_SHED_BELOW_BYTES = 30U * 1024U;
+    static constexpr uint32_t INTERNAL_HEAP_RESUME_ABOVE_BYTES = 45U * 1024U;
+
     // LED frame streaming (extracted to LedStreamBroadcaster)
     webserver::LedStreamBroadcaster* m_ledBroadcaster;
 
@@ -587,6 +594,8 @@ private:
      * @brief Update cached renderer state (called from update() in safe context)
      */
     void updateCachedRendererState();
+
+    void updateLowHeapShedState(uint32_t nowMs);
 };
 
 // ============================================================================

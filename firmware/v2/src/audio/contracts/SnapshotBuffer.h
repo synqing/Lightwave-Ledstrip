@@ -94,7 +94,8 @@ public:
     uint32_t Sequence() const { return m_seq.load(std::memory_order_acquire); }
 
 private:
-    alignas(4) T m_buf[2]{};
+    // Align to T to satisfy platforms with stricter alignment than 4 bytes.
+    alignas(T) T m_buf[2]{};
     mutable std::atomic<uint32_t> m_active{0};
     mutable std::atomic<uint32_t> m_seq{0};
 };

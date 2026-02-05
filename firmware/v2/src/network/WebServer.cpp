@@ -174,6 +174,8 @@ WebServer::WebServer(NodeOrchestrator& orchestrator, RendererNode* renderer)
     , m_startTime(0)
     , m_lastImmediateBroadcast(0)
     , m_broadcastPending(false)
+    , m_lowHeapShed(false)
+    , m_lastHeapShedLogMs(0)
     , m_zoneComposer(nullptr)
     , m_lastStateCacheUpdate(0)
     , m_ledBroadcaster(nullptr)
@@ -428,12 +430,38 @@ bool WebServer::isClientAuthenticated(uint32_t clientId) const {
 }
 #endif
 
+void WebServer::updateLowHeapShedState(uint32_t nowMs) {
+    const uint32_t freeInternal = static_cast<uint32_t>(getFreeInternalHeap());
+
+    if (!m_lowHeapShed) {
+        if (freeInternal < INTERNAL_HEAP_SHED_BELOW_BYTES) {
+            m_lowHeapShed = true;
+            m_lastHeapShedLogMs = nowMs;
+            LW_LOGW("Low-heap shedding ENABLED (internal=%lu)", (unsigned long)freeInternal);
+            // Cancel any pending broadcasts; when shedding we avoid creating/queuing WS payloads.
+            m_broadcastPending = false;
+        }
+    } else {
+        if (freeInternal > INTERNAL_HEAP_RESUME_ABOVE_BYTES) {
+            m_lowHeapShed = false;
+            m_lastHeapShedLogMs = nowMs;
+            LW_LOGI("Low-heap shedding DISABLED (internal=%lu)", (unsigned long)freeInternal);
+            // Force a one-shot status broadcast after recovery to resynchronise dashboards.
+            m_broadcastPending = true;
+        } else if ((nowMs - m_lastHeapShedLogMs) > 5000) {
+            m_lastHeapShedLogMs = nowMs;
+            LW_LOGW("Low-heap shedding active (internal=%lu)", (unsigned long)freeInternal);
+        }
+    }
+}
+
 void WebServer::update() {
     if (!m_running) return;
 
     // Cleanup disconnected WebSocket clients
     m_ws->cleanupClients();
     const uint32_t nowMs = millis();
+    updateLowHeapShedState(nowMs);
 
     // Immediate cleanup when an AP station disconnects from WiFi.
     // TCP won't notice the dead connection for 10-30s, but we know immediately
@@ -564,18 +592,22 @@ void WebServer::update() {
 
 #if FEATURE_AUDIO_SYNC
     // Audio frame streaming to subscribed clients (30 FPS)
-    broadcastAudioFrame();
+    if (!m_lowHeapShed) {
+        broadcastAudioFrame();
 
-    // FFT frame streaming to subscribed clients (31 Hz)
-    broadcastFftFrame();
+        // FFT frame streaming to subscribed clients (31 Hz)
+        broadcastFftFrame();
 
-    // Beat event streaming (fires on beat_tick/downbeat_tick)
-    broadcastBeatEvent();
+        // Beat event streaming (fires on beat_tick/downbeat_tick)
+        broadcastBeatEvent();
+    }
 #endif
 
 #if FEATURE_AUDIO_BENCHMARK
     // Benchmark metrics streaming to subscribed clients (10 FPS)
-    broadcastBenchmarkStats();
+    if (!m_lowHeapShed) {
+        broadcastBenchmarkStats();
+    }
 #endif
 
 #if FEATURE_EFFECT_VALIDATION
@@ -593,8 +625,8 @@ void WebServer::update() {
 #endif
 
     // Periodic status broadcast
-    uint32_t now = millis();
-    if (now - m_lastBroadcast >= WebServerConfig::STATUS_BROADCAST_INTERVAL_MS) {
+    uint32_t now = nowMs;
+    if (!m_lowHeapShed && (now - m_lastBroadcast >= WebServerConfig::STATUS_BROADCAST_INTERVAL_MS)) {
         m_lastBroadcast = now;
         m_broadcastPending = true;  // Defer to safe context
     }
@@ -608,7 +640,9 @@ void WebServer::update() {
             // (AsyncWebSocket doesn't expose queue size, so we use time-based throttling)
             m_lastImmediateBroadcast = now;
             m_broadcastPending = false;
-            doBroadcastStatus();  // Actually send the broadcast in safe context
+            if (!m_lowHeapShed) {
+                doBroadcastStatus();  // Actually send the broadcast in safe context
+            }
         }
     }
     
@@ -1193,6 +1227,9 @@ void WebServer::broadcastStatus() {
 }
 
 void WebServer::doBroadcastStatus() {
+    if (m_lowHeapShed) {
+        return;
+    }
     // SAFETY CHECKS: Validate pointers and state before accessing
     if (!m_ws) {
         LW_LOGW("doBroadcastStatus: m_ws is null");
@@ -1304,6 +1341,9 @@ void WebServer::doBroadcastStatus() {
 }
 
 void WebServer::broadcastZoneState() {
+    if (m_lowHeapShed) {
+        return;
+    }
     // SAFETY: Validate pointers before accessing
     if (!m_ws) {
         LW_LOGW("broadcastZoneState: m_ws is null");
@@ -1390,6 +1430,9 @@ void WebServer::broadcastZoneState() {
 }
 
 void WebServer::broadcastSingleZoneState(uint8_t zoneId) {
+    if (m_lowHeapShed) {
+        return;
+    }
     // SAFETY: Validate pointers before accessing
     if (!m_ws) {
         LW_LOGW("broadcastSingleZoneState: m_ws is null");
@@ -1457,6 +1500,9 @@ void WebServer::broadcastSingleZoneState(uint8_t zoneId) {
 }
 
 void WebServer::notifyEffectChange(uint8_t effectId, const char* name) {
+    if (m_lowHeapShed) {
+        return;
+    }
     // SAFETY: Validate pointers before accessing
     if (!m_ws) {
         LW_LOGW("notifyEffectChange: m_ws is null");
@@ -1512,6 +1558,13 @@ void WebServer::broadcastLEDFrame() {
 
 bool WebServer::setLEDStreamSubscription(AsyncWebSocketClient* client, bool subscribe) {
     if (!client || !m_ledBroadcaster) return false;
+    if (subscribe) {
+        const uint32_t freeInternal = static_cast<uint32_t>(getFreeInternalHeap());
+        if (m_lowHeapShed || freeInternal < INTERNAL_HEAP_SHED_BELOW_BYTES) {
+            LW_LOGW("LED stream subscribe rejected (low internal heap=%lu)", (unsigned long)freeInternal);
+            return false;
+        }
+    }
     uint32_t clientId = client->id();
     bool success = m_ledBroadcaster->setSubscription(clientId, subscribe);
 
@@ -1564,6 +1617,9 @@ void WebServer::broadcastAudioFrame() {
 }
 
 void WebServer::broadcastBeatEvent() {
+    if (m_lowHeapShed) {
+        return;
+    }
     // SAFETY: Validate pointers before accessing
     if (!m_ws || m_ws->count() == 0) return;
 
@@ -1627,6 +1683,13 @@ void WebServer::broadcastFftFrame() {
 
 bool WebServer::setAudioStreamSubscription(AsyncWebSocketClient* client, bool subscribe) {
     if (!client || !m_audioBroadcaster) return false;
+    if (subscribe) {
+        const uint32_t freeInternal = static_cast<uint32_t>(getFreeInternalHeap());
+        if (m_lowHeapShed || freeInternal < INTERNAL_HEAP_SHED_BELOW_BYTES) {
+            LW_LOGW("Audio stream subscribe rejected (low internal heap=%lu)", (unsigned long)freeInternal);
+            return false;
+        }
+    }
     uint32_t clientId = client->id();
     bool success = m_audioBroadcaster->setSubscription(clientId, subscribe);
 

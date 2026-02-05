@@ -228,9 +228,12 @@ private:
     // Persistent per-zone render buffers (preserve temporal smoothing/trails)
     // Each zone effect renders into its own full buffer, preventing cross-zone
     // contamination and eliminating strobing caused by buffer resets.
-    CRGB m_zoneBuffers[MAX_ZONES][TOTAL_LEDS];
+    // Allocated during init() (prefer PSRAM). Layout: MAX_ZONES contiguous buffers
+    // of TOTAL_LEDS each (zone 0 first).
+    CRGB* m_zoneBuffers = nullptr;
 
-    CRGB m_outputBuffer[TOTAL_LEDS];    // Composited output buffer
+    // Composited output buffer (allocated during init()).
+    CRGB* m_outputBuffer = nullptr;
 
     // Reusable per-frame buffers (avoid stack allocations in renderZone)
     CRGBPalette16 m_zonePalette;           // Global palette (used when zone.paletteId == 0)

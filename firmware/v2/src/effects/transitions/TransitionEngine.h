@@ -62,7 +62,7 @@ struct Pulse {
 class TransitionEngine {
 public:
     TransitionEngine();
-    ~TransitionEngine() = default;
+    ~TransitionEngine();
 
     // ==================== Transition Control ====================
 
@@ -129,14 +129,17 @@ private:
 
     // ==================== Buffers ====================
 
-    CRGB m_sourceBuffer[TOTAL_LEDS];  // Copy of old effect
-    CRGB m_targetBuffer[TOTAL_LEDS];  // Copy of new effect (NOT pointer - prevents aliasing!)
+    // PSRAM-backed buffers (allocated in constructor). These are not DMA targets.
+    CRGB* m_sourceBuffer;             // Copy of old effect
+    CRGB* m_targetBuffer;             // Copy of new effect
     CRGB* m_outputBuffer;              // Pointer to output
 
     // ==================== Effect-Specific State ====================
 
     // Dissolve
-    uint16_t m_dissolveOrder[MAX_DISSOLVE_PIXELS];
+    uint16_t* m_dissolveOrder;
+
+    bool m_buffersReady;
 
     // Implosion
     Particle m_particles[MAX_PARTICLES];

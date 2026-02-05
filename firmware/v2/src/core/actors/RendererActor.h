@@ -667,9 +667,11 @@ private:
     // Performance metrics for color correction
     uint32_t m_correctionSkipCount;   // Number of frames where correction was skipped
     uint32_t m_correctionApplyCount;  // Number of frames where correction was applied
-    CRGB m_captureTapA[LedConfig::TOTAL_LEDS];  // Pre-correction
-    CRGB m_captureTapB[LedConfig::TOTAL_LEDS];  // Post-correction
-    CRGB m_captureTapC[LedConfig::TOTAL_LEDS];  // Pre-WS2812 (per-strip, interleaved)
+    // Capture buffers are allocated lazily (prefer PSRAM) when capture mode is enabled.
+    CRGB* m_captureBlock;  // 3 * TOTAL_LEDS, laid out A|B|C
+    CRGB* m_captureTapA;   // Pre-correction
+    CRGB* m_captureTapB;   // Post-correction
+    CRGB* m_captureTapC;   // Pre-WS2812 (per-strip, interleaved)
     CaptureMetadata m_captureMetadata;
     bool m_captureTapAValid;
     bool m_captureTapBValid;

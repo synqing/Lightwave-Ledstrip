@@ -10,10 +10,45 @@
 #if FEATURE_AUDIO_SYNC
 
 #include <cstring>
+
+#ifndef NATIVE_BUILD
 #include <Arduino.h>
+#include <esp_heap_caps.h>
+#define LW_LOG_TAG "AudioMapping"
+#include "../../utils/Log.h"
+#else
+#include <chrono>
+#include <cstdlib>
+#endif
 
 namespace lightwaveos {
 namespace audio {
+
+namespace {
+#if defined(NATIVE_BUILD)
+using AllocFn = void* (*)(size_t, size_t);
+static AllocFn s_testAllocFn = nullptr;
+
+static void* allocZeroed(size_t count, size_t size) {
+    if (s_testAllocFn) {
+        return s_testAllocFn(count, size);
+    }
+    return std::calloc(count, size);
+}
+
+static uint32_t lw_micros() {
+    using namespace std::chrono;
+    static const steady_clock::time_point start = steady_clock::now();
+    return static_cast<uint32_t>(duration_cast<microseconds>(steady_clock::now() - start).count());
+}
+#else
+static void* allocZeroed(size_t count, size_t size) {
+    return heap_caps_calloc(count, size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+}
+
+static uint32_t lw_micros() { return micros(); }
+#endif
+} // namespace
 
 // =============================================================================
 // CURVE APPLICATION FUNCTIONS
@@ -200,17 +235,59 @@ AudioMappingRegistry& AudioMappingRegistry::instance() {
     return inst;
 }
 
+bool AudioMappingRegistry::begin() {
+    if (m_ready && m_mappings != nullptr) {
+        return true;
+    }
+
+    const size_t bytes = static_cast<size_t>(MAX_EFFECTS) * sizeof(EffectAudioMapping);
+    auto* table = static_cast<EffectAudioMapping*>(allocZeroed(1, bytes));
+    if (!table) {
+#ifndef NATIVE_BUILD
+        if (!m_allocFailureLogged) {
+            LW_LOGW("PSRAM allocation failed for mappings table (%u bytes) - disabling audio mappings",
+                    static_cast<unsigned>(bytes));
+            m_allocFailureLogged = true;
+        }
+#endif
+        m_mappings = nullptr;
+        m_ready = false;
+        return false;
+    }
+
+    m_mappings = table;
+
+    // Initialise defaults using in-struct initialisers (not preserved by calloc()).
+    for (uint8_t i = 0; i < MAX_EFFECTS; i++) {
+        m_mappings[i] = EffectAudioMapping();
+        m_mappings[i].effectId = i;
+        m_mappings[i].calculateChecksum();
+    }
+
+    m_ready = true;
+    return true;
+}
+
+#if defined(NATIVE_BUILD)
+void AudioMappingRegistry::setTestAllocator(void* (*allocFn)(size_t count, size_t size)) {
+    s_testAllocFn = allocFn;
+}
+#endif
+
 const EffectAudioMapping* AudioMappingRegistry::getMapping(uint8_t effectId) const {
+    if (!m_ready || m_mappings == nullptr) return nullptr;
     if (effectId >= MAX_EFFECTS) return nullptr;
     return &m_mappings[effectId];
 }
 
 EffectAudioMapping* AudioMappingRegistry::getMapping(uint8_t effectId) {
+    if (!m_ready || m_mappings == nullptr) return nullptr;
     if (effectId >= MAX_EFFECTS) return nullptr;
     return &m_mappings[effectId];
 }
 
 bool AudioMappingRegistry::setMapping(uint8_t effectId, const EffectAudioMapping& config) {
+    if (!m_ready || m_mappings == nullptr) return false;
     if (effectId >= MAX_EFFECTS) return false;
 
     m_mappings[effectId] = config;
@@ -220,18 +297,21 @@ bool AudioMappingRegistry::setMapping(uint8_t effectId, const EffectAudioMapping
 }
 
 void AudioMappingRegistry::setEffectMappingEnabled(uint8_t effectId, bool enabled) {
+    if (!m_ready || m_mappings == nullptr) return;
     if (effectId >= MAX_EFFECTS) return;
     m_mappings[effectId].globalEnabled = enabled;
     m_mappings[effectId].calculateChecksum();
 }
 
 bool AudioMappingRegistry::hasActiveMappings(uint8_t effectId) const {
+    if (!m_ready || m_mappings == nullptr) return false;
     if (effectId >= MAX_EFFECTS) return false;
     const EffectAudioMapping& mapping = m_mappings[effectId];
     return mapping.globalEnabled && mapping.mappingCount > 0;
 }
 
 uint8_t AudioMappingRegistry::getActiveEffectCount() const {
+    if (!m_ready || m_mappings == nullptr) return 0;
     uint8_t count = 0;
     for (uint8_t i = 0; i < MAX_EFFECTS; i++) {
         if (hasActiveMappings(i)) count++;
@@ -240,6 +320,7 @@ uint8_t AudioMappingRegistry::getActiveEffectCount() const {
 }
 
 uint16_t AudioMappingRegistry::getTotalMappingCount() const {
+    if (!m_ready || m_mappings == nullptr) return 0;
     uint16_t count = 0;
     for (uint8_t i = 0; i < MAX_EFFECTS; i++) {
         if (m_mappings[i].globalEnabled) {
@@ -359,17 +440,18 @@ void AudioMappingRegistry::applyMappings(
     uint8_t& variation,
     uint8_t& hue
 ) {
+    if (!m_ready || m_mappings == nullptr) return;
     if (effectId >= MAX_EFFECTS) return;
 
     EffectAudioMapping& config = m_mappings[effectId];
     if (!config.globalEnabled || config.mappingCount == 0) return;
 
     // Performance instrumentation
-    uint32_t startMicros = micros();
+    uint32_t startMicros = lw_micros();
 
     // If no fresh audio, skip (keep previous smoothed values)
     if (!audioAvailable) {
-        m_lastApplyMicros = micros() - startMicros;
+        m_lastApplyMicros = lw_micros() - startMicros;
         m_applyCount++;
         return;
     }
@@ -413,7 +495,7 @@ void AudioMappingRegistry::applyMappings(
     }
 
     // Record performance
-    m_lastApplyMicros = micros() - startMicros;
+    m_lastApplyMicros = lw_micros() - startMicros;
     m_applyCount++;
 
     if (m_lastApplyMicros > m_maxApplyMicros) {

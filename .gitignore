@@ -98,6 +98,15 @@ tools/upload.sh
 docs/CHANGELOG.md
 docs/TODO.md
 
+# AI/agent-generated research artefacts (local)
+docs/research/
+docs/testing/
+docs/architecture/PSRAM_REFACTOR_ARCH_REVIEW.md
+research/
+lightwave-ios-v2/2026-*.txt
+lightwave-ios-v2/LightwaveOS/Views/Audio/CLAUDE.md
+firmware/v2/docs/SHOWDIRECTOR_USER_GUIDE.md
+
 # Template/design files (local development artifacts)
 docs/templates/
 

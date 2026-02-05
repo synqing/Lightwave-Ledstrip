@@ -57,6 +57,7 @@
 
 #if FEATURE_AUDIO_SYNC
 #include "audio/AudioDebugConfig.h"
+#include "audio/contracts/AudioEffectMapping.h"
 #endif
 
 #include "config/DebugConfig.h"
@@ -174,6 +175,14 @@ void setup() {
     LW_LOGI("Registering effects...");
     uint8_t effectCount = registerAllEffects(renderer);
     LW_LOGI("Effects registered: %d", effectCount);
+
+#if FEATURE_AUDIO_SYNC
+    // Initialise AudioMappingRegistry before render tasks begin so the large mapping
+    // table can live in PSRAM rather than internal SRAM.
+    LW_LOGI("Initialising Audio Mapping Registry...");
+    bool mappingOk = lightwaveos::audio::AudioMappingRegistry::instance().begin();
+    LW_LOGI("Audio Mapping Registry: %s", mappingOk ? "READY" : "DISABLED");
+#endif
 
     // Initialize NVS (must be before Zone Composer to load saved config)
     LW_LOGI("Initializing NVS...");

@@ -46,4 +46,19 @@
 | #25408 | 8:35 PM | 🔵 | Disconnect handler missing _pendingZonesRefresh flag clear | ~367 |
 | #25407 | " | 🔵 | WebSocket connection lacks heartbeat enablement in begin() methods | ~397 |
 | #25406 | " | 🟣 | WebSocket heartbeat and connection hardening implemented | ~489 |
+
+### Feb 6, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #25695 | 3:00 AM | ✅ | Tab5 sendZonePalette() simplified to always use send queue | ~423 |
+| #25694 | " | 🔄 | Tab5 sendZoneSpeed simplified to always use send queue | ~484 |
+| #25693 | 2:59 AM | 🔄 | Tab5 WebSocket sendZoneBrightness refactored to always queue via send queue | ~477 |
+| #25690 | " | 🔴 | Tab5 sendPaletteChange() simplified to always queue instead of immediate send | ~498 |
+| #25689 | " | 🔴 | Brightness Command Simplified to Always Queue | ~661 |
+| #25685 | 2:43 AM | 🔴 | Tab5 parameter sends now always queue to prevent watchdog timeout from blocking WebSocket calls | ~704 |
+| #25684 | 2:41 AM | 🔵 | Tab5 WebSocketClient implements per-parameter rate limiting with 50ms throttle and send queue for dropped messages | ~593 |
+| #25657 | 2:01 AM | 🔵 | WebSocket Connection Timeout Set to 20 Seconds | ~590 |
+| #25611 | 1:04 AM | 🔵 | Tab5 WebSocketClient attemptReconnect implements full socket teardown and heartbeat re-enablement | ~495 |
+| #25609 | " | 🔵 | Tab5 WebSocket infinite reconnect loop root cause identified | ~677 |
 </claude-mem-context>

@@ -32,6 +32,8 @@
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>LightwaveOS needs to discover LED controllers on your local network.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>LightwaveOS uses your location to detect which WiFi network you're on for instant device connection.</string>
 	<key>UIBackgroundModes</key>
 	<array/>
 	<key>UILaunchScreen</key>

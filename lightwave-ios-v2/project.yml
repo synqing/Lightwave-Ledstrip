@@ -43,6 +43,7 @@ targets:
         INFOPLIST_KEY_NSBonjourServices: "_lightwaveos._tcp,_http._tcp"
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: VS4NV74375
+        CODE_SIGN_ENTITLEMENTS: LightwaveOS.entitlements
       configs:
         Debug:
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: "RIVE_RUNTIME_APPLE DEBUG"
@@ -55,6 +56,7 @@ targets:
       path: LightwaveOS/Resources/Info.plist
       properties:
         CFBundleDisplayName: "LightwaveOS v2"
+        NSLocationWhenInUseUsageDescription: "LightwaveOS uses your location to detect which WiFi network you're on for instant device connection."
         NSLocalNetworkUsageDescription: "LightwaveOS needs to discover LED controllers on your local network."
         NSBonjourServices:
           - "_lightwaveos._tcp"

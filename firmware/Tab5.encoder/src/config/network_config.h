@@ -14,20 +14,20 @@
 
 // WiFi Station Credentials (defaults, overridden by build flags)
 #ifndef WIFI_SSID
-#define WIFI_SSID "VX220-013F"
+#define WIFI_SSID "LightwaveOS-AP"
 #endif
 #ifndef WIFI_PASSWORD
-#define WIFI_PASSWORD "3232AA90E0F24"
+#define WIFI_PASSWORD "SpectraSynq"
 #endif
 
 // Secondary WiFi Network (fallback)
-// Tab5 automatically connects to v2 device's AP when primary WiFi unavailable
-// v2 device AP: SSID="LightwaveOS-AP", Password="SpectraSynq", IP=192.168.4.1
+// User's home/venue WiFi configured via wifi_credentials.ini build flags
+// Override: -D WIFI_SSID2=\"YourNetwork\" -D WIFI_PASSWORD2=\"YourPassword\"
 #ifndef WIFI_SSID2
-#define WIFI_SSID2 "LightwaveOS-AP"
+#define WIFI_SSID2 "CONFIGURE_ME"
 #endif
 #ifndef WIFI_PASSWORD2
-#define WIFI_PASSWORD2 "SpectraSynq"
+#define WIFI_PASSWORD2 ""
 #endif
 
 // LightwaveOS Server
@@ -118,7 +118,7 @@ namespace NetworkConfig {
     //   2. Or check your router's admin page for connected devices
     //   3. Or use a network scanner app (Fing, etc.)
     // This IP is used when mDNS fails on third-party networks (e.g., VX220-013F)
-    constexpr const char* MDNS_FALLBACK_IP_PRIMARY = "192.168.1.101";
+    constexpr const char* MDNS_FALLBACK_IP_PRIMARY = "192.168.4.1";
 }
 
 // NVS namespace and keys for network configuration

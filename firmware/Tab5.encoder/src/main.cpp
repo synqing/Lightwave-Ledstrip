@@ -1600,7 +1600,8 @@ void setup() {
                   // ESP.getFreeHeap(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
         // #endregion
     
-    // Begin WiFi - connect to home WiFi (same network as v2)
+    // Begin WiFi - connect to v2's AP (deterministic Portable Mode)
+    // Primary: LightwaveOS-AP (192.168.4.1), Secondary: user network via build flags
     g_wifiManager.begin(WIFI_SSID, WIFI_PASSWORD);
     
     // #region agent log (DISABLED)
@@ -2369,7 +2370,7 @@ void loop() {
         if (wifiOk) {
             // Avoid per-frame heap churn (e.g. IPAddress::toString() + String copies).
             static uint32_t s_lastWiFiInfoMs = 0;
-            static char s_ipBuf[16] = {0};
+            static char s_ipBuf[48] = {0};  // Expanded for "IP > targeting v2" display
             static char s_ssidBuf[33] = {0};  // 32 + NUL (802.11 SSID max)
             static int32_t s_rssi = 0;
 
@@ -2378,7 +2379,14 @@ void loop() {
                 s_lastWiFiInfoMs = now;
 
                 const IPAddress ip = g_wifiManager.getLocalIP();
-                formatIPv4(ip, s_ipBuf);
+                char ipOnly[16];
+                formatIPv4(ip, ipOnly);
+
+                if (g_wsConfigured) {
+                    snprintf(s_ipBuf, sizeof(s_ipBuf), "%s", ipOnly);
+                } else {
+                    snprintf(s_ipBuf, sizeof(s_ipBuf), "%s > targeting v2", ipOnly);
+                }
 
                 const String ssid = g_wifiManager.getSSID();
                 ssid.toCharArray(s_ssidBuf, sizeof(s_ssidBuf));

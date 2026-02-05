@@ -143,7 +143,7 @@ namespace NetworkConfig {
     // ========================================================================
 
     constexpr size_t WS_MAX_CLIENTS = 4;
-    constexpr uint32_t WS_PING_INTERVAL_MS = 30000;
+    constexpr uint32_t WS_PING_INTERVAL_MS = 15000;
 
     // ========================================================================
     // WiFiManager Settings

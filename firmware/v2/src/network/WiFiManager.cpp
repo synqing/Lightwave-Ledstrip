@@ -66,15 +66,28 @@ bool WiFiManager::begin() {
     // Register WiFi event handler
     WiFi.onEvent(onWiFiEvent);
 
-    // Set WiFi mode. Default is STA; AP-only builds start directly in AP mode.
+    // Set WiFi mode. Default is AP+STA concurrent (Portable Mode).
+    // AP starts immediately so Tab5/iOS can connect within seconds of boot.
+    // STA connects in parallel without affecting AP clients.
 #ifdef WIFI_AP_ONLY
     LW_LOGW("WIFI_AP_ONLY enabled - starting in AP mode only");
     startSoftAP();
     setState(STATE_WIFI_AP_MODE);
 #else
-    // Set WiFi mode to STA only - AP mode is fallback only
-    // (Exclusive modes: STA for normal operation, AP when connection fails)
-    WiFi.mode(WIFI_MODE_STA);
+    if (m_apEnabled) {
+        // Portable Mode: AP always on, STA connects in parallel
+        WiFi.mode(WIFI_MODE_APSTA);
+        if (WiFi.softAP(m_apSSID.c_str(), m_apPassword.c_str(), m_apChannel)) {
+            LW_LOGI("AP always-on: '%s' at %s (STA will connect in parallel)",
+                    m_apSSID.c_str(), WiFi.softAPIP().toString().c_str());
+            xEventGroupSetBits(m_wifiEventGroup, EVENT_AP_START);
+        } else {
+            LW_LOGE("Failed to start Soft-AP, falling back to STA only");
+            WiFi.mode(WIFI_MODE_STA);
+        }
+    } else {
+        WiFi.mode(WIFI_MODE_STA);
+    }
 #endif
 
     // Create WiFi management task on Core 0
@@ -134,9 +147,9 @@ void WiFiManager::wifiTask(void* parameter) {
 
     LW_LOGI("Task started");
 
-    // NOTE: AP is NOT started immediately - it's a FALLBACK only
-    // AP mode is entered via handleStateFailed() when all STA connection attempts
-    // are exhausted. This enforces STA-first architecture.
+    // NOTE: In Portable Mode, AP is started immediately in begin() via AP+STA.
+    // The task handles STA connection attempts in parallel.
+    // AP stays up permanently regardless of STA state.
 
     // Main state machine loop
     while (true) {
@@ -434,7 +447,7 @@ void WiFiManager::handleStateFailed() {
 
     // If AP mode is enabled and we've exhausted all networks, fall back to it
     if (m_apEnabled && m_attemptsOnCurrentNetwork >= NetworkConfig::WIFI_ATTEMPTS_PER_NETWORK && !hasSecondaryNetwork()) {
-        LW_LOGW("Falling back to AP mode for configuration");
+        LW_LOGW("All networks exhausted - entering AP mode (AP already up in AP+STA)");
         setState(STATE_WIFI_AP_MODE);
         return;
     }
@@ -481,14 +494,14 @@ void WiFiManager::handleStateAPMode() {
     return;
 #endif
 
-    // Periodically try to connect to WiFi if we have valid credentials
+    // Periodically try STA connection without killing AP (non-destructive retry)
     if (!m_ssid.isEmpty() && m_ssid != "CONFIGURE_ME") {
         if (millis() - lastRetryTime > 60000) {
             lastRetryTime = millis();
-            LW_LOGI("Retrying WiFi connection from AP mode...");
-            // Switch back to STA mode before attempting connection
-            WiFi.mode(WIFI_MODE_STA);
-            setState(STATE_WIFI_INIT);
+            LW_LOGI("Retrying STA connection from AP mode (AP stays up)...");
+            // Disconnect STA only, preserve AP. AP+STA mode set in begin().
+            WiFi.disconnect(false);
+            setState(STATE_WIFI_SCANNING);
         }
     }
 }
@@ -569,8 +582,8 @@ bool WiFiManager::connectToAP() {
 void WiFiManager::startSoftAP() {
     LW_LOGI("Starting Soft-AP: '%s' (channel %d)", m_apSSID.c_str(), m_apChannel);
 
-    // Switch to AP-only mode (exclusive modes architecture)
-    WiFi.mode(WIFI_MODE_AP);
+    // Switch to AP+STA concurrent mode (Portable Mode architecture)
+    WiFi.mode(WIFI_MODE_APSTA);
 
     // Configure and start AP
     if (WiFi.softAP(m_apSSID.c_str(), m_apPassword.c_str(), m_apChannel)) {
@@ -1047,6 +1060,52 @@ void WiFiManager::onWiFiEvent(WiFiEvent_t event) {
             break;
     }
 #endif
+}
+
+// ============================================================================
+// Runtime Mode Control (Portable Mode)
+// ============================================================================
+
+bool WiFiManager::requestSTAEnable(uint32_t timeoutMs, bool autoRevert) {
+    (void)timeoutMs; (void)autoRevert;
+    LW_LOGI("STA enable requested (already active in AP+STA mode)");
+    if (m_currentState == STATE_WIFI_AP_MODE || m_currentState == STATE_WIFI_FAILED) {
+        WiFi.disconnect(false);
+        setState(STATE_WIFI_INIT);
+    }
+    return true;
+}
+
+bool WiFiManager::requestAPOnly() {
+    LW_LOGI("AP-only mode requested");
+    WiFi.disconnect(false);
+    setState(STATE_WIFI_AP_MODE);
+    return true;
+}
+
+bool WiFiManager::connectToNetwork(const String& ssid, const String& password) {
+    LW_LOGI("Connect requested: '%s'", ssid.c_str());
+    m_credentialsStorage.saveNetwork(ssid, password);
+    setCredentials(ssid, password);
+    if (WiFi.getMode() == WIFI_MODE_AP) {
+        WiFi.mode(WIFI_MODE_APSTA);
+    }
+    WiFi.disconnect(false);
+    setState(STATE_WIFI_INIT);
+    return true;
+}
+
+bool WiFiManager::connectToSavedNetwork(const String& ssid) {
+    LW_LOGI("Connect to saved network: '%s'", ssid.c_str());
+    WiFiCredentialsStorage::NetworkCredential networks[8];
+    uint8_t count = m_credentialsStorage.loadNetworks(networks, 8);
+    for (uint8_t i = 0; i < count; i++) {
+        if (networks[i].ssid == ssid) {
+            return connectToNetwork(ssid, networks[i].password);
+        }
+    }
+    LW_LOGW("Network '%s' not found in saved credentials", ssid.c_str());
+    return false;
 }
 
 } // namespace network

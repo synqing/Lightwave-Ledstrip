@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import Network
 import Observation
 
 /// App mode enum tracking the active tab
@@ -71,6 +72,15 @@ class AppViewModel {
 
     // MARK: - Zone Refresh Throttling
 
+    // MARK: - Network Monitor
+
+    private var networkMonitor: NWPathMonitor?
+    private var lastNetworkPath: NWPath.Status?
+    private var reconnectTask: Task<Void, Never>?
+
+    private static let lastDeviceIPKey = "lightwaveos.lastDeviceIP"
+    private static let lastDevicePortKey = "lightwaveos.lastDevicePort"
+
     private var zoneRefreshTask: Task<Void, Never>?
     private var lastZoneRefresh: Date = .distantPast
     private var statusPollTask: Task<Void, Never>?
@@ -101,6 +111,9 @@ class AppViewModel {
         log("Connecting to \(device.displayName) at \(device.cleanIP)...", category: "CONN")
         connectionState = .connecting
         currentDevice = device
+
+        // Persist for fast reconnection
+        persistDevice(ip: device.cleanIP, port: device.port)
 
         await connectManual(ip: device.cleanIP, port: device.port)
     }
@@ -205,6 +218,9 @@ class AppViewModel {
             connectionState = .connected
             log("Connected successfully", category: "CONN")
 
+            // Start monitoring for network changes
+            startNetworkMonitor()
+
         } catch {
             log("Connection failed: \(error.localizedDescription)", category: "ERROR")
             connectionState = .error(error.localizedDescription)
@@ -214,6 +230,9 @@ class AppViewModel {
 
     func disconnect() async {
         log("Disconnecting...", category: "CONN")
+        stopNetworkMonitor()
+        reconnectTask?.cancel()
+        reconnectTask = nil
         await ws.disconnect()
         rest = nil
         currentDevice = nil
@@ -499,6 +518,93 @@ class AppViewModel {
             self.deviceStatus = response.data
         } catch {
             // Keep last known status; avoid spamming logs
+        }
+    }
+
+    // MARK: - Network Monitor
+
+    /// Monitor network path changes to trigger reconnection when WiFi changes.
+    private func startNetworkMonitor() {
+        stopNetworkMonitor()
+        let monitor = NWPathMonitor(requiredInterfaceType: .wifi)
+        self.networkMonitor = monitor
+
+        monitor.pathUpdateHandler = { [weak self] path in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let previousStatus = self.lastNetworkPath
+                self.lastNetworkPath = path.status
+
+                if previousStatus == .unsatisfied && path.status == .satisfied {
+                    self.log("WiFi restored, attempting reconnection...", category: "NET")
+                    self.attemptReconnection()
+                } else if previousStatus == .satisfied && path.status == .unsatisfied {
+                    self.log("WiFi lost", category: "NET")
+                }
+            }
+        }
+
+        monitor.start(queue: DispatchQueue(label: "com.lightwaveos.netmonitor", qos: .utility))
+    }
+
+    private func stopNetworkMonitor() {
+        networkMonitor?.cancel()
+        networkMonitor = nil
+        lastNetworkPath = nil
+    }
+
+    // MARK: - Device Persistence
+
+    /// Persist last-connected device for fast reconnection on next launch.
+    private func persistDevice(ip: String, port: Int) {
+        UserDefaults.standard.set(ip, forKey: Self.lastDeviceIPKey)
+        UserDefaults.standard.set(port, forKey: Self.lastDevicePortKey)
+    }
+
+    /// Load last-connected device from UserDefaults.
+    func loadPersistedDevice() -> (ip: String, port: Int)? {
+        guard let ip = UserDefaults.standard.string(forKey: Self.lastDeviceIPKey),
+              !ip.isEmpty else {
+            return nil
+        }
+        let port = UserDefaults.standard.integer(forKey: Self.lastDevicePortKey)
+        return (ip, port > 0 ? port : 80)
+    }
+
+    // MARK: - Reconnection
+
+    /// Attempt to reconnect: probe last-known IP first, then fall back to discovery.
+    func attemptReconnection() {
+        reconnectTask?.cancel()
+        reconnectTask = Task { [weak self] in
+            guard let self else { return }
+
+            // First: probe last-known device IP
+            if let last = self.loadPersistedDevice() {
+                self.log("Probing last device at \(last.ip):\(last.port)...", category: "CONN")
+                if let device = await self.discovery.probeDevice(ip: last.ip, port: last.port) {
+                    guard !Task.isCancelled else { return }
+                    await self.connect(to: device)
+                    return
+                }
+            }
+
+            guard !Task.isCancelled else { return }
+
+            // Probe v2 AP gateway directly
+            self.log("Probing v2 AP gateway...", category: "CONN")
+            if let device = await self.discovery.probeDevice(ip: "192.168.4.1") {
+                guard !Task.isCancelled else { return }
+                await self.connect(to: device)
+                return
+            }
+
+            guard !Task.isCancelled else { return }
+
+            // Last resort: full Bonjour discovery
+            self.log("Falling back to Bonjour discovery...", category: "CONN")
+            self.connectionState = .discovering
+            await self.startDeviceDiscovery()
         }
     }
 

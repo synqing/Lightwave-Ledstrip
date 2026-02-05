@@ -82,7 +82,11 @@ void WebSocketClient::begin(const char* host, uint16_t port, const char* path) {
     esp_task_wdt_reset();
     
     _ws.begin(host, port, path);
-    
+
+    // Enable ping/pong heartbeat for dead-connection detection
+    // 15s ping interval, 10s pong timeout, 2 missed pongs = disconnect
+    _ws.enableHeartbeat(15000, 10000, 2);
+
     // CRITICAL FIX: Feed watchdog after begin() returns
     esp_task_wdt_reset();
 }
@@ -114,7 +118,10 @@ void WebSocketClient::begin(IPAddress ip, uint16_t port, const char* path) {
     esp_task_wdt_reset();
     
     _ws.begin(ip, port, path);
-    
+
+    // Enable ping/pong heartbeat for dead-connection detection
+    _ws.enableHeartbeat(15000, 10000, 2);
+
     // CRITICAL FIX: Feed watchdog after begin() returns
     esp_task_wdt_reset();
 }
@@ -233,6 +240,7 @@ void WebSocketClient::handleEvent(WStype_t type, uint8_t* payload, size_t length
             }
             _status = WebSocketStatus::DISCONNECTED;
             _pendingHello = false;  // Clear pending hello on disconnect
+            _pendingZonesRefresh = false;  // Clear deferred zone refresh
             increaseReconnectBackoff();
             break;
 
@@ -302,13 +310,19 @@ void WebSocketClient::attemptReconnect() {
 
         // CRITICAL FIX: Feed watchdog before reconnect attempt
         esp_task_wdt_reset();
-        
+
+        // Full teardown: close any lingering socket before creating new connection
+        _ws.disconnect();
+
         if (_useIP) {
             _ws.begin(_serverIP, _serverPort, _serverPath);
         } else {
             _ws.begin(_serverHost, _serverPort, _serverPath);
         }
-        
+
+        // Re-enable heartbeat after fresh begin() (begin() resets library state)
+        _ws.enableHeartbeat(15000, 10000, 2);
+
         // CRITICAL FIX: Feed watchdog after reconnect attempt
         esp_task_wdt_reset();
     }

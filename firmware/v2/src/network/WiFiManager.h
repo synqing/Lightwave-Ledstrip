@@ -349,15 +349,12 @@ public:
     /**
      * @brief Request STA mode enable (stub)
      */
-    bool requestSTAEnable(uint32_t timeoutMs = 0, bool autoRevert = false) { 
-        (void)timeoutMs; (void)autoRevert; 
-        return false; 
-    }
+    bool requestSTAEnable(uint32_t timeoutMs = 0, bool autoRevert = false);
 
     /**
-     * @brief Request AP-only mode (stub)
+     * @brief Request AP-only mode (disconnects STA, stays in AP)
      */
-    bool requestAPOnly() { return false; }
+    bool requestAPOnly();
 
     /**
      * @brief Check if force AP-only mode is active (stub)
@@ -397,18 +394,12 @@ public:
     /**
      * @brief Connect to network (stub)
      */
-    bool connectToNetwork(const String& ssid, const String& password) {
-        (void)ssid; (void)password;
-        return false;
-    }
+    bool connectToNetwork(const String& ssid, const String& password);
 
     /**
-     * @brief Connect to saved network (stub)
+     * @brief Connect to a saved network by SSID
      */
-    bool connectToSavedNetwork(const String& ssid) {
-        (void)ssid;
-        return false;
-    }
+    bool connectToSavedNetwork(const String& ssid);
 
 private:
     // ========================================================================

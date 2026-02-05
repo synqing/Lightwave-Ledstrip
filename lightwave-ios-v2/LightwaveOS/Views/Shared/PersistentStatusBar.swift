@@ -188,15 +188,18 @@ struct PersistentStatusBar: View {
     private var statusText: String {
         switch appVM.connectionState {
         case .disconnected:
-            return "Disconnected"
+            return "Not Connected"
         case .discovering:
-            return "Discovering"
+            return "Searching..."
         case .connecting:
-            return "Connecting"
+            return "Connecting..."
         case .connected:
+            if appVM.currentDevice?.cleanIP == "192.168.4.1" {
+                return "Connected (AP)"
+            }
             return "Connected"
-        case .error(let msg):
-            return msg
+        case .error:
+            return "Reconnecting..."
         }
     }
 

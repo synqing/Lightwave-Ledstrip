@@ -9,6 +9,7 @@
 
 import Foundation
 import Network
+import NetworkExtension
 
 /// Actor-based device discovery service for LightwaveOS devices.
 /// Provides reactive device updates via AsyncStream and eliminates data races
@@ -27,6 +28,10 @@ actor DeviceDiscoveryService {
     // MARK: - Non-Isolated State
 
     private let browserQueue = DispatchQueue(label: "com.lightwaveos.discovery", qos: .userInitiated)
+    private var probeTask: Task<Void, Never>?
+
+    // Known IP for v2 AP gateway (Portable Mode)
+    private static let lightwaveAPIP = "192.168.4.1"
 
     // MARK: - Public Interface
 
@@ -70,6 +75,28 @@ actor DeviceDiscoveryService {
             // Start browsing
             browser.start(queue: browserQueue)
 
+            // Schedule HTTP probe fallback (works without entitlement)
+            self.probeTask = Task {
+                // First: check if we're on the v2 AP (instant if entitlement available)
+                if let apIP = await self.detectLightwaveAP() {
+                    if let device = await self.probeDevice(ip: apIP) {
+                        await self.addDevice(device)
+                        return
+                    }
+                }
+
+                // Wait 5 seconds for Bonjour to find something
+                try? await Task.sleep(for: .seconds(5))
+                guard !Task.isCancelled else { return }
+
+                // If Bonjour found nothing, probe known IPs
+                if await self.discoveredDevices.isEmpty {
+                    if let device = await self.probeDevice(ip: Self.lightwaveAPIP) {
+                        await self.addDevice(device)
+                    }
+                }
+            }
+
             // Handle stream termination
             continuation.onTermination = { [weak self] _ in
                 guard let self = self else { return }
@@ -88,6 +115,8 @@ actor DeviceDiscoveryService {
     // MARK: - Private Implementation
 
     private func stopDiscoveryInternal() {
+        probeTask?.cancel()
+        probeTask = nil
         browser?.cancel()
         browser = nil
         cancelAllResolutions()
@@ -298,6 +327,57 @@ actor DeviceDiscoveryService {
 
         // Yield updated list
         streamContinuation?.yield(discoveredDevices)
+    }
+
+    // MARK: - HTTP Probe
+
+    /// Probe a device at a specific IP via HTTP GET /api/v1/device/info.
+    /// Returns DeviceInfo if the device responds within the timeout.
+    func probeDevice(ip: String, port: Int = 80) async -> DeviceInfo? {
+        guard let url = URL(string: "http://\(ip):\(port)/api/v1/device/info") else {
+            return nil
+        }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 2.0
+        request.httpMethod = "GET"
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200 else {
+                return nil
+            }
+
+            // Parse hostname from response if available
+            var hostname = "lightwaveos"
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let dataDict = json["data"] as? [String: Any],
+               let name = dataDict["hostname"] as? String {
+                hostname = name
+            }
+
+            return DeviceInfo(hostname: hostname, ipAddress: ip, port: port)
+        } catch {
+            return nil
+        }
+    }
+
+    /// Check if currently connected to a LightwaveOS AP via SSID.
+    /// Returns the v2 device IP if on the AP, nil otherwise.
+    /// Requires "Access WiFi Information" entitlement + location permission.
+    /// Falls back gracefully (returns nil) when unavailable.
+    private func detectLightwaveAP() async -> String? {
+        await withCheckedContinuation { continuation in
+            NEHotspotNetwork.fetchCurrent { network in
+                if let ssid = network?.ssid,
+                   ssid.localizedCaseInsensitiveContains("lightwaveos") {
+                    continuation.resume(returning: Self.lightwaveAPIP)
+                } else {
+                    continuation.resume(returning: nil)
+                }
+            }
+        }
     }
 
     // MARK: - Utilities

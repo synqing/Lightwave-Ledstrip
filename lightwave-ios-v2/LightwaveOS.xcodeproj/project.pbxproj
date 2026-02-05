@@ -20,7 +20,6 @@
 		2DE021CF3623E96957E0FB5C /* ZoneConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08C2D77D1CFF5748E86799D6 /* ZoneConfig.swift */; };
 		31BBB2F2C90464B12766B78B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 18BB5AEC76BDB1042E10C43A /* Assets.xcassets */; };
 		3233C8CD1AD0C3F1CDF06FBA /* AudioTuningParameters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70567498B0EBA5C80F60D128 /* AudioTuningParameters.swift */; };
-		39BBEFD7203ADA9A031D70BD /* RiveAssetRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8AA077BE40C504F5857BAF8 /* RiveAssetRegistry.swift */; };
 		3AAECAF9F115A60F48C53CF6 /* StateCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6835286C5F9C9CFBB0342C18 /* StateCard.swift */; };
 		3B728228347413E7091E32CA /* TransitionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F36409ABC36BCB430CD9E0A4 /* TransitionCard.swift */; };
 		3D89807695C36EF268ECF7F4 /* AppViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F30172340FDF0956E377E609 /* AppViewModel.swift */; };
@@ -44,7 +43,6 @@
 		651D94812D47ACEF73F02D22 /* WaveformSpectrumCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 015EA9550AB44879E2FEDC47 /* WaveformSpectrumCard.swift */; };
 		6A5F5AA58634F4613D9B3ED5 /* ZonePaletteSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 168C9F678A0019152BC2DB77 /* ZonePaletteSelectorView.swift */; };
 		6BB889F59EE8A58C7385BBEA /* ColourCorrectionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EE7EA23FBC59A906EFEB025 /* ColourCorrectionCard.swift */; };
-		6E5C18C5632D04039B31DE2E /* DesignReferenceData.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7EE77E551ADFC8B7142DFCA /* DesignReferenceData.swift */; };
 		6EB45E88A8F52BD4E073B17A /* AudioMetricsFrame.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58FF25A0E1C1057E09C88FD6 /* AudioMetricsFrame.swift */; };
 		7199AF4B6F1AC075548475CF /* PaletteViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 224698FD7FB174C316FBE60D /* PaletteViewModel.swift */; };
 		731AD47052D2320BBE28F2C3 /* ConnectionDot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CA3B90727EBB0CF6103AEA1 /* ConnectionDot.swift */; };
@@ -60,7 +58,6 @@
 		97F87D839542891BE69184EC /* BeatHapticsCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A1727B0FD097BC45F09E2AE /* BeatHapticsCard.swift */; };
 		98512C417EA442B34802EB83 /* PlayTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 456CA5276801070F23B37070 /* PlayTab.swift */; };
 		9E2095C181E3E4C63D8EE18F /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87205249A100EE9FB99CC9D8 /* DesignTokens.swift */; };
-		A45A187071BDDB0F4F7136DF /* RiveRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 014757B5CB91C8603A1DF679 /* RiveRuntime.swift */; };
 		A6D3AE786BE1C665F29E1387 /* EnergyCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1A074509DE203CBD3BD0AB /* EnergyCard.swift */; };
 		A8C6128BC49CA053AEDD3E60 /* AudioParametersCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6C3DFA6F658077123421991 /* AudioParametersCard.swift */; };
 		A9750C3CA3D06B429608AF83 /* DotMatrixCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 968C3EBBFE6704A938BC735B /* DotMatrixCanvas.swift */; };
@@ -71,18 +68,13 @@
 		B871B0FF48E50BCFEACD90AD /* UDPStreamReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A666FDABA22F3869FE52E0A /* UDPStreamReceiver.swift */; };
 		BA7A664F2E2A8E45B775DBB6 /* SilenceDetectionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DC45A333675D7720ED18E93 /* SilenceDetectionCard.swift */; };
 		BAE8BCD1B192AB3E5AEC645A /* LightwaveOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8486C05EF5A54BF248CBC5 /* LightwaveOSApp.swift */; };
-		BD7225787111D20B0DAB3510 /* DesignReferenceCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E512D28B2FAAB2052D39981 /* DesignReferenceCapture.swift */; };
 		BDCCFCEE87577AA07404073C /* JetBrainsMono-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = AE8390CC2910D822252527A7 /* JetBrainsMono-Medium.ttf */; };
 		BF2618C4BF2E8B080D8ABD8D /* ColourCorrectionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F510F083B57F41382CDE442A /* ColourCorrectionViewModel.swift */; };
 		C37B4DEBCA003D607F1EB6B7 /* SystemState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FE0B2000D2C4873FDC10DF5 /* SystemState.swift */; };
 		C57C8477A4CEC46122235A5B /* BeatPulse.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1C44B4393BF8BAEE1D5974 /* BeatPulse.swift */; };
-		C8AD2FB3D54FFCF4DEEFC4FB /* RiveReferenceGallery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E9220213A1BC42D7DC9736C /* RiveReferenceGallery.swift */; };
-		CD8C706BCC146AE424D532E2 /* RiveAppleRuntimeAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5925C7D2FEBD45A8B24782D /* RiveAppleRuntimeAdapter.swift */; };
 		D40C0E29EE75A444D41C091B /* DeviceInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24F263BD5B2BE3B042FD6500 /* DeviceInfo.swift */; };
 		D4858ADE55BA3233EAC10336 /* StepperControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB077354363CFEC33A7BCC55 /* StepperControl.swift */; };
 		D7B1E0FA82137B04E351A3AC /* PrimaryControlsCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3683BF0C58E2D73196B6C24F /* PrimaryControlsCard.swift */; };
-		DAEE2833638579F4171A6742 /* RiveViewContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2532BA73C0A023E4FE6FFC5E /* RiveViewContainer.swift */; };
-		DB7A0B8FCD6D7AB7F0635D59 /* RiveCppRuntimeAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08AA2C21356E7DCE870D100D /* RiveCppRuntimeAdapter.swift */; };
 		DD03A1AAA86329C8F31ED5F8 /* ZoneViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CEDD5DA50941F20E512D1B2 /* ZoneViewModel.swift */; };
 		DD2A1545ECFBAFC9366C0222 /* ShowsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01B2B27348B24F57C57E84EE /* ShowsView.swift */; };
 		DD9590BF303220F7E3701DD7 /* EffectMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 455F2E537DDB7B2763EC9AD0 /* EffectMetadata.swift */; };
@@ -94,12 +86,9 @@
 		E9CA5DC7DEA6FB23A7C72159 /* BebasNeue-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 6D2BE3CB8FCF48E1A0DD6BA4 /* BebasNeue-Bold.ttf */; };
 		EAD83A8923DD6CA8F03A0887 /* WaterfallCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 374C885FB86340D0868A0F17 /* WaterfallCanvas.swift */; };
 		EE6E92BCD446F432BFB4D1A9 /* ColourCorrectionConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C193AB587158FAE17B70076 /* ColourCorrectionConfig.swift */; };
-		EEB9D4CB8A3A284E3FC897E2 /* RiveRuntimeFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9EEA486B10C7508EF9BEFB8 /* RiveRuntimeFactory.swift */; };
-		F012D64C3954D7C9018F7F9E /* RiveAssetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FC30F2B1E7E2A002235D10B /* RiveAssetTests.swift */; };
 		F0E737F62762F2F3CBD94E41 /* DebugLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3312C970BE3E5BC4D373D9AA /* DebugLogView.swift */; };
 		F201C9ADFB5282D9B2FDC3BD /* Palettes_Master.json in Resources */ = {isa = PBXBuildFile; fileRef = 6A5074FF917C2B57C4CE67E0 /* Palettes_Master.json */; };
 		F2115B1183C10DA720A36477 /* ZoneCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = E806390A509CCD91CCE62C34 /* ZoneCard.swift */; };
-		F620A6280CABB7373751D286 /* RiveReferenceScreenshotsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41B105BA1C641A3CE67651CC /* RiveReferenceScreenshotsUITests.swift */; };
 		F9B02ED4E22BECB3EFD01829 /* RESTClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DABC7E4FD7AB390A7413924 /* RESTClient.swift */; };
 		F9F00E9852A03ABB2DC113AD /* SpectrumVisualisationCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70BC4E2523308275C0B38ECC /* SpectrumVisualisationCard.swift */; };
 		F9F86388A7F4ACC8530A4B99 /* PresetsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F546C8A2C99339CAF146E5B8 /* PresetsView.swift */; };
@@ -123,10 +112,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		014757B5CB91C8603A1DF679 /* RiveRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RiveRuntime.swift; sourceTree = "<group>"; };
 		015EA9550AB44879E2FEDC47 /* WaveformSpectrumCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformSpectrumCard.swift; sourceTree = "<group>"; };
 		01B2B27348B24F57C57E84EE /* ShowsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowsView.swift; sourceTree = "<group>"; };
-		08AA2C21356E7DCE870D100D /* RiveCppRuntimeAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RiveCppRuntimeAdapter.swift; sourceTree = "<group>"; };
 		08C2D77D1CFF5748E86799D6 /* ZoneConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoneConfig.swift; sourceTree = "<group>"; };
 		0AE9C345B8D6E90338187465 /* NoveltyOnsetCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoveltyOnsetCard.swift; sourceTree = "<group>"; };
 		0C1ED4C5F6EC72A53B9AEC1C /* PatternPill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatternPill.swift; sourceTree = "<group>"; };
@@ -140,7 +127,6 @@
 		21FB60C98C375E8F04A95D75 /* BooleanIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BooleanIndicator.swift; sourceTree = "<group>"; };
 		224698FD7FB174C316FBE60D /* PaletteViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteViewModel.swift; sourceTree = "<group>"; };
 		24F263BD5B2BE3B042FD6500 /* DeviceInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceInfo.swift; sourceTree = "<group>"; };
-		2532BA73C0A023E4FE6FFC5E /* RiveViewContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RiveViewContainer.swift; sourceTree = "<group>"; };
 		254F0C219FB5F9F4CE8A47D4 /* PersistentStatusBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistentStatusBar.swift; sourceTree = "<group>"; };
 		25808F2C76C005D96028C674 /* EffectViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EffectViewModel.swift; sourceTree = "<group>"; };
 		25C2C8B36E0F08C57DD1C8ED /* LWCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LWCard.swift; sourceTree = "<group>"; };
@@ -153,7 +139,6 @@
 		3A1727B0FD097BC45F09E2AE /* BeatHapticsCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeatHapticsCard.swift; sourceTree = "<group>"; };
 		3A450B5387DC386220A98816 /* TransitionConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitionConfig.swift; sourceTree = "<group>"; };
 		3CA3B90727EBB0CF6103AEA1 /* ConnectionDot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionDot.swift; sourceTree = "<group>"; };
-		41B105BA1C641A3CE67651CC /* RiveReferenceScreenshotsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RiveReferenceScreenshotsUITests.swift; sourceTree = "<group>"; };
 		455F2E537DDB7B2763EC9AD0 /* EffectMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EffectMetadata.swift; sourceTree = "<group>"; };
 		456CA5276801070F23B37070 /* PlayTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayTab.swift; sourceTree = "<group>"; };
 		4A06B1F5D1B76135389E8A37 /* DeviceDiscoveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceDiscoveryService.swift; sourceTree = "<group>"; };
@@ -172,8 +157,6 @@
 		6B7CC4054A122FC375E195C9 /* BandEnvelopeCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BandEnvelopeCard.swift; sourceTree = "<group>"; };
 		6D2BE3CB8FCF48E1A0DD6BA4 /* BebasNeue-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "BebasNeue-Bold.ttf"; sourceTree = "<group>"; };
 		6E1E87FD587D3F3C005F248C /* ZonesTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZonesTab.swift; sourceTree = "<group>"; };
-		6E512D28B2FAAB2052D39981 /* DesignReferenceCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignReferenceCapture.swift; sourceTree = "<group>"; };
-		6E9220213A1BC42D7DC9736C /* RiveReferenceGallery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RiveReferenceGallery.swift; sourceTree = "<group>"; };
 		6FF496F8DA6AC2228F21B80C /* CatmullRom.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatmullRom.swift; sourceTree = "<group>"; };
 		70567498B0EBA5C80F60D128 /* AudioTuningParameters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioTuningParameters.swift; sourceTree = "<group>"; };
 		70BC4E2523308275C0B38ECC /* SpectrumVisualisationCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpectrumVisualisationCard.swift; sourceTree = "<group>"; };
@@ -188,8 +171,6 @@
 		8CE2A301EC4BB1F6157369C3 /* BeatEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeatEvent.swift; sourceTree = "<group>"; };
 		8DC45A333675D7720ED18E93 /* SilenceDetectionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SilenceDetectionCard.swift; sourceTree = "<group>"; };
 		8E59AECEC7E904EDD6218285 /* Rajdhani-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Rajdhani-Medium.ttf"; sourceTree = "<group>"; };
-		8FC30F2B1E7E2A002235D10B /* RiveAssetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RiveAssetTests.swift; sourceTree = "<group>"; };
-		90AD2F85C4937E8ECB655CE7 /* .keep */ = {isa = PBXFileReference; path = .keep; sourceTree = "<group>"; };
 		968C3EBBFE6704A938BC735B /* DotMatrixCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DotMatrixCanvas.swift; sourceTree = "<group>"; };
 		9C193AB587158FAE17B70076 /* ColourCorrectionConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColourCorrectionConfig.swift; sourceTree = "<group>"; };
 		9E098D8F3CD5BB4C24E6F3BE /* PaletteMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteMetadata.swift; sourceTree = "<group>"; };
@@ -210,8 +191,6 @@
 		DF78CFCA2FCF79A5CDB755D9 /* ExpressionParametersCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpressionParametersCard.swift; sourceTree = "<group>"; };
 		E448948AAFAA0CD844A14110 /* APIResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIResponse.swift; sourceTree = "<group>"; };
 		E4CB0B4835A9BACD84EF9FB5 /* HeroLEDPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeroLEDPreview.swift; sourceTree = "<group>"; };
-		E5925C7D2FEBD45A8B24782D /* RiveAppleRuntimeAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RiveAppleRuntimeAdapter.swift; sourceTree = "<group>"; };
-		E7EE77E551ADFC8B7142DFCA /* DesignReferenceData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignReferenceData.swift; sourceTree = "<group>"; };
 		E806390A509CCD91CCE62C34 /* ZoneCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoneCard.swift; sourceTree = "<group>"; };
 		EB077354363CFEC33A7BCC55 /* StepperControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StepperControl.swift; sourceTree = "<group>"; };
 		F30172340FDF0956E377E609 /* AppViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppViewModel.swift; sourceTree = "<group>"; };
@@ -220,8 +199,6 @@
 		F546C8A2C99339CAF146E5B8 /* PresetsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetsView.swift; sourceTree = "<group>"; };
 		F7DF92D44D22FEB411F9071B /* DeviceTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceTab.swift; sourceTree = "<group>"; };
 		F83207D4D91AF3D90F889CB9 /* MetricBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricBar.swift; sourceTree = "<group>"; };
-		F8AA077BE40C504F5857BAF8 /* RiveAssetRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RiveAssetRegistry.swift; sourceTree = "<group>"; };
-		F9EEA486B10C7508EF9BEFB8 /* RiveRuntimeFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RiveRuntimeFactory.swift; sourceTree = "<group>"; };
 		FD1DD439D8B2C8A802FC7B7A /* BeatTempoCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeatTempoCard.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -237,16 +214,6 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		03CBAD534E49CB4C0D0BE291 /* Debug */ = {
-			isa = PBXGroup;
-			children = (
-				6E512D28B2FAAB2052D39981 /* DesignReferenceCapture.swift */,
-				E7EE77E551ADFC8B7142DFCA /* DesignReferenceData.swift */,
-				6E9220213A1BC42D7DC9736C /* RiveReferenceGallery.swift */,
-			);
-			path = Debug;
-			sourceTree = "<group>";
-		};
 		06835CFE31755DC52480B3E0 = {
 			isa = PBXGroup;
 			children = (
@@ -295,22 +262,9 @@
 			path = Components;
 			sourceTree = "<group>";
 		};
-		1E05BAD71A0ACC174551DDB7 /* Rive */ = {
-			isa = PBXGroup;
-			children = (
-				F8AA077BE40C504F5857BAF8 /* RiveAssetRegistry.swift */,
-				014757B5CB91C8603A1DF679 /* RiveRuntime.swift */,
-				F9EEA486B10C7508EF9BEFB8 /* RiveRuntimeFactory.swift */,
-				2532BA73C0A023E4FE6FFC5E /* RiveViewContainer.swift */,
-				61550B17825AC6624693A49D /* Adapters */,
-			);
-			path = Rive;
-			sourceTree = "<group>";
-		};
 		275A3BEE403997031628F68D /* LightwaveOSTests */ = {
 			isa = PBXGroup;
 			children = (
-				8FC30F2B1E7E2A002235D10B /* RiveAssetTests.swift */,
 			);
 			path = LightwaveOSTests;
 			sourceTree = "<group>";
@@ -343,22 +297,12 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
-		61550B17825AC6624693A49D /* Adapters */ = {
-			isa = PBXGroup;
-			children = (
-				E5925C7D2FEBD45A8B24782D /* RiveAppleRuntimeAdapter.swift */,
-				08AA2C21356E7DCE870D100D /* RiveCppRuntimeAdapter.swift */,
-			);
-			path = Adapters;
-			sourceTree = "<group>";
-		};
 		6496E1ED07FD075EDC975B77 /* LightwaveOS */ = {
 			isa = PBXGroup;
 			children = (
 				18BB5AEC76BDB1042E10C43A /* Assets.xcassets */,
 				C09C5C83D21C91F921848082 /* App */,
 				0FE53C2F3EBBC1B442360F8D /* Components */,
-				03CBAD534E49CB4C0D0BE291 /* Debug */,
 				E9D96B63C493E956D7941F3E /* Models */,
 				CCE19016D5E2D870FAC4E39A /* Network */,
 				6C5E97CC447298533E6753FB /* Resources */,
@@ -392,7 +336,6 @@
 				1BE5EB53F03D24EAA9BF8845 /* Info.plist */,
 				DB7BA626F16B465550D83683 /* Fonts */,
 				B676359C63D1809E9421C3F1 /* Palettes */,
-				9792F5440C6381B042D14284 /* Rive */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -402,17 +345,8 @@
 			children = (
 				6FF496F8DA6AC2228F21B80C /* CatmullRom.swift */,
 				D6416631D7DB3C5D87A0AB6B /* PaletteLUT.swift */,
-				1E05BAD71A0ACC174551DDB7 /* Rive */,
 			);
 			path = Utilities;
-			sourceTree = "<group>";
-		};
-		9792F5440C6381B042D14284 /* Rive */ = {
-			isa = PBXGroup;
-			children = (
-				90AD2F85C4937E8ECB655CE7 /* .keep */,
-			);
-			path = Rive;
 			sourceTree = "<group>";
 		};
 		A49F221A8F4B0335D35F3A33 /* Zones */ = {
@@ -527,7 +461,6 @@
 		EC3BA00DFF7C7A4F2557BF62 /* LightwaveOSUITests */ = {
 			isa = PBXGroup;
 			children = (
-				41B105BA1C641A3CE67651CC /* RiveReferenceScreenshotsUITests.swift */,
 			);
 			path = LightwaveOSUITests;
 			sourceTree = "<group>";
@@ -664,7 +597,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F012D64C3954D7C9018F7F9E /* RiveAssetTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -672,7 +604,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F620A6280CABB7373751D286 /* RiveReferenceScreenshotsUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -705,8 +636,6 @@
 				218BC49796BCB81D40C3FBDA /* ControlBusSmoothingCard.swift in Sources */,
 				55BDAF64661B13330D6FAC75 /* DSPHealthCard.swift in Sources */,
 				F0E737F62762F2F3CBD94E41 /* DebugLogView.swift in Sources */,
-				BD7225787111D20B0DAB3510 /* DesignReferenceCapture.swift in Sources */,
-				6E5C18C5632D04039B31DE2E /* DesignReferenceData.swift in Sources */,
 				9E2095C181E3E4C63D8EE18F /* DesignTokens.swift in Sources */,
 				800432784DA7C15F40CA4A21 /* DeviceDiscoveryService.swift in Sources */,
 				D40C0E29EE75A444D41C091B /* DeviceInfo.swift in Sources */,
@@ -739,13 +668,6 @@
 				45694336ED60BDA41BFA3540 /* PresetsViewModel.swift in Sources */,
 				D7B1E0FA82137B04E351A3AC /* PrimaryControlsCard.swift in Sources */,
 				F9B02ED4E22BECB3EFD01829 /* RESTClient.swift in Sources */,
-				CD8C706BCC146AE424D532E2 /* RiveAppleRuntimeAdapter.swift in Sources */,
-				39BBEFD7203ADA9A031D70BD /* RiveAssetRegistry.swift in Sources */,
-				DB7A0B8FCD6D7AB7F0635D59 /* RiveCppRuntimeAdapter.swift in Sources */,
-				C8AD2FB3D54FFCF4DEEFC4FB /* RiveReferenceGallery.swift in Sources */,
-				A45A187071BDDB0F4F7136DF /* RiveRuntime.swift in Sources */,
-				EEB9D4CB8A3A284E3FC897E2 /* RiveRuntimeFactory.swift in Sources */,
-				DAEE2833638579F4171A6742 /* RiveViewContainer.swift in Sources */,
 				DD2A1545ECFBAFC9366C0222 /* ShowsView.swift in Sources */,
 				BA7A664F2E2A8E45B775DBB6 /* SilenceDetectionCard.swift in Sources */,
 				F9F00E9852A03ABB2DC113AD /* SpectrumVisualisationCard.swift in Sources */,
@@ -895,6 +817,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = LightwaveOS.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -983,6 +906,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = LightwaveOS.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -1144,6 +1068,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = LightwaveOS.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;

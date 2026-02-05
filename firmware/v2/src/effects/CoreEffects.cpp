@@ -32,6 +32,7 @@
 #include "ieffect/WaveReactiveEffect.h"
 #include "ieffect/RippleEffect.h"
 #include "ieffect/HeartbeatEffect.h"
+#include "ieffect/HeartbeatEsTunedEffect.h"
 #include "ieffect/InterferenceEffect.h"
 #include "ieffect/BreathingEffect.h"
 #include "ieffect/PulseEffect.h"
@@ -1011,9 +1012,15 @@ uint8_t registerAllEffects(RendererActor* renderer) {
         total++;
     }
 
+    // Heartbeat (ES tuned) (ID 107)
+    static ieffect::HeartbeatEsTunedEffect heartbeatEsTunedInstance;
+    if (renderer->registerEffect(total, &heartbeatEsTunedInstance)) {
+        total++;
+    }
+
     // =============== EFFECT COUNT PARITY VALIDATION ===============
     // Runtime validation: ensure registered count matches expected
-    constexpr uint8_t EXPECTED_EFFECT_COUNT = 107;  // 101 + 5 ES reference shows + 1 ES-tuned port
+    constexpr uint8_t EXPECTED_EFFECT_COUNT = 108;  // 101 + 5 ES reference shows + 2 ES-tuned ports
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

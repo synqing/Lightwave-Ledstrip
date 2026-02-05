@@ -82,6 +82,7 @@ private:
     // COLLISION FLASH (snare-triggered, spatial decay from center)
     // =========================================================================
     float m_collisionBoost = 0.0f;
+    float m_lastFastFlux = 0.0f;  // Backend-agnostic transient proxy for collision flash
 
     // =========================================================================
     // CHROMA DOMINANT BIN (smoothed over 250ms for color offset)

@@ -25,6 +25,27 @@ namespace ieffect {
 
 namespace {
 
+static inline const float* selectChroma12(const audio::ControlBusFrame& cb, bool preferHeavy) {
+    // Prefer heavy chroma when it is populated, else fall back to ES raw or LWLS chroma.
+    float heavySum = 0.0f;
+    float esSum = 0.0f;
+    float lwSum = 0.0f;
+    for (uint8_t i = 0; i < audio::CONTROLBUS_NUM_CHROMA; ++i) {
+        heavySum += cb.heavy_chroma[i];
+        esSum += cb.es_chroma_raw[i];
+        lwSum += cb.chroma[i];
+    }
+
+    if (preferHeavy && heavySum > 0.001f) return cb.heavy_chroma;
+    if (esSum > (lwSum + 0.001f)) return cb.es_chroma_raw;
+    return cb.chroma;
+}
+
+// Musically anchored palette offsets (no full hue-wheel sweep).
+static constexpr uint8_t NOTE_OFFSETS[12] = {
+    0, 10, 26, 38, 56, 70, 90, 106, 130, 150, 174, 202
+};
+
 /**
  * @brief Compute palette warmth offset from chord type.
  *
@@ -133,7 +154,7 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
         // =====================================================================
         float subBassSum = 0.0f;
         for (uint8_t i = 0; i < 6; ++i) {
-            subBassSum += ctx.audio.bin(i);  // bins64[0..5]
+            subBassSum += ctx.audio.binAdaptive(i);  // bins64Adaptive[0..5] is more robust across backends
         }
         float subBassAvg = subBassSum / 6.0f;
 
@@ -152,6 +173,7 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
         CRGB sum_color = CRGB(0, 0, 0);
         float brightness_sum = 0.0f;
         const bool chromaticMode = (ctx.saturation >= 128);
+        const float silentScale = ctx.audio.controlBus.silentScale;
 
         // Chord-driven palette warmth adjustment
         // Maps chord type to hue offset for emotional color response
@@ -166,9 +188,10 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
         if (adjustedHue > 255) adjustedHue -= 256;
         uint8_t chordAdjustedHue = (uint8_t)adjustedHue;
 
+        const float* chroma = selectChroma12(ctx.audio.controlBus, /*preferHeavy*/ true);
+
         for (uint8_t i = 0; i < 12; ++i) {
-            float prog = i / 12.0f;
-            float bin = ctx.audio.controlBus.heavy_chroma[i];
+            float bin = chroma[i] * silentScale;
 
             // Apply squaring (SQUARE_ITER, typically 1)
             float bright = bin;
@@ -181,7 +204,7 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
             if (chromaticMode) {
                 // Use palette for colour with chord-adjusted hue base
                 // Palette index includes chord warmth for emotional color response
-                uint8_t paletteIdx = (uint8_t)(prog * 255.0f + chordAdjustedHue);
+                uint8_t paletteIdx = (uint8_t)(chordAdjustedHue + NOTE_OFFSETS[i]);
                 uint8_t brightU8 = (uint8_t)bright;
                 brightU8 = (uint8_t)((brightU8 * ctx.brightness) / 255);
                 CRGB out_col = ctx.palette.getColor(paletteIdx, brightU8);
@@ -295,6 +318,16 @@ void AudioBloomEffect::render(plugins::EffectContext& ctx) {
             if (rightIdx < ctx.ledCount) {
                 ctx.leds[rightIdx] += warmBoost;
             }
+        }
+    }
+
+    // Beat confidence accent: a small centre lift that tracks tempo confidence without needing explicit beat triggers.
+    if (ctx.audio.tempoConfidence() > 0.35f) {
+        float beat = ctx.audio.beatStrength();
+        if (beat > 0.05f) {
+            uint8_t boost = (uint8_t)(beat * 22.0f);
+            ctx.leds[ctx.centerPoint - 1] += CRGB(boost, boost >> 2, 0);
+            ctx.leds[ctx.centerPoint] += CRGB(boost, boost >> 2, 0);
         }
     }
 #endif  // FEATURE_AUDIO_SYNC

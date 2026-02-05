@@ -16,6 +16,41 @@ namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
+namespace {
+
+static inline const float* selectChroma12(const audio::ControlBusFrame& cb) {
+    // Prefer ES raw chroma when present (parity + stability for ES backend).
+    // Fallback to LWLS contract chroma otherwise.
+    float esSum = 0.0f;
+    float lwSum = 0.0f;
+    for (uint8_t i = 0; i < audio::CONTROLBUS_NUM_CHROMA; ++i) {
+        esSum += cb.es_chroma_raw[i];
+        lwSum += cb.chroma[i];
+    }
+    return (esSum > (lwSum + 0.001f)) ? cb.es_chroma_raw : cb.chroma;
+}
+
+static inline uint8_t dominantChromaBin12(const float chroma[audio::CONTROLBUS_NUM_CHROMA], float* outMax = nullptr) {
+    uint8_t best = 0;
+    float bestV = chroma[0];
+    for (uint8_t i = 1; i < audio::CONTROLBUS_NUM_CHROMA; ++i) {
+        float v = chroma[i];
+        if (v > bestV) {
+            bestV = v;
+            best = i;
+        }
+    }
+    if (outMax) *outMax = bestV;
+    return best;
+}
+
+static inline uint8_t chromaBinToHue(uint8_t bin) {
+    // 12 bins → 0..252 hue range (21 hue units per semitone).
+    return (uint8_t)(bin * 21);
+}
+
+} // namespace
+
 bool LGPBeatPulseEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
     // Primary kick/beat pulse
@@ -33,6 +68,11 @@ bool LGPBeatPulseEffect::init(plugins::EffectContext& ctx) {
     m_lastTrebleEnergy = 0.0f;
     m_hihatShimmer = 0.0f;
 
+    m_lastFastFlux = 0.0f;
+    m_lastHopSeq = 0;
+    m_dominantChromaBin = 0;
+    m_dominantChromaBinSmooth = 0.0f;
+
     return true;
 }
 
@@ -48,6 +88,7 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
     // Spike detection thresholds
     constexpr float SNARE_SPIKE_THRESH = 0.25f;   // Mid energy spike threshold
     constexpr float HIHAT_SPIKE_THRESH = 0.20f;   // Treble energy spike threshold
+    constexpr float FLUX_SPIKE_THRESH = 0.22f;    // Flux spike threshold (backend-agnostic onset proxy)
 
     if (ctx.audio.available) {
         beatPhase = ctx.audio.beatPhase();
@@ -55,6 +96,18 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
         midEnergy = ctx.audio.mid();
         trebleEnergy = ctx.audio.treble();
         onBeat = ctx.audio.isOnBeat();
+
+        // Update chroma anchor on hop boundaries (keeps colour stable between hops).
+        if (ctx.audio.controlBus.hop_seq != m_lastHopSeq) {
+            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+            const float* chroma = selectChroma12(ctx.audio.controlBus);
+            m_dominantChromaBin = dominantChromaBin12(chroma);
+        }
+
+        // Smooth chroma bin (prevents rapid hue jitter on sparse chroma).
+        float dt = ctx.getSafeDeltaSeconds();
+        float alpha = 1.0f - expf(-dt / 0.20f);
+        m_dominantChromaBinSmooth += ((float)m_dominantChromaBin - m_dominantChromaBinSmooth) * alpha;
 
         // Snare detection: spike in mid-frequency energy
         float midDelta = midEnergy - m_lastMidEnergy;
@@ -66,6 +119,19 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
         float trebleDelta = trebleEnergy - m_lastTrebleEnergy;
         if (trebleDelta > HIHAT_SPIKE_THRESH && trebleEnergy > 0.3f) {
             hihatHit = true;
+        }
+
+        // Flux accent: a reliable onset proxy for backends without explicit snare triggers.
+        float flux = ctx.audio.fastFlux();
+        float fluxDelta = flux - m_lastFastFlux;
+        m_lastFastFlux = flux;
+        if (fluxDelta > FLUX_SPIKE_THRESH && flux > 0.25f) {
+            // Treat as snare-like transient when there is some mid/treble content.
+            if (midEnergy > 0.25f || trebleEnergy > 0.18f) {
+                snareHit = true;
+            } else {
+                hihatHit = true;
+            }
         }
 
         // Store for next frame
@@ -98,7 +164,10 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
     // === PRIMARY PULSE (Kick/Beat) ===
     if (onBeat) {
         m_pulsePosition = 0.0f;
-        m_pulseIntensity = 0.3f + bassEnergy * 0.7f;
+        float strength = ctx.audio.available ? ctx.audio.beatStrength() : 0.0f;
+        float silentScale = ctx.audio.available ? ctx.audio.controlBus.silentScale : 1.0f;
+        float base = 0.25f + 0.75f * fminf(1.0f, bassEnergy * 1.15f + strength * 0.65f);
+        m_pulseIntensity = base * silentScale;
     }
 
     // Expand pulse outward (~400ms to reach edge)
@@ -136,6 +205,12 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
     memset(ctx.leds, 0, ctx.ledCount * sizeof(CRGB));
 
     // === RENDER CENTER PAIR OUTWARD ===
+    uint8_t baseHue = chromaBinToHue((uint8_t)(m_dominantChromaBinSmooth + 0.5f));
+    // Fixed offsets (no time-based hue cycling): keeps colour musically anchored (non-rainbow).
+    uint8_t primaryHue = baseHue;
+    uint8_t snareHue = (uint8_t)(baseHue + 42);  // ~perfect fifth-ish shift
+    uint8_t hihatHue = (uint8_t)(baseHue + 96);  // brighter offset
+
     for (int dist = 0; dist < HALF_LENGTH; ++dist) {
         float normalizedDist = (float)dist / HALF_LENGTH;
 
@@ -169,18 +244,10 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
         }
 
         // Background glow based on beat phase
-        float bgBright = 0.08f + beatPhase * 0.12f;
+        float strength = ctx.audio.available ? ctx.audio.beatStrength() : 0.0f;
+        float bgBright = 0.06f + 0.10f * beatPhase + 0.10f * strength;
 
         // --- Combine all layers ---
-        // Primary pulse uses base hue
-        uint8_t primaryHue = ctx.gHue + (uint8_t)(beatPhase * 64);
-
-        // Snare uses complementary hue (+128 = opposite on color wheel)
-        uint8_t snareHue = primaryHue + 128;
-
-        // Hi-hat uses offset hue (+64)
-        uint8_t hihatHue = primaryHue + 64;
-
         // Calculate combined color
         CRGB finalColor = CRGB::Black;
 

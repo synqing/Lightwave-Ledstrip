@@ -45,6 +45,12 @@ private:
     // Hi-hat detection and shimmer overlay
     float m_lastTrebleEnergy = 0.0f; // Previous frame treble energy
     float m_hihatShimmer = 0.0f;     // Hi-hat shimmer intensity (decays fast)
+
+    // ES/LWLS-agnostic onset proxy (flux) and chroma hue anchoring
+    float m_lastFastFlux = 0.0f;
+    uint32_t m_lastHopSeq = 0;
+    uint8_t m_dominantChromaBin = 0;
+    float m_dominantChromaBinSmooth = 0.0f;
 };
 
 } // namespace ieffect

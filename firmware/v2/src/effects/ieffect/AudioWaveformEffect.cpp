@@ -29,6 +29,30 @@ namespace lightwaveos {
 namespace effects {
 namespace ieffect {
 
+namespace {
+
+static inline const float* selectChroma12(const audio::ControlBusFrame& cb) {
+    float esSum = 0.0f;
+    float lwSum = 0.0f;
+    for (uint8_t i = 0; i < audio::CONTROLBUS_NUM_CHROMA; ++i) {
+        esSum += cb.es_chroma_raw[i];
+        lwSum += cb.chroma[i];
+    }
+    return (esSum > (lwSum + 0.001f)) ? cb.es_chroma_raw : cb.chroma;
+}
+
+static inline uint8_t chromaBinToHue(uint8_t bin) {
+    return (uint8_t)(bin * 21);
+}
+
+static inline float clamp01(float v) {
+    if (v < 0.0f) return 0.0f;
+    if (v > 1.0f) return 1.0f;
+    return v;
+}
+
+} // namespace
+
 bool AudioWaveformEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
     m_peakSmoothed = 0.0f;
@@ -125,9 +149,17 @@ void AudioWaveformEffect::render(plugins::EffectContext& ctx) {
     }
 
     // =========================================
-    // STEP 1: Get current audio amplitude (use RMS like Snapwave)
+    // STEP 1: Get current audio amplitude
+    // Prefer peak waveform amplitude for crisp transients; fall back to RMS.
     // =========================================
-    float currentAmp = ctx.audio.rms();
+    float peak = 0.0f;
+    for (uint8_t i = 0; i < ctx.audio.waveformSize(); ++i) {
+        float a = ctx.audio.getWaveformAmplitude(i);
+        if (a > peak) peak = a;
+    }
+    float currentAmp = fmaxf(peak, ctx.audio.rms());
+    currentAmp *= ctx.audio.controlBus.silentScale;
+    currentAmp = clamp01(currentAmp);
 
     // =========================================
     // STEP 2: Smooth the peak (5%/95% - original)
@@ -179,10 +211,29 @@ CRGB AudioWaveformEffect::computeChromaColor(const plugins::EffectContext& ctx) 
     float sumR = 0.0f, sumG = 0.0f, sumB = 0.0f;
 
 #if FEATURE_AUDIO_SYNC
+    const float* chroma = selectChroma12(ctx.audio.controlBus);
+
+    // Musically anchored palette indices (no HSV hue-wheel sweep).
+    // Offsets are deliberately non-linear to avoid a "rainbow ladder" look.
+    static constexpr uint8_t NOTE_OFFSETS[12] = {
+        0, 12, 28, 40, 58, 72, 92, 108, 132, 152, 176, 204
+    };
+
+    // Pick a stable base hue from the dominant chroma bin.
+    uint8_t dominantBin = 0;
+    float dominantV = 0.0f;
+    for (uint8_t i = 0; i < 12; ++i) {
+        float v = chroma[i];
+        if (v > dominantV) {
+            dominantV = v;
+            dominantBin = i;
+        }
+    }
+    uint8_t baseHue = chromaBinToHue(dominantBin);
+
     // Accumulate color from all chromagram bins
     for (uint8_t c = 0; c < 12; ++c) {
-        float prog = c / 12.0f;  // 0.0 to 0.917
-        float bin = ctx.audio.controlBus.chroma[c];
+        float bin = chroma[c];
 
         // Square for contrast, then boost (original algorithm)
         float bright = bin * bin * CHROMA_BOOST;
@@ -190,14 +241,11 @@ CRGB AudioWaveformEffect::computeChromaColor(const plugins::EffectContext& ctx) 
 
         // Only contribute if above threshold
         if (bright > CHROMA_THRESHOLD) {
-            // Pure HSV spectrum mapping (original chromatic mode)
-            // Note C (prog=0) → Hue 0 (red)
-            // Note G (prog=0.583) → Hue ~149 (cyan)
-            uint8_t hue = (uint8_t)(prog * 255.0f);
+            uint8_t paletteIdx = (uint8_t)(baseHue + NOTE_OFFSETS[c]);
             uint8_t brightU8 = (uint8_t)(bright * 255.0f);
-
-            CRGB noteColor;
-            hsv2rgb_spectrum(CHSV(hue, 255, brightU8), noteColor);
+            // Apply global brightness here to keep per-note contribution bounded.
+            brightU8 = (uint8_t)((brightU8 * ctx.brightness) / 255);
+            CRGB noteColor = ctx.palette.getColor(paletteIdx, brightU8);
 
             sumR += noteColor.r;
             sumG += noteColor.g;

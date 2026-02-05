@@ -64,6 +64,7 @@ bool LGPPhotonicCrystalEffect::init(plugins::EffectContext& ctx) {
 
     // Collision flash
     m_collisionBoost = 0.0f;
+    m_lastFastFlux = 0.0f;
 
     // Chroma tracking
     m_dominantBin = 0;
@@ -127,10 +128,20 @@ void LGPPhotonicCrystalEffect::render(plugins::EffectContext& ctx) {
             if (m_energyDelta < 0.0f) m_energyDelta = 0.0f;
 
             // Dominant chroma bin detection (for color offset)
+            const float* chroma = ctx.audio.controlBus.chroma;
+            // Prefer ES raw chroma when present (ES backend parity/stability).
+            float esSum = 0.0f;
+            float lwSum = 0.0f;
+            for (uint8_t i = 0; i < 12; ++i) {
+                esSum += ctx.audio.controlBus.es_chroma_raw[i];
+                lwSum += ctx.audio.controlBus.chroma[i];
+            }
+            if (esSum > (lwSum + 0.001f)) chroma = ctx.audio.controlBus.es_chroma_raw;
+
             float maxChroma = 0.0f;
             for (uint8_t bin = 0; bin < 12; ++bin) {
-                if (ctx.audio.controlBus.chroma[bin] > maxChroma) {
-                    maxChroma = ctx.audio.controlBus.chroma[bin];
+                if (chroma[bin] > maxChroma) {
+                    maxChroma = chroma[bin];
                     m_dominantBin = bin;
                 }
             }
@@ -145,8 +156,22 @@ void LGPPhotonicCrystalEffect::render(plugins::EffectContext& ctx) {
         if (brightnessGain > 1.5f) brightnessGain = 1.5f;
         if (brightnessGain < 0.3f) brightnessGain = 0.3f;
 
-        // Collision flash (snare-triggered)
-        if (ctx.audio.isSnareHit()) {
+        // Collision flash:
+        // - Primary: explicit snare trigger (legacy LWLS pipeline)
+        // - Fallback: flux spikes with some treble/mid content (ES backend)
+        bool collisionHit = ctx.audio.isSnareHit();
+        float flux = ctx.audio.fastFlux();
+        float fluxDelta = flux - m_lastFastFlux;
+        m_lastFastFlux = flux;
+        if (!collisionHit) {
+            if (fluxDelta > 0.22f && flux > 0.25f) {
+                // Require some high-frequency energy so bass drops do not spam flashes.
+                if (ctx.audio.treble() > 0.20f || ctx.audio.mid() > 0.28f) {
+                    collisionHit = true;
+                }
+            }
+        }
+        if (collisionHit) {
             m_collisionBoost = 1.0f;
         }
         m_collisionBoost *= 0.88f;

@@ -32,7 +32,12 @@ public:
 
 private:
     float m_breathLevel = 0.0f;  // Current "breath" intensity
-    float m_hueShift = 0.0f;     // Accumulated hue from treble
+    // Musically anchored hue (smoothed) - avoids time-based hue cycling.
+    float m_hueAnchorSmooth = 0.0f;
+    uint32_t m_lastHopSeq = 0;
+    float m_lastBass = 0.0f;
+    float m_lastFastFlux = 0.0f;
+    float m_fluxKick = 0.0f;
 };
 
 } // namespace ieffect

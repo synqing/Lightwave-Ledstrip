@@ -123,6 +123,7 @@
 #include "ieffect/esv11_reference/EsSpectrumRefEffect.h"
 #include "ieffect/esv11_reference/EsOctaveRefEffect.h"
 #include "ieffect/esv11_reference/EsBloomRefEffect.h"
+#include "ieffect/esv11_reference/EsWaveformRefEffect.h"
 #include "utils/FastLEDOptim.h"
 #include "../core/narrative/NarrativeEngine.h"
 #include <FastLED.h>
@@ -997,9 +998,15 @@ uint8_t registerAllEffects(RendererActor* renderer) {
         total++;
     }
 
+    // ES Waveform (Ref) (ID 105)
+    static ieffect::esv11_reference::EsWaveformRefEffect esWaveformRefInstance;
+    if (renderer->registerEffect(total, &esWaveformRefInstance)) {
+        total++;
+    }
+
     // =============== EFFECT COUNT PARITY VALIDATION ===============
     // Runtime validation: ensure registered count matches expected
-    constexpr uint8_t EXPECTED_EFFECT_COUNT = 105;  // 101 + 4 ES reference shows
+    constexpr uint8_t EXPECTED_EFFECT_COUNT = 106;  // 101 + 5 ES reference shows
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

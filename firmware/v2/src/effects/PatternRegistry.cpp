@@ -149,11 +149,12 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
     // --- Palette Auto-Cycle (100) ---
     {PM_STR("LGP Holographic Auto-Cycle"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::MOIRE | PatternTags::DEPTH, PM_STR("Holographic effect with internal palette auto-cycling"), PM_STR("Multi-layer interference, palette cycling, depth illusion"), PM_STR("LGP Holographic")},
 
-    // --- ES v1.1 Reference Shows (101-104) ---
+    // --- ES v1.1 Reference Shows (101-105) ---
     {PM_STR("ES Analog (Ref)"), PatternFamily::GEOMETRIC, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Emotiscope v1.1 reference: VU dot display"), PM_STR("VU level, centre-origin dot"), PM_STR("")},
     {PM_STR("ES Spectrum (Ref)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Emotiscope v1.1 reference: 64-bin spectrum strip"), PM_STR("Spectrogram magnitude, HSV gradient"), PM_STR("")},
     {PM_STR("ES Octave (Ref)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Emotiscope v1.1 reference: chromagram strip"), PM_STR("Chromagram magnitude, HSV gradient"), PM_STR("")},
-    {PM_STR("ES Bloom (Ref)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Emotiscope v1.1 reference: chroma bloom"), PM_STR("Chromagram sampling, squared response"), PM_STR("")}
+    {PM_STR("ES Bloom (Ref)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Emotiscope v1.1 reference: chroma bloom"), PM_STR("Chromagram sampling, squared response"), PM_STR("")},
+    {PM_STR("ES Waveform (Ref)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Emotiscope v1.1 reference: waveform strip"), PM_STR("Waveform history, low-pass smoothing, HSV gradient"), PM_STR("")}
 };
 
 const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(PatternMetadata);
@@ -163,7 +164,7 @@ const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(Pattern
 // ============================================================================
 
 // Expected number of implemented effects (must match registerAllEffects() return value)
-constexpr uint8_t EXPECTED_EFFECT_COUNT = 105;  // 101 base + 4 ES reference shows
+constexpr uint8_t EXPECTED_EFFECT_COUNT = 106;  // 101 base + 5 ES reference shows
 
 // Compile-time assertion: metadata must have at least as many entries as implemented effects
 // This ensures we can always map effect IDs to metadata (allows for future effects in metadata)
@@ -422,7 +423,8 @@ static const uint8_t REACTIVE_EFFECT_IDS[] PROGMEM = {
     101, // ES Analog (Ref) - reference show
     102, // ES Spectrum (Ref) - reference show
     103, // ES Octave (Ref) - reference show
-    104  // ES Bloom (Ref) - reference show
+    104, // ES Bloom (Ref) - reference show
+    105  // ES Waveform (Ref) - reference show
 };
 static constexpr uint8_t REACTIVE_EFFECT_COUNT = sizeof(REACTIVE_EFFECT_IDS);
 

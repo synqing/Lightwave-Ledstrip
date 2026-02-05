@@ -229,7 +229,7 @@ struct ConnectionSheet: View {
             }
         }
         .onChange(of: appVM.connectionState) { _, newState in
-            if newState == .connected {
+            if newState == .ready {
                 dismiss()
             }
         }
@@ -246,8 +246,8 @@ struct ConnectionSheet: View {
 
             await MainActor.run {
                 isConnecting = false
-                if case .error(let message) = appVM.connectionState {
-                    errorMessage = message
+                if case .failed(let reason) = appVM.connectionState {
+                    errorMessage = reason.userMessage
                 }
                 // dismiss happens via onChange(of: appVM.connectionState) above
             }
@@ -267,8 +267,8 @@ struct ConnectionSheet: View {
 
             await MainActor.run {
                 isConnecting = false
-                if case .error(let message) = appVM.connectionState {
-                    errorMessage = message
+                if case .failed(let reason) = appVM.connectionState {
+                    errorMessage = reason.userMessage
                 }
             }
         }
@@ -286,7 +286,7 @@ struct ConnectionSheet: View {
 
             await MainActor.run {
                 isConnecting = false
-                if case .error = appVM.connectionState {
+                if case .failed = appVM.connectionState {
                     // Probe failed — user is probably not on the AP network yet.
                     // Show join instructions and start monitoring for WiFi changes.
                     showAPInstructions = true

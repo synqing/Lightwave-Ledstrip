@@ -110,6 +110,7 @@ struct SpectrumCanvas: View {
             guard bins.count > 0 else { return }
 
             let barWidth = size.width / CGFloat(bins.count)
+            let indexDivisor = max(1, bins.count - 1)
 
             for (index, amplitude) in bins.enumerated() {
                 let x = CGFloat(index) * barWidth
@@ -122,7 +123,7 @@ struct SpectrumCanvas: View {
                 )
 
                 // Bass-heavy opacity falloff
-                let normalizedIndex = Double(index) / Double(bins.count - 1)
+                let normalizedIndex = Double(index) / Double(indexDivisor)
                 let opacity = 1.0 - (normalizedIndex * 0.5)
 
                 context.fill(

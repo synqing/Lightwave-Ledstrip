@@ -14,6 +14,7 @@ struct StepperControl: View {
     @Binding var value: Double
     let step: Double
     let format: String
+    var range: ClosedRange<Double> = 0...Double.greatestFiniteMagnitude
     var onChanged: (() -> Void)?
 
     var body: some View {
@@ -28,7 +29,7 @@ struct StepperControl: View {
             HStack(spacing: 0) {
                 // Decrement button (◀)
                 Button {
-                    value = max(0, value - step)
+                    value = max(range.lowerBound, value - step)
                     onChanged?()
                 } label: {
                     Image(systemName: "chevron.left")
@@ -70,7 +71,7 @@ struct StepperControl: View {
 
                 // Increment button (▶)
                 Button {
-                    value += step
+                    value = min(range.upperBound, value + step)
                     onChanged?()
                 } label: {
                     Image(systemName: "chevron.right")

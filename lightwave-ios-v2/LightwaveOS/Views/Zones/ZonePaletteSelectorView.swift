@@ -15,6 +15,7 @@ struct ZonePaletteSelectorView: View {
 
     @State private var searchText = ""
     @State private var selectedFilter = "All"
+    @State private var selectedFlags: Set<PaletteFlagKey> = []
 
     var body: some View {
         NavigationStack {
@@ -98,6 +99,26 @@ struct ZonePaletteSelectorView: View {
                     }
                 }
             }
+
+            // Flag chips
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    if !selectedFlags.isEmpty {
+                        FlagChip(title: "Clear flags", count: nil, isSelected: false) {
+                            selectedFlags.removeAll()
+                        }
+                    }
+                    ForEach(PaletteFlagKey.allCases) { flag in
+                        FlagChip(
+                            title: flag.label,
+                            count: countForFlag(flag),
+                            isSelected: selectedFlags.contains(flag)
+                        ) {
+                            toggleFlag(flag)
+                        }
+                    }
+                }
+            }
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
@@ -173,6 +194,13 @@ struct ZonePaletteSelectorView: View {
             palettes = palettes.filter { $0.category == selectedFilter }
         }
 
+        // Filter by flags (all selected flags must match)
+        if !selectedFlags.isEmpty {
+            palettes = palettes.filter { palette in
+                selectedFlags.allSatisfy { palette.hasFlag($0) }
+            }
+        }
+
         return palettes
     }
 
@@ -201,6 +229,19 @@ struct ZonePaletteSelectorView: View {
             )
             dismiss()
         }
+    }
+
+    private func toggleFlag(_ flag: PaletteFlagKey) {
+        if selectedFlags.contains(flag) {
+            selectedFlags.remove(flag)
+        } else {
+            selectedFlags.insert(flag)
+        }
+    }
+
+    /// Count of palettes that have this flag among the current search+category+flags filtered set
+    private func countForFlag(_ flag: PaletteFlagKey) -> Int {
+        filteredPalettes.filter { $0.hasFlag(flag) }.count
     }
 }
 

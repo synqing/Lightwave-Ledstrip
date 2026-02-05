@@ -170,24 +170,28 @@ struct PersistentStatusBar: View {
 
     private var statusText: String {
         switch appVM.connectionState {
-        case .disconnected:
+        case .idle:
             return "Not Connected"
-        case .discovering:
+        case .targeting:
             return "Searching..."
-        case .connecting:
+        case .handshakeHTTP:
             return "Connecting..."
-        case .connected:
+        case .connectingWS:
+            return "Connecting..."
+        case .backoff:
+            return "Reconnecting..."
+        case .ready:
             if appVM.currentDevice?.cleanIP == "192.168.4.1" {
                 return "Connected (AP)"
             }
             return "Connected"
-        case .error:
+        case .failed:
             return "Reconnecting..."
         }
     }
 
     private var isErrorState: Bool {
-        if case .error = appVM.connectionState {
+        if case .failed = appVM.connectionState {
             return true
         }
         return false
@@ -195,9 +199,9 @@ struct PersistentStatusBar: View {
 
     private var dotGlowColor: Color {
         switch appVM.connectionState {
-        case .connected:
+        case .ready:
             return Color.lwSuccess.opacity(0.4)
-        case .connecting, .discovering:
+        case .targeting, .handshakeHTTP, .connectingWS, .backoff:
             return Color.lwGold.opacity(0.3)
         default:
             return Color.clear
@@ -228,7 +232,7 @@ struct PersistentStatusBar: View {
         if let connected = appVM.deviceStatus?.network?.connected {
             return connected ? "Connected" : "Disconnected"
         }
-        return appVM.connectionState == .connected ? "Connected" : "Disconnected"
+        return appVM.connectionState.isReady ? "Connected" : "Disconnected"
     }
 
     private var wsStatusText: String {
@@ -242,96 +246,17 @@ struct PersistentStatusBar: View {
 
 // MARK: - Preview
 
-#Preview("Status Bar States") {
+// NOTE: Previews are disabled because connectionState is now a computed property
+// from ConnectionManager and cannot be set directly on AppViewModel.
+// To preview different states, use the ConnectionDot preview instead.
+
+#Preview("Status Bar - Default") {
     VStack(spacing: 16) {
-        // Connected (drawer closed)
         PersistentStatusBar()
-            .environment({
-                let vm = AppViewModel()
-                vm.connectionState = .connected
-                vm.currentDevice = DeviceInfo(
-                    hostname: "lightwaveos.local",
-                    ipAddress: "192.168.1.100",
-                    port: 80
-                )
-                return vm
-            }())
-
-        // Connected (drawer open)
-        PersistentStatusBar()
-            .environment({
-                let vm = AppViewModel()
-                vm.connectionState = .connected
-                vm.currentDevice = DeviceInfo(
-                    hostname: "lightwaveos.local",
-                    ipAddress: "192.168.1.100",
-                    port: 80
-                )
-                return vm
-            }())
-            .onAppear {
-                // Simulate drawer open state in preview
-            }
-
-        // Connecting
-        PersistentStatusBar()
-            .environment({
-                let vm = AppViewModel()
-                vm.connectionState = .connecting
-                return vm
-            }())
-
-        // Disconnected
-        PersistentStatusBar()
-            .environment({
-                let vm = AppViewModel()
-                vm.connectionState = .disconnected
-                return vm
-            }())
-
-        // Error state
-        PersistentStatusBar()
-            .environment({
-                let vm = AppViewModel()
-                vm.connectionState = .error("Connection timeout")
-                return vm
-            }())
+            .environment(AppViewModel())
 
         Spacer()
     }
     .padding(.horizontal, 16)
     .background(Color.lwBase)
-}
-
-#Preview("Drawer Open") {
-    // Preview with drawer explicitly open
-    StatefulPreviewWrapper()
-        .background(Color.lwBase)
-}
-
-// Helper view for stateful preview with drawer open
-private struct StatefulPreviewWrapper: View {
-    @State private var isOpen = true
-
-    var body: some View {
-        VStack {
-            PersistentStatusBar()
-                .environment({
-                    let vm = AppViewModel()
-                    vm.connectionState = .connected
-                    vm.currentDevice = DeviceInfo(
-                        hostname: "lightwaveos.local",
-                        ipAddress: "192.168.1.100",
-                        port: 80
-                    )
-                    return vm
-                }())
-                .onTapGesture {
-                    isOpen.toggle()
-                }
-
-            Spacer()
-        }
-        .padding(.horizontal, 16)
-    }
 }

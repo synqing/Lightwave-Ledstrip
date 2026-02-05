@@ -45,6 +45,26 @@ class ZoneViewModel {
     private var clearBrightnessPendingTasks: [Int: Task<Void, Never>] = [:]
     private var splitDebounceTask: Task<Void, Never>?
 
+    // MARK: - Disconnect Cleanup
+
+    func disconnect() {
+        // Cancel all in-flight debounce tasks
+        for task in speedDebounceTasks.values { task.cancel() }
+        speedDebounceTasks.removeAll()
+        for task in brightnessDebounceTasks.values { task.cancel() }
+        brightnessDebounceTasks.removeAll()
+        for task in clearSpeedPendingTasks.values { task.cancel() }
+        clearSpeedPendingTasks.removeAll()
+        for task in clearBrightnessPendingTasks.values { task.cancel() }
+        clearBrightnessPendingTasks.removeAll()
+        splitDebounceTask?.cancel()
+        splitDebounceTask = nil
+        pendingZoneSpeeds.removeAll()
+        pendingZoneBrightness.removeAll()
+        restClient = nil
+        ws = nil
+    }
+
     // MARK: - API Methods
 
     func toggleZones() async {
@@ -69,19 +89,19 @@ class ZoneViewModel {
             }
         }
 
-        // WebSocket path (more reliable for zone controls)
+        // Prefer WebSocket (real-time), fall back to REST only if WS unavailable
         if let ws = ws {
             await ws.send("zone.setEffect", params: [
                 "zoneId": zoneId,
                 "effectId": effectId
             ])
+            return  // WS sent — don't duplicate via REST
         }
 
+        // REST fallback when WS not available
         guard let client = restClient else { return }
-
         do {
             try await client.setZoneEffect(zoneId: zoneId, effectId: effectId)
-            print("Set zone \(zoneId) effect to \(effectId)")
         } catch {
             print("Error setting zone effect: \(error)")
         }
@@ -96,19 +116,19 @@ class ZoneViewModel {
             }
         }
 
-        // WebSocket path (more reliable for zone controls)
+        // Prefer WebSocket (real-time), fall back to REST only if WS unavailable
         if let ws = ws {
             await ws.send("zone.setPalette", params: [
                 "zoneId": zoneId,
                 "paletteId": paletteId
             ])
+            return  // WS sent — don't duplicate via REST
         }
 
+        // REST fallback when WS not available
         guard let client = restClient else { return }
-
         do {
             try await client.setZonePalette(zoneId: zoneId, paletteId: paletteId)
-            print("Set zone \(zoneId) palette to \(paletteId)")
         } catch {
             print("Error setting zone palette: \(error)")
         }
@@ -123,19 +143,19 @@ class ZoneViewModel {
             }
         }
 
-        // WebSocket path (more reliable for zone controls)
+        // Prefer WebSocket (real-time), fall back to REST only if WS unavailable
         if let ws = ws {
             await ws.send("zone.setBlend", params: [
                 "zoneId": zoneId,
                 "blendMode": blendMode
             ])
+            return  // WS sent — don't duplicate via REST
         }
 
+        // REST fallback when WS not available
         guard let client = restClient else { return }
-
         do {
             try await client.setZoneBlendMode(zoneId: zoneId, blendMode: blendMode)
-            print("Set zone \(zoneId) blend mode to \(blendMode)")
         } catch {
             print("Error setting zone blend: \(error)")
         }
@@ -241,16 +261,19 @@ class ZoneViewModel {
 
     // MARK: - Boundary Model (centre-origin symmetric zone splits)
 
-    /// Extract boundary values from current segments
+    /// Extract boundary values from current segments, clamping to valid range
     func updateBoundariesFromSegments() {
         guard segments.count >= 2 else { return }
         let z0 = segments.first(where: { $0.zoneId == 0 })
-        boundary0 = z0?.s1LeftStart ?? 55
+        boundary0 = max(Self.minZoneWidth, z0?.s1LeftStart ?? 55)
 
         if segments.count >= 3 {
             let z1 = segments.first(where: { $0.zoneId == 1 })
-            boundary1 = z1?.s1LeftStart ?? 30
+            boundary1 = max(Self.minZoneWidth, z1?.s1LeftStart ?? 30)
         }
+
+        // Enforce constraints after loading from network
+        validateBoundaries()
     }
 
     /// Create a symmetric zone segment from left-side parameters

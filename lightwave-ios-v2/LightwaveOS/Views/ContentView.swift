@@ -78,16 +78,18 @@ struct ContentView: View {
             ConnectionSheet()
         }
         .onAppear {
-            // Show connection sheet if not connected
-            if appVM.connectionState != .connected {
+            // Show connection sheet if not ready
+            if !appVM.connectionState.isReady {
                 showConnectionSheet = true
             }
         }
         .onChange(of: appVM.connectionState) { _, newState in
-            // Auto-show connection sheet when disconnected
-            if newState == .disconnected {
+            // Auto-show connection sheet when idle or failed
+            if case .idle = newState {
                 showConnectionSheet = true
-            } else if newState == .connected {
+            } else if case .failed = newState {
+                showConnectionSheet = true
+            } else if newState.isReady {
                 showConnectionSheet = false
             }
         }

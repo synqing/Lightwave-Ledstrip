@@ -131,10 +131,12 @@ class UDPStreamReceiver {
             }
         } else if data.count >= 464 {
             // Check for audio magic: 0x00445541 at offset 0 (little-endian)
-            // In memory: bytes are [0x41, 0x55, 0x44, 0x00]
-            let magic: UInt32 = data.withUnsafeBytes { ptr in
-                ptr.load(as: UInt32.self)
-            }
+            // Manual byte reconstruction for ARM alignment safety
+            let b0 = UInt32(data[data.startIndex])
+            let b1 = UInt32(data[data.startIndex + 1])
+            let b2 = UInt32(data[data.startIndex + 2])
+            let b3 = UInt32(data[data.startIndex + 3])
+            let magic = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
             if magic == 0x00445541 {
                 let capturedData = data
                 Task { @MainActor [weak self] in

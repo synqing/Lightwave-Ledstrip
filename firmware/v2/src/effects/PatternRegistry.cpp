@@ -154,7 +154,10 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
     {PM_STR("ES Spectrum (Ref)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Emotiscope v1.1 reference: 64-bin spectrum strip"), PM_STR("Spectrogram magnitude, HSV gradient"), PM_STR("")},
     {PM_STR("ES Octave (Ref)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Emotiscope v1.1 reference: chromagram strip"), PM_STR("Chromagram magnitude, HSV gradient"), PM_STR("")},
     {PM_STR("ES Bloom (Ref)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Emotiscope v1.1 reference: chroma bloom"), PM_STR("Chromagram sampling, squared response"), PM_STR("")},
-    {PM_STR("ES Waveform (Ref)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Emotiscope v1.1 reference: waveform strip"), PM_STR("Waveform history, low-pass smoothing, HSV gradient"), PM_STR("")}
+    {PM_STR("ES Waveform (Ref)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Emotiscope v1.1 reference: waveform strip"), PM_STR("Waveform history, low-pass smoothing, HSV gradient"), PM_STR("")},
+
+    // --- ES tuned ports (106+) ---
+    {PM_STR("Ripple (ES tuned)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Beat-locked ripples tuned for ES v1.1 audio backend"), PM_STR("Beat strength + flux accents, FFT sub-bass/treble shaping"), PM_STR("Ripple")}
 };
 
 const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(PatternMetadata);
@@ -164,7 +167,7 @@ const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(Pattern
 // ============================================================================
 
 // Expected number of implemented effects (must match registerAllEffects() return value)
-constexpr uint8_t EXPECTED_EFFECT_COUNT = 106;  // 101 base + 5 ES reference shows
+constexpr uint8_t EXPECTED_EFFECT_COUNT = 107;  // 101 base + 5 ES reference shows + 1 ES-tuned port
 
 // Compile-time assertion: metadata must have at least as many entries as implemented effects
 // This ensures we can always map effect IDs to metadata (allows for future effects in metadata)
@@ -388,6 +391,7 @@ static const uint8_t REACTIVE_EFFECT_IDS[] PROGMEM = {
     6,   // BPM - beat-synced pulsing
     7,   // Wave Ambient - RMS amplitude modulation
     8,   // Ripple - kick/treble triggered, chroma-driven
+    106, // Ripple (ES tuned) - ES backend tuned, beat-locked
     11,  // Breathing - RMS breathing, beat-gated pulses
     16,  // Interference Scanner - heavyMid energy, snare boost
     17,  // Wave Collision - heavyBass, snare/hihat triggers

@@ -117,6 +117,7 @@
 #include "ieffect/LGPStarBurstEffectEnhanced.h"
 #include "ieffect/LGPWaveCollisionEffectEnhanced.h"
 #include "ieffect/RippleEnhancedEffect.h"
+#include "ieffect/RippleEsTunedEffect.h"
 #include "ieffect/TrinityTestEffect.h"
 #include "ieffect/LGPHolographicAutoCycleEffect.h"
 #include "ieffect/esv11_reference/EsAnalogRefEffect.h"
@@ -1004,9 +1005,15 @@ uint8_t registerAllEffects(RendererActor* renderer) {
         total++;
     }
 
+    // Ripple (ES tuned) (ID 106)
+    static ieffect::RippleEsTunedEffect rippleEsTunedInstance;
+    if (renderer->registerEffect(total, &rippleEsTunedInstance)) {
+        total++;
+    }
+
     // =============== EFFECT COUNT PARITY VALIDATION ===============
     // Runtime validation: ensure registered count matches expected
-    constexpr uint8_t EXPECTED_EFFECT_COUNT = 106;  // 101 + 5 ES reference shows
+    constexpr uint8_t EXPECTED_EFFECT_COUNT = 107;  // 101 + 5 ES reference shows + 1 ES-tuned port
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

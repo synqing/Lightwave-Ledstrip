@@ -1,0 +1,267 @@
+/**
+ * @file RippleEsTunedEffect.cpp
+ * @brief Ripple (ES tuned) effect implementation
+ */
+
+#include "RippleEsTunedEffect.h"
+
+#include "../../config/features.h"
+#include <FastLED.h>
+#include <cmath>
+
+namespace lightwaveos::effects::ieffect {
+
+RippleEsTunedEffect::RippleEsTunedEffect() {
+    for (uint8_t i = 0; i < MAX_RIPPLES; i++) {
+        m_ripples[i] = {};
+    }
+    memset(m_radial, 0, sizeof(m_radial));
+    memset(m_radialAux, 0, sizeof(m_radialAux));
+}
+
+bool RippleEsTunedEffect::init(plugins::EffectContext& ctx) {
+    (void)ctx;
+    for (uint8_t i = 0; i < MAX_RIPPLES; i++) {
+        m_ripples[i] = {};
+    }
+    m_lastHopSeq = 0;
+    m_spawnCooldown = 0;
+    memset(m_radial, 0, sizeof(m_radial));
+    memset(m_radialAux, 0, sizeof(m_radialAux));
+    m_subBass = 0.0f;
+    m_treble = 0.0f;
+    m_fluxEnv = 0.0f;
+    m_baseHue = 0;
+    return true;
+}
+
+void RippleEsTunedEffect::spawnRipple(uint8_t hue, uint8_t intensity, float speed) {
+    for (uint8_t r = 0; r < MAX_RIPPLES; r++) {
+        if (!m_ripples[r].active) {
+            m_ripples[r].radius = 0.0f;
+            m_ripples[r].speed = speed;
+            m_ripples[r].hue = hue;
+            m_ripples[r].intensity = intensity;
+            m_ripples[r].active = true;
+            return;
+        }
+    }
+}
+
+void RippleEsTunedEffect::render(plugins::EffectContext& ctx) {
+    // ES-tuned ripple: beat-locked spawns + FFT/flux shaping.
+    // Uses centre-origin radial buffer (no linear sweeps).
+
+    const bool hasAudio = ctx.audio.available;
+    const bool tempoOk = hasAudio && (ctx.audio.tempoConfidence() >= 0.30f);
+
+    // Decay trails. Slightly louder music keeps more trail.
+    uint8_t fade = 42;
+    if (hasAudio) {
+        float rms = ctx.audio.rms();
+        if (rms < 0.0f) rms = 0.0f;
+        if (rms > 1.0f) rms = 1.0f;
+        float f = 52.0f - (18.0f * rms);
+        if (f < 28.0f) f = 28.0f;
+        if (f > 58.0f) f = 58.0f;
+        fade = static_cast<uint8_t>(f);
+    }
+    fadeToBlackBy(m_radial, HALF_LENGTH, fade);
+
+    bool newHop = false;
+#if FEATURE_AUDIO_SYNC
+    if (hasAudio) {
+        newHop = (ctx.audio.controlBus.hop_seq != m_lastHopSeq);
+        if (newHop) {
+            m_lastHopSeq = ctx.audio.controlBus.hop_seq;
+
+            // FFT energy summaries (prefer adaptive bins when present).
+            // ES backend populates bins64 + bins64Adaptive; use adaptive for stability.
+            float subBassSum = 0.0f;
+            for (uint8_t i = 0; i < 6; i++) {
+                subBassSum += ctx.audio.binAdaptive(i);
+            }
+            float subBass = subBassSum * (1.0f / 6.0f);
+            if (subBass > 1.0f) subBass = 1.0f;
+            if (subBass < 0.0f) subBass = 0.0f;
+            // Fast attack / medium decay to feel punchy but stable.
+            if (subBass > m_subBass) {
+                m_subBass = subBass;
+            } else {
+                m_subBass = (m_subBass * 0.86f) + (subBass * 0.14f);
+            }
+
+            float trebleSum = 0.0f;
+            for (uint8_t i = 48; i < 64; i++) {
+                trebleSum += ctx.audio.binAdaptive(i);
+            }
+            float treble = trebleSum * (1.0f / 16.0f);
+            if (treble > 1.0f) treble = 1.0f;
+            if (treble < 0.0f) treble = 0.0f;
+            m_treble = (m_treble * 0.80f) + (treble * 0.20f);
+
+            float flux = ctx.audio.fastFlux();
+            if (flux < 0.0f) flux = 0.0f;
+            if (flux > 1.0f) flux = 1.0f;
+            // Transient envelope: instant-ish attack, fast-ish decay.
+            if (flux > m_fluxEnv) {
+                m_fluxEnv = flux;
+            } else {
+                m_fluxEnv *= 0.82f;
+            }
+
+            // Chroma-anchored hue: prefer ES raw chroma when present, else LWLS chroma.
+            const float* chroma = ctx.audio.trinityActive ? nullptr : ctx.audio.controlBus.es_chroma_raw;
+            const float* chromaFallback = ctx.audio.controlBus.chroma;
+            float maxVal = 0.0f;
+            uint8_t maxIdx = 0;
+            if (chroma) {
+                for (uint8_t i = 0; i < 12; i++) {
+                    if (chroma[i] > maxVal) {
+                        maxVal = chroma[i];
+                        maxIdx = i;
+                    }
+                }
+            }
+            if (maxVal < 0.05f) {
+                maxVal = 0.0f;
+                for (uint8_t i = 0; i < 12; i++) {
+                    if (chromaFallback[i] > maxVal) {
+                        maxVal = chromaFallback[i];
+                        maxIdx = i;
+                    }
+                }
+            }
+            if (maxVal > 0.05f) {
+                m_baseHue = static_cast<uint8_t>(maxIdx * 21);
+            } else {
+                // Keep stable rather than drifting hues when chroma is absent.
+                m_baseHue = ctx.gHue;
+            }
+        }
+    }
+#endif
+
+    if (m_spawnCooldown > 0) {
+        m_spawnCooldown--;
+    }
+
+    // Unified speed scaling from slider: 0..50 → ~0.6..2.4
+    float speedScale = 0.6f + (1.8f * (ctx.speed / 50.0f));
+    if (speedScale < 0.25f) speedScale = 0.25f;
+
+    // Spawn logic:
+    // - Beat-locked spawns when tempo is reliable.
+    // - Kick + snare can force spawns.
+    // - Flux can add extra micro-spawns on sharp transients.
+    if (hasAudio && m_spawnCooldown == 0) {
+        const float beatStrength = tempoOk ? ctx.audio.beatStrength() : 0.0f;
+        const bool beatTick = tempoOk && ctx.audio.isOnBeat();
+
+        // Base intensity driven by sub-bass + flux. Beat strength boosts when tempo locked.
+        float intensity01 = 0.25f + (0.55f * m_subBass) + (0.45f * m_fluxEnv);
+        if (tempoOk) {
+            intensity01 *= 0.75f + (0.60f * beatStrength);
+        }
+        if (intensity01 > 1.0f) intensity01 = 1.0f;
+        if (intensity01 < 0.0f) intensity01 = 0.0f;
+        uint8_t intensity = static_cast<uint8_t>(intensity01 * 255.0f);
+
+        // Kick detection: lower threshold than legacy Ripple, tuned for ES adaptive bins.
+        const bool kick = (m_subBass > 0.35f);
+        const bool snare = ctx.audio.isSnareHit();
+
+        // Beat spawns: predictable pulse when locked.
+        if (beatTick && (beatStrength > 0.18f)) {
+            float spd = speedScale * (0.85f + (0.40f * m_subBass));
+            spawnRipple(static_cast<uint8_t>(m_baseHue + ctx.gHue), intensity, spd);
+            m_spawnCooldown = 1;
+        }
+
+        // Force spawns for kick/snare (even if tempo is poor).
+        if (kick) {
+            float spd = speedScale * (1.00f + (0.50f * m_subBass));
+            uint8_t hue = static_cast<uint8_t>(ctx.gHue + m_baseHue + (uint8_t)(m_subBass * 30.0f));
+            spawnRipple(hue, 255, spd);
+            m_spawnCooldown = 2;
+        } else if (snare) {
+            float spd = speedScale * 1.15f;
+            uint8_t hue = static_cast<uint8_t>(m_baseHue + 64);
+            spawnRipple(hue, 230, spd);
+            m_spawnCooldown = 1;
+        } else if (m_fluxEnv > 0.55f && (!tempoOk || !beatTick)) {
+            // Flux accent spawns (only when not already beat-spawning) to avoid overload.
+            float spd = speedScale * (0.75f + (0.35f * m_fluxEnv));
+            spawnRipple(static_cast<uint8_t>(m_baseHue + ctx.gHue), (uint8_t)(180 + (m_fluxEnv * 60.0f)), spd);
+            m_spawnCooldown = 1;
+        }
+    }
+
+    // Update and render ripples into radial history buffer.
+    const float beatStrengthNow = (tempoOk ? ctx.audio.beatStrength() : 0.0f);
+    const float thickness = 2.0f + (4.0f * m_treble);  // treble = thicker, brighter edge
+
+    for (uint8_t r = 0; r < MAX_RIPPLES; r++) {
+        if (!m_ripples[r].active) continue;
+
+        // Growth rate responds to beat strength + sub-bass.
+        float growth = m_ripples[r].speed * (0.85f + (0.35f * beatStrengthNow) + (0.25f * m_subBass));
+        m_ripples[r].radius += growth;
+
+        if (m_ripples[r].radius > HALF_LENGTH) {
+            m_ripples[r].active = false;
+            continue;
+        }
+
+        for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
+            float wavePos = static_cast<float>(dist) - m_ripples[r].radius;
+            float waveAbs = fabsf(wavePos);
+            if (waveAbs < thickness) {
+                float front01 = 1.0f - (waveAbs / thickness);
+                if (front01 < 0.0f) front01 = 0.0f;
+                if (front01 > 1.0f) front01 = 1.0f;
+
+                uint8_t b = static_cast<uint8_t>(front01 * 255.0f);
+
+                // Edge fade to keep the centre clean.
+                uint8_t edgeFade = (uint8_t)((HALF_LENGTH - m_ripples[r].radius) * 255.0f / HALF_LENGTH);
+                b = scale8(b, edgeFade);
+                b = scale8(b, m_ripples[r].intensity);
+
+                // Treble shimmer: add sparkle to the leading edge.
+                if (m_treble > 0.08f) {
+                    uint8_t shimmerBoost = (uint8_t)(m_treble * front01 * 70.0f);
+                    b = qadd8(b, shimmerBoost);
+                }
+
+                CRGB color = ctx.palette.getColor((uint8_t)(m_ripples[r].hue + dist), b);
+                m_radial[dist].r = qadd8(m_radial[dist].r, color.r);
+                m_radial[dist].g = qadd8(m_radial[dist].g, color.g);
+                m_radial[dist].b = qadd8(m_radial[dist].b, color.b);
+            }
+        }
+    }
+
+    memcpy(m_radialAux, m_radial, sizeof(m_radial));
+
+    for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
+        SET_CENTER_PAIR(ctx, dist, m_radialAux[dist]);
+    }
+}
+
+void RippleEsTunedEffect::cleanup() {
+    // No resources to free.
+}
+
+const plugins::EffectMetadata& RippleEsTunedEffect::getMetadata() const {
+    static plugins::EffectMetadata meta{
+        "Ripple (ES tuned)",
+        "Beat-locked ripples tuned for ES v1.1 audio backend",
+        plugins::EffectCategory::WATER,
+        1
+    };
+    return meta;
+}
+
+} // namespace lightwaveos::effects::ieffect
+

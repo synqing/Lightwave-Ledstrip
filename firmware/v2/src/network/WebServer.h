@@ -517,9 +517,20 @@ private:
     webserver::RateLimiter m_rateLimiter;
     webserver::WsGateway* m_wsGateway;  // WebSocket gateway (Phase 2)
 
+    // Client ID → IP mapping for disconnect cleanup.
+    // AsyncWebSocketClient::remoteIP() may return 0.0.0.0 after disconnect, which breaks
+    // UDP subscriber cleanup if we key subscriptions by IP.
+    static constexpr uint8_t WS_CLIENT_IP_MAP_SLOTS = 16;
+    struct WsClientIpMapEntry {
+        uint32_t clientId = 0;  // AsyncWebSocketClient ID (0 = empty)
+        uint32_t ipKey = 0;     // Packed IPv4 from connect time
+    };
+    WsClientIpMapEntry m_wsClientIpMap[WS_CLIENT_IP_MAP_SLOTS] = {};
+
     bool m_running;
     bool m_apMode;
     volatile bool m_apClientDisconnected;
+    uint32_t m_lastApReinitMs;
     bool m_mdnsStarted;
     bool m_littleFSMounted;
     uint32_t m_lastBroadcast;

@@ -10,6 +10,7 @@
 #pragma once
 
 #include "EsV11Shim.h"
+#include "EsV11Buffers.h"
 #include "global_defines.h"
 #include "utilities_min.h"
 
@@ -30,7 +31,7 @@
 #define I2S_BCLK_PIN  14
 #define I2S_DIN_PIN   13
 
-float sample_history[SAMPLE_HISTORY_LENGTH];
+// sample_history is allocated during backend initialisation (PSRAM heap where available).
 const float recip_scale = 1.0f / 131072.0f; // max 18 bit signed value
 
 // DC Blocker filter state and coefficients

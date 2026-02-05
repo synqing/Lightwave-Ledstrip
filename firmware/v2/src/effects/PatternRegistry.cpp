@@ -158,7 +158,8 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
 
     // --- ES tuned ports (106+) ---
     {PM_STR("Ripple (ES tuned)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Beat-locked ripples tuned for ES v1.1 audio backend"), PM_STR("Beat strength + flux accents, FFT sub-bass/treble shaping"), PM_STR("Ripple")},
-    {PM_STR("Heartbeat (ES tuned)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Beat-locked lub-dub heartbeat tuned for ES v1.1 audio backend"), PM_STR("Beat tick + flux accents, chroma-anchored palette hue"), PM_STR("Heartbeat")}
+    {PM_STR("Heartbeat (ES tuned)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Beat-locked lub-dub heartbeat tuned for ES v1.1 audio backend"), PM_STR("Beat tick + flux accents, chroma-anchored palette hue"), PM_STR("Heartbeat")},
+    {PM_STR("LGP Holographic (ES tuned)"), PatternFamily::INTERFERENCE, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::MOIRE | PatternTags::DEPTH, PM_STR("Musically driven holographic depth layers tuned for ES v1.1 audio backend"), PM_STR("Band energy voicing, beat phase ratios, flux refraction accents, chroma-anchored colour"), PM_STR("LGP Holographic")}
 };
 
 const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(PatternMetadata);
@@ -168,7 +169,7 @@ const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(Pattern
 // ============================================================================
 
 // Expected number of implemented effects (must match registerAllEffects() return value)
-constexpr uint8_t EXPECTED_EFFECT_COUNT = 108;  // 101 base + 5 ES reference shows + 2 ES-tuned ports
+constexpr uint8_t EXPECTED_EFFECT_COUNT = 109;  // 101 base + 5 ES reference shows + 3 ES-tuned ports
 
 // Compile-time assertion: metadata must have at least as many entries as implemented effects
 // This ensures we can always map effect IDs to metadata (allows for future effects in metadata)
@@ -398,6 +399,7 @@ static const uint8_t REACTIVE_EFFECT_IDS[] PROGMEM = {
     11,  // Breathing - RMS breathing, beat-gated pulses
     16,  // Interference Scanner - heavyMid energy, snare boost
     17,  // Wave Collision - heavyBass, snare/hihat triggers
+    108, // LGP Holographic (ES tuned) - beat/flux/chroma driven holographic depth
     22,  // Chevron Waves - chroma, snare sharpness
     24,  // Star Burst - full audio pipeline, snare bursts
     33,  // Photonic Crystal - tempo breathing, saliency

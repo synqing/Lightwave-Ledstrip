@@ -38,6 +38,7 @@
 #include "ieffect/PulseEffect.h"
 #include "ieffect/LGPBoxWaveEffect.h"
 #include "ieffect/LGPHolographicEffect.h"
+#include "ieffect/LGPHolographicEsTunedEffect.h"
 #include "ieffect/LGPInterferenceScannerEffect.h"
 #include "ieffect/LGPWaveCollisionEffect.h"
 #include "ieffect/LGPDiamondLatticeEffect.h"
@@ -1018,9 +1019,15 @@ uint8_t registerAllEffects(RendererActor* renderer) {
         total++;
     }
 
+    // LGP Holographic (ES tuned) (ID 108)
+    static ieffect::LGPHolographicEsTunedEffect holographicEsTunedInstance;
+    if (renderer->registerEffect(total, &holographicEsTunedInstance)) {
+        total++;
+    }
+
     // =============== EFFECT COUNT PARITY VALIDATION ===============
     // Runtime validation: ensure registered count matches expected
-    constexpr uint8_t EXPECTED_EFFECT_COUNT = 108;  // 101 + 5 ES reference shows + 2 ES-tuned ports
+    constexpr uint8_t EXPECTED_EFFECT_COUNT = 109;  // 101 + 5 ES reference shows + 3 ES-tuned ports
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

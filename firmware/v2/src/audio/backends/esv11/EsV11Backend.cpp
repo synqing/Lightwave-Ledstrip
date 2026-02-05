@@ -9,7 +9,11 @@
 #include <cmath>
 #include <cstring>
 
+#define LW_LOG_TAG "AudioESV11"
+#include "utils/Log.h"
+
 #include "vendor/EsV11Shim.h"
+#include "vendor/EsV11Buffers.h"
 
 // Vendor headers (frozen ES v1.1_320 sources)
 #include "vendor/global_defines.h"
@@ -28,6 +32,29 @@ static inline float clamp01(float x) {
 
 bool EsV11Backend::init()
 {
+#if defined(ARDUINO) && !defined(NATIVE_BUILD)
+    const size_t heapBefore = ESP.getFreeHeap();
+    const size_t psramBefore = ESP.getFreePsram();
+    const size_t psramSize = ESP.getPsramSize();
+    LW_LOGI("ESV11 init: heap=%lu, PSRAM=%lu/%lu", (unsigned long)heapBefore, (unsigned long)psramBefore,
+            (unsigned long)psramSize);
+#endif
+
+    if (!::esv11_init_buffers()) {
+#if defined(ARDUINO) && !defined(NATIVE_BUILD)
+        LW_LOGE("ESV11 init: buffer allocation failed (heap=%lu, PSRAM=%lu/%lu)",
+                (unsigned long)ESP.getFreeHeap(), (unsigned long)ESP.getFreePsram(), (unsigned long)ESP.getPsramSize());
+#else
+        LW_LOGE("ESV11 init: buffer allocation failed");
+#endif
+        return false;
+    }
+
+#if defined(ARDUINO) && !defined(NATIVE_BUILD)
+    LW_LOGI("ESV11 init: heap %lu -> %lu, PSRAM %lu -> %lu", (unsigned long)heapBefore,
+            (unsigned long)ESP.getFreeHeap(), (unsigned long)psramBefore, (unsigned long)ESP.getFreePsram());
+#endif
+
     // ES vendor initialisation ordering is preserved where practical.
     // NOTE: ES expects various tables to be initialised (window lookup, goertzel constants, tempo constants).
     init_window_lookup();

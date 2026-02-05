@@ -8,6 +8,7 @@
 #include <cstring>
 
 #include "EsV11Shim.h"
+#include "EsV11Buffers.h"
 #include "global_defines.h"
 #include "types_min.h"
 #include "utilities_min.h"
@@ -23,13 +24,6 @@ float MAX_TEMPO_RANGE = 1.0f;
 
 float tempi_bpm_values_hz[NUM_TEMPI];
 
-float novelty_curve[NOVELTY_HISTORY_LENGTH];
-float novelty_curve_normalized[NOVELTY_HISTORY_LENGTH];
-
-float vu_curve[NOVELTY_HISTORY_LENGTH];
-float vu_curve_normalized[NOVELTY_HISTORY_LENGTH];
-
-tempo tempi[NUM_TEMPI];
 float tempi_smooth[NUM_TEMPI];
 float tempi_power_sum = 0.0f;
 
@@ -298,4 +292,3 @@ inline void update_tempi_phase(float delta) {
         tempo_confidence = max_contribution;
     }, __func__);
 }
-

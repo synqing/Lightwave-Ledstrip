@@ -15,6 +15,7 @@
 #include <cstring>
 
 #include "EsV11Shim.h"
+#include "EsV11Buffers.h"
 #include "global_defines.h"
 #include "types_min.h"
 #include "microphone.h"
@@ -51,12 +52,9 @@ static const float notes[] = {
     14080.0f, 14498.62f, 14917.24f, 15360.75f, 15804.26f, 16274.145f
 };
 
-float window_lookup[4096];
-
 uint32_t noise_calibration_wait_frames_remaining = 0;
 uint32_t noise_calibration_active_frames_remaining = 0;
 
-freq frequencies_musical[NUM_FREQS];
 uint16_t max_goertzel_block_size = 0;
 
 volatile bool magnitudes_locked = false;
@@ -66,7 +64,6 @@ float chromagram[12];
 
 const uint8_t NUM_SPECTROGRAM_AVERAGE_SAMPLES = 12;
 float spectrogram_smooth[NUM_FREQS] = { 0.0f };
-float spectrogram_average[NUM_SPECTROGRAM_AVERAGE_SAMPLES][NUM_FREQS];
 uint8_t spectrogram_average_index = 0;
 
 inline void init_goertzel(uint16_t frequency_slot, float frequency, float bandwidth) {
@@ -180,7 +177,6 @@ inline void calculate_magnitudes() {
         static float magnitudes_smooth[NUM_FREQS];
         static float max_val_smooth = 0.0f;
 
-        static float noise_history[10][NUM_FREQS];
         static float noise_floor[NUM_FREQS];
         static uint8_t noise_history_index = 0;
         static uint32_t last_noise_spectrum_log = 0;
@@ -289,4 +285,3 @@ inline void get_chromagram(){
         }
     }, __func__ );
 }
-

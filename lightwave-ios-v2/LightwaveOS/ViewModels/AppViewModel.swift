@@ -290,7 +290,7 @@ class AppViewModel {
 
                 case .disconnected(let error):
                     self.log("WebSocket disconnected: \(error?.localizedDescription ?? "clean")", category: "WS")
-                    self.wsConnected = false
+                    // NOTE: wsConnected is a computed property from connectionState, no assignment needed
                     self.streamSubscriptionTask?.cancel()
                     self.streamSubscriptionTask = nil
                     self.udpHealthTask?.cancel()
@@ -301,10 +301,9 @@ class AppViewModel {
                     self.udpFallbackActive = false
                     self.udpSubscribeStart = nil
 
-                    // If WS lost unexpectedly while app thinks it's connected, trigger recovery
-                    if error != nil && self.connectionState.isReady {
-                        self.log("WS lost unexpectedly — attempting recovery", category: "WS")
-                        // ConnectionManager handles reconnection now
+                    // Notify ConnectionManager to trigger reconnection
+                    Task {
+                        await self.connectionManager.notifyWebSocketDisconnected()
                     }
                 }
             }
@@ -497,12 +496,8 @@ class AppViewModel {
         udpReceiver.start()
         wireUDPHandlers()
 
-        // Consume WS events
-        if let url = connectionManager.target?.webSocketURL {
-            // WS is already connected by ConnectionManager, just consume events
-            let stream = await ws.connect(to: url)
-            consumeWebSocketEvents(stream)
-        }
+        // NOTE: WebSocket events are consumed in connectionDidBecomeReady()
+        // DO NOT call ws.connect() here - that creates a SECOND connection!
 
         // Load initial data
         log("Loading effects list...", category: "INIT")
@@ -588,7 +583,7 @@ class AppViewModel {
 // MARK: - ConnectionManagerDelegate
 
 extension AppViewModel: ConnectionManagerDelegate {
-    func connectionDidBecomeReady(rest: RESTClient, ws: WebSocketService) {
+    func connectionDidBecomeReady(rest: RESTClient, ws: WebSocketService, eventStream: AsyncStream<WebSocketService.Event>) {
         // Inject REST client into child ViewModels
         self.rest = rest
         effects.restClient = rest
@@ -600,7 +595,10 @@ extension AppViewModel: ConnectionManagerDelegate {
         transition.restClient = rest
         colourCorrection.restClient = rest
 
-        // Load initial state
+        // Consume WebSocket events - we are the ONLY consumer
+        consumeWebSocketEvents(eventStream)
+
+        // Load initial state (no longer calls ws.connect())
         Task {
             await loadInitialState()
         }

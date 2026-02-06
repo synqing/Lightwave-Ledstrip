@@ -44,8 +44,10 @@ enum ConnectionState: Equatable, Sendable {
 /// Delegate protocol for ConnectionManager events
 @MainActor
 protocol ConnectionManagerDelegate: AnyObject {
-    /// Called when connection reaches ready state with established clients
-    func connectionDidBecomeReady(rest: RESTClient, ws: WebSocketService)
+    /// Called when connection reaches ready state with established clients and event stream.
+    /// The delegate MUST consume the eventStream - it is the ONLY consumer.
+    /// When the delegate receives .disconnected, it must call connectionManager.notifyWebSocketDisconnected().
+    func connectionDidBecomeReady(rest: RESTClient, ws: WebSocketService, eventStream: AsyncStream<WebSocketService.Event>)
 
     /// Called when connection fails or disconnects
     func connectionDidDisconnect()
@@ -208,8 +210,10 @@ final class ConnectionManager {
             setState(.ready)
             startNetworkMonitor()
 
-            // Notify delegate on main actor
-            delegate?.connectionDidBecomeReady(rest: restClient, ws: ws)
+            // Notify delegate with event stream - delegate is the ONLY consumer
+            if let eventStream = wsEventStream {
+                delegate?.connectionDidBecomeReady(rest: restClient, ws: ws, eventStream: eventStream)
+            }
 
             // Reset retry counter on successful connection
             retryAttempt = 0
@@ -345,25 +349,16 @@ final class ConnectionManager {
             group.cancelAll()
         }
 
-        // Store the stream and start monitoring after connection
+        // Store the stream - AppViewModel will consume it via delegate
         self.wsEventStream = eventStream
-        startWSEventMonitoring(stream: eventStream)
+        // NOTE: startWSEventMonitoring removed - AppViewModel is the ONLY stream consumer.
+        // When AppViewModel receives .disconnected, it calls notifyWebSocketDisconnected().
     }
 
-    private func startWSEventMonitoring(stream: AsyncStream<WebSocketService.Event>) {
-        wsEventTask = Task { [weak self] in
-            for await event in stream {
-                guard !Task.isCancelled, let self = self else { return }
-
-                switch event {
-                case .disconnected(let error):
-                    print("[CONN] WebSocket disconnected: \(error?.localizedDescription ?? "clean")")
-                    await self.handleWSDisconnection()
-                default:
-                    break
-                }
-            }
-        }
+    /// Called by AppViewModel when it detects WebSocket disconnection from the event stream.
+    /// This triggers reconnection logic.
+    func notifyWebSocketDisconnected() async {
+        await handleWSDisconnection()
     }
 
     private func handleWSDisconnection() async {

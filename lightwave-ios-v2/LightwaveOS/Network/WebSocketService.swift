@@ -94,14 +94,18 @@ actor WebSocketService {
     // MARK: - Public Methods
 
     /// Connect to the WebSocket server and return an event stream
-    func connect(to url: URL) -> AsyncStream<Event> {
+    /// - Parameters:
+    ///   - url: The WebSocket URL to connect to
+    ///   - autoReconnect: If false, WebSocketService will NOT auto-reconnect on disconnect.
+    ///                    Set to false when ConnectionManager manages reconnection.
+    func connect(to url: URL, autoReconnect: Bool = false) -> AsyncStream<Event> {
         // Guard double-connect: clean up any existing connection first
         if webSocketTask != nil || eventContinuation != nil {
             disconnect()
         }
 
         currentURL = url
-        shouldReconnect = true
+        shouldReconnect = autoReconnect
         reconnectAttempts = 0
 
         // Use makeStream() to avoid actor isolation issues in AsyncStream closure

@@ -47,6 +47,14 @@ static inline void addWhiteSaturating(CRGB& c, uint8_t w) {
     c.b = (b > 255) ? 255 : static_cast<uint8_t>(b);
 }
 
+static inline float trailsMulFromFadeAmount(uint8_t fadeAmount, float dtSeconds) {
+    // Match FastLED fadeToBlackBy() semantics: scale channels by (255-fade)/256 each frame.
+    // We do a dt-correct version for 120 FPS render cadence.
+    const float perFrame = (255.0f - static_cast<float>(fadeAmount)) / 255.0f;
+    const float clamped = clamp(perFrame, 0.0f, 1.0f);
+    return powf(clamped, dtSeconds * 120.0f);
+}
+
 static inline float ringHitTent(float diff, float width) {
     if (width <= 0.0001f) return 0.0f;
     float x = diff / width;
@@ -88,6 +96,7 @@ bool BeatPulseShockwaveEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
     m_lastBeatTimeMs = 0;
     m_latchedBeatStrength = 0.0f;
+    m_stackGlow = 0.75f;
     std::memset(m_trail, 0, sizeof(m_trail));
     return true;
 }
@@ -135,6 +144,7 @@ void BeatPulseShockwaveEffect::render(plugins::EffectContext& ctx) {
     const float intensityNorm = static_cast<float>(ctx.intensity) / 255.0f;
     const float complexityNorm = static_cast<float>(ctx.complexity) / 255.0f;
     const float variationNorm = static_cast<float>(ctx.variation) / 255.0f;
+    const float stackGlow = clamp01(m_stackGlow);
 
     // Travel time: faster at higher speed (centre→edge or edge→centre).
     const float travelMs = lerp(900.0f, 220.0f, speed01);
@@ -145,9 +155,7 @@ void BeatPulseShockwaveEffect::render(plugins::EffectContext& ctx) {
     const float width = baseWidth * lerp(1.20f, 0.85f, variationNorm);
 
     // Trails decay derived from fadeAmount (0 = no fade, 255 = instant fade).
-    const float fade01 = static_cast<float>(ctx.fadeAmount) / 255.0f;
-    const float baseTrailMul = clamp(1.0f - fade01, 0.0f, 1.0f);
-    const float trailMul = powf(baseTrailMul, dt * 60.0f);
+    const float trailMul = trailsMulFromFadeAmount(ctx.fadeAmount, dt);
 
     // Echoes: add one faint echo ring when complexity is high.
     const bool enableEcho = (complexityNorm > 0.62f);
@@ -212,15 +220,15 @@ void BeatPulseShockwaveEffect::render(plugins::EffectContext& ctx) {
         const uint8_t paletteIdx = clampU8FromFloat(dist01 * 255.0f);
 
         // Brightness: base + pulse boost (knob-driven).
-        const float baseBrightness = lerp(0.30f, 0.62f, intensityNorm);
+        const float baseBrightness = lerp(0.06f, 0.62f, stackGlow) * lerp(0.65f, 1.0f, intensityNorm);
         const float boost = effIntensity * lerp(0.35f, 0.65f, intensityNorm);
         const float brightnessFactor = clamp01(baseBrightness + boost);
 
         const uint8_t bri8 = clampU8FromFloat(static_cast<float>(ctx.brightness) * brightnessFactor);
         CRGB c = ctx.palette.getColor(paletteIdx, bri8);
 
-        // White push: specular punch, scaled by intensity knob.
-        const float whiteMix = effIntensity * lerp(0.12f, 0.38f, intensityNorm);
+        // White push: specular punch, scaled by intensity knob and stack glow.
+        const float whiteMix = effIntensity * lerp(0.06f, 0.42f, intensityNorm) * (0.20f + 0.80f * stackGlow);
         const uint8_t w8 = clampU8FromFloat(static_cast<float>(ctx.brightness) * whiteMix);
         addWhiteSaturating(c, w8);
 
@@ -234,5 +242,35 @@ const plugins::EffectMetadata& BeatPulseShockwaveEffect::getMetadata() const {
     return m_meta;
 }
 
-} // namespace lightwaveos::effects::ieffect
+uint8_t BeatPulseShockwaveEffect::getParameterCount() const {
+    return 1;
+}
 
+const plugins::EffectParameter* BeatPulseShockwaveEffect::getParameter(uint8_t index) const {
+    static plugins::EffectParameter params[] = {
+        plugins::EffectParameter("stackGlow", "Stack Glow", 0.0f, 1.0f, 0.75f),
+    };
+    if (index >= (sizeof(params) / sizeof(params[0]))) {
+        return nullptr;
+    }
+    return &params[index];
+}
+
+bool BeatPulseShockwaveEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "stackGlow") == 0) {
+        m_stackGlow = clamp01(value);
+        return true;
+    }
+    return false;
+}
+
+float BeatPulseShockwaveEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "stackGlow") == 0) {
+        return m_stackGlow;
+    }
+    return 0.0f;
+}
+
+} // namespace lightwaveos::effects::ieffect

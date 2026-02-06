@@ -36,12 +36,19 @@ public:
     void cleanup() override;
     const plugins::EffectMetadata& getMetadata() const override;
 
+    uint8_t getParameterCount() const override;
+    const plugins::EffectParameter* getParameter(uint8_t index) const override;
+    bool setParameter(const char* name, float value) override;
+    float getParameter(const char* name) const override;
+
 private:
     bool m_inward = false;
     plugins::EffectMetadata m_meta;
 
     uint32_t m_lastBeatTimeMs = 0;
     float m_latchedBeatStrength = 0.0f;
+
+    float m_stackGlow = 0.75f;  // 0..1 “glowing stack” amount
 
     // Trails are stored in centre-distance space (HALF_LENGTH entries).
     float m_trail[HALF_LENGTH] = {0.0f};

@@ -12,6 +12,7 @@
 #endif
 
 #include <cmath>
+#include <cstring>
 
 namespace lightwaveos::effects::ieffect {
 
@@ -38,6 +39,20 @@ static inline void addWhiteSaturating(CRGB& c, uint8_t w) {
     c.b = (b > 255) ? 255 : static_cast<uint8_t>(b);
 }
 
+static inline float clamp(float v, float lo, float hi) {
+    if (v < lo) return lo;
+    if (v > hi) return hi;
+    return v;
+}
+
+static inline float trailsMulFromFadeAmount(uint8_t fadeAmount, float dtSeconds) {
+    // Match FastLED fadeToBlackBy() semantics: scale channels by (255-fade)/256 each frame.
+    // We do a dt-correct version for 120 FPS render cadence.
+    const float perFrame = (255.0f - static_cast<float>(fadeAmount)) / 255.0f;
+    const float clamped = clamp(perFrame, 0.0f, 1.0f);
+    return powf(clamped, dtSeconds * 120.0f);
+}
+
 } // namespace
 
 bool BeatPulseStackEffect::init(plugins::EffectContext& ctx) {
@@ -45,6 +60,8 @@ bool BeatPulseStackEffect::init(plugins::EffectContext& ctx) {
     m_beatIntensity = 0.0f;
     m_lastBeatTimeMs = 0;
     m_fallbackBpm = 128.0f;
+    m_stackGlow = 0.75f;
+    std::memset(m_trail, 0, sizeof(m_trail));
     return true;
 }
 
@@ -96,13 +113,16 @@ void BeatPulseStackEffect::render(plugins::EffectContext& ctx) {
     const float intensityNorm = static_cast<float>(ctx.intensity) / 255.0f;
     const float complexityNorm = static_cast<float>(ctx.complexity) / 255.0f;
     const float variationNorm = static_cast<float>(ctx.variation) / 255.0f;
+    const float stackGlow = clamp01(m_stackGlow);
 
     // Complexity tunes ring sharpness (higher = tighter ring), Variation trims starting radius.
     const float ringSharpness = 2.25f + 4.50f * complexityNorm;           // 2.25..6.75
     const float ringStartRadius = 0.40f + 0.35f * variationNorm;          // 0.40..0.75 (at beatIntensity=1)
-    const float whiteScale = 0.16f + 0.30f * intensityNorm;               // 0.16..0.46
+    const float whiteScale = (0.10f + 0.38f * intensityNorm) * (0.20f + 0.80f * stackGlow);
     const float boostScale = 0.30f + 0.45f * intensityNorm;               // 0.30..0.75
-    const float baseBrightness = 0.40f + 0.22f * intensityNorm;           // 0.40..0.62
+    const float baseBrightness = (0.10f + (0.52f + 0.22f * intensityNorm) * stackGlow);
+
+    const float trailMul = trailsMulFromFadeAmount(ctx.fadeAmount, dt);
 
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         // Distance 0 at centre → ~1 at edges (centre is between the pair).
@@ -117,16 +137,24 @@ void BeatPulseStackEffect::render(plugins::EffectContext& ctx) {
         float intensity = fmaxf(0.0f, waveHit) * m_beatIntensity;
         intensity *= silentScale;
 
+        // Trails: a “glowing stack” wants persistence in a physically plausible way.
+        // We store intensity in centre-distance space and decay it per frame.
+        m_trail[dist] *= trailMul;
+        if (intensity > m_trail[dist]) {
+            m_trail[dist] = intensity;
+        }
+        const float effIntensity = m_trail[dist];
+
         // Base gradient (static): palette indexed by distance.
         const uint8_t paletteIdx = static_cast<uint8_t>(clamp01(dist01) * 255.0f);
 
         // Brightness boost on beat (HTML: baseBrightness=0.5, + intensity*0.5)
-        const float brightnessFactor = baseBrightness + intensity * boostScale;
+        const float brightnessFactor = clamp01(baseBrightness + effIntensity * boostScale);
         const uint8_t brightness8 = clampU8FromFloat(static_cast<float>(ctx.brightness) * brightnessFactor);
         CRGB c = ctx.palette.getColor(paletteIdx, brightness8);
 
         // White push (HTML: whiteMix = intensity * 0.3)
-        const float whiteMix = intensity * whiteScale;
+        const float whiteMix = effIntensity * whiteScale;
         const uint8_t white8 = clampU8FromFloat(static_cast<float>(ctx.brightness) * whiteMix);
         addWhiteSaturating(c, white8);
 
@@ -145,6 +173,37 @@ const plugins::EffectMetadata& BeatPulseStackEffect::getMetadata() const {
         "LightwaveOS"
     };
     return meta;
+}
+
+uint8_t BeatPulseStackEffect::getParameterCount() const {
+    return 1;
+}
+
+const plugins::EffectParameter* BeatPulseStackEffect::getParameter(uint8_t index) const {
+    static plugins::EffectParameter params[] = {
+        plugins::EffectParameter("stackGlow", "Stack Glow", 0.0f, 1.0f, 0.75f),
+    };
+    if (index >= (sizeof(params) / sizeof(params[0]))) {
+        return nullptr;
+    }
+    return &params[index];
+}
+
+bool BeatPulseStackEffect::setParameter(const char* name, float value) {
+    if (!name) return false;
+    if (strcmp(name, "stackGlow") == 0) {
+        m_stackGlow = clamp01(value);
+        return true;
+    }
+    return false;
+}
+
+float BeatPulseStackEffect::getParameter(const char* name) const {
+    if (!name) return 0.0f;
+    if (strcmp(name, "stackGlow") == 0) {
+        return m_stackGlow;
+    }
+    return 0.0f;
 }
 
 } // namespace lightwaveos::effects::ieffect

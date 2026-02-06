@@ -91,6 +91,7 @@
 #include "ieffect/LGPChromaticPulseEffect.h"
 #include "ieffect/LGPAudioTestEffect.h"
 #include "ieffect/LGPBeatPulseEffect.h"
+#include "ieffect/BeatPulseStackEffect.h"
 #include "ieffect/LGPSpectrumBarsEffect.h"
 #include "ieffect/LGPBassBreathEffect.h"
 #include "ieffect/AudioWaveformEffect.h"
@@ -1035,9 +1036,15 @@ uint8_t registerAllEffects(RendererActor* renderer) {
         total++;
     }
 
+    // Beat Pulse (Stack) (ID 110) - UI preview parity (static gradient + white push)
+    static ieffect::BeatPulseStackEffect beatPulseStackInstance;
+    if (renderer->registerEffect(total, &beatPulseStackInstance)) {
+        total++;
+    }
+
     // =============== EFFECT COUNT PARITY VALIDATION ===============
     // Runtime validation: ensure registered count matches expected
-    constexpr uint8_t EXPECTED_EFFECT_COUNT = 110;  // 101 base + 5 ES reference + 3 ES-tuned + 1 SB reference
+    constexpr uint8_t EXPECTED_EFFECT_COUNT = 111;  // 101 base + 5 ES reference + 3 ES-tuned + 1 SB reference + 1 UI parity
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

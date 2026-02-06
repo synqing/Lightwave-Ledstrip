@@ -241,9 +241,12 @@ void WsGateway::handleConnect(AsyncWebSocketClient* client) {
 
     LW_LOGI("WS: Client %u connected from %s", client->id(), client->remoteIP().toString().c_str());
 
-    // For streaming clients (LED/audio), drop excess frames instead of killing the connection.
-    // canSend() checks in broadcasters provide first-line back-pressure; this is defence-in-depth.
-    client->setCloseClientOnQueueFull(false);
+    // Close clients that cannot keep up.
+    //
+    // AsyncWebSocket queues outgoing frames in internal heap. If a client is slow (poor RSSI,
+    // backgrounded app, etc.), the queue can fill and hold significant SRAM, starving WiFi/esp_timer.
+    // Closing on queue full prevents ENOMEM spirals and forces the client to reconnect cleanly.
+    client->setCloseClientOnQueueFull(true);
 
     // Mark active for this IP (best-effort) and set initial activity timestamp
     if (ipKey != 0) {
@@ -783,6 +786,25 @@ void WsGateway::cleanupStaleConnections() {
                     static_cast<unsigned long>(nowMs), static_cast<unsigned>(i), static_cast<unsigned long>(idleMs));
                 Serial.println(buf);
             }
+        }
+    }
+}
+
+void WsGateway::closeClientsInSubnet(uint8_t a, uint8_t b, uint8_t c, uint16_t code, const char* reason) {
+    if (!m_ws) return;
+
+    for (uint8_t i = 0; i < CLIENT_IP_MAP_SLOTS; i++) {
+        const uint32_t clientId = m_clientIpMap[i].clientId;
+        if (clientId == 0) continue;
+
+        const uint32_t key = m_clientIpMap[i].ipKey;
+        const uint8_t o1 = static_cast<uint8_t>((key >> 24) & 0xFF);
+        const uint8_t o2 = static_cast<uint8_t>((key >> 16) & 0xFF);
+        const uint8_t o3 = static_cast<uint8_t>((key >> 8) & 0xFF);
+        if (o1 != a || o2 != b || o3 != c) continue;
+
+        if (m_ws->hasClient(clientId)) {
+            m_ws->close(clientId, code, reason);
         }
     }
 }

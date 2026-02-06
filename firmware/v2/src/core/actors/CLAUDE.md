@@ -15,4 +15,14 @@
 |----|------|---|-------|------|
 | #23286 | 8:41 AM | 🔵 | Actor System Stack Allocation and Memory Safety Margins | ~568 |
 | #23268 | 8:38 AM | 🔵 | Actor System Configuration and Stack Allocations | ~808 |
+
+### Feb 6, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #25645 | 1:31 AM | 🔵 | RendererActor publishes EFFECT_CHANGED event via MessageBus after successful effect transitions | ~482 |
+| #25644 | 1:30 AM | 🔵 | v2 Actor message loop implements queue saturation prevention with watchdog management | ~543 |
+| #25636 | 1:25 AM | 🔵 | v2 RendererActor runs at 120 FPS on Core 1 with integrated audio, zones, transitions, and color correction | ~761 |
+| #25629 | 1:10 AM | 🔴 | Added missing watchdog reset header to Actor base class | ~368 |
+| #25626 | 1:09 AM | 🔵 | v2 TG1WDT_SYS_RST crash caused by Actor queue drain loop starving watchdog during rapid effect changes | ~837 |
 </claude-mem-context>

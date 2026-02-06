@@ -24,4 +24,17 @@
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
 | #24143 | 10:49 PM | ⚖️ | Wireless Architecture Hardening Plan Created for K1 Network Recovery | ~647 |
+
+### Feb 1, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #24281 | 2:54 AM | 🔵 | Default Zone Count Configuration Across Firmware Components | ~458 |
+
+### Feb 6, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #25598 | 12:54 AM | ✅ | v2 AP password removed for open network access in Portable Mode | ~420 |
+| #25582 | 12:45 AM | ✅ | v2 AP password removed for open network compatibility testing | ~484 |
 </claude-mem-context>

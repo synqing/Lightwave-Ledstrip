@@ -9,4 +9,10 @@
 |----|------|---|-------|------|
 | #11283 | 8:31 AM | ✅ | OTA Documentation Enhanced with Version API and Dual Endpoints | ~599 |
 | #11270 | 8:27 AM | 🔵 | LightwaveOS V2 OTA Update System with WebSocket Audio Streaming | ~579 |
+
+### Feb 6, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #25621 | 1:06 AM | 🔵 | v2 firmware crash fix debrief documents failed watchdog timeout investigation | ~486 |
 </claude-mem-context>

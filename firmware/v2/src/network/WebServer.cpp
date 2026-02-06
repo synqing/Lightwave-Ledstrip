@@ -174,6 +174,8 @@ WebServer::WebServer(NodeOrchestrator& orchestrator, RendererNode* renderer)
     , m_startTime(0)
     , m_lastImmediateBroadcast(0)
     , m_broadcastPending(false)
+    , m_apClientDisconnected(false)
+    , m_lastApReinitMs(0)
     , m_lowHeapShed(false)
     , m_lastHeapShedLogMs(0)
     , m_zoneComposer(nullptr)
@@ -440,6 +442,10 @@ void WebServer::updateLowHeapShedState(uint32_t nowMs) {
             LW_LOGW("Low-heap shedding ENABLED (internal=%lu)", (unsigned long)freeInternal);
             // Cancel any pending broadcasts; when shedding we avoid creating/queuing WS payloads.
             m_broadcastPending = false;
+            // Free queued WS frames immediately — internal heap starvation crashes WiFi/esp_timer.
+            if (m_ws && m_ws->count() > 0) {
+                m_ws->closeAll(1013 /* Try Again Later */);
+            }
         }
     } else {
         if (freeInternal > INTERNAL_HEAP_RESUME_ABOVE_BYTES) {
@@ -468,13 +474,11 @@ void WebServer::update() {
     // from the WiFi event. Close all WS clients on the AP subnet (192.168.4.x).
     if (m_apClientDisconnected) {
         m_apClientDisconnected = false;
-        for (auto& c : m_ws->getClients()) {
-            IPAddress ip = c.remoteIP();
-            if (ip[0] == 192 && ip[1] == 168 && ip[2] == 4) {
-                LW_LOGI("AP station left — closing WS client %u (IP: %s)",
-                        c.id(), ip.toString().c_str());
-                c.close();
-            }
+        if (m_wsGateway) {
+            m_wsGateway->closeClientsInSubnet(192, 168, 4, 1001 /* Going Away */, "AP station left");
+        } else if (m_ws) {
+            // Fallback: close everything (safe but heavy-handed).
+            m_ws->closeAll(1001 /* Going Away */, "AP station left");
         }
 
         // Optional recovery: restart AP to flush WPA2 PMK cache (helps some rebooted clients).
@@ -1330,13 +1334,9 @@ void WebServer::doBroadcastStatus() {
     String output;
     serializeJson(doc, output);
     
-    // Per-client send with back-pressure: avoid queue growth when a client is slow.
     if (m_ws && m_ws->count() > 0) {
-        for (auto& c : m_ws->getClients()) {
-            if (c.status() != WS_CONNECTED) continue;
-            if (!c.canSend()) continue;
-            c.text(output);
-        }
+        if (!m_ws->availableForWriteAll()) return;
+        m_ws->textAll(output);
     }
 }
 
@@ -1419,13 +1419,9 @@ void WebServer::broadcastZoneState() {
     String output;
     serializeJson(doc, output);
     
-    // Per-client send with back-pressure: avoid queue growth when a client is slow.
     if (m_ws && m_ws->count() > 0) {
-        for (auto& c : m_ws->getClients()) {
-            if (c.status() != WS_CONNECTED) continue;
-            if (!c.canSend()) continue;
-            c.text(output);
-        }
+        if (!m_ws->availableForWriteAll()) return;
+        m_ws->textAll(output);
     }
 }
 
@@ -1487,13 +1483,9 @@ void WebServer::broadcastSingleZoneState(uint8_t zoneId) {
     String output;
     serializeJson(doc, output);
 
-    // Per-client send with back-pressure: avoid queue growth when a client is slow.
     if (m_ws && m_ws->count() > 0) {
-        for (auto& c : m_ws->getClients()) {
-            if (c.status() != WS_CONNECTED) continue;
-            if (!c.canSend()) continue;
-            c.text(output);
-        }
+        if (!m_ws->availableForWriteAll()) return;
+        m_ws->textAll(output);
     }
 
     LW_LOGD("Broadcast zones.stateChanged for zone %d", zoneId);
@@ -1527,13 +1519,9 @@ void WebServer::notifyEffectChange(uint8_t effectId, const char* name) {
     String output;
     serializeJson(doc, output);
     
-    // Per-client send with back-pressure: avoid queue growth when a client is slow.
     if (m_ws && m_ws->count() > 0) {
-        for (auto& c : m_ws->getClients()) {
-            if (c.status() != WS_CONNECTED) continue;
-            if (!c.canSend()) continue;
-            c.text(output);
-        }
+        if (!m_ws->availableForWriteAll()) return;
+        m_ws->textAll(output);
     }
 }
 

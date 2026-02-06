@@ -57,6 +57,18 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #25704 | 3:03 AM | 🔵 | v2 WebServer update loop broadcasts LED/audio frames via WebSocket and UDP with coalesced status updates | ~648 |
+| #25626 | 1:09 AM | 🔵 | v2 TG1WDT_SYS_RST crash caused by Actor queue drain loop starving watchdog during rapid effect changes | ~837 |
+| #25624 | 1:07 AM | 🔴 | v2 WiFiManager STA retry disabled after repeated network scan failures | ~172 |
+| #25623 | " | 🔵 | v2 WiFiManager switches to AP mode after 2 failed scans without known networks | ~479 |
+| #25622 | " | 🔵 | v2 WiFiManager implements non-destructive STA retry from AP mode | ~414 |
+| #25601 | 12:54 AM | 🔴 | Fixed AP re-initialization to support empty password for open network | ~473 |
+| #25600 | " | 🟣 | v2 AP now supports open network mode when password is empty | ~463 |
+| #25599 | " | 🟣 | v2 WiFi AP supports open network mode when password is empty | ~408 |
+| #25596 | 12:53 AM | 🟣 | v2 WiFiManager AP now uses WPA/WPA2-PSK encryption with 4 client limit | ~415 |
+| #25584 | 12:45 AM | 🔴 | v2 AP authentication mode now conditionally set based on password presence | ~486 |
+| #25583 | " | 🟣 | v2 WiFi AP now supports optional open network mode for simplified iOS connection | ~494 |
+| #25580 | 12:41 AM | 🔵 | v2 WiFi AP configured with WPA/WPA2-PSK authentication, SSID broadcast, and 4-client limit | ~602 |
 | #25550 | 12:03 AM | 🔴 | Implemented AP re-initialization to flush WPA2 PMK cache on client disconnect | ~602 |
 | #25542 | 12:00 AM | 🔵 | Root cause identified for Tab5 4WAY_HANDSHAKE_TIMEOUT: ESP32 WiFi stack PMK cache retention | ~772 |
 </claude-mem-context>

@@ -86,6 +86,20 @@ public:
      */
     void cleanupStaleConnections();
 
+    /**
+     * @brief Close WebSocket clients that were connected via a specific subnet prefix
+     *
+     * Uses the fixed-size clientId → IP table to avoid fragile iteration over AsyncWebSocket internals.
+     * Intended for Soft-AP station disconnect cleanup (192.168.4.*).
+     *
+     * @param a First octet (e.g. 192)
+     * @param b Second octet (e.g. 168)
+     * @param c Third octet (e.g. 4)
+     * @param code WebSocket close code
+     * @param reason Optional close reason (may be nullptr)
+     */
+    void closeClientsInSubnet(uint8_t a, uint8_t b, uint8_t c, uint16_t code, const char* reason);
+
 private:
     AsyncWebSocket* m_ws;
     WebServerContext m_ctx;

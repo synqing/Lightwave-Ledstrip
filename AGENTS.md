@@ -13,6 +13,7 @@ pio device monitor -b 115200           # serial monitor
 
 ## Hard Constraints
 
+- **PSRAM MANDATORY**: All build environments MUST have PSRAM enabled (`-D BOARD_HAS_PSRAM`). The firmware requires 8MB PSRAM for DSP buffers, network stack, and effects. Internal SRAM (~320KB) is insufficient. Builds without PSRAM will crash with `ESP_ERR_NO_MEM`.
 - **Centre origin**: All effects originate from LED 79/80 outward (or inward to 79/80). No linear sweeps.
 - **No rainbows**: No rainbow cycling or full hue-wheel sweeps.
 - **No heap alloc in render**: No `new`/`malloc`/`String` in `render()` paths. Use static buffers.

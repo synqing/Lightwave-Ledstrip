@@ -3,9 +3,11 @@
 🚫 **CRITICAL: NO RAINBOWS EVER - AGENTS THAT CREATE RAINBOWS WILL BE DESTROYED** 🚫
 
 📍 **MANDATORY: ALL EFFECTS MUST ORIGINATE FROM CENTER LEDs 79/80**
-- Effects MUST move OUTWARD from center (79/80) to edges (0/159) 
+- Effects MUST move OUTWARD from center (79/80) to edges (0/159)
 - OR move INWARD from edges (0/159) to center (79/80)
 - NO OTHER PROPAGATION PATTERNS ALLOWED
+
+💾 **PSRAM REQUIRED**: All builds require ESP32-S3 N16R8 (8MB PSRAM). Internal SRAM is insufficient for audio DSP (~68KB), WiFi stack (~60KB), and effects. Without PSRAM: `ESP_ERR_NO_MEM` crashes.
 
 ## For AI Agents
 
@@ -84,6 +86,7 @@ Always use these specific ports for uploads and monitoring. Verify with `pio dev
 - [PlatformIO](https://platformio.org/) (VS Code extension or CLI)
 - ESP32 board package
 - USB cable for programming
+- **ESP32-S3 with 8MB PSRAM** (N16R8 variant required) - Internal SRAM is insufficient for DSP/network stack
 
 ### Build Instructions
 

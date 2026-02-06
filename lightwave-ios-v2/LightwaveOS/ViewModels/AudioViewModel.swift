@@ -143,10 +143,15 @@ class AudioViewModel {
     func reset() {
         beatResetTask?.cancel()
         downbeatResetTask?.cancel()
+        audioParamsDebounceTask?.cancel()
+        audioParamsDebounceTask = nil
+        audioTuningDebounceTask?.cancel()
+        audioTuningDebounceTask = nil
         isBeating = false
         isDownbeat = false
         audioFrameCount = 0
         lastAudioFrameAt = nil
+        restClient = nil
         stopTelemetryPolling()
     }
 

@@ -33,6 +33,7 @@
 #ifndef NATIVE_BUILD
 #include "esp_rom_sys.h"
 #include <esp_task_wdt.h>
+#include <esp_heap_caps.h>
 #endif
 
 // Audio integration (Phase 2)
@@ -134,6 +135,10 @@ RendererActor::RendererActor()
     , m_captureTapMask(0)
     , m_correctionSkipCount(0)
     , m_correctionApplyCount(0)
+    , m_captureBlock(nullptr)
+    , m_captureTapA(nullptr)
+    , m_captureTapB(nullptr)
+    , m_captureTapC(nullptr)
     , m_captureTapAValid(false)
     , m_captureTapBValid(false)
     , m_captureTapCValid(false)
@@ -156,9 +161,6 @@ RendererActor::RendererActor()
     memset(m_transitionSourceBuffer, 0, sizeof(m_transitionSourceBuffer));
     m_transitionEngine = new TransitionEngine();
 #endif
-    memset(m_captureTapA, 0, sizeof(m_captureTapA));
-    memset(m_captureTapB, 0, sizeof(m_captureTapB));
-    memset(m_captureTapC, 0, sizeof(m_captureTapC));
 
     // Initialize effect registry
     for (uint8_t i = 0; i < MAX_EFFECTS; i++) {
@@ -189,6 +191,13 @@ RendererActor::~RendererActor()
         m_transitionEngine = nullptr;
     }
 #endif
+    if (m_captureBlock) {
+        free(m_captureBlock);
+        m_captureBlock = nullptr;
+        m_captureTapA = nullptr;
+        m_captureTapB = nullptr;
+        m_captureTapC = nullptr;
+    }
     // Actor base class handles task cleanup
 }
 
@@ -770,9 +779,52 @@ void RendererActor::onStop()
 // Frame Capture System (for testbed)
 // ============================================================================
 
+static bool ensureCaptureBuffers(CRGB*& block, CRGB*& tapA, CRGB*& tapB, CRGB*& tapC) {
+    if (block != nullptr && tapA != nullptr && tapB != nullptr && tapC != nullptr) {
+        return true;
+    }
+
+    const size_t bytes = static_cast<size_t>(lightwaveos::actors::LedConfig::TOTAL_LEDS) *
+                         sizeof(CRGB) * 3U;
+
+#ifndef NATIVE_BUILD
+    block = static_cast<CRGB*>(
+        heap_caps_calloc(1, bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (!block) {
+        block = static_cast<CRGB*>(
+            heap_caps_calloc(1, bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    }
+#else
+    block = static_cast<CRGB*>(calloc(1, bytes));
+#endif
+
+    if (!block) {
+        tapA = nullptr;
+        tapB = nullptr;
+        tapC = nullptr;
+        return false;
+    }
+
+    tapA = block;
+    tapB = block + lightwaveos::actors::LedConfig::TOTAL_LEDS;
+    tapC = block + (2U * lightwaveos::actors::LedConfig::TOTAL_LEDS);
+    return true;
+}
+
 void RendererActor::setCaptureMode(bool enabled, uint8_t tapMask) {
+    const uint8_t masked = tapMask & 0x07;  // Only bits 0-2 are valid
+
+    if (enabled) {
+        if (!ensureCaptureBuffers(m_captureBlock, m_captureTapA, m_captureTapB, m_captureTapC)) {
+            LW_LOGW("Capture enable refused: buffer allocation failed");
+            m_captureEnabled = false;
+            m_captureTapMask = 0;
+            return;
+        }
+    }
+
     m_captureEnabled = enabled;
-    m_captureTapMask = tapMask & 0x07;  // Only bits 0-2 are valid
+    m_captureTapMask = masked;
     
     if (!enabled) {
         m_captureTapAValid = false;
@@ -900,6 +952,13 @@ void RendererActor::applyPendingEffectParameterUpdates() {
 }
 
 void RendererActor::forceOneShotCapture(CaptureTap tap) {
+    // forceOneShotCapture may be called even when capture mode is disabled (e.g. serial dump),
+    // so ensure buffers exist for the requested tap.
+    if (!ensureCaptureBuffers(m_captureBlock, m_captureTapA, m_captureTapB, m_captureTapC)) {
+        LW_LOGW("One-shot capture skipped: buffer allocation failed");
+        return;
+    }
+
     // Preserve the live LED state buffer so buffer-feedback effects are not disturbed.
     CRGB savedLeds[LedConfig::TOTAL_LEDS];
     memcpy(savedLeds, m_leds, sizeof(savedLeds));
@@ -935,6 +994,10 @@ void RendererActor::forceOneShotCapture(CaptureTap tap) {
 
 void RendererActor::captureFrame(CaptureTap tap, const CRGB* sourceBuffer) {
     if (sourceBuffer == nullptr) {
+        return;
+    }
+
+    if (m_captureTapA == nullptr || m_captureTapB == nullptr || m_captureTapC == nullptr) {
         return;
     }
     
@@ -1364,7 +1427,7 @@ void RendererActor::showLeds()
 #endif
 
     // TAP C: Capture pre-WS2812 (after strip split, before show)
-    if (m_captureEnabled && (m_captureTapMask & 0x04)) {
+    if (m_captureEnabled && (m_captureTapMask & 0x04) && m_captureTapC != nullptr) {
         // Interleave strip1 and strip2 into unified format for capture
         for (uint16_t i = 0; i < LedConfig::LEDS_PER_STRIP; i++) {
             m_captureTapC[i] = m_strip1[i];

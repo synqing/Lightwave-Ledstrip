@@ -23,16 +23,13 @@ enum AppMode: String, Sendable {
 class AppViewModel {
     // MARK: - Connection State
 
-    enum ConnectionState: Equatable {
-        case disconnected
-        case discovering
-        case connecting
-        case connected
-        case error(String)
+    /// Connection state derived from ConnectionManager for UI observation
+    var connectionState: ConnectionState {
+        connectionManager.state
     }
 
-    var connectionState: ConnectionState = .disconnected
     var currentDevice: DeviceInfo?
+    var currentIP: String?  // Track IP for AP subnet detection (works for manual connections too)
     var currentMode: AppMode = .play
 
     // MARK: - LED Stream State
@@ -64,6 +61,7 @@ class AppViewModel {
     let ws: WebSocketService
     let udpReceiver: UDPStreamReceiver
     let discovery: DeviceDiscoveryService
+    let connectionManager: ConnectionManager
 
     // MARK: - Debug Log
 
@@ -72,23 +70,15 @@ class AppViewModel {
 
     // MARK: - Zone Refresh Throttling
 
-    // MARK: - Network Monitor
-
-    private var networkMonitor: NWPathMonitor?
-    private var lastNetworkPath: NWPath.Status?
-    private var reconnectTask: Task<Void, Never>?
-
-    private static let lastDeviceIPKey = "lightwaveos.lastDeviceIP"
-    private static let lastDevicePortKey = "lightwaveos.lastDevicePort"
-
     private var zoneRefreshTask: Task<Void, Never>?
     private var lastZoneRefresh: Date = .distantPast
-    private var statusPollTask: Task<Void, Never>?
     private var streamSubscriptionTask: Task<Void, Never>?
     private var udpFallbackActive = false
     private var udpSubscribeStart: Date?
     private let udpFallbackDelaySeconds: TimeInterval = 3.0
     private var udpHealthTask: Task<Void, Never>?
+    private var wsEventTask: Task<Void, Never>?
+    private var discoveryStreamTask: Task<Void, Never>?
 
     // MARK: - Initialization
 
@@ -103,156 +93,62 @@ class AppViewModel {
         self.ws = WebSocketService()
         self.udpReceiver = UDPStreamReceiver()
         self.discovery = DeviceDiscoveryService()
+        self.connectionManager = ConnectionManager(ws: ws, discovery: discovery)
+
+        // Set self as delegate AFTER init completes
+        Task { @MainActor in
+            self.connectionManager.delegate = self
+        }
     }
 
-    // MARK: - Connection Management
+    // MARK: - Connection API (delegates to ConnectionManager)
 
+    /// Connect to a discovered device
     func connect(to device: DeviceInfo) async {
         log("Connecting to \(device.displayName) at \(device.cleanIP)...", category: "CONN")
-        connectionState = .connecting
         currentDevice = device
-
-        // Persist for fast reconnection
-        persistDevice(ip: device.cleanIP, port: device.port)
-
-        await connectManual(ip: device.cleanIP, port: device.port)
+        let target = DeviceTarget.from(device)
+        await connectionManager.connect(target: target)
     }
 
+    /// Connect manually by IP
     func connectManual(ip: String, port: Int = 80) async {
-        // Strip interface scope suffix if present
-        let cleanIP = ip.components(separatedBy: "%").first ?? ip
-        connectionState = .connecting
-        log("Manual connection to \(cleanIP):\(port)", category: "CONN")
-
-        // Start UDP listener before subscribing (firmware will send to our port)
-        udpReceiver.start()
-
-        // Wire UDP frame handlers
-        udpReceiver.onLedFrame = { [weak self] bytes in
-            guard let self = self else { return }
-            // Parse v1 frame: skip 4-byte header, extract RGB for both strips
-            guard bytes.count >= 966 else { return }
-            // Extract raw RGB data from dual-strip format
-            // Strip 0: bytes 5..484 (stripID + 160*3 RGB)
-            // Strip 1: bytes 486..965 (stripID + 160*3 RGB)
-            var ledData = [UInt8](repeating: 0, count: 960)
-            // Strip 0 RGB data starts at offset 5 (header=4, stripID=1)
-            for i in 0..<480 {
-                ledData[i] = bytes[5 + i]
-            }
-            // Strip 1 RGB data starts at offset 486 (4 + 1 + 480 + 1)
-            for i in 0..<480 {
-                ledData[480 + i] = bytes[486 + i]
-            }
-            self.ledData = ledData
-            if !self.isLEDStreamActive {
-                self.isLEDStreamActive = true
-                self.log("LED stream started (UDP)", category: "UDP")
-            }
-        }
-
-        udpReceiver.onAudioFrame = { [weak self] data in
-            guard let self = self else { return }
-            // Parse binary audio metrics frame
-            if let frame = AudioMetricsFrame(data: data) {
-                self.audio.handleMetricsFrame(frame)
-            }
-        }
-
-        // Create REST client
-        let client = RESTClient(host: cleanIP, port: port)
-        self.rest = client
-
-        do {
-            // Test connectivity with device info endpoint
-            log("Testing connectivity...", category: "CONN")
-            let response = try await client.getDeviceInfo()
-
-            guard response.success else {
-                throw NSError(domain: "LightwaveOS", code: -1, userInfo: [NSLocalizedDescriptionKey: "Device returned failure response"])
-            }
-
-            log("Device info received: \(response.data.firmware)", category: "CONN")
-            self.deviceInfo = response.data
-
-            // Connect WebSocket
-            log("Connecting WebSocket...", category: "WS")
-            guard let wsURL = URL(string: "ws://\(cleanIP):\(port)/ws") else {
-                throw NSError(domain: "LightwaveOS", code: -2, userInfo: [NSLocalizedDescriptionKey: "Invalid WebSocket URL"])
-            }
-            let stream = await ws.connect(to: wsURL)
-            consumeWebSocketEvents(stream)
-
-            // Inject REST client into child ViewModels
-            effects.restClient = client
-            palettes.restClient = client
-            parameters.restClient = client
-            zones.restClient = client
-            zones.ws = ws
-            audio.restClient = client
-            transition.restClient = client
-            colourCorrection.restClient = client
-
-            // Load initial state
-            log("Loading effects list...", category: "INIT")
-            await effects.loadEffects()
-
-            log("Loading palettes list...", category: "INIT")
-            await palettes.loadPalettes()
-
-            log("Loading parameters...", category: "INIT")
-            await parameters.loadParameters()
-
-            log("Loading zones...", category: "INIT")
-            await zones.loadZones()
-
-            log("Loading colour correction...", category: "INIT")
-            await colourCorrection.loadConfig()
-
-            log("Loading audio tuning...", category: "INIT")
-            await audio.loadAudioTuning()
-
-            startDeviceStatusPolling()
-
-            // Connection successful
-            connectionState = .connected
-            log("Connected successfully", category: "CONN")
-
-            // Start monitoring for network changes
-            startNetworkMonitor()
-
-        } catch {
-            log("Connection failed: \(error.localizedDescription)", category: "ERROR")
-            connectionState = .error(error.localizedDescription)
-            rest = nil
-        }
+        log("Manual connection to \(ip):\(port)", category: "CONN")
+        let target = DeviceTarget.manual(ip: ip, port: port)
+        await connectionManager.connect(target: target)
     }
 
+    /// Disconnect from device
     func disconnect() async {
         log("Disconnecting...", category: "CONN")
-        stopNetworkMonitor()
-        reconnectTask?.cancel()
-        reconnectTask = nil
-        await ws.disconnect()
-        rest = nil
-        currentDevice = nil
-        connectionState = .disconnected
-        statusPollTask?.cancel()
-        statusPollTask = nil
+
+        // Cancel local tasks
+        wsEventTask?.cancel()
+        wsEventTask = nil
+        discoveryStreamTask?.cancel()
+        discoveryStreamTask = nil
         streamSubscriptionTask?.cancel()
         streamSubscriptionTask = nil
-        udpReceiver.stop()
-        deviceStatus = nil
-        deviceInfo = nil
-        wsConnected = false
+        udpHealthTask?.cancel()
+        udpHealthTask = nil
+        zoneRefreshTask?.cancel()
+        zoneRefreshTask = nil
 
-        // Reset state
-        effects.currentEffectId = 0
-        effects.currentEffectName = ""
-        palettes.currentPaletteId = 0
-        audio.reset()
-        ledData = Array(repeating: 0, count: 960)
-        isLEDStreamActive = false
+        await connectionManager.disconnect()
+    }
+
+    // MARK: - App Lifecycle
+
+    /// Handle app entering background
+    func handleBackground() async {
+        await pauseStreaming()
+        await connectionManager.handleBackground()
+    }
+
+    /// Handle app returning to foreground
+    func handleForeground() async {
+        await connectionManager.handleForeground()
+        await resumeStreaming()
     }
 
     // MARK: - Device Discovery
@@ -260,9 +156,13 @@ class AppViewModel {
     /// Start device discovery and consume updates.
     /// Updates discoveredDevices and isDiscoverySearching from the actor stream.
     func startDeviceDiscovery() async {
+        // Cancel old task BEFORE creating new stream to avoid orphan continuations
+        discoveryStreamTask?.cancel()
+        discoveryStreamTask = nil
+
         let stream = await discovery.startDiscovery()
 
-        Task { @MainActor [weak self] in
+        discoveryStreamTask = Task { @MainActor [weak self] in
             for await devices in stream {
                 guard let self = self else { break }
                 self.discoveredDevices = devices
@@ -278,16 +178,59 @@ class AppViewModel {
         isDiscoverySearching = false
     }
 
+    // MARK: - Reconnection
+
+    /// Attempt to reconnect: probe last-known IP first, then fall back to discovery.
+    func attemptReconnection() {
+        // Guard: don't start reconnection if already connected or connecting
+        guard !connectionState.isConnecting && !connectionState.isReady else {
+            log("Skipping reconnection — already \(connectionState)", category: "CONN")
+            return
+        }
+
+        Task { [weak self] in
+            guard let self else { return }
+
+            // First: probe last-known device IP
+            if let last = DeviceTarget.loadPersisted() {
+                self.log("Probing last device at \(last.lastKnownIP):\(last.port)...", category: "CONN")
+                if let device = await self.discovery.probeDevice(ip: last.lastKnownIP, port: last.port) {
+                    guard !Task.isCancelled else { return }
+                    await self.connect(to: device)
+                    return
+                }
+            }
+
+            guard !Task.isCancelled else { return }
+
+            // Probe v2 AP gateway directly
+            self.log("Probing v2 AP gateway...", category: "CONN")
+            if let device = await self.discovery.probeDevice(ip: "192.168.4.1") {
+                guard !Task.isCancelled else { return }
+                await self.connect(to: device)
+                return
+            }
+
+            guard !Task.isCancelled else { return }
+
+            // Last resort: full Bonjour discovery
+            self.log("Falling back to Bonjour discovery...", category: "CONN")
+            await self.startDeviceDiscovery()
+        }
+    }
+
     // MARK: - WebSocket Event Stream
 
     private func consumeWebSocketEvents(_ stream: AsyncStream<WebSocketService.Event>) {
-        Task { @MainActor [weak self] in
+        wsEventTask?.cancel()
+        wsEventTask = Task { @MainActor [weak self] in
             for await event in stream {
                 guard let self = self else { break }
                 switch event {
                 case .status(let payload):
                     // Update current effect
-                    if let effectId = payload.data["currentEffect"] as? Int {
+                    if let effectId = (payload.data["effectId"] as? Int)
+                        ?? (payload.data["currentEffect"] as? Int) {
                         self.effects.currentEffectId = effectId
                         if let effect = self.effects.allEffects.first(where: { $0.id == effectId }) {
                             self.effects.currentEffectName = effect.name
@@ -295,7 +238,8 @@ class AppViewModel {
                     }
 
                     // Update current palette
-                    if let paletteId = payload.data["currentPalette"] as? Int {
+                    if let paletteId = (payload.data["paletteId"] as? Int)
+                        ?? (payload.data["currentPalette"] as? Int) {
                         self.palettes.currentPaletteId = paletteId
                     }
 
@@ -346,7 +290,7 @@ class AppViewModel {
 
                 case .disconnected(let error):
                     self.log("WebSocket disconnected: \(error?.localizedDescription ?? "clean")", category: "WS")
-                    self.wsConnected = false
+                    // NOTE: wsConnected is a computed property from connectionState, no assignment needed
                     self.streamSubscriptionTask?.cancel()
                     self.streamSubscriptionTask = nil
                     self.udpHealthTask?.cancel()
@@ -356,6 +300,11 @@ class AppViewModel {
                     self.udpReceiver.reset()
                     self.udpFallbackActive = false
                     self.udpSubscribeStart = nil
+
+                    // Notify ConnectionManager to trigger reconnection
+                    Task {
+                        await self.connectionManager.notifyWebSocketDisconnected()
+                    }
                 }
             }
         }
@@ -402,12 +351,54 @@ class AppViewModel {
         }
     }
 
+    // MARK: - Background/Foreground Streaming
+
+    private var wasStreamingBeforeBackground = false
+
+    /// Pause streaming when app enters background to save battery.
+    func pauseStreaming() async {
+        guard connectionState.isReady else { return }
+        wasStreamingBeforeBackground = isLEDStreamActive || audio.audioFrameCount > 0
+
+        if wasStreamingBeforeBackground {
+            log("Pausing streaming (app backgrounded)", category: "BG")
+            await ws.unsubscribeLEDStream()
+            await ws.unsubscribeAudioStream()
+            streamSubscriptionTask?.cancel()
+            streamSubscriptionTask = nil
+            udpHealthTask?.cancel()
+            udpHealthTask = nil
+        }
+    }
+
+    /// Resume streaming when app returns to foreground.
+    func resumeStreaming() async {
+        guard connectionState.isReady, wasStreamingBeforeBackground else { return }
+        log("Resuming streaming (app foregrounded)", category: "BG")
+        wasStreamingBeforeBackground = false
+        startStreamSubscriptions()
+        startUdpHealthMonitor()
+    }
+
     // MARK: - Stream Subscription Retry
 
     private func startStreamSubscriptions() {
         streamSubscriptionTask?.cancel()
         streamSubscriptionTask = Task { @MainActor [weak self] in
             guard let self else { return }
+
+            // On AP subnet, skip UDP — soft AP UDP routing is unreliable.
+            // Go straight to WS streaming to avoid the 3s dead-time and
+            // potential double-subscription (UDP + WS fallback simultaneously).
+            let isAPSubnet = self.currentIP == "192.168.4.1"
+            if isAPSubnet {
+                self.log("On AP subnet — using WS streaming (UDP unreliable over soft AP)", category: "UDP")
+                self.udpFallbackActive = true
+                await self.ws.subscribeLEDStreamWS()
+                await self.ws.subscribeAudioStreamWS()
+                return
+            }
+
             var attempt = 0
             let maxAttempts = 8
             let udpReady = await self.udpReceiver.waitUntilReady(timeout: 2.0)
@@ -498,113 +489,67 @@ class AppViewModel {
         }
     }
 
-    // MARK: - Device Status Polling
+    // MARK: - Helper for Initial State Loading
 
-    private func startDeviceStatusPolling() {
-        statusPollTask?.cancel()
-        statusPollTask = Task { [weak self] in
-            guard let self else { return }
-            while !Task.isCancelled {
-                await self.loadDeviceStatus()
-                try? await Task.sleep(for: .seconds(2))
-            }
-        }
-    }
+    private func loadInitialState() async {
+        // Start UDP listener
+        udpReceiver.start()
+        wireUDPHandlers()
 
-    private func loadDeviceStatus() async {
-        guard let client = rest else { return }
-        do {
-            let response = try await client.getDeviceStatus()
-            self.deviceStatus = response.data
-        } catch {
-            // Keep last known status; avoid spamming logs
-        }
-    }
+        // NOTE: WebSocket events are consumed in connectionDidBecomeReady()
+        // DO NOT call ws.connect() here - that creates a SECOND connection!
 
-    // MARK: - Network Monitor
+        // Load initial data
+        log("Loading effects list...", category: "INIT")
+        await effects.loadEffects()
 
-    /// Monitor network path changes to trigger reconnection when WiFi changes.
-    private func startNetworkMonitor() {
-        stopNetworkMonitor()
-        let monitor = NWPathMonitor(requiredInterfaceType: .wifi)
-        self.networkMonitor = monitor
+        log("Loading palettes list...", category: "INIT")
+        await palettes.loadPalettes()
 
-        monitor.pathUpdateHandler = { [weak self] path in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                let previousStatus = self.lastNetworkPath
-                self.lastNetworkPath = path.status
-
-                if previousStatus == .unsatisfied && path.status == .satisfied {
-                    self.log("WiFi restored, attempting reconnection...", category: "NET")
-                    self.attemptReconnection()
-                } else if previousStatus == .satisfied && path.status == .unsatisfied {
-                    self.log("WiFi lost", category: "NET")
-                }
-            }
+        log("Loading parameters...", category: "INIT")
+        if let paletteId = await parameters.loadParameters() {
+            palettes.currentPaletteId = paletteId
         }
 
-        monitor.start(queue: DispatchQueue(label: "com.lightwaveos.netmonitor", qos: .utility))
+        log("Loading zones...", category: "INIT")
+        await zones.loadZones()
+
+        log("Loading colour correction...", category: "INIT")
+        await colourCorrection.loadConfig()
+
+        log("Loading audio tuning...", category: "INIT")
+        await audio.loadAudioTuning()
+
+        // Start streaming
+        startStreamSubscriptions()
+        startUdpHealthMonitor()
+
+        log("Connected successfully", category: "CONN")
     }
 
-    private func stopNetworkMonitor() {
-        networkMonitor?.cancel()
-        networkMonitor = nil
-        lastNetworkPath = nil
-    }
-
-    // MARK: - Device Persistence
-
-    /// Persist last-connected device for fast reconnection on next launch.
-    private func persistDevice(ip: String, port: Int) {
-        UserDefaults.standard.set(ip, forKey: Self.lastDeviceIPKey)
-        UserDefaults.standard.set(port, forKey: Self.lastDevicePortKey)
-    }
-
-    /// Load last-connected device from UserDefaults.
-    func loadPersistedDevice() -> (ip: String, port: Int)? {
-        guard let ip = UserDefaults.standard.string(forKey: Self.lastDeviceIPKey),
-              !ip.isEmpty else {
-            return nil
+    private func wireUDPHandlers() {
+        udpReceiver.onLedFrame = { [weak self] bytes in
+            guard let self = self else { return }
+            guard bytes.count >= 966 else { return }
+            var ledData = [UInt8](repeating: 0, count: 960)
+            for i in 0..<480 {
+                ledData[i] = bytes[5 + i]
+            }
+            for i in 0..<480 {
+                ledData[480 + i] = bytes[486 + i]
+            }
+            self.ledData = ledData
+            if !self.isLEDStreamActive {
+                self.isLEDStreamActive = true
+                self.log("LED stream started (UDP)", category: "UDP")
+            }
         }
-        let port = UserDefaults.standard.integer(forKey: Self.lastDevicePortKey)
-        return (ip, port > 0 ? port : 80)
-    }
 
-    // MARK: - Reconnection
-
-    /// Attempt to reconnect: probe last-known IP first, then fall back to discovery.
-    func attemptReconnection() {
-        reconnectTask?.cancel()
-        reconnectTask = Task { [weak self] in
-            guard let self else { return }
-
-            // First: probe last-known device IP
-            if let last = self.loadPersistedDevice() {
-                self.log("Probing last device at \(last.ip):\(last.port)...", category: "CONN")
-                if let device = await self.discovery.probeDevice(ip: last.ip, port: last.port) {
-                    guard !Task.isCancelled else { return }
-                    await self.connect(to: device)
-                    return
-                }
+        udpReceiver.onAudioFrame = { [weak self] data in
+            guard let self = self else { return }
+            if let frame = AudioMetricsFrame(data: data) {
+                self.audio.handleMetricsFrame(frame)
             }
-
-            guard !Task.isCancelled else { return }
-
-            // Probe v2 AP gateway directly
-            self.log("Probing v2 AP gateway...", category: "CONN")
-            if let device = await self.discovery.probeDevice(ip: "192.168.4.1") {
-                guard !Task.isCancelled else { return }
-                await self.connect(to: device)
-                return
-            }
-
-            guard !Task.isCancelled else { return }
-
-            // Last resort: full Bonjour discovery
-            self.log("Falling back to Bonjour discovery...", category: "CONN")
-            self.connectionState = .discovering
-            await self.startDeviceDiscovery()
         }
     }
 
@@ -632,6 +577,84 @@ class AppViewModel {
 
     func clearLog() {
         debugLog.removeAll()
+    }
+}
+
+// MARK: - ConnectionManagerDelegate
+
+extension AppViewModel: ConnectionManagerDelegate {
+    func connectionDidBecomeReady(rest: RESTClient, ws: WebSocketService, eventStream: AsyncStream<WebSocketService.Event>) {
+        // Inject REST client into child ViewModels
+        self.rest = rest
+        effects.restClient = rest
+        palettes.restClient = rest
+        parameters.restClient = rest
+        zones.restClient = rest
+        zones.ws = ws
+        audio.restClient = rest
+        transition.restClient = rest
+        colourCorrection.restClient = rest
+
+        // Consume WebSocket events - we are the ONLY consumer
+        consumeWebSocketEvents(eventStream)
+
+        // Load initial state (no longer calls ws.connect())
+        Task {
+            await loadInitialState()
+        }
+    }
+
+    func connectionDidDisconnect() {
+        // Clean up child ViewModels
+        rest = nil
+        effects.restClient = nil
+        palettes.restClient = nil
+        parameters.restClient = nil
+        zones.restClient = nil
+        audio.restClient = nil
+        transition.restClient = nil
+        colourCorrection.restClient = nil
+
+        parameters.disconnect()
+        zones.disconnect()
+        colourCorrection.disconnect()
+        audio.reset()
+
+        // Reset local state
+        currentDevice = nil
+        currentIP = nil
+        deviceStatus = nil
+        deviceInfo = nil
+        wsConnected = false
+        ledData = Array(repeating: 0, count: 960)
+        isLEDStreamActive = false
+        udpFallbackActive = false
+        udpSubscribeStart = nil
+
+        // Reset effect and palette state
+        effects.currentEffectId = 0
+        effects.currentEffectName = ""
+        palettes.currentPaletteId = 0
+
+        // Stop UDP
+        udpReceiver.stop()
+        udpReceiver.onLedFrame = nil
+        udpReceiver.onAudioFrame = nil
+    }
+
+    func connectionStateDidChange(_ state: ConnectionState) {
+        // Update derived properties
+        if state.isReady {
+            wsConnected = true
+            if let target = connectionManager.target {
+                currentIP = target.lastKnownIP
+            }
+        } else {
+            wsConnected = false
+        }
+
+        // Log state change
+        log("Connection state: \(state)", category: "CONN")
     }
 }
 

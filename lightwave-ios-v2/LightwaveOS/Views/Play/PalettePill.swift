@@ -117,19 +117,10 @@ struct PalettePill: View {
     }
 
     private var paletteAccent: some View {
-        return AnyView(
-            RiveViewContainer(
-                asset: RiveAssetRegistry.palettePillAccent,
-                inputs: [
-                    .number("index", Double(appVM.palettes.currentPaletteId)),
-                    .number("count", Double(appVM.palettes.allPalettes.count))
-                ],
-                fallback: AnyView(EmptyView())
-            )
+        EmptyView()
             .frame(width: 36, height: 36)
             .opacity(0.9)
             .allowsHitTesting(false)
-        )
     }
 }
 

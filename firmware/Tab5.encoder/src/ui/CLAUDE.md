@@ -41,4 +41,18 @@
 | #23207 | 7:33 AM | ⚖️ | Three-Part Implementation Plan: Dashboard API Fix, Beat Detection Diagnostic, Multi-Device Control | ~784 |
 | #23182 | 7:26 AM | 🔵 | Tab5 Encoder DisplayUI Multi-Screen Architecture | ~901 |
 | #23176 | " | 🔵 | Tab5 Encoder Physical Interface with LVGL | ~719 |
+
+### Feb 5, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #25541 | 11:57 PM | 🔵 | Tab5 crash root cause identified as null pointer dereference in ActionRowWidget rendering | ~665 |
+| #25539 | 11:56 PM | 🔵 | Tab5 DisplayUI implements WiFi info display with IP, SSID, and RSSI fields | ~428 |
+
+### Feb 6, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #25546 | 12:00 AM | 🔵 | Tab5 DisplayUI shows color correction state with gamma value formatting and preset delete feedback | ~477 |
+| #25545 | " | 🔵 | Tab5 DisplayUI integrates battery monitoring via EspHal abstraction | ~408 |
 </claude-mem-context>

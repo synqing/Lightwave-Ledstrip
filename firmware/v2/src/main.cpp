@@ -57,6 +57,7 @@
 
 #if FEATURE_AUDIO_SYNC
 #include "audio/AudioDebugConfig.h"
+#include "audio/contracts/AudioEffectMapping.h"
 #endif
 
 #include "config/DebugConfig.h"
@@ -175,6 +176,14 @@ void setup() {
     uint8_t effectCount = registerAllEffects(renderer);
     LW_LOGI("Effects registered: %d", effectCount);
 
+#if FEATURE_AUDIO_SYNC
+    // Initialise AudioMappingRegistry before render tasks begin so the large mapping
+    // table can live in PSRAM rather than internal SRAM.
+    LW_LOGI("Initialising Audio Mapping Registry...");
+    bool mappingOk = lightwaveos::audio::AudioMappingRegistry::instance().begin();
+    LW_LOGI("Audio Mapping Registry: %s", mappingOk ? "READY" : "DISABLED");
+#endif
+
     // Initialize NVS (must be before Zone Composer to load saved config)
     LW_LOGI("Initializing NVS...");
     if (!NVS_MANAGER.init()) {
@@ -271,7 +280,7 @@ void setup() {
     );
     // Enable AP fallback — K1 is a sealed device with no USB access.
     // Without this, a WiFi drop makes the device permanently unreachable.
-    WIFI_MANAGER.enableSoftAP("LightwaveOS-AP", "SpectraSynq");
+    WIFI_MANAGER.enableSoftAP(NetworkConfig::AP_SSID, NetworkConfig::AP_PASSWORD);
 
     if (!WIFI_MANAGER.begin()) {
         LW_LOGE("WiFiManager failed to start!");

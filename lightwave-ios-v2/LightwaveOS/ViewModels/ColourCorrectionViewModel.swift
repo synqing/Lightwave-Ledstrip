@@ -74,6 +74,14 @@ class ColourCorrectionViewModel {
         }
     }
 
+    // MARK: - Disconnect Cleanup
+
+    func disconnect() {
+        saveDebounceTask?.cancel()
+        saveDebounceTask = nil
+        restClient = nil
+    }
+
     // MARK: - API Methods
 
     func loadConfig() async {

@@ -534,7 +534,7 @@ When WiFi connection fails, device enters AP mode:
 | Setting | Value |
 |---------|-------|
 | SSID | `LightwaveOS-AP` |
-| Password | `SpectraSynq` |
+| Password | *(none — open network)* |
 | IP | `192.168.4.1` |
 | Channel | `1` (configurable via `enableSoftAP`) |
 

@@ -11,35 +11,40 @@ import SwiftUI
 @main
 struct LightwaveOSApp: App {
     @State private var appVM = AppViewModel()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
-#if DEBUG
-            let env = ProcessInfo.processInfo.environment
-            if env["LW_EXPORT_DESIGN_PNGS"] == "1"
-                || ProcessInfo.processInfo.arguments.contains("LW_EXPORT_DESIGN_PNGS") {
-                DesignReferenceExportView()
-                    .environment(appVM)
-                    .environment(appVM.audio)
-                    .preferredColorScheme(.dark)
-            } else if env["LW_SHOW_RIVE_GALLERY"] == "1"
-                || ProcessInfo.processInfo.arguments.contains("LW_SHOW_RIVE_GALLERY") {
-                RiveReferenceGallery()
-                    .environment(appVM)
-                    .environment(appVM.audio)
-                    .preferredColorScheme(.dark)
-            } else {
-                ContentView()
-                    .environment(appVM)
-                    .environment(appVM.audio)
-                    .preferredColorScheme(.dark)
-            }
-#else
             ContentView()
                 .environment(appVM)
                 .environment(appVM.audio)
-                .preferredColorScheme(.dark)
-#endif
+                .preferredColorScheme(ColorScheme.dark)
+                .onChange(of: scenePhase) { oldPhase, newPhase in
+                    handleScenePhaseChange(from: oldPhase, to: newPhase)
+                }
+        }
+    }
+
+    private func handleScenePhaseChange(from oldPhase: ScenePhase, to newPhase: ScenePhase) {
+        switch newPhase {
+        case .background:
+            Task {
+                await appVM.handleBackground()
+            }
+
+        case .active:
+            if oldPhase == .background {
+                Task {
+                    await appVM.handleForeground()
+                }
+            }
+
+        case .inactive:
+            // Brief transition state — no action needed
+            break
+
+        @unknown default:
+            break
         }
     }
 }

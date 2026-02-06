@@ -15,6 +15,7 @@ struct PaletteSelectorView: View {
 
     @State private var searchText = ""
     @State private var selectedFilter = "All"
+    @State private var selectedFlags: Set<PaletteFlagKey> = []
 
     var body: some View {
         NavigationStack {
@@ -88,6 +89,26 @@ struct PaletteSelectorView: View {
                     ForEach(uniqueCategories, id: \.self) { category in
                         FilterChip(title: category, isSelected: selectedFilter == category) {
                             selectedFilter = category
+                        }
+                    }
+                }
+            }
+
+            // Flag chips
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    if !selectedFlags.isEmpty {
+                        FlagChip(title: "Clear flags", count: nil, isSelected: false) {
+                            selectedFlags.removeAll()
+                        }
+                    }
+                    ForEach(PaletteFlagKey.allCases) { flag in
+                        FlagChip(
+                            title: flag.label,
+                            count: countForFlag(flag),
+                            isSelected: selectedFlags.contains(flag)
+                        ) {
+                            toggleFlag(flag)
                         }
                     }
                 }
@@ -167,6 +188,13 @@ struct PaletteSelectorView: View {
             palettes = palettes.filter { $0.category == selectedFilter }
         }
 
+        // Filter by flags (all selected flags must match)
+        if !selectedFlags.isEmpty {
+            palettes = palettes.filter { palette in
+                selectedFlags.allSatisfy { palette.hasFlag($0) }
+            }
+        }
+
         return palettes
     }
 
@@ -188,6 +216,19 @@ struct PaletteSelectorView: View {
             dismiss()
         }
     }
+
+    private func toggleFlag(_ flag: PaletteFlagKey) {
+        if selectedFlags.contains(flag) {
+            selectedFlags.remove(flag)
+        } else {
+            selectedFlags.insert(flag)
+        }
+    }
+
+    /// Count of palettes that have this flag among the current search+category+flags filtered set
+    private func countForFlag(_ flag: PaletteFlagKey) -> Int {
+        filteredPalettes.filter { $0.hasFlag(flag) }.count
+    }
 }
 
 // MARK: - Filter Chip
@@ -202,6 +243,48 @@ struct FilterChip: View {
             Text(title)
                 .font(.pillLabel)
                 .tracking(1.0)
+                .foregroundStyle(isSelected ? Color.lwBase : Color.lwTextSecondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(isSelected ? Color.lwGold : Color.clear)
+                .overlay(
+                    Capsule()
+                        .strokeBorder(isSelected ? Color.lwGold : Color.lwElevated, lineWidth: 1)
+                )
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+// MARK: - Flag Chip (multi-select, optional count)
+
+struct FlagChip: View {
+    let title: String
+    let count: Int?
+    let isSelected: Bool
+    let onTap: () -> Void
+
+    init(title: String, count: Int? = nil, isSelected: Bool, onTap: @escaping () -> Void) {
+        self.title = title
+        self.count = count
+        self.isSelected = isSelected
+        self.onTap = onTap
+    }
+
+    private var displayTitle: String {
+        if let count, count >= 0 {
+            return "\(title) (\(count))"
+        }
+        return title
+    }
+
+    var body: some View {
+        Button(action: onTap) {
+            Text(displayTitle)
+                .font(.pillLabel)
+                .tracking(0.8)
                 .foregroundStyle(isSelected ? Color.lwBase : Color.lwTextSecondary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)

@@ -73,7 +73,22 @@ class PaletteViewModel {
         do {
             let response = try await client.getPalettes(limit: 100)
             let fromAPI = response.data.palettes.map { p in
-                PaletteMetadata(id: p.id, name: p.name, category: p.category ?? "Palette")
+                PaletteMetadata(
+                    id: p.id,
+                    name: p.name,
+                    category: p.category ?? "Palette",
+                    colors: nil,
+                    flags: PaletteFlags(
+                        warm: p.flags?.warm,
+                        cool: p.flags?.cool,
+                        calm: p.flags?.calm,
+                        vivid: p.flags?.vivid,
+                        cvdFriendly: p.flags?.cvdFriendly,
+                        whiteHeavy: p.flags?.whiteHeavy
+                    ),
+                    avgBrightness: p.avgBrightness,
+                    maxBrightness: p.maxBrightness
+                )
             }
 
             if !fromAPI.isEmpty {
@@ -92,7 +107,10 @@ class PaletteViewModel {
                         id: palette.id,
                         name: palette.name,
                         category: palette.category ?? base?.category,
-                        colors: base?.colors
+                        colors: base?.colors,
+                        flags: palette.flags ?? base?.flags,
+                        avgBrightness: palette.avgBrightness ?? base?.avgBrightness,
+                        maxBrightness: palette.maxBrightness ?? base?.maxBrightness
                     )
                 }
 

@@ -21,6 +21,10 @@ compile_commands.json
 *.sublime-project
 *.sublime-workspace
 
+# Xcode
+**/xcuserdata/
+**/*.xcuserstate
+
 # OS
 .DS_Store
 Thumbs.db
@@ -78,6 +82,9 @@ reports/
 # Hardware vendor folders (legacy)
 .waveshare/
 
+# Nested repo workspaces (do not track)
+firmware-v2-product/
+
 # Development artifacts in tools/
 tools/fastled-wasm/
 tools/prism.node-package/
@@ -90,6 +97,15 @@ tools/upload.sh
 # Duplicate docs (single source of truth at root)
 docs/CHANGELOG.md
 docs/TODO.md
+
+# AI/agent-generated research artefacts (local)
+docs/research/
+docs/testing/
+docs/architecture/PSRAM_REFACTOR_ARCH_REVIEW.md
+research/
+lightwave-ios-v2/2026-*.txt
+lightwave-ios-v2/LightwaveOS/Views/Audio/CLAUDE.md
+firmware/v2/docs/SHOWDIRECTOR_USER_GUIDE.md
 
 # Template/design files (local development artifacts)
 docs/templates/

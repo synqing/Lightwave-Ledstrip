@@ -33,7 +33,8 @@ struct DotRidgeCanvas: View {
     // MARK: - Body
 
     var body: some View {
-        TimelineView(.animation) { timeline in
+        // 15 Hz matches firmware audio frame rate — saves battery vs 60 Hz .animation
+        TimelineView(.periodic(from: .now, by: 1.0 / 15.0)) { timeline in
             Canvas { ctx, size in
                 // Fill background with lwBase
                 ctx.fill(

@@ -8,9 +8,48 @@
 import Foundation
 import SwiftUI
 
+/// Palette flag metadata from firmware/API
+struct PaletteFlags: Codable, Sendable, Hashable {
+    let warm: Bool?
+    let cool: Bool?
+    let calm: Bool?
+    let vivid: Bool?
+    let cvdFriendly: Bool?
+    let whiteHeavy: Bool?
+}
+
+/// Palette flag keys for UI filters
+enum PaletteFlagKey: String, CaseIterable, Identifiable {
+    case warm
+    case cool
+    case calm
+    case vivid
+    case cvdFriendly
+    case whiteHeavy
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .warm:
+            return "Warm"
+        case .cool:
+            return "Cool"
+        case .calm:
+            return "Calm"
+        case .vivid:
+            return "Vivid"
+        case .cvdFriendly:
+            return "CVD-Friendly"
+        case .whiteHeavy:
+            return "White-Heavy"
+        }
+    }
+}
+
 /// Single colour stop in a palette gradient
 struct PaletteColor: Codable, Sendable, Hashable {
-    /// Position in gradient (0.0-1.0)
+    /// Position in gradient (0.0-1.0, or 0-255 from firmware)
     let position: Double
 
     /// Red component (0-255)
@@ -44,6 +83,15 @@ struct PaletteMetadata: Codable, Identifiable, Sendable, Hashable {
     /// Array of colour stops for gradient swatch rendering
     let colors: [PaletteColor]?
 
+    /// Flag metadata (warm, cool, etc.)
+    let flags: PaletteFlags?
+
+    /// Average brightness estimate (0-255)
+    let avgBrightness: Int?
+
+    /// Maximum brightness estimate (0-255)
+    let maxBrightness: Int?
+
     // MARK: - Coding Keys
 
     enum CodingKeys: String, CodingKey {
@@ -51,15 +99,29 @@ struct PaletteMetadata: Codable, Identifiable, Sendable, Hashable {
         case name
         case category
         case colors
+        case flags
+        case avgBrightness
+        case maxBrightness
     }
 
     // MARK: - Initialization
 
-    init(id: Int, name: String, category: String? = nil, colors: [PaletteColor]? = nil) {
+    init(
+        id: Int,
+        name: String,
+        category: String? = nil,
+        colors: [PaletteColor]? = nil,
+        flags: PaletteFlags? = nil,
+        avgBrightness: Int? = nil,
+        maxBrightness: Int? = nil
+    ) {
         self.id = id
         self.name = name
         self.category = category
         self.colors = colors
+        self.flags = flags
+        self.avgBrightness = avgBrightness
+        self.maxBrightness = maxBrightness
     }
 
     // MARK: - Computed Properties
@@ -82,6 +144,24 @@ struct PaletteMetadata: Codable, Identifiable, Sendable, Hashable {
     /// Display category with fallback
     var displayCategory: String {
         category ?? "Custom"
+    }
+
+    /// Returns true when the palette has the requested flag
+    func hasFlag(_ flag: PaletteFlagKey) -> Bool {
+        switch flag {
+        case .warm:
+            return flags?.warm ?? false
+        case .cool:
+            return flags?.cool ?? false
+        case .calm:
+            return flags?.calm ?? false
+        case .vivid:
+            return flags?.vivid ?? false
+        case .cvdFriendly:
+            return flags?.cvdFriendly ?? false
+        case .whiteHeavy:
+            return flags?.whiteHeavy ?? false
+        }
     }
 }
 

@@ -146,16 +146,16 @@ struct DeviceTab: View {
 
     private var connectionStatusText: String {
         switch appVM.connectionState {
-        case .connected:
+        case .ready:
             return "Connected"
-        case .connecting:
+        case .targeting, .handshakeHTTP, .connectingWS:
             return "Connecting..."
-        case .disconnected:
+        case .backoff:
+            return "Retrying..."
+        case .idle:
             return "Disconnected"
-        case .discovering:
-            return "Discovering..."
-        case .error(let message):
-            return "Error: \(message)"
+        case .failed(let reason):
+            return reason.userTitle
         }
     }
 

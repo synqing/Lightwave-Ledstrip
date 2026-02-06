@@ -85,7 +85,7 @@ void WebSocketClient::begin(const char* host, uint16_t port, const char* path) {
 
     // Enable ping/pong heartbeat for dead-connection detection
     // 15s ping interval, 10s pong timeout, 2 missed pongs = disconnect
-    _ws.enableHeartbeat(15000, 10000, 2);
+    _ws.enableHeartbeat(30000, 15000, 3);
 
     // CRITICAL FIX: Feed watchdog after begin() returns
     esp_task_wdt_reset();
@@ -120,7 +120,7 @@ void WebSocketClient::begin(IPAddress ip, uint16_t port, const char* path) {
     _ws.begin(ip, port, path);
 
     // Enable ping/pong heartbeat for dead-connection detection
-    _ws.enableHeartbeat(15000, 10000, 2);
+    _ws.enableHeartbeat(30000, 15000, 3);
 
     // CRITICAL FIX: Feed watchdog after begin() returns
     esp_task_wdt_reset();
@@ -321,7 +321,7 @@ void WebSocketClient::attemptReconnect() {
         }
 
         // Re-enable heartbeat after fresh begin() (begin() resets library state)
-        _ws.enableHeartbeat(15000, 10000, 2);
+        _ws.enableHeartbeat(30000, 15000, 3);
 
         // CRITICAL FIX: Feed watchdog after reconnect attempt
         esp_task_wdt_reset();
@@ -467,124 +467,44 @@ void WebSocketClient::requestZonesState() {
 // ============================================================================
 
 void WebSocketClient::sendEffectChange(uint8_t effectId) {
-    if (!isConnected()) {
-        return;
-    }
-
-    // Queue if throttled, send immediately if allowed
-    if (!canSend(ParamIndex::EFFECT)) {
-        queueParameterChange(ParamIndex::EFFECT, effectId, "effects.setCurrent");
-        return;
-    }
-
-    JsonDocument doc;
-    doc["effectId"] = effectId;
-    sendJSON("effects.setCurrent", doc);
+    if (!isConnected()) return;
+    // Always queue — sendJSON blocks on TCP and can trigger WDT during rapid encoder input
+    queueParameterChange(ParamIndex::EFFECT, effectId, "effects.setCurrent");
 }
 
 void WebSocketClient::sendBrightnessChange(uint8_t brightness) {
-    if (!isConnected()) {
-        return;
-    }
-
-    if (!canSend(ParamIndex::BRIGHTNESS)) {
-        queueParameterChange(ParamIndex::BRIGHTNESS, brightness, "parameters.set");
-        return;
-    }
-
-    JsonDocument doc;
-    doc["brightness"] = brightness;
-    sendJSON("parameters.set", doc);
+    if (!isConnected()) return;
+    queueParameterChange(ParamIndex::BRIGHTNESS, brightness, "parameters.set");
 }
 
 void WebSocketClient::sendPaletteChange(uint8_t paletteId) {
-    if (!isConnected()) {
-        return;
-    }
-
-    if (!canSend(ParamIndex::PALETTE)) {
-        queueParameterChange(ParamIndex::PALETTE, paletteId, "parameters.set");
-        return;
-    }
-
-    JsonDocument doc;
-    doc["paletteId"] = paletteId;
-    sendJSON("parameters.set", doc);
+    if (!isConnected()) return;
+    queueParameterChange(ParamIndex::PALETTE, paletteId, "parameters.set");
 }
 
 void WebSocketClient::sendSpeedChange(uint8_t speed) {
-    if (!isConnected()) {
-        return;
-    }
-
-    if (!canSend(ParamIndex::SPEED)) {
-        queueParameterChange(ParamIndex::SPEED, speed, "parameters.set");
-        return;
-    }
-
-    JsonDocument doc;
-    doc["speed"] = speed;
-    sendJSON("parameters.set", doc);
+    if (!isConnected()) return;
+    queueParameterChange(ParamIndex::SPEED, speed, "parameters.set");
 }
 
 void WebSocketClient::sendMoodChange(uint8_t mood) {
-    if (!isConnected()) {
-        return;
-    }
-
-    if (!canSend(ParamIndex::MOOD)) {
-        queueParameterChange(ParamIndex::MOOD, mood, "parameters.set");
-        return;
-    }
-
-    JsonDocument doc;
-    doc["mood"] = mood;
-    sendJSON("parameters.set", doc);
+    if (!isConnected()) return;
+    queueParameterChange(ParamIndex::MOOD, mood, "parameters.set");
 }
 
 void WebSocketClient::sendFadeAmountChange(uint8_t fadeAmount) {
-    if (!isConnected()) {
-        return;
-    }
-
-    if (!canSend(ParamIndex::FADEAMOUNT)) {
-        queueParameterChange(ParamIndex::FADEAMOUNT, fadeAmount, "parameters.set");
-        return;
-    }
-
-    JsonDocument doc;
-    doc["fadeAmount"] = fadeAmount;
-    sendJSON("parameters.set", doc);
+    if (!isConnected()) return;
+    queueParameterChange(ParamIndex::FADEAMOUNT, fadeAmount, "parameters.set");
 }
 
 void WebSocketClient::sendComplexityChange(uint8_t complexity) {
-    if (!isConnected()) {
-        return;
-    }
-
-    if (!canSend(ParamIndex::COMPLEXITY)) {
-        queueParameterChange(ParamIndex::COMPLEXITY, complexity, "parameters.set");
-        return;
-    }
-
-    JsonDocument doc;
-    doc["complexity"] = complexity;
-    sendJSON("parameters.set", doc);
+    if (!isConnected()) return;
+    queueParameterChange(ParamIndex::COMPLEXITY, complexity, "parameters.set");
 }
 
 void WebSocketClient::sendVariationChange(uint8_t variation) {
-    if (!isConnected()) {
-        return;
-    }
-
-    if (!canSend(ParamIndex::VARIATION)) {
-        queueParameterChange(ParamIndex::VARIATION, variation, "parameters.set");
-        return;
-    }
-
-    JsonDocument doc;
-    doc["variation"] = variation;
-    sendJSON("parameters.set", doc);
+    if (!isConnected()) return;
+    queueParameterChange(ParamIndex::VARIATION, variation, "parameters.set");
 }
 
 // ============================================================================
@@ -602,96 +522,33 @@ void WebSocketClient::sendZoneEnable(bool enable) {
 }
 
 void WebSocketClient::sendZoneEffect(uint8_t zoneId, uint8_t effectId) {
-    if (!isConnected()) {
-        return;
-    }
-
-    // Map zoneId to rate limiter index
+    if (!isConnected() || zoneId > 3) return;
     uint8_t paramIndex = ParamIndex::ZONE0_EFFECT + (zoneId * 2);
-    if (zoneId > 3) {
-        return;
-    }
-
-    if (!canSend(paramIndex)) {
-        queueParameterChange(paramIndex, effectId, "zone.setEffect", zoneId);
-        return;
-    }
-
-    JsonDocument doc;
-    doc["zoneId"] = zoneId;
-    doc["effectId"] = effectId;
-    sendJSON("zone.setEffect", doc);
+    queueParameterChange(paramIndex, effectId, "zone.setEffect", zoneId);
 }
 
 void WebSocketClient::sendZoneBrightness(uint8_t zoneId, uint8_t value) {
-    // Zone brightness uses rate limiter slot for zone effect (same encoder pair)
-    // Note: Brightness is no longer a parameter in new layout, but API still supports it
+    if (!isConnected() || zoneId > 3) return;
     uint8_t paramIndex = ParamIndex::ZONE0_EFFECT + (zoneId * 2);
-    if (zoneId > 3 || !canSend(paramIndex)) {
-        return;
-    }
-
-    JsonDocument doc;
-    doc["zoneId"] = zoneId;
-    doc["brightness"] = value;
-    sendJSON("zone.setBrightness", doc);
+    queueParameterChange(paramIndex, value, "zone.setBrightness", zoneId);
 }
 
 void WebSocketClient::sendZoneSpeed(uint8_t zoneId, uint8_t value) {
-    if (!isConnected()) {
-        return;
-    }
-
-    // Zone speed uses rate limiter slots (indices 9, 11, 13, 15)
+    if (!isConnected() || zoneId > 3) return;
     uint8_t paramIndex = ParamIndex::ZONE0_SPEED + (zoneId * 2);
-    if (zoneId > 3) {
-        return;
-    }
-
-    if (!canSend(paramIndex)) {
-        queueParameterChange(paramIndex, value, "zone.setSpeed", zoneId);
-        return;
-    }
-
-    JsonDocument doc;
-    doc["zoneId"] = zoneId;
-    doc["speed"] = value;
-    sendJSON("zone.setSpeed", doc);
+    queueParameterChange(paramIndex, value, "zone.setSpeed", zoneId);
 }
 
 void WebSocketClient::sendZonePalette(uint8_t zoneId, uint8_t paletteId) {
-    if (!isConnected()) {
-        return;
-    }
-
-    // Zone palette shares rate limit with zone effect (same encoder)
+    if (!isConnected() || zoneId > 3) return;
     uint8_t paramIndex = ParamIndex::ZONE0_EFFECT + (zoneId * 2);
-    if (zoneId > 3) {
-        return;
-    }
-
-    if (!canSend(paramIndex)) {
-        queueParameterChange(paramIndex, paletteId, "zone.setPalette", zoneId);
-        return;
-    }
-
-    JsonDocument doc;
-    doc["zoneId"] = zoneId;
-    doc["paletteId"] = paletteId;
-    sendJSON("zone.setPalette", doc);
+    queueParameterChange(paramIndex, paletteId, "zone.setPalette", zoneId);
 }
 
 void WebSocketClient::sendZoneBlend(uint8_t zoneId, uint8_t blendMode) {
-    // Zone blend uses rate limiter slot for zone effect (same encoder pair)
+    if (!isConnected() || zoneId > 3 || blendMode > 7) return;
     uint8_t paramIndex = ParamIndex::ZONE0_EFFECT + (zoneId * 2);
-    if (zoneId > 3 || blendMode > 7 || !canSend(paramIndex)) {
-        return;
-    }
-
-    JsonDocument doc;
-    doc["zoneId"] = zoneId;
-    doc["blendMode"] = blendMode;
-    sendJSON("zone.setBlend", doc);
+    queueParameterChange(paramIndex, blendMode, "zone.setBlend", zoneId);
 }
 
 void WebSocketClient::sendZonesSetLayout(const struct zones::ZoneSegment* segments, uint8_t zoneCount) {

@@ -134,11 +134,12 @@ struct AudioMetricsFrame: Sendable {
     ///   - data: Source binary data
     ///   - offset: Starting byte offset
     ///   - count: Number of Float elements to read
-    /// - Returns: Array of Float values
+    /// - Returns: Array of Float values (empty if buffer is invalid)
     private static func readFloatArray(from data: Data, offset: Int, count: Int) -> [Float] {
         data.withUnsafeBytes { buffer in
+            guard let base = buffer.baseAddress else { return [] }
             let floatBuffer = UnsafeBufferPointer(
-                start: buffer.baseAddress!.advanced(by: offset).assumingMemoryBound(to: Float.self),
+                start: base.advanced(by: offset).assumingMemoryBound(to: Float.self),
                 count: count
             )
             return Array(floatBuffer)
@@ -151,11 +152,12 @@ struct AudioMetricsFrame: Sendable {
     ///   - data: Source binary data
     ///   - offset: Starting byte offset
     ///   - count: Number of Int16 elements to read
-    /// - Returns: Normalised Float array
+    /// - Returns: Normalised Float array (empty if buffer is invalid)
     private static func readInt16ArrayAsFloat(from data: Data, offset: Int, count: Int) -> [Float] {
         data.withUnsafeBytes { buffer in
+            guard let base = buffer.baseAddress else { return [] }
             let int16Buffer = UnsafeBufferPointer(
-                start: buffer.baseAddress!.advanced(by: offset).assumingMemoryBound(to: Int16.self),
+                start: base.advanced(by: offset).assumingMemoryBound(to: Int16.self),
                 count: count
             )
             return int16Buffer.map { Float($0) / Float(Int16.max) }
@@ -223,6 +225,10 @@ extension AudioMetricsFrame {
             buffer.storeBytes(of: UInt8(1), toByteOffset: 461, as: UInt8.self) // downbeatTick
         }
 
-        return AudioMetricsFrame(data: data)!
+        // Safe: mock data is constructed to match expected frame format
+        guard let frame = AudioMetricsFrame(data: data) else {
+            fatalError("Mock AudioMetricsFrame data construction failed — frame format mismatch")
+        }
+        return frame
     }()
 }

@@ -24,6 +24,7 @@ class ParametersViewModel {
     var intensity: Double = 128
     var complexity: Double = 128
     var variation: Double = 0
+    var paletteId: Int? = nil
 
     // MARK: - Dependencies
 
@@ -34,6 +35,18 @@ class ParametersViewModel {
     private var pendingParams: Set<String> = []
     private var debounceTasks: [String: Task<Void, Never>] = [:]
     private var clearPendingTasks: [String: Task<Void, Never>] = [:]
+
+    // MARK: - Disconnect Cleanup
+
+    func disconnect() {
+        // Cancel all in-flight debounce and pending-clear tasks
+        for task in debounceTasks.values { task.cancel() }
+        debounceTasks.removeAll()
+        for task in clearPendingTasks.values { task.cancel() }
+        clearPendingTasks.removeAll()
+        pendingParams.removeAll()
+        restClient = nil
+    }
 
     // MARK: - Slider Interaction
 
@@ -97,8 +110,8 @@ class ParametersViewModel {
 
     // MARK: - API Methods
 
-    func loadParameters() async {
-        guard let client = restClient else { return }
+    func loadParameters() async -> Int? {
+        guard let client = restClient else { return nil }
 
         do {
             let response = try await client.getParameters()
@@ -112,11 +125,14 @@ class ParametersViewModel {
             intensity = Double(response.data.intensity ?? 128)
             complexity = Double(response.data.complexity ?? 128)
             variation = Double(response.data.variation ?? 0)
+            paletteId = response.data.paletteId
 
             print("Loaded parameters")
+            return paletteId
 
         } catch {
             print("Error loading parameters: \(error)")
+            return nil
         }
     }
 

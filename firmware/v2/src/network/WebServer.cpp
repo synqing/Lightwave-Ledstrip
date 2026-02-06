@@ -96,6 +96,8 @@
 #include <ESPmDNS.h>
 #include <LittleFS.h>
 #include <Arduino.h>
+#include <esp_wifi.h>
+#include <esp_heap_caps.h>
 
 #if FEATURE_MULTI_DEVICE
 #include "../sync/DeviceUUID.h"
@@ -114,6 +116,30 @@ namespace network {
 
 // Global instance pointer (initialized in setup)
 WebServer* webServerInstance = nullptr;
+
+namespace {
+
+uint32_t packIpKey(const IPAddress& ip) {
+    return (static_cast<uint32_t>(ip[0]) << 24) |
+           (static_cast<uint32_t>(ip[1]) << 16) |
+           (static_cast<uint32_t>(ip[2]) << 8)  |
+           (static_cast<uint32_t>(ip[3]) << 0);
+}
+
+IPAddress unpackIpKey(uint32_t key) {
+    return IPAddress(
+        static_cast<uint8_t>((key >> 24) & 0xFF),
+        static_cast<uint8_t>((key >> 16) & 0xFF),
+        static_cast<uint8_t>((key >> 8) & 0xFF),
+        static_cast<uint8_t>((key >> 0) & 0xFF)
+    );
+}
+
+size_t getFreeInternalHeap() {
+    return heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+}
+
+} // namespace
 
 #if FEATURE_EFFECT_VALIDATION
 // Validation encoder (uses g_validationRing from EffectValidationMacros.cpp)
@@ -148,6 +174,8 @@ WebServer::WebServer(NodeOrchestrator& orchestrator, RendererNode* renderer)
     , m_startTime(0)
     , m_lastImmediateBroadcast(0)
     , m_broadcastPending(false)
+    , m_lowHeapShed(false)
+    , m_lastHeapShedLogMs(0)
     , m_zoneComposer(nullptr)
     , m_lastStateCacheUpdate(0)
     , m_ledBroadcaster(nullptr)
@@ -314,6 +342,17 @@ bool WebServer::begin() {
     m_server->begin();
     m_running = true;
 
+    // Register WiFi event handler for immediate AP client cleanup.
+    // When a station disconnects from the AP, TCP doesn't notice for 10-30s.
+    // This flag triggers immediate WebSocket cleanup in update().
+    m_apClientDisconnected = false;
+    m_lastApReinitMs = 0;
+    WiFi.onEvent([this](WiFiEvent_t event, WiFiEventInfo_t info) {
+        (void)event;
+        (void)info;
+        m_apClientDisconnected = true;
+    }, WiFiEvent_t::ARDUINO_EVENT_WIFI_AP_STADISCONNECTED);
+
     // Get zone composer reference if available
     if (m_renderer) {
         m_zoneComposer = m_renderer->getZoneComposer();
@@ -391,16 +430,92 @@ bool WebServer::isClientAuthenticated(uint32_t clientId) const {
 }
 #endif
 
+void WebServer::updateLowHeapShedState(uint32_t nowMs) {
+    const uint32_t freeInternal = static_cast<uint32_t>(getFreeInternalHeap());
+
+    if (!m_lowHeapShed) {
+        if (freeInternal < INTERNAL_HEAP_SHED_BELOW_BYTES) {
+            m_lowHeapShed = true;
+            m_lastHeapShedLogMs = nowMs;
+            LW_LOGW("Low-heap shedding ENABLED (internal=%lu)", (unsigned long)freeInternal);
+            // Cancel any pending broadcasts; when shedding we avoid creating/queuing WS payloads.
+            m_broadcastPending = false;
+        }
+    } else {
+        if (freeInternal > INTERNAL_HEAP_RESUME_ABOVE_BYTES) {
+            m_lowHeapShed = false;
+            m_lastHeapShedLogMs = nowMs;
+            LW_LOGI("Low-heap shedding DISABLED (internal=%lu)", (unsigned long)freeInternal);
+            // Force a one-shot status broadcast after recovery to resynchronise dashboards.
+            m_broadcastPending = true;
+        } else if ((nowMs - m_lastHeapShedLogMs) > 5000) {
+            m_lastHeapShedLogMs = nowMs;
+            LW_LOGW("Low-heap shedding active (internal=%lu)", (unsigned long)freeInternal);
+        }
+    }
+}
+
 void WebServer::update() {
     if (!m_running) return;
 
     // Cleanup disconnected WebSocket clients
     m_ws->cleanupClients();
+    const uint32_t nowMs = millis();
+    updateLowHeapShedState(nowMs);
+
+    // Immediate cleanup when an AP station disconnects from WiFi.
+    // TCP won't notice the dead connection for 10-30s, but we know immediately
+    // from the WiFi event. Close all WS clients on the AP subnet (192.168.4.x).
+    if (m_apClientDisconnected) {
+        m_apClientDisconnected = false;
+        for (auto& c : m_ws->getClients()) {
+            IPAddress ip = c.remoteIP();
+            if (ip[0] == 192 && ip[1] == 168 && ip[2] == 4) {
+                LW_LOGI("AP station left — closing WS client %u (IP: %s)",
+                        c.id(), ip.toString().c_str());
+                c.close();
+            }
+        }
+
+        // Optional recovery: restart AP to flush WPA2 PMK cache (helps some rebooted clients).
+        // This is deliberately conservative because AP restarts are expensive and can leak
+        // resources in the WiFi stack under memory pressure.
+        const size_t apPwLen = strlen(config::NetworkConfig::AP_PASSWORD);
+        const bool apUsesWpa = apPwLen >= 8;
+
+        if (apUsesWpa) {
+            static constexpr uint32_t AP_REINIT_THROTTLE_MS = 60000;
+            static constexpr size_t MIN_INTERNAL_HEAP_FOR_AP_REINIT = 45000;
+
+            // Never restart AP if other stations are still connected.
+            if (WiFi.softAPgetStationNum() != 0) {
+                // Keep serving; do not disrupt remaining AP clients.
+            } else if (m_lastApReinitMs != 0 && (nowMs - m_lastApReinitMs) < AP_REINIT_THROTTLE_MS) {
+                LW_LOGW("AP re-init suppressed (throttle)");
+            } else if (getFreeInternalHeap() < MIN_INTERNAL_HEAP_FOR_AP_REINIT) {
+                LW_LOGW("AP re-init skipped (low internal heap=%lu)", (unsigned long)getFreeInternalHeap());
+            } else {
+                uint8_t apChannel = 1;
+                if (WIFI_MANAGER.isConnected()) {
+                    uint8_t ch = WiFi.channel();
+                    apChannel = (ch != 0) ? ch : 1;
+                }
+                // Tear down AP first to avoid accumulating stale state.
+                WiFi.softAPdisconnect(false);
+                const char* apPw = config::NetworkConfig::AP_PASSWORD;
+                if (!WiFi.softAP(config::NetworkConfig::AP_SSID, apPw, apChannel, false, 4, WIFI_AUTH_WPA_WPA2_PSK)) {
+                    LW_LOGE("AP re-init failed");
+                } else {
+                    m_lastApReinitMs = nowMs;
+                    LW_LOGI("AP re-initialised (channel=%u)", static_cast<unsigned>(apChannel));
+                }
+            }
+        }
+    }
 
     // WebSocket keepalive ping - prevents mobile network timeouts
     static uint32_t lastPingMs = 0;
-    uint32_t nowMs = millis();
-    if (nowMs - lastPingMs >= 30000) {  // Every 30 seconds
+    if (nowMs - lastPingMs >= config::NetworkConfig::WS_PING_INTERVAL_MS) {
         if (m_ws && m_ws->count() > 0) {
             m_ws->pingAll();
         }
@@ -477,18 +592,22 @@ void WebServer::update() {
 
 #if FEATURE_AUDIO_SYNC
     // Audio frame streaming to subscribed clients (30 FPS)
-    broadcastAudioFrame();
+    if (!m_lowHeapShed) {
+        broadcastAudioFrame();
 
-    // FFT frame streaming to subscribed clients (31 Hz)
-    broadcastFftFrame();
+        // FFT frame streaming to subscribed clients (31 Hz)
+        broadcastFftFrame();
 
-    // Beat event streaming (fires on beat_tick/downbeat_tick)
-    broadcastBeatEvent();
+        // Beat event streaming (fires on beat_tick/downbeat_tick)
+        broadcastBeatEvent();
+    }
 #endif
 
 #if FEATURE_AUDIO_BENCHMARK
     // Benchmark metrics streaming to subscribed clients (10 FPS)
-    broadcastBenchmarkStats();
+    if (!m_lowHeapShed) {
+        broadcastBenchmarkStats();
+    }
 #endif
 
 #if FEATURE_EFFECT_VALIDATION
@@ -506,8 +625,8 @@ void WebServer::update() {
 #endif
 
     // Periodic status broadcast
-    uint32_t now = millis();
-    if (now - m_lastBroadcast >= WebServerConfig::STATUS_BROADCAST_INTERVAL_MS) {
+    uint32_t now = nowMs;
+    if (!m_lowHeapShed && (now - m_lastBroadcast >= WebServerConfig::STATUS_BROADCAST_INTERVAL_MS)) {
         m_lastBroadcast = now;
         m_broadcastPending = true;  // Defer to safe context
     }
@@ -521,7 +640,9 @@ void WebServer::update() {
             // (AsyncWebSocket doesn't expose queue size, so we use time-based throttling)
             m_lastImmediateBroadcast = now;
             m_broadcastPending = false;
-            doBroadcastStatus();  // Actually send the broadcast in safe context
+            if (!m_lowHeapShed) {
+                doBroadcastStatus();  // Actually send the broadcast in safe context
+            }
         }
     }
     
@@ -970,6 +1091,30 @@ void WebServer::handleWsConnect(AsyncWebSocketClient* client) {
     // This prevents "Too many messages queued" errors when multiple clients connect rapidly
     m_broadcastPending = true;  // Defer status broadcast
     // Zone state will be sent on next update() tick if needed
+
+    // Track clientId → IP for disconnect cleanup (remoteIP() may become 0.0.0.0 after disconnect).
+    const uint32_t clientId = client->id();
+    const uint32_t ipKey = packIpKey(client->remoteIP());
+    if (ipKey != 0) {
+        uint8_t slot = 0xFF;
+        for (uint8_t i = 0; i < WS_CLIENT_IP_MAP_SLOTS; i++) {
+            if (m_wsClientIpMap[i].clientId == clientId) {
+                slot = i;
+                break;
+            }
+            if (slot == 0xFF && m_wsClientIpMap[i].clientId == 0) {
+                slot = i;  // First empty slot
+            }
+        }
+        if (slot != 0xFF) {
+            m_wsClientIpMap[slot].clientId = clientId;
+            m_wsClientIpMap[slot].ipKey = ipKey;
+        } else {
+            // Table full: evict slot 0 (LRU approximation) so we always keep a mapping.
+            m_wsClientIpMap[0].clientId = clientId;
+            m_wsClientIpMap[0].ipKey = ipKey;
+        }
+    }
 }
 
 void WebServer::handleWsDisconnect(AsyncWebSocketClient* client) {
@@ -981,7 +1126,26 @@ void WebServer::handleWsDisconnect(AsyncWebSocketClient* client) {
 
     // Cleanup UDP stream subscriptions
     if (m_udpStreamer) {
-        m_udpStreamer->removeSubscriber(client->remoteIP());
+        uint32_t ipKey = packIpKey(client->remoteIP());
+        uint32_t mappedIpKey = 0;
+        for (uint8_t i = 0; i < WS_CLIENT_IP_MAP_SLOTS; i++) {
+            if (m_wsClientIpMap[i].clientId == clientId) {
+                mappedIpKey = m_wsClientIpMap[i].ipKey;
+                m_wsClientIpMap[i].clientId = 0;
+                m_wsClientIpMap[i].ipKey = 0;
+                break;
+            }
+        }
+
+        if (ipKey == 0 && mappedIpKey != 0) {
+            ipKey = mappedIpKey;
+        }
+
+        if (ipKey != 0) {
+            m_udpStreamer->removeSubscriber(unpackIpKey(ipKey));
+        } else {
+            LW_LOGW("UDP: No IP for disconnected client %u (remoteIP=0, no mapping)", clientId);
+        }
     }
 
 #if FEATURE_API_AUTH
@@ -1063,6 +1227,9 @@ void WebServer::broadcastStatus() {
 }
 
 void WebServer::doBroadcastStatus() {
+    if (m_lowHeapShed) {
+        return;
+    }
     // SAFETY CHECKS: Validate pointers and state before accessing
     if (!m_ws) {
         LW_LOGW("doBroadcastStatus: m_ws is null");
@@ -1080,7 +1247,7 @@ void WebServer::doBroadcastStatus() {
     // Instead, we use time-based throttling to prevent queue saturation
     static uint32_t lastBroadcastAttempt = 0;
     uint32_t now = millis();
-    if (now - lastBroadcastAttempt < 10) {  // Minimum 10ms between broadcast attempts
+    if (now - lastBroadcastAttempt < 50) {  // Minimum 50ms between broadcast attempts
         return;  // Skip this broadcast to prevent queue buildup
     }
     lastBroadcastAttempt = now;
@@ -1106,6 +1273,8 @@ void WebServer::doBroadcastStatus() {
     doc["cpuPercent"] = cached.stats.cpuPercent;
 
     doc["freeHeap"] = ESP.getFreeHeap();
+    doc["freeHeapInternal"] = static_cast<uint32_t>(getFreeInternalHeap());
+    doc["freePsram"] = ESP.getFreePsram();
     doc["uptime"] = millis() / 1000;
 
 #if FEATURE_AUDIO_SYNC
@@ -1161,14 +1330,20 @@ void WebServer::doBroadcastStatus() {
     String output;
     serializeJson(doc, output);
     
-    // SAFETY: Validate m_ws is still valid before calling textAll()
-    // Note: AsyncWebSocket will handle queue overflow internally, but we throttle to prevent it
+    // Per-client send with back-pressure: avoid queue growth when a client is slow.
     if (m_ws && m_ws->count() > 0) {
-        m_ws->textAll(output);
+        for (auto& c : m_ws->getClients()) {
+            if (c.status() != WS_CONNECTED) continue;
+            if (!c.canSend()) continue;
+            c.text(output);
+        }
     }
 }
 
 void WebServer::broadcastZoneState() {
+    if (m_lowHeapShed) {
+        return;
+    }
     // SAFETY: Validate pointers before accessing
     if (!m_ws) {
         LW_LOGW("broadcastZoneState: m_ws is null");
@@ -1176,6 +1351,15 @@ void WebServer::broadcastZoneState() {
     }
     
     if (m_ws->count() == 0 || !m_zoneComposer) return;
+
+    // QUEUE PROTECTION: Throttle zone broadcasts before doing any JSON work.
+    // zones.list is comparatively large and is called from multiple codepaths.
+    static uint32_t lastZoneBroadcastAttempt = 0;
+    const uint32_t now = millis();
+    if (now - lastZoneBroadcastAttempt < 250) {  // 4 Hz max
+        return;
+    }
+    lastZoneBroadcastAttempt = now;
 
     JsonDocument doc;  // Increased for audio config fields
     doc["type"] = "zones.list";  // Changed from "zone.state"
@@ -1235,21 +1419,20 @@ void WebServer::broadcastZoneState() {
     String output;
     serializeJson(doc, output);
     
-    // QUEUE PROTECTION: Throttle zone broadcasts to prevent queue saturation
-    static uint32_t lastZoneBroadcastAttempt = 0;
-    uint32_t now = millis();
-    if (now - lastZoneBroadcastAttempt < 10) {  // Minimum 10ms between zone broadcasts
-        return;  // Skip this broadcast to prevent queue buildup
-    }
-    lastZoneBroadcastAttempt = now;
-
-    // SAFETY: Validate m_ws is still valid before calling textAll()
+    // Per-client send with back-pressure: avoid queue growth when a client is slow.
     if (m_ws && m_ws->count() > 0) {
-        m_ws->textAll(output);
+        for (auto& c : m_ws->getClients()) {
+            if (c.status() != WS_CONNECTED) continue;
+            if (!c.canSend()) continue;
+            c.text(output);
+        }
     }
 }
 
 void WebServer::broadcastSingleZoneState(uint8_t zoneId) {
+    if (m_lowHeapShed) {
+        return;
+    }
     // SAFETY: Validate pointers before accessing
     if (!m_ws) {
         LW_LOGW("broadcastSingleZoneState: m_ws is null");
@@ -1257,6 +1440,14 @@ void WebServer::broadcastSingleZoneState(uint8_t zoneId) {
     }
 
     if (m_ws->count() == 0 || !m_zoneComposer) return;
+
+    // QUEUE PROTECTION: Throttle rapid per-zone updates (e.g. speed slider/encoder).
+    static uint32_t lastSingleZoneBroadcastAttempt = 0;
+    const uint32_t now = millis();
+    if (now - lastSingleZoneBroadcastAttempt < 50) {  // 20 Hz max
+        return;
+    }
+    lastSingleZoneBroadcastAttempt = now;
 
     // Validate zone ID
     if (zoneId >= m_zoneComposer->getZoneCount()) {
@@ -1268,7 +1459,7 @@ void WebServer::broadcastSingleZoneState(uint8_t zoneId) {
     JsonDocument doc;
     doc["type"] = "zones.stateChanged";
     doc["zoneId"] = zoneId;
-    doc["timestamp"] = millis();
+    doc["timestamp"] = now;
 
     // Add current zone state
     JsonObject current = doc["current"].to<JsonObject>();
@@ -1296,15 +1487,22 @@ void WebServer::broadcastSingleZoneState(uint8_t zoneId) {
     String output;
     serializeJson(doc, output);
 
-    // SAFETY: Validate m_ws is still valid before calling textAll()
+    // Per-client send with back-pressure: avoid queue growth when a client is slow.
     if (m_ws && m_ws->count() > 0) {
-        m_ws->textAll(output);
+        for (auto& c : m_ws->getClients()) {
+            if (c.status() != WS_CONNECTED) continue;
+            if (!c.canSend()) continue;
+            c.text(output);
+        }
     }
 
     LW_LOGD("Broadcast zones.stateChanged for zone %d", zoneId);
 }
 
 void WebServer::notifyEffectChange(uint8_t effectId, const char* name) {
+    if (m_lowHeapShed) {
+        return;
+    }
     // SAFETY: Validate pointers before accessing
     if (!m_ws) {
         LW_LOGW("notifyEffectChange: m_ws is null");
@@ -1316,7 +1514,7 @@ void WebServer::notifyEffectChange(uint8_t effectId, const char* name) {
     // QUEUE PROTECTION: Throttle notifications to prevent queue saturation
     static uint32_t lastEffectNotifyAttempt = 0;
     uint32_t now = millis();
-    if (now - lastEffectNotifyAttempt < 10) {  // Minimum 10ms between notifications
+    if (now - lastEffectNotifyAttempt < 50) {  // Minimum 50ms between notifications
         return;  // Skip this notification to prevent queue buildup
     }
     lastEffectNotifyAttempt = now;
@@ -1329,9 +1527,13 @@ void WebServer::notifyEffectChange(uint8_t effectId, const char* name) {
     String output;
     serializeJson(doc, output);
     
-    // SAFETY: Validate m_ws is still valid before calling textAll()
+    // Per-client send with back-pressure: avoid queue growth when a client is slow.
     if (m_ws && m_ws->count() > 0) {
-        m_ws->textAll(output);
+        for (auto& c : m_ws->getClients()) {
+            if (c.status() != WS_CONNECTED) continue;
+            if (!c.canSend()) continue;
+            c.text(output);
+        }
     }
 }
 
@@ -1345,6 +1547,12 @@ void WebServer::notifyParameterChange() {
 
 void WebServer::broadcastLEDFrame() {
     if (!m_ledBroadcaster || !m_renderer) return;
+
+    // Streaming over WebSocket can consume significant internal heap when clients are slow.
+    // When shedding, prioritise control plane (commands) and UDP streaming.
+    if (m_lowHeapShed) {
+        return;
+    }
     
     // Get LED buffer from renderer (cross-core safe copy)
     CRGB leds[webserver::LedStreamConfig::TOTAL_LEDS];
@@ -1356,6 +1564,13 @@ void WebServer::broadcastLEDFrame() {
 
 bool WebServer::setLEDStreamSubscription(AsyncWebSocketClient* client, bool subscribe) {
     if (!client || !m_ledBroadcaster) return false;
+    if (subscribe) {
+        const uint32_t freeInternal = static_cast<uint32_t>(getFreeInternalHeap());
+        if (m_lowHeapShed || freeInternal < INTERNAL_HEAP_SHED_BELOW_BYTES) {
+            LW_LOGW("LED stream subscribe rejected (low internal heap=%lu)", (unsigned long)freeInternal);
+            return false;
+        }
+    }
     uint32_t clientId = client->id();
     bool success = m_ledBroadcaster->setSubscription(clientId, subscribe);
 
@@ -1398,6 +1613,9 @@ bool WebServer::hasLogStreamSubscribers() const {
 
 void WebServer::broadcastAudioFrame() {
     if (!m_audioBroadcaster || !m_renderer) return;
+    if (m_lowHeapShed) {
+        return;
+    }
 
     // Get audio frame from renderer (cross-core safe - returns by-value copy)
     const audio::ControlBusFrame& frame = m_renderer->getCachedAudioFrame();
@@ -1408,6 +1626,9 @@ void WebServer::broadcastAudioFrame() {
 }
 
 void WebServer::broadcastBeatEvent() {
+    if (m_lowHeapShed) {
+        return;
+    }
     // SAFETY: Validate pointers before accessing
     if (!m_ws || m_ws->count() == 0) return;
 
@@ -1471,6 +1692,13 @@ void WebServer::broadcastFftFrame() {
 
 bool WebServer::setAudioStreamSubscription(AsyncWebSocketClient* client, bool subscribe) {
     if (!client || !m_audioBroadcaster) return false;
+    if (subscribe) {
+        const uint32_t freeInternal = static_cast<uint32_t>(getFreeInternalHeap());
+        if (m_lowHeapShed || freeInternal < INTERNAL_HEAP_SHED_BELOW_BYTES) {
+            LW_LOGW("Audio stream subscribe rejected (low internal heap=%lu)", (unsigned long)freeInternal);
+            return false;
+        }
+    }
     uint32_t clientId = client->id();
     bool success = m_audioBroadcaster->setSubscription(clientId, subscribe);
 

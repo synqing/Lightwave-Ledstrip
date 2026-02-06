@@ -77,7 +77,10 @@ bool WiFiManager::begin() {
     if (m_apEnabled) {
         // Portable Mode: AP always on, STA connects in parallel
         WiFi.mode(WIFI_MODE_APSTA);
-        if (WiFi.softAP(m_apSSID.c_str(), m_apPassword.c_str(), m_apChannel)) {
+        wifi_auth_mode_t authMode = m_apPassword.isEmpty() ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA_WPA2_PSK;
+        const char* pw = m_apPassword.isEmpty() ? NULL : m_apPassword.c_str();
+        if (WiFi.softAP(m_apSSID.c_str(), pw, m_apChannel,
+                        false, 4, authMode)) {
             LW_LOGI("AP always-on: '%s' at %s (STA will connect in parallel)",
                     m_apSSID.c_str(), WiFi.softAPIP().toString().c_str());
             xEventGroupSetBits(m_wifiEventGroup, EVENT_AP_START);
@@ -494,8 +497,12 @@ void WiFiManager::handleStateAPMode() {
     return;
 #endif
 
-    // Periodically try STA connection without killing AP (non-destructive retry)
-    if (!m_ssid.isEmpty() && m_ssid != "CONFIGURE_ME") {
+    // Periodically try STA connection without killing AP (non-destructive retry).
+    // Skip if no known networks were ever found — scanning disrupts the network
+    // stack (tears down UDP streamer, triggers WiFi events) and can cause
+    // watchdog timeouts when combined with rapid effect changes.
+    if (!m_ssid.isEmpty() && m_ssid != "CONFIGURE_ME" &&
+        m_scanAttemptsWithoutKnown < 4) {
         if (millis() - lastRetryTime > 60000) {
             lastRetryTime = millis();
             LW_LOGI("Retrying STA connection from AP mode (AP stays up)...");
@@ -586,7 +593,10 @@ void WiFiManager::startSoftAP() {
     WiFi.mode(WIFI_MODE_APSTA);
 
     // Configure and start AP
-    if (WiFi.softAP(m_apSSID.c_str(), m_apPassword.c_str(), m_apChannel)) {
+    wifi_auth_mode_t apAuth = m_apPassword.isEmpty() ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA_WPA2_PSK;
+    const char* apPw = m_apPassword.isEmpty() ? NULL : m_apPassword.c_str();
+    if (WiFi.softAP(m_apSSID.c_str(), apPw, m_apChannel,
+                    false, 4, apAuth)) {
         LW_LOGI("AP started - IP: %s", WiFi.softAPIP().toString().c_str());
         xEventGroupSetBits(m_wifiEventGroup, EVENT_AP_START);
     } else {

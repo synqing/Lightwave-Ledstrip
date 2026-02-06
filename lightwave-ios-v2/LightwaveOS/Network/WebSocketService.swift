@@ -85,23 +85,34 @@ actor WebSocketService {
         self.session = URLSession(configuration: config)
     }
 
+    deinit {
+        // Finish any lingering continuation to unblock consumers
+        eventContinuation?.finish()
+        session?.invalidateAndCancel()
+    }
+
     // MARK: - Public Methods
 
     /// Connect to the WebSocket server and return an event stream
-    func connect(to url: URL) -> AsyncStream<Event> {
+    /// - Parameters:
+    ///   - url: The WebSocket URL to connect to
+    ///   - autoReconnect: If false, WebSocketService will NOT auto-reconnect on disconnect.
+    ///                    Set to false when ConnectionManager manages reconnection.
+    func connect(to url: URL, autoReconnect: Bool = false) -> AsyncStream<Event> {
         // Guard double-connect: clean up any existing connection first
         if webSocketTask != nil || eventContinuation != nil {
             disconnect()
         }
 
         currentURL = url
-        shouldReconnect = true
+        shouldReconnect = autoReconnect
         reconnectAttempts = 0
 
-        return AsyncStream<Event> { continuation in
-            self.eventContinuation = continuation
-            self.performConnect()
-        }
+        // Use makeStream() to avoid actor isolation issues in AsyncStream closure
+        let (stream, continuation) = AsyncStream<Event>.makeStream()
+        self.eventContinuation = continuation
+        self.performConnect()
+        return stream
     }
 
     /// Disconnect from the WebSocket server
@@ -118,10 +129,34 @@ actor WebSocketService {
         eventContinuation = nil
     }
 
+    /// Graceful disconnect: unsubscribe from streams before closing.
+    /// Tells the v2 to stop queuing frames immediately rather than waiting
+    /// for TCP close detection (which can take 10-30 seconds).
+    func gracefulDisconnect() async {
+        shouldReconnect = false
+        reconnectTask?.cancel()
+        reconnectTask = nil
+
+        // Send unsubscribe commands before closing (best-effort)
+        if webSocketTask != nil, webSocketTask?.state == .running {
+            await sendText("{\"type\":\"ledStream.unsubscribe\"}")
+            await sendText("{\"type\":\"audio.unsubscribe\"}")
+            // Brief delay for sends to flush through TCP
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+
+        receiveTask?.cancel()
+        receiveTask = nil
+        monitorTask?.cancel()
+        monitorTask = nil
+        closeConnection()
+        eventContinuation?.finish()
+        eventContinuation = nil
+    }
+
     /// Send a command with optional parameters
     func send(_ command: String, params: [String: Any] = [:]) {
-        guard webSocketTask != nil else {
-            print("WS send dropped (not connected): \(command)")
+        guard let task = webSocketTask, task.state == .running else {
             return
         }
         var message: [String: Any] = ["type": command]
@@ -194,6 +229,11 @@ actor WebSocketService {
     private func performConnect() {
         guard let url = currentURL else { return }
 
+        // Guard: don't clobber an active connection (e.g. during reconnect race)
+        if let task = webSocketTask, task.state == .running {
+            return
+        }
+
         closeConnection()
 
         guard let session = session else { return }
@@ -202,13 +242,10 @@ actor WebSocketService {
         webSocketTask = task
 
         task.resume()
-        isConnected = true
-        reconnectAttempts = 0
+        // NOTE: isConnected and .connected event are deferred until the first
+        // successful receive() — that confirms the WS handshake actually completed.
 
-        // Yield connected event
-        eventContinuation?.yield(.connected)
-
-        // Start receiving messages
+        // Start receiving messages (will yield .connected on first message)
         receiveTask = Task {
             await receiveMessages()
         }
@@ -232,9 +269,17 @@ actor WebSocketService {
     // MARK: - Message Receiving
 
     private func receiveMessages() async {
+        var handshakeConfirmed = false
         while let task = webSocketTask, task.state == .running {
             do {
                 let message = try await task.receive()
+                // First successful receive confirms the WS handshake completed
+                if !handshakeConfirmed {
+                    handshakeConfirmed = true
+                    isConnected = true
+                    reconnectAttempts = 0
+                    eventContinuation?.yield(.connected)
+                }
                 handleMessage(message)
             } catch {
                 handleConnectionError(error)

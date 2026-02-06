@@ -8,4 +8,13 @@
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
 | #24704 | 9:13 AM | 🔵 | ContentView Root Navigation and State Management | ~630 |
+
+### Feb 6, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #25575 | 12:27 AM | 🟣 | iOS Quick Connect now auto-retries when user joins LightwaveOS-AP network | ~620 |
+| #25573 | " | 🟣 | iOS connection sheet now displays AP join instructions on Quick Connect failure | ~539 |
+| #25572 | 12:26 AM | 🔵 | iOS Quick Connect button broken because it requires manual WiFi network join | ~751 |
+| #25571 | 12:25 AM | 🔵 | iOS ConnectionSheet provides Bonjour discovery, manual IP entry, and Quick Connect for AP mode | ~723 |
 </claude-mem-context>

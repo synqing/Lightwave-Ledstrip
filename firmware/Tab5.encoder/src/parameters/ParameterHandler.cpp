@@ -11,6 +11,7 @@
 #include "../input/ButtonHandler.h"
 #include "../network/WebSocketClient.h"
 #include <Arduino.h>
+#include <esp_task_wdt.h>
 #include <cstring>
 
 
@@ -121,6 +122,9 @@ bool ParameterHandler::applyStatus(JsonDocument& doc) {
             }
         }
     }
+
+    // Feed watchdog after iterating all 16 parameters + encoder updates
+    esp_task_wdt_reset();
 
     // Notify display if any parameters changed (no highlight)
     if (updated) {

@@ -100,19 +100,10 @@ struct PatternPill: View {
     }
 
     private var patternAccent: some View {
-        return AnyView(
-            RiveViewContainer(
-                asset: RiveAssetRegistry.patternPillAccent,
-                inputs: [
-                    .number("index", Double(appVM.effects.currentEffectId)),
-                    .number("count", Double(appVM.effects.allEffects.count))
-                ],
-                fallback: AnyView(EmptyView())
-            )
+        EmptyView()
             .frame(width: 36, height: 36)
             .opacity(0.9)
             .allowsHitTesting(false)
-        )
     }
 }
 

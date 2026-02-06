@@ -172,25 +172,15 @@ struct BPMRingOverlay: View {
     }
 }
 
-// MARK: - Rive Overlay
+// MARK: - BPM Overlay (SwiftUI fallback; Rive overlay when scaffold available)
 
 private extension HeroLEDPreview {
     @ViewBuilder
     var heroOverlay: some View {
-        RiveViewContainer(
-            asset: RiveAssetRegistry.heroOverlay,
-            inputs: [
-                .number("bpm", appVM.audio.currentBpm),
-                .number("confidence", appVM.audio.bpmConfidence),
-                .bool("isBeating", appVM.audio.isBeating)
-            ],
-            fallback: AnyView(
-                BPMRingOverlay(
-                    bpm: Int(appVM.audio.currentBpm),
-                    confidence: appVM.audio.bpmConfidence,
-                    isBeating: appVM.audio.isBeating
-                )
-            )
+        BPMRingOverlay(
+            bpm: Int(appVM.audio.currentBpm),
+            confidence: appVM.audio.bpmConfidence,
+            isBeating: appVM.audio.isBeating
         )
         .frame(width: 96, height: 96)
     }

@@ -39,4 +39,26 @@
 | #23326 | 9:21 AM | 🔵 | Tab5 Encoder Main Architecture and Hardware Configuration | ~650 |
 | #23325 | " | 🔵 | Tab5 Encoder Dual-Unit Architecture and Network Control | ~977 |
 | #23147 | 7:12 AM | 🔵 | Tab5 Encoder Controller System Architecture | ~859 |
+
+### Feb 5, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #25541 | 11:57 PM | 🔵 | Tab5 crash root cause identified as null pointer dereference in ActionRowWidget rendering | ~665 |
+| #25538 | 11:56 PM | 🔵 | Tab5 syncColourCorrectionUi synchronizes color correction state between WebSocket and UI display | ~592 |
+| #25536 | 11:55 PM | 🔵 | Tab5 requests color correction config on WebSocket connect and via throttled UI retries | ~522 |
+| #25497 | 10:14 PM | 🔵 | Tab5 AP disconnection root cause identified: WebSocket port mismatch and heartbeat timeout | ~536 |
+| #25462 | 9:37 PM | ✅ | Portable Mode implementation staged for commit across all three platforms | ~447 |
+| #25428 | 9:26 PM | 🟣 | WebSocket discovery status indicator added to IP display | ~407 |
+| #25427 | 9:25 PM | ✅ | Updated Tab5 WiFi configuration comment for Portable Mode | ~393 |
+| #25426 | " | 🔵 | Tab5 WiFiManager uses same network credentials as v2 device | ~390 |
+
+### Feb 6, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #25549 | 12:03 AM | 🔴 | Fixed Tab5 Core 1 crash by deferring color correction UI sync to main loop | ~511 |
+| #25548 | 12:02 AM | 🔴 | Fixed Core 1 crash by deferring LVGL UI update from WebSocket callback | ~433 |
+| #25547 | " | 🔴 | Deferred colour correction UI update flag added to prevent LVGL crash | ~406 |
+| #25544 | 12:00 AM | 🔵 | Tab5 color correction WebSocket handler parses RGB balance limits and handles setConfig confirmation | ~513 |
 </claude-mem-context>

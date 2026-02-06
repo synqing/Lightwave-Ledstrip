@@ -47,62 +47,64 @@ actor DeviceDiscoveryService {
 
         isSearching = true
 
-        return AsyncStream { continuation in
-            self.streamContinuation = continuation
+        // Use makeStream() to avoid actor isolation issues in AsyncStream closure
+        let (stream, continuation) = AsyncStream<[DeviceInfo]>.makeStream()
+        self.streamContinuation = continuation
 
-            // Yield initial empty state
-            continuation.yield([])
+        // Yield initial empty state
+        continuation.yield([])
 
-            // Create and configure browser
-            let parameters = NWParameters()
-            parameters.includePeerToPeer = false
+        // Create and configure browser
+        let parameters = NWParameters()
+        parameters.includePeerToPeer = false
 
-            let browser = NWBrowser(for: .bonjour(type: "_http._tcp", domain: nil), using: parameters)
-            self.browser = browser
+        let newBrowser = NWBrowser(for: .bonjour(type: "_http._tcp", domain: nil), using: parameters)
+        self.browser = newBrowser
 
-            // Set up state handler
-            browser.stateUpdateHandler = { [weak self] state in
-                guard let self = self else { return }
-                Task { await self.handleBrowserState(state) }
-            }
+        // Set up state handler
+        newBrowser.stateUpdateHandler = { [weak self] state in
+            guard let self = self else { return }
+            Task { await self.handleBrowserState(state) }
+        }
 
-            // Set up results handler
-            browser.browseResultsChangedHandler = { [weak self] results, changes in
-                guard let self = self else { return }
-                Task { await self.handleBrowseChanges(changes) }
-            }
+        // Set up results handler
+        newBrowser.browseResultsChangedHandler = { [weak self] results, changes in
+            guard let self = self else { return }
+            Task { await self.handleBrowseChanges(changes) }
+        }
 
-            // Start browsing
-            browser.start(queue: browserQueue)
+        // Start browsing
+        newBrowser.start(queue: browserQueue)
 
-            // Schedule HTTP probe fallback (works without entitlement)
-            self.probeTask = Task {
-                // First: check if we're on the v2 AP (instant if entitlement available)
-                if let apIP = await self.detectLightwaveAP() {
-                    if let device = await self.probeDevice(ip: apIP) {
-                        await self.addDevice(device)
-                        return
-                    }
-                }
-
-                // Wait 5 seconds for Bonjour to find something
-                try? await Task.sleep(for: .seconds(5))
-                guard !Task.isCancelled else { return }
-
-                // If Bonjour found nothing, probe known IPs
-                if await self.discoveredDevices.isEmpty {
-                    if let device = await self.probeDevice(ip: Self.lightwaveAPIP) {
-                        await self.addDevice(device)
-                    }
+        // Schedule HTTP probe fallback (works without entitlement)
+        self.probeTask = Task {
+            // First: check if we're on the v2 AP (instant if entitlement available)
+            if let apIP = await self.detectLightwaveAP() {
+                if let device = await self.probeDevice(ip: apIP) {
+                    await self.addDevice(device)
+                    return
                 }
             }
 
-            // Handle stream termination
-            continuation.onTermination = { [weak self] _ in
-                guard let self = self else { return }
-                Task { await self.stopDiscoveryInternal() }
+            // Wait 5 seconds for Bonjour to find something
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled else { return }
+
+            // If Bonjour found nothing, probe known IPs
+            if await self.discoveredDevices.isEmpty {
+                if let device = await self.probeDevice(ip: Self.lightwaveAPIP) {
+                    await self.addDevice(device)
+                }
             }
         }
+
+        // Handle stream termination
+        continuation.onTermination = { [weak self] _ in
+            guard let self = self else { return }
+            Task { await self.stopDiscoveryInternal() }
+        }
+
+        return stream
     }
 
     /// Stop device discovery and clean up resources.
@@ -207,22 +209,19 @@ actor DeviceDiscoveryService {
     private func resolveEndpoint(_ result: NWBrowser.Result) async -> DeviceInfo? {
         let connection = NWConnection(to: result.endpoint, using: .tcp)
 
-        // Use a class to wrap the boolean for safe concurrent access
+        // Use a class with atomic check-and-set to prevent double-resume
         final class ResumedFlag: @unchecked Sendable {
             private let lock = NSLock()
             private var _value = false
 
-            var value: Bool {
-                get {
-                    lock.lock()
-                    defer { lock.unlock() }
-                    return _value
-                }
-                set {
-                    lock.lock()
-                    defer { lock.unlock() }
-                    _value = newValue
-                }
+            /// Atomically check if not resumed and set to resumed.
+            /// Returns true if this call successfully claimed the resume, false if already resumed.
+            func tryResume() -> Bool {
+                lock.lock()
+                defer { lock.unlock() }
+                guard !_value else { return false }
+                _value = true
+                return true
             }
         }
 
@@ -230,17 +229,15 @@ actor DeviceDiscoveryService {
 
         return await withCheckedContinuation { continuation in
             connection.stateUpdateHandler = { state in
-                guard !resumed.value else { return }
-
                 switch state {
                 case .ready:
-                    resumed.value = true
+                    guard resumed.tryResume() else { return }
                     let info = Self.extractDeviceInfo(from: connection, result: result)
                     connection.cancel()
                     continuation.resume(returning: info)
 
                 case .failed, .cancelled:
-                    resumed.value = true
+                    guard resumed.tryResume() else { return }
                     continuation.resume(returning: nil)
 
                 default:
@@ -252,8 +249,7 @@ actor DeviceDiscoveryService {
 
             // Timeout after 5 seconds
             self.browserQueue.asyncAfter(deadline: .now() + 5) {
-                guard !resumed.value else { return }
-                resumed.value = true
+                guard resumed.tryResume() else { return }
                 connection.cancel()
                 continuation.resume(returning: nil)
             }

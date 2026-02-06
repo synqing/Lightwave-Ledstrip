@@ -244,6 +244,22 @@ public:
      */
     static AudioMappingRegistry& instance();
 
+    /**
+     * @brief Initialise PSRAM-backed mapping storage (optional feature)
+     *
+     * This must be called once during startup (before render tasks begin) to
+     * move the large mapping table out of internal SRAM. If allocation fails,
+     * the registry remains disabled and all calls degrade gracefully.
+     */
+    bool begin();
+
+#if defined(NATIVE_BUILD)
+    /**
+     * @brief Test hook: override allocator used by begin() in native tests.
+     */
+    static void setTestAllocator(void* (*allocFn)(size_t count, size_t size));
+#endif
+
     // Prevent copying
     AudioMappingRegistry(const AudioMappingRegistry&) = delete;
     AudioMappingRegistry& operator=(const AudioMappingRegistry&) = delete;
@@ -415,7 +431,9 @@ public:
 private:
     AudioMappingRegistry() = default;
 
-    EffectAudioMapping m_mappings[MAX_EFFECTS];
+    EffectAudioMapping* m_mappings = nullptr;
+    bool m_ready = false;
+    bool m_allocFailureLogged = false;
 
     // Performance counters
     uint32_t m_applyCount = 0;

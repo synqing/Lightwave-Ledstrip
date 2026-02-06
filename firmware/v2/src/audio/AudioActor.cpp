@@ -209,9 +209,15 @@ void AudioActor::onTick()
     if (!m_esBackend.readAndProcessChunk(now_us)) {
         m_stats.captureFailCount++;
         m_diag.captureReadErrors++;
+        vTaskDelay(1);  // Block to let IDLE0 feed watchdog (taskYIELD insufficient - only yields to equal/higher priority)
         return;
     }
     m_stats.captureSuccessCount++;
+
+    // CRITICAL: vTaskDelay(1) blocks for one tick, letting IDLE0 feed the watchdog.
+    // taskYIELD() is WRONG here - it only yields to equal/higher priority tasks,
+    // but IDLE runs at priority 0 while Audio runs at priority 4.
+    vTaskDelay(1);
 
     // Publish at 50 Hz (every 4 chunks)
     m_esChunkCounter++;

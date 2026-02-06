@@ -447,6 +447,9 @@ private:
     // Helper Functions
     // ========================================================================
 
+    static bool isValidStaSsid(const String& ssid);
+    bool hasAnyStaCandidates() const;
+
     void performAsyncScan();
     bool connectToAP();
     void startSoftAP();

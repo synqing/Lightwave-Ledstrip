@@ -207,17 +207,19 @@ void WiFiManager::handleStateInit() {
     // Reset credential save flag for new connection attempt
     m_credentialsSaved = false;
 
-    // Check if we have credentials
-    if (m_ssid.isEmpty()) {
-        LW_LOGW("No credentials configured, switching to AP mode");
+    // Avoid STA scan/retry loops when credentials are placeholders or empty.
+    // Repeated scans churn the WiFi stack and can contribute to esp_timer ENOMEM failures.
+    if (!hasAnyStaCandidates()) {
+        LW_LOGW("No valid STA credentials, switching to AP mode");
         setState(STATE_WIFI_AP_MODE);
         return;
     }
 
-    // Check for "CONFIGURE_ME" placeholder
-    if (m_ssid == "CONFIGURE_ME") {
-        LW_LOGW("WiFi not configured (CONFIGURE_ME), switching to AP mode");
-        setState(STATE_WIFI_AP_MODE);
+    // If the current primary SSID is not valid, always scan to select a real candidate
+    // from the credential pool (config primary/secondary + NVS).
+    if (!isValidStaSsid(m_ssid)) {
+        LW_LOGI("Primary STA SSID is not valid, scanning for known networks");
+        setState(STATE_WIFI_SCANNING);
         return;
     }
 
@@ -501,8 +503,7 @@ void WiFiManager::handleStateAPMode() {
     // Skip if no known networks were ever found — scanning disrupts the network
     // stack (tears down UDP streamer, triggers WiFi events) and can cause
     // watchdog timeouts when combined with rapid effect changes.
-    if (!m_ssid.isEmpty() && m_ssid != "CONFIGURE_ME" &&
-        m_scanAttemptsWithoutKnown < 4) {
+    if (hasAnyStaCandidates() && m_scanAttemptsWithoutKnown < 4) {
         if (millis() - lastRetryTime > 60000) {
             lastRetryTime = millis();
             LW_LOGI("Retrying STA connection from AP mode (AP stays up)...");
@@ -526,6 +527,27 @@ void WiFiManager::handleStateDisconnected() {
 // ============================================================================
 // Helper Functions
 // ============================================================================
+
+bool WiFiManager::isValidStaSsid(const String& ssid) {
+    if (ssid.isEmpty()) return false;
+    if (ssid == "CONFIGURE_ME") return false;
+    if (ssid.startsWith("PORTABLE_TEST_NONE")) return false;
+    if (ssid == config::NetworkConfig::AP_SSID) return false;
+    return true;
+}
+
+bool WiFiManager::hasAnyStaCandidates() const {
+    if (isValidStaSsid(m_ssid)) return true;
+    if (isValidStaSsid(m_ssid2)) return true;
+
+    WiFiCredentialsStorage::NetworkCredential nvsNets[WiFiCredentialsStorage::MAX_NETWORKS];
+    WiFiCredentialsStorage& storage = const_cast<WiFiCredentialsStorage&>(m_credentialsStorage);
+    uint8_t nvsCount = storage.loadNetworks(nvsNets, WiFiCredentialsStorage::MAX_NETWORKS);
+    for (uint8_t i = 0; i < nvsCount; i++) {
+        if (isValidStaSsid(nvsNets[i].ssid)) return true;
+    }
+    return false;
+}
 
 void WiFiManager::performAsyncScan() {
     // Clear previous results
@@ -667,7 +689,7 @@ WiFiManager::BestNetworkResult WiFiManager::findBestAvailableNetwork() {
     // Add config primary (if valid)
     String configPrimarySsid = NetworkConfig::WIFI_SSID_VALUE;
     String configPrimaryPass = NetworkConfig::WIFI_PASSWORD_VALUE;
-    if (configPrimarySsid.length() > 0 && configPrimarySsid != "CONFIGURE_ME") {
+    if (isValidStaSsid(configPrimarySsid)) {
         knownNetworks[knownCount++] = {configPrimarySsid, configPrimaryPass,
                                         configPrimarySsid == lastConnected};
     }
@@ -675,7 +697,7 @@ WiFiManager::BestNetworkResult WiFiManager::findBestAvailableNetwork() {
     // Add config secondary (if valid)
     String configSecondarySsid = NetworkConfig::WIFI_SSID_2_VALUE;
     String configSecondaryPass = NetworkConfig::WIFI_PASSWORD_2_VALUE;
-    if (configSecondarySsid.length() > 0 && knownCount < MAX_KNOWN) {
+    if (isValidStaSsid(configSecondarySsid) && knownCount < MAX_KNOWN) {
         // Check for duplicate
         bool isDupe = false;
         for (uint8_t i = 0; i < knownCount; i++) {
@@ -850,7 +872,7 @@ void WiFiManager::setCredentials(const String& ssid, const String& password) {
 }
 
 bool WiFiManager::hasSecondaryNetwork() const {
-    return m_ssid2.length() > 0 && m_ssid2 != "";
+    return isValidStaSsid(m_ssid2);
 }
 
 void WiFiManager::switchToNextNetwork() {

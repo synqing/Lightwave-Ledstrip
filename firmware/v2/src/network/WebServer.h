@@ -542,11 +542,6 @@ private:
     bool m_broadcastPending;
     static constexpr uint32_t BROADCAST_COALESCE_MS = 50;
 
-    // When a station disconnects from the Soft-AP, TCP may keep sockets around for
-    // 10–30 seconds. This flag triggers an immediate WS cleanup pass in update().
-    volatile bool m_apClientDisconnected;
-    uint32_t m_lastApReinitMs;
-
     // Low internal heap shedding (avoid esp_timer/WiFi/lwIP ENOMEM spirals).
     // Use hysteresis to prevent rapid toggling.
     bool m_lowHeapShed;

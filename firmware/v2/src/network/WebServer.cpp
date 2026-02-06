@@ -1547,6 +1547,12 @@ void WebServer::notifyParameterChange() {
 
 void WebServer::broadcastLEDFrame() {
     if (!m_ledBroadcaster || !m_renderer) return;
+
+    // Streaming over WebSocket can consume significant internal heap when clients are slow.
+    // When shedding, prioritise control plane (commands) and UDP streaming.
+    if (m_lowHeapShed) {
+        return;
+    }
     
     // Get LED buffer from renderer (cross-core safe copy)
     CRGB leds[webserver::LedStreamConfig::TOTAL_LEDS];
@@ -1607,6 +1613,9 @@ bool WebServer::hasLogStreamSubscribers() const {
 
 void WebServer::broadcastAudioFrame() {
     if (!m_audioBroadcaster || !m_renderer) return;
+    if (m_lowHeapShed) {
+        return;
+    }
 
     // Get audio frame from renderer (cross-core safe - returns by-value copy)
     const audio::ControlBusFrame& frame = m_renderer->getCachedAudioFrame();

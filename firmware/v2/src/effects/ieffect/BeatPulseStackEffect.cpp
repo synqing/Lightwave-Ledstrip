@@ -72,10 +72,12 @@ void BeatPulseStackEffect::render(plugins::EffectContext& ctx) {
         silentScale = 1.0f;
     }
 
-    // On beat: the HTML sets beatIntensity = 1.0. We scale slightly by beat strength
-    // so weak/uncertain beat tracking doesn’t feel identical to confident locks.
+    // On beat: the HTML sets beatIntensity = 1.0. We scale slightly by beat strength and
+    // by the Intensity knob so weak/uncertain tracking doesn’t feel identical to confident locks.
     if (beatTick) {
-        m_beatIntensity = fmaxf(m_beatIntensity, 0.35f + 0.65f * beatStrength);
+        const float intensityNorm = static_cast<float>(ctx.intensity) / 255.0f;
+        const float minLatch = 0.20f + 0.25f * intensityNorm;
+        m_beatIntensity = fmaxf(m_beatIntensity, fmaxf(minLatch, 0.35f + 0.65f * beatStrength));
     }
 
     // ---------------------------------------------------------------------
@@ -91,6 +93,17 @@ void BeatPulseStackEffect::render(plugins::EffectContext& ctx) {
     // ---------------------------------------------------------------------
     // Render (centre-origin, static palette gradient + white push)
     // ---------------------------------------------------------------------
+    const float intensityNorm = static_cast<float>(ctx.intensity) / 255.0f;
+    const float complexityNorm = static_cast<float>(ctx.complexity) / 255.0f;
+    const float variationNorm = static_cast<float>(ctx.variation) / 255.0f;
+
+    // Complexity tunes ring sharpness (higher = tighter ring), Variation trims starting radius.
+    const float ringSharpness = 2.25f + 4.50f * complexityNorm;           // 2.25..6.75
+    const float ringStartRadius = 0.40f + 0.35f * variationNorm;          // 0.40..0.75 (at beatIntensity=1)
+    const float whiteScale = 0.16f + 0.30f * intensityNorm;               // 0.16..0.46
+    const float boostScale = 0.30f + 0.45f * intensityNorm;               // 0.30..0.75
+    const float baseBrightness = 0.40f + 0.22f * intensityNorm;           // 0.40..0.62
+
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
         // Distance 0 at centre → ~1 at edges (centre is between the pair).
         const float dist01 = (static_cast<float>(dist) + 0.5f) / static_cast<float>(HALF_LENGTH);
@@ -99,9 +112,8 @@ void BeatPulseStackEffect::render(plugins::EffectContext& ctx) {
         // wavePos = beatIntensity * 1.2
         // waveHit = 1 - min(1, abs(dist - wavePos*0.5) * 3)
         // intensity = max(0, waveHit) * beatIntensity
-        const float wavePos = m_beatIntensity * 1.2f;
-        const float ringCentre = wavePos * 0.5f;
-        const float waveHit = 1.0f - fminf(1.0f, fabsf(dist01 - ringCentre) * 3.0f);
+        const float ringCentre = ringStartRadius * m_beatIntensity;
+        const float waveHit = 1.0f - fminf(1.0f, fabsf(dist01 - ringCentre) * ringSharpness);
         float intensity = fmaxf(0.0f, waveHit) * m_beatIntensity;
         intensity *= silentScale;
 
@@ -109,12 +121,12 @@ void BeatPulseStackEffect::render(plugins::EffectContext& ctx) {
         const uint8_t paletteIdx = static_cast<uint8_t>(clamp01(dist01) * 255.0f);
 
         // Brightness boost on beat (HTML: baseBrightness=0.5, + intensity*0.5)
-        const float brightnessFactor = 0.5f + intensity * 0.5f;
+        const float brightnessFactor = baseBrightness + intensity * boostScale;
         const uint8_t brightness8 = clampU8FromFloat(static_cast<float>(ctx.brightness) * brightnessFactor);
         CRGB c = ctx.palette.getColor(paletteIdx, brightness8);
 
         // White push (HTML: whiteMix = intensity * 0.3)
-        const float whiteMix = intensity * 0.30f;
+        const float whiteMix = intensity * whiteScale;
         const uint8_t white8 = clampU8FromFloat(static_cast<float>(ctx.brightness) * whiteMix);
         addWhiteSaturating(c, white8);
 
@@ -136,4 +148,3 @@ const plugins::EffectMetadata& BeatPulseStackEffect::getMetadata() const {
 }
 
 } // namespace lightwaveos::effects::ieffect
-

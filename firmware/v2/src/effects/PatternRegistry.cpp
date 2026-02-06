@@ -165,7 +165,9 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
     {PM_STR("SB Waveform (Ref)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Sensory Bridge 3.1.0 reference: waveform mode"), PM_STR("Waveform history, MOOD smoothing, note chromagram → colour summation"), PM_STR("Audio Waveform, ES Waveform (Ref)")},
 
     // --- UI Preview Parity (110+) ---
-    {PM_STR("Beat Pulse (Stack)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("UI preview parity: static palette gradient with beat-driven white push"), PM_STR("Beat envelope, white push, static centre-origin gradient"), PM_STR("Beat Pulse")}
+    {PM_STR("Beat Pulse (Stack)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("UI preview parity: static palette gradient with beat-driven white push"), PM_STR("Beat envelope, white push, static centre-origin gradient"), PM_STR("Beat Pulse")},
+    {PM_STR("Beat Pulse (Shockwave)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Canonical shockwave: ring travels outward from centre on beat"), PM_STR("Time-since-beat ring position, exponential envelope, white push"), PM_STR("Beat Pulse (Stack), Beat Pulse")},
+    {PM_STR("Beat Pulse (Shockwave In)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Inward shockwave: ring travels edge→centre on beat"), PM_STR("Time-since-beat ring position (inward), exponential envelope, white push"), PM_STR("Beat Pulse (Shockwave)")}
 };
 
 const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(PatternMetadata);
@@ -175,7 +177,7 @@ const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(Pattern
 // ============================================================================
 
 // Expected number of implemented effects (must match registerAllEffects() return value)
-constexpr uint8_t EXPECTED_EFFECT_COUNT = 111;  // 101 base + 5 ES reference + 3 ES-tuned + 1 SB reference + 1 UI parity
+constexpr uint8_t EXPECTED_EFFECT_COUNT = 113;  // 101 base + 5 ES reference + 3 ES-tuned + 1 SB reference + 1 UI parity + 2 shockwaves
 
 // Compile-time assertion: metadata must have at least as many entries as implemented effects
 // This ensures we can always map effect IDs to metadata (allows for future effects in metadata)
@@ -442,7 +444,9 @@ static const uint8_t REACTIVE_EFFECT_IDS[] PROGMEM = {
     104, // ES Bloom (Ref) - reference show
     105, // ES Waveform (Ref) - reference show
     109, // SB Waveform (Ref) - reference show
-    110  // Beat Pulse (Stack) - UI preview parity
+    110, // Beat Pulse (Stack) - UI preview parity
+    111, // Beat Pulse (Shockwave) - outward travelling ring
+    112  // Beat Pulse (Shockwave In) - inward travelling ring
 };
 static constexpr uint8_t REACTIVE_EFFECT_COUNT = sizeof(REACTIVE_EFFECT_IDS);
 

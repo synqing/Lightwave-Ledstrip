@@ -92,6 +92,7 @@
 #include "ieffect/LGPAudioTestEffect.h"
 #include "ieffect/LGPBeatPulseEffect.h"
 #include "ieffect/BeatPulseStackEffect.h"
+#include "ieffect/BeatPulseShockwaveEffect.h"
 #include "ieffect/LGPSpectrumBarsEffect.h"
 #include "ieffect/LGPBassBreathEffect.h"
 #include "ieffect/AudioWaveformEffect.h"
@@ -1042,9 +1043,21 @@ uint8_t registerAllEffects(RendererActor* renderer) {
         total++;
     }
 
+    // Beat Pulse (Shockwave) (ID 111) - canonical outward travelling ring
+    static ieffect::BeatPulseShockwaveEffect beatPulseShockwaveOutInstance(false);
+    if (renderer->registerEffect(total, &beatPulseShockwaveOutInstance)) {
+        total++;
+    }
+
+    // Beat Pulse (Shockwave In) (ID 112) - inward travelling ring (edge→centre)
+    static ieffect::BeatPulseShockwaveEffect beatPulseShockwaveInInstance(true);
+    if (renderer->registerEffect(total, &beatPulseShockwaveInInstance)) {
+        total++;
+    }
+
     // =============== EFFECT COUNT PARITY VALIDATION ===============
     // Runtime validation: ensure registered count matches expected
-    constexpr uint8_t EXPECTED_EFFECT_COUNT = 111;  // 101 base + 5 ES reference + 3 ES-tuned + 1 SB reference + 1 UI parity
+    constexpr uint8_t EXPECTED_EFFECT_COUNT = 113;  // +2 shockwave variants
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

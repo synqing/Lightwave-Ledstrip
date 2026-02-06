@@ -129,6 +129,15 @@ namespace NetworkConfig {
 #endif
 
     // ========================================================================
+    // OTA Chunk Size Limits
+    // ========================================================================
+
+    /// Maximum decoded OTA chunk size in bytes (16KB).
+    /// Base64 input is ~33% larger, so 16KB decoded = ~21.3KB base64 input.
+    /// PSRAM is used if available and internal allocation fails.
+    constexpr size_t MAX_OTA_CHUNK_DECODED_SIZE = 16384;
+
+    // ========================================================================
     // API Key Authentication
     // Enable: -D FEATURE_API_AUTH=1 -D API_KEY=\"your-secret-key\"
     // ========================================================================

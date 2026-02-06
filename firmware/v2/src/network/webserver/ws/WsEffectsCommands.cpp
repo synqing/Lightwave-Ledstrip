@@ -126,8 +126,9 @@ static void handleEffectsList(AsyncWebSocketClient* client, JsonDocument& doc, c
     uint8_t endIdx = (startIdx + limit < effectCount) ? (startIdx + limit) : effectCount;
 
     // Collect effect names and categories into arrays
-    const char* effectNames[128];
-    const char* categories[128];
+    // Note: Arrays sized for typical pagination (limit 1-50)
+    const char* effectNames[80];
+    const char* categories[80];
     static const char* categoryClassic = "Classic";
     static const char* categoryWave = "Wave";
     static const char* categoryPhysics = "Physics";
@@ -291,17 +292,19 @@ static void handleEffectsParametersGet(AsyncWebSocketClient* client, JsonDocumen
     bool hasParameters = (effect != nullptr && effect->getParameterCount() > 0);
     
     // Collect parameter data into arrays
-    const char* paramNames[64];
-    const char* paramDisplayNames[64];
-    float paramMins[64];
-    float paramMaxs[64];
-    float paramDefaults[64];
-    float paramValues[64];
+    // Note: Effects rarely have >16 parameters, caps stack usage
+    static constexpr uint8_t MAX_EFFECT_PARAMS = 16;
+    const char* paramNames[MAX_EFFECT_PARAMS];
+    const char* paramDisplayNames[MAX_EFFECT_PARAMS];
+    float paramMins[MAX_EFFECT_PARAMS];
+    float paramMaxs[MAX_EFFECT_PARAMS];
+    float paramDefaults[MAX_EFFECT_PARAMS];
+    float paramValues[MAX_EFFECT_PARAMS];
     uint8_t paramCount = 0;
-    
+
     if (effect) {
         paramCount = effect->getParameterCount();
-        for (uint8_t i = 0; i < paramCount && i < 64; ++i) {
+        for (uint8_t i = 0; i < paramCount && i < MAX_EFFECT_PARAMS; ++i) {
             const plugins::EffectParameter* param = effect->getParameter(i);
             if (!param) continue;
             paramNames[i] = param->name;
@@ -351,11 +354,13 @@ static void handleEffectsParametersSet(AsyncWebSocketClient* client, JsonDocumen
     }
 
     // Iterate over JsonObjectConst (ArduinoJson v7 supports range-for on JsonObjectConst)
-    const char* queuedKeys[64];
-    const char* failedKeys[64];
+    // Note: Effects rarely have >16 parameters, caps stack usage
+    static constexpr uint8_t MAX_PARAM_KEYS = 16;
+    const char* queuedKeys[MAX_PARAM_KEYS];
+    const char* failedKeys[MAX_PARAM_KEYS];
     uint8_t queuedCount = 0;
     uint8_t failedCount = 0;
-    
+
     for (JsonPairConst kv : req.parameters) {
         const char* key = kv.key().c_str();
         float value = kv.value().as<float>();
@@ -369,17 +374,17 @@ static void handleEffectsParametersSet(AsyncWebSocketClient* client, JsonDocumen
             }
         }
         if (!known) {
-            if (failedCount < 64) {
+            if (failedCount < MAX_PARAM_KEYS) {
                 failedKeys[failedCount++] = key;
             }
             continue;
         }
         if (ctx.renderer->enqueueEffectParameterUpdate(effectId, key, value)) {
-            if (queuedCount < 64) {
+            if (queuedCount < MAX_PARAM_KEYS) {
                 queuedKeys[queuedCount++] = key;
             }
         } else {
-            if (failedCount < 64) {
+            if (failedCount < MAX_PARAM_KEYS) {
                 failedKeys[failedCount++] = key;
             }
         }

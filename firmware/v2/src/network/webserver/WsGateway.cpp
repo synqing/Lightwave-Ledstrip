@@ -7,6 +7,7 @@
 #include "WsCommandRouter.h"
 #include "../WebServer.h"
 #include "../ApiResponse.h"
+#include "../RequestValidator.h"
 #include "../../codec/WsCommonCodec.h"
 #include "../../utils/Log.h"
 #include "../../config/network_config.h"
@@ -18,6 +19,12 @@
 
 #undef LW_LOG_TAG
 #define LW_LOG_TAG "WsGateway"
+
+namespace {
+    // Shared telemetry buffer for WS event handlers
+    // Safe: WS events processed sequentially on AsyncTCP task (Core 0)
+    static char s_telemetryBuf[320];
+}
 
 namespace lightwaveos {
 namespace network {
@@ -695,7 +702,27 @@ void WsGateway::handleMessage(AsyncWebSocketClient* client, uint8_t* data, size_
         client->text(buildWsError(ErrorCodes::INVALID_JSON, "Parse error"));
         return;
     }
-    
+
+    // Validate JSON nesting depth to prevent stack overflow from malicious payloads
+    // Max depth 10 allows normal operations (2-5 levels) with headroom
+    constexpr uint8_t MAX_JSON_DEPTH = 10;
+    if (!RequestValidator::validateJsonDepth(doc, MAX_JSON_DEPTH)) {
+        // Log rejected frame (nesting depth exceeded)
+        const int n = snprintf(s_telemetryBuf, sizeof(s_telemetryBuf),
+            "{\"event\":\"msg.recv\",\"ts_mono_ms\":%lu,\"connEpoch\":%lu,\"eventSeq\":%lu,\"clientId\":%lu,\"msgType\":\"\",\"result\":\"rejected\",\"reason\":\"depth_limit\",\"payloadSummary\":\"\",\"schemaVersion\":\"1.0.0\"}",
+            static_cast<unsigned long>(tsMonoms),
+            static_cast<unsigned long>(connEpoch),
+            static_cast<unsigned long>(eventSeq),
+            static_cast<unsigned long>(clientId)
+        );
+        if (n > 0 && n < static_cast<int>(sizeof(s_telemetryBuf))) {
+            Serial.println(s_telemetryBuf);
+        }
+
+        client->text(buildWsError(ErrorCodes::INVALID_JSON, "JSON nesting depth exceeds limit"));
+        return;
+    }
+
     using namespace lightwaveos::codec;
     JsonObjectConst root = doc.as<JsonObjectConst>();
     TypeDecodeResult typeResult = WsCommonCodec::decodeType(root);

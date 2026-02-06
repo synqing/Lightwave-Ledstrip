@@ -526,11 +526,12 @@ private:
         return value;
     }
 
+public:
     /**
      * @brief Validate JSON document depth
-     * 
+     *
      * Prevents deeply nested JSON structures that could cause stack overflow.
-     * 
+     *
      * @param doc JSON document to validate
      * @param maxDepth Maximum allowed nesting depth (default 10)
      * @return true if depth is valid, false if too deep

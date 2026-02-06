@@ -9,6 +9,7 @@
 #include <Arduino.h>
 #include <cstring>
 #include <cstdio>
+#include <esp_heap_caps.h>
 
 namespace lightwaveos {
 namespace network {
@@ -24,20 +25,40 @@ LogStreamBroadcaster::LogStreamBroadcaster(AsyncWebSocket* ws)
     m_mux = portMUX_INITIALIZER_UNLOCKED;
 #endif
 
-    // Allocate ring buffer
-    m_ringBuffer = new char*[LogStreamConfig::RING_BUFFER_SIZE];
-    for (size_t i = 0; i < LogStreamConfig::RING_BUFFER_SIZE; i++) {
-        m_ringBuffer[i] = new char[LogStreamConfig::MAX_MESSAGE_LENGTH];
-        m_ringBuffer[i][0] = '\0';
+    // Allocate ring buffer in PSRAM (25.6KB - too large for internal SRAM)
+    m_ringBuffer = static_cast<char**>(
+        heap_caps_calloc(LogStreamConfig::RING_BUFFER_SIZE, sizeof(char*), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)
+    );
+    if (!m_ringBuffer) {
+        // Fallback to internal SRAM if PSRAM unavailable
+        m_ringBuffer = static_cast<char**>(
+            heap_caps_calloc(LogStreamConfig::RING_BUFFER_SIZE, sizeof(char*), MALLOC_CAP_8BIT)
+        );
+    }
+    if (m_ringBuffer) {
+        for (size_t i = 0; i < LogStreamConfig::RING_BUFFER_SIZE; i++) {
+            m_ringBuffer[i] = static_cast<char*>(
+                heap_caps_calloc(LogStreamConfig::MAX_MESSAGE_LENGTH, sizeof(char), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)
+            );
+            if (!m_ringBuffer[i]) {
+                // Fallback to internal SRAM for this slot
+                m_ringBuffer[i] = static_cast<char*>(
+                    heap_caps_calloc(LogStreamConfig::MAX_MESSAGE_LENGTH, sizeof(char), MALLOC_CAP_8BIT)
+                );
+            }
+        }
     }
 }
 
 LogStreamBroadcaster::~LogStreamBroadcaster() {
     if (m_ringBuffer) {
         for (size_t i = 0; i < LogStreamConfig::RING_BUFFER_SIZE; i++) {
-            delete[] m_ringBuffer[i];
+            if (m_ringBuffer[i]) {
+                heap_caps_free(m_ringBuffer[i]);
+            }
         }
-        delete[] m_ringBuffer;
+        heap_caps_free(m_ringBuffer);
+        m_ringBuffer = nullptr;
     }
 }
 
@@ -156,45 +177,59 @@ void LogStreamBroadcaster::sendBackfill(uint32_t clientId) {
     AsyncWebSocketClient* c = m_ws->client(clientId);
     if (!c || c->status() != WS_CONNECTED) return;
 
-    // Send header indicating backfill start
     c->text("--- Log History ---");
 
-    // Copy ring buffer state to avoid long critical section
-    char tempBuffer[LogStreamConfig::RING_BUFFER_SIZE][LogStreamConfig::MAX_MESSAGE_LENGTH];
-    size_t tempCount = 0;
-    size_t startIdx = 0;
+    // Capture ring buffer state (only indices, not data)
+    size_t capturedCount = 0;
+    size_t capturedHead = 0;
 
 #if defined(ESP32)
     portENTER_CRITICAL(&m_mux);
 #endif
-    tempCount = m_ringCount;
-    if (tempCount > 0) {
-        // Calculate start index for oldest message
-        if (tempCount >= LogStreamConfig::RING_BUFFER_SIZE) {
-            startIdx = m_ringHead; // Head points to oldest when full
-        } else {
-            startIdx = 0;
-        }
-
-        // Copy messages in order (oldest to newest)
-        for (size_t i = 0; i < tempCount; i++) {
-            size_t idx = (startIdx + i) % LogStreamConfig::RING_BUFFER_SIZE;
-            strncpy(tempBuffer[i], m_ringBuffer[idx], LogStreamConfig::MAX_MESSAGE_LENGTH - 1);
-            tempBuffer[i][LogStreamConfig::MAX_MESSAGE_LENGTH - 1] = '\0';
-        }
-    }
+    capturedCount = m_ringCount;
+    capturedHead = m_ringHead;
 #if defined(ESP32)
     portEXIT_CRITICAL(&m_mux);
 #endif
 
-    // Send backfill messages outside critical section
-    for (size_t i = 0; i < tempCount; i++) {
-        if (tempBuffer[i][0] != '\0') {
-            c->text(tempBuffer[i]);
+    if (capturedCount == 0 || !m_ringBuffer) {
+        c->text("--- Live Logs ---");
+        return;
+    }
+
+    size_t startIdx = 0;
+    if (capturedCount >= LogStreamConfig::RING_BUFFER_SIZE) {
+        startIdx = capturedHead;
+    }
+
+    // Single message buffer on stack (256 bytes - safe)
+    char msgBuffer[LogStreamConfig::MAX_MESSAGE_LENGTH];
+
+    for (size_t i = 0; i < capturedCount; i++) {
+        size_t idx = (startIdx + i) % LogStreamConfig::RING_BUFFER_SIZE;
+
+#if defined(ESP32)
+        portENTER_CRITICAL(&m_mux);
+#endif
+        if (m_ringBuffer[idx]) {
+            strncpy(msgBuffer, m_ringBuffer[idx], LogStreamConfig::MAX_MESSAGE_LENGTH - 1);
+            msgBuffer[LogStreamConfig::MAX_MESSAGE_LENGTH - 1] = '\0';
+        } else {
+            msgBuffer[0] = '\0';
+        }
+#if defined(ESP32)
+        portEXIT_CRITICAL(&m_mux);
+#endif
+
+        if (msgBuffer[0] != '\0') {
+            c->text(msgBuffer);
+        }
+
+        if (c->status() != WS_CONNECTED) {
+            return;
         }
     }
 
-    // Send footer indicating live logs start
     c->text("--- Live Logs ---");
 }
 

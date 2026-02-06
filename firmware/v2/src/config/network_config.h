@@ -97,8 +97,9 @@ namespace NetworkConfig {
     #ifdef AP_PASSWORD_CUSTOM
         constexpr const char* AP_PASSWORD = AP_PASSWORD_CUSTOM;
     #else
-        // Default Soft-AP password. Keep the exact casing aligned with clients (e.g. Tab5.encoder).
-        constexpr const char* AP_PASSWORD = "SpectraSynq";
+        // Default Soft-AP password.
+        // Empty string = open network (no password).
+        constexpr const char* AP_PASSWORD = "";
     #endif
 
     // ========================================================================

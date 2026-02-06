@@ -85,7 +85,7 @@ struct ConnectionSheet: View {
 
                                                 VStack(alignment: .leading, spacing: 2) {
                                                     Text("Network: **LightwaveOS-AP**")
-                                                    Text("Password: **SpectraSynq**")
+                                                    Text("Password: *(none)*")
                                                 }
                                                 .font(.caption)
                                                 .foregroundStyle(Color.lwTextPrimary)

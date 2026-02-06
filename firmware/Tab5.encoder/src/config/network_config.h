@@ -17,7 +17,7 @@
 #define WIFI_SSID "LightwaveOS-AP"
 #endif
 #ifndef WIFI_PASSWORD
-#define WIFI_PASSWORD "SpectraSynq"
+#define WIFI_PASSWORD ""
 #endif
 
 // Secondary WiFi Network (fallback)

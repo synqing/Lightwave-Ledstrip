@@ -19,7 +19,7 @@
  * @code
  * // In setup()
  * WIFI_MANAGER.setCredentials(ssid, password);
- * WIFI_MANAGER.enableSoftAP("LightwaveOS-AP", "SpectraSynq");
+ * WIFI_MANAGER.enableSoftAP("LightwaveOS-AP", "");
  * if (!WIFI_MANAGER.begin()) {
  *     Serial.println("WiFiManager failed!");
  * }

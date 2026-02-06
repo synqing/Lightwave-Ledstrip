@@ -280,7 +280,7 @@ void setup() {
     );
     // Enable AP fallback — K1 is a sealed device with no USB access.
     // Without this, a WiFi drop makes the device permanently unreachable.
-    WIFI_MANAGER.enableSoftAP("LightwaveOS-AP", "SpectraSynq");
+    WIFI_MANAGER.enableSoftAP(NetworkConfig::AP_SSID, NetworkConfig::AP_PASSWORD);
 
     if (!WIFI_MANAGER.begin()) {
         LW_LOGE("WiFiManager failed to start!");

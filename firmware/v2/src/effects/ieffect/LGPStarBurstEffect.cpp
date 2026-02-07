@@ -155,8 +155,10 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
     for (int i = 0; i < STRIP_LENGTH; i++) {
         float distFromCenter = (float)centerPairDistance((uint16_t)i);
 
-        // FIXED frequency - no kick modulation (like Wave Collision)
-        const float freqBase = 0.25f;
+        // ANTI-ALIASED frequency: Reduced from 0.25f to 0.12f to prevent wagon-wheel
+        // At 0.25f with 240.0 phase multiplier: ~3.84 rad/frame @ 60fps = jumps >1 wavelength
+        // At 0.12f: ~1.84 rad/frame = stays under half-wavelength (Nyquist-safe)
+        const float freqBase = 0.12f;  // ~52 LED wavelength, smoother motion
         float star = sinf(distFromCenter * freqBase - m_phase);
 
         // Center-focused burst flash (like Wave Collision's collision flash)

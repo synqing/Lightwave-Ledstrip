@@ -189,9 +189,11 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
         // =====================================================================
         // 64-bin TREBLE SHIMMER: High frequencies (bins 48-63) add sparkle
         // Hi-hat and cymbal energy creates high-frequency brightness overlay.
+        // FIXED: Reduced phase multiplier from 4.0x to 1.6x to match wave velocities
+        // (was 10x faster than main waves, now only 1.3x faster for visual coherence)
         // =====================================================================
         if (m_trebleOverlay > 0.1f) {
-            float shimmer = m_trebleOverlay * sinf(dist * 1.5f + m_scanPhase * 4.0f);
+            float shimmer = m_trebleOverlay * sinf(dist * 1.5f + m_scanPhase * 1.6f);
             audioGain += shimmer * 0.35f;
         }
 

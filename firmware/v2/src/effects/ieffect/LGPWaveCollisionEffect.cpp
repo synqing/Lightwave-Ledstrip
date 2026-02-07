@@ -203,10 +203,16 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
         // CENTRE ORIGIN: Calculate distance from centre pair
         float distFromCenter = (float)centerPairDistance((uint16_t)i);
 
-        // DIFFERENTIATED WAVE COLLISION: Longer wavelength than Interference Scanner
-        // sin(k*dist - phase) produces OUTWARD motion when phase increases
+        // WAVE COLLISION: Two counter-propagating wave packets that collide at centre
+        // sin(k*dist - phase) = OUTWARD motion, sin(k*dist + phase) = INWARD motion
+        // Their sum creates standing wave nodes with travelling collision events
         const float freqBase = 0.15f;  // ~42 LED wavelength (vs Scanner's ~25-31)
-        float wave1 = sinf(distFromCenter * freqBase - m_phase);
+        float waveOutward = sinf(distFromCenter * freqBase - m_phase);
+        float waveInward = sinf(distFromCenter * freqBase + m_phase);
+
+        // Sum creates interference: constructive at nodes, destructive at antinodes
+        // The beating pattern appears to "collide" at the centre
+        float waveSum = (waveOutward + waveInward) * 0.5f;
 
         // COLLISION FLASH: Center-focused explosion on snare hits
         // collisionBoost decays from 1.0 (snare hit) with spatial falloff from center
@@ -214,7 +220,7 @@ void LGPWaveCollisionEffect::render(plugins::EffectContext& ctx) {
 
         // Base audio intensity (without uniform collision boost - moved to spatial flash)
         float audioIntensity = 0.4f + 0.5f * energyAvgSmooth + 0.4f * energyDeltaSmooth;
-        float interference = wave1 * audioIntensity + collisionFlash * 0.8f;  // Collision adds separate layer
+        float interference = waveSum * audioIntensity + collisionFlash * 0.8f;  // Collision adds separate layer
 
         // CRITICAL: Use tanhf for uniform brightness (like ChevronWaves)
         interference = tanhf(interference * 2.0f) * 0.5f + 0.5f;

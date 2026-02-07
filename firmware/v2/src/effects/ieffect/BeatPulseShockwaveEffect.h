@@ -1,17 +1,18 @@
 /**
  * @file BeatPulseShockwaveEffect.h
- * @brief Beat Pulse (Shockwave) - travelling centre-origin pulse (outward or inward)
+ * @brief Beat Pulse (Shockwave) - HTML PARITY implementation
  *
- * This effect implements the "canonical" Beat Pulse shockwave described in the
- * LED preview notes: ring position is driven by time-since-beat, while amplitude
- * is driven by beat strength and an exponential decay envelope.
+ * VISUAL IDENTITY:
+ * Single ring expanding OUTWARD from centre (or INWARD from edges) with
+ * AMPLITUDE-DRIVEN motion. Same HTML core maths as Stack, different direction.
  *
- * Knob mapping (meaningful, stable, and portable):
- * - `speed`      : travel time (centre→edge or edge→centre)
- * - `intensity`  : pulse amplitude + white push amount
- * - `complexity` : ring width + optional echoes
- * - `variation`  : ring profile (tent vs smoothstep vs cosine) + echo spacing trim
- * - `fadeAmount` : trails persistence (higher = shorter trails)
+ * HTML PARITY (LOCKED):
+ * - beatIntensity slams to 1.0 on beat, decays *= 0.94^(dt*60)
+ * - ringCentre = beatIntensity * 0.6 (amplitude-driven, not time-driven)
+ * - Triangle profile: waveHit = 1 - min(1, abs(dist - ringCentre) * 3)
+ * - intensity = max(0, waveHit) * beatIntensity
+ * - brightness = 0.5 + intensity * 0.5
+ * - whiteMix = intensity * 0.3
  *
  * Effect IDs:
  * - 111: Beat Pulse (Shockwave) [outward]
@@ -45,13 +46,9 @@ private:
     bool m_inward = false;
     plugins::EffectMetadata m_meta;
 
-    uint32_t m_lastBeatTimeMs = 0;
-    float m_latchedBeatStrength = 0.0f;
-
-    float m_stackGlow = 0.75f;  // 0..1 “glowing stack” amount
-
-    // Trails are stored in centre-distance space (HALF_LENGTH entries).
-    float m_trail[HALF_LENGTH] = {0.0f};
+    float m_beatIntensity = 0.0f;      // Amplitude-driven ring position (HTML parity)
+    uint32_t m_lastBeatTimeMs = 0;     // Fallback metronome tracking
+    float m_fallbackBpm = 128.0f;      // Fallback metronome BPM
 };
 
 } // namespace lightwaveos::effects::ieffect

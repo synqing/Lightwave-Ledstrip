@@ -1,19 +1,22 @@
 /**
  * @file BeatPulseStackEffect.h
- * @brief Beat Pulse (Stack) - UI preview parity pulse (static palette gradient + white push)
+ * @brief Beat Pulse (Stack) - HTML PARITY implementation
  *
- * This effect implements the core Beat Pulse maths used in:
- * `docs/ui-mockups/components/v2/led-preview-stack.html`.
+ * VISUAL IDENTITY:
+ * Single ring contracting inward (edge to centre) with AMPLITUDE-DRIVEN motion.
+ * Clean. Definitive. The kick drum. HTML parity locked.
  *
- * Key traits:
- * - Centre-origin, symmetric output (uses SET_CENTER_PAIR)
- * - Static palette gradient (distance → palette index)
- * - Beat-driven brightness boost + “white push” (specular punch)
- * - Exponential-ish decay with dt-correct behaviour (frame-rate independent)
+ * HTML PARITY (LOCKED):
+ * - beatIntensity slams to 1.0 on beat, decays *= 0.94^(dt*60)
+ * - ringCentre = beatIntensity * 0.6 (amplitude-driven, not time-driven)
+ * - Triangle profile: waveHit = 1 - min(1, abs(dist - ringCentre) * 3)
+ * - intensity = max(0, waveHit) * beatIntensity
+ * - brightness = 0.5 + intensity * 0.5
+ * - whiteMix = intensity * 0.3
  *
  * Notes:
- * - The HTML demo simulates beats at a fixed BPM; this effect uses real beat
- *   ticks when audio is available, and falls back to a metronome otherwise.
+ * - Uses real beat ticks when audio is available
+ * - Falls back to 128 BPM metronome otherwise
  *
  * Effect ID: 110
  */
@@ -42,15 +45,9 @@ public:
     float getParameter(const char* name) const override;
 
 private:
-    float m_beatIntensity = 0.0f;      // 0..1
-    uint32_t m_lastBeatTimeMs = 0;     // For fallback metronome
-    float m_fallbackBpm = 128.0f;
-
-    // “Glowing stack” aesthetic control (0..1). Higher = brighter base + more white push.
-    float m_stackGlow = 0.75f;
-
-    // Trails state in centre-distance space (HALF_LENGTH entries).
-    float m_trail[HALF_LENGTH] = {0.0f};
+    float m_beatIntensity = 0.0f;      // Amplitude-driven ring position (HTML parity)
+    uint32_t m_lastBeatTimeMs = 0;     // Fallback metronome tracking
+    float m_fallbackBpm = 128.0f;      // Fallback metronome BPM
 };
 
 } // namespace lightwaveos::effects::ieffect

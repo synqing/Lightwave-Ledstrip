@@ -1,91 +1,35 @@
 /**
  * @file BeatPulseShockwaveEffect.cpp
- * @brief Beat Pulse shockwave (outward/inward) with knob-driven shaping
+ * @brief Beat Pulse (Shockwave) - HTML PARITY implementation
+ *
+ * VISUAL IDENTITY:
+ * Single ring expanding OUTWARD from centre (or INWARD from edges) with
+ * AMPLITUDE-DRIVEN motion. Same HTML core maths as Stack, different direction.
+ *
+ * HTML PARITY (LOCKED):
+ * - beatIntensity slams to 1.0 on beat, decays *= 0.94^(dt*60)
+ * - Ring position inverted for outward vs inward:
+ *   - Outward: ringPos = 1 - ringCentre (starts at edge, moves toward centre)
+ *   - Inward: ringPos = ringCentre (starts at centre, moves toward edge)
+ * - Triangle profile: waveHit = 1 - min(1, abs(dist - ringPos) * 3)
+ * - intensity = max(0, waveHit) * beatIntensity
+ * - brightness = 0.5 + intensity * 0.5
+ * - whiteMix = intensity * 0.3
  */
 
 #include "BeatPulseShockwaveEffect.h"
-
 #include "../CoreEffects.h"
-
-#ifndef NATIVE_BUILD
-#include <FastLED.h>
-#endif
+#include "BeatPulseRenderUtils.h"
 
 #include <cmath>
-#include <cstring>
 
 namespace lightwaveos::effects::ieffect {
-
-namespace {
-
-static constexpr float kPi = 3.14159265358979323846f;
-
-static inline float clamp01(float v) {
-    if (v < 0.0f) return 0.0f;
-    if (v > 1.0f) return 1.0f;
-    return v;
-}
-
-static inline float clamp(float v, float lo, float hi) {
-    if (v < lo) return lo;
-    if (v > hi) return hi;
-    return v;
-}
-
-static inline uint8_t clampU8FromFloat(float v) {
-    if (v <= 0.0f) return 0;
-    if (v >= 255.0f) return 255;
-    return static_cast<uint8_t>(v + 0.5f);
-}
-
-static inline void addWhiteSaturating(CRGB& c, uint8_t w) {
-    uint16_t r = static_cast<uint16_t>(c.r) + w;
-    uint16_t g = static_cast<uint16_t>(c.g) + w;
-    uint16_t b = static_cast<uint16_t>(c.b) + w;
-    c.r = (r > 255) ? 255 : static_cast<uint8_t>(r);
-    c.g = (g > 255) ? 255 : static_cast<uint8_t>(g);
-    c.b = (b > 255) ? 255 : static_cast<uint8_t>(b);
-}
-
-static inline float trailsMulFromFadeAmount(uint8_t fadeAmount, float dtSeconds) {
-    // Match FastLED fadeToBlackBy() semantics: scale channels by (255-fade)/256 each frame.
-    // We do a dt-correct version for 120 FPS render cadence.
-    const float perFrame = (255.0f - static_cast<float>(fadeAmount)) / 255.0f;
-    const float clamped = clamp(perFrame, 0.0f, 1.0f);
-    return powf(clamped, dtSeconds * 120.0f);
-}
-
-static inline float ringHitTent(float diff, float width) {
-    if (width <= 0.0001f) return 0.0f;
-    float x = diff / width;
-    if (x >= 1.0f) return 0.0f;
-    return 1.0f - x;
-}
-
-static inline float ringHitSmooth(float diff, float width) {
-    float t = ringHitTent(diff, width);
-    // smoothstep(t): t^2 (3-2t)
-    return t * t * (3.0f - 2.0f * t);
-}
-
-static inline float ringHitCosine(float diff, float width) {
-    if (width <= 0.0001f) return 0.0f;
-    float x = diff / width;
-    if (x >= 1.0f) return 0.0f;
-    return 0.5f + 0.5f * cosf(kPi * x);
-}
-
-static inline float lerp(float a, float b, float t) {
-    return a + (b - a) * t;
-}
-
-} // namespace
 
 BeatPulseShockwaveEffect::BeatPulseShockwaveEffect(bool inward)
     : m_inward(inward)
     , m_meta(
           inward ? "Beat Pulse (Shockwave In)" : "Beat Pulse (Shockwave)",
-          inward ? "Edge→centre shockwave driven by beat tick/strength" : "Centre→edge shockwave driven by beat tick/strength",
+          inward ? "HTML parity: amplitude-driven ring edge→centre" : "HTML parity: amplitude-driven ring centre→edge",
           plugins::EffectCategory::PARTY,
           1,
           "LightwaveOS")
@@ -94,143 +38,68 @@ BeatPulseShockwaveEffect::BeatPulseShockwaveEffect(bool inward)
 
 bool BeatPulseShockwaveEffect::init(plugins::EffectContext& ctx) {
     (void)ctx;
+    m_beatIntensity = 0.0f;
     m_lastBeatTimeMs = 0;
-    m_latchedBeatStrength = 0.0f;
-    m_stackGlow = 0.75f;
-    std::memset(m_trail, 0, sizeof(m_trail));
+    m_fallbackBpm = 128.0f;
     return true;
 }
 
 void BeatPulseShockwaveEffect::render(plugins::EffectContext& ctx) {
-    // ---------------------------------------------------------------------
-    // Beat source (audio preferred, fallback metronome)
-    // ---------------------------------------------------------------------
+    // =========================================================================
+    // HTML PARITY: Amplitude-driven ring position, locked constants.
+    // Direction: outward (centre→edge) or inward (edge→centre).
+    // =========================================================================
+
+    // --- Beat source ---
     bool beatTick = false;
-    float beatStrength = 1.0f;
-    float silentScale = 1.0f;
 
     if (ctx.audio.available) {
         beatTick = ctx.audio.isOnBeat();
-        beatStrength = clamp01(ctx.audio.beatStrength());
-        silentScale = ctx.audio.controlBus.silentScale;
     } else {
-        // Fallback metronome: tie BPM to speed a little so it stays "alive".
-        // speed=0..100 → 96..140 BPM.
-        float speed01 = clamp01(ctx.speed / 100.0f);
-        float bpm = lerp(96.0f, 140.0f, speed01);
-        float beatIntervalMs = 60000.0f / fmaxf(30.0f, bpm);
-        uint32_t nowMs = ctx.totalTimeMs;
-        if (m_lastBeatTimeMs == 0 || (nowMs - m_lastBeatTimeMs) >= static_cast<uint32_t>(beatIntervalMs)) {
+        // Fallback metronome (128 BPM)
+        const uint32_t nowMs = ctx.totalTimeMs;
+        const float beatIntervalMs = 60000.0f / fmaxf(30.0f, m_fallbackBpm);
+        if (m_lastBeatTimeMs == 0 ||
+            (nowMs - m_lastBeatTimeMs) >= static_cast<uint32_t>(beatIntervalMs)) {
             beatTick = true;
+            m_lastBeatTimeMs = nowMs;
         }
-        beatStrength = 1.0f;
-        silentScale = 1.0f;
     }
 
-    const uint32_t nowMs = ctx.totalTimeMs;
-    if (beatTick) {
-        m_lastBeatTimeMs = nowMs;
-        // Latch strength on tick so envelope doesn’t depend on the backend’s internal decay.
-        const float intensityNorm = static_cast<float>(ctx.intensity) / 255.0f;
-        const float minLatch = 0.20f + 0.25f * intensityNorm;
-        m_latchedBeatStrength = fmaxf(minLatch, beatStrength);
-    }
-
-    // ---------------------------------------------------------------------
-    // Knob mapping
-    // ---------------------------------------------------------------------
+    // --- Update beatIntensity using HTML parity maths ---
     const float dt = ctx.getSafeDeltaSeconds();
-    const float speed01 = clamp01(ctx.speed / 100.0f);
-    const float intensityNorm = static_cast<float>(ctx.intensity) / 255.0f;
-    const float complexityNorm = static_cast<float>(ctx.complexity) / 255.0f;
-    const float variationNorm = static_cast<float>(ctx.variation) / 255.0f;
-    const float stackGlow = clamp01(m_stackGlow);
+    BeatPulseHTML::updateBeatIntensity(m_beatIntensity, beatTick, dt);
 
-    // Travel time: faster at higher speed (centre→edge or edge→centre).
-    const float travelMs = lerp(900.0f, 220.0f, speed01);
-    // Decay time: slightly longer at higher intensity/complexity so trails can breathe.
-    const float decayMs = lerp(240.0f, 520.0f, 0.55f * intensityNorm + 0.45f * complexityNorm);
-    // Ring width: thicker when low complexity, thinner when high complexity.
-    const float baseWidth = lerp(0.22f, 0.06f, complexityNorm);
-    const float width = baseWidth * lerp(1.20f, 0.85f, variationNorm);
+    // --- Ring position ---
+    // HTML ringCentre is 0..0.6 as beatIntensity decays 1.0..0.0
+    // For OUTWARD: ring starts at centre (0) and expands to edge (0.6)
+    //              So we use ringCentre directly
+    // For INWARD:  ring starts at edge (~0.6) and contracts to centre (0)
+    //              So we invert: 1.0 - ringCentre → 0.4..1.0
+    const float htmlCentre = BeatPulseHTML::ringCentre01(m_beatIntensity);
+    const float ringPos = m_inward ? htmlCentre : (1.0f - htmlCentre);
 
-    // Trails decay derived from fadeAmount (0 = no fade, 255 = instant fade).
-    const float trailMul = trailsMulFromFadeAmount(ctx.fadeAmount, dt);
-
-    // Echoes: add one faint echo ring when complexity is high.
-    const bool enableEcho = (complexityNorm > 0.62f);
-    const float echoSpacing = lerp(0.10f, 0.045f, variationNorm);  // in dist01 units
-    const float echoGain = 0.35f + 0.15f * complexityNorm;
-
-    // ---------------------------------------------------------------------
-    // Ring position + envelope
-    // ---------------------------------------------------------------------
-    float ageMs = 999999.0f;
-    if (m_lastBeatTimeMs != 0) {
-        ageMs = static_cast<float>(nowMs - m_lastBeatTimeMs);
-    }
-    const float pos01raw = clamp01(ageMs / travelMs);
-    const float pos01 = m_inward ? (1.0f - pos01raw) : pos01raw;
-
-    // Exponential decay envelope (amplitude), scaled by intensity and silent gating.
-    float env = 0.0f;
-    if (ageMs < (travelMs + 2.0f * decayMs)) {
-        env = expf(-ageMs / decayMs);
-        env *= m_latchedBeatStrength;
-        env *= (0.35f + 0.65f * intensityNorm);
-        env *= silentScale;
-        env = clamp01(env);
-    }
-
-    // ---------------------------------------------------------------------
-    // Render: static palette gradient + pulse overlay + white push + trails
-    // ---------------------------------------------------------------------
+    // --- Render ---
     for (uint16_t dist = 0; dist < HALF_LENGTH; ++dist) {
+        // Distance 0 at centre, ~1 at edges
         const float dist01 = (static_cast<float>(dist) + 0.5f) / static_cast<float>(HALF_LENGTH);
-        const float diff = fabsf(dist01 - pos01);
 
-        float hit = 0.0f;
-        // Variation selects profile family.
-        if (ctx.variation < 85) {
-            hit = ringHitTent(diff, width);
-        } else if (ctx.variation < 170) {
-            hit = ringHitSmooth(diff, width);
-        } else {
-            hit = ringHitCosine(diff, width);
-        }
+        // HTML parity triangle profile (slope = 3)
+        const float diff = fabsf(dist01 - ringPos);
+        const float waveHit = 1.0f - fminf(1.0f, diff * 3.0f);
+        const float hit = fmaxf(0.0f, waveHit);
+        const float intensity = hit * m_beatIntensity;
 
-        float intensity = env * hit;
+        // HTML parity: brightness = 0.5 + intensity * 0.5
+        const float brightFactor = BeatPulseHTML::brightnessFactor(intensity);
 
-        if (enableEcho) {
-            float echoPos = m_inward ? (pos01 + echoSpacing) : (pos01 - echoSpacing);
-            echoPos = clamp01(echoPos);
-            float echoDiff = fabsf(dist01 - echoPos);
-            float echoHit = ringHitSmooth(echoDiff, width * 1.10f);
-            intensity = fmaxf(intensity, env * echoHit * echoGain);
-        }
+        // Palette colour by distance
+        const uint8_t paletteIdx = floatToByte(dist01);
+        CRGB c = ctx.palette.getColor(paletteIdx, scaleBrightness(ctx.brightness, brightFactor));
 
-        // Trails: keep the maximum intensity over recent frames with knob-driven decay.
-        m_trail[dist] *= trailMul;
-        if (intensity > m_trail[dist]) {
-            m_trail[dist] = intensity;
-        }
-        const float effIntensity = m_trail[dist];
-
-        // Base gradient by distance (matches preview concept: paletteColour(dist)).
-        const uint8_t paletteIdx = clampU8FromFloat(dist01 * 255.0f);
-
-        // Brightness: base + pulse boost (knob-driven).
-        const float baseBrightness = lerp(0.06f, 0.62f, stackGlow) * lerp(0.65f, 1.0f, intensityNorm);
-        const float boost = effIntensity * lerp(0.35f, 0.65f, intensityNorm);
-        const float brightnessFactor = clamp01(baseBrightness + boost);
-
-        const uint8_t bri8 = clampU8FromFloat(static_cast<float>(ctx.brightness) * brightnessFactor);
-        CRGB c = ctx.palette.getColor(paletteIdx, bri8);
-
-        // White push: specular punch, scaled by intensity knob and stack glow.
-        const float whiteMix = effIntensity * lerp(0.06f, 0.42f, intensityNorm) * (0.20f + 0.80f * stackGlow);
-        const uint8_t w8 = clampU8FromFloat(static_cast<float>(ctx.brightness) * whiteMix);
-        addWhiteSaturating(c, w8);
+        // HTML parity: white mix = intensity * 0.3
+        const float whiteMixVal = BeatPulseHTML::whiteMix(intensity);
+        ColourUtil::addWhiteSaturating(c, floatToByte(whiteMixVal));
 
         SET_CENTER_PAIR(ctx, dist, c);
     }
@@ -243,33 +112,22 @@ const plugins::EffectMetadata& BeatPulseShockwaveEffect::getMetadata() const {
 }
 
 uint8_t BeatPulseShockwaveEffect::getParameterCount() const {
-    return 1;
+    return 0;
 }
 
 const plugins::EffectParameter* BeatPulseShockwaveEffect::getParameter(uint8_t index) const {
-    static plugins::EffectParameter params[] = {
-        plugins::EffectParameter("stackGlow", "Stack Glow", 0.0f, 1.0f, 0.75f),
-    };
-    if (index >= (sizeof(params) / sizeof(params[0]))) {
-        return nullptr;
-    }
-    return &params[index];
+    (void)index;
+    return nullptr;
 }
 
 bool BeatPulseShockwaveEffect::setParameter(const char* name, float value) {
-    if (!name) return false;
-    if (strcmp(name, "stackGlow") == 0) {
-        m_stackGlow = clamp01(value);
-        return true;
-    }
+    (void)name;
+    (void)value;
     return false;
 }
 
 float BeatPulseShockwaveEffect::getParameter(const char* name) const {
-    if (!name) return 0.0f;
-    if (strcmp(name, "stackGlow") == 0) {
-        return m_stackGlow;
-    }
+    (void)name;
     return 0.0f;
 }
 

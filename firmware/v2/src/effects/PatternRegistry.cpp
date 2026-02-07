@@ -6,6 +6,7 @@
  */
 
 #include "PatternRegistry.h"
+#include "../config/limits.h"
 #include "../core/actors/ActorSystem.h"
 #include "../core/actors/RendererActor.h"
 
@@ -167,7 +168,17 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
     // --- UI Preview Parity (110+) ---
     {PM_STR("Beat Pulse (Stack)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("UI preview parity: static palette gradient with beat-driven white push"), PM_STR("Beat envelope, white push, static centre-origin gradient"), PM_STR("Beat Pulse")},
     {PM_STR("Beat Pulse (Shockwave)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Canonical shockwave: ring travels outward from centre on beat"), PM_STR("Time-since-beat ring position, exponential envelope, white push"), PM_STR("Beat Pulse (Stack), Beat Pulse")},
-    {PM_STR("Beat Pulse (Shockwave In)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Inward shockwave: ring travels edge→centre on beat"), PM_STR("Time-since-beat ring position (inward), exponential envelope, white push"), PM_STR("Beat Pulse (Shockwave)")}
+    {PM_STR("Beat Pulse (Shockwave In)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Inward shockwave: ring travels edge→centre on beat"), PM_STR("Time-since-beat ring position (inward), exponential envelope, white push"), PM_STR("Beat Pulse (Shockwave)")},
+
+    // --- Beat Pulse Family (113-119) ---
+    {PM_STR("Beat Pulse (Void)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Hard detonation in darkness: palette ring against black"), PM_STR("Parity ring maths, zero base brightness, palette-coloured detonation"), PM_STR("Beat Pulse (Stack)")},
+    {PM_STR("Beat Pulse (Resonant)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Double ring contracting inward: sharp attack + warm resonant body"), PM_STR("Dual ring inward contraction, attack/body separation, differential decay"), PM_STR("Beat Pulse (Shockwave In)")},
+    {PM_STR("Beat Pulse (Ripple)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Cascading implosion ripples: up to 3 rings converge on centre"), PM_STR("3-slot ring buffer, independent ring decay, inward contraction"), PM_STR("Beat Pulse (Resonant)")},
+    {PM_STR("Beat Pulse (Shockwave Cascade)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::TRAVELING, PM_STR("Outward pressure wave with trailing echo rings"), PM_STR("Primary + 2 echo rings, fixed offset trailing, outward expansion"), PM_STR("Beat Pulse (Shockwave)")},
+    {PM_STR("Beat Pulse (Spectral)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Three frequency-driven rings: bass outer, mid middle, treble centre"), PM_STR("Continuous frequency response, smoothed band tracking, spatial spectrum mapping"), PM_STR("Spectrum Bars")},
+    {PM_STR("Beat Pulse (Spectral Pulse)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Stationary zones pulsing by frequency band"), PM_STR("Fixed zone mapping, soft crossfade boundaries, continuous spectral response"), PM_STR("Beat Pulse (Spectral)")},
+    {PM_STR("Beat Pulse (Breathe)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Warm whole-strip amplitude pump with centre-weighted glow"), PM_STR("No ring shape, centre-biased amplitude, slower decay for sustain"), PM_STR("Beat Pulse (Stack), Breathing")},
+    {PM_STR("Beat Pulse (LGP Interference)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::STANDING, PM_STR("Dual-strip interference: standing waves exploit LGP optics"), PM_STR("Phase-offset strip driving, spatial frequency control, anti-phase/quadrature modes"), PM_STR("LGP Chladni Harmonics, Modal Resonance")}
 };
 
 const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(PatternMetadata);
@@ -177,7 +188,8 @@ const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(Pattern
 // ============================================================================
 
 // Expected number of implemented effects (must match registerAllEffects() return value)
-constexpr uint8_t EXPECTED_EFFECT_COUNT = 113;  // 101 base + 5 ES reference + 3 ES-tuned + 1 SB reference + 1 UI parity + 2 shockwaves
+// Uses limits::MAX_EFFECTS (single source of truth)
+constexpr uint8_t EXPECTED_EFFECT_COUNT = lightwaveos::limits::MAX_EFFECTS;
 
 // Compile-time assertion: metadata must have at least as many entries as implemented effects
 // This ensures we can always map effect IDs to metadata (allows for future effects in metadata)
@@ -446,7 +458,15 @@ static const uint8_t REACTIVE_EFFECT_IDS[] PROGMEM = {
     109, // SB Waveform (Ref) - reference show
     110, // Beat Pulse (Stack) - UI preview parity
     111, // Beat Pulse (Shockwave) - outward travelling ring
-    112  // Beat Pulse (Shockwave In) - inward travelling ring
+    112, // Beat Pulse (Shockwave In) - inward travelling ring
+    113, // Beat Pulse (Void) - parity ring in darkness
+    114, // Beat Pulse (Resonant) - double ring contracting inward
+    115, // Beat Pulse (Ripple) - 3-slot cascading implosion rings
+    116, // Beat Pulse (Shockwave Cascade) - outward with echo rings
+    117, // Beat Pulse (Spectral) - three frequency-driven rings
+    118, // Beat Pulse (Spectral Pulse) - stationary frequency zones
+    119, // Beat Pulse (Breathe) - whole-strip amplitude pump
+    120  // Beat Pulse (LGP Interference) - dual-strip standing wave interference
 };
 static constexpr uint8_t REACTIVE_EFFECT_COUNT = sizeof(REACTIVE_EFFECT_IDS);
 

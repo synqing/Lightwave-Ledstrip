@@ -7,6 +7,7 @@
  */
 
 #include "CoreEffects.h"
+#include "../config/limits.h"  // For limits::MAX_EFFECTS validation
 #include "LGPInterferenceEffects.h"
 #include "LGPGeometricEffects.h"
 #include "LGPAdvancedEffects.h"
@@ -93,6 +94,14 @@
 #include "ieffect/LGPBeatPulseEffect.h"
 #include "ieffect/BeatPulseStackEffect.h"
 #include "ieffect/BeatPulseShockwaveEffect.h"
+#include "ieffect/BeatPulseVoidEffect.h"
+#include "ieffect/BeatPulseResonantEffect.h"
+#include "ieffect/BeatPulseRippleEffect.h"
+#include "ieffect/BeatPulseShockwaveCascadeEffect.h"
+#include "ieffect/BeatPulseSpectralEffect.h"
+#include "ieffect/BeatPulseSpectralPulseEffect.h"
+#include "ieffect/BeatPulseBreatheEffect.h"
+#include "ieffect/BeatPulseLGPInterferenceEffect.h"
 #include "ieffect/LGPSpectrumBarsEffect.h"
 #include "ieffect/LGPBassBreathEffect.h"
 #include "ieffect/AudioWaveformEffect.h"
@@ -1043,21 +1052,69 @@ uint8_t registerAllEffects(RendererActor* renderer) {
         total++;
     }
 
-    // Beat Pulse (Shockwave) (ID 111) - canonical outward travelling ring
-    static ieffect::BeatPulseShockwaveEffect beatPulseShockwaveOutInstance(false);
-    if (renderer->registerEffect(total, &beatPulseShockwaveOutInstance)) {
+    // Beat Pulse (Shockwave) (ID 111) - outward pressure wave with sharp front and exponential trail
+    static ieffect::BeatPulseShockwaveEffect beatPulseShockwaveInstance(false);  // false = outward
+    if (renderer->registerEffect(total, &beatPulseShockwaveInstance)) {
         total++;
     }
 
-    // Beat Pulse (Shockwave In) (ID 112) - inward travelling ring (edge→centre)
-    static ieffect::BeatPulseShockwaveEffect beatPulseShockwaveInInstance(true);
-    if (renderer->registerEffect(total, &beatPulseShockwaveInInstance)) {
+    // NOTE: ID 112 (Shockwave In) has been removed. Use Parity/Stack for inward effects.
+    // The slot is left empty to preserve effect ID stability for existing presets.
+
+    // =============== BEAT PULSE FAMILY (113-119) ===============
+
+    // Beat Pulse (Void) (ID 113) - Parity ring in darkness, palette-coloured detonation against black
+    static ieffect::BeatPulseVoidEffect beatPulseVoidInstance;
+    if (renderer->registerEffect(total, &beatPulseVoidInstance)) {
+        total++;
+    }
+
+    // Beat Pulse (Resonant) (ID 114) - Double ring contracting inward: attack snap + resonant body
+    static ieffect::BeatPulseResonantEffect beatPulseResonantInstance;
+    if (renderer->registerEffect(total, &beatPulseResonantInstance)) {
+        total++;
+    }
+
+    // Beat Pulse (Ripple) (ID 115) - 3-slot ring buffer of cascading implosion rings
+    static ieffect::BeatPulseRippleEffect beatPulseRippleInstance;
+    if (renderer->registerEffect(total, &beatPulseRippleInstance)) {
+        total++;
+    }
+
+    // Beat Pulse (Shockwave Cascade) (ID 116) - Outward expansion with trailing echo rings
+    static ieffect::BeatPulseShockwaveCascadeEffect beatPulseShockwaveCascadeInstance;
+    if (renderer->registerEffect(total, &beatPulseShockwaveCascadeInstance)) {
+        total++;
+    }
+
+    // Beat Pulse (Spectral) (ID 117) - Three frequency-driven rings: bass outer, mid middle, treble centre
+    static ieffect::BeatPulseSpectralEffect beatPulseSpectralInstance;
+    if (renderer->registerEffect(total, &beatPulseSpectralInstance)) {
+        total++;
+    }
+
+    // Beat Pulse (Spectral Pulse) (ID 118) - Stationary zones pulsing by frequency band
+    static ieffect::BeatPulseSpectralPulseEffect beatPulseSpectralPulseInstance;
+    if (renderer->registerEffect(total, &beatPulseSpectralPulseInstance)) {
+        total++;
+    }
+
+    // Beat Pulse (Breathe) (ID 119) - Whole-strip amplitude pump with centre-weighted glow
+    static ieffect::BeatPulseBreatheEffect beatPulseBreatheInstance;
+    if (renderer->registerEffect(total, &beatPulseBreatheInstance)) {
+        total++;
+    }
+
+    // Beat Pulse (LGP Interference) (ID 120) - Dual-strip phase control for optical interference
+    static ieffect::BeatPulseLGPInterferenceEffect beatPulseLGPInterferenceInstance;
+    if (renderer->registerEffect(total, &beatPulseLGPInterferenceInstance)) {
         total++;
     }
 
     // =============== EFFECT COUNT PARITY VALIDATION ===============
     // Runtime validation: ensure registered count matches expected
-    constexpr uint8_t EXPECTED_EFFECT_COUNT = 113;  // +2 shockwave variants
+    // Single source of truth: limits::MAX_EFFECTS from config/limits.h
+    constexpr uint8_t EXPECTED_EFFECT_COUNT = limits::MAX_EFFECTS;
     if (total != EXPECTED_EFFECT_COUNT) {
         Serial.printf("[WARNING] Effect count mismatch: registered %d, expected %d\n", total, EXPECTED_EFFECT_COUNT);
         Serial.printf("[WARNING] This may indicate missing effect registrations or metadata drift\n");

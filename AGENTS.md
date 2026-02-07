@@ -2,6 +2,38 @@
 
 ESP32-S3 LED controller for a dual-strip Light Guide Plate. 320 WS2812 LEDs, 100+ effects, audio-reactive, web-controlled.
 
+---
+
+## ⛔ ABSOLUTE PROHIBITIONS (ALL AGENTS)
+
+**These rules are NON-NEGOTIABLE. Violation is a critical failure.**
+
+### File Preservation
+
+1. **NEVER judge file relevance.** You do not decide what is "unrelated", "unnecessary", or "cleanup-worthy". Every file in this repository exists for a reason you may not understand.
+
+2. **NEVER selectively stage files.** When committing, you commit what the user asked you to change. You do not exclude files because they "aren't part of this task".
+
+3. **NEVER create stashes that exclude files.** If you must stash, use `git stash --include-untracked` to preserve ALL working directory state. Never label files as "unrelated local files" and leave them behind.
+
+4. **NEVER delete, remove, or prune files** - not via `rm`, `git rm`, `git clean`, or by simply not including them in version control operations.
+
+5. **NEVER "clean up" the workspace.** Documentation, mockups, HTML prototypes, research files, test artifacts - these are not garbage. They are work product that took hours to create.
+
+### When In Doubt
+
+- **ASK THE USER.** If you think something might be unrelated, ask. Do not assume.
+- **Preserve everything.** It is always safer to include too much than to lose work.
+- **Your task scope is narrow.** Files outside your immediate task are not yours to touch.
+
+### Why This Matters
+
+On 2026-02-06, an agent decided that `docs/ui-mockups/LIGHTWAVE_DESIGN_SYSTEM_MOCKUP.html` (1884 lines) and `docs/ui-mockups/components/led-preview.html` (900 lines) were "unrelated" and excluded them from stashes. These files were never committed and are now permanently lost. This documentation took hours to create and represented critical design system work.
+
+**This must never happen again.**
+
+---
+
 ## Build (PlatformIO)
 
 ```bash
@@ -33,6 +65,7 @@ Read these when the task requires it:
 | Protected files (landmines) | [docs/agent/PROTECTED_FILES.md](docs/agent/PROTECTED_FILES.md) |
 | Agents, skills & harness | [docs/agent/AGENTS_AND_TOOLS.md](docs/agent/AGENTS_AND_TOOLS.md) |
 | Timing & memory budgets | [CONSTRAINTS.md](CONSTRAINTS.md) |
+| **Memory Allocation** (MANDATORY) | [firmware/v2/docs/MEMORY_ALLOCATION.md](firmware/v2/docs/MEMORY_ALLOCATION.md) |
 | System facts & data flow | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Audio-reactive protocol | [docs/audio-visual/audio-visual-semantic-mapping.md](docs/audio-visual/audio-visual-semantic-mapping.md) |
 | Full REST API reference | [docs/api/api-v1.md](docs/api/api-v1.md) |

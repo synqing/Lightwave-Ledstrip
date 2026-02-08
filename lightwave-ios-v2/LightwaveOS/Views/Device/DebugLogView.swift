@@ -11,6 +11,14 @@ import SwiftUI
 struct DebugLogView: View {
     @Environment(AppViewModel.self) private var appVM
 
+    @State private var isSharePresented = false
+
+    private var logText: String {
+        appVM.debugLog
+            .map { "[\($0.category)] \(formatFullTimestamp($0.timestamp)): \($0.message)" }
+            .joined(separator: "\n")
+    }
+
     var body: some View {
         Group {
             if appVM.debugLog.isEmpty {
@@ -47,9 +55,16 @@ struct DebugLogView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button("Clear") { appVM.clearLog() }
-                    .foregroundStyle(Color.lwGold)
+                Button {
+                    isSharePresented = true
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                        .foregroundStyle(Color.lwGold)
+                }
             }
+        }
+        .sheet(isPresented: $isSharePresented) {
+            ShareView(activityItems: [exportFileURL()])
         }
     }
 
@@ -71,6 +86,35 @@ struct DebugLogView: View {
         default: return .lwTextSecondary
         }
     }
+
+    private func formatFullTimestamp(_ date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: date)
+    }
+
+    private func exportFileURL() -> URL {
+        let filename = "lightwaveos-debuglog-\(Date().ISO8601Format()).txt"
+        let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(filename)
+
+        do {
+            try logText.write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+        }
+
+        return url
+    }
+}
+
+private struct ShareView: UIViewControllerRepresentable {
+    let activityItems: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 // MARK: - Preview

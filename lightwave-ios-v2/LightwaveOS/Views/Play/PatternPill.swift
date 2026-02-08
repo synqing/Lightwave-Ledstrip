@@ -88,12 +88,14 @@ struct PatternPill: View {
             RoundedRectangle(cornerRadius: CornerRadius.card)
                 .fill(Color.lwCardGradient)
         )
-        .overlay(alignment: .topTrailing) {
-            patternAccent
-                .padding(.top, 8)
-                .padding(.trailing, 12)
-        }
-        .ambientShadow()
+        // Liquid Glass treatment
+        .glassSurface(style: .card, cornerRadius: CornerRadius.card)
+        .innerShadow(cornerRadius: CornerRadius.card)
+        .innerHighlight(style: .subtle, cornerRadius: CornerRadius.card)
+        .gradientStroke(style: .subtle, cornerRadius: CornerRadius.card)
+        .grainOverlay(.subtle)
+        .clipShape(RoundedRectangle(cornerRadius: CornerRadius.card))
+        .shadowStack(style: .card)
         .sheet(isPresented: $showEffectSelector) {
             EffectSelectorView()
         }

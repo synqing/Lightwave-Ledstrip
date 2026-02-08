@@ -3,6 +3,7 @@
 //  LightwaveOS
 //
 //  60pt tall LED strip visualization with zone-coloured segments.
+//  Features 6-layer "Liquid Glass" render stack for premium depth and texture.
 //
 
 import SwiftUI
@@ -32,23 +33,21 @@ struct LEDStripView: View {
                     .foregroundStyle(Color.lwTextTertiary)
             }
 
-            // LED strip canvas visualisation (28pt tall)
-            Canvas { context, size in
-                drawLEDStrip(context: context, size: size)
-            }
-            .frame(height: 28)
-            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.nested))
-            .overlay(
-                GeometryReader { geometry in
-                    Color.clear
-                        .contentShape(Rectangle())
-                        .frame(width: 44, height: geometry.size.height)
-                        .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
-                        .onTapGesture {
-                            appVM.zones.resetSplitsToEven()
-                        }
-                }
-            )
+            // LED strip with 6-layer "Liquid Glass" render stack
+            ledStripWithGlassLayers
+                .frame(height: 28)
+                .clipShape(RoundedRectangle(cornerRadius: CornerRadius.nested))
+                .overlay(
+                    GeometryReader { geometry in
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .frame(width: 44, height: geometry.size.height)
+                            .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+                            .onTapGesture {
+                                appVM.zones.resetSplitsToEven()
+                            }
+                    }
+                )
 
             // Centre label
             Text("Centre pair: LEDs 79 (left) / 80 (right) • Tap centre to reset splits")
@@ -57,6 +56,65 @@ struct LEDStripView: View {
                 .frame(maxWidth: .infinity)
                 .multilineTextAlignment(.center)
         }
+    }
+
+    // MARK: - 6-Layer Liquid Glass Stack
+
+    /// 6-layer "Liquid Glass" render stack for premium LED strip visualization
+    /// Layers (bottom to top):
+    /// 1. GlassCard wrapper (compact variant for nested use)
+    /// 2. LED core (existing Canvas rendering)
+    /// 3. Inter-LED bleed (2px horizontal blur for smoother look)
+    /// 4. Ambient glow (radial gradient from centre, lwGold at 0.1 opacity)
+    /// 5. Reflection (top gradient white→clear at 0.08 opacity, 20% height)
+    /// 6. Beat pulse overlay (scale 1.02 on beat)
+    private var ledStripWithGlassLayers: some View {
+        ZStack {
+            // Layer 2: LED core (existing Canvas rendering)
+            Canvas { context, size in
+                drawLEDStrip(context: context, size: size)
+            }
+            // Layer 3: Inter-LED bleed effect (2px horizontal blur)
+            .blur(radius: 1.0)
+
+            // Layer 4: Ambient glow (radial gradient from centre)
+            RadialGradient(
+                colors: [
+                    Color.lwGold.opacity(0.1),
+                    Color.clear
+                ],
+                center: .center,
+                startRadius: 0,
+                endRadius: 100
+            )
+            .allowsHitTesting(false)
+
+            // Layer 5: Reflection (top gradient white→clear, 20% height)
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.08),
+                    Color.clear
+                ],
+                startPoint: .top,
+                endPoint: UnitPoint(x: 0.5, y: 0.2)
+            )
+            .allowsHitTesting(false)
+        }
+        // Layer 1: GlassCard wrapper (compact variant, minimal layers for nested use)
+        .glassSurface(style: .card, cornerRadius: CornerRadius.nested)
+        .background(
+            RoundedRectangle(cornerRadius: CornerRadius.nested)
+                .fill(Color.lwCardGradient)
+                .opacity(0.6)
+        )
+        .innerShadow(style: .subtle, cornerRadius: CornerRadius.nested)
+        .gradientStroke(style: .subtle, cornerRadius: CornerRadius.nested)
+        // Layer 6: Beat pulse overlay (scale 1.02 on beat)
+        .energyPulse(
+            isActive: appVM.audio.isBeating,
+            isDownbeat: false,
+            colour: .lwGold
+        )
     }
 
     // MARK: - Canvas Drawing
@@ -175,4 +233,42 @@ struct LEDStripView: View {
         .environment(appVM)
         .padding(Spacing.lg)
         .background(Color.lwBase)
+}
+
+#Preview("LED Strip View - Beat Pulse Demo") {
+    struct BeatPulseDemo: View {
+        @State private var isBeating = false
+
+        var body: some View {
+            let appVM = {
+                let vm = AppViewModel()
+                vm.zones.zonesEnabled = true
+                vm.zones.zoneCount = 2
+                vm.zones.segments = [
+                    ZoneSegment(zoneId: 0, s1LeftStart: 0, s1LeftEnd: 39, s1RightStart: 80, s1RightEnd: 119),
+                    ZoneSegment(zoneId: 1, s1LeftStart: 40, s1LeftEnd: 79, s1RightStart: 120, s1RightEnd: 159)
+                ]
+                vm.audio.isBeating = isBeating
+                return vm
+            }()
+
+            VStack(spacing: Spacing.lg) {
+                LEDStripView()
+                    .environment(appVM)
+
+                Button("Trigger Beat Pulse") {
+                    isBeating = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        isBeating = false
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.lwGold)
+            }
+            .padding(Spacing.lg)
+            .background(Color.lwBase)
+        }
+    }
+
+    return BeatPulseDemo()
 }

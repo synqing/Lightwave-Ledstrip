@@ -2,8 +2,8 @@
 //  ExpressionParametersCard.swift
 //  LightwaveOS
 //
-//  Collapsible card with 7 expression parameters in 2 semantic groups:
-//  COLOUR (hue, saturation, mood) and MOTION (trails, intensity, complexity, variation).
+//  Collapsible card with 6 expression parameters in 2 semantic groups:
+//  COLOUR (saturation, mood) and MOTION (trails, intensity, complexity, variation).
 //
 
 import SwiftUI
@@ -52,32 +52,6 @@ struct ExpressionParametersCard: View {
                                 .tracking(0.6)
 
                             VStack(spacing: Spacing.xs) {
-                                LWSlider(
-                                    title: "Hue",
-                                    value: $params.hue,
-                                    range: 0...255,
-                                    step: 1,
-                                    trackGradient: LinearGradient(
-                                        colors: [
-                                            Color.red,
-                                            Color.yellow,
-                                            Color.green,
-                                            Color.cyan,
-                                            Color.blue,
-                                            Color.purple,
-                                            Color.red
-                                        ],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    ),
-                                    onChanged: { value in
-                                        params.sliderChanged("hue", value: value)
-                                    },
-                                    onEnded: {
-                                        params.sliderReleased("hue")
-                                    }
-                                )
-
                                 LWSlider(
                                     title: "Saturation",
                                     value: $params.saturation,
@@ -200,7 +174,6 @@ struct ExpressionParametersCard: View {
         ExpressionParametersCard()
             .environment({
                 let vm = AppViewModel()
-                vm.parameters.hue = 128
                 vm.parameters.saturation = 255
                 vm.parameters.mood = 0
                 vm.parameters.fadeAmount = 255

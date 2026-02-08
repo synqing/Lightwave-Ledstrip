@@ -52,6 +52,21 @@ struct EffectSelectorView: View {
                             Text("No effects found")
                                 .font(.bodyValue)
                                 .foregroundStyle(Color.lwTextSecondary)
+
+                            if let error = appVM.effects.lastError {
+                                Text(error)
+                                    .font(.caption)
+                                    .foregroundStyle(Color.red)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, Spacing.lg)
+
+                                Button("Retry") {
+                                    Task {
+                                        await appVM.effects.loadEffects()
+                                    }
+                                }
+                                .foregroundStyle(Color.lwGold)
+                            }
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
@@ -82,10 +97,13 @@ struct EffectSelectorView: View {
                             }
                             .padding(.vertical, Spacing.md)
                         }
+                        .refreshable {
+                            await appVM.effects.loadEffects()
+                        }
                     }
                 }
             }
-            .navigationTitle("Select Effect")
+            .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .searchable(
                 text: $searchText,
@@ -98,6 +116,13 @@ struct EffectSelectorView: View {
                         dismiss()
                     }
                     .foregroundStyle(Color.lwGold)
+                }
+
+                ToolbarItem(placement: .primaryAction) {
+                    if appVM.effects.isLoading {
+                        ProgressView()
+                            .tint(Color.lwGold)
+                    }
                 }
             }
         }
@@ -140,6 +165,11 @@ struct EffectSelectorView: View {
         let grouped = Dictionary(grouping: effects) { $0.displayCategory }
         return grouped.sorted { $0.key < $1.key }
             .map { (category: $0.key, effects: $0.value.sorted { $0.name < $1.name }) }
+    }
+
+    private var navigationTitle: String {
+        let count = allEffects.count
+        return count > 0 ? "Effects (\(count))" : "Select Effect"
     }
 
     private func isSelected(_ effect: EffectMetadata) -> Bool {

@@ -12,7 +12,7 @@ struct HeroLEDPreview: View {
     @Environment(AppViewModel.self) private var appVM
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    @State private var beatScale: CGFloat = 1.0
+    @State private var beatIntensity: Double = 0.0
     private let heroHeight: CGFloat = 140
 
     var body: some View {
@@ -52,11 +52,34 @@ struct HeroLEDPreview: View {
             }
             .frame(height: heroHeight)
             .background(Color.lwCardGradient)
-            .clipShape(RoundedRectangle(cornerRadius: CornerRadius.hero))
-            .heroGlow(color: .lwGold)
-            .scaleEffect(beatScale)
 
-            // Effect name overlay (bottom-left)
+            // Beat pulse overlay — Centre-origin bloom (inside card, no geometry bounce)
+            if beatIntensity > 0 {
+                RadialGradient(
+                    colors: [
+                        Color.lwGold.opacity(beatIntensity * GlassTokens.bloomOpacity * 2.0),
+                        Color.lwGold.opacity(beatIntensity * GlassTokens.bloomOpacity * 0.5),
+                        Color.clear
+                    ],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: heroHeight * 0.7
+                )
+                .blendMode(.plusLighter)
+                .allowsHitTesting(false)
+                .frame(height: heroHeight)
+            }
+        }
+        .frame(height: heroHeight)
+        // Liquid Glass treatment (applied to container, not scaled)
+        .glassSurface(style: .hero, cornerRadius: CornerRadius.hero)
+        .innerShadow(cornerRadius: CornerRadius.hero)
+        .innerHighlight(style: .standard, cornerRadius: CornerRadius.hero)
+        .gradientStroke(style: .accent, cornerRadius: CornerRadius.hero)
+        .grainOverlay(.subtle)
+        .clipShape(RoundedRectangle(cornerRadius: CornerRadius.hero))
+        .shadowStack(style: .hero)
+        .overlay {
             VStack {
                 Spacer()
                 HStack {
@@ -69,20 +92,29 @@ struct HeroLEDPreview: View {
                 }
             }
             .frame(height: heroHeight)
+            .allowsHitTesting(false)
 
             // BPM ring overlay (centred in card)
             heroOverlay
         }
-        .frame(height: heroHeight)
         .onChange(of: appVM.audio.isBeating) { _, isBeating in
-            guard isBeating, !reduceMotion else { return }
-
-            // Beat pulse animation
-            withAnimation(.spring(duration: 0.15, bounce: 0.3)) {
-                beatScale = 1.02
+            guard isBeating, !reduceMotion else {
+                beatIntensity = 0.0
+                return
             }
-            withAnimation(.spring(duration: 0.2, bounce: 0.2).delay(0.15)) {
-                beatScale = 1.0
+
+            // Beat pulse animation — Intensity modulation, not scale
+            withAnimation(.spring(
+                response: AnimationTokens.beatSpringResponse,
+                dampingFraction: AnimationTokens.beatSpringDamping
+            )) {
+                beatIntensity = 1.0
+            }
+            withAnimation(.spring(
+                response: AnimationTokens.beatSpringResponse * 1.33,
+                dampingFraction: AnimationTokens.beatSpringDamping
+            ).delay(AnimationTokens.beatSpringResponse)) {
+                beatIntensity = 0.0
             }
         }
         .gesture(
@@ -118,34 +150,80 @@ struct HeroLEDPreview: View {
 }
 
 // MARK: - BPM Ring Overlay
+//
+// Part of the "Liquid Glass" visual system.
+// Constraints:
+// - Palette: ONLY [lwGold → lwGoldSecondary → lwGold] — NO RAINBOWS
+// - Burst scale: max 1.35 (downbeat), 1.15 (regular) — NOT 2.5+
+// - Bloom: 120-130% of ring, 28-40px blur max
+// - Sharp specular highlight for instrument-quality look
 
 struct BPMRingOverlay: View {
     let bpm: Int
     let confidence: Double
     let isBeating: Bool
+    let beatPosition: Int
+    var isDownbeat: Bool = false
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    // Constants — constrained per Liquid Glass spec
+    private let ringSize: CGFloat = 80
+    private let strokeWidth: CGFloat = 4
+    private let bloomScale: CGFloat = 1.25  // 120-130% of ring
+    private let bloomBlur: CGFloat = 32     // 28-40px range
+    private let specularSize = CGSize(width: 16, height: 6)
+
+    // Constrained burst scales — NOT 2.5+
+    private var burstScale: CGFloat {
+        guard isBeating, !reduceMotion else { return 1.0 }
+        return isDownbeat ? GlassTokens.beatBurstMax : GlassTokens.beatBurstRegular
+    }
+
+    // Constrained palette — NO RAINBOWS
+    // Only: [lwGold → lwGoldSecondary → lwGold]
+    private var ringGradient: AngularGradient {
+        AngularGradient(
+            colors: [.lwGold, .lwGoldSecondary, .lwGold],
+            center: .center
+        )
+    }
 
     var body: some View {
         ZStack {
+            // Bloom layer (120-130% of ring)
+            Circle()
+                .fill(Color.lwGold.opacity(GlassTokens.bloomOpacity))
+                .frame(width: ringSize * bloomScale, height: ringSize * bloomScale)
+                .blur(radius: bloomBlur)
+
             // Background ring (always visible)
             Circle()
                 .stroke(
                     Color.lwElevated.opacity(0.5),
-                    lineWidth: 4
+                    lineWidth: strokeWidth
                 )
-                .frame(width: 80, height: 80)
+                .frame(width: ringSize, height: ringSize)
 
-            // Foreground confidence arc
+            // Foreground confidence arc with constrained gradient
             Circle()
                 .trim(from: 0, to: confidence)
                 .stroke(
-                    Color.lwGold,
-                    style: StrokeStyle(lineWidth: 4, lineCap: .round)
+                    ringGradient,
+                    style: StrokeStyle(lineWidth: strokeWidth, lineCap: .round)
                 )
-                .frame(width: 80, height: 80)
+                .frame(width: ringSize, height: ringSize)
                 .rotationEffect(.degrees(-90))
 
-            // BPM value and label
-            VStack(spacing: 0) {
+            // Sharp specular highlight (instrument glass, not soft flare)
+            Ellipse()
+                .fill(Color.lwGlassHighlight.opacity(0.2))
+                .frame(width: specularSize.width, height: specularSize.height)
+                .offset(x: -ringSize / 4, y: -ringSize / 3)
+                .blur(radius: 2)
+
+            // BPM value, label, and phase indicator
+            VStack(spacing: 2) {
                 if bpm > 0 {
                     Text("\(bpm)")
                         .font(.bpmNumeral)
@@ -165,10 +243,25 @@ struct BPMRingOverlay: View {
                     .textCase(.uppercase)
                     .foregroundStyle(Color.lwTextSecondary)
                     .shadow(color: Color.black.opacity(0.8), radius: 8, x: 0, y: 2)
+
+                // Beat phase indicator (4/4 time)
+                PhaseIndicator(
+                    currentPhase: beatPosition,
+                    totalPhases: 4,
+                    isActive: isBeating && bpm > 0
+                )
+                .padding(.top, 4)
             }
         }
-        .scaleEffect(isBeating ? 1.03 : 1.0)
-        .animation(.spring(duration: 0.15, bounce: 0.3), value: isBeating)
+        .compositingGroup()
+        .scaleEffect(burstScale)
+        .animation(
+            .spring(
+                response: AnimationTokens.beatSpringResponse,
+                dampingFraction: AnimationTokens.beatSpringDamping
+            ),
+            value: isBeating
+        )
     }
 }
 
@@ -180,7 +273,8 @@ private extension HeroLEDPreview {
         BPMRingOverlay(
             bpm: Int(appVM.audio.currentBpm),
             confidence: appVM.audio.bpmConfidence,
-            isBeating: appVM.audio.isBeating
+            isBeating: appVM.audio.isBeating,
+            beatPosition: appVM.audio.beatPosition
         )
         .frame(width: 96, height: 96)
     }

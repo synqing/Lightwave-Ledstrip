@@ -2,12 +2,14 @@
 //  PaletteSelectorView.swift
 //  LightwaveOS
 //
-//  3-column grid palette selector with sticky search bar and filter chips.
+//  3-column grid palette selector with sticky search bar, filter chips,
+//  and 12-slot (3×4) favourites grid with drag-and-drop support.
 //  Matches ui-overhaul-mockup.html design spec.
 //  iOS 17+, Swift 6 with @Observable @MainActor.
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct PaletteSelectorView: View {
     @Environment(AppViewModel.self) private var appVM
@@ -16,6 +18,10 @@ struct PaletteSelectorView: View {
     @State private var searchText = ""
     @State private var selectedFilter = "All"
     @State private var selectedFlags: Set<PaletteFlagKey> = []
+
+    // Undo toast state
+    @State private var undoToastLabel: String?
+    @State private var undoToastTask: Task<Void, Never>?
 
     var body: some View {
         NavigationStack {
@@ -33,6 +39,22 @@ struct PaletteSelectorView: View {
                         }
                     }
                 }
+
+                // Undo toast overlay
+                if let label = undoToastLabel {
+                    VStack {
+                        Spacer()
+                        UndoToast(label: label) {
+                            appVM.palettes.undoFavouriteChange()
+                            dismissUndoToast()
+                        } onDismiss: {
+                            dismissUndoToast()
+                        }
+                        .padding(.bottom, 20)
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .animation(.spring(duration: 0.35, bounce: 0.1), value: undoToastLabel)
+                }
             }
             .navigationTitle("SELECT PALETTE")
             .navigationBarTitleDisplayMode(.inline)
@@ -45,6 +67,22 @@ struct PaletteSelectorView: View {
                 }
             }
         }
+    }
+
+    private func showUndoToast(label: String) {
+        undoToastTask?.cancel()
+        undoToastLabel = label
+        undoToastTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            guard !Task.isCancelled else { return }
+            dismissUndoToast()
+        }
+    }
+
+    private func dismissUndoToast() {
+        undoToastTask?.cancel()
+        undoToastLabel = nil
+        appVM.palettes.clearFavouriteUndo()
     }
 
     // MARK: - Sticky Header
@@ -113,11 +151,59 @@ struct PaletteSelectorView: View {
                     }
                 }
             }
+
+            // MARK: Favourites Grid (3×4 = 12 slots)
+            favouritesGrid
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
         .padding(.bottom, 16)
         .background(Color.lwBase)
+    }
+
+    // MARK: - Favourites Grid
+
+    private var favouritesGrid: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("FAVOURITES")
+                .font(.subGroupHeader)
+                .foregroundStyle(Color.lwTextSecondary)
+                .tracking(1.5)
+
+            // 3 columns × 4 rows = 12 slots
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: 8),
+                    GridItem(.flexible(), spacing: 8),
+                    GridItem(.flexible(), spacing: 8)
+                ],
+                spacing: 8
+            ) {
+                ForEach(0..<12, id: \.self) { slot in
+                    FavouriteSlotCell(
+                        slot: slot,
+                        paletteId: appVM.palettes.favouriteSlots[slot],
+                        palette: appVM.palettes.favouriteSlots[slot].flatMap { appVM.palettes.palette(for: $0) },
+                        isCurrentPalette: appVM.palettes.favouriteSlots[slot] == appVM.palettes.currentPaletteId
+                    ) { palette in
+                        // Tap to select
+                        Task {
+                            await appVM.palettes.setPalette(id: palette.id)
+                            dismiss()
+                        }
+                    } onDrop: { item in
+                        if let label = appVM.palettes.handleDrop(item: item, ontoSlot: slot) {
+                            showUndoToast(label: label)
+                        }
+                    } onRemove: {
+                        if let label = appVM.palettes.removeFromFavourites(slot: slot) {
+                            showUndoToast(label: label)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.top, 8)
     }
 
     // MARK: - Grid Content
@@ -300,48 +386,247 @@ struct FlagChip: View {
     }
 }
 
-// MARK: - Palette Cell
+// MARK: - Palette Cell (Draggable)
 
 struct PaletteCell: View {
+    @Environment(AppViewModel.self) private var appVM
+
     let palette: PaletteMetadata
     let isSelected: Bool
     let onTap: () -> Void
 
     var body: some View {
-        Button(action: onTap) {
-            VStack(spacing: 0) {
-                // Gradient swatch
-                PaletteGradientSwatch(colors: palette.gradientColors)
-                    .frame(height: 40)
-                    .frame(maxWidth: .infinity)
+        // Outer container for dragging - NO gestures here except drag
+        VStack(spacing: 0) {
+            // Gradient swatch - primary drag handle area
+            PaletteGradientSwatch(colors: palette.gradientColors)
+                .frame(height: 40)
+                .frame(maxWidth: .infinity)
 
-                // Palette name
-                Text(palette.name)
-                    .font(.microLabel)
-                    .foregroundStyle(Color.lwTextSecondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 6)
-                    .frame(maxWidth: .infinity, alignment: .center)
-            }
-            .background(Color.lwCard)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(isSelected ? Color.lwGold : Color.clear, lineWidth: 2)
-            )
-            .shadow(
-                color: isSelected ? Color.lwGold.opacity(0.3) : Color.clear,
-                radius: isSelected ? 8 : 0,
-                x: 0,
-                y: 0
-            )
+            // Palette name
+            Text(palette.name)
+                .font(.microLabel)
+                .foregroundStyle(Color.lwTextSecondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity, alignment: .center)
         }
-        .buttonStyle(.plain)
+        .background(Color.lwCard)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(isSelected ? Color.lwGold : Color.clear, lineWidth: 2)
+        )
+        .shadow(
+            color: isSelected ? Color.lwGold.opacity(0.3) : Color.clear,
+            radius: isSelected ? 8 : 0,
+            x: 0,
+            y: 0
+        )
+        // Menu button as overlay - separate from drag surface
+        .overlay(alignment: .topTrailing) {
+            Menu {
+                if let emptySlot = appVM.palettes.firstEmptySlot() {
+                    Button {
+                        _ = appVM.palettes.pinToSlot(paletteId: palette.id, slot: emptySlot)
+                    } label: {
+                        Label("Add to Favourites", systemImage: "star")
+                    }
+                }
+
+                Menu {
+                    ForEach(0..<12, id: \.self) { slot in
+                        Button {
+                            if appVM.palettes.favouriteSlots[slot] == nil {
+                                _ = appVM.palettes.pinToSlot(paletteId: palette.id, slot: slot)
+                            } else {
+                                _ = appVM.palettes.replaceSlot(paletteId: palette.id, slot: slot)
+                            }
+                        } label: {
+                            let slotLabel = "Slot \(slot + 1)"
+                            let current = appVM.palettes.favouriteSlots[slot]
+                            if let current {
+                                Text("\(slotLabel): \(appVM.palettes.paletteName(for: current))")
+                            } else {
+                                Text("\(slotLabel): Empty")
+                            }
+                        }
+                    }
+                } label: {
+                    Label("Pin to Slot…", systemImage: "square.grid.3x4")
+                }
+
+                Divider()
+
+                Button {
+                    onTap()
+                } label: {
+                    Label("Select Palette", systemImage: "checkmark.circle")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .font(.iconSmall)
+                    .foregroundStyle(Color.lwTextTertiary)
+                    .frame(width: 32, height: 32)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        // Tap gesture for selection - uses highPriority to not block drag
+        .onTapGesture { onTap() }
+        // Drag uses the whole cell shape
+        .contentShape(.dragPreview, RoundedRectangle(cornerRadius: 10))
+        .draggable(PaletteDragItem(paletteId: palette.id, sourceSlot: nil)) {
+            VStack(alignment: .leading, spacing: 8) {
+                PaletteGradientSwatch(colors: palette.gradientColors)
+                    .frame(width: 160, height: 18)
+                    .clipShape(Capsule())
+                Text(palette.shortName)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.lwTextPrimary)
+                    .lineLimit(1)
+            }
+            .padding(12)
+            .background(Color.lwCard)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
         .accessibilityLabel(Text(palette.name))
-        .accessibilityHint(Text("Select palette"))
+        .accessibilityHint(Text("Tap to select, or drag to favourites"))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+// MARK: - Favourite Slot Cell
+
+struct FavouriteSlotCell: View {
+    let slot: Int
+    let paletteId: Int?
+    let palette: PaletteMetadata?
+    let isCurrentPalette: Bool
+    let onSelect: (PaletteMetadata) -> Void
+    let onDrop: (PaletteDragItem) -> Void
+    let onRemove: () -> Void
+
+    var body: some View {
+        Group {
+            if let palette {
+                // Filled slot - draggable
+                filledSlotView(palette: palette)
+            } else {
+                // Empty slot - drop target only
+                emptySlotView
+            }
+        }
+        .dropDestination(for: PaletteDragItem.self) { items, _ in
+            guard let item = items.first else { return false }
+            onDrop(item)
+            return true
+        }
+    }
+
+    private func filledSlotView(palette: PaletteMetadata) -> some View {
+        VStack(spacing: 0) {
+            PaletteGradientSwatch(colors: palette.gradientColors)
+                .frame(height: 28)
+                .frame(maxWidth: .infinity)
+
+            Text(palette.shortName)
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(Color.lwTextSecondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity, alignment: .center)
+        }
+        .background(Color.lwCard)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(isCurrentPalette ? Color.lwGold : Color.lwElevated, lineWidth: isCurrentPalette ? 2 : 1)
+        )
+        .shadow(
+            color: isCurrentPalette ? Color.lwGold.opacity(0.3) : Color.clear,
+            radius: isCurrentPalette ? 6 : 0
+        )
+        // Remove button as overlay - separate hit target
+        .overlay(alignment: .topTrailing) {
+            Button(role: .destructive) {
+                onRemove()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(Color.lwTextTertiary)
+                    .frame(width: 24, height: 24)
+                    .background(
+                        Circle()
+                            .fill(Color.lwCard.opacity(0.8))
+                    )
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("Remove favourite slot \(slot + 1)"))
+        }
+        // Tap to select
+        .onTapGesture { onSelect(palette) }
+        // Drag from this slot
+        .contentShape(.dragPreview, RoundedRectangle(cornerRadius: 8))
+        .draggable(PaletteDragItem(paletteId: palette.id, sourceSlot: slot))
+    }
+
+    private var emptySlotView: some View {
+        RoundedRectangle(cornerRadius: 8)
+            .strokeBorder(Color.lwElevated.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+            .frame(height: 48)
+            .background(Color.lwCard.opacity(0.3))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay {
+                Image(systemName: "plus")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Color.lwTextTertiary.opacity(0.5))
+            }
+    }
+}
+
+// MARK: - Undo Toast
+
+struct UndoToast: View {
+    let label: String
+    let onUndo: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(label)
+                .font(.subheadline)
+                .foregroundStyle(Color.lwTextPrimary)
+
+            Spacer()
+
+            Button("Undo") {
+                onUndo()
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(Color.lwGold)
+
+            Button {
+                onDismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.lwTextTertiary)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.lwCard)
+                .shadow(color: .black.opacity(0.3), radius: 8, y: 4)
+        )
+        .padding(.horizontal, 20)
     }
 }
 

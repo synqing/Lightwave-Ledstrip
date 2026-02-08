@@ -13,6 +13,7 @@
 #pragma once
 
 #include "api/IEffect.h"
+#include "../config/limits.h"
 #include <stdint.h>
 
 namespace lightwaveos {
@@ -26,7 +27,10 @@ namespace plugins {
  */
 class BuiltinEffectRegistry {
 public:
+    // Larger than limits::MAX_EFFECTS to allow headroom for future effects
     static constexpr uint8_t MAX_EFFECTS = 128;
+    static_assert(MAX_EFFECTS >= limits::MAX_EFFECTS,
+                  "BuiltinEffectRegistry::MAX_EFFECTS must be >= limits::MAX_EFFECTS");
 
     /**
      * @brief Register a built-in effect

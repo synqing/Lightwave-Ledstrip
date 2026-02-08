@@ -15,6 +15,7 @@
 #pragma once
 
 #include "../config/features.h"
+#include "../config/limits.h"
 #include "api/IEffectRegistry.h"
 #include "api/IEffect.h"
 #include <stdint.h>
@@ -34,6 +35,8 @@ namespace plugins {
  */
 struct PluginConfig {
     static constexpr uint8_t MAX_EFFECTS = 128;
+    static_assert(MAX_EFFECTS >= limits::MAX_EFFECTS,
+                  "PluginConfig::MAX_EFFECTS must be >= limits::MAX_EFFECTS");
     static constexpr uint8_t MAX_MANIFESTS = 16;
     static constexpr size_t LITTLEFS_PLUGIN_PATH_MAX = 64;
     static constexpr size_t MANIFEST_CAPACITY = 2048;

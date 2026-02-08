@@ -1057,7 +1057,7 @@ const uint8_t master_palette_flags[] = {
     PAL_WARM | PAL_WHITE_HEAVY | PAL_VIVID, // 24 Fire
     PAL_COOL | PAL_HIGH_SAT | PAL_VIVID, // 25 Colorful
     PAL_WARM | PAL_HIGH_SAT | PAL_VIVID, // 26 Magenta Evening
-    PAL_COOL | PAL_WHITE_HEAVY | PAL_VIVID, // 27 Pink Purple
+    PAL_COOL | PAL_HIGH_SAT | PAL_VIVID, // 27 Pink Purple (removed WHITE_HEAVY - was corrupting colors)
     PAL_WARM | PAL_CALM,            // 28 Autumn 19
     PAL_COOL | PAL_WHITE_HEAVY | PAL_HIGH_SAT | PAL_VIVID, // 29 Blue Magenta White
     PAL_WARM | PAL_HIGH_SAT | PAL_VIVID, // 30 Black Magenta Red

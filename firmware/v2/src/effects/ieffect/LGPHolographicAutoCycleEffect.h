@@ -53,7 +53,6 @@ private:
 
     // Cycle tracking
     int32_t m_lastCycleCount;            // floor(m_phase1 / TWO_PI) at last check
-    uint8_t m_cyclesSinceChange;         // Counts rotations on current palette (0 or 1)
 
     // Playlist state
     uint8_t m_playlist[PLAYLIST_SIZE];   // Shuffled copy of palette IDs

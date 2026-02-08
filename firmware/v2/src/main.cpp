@@ -1649,6 +1649,42 @@ void loop() {
                                   renderer->getEffectName(currentEffect), currentEffect);
                     break;
 
+                case 'L': {  // Jump to last effect in current register
+                    uint8_t newEffectId = 0xFF;
+
+                    switch (currentRegister) {
+                        case EffectRegister::ALL:
+                            newEffectId = renderer->getEffectCount() - 1;
+                            break;
+
+                        case EffectRegister::REACTIVE: {
+                            uint8_t count = PatternRegistry::getReactiveEffectCount();
+                            if (count > 0) {
+                                reactiveRegisterIndex = count - 1;
+                                newEffectId = PatternRegistry::getReactiveEffectId(reactiveRegisterIndex);
+                            }
+                            break;
+                        }
+
+                        case EffectRegister::AMBIENT:
+                            if (ambientEffectCount > 0) {
+                                ambientRegisterIndex = ambientEffectCount - 1;
+                                newEffectId = ambientEffectIds[ambientRegisterIndex];
+                            }
+                            break;
+                    }
+
+                    if (newEffectId != 0xFF && newEffectId < renderer->getEffectCount()) {
+                        currentEffect = newEffectId;
+                        actors.setEffect(currentEffect);
+                        const char* suffix = (currentRegister == EffectRegister::REACTIVE) ? "[R]" :
+                                             (currentRegister == EffectRegister::AMBIENT) ? "[M]" : "";
+                        Serial.printf("Last effect %d%s: " LW_CLR_GREEN "%s" LW_ANSI_RESET "\n",
+                                      currentEffect, suffix, renderer->getEffectName(currentEffect));
+                    }
+                    break;
+                }
+
                 case '+':
                 case '=':
                     {

@@ -27,6 +27,7 @@
 
 #include <cstdint>
 #include <cmath>
+#include "../../config/limits.h"  // For limits::MAX_EFFECTS
 #include "ControlBus.h"
 #include "MusicalGrid.h"
 
@@ -236,8 +237,8 @@ struct EffectAudioMapping {
  */
 class AudioMappingRegistry {
 public:
-    // Keep in sync with RendererActor::MAX_EFFECTS (upper bound for effect IDs)
-    static constexpr uint8_t MAX_EFFECTS = 113;
+    // Single source of truth: references limits::MAX_EFFECTS
+    static constexpr uint8_t MAX_EFFECTS = limits::MAX_EFFECTS;
 
     /**
      * @brief Get singleton instance

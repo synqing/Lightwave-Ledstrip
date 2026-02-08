@@ -35,7 +35,6 @@ LGPHolographicAutoCycleEffect::LGPHolographicAutoCycleEffect()
     , m_activePalette()
     , m_targetPalette()
     , m_lastCycleCount(0)
-    , m_cyclesSinceChange(0)
     , m_playlistIndex(0)
     , m_isTransitioning(false)
 {
@@ -56,7 +55,6 @@ bool LGPHolographicAutoCycleEffect::init(plugins::EffectContext& ctx) {
 
     // Reset cycle tracking
     m_lastCycleCount = 0;
-    m_cyclesSinceChange = 0;
 
     // Shuffle and start from first palette
     shufflePlaylist();
@@ -85,13 +83,7 @@ void LGPHolographicAutoCycleEffect::render(plugins::EffectContext& ctx) {
 
     if (currentCycleCount > m_lastCycleCount) {
         m_lastCycleCount = currentCycleCount;
-        m_cyclesSinceChange++;
-
-        if (m_cyclesSinceChange >= 2) {
-            // 2 rotations completed on this palette -- advance
-            m_cyclesSinceChange = 0;
-            advancePalette();
-        }
+        advancePalette();
     }
 
     // ===== Palette crossfade =====

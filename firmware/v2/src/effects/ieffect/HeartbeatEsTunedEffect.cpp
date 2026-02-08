@@ -100,8 +100,8 @@ void HeartbeatEsTunedEffect::render(plugins::EffectContext& ctx) {
         float alpha = 1.0f - expf(-dt / 0.25f);
         m_dominantChromaBinSmooth += ((float)m_dominantChromaBin - m_dominantChromaBinSmooth) * alpha;
     } else {
-        // Drift very slowly back to 0 when audio is absent (keeps a stable default).
-        m_dominantChromaBinSmooth *= 0.995f;
+        // Drift very slowly back to 0 when audio is absent (keeps a stable default) - dt-corrected
+        m_dominantChromaBinSmooth *= powf(0.995f, dt * 60.0f);
     }
 
     const uint8_t baseHue = chromaBinToHue((uint8_t)(m_dominantChromaBinSmooth + 0.5f));

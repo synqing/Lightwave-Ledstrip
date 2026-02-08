@@ -30,6 +30,7 @@ bool LGPFluidDynamicsEffect::init(plugins::EffectContext& ctx) {
 
 void LGPFluidDynamicsEffect::render(plugins::EffectContext& ctx) {
     // Laminar and turbulent flow visualization
+    float dt = ctx.getSafeDeltaSeconds();
     m_time = (uint16_t)(m_time + (ctx.speed >> 2));
 
     float speedNorm = ctx.speed / 50.0f;
@@ -48,11 +49,11 @@ void LGPFluidDynamicsEffect::render(plugins::EffectContext& ctx) {
 
         // Update velocity
         m_velocity[i] += gradientForce + turbulence * 0.1f;
-        m_velocity[i] *= 0.95f;
+        m_velocity[i] *= powf(0.95f, dt * 60.0f);  // dt-corrected decay
 
         // Update pressure
         m_pressure[i] += m_velocity[i] * 0.1f;
-        m_pressure[i] *= 0.98f;
+        m_pressure[i] *= powf(0.98f, dt * 60.0f);  // dt-corrected decay
 
         // Add source/sink at center
         if (centerPairDistance(i) < 5) {

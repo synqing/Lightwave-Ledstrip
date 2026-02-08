@@ -48,7 +48,7 @@ void LGPPerlinInterferenceWeaveAmbientEffect::render(plugins::EffectContext& ctx
     float phaseMod = 16.0f * sinf(angle * 0.2f); // Slow modulation
     float targetPhaseOffset = basePhaseOffset + phaseMod;
     
-    float alpha = dt / (0.2f + dt);
+    float alpha = 1.0f - expf(-dt / 0.2f);  // True exponential, tau=200ms
     m_phaseOffset += (targetPhaseOffset - m_phaseOffset) * alpha;
 
     // =========================================================================

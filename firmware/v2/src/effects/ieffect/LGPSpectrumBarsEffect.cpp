@@ -61,13 +61,15 @@ bool LGPSpectrumBarsEffect::init(plugins::EffectContext& ctx) {
 }
 
 void LGPSpectrumBarsEffect::render(plugins::EffectContext& ctx) {
+    float dt = ctx.getSafeDeltaSeconds();
+
     // Update smoothed bands (fast attack, slow decay)
     for (int i = 0; i < 8; ++i) {
         float target = ctx.audio.available ? (ctx.audio.getBand(i) * ctx.audio.controlBus.silentScale) : 0.0f;
         if (target > m_smoothedBands[i]) {
             m_smoothedBands[i] = target;  // Instant attack
         } else {
-            m_smoothedBands[i] *= 0.92f;  // Slow decay (~200ms)
+            m_smoothedBands[i] *= powf(0.92f, dt * 60.0f);  // Slow decay (~200ms, dt-corrected)
         }
     }
 

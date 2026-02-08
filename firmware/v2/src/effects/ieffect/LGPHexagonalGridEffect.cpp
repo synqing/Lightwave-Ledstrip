@@ -25,10 +25,11 @@ bool LGPHexagonalGridEffect::init(plugins::EffectContext& ctx) {
 
 void LGPHexagonalGridEffect::render(plugins::EffectContext& ctx) {
     // Three waves at 120 degrees create hexagonal patterns
+    float dt = ctx.getSafeDeltaSeconds();
     float speedNorm = ctx.speed / 50.0f;
     float intensityNorm = ctx.brightness / 255.0f;
 
-    m_phase += speedNorm * 0.01f;
+    m_phase += speedNorm * 0.01f * 60.0f * dt;  // dt-corrected
 
     const float hexSize = 10.0f;
 

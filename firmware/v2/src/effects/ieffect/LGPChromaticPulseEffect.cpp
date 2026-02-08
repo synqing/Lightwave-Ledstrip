@@ -128,10 +128,11 @@ bool LGPChromaticPulseEffect::init(plugins::EffectContext& ctx) {
 
 void LGPChromaticPulseEffect::render(plugins::EffectContext& ctx) {
     // Aberration sweeps from centre outward with intensity pulse
+    float dt = ctx.getSafeDeltaSeconds();
     float baseIntensity = ctx.brightness / 255.0f;
     float baseAberration = (ctx.complexity / 255.0f) * 3.0f;
 
-    m_phase += ctx.speed * 0.015f;
+    m_phase += ctx.speed * 0.015f * 60.0f * dt;  // dt-corrected
     if (m_phase > TWO_PI) m_phase -= TWO_PI;
 
     float aberration = baseAberration * (0.5f + 0.5f * sinf(m_phase));

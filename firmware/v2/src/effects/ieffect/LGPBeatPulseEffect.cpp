@@ -174,8 +174,9 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
     m_pulsePosition += (ctx.deltaTimeSeconds * 1000.0f) / 400.0f;
     if (m_pulsePosition > 1.0f) m_pulsePosition = 1.0f;
 
-    // Decay intensity
-    m_pulseIntensity *= 0.95f;
+    // Decay intensity (dt-corrected for frame-rate independence)
+    float dt = ctx.getSafeDeltaSeconds();
+    m_pulseIntensity *= powf(0.95f, dt * 60.0f);
     if (m_pulseIntensity < 0.01f) m_pulseIntensity = 0.0f;
 
     // === SECONDARY PULSE (Snare) ===
@@ -188,8 +189,8 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
     m_snarePulsePos += (ctx.deltaTimeSeconds * 1000.0f) / 300.0f;
     if (m_snarePulsePos > 1.0f) m_snarePulsePos = 1.0f;
 
-    // Faster decay for snare
-    m_snarePulseInt *= 0.92f;
+    // Faster decay for snare (dt-corrected)
+    m_snarePulseInt *= powf(0.92f, dt * 60.0f);
     if (m_snarePulseInt < 0.01f) m_snarePulseInt = 0.0f;
 
     // === SHIMMER OVERLAY (Hi-hat) ===
@@ -197,8 +198,8 @@ void LGPBeatPulseEffect::render(plugins::EffectContext& ctx) {
         m_hihatShimmer = 0.8f + trebleEnergy * 0.2f;
     }
 
-    // Very fast decay for hi-hat sparkle (~150ms)
-    m_hihatShimmer *= 0.88f;
+    // Very fast decay for hi-hat sparkle (dt-corrected)
+    m_hihatShimmer *= powf(0.88f, dt * 60.0f);
     if (m_hihatShimmer < 0.01f) m_hihatShimmer = 0.0f;
 
     // Clear buffer

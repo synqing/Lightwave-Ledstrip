@@ -109,7 +109,9 @@ void ChevronWavesEnhancedEffect::render(plugins::EffectContext& ctx) {
     } else
 #endif
     {
-        m_energyAvg *= 0.98f;
+        // dt-corrected decay when audio unavailable
+        float dtFallback = enhancement::getSafeDeltaSeconds(ctx.deltaTimeSeconds);
+        m_energyAvg *= powf(0.98f, dtFallback * 60.0f);
         m_energyDelta = 0.0f;
     }
 
@@ -129,7 +131,7 @@ void ChevronWavesEnhancedEffect::render(plugins::EffectContext& ctx) {
         if (ctx.audio.isSnareHit()) {
             m_snareSharpness = 1.0f;
         }
-        m_snareSharpness *= 0.90f;  // Decay
+        m_snareSharpness *= powf(0.90f, dt * 60.0f);  // dt-corrected decay
         if (m_snareSharpness < 0.01f) m_snareSharpness = 0.0f;
     }
 

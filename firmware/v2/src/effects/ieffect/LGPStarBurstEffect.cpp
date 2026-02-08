@@ -86,8 +86,8 @@ void LGPStarBurstEffect::render(plugins::EffectContext& ctx) {
     float dt = ctx.getSafeDeltaSeconds();
     if (dt > 0.1f) dt = 0.1f;  // Clamp for safety
 
-    // Smooth dominant bin (for color stability)
-    float alphaBin = dt / (0.25f + dt);
+    // Smooth dominant bin (for color stability) - true exponential, tau=250ms
+    float alphaBin = 1.0f - expf(-dt / 0.25f);
     m_dominantBinSmooth += (m_dominantBin - m_dominantBinSmooth) * alphaBin;
     if (m_dominantBinSmooth < 0.0f) m_dominantBinSmooth = 0.0f;
     if (m_dominantBinSmooth > 11.0f) m_dominantBinSmooth = 11.0f;

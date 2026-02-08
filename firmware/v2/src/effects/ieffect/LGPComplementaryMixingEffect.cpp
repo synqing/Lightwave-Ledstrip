@@ -24,11 +24,12 @@ bool LGPComplementaryMixingEffect::init(plugins::EffectContext& ctx) {
 
 void LGPComplementaryMixingEffect::render(plugins::EffectContext& ctx) {
     // Dynamic complementary pairs create neutral zones
+    float dt = ctx.getSafeDeltaSeconds();
     float speed = ctx.speed / 255.0f;
     float intensity = ctx.brightness / 255.0f;
     const float variation = 0.5f;
 
-    m_phase += speed * 0.01f;
+    m_phase += speed * 0.01f * 60.0f * dt;  // dt-corrected
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         float distFromCenter = (float)centerPairDistance((uint16_t)i);

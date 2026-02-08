@@ -25,10 +25,11 @@ bool LGPMeshNetworkEffect::init(plugins::EffectContext& ctx) {
 
 void LGPMeshNetworkEffect::render(plugins::EffectContext& ctx) {
     // CENTER ORIGIN - Interconnected node patterns like neural networks
+    float dt = ctx.getSafeDeltaSeconds();
     float speedNorm = ctx.speed / 50.0f;
     float intensityNorm = ctx.brightness / 255.0f;
 
-    m_phase += speedNorm * 0.02f;
+    m_phase += speedNorm * 0.02f * 60.0f * dt;  // dt-corrected
 
     const int nodeCount = 12;
 

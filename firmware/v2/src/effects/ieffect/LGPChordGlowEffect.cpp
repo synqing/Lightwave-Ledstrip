@@ -141,7 +141,7 @@ void LGPChordGlowEffect::render(plugins::EffectContext& ctx) {
     float diff = targetRoot - m_rootNoteSmooth;
     if (diff > 6.0f) targetRoot -= 12.0f;
     else if (diff < -6.0f) targetRoot += 12.0f;
-    m_rootNoteSmooth += (targetRoot - m_rootNoteSmooth) * (dt / (0.2f + dt));
+    m_rootNoteSmooth += (targetRoot - m_rootNoteSmooth) * (1.0f - expf(-dt / 0.2f));  // True exponential, tau=200ms
     // Wrap back to 0-11 range
     while (m_rootNoteSmooth < 0.0f) m_rootNoteSmooth += 12.0f;
     while (m_rootNoteSmooth >= 12.0f) m_rootNoteSmooth -= 12.0f;

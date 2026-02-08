@@ -123,8 +123,8 @@ void LGPStarBurstEnhancedEffect::render(plugins::EffectContext& ctx) {
         if (m_hihatSparkle < 0.01f) m_hihatSparkle = 0.0f;
     }
 
-    // Smooth dominant bin (for color stability)
-    float alphaBin = dt / (0.25f + dt);
+    // Smooth dominant bin (for color stability) - true exponential, tau=250ms
+    float alphaBin = 1.0f - expf(-dt / 0.25f);
     m_dominantBinSmooth += (m_dominantBin - m_dominantBinSmooth) * alphaBin;
     if (m_dominantBinSmooth < 0.0f) m_dominantBinSmooth = 0.0f;
     if (m_dominantBinSmooth > 11.0f) m_dominantBinSmooth = 11.0f;

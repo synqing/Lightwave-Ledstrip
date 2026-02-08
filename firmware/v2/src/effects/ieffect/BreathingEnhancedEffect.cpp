@@ -227,8 +227,8 @@ void BreathingEnhancedEffect::render(plugins::EffectContext& ctx) {
             m_pulseIntensity = fmaxf(m_pulseIntensity, subBassEnergy * 0.8f);
         }
         
-        // Decay pulse intensity
-        m_pulseIntensity *= 0.92f;
+        // Decay pulse intensity (dt-corrected)
+        m_pulseIntensity *= powf(0.92f, dt * 60.0f);
         if (m_pulseIntensity < 0.01f) m_pulseIntensity = 0.0f;
         
         // Boost brightness with pulse

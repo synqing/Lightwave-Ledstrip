@@ -25,10 +25,11 @@ bool LGPDiamondLatticeEffect::init(plugins::EffectContext& ctx) {
 
 void LGPDiamondLatticeEffect::render(plugins::EffectContext& ctx) {
     // CENTER ORIGIN - Angled wave fronts create diamond patterns from center
+    float dt = ctx.getSafeDeltaSeconds();
     float speedNorm = ctx.speed / 50.0f;
     float intensityNorm = ctx.brightness / 255.0f;
 
-    m_phase += speedNorm * 0.02f;
+    m_phase += speedNorm * 0.02f * 60.0f * dt;  // dt-corrected
 
     const float diamondFreq = 6.0f;
 

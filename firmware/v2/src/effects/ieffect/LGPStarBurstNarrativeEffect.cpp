@@ -428,19 +428,19 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
     } else
 #endif
     if (!hasAudio) {
-        // No audio: decay toward calm
-        m_energyAvg *= 0.98f;
+        // No audio: decay toward calm (dt-corrected)
+        m_energyAvg *= powf(0.98f, dt * 60.0f);
         m_energyDelta = 0.0f;
     }
 
     // -----------------------------------------
-    // SMOOTHING (dt-aware, asymmetric)
+    // SMOOTHING (true exponential, asymmetric)
     // -----------------------------------------
-    const float riseAvg  = dt / (0.20f + dt);
-    const float fallAvg  = dt / (0.50f + dt);
-    const float riseDel  = dt / (0.08f + dt);
-    const float fallDel  = dt / (0.25f + dt);
-    const float alphaBin = dt / (0.25f + dt);
+    const float riseAvg  = 1.0f - expf(-dt / 0.20f);
+    const float fallAvg  = 1.0f - expf(-dt / 0.50f);
+    const float riseDel  = 1.0f - expf(-dt / 0.08f);
+    const float fallDel  = 1.0f - expf(-dt / 0.25f);
+    const float alphaBin = 1.0f - expf(-dt / 0.25f);
 
     m_energyAvgSmooth   = smoothValue(m_energyAvgSmooth,   m_energyAvg,   riseAvg, fallAvg);
     m_energyDeltaSmooth = smoothValue(m_energyDeltaSmooth, m_energyDelta, riseDel, fallDel);

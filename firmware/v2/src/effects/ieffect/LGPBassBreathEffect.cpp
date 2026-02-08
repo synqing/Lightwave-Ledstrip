@@ -67,6 +67,9 @@ bool LGPBassBreathEffect::init(plugins::EffectContext& ctx) {
 }
 
 void LGPBassBreathEffect::render(plugins::EffectContext& ctx) {
+    // Get dt early for all decay operations
+    float dt = ctx.getSafeDeltaSeconds();
+
     float bass, mid, treble;
     float beatStrength = 0.0f;
     float beatPhase = 0.0f;
@@ -100,13 +103,13 @@ void LGPBassBreathEffect::render(plugins::EffectContext& ctx) {
         } else {
             // Also allow slow following of sustained flux (but bounded).
             if (flux > m_fluxKick) m_fluxKick = flux;
-            m_fluxKick *= 0.86f;
+            m_fluxKick *= powf(0.86f, dt * 60.0f);  // dt-corrected
         }
     } else {
-        m_fluxKick *= 0.90f;
+        m_fluxKick *= powf(0.90f, dt * 60.0f);  // dt-corrected
     }
 #else
-    m_fluxKick *= 0.90f;
+    m_fluxKick *= powf(0.90f, dt * 60.0f);  // dt-corrected
 #endif
 
     // Beat-shaped inhale (smooth, centre-origin): raised cosine pulse per beat.
@@ -124,7 +127,7 @@ void LGPBassBreathEffect::render(plugins::EffectContext& ctx) {
     if (targetBreath > m_breathLevel) {
         m_breathLevel = targetBreath;  // Instant attack
     } else {
-        m_breathLevel *= 0.97f;  // Slow exhale (~500ms)
+        m_breathLevel *= powf(0.97f, dt * 60.0f);  // Slow exhale (dt-corrected)
     }
 
     // Musically anchored hue (non-rainbow): dominant chroma bin, smoothed across hops.
@@ -141,7 +144,6 @@ void LGPBassBreathEffect::render(plugins::EffectContext& ctx) {
     }
 #endif
 
-    float dt = ctx.getSafeDeltaSeconds();
     float alphaHue = 1.0f - expf(-dt / 0.35f);
     float targetHue = (float)chromaBinToHue(dominantBin);
     m_hueAnchorSmooth += (targetHue - m_hueAnchorSmooth) * alphaHue;

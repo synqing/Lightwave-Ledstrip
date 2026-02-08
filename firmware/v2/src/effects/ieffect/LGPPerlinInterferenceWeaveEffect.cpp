@@ -88,8 +88,8 @@ void LGPPerlinInterferenceWeaveEffect::render(plugins::EffectContext& ctx) {
     float beatPhaseMod = beatMod * 16.0f; // 0-16 additional offset
     float targetPhaseOffset = basePhaseOffset + beatPhaseMod;
     
-    // Smooth phase offset changes
-    float alpha = dt / (0.15f + dt); // ~150ms smoothing
+    // Smooth phase offset changes (true exponential, tau=150ms)
+    float alpha = 1.0f - expf(-dt / 0.15f);
     m_phaseOffset += (targetPhaseOffset - m_phaseOffset) * alpha;
 
     // =========================================================================

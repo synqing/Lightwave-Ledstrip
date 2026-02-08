@@ -236,7 +236,7 @@ void BPMEnhancedEffect::render(plugins::EffectContext& ctx) {
     for (int r = 0; r < MAX_RINGS; r++) {
         if (m_ringIntensity[r] > 0.01f) {
             m_ringRadius[r] += expansionRate * dt;
-            m_ringIntensity[r] *= 0.97f;  // Gradual fade
+            m_ringIntensity[r] *= powf(0.97f, dt * 60.0f);  // Gradual fade (dt-corrected)
 
             // Kill ring when it reaches edge
             if (m_ringRadius[r] > HALF_LENGTH) {

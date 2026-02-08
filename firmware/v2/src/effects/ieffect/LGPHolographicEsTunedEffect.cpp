@@ -152,7 +152,7 @@ void LGPHolographicEsTunedEffect::render(plugins::EffectContext& ctx) {
         // No audio: decay accents slowly.
         m_refraction *= expf(-dt / 0.25f);
         m_focus *= expf(-dt / 0.40f);
-        m_dominantChromaBinSmooth *= 0.995f;
+        m_dominantChromaBinSmooth *= powf(0.995f, dt * 60.0f);  // dt-corrected
     }
 
     // ---------------------------------------------------------------------

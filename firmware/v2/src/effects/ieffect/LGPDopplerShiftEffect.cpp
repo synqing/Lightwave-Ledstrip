@@ -25,10 +25,11 @@ bool LGPDopplerShiftEffect::init(plugins::EffectContext& ctx) {
 
 void LGPDopplerShiftEffect::render(plugins::EffectContext& ctx) {
     // Moving colors shift frequency based on velocity
+    float dt = ctx.getSafeDeltaSeconds();
     float speed = ctx.speed / 255.0f;
     float intensity = ctx.brightness / 255.0f;
 
-    m_sourcePosition += speed * 5.0f;
+    m_sourcePosition += speed * 5.0f * 60.0f * dt;  // dt-corrected
 
     for (int i = 0; i < STRIP_LENGTH; i++) {
         float distFromCenter = (float)centerPairDistance((uint16_t)i);

@@ -61,6 +61,9 @@ void LGPMycelialNetworkEffect::render(plugins::EffectContext& ctx) {
         m_initialized = true;
     }
 
+    // Get dt for frame-rate independent decay
+    float dt = ctx.getSafeDeltaSeconds();
+
     const float branchProbability = 0.005f;
     const uint8_t numTips = 8;
 
@@ -99,7 +102,7 @@ void LGPMycelialNetworkEffect::render(plugins::EffectContext& ctx) {
         float distFromCenter = (float)centerPairDistance((uint16_t)i);
         float normalizedDist = distFromCenter / (float)HALF_LENGTH;
 
-        m_networkDensity[i] *= 0.998f;
+        m_networkDensity[i] *= powf(0.998f, dt * 60.0f);  // dt-corrected decay
 
         float tipGlow = 0.0f;
         for (int t = 0; t < 16; t++) {

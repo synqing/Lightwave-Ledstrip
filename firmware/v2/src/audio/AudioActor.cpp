@@ -233,6 +233,11 @@ void AudioActor::onTick()
     ControlBusFrame frame{};
     m_esHopSeq++;
     m_esAdapter.buildFrame(frame, es, m_esHopSeq);
+
+    // CLOCK SPINE FIX (ES backend): Ensure frame.t uses END-OF-HOP semantics
+    // es.sample_index from EsV11Backend represents the post-hop sample index
+    frame.t = AudioTime(es.sample_index, SAMPLE_RATE, now_us);
+
     m_controlBusBuffer.Publish(frame);
 
     m_hopCount++;
@@ -817,11 +822,18 @@ void AudioActor::processHop()
     }
 
     // 1. Build AudioTime for this hop
-    uint64_t now_us = esp_timer_get_time();
-    AudioTime now(m_sampleIndex, SAMPLE_RATE, now_us);
+    // CLOCK SPINE FIX: Use END-OF-HOP semantics
+    // - t.sample_index = sample immediately AFTER this hop (monotonic)
+    // - t.timestamp_us = capture end time for this hop (not processing start)
+    // This ensures renderer extrapolation uses the correct audio timeline.
+    uint64_t now_us = (m_diag.lastCaptureEndUs != 0)
+        ? m_diag.lastCaptureEndUs
+        : esp_timer_get_time();
+    uint64_t hop_end_sample_index = m_sampleIndex + HOP_SIZE;
+    AudioTime now(hop_end_sample_index, SAMPLE_RATE, now_us);
 
-    // Update monotonic counters
-    m_sampleIndex += HOP_SIZE;
+    // Update monotonic counters (sample index now represents END of processed audio)
+    m_sampleIndex = hop_end_sample_index;
     m_hopCount++;
 
     int32_t minRaw = 32767;

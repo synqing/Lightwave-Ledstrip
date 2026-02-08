@@ -78,7 +78,10 @@ void EsBeatClock::tick(const ControlBusFrame& latest, bool newAudioFrame, const 
 
     if (!m_hasBase) {
         m_hasBase = true;
-        m_lastTickT = render_now;
+        // CLOCK SPINE FIX: Anchor to audio frame's time, not render_now
+        // This ensures phase is defined at the audio observation point,
+        // and the integration step will correctly advance to render_now.
+        m_lastTickT = (latest.t.sample_rate_hz != 0) ? latest.t : render_now;
         m_phase01 = clamp01(latest.es_phase01_at_audio_t);
         m_bpm = (latest.es_bpm > 1.0f) ? latest.es_bpm : 120.0f;
         m_conf = clamp01(latest.es_tempo_confidence);
@@ -110,6 +113,10 @@ void EsBeatClock::tick(const ControlBusFrame& latest, bool newAudioFrame, const 
         m_conf = clamp01(latest.es_tempo_confidence);
         m_phase01 = clamp01(latest.es_phase01_at_audio_t);
         m_beatInBar = latest.es_beat_in_bar;
+
+        // CLOCK SPINE FIX: Anchor to audio frame's time, not render_now
+        // Phase is now defined at latest.t; integration step advances to render_now.
+        m_lastTickT = (latest.t.sample_rate_hz != 0) ? latest.t : m_lastTickT;
 
         if (latest.es_beat_tick) {
             // Hard align to beat boundary.

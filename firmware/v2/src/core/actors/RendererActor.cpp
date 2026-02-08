@@ -34,6 +34,7 @@
 #include "esp_rom_sys.h"
 #include <esp_task_wdt.h>
 #include <esp_heap_caps.h>
+#include <esp_timer.h>  // CLOCK SPINE FIX: Use same clock as AudioActor
 #endif
 
 // Audio integration (Phase 2)
@@ -1163,7 +1164,13 @@ void RendererActor::renderFrame()
         uint32_t prevSeq = m_lastControlBusSeq;
 
         // 2. Extrapolate AudioTime from audio snapshot
+        // CLOCK SPINE FIX: Use esp_timer_get_time() (same clock as AudioActor)
+        // This ensures renderer and audio actor share a consistent timeline.
+#ifndef NATIVE_BUILD
+        uint64_t now_us = static_cast<uint64_t>(esp_timer_get_time());
+#else
         uint64_t now_us = micros();
+#endif
         if (seq != m_lastControlBusSeq) {
             // New audio frame arrived - resync extrapolation base
             m_lastAudioTime = m_lastControlBus.t;
@@ -1172,7 +1179,8 @@ void RendererActor::renderFrame()
         }
 
         // 3. Build extrapolated render-time AudioTime
-        uint64_t dt_us = now_us - m_lastAudioMicros;
+        // CLOCK SPINE FIX: Wrap-safe subtraction (defensive, 64-bit shouldn't wrap)
+        uint64_t dt_us = (now_us >= m_lastAudioMicros) ? (now_us - m_lastAudioMicros) : 0;
         uint64_t extrapolated_samples = m_lastAudioTime.sample_index +
             (dt_us * m_lastAudioTime.sample_rate_hz / 1000000);
         audio::AudioTime render_now(

@@ -32,6 +32,7 @@
 #include "../bus/MessageBus.h"
 #include "../../effects/enhancement/ColorCorrectionEngine.h"
 #include "../../config/features.h"
+#include "../../config/limits.h"
 #include "../../plugins/api/EffectContext.h"
 #include "../../plugins/api/IEffectRegistry.h"
 
@@ -599,10 +600,9 @@ private:
 
     // Effect registry - IEffect-only
     //
-    // IMPORTANT: This value must be >= the number of registered effects.
-    // It is referenced (sometimes duplicated) across networking/state/persistence.
-    // If you add effects beyond this limit, registration and/or selection will fail.
-    static constexpr uint8_t MAX_EFFECTS = 113;
+    // IMPORTANT: This value comes from limits.h (single source of truth).
+    // Update limits::MAX_EFFECTS when adding new effects.
+    static constexpr uint8_t MAX_EFFECTS = limits::MAX_EFFECTS;
     struct EffectEntry {
         const char* name;
         plugins::IEffect* effect;   // All effects are IEffect instances (native or adapter)
@@ -713,6 +713,12 @@ private:
     bool m_trinitySyncActive = false;
     bool m_trinitySyncPaused = false;
     float m_trinitySyncPosition = 0.0f;
+
+    /// Trinity structure segment state (optional; driven by host)
+    uint8_t m_trinitySegmentIndex = 0xFF;     // 0xFF = unknown/unset
+    uint16_t m_trinitySegmentLabelHash = 0;   // 16-bit hash of label string (FNV-1a fold)
+    uint32_t m_trinitySegmentStartMs = 0;
+    uint32_t m_trinitySegmentEndMs = 0;
 #endif
 
     // Audio availability latch (hysteresis) removed: keep simple gate based on

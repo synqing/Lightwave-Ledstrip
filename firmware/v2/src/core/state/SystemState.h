@@ -2,16 +2,15 @@
 
 #include <cstdint>
 #include <array>
+#include "../../config/limits.h"  // Single source of truth for system limits
 
 namespace lightwaveos {
 namespace state {
 
-// Maximum configuration constants
-constexpr uint8_t MAX_ZONES = 4;
-constexpr uint8_t MAX_PALETTE_COUNT = 64;
-// Maximum effect ID allowed by CQRS/state commands.
-// Keep in sync with RendererActor::MAX_EFFECTS (upper bound for effect IDs).
-constexpr uint8_t MAX_EFFECT_COUNT = 104;
+// Maximum configuration constants - reference centralised limits
+using limits::MAX_ZONES;
+constexpr uint8_t MAX_PALETTE_COUNT = limits::MAX_PALETTES;
+constexpr uint8_t MAX_EFFECT_COUNT = limits::MAX_EFFECTS;
 
 /**
  * Zone configuration state

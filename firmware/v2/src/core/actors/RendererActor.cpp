@@ -658,6 +658,35 @@ void RendererActor::onMessage(const Message& msg)
                 }
             }
             break;
+
+        case MessageType::TRINITY_SEGMENT:
+            {
+                uint8_t index = msg.param1;
+                uint16_t labelHash16 = ((uint16_t)msg.param2 << 8) | (uint16_t)msg.param3;
+                uint32_t startMs = msg.param4;
+                uint32_t endMs = msg._reserved;
+
+                bool changed = (index != m_trinitySegmentIndex) ||
+                               (labelHash16 != m_trinitySegmentLabelHash) ||
+                               (startMs != m_trinitySegmentStartMs) ||
+                               (endMs != m_trinitySegmentEndMs);
+
+                m_trinitySegmentIndex = index;
+                m_trinitySegmentLabelHash = labelHash16;
+                m_trinitySegmentStartMs = startMs;
+                m_trinitySegmentEndMs = endMs;
+
+                if (changed) {
+                    // Broadcast to any interested actors (semantic adapters, diagnostics, etc.)
+                    bus::MessageBus::instance().publish(msg);
+                    LW_LOGI("TRINITY_SEGMENT: idx=%u labelHash=0x%04X start=%lums end=%lums",
+                            static_cast<unsigned>(index),
+                            static_cast<unsigned>(labelHash16),
+                            static_cast<unsigned long>(startMs),
+                            static_cast<unsigned long>(endMs));
+                }
+            }
+            break;
 #endif
 
         default:

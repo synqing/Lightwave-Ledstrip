@@ -23,6 +23,7 @@
 #include <cstdint>
 #include "NVSManager.h"
 #include "../../effects/zones/ZoneComposer.h"
+#include "../../config/limits.h"  // Single source of truth for system limits
 
 namespace lightwaveos {
 namespace persistence {
@@ -226,11 +227,11 @@ private:
     // Config version for future compatibility
     static constexpr uint8_t CONFIG_VERSION = 2;
 
-    // Effect limits (should match RendererActor upper bound)
-    static constexpr uint8_t MAX_EFFECT_ID = 104;
+    // Effect limits - reference centralised limits
+    static constexpr uint8_t MAX_EFFECT_ID = limits::MAX_EFFECTS - 1;
     static constexpr uint8_t MIN_SPEED = 1;
     static constexpr uint8_t MAX_SPEED = 50;
-    static constexpr uint8_t MAX_PALETTE_ID = 36;
+    static constexpr uint8_t MAX_PALETTE_ID = limits::MAX_PALETTES - 1;
 };
 
 } // namespace persistence

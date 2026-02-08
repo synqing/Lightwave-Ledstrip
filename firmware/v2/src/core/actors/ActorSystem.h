@@ -288,6 +288,16 @@ public:
      * @return true if message was sent
      */
     bool trinitySync(uint8_t action, float positionSec, float bpm = 120.0f);
+
+    /**
+     * @brief Inject Trinity structure segment change
+     * @param index Segment index (0-255)
+     * @param labelHash16 16-bit hash of segment label (stable identifier, avoids string storage)
+     * @param startSec Segment start time (seconds)
+     * @param endSec Segment end time (seconds)
+     * @return true if message was sent
+     */
+    bool trinitySegment(uint8_t index, uint16_t labelHash16, float startSec, float endSec);
 #endif
 
     // ========================================================================

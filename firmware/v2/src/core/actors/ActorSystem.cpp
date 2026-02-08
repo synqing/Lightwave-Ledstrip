@@ -557,6 +557,32 @@ bool ActorSystem::trinitySync(uint8_t action, float positionSec, float bpm)
 
     return m_renderer->send(msg, pdMS_TO_TICKS(10));
 }
+
+bool ActorSystem::trinitySegment(uint8_t index, uint16_t labelHash16, float startSec, float endSec)
+{
+    if (!m_renderer || !m_renderer->isRunning()) {
+        return false;
+    }
+
+    // Queue backpressure check
+    uint8_t utilization = m_renderer->getQueueUtilization();
+    if (utilization >= 90) {
+        return false;
+    }
+
+    // Pack segment times as uint32_t milliseconds
+    uint32_t startMs = (uint32_t)(fmaxf(0.0f, startSec) * 1000.0f);
+    uint32_t endMs = (uint32_t)(fmaxf(0.0f, endSec) * 1000.0f);
+
+    Message msg(MessageType::TRINITY_SEGMENT);
+    msg.param1 = index;
+    msg.param2 = (labelHash16 >> 8) & 0xFF;
+    msg.param3 = labelHash16 & 0xFF;
+    msg.param4 = startMs;
+    msg._reserved = endMs;
+
+    return m_renderer->send(msg, pdMS_TO_TICKS(10));
+}
 #endif
 
 bool ActorSystem::startTransition(uint8_t effectId, uint8_t transitionType)

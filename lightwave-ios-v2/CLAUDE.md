@@ -119,4 +119,13 @@ Device tab:
 | #25572 | 12:26 AM | 🔵 | iOS Quick Connect button broken because it requires manual WiFi network join | ~751 |
 | #25566 | 12:25 AM | 🔵 | iOS project.yml contains NSLocationWhenInUseUsageDescription for WiFi network detection | ~478 |
 | #25565 | " | ✅ | WiFi Information entitlement removed from iOS app due to Apple Developer account requirement | ~384 |
+
+### Feb 7, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #27124 | 1:33 AM | ✅ | Added SnapshotTesting Package to Test Target | ~528 |
+| #27122 | " | 🔵 | iOS Project Configuration Revealing Swift 6.0 and Rive Runtime Setup | ~667 |
+| #27002 | 12:55 AM | 🔵 | iOS Component Architecture and Testing Infrastructure Assessment | ~652 |
+| #26987 | " | 🔵 | Project Configuration File Search Returned No Test Configuration | ~329 |
 </claude-mem-context>

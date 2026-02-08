@@ -8,4 +8,15 @@
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
 | #24725 | 11:50 AM | 🔵 | HeroLEDPreview Canvas-Based Rendering | ~697 |
+
+### Feb 7, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #27147 | 5:05 AM | 🟣 | Added Beat Phase Indicator to BPM Ring | ~550 |
+| #27105 | 1:24 AM | 🔄 | PalettePill Updated to Use New Liquid Glass API | ~462 |
+| #27100 | 1:23 AM | 🔵 | PalettePill Component Implementation Examined | ~540 |
+| #27067 | 1:07 AM | 🔄 | BPM Ring Enhanced with Liquid Glass Visual System | ~629 |
+| #27002 | 12:55 AM | 🔵 | iOS Component Architecture and Testing Infrastructure Assessment | ~652 |
+| #26824 | 12:49 AM | 🔵 | iOS LED Preview Canvas Implementation Using UDP Streaming | ~475 |
 </claude-mem-context>

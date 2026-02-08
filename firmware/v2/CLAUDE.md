@@ -21,4 +21,10 @@
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
 | #25558 | 12:13 AM | ✅ | v2 WiFi credentials configured for Portable Mode testing | ~386 |
+
+### Feb 7, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #26776 | 12:17 AM | 🔵 | User Frustration: Build Without Testing Root Cause Fix | ~449 |
 </claude-mem-context>

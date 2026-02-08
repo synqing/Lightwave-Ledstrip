@@ -25,5 +25,19 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #25842 | 5:38 AM | 🔵 | iOS WebSocketService uses AsyncStream with continuation for event delivery and manages reconnection lifecycle | ~614 |
+| #25820 | 5:19 AM | 🔵 | iOS Device Discovery Uses 5-Second Connection Timeout with Safe Concurrency | ~930 |
+| #25803 | 5:09 AM | 🔵 | iOS RESTClient Uses Actor Isolation with 15-Second Request Timeout | ~1015 |
+| #25765 | 4:56 AM | 🔵 | iOS UDPStreamReceiver demultiplexes LED and audio binary frames via magic byte detection on port 41234 | ~674 |
+| #25717 | 3:17 AM | 🔵 | iOS network layer has critical race conditions and missing timeout handling | ~721 |
+| #25716 | " | 🔵 | iOS DeviceDiscoveryService implements multi-tier discovery with AP detection, Bonjour, and HTTP probe | ~564 |
 | #25572 | 12:26 AM | 🔵 | iOS Quick Connect button broken because it requires manual WiFi network join | ~751 |
+
+### Feb 7, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #27079 | 1:10 AM | 🔵 | REST Client Effect Preset Models Examined | ~466 |
+| #27027 | 12:57 AM | 🔵 | iOS Connection Manager State Machine with Exponential Backoff | ~677 |
+| #26940 | 12:54 AM | 🔵 | iOS Animation Implementation Patterns Identified | ~450 |
 </claude-mem-context>

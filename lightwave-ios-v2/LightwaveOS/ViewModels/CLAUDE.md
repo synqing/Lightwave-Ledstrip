@@ -28,6 +28,22 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #25835 | 5:30 AM | 🔵 | iOS Detects AP Subnet and Disables UDP Streaming | ~893 |
+| #25813 | 5:13 AM | 🔴 | iOS app connection failure counter reset on new connection attempts | ~436 |
+| #25812 | " | 🟣 | iOS app now auto-disconnects after consecutive REST status poll failures | ~451 |
+| #25811 | " | 🟣 | iOS app status polling failure tracking added for connection health monitoring | ~432 |
+| #25810 | " | 🔵 | iOS AppViewModel manages device status polling with Swift concurrency Task | ~522 |
+| #25756 | 3:43 AM | 🔴 | iOS Discovery Stream Task Cancellation Added | ~642 |
+| #25749 | 3:39 AM | 🔵 | iOS EffectViewModel provides effect filtering by category, search text, and audio-reactive flag with REST API integration | ~690 |
+| #25725 | 3:33 AM | 🔵 | iOS PaletteViewModel Architecture Examined | ~691 |
+| #25724 | 3:29 AM | 🔴 | iOS app skips UDP streaming when connected to v2 AP subnet | ~460 |
 | #25572 | 12:26 AM | 🔵 | iOS Quick Connect button broken because it requires manual WiFi network join | ~751 |
 | #25568 | 12:25 AM | 🔵 | iOS AppViewModel implements complete network monitoring and reconnection cascade | ~604 |
+
+### Feb 7, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #27087 | 1:12 AM | 🔄 | PresetsViewModel Updated to Use EffectPresetSummary Type | ~435 |
+| #26940 | 12:54 AM | 🔵 | iOS Animation Implementation Patterns Identified | ~450 |
 </claude-mem-context>

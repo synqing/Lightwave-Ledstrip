@@ -28,4 +28,16 @@
 |----|------|---|-------|------|
 | #24143 | 10:49 PM | ⚖️ | Wireless Architecture Hardening Plan Created for K1 Network Recovery | ~647 |
 | #23961 | 8:51 PM | 🔵 | LightwaveOS Dashboard Architecture Fully Mapped | ~624 |
+
+### Feb 5, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #25494 | 10:13 PM | 🔵 | v2 WebSocket server client lifecycle analysis reveals queue overflow root cause and cleanup architecture | ~762 |
+
+### Feb 7, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #26776 | 12:17 AM | 🔵 | User Frustration: Build Without Testing Root Cause Fix | ~449 |
 </claude-mem-context>

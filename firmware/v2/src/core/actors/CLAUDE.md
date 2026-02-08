@@ -25,4 +25,12 @@
 | #25636 | 1:25 AM | 🔵 | v2 RendererActor runs at 120 FPS on Core 1 with integrated audio, zones, transitions, and color correction | ~761 |
 | #25629 | 1:10 AM | 🔴 | Added missing watchdog reset header to Actor base class | ~368 |
 | #25626 | 1:09 AM | 🔵 | v2 TG1WDT_SYS_RST crash caused by Actor queue drain loop starving watchdog during rapid effect changes | ~837 |
+
+### Feb 7, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #27444 | 11:40 PM | 🔵 | RendererActor Constructor Initialization Order and Member State | ~873 |
+| #27440 | 11:39 PM | 🟣 | RendererActor Integrated EffectPostProcessor Member Variables | ~717 |
+| #27431 | 11:37 PM | ✅ | Added EffectPostProcessor Include to RendererActor | ~524 |
 </claude-mem-context>

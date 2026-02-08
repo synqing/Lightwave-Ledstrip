@@ -33,6 +33,17 @@ static inline float clamp01(float v) {
 }
 
 /**
+ * @brief Linear interpolation between two values
+ * @param a Start value
+ * @param b End value
+ * @param t Interpolation factor [0, 1]
+ * @return Interpolated value
+ */
+static inline float lerp(float a, float b, float t) {
+    return a + (b - a) * t;
+}
+
+/**
  * @brief Convert float [0, 1] to uint8_t [0, 255]
  */
 static inline uint8_t floatToByte(float v) {

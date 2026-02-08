@@ -178,7 +178,10 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
     {PM_STR("Beat Pulse (Spectral)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Three frequency-driven rings: bass outer, mid middle, treble centre"), PM_STR("Continuous frequency response, smoothed band tracking, spatial spectrum mapping"), PM_STR("Spectrum Bars")},
     {PM_STR("Beat Pulse (Spectral Pulse)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::SPECTRAL, PM_STR("Stationary zones pulsing by frequency band"), PM_STR("Fixed zone mapping, soft crossfade boundaries, continuous spectral response"), PM_STR("Beat Pulse (Spectral)")},
     {PM_STR("Beat Pulse (Breathe)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN, PM_STR("Warm whole-strip amplitude pump with centre-weighted glow"), PM_STR("No ring shape, centre-biased amplitude, slower decay for sustain"), PM_STR("Beat Pulse (Stack), Breathing")},
-    {PM_STR("Beat Pulse (LGP Interference)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::STANDING, PM_STR("Dual-strip interference: standing waves exploit LGP optics"), PM_STR("Phase-offset strip driving, spatial frequency control, anti-phase/quadrature modes"), PM_STR("LGP Chladni Harmonics, Modal Resonance")}
+    {PM_STR("Beat Pulse (LGP Interference)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP | PatternTags::STANDING, PM_STR("Dual-strip interference: standing waves exploit LGP optics"), PM_STR("Phase-offset strip driving, spatial frequency control, anti-phase/quadrature modes"), PM_STR("LGP Chladni Harmonics, Modal Resonance")},
+
+    // --- Beat Pulse (Bloom) - ID 121 ---
+    {PM_STR("Beat Pulse (Bloom)"), PatternFamily::FLUID_PLASMA, PatternTags::CENTER_ORIGIN | PatternTags::DUAL_STRIP, PM_STR("Bloom-style subpixel transport (liquid trails)"), PM_STR("Stateful HDR-ish history buffer advected outward by fractional offsets (subpixel), with beat+flux centre injection."), PM_STR("Transport/Advection/Trails")}
 };
 
 const uint8_t PATTERN_METADATA_COUNT = sizeof(PATTERN_METADATA) / sizeof(PatternMetadata);

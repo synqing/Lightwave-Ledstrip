@@ -102,6 +102,7 @@
 #include "ieffect/BeatPulseSpectralPulseEffect.h"
 #include "ieffect/BeatPulseBreatheEffect.h"
 #include "ieffect/BeatPulseLGPInterferenceEffect.h"
+#include "ieffect/BeatPulseBloomEffect.h"
 #include "ieffect/LGPSpectrumBarsEffect.h"
 #include "ieffect/LGPBassBreathEffect.h"
 #include "ieffect/AudioWaveformEffect.h"
@@ -1108,6 +1109,12 @@ uint8_t registerAllEffects(RendererActor* renderer) {
     // Beat Pulse (LGP Interference) (ID 120) - Dual-strip phase control for optical interference
     static ieffect::BeatPulseLGPInterferenceEffect beatPulseLGPInterferenceInstance;
     if (renderer->registerEffect(total, &beatPulseLGPInterferenceInstance)) {
+        total++;
+    }
+
+    // Beat Pulse (Bloom) (ID 121) - Centre bloom with outward decay
+    static ieffect::BeatPulseBloomEffect beatPulseBloomInstance;
+    if (renderer->registerEffect(total, &beatPulseBloomInstance)) {
         total++;
     }
 

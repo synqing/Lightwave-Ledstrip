@@ -445,6 +445,124 @@ struct GenericResponse: Codable, Sendable {
     let timestamp: Int?
 }
 
+// MARK: - Effect Preset Response Models
+
+struct EffectPresetsResponse: Codable, Sendable {
+    let success: Bool
+    let data: EffectPresetsData
+    let timestamp: Int?
+
+    struct EffectPresetsData: Codable, Sendable {
+        let presets: [EffectPresetSummary]
+        let count: Int?
+    }
+}
+
+/// Simple preset model for REST API list responses
+/// Note: Use EffectPreset from Models/ for full preset data with parameters
+struct EffectPresetSummary: Codable, Sendable, Identifiable, Hashable {
+    let id: Int
+    let name: String
+    let effectId: Int
+    let paletteId: Int
+    let timestamp: Int?
+
+    var formattedDate: String? {
+        guard let timestamp = timestamp else { return nil }
+        let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+}
+
+struct EffectPresetDetailResponse: Codable, Sendable {
+    let success: Bool
+    let data: EffectPresetDetail
+    let timestamp: Int?
+
+    struct EffectPresetDetail: Codable, Sendable {
+        let id: Int
+        let name: String
+        let effectId: Int
+        let paletteId: Int
+        let brightness: Int
+        let speed: Int
+        let parameters: EffectPresetParameters?
+        let timestamp: Int?
+
+        struct EffectPresetParameters: Codable, Sendable {
+            let mood: Int?
+            let trails: Int?
+            let hue: Int?
+            let saturation: Int?
+            let intensity: Int?
+            let complexity: Int?
+            let variation: Int?
+        }
+    }
+}
+
+// MARK: - Zone Preset Response Models
+
+struct ZonePresetsResponse: Codable, Sendable {
+    let success: Bool
+    let data: ZonePresetsData
+    let timestamp: Int?
+
+    struct ZonePresetsData: Codable, Sendable {
+        let presets: [ZonePresetSummary]
+        let count: Int?
+    }
+}
+
+struct ZonePresetSummary: Codable, Sendable, Identifiable, Hashable {
+    let id: Int
+    let name: String
+    let zoneCount: Int
+    let timestamp: Int?
+
+    var formattedDate: String? {
+        guard let timestamp = timestamp else { return nil }
+        let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+}
+
+struct ZonePresetDetailResponse: Codable, Sendable {
+    let success: Bool
+    let data: ZonePresetDetail
+    let timestamp: Int?
+
+    struct ZonePresetDetail: Codable, Sendable {
+        let id: Int
+        let name: String
+        let zoneCount: Int
+        let zones: [ZonePresetEntry]
+        let timestamp: Int?
+
+        struct ZonePresetEntry: Codable, Sendable {
+            let effectId: Int
+            let paletteId: Int
+            let brightness: Int
+            let speed: Int
+            let blendMode: Int
+            let segments: ZoneSegments
+
+            struct ZoneSegments: Codable, Sendable {
+                let s1LeftStart: Int
+                let s1LeftEnd: Int
+                let s1RightStart: Int
+                let s1RightEnd: Int
+            }
+        }
+    }
+}
+
 // MARK: - Network Endpoints (Wi-Fi setup / AP mode)
 
 struct NetworkStatusResponse: Codable, Sendable {
@@ -511,6 +629,55 @@ struct NetworkConnectResponse: Codable, Sendable {
     struct NetworkConnectData: Codable, Sendable {
         let message: String?
         let ssid: String?
+    }
+}
+
+// MARK: - Shows Endpoints
+
+struct ShowsResponse: Codable, Sendable {
+    let success: Bool
+    let data: ShowsData
+    let timestamp: Int?
+
+    struct ShowsData: Codable, Sendable {
+        let shows: [ShowMetadata]
+        let count: Int?
+
+        struct ShowMetadata: Codable, Sendable, Identifiable {
+            let id: Int
+            let name: String
+            let duration: Int  // milliseconds
+            let looping: Bool
+            let stepCount: Int?
+
+            var formattedDuration: String {
+                let seconds = duration / 1000
+                let minutes = seconds / 60
+                let remainingSeconds = seconds % 60
+                return String(format: "%d:%02d", minutes, remainingSeconds)
+            }
+        }
+    }
+}
+
+struct CurrentShowResponse: Codable, Sendable {
+    let success: Bool
+    let data: CurrentShowData
+    let timestamp: Int?
+
+    struct CurrentShowData: Codable, Sendable {
+        let playing: Bool
+        let paused: Bool?
+        let showId: Int?
+        let showName: String?
+        let duration: Int?
+        let elapsed: Int?
+        let remaining: Int?
+        let progress: Double?  // 0.0-1.0
+        let chapter: Int?
+        let chapterName: String?
+        let tension: Int?
+        let looping: Bool?
     }
 }
 
@@ -761,6 +928,10 @@ actor RESTClient {
         let _: GenericResponse = try await request("POST", path: "presets/save-current", body: ["name": name])
     }
 
+    func deletePreset(id: Int) async throws {
+        let _: GenericResponse = try await request("DELETE", path: "presets/\(id)")
+    }
+
     // MARK: - Audio Endpoints
 
     func getAudioParameters() async throws -> AudioParametersResponse {
@@ -833,5 +1004,113 @@ actor RESTClient {
 
     func disconnectFromNetwork() async throws {
         let _: GenericResponse = try await request("POST", path: "network/disconnect", body: [:])
+    }
+
+    // MARK: - Effect Preset Endpoints
+
+    /// List all effect presets
+    func getEffectPresets() async throws -> EffectPresetsResponse {
+        try await request("GET", path: "presets/effects")
+    }
+
+    /// Get effect preset detail by ID
+    func getEffectPreset(id: Int) async throws -> EffectPresetDetailResponse {
+        try await request("GET", path: "presets/effects/\(id)")
+    }
+
+    /// Save current effect as a preset
+    /// - Parameters:
+    ///   - slot: Preset slot (0-15)
+    ///   - name: User-friendly preset name
+    func saveEffectPreset(slot: Int, name: String) async throws {
+        let _: GenericResponse = try await request("POST", path: "presets/effects/save-current", body: [
+            "slot": slot,
+            "name": name
+        ])
+    }
+
+    /// Load an effect preset by ID
+    func loadEffectPreset(id: Int) async throws {
+        let _: GenericResponse = try await request("POST", path: "presets/effects/\(id)/load", body: [:])
+    }
+
+    /// Delete an effect preset by ID
+    func deleteEffectPreset(id: Int) async throws {
+        let _: GenericResponse = try await request("DELETE", path: "presets/effects/\(id)")
+    }
+
+    // MARK: - Zone Preset Endpoints
+
+    /// List all zone presets
+    func getZonePresets() async throws -> ZonePresetsResponse {
+        try await request("GET", path: "presets/zones")
+    }
+
+    /// Get zone preset detail by ID
+    func getZonePreset(id: Int) async throws -> ZonePresetDetailResponse {
+        try await request("GET", path: "presets/zones/\(id)")
+    }
+
+    /// Save current zone configuration as a preset
+    /// - Parameters:
+    ///   - slot: Preset slot (0-15)
+    ///   - name: User-friendly preset name
+    func saveZonePreset(slot: Int, name: String) async throws {
+        let _: GenericResponse = try await request("POST", path: "presets/zones/save-current", body: [
+            "slot": slot,
+            "name": name
+        ])
+    }
+
+    /// Load a zone preset by ID (applies zone configuration)
+    func loadZonePresetById(id: Int) async throws {
+        let _: GenericResponse = try await request("POST", path: "presets/zones/\(id)/load", body: [:])
+    }
+
+    /// Delete a zone preset by ID
+    func deleteZonePreset(id: Int) async throws {
+        let _: GenericResponse = try await request("DELETE", path: "presets/zones/\(id)")
+    }
+
+    // MARK: - Shows Endpoints
+
+    /// List all available shows
+    func getShows() async throws -> ShowsResponse {
+        try await request("GET", path: "shows")
+    }
+
+    /// Get current show playback status
+    func getCurrentShow() async throws -> CurrentShowResponse {
+        try await request("GET", path: "shows/current")
+    }
+
+    /// Start playing a show by ID
+    func playShow(id: Int) async throws {
+        let _: GenericResponse = try await request("POST", path: "shows/control", body: [
+            "action": "start",
+            "showId": id
+        ])
+    }
+
+    /// Pause current show (toggle pause/resume)
+    func pauseShow() async throws {
+        let _: GenericResponse = try await request("POST", path: "shows/control", body: [
+            "action": "pause"
+        ])
+    }
+
+    /// Stop current show
+    func stopShow() async throws {
+        let _: GenericResponse = try await request("POST", path: "shows/control", body: [
+            "action": "stop"
+        ])
+    }
+
+    /// Seek to position in current show
+    func seekShow(timeMs: Int) async throws {
+        let _: GenericResponse = try await request("POST", path: "shows/control", body: [
+            "action": "seek",
+            "timeMs": timeMs
+        ])
     }
 }

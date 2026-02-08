@@ -50,8 +50,8 @@ void LGPMeshNetworkEffect::render(plugins::EffectContext& ctx) {
                                                                       nodeBright);
                 }
             } else if (distToNode < 20.0f) {
-                // Connections to nearby nodes (sin(k*dist - phase) = OUTWARD propagation)
-                float connection = sinf(distToNode * 0.5f - m_phase + n);
+                // Connections to nearby nodes (sin(k*dist + phase) = INWARD propagation - intentional design)
+                float connection = sinf(distToNode * 0.5f + m_phase + n);
                 connection *= expf(-distToNode * 0.1f);
 
                 uint8_t connBright = (uint8_t)(fabsf(connection) * 128.0f * intensityNorm);

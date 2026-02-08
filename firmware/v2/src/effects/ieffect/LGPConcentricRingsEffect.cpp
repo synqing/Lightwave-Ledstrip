@@ -37,8 +37,8 @@ void LGPConcentricRingsEffect::render(plugins::EffectContext& ctx) {
         float distFromCenter = (float)centerPairDistance((uint16_t)i);
         float normalizedDist = distFromCenter / (float)HALF_LENGTH;
 
-        // Bessel function-like (sin(k*dist - phase) = OUTWARD motion)
-        float bessel = sinf(distFromCenter * ringCount * 0.2f - m_phase);
+        // Bessel function-like (sin(k*dist + phase) = INWARD motion - intentional design)
+        float bessel = sinf(distFromCenter * ringCount * 0.2f + m_phase);
         bessel *= 1.0f / sqrtf(normalizedDist + 0.1f);
 
         // Sharp ring edges

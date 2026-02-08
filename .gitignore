@@ -52,6 +52,7 @@ wifi_credentials.ini
 # Claude / local agent tooling (keep folder structure tracked via .claude/.gitkeep)
 .claude/**
 !.claude/.gitkeep
+**/.claude/
 
 # Local semantic tooling / MCP manifests (environment-specific)
 .code-context/
@@ -163,3 +164,12 @@ context_engineering_runs/
 
 # Temporary working directory
 z_temp/
+
+# AI/IDE tool configuration directories
+.agent/
+.agents/
+.continue/
+.kiro/
+.qoder/
+.trae/
+.windsurf/

@@ -4,7 +4,11 @@
 **Last Updated:** 2025-12-28
 **Status:** Reference Document
 
+For the concrete PRISM/Trinity → firmware transport protocol, see `docs/audio-visual/TRINITY_WS_PROTOCOL.md`.
+
 This document establishes the architectural framework for audio-reactive visualizations in LightwaveOS. It rejects rigid frequency-to-visual bindings in favor of adaptive, musical-intelligence-driven approaches.
+
+**See also:** `docs/audio-visual/prism-trinity-bridge.md` for the concrete PRISM/Trinity WebSocket protocol and the firmware-side semantic bridge (segments → narrative + parameter sweeps).
 
 ---
 

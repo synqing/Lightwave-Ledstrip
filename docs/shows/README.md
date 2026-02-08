@@ -384,19 +384,19 @@ Connect to `ws://lightwaveos.local/ws` and send JSON commands:
 
 ```javascript
 // Start a show
-ws.send(JSON.stringify({cmd: "show.start", showId: 2}));
+ws.send(JSON.stringify({type: "show.start", showId: 2}));
 
 // Stop the show
-ws.send(JSON.stringify({cmd: "show.stop"}));
+ws.send(JSON.stringify({type: "show.stop"}));
 
 // Pause/resume
-ws.send(JSON.stringify({cmd: "show.pause"}));
+ws.send(JSON.stringify({type: "show.pause"}));
 
 // Request status
-ws.send(JSON.stringify({cmd: "show.status"}));
+ws.send(JSON.stringify({type: "show.status"}));
 
 // List available shows
-ws.send(JSON.stringify({cmd: "show.list"}));
+ws.send(JSON.stringify({type: "show.list"}));
 ```
 
 **WebSocket Events** (server → client):

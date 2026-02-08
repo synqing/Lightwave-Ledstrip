@@ -298,7 +298,7 @@ These types are registered under `firmware/v2/src/network/webserver/ws/` via `Ws
 - `motion.*` (phase/speed/momentum suite)
 - `debug.audio.get` / `debug.audio.set`
 - `auth.status` / `auth.rotate` (when auth enabled)
-- `trinity.beat` / `trinity.macro` / `trinity.sync`
+- `trinity.beat` / `trinity.macro` / `trinity.segment` / `trinity.sync`
 
 ---
 
@@ -401,4 +401,3 @@ Tab5.encoder is a **client** of v2’s control surface:
 - It emits v2 control commands (effect selection, parameter updates, zone commands, transition/config commands).
 
 The authoritative mapping table belongs in the Tab5.encoder document, but v2 should expose a stable, versioned command surface (prefer v1 style message schemas and consistent response envelopes).
-

@@ -248,10 +248,44 @@ void SnapwaveLinearEffect::render(plugins::EffectContext& ctx) {
     renderHistoryToLeds(ctx);
 
     // =========================================
-    // STEP 8: Keep strip 2 black
+    // STEP 8: Render to strip 2 (centre-origin at LED 239/240)
     // =========================================
     if (ctx.ledCount > 160) {
-        memset(&ctx.leds[160], 0, (ctx.ledCount - 160) * sizeof(CRGB));
+        uint16_t strip2Start = 160;
+        uint16_t strip2Center = 240;  // Centre of strip 2
+        uint16_t strip2HalfLen = 80;
+
+        // Clear strip 2 first
+        memset(&ctx.leds[strip2Start], 0, strip2HalfLen * 2 * sizeof(CRGB));
+
+        // Render history to strip 2 with phase offset for visual interest
+        for (uint16_t i = 0; i < HISTORY_SIZE; ++i) {
+            uint16_t idx = (m_historyIndex + i) % HISTORY_SIZE;
+            uint8_t distance = m_distanceHistory[idx];
+            CRGB color = m_colorHistory[idx];
+
+            // Faded brightness (oldest = dimmest)
+            float ageFactor = (float)(i + 1) / (float)HISTORY_SIZE;
+            float fadedBrightness = ageFactor * ageFactor;
+            uint8_t scale = (uint8_t)(fadedBrightness * 255.0f);
+            CRGB fadedColor = color;
+            fadedColor.nscale8(scale);
+
+            if (scale < 5) continue;
+
+            // Map to strip 2 centre-origin
+            if (distance < strip2HalfLen) {
+                uint16_t leftPos = strip2Center - 1 - distance;
+                uint16_t rightPos = strip2Center + distance;
+
+                if (leftPos >= strip2Start && leftPos < ctx.ledCount) {
+                    ctx.leds[leftPos] += fadedColor;
+                }
+                if (rightPos < ctx.ledCount) {
+                    ctx.leds[rightPos] += fadedColor;
+                }
+            }
+        }
     }
 }
 

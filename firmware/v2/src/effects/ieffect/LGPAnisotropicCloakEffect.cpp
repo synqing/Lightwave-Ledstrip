@@ -49,7 +49,7 @@ void LGPAnisotropicCloakEffect::render(plugins::EffectContext& ctx) {
         float sideBias = (i < m_pos) ? (1.0f + anisotropy) : (1.0f - anisotropy);
         sideBias = constrain(sideBias, -2.0f, 2.0f);
 
-        float offset = baseIndex * powf(norm, 1.5f) * sideBias * cloakRadius * 0.5f;
+        float offset = baseIndex * (norm * sqrtf(norm)) * sideBias * cloakRadius * 0.5f;  // Optimized: x^1.5 = x*sqrt(x)
         float sample = (float)i + ((i < m_pos) ? -offset : offset);
         sample = constrain(sample, 0.0f, (float)(STRIP_LENGTH - 1));
 

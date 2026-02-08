@@ -34,7 +34,6 @@ void LGPGrinCloakEffect::render(plugins::EffectContext& ctx) {
     float speedNorm = ctx.speed / 50.0f;
 
     const float cloakRadius = 20.0f;
-    const float exponent = 2.0f;
     const float gradient = 1.5f;
 
     m_pos += m_vel * speedNorm;
@@ -47,7 +46,7 @@ void LGPGrinCloakEffect::render(plugins::EffectContext& ctx) {
         float norm = (cloakRadius > 0.001f) ? (dist / cloakRadius) : 0.0f;
         norm = constrain(norm, 0.0f, 1.0f);
 
-        float lensStrength = gradient * powf(norm, exponent);
+        float lensStrength = gradient * (norm * norm);  // Optimized: exponent=2.0 → x*x
         float direction = (i < m_pos) ? -1.0f : 1.0f;
         float sample = (float)i + direction * lensStrength * cloakRadius * 0.6f;
         sample = constrain(sample, 0.0f, (float)(STRIP_LENGTH - 1));

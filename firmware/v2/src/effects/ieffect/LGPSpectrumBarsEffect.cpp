@@ -65,7 +65,14 @@ void LGPSpectrumBarsEffect::render(plugins::EffectContext& ctx) {
 
     // Update smoothed bands (fast attack, slow decay)
     for (int i = 0; i < 8; ++i) {
-        float target = ctx.audio.available ? (ctx.audio.getBand(i) * ctx.audio.controlBus.silentScale) : 0.0f;
+        float target;
+        if (ctx.audio.available) {
+            target = ctx.audio.getBand(i) * ctx.audio.controlBus.silentScale;
+        } else {
+            // Fallback: gentle sine wave animation when no audio
+            float phase = ctx.totalTimeMs * 0.001f + i * 0.4f;
+            target = 0.3f + 0.2f * sinf(phase);
+        }
         if (target > m_smoothedBands[i]) {
             m_smoothedBands[i] = target;  // Instant attack
         } else {

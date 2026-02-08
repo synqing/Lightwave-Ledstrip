@@ -55,6 +55,8 @@ void WaveReactiveEffect::render(plugins::EffectContext& ctx) {
     // CENTER ORIGIN WAVE - Waves propagate from center
     // REACTIVE pattern: energy accumulation drives motion
 
+    float dt = ctx.getSafeDeltaSeconds();
+
     // Base speed from user parameter
     float baseSpeed = (float)ctx.speed;
     float waveFreq = 15.0f;  // Fixed wave frequency
@@ -64,12 +66,12 @@ void WaveReactiveEffect::render(plugins::EffectContext& ctx) {
         // REACTIVE pattern: Audio drives motion through ACCUMULATION
         // This is the key insight from Sensory Bridge Kaleidoscope
 
-        // Step 1: Accumulate energy from RMS
+        // Step 1: Accumulate energy from RMS (dt-corrected)
         float rms = ctx.audio.rms();
-        m_energyAccum += rms * ENERGY_ACCUMULATION_RATE;
+        m_energyAccum += rms * ENERGY_ACCUMULATION_RATE * dt * 60.0f;
 
-        // Step 2: Decay accumulated energy (prevents runaway, creates smoothness)
-        m_energyAccum *= ENERGY_DECAY_RATE;
+        // Step 2: Decay accumulated energy (dt-corrected)
+        m_energyAccum *= powf(ENERGY_DECAY_RATE, dt * 60.0f);
 
         // Step 3: Flux transient detection (brightness boost)
         float flux = ctx.audio.flux();
@@ -81,14 +83,14 @@ void WaveReactiveEffect::render(plugins::EffectContext& ctx) {
     }
 #endif
 
-    // Update wave offset with energy-augmented speed
+    // Update wave offset with energy-augmented speed (dt-corrected)
     // REACTIVE pattern: accumulated energy adds to base speed, not replaces it
     float effectiveSpeed = baseSpeed + m_energyAccum * ENERGY_TO_SPEED_FACTOR;
-    m_waveOffset += (uint32_t)effectiveSpeed;
+    m_waveOffset += (uint32_t)(effectiveSpeed * dt * 60.0f);
     if (m_waveOffset > 65535) m_waveOffset = m_waveOffset % 65536;
 
-    // Decay flux boost for transient brightness
-    m_fluxBoost *= FLUX_BOOST_DECAY;
+    // Decay flux boost for transient brightness (dt-corrected)
+    m_fluxBoost *= powf(FLUX_BOOST_DECAY, dt * 60.0f);
     if (m_fluxBoost < 0.01f) m_fluxBoost = 0.0f;
 
     // Gentle fade for smooth trails

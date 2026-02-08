@@ -142,12 +142,14 @@ void LGPChromaticLensEffect::render(plugins::EffectContext& ctx) {
         ctx.leds[i] = color;
     }
 
+    // Strip 2: Centre-origin at LED 240 (not edge mirror)
     if (ctx.ledCount >= STRIP_LENGTH * 2) {
         for (int i = 0; i < STRIP_LENGTH; i++) {
-            int mirrorIdx = STRIP_LENGTH * 2 - 1 - i;
-            if (mirrorIdx < (int)ctx.ledCount) {
+            // Calculate position on strip 2 using same centre-origin pattern
+            int strip2Idx = STRIP_LENGTH + i;
+            if (strip2Idx < (int)ctx.ledCount) {
                 CRGB color = chromaticDispersionPalette((float)i, aberration, m_phase + PI, intensity, ctx.palette, ctx.gHue);
-                ctx.leds[mirrorIdx] = CRGB(color.b, color.g, color.r);
+                ctx.leds[strip2Idx] = CRGB(color.b, color.g, color.r);  // RGB swap for visual interest
             }
         }
     }

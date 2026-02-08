@@ -161,14 +161,32 @@ void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
         if (ledDist > 0) {
             uint16_t leftIdx2 = centerLED - 1 - (ledDist - 1);
             uint16_t rightIdx2 = centerLED + (ledDist - 1);
-            
+
             CRGB color2 = color.nscale8(bright / 2);  // Dimmer for adjacent
-            
+
             if (leftIdx2 < ctx.ledCount) {
                 ctx.leds[leftIdx2] += color2;
             }
             if (rightIdx2 < ctx.ledCount) {
                 ctx.leds[rightIdx2] += color2;
+            }
+        }
+
+        // Strip 2: Centre-origin at LED 240
+        if (ctx.ledCount >= 320) {
+            uint16_t strip2Center = 240;
+            uint16_t leftIdx3 = strip2Center - 1 - ledDist;
+            uint16_t rightIdx3 = strip2Center + ledDist;
+
+            // Use complementary hue offset for strip 2
+            CRGB color3 = frequencyToColor(bin, ctx);
+            color3.nscale8(bright);
+
+            if (leftIdx3 >= 160 && leftIdx3 < ctx.ledCount) {
+                ctx.leds[leftIdx3] += color3;
+            }
+            if (rightIdx3 < ctx.ledCount) {
+                ctx.leds[rightIdx3] += color3;
             }
         }
     }

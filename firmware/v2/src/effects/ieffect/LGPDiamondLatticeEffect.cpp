@@ -43,7 +43,7 @@ void LGPDiamondLatticeEffect::render(plugins::EffectContext& ctx) {
 
         // Interference creates diamond nodes
         float diamond = fabsf(wave1 * wave2);
-        diamond = powf(diamond, 0.5f);
+        diamond = sqrtf(diamond);  // Optimized: sqrtf faster than powf(x, 0.5f)
 
         uint8_t brightness = (uint8_t)(diamond * 255.0f * intensityNorm);
         uint8_t paletteIndex = (uint8_t)(distFromCenter * 2.0f);

@@ -2,8 +2,14 @@
 //  LWSlider.swift
 //  LightwaveOS
 //
-//  Gold-accent slider with gradient track, glow effect, and endpoint labels.
+//  Gold-accent slider with "Liquid Glass" treatment, gradient track, haptic feedback, and endpoint labels.
 //  Used for brightness (0-255), speed (1-50), mood (0-255), etc.
+//
+//  Glass treatment:
+//  - Track: glassSurface with thin style (5pt corner radius)
+//  - Thumb: 3-layer premium design (base, specular highlight, drag glow)
+//  - Haptic feedback: Light impact on value changes
+//  - Drag feedback: 1.1x scale and gold glow
 //
 
 import SwiftUI
@@ -20,7 +26,11 @@ struct LWSlider: View {
     var onEnded: (() -> Void)?
 
     @State private var isDragging = false
+    @State private var lastHapticValue: Int = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    // Haptic feedback generator
+    private let hapticGenerator = UIImpactFeedbackGenerator(style: .light)
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
@@ -39,53 +49,58 @@ struct LWSlider: View {
                     .foregroundStyle(Color.lwGold)
             }
 
-            // Custom slider track with gradient
+            // Custom slider track with gradient and glass treatment
             GeometryReader { geometry in
+                let thumbRadius: CGFloat = 8 // Half of 16pt thumb width
+                let clampedFillWidth = clampedThumbPosition(
+                    percent: (value - range.lowerBound) / (range.upperBound - range.lowerBound),
+                    width: geometry.size.width,
+                    thumbRadius: thumbRadius
+                )
+
                 ZStack(alignment: .leading) {
-                    // Background track
+                    // Background track with glass surface
                     RoundedRectangle(cornerRadius: 5)
                         .fill(Color.lwCard)
                         .frame(height: 10)
-
-                    // Filled portion with gradient
-                    let fillWidth = CGFloat((value - range.lowerBound) / (range.upperBound - range.lowerBound)) * geometry.size.width
-                    RoundedRectangle(cornerRadius: 5)
-                        .fill(trackGradient ?? defaultGradient)
-                        .frame(width: max(0, fillWidth), height: 10)
-
-                    // Thumb
-                    Circle()
-                        .fill(Color.lwGold)
-                        .frame(width: 24, height: 24)
-                        .shadow(
-                            color: isDragging && !reduceMotion ? Color.lwGold.opacity(0.6) : Color.clear,
-                            radius: isDragging && !reduceMotion ? 8 : 0,
-                            x: 0,
-                            y: 0
-                        )
-                        .position(
-                            x: fillWidth,
-                            y: geometry.size.height / 2
-                        )
+                        .glassSurface(style: .base, cornerRadius: 5)
+                        .contentShape(Rectangle())
                         .gesture(
                             DragGesture(minimumDistance: 0)
                                 .onChanged { gesture in
-                                    if !isDragging {
-                                        isDragging = true
-                                    }
-                                    updateValue(from: gesture.location.x, in: geometry.size.width)
-                                    onChanged?(value)
+                                    handleDragChanged(at: gesture.location.x, in: geometry.size.width)
                                 }
                                 .onEnded { _ in
-                                    withAnimation(.easeOut(duration: 0.3)) {
-                                        isDragging = false
-                                    }
-                                    onEnded?()
+                                    handleDragEnded()
                                 }
                         )
+
+                    // Filled portion with gradient
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(trackGradient ?? defaultGradient)
+                        .frame(width: max(0, clampedFillWidth), height: 10)
+
+                    // Premium 3-layer thumb with 44pt hit target
+                    ZStack {
+                        premiumThumb()
+                    }
+                    .frame(width: 44, height: 44) // 44pt hit target
+                    .position(
+                        x: clampedFillWidth,
+                        y: geometry.size.height / 2
+                    )
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { gesture in
+                                handleDragChanged(at: gesture.location.x, in: geometry.size.width)
+                            }
+                            .onEnded { _ in
+                                handleDragEnded()
+                            }
+                    )
                 }
             }
-            .frame(height: 24)
+            .frame(height: 44) // Increased from 24 to accommodate 44pt hit target
 
             // Endpoint labels
             if let leftLabel = leftLabel, let rightLabel = rightLabel {
@@ -116,11 +131,44 @@ struct LWSlider: View {
             @unknown default:
                 break
             }
+            hapticGenerator.impactOccurred()
             onChanged?(value)
+        }
+        .onAppear {
+            lastHapticValue = Int(value)
         }
     }
 
     // MARK: - Helpers
+
+    /// Premium 3-layer thumb with glass treatment
+    @ViewBuilder
+    private func premiumThumb() -> some View {
+        ZStack {
+            // Layer 1: Base circle (lwElevated fill)
+            Circle()
+                .fill(Color.lwElevated)
+                .frame(width: 16, height: 16)
+
+            // Layer 2: Specular highlight (top-left ellipse)
+            Ellipse()
+                .fill(Color.white.opacity(0.3))
+                .frame(width: 6, height: 3)
+                .offset(x: -2, y: -3)
+
+            // Layer 3: Drag glow (gold, 140% scale, appears on drag)
+            if isDragging && !reduceMotion {
+                Circle()
+                    .fill(Color.lwGold)
+                    .frame(width: 16, height: 16)
+                    .scaleEffect(1.4)
+                    .opacity(0.4)
+                    .blur(radius: 8)
+            }
+        }
+        .scaleEffect(isDragging && !reduceMotion ? 1.1 : 1.0)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isDragging)
+    }
 
     private var defaultGradient: LinearGradient {
         LinearGradient(
@@ -128,6 +176,44 @@ struct LWSlider: View {
             startPoint: .leading,
             endPoint: .trailing
         )
+    }
+
+    /// Clamp thumb position so it stays fully within track bounds
+    private func clampedThumbPosition(percent: Double, width: CGFloat, thumbRadius: CGFloat) -> CGFloat {
+        let rawPosition = CGFloat(percent) * width
+        return min(max(rawPosition, thumbRadius), width - thumbRadius)
+    }
+
+    /// Unified drag handling with haptic feedback
+    private func handleDragChanged(at x: CGFloat, in width: CGFloat) {
+        if !isDragging {
+            isDragging = true
+            hapticGenerator.prepare()
+        }
+
+        let oldValue = value
+        updateValue(from: x, in: width)
+
+        // Haptic feedback on value changes
+        let currentHapticValue = Int(value)
+        if currentHapticValue != lastHapticValue {
+            hapticGenerator.impactOccurred()
+            lastHapticValue = currentHapticValue
+        }
+
+        // onChanged is for local UI updates only, no external callback during drag
+        // External callbacks happen only on drag end to avoid network spam
+    }
+
+    /// Handle drag end with external callback
+    private func handleDragEnded() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            isDragging = false
+        }
+
+        // Commit final value to external callback
+        onChanged?(value)
+        onEnded?()
     }
 
     private func updateValue(from x: CGFloat, in width: CGFloat) {

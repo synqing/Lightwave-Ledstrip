@@ -3,10 +3,13 @@
 //  LightwaveOS
 //
 //  Container card with gradient background and optional title header.
+//  Now uses "Liquid Glass" primitives for premium visual treatment.
 //
 
 import SwiftUI
 
+/// Card component with Liquid Glass treatment.
+/// Uses the 8-layer optical stack from the glass primitives.
 struct LWCard<Content: View>: View {
     var title: String?
     var elevated: Bool = false
@@ -27,28 +30,40 @@ struct LWCard<Content: View>: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
+        // Layer 1: Base shape with gradient
         .background(
             RoundedRectangle(cornerRadius: CornerRadius.card)
                 .fill(Color.lwCardGradient)
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: CornerRadius.card)
-                .strokeBorder(accentBorder ?? Color.clear, lineWidth: accentBorder != nil ? 2 : 0)
-        )
-        .modifier(ShadowModifier(elevated: elevated))
+        // Layer 2: Glass surface (material blur)
+        .glassSurface(style: .card, cornerRadius: CornerRadius.card)
+        // Layer 3: Inner shadow for depth
+        .innerShadow(cornerRadius: CornerRadius.card)
+        // Layer 4: Inner highlight (specular lip)
+        .innerHighlight(style: .subtle, cornerRadius: CornerRadius.card)
+        // Layer 5: Gradient stroke border
+        .gradientStroke(style: accentBorder != nil ? .zone(accentBorder!) : .subtle, cornerRadius: CornerRadius.card)
+        // Layer 6: Grain overlay for texture
+        .grainOverlay(.subtle)
+        // Composite all card body layers to prevent scroll artifacts
+        .compositingGroup()
+        // Layer 7: Clip to shape
+        .clipShape(RoundedRectangle(cornerRadius: CornerRadius.card))
+        // Layer 8: Shadow stack
+        .modifier(GlassShadowModifier(elevated: elevated))
     }
 }
 
 // MARK: - Shadow Modifier
 
-private struct ShadowModifier: ViewModifier {
+private struct GlassShadowModifier: ViewModifier {
     let elevated: Bool
 
     func body(content: Content) -> some View {
         if elevated {
-            content.elevatedShadow()
+            content.shadowStack(style: .elevated)
         } else {
-            content.ambientShadow()
+            content.shadowStack(style: .card)
         }
     }
 }

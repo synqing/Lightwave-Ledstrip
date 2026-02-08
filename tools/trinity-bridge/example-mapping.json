@@ -1,0 +1,32 @@
+{
+  "segmentRules": [
+    {
+      "name": "Chorus/Drop → Beat Pulse",
+      "match": { "pattern": "chorus|drop|climax", "flags": "i" },
+      "actions": [
+        { "type": "effects.setCurrent", "effectId": 69, "transition": { "type": 2, "duration": 900 } },
+        { "type": "effects.setBrightness", "value": 255 },
+        { "type": "effects.setSpeed", "value": 25 }
+      ]
+    },
+    {
+      "name": "Verse/Intro → Bass Breath",
+      "match": { "pattern": "verse|intro", "flags": "i" },
+      "actions": [
+        { "type": "effects.setCurrent", "effectId": 71, "transition": { "type": 1, "duration": 1200 } },
+        { "type": "effects.setBrightness", "value": 140 },
+        { "type": "effects.setSpeed", "value": 12 }
+      ]
+    },
+    {
+      "name": "Break/Bridge/Outro → Waveform",
+      "match": { "pattern": "break|bridge|outro|ambient", "flags": "i" },
+      "actions": [
+        { "type": "effects.setCurrent", "effectId": 72, "transition": { "type": 1, "duration": 1500 } },
+        { "type": "effects.setBrightness", "value": 110 },
+        { "type": "effects.setSpeed", "value": 10 }
+      ]
+    }
+  ]
+}
+

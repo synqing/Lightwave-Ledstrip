@@ -116,7 +116,9 @@ void LGPInterferenceScannerEffect::render(plugins::EffectContext& ctx) {
     } else
 #endif
     {
-        m_energyAvg *= 0.98f;
+        // dt-corrected decay when audio unavailable (matches Enhanced version)
+        float dtFallback = enhancement::getSafeDeltaSeconds(ctx.deltaTimeSeconds);
+        m_energyAvg *= powf(0.98f, dtFallback * 60.0f);
         m_energyDelta = 0.0f;
     }
 

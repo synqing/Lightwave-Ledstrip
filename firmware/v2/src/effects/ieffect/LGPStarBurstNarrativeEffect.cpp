@@ -235,8 +235,9 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
         targetWarmth *= warmthScale;
 
         // Asymmetric smoothing: fast rise on crescendos, slow fall on decrescendos
-        const float warmthRise = dt / (0.15f + dt);  // ~150ms rise
-        const float warmthFall = dt / (0.60f + dt);  // ~600ms fall
+        // True exponential (frame-rate independent) per SmoothingEngine.h
+        const float warmthRise = 1.0f - expf(-dt / 0.15f);  // ~150ms rise
+        const float warmthFall = 1.0f - expf(-dt / 0.60f);  // ~600ms fall
         m_warmthOffset = smoothValue(m_warmthOffset, targetWarmth, warmthRise, warmthFall);
 
         // Smooth style transitions to prevent jarring switches
@@ -558,8 +559,10 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
     // Smooth committed root bin - rate adapts to style
     // RHYTHMIC: faster color changes (colorTransitionSpeed = 0.8)
     // HARMONIC: slower, more intentional (colorTransitionSpeed = 0.3)
+    // True exponential (frame-rate independent) per SmoothingEngine.h
     const float colorSmoothTau = 0.35f / m_styleTiming.colorTransitionSpeed;
-    m_keyRootBinSmooth += ((float)m_keyRootBin - m_keyRootBinSmooth) * (dt / (colorSmoothTau + dt));
+    const float colorAlpha = 1.0f - expf(-dt / colorSmoothTau);
+    m_keyRootBinSmooth += ((float)m_keyRootBin - m_keyRootBinSmooth) * colorAlpha;
     if (m_keyRootBinSmooth < 0.0f) m_keyRootBinSmooth = 0.0f;
     if (m_keyRootBinSmooth > 11.0f) m_keyRootBinSmooth = 11.0f;
 
@@ -630,7 +633,8 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
 #else
     const float rawFlux = 0.0f;
 #endif
-    m_fluxSmooth = smoothValue(m_fluxSmooth, rawFlux, dt / (0.25f + dt), dt / (0.80f + dt));
+    // True exponential (frame-rate independent) per SmoothingEngine.h
+    m_fluxSmooth = smoothValue(m_fluxSmooth, rawFlux, 1.0f - expf(-dt / 0.25f), 1.0f - expf(-dt / 0.80f));
 
     // Texture phase accumulator - rate modulated by flux
     const float textureRate = 3.0f * (0.5f + m_fluxSmooth);

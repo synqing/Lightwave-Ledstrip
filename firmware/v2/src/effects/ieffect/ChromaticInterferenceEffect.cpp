@@ -107,12 +107,13 @@ CRGB ChromaticInterferenceEffect::chromaticDispersionPalette(float position,
 
 void ChromaticInterferenceEffect::render(plugins::EffectContext& ctx) {
     // Dual-edge injection with dispersion, interference patterns
+    float dt = ctx.getSafeDeltaSeconds();
     float intensity = ctx.brightness / 255.0f;
     // Aberration strength from complexity parameter (b1: complexity_norm * 3)
     float aberration = (ctx.complexity / 255.0f) * 3.0f;
-    
-    // Interference phase animation
-    m_interferencePhase += ctx.speed * PHASE_SPEED;
+
+    // Interference phase animation (dt-corrected)
+    m_interferencePhase += ctx.speed * PHASE_SPEED * 60.0f * dt;
     if (m_interferencePhase > TWO_PI) m_interferencePhase -= TWO_PI;
     
     for (uint16_t i = 0; i < ctx.ledCount && i < STRIP_LENGTH; i++) {

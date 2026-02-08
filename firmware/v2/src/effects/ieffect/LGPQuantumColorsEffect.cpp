@@ -24,9 +24,10 @@ bool LGPQuantumColorsEffect::init(plugins::EffectContext& ctx) {
 
 void LGPQuantumColorsEffect::render(plugins::EffectContext& ctx) {
     // Colors exist in quantum states until "observed"
+    float dt = ctx.getSafeDeltaSeconds();
     float intensity = ctx.brightness / 255.0f;
 
-    m_waveFunction += ctx.speed * 0.001f;
+    m_waveFunction += ctx.speed * 0.001f * 60.0f * dt;  // dt-corrected
 
     const int numStates = 4;
 

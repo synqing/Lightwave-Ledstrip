@@ -26,8 +26,9 @@ void OceanEffect::render(plugins::EffectContext& ctx) {
     // CENTER ORIGIN OCEAN - Waves emanate from center 79/80
     // Narrative integration: wave intensity modulated by narrative intensity
     using namespace lightwaveos::narrative;
-    
-    m_waterOffset += ctx.speed / 2;
+    float dt = ctx.getSafeDeltaSeconds();
+
+    m_waterOffset += (uint32_t)(ctx.speed / 2 * 60.0f * dt);  // dt-corrected
 
     if (m_waterOffset > 65535) m_waterOffset = m_waterOffset % 65536;
     

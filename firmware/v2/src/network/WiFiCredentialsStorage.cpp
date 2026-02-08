@@ -213,7 +213,9 @@ uint8_t WiFiCredentialsStorage::loadNetworks(NetworkCredential* networks, uint8_
         }
     }
 
-    LW_LOGI("Loaded %d networks from NVS", loaded);
+    if (loaded > 0) {
+        LW_LOGD("Loaded %d networks from NVS", loaded);
+    }
     return loaded;
 }
 

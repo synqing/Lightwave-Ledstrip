@@ -41,6 +41,7 @@
 
 #include <ArduinoJson.h>
 #include "ApiResponse.h"
+#include "../config/limits.h"  // Single source of truth for system limits
 
 namespace lightwaveos {
 namespace network {
@@ -581,8 +582,7 @@ public:
  * @return Valid effect ID, defaults to 0 if out of bounds
  */
 inline uint8_t validateEffectIdInRequest(uint8_t effectId) {
-    constexpr uint8_t MAX_EFFECTS = 104;  // Keep in sync with RendererActor::MAX_EFFECTS
-    if (effectId >= MAX_EFFECTS) {
+    if (effectId >= limits::MAX_EFFECTS) {
         return 0;  // Return safe default (effect 0)
     }
     return effectId;
@@ -597,8 +597,7 @@ inline uint8_t validateEffectIdInRequest(uint8_t effectId) {
  * @return Valid palette ID, defaults to 0 if out of bounds
  */
 inline uint8_t validatePaletteIdInRequest(uint8_t paletteId) {
-    constexpr uint8_t MASTER_PALETTE_COUNT = 75;  // From Palettes_Master.h
-    if (paletteId >= MASTER_PALETTE_COUNT) {
+    if (paletteId >= limits::MAX_PALETTES) {
         return 0;  // Return safe default (palette 0)
     }
     return paletteId;

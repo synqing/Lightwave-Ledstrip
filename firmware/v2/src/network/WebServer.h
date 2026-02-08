@@ -25,6 +25,7 @@
 #pragma once
 
 #include "../config/features.h"
+#include "../config/limits.h"
 
 #if FEATURE_WEB_SERVER
 
@@ -283,7 +284,9 @@ public:
             uint32_t framesRendered;
         } stats;
         // Effect names - pointers to stable strings in RendererActor (valid until next cache update)
-        const char* effectNames[102];  // MAX_EFFECTS (keep in sync with RendererNode::MAX_EFFECTS)
+        // Uses limits::MAX_EFFECTS (single source of truth)
+        static constexpr uint8_t MAX_CACHED_EFFECTS = limits::MAX_EFFECTS;
+        const char* effectNames[MAX_CACHED_EFFECTS];
         // Audio tuning (if available) - simplified to avoid include dependency
 #if FEATURE_AUDIO_SYNC
         struct {

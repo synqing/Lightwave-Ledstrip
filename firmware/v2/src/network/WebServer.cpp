@@ -47,6 +47,7 @@
 #include "webserver/ws/WsPaletteCommands.h"
 #include "webserver/ws/WsPresetCommands.h"
 #include "webserver/ws/WsZonePresetCommands.h"
+#include "webserver/ws/WsEffectPresetCommands.h"
 #include "webserver/ws/WsBatchCommands.h"
 #if FEATURE_AUDIO_SYNC
 #include "webserver/ws/WsAudioCommands.h"
@@ -714,12 +715,14 @@ void WebServer::updateCachedRendererState() {
     
     // Cache effect names (pointers to stable strings in RendererActor)
     uint8_t count = m_cachedRendererState.effectCount;
-    if (count > 102) count = 102;  // Safety: MAX_EFFECTS
+    if (count > CachedRendererState::MAX_CACHED_EFFECTS) {
+        count = CachedRendererState::MAX_CACHED_EFFECTS;
+    }
     for (uint8_t i = 0; i < count; ++i) {
         m_cachedRendererState.effectNames[i] = m_renderer->getEffectName(i);
     }
     // Clear remaining slots
-    for (uint8_t i = count; i < 96; ++i) {
+    for (uint8_t i = count; i < CachedRendererState::MAX_CACHED_EFFECTS; ++i) {
         m_cachedRendererState.effectNames[i] = nullptr;
     }
     
@@ -960,6 +963,7 @@ void WebServer::setupWebSocket() {
     webserver::ws::registerWsPaletteCommands(ctx);
     webserver::ws::registerWsPresetCommands(ctx);
     webserver::ws::registerWsZonePresetCommands(ctx);
+    webserver::ws::registerWsEffectPresetCommands(ctx);
     webserver::ws::registerWsBatchCommands(ctx);
 #if FEATURE_AUDIO_SYNC
     webserver::ws::registerWsAudioCommands(ctx);

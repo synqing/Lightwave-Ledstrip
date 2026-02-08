@@ -51,6 +51,7 @@ class AppViewModel {
     var audio: AudioViewModel
     var transition: TransitionViewModel
     var colourCorrection: ColourCorrectionViewModel
+    var presets: PresetsViewModel
     var deviceStatus: DeviceStatusResponse.DeviceStatus?
     var deviceInfo: DeviceInfoResponse.DeviceInfo?
     var wsConnected: Bool = false
@@ -90,10 +91,14 @@ class AppViewModel {
         self.audio = AudioViewModel()
         self.transition = TransitionViewModel()
         self.colourCorrection = ColourCorrectionViewModel()
+        self.presets = PresetsViewModel()
         self.ws = WebSocketService()
         self.udpReceiver = UDPStreamReceiver()
         self.discovery = DeviceDiscoveryService()
         self.connectionManager = ConnectionManager(ws: ws, discovery: discovery)
+
+        // Load persisted zone state
+        zones.loadPersistedZoneState()
 
         // Set self as delegate AFTER init completes
         Task { @MainActor in
@@ -142,6 +147,7 @@ class AppViewModel {
     /// Handle app entering background
     func handleBackground() async {
         await pauseStreaming()
+        zones.persistZoneState()
         await connectionManager.handleBackground()
     }
 
@@ -512,7 +518,15 @@ class AppViewModel {
         }
 
         log("Loading zones...", category: "INIT")
-        await zones.loadZones()
+        if zones.hasPersistedZoneState {
+            log("Restoring zones from phone...", category: "INIT")
+            await zones.applyPersistedZoneStateToDevice()
+            // Refresh from device after pushing so UI reflects any clamping/normalisation.
+            await zones.loadZones()
+        } else {
+            await zones.loadZones()
+            zones.persistZoneState()
+        }
 
         log("Loading colour correction...", category: "INIT")
         await colourCorrection.loadConfig()
@@ -594,6 +608,7 @@ extension AppViewModel: ConnectionManagerDelegate {
         audio.restClient = rest
         transition.restClient = rest
         colourCorrection.restClient = rest
+        presets.restClient = rest
 
         // Consume WebSocket events - we are the ONLY consumer
         consumeWebSocketEvents(eventStream)
@@ -614,7 +629,10 @@ extension AppViewModel: ConnectionManagerDelegate {
         audio.restClient = nil
         transition.restClient = nil
         colourCorrection.restClient = nil
+        presets.restClient = nil
 
+        effects.disconnect()
+        palettes.disconnect()
         parameters.disconnect()
         zones.disconnect()
         colourCorrection.disconnect()
@@ -631,10 +649,11 @@ extension AppViewModel: ConnectionManagerDelegate {
         udpFallbackActive = false
         udpSubscribeStart = nil
 
-        // Reset effect and palette state
-        effects.currentEffectId = 0
-        effects.currentEffectName = ""
-        palettes.currentPaletteId = 0
+        // Reset preset state
+        presets.effectPresets = []
+        presets.zonePresets = []
+        presets.currentEffectPresetId = nil
+        presets.currentZonePresetId = nil
 
         // Stop UDP
         udpReceiver.stop()

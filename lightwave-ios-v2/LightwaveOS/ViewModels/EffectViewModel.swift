@@ -20,6 +20,8 @@ class EffectViewModel {
     var searchText: String = ""
     var selectedCategory: String = "All"
     var showAudioOnlyFilter: Bool = false
+    var isLoading: Bool = false
+    var lastError: String?
 
     // MARK: - Dependencies
 
@@ -76,7 +78,13 @@ class EffectViewModel {
     // MARK: - API Methods
 
     func loadEffects() async {
-        guard let client = restClient else { return }
+        guard let client = restClient else {
+            lastError = "No REST client available"
+            return
+        }
+
+        isLoading = true
+        lastError = nil
 
         do {
             let response = try await client.getEffects(page: 1, limit: 200)
@@ -92,11 +100,17 @@ class EffectViewModel {
                     categoryName: effect.categoryName
                 )
             }
-            print("Loaded \(allEffects.count) effects")
+
+            let audioCount = allEffects.filter { $0.isAudioReactive }.count
+            print("✓ Loaded \(allEffects.count) effects (\(audioCount) audio-reactive)")
 
         } catch {
-            print("Error loading effects: \(error)")
+            let errorMsg = "Failed to load effects: \(error.localizedDescription)"
+            print("✗ \(errorMsg)")
+            lastError = errorMsg
         }
+
+        isLoading = false
     }
 
     func setEffect(id: Int) async {
@@ -135,5 +149,14 @@ class EffectViewModel {
         let prevEffect = allEffects[prevIndex]
 
         await setEffect(id: prevEffect.id)
+    }
+
+    /// Reset state on disconnect
+    func disconnect() {
+        allEffects = []
+        currentEffectId = 0
+        currentEffectName = ""
+        isLoading = false
+        lastError = nil
     }
 }

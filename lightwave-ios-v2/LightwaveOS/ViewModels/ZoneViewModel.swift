@@ -27,7 +27,7 @@ class ZoneViewModel {
     var presets: [ZonePreset] = []
 
     /// Boundary state (derived from segments, drives split sliders)
-    var boundary0: Int = 55  // b0: inner/middle boundary (default 2-zone even)
+    var boundary0: Int = 60  // b0: inner/middle boundary (default 2-zone: inner=20/side, outer=60/side)
     var boundary1: Int = 30  // b1: middle/outer boundary (default 3-zone even)
 
     // MARK: - Network
@@ -74,6 +74,7 @@ class ZoneViewModel {
         do {
             try await client.setZonesEnabled(newState)
             self.zonesEnabled = newState
+            persistZoneState()
             print("Zones \(newState ? "enabled" : "disabled")")
         } catch {
             print("Error toggling zones: \(error)")
@@ -87,6 +88,7 @@ class ZoneViewModel {
             if let name = effectName {
                 zones[index].effectName = name
             }
+            persistZoneState()
         }
 
         // Prefer WebSocket (real-time), fall back to REST only if WS unavailable
@@ -114,6 +116,7 @@ class ZoneViewModel {
             if let name = paletteName {
                 zones[index].paletteName = name
             }
+            persistZoneState()
         }
 
         // Prefer WebSocket (real-time), fall back to REST only if WS unavailable
@@ -141,6 +144,7 @@ class ZoneViewModel {
             if let name = blendModeName {
                 zones[index].blendModeName = name
             }
+            persistZoneState()
         }
 
         // Prefer WebSocket (real-time), fall back to REST only if WS unavailable
@@ -190,6 +194,7 @@ class ZoneViewModel {
                 if let client = restClient {
                     try await client.setZoneSpeed(zoneId: zoneId, speed: speed)
                 }
+                persistZoneState()
                 print("Updated zone \(zoneId) speed to \(speed)")
 
                 // Clear pending flag after 1 second
@@ -239,6 +244,7 @@ class ZoneViewModel {
                 if let client = restClient {
                     try await client.setZoneBrightness(zoneId: zoneId, brightness: brightness)
                 }
+                persistZoneState()
                 print("Updated zone \(zoneId) brightness to \(brightness)")
 
                 // Clear pending flag after 1 second
@@ -265,7 +271,7 @@ class ZoneViewModel {
     func updateBoundariesFromSegments() {
         guard segments.count >= 2 else { return }
         let z0 = segments.first(where: { $0.zoneId == 0 })
-        boundary0 = max(Self.minZoneWidth, z0?.s1LeftStart ?? 55)
+        boundary0 = max(Self.minZoneWidth, z0?.s1LeftStart ?? 60)
 
         if segments.count >= 3 {
             let z1 = segments.first(where: { $0.zoneId == 1 })
@@ -354,6 +360,7 @@ class ZoneViewModel {
                     ]
                 }
                 try await restClient?.setZoneLayout(zones: layoutZones)
+                persistZoneState()
             } catch is CancellationError {
                 // Cancelled by newer drag
             } catch {
@@ -366,7 +373,7 @@ class ZoneViewModel {
     func resetSplitsToEven() {
         switch zoneCount {
         case 2:
-            boundary0 = 55  // inner=25 LEDs/side, outer=55 LEDs/side
+            boundary0 = 60  // inner=20 LEDs/side, outer=60 LEDs/side
         case 3:
             boundary0 = 65  // inner=15/side
             boundary1 = 30  // middle=35/side, outer=30/side
@@ -375,6 +382,7 @@ class ZoneViewModel {
         }
 
         segments = segmentsFromBoundaries()
+        persistZoneState()
 
         // Send to firmware immediately (no debounce for tap reset)
         Task {
@@ -532,6 +540,116 @@ class ZoneViewModel {
             if let blendModeName = (current?["blendModeName"] as? String) ?? (data["blendModeName"] as? String) {
                 zones[index].blendModeName = blendModeName
             }
+        }
+    }
+    
+    // MARK: - Persistence
+    
+    private static let zonesEnabledKey = "zones_enabled"
+    private static let zoneCountKey = "zones_count"
+    private static let zonesConfigKey = "zones_config"
+    private static let segmentsKey = "zones_segments"
+    private static let boundary0Key = "zones_boundary0"
+    private static let boundary1Key = "zones_boundary1"
+
+    var hasPersistedZoneState: Bool {
+        UserDefaults.standard.data(forKey: Self.zonesConfigKey) != nil ||
+        UserDefaults.standard.data(forKey: Self.segmentsKey) != nil
+    }
+    
+    /// Save current zone state to UserDefaults
+    func persistZoneState() {
+        UserDefaults.standard.set(zonesEnabled, forKey: Self.zonesEnabledKey)
+        UserDefaults.standard.set(zoneCount, forKey: Self.zoneCountKey)
+        UserDefaults.standard.set(boundary0, forKey: Self.boundary0Key)
+        UserDefaults.standard.set(boundary1, forKey: Self.boundary1Key)
+        
+        // Persist zones array
+        if let zonesData = try? JSONEncoder().encode(zones) {
+            UserDefaults.standard.set(zonesData, forKey: Self.zonesConfigKey)
+        }
+        
+        // Persist segments array
+        if let segmentsData = try? JSONEncoder().encode(segments) {
+            UserDefaults.standard.set(segmentsData, forKey: Self.segmentsKey)
+        }
+    }
+    
+    /// Load persisted zone state from UserDefaults
+    func loadPersistedZoneState() {
+        zonesEnabled = UserDefaults.standard.bool(forKey: Self.zonesEnabledKey)
+        zoneCount = UserDefaults.standard.integer(forKey: Self.zoneCountKey)
+        boundary0 = UserDefaults.standard.integer(forKey: Self.boundary0Key)
+        boundary1 = UserDefaults.standard.integer(forKey: Self.boundary1Key)
+        
+        // Restore defaults if values are invalid
+        if zoneCount < 1 || zoneCount > 3 {
+            zoneCount = 2
+        }
+        if boundary0 == 0 {
+            boundary0 = 60
+        }
+        if boundary1 == 0 {
+            boundary1 = 30
+        }
+        
+        // Load zones array
+        if let zonesData = UserDefaults.standard.data(forKey: Self.zonesConfigKey),
+           let decodedZones = try? JSONDecoder().decode([ZoneConfig].self, from: zonesData) {
+            zones = decodedZones
+        }
+        
+        // Load segments array
+        if let segmentsData = UserDefaults.standard.data(forKey: Self.segmentsKey),
+           let decodedSegments = try? JSONDecoder().decode([ZoneSegment].self, from: segmentsData) {
+            segments = decodedSegments
+        }
+    }
+
+    /// Push the currently loaded (persisted) zone state onto the connected device.
+    /// This keeps persistence on the phone, treating the device state as ephemeral.
+    func applyPersistedZoneStateToDevice() async {
+        guard let client = restClient else { return }
+
+        // Ensure we have a valid segments model to send.
+        if segments.isEmpty {
+            segments = segmentsFromBoundaries()
+        }
+
+        do {
+            try await client.setZonesEnabled(zonesEnabled)
+
+            let layoutZones: [[String: Int]] = segments.map { seg in
+                [
+                    "zoneId": seg.zoneId,
+                    "s1LeftStart": seg.s1LeftStart,
+                    "s1LeftEnd": seg.s1LeftEnd,
+                    "s1RightStart": seg.s1RightStart,
+                    "s1RightEnd": seg.s1RightEnd
+                ]
+            }
+            try await client.setZoneLayout(zones: layoutZones)
+
+            // Apply per-zone settings for zones that exist in the current layout.
+            for zoneId in 0..<zoneCount {
+                guard let zone = zones.first(where: { $0.id == zoneId }) else { continue }
+
+                if let effectId = zone.effectId {
+                    try await client.setZoneEffect(zoneId: zoneId, effectId: effectId)
+                }
+                if let paletteId = zone.paletteId {
+                    try await client.setZonePalette(zoneId: zoneId, paletteId: paletteId)
+                }
+                if let blendMode = zone.blendMode {
+                    try await client.setZoneBlendMode(zoneId: zoneId, blendMode: blendMode)
+                }
+
+                try await client.setZoneSpeed(zoneId: zoneId, speed: zone.speed)
+                try await client.setZoneBrightness(zoneId: zoneId, brightness: zone.brightness)
+            }
+
+        } catch {
+            print("Error applying persisted zone state to device: \(error)")
         }
     }
 }

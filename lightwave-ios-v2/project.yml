@@ -73,6 +73,7 @@ targets:
       - path: LightwaveOSTests
     dependencies:
       - target: LightwaveOS
+      - package: SnapshotTesting
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.spectrasynq.lightwaveos2.tests
@@ -94,3 +95,6 @@ packages:
   RiveRuntime:
     url: https://github.com/rive-app/rive-ios
     from: 6.12.2
+  SnapshotTesting:
+    url: https://github.com/pointfreeco/swift-snapshot-testing
+    from: 1.15.0

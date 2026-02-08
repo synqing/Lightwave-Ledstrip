@@ -1,0 +1,195 @@
+name: iOS Snapshot Tests
+
+on:
+  pull_request:
+    paths:
+      - 'lightwave-ios-v2/**'
+      - '.github/workflows/ios-snapshot-tests.yml'
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  snapshot-tests:
+    name: Run Snapshot Tests
+    runs-on: macos-14
+    timeout-minutes: 30
+
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_15.2.app/Contents/Developer
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+
+      - name: Checkout LFS Files
+        run: git lfs pull
+
+      - name: Select Xcode Version
+        run: |
+          sudo xcode-select -s /Applications/Xcode_15.2.app/Contents/Developer
+          xcodebuild -version
+
+      - name: Cache Homebrew
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/Homebrew
+            /usr/local/Cellar/xcodegen
+          key: ${{ runner.os }}-brew-xcodegen-${{ hashFiles('.github/workflows/ios-snapshot-tests.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-brew-xcodegen-
+            ${{ runner.os }}-brew-
+
+      - name: Install XcodeGen
+        run: |
+          brew install xcodegen
+          xcodegen --version
+
+      - name: Cache Swift Package Manager
+        uses: actions/cache@v4
+        with:
+          path: |
+            lightwave-ios-v2/.build
+            ~/Library/Developer/Xcode/DerivedData/**/SourcePackages
+          key: ${{ runner.os }}-spm-${{ hashFiles('lightwave-ios-v2/project.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Generate Xcode Project
+        working-directory: lightwave-ios-v2
+        run: |
+          xcodegen generate
+          ls -la LightwaveOS.xcodeproj
+
+      - name: Resolve Swift Package Dependencies
+        working-directory: lightwave-ios-v2
+        run: |
+          xcodebuild -resolvePackageDependencies -scheme LightwaveOS
+
+      - name: Run Snapshot Tests
+        working-directory: lightwave-ios-v2
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -scheme LightwaveOS \
+            -destination 'platform=iOS Simulator,name=iPhone 15 Pro,OS=17.2' \
+            -resultBundlePath TestResults.xcresult \
+            -enableCodeCoverage YES \
+            | tee xcodebuild-test.log \
+            | xcbeautify --renderer github-actions || true
+        continue-on-error: true
+        id: tests
+
+      - name: Check Test Results
+        working-directory: lightwave-ios-v2
+        run: |
+          if xcrun xcresulttool get --path TestResults.xcresult --format json | grep -q '"testStatus" : "Failure"'; then
+            echo "TESTS_FAILED=true" >> $GITHUB_ENV
+            exit 1
+          else
+            echo "TESTS_FAILED=false" >> $GITHUB_ENV
+          fi
+        continue-on-error: true
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ github.run_number }}
+          path: |
+            lightwave-ios-v2/TestResults.xcresult
+            lightwave-ios-v2/xcodebuild-test.log
+          retention-days: 30
+
+      - name: Find Snapshot Failures
+        if: failure() || env.TESTS_FAILED == 'true'
+        id: find-snapshots
+        working-directory: lightwave-ios-v2
+        run: |
+          # Find all __Snapshots__ directories containing failure artifacts
+          SNAPSHOT_DIRS=$(find . -type d -name "__Snapshots__" 2>/dev/null || true)
+
+          if [ -n "$SNAPSHOT_DIRS" ]; then
+            echo "Found snapshot directories:"
+            echo "$SNAPSHOT_DIRS"
+            echo "HAS_SNAPSHOTS=true" >> $GITHUB_ENV
+
+            # Create a staging directory for snapshot diffs
+            mkdir -p snapshot-failures
+
+            # Copy all snapshot-related files
+            find . -type d -name "__Snapshots__" -exec cp -R {} snapshot-failures/ \; 2>/dev/null || true
+
+            # Look for reference images and failed images
+            find . -name "*reference*.png" -o -name "*failed*.png" -o -name "*diff*.png" | \
+              xargs -I {} cp {} snapshot-failures/ 2>/dev/null || true
+
+            # List what we found
+            echo "Snapshot failures collected:"
+            ls -lR snapshot-failures/ || echo "No files collected"
+          else
+            echo "HAS_SNAPSHOTS=false" >> $GITHUB_ENV
+            echo "No snapshot directories found"
+          fi
+        continue-on-error: true
+
+      - name: Upload Snapshot Failures
+        if: (failure() || env.TESTS_FAILED == 'true') && env.HAS_SNAPSHOTS == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapshot-failures-${{ github.run_number }}
+          path: lightwave-ios-v2/snapshot-failures/
+          retention-days: 30
+
+      - name: Generate Test Summary
+        if: always()
+        working-directory: lightwave-ios-v2
+        run: |
+          echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f "TestResults.xcresult" ]; then
+            # Extract test summary
+            xcrun xcresulttool get --path TestResults.xcresult --format json > results.json
+
+            # Count tests
+            TOTAL=$(jq '[.. | objects | select(.testStatus != null)] | length' results.json 2>/dev/null || echo "0")
+            PASSED=$(jq '[.. | objects | select(.testStatus == "Success")] | length' results.json 2>/dev/null || echo "0")
+            FAILED=$(jq '[.. | objects | select(.testStatus == "Failure")] | length' results.json 2>/dev/null || echo "0")
+
+            echo "- **Total Tests**: $TOTAL" >> $GITHUB_STEP_SUMMARY
+            echo "- **Passed**: ✅ $PASSED" >> $GITHUB_STEP_SUMMARY
+            echo "- **Failed**: ❌ $FAILED" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            if [ "$FAILED" -gt 0 ]; then
+              echo "### Failed Tests" >> $GITHUB_STEP_SUMMARY
+              jq -r '[.. | objects | select(.testStatus == "Failure") | .identifier] | unique | .[]' results.json 2>/dev/null | \
+                sed 's/^/- /' >> $GITHUB_STEP_SUMMARY || true
+            fi
+
+            rm -f results.json
+          else
+            echo "⚠️ Test results not found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "$HAS_SNAPSHOTS" == "true" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Snapshot Failures" >> $GITHUB_STEP_SUMMARY
+            echo "📸 Snapshot comparison failures detected. Check the uploaded artifacts for visual diffs." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Fail Workflow on Test Failure
+        if: env.TESTS_FAILED == 'true'
+        run: |
+          echo "::error::Snapshot tests failed. Check the test results and snapshot artifacts."
+          exit 1

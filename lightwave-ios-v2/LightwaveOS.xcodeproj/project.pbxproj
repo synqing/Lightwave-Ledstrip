@@ -7,16 +7,21 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		00B16046F97B9B27A5735BB5 /* LWCardSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07D13B98052ECC3FF92D6654 /* LWCardSnapshotTests.swift */; };
 		0163CE67A2FFC8BE76B8F171 /* ZoneEffectSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7842D3CB7F30B82B6510791 /* ZoneEffectSelectorView.swift */; };
 		04CF3ABF4F690ECCD65A93B3 /* LWSlider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61D83CFB65D318279505DBE1 /* LWSlider.swift */; };
+		082CFFCEED919D0A05FF0A41 /* GlowStack.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4090493FC0E92746BBB3BB9 /* GlowStack.swift */; };
 		0A1D15C59D3B43DF3C54945F /* ParametersViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C2DEC421D3DDA638E3C0A64 /* ParametersViewModel.swift */; };
 		11E6A0E782BD4B03CD542F5B /* TransitionConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A450B5387DC386220A98816 /* TransitionConfig.swift */; };
 		1263036EBD20BAFA598E80AB /* PaletteMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E098D8F3CD5BB4C24E6F3BE /* PaletteMetadata.swift */; };
 		139C02DFEF7D538F1AAD62DA /* DotRidgeCanvas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E90C94F5CB5CFECA0207056 /* DotRidgeCanvas.swift */; };
 		1753660806145577E7550059 /* TransitionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D2D905559510B8544F756FE /* TransitionViewModel.swift */; };
 		17EFD59BD34954993885E7CB /* DeviceTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7DF92D44D22FEB411F9071B /* DeviceTab.swift */; };
+		1B44E7E8615334AACE57D4D0 /* LWSliderSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4203D8698E02C8380FD90912 /* LWSliderSnapshotTests.swift */; };
 		218BC49796BCB81D40C3FBDA /* ControlBusSmoothingCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EE339DCEDEE943BE3437346 /* ControlBusSmoothingCard.swift */; };
+		22EA78208B207046DCBA0BE4 /* PhaseIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 564C95B2E2EF849B3CC1BB65 /* PhaseIndicator.swift */; };
 		257284DC283160C607E6E1A2 /* DeviceTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB2FF01899911C9628E20906 /* DeviceTarget.swift */; };
+		28260A27E401F14C400985EE /* ShimmerSweep.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB64B28C412D0CA8CDFC7D68 /* ShimmerSweep.swift */; };
 		29FBBBBED8ADA326B0DC174C /* CatmullRom.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FF496F8DA6AC2228F21B80C /* CatmullRom.swift */; };
 		2C56FD4FB075431FCE967D03 /* ConnectionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F78DFAC9CA66009A9E4FE950 /* ConnectionManager.swift */; };
 		2DE021CF3623E96957E0FB5C /* ZoneConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08C2D77D1CFF5748E86799D6 /* ZoneConfig.swift */; };
@@ -26,6 +31,8 @@
 		3AAECAF9F115A60F48C53CF6 /* StateCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6835286C5F9C9CFBB0342C18 /* StateCard.swift */; };
 		3B728228347413E7091E32CA /* TransitionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F36409ABC36BCB430CD9E0A4 /* TransitionCard.swift */; };
 		3D89807695C36EF268ECF7F4 /* AppViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F30172340FDF0956E377E609 /* AppViewModel.swift */; };
+		3F8A9A19FE0182C87D77793C /* SavedZonePreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = C03D8E805B47C9F511964259 /* SavedZonePreset.swift */; };
+		4350CD8F75E49952A1284E85 /* LightwaveOSUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09C42796DB076B87025D874C /* LightwaveOSUITests.swift */; };
 		45694336ED60BDA41BFA3540 /* PresetsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF92DC1993E1D866C81B1AF2 /* PresetsViewModel.swift */; };
 		46A01374A6FEBB0BD76B44B0 /* HeroLEDPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4CB0B4835A9BACD84EF9FB5 /* HeroLEDPreview.swift */; };
 		46F56671E92063AFF9D4DEDE /* AudioMicroInteractionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8654E76A2F4CB516999727B1 /* AudioMicroInteractionCard.swift */; };
@@ -33,20 +40,25 @@
 		4B3C99D5686D76D39E70E94A /* PalettePill.swift in Sources */ = {isa = PBXBuildFile; fileRef = C370B32AA140BBEF43C6E2C2 /* PalettePill.swift */; };
 		4C425AF22BF7A28DCC290BDA /* Rajdhani-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 8E59AECEC7E904EDD6218285 /* Rajdhani-Medium.ttf */; };
 		4D751605DDEF7E6FDFD34564 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB07CA24EADEF6BA881D646F /* ContentView.swift */; };
+		4E92EF01857A5B7EAC15F682 /* GlassSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81E17DD09EEA7625E6EFE7C1 /* GlassSurface.swift */; };
 		5459AE85295E1B2195C348FC /* NoveltyOnsetCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AE9C345B8D6E90338187465 /* NoveltyOnsetCard.swift */; };
 		5570105A1AFE44E78C87C12F /* EffectSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BEF66607D6EB7A86DAB1A24 /* EffectSelectorView.swift */; };
 		55BDAF64661B13330D6FAC75 /* DSPHealthCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84846BE14BEFB7AD1474515D /* DSPHealthCard.swift */; };
 		567B084BC06F68C464764BF6 /* LWCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25C2C8B36E0F08C57DD1C8ED /* LWCard.swift */; };
+		59685893995100B807880375 /* SnapshotTesting in Frameworks */ = {isa = PBXBuildFile; productRef = 172B197C5C8C52FE058625DB /* SnapshotTesting */; };
 		5B6B5DE31AEFA3BD6EDD2094 /* ConnectionSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89A2E16E0729B28215952E9B /* ConnectionSheet.swift */; };
 		5C1C06EBB274C051A439A797 /* ZonePreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = C22F18DAE2719E6988E4786B /* ZonePreset.swift */; };
 		5CAB43DF6F29197959F5DD73 /* PersistentStatusBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 254F0C219FB5F9F4CE8A47D4 /* PersistentStatusBar.swift */; };
 		5D1AFF73F547DEB373796126 /* ZonesTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E1E87FD587D3F3C005F248C /* ZonesTab.swift */; };
 		5FDC20B426C20FB926696A29 /* ZoneHeaderCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = C704DF2FFFAD9DA38DF9AAC2 /* ZoneHeaderCard.swift */; };
+		6304424356DFE97CD779DCA9 /* InnerShadow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 708471E3E78E72F6FBB6564D /* InnerShadow.swift */; };
 		6398FD62C2DE608465A3F7B6 /* BandEnvelopeCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B7CC4054A122FC375E195C9 /* BandEnvelopeCard.swift */; };
 		651D94812D47ACEF73F02D22 /* WaveformSpectrumCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 015EA9550AB44879E2FEDC47 /* WaveformSpectrumCard.swift */; };
+		6833198C7231B9C09058C435 /* EnergyPulse.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8EBD3FC475D43D561709ECD /* EnergyPulse.swift */; };
 		6A5F5AA58634F4613D9B3ED5 /* ZonePaletteSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 168C9F678A0019152BC2DB77 /* ZonePaletteSelectorView.swift */; };
 		6BB889F59EE8A58C7385BBEA /* ColourCorrectionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EE7EA23FBC59A906EFEB025 /* ColourCorrectionCard.swift */; };
 		6E5C18C5632D04039B31DE2E /* DesignReferenceData.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7EE77E551ADFC8B7142DFCA /* DesignReferenceData.swift */; };
+		6E70A7AC9CA9A9AEFE2CED33 /* GradientStroke.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7BF72DC1CCB7D3B8FB430C2 /* GradientStroke.swift */; };
 		6EB45E88A8F52BD4E073B17A /* AudioMetricsFrame.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58FF25A0E1C1057E09C88FD6 /* AudioMetricsFrame.swift */; };
 		70ED3A876B17DC0122EB17EB /* ConnectivityTortureTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF16116B37E0F57F4376B252 /* ConnectivityTortureTest.swift */; };
 		7199AF4B6F1AC075548475CF /* PaletteViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 224698FD7FB174C316FBE60D /* PaletteViewModel.swift */; };
@@ -62,6 +74,7 @@
 		96C9D4D2DCE98659FD34D56F /* PaletteSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E24D590F91011F14E7284A3 /* PaletteSelectorView.swift */; };
 		97F87D839542891BE69184EC /* BeatHapticsCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A1727B0FD097BC45F09E2AE /* BeatHapticsCard.swift */; };
 		98512C417EA442B34802EB83 /* PlayTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 456CA5276801070F23B37070 /* PlayTab.swift */; };
+		9C2C0C2A108E9ABECA5D469A /* ConnectionDotSnapshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 181DA281E2C9AE76A7381410 /* ConnectionDotSnapshotTests.swift */; };
 		9E2095C181E3E4C63D8EE18F /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87205249A100EE9FB99CC9D8 /* DesignTokens.swift */; };
 		A45A187071BDDB0F4F7136DF /* RiveRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 014757B5CB91C8603A1DF679 /* RiveRuntime.swift */; };
 		A6D3AE786BE1C665F29E1387 /* EnergyCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1A074509DE203CBD3BD0AB /* EnergyCard.swift */; };
@@ -71,25 +84,30 @@
 		A9DA8D7D7DE6C390B6CB5D9F /* ZoneSegment.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3494A9997E5BDD618C4F611 /* ZoneSegment.swift */; };
 		AA4974FFED4AA3412E9CCEFF /* WebSocketService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E5E9E104E8517B31A2FCD3 /* WebSocketService.swift */; };
 		ABC80644A6EF1724A606D6CF /* EffectViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25808F2C76C005D96028C674 /* EffectViewModel.swift */; };
+		B0CF75A65B9A1C7A89C3CEF8 /* EffectPreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CB900DD932F7277B8EEB153 /* EffectPreset.swift */; };
 		B871B0FF48E50BCFEACD90AD /* UDPStreamReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A666FDABA22F3869FE52E0A /* UDPStreamReceiver.swift */; };
 		BA7A664F2E2A8E45B775DBB6 /* SilenceDetectionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DC45A333675D7720ED18E93 /* SilenceDetectionCard.swift */; };
 		BAE8BCD1B192AB3E5AEC645A /* LightwaveOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8486C05EF5A54BF248CBC5 /* LightwaveOSApp.swift */; };
 		BD7225787111D20B0DAB3510 /* DesignReferenceCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E512D28B2FAAB2052D39981 /* DesignReferenceCapture.swift */; };
 		BDCCFCEE87577AA07404073C /* JetBrainsMono-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = AE8390CC2910D822252527A7 /* JetBrainsMono-Medium.ttf */; };
 		BF2618C4BF2E8B080D8ABD8D /* ColourCorrectionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F510F083B57F41382CDE442A /* ColourCorrectionViewModel.swift */; };
+		C0F3A5792D881418C2CE0403 /* GlassCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B59625DADEFB3F03FCC18825 /* GlassCard.swift */; };
 		C37B4DEBCA003D607F1EB6B7 /* SystemState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FE0B2000D2C4873FDC10DF5 /* SystemState.swift */; };
 		C57C8477A4CEC46122235A5B /* BeatPulse.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA1C44B4393BF8BAEE1D5974 /* BeatPulse.swift */; };
 		C8AD2FB3D54FFCF4DEEFC4FB /* RiveReferenceGallery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E9220213A1BC42D7DC9736C /* RiveReferenceGallery.swift */; };
 		CD8C706BCC146AE424D532E2 /* RiveAppleRuntimeAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5925C7D2FEBD45A8B24782D /* RiveAppleRuntimeAdapter.swift */; };
+		D2D0E41B6071A867D1E5F6C9 /* GrainOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7642B3E1D462B3B96BE9E6AB /* GrainOverlay.swift */; };
 		D40C0E29EE75A444D41C091B /* DeviceInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24F263BD5B2BE3B042FD6500 /* DeviceInfo.swift */; };
 		D4858ADE55BA3233EAC10336 /* StepperControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB077354363CFEC33A7BCC55 /* StepperControl.swift */; };
 		D7B1E0FA82137B04E351A3AC /* PrimaryControlsCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3683BF0C58E2D73196B6C24F /* PrimaryControlsCard.swift */; };
+		D9BFFEAD828BA0FA6051FEC0 /* SnapshotTestCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1335EC1BADDE0E92280D891F /* SnapshotTestCase.swift */; };
 		DAEE2833638579F4171A6742 /* RiveViewContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2532BA73C0A023E4FE6FFC5E /* RiveViewContainer.swift */; };
 		DB7A0B8FCD6D7AB7F0635D59 /* RiveCppRuntimeAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08AA2C21356E7DCE870D100D /* RiveCppRuntimeAdapter.swift */; };
 		DD03A1AAA86329C8F31ED5F8 /* ZoneViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CEDD5DA50941F20E512D1B2 /* ZoneViewModel.swift */; };
 		DD2A1545ECFBAFC9366C0222 /* ShowsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01B2B27348B24F57C57E84EE /* ShowsView.swift */; };
 		DD9590BF303220F7E3701DD7 /* EffectMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 455F2E537DDB7B2763EC9AD0 /* EffectMetadata.swift */; };
 		DDBC0920AD5A6D945CB1DB98 /* MetricBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = F83207D4D91AF3D90F889CB9 /* MetricBar.swift */; };
+		E0902E5583C0ACF43ABE937D /* InnerHighlight.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3F3E3605536EFDC11699D53 /* InnerHighlight.swift */; };
 		E46DEF42288D99C02156DD24 /* BeatTempoCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD1DD439D8B2C8A802FC7B7A /* BeatTempoCard.swift */; };
 		E58931F01E9F0E5EA55B34D1 /* AudioTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21011EB5D02FBEF35115201F /* AudioTab.swift */; };
 		E75779C39E1662B362D2A503 /* LWButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20112EA69C6BBF4AD578EAB9 /* LWButton.swift */; };
@@ -101,7 +119,9 @@
 		F0E737F62762F2F3CBD94E41 /* DebugLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3312C970BE3E5BC4D373D9AA /* DebugLogView.swift */; };
 		F201C9ADFB5282D9B2FDC3BD /* Palettes_Master.json in Resources */ = {isa = PBXBuildFile; fileRef = 6A5074FF917C2B57C4CE67E0 /* Palettes_Master.json */; };
 		F2115B1183C10DA720A36477 /* ZoneCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = E806390A509CCD91CCE62C34 /* ZoneCard.swift */; };
+		F2A92D8F2CF5B9682D55713F /* AmbientOcclusionShadowStack.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAA9ED3B79FB5F8A0E282006 /* AmbientOcclusionShadowStack.swift */; };
 		F72AA4EA08D93B3A5A8BAECB /* FailureReason.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B0CA4841632E1187F26433E /* FailureReason.swift */; };
+		F77DE6784CC3591FD35C3D79 /* LightwaveOSTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1977B1F3B0723E9E0EA70A34 /* LightwaveOSTests.swift */; };
 		F9B02ED4E22BECB3EFD01829 /* RESTClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DABC7E4FD7AB390A7413924 /* RESTClient.swift */; };
 		F9F00E9852A03ABB2DC113AD /* SpectrumVisualisationCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70BC4E2523308275C0B38ECC /* SpectrumVisualisationCard.swift */; };
 		F9F86388A7F4ACC8530A4B99 /* PresetsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F546C8A2C99339CAF146E5B8 /* PresetsView.swift */; };
@@ -128,12 +148,17 @@
 		014757B5CB91C8603A1DF679 /* RiveRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RiveRuntime.swift; sourceTree = "<group>"; };
 		015EA9550AB44879E2FEDC47 /* WaveformSpectrumCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformSpectrumCard.swift; sourceTree = "<group>"; };
 		01B2B27348B24F57C57E84EE /* ShowsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowsView.swift; sourceTree = "<group>"; };
+		07D13B98052ECC3FF92D6654 /* LWCardSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LWCardSnapshotTests.swift; sourceTree = "<group>"; };
 		08AA2C21356E7DCE870D100D /* RiveCppRuntimeAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RiveCppRuntimeAdapter.swift; sourceTree = "<group>"; };
 		08C2D77D1CFF5748E86799D6 /* ZoneConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoneConfig.swift; sourceTree = "<group>"; };
+		09C42796DB076B87025D874C /* LightwaveOSUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LightwaveOSUITests.swift; sourceTree = "<group>"; };
 		0AE9C345B8D6E90338187465 /* NoveltyOnsetCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoveltyOnsetCard.swift; sourceTree = "<group>"; };
 		0C1ED4C5F6EC72A53B9AEC1C /* PatternPill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatternPill.swift; sourceTree = "<group>"; };
+		1335EC1BADDE0E92280D891F /* SnapshotTestCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapshotTestCase.swift; sourceTree = "<group>"; };
 		168C9F678A0019152BC2DB77 /* ZonePaletteSelectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZonePaletteSelectorView.swift; sourceTree = "<group>"; };
+		181DA281E2C9AE76A7381410 /* ConnectionDotSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionDotSnapshotTests.swift; sourceTree = "<group>"; };
 		18BB5AEC76BDB1042E10C43A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		1977B1F3B0723E9E0EA70A34 /* LightwaveOSTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LightwaveOSTests.swift; sourceTree = "<group>"; };
 		1A8573E656EDD28AD85E9F93 /* LightwaveOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = LightwaveOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1BE5EB53F03D24EAA9BF8845 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		1D2D905559510B8544F756FE /* TransitionViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitionViewModel.swift; sourceTree = "<group>"; };
@@ -155,12 +180,14 @@
 		3A1727B0FD097BC45F09E2AE /* BeatHapticsCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeatHapticsCard.swift; sourceTree = "<group>"; };
 		3A450B5387DC386220A98816 /* TransitionConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransitionConfig.swift; sourceTree = "<group>"; };
 		3CA3B90727EBB0CF6103AEA1 /* ConnectionDot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionDot.swift; sourceTree = "<group>"; };
+		4203D8698E02C8380FD90912 /* LWSliderSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LWSliderSnapshotTests.swift; sourceTree = "<group>"; };
 		455F2E537DDB7B2763EC9AD0 /* EffectMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EffectMetadata.swift; sourceTree = "<group>"; };
 		456CA5276801070F23B37070 /* PlayTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayTab.swift; sourceTree = "<group>"; };
 		4A06B1F5D1B76135389E8A37 /* DeviceDiscoveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceDiscoveryService.swift; sourceTree = "<group>"; };
 		4BEF66607D6EB7A86DAB1A24 /* EffectSelectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EffectSelectorView.swift; sourceTree = "<group>"; };
 		4C2DEC421D3DDA638E3C0A64 /* ParametersViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParametersViewModel.swift; sourceTree = "<group>"; };
 		4EE7EA23FBC59A906EFEB025 /* ColourCorrectionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColourCorrectionCard.swift; sourceTree = "<group>"; };
+		564C95B2E2EF849B3CC1BB65 /* PhaseIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhaseIndicator.swift; sourceTree = "<group>"; };
 		58FF25A0E1C1057E09C88FD6 /* AudioMetricsFrame.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMetricsFrame.swift; sourceTree = "<group>"; };
 		5A666FDABA22F3869FE52E0A /* UDPStreamReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UDPStreamReceiver.swift; sourceTree = "<group>"; };
 		5E90C94F5CB5CFECA0207056 /* DotRidgeCanvas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DotRidgeCanvas.swift; sourceTree = "<group>"; };
@@ -178,15 +205,19 @@
 		6E9220213A1BC42D7DC9736C /* RiveReferenceGallery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RiveReferenceGallery.swift; sourceTree = "<group>"; };
 		6FF496F8DA6AC2228F21B80C /* CatmullRom.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatmullRom.swift; sourceTree = "<group>"; };
 		70567498B0EBA5C80F60D128 /* AudioTuningParameters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioTuningParameters.swift; sourceTree = "<group>"; };
+		708471E3E78E72F6FBB6564D /* InnerShadow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InnerShadow.swift; sourceTree = "<group>"; };
 		70BC4E2523308275C0B38ECC /* SpectrumVisualisationCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpectrumVisualisationCard.swift; sourceTree = "<group>"; };
+		7642B3E1D462B3B96BE9E6AB /* GrainOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrainOverlay.swift; sourceTree = "<group>"; };
 		7A1A074509DE203CBD3BD0AB /* EnergyCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnergyCard.swift; sourceTree = "<group>"; };
 		7DABC7E4FD7AB390A7413924 /* RESTClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RESTClient.swift; sourceTree = "<group>"; };
 		7E185DC09E48C5BAB0DA19E5 /* LEDStripView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LEDStripView.swift; sourceTree = "<group>"; };
 		7E24D590F91011F14E7284A3 /* PaletteSelectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteSelectorView.swift; sourceTree = "<group>"; };
+		81E17DD09EEA7625E6EFE7C1 /* GlassSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassSurface.swift; sourceTree = "<group>"; };
 		84846BE14BEFB7AD1474515D /* DSPHealthCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DSPHealthCard.swift; sourceTree = "<group>"; };
 		8654E76A2F4CB516999727B1 /* AudioMicroInteractionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMicroInteractionCard.swift; sourceTree = "<group>"; };
 		87205249A100EE9FB99CC9D8 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
 		89A2E16E0729B28215952E9B /* ConnectionSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionSheet.swift; sourceTree = "<group>"; };
+		8CB900DD932F7277B8EEB153 /* EffectPreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EffectPreset.swift; sourceTree = "<group>"; };
 		8CE2A301EC4BB1F6157369C3 /* BeatEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeatEvent.swift; sourceTree = "<group>"; };
 		8DC45A333675D7720ED18E93 /* SilenceDetectionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SilenceDetectionCard.swift; sourceTree = "<group>"; };
 		8E59AECEC7E904EDD6218285 /* Rajdhani-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Rajdhani-Medium.ttf"; sourceTree = "<group>"; };
@@ -197,17 +228,25 @@
 		A3494A9997E5BDD618C4F611 /* ZoneSegment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoneSegment.swift; sourceTree = "<group>"; };
 		A7842D3CB7F30B82B6510791 /* ZoneEffectSelectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoneEffectSelectorView.swift; sourceTree = "<group>"; };
 		AA1C44B4393BF8BAEE1D5974 /* BeatPulse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeatPulse.swift; sourceTree = "<group>"; };
+		AAA9ED3B79FB5F8A0E282006 /* AmbientOcclusionShadowStack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmbientOcclusionShadowStack.swift; sourceTree = "<group>"; };
 		AB2FF01899911C9628E20906 /* DeviceTarget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceTarget.swift; sourceTree = "<group>"; };
+		AB64B28C412D0CA8CDFC7D68 /* ShimmerSweep.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShimmerSweep.swift; sourceTree = "<group>"; };
 		AE8390CC2910D822252527A7 /* JetBrainsMono-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "JetBrainsMono-Medium.ttf"; sourceTree = "<group>"; };
+		B4090493FC0E92746BBB3BB9 /* GlowStack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlowStack.swift; sourceTree = "<group>"; };
+		B59625DADEFB3F03FCC18825 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
 		BF16116B37E0F57F4376B252 /* ConnectivityTortureTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityTortureTest.swift; sourceTree = "<group>"; };
 		BF92DC1993E1D866C81B1AF2 /* PresetsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetsViewModel.swift; sourceTree = "<group>"; };
+		C03D8E805B47C9F511964259 /* SavedZonePreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedZonePreset.swift; sourceTree = "<group>"; };
 		C22F18DAE2719E6988E4786B /* ZonePreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZonePreset.swift; sourceTree = "<group>"; };
 		C370B32AA140BBEF43C6E2C2 /* PalettePill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PalettePill.swift; sourceTree = "<group>"; };
+		C3F3E3605536EFDC11699D53 /* InnerHighlight.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InnerHighlight.swift; sourceTree = "<group>"; };
 		C6C3DFA6F658077123421991 /* AudioParametersCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioParametersCard.swift; sourceTree = "<group>"; };
 		C704DF2FFFAD9DA38DF9AAC2 /* ZoneHeaderCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoneHeaderCard.swift; sourceTree = "<group>"; };
 		C72251A9FB2D4BBDBF401161 /* ColourCorrectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColourCorrectionView.swift; sourceTree = "<group>"; };
 		D6416631D7DB3C5D87A0AB6B /* PaletteLUT.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaletteLUT.swift; sourceTree = "<group>"; };
 		D6653D1E80D92C64FAC24AD3 /* AudioViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioViewModel.swift; sourceTree = "<group>"; };
+		D7BF72DC1CCB7D3B8FB430C2 /* GradientStroke.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GradientStroke.swift; sourceTree = "<group>"; };
+		D8EBD3FC475D43D561709ECD /* EnergyPulse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnergyPulse.swift; sourceTree = "<group>"; };
 		DB07CA24EADEF6BA881D646F /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		DF78CFCA2FCF79A5CDB755D9 /* ExpressionParametersCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExpressionParametersCard.swift; sourceTree = "<group>"; };
 		E448948AAFAA0CD844A14110 /* APIResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIResponse.swift; sourceTree = "<group>"; };
@@ -234,6 +273,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				47F2461CC117A93E11BE3C17 /* RiveRuntime in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		495722A70AD17A71EC544481 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				59685893995100B807880375 /* SnapshotTesting in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -293,7 +340,9 @@
 				25C2C8B36E0F08C57DD1C8ED /* LWCard.swift */,
 				61D83CFB65D318279505DBE1 /* LWSlider.swift */,
 				F83207D4D91AF3D90F889CB9 /* MetricBar.swift */,
+				564C95B2E2EF849B3CC1BB65 /* PhaseIndicator.swift */,
 				EB077354363CFEC33A7BCC55 /* StepperControl.swift */,
+				B7DAE99989356DC3B2FD483D /* Glass */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -313,6 +362,8 @@
 		275A3BEE403997031628F68D /* LightwaveOSTests */ = {
 			isa = PBXGroup;
 			children = (
+				1977B1F3B0723E9E0EA70A34 /* LightwaveOSTests.swift */,
+				5CB0360F4B09BF8225BEC9D3 /* Snapshots */,
 			);
 			path = LightwaveOSTests;
 			sourceTree = "<group>";
@@ -344,6 +395,15 @@
 				A49F221A8F4B0335D35F3A33 /* Zones */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		5CB0360F4B09BF8225BEC9D3 /* Snapshots */ = {
+			isa = PBXGroup;
+			children = (
+				1335EC1BADDE0E92280D891F /* SnapshotTestCase.swift */,
+				B8BECD4D15BE666B96D9C0B1 /* Components */,
+			);
+			path = Snapshots;
 			sourceTree = "<group>";
 		};
 		61550B17825AC6624693A49D /* Adapters */ = {
@@ -453,6 +513,33 @@
 			path = Palettes;
 			sourceTree = "<group>";
 		};
+		B7DAE99989356DC3B2FD483D /* Glass */ = {
+			isa = PBXGroup;
+			children = (
+				AAA9ED3B79FB5F8A0E282006 /* AmbientOcclusionShadowStack.swift */,
+				D8EBD3FC475D43D561709ECD /* EnergyPulse.swift */,
+				B59625DADEFB3F03FCC18825 /* GlassCard.swift */,
+				81E17DD09EEA7625E6EFE7C1 /* GlassSurface.swift */,
+				B4090493FC0E92746BBB3BB9 /* GlowStack.swift */,
+				D7BF72DC1CCB7D3B8FB430C2 /* GradientStroke.swift */,
+				7642B3E1D462B3B96BE9E6AB /* GrainOverlay.swift */,
+				C3F3E3605536EFDC11699D53 /* InnerHighlight.swift */,
+				708471E3E78E72F6FBB6564D /* InnerShadow.swift */,
+				AB64B28C412D0CA8CDFC7D68 /* ShimmerSweep.swift */,
+			);
+			path = Glass;
+			sourceTree = "<group>";
+		};
+		B8BECD4D15BE666B96D9C0B1 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				181DA281E2C9AE76A7381410 /* ConnectionDotSnapshotTests.swift */,
+				07D13B98052ECC3FF92D6654 /* LWCardSnapshotTests.swift */,
+				4203D8698E02C8380FD90912 /* LWSliderSnapshotTests.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
 		C09C5C83D21C91F921848082 /* App */ = {
 			isa = PBXGroup;
 			children = (
@@ -518,8 +605,10 @@
 				24F263BD5B2BE3B042FD6500 /* DeviceInfo.swift */,
 				AB2FF01899911C9628E20906 /* DeviceTarget.swift */,
 				455F2E537DDB7B2763EC9AD0 /* EffectMetadata.swift */,
+				8CB900DD932F7277B8EEB153 /* EffectPreset.swift */,
 				6B0CA4841632E1187F26433E /* FailureReason.swift */,
 				9E098D8F3CD5BB4C24E6F3BE /* PaletteMetadata.swift */,
+				C03D8E805B47C9F511964259 /* SavedZonePreset.swift */,
 				5FE0B2000D2C4873FDC10DF5 /* SystemState.swift */,
 				3A450B5387DC386220A98816 /* TransitionConfig.swift */,
 				08C2D77D1CFF5748E86799D6 /* ZoneConfig.swift */,
@@ -532,6 +621,7 @@
 		EC3BA00DFF7C7A4F2557BF62 /* LightwaveOSUITests */ = {
 			isa = PBXGroup;
 			children = (
+				09C42796DB076B87025D874C /* LightwaveOSUITests.swift */,
 			);
 			path = LightwaveOSUITests;
 			sourceTree = "<group>";
@@ -593,6 +683,7 @@
 			buildConfigurationList = 40882BEE10D36CC1E2D7FDE7 /* Build configuration list for PBXNativeTarget "LightwaveOSTests" */;
 			buildPhases = (
 				38FBE43344E5DCBBAAF8D0FB /* Sources */,
+				495722A70AD17A71EC544481 /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -601,6 +692,7 @@
 			);
 			name = LightwaveOSTests;
 			packageProductDependencies = (
+				172B197C5C8C52FE058625DB /* SnapshotTesting */,
 			);
 			productName = LightwaveOSTests;
 			productReference = 5EB40BA8FF3F11929580852A /* LightwaveOSTests.xctest */;
@@ -636,6 +728,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				70C05B14CED3BD1A6ACF6198 /* XCRemoteSwiftPackageReference "rive-ios" */,
+				2721DD6AD4E52D85313B5F20 /* XCRemoteSwiftPackageReference "swift-snapshot-testing" */,
 			);
 			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
@@ -668,6 +761,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9C2C0C2A108E9ABECA5D469A /* ConnectionDotSnapshotTests.swift in Sources */,
+				00B16046F97B9B27A5735BB5 /* LWCardSnapshotTests.swift in Sources */,
+				1B44E7E8615334AACE57D4D0 /* LWSliderSnapshotTests.swift in Sources */,
+				F77DE6784CC3591FD35C3D79 /* LightwaveOSTests.swift in Sources */,
+				D9BFFEAD828BA0FA6051FEC0 /* SnapshotTestCase.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -675,6 +773,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4350CD8F75E49952A1284E85 /* LightwaveOSUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -683,6 +782,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				91C002843B54FEC54EA87C4C /* APIResponse.swift in Sources */,
+				F2A92D8F2CF5B9682D55713F /* AmbientOcclusionShadowStack.swift in Sources */,
 				3D89807695C36EF268ECF7F4 /* AppViewModel.swift in Sources */,
 				6EB45E88A8F52BD4E073B17A /* AudioMetricsFrame.swift in Sources */,
 				46F56671E92063AFF9D4DEDE /* AudioMicroInteractionCard.swift in Sources */,
@@ -719,12 +819,21 @@
 				A9750C3CA3D06B429608AF83 /* DotMatrixCanvas.swift in Sources */,
 				139C02DFEF7D538F1AAD62DA /* DotRidgeCanvas.swift in Sources */,
 				DD9590BF303220F7E3701DD7 /* EffectMetadata.swift in Sources */,
+				B0CF75A65B9A1C7A89C3CEF8 /* EffectPreset.swift in Sources */,
 				5570105A1AFE44E78C87C12F /* EffectSelectorView.swift in Sources */,
 				ABC80644A6EF1724A606D6CF /* EffectViewModel.swift in Sources */,
 				A6D3AE786BE1C665F29E1387 /* EnergyCard.swift in Sources */,
+				6833198C7231B9C09058C435 /* EnergyPulse.swift in Sources */,
 				798069C686F9B5DADBE9494F /* ExpressionParametersCard.swift in Sources */,
 				F72AA4EA08D93B3A5A8BAECB /* FailureReason.swift in Sources */,
+				C0F3A5792D881418C2CE0403 /* GlassCard.swift in Sources */,
+				4E92EF01857A5B7EAC15F682 /* GlassSurface.swift in Sources */,
+				082CFFCEED919D0A05FF0A41 /* GlowStack.swift in Sources */,
+				6E70A7AC9CA9A9AEFE2CED33 /* GradientStroke.swift in Sources */,
+				D2D0E41B6071A867D1E5F6C9 /* GrainOverlay.swift in Sources */,
 				46A01374A6FEBB0BD76B44B0 /* HeroLEDPreview.swift in Sources */,
+				E0902E5583C0ACF43ABE937D /* InnerHighlight.swift in Sources */,
+				6304424356DFE97CD779DCA9 /* InnerShadow.swift in Sources */,
 				E88C768709E490E1957F1944 /* LEDStripView.swift in Sources */,
 				E75779C39E1662B362D2A503 /* LWButton.swift in Sources */,
 				567B084BC06F68C464764BF6 /* LWCard.swift in Sources */,
@@ -740,6 +849,7 @@
 				0A1D15C59D3B43DF3C54945F /* ParametersViewModel.swift in Sources */,
 				8552E2FE7937823BA926DF2E /* PatternPill.swift in Sources */,
 				5CAB43DF6F29197959F5DD73 /* PersistentStatusBar.swift in Sources */,
+				22EA78208B207046DCBA0BE4 /* PhaseIndicator.swift in Sources */,
 				98512C417EA442B34802EB83 /* PlayTab.swift in Sources */,
 				F9F86388A7F4ACC8530A4B99 /* PresetsView.swift in Sources */,
 				45694336ED60BDA41BFA3540 /* PresetsViewModel.swift in Sources */,
@@ -752,6 +862,8 @@
 				A45A187071BDDB0F4F7136DF /* RiveRuntime.swift in Sources */,
 				EEB9D4CB8A3A284E3FC897E2 /* RiveRuntimeFactory.swift in Sources */,
 				DAEE2833638579F4171A6742 /* RiveViewContainer.swift in Sources */,
+				3F8A9A19FE0182C87D77793C /* SavedZonePreset.swift in Sources */,
+				28260A27E401F14C400985EE /* ShimmerSweep.swift in Sources */,
 				DD2A1545ECFBAFC9366C0222 /* ShowsView.swift in Sources */,
 				BA7A664F2E2A8E45B775DBB6 /* SilenceDetectionCard.swift in Sources */,
 				F9F00E9852A03ABB2DC113AD /* SpectrumVisualisationCard.swift in Sources */,
@@ -1219,6 +1331,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		2721DD6AD4E52D85313B5F20 /* XCRemoteSwiftPackageReference "swift-snapshot-testing" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/pointfreeco/swift-snapshot-testing";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.15.0;
+			};
+		};
 		70C05B14CED3BD1A6ACF6198 /* XCRemoteSwiftPackageReference "rive-ios" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/rive-app/rive-ios";
@@ -1230,6 +1350,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		172B197C5C8C52FE058625DB /* SnapshotTesting */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2721DD6AD4E52D85313B5F20 /* XCRemoteSwiftPackageReference "swift-snapshot-testing" */;
+			productName = SnapshotTesting;
+		};
 		A22BB2E5A24999822516852A /* RiveRuntime */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 70C05B14CED3BD1A6ACF6198 /* XCRemoteSwiftPackageReference "rive-ios" */;

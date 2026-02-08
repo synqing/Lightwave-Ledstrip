@@ -1,0 +1,11 @@
+# Git LFS configuration for snapshot testing images
+# All PNG files are tracked with LFS to avoid bloating the repository
+
+*.png filter=lfs diff=lfs merge=lfs -text
+
+# Additional image formats that might be used in snapshots
+*.jpg filter=lfs diff=lfs merge=lfs -text
+*.jpeg filter=lfs diff=lfs merge=lfs -text
+
+# Exclude certain directories if needed (uncomment if necessary)
+# !/some/path/to/exclude/**/*.png

@@ -227,8 +227,8 @@ void LGPStarBurstEnhancedEffect::render(plugins::EffectContext& ctx) {
     for (int i = 0; i < STRIP_LENGTH; i++) {
         float distFromCenter = (float)centerPairDistance((uint16_t)i);
 
-        // FIXED frequency - reduced from 0.25f to 0.12f to prevent wagon-wheel aliasing
-        const float freqBase = 0.12f;
+        // Spatial frequency for sharp radial lines
+        const float freqBase = 0.25f;
         float star = sinf(distFromCenter * freqBase - m_phase);
 
         // Center-focused burst flash (like Wave Collision's collision flash)

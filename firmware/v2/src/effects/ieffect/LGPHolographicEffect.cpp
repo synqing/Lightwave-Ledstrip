@@ -52,8 +52,8 @@ void LGPHolographicEffect::render(plugins::EffectContext& ctx) {
         // Layer 3 - Fast, tight pattern
         layerSum += sinf(dist * 0.3f + m_phase3) * 0.5f;
 
-        // Layer 4 - Shimmer (reduced multiplier from 3.0x to 1.5x for velocity coherence)
-        layerSum += sinf(dist * 0.6f - m_phase1 * 1.5f) * 0.3f;
+        // Layer 4 - Shimmer (3.0x creates sharp interference bands)
+        layerSum += sinf(dist * 0.6f - m_phase1 * 3.0f) * 0.3f;
 
         // Normalize
         layerSum = layerSum / (float)numLayers;

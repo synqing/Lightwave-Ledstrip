@@ -90,10 +90,10 @@ firmware/v2/src/
 
 ```bash
 # Build firmware (audio-enabled)
-cd firmware/v2 && pio run -e esp32dev_audio
+cd firmware/v2 && pio run -e esp32dev_audio_esv11
 
 # Build + upload
-cd firmware/v2 && pio run -e esp32dev_audio -t upload
+cd firmware/v2 && pio run -e esp32dev_audio_esv11 -t upload
 
 # Serial monitor
 pio device monitor -b 115200
@@ -125,7 +125,7 @@ When implementing or modifying effects, verify:
 - [ ] **Zone-aware**: Effect respects `ctx.ledCount` and `ctx.zoneStart` if applicable
 - [ ] **FPS maintained**: `validate <id>` shows no FPS regression
 - [ ] **British English**: Comments use British spelling
-- [ ] **Build passes**: `pio run -e esp32dev_audio` succeeds without errors
+- [ ] **Build passes**: `pio run -e esp32dev_audio_esv11` succeeds without errors
 
 ---
 

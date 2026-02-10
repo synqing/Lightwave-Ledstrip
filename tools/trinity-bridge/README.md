@@ -95,4 +95,4 @@ Optional: add alias maps inside the JSON if `palette_id`/`motion_id` are strings
 ## Notes
 
 - Commands are sent using Lightwave’s WebSocket envelope key `type` (not `cmd`).
-- Use a firmware build with `FEATURE_AUDIO_SYNC=1` (e.g. `esp32dev_audio`) for Trinity ingestion.
+- Use a firmware build with `FEATURE_AUDIO_SYNC=1` (e.g. `esp32dev_audio_esv11`) for Trinity ingestion.

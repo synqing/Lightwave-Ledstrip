@@ -195,7 +195,7 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
 ### Step 5: Build & Verify
 
 ```bash
-pio run -e esp32dev_audio
+pio run -e esp32dev_audio_esv11
 ```
 
 **Compile-time checks:**
@@ -243,7 +243,7 @@ static_assert(PRESET_STORAGE_SIZE >= MAX_EFFECT_PRESETS, "...");
 
 ```bash
 # All counts match (current state)
-pio run -e esp32dev_audio
+pio run -e esp32dev_audio_esv11
 # ✅ SUCCESS
 ```
 
@@ -257,7 +257,7 @@ const PatternMetadata PATTERN_METADATA[] PROGMEM = {
 ```
 
 ```bash
-pio run -e esp32dev_audio
+pio run -e esp32dev_audio_esv11
 # ❌ COMPILE ERROR:
 # static assertion failed: PATTERN_METADATA_COUNT must be >= EXPECTED_EFFECT_COUNT
 ```
@@ -269,7 +269,7 @@ pio run -e esp32dev_audio
 ```
 
 ```bash
-pio run -e esp32dev_audio
+pio run -e esp32dev_audio_esv11
 # ✅ Compiles (no static array overflow)
 # ⚠️  Runtime warning on serial:
 # [WARNING] Effect count mismatch: registered 112, expected 113
@@ -424,7 +424,7 @@ When modifying the effect system:
 - [ ] Add effect implementation
 - [ ] Register in `CoreEffects.cpp::registerAllEffects()`
 - [ ] Add metadata to `PatternRegistry.cpp::PATTERN_METADATA[]`
-- [ ] Build with `pio run -e esp32dev_audio`
+- [ ] Build with `pio run -e esp32dev_audio_esv11`
 - [ ] Verify no static_assert failures
 - [ ] Verify no runtime warnings in serial monitor
 - [ ] Test effect switching via web interface

@@ -267,7 +267,7 @@ cat scripts/ralph/prd.json | jq '.userStories[] | select(.passes == false) | .id
       "acceptanceCriteria": [
         "string - Verifiable criterion 1",
         "string - Verifiable criterion 2",
-        "pio run -e esp32dev_audio compiles"
+        "pio run -e esp32dev_audio_esv11 compiles"
       ],
       "priority": "number - Execution order (1 = first)",
       "passes": "boolean - false until completed",
@@ -326,7 +326,7 @@ Each criterion must be something Ralph can CHECK.
 - "Create `src/effects/PulseEffect.h` with render() declaration"
 - "Effect uses CENTER ORIGIN coordinate system"
 - "No malloc/new in render() implementation"
-- "pio run -e esp32dev_audio compiles"
+- "pio run -e esp32dev_audio_esv11 compiles"
 - "Effect verified via serial menu on hardware"
 
 **Bad (Vague):**
@@ -337,7 +337,7 @@ Each criterion must be something Ralph can CHECK.
 
 **Required for ALL stories:**
 ```
-"pio run -e esp32dev_audio compiles"
+"pio run -e esp32dev_audio_esv11 compiles"
 ```
 
 **Required for effect stories:**
@@ -418,7 +418,7 @@ git log --oneline -5
 cat scripts/ralph/progress.txt
 
 # Monitor build output
-pio run -e esp32dev_audio 2>&1 | tail -20
+pio run -e esp32dev_audio_esv11 2>&1 | tail -20
 ```
 
 ### Phase 4: Completion & Archive
@@ -568,8 +568,8 @@ scripts/ralph/
 
 | Environment | Purpose | Command |
 |-------------|---------|---------|
-| `esp32dev_audio` | Audio-enabled build (default) | `pio run -e esp32dev_audio` |
-| `esp32dev_audio` | WiFi + WebServer | `pio run -e esp32dev_audio` |
+| `esp32dev_audio_esv11` | Audio-enabled build (default) | `pio run -e esp32dev_audio_esv11` |
+| `esp32dev_audio_esv11` | WiFi + WebServer | `pio run -e esp32dev_audio_esv11` |
 | `memory_debug` | Heap tracing | `pio run -e memory_debug` |
 
 ### 11.2 Required Quality Checks
@@ -579,10 +579,10 @@ scripts/ralph/
 ```bash
 # Primary build (audio)
 cd firmware/v2
-pio run -e esp32dev_audio
+pio run -e esp32dev_audio_esv11
 
 # WiFi build (if story touches web)
-pio run -e esp32dev_audio
+pio run -e esp32dev_audio_esv11
 
 # Pre-commit hooks
 pre-commit run --all-files
@@ -598,8 +598,8 @@ Ensure the Ralph agent instructions include:
 Run these checks before committing:
 
 ### PlatformIO Builds
-- `cd firmware/v2 && pio run -e esp32dev_audio` - Must compile
-- `pio run -e esp32dev_audio` - Must compile (if touching web code)
+- `cd firmware/v2 && pio run -e esp32dev_audio_esv11` - Must compile
+- `pio run -e esp32dev_audio_esv11` - Must compile (if touching web code)
 
 ### Pre-commit Hooks
 - `pre-commit run --all-files` - Formatting and validation
@@ -635,7 +635,7 @@ Any story that modifies effects MUST include hardware verification.
 ```bash
 # Build and flash
 cd firmware/v2
-pio run -e esp32dev_audio -t upload --upload-port /dev/cu.usbmodem1101
+pio run -e esp32dev_audio_esv11 -t upload --upload-port /dev/cu.usbmodem1101
 
 # Open serial monitor
 pio device monitor -p /dev/cu.usbmodem1101 -b 115200
@@ -675,7 +675,7 @@ Runs automatic checks:
     "Uses CENTER ORIGIN coordinate system",
     "No malloc/new in render() method",
     "No rainbow colors or HSV sweeps",
-    "pio run -e esp32dev_audio compiles",
+    "pio run -e esp32dev_audio_esv11 compiles",
     "Effect verified via serial menu on hardware"
   ]
 }
@@ -712,10 +712,10 @@ git log --oneline -10
 git branch --show-current
 
 # Build with verbose output
-pio run -e esp32dev_audio -v
+pio run -e esp32dev_audio_esv11 -v
 
 # Check flash/RAM usage
-pio run -e esp32dev_audio | grep -E "Flash|RAM"
+pio run -e esp32dev_audio_esv11 | grep -E "Flash|RAM"
 
 # Serial monitor (115200 baud)
 pio device monitor -b 115200
@@ -742,7 +742,7 @@ pio device monitor -b 115200
 1. Check compiler errors carefully
 2. Look for missing includes or forward declarations
 3. Ensure all files are properly saved
-4. Try clean build: `pio run -t clean && pio run -e esp32dev_audio`
+4. Try clean build: `pio run -t clean && pio run -e esp32dev_audio_esv11`
 
 ---
 
@@ -849,7 +849,7 @@ These files require HIGH CAUTION when modifying:
         "Class inherits from BaseEffect",
         "Declare render() method",
         "Declare private members for pulse state",
-        "pio run -e esp32dev_audio compiles"
+        "pio run -e esp32dev_audio_esv11 compiles"
       ],
       "priority": 1,
       "passes": false,
@@ -865,7 +865,7 @@ These files require HIGH CAUTION when modifying:
         "Intensity based on m_audio.bassEnergy()",
         "NO malloc/new in render()",
         "NO rainbow colors - single hue with brightness variation",
-        "pio run -e esp32dev_audio compiles"
+        "pio run -e esp32dev_audio_esv11 compiles"
       ],
       "priority": 2,
       "passes": false,
@@ -878,7 +878,7 @@ These files require HIGH CAUTION when modifying:
       "acceptanceCriteria": [
         "Add PulseEffect to EffectRegistry::init()",
         "Effect appears in serial menu under 'Audio Effects'",
-        "pio run -e esp32dev_audio compiles",
+        "pio run -e esp32dev_audio_esv11 compiles",
         "Effect verified via serial menu on hardware"
       ],
       "priority": 3,
@@ -892,7 +892,7 @@ These files require HIGH CAUTION when modifying:
       "acceptanceCriteria": [
         "Effect ID exposed in /api/v1/effects endpoint",
         "WebSocket setEffect command accepts PulseEffect",
-        "pio run -e esp32dev_audio compiles",
+        "pio run -e esp32dev_audio_esv11 compiles",
         "Effect selectable from web dashboard"
       ],
       "priority": 4,

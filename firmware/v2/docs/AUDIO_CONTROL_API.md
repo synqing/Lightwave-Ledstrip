@@ -8,7 +8,7 @@ LightwaveOS v2 provides comprehensive audio control APIs for managing audio capt
 2. **Beat Event Streaming** - Real-time beat and tempo notifications
 3. **Audio Tuning Presets** - Save/load audio DSP configurations to NVS
 
-All features require the `esp32dev_audio` build environment with `FEATURE_AUDIO_SYNC=1`.
+All features require the `esp32dev_audio_esv11` build environment with `FEATURE_AUDIO_SYNC=1`.
 
 ---
 
@@ -27,8 +27,8 @@ All features require the `esp32dev_audio` build environment with `FEATURE_AUDIO_
 
 ## Requirements
 
-- **Firmware**: Built with `pio run -e esp32dev_audio`
-- **Feature Flag**: `FEATURE_AUDIO_SYNC=1` (automatically set by esp32dev_audio)
+- **Firmware**: Built with `pio run -e esp32dev_audio_esv11`
+- **Feature Flag**: `FEATURE_AUDIO_SYNC=1` (automatically set by esp32dev_audio_esv11)
 - **Connection**: REST via `http://lightwaveos.local/api/v1/` or WebSocket via `ws://lightwaveos.local/ws`
 
 ---

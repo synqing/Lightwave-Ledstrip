@@ -725,15 +725,10 @@ void RendererActor::onTick()
         captureFrame(CaptureTap::TAP_B_POST_CORRECTION, m_leds);
     }
 
-#ifndef NATIVE_BUILD
-    // CRITICAL: Yield BEFORE showLeds() to let IDLE1 reset its watchdog
-    // FastLED.show() blocks for ~9.6ms, preventing IDLE1 from running
-    // We must yield here so IDLE1 gets CPU time before the blocking call
-    // Use vTaskDelay(1) not vTaskDelay(0) - vTaskDelay(0) may not yield if nothing else is ready
-    vTaskDelay(1);
-#endif
-
     // Push to strips
+    // NOTE: showLeds() blocks for ~9.6ms (WS2812 wire time for 320 LEDs)
+    // During this blocking I/O, FreeRTOS can schedule other tasks on Core 1,
+    // including IDLE1 which feeds the watchdog. No explicit yield needed before.
     showLeds();
 
     // Calculate frame time (pre-throttle)
@@ -784,11 +779,10 @@ void RendererActor::onTick()
     m_frameCount++;
 
 #ifndef NATIVE_BUILD
-    // CRITICAL: Yield at END of frame to let IDLE1 reset its watchdog
-    // The Actor system calls onTick() synchronously when queue times out,
-    // so we must explicitly yield here to give IDLE1 CPU time
-    // Use vTaskDelay(1) to ensure at least one tick of yield (vTaskDelay(0) may not yield)
-    vTaskDelay(1);
+    // Cooperative yield at end of frame - use vTaskDelay(0) to yield without
+    // adding ~10ms latency. The ~9.6ms showLeds() blocking already provides
+    // ample time for IDLE1 to run and feed the watchdog.
+    vTaskDelay(0);
 #endif
 }
 
@@ -936,6 +930,12 @@ void RendererActor::applyPendingAudioContractTuning() {
     m_musicalGrid.setTuning(toMusicalGridTuning(m_audioContractTuning));
     m_musicalGrid.SetTimeSignature(m_audioContractTuning.beatsPerBar, m_audioContractTuning.beatUnit);
 #endif
+}
+
+void RendererActor::getBandsDebugSnapshot(BandsDebugSnapshot& out) const {
+    uint8_t idx = m_bandsDebugWriteIndex.load(std::memory_order_acquire);
+    const BandsDebugSnapshot& snap = m_bandsDebugSnapshot[1u - idx];
+    out = snap;
 }
 
 #endif
@@ -1196,6 +1196,39 @@ void RendererActor::renderFrame()
         bool age_within_tolerance = (age_s >= -0.01f && age_s < staleness_s);
         audioAvailable = sequence_changed || age_within_tolerance;
 
+        // DEBUG: Log clock spine renderer values every 2 seconds
+        // Track stats over the interval to see actual behavior
+        static uint32_t lastClockSpineRenderLog = 0;
+        static float maxAge_ms = 0.0f;
+        static float sumAge_ms = 0.0f;
+        static uint32_t ageCount = 0;
+        static uint32_t newFrameCount = 0;
+        static uint64_t maxDt_us = 0;
+
+        float age_ms = age_s * 1000.0f;
+        if (age_ms > maxAge_ms) maxAge_ms = age_ms;
+        sumAge_ms += age_ms;
+        ageCount++;
+        if (sequence_changed) newFrameCount++;
+        if (dt_us > maxDt_us) maxDt_us = dt_us;
+
+        // DEBUG: CLOCK_SPINE:RENDER logging disabled to reduce serial spam
+        // uint32_t nowLogMs = millis();
+        // if (nowLogMs - lastClockSpineRenderLog >= 2000) {  // 2 seconds
+        //     lastClockSpineRenderLog = nowLogMs;
+        //     float avgAge_ms = (ageCount > 0) ? (sumAge_ms / ageCount) : 0.0f;
+        //     LW_LOGI("[CLOCK_SPINE:RENDER] avgAge=%.2fms maxAge=%.2fms maxDt=%lluus newFrames=%u totalFrames=%u",
+        //             avgAge_ms, maxAge_ms,
+        //             (unsigned long long)maxDt_us,
+        //             newFrameCount, ageCount);
+        //     // Reset stats
+        //     maxAge_ms = 0.0f;
+        //     sumAge_ms = 0.0f;
+        //     ageCount = 0;
+        //     newFrameCount = 0;
+        //     maxDt_us = 0;
+        // }
+
         // 5. Beat phase at 120 FPS (renderer-domain integration)
 #if FEATURE_AUDIO_BACKEND_ESV11
         m_esBeatClock.tick(m_lastControlBus, sequence_changed, render_now);
@@ -1206,32 +1239,35 @@ void RendererActor::renderFrame()
 #endif
         
         // Debug: Log audio availability issues every 4 seconds (reduced frequency)
-        static uint32_t lastAudioDbg = 0;
-        uint32_t nowDbg = millis();
-        if (nowDbg - lastAudioDbg >= 4000) {
-            lastAudioDbg = nowDbg;
-            if (!audioAvailable) {
-                LW_LOGW("Audio unavailable: seq=%u prevSeq=%u age_s=%.3f staleness_s=%.3f hop_seq=%u",
-                        seq, prevSeq, age_s, staleness_s, m_lastControlBus.hop_seq);
-            } else {
-                // Include ES raw signal peaks to aid parity debugging against Emotiscope.
+        // Toggle with serial 'a' command via setAudioDebugEnabled()
+        if (m_audioDebugEnabled) {
+            static uint32_t lastAudioDbg = 0;
+            uint32_t nowDbg = millis();
+            if (nowDbg - lastAudioDbg >= 4000) {
+                lastAudioDbg = nowDbg;
+                if (!audioAvailable) {
+                    LW_LOGW("Audio unavailable: seq=%u prevSeq=%u age_s=%.3f staleness_s=%.3f hop_seq=%u",
+                            seq, prevSeq, age_s, staleness_s, m_lastControlBus.hop_seq);
+                } else {
+                    // Include ES raw signal peaks to aid parity debugging against Emotiscope.
 #if FEATURE_AUDIO_BACKEND_ESV11
-                float maxBinRaw = 0.0f;
-                float maxChromaRaw = 0.0f;
-                for (uint8_t i = 0; i < audio::ControlBusFrame::BINS_64_COUNT; ++i) {
-                    if (m_lastControlBus.es_bins64_raw[i] > maxBinRaw) maxBinRaw = m_lastControlBus.es_bins64_raw[i];
-                }
-                for (uint8_t i = 0; i < audio::CONTROLBUS_NUM_CHROMA; ++i) {
-                    if (m_lastControlBus.es_chroma_raw[i] > maxChromaRaw) maxChromaRaw = m_lastControlBus.es_chroma_raw[i];
-                }
-                LW_LOGI("Audio OK: seq=%u hop_seq=%u rms=%.3f flux=%.3f es_vu=%.3f es_binMax=%.3f es_chrMax=%.3f bpm=%.1f conf=%.2f",
-                        seq, m_lastControlBus.hop_seq, m_lastControlBus.rms, m_lastControlBus.flux,
-                        m_lastControlBus.es_vu_level_raw, maxBinRaw, maxChromaRaw,
-                        m_lastControlBus.es_bpm, m_lastControlBus.es_tempo_confidence);
+                    float maxBinRaw = 0.0f;
+                    float maxChromaRaw = 0.0f;
+                    for (uint8_t i = 0; i < audio::ControlBusFrame::BINS_64_COUNT; ++i) {
+                        if (m_lastControlBus.es_bins64_raw[i] > maxBinRaw) maxBinRaw = m_lastControlBus.es_bins64_raw[i];
+                    }
+                    for (uint8_t i = 0; i < audio::CONTROLBUS_NUM_CHROMA; ++i) {
+                        if (m_lastControlBus.es_chroma_raw[i] > maxChromaRaw) maxChromaRaw = m_lastControlBus.es_chroma_raw[i];
+                    }
+                    LW_LOGI("Audio OK: seq=%u hop_seq=%u rms=%.3f flux=%.3f es_vu=%.3f es_binMax=%.3f es_chrMax=%.3f bpm=%.1f conf=%.2f",
+                            seq, m_lastControlBus.hop_seq, m_lastControlBus.rms, m_lastControlBus.flux,
+                            m_lastControlBus.es_vu_level_raw, maxBinRaw, maxChromaRaw,
+                            m_lastControlBus.es_bpm, m_lastControlBus.es_tempo_confidence);
 #else
-                LW_LOGI("Audio OK: seq=%u hop_seq=%u rms=%.3f flux=%.3f",
-                        seq, m_lastControlBus.hop_seq, m_lastControlBus.rms, m_lastControlBus.flux);
+                    LW_LOGI("Audio OK: seq=%u hop_seq=%u rms=%.3f flux=%.3f",
+                            seq, m_lastControlBus.hop_seq, m_lastControlBus.rms, m_lastControlBus.flux);
 #endif
+                }
             }
         }
 
@@ -1260,6 +1296,25 @@ void RendererActor::renderFrame()
             m_sharedAudioCtx.musicalGrid = m_lastMusicalGrid;
             m_sharedAudioCtx.available = audioAvailable;
             m_sharedAudioCtx.trinityActive = false;
+
+            // Bands debug snapshot (lock-free double buffer for serial "bands" command)
+            uint8_t idx = m_bandsDebugWriteIndex.load(std::memory_order_relaxed);
+            BandsDebugSnapshot& snap = m_bandsDebugSnapshot[idx];
+            for (uint8_t i = 0; i < 8; ++i) snap.bands[i] = m_lastControlBus.bands[i];
+            snap.bass = (m_lastControlBus.bands[0] + m_lastControlBus.bands[1]) * 0.5f;
+            snap.mid = (m_lastControlBus.bands[2] + m_lastControlBus.bands[3] + m_lastControlBus.bands[4]) / 3.0f;
+            snap.treble = (m_lastControlBus.bands[5] + m_lastControlBus.bands[6] + m_lastControlBus.bands[7]) / 3.0f;
+            snap.rms = m_lastControlBus.rms;
+            // Avoid rms=0 when bands have content (display fallback for "x" output)
+            if (snap.rms <= 0.0f && (snap.bass + snap.mid + snap.treble) > 0.01f) {
+                float bandRms = 0.0f;
+                for (uint8_t i = 0; i < 8; ++i) bandRms += snap.bands[i] * snap.bands[i];
+                snap.rms = (bandRms > 0.0f) ? sqrtf(bandRms / 8.0f) : (snap.bass + snap.mid + snap.treble) / 3.0f;
+            }
+            snap.flux = m_lastControlBus.flux;
+            snap.hop_seq = m_lastControlBus.hop_seq;
+            snap.valid = true;
+            m_bandsDebugWriteIndex.store(1u - idx, std::memory_order_release);
         }
     } else {
         // No audio buffer - check Trinity proxy as fallback
@@ -1442,6 +1497,28 @@ void RendererActor::showLeds()
 {
     if (m_strip1 == nullptr || m_strip2 == nullptr) {
         return;
+    }
+
+    // Soft-knee tone map: prevent additive washout from flattening to white
+    // lum = (r+g+b)/3, lumT = lum/(lum+knee); scale RGB by lumT/lum (hue preserved)
+    constexpr float kToneMapKnee = 1.0f;
+    for (uint16_t i = 0; i < LedConfig::TOTAL_LEDS; ++i) {
+        float r = static_cast<float>(m_leds[i].r) * (1.0f / 255.0f);
+        float g = static_cast<float>(m_leds[i].g) * (1.0f / 255.0f);
+        float b = static_cast<float>(m_leds[i].b) * (1.0f / 255.0f);
+        float lum = (r + g + b) * (1.0f / 3.0f);
+        if (lum <= 0.0f) continue;
+        float lumT = lum / (lum + kToneMapKnee);
+        float scale = lumT / lum;
+        r *= scale;
+        g *= scale;
+        b *= scale;
+        if (r > 1.0f) r = 1.0f;
+        if (g > 1.0f) g = 1.0f;
+        if (b > 1.0f) b = 1.0f;
+        m_leds[i].r = static_cast<uint8_t>(r * 255.0f + 0.5f);
+        m_leds[i].g = static_cast<uint8_t>(g * 255.0f + 0.5f);
+        m_leds[i].b = static_cast<uint8_t>(b * 255.0f + 0.5f);
     }
 
     // Copy from unified buffer to strip buffers

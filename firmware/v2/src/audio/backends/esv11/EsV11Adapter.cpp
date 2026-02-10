@@ -102,7 +102,9 @@ void EsV11Adapter::buildFrame(lightwaveos::audio::ControlBusFrame& out,
         out.bins64Adaptive[i] = v;
     }
 
-    // Aggregate 8 bands from 64 bins (mean of each 8-bin block)
+    // Aggregate 8 bands from 64 bins (mean of each 8-bin block).
+    // Mapping: band 0 = bins 0–7 (sub-bass), band 1 = 8–15 (bass), band 2–4 = mid, band 5–7 = treble.
+    // ctx.audio.bass() = avg(bands[0],bands[1]), mid() = avg(2,3,4), treble() = avg(5,6,7).
     for (uint8_t band = 0; band < lightwaveos::audio::CONTROLBUS_NUM_BANDS; ++band) {
         const uint8_t start = static_cast<uint8_t>(band * 8);
         float sum = 0.0f;

@@ -22,8 +22,8 @@ Run these checks before committing:
 ### PlatformIO Builds
 ```bash
 cd firmware/v2
-pio run -e esp32dev_audio    # MUST compile - this is the auth-enabled build
-pio run -e esp32dev_audio   # MUST compile - auth disabled here
+pio run -e esp32dev_audio_esv11    # MUST compile - this is the auth-enabled build
+pio run -e esp32dev_audio_esv11   # MUST compile - auth disabled here
 ```
 
 ### Critical Invariants

@@ -45,8 +45,8 @@ struct DeviceTab: View {
                 }
                 .listRowBackground(Color.lwCard)
 
-                // Section: Presets
-                Section("Presets") {
+                // Section: Presets & Shows
+                Section("Presets & Shows") {
                     NavigationLink {
                         PresetsView(type: .effect)
                     } label: {
@@ -54,12 +54,7 @@ struct DeviceTab: View {
                             .foregroundStyle(Color.lwTextPrimary)
                     }
 
-                    NavigationLink {
-                        PresetsView(type: .zone)
-                    } label: {
-                        Label("Zone Presets", systemImage: "square.split.2x2")
-                            .foregroundStyle(Color.lwTextPrimary)
-                    }
+                    // Note: Zone Presets moved inline to Zones tab (ZonePresetsCard)
 
                     NavigationLink {
                         ShowsView()

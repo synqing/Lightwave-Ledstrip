@@ -8,6 +8,10 @@
 
 #include <cmath>
 
+// Unified logging for debug output
+#define LW_LOG_TAG "EsBeatClock"
+#include "utils/Log.h"
+
 namespace lightwaveos::audio::esv11 {
 
 float EsBeatClock::clamp01(float x) {
@@ -132,7 +136,36 @@ void EsBeatClock::tick(const ControlBusFrame& latest, bool newAudioFrame, const 
     int64_t ds = static_cast<int64_t>(render_now.sample_index) - static_cast<int64_t>(m_lastTickT.sample_index);
     if (ds < 0) ds = 0;
     const float dt_s = static_cast<float>(ds) / static_cast<float>(render_now.sample_rate_hz ? render_now.sample_rate_hz : 12800);
+
     m_lastTickT = render_now;
+
+    // DEBUG: Log clock spine beat clock values every 2 seconds
+    // Log AFTER m_lastTickT update so we see actual integration values
+    static uint32_t lastBeatClockLog = 0;
+    static uint32_t framesSinceLog = 0;
+    static float maxAdvance = 0.0f;
+    static float sumAdvance = 0.0f;
+    static uint32_t advanceCount = 0;
+
+    float thisAdvance = dt_s * (m_bpm / 60.0f);
+    if (thisAdvance > maxAdvance) maxAdvance = thisAdvance;
+    sumAdvance += thisAdvance;
+    advanceCount++;
+    framesSinceLog++;
+
+    // DEBUG: CLOCK_SPINE:BEAT logging disabled to reduce serial spam
+    // uint32_t nowMs = static_cast<uint32_t>(render_now.monotonic_us / 1000);
+    // if (nowMs - lastBeatClockLog >= 2000) {  // 2 seconds
+    //     lastBeatClockLog = nowMs;
+    //     float avgAdvance = (advanceCount > 0) ? (sumAdvance / advanceCount) : 0.0f;
+    //     LW_LOGI("[CLOCK_SPINE:BEAT] phase=%.3f bpm=%.1f frames=%lu avgAdv=%.5f maxAdv=%.5f",
+    //             m_phase01, m_bpm, (unsigned long)framesSinceLog, avgAdvance, maxAdvance);
+    //     // Reset stats
+    //     framesSinceLog = 0;
+    //     maxAdvance = 0.0f;
+    //     sumAdvance = 0.0f;
+    //     advanceCount = 0;
+    // }
 
     const float bps = m_bpm / 60.0f;
     float phaseAdvance = dt_s * bps;

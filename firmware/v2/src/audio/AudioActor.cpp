@@ -238,6 +238,16 @@ void AudioActor::onTick()
     // es.sample_index from EsV11Backend represents the post-hop sample index
     frame.t = AudioTime(es.sample_index, SAMPLE_RATE, now_us);
 
+    // DEBUG: CLOCK_SPINE:ES logging disabled to reduce serial spam
+    // static uint64_t lastClockSpineLog = 0;
+    // if (now_us - lastClockSpineLog >= 2000000) {  // 2 seconds
+    //     lastClockSpineLog = now_us;
+    //     LW_LOGI("[CLOCK_SPINE:ES] frame.t: sample_idx=%llu mono_us=%llu hop_seq=%u",
+    //             (unsigned long long)frame.t.sample_index,
+    //             (unsigned long long)frame.t.monotonic_us,
+    //             frame.hop_seq);
+    // }
+
     m_controlBusBuffer.Publish(frame);
 
     m_hopCount++;
@@ -835,6 +845,18 @@ void AudioActor::processHop()
     // Update monotonic counters (sample index now represents END of processed audio)
     m_sampleIndex = hop_end_sample_index;
     m_hopCount++;
+
+    // DEBUG: Log clock spine values every 2 seconds (LWLS backend) - DISABLED
+    // static uint64_t lastClockSpineLogLwls = 0;
+    // uint64_t logNow = esp_timer_get_time();
+    // if (logNow - lastClockSpineLogLwls >= 2000000) {  // 2 seconds
+    //     lastClockSpineLogLwls = logNow;
+    //     LW_LOGI("[CLOCK_SPINE:LWLS] now.t: sample_idx=%llu mono_us=%llu captureEnd=%llu hop=%lu",
+    //             (unsigned long long)now.sample_index,
+    //             (unsigned long long)now.monotonic_us,
+    //             (unsigned long long)m_diag.lastCaptureEndUs,
+    //             (unsigned long)m_hopCount);
+    // }
 
     int32_t minRaw = 32767;
     int32_t maxRaw = -32768;

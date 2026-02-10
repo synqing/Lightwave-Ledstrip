@@ -53,7 +53,7 @@ This document defines the routing matrix that maps files, tasks, and domains to 
 ```bash
 # Serial: s (FPS/CPU check)
 # Serial: validate <effectId> (centre-origin, hue-span, FPS, heap-delta)
-# Build: cd firmware/v2 && pio run -e esp32dev_audio
+# Build: cd firmware/v2 && pio run -e esp32dev_audio_esv11
 ```
 
 **Pattern Memory Keys**:
@@ -88,7 +88,7 @@ This document defines the routing matrix that maps files, tasks, and domains to 
 
 **Validation Commands**:
 ```bash
-# Build: cd firmware/v2 && pio run -e esp32dev_audio -t upload
+# Build: cd firmware/v2 && pio run -e esp32dev_audio_esv11 -t upload
 # Serial: Verify WiFi connects without "IP: 0.0.0.0" appearing first
 # API: GET /api/v1/effects (verify backward compatibility)
 ```

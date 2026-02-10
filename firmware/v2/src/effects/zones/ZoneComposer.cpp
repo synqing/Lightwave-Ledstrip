@@ -312,9 +312,14 @@ void ZoneComposer::renderZone(uint8_t zoneId, CRGB* leds, uint16_t numLeds,
     // Update zone-specific fields in the reusable context
     // (Base fields were already set in render() once per frame)
     m_zoneContext.leds = zoneBuffer;
-    m_zoneContext.brightness = zone.brightness;
+    // IMPORTANT: Effects render at full brightness (255). The compositor applies
+    // zone.brightness during composition to avoid squaring brightness.
+    m_zoneContext.brightness = 255;
     m_zoneContext.speed = zone.speed;
     m_zoneContext.zoneId = zoneId;  // Zone ID for zone-aware effects
+    // Set mood and fadeAmount so transport-based effects have fuel
+    m_zoneContext.mood = 128;       // Default mid-range mood (0-255)
+    m_zoneContext.fadeAmount = 128; // Default mid-range fade (0-255)
     // Apply speed-scaled time for this zone.
     float speedFactor = computeSpeedTimeFactor(zone.speed);
     float scaledDeltaSeconds = deltaSeconds * speedFactor;

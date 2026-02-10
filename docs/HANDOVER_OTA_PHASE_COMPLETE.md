@@ -236,10 +236,10 @@ python3 tools/extract_jsonl.py traces/curated/ota_rest_happy_path_raw.txt
 
 ```bash
 # Build
-cd firmware/v2 && pio run -e esp32dev_audio
+cd firmware/v2 && pio run -e esp32dev_audio_esv11
 
 # Upload to ESP32-S3
-cd firmware/v2 && pio run -e esp32dev_audio -t upload --upload-port /dev/cu.usbmodem1101
+cd firmware/v2 && pio run -e esp32dev_audio_esv11 -t upload --upload-port /dev/cu.usbmodem1101
 
 # Monitor serial
 pio device monitor -p /dev/cu.usbmodem1101 -b 115200

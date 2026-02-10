@@ -51,6 +51,16 @@ private:
     uint32_t m_lastHopSeq = 0;
     uint8_t m_dominantChromaBin = 0;
     float m_dominantChromaBinSmooth = 0.0f;
+
+    // Bands-dead guard: when bands stay near zero for N frames, don't trust band-based snare/hihat
+    uint16_t m_bandsLowFrames = 0;
+    static constexpr float BANDS_LOW_THRESHOLD = 0.02f;
+    static constexpr uint16_t BANDS_LOW_FRAMES_MAX = 60;  // ~0.5 s at 120 FPS
+
+    // Smoothed context so audio mapping doesn't cause flashing or cut-off display
+    float m_smoothBrightness = 0.8f;   // 0-1, from ctx.brightness/255
+    float m_smoothStrength = 0.3f;     // beatStrength
+    float m_smoothBeatPhase = 0.0f;     // beatPhase for stable background
 };
 
 } // namespace ieffect

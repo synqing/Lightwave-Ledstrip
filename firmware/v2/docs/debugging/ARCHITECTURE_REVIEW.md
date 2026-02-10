@@ -328,7 +328,7 @@ npx claude-flow@v3alpha agent_spawn \
 
 After implementation:
 
-- [ ] `pio run -e esp32dev_audio` compiles cleanly
+- [ ] `pio run -e esp32dev_audio_esv11` compiles cleanly
 - [ ] `curl http://lightwaveos.local/api/v1/debug/performance` returns JSON
 - [ ] `curl http://lightwaveos.local/api/v1/debug/memory` returns JSON
 - [ ] WebSocket `debug.performance.get` returns data

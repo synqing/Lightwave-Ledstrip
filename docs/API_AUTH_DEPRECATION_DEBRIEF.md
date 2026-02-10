@@ -318,7 +318,7 @@ JsonObject error = root.createNestedObject("error");
 
 ### ✅ Completed
 - All native unit tests passing (`pio test -e native_codec_test_ws`)
-- Firmware builds successfully (`pio run -e esp32dev_audio`)
+- Firmware builds successfully (`pio run -e esp32dev_audio_esv11`)
 - Firmware uploads successfully
 - JSON boundary checker shows no new violations (only pre-existing Tab5 encoder violations)
 - All deprecation warnings resolved except 1 in `ApiResponse.h`

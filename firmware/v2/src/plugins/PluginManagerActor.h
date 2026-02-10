@@ -34,7 +34,7 @@ namespace plugins {
  * @brief Plugin configuration constants
  */
 struct PluginConfig {
-    static constexpr uint8_t MAX_EFFECTS = 128;
+    static constexpr uint8_t MAX_EFFECTS = 155;
     static_assert(MAX_EFFECTS >= limits::MAX_EFFECTS,
                   "PluginConfig::MAX_EFFECTS must be >= limits::MAX_EFFECTS");
     static constexpr uint8_t MAX_MANIFESTS = 16;
@@ -80,7 +80,7 @@ struct PluginStats {
  * @brief Plugin Manager Actor
  *
  * Central registry manager that:
- * - Maintains up to 128 registered IEffect instances
+ * - Maintains up to 140 registered IEffect instances
  * - Loads plugins from LittleFS on startup
  * - Supports atomic reload at runtime
  * - Coordinates effect registration with RendererActor

@@ -98,7 +98,7 @@ python3 tools/check_trace_conformance.py traces/curated/ota_rest_happy_path.itf.
 python3 tools/capture_ota_rest_trace_direct.py ota_rest_happy_path traces/curated/ lightwaveos.local LW-OTA-2024-SecureUpdate
 
 # Build & upload firmware
-cd firmware/v2 && pio run -e esp32dev_audio -t upload --upload-port /dev/cu.usbmodem1101
+cd firmware/v2 && pio run -e esp32dev_audio_esv11 -t upload --upload-port /dev/cu.usbmodem1101
 ```
 
 ## Key Constraints

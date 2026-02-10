@@ -39,7 +39,20 @@
 #include "ieffect/PulseEffect.h"
 #include "ieffect/LGPBoxWaveEffect.h"
 #include "ieffect/LGPHolographicEffect.h"
+#include "ieffect/LGPOpalFilmEffect.h"
+#include "ieffect/LGPGratingScanEffect.h"
+#include "ieffect/LGPGratingScanBreakupEffect.h"
+#include "ieffect/LGPStressGlassEffect.h"
+#include "ieffect/LGPStressGlassMeltEffect.h"
+#include "ieffect/LGPMoireSilkEffect.h"
+#include "ieffect/LGPCausticShardsEffect.h"
+#include "ieffect/LGPParallaxDepthEffect.h"
 #include "ieffect/LGPHolographicEsTunedEffect.h"
+#include "ieffect/LGPWaterCausticsEffect.h"
+#include "ieffect/LGPSchlierenFlowEffect.h"
+#include "ieffect/LGPReactionDiffusionEffect.h"
+#include "ieffect/LGPReactionDiffusionTriangleEffect.h"
+#include "ieffect/LGPShapeBangersPack.h"
 #include "ieffect/LGPInterferenceScannerEffect.h"
 #include "ieffect/LGPWaveCollisionEffect.h"
 #include "ieffect/LGPDiamondLatticeEffect.h"
@@ -103,6 +116,9 @@
 #include "ieffect/BeatPulseBreatheEffect.h"
 #include "ieffect/BeatPulseLGPInterferenceEffect.h"
 #include "ieffect/BeatPulseBloomEffect.h"
+#include "ieffect/BloomParityEffect.h"
+#include "ieffect/KuramotoTransportEffect.h"
+#include "ieffect/WaveformParityEffect.h"
 #include "ieffect/LGPSpectrumBarsEffect.h"
 #include "ieffect/LGPBassBreathEffect.h"
 #include "ieffect/AudioWaveformEffect.h"
@@ -1112,9 +1128,167 @@ uint8_t registerAllEffects(RendererActor* renderer) {
         total++;
     }
 
-    // Beat Pulse (Bloom) (ID 121) - Centre bloom with outward decay
-    static ieffect::BeatPulseBloomEffect beatPulseBloomInstance;
-    if (renderer->registerEffect(total, &beatPulseBloomInstance)) {
+    // Beat Pulse (Bloom) (ID 121) - Sensory Bridge Bloom parity: subpixel advection transport
+    // Transport is the brush. History is the canvas. Audio is just pigment injection.
+    static ieffect::BloomParityEffect bloomParityInstance;
+    if (renderer->registerEffect(total, &bloomParityInstance)) {
+        total++;
+    }
+
+    // Kuramoto Transport (ID 122) - Invisible oscillators → event injection → transported light
+    // Architecture: Kuramoto field generates phase dynamics, feature extractor finds events,
+    // transport buffer advects visible "light substance". Audio steers only engine params.
+    static ieffect::KuramotoTransportEffect kuramotoTransportInstance;
+    if (renderer->registerEffect(total, &kuramotoTransportInstance)) {
+        total++;
+    }
+
+    // SB Waveform Parity (ID 123) - Sensory Bridge 3.1.0 waveform mode
+    // Intensity-only rendering + palette at output. dt-corrected. Dynamic normalisation.
+    static ieffect::WaveformParityEffect waveformParityInstance;
+    if (renderer->registerEffect(total, &waveformParityInstance)) {
+        total++;
+    }
+
+    // =============== HOLOGRAPHIC VARIANTS PACK (124-129) ===============
+
+    // LGP Opal Film (ID 124) - Thin-film iridescence bands
+    static ieffect::LGPOpalFilmEffect opalFilmInstance;
+    if (renderer->registerEffect(total, &opalFilmInstance)) {
+        total++;
+    }
+
+    // LGP Grating Scan (ID 125) - Diffraction scan highlight
+    static ieffect::LGPGratingScanEffect gratingScanInstance;
+    if (renderer->registerEffect(total, &gratingScanInstance)) {
+        total++;
+    }
+
+    // LGP Stress Glass (ID 126) - Photoelastic fringe field
+    static ieffect::LGPStressGlassEffect stressGlassInstance;
+    if (renderer->registerEffect(total, &stressGlassInstance)) {
+        total++;
+    }
+
+    // LGP Moire Silk (ID 127) - Two-lattice beat pattern
+    static ieffect::LGPMoireSilkEffect moireSilkInstance;
+    if (renderer->registerEffect(total, &moireSilkInstance)) {
+        total++;
+    }
+
+    // LGP Caustic Shards (ID 128) - Interference with prismatic glints
+    static ieffect::LGPCausticShardsEffect causticShardsInstance;
+    if (renderer->registerEffect(total, &causticShardsInstance)) {
+        total++;
+    }
+
+    // LGP Parallax Depth (ID 129) - Two-layer refractive parallax
+    static ieffect::LGPParallaxDepthEffect parallaxDepthInstance;
+    if (renderer->registerEffect(total, &parallaxDepthInstance)) {
+        total++;
+    }
+
+    // LGP Stress Glass (Melt) (ID 130) - Phase-locked wings
+    static ieffect::LGPStressGlassMeltEffect stressGlassMeltInstance;
+    if (renderer->registerEffect(total, &stressGlassMeltInstance)) {
+        total++;
+    }
+
+    // LGP Grating Scan (Breakup) (ID 131) - Halo breakup
+    static ieffect::LGPGratingScanBreakupEffect gratingScanBreakupInstance;
+    if (renderer->registerEffect(total, &gratingScanBreakupInstance)) {
+        total++;
+    }
+
+    // LGP Water Caustics (ID 132) - Ray-envelope caustic filaments
+    static ieffect::LGPWaterCausticsEffect waterCausticsInstance;
+    if (renderer->registerEffect(total, &waterCausticsInstance)) {
+        total++;
+    }
+
+    // LGP Schlieren Flow (ID 133) - Knife-edge gradient flow
+    static ieffect::LGPSchlierenFlowEffect schlierenFlowInstance;
+    if (renderer->registerEffect(total, &schlierenFlowInstance)) {
+        total++;
+    }
+
+    // LGP Reaction Diffusion (ID 134) - Gray-Scott slime
+    static ieffect::LGPReactionDiffusionEffect reactionDiffusionInstance;
+    if (renderer->registerEffect(total, &reactionDiffusionInstance)) {
+        total++;
+    }
+
+    // LGP RD Triangle (ID 135) - Reaction-diffusion front wedge isolation
+    static ieffect::LGPReactionDiffusionTriangleEffect reactionDiffusionTriangleInstance;
+    if (renderer->registerEffect(total, &reactionDiffusionTriangleInstance)) {
+        total++;
+    }
+
+    // --- Shape Bangers Pack (136-146) ---
+
+    // LGP Talbot Carpet (ID 136) - Self-imaging lattice rug
+    static ieffect::LGPTalbotCarpetEffect talbotCarpetInstance;
+    if (renderer->registerEffect(total, &talbotCarpetInstance)) {
+        total++;
+    }
+
+    // LGP Airy Comet (ID 137) - Self-accelerating comet with trailing lobes
+    static ieffect::LGPAiryCometEffect airyCometInstance;
+    if (renderer->registerEffect(total, &airyCometInstance)) {
+        total++;
+    }
+
+    // LGP Moire Cathedral (ID 138) - Interference arches from close gratings
+    static ieffect::LGPMoireCathedralEffect moireCathedralInstance;
+    if (renderer->registerEffect(total, &moireCathedralInstance)) {
+        total++;
+    }
+
+    // LGP Living Glyph (ID 139) - Superformula morphing supershapes
+    static ieffect::LGPSuperformulaGlyphEffect superformulaGlyphInstance;
+    if (renderer->registerEffect(total, &superformulaGlyphInstance)) {
+        total++;
+    }
+
+    // LGP Spirograph Crown (ID 140) - Hypotrochoid gear-flower loops
+    static ieffect::LGPSpirographCrownEffect spirographCrownInstance;
+    if (renderer->registerEffect(total, &spirographCrownInstance)) {
+        total++;
+    }
+
+    // LGP Rose Bloom (ID 141) - Rhodonea petal engine
+    static ieffect::LGPRoseBloomEffect roseBloomInstance;
+    if (renderer->registerEffect(total, &roseBloomInstance)) {
+        total++;
+    }
+
+    // LGP Harmonograph Halo (ID 142) - Lissajous aura orbitals
+    static ieffect::LGPHarmonographHaloEffect harmonographHaloInstance;
+    if (renderer->registerEffect(total, &harmonographHaloInstance)) {
+        total++;
+    }
+
+    // LGP Rule 30 Cathedral (ID 143) - Elementary CA textile
+    static ieffect::LGPRule30CathedralEffect rule30CathedralInstance;
+    if (renderer->registerEffect(total, &rule30CathedralInstance)) {
+        total++;
+    }
+
+    // LGP Langton Highway (ID 144) - Emergent ant-to-highway projection
+    static ieffect::LGPLangtonHighwayEffect langtonHighwayInstance;
+    if (renderer->registerEffect(total, &langtonHighwayInstance)) {
+        total++;
+    }
+
+    // LGP Cymatic Ladder (ID 145) - Standing-wave sculpture
+    static ieffect::LGPCymaticLadderEffect cymaticLadderInstance;
+    if (renderer->registerEffect(total, &cymaticLadderInstance)) {
+        total++;
+    }
+
+    // LGP Mach Diamonds (ID 146) - Shock-diamond jewellery
+    static ieffect::LGPMachDiamondsEffect machDiamondsInstance;
+    if (renderer->registerEffect(total, &machDiamondsInstance)) {
         total++;
     }
 

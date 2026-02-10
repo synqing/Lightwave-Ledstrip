@@ -561,7 +561,7 @@ const char* description = meta.description;
 
 ```bash
 cd firmware/v2
-pio run -e esp32dev_audio  # Must succeed with no warnings
+pio run -e esp32dev_audio_esv11  # Must succeed with no warnings
 ```
 
 ---

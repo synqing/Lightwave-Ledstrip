@@ -389,7 +389,7 @@ Routes are registered in `firmware/v2/src/network/webserver/V1ApiRoutes.cpp`.
 ---
 
 ## 12) Build environments and test surfaces
-- **Main build:** `pio run -d firmware/v2 -e esp32dev_audio`
+- **Main build:** `pio run -d firmware/v2 -e esp32dev_audio_esv11`
 - **Native tests:** `pio run -d firmware/v2 -e native_test` (host testing surface)
 - **What to document:** which subsystems are covered by host tests and which require hardware.
 

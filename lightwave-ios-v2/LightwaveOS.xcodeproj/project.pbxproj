@@ -52,6 +52,7 @@
 		5D1AFF73F547DEB373796126 /* ZonesTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E1E87FD587D3F3C005F248C /* ZonesTab.swift */; };
 		5FDC20B426C20FB926696A29 /* ZoneHeaderCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = C704DF2FFFAD9DA38DF9AAC2 /* ZoneHeaderCard.swift */; };
 		6304424356DFE97CD779DCA9 /* InnerShadow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 708471E3E78E72F6FBB6564D /* InnerShadow.swift */; };
+		631C88CF7DBE4CB7387584D0 /* ZonePresetsCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46672AB014615A7366928FF2 /* ZonePresetsCard.swift */; };
 		6398FD62C2DE608465A3F7B6 /* BandEnvelopeCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B7CC4054A122FC375E195C9 /* BandEnvelopeCard.swift */; };
 		651D94812D47ACEF73F02D22 /* WaveformSpectrumCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 015EA9550AB44879E2FEDC47 /* WaveformSpectrumCard.swift */; };
 		6833198C7231B9C09058C435 /* EnergyPulse.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8EBD3FC475D43D561709ECD /* EnergyPulse.swift */; };
@@ -84,6 +85,7 @@
 		A9DA8D7D7DE6C390B6CB5D9F /* ZoneSegment.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3494A9997E5BDD618C4F611 /* ZoneSegment.swift */; };
 		AA4974FFED4AA3412E9CCEFF /* WebSocketService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E5E9E104E8517B31A2FCD3 /* WebSocketService.swift */; };
 		ABC80644A6EF1724A606D6CF /* EffectViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25808F2C76C005D96028C674 /* EffectViewModel.swift */; };
+		AFEAAEBB71E18B08EA315508 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = B911BCD4F353354240419E1B /* README.md */; };
 		B0CF75A65B9A1C7A89C3CEF8 /* EffectPreset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CB900DD932F7277B8EEB153 /* EffectPreset.swift */; };
 		B871B0FF48E50BCFEACD90AD /* UDPStreamReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A666FDABA22F3869FE52E0A /* UDPStreamReceiver.swift */; };
 		BA7A664F2E2A8E45B775DBB6 /* SilenceDetectionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DC45A333675D7720ED18E93 /* SilenceDetectionCard.swift */; };
@@ -183,6 +185,7 @@
 		4203D8698E02C8380FD90912 /* LWSliderSnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LWSliderSnapshotTests.swift; sourceTree = "<group>"; };
 		455F2E537DDB7B2763EC9AD0 /* EffectMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EffectMetadata.swift; sourceTree = "<group>"; };
 		456CA5276801070F23B37070 /* PlayTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayTab.swift; sourceTree = "<group>"; };
+		46672AB014615A7366928FF2 /* ZonePresetsCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZonePresetsCard.swift; sourceTree = "<group>"; };
 		4A06B1F5D1B76135389E8A37 /* DeviceDiscoveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceDiscoveryService.swift; sourceTree = "<group>"; };
 		4BEF66607D6EB7A86DAB1A24 /* EffectSelectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EffectSelectorView.swift; sourceTree = "<group>"; };
 		4C2DEC421D3DDA638E3C0A64 /* ParametersViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParametersViewModel.swift; sourceTree = "<group>"; };
@@ -234,6 +237,7 @@
 		AE8390CC2910D822252527A7 /* JetBrainsMono-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "JetBrainsMono-Medium.ttf"; sourceTree = "<group>"; };
 		B4090493FC0E92746BBB3BB9 /* GlowStack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlowStack.swift; sourceTree = "<group>"; };
 		B59625DADEFB3F03FCC18825 /* GlassCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassCard.swift; sourceTree = "<group>"; };
+		B911BCD4F353354240419E1B /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		BF16116B37E0F57F4376B252 /* ConnectivityTortureTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityTortureTest.swift; sourceTree = "<group>"; };
 		BF92DC1993E1D866C81B1AF2 /* PresetsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PresetsViewModel.swift; sourceTree = "<group>"; };
 		C03D8E805B47C9F511964259 /* SavedZonePreset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SavedZonePreset.swift; sourceTree = "<group>"; };
@@ -400,6 +404,7 @@
 		5CB0360F4B09BF8225BEC9D3 /* Snapshots */ = {
 			isa = PBXGroup;
 			children = (
+				B911BCD4F353354240419E1B /* README.md */,
 				1335EC1BADDE0E92280D891F /* SnapshotTestCase.swift */,
 				B8BECD4D15BE666B96D9C0B1 /* Components */,
 			);
@@ -485,6 +490,7 @@
 				A7842D3CB7F30B82B6510791 /* ZoneEffectSelectorView.swift */,
 				C704DF2FFFAD9DA38DF9AAC2 /* ZoneHeaderCard.swift */,
 				168C9F678A0019152BC2DB77 /* ZonePaletteSelectorView.swift */,
+				46672AB014615A7366928FF2 /* ZonePresetsCard.swift */,
 			);
 			path = Zones;
 			sourceTree = "<group>";
@@ -683,6 +689,7 @@
 			buildConfigurationList = 40882BEE10D36CC1E2D7FDE7 /* Build configuration list for PBXNativeTarget "LightwaveOSTests" */;
 			buildPhases = (
 				38FBE43344E5DCBBAAF8D0FB /* Sources */,
+				9ADA7901597E86298E44FB4E /* Resources */,
 				495722A70AD17A71EC544481 /* Frameworks */,
 			);
 			buildRules = (
@@ -742,6 +749,14 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		9ADA7901597E86298E44FB4E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AFEAAEBB71E18B08EA315508 /* README.md in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FC3197B091E4005197AF7DC7 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -883,6 +898,7 @@
 				5FDC20B426C20FB926696A29 /* ZoneHeaderCard.swift in Sources */,
 				6A5F5AA58634F4613D9B3ED5 /* ZonePaletteSelectorView.swift in Sources */,
 				5C1C06EBB274C051A439A797 /* ZonePreset.swift in Sources */,
+				631C88CF7DBE4CB7387584D0 /* ZonePresetsCard.swift in Sources */,
 				A9DA8D7D7DE6C390B6CB5D9F /* ZoneSegment.swift in Sources */,
 				DD03A1AAA86329C8F31ED5F8 /* ZoneViewModel.swift in Sources */,
 				5D1AFF73F547DEB373796126 /* ZonesTab.swift in Sources */,

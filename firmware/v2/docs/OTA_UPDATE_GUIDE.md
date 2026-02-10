@@ -20,7 +20,7 @@ LightwaveOS supports Over-The-Air (OTA) firmware updates via HTTP POST to the `/
 ```bash
 curl -X POST \
   -H "X-OTA-Token: LW-OTA-2024-SecureUpdate" \
-  -F "update=@.pio/build/esp32dev_audio/firmware.bin;type=application/octet-stream" \
+  -F "update=@.pio/build/esp32dev_audio_esv11/firmware.bin;type=application/octet-stream" \
   "http://lightwaveos.local/update"
 ```
 
@@ -28,10 +28,10 @@ curl -X POST \
 
 ```bash
 # Build firmware with audio features (required for audio streaming)
-pio run -e esp32dev_audio
+pio run -e esp32dev_audio_esv11
 
 # Firmware binary location
-.pio/build/esp32dev_audio/firmware.bin
+.pio/build/esp32dev_audio_esv11/firmware.bin
 ```
 
 ---
@@ -42,12 +42,12 @@ pio run -e esp32dev_audio
 
 ```bash
 # Clean build recommended before OTA
-pio run -e esp32dev_audio -t clean
-pio run -e esp32dev_audio
+pio run -e esp32dev_audio_esv11 -t clean
+pio run -e esp32dev_audio_esv11
 
 # Verify build output
-ls -la .pio/build/esp32dev_audio/firmware.bin
-md5 .pio/build/esp32dev_audio/firmware.bin
+ls -la .pio/build/esp32dev_audio_esv11/firmware.bin
+md5 .pio/build/esp32dev_audio_esv11/firmware.bin
 ```
 
 ### 2. Verify Device Connectivity
@@ -66,7 +66,7 @@ curl -s http://192.168.x.x/api/v1/device/status | python3 -m json.tool
 ```bash
 curl -X POST \
   -H "X-OTA-Token: LW-OTA-2024-SecureUpdate" \
-  -F "update=@.pio/build/esp32dev_audio/firmware.bin;type=application/octet-stream" \
+  -F "update=@.pio/build/esp32dev_audio_esv11/firmware.bin;type=application/octet-stream" \
   "http://192.168.x.x/update"
 ```
 
@@ -75,7 +75,7 @@ curl -X POST \
 curl -X POST \
   -H "X-OTA-Token: LW-OTA-2024-SecureUpdate" \
   -H "Content-Type: application/octet-stream" \
-  --data-binary @.pio/build/esp32dev_audio/firmware.bin \
+  --data-binary @.pio/build/esp32dev_audio_esv11/firmware.bin \
   "http://192.168.x.x/update"
 ```
 
@@ -107,10 +107,10 @@ Look for:
 | Environment | WiFi | Audio | Audio Broadcast | Use Case |
 |-------------|------|-------|-----------------|----------|
 | `esp32dev` | No | No | No | Standalone LED effects |
-| `esp32dev_audio` | Yes | No | No | Web control, no audio |
-| `esp32dev_audio` | Yes | Yes | Yes | Full audio-reactive features |
+| `esp32dev_audio_esv11` | Yes | No | No | Web control, no audio |
+| `esp32dev_audio_esv11` | Yes | Yes | Yes | Full audio-reactive features |
 
-**Important**: Audio stream broadcasting requires `esp32dev_audio`. The audio pipeline (I2S capture, Goertzel analysis, chroma extraction) is only compiled with `FEATURE_AUDIO_SYNC=1`.
+**Important**: Audio stream broadcasting requires `esp32dev_audio_esv11`. The audio pipeline (I2S capture, Goertzel analysis, chroma extraction) is only compiled with `FEATURE_AUDIO_SYNC=1`.
 
 ---
 
@@ -135,13 +135,13 @@ X-OTA-Token: LW-OTA-2024-SecureUpdate
 
 1. **Same firmware uploaded** - Check MD5 hash differs from previous
    ```bash
-   md5 .pio/build/esp32dev_audio/firmware.bin
+   md5 .pio/build/esp32dev_audio_esv11/firmware.bin
    ```
 
 2. **Build not updated** - Force clean rebuild
    ```bash
-   pio run -e esp32dev_audio -t clean
-   pio run -e esp32dev_audio
+   pio run -e esp32dev_audio_esv11 -t clean
+   pio run -e esp32dev_audio_esv11
    ```
 
 3. **Code bug masking changes** - See "WebSocket Silent Failure Bug" below
@@ -246,7 +246,7 @@ asyncio.run(test())
 
 ## Audio Stream Verification
 
-After deploying `esp32dev_audio` build:
+After deploying `esp32dev_audio_esv11` build:
 
 ```python
 import asyncio

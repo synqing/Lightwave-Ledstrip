@@ -143,10 +143,28 @@ public:
             // Swap buffers: hist <- work
             std::memcpy(m_hist[zoneId], m_work[zoneId], sizeof(RGB16) * radialLen);
         }
+
+        // Edge sink: smooth falloff in last 8 bins to prevent hard cutoff.
+        // Energy fades quadratically as it approaches the boundary.
+        constexpr uint16_t EDGE_SINK_WIDTH = 8;
+        if (radialLen > EDGE_SINK_WIDTH) {
+            const uint16_t sinkStart = radialLen - EDGE_SINK_WIDTH;
+            for (uint16_t i = sinkStart; i < radialLen; i++) {
+                const float distFromEdge = static_cast<float>(radialLen - 1 - i);
+                const float t = distFromEdge / static_cast<float>(EDGE_SINK_WIDTH);
+                const float fade = t * t;  // Quadratic: faster fade near edge
+                m_hist[zoneId][i].r = static_cast<uint16_t>(m_hist[zoneId][i].r * fade);
+                m_hist[zoneId][i].g = static_cast<uint16_t>(m_hist[zoneId][i].g * fade);
+                m_hist[zoneId][i].b = static_cast<uint16_t>(m_hist[zoneId][i].b * fade);
+            }
+        }
     }
 
     /**
      * @brief Inject colour energy at the centre of the radial buffer.
+     *
+     * Uses a 5-bin Gaussian-like kernel for body (not a single-pixel needle).
+     * This creates a more organic "bloom" at the injection point.
      *
      * @param zoneId     Zone index
      * @param radialLen  Active radial length
@@ -176,15 +194,22 @@ public:
         e.g = clampU16(static_cast<uint32_t>(static_cast<float>(color.g) * 257.0f * a));
         e.b = clampU16(static_cast<uint32_t>(static_cast<float>(color.b) * 257.0f * a));
 
-        // Spread across a few bins to avoid "single-LED" harshness.
-        // We keep this extremely cheap.
-        const float w0 = 0.70f + 0.25f * (1.0f - spread01);
-        const float w1 = 0.22f * spread01;
-        const float w2 = 0.08f * spread01;
+        // 5-bin Gaussian-like kernel for organic body (not a needle).
+        // At spread=0: tight core (mostly bin 0)
+        // At spread=1: wide spread across 5 bins
+        // Weights are normalised to sum to ~1.0
+        const float tightness = 1.0f - spread01;
+        const float w0 = 0.50f + 0.40f * tightness;  // 0.50..0.90
+        const float w1 = 0.20f * spread01 + 0.05f;   // 0.05..0.25
+        const float w2 = 0.12f * spread01;           // 0.00..0.12
+        const float w3 = 0.06f * spread01;           // 0.00..0.06
+        const float w4 = 0.02f * spread01;           // 0.00..0.02
 
         addScaled(m_hist[zoneId][0], e, w0);
         if (radialLen > 1) addScaled(m_hist[zoneId][1], e, w1);
         if (radialLen > 2) addScaled(m_hist[zoneId][2], e, w2);
+        if (radialLen > 3) addScaled(m_hist[zoneId][3], e, w3);
+        if (radialLen > 4) addScaled(m_hist[zoneId][4], e, w4);
     }
 
     /**
@@ -203,12 +228,37 @@ public:
         uint16_t radialLen,
         float outGain01
     ) const {
+        readoutToLedsWithPalette(zoneId, ctx, radialLen, outGain01, ctx.gHue, 0.0f);
+    }
+
+    /**
+     * @brief Convert radial HDR history with palette-based colour enhancement.
+     *
+     * Adds spatial colour variation by blending transported colour with distance-based
+     * palette sampling. This creates richer colours as light flows outward.
+     *
+     * @param zoneId       Zone index
+     * @param ctx          EffectContext
+     * @param radialLen    Active radial length
+     * @param outGain01    Additional 0..1 scaling applied at output
+     * @param baseHue      Base palette index (typically ctx.gHue + shift)
+     * @param paletteMix01 How much to blend palette (0=pure transport, 1=full palette)
+     */
+    void readoutToLedsWithPalette(
+        uint8_t zoneId,
+        plugins::EffectContext& ctx,
+        uint16_t radialLen,
+        float outGain01,
+        uint8_t baseHue,
+        float paletteMix01
+    ) const {
         if (zoneId >= MAX_ZONES) return;
 
         radialLen = (radialLen > MAX_RADIAL_LEN) ? MAX_RADIAL_LEN : radialLen;
         if (radialLen < 1) return;
 
         const float g = clamp01(outGain01);
+        const float pmix = clamp01(paletteMix01);
 
         // Derive strip length from centrePoint (ZoneComposer sets centrePoint=79 for 160 LEDs).
         // stripLen = (centrePoint+1)*2.
@@ -224,7 +274,25 @@ public:
                 continue;
             }
 
-            const CRGB c = toCRGB8(m_hist[zoneId][dist], g);
+            // Get transported HDR colour
+            CRGB c = toCRGB8(m_hist[zoneId][dist], g);
+
+            // Blend with palette based on distance for richer colour variation
+            if (pmix > 0.001f) {
+                // Distance-based palette offset: creates colour shift as light travels
+                const float dist01 = static_cast<float>(dist) / static_cast<float>(radialLen);
+                const uint8_t paletteIdx = baseHue + static_cast<uint8_t>(dist01 * 64.0f);
+
+                // Use luminance of transported colour to modulate palette brightness
+                const uint8_t lum = (c.r > c.g) ? ((c.r > c.b) ? c.r : c.b) : ((c.g > c.b) ? c.g : c.b);
+                CRGB palCol = ctx.palette.getColor(paletteIdx, lum);
+
+                // Blend: transported colour + palette tint
+                const float t = 1.0f - pmix;
+                c.r = static_cast<uint8_t>(c.r * t + palCol.r * pmix);
+                c.g = static_cast<uint8_t>(c.g * t + palCol.g * pmix);
+                c.b = static_cast<uint8_t>(c.b * t + palCol.b * pmix);
+            }
 
             // Strip 1
             ctx.leds[left]  = c;
@@ -264,17 +332,40 @@ private:
         dst.b = clampU16(static_cast<uint32_t>(dst.b) + b);
     }
 
+    /**
+     * @brief Knee tone-map: boosts low levels, compresses highlights.
+     *
+     * Formula: out = in / (in + knee)
+     * This keeps low-level energy visible and prevents harsh clipping.
+     * Without this, the output looks "computed" and dull.
+     */
+    static inline float kneeToneMap(float in01, float knee = 0.5f) {
+        if (in01 <= 0.0f) return 0.0f;
+        // Rescale so that 1.0 maps to ~0.67 (at knee=0.5), not 0.5
+        // This keeps peak brightness punchy while compressing highlights
+        const float mapped = in01 / (in01 + knee);
+        // Boost to restore headroom: at in=1.0, knee=0.5, mapped=0.67 → out=1.0
+        return mapped * (1.0f + knee);
+    }
+
     static inline CRGB toCRGB8(const RGB16& v, float gain01) {
-        // Convert 16-bit to 8-bit and apply gain.
+        // Convert 16-bit to 8-bit with knee tone-mapping for rich output.
         const float g = clamp01(gain01);
 
-        uint32_t r8 = static_cast<uint32_t>(v.r >> 8);
-        uint32_t g8 = static_cast<uint32_t>(v.g >> 8);
-        uint32_t b8 = static_cast<uint32_t>(v.b >> 8);
+        // Normalise 16-bit to 0..1
+        float r01 = static_cast<float>(v.r) / 65535.0f;
+        float g01 = static_cast<float>(v.g) / 65535.0f;
+        float b01 = static_cast<float>(v.b) / 65535.0f;
 
-        r8 = static_cast<uint32_t>(static_cast<float>(r8) * g);
-        g8 = static_cast<uint32_t>(static_cast<float>(g8) * g);
-        b8 = static_cast<uint32_t>(static_cast<float>(b8) * g);
+        // Apply knee tone-map (boosts lows, compresses highs)
+        r01 = kneeToneMap(r01);
+        g01 = kneeToneMap(g01);
+        b01 = kneeToneMap(b01);
+
+        // Apply gain and convert to 8-bit
+        uint32_t r8 = static_cast<uint32_t>(r01 * g * 255.0f + 0.5f);
+        uint32_t g8 = static_cast<uint32_t>(g01 * g * 255.0f + 0.5f);
+        uint32_t b8 = static_cast<uint32_t>(b01 * g * 255.0f + 0.5f);
 
         if (r8 > 255u) r8 = 255u;
         if (g8 > 255u) g8 = 255u;

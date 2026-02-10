@@ -29,6 +29,8 @@
 #include "effects/CoreEffects.h"
 #include "effects/zones/ZoneComposer.h"
 #include "effects/PatternRegistry.h"
+#include "effects/ieffect/BeatPulseBloomEffect.h"  // For debug toggle
+#include "effects/ieffect/BloomParityEffect.h"     // For runtime PostFX tuning
 #if FEATURE_TRANSITIONS
 #include "effects/transitions/TransitionEngine.h"
 #include "effects/transitions/TransitionTypes.h"
@@ -366,8 +368,16 @@ void setup() {
     Serial.println("  +/-     - Adjust brightness");
     Serial.println("  [/]     - Adjust speed");
     Serial.println("  ,/.     - Prev/Next palette (75 total)");
+    Serial.println("  p/P     - Bloom prism opacity +/-");
+    Serial.println("  o/O     - Bloom bulb opacity +/-");
+    Serial.println("  i/I     - Mood +/- (transport speed)");
+    Serial.println("  f/F     - Bloom alpha +/- (persistence)");
+    Serial.println("  h/H     - Bloom square iter +/- (contrast)");
+    Serial.println("  j/J     - Bloom prism iter +/- (ghost layers)");
+    Serial.println("  k/K     - Bloom gHue speed +/- (palette sweep)");
+    Serial.println("  u/U     - Bloom spatial spread +/- (palette gradient)");
+    Serial.println("  v/V     - Bloom intensity coupling +/- (spatial↔heatmap)");
     Serial.println("  l       - List effects");
-    Serial.println("  P       - List palettes");
     Serial.println("  s       - Print status");
     Serial.println("\nEffect Registers:");
     Serial.println("  r       - Reactive effects only (audio-responsive)");
@@ -380,8 +390,7 @@ void setup() {
     Serial.println("  1-5     - Load zone preset (in zone mode)");
     Serial.println("  S       - Save all settings to NVS");
     Serial.println("\nTransition Commands:");
-    Serial.println("  t       - Transition to next effect (random type)");
-    Serial.println("  T       - Transition to next effect (fade)");
+    Serial.println("  t/T     - RD Triangle F +/- (auto-selects RD Triangle)");
     Serial.println("  !       - List transition types");
     Serial.println("\nAuto-Play (Narrative) Commands:");
     Serial.println("  A       - Toggle auto-play mode");
@@ -397,7 +406,7 @@ void setup() {
     Serial.println("  C       - Show color correction status");
     Serial.println("  e       - Toggle auto-exposure");
     Serial.println("  g       - Toggle/cycle gamma (off→2.2→2.5→2.8→off)");
-    Serial.println("  B       - Toggle brown guardrail");
+    Serial.println("  b/B     - RD Triangle K +/- (auto-selects RD Triangle)");
     Serial.println("  cc      - Show correction mode (0=OFF,1=HSV,2=RGB,3=BOTH)");
     Serial.println("  cc N    - Set correction mode (0-3, accepts 'cc1' or 'cc 1')");
     Serial.println("  ae      - Show auto-exposure status");
@@ -413,6 +422,7 @@ void setup() {
 #endif
 #if FEATURE_AUDIO_SYNC
     Serial.println("\nAudio Debug Verbosity:");
+    Serial.println("  x              - Print 8-band + bass/mid/treble/rms/flux (one-shot; alias: bands)");
     Serial.println("  adbg           - Show current level");
     Serial.println("  adbg <0-5>     - Set level (0=off, 2=warnings, 5=trace)");
     Serial.println("  adbg status    - Print health summary (one-shot)");
@@ -421,6 +431,7 @@ void setup() {
     Serial.println("  adbg interval <N> - Set base interval in frames");
 #endif
     Serial.println("\nDebug Commands (unified):");
+    Serial.println("  d             - Toggle Bloom effect debug (spd/vel/mood/beat)");
     Serial.println("  dbg           - Show debug config");
     Serial.println("  dbg <0-5>     - Set global level (0=off,2=warn,3=info,4=debug,5=trace)");
     Serial.println("  dbg audio <0-5>   - Set audio domain level");
@@ -498,6 +509,19 @@ void loop() {
                 case ',': case '.':  // Palette
                 case '<': case '>':  // Show navigation
                 case '{': case '}':  // Seek
+                case 'a':            // Audio debug toggle
+                case 'p': case 'P':  // Bloom prism opacity
+                case 'o': case 'O':  // Bloom bulb opacity
+                case 'i': case 'I':  // Mood
+                case 'f': case 'F':  // Bloom alpha (persistence)
+                case 'h': case 'H':  // Bloom square iter (contrast)
+                case 'j': case 'J':  // Bloom prism iterations
+                case 'k': case 'K':  // Bloom gHue speed (palette sweep)
+                case 'u': case 'U':  // Bloom spatial spread
+                case 'v': case 'V':  // Bloom intensity coupling
+                case 'b': case 'B':  // RD Triangle K +/-
+                case 't': case 'T':  // RD Triangle F +/-
+                case 'x': case 'X':  // Bands observability (one-shot dump)
                     isImmediate = true;
                     break;
             }
@@ -535,7 +559,7 @@ void loop() {
         if (input.length() == 0 && firstChar != ' ' && firstChar != '+' && firstChar != '-' &&
             firstChar != '=' && firstChar != '[' && firstChar != ']' &&
             firstChar != ',' && firstChar != '.' && firstChar != '<' && firstChar != '>' &&
-            firstChar != '{' && firstChar != '}') {
+            firstChar != '{' && firstChar != '}' && firstChar != 'x' && firstChar != 'X') {
             // Empty after trim and not an immediate command - ignore
         } else {
         // Restore single-char immediate commands that got trimmed
@@ -547,6 +571,32 @@ void loop() {
         bool handledMulti = false;
         int peekChar = input[0];
 
+#if FEATURE_AUDIO_SYNC
+        // Observability: single key "x" (or "bands") — must be top-level so "x" and "bands" are not gated by peekChar == 'a'
+        if (inputLower == "x" || inputLower == "bands") {
+            handledMulti = true;
+            RendererActor* ren = actors.getRenderer();
+            if (ren) {
+                RendererActor::BandsDebugSnapshot snap;
+                ren->getBandsDebugSnapshot(snap);
+                if (snap.valid) {
+                    Serial.println("\n=== Bands (renderer snapshot) ===");
+                    Serial.printf("  bands[0..7]: %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f\n",
+                        snap.bands[0], snap.bands[1], snap.bands[2], snap.bands[3],
+                        snap.bands[4], snap.bands[5], snap.bands[6], snap.bands[7]);
+                    Serial.printf("  bass=%.3f mid=%.3f treble=%.3f (ctx.audio accessors)\n",
+                        snap.bass, snap.mid, snap.treble);
+                    Serial.printf("  rms=%.3f flux=%.3f hop_seq=%lu\n",
+                        snap.rms, snap.flux, (unsigned long)snap.hop_seq);
+                } else {
+                    Serial.println("Bands: no live snapshot (audio buffer or frame not ready)");
+                }
+            } else {
+                Serial.println("Renderer not available");
+            }
+        }
+        else
+#endif
         // Color correction commands (cc, ae, gamma, brown) and capture commands
         if (peekChar == 'c' && input.length() > 1) {
 
@@ -754,12 +804,8 @@ void loop() {
 #if FEATURE_AUDIO_SYNC
             // Audio Debug Verbosity: adbg (backwards-compatible alias for dbg audio)
             // adbg        -> show audio debug config
-            // adbg <0-5>  -> set audio domain level
-            // adbg status -> one-shot health summary
-            // adbg spectrum -> one-shot spectrum
-            // adbg beat -> one-shot beat tracking
-            // adbg interval <N> -> set base interval (legacy)
-            else if (inputLower.startsWith("adbg")) {
+            // (x | bands handled at top level so "x" and "bands" are not gated by peekChar == 'a')
+            if (inputLower.startsWith("adbg")) {
                 handledMulti = true;
                 auto& dbgCfg = lightwaveos::audio::getAudioDebugConfig();
                 auto& unifiedCfg = lightwaveos::config::getDebugConfig();
@@ -1478,7 +1524,8 @@ void loop() {
                 // Command letters: c, e, g, n, l, p, s, t, z are handled in switch below
                 bool isEffectKey = false;
                 if (!inZoneMode && cmd >= 'a' && cmd <= 'k' &&
-                    cmd != 'c' && cmd != 'e' && cmd != 'g' &&
+                    cmd != 'a' && cmd != 'b' && cmd != 'c' && cmd != 'd' && cmd != 'e' && cmd != 'f' && cmd != 'g' &&
+                    cmd != 'h' && cmd != 'i' && cmd != 'j' && cmd != 'k' &&
                     cmd != 'n' && cmd != 'l' && cmd != 'p' && cmd != 's' && cmd != 't' && cmd != 'z') {
                     uint8_t e = 10 + (cmd - 'a');
                     if (e < renderer->getEffectCount()) {
@@ -1491,6 +1538,32 @@ void loop() {
 
                 if (!isEffectKey)
                 switch (cmd) {
+#if FEATURE_AUDIO_SYNC
+                case 'x': case 'X':
+                    // Bands observability (same as top-level "x" / "bands")
+                    {
+                        RendererActor* ren = actors.getRenderer();
+                        if (ren) {
+                            RendererActor::BandsDebugSnapshot snap;
+                            ren->getBandsDebugSnapshot(snap);
+                            if (snap.valid) {
+                                Serial.println("\n=== Bands (renderer snapshot) ===");
+                                Serial.printf("  bands[0..7]: %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f\n",
+                                    snap.bands[0], snap.bands[1], snap.bands[2], snap.bands[3],
+                                    snap.bands[4], snap.bands[5], snap.bands[6], snap.bands[7]);
+                                Serial.printf("  bass=%.3f mid=%.3f treble=%.3f (ctx.audio accessors)\n",
+                                    snap.bass, snap.mid, snap.treble);
+                                Serial.printf("  rms=%.3f flux=%.3f hop_seq=%lu\n",
+                                    snap.rms, snap.flux, (unsigned long)snap.hop_seq);
+                            } else {
+                                Serial.println("Bands: no live snapshot (audio buffer or frame not ready)");
+                            }
+                        } else {
+                            Serial.println("Renderer not available");
+                        }
+                    }
+                    break;
+#endif
                 case 'z':
                     // Toggle zone mode
                     zoneComposer.setEnabled(!zoneComposer.isEnabled());
@@ -1731,12 +1804,11 @@ void loop() {
                     break;
 
                 case '.':  // Next palette (quick key)
-                case 'p':
                     {
                         uint8_t paletteCount = renderer->getPaletteCount();
-                        uint8_t p = (renderer->getPaletteIndex() + 1) % paletteCount;
-                        actors.setPalette(p);
-                        Serial.printf("Palette %d/%d: %s\n", p, paletteCount, renderer->getPaletteName(p));
+                        uint8_t pal = (renderer->getPaletteIndex() + 1) % paletteCount;
+                        actors.setPalette(pal);
+                        Serial.printf("Palette %d/%d: %s\n", pal, paletteCount, renderer->getPaletteName(pal));
                     }
                     break;
 
@@ -1764,28 +1836,58 @@ void loop() {
                     }
                     break;
 
-                case 'P':
-                    // List all palettes
+                case 'p':
+                    // Bloom prism opacity +
                     {
-                        uint8_t paletteCount = renderer->getPaletteCount();
-                        uint8_t currentPalette = renderer->getPaletteIndex();
-                        Serial.printf("\n=== Palettes (%d total) ===\n", paletteCount);
-                        Serial.println("--- Artistic (cpt-city) ---");
-                        for (uint8_t i = 0; i <= 32; i++) {
-                            Serial.printf("  %2d: %s%s\n", i, renderer->getPaletteName(i),
-                                          (i == currentPalette) ? " <--" : "");
-                        }
-                        Serial.println("--- Scientific (Crameri) ---");
-                        for (uint8_t i = 33; i <= 56; i++) {
-                            Serial.printf("  %2d: %s%s\n", i, renderer->getPaletteName(i),
-                                          (i == currentPalette) ? " <--" : "");
-                        }
-                        Serial.println("--- LGP-Optimized (viridis family) ---");
-                        for (uint8_t i = 57; i <= 74; i++) {
-                            Serial.printf("  %2d: %s%s\n", i, renderer->getPaletteName(i),
-                                          (i == currentPalette) ? " <--" : "");
-                        }
-                        Serial.println();
+                        using BP = lightwaveos::effects::ieffect::BloomParityEffect;
+                        BP::setPrismOpacity(BP::getPrismOpacity() + 0.05f);
+                        Serial.printf("Bloom Prism: %.2f\n", BP::getPrismOpacity());
+                    }
+                    break;
+
+                case 'P':
+                    // Bloom prism opacity -
+                    {
+                        using BP = lightwaveos::effects::ieffect::BloomParityEffect;
+                        BP::setPrismOpacity(BP::getPrismOpacity() - 0.05f);
+                        Serial.printf("Bloom Prism: %.2f\n", BP::getPrismOpacity());
+                    }
+                    break;
+
+                case 'o':
+                    // Bloom bulb opacity +
+                    {
+                        using BP = lightwaveos::effects::ieffect::BloomParityEffect;
+                        BP::setBulbOpacity(BP::getBulbOpacity() + 0.05f);
+                        Serial.printf("Bloom Bulb: %.2f\n", BP::getBulbOpacity());
+                    }
+                    break;
+
+                case 'O':
+                    // Bloom bulb opacity -
+                    {
+                        using BP = lightwaveos::effects::ieffect::BloomParityEffect;
+                        BP::setBulbOpacity(BP::getBulbOpacity() - 0.05f);
+                        Serial.printf("Bloom Bulb: %.2f\n", BP::getBulbOpacity());
+                    }
+                    break;
+
+                case 'a':
+                    // Toggle audio debug logging
+                    {
+                        bool enabled = !renderer->isAudioDebugEnabled();
+                        renderer->setAudioDebugEnabled(enabled);
+                        Serial.printf("Audio debug: %s\n", enabled ? "ON" : "OFF");
+                    }
+                    break;
+
+                case 'i':
+                    // Mood +
+                    {
+                        uint8_t m = renderer->getMood();
+                        m = static_cast<uint8_t>(min(static_cast<int>(m) + 16, 255));
+                        actors.setMood(m);
+                        Serial.printf("Mood: %d (%.0f%%)\n", m, m * 100.0f / 255.0f);
                     }
                     break;
 
@@ -1811,25 +1913,48 @@ void loop() {
                     }
                     break;
 
-                case 't':
-                    // Random transition to next effect
-                    if (!inZoneMode) {
-                        uint8_t effectCount = renderer->getEffectCount();
-                        uint8_t nextEffect = (currentEffect + 1) % effectCount;
-                        renderer->startRandomTransition(nextEffect);
-                        currentEffect = nextEffect;
-                        Serial.printf("Transition to: %s\n", renderer->getEffectName(currentEffect));
-                    }
+                case 'd':
+                    // Toggle Bloom effect debug output
+                    lightwaveos::effects::ieffect::g_bloomDebugEnabled =
+                        !lightwaveos::effects::ieffect::g_bloomDebugEnabled;
+                    Serial.printf("[BLOOM DEBUG] %s\n",
+                        lightwaveos::effects::ieffect::g_bloomDebugEnabled ? "ENABLED (select effect 120)" : "DISABLED");
                     break;
 
+                case 't':
                 case 'T':
-                    // Fade transition to next effect
-                    if (!inZoneMode) {
+                    // RD Triangle: F - / +
+                    {
+                        uint8_t rdTriangleId = 0xFF;
                         uint8_t effectCount = renderer->getEffectCount();
-                        uint8_t nextEffect = (currentEffect + 1) % effectCount;
-                        renderer->startTransition(nextEffect, 0);  // 0 = FADE
-                        currentEffect = nextEffect;
-                        Serial.printf("Fade to: %s\n", renderer->getEffectName(currentEffect));
+                        for (uint8_t i = 0; i < effectCount; i++) {
+                            const char* name = renderer->getEffectName(i);
+                            if (name && strcmp(name, "LGP RD Triangle") == 0) {
+                                rdTriangleId = i;
+                                break;
+                            }
+                        }
+                        if (rdTriangleId == 0xFF) {
+                            Serial.println("RD Triangle not found");
+                            break;
+                        }
+                        if (renderer->getCurrentEffect() != rdTriangleId) {
+                            currentEffect = rdTriangleId;
+                            actors.setEffect(rdTriangleId);
+                        }
+                        IEffect* effect = renderer->getEffectInstance(rdTriangleId);
+                        if (!effect) {
+                            Serial.println("RD Triangle not available");
+                            break;
+                        }
+                        float f = effect->getParameter("F");
+                        if (f <= 0.0f) f = 0.0380f;
+                        if (cmd == 't') f -= 0.0010f;
+                        else f += 0.0010f;
+                        if (f < 0.0300f) f = 0.0300f;
+                        if (f > 0.0500f) f = 0.0500f;
+                        effect->setParameter("F", f);
+                        Serial.printf("RD Triangle F: %.4f\n", f);
                     }
                     break;
 
@@ -2087,68 +2212,162 @@ void loop() {
                     }
                     break;
 
+                case 'b':
                 case 'B':
-                    // Toggle brown guardrail
+                    // RD Triangle: K - / +
                     {
-                        auto& engine = lightwaveos::enhancement::ColorCorrectionEngine::getInstance();
-                        auto& cfg = engine.getConfig();
-                        cfg.brownGuardrailEnabled = !cfg.brownGuardrailEnabled;
-                        Serial.printf("Brown guardrail: %s\n", cfg.brownGuardrailEnabled ? "ON" : "OFF");
+                        uint8_t rdTriangleId = 0xFF;
+                        uint8_t effectCount = renderer->getEffectCount();
+                        for (uint8_t i = 0; i < effectCount; i++) {
+                            const char* name = renderer->getEffectName(i);
+                            if (name && strcmp(name, "LGP RD Triangle") == 0) {
+                                rdTriangleId = i;
+                                break;
+                            }
+                        }
+                        if (rdTriangleId == 0xFF) {
+                            Serial.println("RD Triangle not found");
+                            break;
+                        }
+                        if (renderer->getCurrentEffect() != rdTriangleId) {
+                            currentEffect = rdTriangleId;
+                            actors.setEffect(rdTriangleId);
+                        }
+                        IEffect* effect = renderer->getEffectInstance(rdTriangleId);
+                        if (!effect) {
+                            Serial.println("RD Triangle not available");
+                            break;
+                        }
+                        float k = effect->getParameter("K");
+                        if (k <= 0.0f) k = 0.0630f;
+                        if (cmd == 'b') k -= 0.0010f;
+                        else k += 0.0010f;
+                        if (k < 0.0550f) k = 0.0550f;
+                        if (k > 0.0750f) k = 0.0750f;
+                        effect->setParameter("K", k);
+                        Serial.printf("RD Triangle K: %.4f\n", k);
                     }
                     break;
 
                 case 'I':
-                    // Show IEffect pilot status
+                    // Mood -
                     {
-                        Serial.println("\n=== IEffect Pilot Status ===");
-                        uint8_t effectCount = renderer->getEffectCount();
-                        uint8_t ieffectCount = 0;
-                        uint8_t legacyCount = 0;
-                        
-                        // Count all effects first
-                        for (uint8_t i = 0; i < effectCount; i++) {
-                            if (renderer->getEffectInstance(i) != nullptr) {
-                                ieffectCount++;
-                            } else {
-                                legacyCount++;
-                            }
-                        }
-                        
-                        Serial.println("\nPilot Effects (IEffect Native):");
-                        uint8_t pilotIds[] = {15, 22, 67};  // Modal Resonance, Chevron Waves, Chromatic Interference
-                        const char* pilotNames[] = {"LGP Modal Resonance", "LGP Chevron Waves", "LGP Chromatic Interference"};
-                        
-                        for (uint8_t i = 0; i < 3; i++) {
-                            uint8_t id = pilotIds[i];
-                            if (id < effectCount) {
-                                lightwaveos::plugins::IEffect* effect = renderer->getEffectInstance(id);
-                                if (effect != nullptr) {
-                                    const lightwaveos::plugins::EffectMetadata& meta = effect->getMetadata();
-                                    Serial.printf("  [✓] ID %2d: %s\n", id, pilotNames[i]);
-                                    Serial.printf("      Type: IEffect Native\n");
-                                    Serial.printf("      Metadata: %s - %s\n", meta.name, meta.description);
-                                } else {
-                                    Serial.printf("  [✗] ID %2d: %s - NOT REGISTERED AS IEffect!\n", id, pilotNames[i]);
-                                }
-                            }
-                        }
-                        
-                        Serial.println("\nAll Effects Summary:");
-                        Serial.printf("  IEffect Native: %d effects\n", ieffectCount);
-                        Serial.printf("  Legacy (function pointer): %d effects\n", legacyCount);
-                        Serial.printf("  Total: %d effects\n", effectCount);
-                        
-                        uint8_t current = renderer->getCurrentEffect();
-                        lightwaveos::plugins::IEffect* currentEffect = renderer->getEffectInstance(current);
-                        Serial.printf("\nCurrent Effect (ID %d):\n", current);
-                        Serial.printf("  Name: %s\n", renderer->getEffectName(current));
-                        Serial.printf("  Type: %s\n", currentEffect ? "IEffect Native" : "Legacy (function pointer)");
-                        if (currentEffect) {
-                            const lightwaveos::plugins::EffectMetadata& meta = currentEffect->getMetadata();
-                            Serial.printf("  Category: %d\n", (int)meta.category);
-                            Serial.printf("  Version: %d\n", meta.version);
-                        }
-                        Serial.println();
+                        uint8_t m = renderer->getMood();
+                        m = static_cast<uint8_t>(max(static_cast<int>(m) - 16, 0));
+                        actors.setMood(m);
+                        Serial.printf("Mood: %d (%.0f%%)\n", m, m * 100.0f / 255.0f);
+                    }
+                    break;
+
+                case 'f':
+                    // Alpha (persistence) +
+                    {
+                        using BP = lightwaveos::effects::ieffect::BloomParityEffect;
+                        BP::setAlpha(BP::getAlpha() + 0.01f);
+                        Serial.printf("Bloom Alpha: %.3f\n", BP::getAlpha());
+                    }
+                    break;
+
+                case 'F':
+                    // Alpha (persistence) -
+                    {
+                        using BP = lightwaveos::effects::ieffect::BloomParityEffect;
+                        BP::setAlpha(BP::getAlpha() - 0.01f);
+                        Serial.printf("Bloom Alpha: %.3f\n", BP::getAlpha());
+                    }
+                    break;
+
+                case 'h':
+                    // Square iterations (contrast) +
+                    {
+                        using BP = lightwaveos::effects::ieffect::BloomParityEffect;
+                        BP::setSquareIter(BP::getSquareIter() + 1);
+                        Serial.printf("Bloom Square Iter: %d\n", BP::getSquareIter());
+                    }
+                    break;
+
+                case 'H':
+                    // Square iterations (contrast) -
+                    {
+                        using BP = lightwaveos::effects::ieffect::BloomParityEffect;
+                        uint8_t si = BP::getSquareIter();
+                        BP::setSquareIter(si > 0 ? si - 1 : 0);
+                        Serial.printf("Bloom Square Iter: %d\n", BP::getSquareIter());
+                    }
+                    break;
+
+                case 'j':
+                    // Prism iterations +
+                    {
+                        using BP = lightwaveos::effects::ieffect::BloomParityEffect;
+                        BP::setPrismIterations(BP::getPrismIterations() + 1);
+                        Serial.printf("Bloom Prism Iter: %d\n", BP::getPrismIterations());
+                    }
+                    break;
+
+                case 'J':
+                    // Prism iterations -
+                    {
+                        using BP = lightwaveos::effects::ieffect::BloomParityEffect;
+                        uint8_t pi = BP::getPrismIterations();
+                        BP::setPrismIterations(pi > 0 ? pi - 1 : 0);
+                        Serial.printf("Bloom Prism Iter: %d\n", BP::getPrismIterations());
+                    }
+                    break;
+
+                case 'k':
+                    // gHue speed +
+                    {
+                        using BP = lightwaveos::effects::ieffect::BloomParityEffect;
+                        BP::setGHueSpeed(BP::getGHueSpeed() + 0.25f);
+                        Serial.printf("Bloom gHue Speed: %.2f\n", BP::getGHueSpeed());
+                    }
+                    break;
+
+                case 'K':
+                    // gHue speed -
+                    {
+                        using BP = lightwaveos::effects::ieffect::BloomParityEffect;
+                        BP::setGHueSpeed(BP::getGHueSpeed() - 0.25f);
+                        Serial.printf("Bloom gHue Speed: %.2f\n", BP::getGHueSpeed());
+                    }
+                    break;
+
+                case 'u':
+                    // Spatial spread +
+                    {
+                        using BP = lightwaveos::effects::ieffect::BloomParityEffect;
+                        BP::setSpatialSpread(BP::getSpatialSpread() + 16.0f);
+                        Serial.printf("Bloom Spatial Spread: %.0f\n", BP::getSpatialSpread());
+                    }
+                    break;
+
+                case 'U':
+                    // Spatial spread -
+                    {
+                        using BP = lightwaveos::effects::ieffect::BloomParityEffect;
+                        float ss = BP::getSpatialSpread();
+                        BP::setSpatialSpread(ss > 16.0f ? ss - 16.0f : 0.0f);
+                        Serial.printf("Bloom Spatial Spread: %.0f\n", BP::getSpatialSpread());
+                    }
+                    break;
+
+                case 'v':
+                    // Intensity coupling +
+                    {
+                        using BP = lightwaveos::effects::ieffect::BloomParityEffect;
+                        BP::setIntensityCoupling(BP::getIntensityCoupling() + 0.1f);
+                        Serial.printf("Bloom Intensity Coupling: %.1f\n", BP::getIntensityCoupling());
+                    }
+                    break;
+
+                case 'V':
+                    // Intensity coupling -
+                    {
+                        using BP = lightwaveos::effects::ieffect::BloomParityEffect;
+                        float ic = BP::getIntensityCoupling();
+                        BP::setIntensityCoupling(ic > 0.1f ? ic - 0.1f : 0.0f);
+                        Serial.printf("Bloom Intensity Coupling: %.1f\n", BP::getIntensityCoupling());
                     }
                     break;
             }

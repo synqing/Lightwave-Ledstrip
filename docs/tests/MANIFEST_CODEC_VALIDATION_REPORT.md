@@ -75,7 +75,7 @@ pio test -e native_test
 **Test Command**:
 ```bash
 cd firmware/v2
-pio run -e esp32dev_audio
+pio run -e esp32dev_audio_esv11
 ```
 
 **Results**:
@@ -88,9 +88,9 @@ pio run -e esp32dev_audio
 
 **Evidence**:
 ```
-Environment     Status    Duration
---------------  --------  ------------
-esp32dev_audio  SUCCESS   00:00:33.301
+Environment            Status    Duration
+---------------------  --------  ------------
+esp32dev_audio_esv11   SUCCESS   00:00:33.301
 ```
 
 ---
@@ -105,10 +105,10 @@ esp32dev_audio  SUCCESS   00:00:33.301
 ```bash
 # Upload firmware (ESP32-S3 on usbmodem1101)
 cd firmware/v2
-pio run -e esp32dev_audio -t upload --upload-port /dev/cu.usbmodem1101
+pio run -e esp32dev_audio_esv11 -t upload --upload-port /dev/cu.usbmodem1101
 
 # Upload LittleFS with test manifests
-pio run -e esp32dev_audio -t uploadfs --upload-port /dev/cu.usbmodem1101
+pio run -e esp32dev_audio_esv11 -t uploadfs --upload-port /dev/cu.usbmodem1101
 ```
 
 **Results**:

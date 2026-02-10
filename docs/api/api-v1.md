@@ -2112,7 +2112,7 @@ UDP frame demultiplexing uses magic bytes:
 
 ## Related Documentation
 
-For audio-specific APIs (requires `esp32dev_audio` build):
+For audio-specific APIs (requires `esp32dev_audio_esv11` build):
 
 - [Audio Stream API](../../v2/docs/AUDIO_STREAM_API.md) - Binary audio metrics streaming (30 FPS)
 - [Audio Control API](../../v2/docs/AUDIO_CONTROL_API.md) - Capture control, beat events, tuning presets

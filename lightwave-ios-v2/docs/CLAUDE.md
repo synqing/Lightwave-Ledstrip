@@ -8,4 +8,11 @@
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
 | #24721 | 11:36 AM | 🔵 | DESIGN_SPEC.md Comprehensive UI Specification | ~705 |
+
+### Feb 7, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #27025 | 12:57 AM | 🔵 | iOS Design Specification Documentation Reveals v2 UI Overhaul | ~769 |
+| #27005 | 12:56 AM | 🔵 | iOS Design Specification Document Examined | ~554 |
 </claude-mem-context>

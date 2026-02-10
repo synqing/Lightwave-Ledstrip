@@ -30,7 +30,7 @@ The project is configured with USB CDC (Communications Device Class) enabled:
 **ESP32-S3 (v2 firmware)**:
 ```bash
 cd firmware/v2
-pio run -e esp32dev_audio -t upload --upload-port /dev/cu.usbmodem1101
+pio run -e esp32dev_audio_esv11 -t upload --upload-port /dev/cu.usbmodem1101
 ```
 
 **Tab5 (encoder firmware)**:

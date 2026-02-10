@@ -98,6 +98,7 @@ class PresetsViewModel {
     func loadZonePresets() async {
         guard let client = restClient else {
             errorMessage = "Not connected to device"
+            print("[PRESETS] loadZonePresets: No REST client")
             return
         }
 
@@ -105,13 +106,18 @@ class PresetsViewModel {
         errorMessage = nil
         defer { isLoading = false }
 
+        print("[PRESETS] loadZonePresets: Fetching from device...")
+
         do {
             let response = try await client.getZonePresets()
             zonePresets = response.data.presets
-            print("Loaded \(zonePresets.count) zone presets")
+            print("[PRESETS] loadZonePresets: Loaded \(zonePresets.count) presets")
+            for preset in zonePresets {
+                print("[PRESETS]   - ID \(preset.id): \(preset.name) (\(preset.zoneCount) zones)")
+            }
         } catch {
             errorMessage = "Failed to load zone presets: \(error.localizedDescription)"
-            print("Zone presets load failed: \(error)")
+            print("[PRESETS] loadZonePresets FAILED: \(error)")
         }
     }
 
@@ -209,20 +215,23 @@ class PresetsViewModel {
     /// Save current zone configuration as a new preset
     /// - Parameters:
     ///   - name: User-friendly name for the preset
-    ///   - slot: Slot ID (0-15) to save to; overwrites existing preset in slot
+    ///   - slot: Slot ID (0-15) to save to; Note: firmware ignores slot and auto-assigns ID 10+
     func saveCurrentAsZonePreset(name: String, slot: Int) async {
         guard let client = restClient else {
             errorMessage = "Not connected to device"
+            print("[PRESETS] saveZonePreset: No REST client")
             return
         }
 
         guard slot >= 0 && slot < Self.maxZonePresets else {
             errorMessage = "Invalid slot: must be 0-\(Self.maxZonePresets - 1)"
+            print("[PRESETS] saveZonePreset: Invalid slot \(slot)")
             return
         }
 
         guard !name.trimmingCharacters(in: .whitespaces).isEmpty else {
             errorMessage = "Preset name cannot be empty"
+            print("[PRESETS] saveZonePreset: Empty name")
             return
         }
 
@@ -230,16 +239,18 @@ class PresetsViewModel {
         errorMessage = nil
         defer { isLoading = false }
 
+        print("[PRESETS] saveZonePreset: Saving '\(name)' (slot hint: \(slot))...")
+
         do {
             try await client.saveZonePreset(slot: slot, name: name)
             await showSuccess("Saved '\(name)'")
-            print("Saved zone preset '\(name)' to slot \(slot)")
+            print("[PRESETS] saveZonePreset: Save succeeded, reloading presets...")
 
             // Reload presets to reflect the new state
             await loadZonePresets()
         } catch {
-            errorMessage = "Failed to save zone preset: \(error.localizedDescription)"
-            print("Save zone preset failed: \(error)")
+            errorMessage = "Failed to save: \(error.localizedDescription)"
+            print("[PRESETS] saveZonePreset FAILED: \(error)")
         }
     }
 

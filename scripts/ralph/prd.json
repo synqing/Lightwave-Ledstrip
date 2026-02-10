@@ -8,15 +8,15 @@
       "title": "Enable FEATURE_API_AUTH and verify builds",
       "description": "As a developer, I need FEATURE_API_AUTH enabled by default in the wifi build environment so authentication is active.",
       "acceptanceCriteria": [
-        "Add -D FEATURE_API_AUTH=1 to esp32dev_audio build_flags in platformio.ini",
+        "Add -D FEATURE_API_AUTH=1 to esp32dev_audio_esv11 build_flags in platformio.ini",
         "Add -D API_KEY=\\\"LW-DEFAULT-KEY-CHANGE-ME\\\" as default placeholder",
-        "pio run -e esp32dev_audio compiles without errors",
-        "pio run -e esp32dev_audio compiles without errors (auth disabled)",
+        "pio run -e esp32dev_audio_esv11 compiles without errors",
+        "pio run -e esp32dev_audio_esv11 compiles without errors (auth disabled)",
         "No new compiler warnings introduced"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Completed: Added esp32dev_audio env with -D FEATURE_API_AUTH=1 -D API_KEY=\"LW-DEFAULT-KEY-CHANGE-ME\". Both builds compile cleanly."
+      "notes": "Completed: Added esp32dev_audio_esv11 env with -D FEATURE_API_AUTH=1 -D API_KEY=\"LW-DEFAULT-KEY-CHANGE-ME\". Both builds compile cleanly."
     },
     {
       "id": "US-002",
@@ -28,7 +28,7 @@
         "Key stored in NVS namespace 'auth' with key 'api_key'",
         "generateKey() creates 32-char alphanumeric random key",
         "Falls back to compile-time API_KEY if NVS is empty",
-        "pio run -e esp32dev_audio compiles"
+        "pio run -e esp32dev_audio_esv11 compiles"
       ],
       "priority": 2,
       "passes": true,
@@ -42,7 +42,7 @@
         "WebServer constructor initializes ApiKeyManager",
         "checkAPIKey() reads from ApiKeyManager.getKey() not NetworkConfig::API_KEY_VALUE",
         "WebSocket auth handler reads from ApiKeyManager.getKey()",
-        "pio run -e esp32dev_audio compiles",
+        "pio run -e esp32dev_audio_esv11 compiles",
         "Existing auth behavior unchanged when NVS empty"
       ],
       "priority": 3,
@@ -58,7 +58,7 @@
         "DELETE /api/v1/auth/key clears NVS key, reverts to compile-time default (requires valid key)",
         "GET /api/v1/auth/status returns {enabled: bool, keyConfigured: bool} (public endpoint)",
         "All key-modifying endpoints require valid X-API-Key header",
-        "pio run -e esp32dev_audio compiles"
+        "pio run -e esp32dev_audio_esv11 compiles"
       ],
       "priority": 4,
       "passes": true,
@@ -73,7 +73,7 @@
         "After 5 failed attempts in 60 seconds, block IP for 5 minutes",
         "Return 429 Too Many Requests with Retry-After header when blocked",
         "Successful auth resets the failure counter for that IP",
-        "pio run -e esp32dev_audio compiles"
+        "pio run -e esp32dev_audio_esv11 compiles"
       ],
       "priority": 5,
       "passes": true,
@@ -88,7 +88,7 @@
         "Command 'auth.rotate' generates new key (requires authenticated client)",
         "Command 'auth.status' returns enabled/configured status",
         "Register commands in WsCommandRouter",
-        "pio run -e esp32dev_audio compiles"
+        "pio run -e esp32dev_audio_esv11 compiles"
       ],
       "priority": 6,
       "passes": true,
@@ -104,7 +104,7 @@
         "Add 'Rotate Key' button that calls auth.rotate and displays new key once",
         "Add input field for entering API key on initial connection",
         "Store API key in localStorage for subsequent connections",
-        "pio run -e esp32dev_audio compiles",
+        "pio run -e esp32dev_audio_esv11 compiles",
         "UI renders correctly in browser"
       ],
       "priority": 7,
@@ -121,7 +121,7 @@
         "Document WebSocket auth message flow",
         "Document key rotation and management endpoints",
         "Document rate limiting behavior",
-        "pio run -e esp32dev_audio compiles"
+        "pio run -e esp32dev_audio_esv11 compiles"
       ],
       "priority": 8,
       "passes": true,

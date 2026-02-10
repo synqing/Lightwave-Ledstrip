@@ -555,7 +555,7 @@ console.log('Enhancement status:', status);
 **Solutions**:
 ```bash
 # Re-upload SPIFFS
-pio run -e esp32dev_audio -t uploadfs
+pio run -e esp32dev_audio_esv11 -t uploadfs
 
 # Clear browser cache (hard refresh)
 # Chrome/Edge: Ctrl+Shift+R (Windows) or Cmd+Shift+R (Mac)

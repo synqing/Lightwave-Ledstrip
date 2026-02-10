@@ -4,7 +4,7 @@ This document describes the **Trinity sync** WebSocket message protocol used to 
 
 ## Requirements
 
-- Firmware build with `FEATURE_AUDIO_SYNC=1` (e.g. PlatformIO env `esp32dev_audio`).
+- Firmware build with `FEATURE_AUDIO_SYNC=1` (e.g. PlatformIO env `esp32dev_audio_esv11`).
 - WebSocket endpoint: `ws://<device-host>/ws`
 - All messages use the Lightwave WebSocket envelope key `type`:
 

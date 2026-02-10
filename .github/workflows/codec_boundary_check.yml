@@ -95,4 +95,4 @@ jobs:
       
       - name: Build Check
         working-directory: firmware/v2
-        run: pio run -e esp32dev_audio
+        run: pio run -e esp32dev_audio_esv11

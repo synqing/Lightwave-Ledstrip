@@ -790,14 +790,16 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
         const uint8_t bFifth = clampU8((int)roundf(brightness * wFifth));
 
         CRGB c = CRGB::Black;
-        if (bRoot)  c += ctx.palette.getColor((uint8_t)(hueRoot  + paletteIndex), bRoot);
-        if (bThird) c += ctx.palette.getColor((uint8_t)(hueThird + paletteIndex), bThird);
-        if (bFifth) c += ctx.palette.getColor((uint8_t)(hueFifth + paletteIndex), bFifth);
+        uint8_t layerCount1 = 0;
+        if (bRoot)  { c += ctx.palette.getColor((uint8_t)(hueRoot  + paletteIndex), bRoot);  layerCount1++; }
+        if (bThird) { c += ctx.palette.getColor((uint8_t)(hueThird + paletteIndex), bThird); layerCount1++; }
+        if (bFifth) { c += ctx.palette.getColor((uint8_t)(hueFifth + paletteIndex), bFifth); layerCount1++; }
 
         // Motion-weighted burst accent
         if (m_burst > 0.20f && env > 0.25f) {
             const uint8_t accentB = clampU8((int)roundf(brightness * m_burst * 0.55f * (0.7f + 0.6f * motionWeight)));
             c += ctx.palette.getColor((uint8_t)(hueRoot + 128 + paletteIndex), accentB);
+            layerCount1++;
         }
 
         // -----------------------------------------
@@ -815,6 +817,7 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
             if (shimmerIntensity > 0.1f) {
                 const uint8_t shimmerB = clampU8((int)roundf(brightness * shimmerIntensity));
                 c += ctx.palette.getColor((uint8_t)(hueFifth + 32 + paletteIndex), shimmerB);
+                layerCount1++;
             }
         }
 
@@ -832,6 +835,7 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
             if (textureAmount > 0.08f) {
                 const uint8_t texB = clampU8((int)roundf(brightness * textureAmount * 0.35f));
                 c += ctx.palette.getColor((uint8_t)(hueFifth + 48 + paletteIndex), texB);
+                layerCount1++;
             }
         }
 
@@ -840,8 +844,13 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
             const float pulseFade = expf(-normalizedDist * 4.5f);  // Tight center focus
             const uint8_t pulseB = clampU8((int)roundf(brightness * m_chordChangePulse * pulseFade * 0.7f));
             c += ctx.palette.getColor((uint8_t)(hueFifth + 64 + paletteIndex), pulseB);
+            layerCount1++;
         }
 
+        // Normalise by layer count to prevent additive RGB wash to white (colour corruption fix)
+        if (layerCount1 > 0) {
+            c.nscale8(255u / (unsigned)layerCount1);
+        }
         ctx.leds[i] = c;
 
         if (i + STRIP_LENGTH < ctx.ledCount) {
@@ -849,13 +858,15 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
             const uint8_t harmonyShift = 90;
 
             CRGB c2 = CRGB::Black;
-            if (bRoot)  c2 += ctx.palette.getColor((uint8_t)(hueRoot  + harmonyShift + paletteIndex), bRoot);
-            if (bThird) c2 += ctx.palette.getColor((uint8_t)(hueThird + harmonyShift + paletteIndex), bThird);
-            if (bFifth) c2 += ctx.palette.getColor((uint8_t)(hueFifth + harmonyShift + paletteIndex), bFifth);
+            uint8_t layerCount2 = 0;
+            if (bRoot)  { c2 += ctx.palette.getColor((uint8_t)(hueRoot  + harmonyShift + paletteIndex), bRoot);  layerCount2++; }
+            if (bThird) { c2 += ctx.palette.getColor((uint8_t)(hueThird + harmonyShift + paletteIndex), bThird); layerCount2++; }
+            if (bFifth) { c2 += ctx.palette.getColor((uint8_t)(hueFifth + harmonyShift + paletteIndex), bFifth); layerCount2++; }
 
             if (m_burst > 0.20f && env > 0.25f) {
                 const uint8_t accentB = clampU8((int)roundf(brightness * m_burst * 0.55f * (0.7f + 0.6f * motionWeight)));
                 c2 += ctx.palette.getColor((uint8_t)(hueRoot + harmonyShift + 128 + paletteIndex), accentB);
+                layerCount2++;
             }
 
             // FIX: Removed shimmer layer that was ONLY on Strip 2 - caused visual incoherence
@@ -875,6 +886,7 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
                 if (textureAmount > 0.08f) {
                     const uint8_t texB = clampU8((int)roundf(brightness * textureAmount * 0.35f));
                     c2 += ctx.palette.getColor((uint8_t)(hueFifth + harmonyShift + 48 + paletteIndex), texB);
+                    layerCount2++;
                 }
             }
 
@@ -883,8 +895,13 @@ void LGPStarBurstNarrativeEffect::render(plugins::EffectContext& ctx) {
                 const float pulseFade = expf(-normalizedDist * 4.5f);
                 const uint8_t pulseB = clampU8((int)roundf(brightness * m_chordChangePulse * pulseFade * 0.7f));
                 c2 += ctx.palette.getColor((uint8_t)(hueFifth + harmonyShift + 64 + paletteIndex), pulseB);
+                layerCount2++;
             }
 
+            // Normalise by layer count to prevent additive RGB wash to white (colour corruption fix)
+            if (layerCount2 > 0) {
+                c2.nscale8(255u / (unsigned)layerCount2);
+            }
             ctx.leds[i + STRIP_LENGTH] = c2;
         }
     }

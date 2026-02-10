@@ -93,7 +93,7 @@ Always use these specific ports for uploads and monitoring. Verify with `pio dev
 **v2 Firmware (ESP32-S3)**:
 ```bash
 cd firmware/v2
-pio run -e esp32dev_audio -t upload --upload-port /dev/cu.usbmodem1101
+pio run -e esp32dev_audio_esv11 -t upload --upload-port /dev/cu.usbmodem1101
 ```
 
 **Tab5 Encoder Firmware**:

@@ -315,12 +315,11 @@ void RippleEnhancedEffect::render(plugins::EffectContext& ctx) {
 
                 // =========================================================
                 // 64-bin TREBLE SHIMMER on wavefront (bins 48-63)
-                // Hi-hat/cymbal energy adds sparkle to the leading edge.
-                // Stronger at wavefront (waveAbs~0), fades toward trailing edge.
+                // Hi-hat/cymbal energy adds sparkle; capped to avoid brightness stacking wash (colour fix).
                 // =========================================================
-                if (m_trebleShimmer > 0.08f) {  // Enhanced: Lower threshold (0.08f instead of 0.1f)
+                if (m_trebleShimmer > 0.08f) {
                     float shimmerFade = 1.0f - (waveAbs / 3.0f);  // 1.0 at front, 0.0 at back
-                    uint8_t shimmerBoost = (uint8_t)(m_trebleShimmer * shimmerFade * 60.0f);
+                    uint8_t shimmerBoost = (uint8_t)(m_trebleShimmer * shimmerFade * 30.0f);  // was 60; halved to preserve palette
                     brightness = qadd8(brightness, shimmerBoost);
                 }
 

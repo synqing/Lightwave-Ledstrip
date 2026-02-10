@@ -48,4 +48,4 @@
 - [ ] Effect ID matches PatternRegistry index (stable)
 - [ ] `validate <effectId>` passes all checks
 - [ ] No American spellings in comments (British English)
-- [ ] Build passes: `cd firmware/v2 && pio run -e esp32dev_audio`
+- [ ] Build passes: `cd firmware/v2 && pio run -e esp32dev_audio_esv11`

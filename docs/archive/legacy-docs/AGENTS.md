@@ -36,9 +36,9 @@ This repo uses PlatformIO with two standalone projects:
 ### LightwaveOS Build Commands
 
 - **Build (default, audio-enabled)**:
-  - `cd firmware/v2 && pio run -e esp32dev_audio`
+  - `cd firmware/v2 && pio run -e esp32dev_audio_esv11`
 - **Build + upload**:
-  - `cd firmware/v2 && pio run -e esp32dev_audio -t upload`
+  - `cd firmware/v2 && pio run -e esp32dev_audio_esv11 -t upload`
 - **Serial monitor**:
   - `pio device monitor -b 115200`
 

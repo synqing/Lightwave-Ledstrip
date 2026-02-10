@@ -614,7 +614,7 @@ increaseSaturation(m_radial, HALF_LENGTH, 24);  // Was: 32
 ## Composite Verification Checklist
 
 ### Pre-Test Setup
-- [ ] Build with `pio run -e esp32dev_audio -t upload`
+- [ ] Build with `pio run -e esp32dev_audio_esv11 -t upload`
 - [ ] Verify audio input connected and calibrated
 - [ ] Set brightness to 50% (128) for consistent measurement
 - [ ] Use LGP_SMOOTH preset for full feature set

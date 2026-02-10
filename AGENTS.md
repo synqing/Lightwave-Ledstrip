@@ -38,8 +38,8 @@ On 2026-02-06, an agent decided that `docs/ui-mockups/LIGHTWAVE_DESIGN_SYSTEM_MO
 
 ```bash
 cd firmware/v2
-pio run -e esp32dev_audio              # build
-pio run -e esp32dev_audio -t upload    # build + flash
+pio run -e esp32dev_audio_esv11              # build
+pio run -e esp32dev_audio_esv11 -t upload    # build + flash
 pio device monitor -b 115200           # serial monitor
 ```
 

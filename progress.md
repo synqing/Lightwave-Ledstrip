@@ -30,7 +30,7 @@
 ## Test Results
 | Test | Input | Expected | Actual | Status |
 |------|-------|----------|--------|--------|
-| Firmware build | `pio run -e esp32dev_audio` | Successful compile/link | Success | ✓ |
+| Firmware build | `pio run -e esp32dev_audio_esv11` | Successful compile/link | Success | ✓ |
 
 ## Error Log
 | Timestamp | Error | Attempt | Resolution |

@@ -127,7 +127,7 @@ Level 0 = Nothing
 
 ## What Prints by Default (Out of the Box)
 
-### Build: `esp32dev_audio` with defaults
+### Build: `esp32dev_audio_esv11` with defaults
 | Setting | Value |
 |---------|-------|
 | `LW_LOG_LEVEL` | 4 (DEBUG) |

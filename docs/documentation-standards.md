@@ -622,7 +622,7 @@ struct Example {
 ### Build Command
 
 ```bash
-pio run -e esp32dev_audio -t upload
+pio run -e esp32dev_audio_esv11 -t upload
 ```
 
 ---

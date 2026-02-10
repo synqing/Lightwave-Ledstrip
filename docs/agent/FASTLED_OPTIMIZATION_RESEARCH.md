@@ -935,11 +935,11 @@ class MyEffect : public IEffect {
 ```bash
 # Profile effect timing
 cd firmware/v2
-pio run -e esp32dev_audio -t upload
+pio run -e esp32dev_audio_esv11 -t upload
 # Serial monitor shows: "Effect: X.XXms"
 
 # Check memory usage
-pio run -e esp32dev_audio --target size
+pio run -e esp32dev_audio_esv11 --target size
 # Shows flash and SRAM allocation
 ```
 

@@ -290,7 +290,7 @@ npx claude-flow@v3alpha swarm_init \
 ```bash
 # Serial: s (FPS/CPU check)
 # Serial: validate <effectId> (centre-origin, hue-span, FPS, heap-delta)
-# Build: cd firmware/v2 && pio run -e esp32dev_audio
+# Build: cd firmware/v2 && pio run -e esp32dev_audio_esv11
 ```
 
 **Acceptance Criteria**:
@@ -307,7 +307,7 @@ npx claude-flow@v3alpha swarm_init \
 **Validation Commands**:
 
 ```bash
-# Build: cd firmware/v2 && pio run -e esp32dev_audio -t upload
+# Build: cd firmware/v2 && pio run -e esp32dev_audio_esv11 -t upload
 # Serial: Verify WiFi connects without "IP: 0.0.0.0" appearing first
 # API: GET /api/v1/effects (verify backward compatibility)
 ```

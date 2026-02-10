@@ -17,6 +17,9 @@
 
 namespace lightwaveos::effects::ieffect {
 
+// Debug flag - toggle with 'd' key in serial console
+extern bool g_bloomDebugEnabled;
+
 class BeatPulseBloomEffect final : public plugins::IEffect {
 public:
     BeatPulseBloomEffect();

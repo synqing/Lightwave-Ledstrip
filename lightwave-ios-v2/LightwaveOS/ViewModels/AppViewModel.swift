@@ -518,15 +518,9 @@ class AppViewModel {
         }
 
         log("Loading zones...", category: "INIT")
-        if zones.hasPersistedZoneState {
-            log("Restoring zones from phone...", category: "INIT")
-            await zones.applyPersistedZoneStateToDevice()
-            // Refresh from device after pushing so UI reflects any clamping/normalisation.
-            await zones.loadZones()
-        } else {
-            await zones.loadZones()
-            zones.persistZoneState()
-        }
+        // Always load device state first (read-only). Zone restoration is deferred
+        // to avoid overwhelming ESP32 soft AP with 15+ REST calls during connection.
+        await zones.loadZones()
 
         log("Loading colour correction...", category: "INIT")
         await colourCorrection.loadConfig()
@@ -534,11 +528,25 @@ class AppViewModel {
         log("Loading audio tuning...", category: "INIT")
         await audio.loadAudioTuning()
 
-        // Start streaming
-        startStreamSubscriptions()
-        startUdpHealthMonitor()
+        // NOTE: Stream subscriptions are started from the .connected event handler.
+        // DO NOT call startStreamSubscriptions() here - it causes duplicate subscription
+        // messages that can overwhelm the ESP32 soft AP WebSocket.
 
-        log("Connected successfully", category: "CONN")
+        log("Initial state loaded", category: "CONN")
+
+        // Defer zone restoration until after streaming is established.
+        // This prevents the burst of 15+ REST calls from overwhelming the ESP32 soft AP.
+        if zones.hasPersistedZoneState {
+            Task {
+                try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5s for streams to stabilise
+                guard !Task.isCancelled, connectionState.isReady else { return }
+                log("Restoring zones from phone...", category: "INIT")
+                await zones.applyPersistedZoneStateToDevice()
+                await zones.loadZones() // Refresh to reflect any clamping
+            }
+        } else {
+            zones.persistZoneState()
+        }
     }
 
     private func wireUDPHandlers() {

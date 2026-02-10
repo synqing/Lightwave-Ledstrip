@@ -404,6 +404,27 @@ public:
             : "es";
     }
 
+    /**
+     * @brief Snapshot of bands + rms/flux for serial debug (e.g. "bands" command).
+     * Lock-free: renderer writes to double buffer, getter reads the other slot.
+     */
+    struct BandsDebugSnapshot {
+        float bands[8] = {0};
+        float bass = 0.0f;   ///< (bands[0]+bands[1])/2
+        float mid = 0.0f;    ///< (bands[2]+bands[3]+bands[4])/3
+        float treble = 0.0f; ///< (bands[5]+bands[6]+bands[7])/3
+        float rms = 0.0f;
+        float flux = 0.0f;
+        uint32_t hop_seq = 0;
+        bool valid = false;
+    };
+
+    /**
+     * @brief Get latest bands snapshot for validation (serial "bands" command).
+     * Thread-safe: reads from the slot the renderer is not currently writing.
+     */
+    void getBandsDebugSnapshot(BandsDebugSnapshot& out) const;
+
 #if !FEATURE_AUDIO_BACKEND_ESV11
     // ========================================================================
     // TempoTracker Integration (replaces K1)
@@ -464,6 +485,12 @@ public:
      * @brief Check if capture mode is enabled
      */
     bool isCaptureModeEnabled() const { return m_captureEnabled; }
+
+    /**
+     * @brief Enable/disable audio debug logging (serial 'a' command)
+     */
+    void setAudioDebugEnabled(bool enabled) { m_audioDebugEnabled = enabled; }
+    bool isAudioDebugEnabled() const { return m_audioDebugEnabled; }
 
     /**
      * @brief Get captured frame for a specific tap
@@ -746,6 +773,13 @@ private:
 
     /// Cached result of hasActiveMappings() - updated on effect change only
     bool m_effectHasAudioMappings = false;
+
+    /// Audio debug logging toggle (serial 'a' command)
+    bool m_audioDebugEnabled = true;
+
+    /// Bands debug snapshot (double buffer for lock-free read from serial handler)
+    mutable BandsDebugSnapshot m_bandsDebugSnapshot[2];
+    mutable std::atomic<uint8_t> m_bandsDebugWriteIndex{0};
 
     // ========================================================================
     // TempoTracker Integration (replaces K1)

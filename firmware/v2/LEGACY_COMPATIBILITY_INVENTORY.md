@@ -9,7 +9,7 @@
 ## 1. v2 Build Targets
 
 ### Firmware Builds
-- **`esp32dev_audio`** (primary): ESP32-S3 firmware with WiFi, Audio, and WebServer
+- **`esp32dev_audio_esv11`** (primary): ESP32-S3 firmware with WiFi, Audio, and WebServer
 - **`esp32dev_audio_benchmark`**: Audio pipeline benchmarking
 - **`esp32dev_audio_trace`**: Perfetto timeline tracing
 - **`esp32dev_SSB`**: Sensory Bridge compatibility build

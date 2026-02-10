@@ -523,7 +523,7 @@ void StyleDetector::update(float rms, float flux, const float* bands,
 ### 1. Build Verification
 ```bash
 cd firmware/v2
-pio run -e esp32dev_audio
+pio run -e esp32dev_audio_esv11
 ```
 
 **Expected:** Clean build with no errors
@@ -791,7 +791,7 @@ After engineering review, the **unanimous recommendation is to implement all 7 c
 - [ ] Replace ControlBus::computeSaliency() with time-based version
 
 **Phase 3: Verification**
-- [ ] Build: `pio run -e esp32dev_audio`
+- [ ] Build: `pio run -e esp32dev_audio_esv11`
 - [ ] Grep: Zero matches for old state fields
 - [ ] Baseline: Capture 10-min audio session metrics (before)
 - [ ] Deploy: Flash updated firmware

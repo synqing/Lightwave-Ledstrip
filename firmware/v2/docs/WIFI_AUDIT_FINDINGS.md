@@ -72,7 +72,7 @@ Both `EVENT_DISCONNECTED` and `EVENT_CONNECTION_FAILED` are set for EVERY discon
 - CONNECTED state to see failure when it should see "disconnected, will reconnect"
 - Stale failure bits persisting across state transitions
 
-## Build Configuration (esp32dev_audio)
+## Build Configuration (esp32dev_audio_esv11)
 
 **Location**: `v2/platformio.ini:60-74`
 

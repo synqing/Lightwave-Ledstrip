@@ -24,13 +24,13 @@ In `platformio.ini`, uncomment this line:
 ### Method 3: Use WiFi Environment
 Build with the WiFi-enabled environment:
 ```bash
-pio run -e esp32dev_audio
+pio run -e esp32dev_audio_esv11
 ```
 
 ## Available Build Environments
 
 - `esp32dev` - Default, **NO WiFi** (fast, lean, efficient)
-- `esp32dev_audio` - WiFi enabled (slow, bloated, worthless)
+- `esp32dev_audio_esv11` - WiFi enabled (slow, bloated, worthless)
 - `esp32dev_debug` - Debug build, no WiFi
 - `memory_debug` - Memory debugging, no WiFi
 

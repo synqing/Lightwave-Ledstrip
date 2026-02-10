@@ -197,7 +197,7 @@ Result: Multiple failed fixes, no resolution
 - Never verified against actual hardware
 
 ### 5. Build Configuration
-- Assumed esp32dev_audio environment matches reference
+- Assumed esp32dev_audio_esv11 environment matches reference
 - Never checked for hidden #ifdef differences
 - Never verified FEATURE flags match
 

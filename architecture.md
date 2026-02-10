@@ -142,7 +142,7 @@ Global buffer: `CRGB leds[320]`
 
 ### Modifying Web Interface
 1. Edit `data/index.html`, `data/app.js`, `data/styles.css`
-2. Build: `pio run -e esp32dev_audio -t upload`
+2. Build: `pio run -e esp32dev_audio_esv11 -t upload`
 3. Access: `http://lightwaveos.local`
 
 ### Adding Zone Effects
@@ -156,7 +156,7 @@ Global buffer: `CRGB leds[320]`
 
 | Environment | Command | Features |
 |-------------|---------|----------|
-| esp32dev_audio | `pio run -e esp32dev_audio` | Primary build: WiFi + Audio + WebServer |
+| esp32dev_audio_esv11 | `pio run -e esp32dev_audio_esv11` | Primary build: WiFi + Audio + WebServer |
 | esp32dev_audio_benchmark | `pio run -e esp32dev_audio_benchmark` | Audio pipeline benchmarking |
 | esp32dev_audio_trace | `pio run -e esp32dev_audio_trace` | Perfetto timeline tracing |
 | esp32dev_SSB | `pio run -e esp32dev_SSB` | Sensory Bridge compatibility |

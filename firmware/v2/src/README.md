@@ -421,7 +421,7 @@ Enable with `FEATURE_EFFECT_VALIDATION=1`.
 
 ```bash
 cd firmware/v2
-pio run -e esp32dev_audio -t upload
+pio run -e esp32dev_audio_esv11 -t upload
 ```
 
 All hardware build environments include WiFi, audio, and web server by default.
@@ -435,7 +435,7 @@ pio device monitor -b 115200
 ### Clean Build
 
 ```bash
-pio run -t clean && pio run -e esp32dev_audio -t upload
+pio run -t clean && pio run -e esp32dev_audio_esv11 -t upload
 ```
 
 ### Run Native Tests

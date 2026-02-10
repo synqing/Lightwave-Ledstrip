@@ -103,7 +103,7 @@ Previous approach had no debug visibility into K1 pipeline internals.
 **Build Verification:**
 ```bash
 # Should compile with FEATURE_K1_DEBUG enabled (defaults to FEATURE_AUDIO_SYNC)
-pio run -e esp32dev_audio
+pio run -e esp32dev_audio_esv11
 
 # Verify debug infrastructure is included
 grep -r "FEATURE_K1_DEBUG" v2/src/

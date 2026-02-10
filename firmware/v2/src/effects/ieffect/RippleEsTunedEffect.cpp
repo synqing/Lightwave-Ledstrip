@@ -235,6 +235,9 @@ void RippleEsTunedEffect::render(plugins::EffectContext& ctx) {
                 }
 
                 CRGB color = ctx.palette.getColor((uint8_t)(m_ripples[r].hue + dist), b);
+                // Pre-scale so multiple overlapping ripples stay in range (colour corruption fix)
+                constexpr uint8_t RIPPLE_PRE_SCALE = 85;  // ~3 overlapping ripples sum to 255
+                color = color.nscale8(RIPPLE_PRE_SCALE);
                 m_radial[dist].r = qadd8(m_radial[dist].r, color.r);
                 m_radial[dist].g = qadd8(m_radial[dist].g, color.g);
                 m_radial[dist].b = qadd8(m_radial[dist].b, color.b);

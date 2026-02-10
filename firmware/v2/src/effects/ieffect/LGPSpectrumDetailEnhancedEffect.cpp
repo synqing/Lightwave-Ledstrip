@@ -37,10 +37,9 @@ constexpr float MIN_THRESHOLD = 0.002f;  // Very low threshold for sensitivity
 // NOTE: SMOOTHING_COEFF removed - using frame-rate independent tau-based smoothing
 
 // PRE_SCALE: Scale colors BEFORE accumulation to prevent overflow
-// CRITICAL: 4 treble bins (60-63) all map to distance 0 (center LED)
-// With qadd8() saturation, we can safely increase brightness
-constexpr uint8_t SPECTRUM_PRE_SCALE = 90;   // 4 bins × 90 = 360 → qadd8 clamps to 255
-constexpr uint8_t TRAIL_PRE_SCALE = 45;      // Conservative for trails (also overlapping)
+// Spectrum and trail both add to same LEDs (qadd8); keep sum in range (colour corruption fix).
+constexpr uint8_t SPECTRUM_PRE_SCALE = 40;   // ~4 bins × 40 + trail ~= 220, stays in range
+constexpr uint8_t TRAIL_PRE_SCALE = 25;      // Trail overlap; spectrum + trail must not wash to white
 constexpr uint8_t STRIP2_PRE_SCALE = 60;     // Strip 2 at 66% of Strip 1 (supporting role)
 
 bool LGPSpectrumDetailEnhancedEffect::init(plugins::EffectContext& ctx) {

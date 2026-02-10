@@ -23,7 +23,7 @@ domains:
       - "additive JSON only"
       - "thread safety"
     required_checks:
-      - command: "pio run -e esp32dev_audio"
+      - command: "pio run -e esp32dev_audio_esv11"
         description: "Build verification"
   
   dashboard_ui:

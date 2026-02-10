@@ -254,13 +254,13 @@ Enable ShowDirector in `src/config/features.h`:
 #define FEATURE_SHOWS 1
 ```
 
-This flag is typically defined in the `esp32dev_audio` build environment.
+This flag is typically defined in the `esp32dev_audio_esv11` build environment.
 
 ### Build Command
 
 ```bash
 # Full build with WiFi and Shows
-pio run -e esp32dev_audio -t upload
+pio run -e esp32dev_audio_esv11 -t upload
 
 # Monitor serial output
 pio device monitor -b 115200
@@ -605,7 +605,7 @@ Currently, testing is manual:
 
 **Causes**:
 1. `FEATURE_SHOWS` not enabled - Check `src/config/features.h`
-2. Build environment mismatch - Use `esp32dev_audio` environment
+2. Build environment mismatch - Use `esp32dev_audio_esv11` environment
 3. API rate limiting - Wait and retry
 
 **Verification**:
@@ -669,7 +669,7 @@ Serial output at 115200 baud shows:
 1. **Stop and restart**: `POST /api/v1/shows/stop`, then start again
 2. **Clear WebSocket**: Refresh the browser page
 3. **Power cycle**: Sometimes needed if ESP32 is in bad state
-4. **Rebuild firmware**: `pio run -e esp32dev_audio -t clean && pio run -e esp32dev_audio -t upload`
+4. **Rebuild firmware**: `pio run -e esp32dev_audio_esv11 -t clean && pio run -e esp32dev_audio_esv11 -t upload`
 
 ---
 

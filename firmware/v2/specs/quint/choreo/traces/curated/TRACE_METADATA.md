@@ -9,7 +9,7 @@ This directory contains real hardware-captured traces from the ESP32-S3 Lightwav
 - **Firmware SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
 - **Spec SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
 - **Device:** ESP32-S3 LightwaveOS v2
-- **Build Environment:** esp32dev_audio (PlatformIO)
+- **Build Environment:** esp32dev_audio_esv11 (PlatformIO)
 - **Captured:** 2026-01-19
 - **Events:** 7 (ws.connect, msg.recv x5, ws.disconnect)
 - **Purpose:** Baseline happy path protocol flow verification
@@ -22,7 +22,7 @@ This directory contains real hardware-captured traces from the ESP32-S3 Lightwav
 - **Firmware SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
 - **Spec SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
 - **Device:** ESP32-S3 LightwaveOS v2
-- **Build Environment:** esp32dev_audio (PlatformIO)
+- **Build Environment:** esp32dev_audio_esv11 (PlatformIO)
 - **Captured:** 2026-01-19
 - **Events:** 10 (includes multiple rejection scenarios)
 - **Purpose:** Verify rejection telemetry and error handling
@@ -34,7 +34,7 @@ This directory contains real hardware-captured traces from the ESP32-S3 Lightwav
 - **Firmware SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
 - **Spec SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
 - **Device:** ESP32-S3 LightwaveOS v2
-- **Build Environment:** esp32dev_audio (PlatformIO)
+- **Build Environment:** esp32dev_audio_esv11 (PlatformIO)
 - **Captured:** 2026-01-19
 - **Events:** 7 (multiple ws.connect/ws.disconnect cycles)
 - **Purpose:** Verify clientId increments, ws.disconnect logged correctly, connection state tracking
@@ -46,7 +46,7 @@ This directory contains real hardware-captured traces from the ESP32-S3 Lightwav
 - **Firmware SHA:** aaabc3c8373909b1c66fbb4f946325734926581c (to be updated after commit)
 - **Spec SHA:** aaabc3c8373909b1c66fbb4f946325734926581c (to be updated after commit)
 - **Device:** ESP32-S3 LightwaveOS v2
-- **Build Environment:** esp32dev_audio (PlatformIO)
+- **Build Environment:** esp32dev_audio_esv11 (PlatformIO)
 - **Captured:** 2026-01-19
 - **Events:** 19 (ws.connect x2, msg.recv x16 including zones.get, zones.update, ws.disconnect x1)
 - **Purpose:** Baseline zones protocol flow verification (happy path)
@@ -58,7 +58,7 @@ This directory contains real hardware-captured traces from the ESP32-S3 Lightwav
 - **Firmware SHA:** aaabc3c8373909b1c66fbb4f946325734926581c (to be updated after commit)
 - **Spec SHA:** aaabc3c8373909b1c66fbb4f946325734926581c (to be updated after commit)
 - **Device:** ESP32-S3 LightwaveOS v2
-- **Build Environment:** esp32dev_audio (PlatformIO)
+- **Build Environment:** esp32dev_audio_esv11 (PlatformIO)
 - **Captured:** 2026-01-19
 - **Events:** 10 (connect/disconnect cycles with zones.get, zones.update)
 - **Purpose:** Prove idempotency / message-soup tolerance for zones (disconnect before response)
@@ -70,7 +70,7 @@ This directory contains real hardware-captured traces from the ESP32-S3 Lightwav
 - **Firmware SHA:** aaabc3c8373909b1c66fbb4f946325734926581c (to be updated after commit)
 - **Spec SHA:** aaabc3c8373909b1c66fbb4f946325734926581c (to be updated after commit)
 - **Device:** ESP32-S3 LightwaveOS v2
-- **Build Environment:** esp32dev_audio (PlatformIO)
+- **Build Environment:** esp32dev_audio_esv11 (PlatformIO)
 - **Captured:** 2026-01-19
 - **Events:** 9 (connect/disconnect/reconnect with zones.get, zones.update)
 - **Purpose:** Prove epoch/handshake discipline holds for zones protocol too
@@ -82,7 +82,7 @@ This directory contains real hardware-captured traces from the ESP32-S3 Lightwav
 - **Firmware SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
 - **Spec SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
 - **Device:** ESP32-S3 LightwaveOS v2
-- **Build Environment:** esp32dev_audio (PlatformIO)
+- **Build Environment:** esp32dev_audio_esv11 (PlatformIO)
 - **Captured:** 2026-01-19
 - **Events:** 57 (WebSocket OTA happy path with full upload flow, device rebooted)
 - **Purpose:** Baseline OTA WebSocket protocol flow verification (happy path)
@@ -93,7 +93,7 @@ This directory contains real hardware-captured traces from the ESP32-S3 Lightwav
 - **Firmware SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
 - **Spec SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
 - **Device:** ESP32-S3 LightwaveOS v2
-- **Build Environment:** esp32dev_audio (PlatformIO)
+- **Build Environment:** esp32dev_audio_esv11 (PlatformIO)
 - **Captured:** 2026-01-19
 - **Events:** 68 (reconnect mid-transfer with epoch-scoping validation)
 - **Purpose:** Prove OTA session epoch-scoping: disconnect aborts session, reconnect requires restart
@@ -104,7 +104,7 @@ This directory contains real hardware-captured traces from the ESP32-S3 Lightwav
 - **Firmware SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
 - **Spec SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
 - **Device:** ESP32-S3 LightwaveOS v2
-- **Build Environment:** esp32dev_audio (PlatformIO)
+- **Build Environment:** esp32dev_audio_esv11 (PlatformIO)
 - **Captured:** 2026-01-19
 - **Events:** 56 (abort and retry flow validation)
 - **Purpose:** Prove explicit abort and retry flow works correctly
@@ -115,7 +115,7 @@ This directory contains real hardware-captured traces from the ESP32-S3 Lightwav
 - **Firmware SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
 - **Spec SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
 - **Device:** ESP32-S3 LightwaveOS v2
-- **Build Environment:** esp32dev_audio (PlatformIO)
+- **Build Environment:** esp32dev_audio_esv11 (PlatformIO)
 - **Captured:** 2026-01-19
 - **Events:** 13 (ota.rest.begin, ota.rest.progress x10, ota.rest.complete, telemetry.boot - complete successful OTA flow)
 - **Purpose:** Baseline OTA REST endpoint flow verification (true happy path with auth) - validates dual-bucket rate limiting + Update API fixes (aligned maxSketchSpace, error diagnostics)
@@ -130,7 +130,7 @@ This directory contains real hardware-captured traces from the ESP32-S3 Lightwav
 - **Firmware SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
 - **Spec SHA:** aaabc3c8373909b1c66fbb4f946325734926581c
 - **Device:** ESP32-S3 LightwaveOS v2
-- **Build Environment:** esp32dev_audio (PlatformIO)
+- **Build Environment:** esp32dev_audio_esv11 (PlatformIO)
 - **Captured:** 2026-01-19
 - **Events:** 1 (ota.rest.failed with Unauthorized - validates auth_fail bucket)
 - **Purpose:** Verify auth correctness: invalid token produces correct HTTP status and telemetry

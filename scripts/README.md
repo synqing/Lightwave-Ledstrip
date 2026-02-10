@@ -49,7 +49,7 @@ Uploads the LittleFS filesystem (web interface files) to ESP32.
 ```
 
 - Default port: `/dev/cu.usbmodem1101` (v2 ESP32-S3 device)
-- Uses `esp32dev_audio` environment
+- Uses `esp32dev_audio_esv11` environment
 - Web interface accessible at `http://lightwaveos.local` after upload
 
 ### monitor.sh
@@ -108,7 +108,7 @@ cd firmware/v2
 pio run
 
 # Build with WiFi
-pio run -e esp32dev_audio
+pio run -e esp32dev_audio_esv11
 
 # Upload
 pio run -t upload

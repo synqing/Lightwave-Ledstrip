@@ -74,7 +74,7 @@ Need for tiered, runtime-configurable verbosity:
 
 **Build Verification:**
 ```bash
-pio run -e esp32dev_audio
+pio run -e esp32dev_audio_esv11
 ```
 
 **Runtime Verification:**

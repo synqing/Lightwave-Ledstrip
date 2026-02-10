@@ -72,12 +72,12 @@ Technical reference for memory allocation, buffer configurations, and system con
 
 | Flag | Value | Purpose | Build |
 |------|-------|---------|--------|
-| **BOARD_HAS_PSRAM** | 1 | Enable PSRAM support | esp32dev_audio |
-| **PSRAM_SIZE** | 8388608 | PSRAM size in bytes (8MB) | esp32dev_audio |
+| **BOARD_HAS_PSRAM** | 1 | Enable PSRAM support | esp32dev_audio_esv11 |
+| **PSRAM_SIZE** | 8388608 | PSRAM size in bytes (8MB) | esp32dev_audio_esv11 |
 | **PSRAM_SIZE** | 2097152 | PSRAM size in bytes (2MB) | esp32dev_FH4R2 |
-| **board_build.psram_type** | opi | Octal SPI (8-bit bus) | esp32dev_audio |
+| **board_build.psram_type** | opi | Octal SPI (8-bit bus) | esp32dev_audio_esv11 |
 | **board_build.psram_type** | qio | Quad SPI (4-bit bus) | esp32dev_FH4R2 |
-| **board_build.f_cpu** | 240000000L | CPU frequency (240 MHz) | esp32dev_audio |
+| **board_build.f_cpu** | 240000000L | CPU frequency (240 MHz) | esp32dev_audio_esv11 |
 | **board_build.f_flash** | 80000000L | Flash frequency (80 MHz) | secondary boards |
 | **CONFIG_ASYNC_TCP_RUNNING_CORE** | 0 | AsyncTCP affinity | all |
 | **CONFIG_ASYNC_TCP_USE_WDT** | 0 | Disable watchdog for async | all |
@@ -382,7 +382,7 @@ WiFi/Network tasks:
 
 | Board | Flash | PSRAM | SRAM | Config |
 |-------|-------|-------|------|--------|
-| **esp32dev_audio (N16R8)** | 16 MB | 8 MB OPI | 384 KB | Primary |
+| **esp32dev_audio_esv11 (N16R8)** | 16 MB | 8 MB OPI | 384 KB | Primary |
 | **esp32dev_FH4R2** | 4 MB | 2 MB QIO | 384 KB | Constrained |
 | **esp32dev_FH4** | 4 MB | None | 384 KB | SRAM-only |
 | **esp32dev_SSB (Secondary)** | 4 MB | 2 MB OPI | 384 KB | Custom GPIO |
@@ -390,7 +390,7 @@ WiFi/Network tasks:
 
 ### Build Flags by Variant
 
-#### Primary Build (esp32dev_audio)
+#### Primary Build (esp32dev_audio_esv11)
 
 ```
 -D BOARD_HAS_PSRAM=1

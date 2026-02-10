@@ -162,36 +162,43 @@ static inline float hardEdge(float diff, float width, float softness) {
 namespace ColourUtil {
 
 /**
- * @brief Add white to colour with saturation (no overflow)
+ * @brief Add punch/brightness without pushing to white (hue-preserving)
  * @param c Colour to modify (in-place)
- * @param w White amount [0, 255]
+ * @param w Brightness boost [0, 255] (luminance scale; r:g:b ratio preserved)
+ *
+ * Replaces former addWhiteSaturating which drove (r,g,b) toward (255,255,255).
+ * Now scales luminance so hue stays intact and palette doesn't wash out.
  */
 static inline void addWhiteSaturating(CRGB& c, uint8_t w) {
-    uint16_t r = static_cast<uint16_t>(c.r) + w;
-    uint16_t g = static_cast<uint16_t>(c.g) + w;
-    uint16_t b = static_cast<uint16_t>(c.b) + w;
-    c.r = (r > 255) ? 255 : static_cast<uint8_t>(r);
-    c.g = (g > 255) ? 255 : static_cast<uint8_t>(g);
-    c.b = (b > 255) ? 255 : static_cast<uint8_t>(b);
+    uint16_t r = static_cast<uint16_t>(c.r);
+    uint16_t g = static_cast<uint16_t>(c.g);
+    uint16_t b = static_cast<uint16_t>(c.b);
+    uint16_t lum = (r + g + b) / 3;
+    if (lum == 0) {
+        c.r = c.g = c.b = (w > 255) ? 255 : w;
+        return;
+    }
+    uint16_t lumNew = lum + w;
+    if (lumNew > 255) lumNew = 255;
+    c.r = static_cast<uint8_t>((r * lumNew) / lum);
+    c.g = static_cast<uint8_t>((g * lumNew) / lum);
+    c.b = static_cast<uint8_t>((b * lumNew) / lum);
 }
 
 /**
- * @brief Additive blend (saturating) - both colours visible simultaneously
+ * @brief Average of two colours (no wash to white)
  * @param base Base colour
- * @param overlay Overlay colour to add
- * @return Blended colour (saturating addition)
+ * @param overlay Overlay colour
+ * @return Blended colour (average; hue preserved instead of summing to white)
  *
- * Creates a screen-like blend where both layers are visible.
- * Ideal for layering attack and body rings.
+ * Replaces former additive() which summed R,G,B and drove output to white.
+ * Now averages so both layers are visible without washing out palette.
  */
 static inline CRGB additive(const CRGB& base, const CRGB& overlay) {
-    uint16_t r = static_cast<uint16_t>(base.r) + static_cast<uint16_t>(overlay.r);
-    uint16_t g = static_cast<uint16_t>(base.g) + static_cast<uint16_t>(overlay.g);
-    uint16_t b = static_cast<uint16_t>(base.b) + static_cast<uint16_t>(overlay.b);
     return CRGB(
-        (r > 255) ? 255 : static_cast<uint8_t>(r),
-        (g > 255) ? 255 : static_cast<uint8_t>(g),
-        (b > 255) ? 255 : static_cast<uint8_t>(b)
+        static_cast<uint8_t>((static_cast<uint16_t>(base.r) + overlay.r + 1) >> 1),
+        static_cast<uint8_t>((static_cast<uint16_t>(base.g) + overlay.g + 1) >> 1),
+        static_cast<uint8_t>((static_cast<uint16_t>(base.b) + overlay.b + 1) >> 1)
     );
 }
 

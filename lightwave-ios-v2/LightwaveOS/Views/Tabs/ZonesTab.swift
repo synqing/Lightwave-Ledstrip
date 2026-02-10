@@ -23,6 +23,12 @@ struct ZonesTab: View {
                 ZoneHeaderCard()
                     .padding(.horizontal, 16)
 
+                // Zone Presets card (only when zones enabled)
+                if app.zones.zonesEnabled {
+                    ZonePresetsCard()
+                        .padding(.horizontal, 16)
+                }
+
                 // Zone cards (dynamically generated based on zone count)
                 if app.zones.zonesEnabled {
                     ForEach(0..<app.zones.zoneCount, id: \.self) { index in

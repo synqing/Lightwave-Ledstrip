@@ -6,8 +6,8 @@ LightwaveOS provides real-time audio metrics streaming over WebSocket for buildi
 
 ## Requirements
 
-- Firmware built with `esp32dev_audio` environment
-- `FEATURE_AUDIO_SYNC=1` compile flag (set automatically by esp32dev_audio)
+- Firmware built with `esp32dev_audio_esv11` environment
+- `FEATURE_AUDIO_SYNC=1` compile flag (set automatically by esp32dev_audio_esv11)
 - WebSocket connection to `ws://lightwaveos.local/ws`
 
 ---
@@ -390,7 +390,7 @@ Both streams can be subscribed simultaneously.
 
 ### No Audio Frames Received
 
-1. **Check firmware build**: Must use `esp32dev_audio` environment
+1. **Check firmware build**: Must use `esp32dev_audio_esv11` environment
 2. **Verify subscription response**: Should receive `audioStream.subscribed`
 3. **Check WebSocket connection**: Ensure binary message handling is implemented
 

@@ -860,7 +860,7 @@ m_band_attack = base_attack / rate_scale;
 
 | Function | File | Lines | Purpose |
 |----------|------|-------|---------|
-| `SnapshotBuffer::Publish()` | `SnapshotBuffer.h` | 45-60 | Lock-free write |
+| `SnapshotBuffer::Publish()` B| `SnapshotBuffer.h` | 45-60 | Lock-free write |
 | `SnapshotBuffer::ReadLatest()` | `SnapshotBuffer.h` | 62-80 | Lock-free read |
 
 ---

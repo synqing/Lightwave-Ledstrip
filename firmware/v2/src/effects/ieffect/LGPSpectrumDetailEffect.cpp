@@ -141,6 +141,10 @@ void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
         uint8_t bright = (uint8_t)(magnitude * ctx.brightness);
         if (bright > maxBright) maxBright = bright;
         color = color.nscale8(bright);
+
+        // Pre-scale band contribution so multiple bins hitting same LED stay in range (colour corruption fix)
+        constexpr uint8_t SPECTRUM_PRE_SCALE = 85;  // ~3 overlapping bands sum to 255
+        color = color.nscale8(SPECTRUM_PRE_SCALE);
         
         // Apply to center pair (symmetric)
         uint16_t centerLED = ctx.centerPoint;
@@ -162,7 +166,7 @@ void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
             uint16_t leftIdx2 = centerLED - 1 - (ledDist - 1);
             uint16_t rightIdx2 = centerLED + (ledDist - 1);
 
-            CRGB color2 = color.nscale8(bright / 2);  // Dimmer for adjacent
+            CRGB color2 = color.nscale8(128);  // Dimmer for adjacent (already pre-scaled)
 
             if (leftIdx2 < ctx.ledCount) {
                 ctx.leds[leftIdx2] += color2;
@@ -178,9 +182,9 @@ void LGPSpectrumDetailEffect::render(plugins::EffectContext& ctx) {
             uint16_t leftIdx3 = strip2Center - 1 - ledDist;
             uint16_t rightIdx3 = strip2Center + ledDist;
 
-            // Use complementary hue offset for strip 2
+            // Use complementary hue offset for strip 2 (same pre-scale as strip 1)
             CRGB color3 = frequencyToColor(bin, ctx);
-            color3.nscale8(bright);
+            color3 = color3.nscale8(bright).nscale8(SPECTRUM_PRE_SCALE);
 
             if (leftIdx3 >= 160 && leftIdx3 < ctx.ledCount) {
                 ctx.leds[leftIdx3] += color3;

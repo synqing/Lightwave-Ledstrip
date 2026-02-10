@@ -28,13 +28,13 @@ namespace plugins {
 class BuiltinEffectRegistry {
 public:
     // Larger than limits::MAX_EFFECTS to allow headroom for future effects
-    static constexpr uint8_t MAX_EFFECTS = 128;
+    static constexpr uint8_t MAX_EFFECTS = 155;
     static_assert(MAX_EFFECTS >= limits::MAX_EFFECTS,
                   "BuiltinEffectRegistry::MAX_EFFECTS must be >= limits::MAX_EFFECTS");
 
     /**
      * @brief Register a built-in effect
-     * @param id Effect ID (0-127)
+     * @param id Effect ID (0-139)
      * @param effect Pointer to IEffect instance
      * @return true if registered successfully
      */

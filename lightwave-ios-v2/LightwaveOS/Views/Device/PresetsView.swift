@@ -210,13 +210,25 @@ struct PresetsView: View {
         isLoading = true
 
         do {
-            let response = try await rest.getPresets()
-            presets = response.data.presets.map { preset in
-                PresetItem(
-                    id: preset.id,
-                    name: preset.name,
-                    createdAt: nil  // API doesn't provide date currently
-                )
+            switch type {
+            case .effect:
+                let response = try await rest.getEffectPresets()
+                presets = response.data.presets.map { preset in
+                    PresetItem(
+                        id: preset.id,
+                        name: preset.name,
+                        createdAt: preset.timestamp.map { Date(timeIntervalSince1970: TimeInterval($0)) }
+                    )
+                }
+            case .zone:
+                let response = try await rest.getZonePresets()
+                presets = response.data.presets.map { preset in
+                    PresetItem(
+                        id: preset.id,
+                        name: preset.name,
+                        createdAt: preset.timestamp.map { Date(timeIntervalSince1970: TimeInterval($0)) }
+                    )
+                }
             }
             isLoading = false
         } catch {
@@ -230,7 +242,12 @@ struct PresetsView: View {
         guard let rest = appVM.rest else { return }
 
         do {
-            try await rest.loadPreset(id: preset.id)
+            switch type {
+            case .effect:
+                try await rest.loadEffectPreset(id: preset.id)
+            case .zone:
+                try await rest.loadZonePresetById(id: preset.id)
+            }
             currentPresetId = preset.id
             appVM.log("Loaded preset: \(preset.name)", category: "PRESET")
 
@@ -247,8 +264,16 @@ struct PresetsView: View {
     private func savePreset(name: String, slot: Int?) async {
         guard let rest = appVM.rest else { return }
 
+        // Use provided slot or default to 0
+        let targetSlot = slot ?? 0
+
         do {
-            try await rest.savePreset(name: name)
+            switch type {
+            case .effect:
+                try await rest.saveEffectPreset(slot: targetSlot, name: name)
+            case .zone:
+                try await rest.saveZonePreset(slot: targetSlot, name: name)
+            }
             appVM.log("Saved preset: \(name)", category: "PRESET")
 
             // Reload presets to show the new one
@@ -263,7 +288,12 @@ struct PresetsView: View {
         guard let rest = appVM.rest else { return }
 
         do {
-            try await rest.deletePreset(id: preset.id)
+            switch type {
+            case .effect:
+                try await rest.deleteEffectPreset(id: preset.id)
+            case .zone:
+                try await rest.deleteZonePreset(id: preset.id)
+            }
             appVM.log("Deleted preset: \(preset.name)", category: "PRESET")
 
             // Clear current preset if it was deleted
